@@ -46,7 +46,7 @@ Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the
 
 ```bash
 $ git push
-[Lint] Running 393 rules (zero LLM)...
+[Lint] Running compiled rules (zero LLM)...
 ### Warnings
 - **packages/cli/src/git.ts:22** - Never use native child_process
   Pattern: `import { execSync } from 'node:child_process'`
@@ -58,11 +58,11 @@ The "wrong" way becomes the "loud" way. No LLM in the loop at runtime. Just sub-
 
 ## How Mistakes Become Rules
 
-The core loop is simple. A mistake gets caught in a PR review, a bot nit, or a production bug. I write a plain-English lesson that explains what went wrong. `totem compile` turns the lesson into an AST or regex rule, and `totem lint` enforces it on every push from that point forward. The same mistake can never happen again.
+The core loop is simple. A mistake gets caught in a PR review, a bot nit, or a production bug. I write a plain-English lesson that explains what went wrong. `totem lesson compile` turns the lesson into an AST or regex rule, and `totem lint` enforces it on every push from that point forward. The same mistake can never happen again.
 
 ```mermaid
 graph LR
-    Catch["Catch a mistake"] -->|write a lesson| Compile["totem compile"]
+    Catch["Catch a mistake"] -->|write a lesson| Compile["totem lesson compile"]
     Compile -->|generates rule| Enforce["totem lint"]
     Enforce -->|catches next attempt| Catch
 
@@ -71,7 +71,7 @@ graph LR
     style Enforce fill:#1a4d2e,stroke:#34a853,color:#fff
 ```
 
-When a rule matches comments or string literals instead of actual code, `totem doctor` flags it as noisy, and `totem compile --upgrade` re-runs the compiler with a precision-targeted prompt. I'd rather have 300 precise rules than 1,000 noisy ones.
+When a rule matches comments or string literals instead of actual code, `totem doctor` flags it as noisy, and `totem lesson compile --upgrade` re-runs the compiler with a precision-targeted prompt. I'd rather have 300 precise rules than 1,000 noisy ones.
 
 ## The Queryable Knowledge Index
 
@@ -79,11 +79,9 @@ AI agents are stateless by default. Every new session starts from zero, with no 
 
 Totem's approach is to ship a queryable knowledge index that holds your lessons and ADRs in a local semantic store (Tree-sitter + LanceDB). The index lives in your repo as plain files, so there's no cloud dependency and no vendor lock-in.
 
-Any MCP-compatible agent can query it (e.g., Claude, Gemini, Cursor, Windsurf, Copilot). Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real answer grounded in your project's actual history.
+Any MCP-compatible agent can query it (e.g., Claude, Gemini, Cursor, Windsurf, Copilot). Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real answer grounded in your project's actual history. Whether an agent actually issues that query before deriving from scratch is currently an agent-discipline question — see [What Works and What Doesn't](#what-works-and-what-doesnt).
 
-With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), you can federate search across sibling repos. One repo's lessons become queryable from all linked repos, so context doesn't stop at the repo boundary.
-
-The index responds to queries deterministically; whether an agent actually queries it before deriving from scratch is currently an agent-discipline question, not a structural guarantee. See [What Works and What Doesn't](#what-works-and-what-doesnt).
+With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), you can federate search across sibling repos. One repo's lessons become queryable from all linked repos, so context doesn't stop at the repo boundary. (Local filesystem-linked siblings are free; centralized federation with RBAC and hosted compile is the paid tier — see [Open Core Covenant](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md).)
 
 ## What's in the Box
 
@@ -94,7 +92,7 @@ Totem is a set of CLI tools, not a framework. Building blocks you wire into what
 | `totem lint`           | Run all compiled rules against your code. Zero LLM, offline, sub-second.                                       |
 | `totem lesson compile` | Turn plain-English lessons into AST or regex rules.                                                            |
 | `totem lesson extract` | Pull lessons from PR reviews and bot comments.                                                                 |
-| `totem doctor`         | Flag noisy rules via context telemetry, suggest upgrades.                                                      |
+| `totem doctor`         | Flag locally noisy rules via Trap Ledger telemetry, suggest upgrades.                                          |
 | `totem spec`           | Generate an implementation spec from a GitHub issue before you touch any code (LLM-powered, requires API key). |
 | `totem review`         | LLM-powered architectural review on an uncommitted diff (requires API key).                                    |
 | `totem sync`           | Rebuild the semantic index from your lessons and docs.                                                         |
