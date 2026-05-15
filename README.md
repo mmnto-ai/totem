@@ -11,7 +11,7 @@ When using LLMs on projects, I found that agents kept making the same architectu
 
 They can make the wrong way look brilliant (until you realize what happened). They'll rarely ask: _"doesn't a shared helper already exist for this?"_
 
-Totem is what I extracted to solve that friction. It's a file-based toolkit with a deterministic core: a substrate of plain markdown lessons, a queryable knowledge index, compiled lint rules, and CLI primitives that AI agents read from and write to in order to coordinate work. The structural pieces (the substrate, the index, the compiled-rule lint engine) ship today. The discipline and telemetry layers (whether agents consistently query the index, whether compliance gets measured end-to-end) are in active development; see [What Works and What Doesn't](#what-works-and-what-doesnt) for the honest split.
+Totem is what I extracted to solve that friction. It's a file-based toolkit. The lint engine, substrate, and knowledge index are deterministic; the compiler and review commands are LLM-powered. Agents read from and write to a substrate of plain markdown lessons, a queryable knowledge index, compiled lint rules, and CLI primitives in order to coordinate work. The structural pieces (the substrate, the index, the compiled-rule lint engine) ship today. The discipline and telemetry layers (whether agents consistently query the index, whether compliance gets measured end-to-end) are in active development; see [What Works and What Doesn't](#what-works-and-what-doesnt) for the honest split.
 
 ---
 
@@ -80,7 +80,7 @@ AI agents are stateless by default. Every new session starts from zero, with no 
 
 Totem's approach is to ship a queryable knowledge index that holds your lessons and ADRs in a local semantic store (Tree-sitter + LanceDB). The index lives in your repo as plain files, so there's no cloud dependency and no vendor lock-in.
 
-Any MCP-compatible agent can query it: Claude, Gemini, Cursor, Windsurf, Copilot. Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real answer grounded in your project's actual history.
+Any MCP-compatible agent can query it (e.g., Claude, Gemini, Cursor, Windsurf, Copilot). Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real answer grounded in your project's actual history.
 
 With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), you can federate search across sibling repos. One repo's lessons become queryable from all linked repos, so context doesn't stop at the repo boundary.
 
