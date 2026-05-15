@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { RegexEvaluator } from './evaluator.js';
 
+// Soft-warning wall-clock test fixtures (mmnto-ai/totem CI run 25937713095 macOS flake).
+// Workload sized for 50× wall-clock margin so the assertion is reliable regardless of host speed.
+const SOFT_WARNING_TEST_TIMEOUT_MS = 2_000;
+const SOFT_WARNING_THRESHOLD_MS = 5;
+const SOFT_WARNING_TEST_LINE_COUNT = 50_000;
+
 describe('RegexEvaluator — happy path', () => {
   it('returns matched line indices for a simple pattern', async () => {
     const evaluator = new RegexEvaluator();
@@ -90,23 +96,19 @@ describe('RegexEvaluator — timeout', () => {
   });
 
   it('emits softWarningTriggered for evaluations between softWarningMs and timeoutMs', async () => {
-    // Simulate a slow-but-not-pathological pattern by using a moderately
-    // backtracking regex with bounded input. Actual wall-clock depends
-    // on the host, so we pick a pattern that reliably falls in the
-    // soft-warning window and adjust thresholds low enough to trip it.
-    const evaluator = new RegexEvaluator({ timeoutMs: 500, softWarningMs: 1 });
+    const evaluator = new RegexEvaluator({
+      timeoutMs: SOFT_WARNING_TEST_TIMEOUT_MS,
+      softWarningMs: SOFT_WARNING_THRESHOLD_MS,
+    });
     try {
       const result = await evaluator.evaluate({
         ruleHash: 'slow',
         pattern: 'foo',
         flags: '',
-        // Many lines guarantee the total evaluation takes > 1ms.
-        lines: new Array(1000).fill('foo'),
+        lines: new Array(SOFT_WARNING_TEST_LINE_COUNT).fill('foo'),
       });
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        // With softWarningMs = 1 and 1000 lines, elapsed should exceed 1ms
-        // on any reasonable host and softWarning should trip.
         expect(result.softWarningTriggered).toBe(true);
       }
     } finally {
