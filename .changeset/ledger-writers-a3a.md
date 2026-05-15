@@ -32,10 +32,10 @@ Stacked on #1919 (A.3.a schema). Wires the two activity-event writers that the A
 
 ## Tests
 
-- `packages/core/src/session-id.test.ts` — 10 tests covering mint uniqueness, write/read round-trip, malformed UUID rejection, TTL expiration (file backdating via `utimesSync`), custom TTL argument, trailing-whitespace tolerance.
+- `packages/core/src/session-id.test.ts` — 15 tests covering mint uniqueness, write/read round-trip, malformed UUID rejection, TTL expiration (file backdating via `utimesSync`), custom TTL argument, trailing-whitespace tolerance, plus fs error class discrimination on read (ENOENT/EACCES/EPERM/EROFS swallow vs unexpected rethrow per Tenet 4).
 - `packages/mcp/src/ledger-writer.test.ts` — 5 tests covering event emission, session_id population/omission, getContext failure (must not throw), append-don't-overwrite.
 - `packages/mcp/src/tools/search-knowledge.test.ts` — 2 new integration tests verifying handler emits `mcp_call` with `activity_name: 'search_knowledge'`, including the dimension-mismatch error path (invocation, not success, is what ADR-029 measures).
-- `packages/cli/src/commands/init.test.ts` — 4 new tests covering the SessionStart template's session-id minting, persistence, ledger-event emission, and fire-and-forget error-handling.
+- `packages/cli/src/commands/init.test.ts` — 5 new tests covering the SessionStart template's session-id minting, persistence, ledger-event emission, agent_source stamping (Claude-specific), and fire-and-forget error-handling.
 
 ## Backward compatibility
 
