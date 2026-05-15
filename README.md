@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-managed-F69220?logo=pnpm&logoColor=white)](https://pnpm.io)
 
-**Editor integrations:** [Claude Code](.claude/) · [Gemini CLI](.gemini/) · [GitHub Copilot](.github/copilot-instructions.md) · [JetBrains Junie](.junie/) · others tracked in [#1924](https://github.com/mmnto-ai/totem/issues/1924). See [`AGENTS.md`](AGENTS.md) for how integration works.
+**Editor integrations:** [Claude Code](.claude/) · [Gemini CLI](.gemini/) · [GitHub Copilot](.github/copilot-instructions.md) · [JetBrains Junie](.junie/) · others in progress. See [`AGENTS.md`](AGENTS.md) for how integration works.
 
 _AI coding agents are brilliant goldfish. Totem is the file-based substrate they read from and write to. It keeps architectural context durable across sessions._
 
