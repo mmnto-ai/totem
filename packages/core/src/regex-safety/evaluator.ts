@@ -49,9 +49,16 @@ export type EvaluateResult =
   | { kind: 'timeout'; elapsedMs: number }
   | { kind: 'error'; message: string; elapsedMs: number };
 
+// Defaults sized for shared CI runners. On Windows the worker thread spawn +
+// IPC overhead (see `workerReady` doc above) can stack ~30-50ms before the
+// first `postMessage` even fires; pair that with shared-runner scheduling
+// jitter and a 100ms timeout trips on otherwise-trivial regex evaluations
+// (Windows main-branch CI run 25939618872 saw "timeout after 139ms" on a
+// single-line `.sh` corpus). 250ms keeps the per-rule budget snappy in
+// production while giving CI hardware ~2× headroom over observed worst-case.
 const DEFAULT_CONFIG: RegexEvaluatorConfig = {
-  timeoutMs: 100,
-  softWarningMs: 50,
+  timeoutMs: 250,
+  softWarningMs: 100,
 };
 
 type PendingEntry = {

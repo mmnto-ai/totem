@@ -90,23 +90,22 @@ describe('RegexEvaluator — timeout', () => {
   });
 
   it('emits softWarningTriggered for evaluations between softWarningMs and timeoutMs', async () => {
-    // Simulate a slow-but-not-pathological pattern by using a moderately
-    // backtracking regex with bounded input. Actual wall-clock depends
-    // on the host, so we pick a pattern that reliably falls in the
-    // soft-warning window and adjust thresholds low enough to trip it.
-    const evaluator = new RegexEvaluator({ timeoutMs: 500, softWarningMs: 1 });
+    // Wall-clock assertion — softWarning must trip. The original 1ms threshold
+    // + 1000 lines spec'd "should exceed 1ms on any reasonable host," but fast
+    // hardware (M-series Mac CI runners) finishes 1000 trivial-pattern matches
+    // in <1ms, so the assertion was racy. Widen the workload so soft-warning
+    // fires with multi-x margin regardless of host speed (mmnto-ai/totem CI run
+    // 25937713095 macOS flake).
+    const evaluator = new RegexEvaluator({ timeoutMs: 2000, softWarningMs: 5 });
     try {
       const result = await evaluator.evaluate({
         ruleHash: 'slow',
         pattern: 'foo',
         flags: '',
-        // Many lines guarantee the total evaluation takes > 1ms.
-        lines: new Array(1000).fill('foo'),
+        lines: new Array(50_000).fill('foo'),
       });
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
-        // With softWarningMs = 1 and 1000 lines, elapsed should exceed 1ms
-        // on any reasonable host and softWarning should trip.
         expect(result.softWarningTriggered).toBe(true);
       }
     } finally {
