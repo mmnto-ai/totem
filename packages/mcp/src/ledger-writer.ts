@@ -55,9 +55,9 @@ export async function logMcpCall(activityName: string): Promise<void> {
 
     appendLedgerEvent(totemDir, event);
     // totem-context: fire-and-forget telemetry; failure must not propagate
-  } catch (_err) {
+  } catch (err) {
     // intentional swallow — telemetry is a sensor (lesson-b1bae311),
     // failure to record an mcp_call event must not crash the MCP server.
-    void _err;
+    void err;
   }
 }
