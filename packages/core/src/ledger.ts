@@ -59,10 +59,17 @@ export const LedgerEventSchema = z.object({
   /**
    * Agent runtime that produced the event. Orthogonal to `source`
    * (which identifies the emitting subsystem). Optional for
-   * backward-compat with pre-A.3.a events; required by writer for
-   * activity events. Per ADR-078 § Event Attribution, with the
-   * field renamed from `source` to disambiguate against the
-   * load-bearing emitter identifier already in production code.
+   * backward-compat with pre-A.3.a events. Per ADR-078 § Event
+   * Attribution, with the field renamed from `source` to disambiguate
+   * against the load-bearing emitter identifier already in production
+   * code.
+   *
+   * Population schedule:
+   * - SessionStart hooks (Claude/Gemini): set unconditionally to the
+   *   orchestrator vendor since the hook script knows its origin.
+   * - MCP server-side writes: omitted until A.3.c lands the orchestrator
+   *   → MCP correlation propagation (the MCP server cannot independently
+   *   identify which orchestrator invoked it).
    */
   agent_source: z.enum(['claude', 'gemini', 'human']).optional(),
   /**

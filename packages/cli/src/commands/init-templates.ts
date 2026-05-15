@@ -352,6 +352,7 @@ try {
     type: 'session_start',
     activity_name: 'SessionStart',
     source: 'bot',
+    agent_source: 'claude',
     justification: '',
     session_id: sessionId,
   };
