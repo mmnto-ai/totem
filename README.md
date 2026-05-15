@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mmnto/totem.svg)](https://www.npmjs.com/package/@mmnto/totem)
 [![CI](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml/badge.svg)](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml)
 
-_AI coding agents are brilliant goldfish. Totem is their persistent, cross-repo memory._
+_AI coding agents are brilliant goldfish. Totem is the file-anchored substrate they read and write to keep architectural context durable across sessions._
 
 > `totem lint` runs entirely offline and completes in under 2 seconds. No LLMs in the loop.
 
@@ -11,13 +11,13 @@ When using LLMs on projects, I found that agents kept making the same architectu
 
 They can make the wrong way look brilliant (until you realize what happened). They'll rarely ask: _"doesn't a shared helper already exist for this?"_
 
-Totem is what I extracted to solve that friction. It's a set of CLI tools that provides a persistent memory and enforcement layer for AI agents. It uses deterministic hooks to remember the lessons the AI forgets.
+Totem is what I extracted to solve that friction. It's a deterministic, file-anchored toolkit: a substrate of plain markdown lessons, a queryable knowledge index, compiled lint rules, and CLI primitives that AI agents read and write to coordinate work. The structural pieces (the substrate, the index, the compiled-rule lint engine) ship today. The discipline and telemetry layers (whether agents consistently query the index, whether compliance gets measured end-to-end) are in active development; see [What Works and What Doesn't](#what-works-and-what-doesnt) for the honest split.
 
 ---
 
 - [Documentation is merely a suggestion](#documentation-is-merely-a-suggestion)
 - [How Mistakes Become Rules](#how-mistakes-become-rules)
-- [The Memory Layer](#the-memory-layer)
+- [The Queryable Knowledge Index](#the-queryable-knowledge-index)
 - [What's in the Box](#whats-in-the-box)
 - [What Works and What Doesn't](#what-works-and-what-doesnt)
 - [Quickstart](#quickstart)
@@ -74,15 +74,17 @@ graph LR
 
 When a rule matches comments or string literals instead of actual code, `totem doctor` flags it as noisy, and `totem compile --upgrade` re-runs the compiler with a precision-targeted prompt. I'd rather have 300 precise rules than 1,000 noisy ones.
 
-## The Memory Layer
+## The Queryable Knowledge Index
 
-AI agents are stateless by default. Every new session starts from zero, with no memory of prior incidents or the shared helpers you've already written. You end up re-explaining the same context over and over.
+AI agents are stateless by default. Every new session starts from zero, with no record of prior incidents or the shared helpers you've already written. You end up re-explaining the same context over and over.
 
-Totem fixes this by indexing your lessons and ADRs into a local semantic knowledge base (Tree-sitter + LanceDB). The index stays in your repo as plain files, so there's no cloud dependency and no vendor lock-in.
+Totem's approach is to ship a queryable knowledge index that holds your lessons and ADRs in a local semantic store (Tree-sitter + LanceDB). The index lives in your repo as plain files, so there's no cloud dependency and no vendor lock-in.
 
 Any MCP-compatible agent can query it: Claude, Gemini, Cursor, Windsurf, Copilot. Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real answer grounded in your project's actual history.
 
 With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), you can federate search across sibling repos. One repo's lessons become queryable from all linked repos, so context doesn't stop at the repo boundary.
+
+The index responds to queries deterministically; whether an agent actually queries it before deriving from scratch is currently an agent-discipline question, not a structural guarantee. See [What Works and What Doesn't](#what-works-and-what-doesnt).
 
 ## What's in the Box
 
@@ -119,9 +121,9 @@ Totem has three layers, and I want to be honest about where each one stands:
 
 1. **The enforcement layer works.** Compiled rules and Git hooks catch violations mechanically and offline, in under 2 seconds. This is the load-bearing floor that everything else stands on. Nothing on that floor touches the network, so it runs natively in air-gapped environments. No source code leaves your machine.
 2. **The planning layer works too, to my surprise.** Before the agent writes any code, `totem spec` pulls the GitHub issue body and queries the knowledge base for relevant lessons and ADRs. It writes a structured implementation spec to `.totem/specs/<issue>.md`. The spec includes architectural context, files to examine, edge cases the issue description missed, and task-by-task TDD directives with retrieved lessons injected inline as invariants. None of this is a hard tripwire. The agent could write a vague spec and ignore the retrieved context. But in practice the structured prompt reliably catches "I'm about to reinvent a helper that already exists" before the agent commits to an approach. A meaningful chunk of the velocity and architectural consistency I've been getting comes from this upstream gate, more than I expected when I first added it.
-3. **The memory layer is real infrastructure.** The index exists. It's portable across repos, and any MCP agent can query it. But whether an agent _consistently acts_ on the context it retrieves is an open question I'm actively working through. Availability is deterministic. The agent's discipline is not.
+3. **The knowledge index is real infrastructure.** The index exists. It's portable across repos, and any MCP agent can query it. But whether an agent _consistently acts_ on the context it retrieves is an open question I'm actively working through. Availability is deterministic. The agent's discipline is not.
 
-I built the enforcement layer because the upstream layers aren't enough on their own. An agent can have a clean spec, relevant lessons in context, and still drift when it gets deep into a task. The tripwires catch what the planning and memory layers miss. That's the whole point of keeping them as three distinct layers rather than one: each catches a different class of failure, at a different stage of the workflow.
+I built the enforcement layer because the upstream layers aren't enough on their own. An agent can have a clean spec, relevant lessons in context, and still drift when it gets deep into a task. The tripwires catch what the planning layer and the knowledge index miss. That's the whole point of keeping them as three distinct layers rather than one: each catches a different class of failure, at a different stage of the workflow.
 
 ## Changelog
 
