@@ -408,7 +408,7 @@ describe('DOCS_SYSTEM_PROMPT', () => {
   it('includes pinned content to protect the tagline', () => {
     expect(DOCS_SYSTEM_PROMPT).toContain('## Pinned Content');
     expect(DOCS_SYSTEM_PROMPT).toContain('brilliant goldfish');
-    expect(DOCS_SYSTEM_PROMPT).toContain('COSS Covenant');
+    expect(DOCS_SYSTEM_PROMPT).toContain('Commitment section');
   });
 
   it('injects staleness protocol into system prompt', () => {
