@@ -10,29 +10,60 @@ The Trap Ledger is an immutable, append-only event stream located at `.totem/led
 
 ### What gets recorded?
 
-The Ledger actively monitors your usage of Totem override directives:
+The Ledger captures two semantic families of events.
 
-- `// totem-ignore` (Hard suppression)
-- `// totem-context:` (Semantic suppression)
-- `// shield-context:` (Deprecated alias, emits warning as of 1.6.0)
+**Override events** (one per directive encountered):
 
-Whenever `totem lint` or `totem review` encounters one of these directives, it logs an `override` event to the ledger.
+- `// totem-ignore` (Hard suppression) → `type: "suppress"`
+- `// totem-context:` (Semantic suppression) → `type: "suppress"`
+- `// shield-context:` (Deprecated alias, emits warning as of 1.6.0) → `type: "suppress"`
+- `totem shield --override` → `type: "override"`
+- Pattern exemptions → `type: "exemption"`
+
+**Activity events** (one per agent interaction, A.3.a onwards):
+
+- `mcp_call` — MCP tool invocation (e.g., `search_knowledge`); identified by `activity_name`
+- `tool_call_first_significant` — first non-Read/Grep/Glob orchestrator tool call in the session
+- `hook_fire` — lifecycle hook executed (e.g., `SessionStart`, `PreToolUse`, `pre-push`)
+- `session_start` — SessionStart hook fired; new `session_id` minted
 
 ### Event Schema
 
-The NDJSON records contain high-fidelity context about the friction event:
+The NDJSON records contain high-fidelity context about the friction event.
+
+**Override event example:**
 
 ```json
 {
   "timestamp": "2026-03-25T14:32:00.000Z",
-  "type": "exception",
+  "type": "suppress",
   "ruleId": "no-console-in-core",
   "file": "packages/core/src/logger.ts",
   "line": 42,
   "justification": "This is the logger module, console is required here.",
-  "source": "totem-context"
+  "source": "lint"
 }
 ```
+
+**Activity event example** (A.3.a onwards, ADR-029 compliance metric source):
+
+```json
+{
+  "timestamp": "2026-05-15T03:00:00.000Z",
+  "type": "mcp_call",
+  "source": "bot",
+  "agent_source": "claude",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "activity_name": "search_knowledge"
+}
+```
+
+The canonical schema (with field-level descriptions, optionality, and discriminator semantics) lives in `packages/core/src/ledger.ts` (`LedgerEventSchema`). Two orthogonal axes worth calling out:
+
+- `source` — emitting subsystem (`lint` | `shield` | `bot`)
+- `agent_source` — agent runtime that produced the event (`claude` | `gemini` | `human`)
+
+Per ADR-078 § Event Attribution: agent attribution lives in `agent_source`; `source` identifies which Totem subsystem fired the event. Pre-A.3.a events have no `agent_source` field and are forward-compatible (the field is optional).
 
 ---
 

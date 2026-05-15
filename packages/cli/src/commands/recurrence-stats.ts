@@ -232,6 +232,8 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   const ledgerEvents = readLedgerEvents(totemDir, (msg) => log.warn(TAG, msg));
   const overrideEvents = ledgerEvents.filter((e) => e.type === 'override');
   for (const event of overrideEvents) {
+    // Override events carry `file` by writer discipline; A.3.a relaxed the schema-level requirement.
+    if (!event.file) continue;
     const synthetic: NormalizedBotFinding = {
       tool: 'unknown',
       severity: 'medium',
