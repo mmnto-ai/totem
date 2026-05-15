@@ -204,29 +204,38 @@ describe('LedgerEventSchema', () => {
   });
 });
 
-// ─── Writer-side per-branch field-presence (A.3.c discriminated-union gap-filler) ─────
+// ─── Test-fixture per-branch field-presence (factory output validation) ─────
 //
-// The flat schema (A.3.a) allows `ruleId`, `file`, `agent_source`, `session_id`, and
-// `activity_name` to be undefined globally. Per OQ-1 disposition (strategy-Claude
-// T0345Z), the discriminated-union promotion is deferred to A.3.c. These tests
-// enforce writer-side discipline in the A.3.a window: each event type carries the
-// fields its semantics require. Without them, an A.3.b metric computation could
-// read `null` on an LLM-boundary action because a writer silently dropped a field.
+// SCOPE (honest about what this catches): these tests exercise the local
+// `makeEvent` / `makeActivityEvent` test factories defined above and assert
+// each event type's factory output carries its required-by-semantics fields.
+// They catch FIXTURE drift — if a future edit to `makeEvent` removes a default
+// required-by-type field, these tests fail.
 //
-// Tests lock the discipline; they FAIL when a writer omits a required-by-type field.
-// When the schema is promoted to discriminatedUnion in A.3.c, these tests become
-// redundant against the schema (which is the point of promotion); they survive as
-// regression coverage.
+// THEY DO NOT exercise real writers (CR R2 catch — `ledger.test.ts:291`).
+// Writer-regression coverage lives in the consumer-side test files where the
+// actual writers run:
+//   - `mcp_call`     → `packages/mcp/src/ledger-writer.test.ts` (logMcpCall)
+//   - `session_start`→ `packages/cli/src/commands/init.test.ts` (CLAUDE_SESSION_START template content tests)
+//   - `suppress` / `override` / `exemption` → run-compiled-rules.test.ts /
+//     shield.test.ts / exemption.test.ts (writers in @mmnto/cli)
+//
+// STRUCTURAL FIX: per OQ-1 disposition (strategy-Claude T0345Z, cross-stream
+// dispatch chain), the discriminated-union promotion in A.3.c will enforce
+// per-branch field presence at the schema level — at that point these
+// fixture-validation tests become redundant against the schema AND the
+// distributed consumer-side writer tests serve as the regression coverage.
+//
+// Retaining the block as a sanity-check on factory stability; full real-writer
+// coverage in the A.3.a window would require cross-package test imports that
+// exceed the sprint's "no call-site changes to existing writers" DoD.
 
-describe('writer-side per-branch field presence', () => {
+describe('test-fixture per-branch field presence (factory output validation)', () => {
   // Helper: each test builds an event using makeEvent/makeActivityEvent
-  // factories (which always populate required-by-type fields), then asserts
-  // each required field is defined and non-empty on the resulting object.
-  // The test catches the regression where the factories drift and stop
-  // populating a per-branch required field — at which point the assertion
-  // fires with a descriptive label. The schema itself remains permissive
-  // (flat optional) per OQ-1; A.3.c's discriminatedUnion promotion will
-  // make this discipline structural.
+  // factories (which populate required-by-type fields by default), then
+  // asserts each required field is defined and non-empty on the resulting
+  // object. Catches factory drift; does NOT catch real writer regressions
+  // (see § "SCOPE" above for the writer-coverage map).
   function expectWriterCarriesFields(
     event: LedgerEvent,
     requiredByType: ReadonlyArray<keyof LedgerEvent>,
