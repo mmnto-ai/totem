@@ -9,7 +9,6 @@ vi.mock('node:fs', async () => {
   return { ...actual, default: actual };
 });
 
-// eslint-disable-next-line import/order
 import * as fs from 'node:fs';
 
 import { mintSessionId, readSessionId, writeSessionId } from './session-id.js';
@@ -132,7 +131,6 @@ describe('readSessionId', () => {
 
   it('rethrows when caught value is not an object (defensive type guard)', () => {
     const spy = vi.spyOn(fs, 'statSync').mockImplementation(() => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw 'string-thrown-not-an-error';
     });
     try {
