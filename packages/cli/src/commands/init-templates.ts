@@ -330,10 +330,46 @@ export const CLAUDE_SESSION_START = `// [totem] auto-generated — Claude Code S
 // Mirrors \`.gemini/hooks/SessionStart.js\`. \`.cjs\` extension because
 // package.json may have "type": "module" — Claude Code execs hooks via
 // plain \`node\`, which would otherwise treat \`.js\` as ESM.
+//
+// A.3.a: mints a session UUID, persists to .totem/ledger/.session-id,
+// and appends a \`session_start\` event to .totem/ledger/events.ndjson
+// BEFORE running \`totem describe\`. Subsequent MCP calls within the
+// session correlate via session_id (ADR-029 § Session Heuristic).
+// Fire-and-forget: any ledger failure must NOT block the briefing.
 const { spawnSync } = require('child_process');
-const { existsSync } = require('fs');
+const { existsSync, mkdirSync, writeFileSync, appendFileSync } = require('fs');
+const { randomUUID } = require('crypto');
 const { join } = require('path');
 
+// ─── A.3.a: mint session ID + log session_start event ──────────
+try {
+  const ledgerDir = join(process.cwd(), '.totem', 'ledger');
+  mkdirSync(ledgerDir, { recursive: true });
+  const sessionId = randomUUID();
+  writeFileSync(join(ledgerDir, '.session-id'), sessionId, 'utf-8');
+  const event = {
+    timestamp: new Date().toISOString(),
+    type: 'session_start',
+    activity_name: 'SessionStart',
+    source: 'bot',
+    agent_source: 'claude',
+    justification: '',
+    session_id: sessionId,
+  };
+  appendFileSync(join(ledgerDir, 'events.ndjson'), JSON.stringify(event) + '\\n', 'utf-8');
+} catch (err) {
+  // Fire-and-forget; ledger failures must not block the briefing. A lightweight
+  // stderr breadcrumb makes hook misconfigurations diagnosable in consumer repos
+  // (CR R1 catch — empty catch suppresses all signal). stderr (not stdout) so
+  // the briefing path remains clean for Claude's prompt context.
+  process.stderr.write(
+    '[SessionStart] Session-start telemetry unavailable (non-fatal): ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\\n',
+  );
+}
+
+// ─── totem describe briefing (existing behavior) ────────────────
 try {
   const cliPath = join(process.cwd(), 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
   if (existsSync(cliPath)) {

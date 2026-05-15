@@ -33,7 +33,9 @@ export type TotemErrorCode =
   | 'UPGRADE_CLOUD_UNSUPPORTED'
   | 'STALE_MANIFEST'
   | 'FLAG_CONFLICT'
-  | 'HOOKS_LOAD_FAILED';
+  | 'HOOKS_LOAD_FAILED'
+  | 'SESSION_ID_WRITE_FAILED'
+  | 'SESSION_ID_READ_FAILED';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

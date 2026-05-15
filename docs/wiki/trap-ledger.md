@@ -22,10 +22,10 @@ The Ledger captures two semantic families of events.
 
 **Activity events** (one per agent interaction, A.3.a onwards):
 
-- `mcp_call` — MCP tool invocation (e.g., `search_knowledge`); identified by `activity_name`
-- `tool_call_first_significant` — first non-Read/Grep/Glob orchestrator tool call in the session
-- `hook_fire` — lifecycle hook executed (e.g., `SessionStart`, `PreToolUse`, `pre-push`)
-- `session_start` — SessionStart hook fired; new `session_id` minted
+- `mcp_call` — MCP tool invocation (e.g., `search_knowledge`); identified by `activity_name`. Emitted by the MCP server when a tool fires (`source: "bot"` now; MCP `agent_source` attribution deferred to A.3.c).
+- `tool_call_first_significant` — first non-Read/Grep/Glob orchestrator tool call in the session. (Writer ships in A.3.b.)
+- `hook_fire` — lifecycle hook executed (e.g., `SessionStart`, `PreToolUse`, `pre-push`). (Writer ships in A.4.a.)
+- `session_start` — SessionStart hook fired; new `session_id` minted to `.totem/ledger/.session-id`. Emitted by the Claude SessionStart hook script scaffolded by `totem init` (Gemini writer deferred).
 
 ### Event Schema
 
@@ -52,11 +52,12 @@ The NDJSON records contain high-fidelity context about the friction event.
   "timestamp": "2026-05-15T03:00:00.000Z",
   "type": "mcp_call",
   "source": "bot",
-  "agent_source": "claude",
   "session_id": "550e8400-e29b-41d4-a716-446655440000",
   "activity_name": "search_knowledge"
 }
 ```
+
+(MCP `agent_source` attribution lands in A.3.c via orchestrator → MCP correlation propagation; `session_start` events emitted by the Claude hook DO carry `agent_source: "claude"` today.)
 
 The canonical schema (with field-level descriptions, optionality, and discriminator semantics) lives in `packages/core/src/ledger.ts` (`LedgerEventSchema`). Two orthogonal axes worth calling out:
 
