@@ -27,7 +27,7 @@ Stacked on #1919 (A.3.a schema). Wires the two activity-event writers that the A
 ## New core utilities (`packages/core/src/session-id.ts`)
 
 - `mintSessionId()` — wraps `crypto.randomUUID()`.
-- `writeSessionId(totemDir, sessionId)` — persists to `.totem/ledger/.session-id`. Fire-and-forget on I/O failure.
+- `writeSessionId(totemDir, sessionId)` — persists to `.totem/ledger/.session-id`. Swallows expected fs error classes (ENOENT/EACCES/EPERM/EROFS) via the optional `onWarn` callback and rethrows unexpected error classes per Tenet 4 Fail Loud.
 - `readSessionId(totemDir, ttlHours?)` — reads + validates UUID shape + checks mtime against TTL (default 24h). Returns `undefined` for missing/expired/malformed files.
 
 ## Tests

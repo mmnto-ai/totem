@@ -363,7 +363,7 @@ try {
   // (CR R1 catch — empty catch suppresses all signal). stderr (not stdout) so
   // the briefing path remains clean for Claude's prompt context.
   process.stderr.write(
-    '[Totem] Session-start telemetry unavailable (non-fatal): ' +
+    '[SessionStart] Session-start telemetry unavailable (non-fatal): ' +
       (err instanceof Error ? err.message : String(err)) +
       '\\n',
   );
