@@ -11,6 +11,7 @@ vi.mock('node:fs', async () => {
 
 import * as fs from 'node:fs';
 
+import { TotemError } from './errors.js';
 import { mintSessionId, readSessionId, writeSessionId } from './session-id.js';
 import { cleanTmpDir } from './test-utils.js';
 
@@ -106,11 +107,21 @@ describe('readSessionId', () => {
   it('rethrows on unexpected error classes (Tenet 4 Fail Loud)', () => {
     // Force statSync to throw a non-fs error class — simulates an unexpected
     // failure mode the writer should propagate rather than silently swallow.
+    // Per styleguide line 120, the rethrow wraps in TotemError with the
+    // original error preserved via .cause (chain-preserving propagation).
     const spy = vi.spyOn(fs, 'statSync').mockImplementation(() => {
       throw new TypeError('unexpected non-fs error');
     });
     try {
-      expect(() => readSessionId(tmpDir)).toThrow(TypeError);
+      let caught: unknown;
+      try {
+        readSessionId(tmpDir);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(TotemError);
+      expect((caught as TotemError).code).toBe('SESSION_ID_READ_FAILED');
+      expect((caught as TotemError).cause).toBeInstanceOf(TypeError);
     } finally {
       spy.mockRestore();
     }
@@ -135,8 +146,18 @@ describe('readSessionId', () => {
     });
     try {
       // String values have no `.code` property; with the defensive type guard
-      // the function rethrows rather than crashing on property access.
-      expect(() => readSessionId(tmpDir)).toThrow();
+      // the function rethrows rather than crashing on property access. The
+      // rethrow is wrapped in TotemError with the original string preserved
+      // via .cause.
+      let caught: unknown;
+      try {
+        readSessionId(tmpDir);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(TotemError);
+      expect((caught as TotemError).code).toBe('SESSION_ID_READ_FAILED');
+      expect((caught as TotemError).cause).toBe('string-thrown-not-an-error');
     } finally {
       spy.mockRestore();
     }
@@ -145,11 +166,21 @@ describe('readSessionId', () => {
 
 describe('writeSessionId fail-loud behavior', () => {
   it('rethrows on unexpected error classes (Tenet 4 Fail Loud)', () => {
+    // Per styleguide line 120, the rethrow wraps in TotemError with the
+    // original error preserved via .cause (chain-preserving propagation).
     const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
       throw new TypeError('unexpected non-fs error');
     });
     try {
-      expect(() => writeSessionId(tmpDir, mintSessionId())).toThrow(TypeError);
+      let caught: unknown;
+      try {
+        writeSessionId(tmpDir, mintSessionId());
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(TotemError);
+      expect((caught as TotemError).code).toBe('SESSION_ID_WRITE_FAILED');
+      expect((caught as TotemError).cause).toBeInstanceOf(TypeError);
     } finally {
       spy.mockRestore();
     }

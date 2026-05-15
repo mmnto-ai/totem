@@ -12,6 +12,8 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { TotemError } from './errors.js';
+
 const SESSION_ID_FILE = '.session-id';
 const LEDGER_DIR = 'ledger';
 const DEFAULT_TTL_HOURS = 24;
@@ -44,8 +46,14 @@ export function writeSessionId(
       onWarn?.(`Session-ID write failed: ${msg}`);
       return;
     }
-    // Unexpected error class — propagate so Tenet 4 (Fail Loud) catches drift.
-    throw err;
+    // Unexpected error class — wrap with TotemError per styleguide cause-chains
+    // rule (line 120). Tenet 4 Fail Loud satisfied via .cause chain.
+    throw new TotemError(
+      'SESSION_ID_WRITE_FAILED',
+      'Unexpected error writing session ID',
+      'Check filesystem permissions for the .totem/ledger directory.',
+      err,
+    );
   }
 }
 
@@ -90,7 +98,13 @@ export function readSessionId(totemDir: string, ttlHours = DEFAULT_TTL_HOURS): s
     if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
       return undefined;
     }
-    // Unexpected error class — propagate so Tenet 4 (Fail Loud) catches drift.
-    throw err;
+    // Unexpected error class — wrap with TotemError per styleguide cause-chains
+    // rule (line 120). Tenet 4 Fail Loud satisfied via .cause chain.
+    throw new TotemError(
+      'SESSION_ID_READ_FAILED',
+      'Unexpected error reading session ID',
+      'Check filesystem permissions for the .totem/ledger/.session-id file.',
+      err,
+    );
   }
 }
