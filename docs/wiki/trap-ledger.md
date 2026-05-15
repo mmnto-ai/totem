@@ -52,11 +52,12 @@ The NDJSON records contain high-fidelity context about the friction event.
   "timestamp": "2026-05-15T03:00:00.000Z",
   "type": "mcp_call",
   "source": "bot",
-  "agent_source": "claude",
   "session_id": "550e8400-e29b-41d4-a716-446655440000",
   "activity_name": "search_knowledge"
 }
 ```
+
+(MCP `agent_source` attribution lands in A.3.c via orchestrator → MCP correlation propagation; `session_start` events emitted by the Claude hook DO carry `agent_source: "claude"` today.)
 
 The canonical schema (with field-level descriptions, optionality, and discriminator semantics) lives in `packages/core/src/ledger.ts` (`LedgerEventSchema`). Two orthogonal axes worth calling out:
 
