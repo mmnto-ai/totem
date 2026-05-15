@@ -1,8 +1,16 @@
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock node:fs so spyOn works in ESM — same pattern as test-utils.test.ts.
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return { ...actual, default: actual };
+});
+
+// eslint-disable-next-line import/order
+import * as fs from 'node:fs';
 
 import { mintSessionId, readSessionId, writeSessionId } from './session-id.js';
 import { cleanTmpDir } from './test-utils.js';
@@ -94,5 +102,74 @@ describe('readSessionId', () => {
     const id = mintSessionId();
     fs.writeFileSync(path.join(ledgerDir, '.session-id'), id + '\n', 'utf-8');
     expect(readSessionId(tmpDir)).toBe(id);
+  });
+
+  it('rethrows on unexpected error classes (Tenet 4 Fail Loud)', () => {
+    // Force statSync to throw a non-fs error class — simulates an unexpected
+    // failure mode the writer should propagate rather than silently swallow.
+    const spy = vi.spyOn(fs, 'statSync').mockImplementation(() => {
+      throw new TypeError('unexpected non-fs error');
+    });
+    try {
+      expect(() => readSessionId(tmpDir)).toThrow(TypeError);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('returns undefined on EACCES (known fs failure class)', () => {
+    const spy = vi.spyOn(fs, 'statSync').mockImplementation(() => {
+      const err = new Error('permission denied') as NodeJS.ErrnoException;
+      err.code = 'EACCES';
+      throw err;
+    });
+    try {
+      expect(readSessionId(tmpDir)).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('rethrows when caught value is not an object (defensive type guard)', () => {
+    const spy = vi.spyOn(fs, 'statSync').mockImplementation(() => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw 'string-thrown-not-an-error';
+    });
+    try {
+      // String values have no `.code` property; with the defensive type guard
+      // the function rethrows rather than crashing on property access.
+      expect(() => readSessionId(tmpDir)).toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('writeSessionId fail-loud behavior', () => {
+  it('rethrows on unexpected error classes (Tenet 4 Fail Loud)', () => {
+    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+      throw new TypeError('unexpected non-fs error');
+    });
+    try {
+      expect(() => writeSessionId(tmpDir, mintSessionId())).toThrow(TypeError);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('invokes onWarn and returns silently on EACCES (known fs failure class)', () => {
+    const onWarn = vi.fn();
+    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+      const err = new Error('permission denied') as NodeJS.ErrnoException;
+      err.code = 'EACCES';
+      throw err;
+    });
+    try {
+      writeSessionId(tmpDir, mintSessionId(), onWarn);
+      expect(onWarn).toHaveBeenCalledOnce();
+      expect(onWarn.mock.calls[0]![0]).toContain('Session-ID write failed');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
