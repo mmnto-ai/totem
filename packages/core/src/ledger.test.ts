@@ -32,6 +32,19 @@ function makeEvent(overrides: Partial<LedgerEvent> = {}): LedgerEvent {
   };
 }
 
+function makeActivityEvent(overrides: Partial<LedgerEvent> = {}): LedgerEvent {
+  return {
+    timestamp: '2026-05-15T03:00:00.000Z',
+    type: 'mcp_call',
+    justification: '',
+    source: 'bot',
+    agent_source: 'claude',
+    session_id: '550e8400-e29b-41d4-a716-446655440000',
+    activity_name: 'search_knowledge',
+    ...overrides,
+  };
+}
+
 // ─── LedgerEventSchema ─────────────────────────────────
 
 describe('LedgerEventSchema', () => {
@@ -69,6 +82,221 @@ describe('LedgerEventSchema', () => {
     const event = makeEvent({ timestamp: 'not-a-timestamp' });
     const result = LedgerEventSchema.safeParse(event);
     expect(result.success).toBe(false);
+  });
+
+  // ─── Activity events (A.3.a schema extension) ────────────────
+
+  it('accepts an mcp_call activity event with agent_source + session_id + activity_name', () => {
+    const event = makeActivityEvent();
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe('mcp_call');
+      expect(result.data.agent_source).toBe('claude');
+      expect(result.data.session_id).toBe('550e8400-e29b-41d4-a716-446655440000');
+      expect(result.data.activity_name).toBe('search_knowledge');
+      expect(result.data.ruleId).toBeUndefined();
+      expect(result.data.file).toBeUndefined();
+    }
+  });
+
+  it('accepts a session_start activity event without ruleId or file', () => {
+    const event = makeActivityEvent({
+      type: 'session_start',
+      activity_name: 'SessionStart',
+    });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe('session_start');
+      expect(result.data.activity_name).toBe('SessionStart');
+    }
+  });
+
+  it('accepts a tool_call_first_significant activity event', () => {
+    const event = makeActivityEvent({
+      type: 'tool_call_first_significant',
+      activity_name: 'Write',
+      file: 'src/foo.ts',
+    });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a hook_fire activity event with activity_name discriminator', () => {
+    const event = makeActivityEvent({
+      type: 'hook_fire',
+      activity_name: 'PreToolUse',
+    });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts all three agent_source values', () => {
+    for (const value of ['claude', 'gemini', 'human'] as const) {
+      const event = makeActivityEvent({ agent_source: value });
+      const result = LedgerEventSchema.safeParse(event);
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('rejects an unknown agent_source value', () => {
+    const event = makeActivityEvent({
+      // @ts-expect-error — intentionally invalid for the test
+      agent_source: 'cursor',
+    });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a malformed session_id UUID', () => {
+    const event = makeActivityEvent({ session_id: 'not-a-uuid' });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a malformed correlation_id UUID', () => {
+    const event = makeActivityEvent({ correlation_id: 'not-a-uuid' });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty activity_name', () => {
+    const event = makeActivityEvent({ activity_name: '' });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a pre-A.3.a override event (no new optional fields populated)', () => {
+    // Mirrors what a pre-A.3.a writer produces; round-trip must remain compatible.
+    const legacyEvent = {
+      timestamp: '2026-03-25T12:00:00.000Z',
+      type: 'suppress' as const,
+      ruleId: 'abc123',
+      file: 'src/index.ts',
+      justification: 'legacy',
+      source: 'lint' as const,
+    };
+    const result = LedgerEventSchema.safeParse(legacyEvent);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.agent_source).toBeUndefined();
+      expect(result.data.session_id).toBeUndefined();
+      expect(result.data.correlation_id).toBeUndefined();
+      expect(result.data.activity_name).toBeUndefined();
+    }
+  });
+
+  it('accepts an override event with the new optional attribution fields populated', () => {
+    const event = makeEvent({
+      type: 'override',
+      source: 'shield',
+      agent_source: 'claude',
+      session_id: '550e8400-e29b-41d4-a716-446655440000',
+      correlation_id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+    });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.agent_source).toBe('claude');
+      expect(result.data.correlation_id).toBe('6ba7b810-9dad-11d1-80b4-00c04fd430c8');
+    }
+  });
+});
+
+// ─── Test-fixture per-branch field-presence (factory output validation) ─────
+//
+// SCOPE (honest about what this catches): these tests exercise the local
+// `makeEvent` / `makeActivityEvent` test factories defined above and assert
+// each event type's factory output carries its required-by-semantics fields.
+// They catch FIXTURE drift — if a future edit to `makeEvent` removes a default
+// required-by-type field, these tests fail.
+//
+// THEY DO NOT exercise real writers (CR R2 catch — `ledger.test.ts:291`).
+// Writer-regression coverage lives in the consumer-side test files where the
+// actual writers run:
+//   - `mcp_call`     → `packages/mcp/src/ledger-writer.test.ts` (logMcpCall)
+//   - `session_start`→ `packages/cli/src/commands/init.test.ts` (CLAUDE_SESSION_START template content tests)
+//   - `suppress` / `override` / `exemption` → run-compiled-rules.test.ts /
+//     shield.test.ts / exemption.test.ts (writers in @mmnto/cli)
+//
+// STRUCTURAL FIX: per OQ-1 disposition (strategy-Claude T0345Z, cross-stream
+// dispatch chain), the discriminated-union promotion in A.3.c will enforce
+// per-branch field presence at the schema level — at that point these
+// fixture-validation tests become redundant against the schema AND the
+// distributed consumer-side writer tests serve as the regression coverage.
+//
+// Retaining the block as a sanity-check on factory stability; full real-writer
+// coverage in the A.3.a window would require cross-package test imports that
+// exceed the sprint's "no call-site changes to existing writers" DoD.
+
+describe('test-fixture per-branch field presence (factory output validation)', () => {
+  // Helper: each test builds an event using makeEvent/makeActivityEvent
+  // factories (which populate required-by-type fields by default), then
+  // asserts each required field is defined and non-empty on the resulting
+  // object. Catches factory drift; does NOT catch real writer regressions
+  // (see § "SCOPE" above for the writer-coverage map).
+  function expectWriterCarriesFields(
+    event: LedgerEvent,
+    requiredByType: ReadonlyArray<keyof LedgerEvent>,
+  ): void {
+    for (const field of requiredByType) {
+      const fieldValue = event[field];
+      expect(fieldValue, `expected ${event.type} event to carry ${String(field)}`).toBeDefined();
+      if (typeof fieldValue === 'string') {
+        expect(fieldValue.length, `expected non-empty ${String(field)}`).toBeGreaterThan(0);
+      }
+    }
+  }
+
+  it('suppress events carry ruleId + file', () => {
+    expectWriterCarriesFields(makeEvent({ type: 'suppress' }), ['ruleId', 'file']);
+  });
+
+  it('override events carry ruleId + file', () => {
+    expectWriterCarriesFields(makeEvent({ type: 'override', source: 'shield' }), [
+      'ruleId',
+      'file',
+    ]);
+  });
+
+  it('exemption events carry ruleId + file', () => {
+    expectWriterCarriesFields(makeEvent({ type: 'exemption', source: 'bot' }), ['ruleId', 'file']);
+  });
+
+  it('mcp_call events carry agent_source + session_id + activity_name', () => {
+    expectWriterCarriesFields(makeActivityEvent({ type: 'mcp_call' }), [
+      'agent_source',
+      'session_id',
+      'activity_name',
+    ]);
+  });
+
+  it('session_start events carry agent_source + session_id', () => {
+    // session_start is what the SessionStart hook emits; agent_source identifies
+    // the orchestrator vendor (hook knows its own origin), session_id is the
+    // freshly-minted UUID that subsequent events correlate against.
+    expectWriterCarriesFields(
+      makeActivityEvent({ type: 'session_start', activity_name: 'SessionStart' }),
+      ['agent_source', 'session_id'],
+    );
+  });
+
+  it('hook_fire events carry agent_source + session_id + activity_name', () => {
+    expectWriterCarriesFields(
+      makeActivityEvent({ type: 'hook_fire', activity_name: 'PreToolUse' }),
+      ['agent_source', 'session_id', 'activity_name'],
+    );
+  });
+
+  it('tool_call_first_significant events carry agent_source + session_id', () => {
+    // activity_name (e.g., 'Write', 'Bash') is informational on this event type
+    // but not required by writer discipline — the timestamp + session_id pair is
+    // what the ADR-029 metric anchors on.
+    expectWriterCarriesFields(
+      makeActivityEvent({ type: 'tool_call_first_significant', activity_name: 'Write' }),
+      ['agent_source', 'session_id'],
+    );
   });
 });
 
@@ -180,5 +408,42 @@ describe('readLedgerEvents', () => {
   it('returns empty array when file does not exist', () => {
     const events = readLedgerEvents(tmpDir);
     expect(events).toEqual([]);
+  });
+
+  it('round-trips activity events alongside override events', () => {
+    // Mixed-event ledger — simulates a real session where override events
+    // (lint/shield bypasses) coexist with activity events (MCP calls, etc.).
+    const sessionId = '550e8400-e29b-41d4-a716-446655440000';
+    const sessionStart = makeActivityEvent({
+      type: 'session_start',
+      activity_name: 'SessionStart',
+      session_id: sessionId,
+    });
+    const mcpCall = makeActivityEvent({
+      type: 'mcp_call',
+      activity_name: 'search_knowledge',
+      session_id: sessionId,
+    });
+    const overrideEvent = makeEvent({
+      type: 'override',
+      source: 'shield',
+      ruleId: 'rule-xyz',
+      agent_source: 'claude',
+      session_id: sessionId,
+    });
+
+    appendLedgerEvent(tmpDir, sessionStart);
+    appendLedgerEvent(tmpDir, mcpCall);
+    appendLedgerEvent(tmpDir, overrideEvent);
+
+    const events = readLedgerEvents(tmpDir);
+    expect(events).toHaveLength(3);
+    expect(events[0]!.type).toBe('session_start');
+    expect(events[1]!.type).toBe('mcp_call');
+    expect(events[1]!.activity_name).toBe('search_knowledge');
+    expect(events[2]!.type).toBe('override');
+    expect(events[2]!.ruleId).toBe('rule-xyz');
+    // All three share the session_id — enables per-session compliance computation (A.3.b).
+    expect(events.every((e) => e.session_id === sessionId)).toBe(true);
   });
 });

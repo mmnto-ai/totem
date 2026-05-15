@@ -123,6 +123,66 @@ describe('readLedgerBypassCounts', () => {
     expect(counts.get('rule-a')).toBe(1);
     expect(counts.get('rule-b')).toBe(1);
   });
+
+  // A.3.a — type-based filter (CR/GCA Round-1 fix). The prior implementation
+  // used absence of `ruleId` as a proxy to skip activity events, which would
+  // mis-count an activity event that happened to carry a ruleId. Now the
+  // filter is type-based: only `suppress` and `override` count toward bypass
+  // rate.
+
+  it('excludes activity events even when they carry a ruleId', async () => {
+    // Construct an mcp_call event that happens to carry a ruleId — the prior
+    // absence-of-ruleId proxy would have counted this. With the type filter
+    // it's correctly excluded.
+    const sneakyActivityEvent = JSON.stringify({
+      timestamp: '2026-05-15T03:00:00.000Z',
+      type: 'mcp_call',
+      ruleId: 'should-not-count', // <-- the bug surface that proxy filter missed
+      source: 'bot',
+      agent_source: 'claude',
+      session_id: '550e8400-e29b-41d4-a716-446655440000',
+      activity_name: 'search_knowledge',
+      justification: '',
+    });
+    writeLedger(tmpDir, [
+      makeLedgerEvent('legit-rule'),
+      sneakyActivityEvent,
+      makeLedgerEvent('legit-rule'),
+    ]);
+
+    const counts = await readLedgerBypassCounts(tmpDir);
+    expect(counts.get('legit-rule')).toBe(2);
+    expect(counts.get('should-not-count')).toBeUndefined();
+    expect(counts.size).toBe(1);
+  });
+
+  it('excludes session_start and exemption events from bypass counts', async () => {
+    // session_start and exemption are not bypass events; neither should
+    // contribute to the rule-scoped bypass-rate metric.
+    const sessionStartEvent = JSON.stringify({
+      timestamp: '2026-05-15T03:00:00.000Z',
+      type: 'session_start',
+      source: 'bot',
+      agent_source: 'claude',
+      session_id: '550e8400-e29b-41d4-a716-446655440000',
+      activity_name: 'SessionStart',
+      justification: '',
+    });
+    const exemptionEvent = JSON.stringify({
+      timestamp: '2026-05-15T03:01:00.000Z',
+      type: 'exemption',
+      ruleId: 'auto-exempt-rule',
+      file: 'src/index.ts',
+      source: 'lint',
+      justification: '',
+    });
+    writeLedger(tmpDir, [makeLedgerEvent('legit-rule'), sessionStartEvent, exemptionEvent]);
+
+    const counts = await readLedgerBypassCounts(tmpDir);
+    expect(counts.get('legit-rule')).toBe(1);
+    expect(counts.get('auto-exempt-rule')).toBeUndefined();
+    expect(counts.size).toBe(1);
+  });
 });
 
 // ─── analyzeLedger ──────────────────────────────────────

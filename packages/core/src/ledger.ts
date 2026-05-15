@@ -8,17 +8,45 @@ import { z } from 'zod';
 export const LedgerEventSchema = z.object({
   /** ISO 8601 timestamp */
   timestamp: z.string().datetime(),
-  /** Event type: suppress (inline directive), override (shield --override), exemption (auto/manual pattern exemption) */
-  type: z.enum(['suppress', 'override', 'exemption']),
-  /** Rule ID (lessonHash) that was suppressed/overridden */
-  ruleId: z.string().min(1),
-  /** File where the suppression/override occurred */
-  file: z.string().min(1),
+  /**
+   * Event type. Two semantic families:
+   *
+   *  Override events (require `ruleId` + `file` at writer side):
+   *  - `suppress`  — inline directive (`// totem-ignore`, `// totem-context:`)
+   *  - `override`  — `shield --override`
+   *  - `exemption` — auto/manual pattern exemption
+   *
+   *  Activity events (require `agent_source` + `session_id` at writer side; no rule context):
+   *  - `mcp_call`                    — MCP tool invocation (see `activity_name` for which tool)
+   *  - `tool_call_first_significant` — first non-Read/Grep/Glob orchestrator tool call in session
+   *  - `hook_fire`                   — lifecycle hook executed (see `activity_name` for which hook)
+   *  - `session_start`               — SessionStart hook fired; new `session_id` minted
+   *
+   *  Schema-level: `ruleId` + `file` are optional to accommodate activity events. Writer-side
+   *  discipline enforces required-by-type. Promotion to `z.discriminatedUnion` deferred to A.3.c
+   *  per design doc OQ-1 (.handoff/_shared/2026-05-15-a3a-schema-extension-design.md).
+   */
+  type: z.enum([
+    'suppress',
+    'override',
+    'exemption',
+    'mcp_call',
+    'tool_call_first_significant',
+    'hook_fire',
+    'session_start',
+  ]),
+  /** Rule ID (lessonHash) for override events. Optional; required by writer for suppress/override/exemption. */
+  ruleId: z.string().trim().min(1).optional(),
+  /** File where the suppression/override occurred. Optional; required by writer for suppress/override/exemption. */
+  file: z.string().trim().min(1).optional(),
   /** Line number in the file */
   line: z.number().int().positive().optional(),
   /** The justification text from totem-context: (or deprecated shield-context: alias). Empty for totem-ignore. */
   justification: z.string().default(''),
-  /** Source of the event */
+  /**
+   * Emitting subsystem. Identifies which code path produced the event,
+   * orthogonal to `agent_source` (agent runtime attribution).
+   */
   source: z.enum(['lint', 'shield', 'bot']),
   /**
    * True when the bypassed rule was shipped by a pack with
@@ -28,6 +56,36 @@ export const LedgerEventSchema = z.object({
    * mmnto-ai/totem#1485). Absent on events from non-immutable rules.
    */
   immutable: z.boolean().optional(),
+  /**
+   * Agent runtime that produced the event. Orthogonal to `source`
+   * (which identifies the emitting subsystem). Optional for
+   * backward-compat with pre-A.3.a events; required by writer for
+   * activity events. Per ADR-078 § Event Attribution, with the
+   * field renamed from `source` to disambiguate against the
+   * load-bearing emitter identifier already in production code.
+   */
+  agent_source: z.enum(['claude', 'gemini', 'human']).optional(),
+  /**
+   * Session UUID minted at SessionStart hook fire (24h TTL, rotates on
+   * subsequent SessionStart). Persisted to `.totem/ledger/.session-id`
+   * for cross-event correlation within a session. Per ADR-029 § Session
+   * Heuristic (explicit UUID supersedes the rolling-2h activity heuristic
+   * when present). Optional for backward-compat.
+   */
+  session_id: z.string().uuid().optional(),
+  /**
+   * Trace correlation ID per ADR-014 — links an orchestrator run to
+   * the MCP tool calls it triggered. Optional; populated by A.3.c
+   * end-to-end correlation propagation.
+   */
+  correlation_id: z.string().uuid().optional(),
+  /**
+   * Sub-type discriminator for activity events. Examples:
+   *   `mcp_call`  → 'search_knowledge' | 'describe_project' | ...
+   *   `hook_fire` → 'SessionStart' | 'PreToolUse' | 'pre-push' | ...
+   * Optional; meaningful only on activity events.
+   */
+  activity_name: z.string().trim().min(1).optional(),
 });
 
 export type LedgerEvent = z.infer<typeof LedgerEventSchema>;
