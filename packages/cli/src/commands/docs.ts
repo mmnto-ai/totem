@@ -54,7 +54,7 @@ Updated content here...
 - **README value prop**: The core pitch ends with: "Write what you learned in plain English. Totem compiles it into a rule. That mistake physically cannot happen again." Do not weaken this language.
 - **Flywheel diagram**: The mermaid diagram showing Observe → Learn → Enforce must remain. Do not remove or replace it.
 - **Performance claim**: The rule count changes with each compile. Read the current count from the LIVE METRICS section if available, otherwise keep the existing number.
-- **COSS Covenant**: The "Open Core Covenant" section near the bottom links to COVENANT.md. Do not remove it.
+- **Commitment section**: The open-source commitment block near the bottom is hand-maintained. Do not rewrite or remove it — preserve verbatim.
 
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.

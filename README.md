@@ -87,7 +87,7 @@ Totem's approach is to ship a queryable knowledge index that holds your lessons 
 
 Any MCP-compatible agent can query it. Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real set of ranked candidates from your project's actual history (the agent still has to read them and synthesize — a queryable index returns candidates, not pre-synthesized answers). Whether an agent actually issues that query before deriving from scratch is currently an agent-discipline question — see [What Works and What Doesn't](#what-works-and-what-doesnt).
 
-With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), federation across sibling repos is supported via the opt-in `linkedIndexes` config — one repo's lessons become queryable from all linked repos when cohorts opt in, so context doesn't stop at the repo boundary. (Local filesystem-linked siblings are free; centralized federation with RBAC and hosted compile is the paid tier — see [Open Core Covenant](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md).)
+With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), federation across sibling repos is supported via the opt-in `linkedIndexes` config — one repo's lessons become queryable from all linked repos when cohorts opt in, so context doesn't stop at the repo boundary.
 
 ## What's in the Box
 
@@ -179,9 +179,11 @@ See the Wiki for how to use Totem to govern your workflows:
 - [MCP Server Setup](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/mcp-setup.md)
 - [CI/CD Integration](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/ci-integration.md)
 
-## Open Core Covenant
+## Open Source Commitment
 
-**Single-repo local use is free. Multi-repo centralized governance is paid.** The enforcement engine, lesson pipeline, MCP server, and self-healing loop are Apache 2.0 and will remain free and open. See [`COVENANT.md`](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md) for full details.
+The enforcement engine, lesson pipeline, MCP server, and self-healing loop are Apache 2.0 and will stay that way. If federation or hosted services come later, they'll be a separate product — the local toolkit you use today won't change terms.
+
+See [`COVENANT.md`](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md) for details.
 
 ## License
 
