@@ -181,7 +181,7 @@ See the Wiki for how to use Totem to govern your workflows:
 
 ## Open Source Commitment
 
-The core toolkit (enforcement engine, `totem lesson compile`, MCP server, and self-healing loop) is Apache 2.0 and will stay that way. If federation, hosted services, or centralized telemetry come later, they'll be separate products — the local toolkit you use today won't change terms.
+The core toolkit (enforcement engine, `totem lesson compile`, MCP server, and self-healing loop) is Apache 2.0. If federation, hosted services, or centralized telemetry are introduced later, they are intended to be separate products, while the local toolkit remains Apache 2.0.
 
 See [`COVENANT.md`](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md) for details.
 
