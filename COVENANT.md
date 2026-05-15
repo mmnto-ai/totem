@@ -37,12 +37,12 @@ Operational features for organizations governing multiple repos and agent fleets
 
 - Core enforcement runs **locally**. No data leaves your machine unless you opt in.
 - Enterprise telemetry is opt-in. Uploads are encrypted and signed. Customers control retention and export.
-- DLP masking is applied at every LLM boundary before any external call.
+- `Goal:` DLP masking on LLM boundaries. User-defined `CustomSecret` patterns (`packages/core/src/secrets.ts`) and telemetry path redaction (`packages/core/src/regex-safety/telemetry.ts`) ship today; comprehensive automatic masking across every LLM boundary is in active development.
 
 ## Trust
 
 - Compiled rules are deterministic. You can verify them locally against the source lessons.
-- Compile manifests provide cryptographic provenance: input hash, output hash, model, timestamp.
+- Compile manifests carry cryptographic provenance — input hash, SHA-256 output_hash, model, timestamp — written to `compile-manifest.json` and validated by `totem verify-manifest`.
 - Security disclosures follow coordinated disclosure via `SECURITY.md`.
 
 ## Contributions
