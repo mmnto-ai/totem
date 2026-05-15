@@ -2,6 +2,12 @@
 
 [![npm version](https://img.shields.io/npm/v/@mmnto/totem.svg)](https://www.npmjs.com/package/@mmnto/totem)
 [![CI](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml/badge.svg)](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml)
+[![MCP Server](https://img.shields.io/badge/MCP-Server-1f6feb)](https://github.com/mmnto-ai/totem/tree/main/packages/mcp)
+[![Tool-agnostic](https://img.shields.io/badge/Tool--agnostic-Claude%20%E2%80%A2%20Cursor%20%E2%80%A2%20Gemini%20%E2%80%A2%20Windsurf%20%E2%80%A2%20Copilot-2ea44f)](https://github.com/mmnto-ai/totem/blob/main/AGENTS.md)
+[![AGENTS.md](https://img.shields.io/badge/AGENTS.md-ADR--038-8957e5)](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-038-agents-md-standard.md)
+[![License: Apache-2.0](https://img.shields.io/github/license/mmnto-ai/totem)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-managed-F69220?logo=pnpm&logoColor=white)](https://pnpm.io)
 
 _AI coding agents are brilliant goldfish. Totem is the file-based substrate they read from and write to. It keeps architectural context durable across sessions._
 
