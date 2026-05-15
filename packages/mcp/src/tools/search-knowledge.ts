@@ -7,6 +7,7 @@ import type { ContentType, HealthCheckResult, SearchResult } from '@mmnto/totem'
 import { ContentTypeSchema } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
+import { logMcpCall } from '../ledger-writer.js';
 import { logSearch, setLogDir } from '../search-log.js';
 import { formatSystemWarning, formatXmlResponse } from '../xml-format.js';
 
@@ -604,6 +605,18 @@ export function registerSearchKnowledge(server: McpServer): void {
     },
     async ({ query, type_filter, max_results, boundary }) => {
       const start = Date.now();
+      // A.3.a: emit `mcp_call` activity event to the Trap Ledger. Fire-and-forget;
+      // the ledger write must not block or break the tool call (Tenet 4 + sensor
+      // semantics per lesson-b1bae311). This is the writer half of the
+      // ADR-029 compliance metric — A.3.b reads these events to compute
+      // "% of sessions where search_knowledge fired before first file write."
+      //
+      // logMcpCall has its own internal try/catch, but defense-in-depth with
+      // .catch() guards against any unhandledRejection if internals ever
+      // throw synchronously between awaits.
+      logMcpCall('search_knowledge').catch(() => {
+        /* fire-and-forget */
+      });
       try {
         // Initialize log directory on first call (lazy — avoids loading config at import time)
         try {

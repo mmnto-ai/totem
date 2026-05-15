@@ -59,6 +59,14 @@ interface MockLinkedStore {
 let mockLinkedStores: Map<string, MockLinkedStore> = new Map();
 let mockLinkedStoreInitErrors: Map<string, string> = new Map();
 
+/**
+ * A.3.a — spy on the Trap Ledger writer to verify the handler emits an
+ * `mcp_call` activity event. The real implementation is exercised in
+ * `ledger-writer.test.ts`; the search-knowledge integration test just
+ * verifies the call site fires with the correct activity_name.
+ */
+let mockLogMcpCall: ReturnType<typeof vi.fn>;
+
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: class {},
 }));
@@ -143,6 +151,10 @@ vi.mock('../search-log.js', () => ({
   setLogDir: vi.fn(),
 }));
 
+vi.mock('../ledger-writer.js', () => ({
+  logMcpCall: vi.fn(async () => {}),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports (after mocks are in place)
 // ---------------------------------------------------------------------------
@@ -184,6 +196,7 @@ describe('search_knowledge', () => {
     mockGetContextFailuresRemaining = 0;
     mockLinkedStores = new Map();
     mockLinkedStoreInitErrors = new Map();
+    mockLogMcpCall = vi.fn(async () => {});
 
     // Reset modules to clear the firstHealthCheckDone flag
     vi.resetModules();
@@ -268,7 +281,33 @@ describe('search_knowledge', () => {
       setLogDir: vi.fn(),
     }));
 
+    vi.doMock('../ledger-writer.js', () => ({
+      logMcpCall: mockLogMcpCall,
+    }));
+
     handle = await setupFresh();
+  });
+
+  // --- A.3.a — Trap Ledger writer wiring ---
+
+  it('emits an mcp_call activity event with activity_name=search_knowledge (A.3.a)', async () => {
+    mockSearchResults = [];
+    await handle({ query: 'test' });
+    expect(mockLogMcpCall).toHaveBeenCalledWith('search_knowledge');
+  });
+
+  it('emits the mcp_call event even when the search returns an error', async () => {
+    // Dimension mismatch path returns isError without throwing; mcp_call
+    // should still fire — invocation, not success, is what ADR-029 measures.
+    mockHealthCheckResult = {
+      healthy: false,
+      dimensionMatch: false,
+      storedDimensions: 384,
+      expectedDimensions: 1536,
+      issues: [],
+    };
+    await handle({ query: 'test' });
+    expect(mockLogMcpCall).toHaveBeenCalledWith('search_knowledge');
   });
 
   // --- Successful search returning results ---

@@ -432,6 +432,9 @@ export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secr
 export type { LedgerEvent } from './ledger.js';
 export { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger.js';
 
+// Session ID — A.3.a SessionStart hook + MCP correlation
+export { mintSessionId, readSessionId, writeSessionId } from './session-id.js';
+
 // Pack rule merge primitive (ADR-085 + ADR-089, mmnto-ai/totem#1485)
 export type { ImmutableOverrideBlock, MergeRulesResult } from './pack-merge.js';
 export { mergeRules } from './pack-merge.js';
