@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.40.1
+
+Coordinated cohort bump — no direct changes to this pack.
+
 ## 1.40.0
 
 ### Minor Changes

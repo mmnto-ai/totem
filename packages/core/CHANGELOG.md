@@ -1,5 +1,9 @@
 # @mmnto/totem
 
+## 1.40.1
+
+Coordinated cohort bump — no direct changes in this package; consumes the `@mmnto/mcp` patch.
+
 ## 1.40.0
 
 ### Minor Changes
