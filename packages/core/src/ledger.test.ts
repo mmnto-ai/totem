@@ -204,6 +204,93 @@ describe('LedgerEventSchema', () => {
   });
 });
 
+// ─── Writer-side per-branch field-presence (A.3.c discriminated-union gap-filler) ─────
+//
+// The flat schema (A.3.a) allows `ruleId`, `file`, `agent_source`, `session_id`, and
+// `activity_name` to be undefined globally. Per OQ-1 disposition (strategy-Claude
+// T0345Z), the discriminated-union promotion is deferred to A.3.c. These tests
+// enforce writer-side discipline in the A.3.a window: each event type carries the
+// fields its semantics require. Without them, an A.3.b metric computation could
+// read `null` on an LLM-boundary action because a writer silently dropped a field.
+//
+// Tests lock the discipline; they FAIL when a writer omits a required-by-type field.
+// When the schema is promoted to discriminatedUnion in A.3.c, these tests become
+// redundant against the schema (which is the point of promotion); they survive as
+// regression coverage.
+
+describe('writer-side per-branch field presence', () => {
+  // Helper: each test builds an event using makeEvent/makeActivityEvent
+  // factories (which always populate required-by-type fields), then asserts
+  // each required field is defined and non-empty on the resulting object.
+  // The test catches the regression where the factories drift and stop
+  // populating a per-branch required field — at which point the assertion
+  // fires with a descriptive label. The schema itself remains permissive
+  // (flat optional) per OQ-1; A.3.c's discriminatedUnion promotion will
+  // make this discipline structural.
+  function expectWriterCarriesFields(
+    event: LedgerEvent,
+    requiredByType: ReadonlyArray<keyof LedgerEvent>,
+  ): void {
+    for (const field of requiredByType) {
+      const fieldValue = event[field];
+      expect(fieldValue, `expected ${event.type} event to carry ${String(field)}`).toBeDefined();
+      if (typeof fieldValue === 'string') {
+        expect(fieldValue.length, `expected non-empty ${String(field)}`).toBeGreaterThan(0);
+      }
+    }
+  }
+
+  it('suppress events carry ruleId + file', () => {
+    expectWriterCarriesFields(makeEvent({ type: 'suppress' }), ['ruleId', 'file']);
+  });
+
+  it('override events carry ruleId + file', () => {
+    expectWriterCarriesFields(makeEvent({ type: 'override', source: 'shield' }), [
+      'ruleId',
+      'file',
+    ]);
+  });
+
+  it('exemption events carry ruleId + file', () => {
+    expectWriterCarriesFields(makeEvent({ type: 'exemption', source: 'bot' }), ['ruleId', 'file']);
+  });
+
+  it('mcp_call events carry agent_source + session_id + activity_name', () => {
+    expectWriterCarriesFields(makeActivityEvent({ type: 'mcp_call' }), [
+      'agent_source',
+      'session_id',
+      'activity_name',
+    ]);
+  });
+
+  it('session_start events carry agent_source + session_id', () => {
+    // session_start is what the SessionStart hook emits; agent_source identifies
+    // the orchestrator vendor (hook knows its own origin), session_id is the
+    // freshly-minted UUID that subsequent events correlate against.
+    expectWriterCarriesFields(
+      makeActivityEvent({ type: 'session_start', activity_name: 'SessionStart' }),
+      ['agent_source', 'session_id'],
+    );
+  });
+
+  it('hook_fire events carry agent_source + session_id + activity_name', () => {
+    expectWriterCarriesFields(
+      makeActivityEvent({ type: 'hook_fire', activity_name: 'PreToolUse' }),
+      ['agent_source', 'session_id', 'activity_name'],
+    );
+  });
+
+  it('tool_call_first_significant events carry agent_source + session_id', () => {
+    // activity_name (e.g., 'Write', 'Bash') is informational on this event type
+    // but not required by writer discipline — the timestamp + session_id pair is
+    // what the ADR-029 metric anchors on.
+    expectWriterCarriesFields(
+      makeActivityEvent({ type: 'tool_call_first_significant', activity_name: 'Write' }),
+      ['agent_source', 'session_id'],
+    );
+  });
+});
+
 // ─── appendLedgerEvent ──────────────────────────────────
 
 describe('appendLedgerEvent', () => {

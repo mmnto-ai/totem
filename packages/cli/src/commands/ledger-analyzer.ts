@@ -84,8 +84,13 @@ export async function readLedgerBypassCounts(
       const result = LedgerEventSchema.safeParse(parsed);
       if (!result.success) continue;
       const event = result.data;
-      if (event.type === 'exemption') continue;
-      // Skip activity events (A.3.a) — they have no ruleId; bypass-rate is rule-scoped.
+      // Bypass-rate is rule-scoped: include only the two rule-bypass event types
+      // (suppress + override). Excludes `exemption` and all A.3.a activity events
+      // (mcp_call, session_start, etc.) by type rather than via the absence-of-
+      // ruleId proxy. CR/GCA Round-1 catch — type-based filter is more robust
+      // (the prior proxy would miscount an activity event that happened to
+      // carry a ruleId).
+      if (event.type !== 'suppress' && event.type !== 'override') continue;
       if (!event.ruleId) continue;
       counts.set(event.ruleId, (counts.get(event.ruleId) ?? 0) + 1);
     } catch {

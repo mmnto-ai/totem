@@ -24,7 +24,7 @@ Forward-only schema extension to `LedgerEventSchema` in `packages/core/src/ledge
 - `correlation_id` (UUID) — trace correlation per ADR-014; populated by A.3.c end-to-end propagation work.
 - `activity_name` — sub-type discriminator for activity events.
 
-**Field relaxations:** `ruleId` and `file` are now optional at the schema level to accommodate activity events. Writer-side discipline enforces required-by-type for `suppress` / `override` / `exemption`. Promotion to a Zod `discriminatedUnion` is deferred to A.3.c per design doc OQ-1.
+**Field relaxations:** `ruleId` and `file` are now optional at the schema level to accommodate activity events. Writer-side discipline enforces required-by-type for `suppress` / `override` / `exemption`. Promotion to a Zod `discriminatedUnion` is deferred to A.3.c per design doc OQ-1 (strategy-Claude T0345Z disposition agreed; rationale and gap-filler tests in `ledger.test.ts` § "writer-side per-branch field presence" lock the discipline until the schema enforces it structurally).
 
 **Backward compatibility:**
 
@@ -45,4 +45,4 @@ Activity-event example added for `mcp_call` / `search_knowledge` shape.
 - A.3.c: orchestrator → MCP `correlation_id` propagation (~1 week).
 - A.4.a / A.4.b: PreToolUse soft-block + pre-push hard-block pair (per C-12, ships alongside A.3.a).
 
-ADR-078 surface amendment (rename agent attribution from `source` to `agent_source` in § Decision 2) routed to strategy-Claude via substrate dispatch T0258Z. No code dependency in either direction.
+ADR-078 surface amendment (rename agent attribution from `source` to `agent_source` in § Decision 2) landed at `mmnto-ai/totem-strategy#329` (commit `b830e0c` on main). Includes the first `Falsifying Metric:` field in the ecosystem per Tenet 19 — sibling capability-claim ADRs 014/029/044 backfilled in `mmnto-ai/totem-strategy#330`.
