@@ -88,18 +88,18 @@ The index responds to queries deterministically; whether an agent actually queri
 
 ## What's in the Box
 
-Totem is a set of CLI tools, not a framework. Building blocks you wire into whatever CI and workflow you already have. Every command supports `--json` for scripting.
+Totem is a set of CLI tools, not a framework. Building blocks you wire into whatever CI and workflow you already have. Several commands support `--json` or `--format json` for scripting; check `totem <command> --help` for the format options on a specific command.
 
-| Command         | What it does                                                                                                   |
-| --------------- | -------------------------------------------------------------------------------------------------------------- |
-| `totem lint`    | Run all compiled rules against your code. Zero LLM, offline, sub-second.                                       |
-| `totem compile` | Turn plain-English lessons into AST or regex rules.                                                            |
-| `totem extract` | Pull lessons from PR reviews and bot comments.                                                                 |
-| `totem doctor`  | Flag noisy rules via context telemetry, suggest upgrades.                                                      |
-| `totem spec`    | Generate an implementation spec from a GitHub issue before you touch any code (LLM-powered, requires API key). |
-| `totem review`  | LLM-powered architectural review on an uncommitted diff (requires API key).                                    |
-| `totem sync`    | Rebuild the semantic index from your lessons and docs.                                                         |
-| `totem hooks`   | Install Git hooks (`pre-push` lint gate).                                                                      |
+| Command                | What it does                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `totem lint`           | Run all compiled rules against your code. Zero LLM, offline, sub-second.                                       |
+| `totem lesson compile` | Turn plain-English lessons into AST or regex rules.                                                            |
+| `totem lesson extract` | Pull lessons from PR reviews and bot comments.                                                                 |
+| `totem doctor`         | Flag noisy rules via context telemetry, suggest upgrades.                                                      |
+| `totem spec`           | Generate an implementation spec from a GitHub issue before you touch any code (LLM-powered, requires API key). |
+| `totem review`         | LLM-powered architectural review on an uncommitted diff (requires API key).                                    |
+| `totem sync`           | Rebuild the semantic index from your lessons and docs.                                                         |
+| `totem hook install`   | Install Git hooks (`pre-push` lint gate).                                                                      |
 
 The built-in MCP server exposes the knowledge base to any compatible agent. It's the same index, with no extra setup.
 
