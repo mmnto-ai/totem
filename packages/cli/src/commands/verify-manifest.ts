@@ -42,6 +42,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
     generateOutputHash,
     readCompileManifest,
     safeExec,
+    TotemConfigError,
     TotemError,
   } = await import('@mmnto/totem');
   const { bold, errorColor, log, success: successColor } = await import('../ui.js');
@@ -141,7 +142,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
           'Update packages/cli/src/commands/compile-templates.ts to make the worker change explicit, or pass --allow-compile-drift with a "## Compile Drift Justification" PR-body heading (or TOTEM_DRIFT_JUSTIFICATION env var when no PR exists yet).',
         );
       } else {
-        verifyDriftJustification({ cwd, safeExec, TotemError });
+        verifyDriftJustification({ cwd, safeExec, TotemConfigError });
         log.warn(
           TAG,
           `--allow-compile-drift accepted (${baseFingerprint.slice(0, 8)}… → ${manifest.compile_worker_fingerprint.slice(0, 8)}…). Justification recorded.`,
@@ -194,7 +195,25 @@ function tryReadBaseFingerprint(args: {
   pathMod: typeof import('node:path');
 }): string | undefined {
   const { cwd, manifestPath, safeExec, CompileManifestSchema, pathMod } = args;
-  const relPath = pathMod.relative(cwd, manifestPath).replace(/\\/g, '/');
+  // `git show <ref>:<path>` expects `<path>` relative to the repo root, not
+  // the current working directory. When verify-manifest runs from a sub-dir
+  // of the repo, `path.relative(cwd, manifestPath)` would produce a path
+  // that git rejects. Resolve the repo root via `git rev-parse` first; fall
+  // back to cwd-relative if rev-parse fails (best-effort path).
+  let pathBase = cwd;
+  try {
+    // safeExec's default `trim: true` already strips the trailing newline
+    // that `git rev-parse --show-toplevel` emits (see exec.ts:77), so the
+    // returned path is directly usable by `pathMod.relative` below — no
+    // defensive .trim() needed here.
+    pathBase = safeExec('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      timeout: AUX_LOOKUP_TIMEOUT_MS,
+      maxBuffer: AUX_LOOKUP_MAX_BUFFER,
+    });
+    // totem-context: git rev-parse fall-through is best-effort; pathBase keeps the cwd initializer when not running inside a git repo
+  } catch {}
+  const relPath = pathMod.relative(pathBase, manifestPath).replace(/\\/g, '/');
   // Prefer origin/main as the canonical source — local `main` may be stale
   // when the user hasn't pulled in a while. CI environments may only have
   // origin/<branch> at all; local dev usually has both, and an out-of-date
@@ -262,16 +281,20 @@ function branchDiffTouches(args: { cwd: string; relPath: string; safeExec: SafeE
 function verifyDriftJustification(args: {
   cwd: string;
   safeExec: SafeExec;
-  TotemError: typeof import('@mmnto/totem').TotemError;
+  TotemConfigError: typeof import('@mmnto/totem').TotemConfigError;
 }): void {
-  const { cwd, safeExec, TotemError } = args;
+  const { cwd, safeExec, TotemConfigError } = args;
   const prBody = tryFetchCurrentBranchPrBody({ cwd, safeExec });
   if (prBody !== undefined) {
     if (!DRIFT_JUSTIFICATION_HEADING_RE.test(prBody)) {
-      throw new TotemError(
-        'COMPILE_FAILED',
+      // Flag misuse — TotemConfigError is the canonical CLI-layer
+      // flag-validation class per .gemini/styleguide.md § 76. CONFIG_INVALID
+      // because the flag was passed but the conditions for using it weren't
+      // met (heading missing).
+      throw new TotemConfigError(
         '--allow-compile-drift requires a `## Compile Drift Justification` heading in the PR body.',
         'Edit the PR body and add a `## Compile Drift Justification` section explaining the compile-worker change.',
+        'CONFIG_INVALID',
       );
     }
     return;
@@ -280,10 +303,10 @@ function verifyDriftJustification(args: {
   // No PR body context — pre-push fortification.
   const justification = process.env['TOTEM_DRIFT_JUSTIFICATION'];
   if (justification === undefined || justification.trim().length === 0) {
-    throw new TotemError(
-      'COMPILE_FAILED',
+    throw new TotemConfigError(
       '--allow-compile-drift requires either an open PR (with a `## Compile Drift Justification` heading) or the TOTEM_DRIFT_JUSTIFICATION env var set non-empty.',
       'Open a PR with the heading, or set TOTEM_DRIFT_JUSTIFICATION="reason for the drift" in your shell and retry.',
+      'CONFIG_INVALID',
     );
   }
 }

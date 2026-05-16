@@ -2,7 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 
 import { canonicalStringify } from './compile-manifest.js';
-import { getErrorMessage, TotemParseError } from './errors.js';
+import { TotemParseError } from './errors.js';
 
 // ─── Public types ────────────────────────────────────
 
@@ -72,16 +72,19 @@ export function readPromptTemplateContentHash(promptTemplatePath: string): strin
     const content = fs.readFileSync(promptTemplatePath, 'utf-8').replace(/\r\n/g, '\n');
     return crypto.createHash('sha256').update(content).digest('hex');
   } catch (err) {
+    // .gemini/styleguide.md § 120 — pass the original error as `cause`, never
+    // concatenate `err.message` into the message string (destroys stack
+    // traces; `handleError` traverses `.cause` chains automatically).
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
       throw new TotemParseError(
-        `Cannot hash compile-worker prompt template: ${promptTemplatePath} not found`,
+        `Cannot hash compile-worker prompt template at ${promptTemplatePath} (file not found)`,
         'The compile-worker prompt template (packages/cli/src/commands/compile-templates.ts) is missing. Reinstall the CLI or restore the file.',
         err,
       );
     }
     throw new TotemParseError(
-      `Cannot read compile-worker prompt template: ${getErrorMessage(err)}`,
+      `Cannot read compile-worker prompt template at ${promptTemplatePath}`,
       `Check file permissions for ${promptTemplatePath}.`,
       err,
     );

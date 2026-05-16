@@ -351,6 +351,40 @@ describe('verify-manifest fingerprint drift', () => {
     );
   });
 
+  // R2 fix verification: the repo-root anchor (via `rev-parse --show-toplevel`)
+  // ensures the base-fingerprint lookup constructs paths the way git expects
+  // when verify-manifest runs from a sub-directory of the repo. Without the
+  // fix, the lookup builds a cwd-relative path that git rejects (the path
+  // would walk above the repo root). The afterEach restores `process.cwd()`
+  // — no leak across tests.
+  it('resolves the base-ref path against the repo root when run from a sub-directory', async () => {
+    const subDir = path.join(tmpDir, 'packages/cli');
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(subDir, 'totem.config.ts'), 'export default {};', 'utf-8');
+
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(subDir);
+    seedMonorepoTemplate(tmpDir); // root-level monorepo marker
+
+    initGitRepo(tmpDir);
+    writeManifestWithFingerprint(manifestPath, lessonsDir, rulesPath, 'a'.repeat(64));
+    git(tmpDir, 'add', '.');
+    git(tmpDir, 'commit', '-q', '-m', 'base on main');
+
+    git(tmpDir, 'checkout', '-q', '-b', 'feature/from-subdir');
+    writeManifestWithFingerprint(manifestPath, lessonsDir, rulesPath, 'b'.repeat(64));
+    git(tmpDir, 'add', path.relative(tmpDir, manifestPath).replace(/\\/g, '/'));
+    git(tmpDir, 'commit', '-q', '-m', 'drift from subdir');
+
+    process.chdir(subDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    // Repo-root anchored lookup should locate the base manifest, the drift
+    // gate should fire, and the override-less path should reject. Without
+    // the fix, the lookup would silently return undefined and the gate
+    // would no-op, letting unjustified drift slip through.
+    await expect(verifyManifestCommand()).rejects.toThrow(/fingerprint drift/);
+  });
+
   it('--allow-compile-drift accepts when TOTEM_DRIFT_JUSTIFICATION is set and no PR body context is available', async () => {
     const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
     seedMonorepoTemplate(tmpDir);
