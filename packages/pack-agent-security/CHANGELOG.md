@@ -1,5 +1,7 @@
 # @mmnto/pack-agent-security
 
+## 1.42.0
+
 ## 1.41.0
 
 Coordinated cohort bump — no direct changes in this package; consumes the `@mmnto/totem` minor.
