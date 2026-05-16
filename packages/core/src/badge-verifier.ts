@@ -239,9 +239,8 @@ function decodeBadgeUrl(url: string): { label: string; message: string } {
 function decodeShieldsText(s: string): string {
   let out: string;
   try {
-    out = decodeURIComponent(s);
+    out = decodeURIComponent(s); // totem-context: intentional cleanup — next-line catch swallows malformed % escapes (e.g., a stray `%` in a badge URL) so verifyToolClaims can still match the raw segment instead of crashing the whole hook.
   } catch {
-    // totem-context: intentional cleanup — decodeURIComponent throws on malformed % sequences (e.g., a stray `%` in a badge URL). Preserve the raw segment so verifyToolClaims can still match the badge rather than crashing the whole hook.
     out = s;
   }
   return out.replace(/--|__|_/g, (m) => {
