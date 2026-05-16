@@ -34,6 +34,7 @@ export async function verifyBadgesCommand(
     extractBadgesFromDiff,
     getGitBranchDiff,
     resolveGitRoot,
+    sanitizeForTerminal,
     verifySelfReferenceLinks,
     verifyToolClaims,
   } = await import('@mmnto/totem');
@@ -75,7 +76,10 @@ export async function verifyBadgesCommand(
 
   if (!result.valid) {
     for (const msg of errors) {
-      log.error('Totem Error', msg);
+      // Sanitize: error messages embed badge label/message/linkTarget pulled from
+      // git diff content, which is untrusted. Prevents terminal-control-sequence
+      // injection from a hostile README change.
+      log.error('Totem Error', sanitizeForTerminal(msg));
     }
     const label = errorColor(bold('FAIL'));
     log.error('Totem Error', `${label} — Badge verification failed (${errors.length}).`);

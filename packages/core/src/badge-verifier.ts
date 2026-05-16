@@ -124,7 +124,18 @@ export function verifyToolClaims(
       if (!wordBoundary.test(haystack)) continue;
 
       const candidatePaths = config[tool] ?? [];
-      const anyExists = candidatePaths.some((rel) => exists(path.join(repoRoot, rel)));
+      // Resolve and constrain to repoRoot — a path like '../CLAUDE.md' would
+      // satisfy the claim with a file OUTSIDE the repo, defeating the falsifying
+      // metric. Drop paths that escape the repo before existence-checking.
+      const anyExists = candidatePaths.some((rel) => {
+        const resolved = path.resolve(repoRoot, rel);
+        const repoRootResolved = path.resolve(repoRoot);
+        const sep = path.sep;
+        if (resolved !== repoRootResolved && !resolved.startsWith(repoRootResolved + sep)) {
+          return false;
+        }
+        return exists(resolved);
+      });
       if (anyExists) continue;
 
       const dedupKey = `${badge.rawUrl}|${key}`;
@@ -168,15 +179,22 @@ const STANDARD_CLAIM_LABELS = new Set([
   'mpl-2.0',
 ]);
 
-const INTERNAL_TARGET_PATTERNS = [
-  /^\.\//, // relative path starting with `./`
-  /^\.\.\//, // relative path starting with `../`
-  /\bmmnto-ai\//i,
-  /\bmmnto\//i,
-];
-
+/**
+ * A link target is "internal" if either:
+ *   - it has no HTTP(S) scheme (bare/relative path: `AGENTS.md`, `./AGENTS.md`,
+ *     `../docs/foo.md`, `LICENSE`, `docs/ADR-038.md`), OR
+ *   - it's a fully-qualified URL into a `mmnto-ai/...` GitHub path (self-reference
+ *     for this org — the catalyst class from mmnto-ai/totem#1925 R2).
+ *
+ * The `mmnto-ai/` pattern is intentionally hardcoded for this PR's scope and
+ * tracked as a follow-up: GCA's review on #1934 flagged this as core-pack coupling
+ * to a single user. Resolution path is configuration via `totem.config.ts`
+ * (e.g., a `selfLinkOrgs: string[]` field) — see the PR description.
+ */
 function isInternalLinkTarget(target: string): boolean {
-  return INTERNAL_TARGET_PATTERNS.some((re) => re.test(target));
+  if (!/^https?:\/\//i.test(target)) return true;
+  if (/\bmmnto-ai\//i.test(target)) return true;
+  return false;
 }
 
 /**
@@ -222,9 +240,13 @@ function decodeBadgeUrl(url: string): { label: string; message: string } {
 
   // Split on unescaped single dashes; `--` is the shields.io escape for literal `-`.
   const parts = path.split(/(?<!-)-(?!-)/);
+  // shields.io treats /badge/<LABEL>-<MESSAGE>-<COLOR> as 3-part and /badge/<MESSAGE>-<COLOR>
+  // as 2-part (empty label). Without this branch, a badge like `/badge/Claude-blue` would
+  // misassign `Claude` to label and never get checked for tool-claim membership.
+  const hasLabel = parts.length >= 3;
   return {
-    label: decodeShieldsText(parts[0] ?? ''),
-    message: decodeShieldsText(parts[1] ?? ''),
+    label: decodeShieldsText(hasLabel ? (parts[0] ?? '') : ''),
+    message: decodeShieldsText(hasLabel ? (parts[1] ?? '') : (parts[0] ?? '')),
   };
 }
 

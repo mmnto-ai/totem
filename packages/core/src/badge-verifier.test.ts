@@ -5,6 +5,7 @@ import {
   DEFAULT_TOOL_INTEGRATIONS,
   extractBadgesFromDiff,
   type ExtractedBadge,
+  type ToolIntegrationConfig,
   ToolIntegrationConfigSchema,
   verifySelfReferenceLinks,
   verifyToolClaims,
@@ -145,6 +146,17 @@ describe('badge-verifier — extractBadgesFromDiff', () => {
     expect(badges[0]?.label).toBe('Apache 2.0');
   });
 
+  it('treats 2-part shields URLs (/<MESSAGE>-<COLOR>) as empty-label per shields.io spec', () => {
+    // GCA review on mmnto-ai/totem#1934: `/badge/Claude-blue` means MESSAGE=Claude,
+    // COLOR=blue, LABEL=''. Without the 2-part branch, "Claude" lands in label,
+    // and downstream consumers that key on label vs message misidentify.
+    const diff =
+      README_DIFF_HEADER + `+[![X](https://img.shields.io/badge/Claude-blue)](https://claude.ai)\n`;
+    const badges = extractBadgesFromDiff(diff);
+    expect(badges[0]?.label).toBe('');
+    expect(badges[0]?.message).toBe('Claude');
+  });
+
   it('returns empty array when diff has no README.md changes', () => {
     expect(extractBadgesFromDiff('')).toEqual([]);
     expect(extractBadgesFromDiff(DIFF_NOT_README_HEADER + ` text\n+more text\n`)).toEqual([]);
@@ -201,6 +213,20 @@ describe('badge-verifier — verifyToolClaims', () => {
   it('passes through cleanly when all paths exist', () => {
     const badge = makeBadge({ message: 'Claude Gemini Cursor' });
     expect(verifyToolClaims([badge], config, '/repo', allPathsExist)).toHaveLength(0);
+  });
+
+  it('rejects configured paths that escape repoRoot via .. traversal', () => {
+    // CR review on mmnto-ai/totem#1934: a configured path like '../CLAUDE.md' would
+    // satisfy the claim with a file outside the repo, defeating the falsifying metric.
+    const escapeConfig: ToolIntegrationConfig = {
+      claude: ['../CLAUDE.md', '../../CLAUDE.md'],
+    };
+    const badge = makeBadge({ message: 'Claude' });
+    // Predicate returns true for everything — but the path-escape guard must filter
+    // before existence-checking, so we still get an error.
+    const errors = verifyToolClaims([badge], escapeConfig, '/repo/root', () => true);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/claude/i);
   });
 });
 
@@ -266,5 +292,24 @@ describe('badge-verifier — verifySelfReferenceLinks', () => {
   it('ignores standard-claim badges with no link target', () => {
     const badge = makeBadge({ label: 'AGENTS.md', message: 'compliant' });
     expect(verifySelfReferenceLinks([badge])).toHaveLength(0);
+  });
+
+  it('flags bare relative paths like LICENSE or docs/ADR-038.md as internal', () => {
+    // CR review on mmnto-ai/totem#1934: hardcoded `./` / `../` regex missed bare
+    // README-relative targets. Inversion: anything without http(s):// is internal.
+    const cases: Array<{ linkTarget: string; expectFlag: boolean }> = [
+      { linkTarget: 'LICENSE', expectFlag: true },
+      { linkTarget: 'docs/ADR-038.md', expectFlag: true },
+      { linkTarget: 'AGENTS.md', expectFlag: true },
+      { linkTarget: './AGENTS.md', expectFlag: true },
+      { linkTarget: '../AGENTS.md', expectFlag: true },
+      { linkTarget: 'https://agents.md/', expectFlag: false },
+      { linkTarget: 'http://opensource.org/licenses/MIT', expectFlag: false },
+    ];
+    for (const { linkTarget, expectFlag } of cases) {
+      const badge = makeBadge({ label: 'AGENTS.md', message: 'compliant', linkTarget });
+      const errors = verifySelfReferenceLinks([badge]);
+      expect(errors).toHaveLength(expectFlag ? 1 : 0);
+    }
   });
 });
