@@ -25,6 +25,9 @@ export const LedgerEventSchema = z.object({
    *                                    Best-effort `session_id` only; `agent_source` deferred to A.3.c when
    *                                    the orchestrator → telemetry correlation lands (same constraint as
    *                                    `mcp_call`, which also leaves `agent_source` undefined today).
+   *  - `claim_discipline_finding`    — `totem doctor --claim-discipline` fired on a public-surface diff
+   *                                    (README/AGENTS/design-tenets/wiki); see `ruleId` for which WWND
+   *                                    rule fired and `activity_name` for the surface (Proposal 279).
    *
    *  Schema-level: `ruleId` + `file` are optional to accommodate activity events. Writer-side
    *  discipline enforces required-by-type. Promotion to `z.discriminatedUnion` deferred to A.3.c
@@ -39,6 +42,7 @@ export const LedgerEventSchema = z.object({
     'hook_fire',
     'session_start',
     'compile_run',
+    'claim_discipline_finding',
   ]),
   /** Rule ID (lessonHash) for override events. Optional; required by writer for suppress/override/exemption. */
   ruleId: z.string().trim().min(1).optional(),
@@ -88,9 +92,25 @@ export const LedgerEventSchema = z.object({
    * Sub-type discriminator for activity events. Examples:
    *   `mcp_call`  → 'search_knowledge' | 'describe_project' | ...
    *   `hook_fire` → 'SessionStart' | 'PreToolUse' | 'pre-push' | ...
+   *   `claim_discipline_finding` → 'README.md' | 'AGENTS.md' | 'design-tenets.md' | 'docs/wiki/...'
    * Optional; meaningful only on activity events.
    */
   activity_name: z.string().trim().min(1).optional(),
+  /**
+   * CLI semver (`@mmnto/cli` package.json `version`) that produced the event.
+   * Used to correlate gate behavior with cli releases when investigating
+   * findings post-merge. Per Proposal 279 § Telemetry; additive for all
+   * activity-event consumers, not just `claim_discipline_finding`.
+   */
+  cli_version: z.string().trim().min(1).optional(),
+  /**
+   * True when a `claim_discipline_finding` (or any future bypass-able gate)
+   * was addressed inside the same PR that introduced it. Computed at merge
+   * time by post-merge replay against the PR-body justification heading.
+   * Per Proposal 279 § Telemetry; scoped to claim-discipline events by
+   * writer convention even though the field lives on the base schema.
+   */
+  addressed_in_pr: z.boolean().optional(),
 });
 
 export type LedgerEvent = z.infer<typeof LedgerEventSchema>;
