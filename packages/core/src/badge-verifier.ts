@@ -238,10 +238,10 @@ function decodeBadgeUrl(url: string): { label: string; message: string } {
  */
 function decodeShieldsText(s: string): string {
   let out: string;
-  // totem-context: intentional cleanup — decodeURIComponent throws on malformed % sequences (e.g., a stray `%` in a badge URL). The verifier preserves the raw segment so the badge can still be matched by verifyToolClaims rather than crashing the whole hook.
   try {
     out = decodeURIComponent(s);
   } catch {
+    // totem-context: intentional cleanup — decodeURIComponent throws on malformed % sequences (e.g., a stray `%` in a badge URL). Preserve the raw segment so verifyToolClaims can still match the badge rather than crashing the whole hook.
     out = s;
   }
   return out.replace(/--|__|_/g, (m) => {
