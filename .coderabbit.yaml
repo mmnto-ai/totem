@@ -40,6 +40,14 @@ reviews:
     - '!**/.lancedb/**'
     - '!**/dist/**'
     - '!**/node_modules/**'
+    # Generated artifact of `totem lesson compile` — every compile run rotates a
+    # subset of lessonHashes (axis-3/axis-4 compile-corpus drift per Proposal 278
+    # § Action 4 + Proposal 281-draft). The rotation is reproducible-given-fingerprint
+    # under the #1939 drift gate, but produces high-volume noise on PRs that add
+    # even a single Pipeline 1 lesson. Reviewers should focus on `.totem/lessons/`
+    # (the actual change surface) and `.totem/compile-manifest.json` (the drift
+    # gate's commitment).
+    - '!.totem/compiled-rules.json'
 
   finishing_touches:
     docstrings:
