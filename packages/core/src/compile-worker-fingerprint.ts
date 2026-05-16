@@ -79,7 +79,7 @@ export function readPromptTemplateContentHash(promptTemplatePath: string): strin
     if (code === 'ENOENT') {
       throw new TotemParseError(
         `Cannot hash compile-worker prompt template at ${promptTemplatePath} (file not found)`,
-        'The compile-worker prompt template (packages/cli/src/commands/compile-templates.ts) is missing. Reinstall the CLI or restore the file.',
+        'The compile-worker prompt template is missing at the resolved path. Reinstall the CLI or verify the build output, depending on whether you are running from source (compile-templates.ts) or a built artifact (compile-templates.js).',
         err,
       );
     }

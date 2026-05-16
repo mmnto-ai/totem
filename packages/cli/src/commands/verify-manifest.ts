@@ -41,6 +41,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
     findRepoRootSync,
     generateInputHash,
     generateOutputHash,
+    getDefaultBranch,
     readCompileManifest,
     safeExec,
     TotemConfigError,
@@ -116,6 +117,18 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   // monorepo (e.g., `cd packages/cli && pnpm totem verify-manifest`).
   const inMonorepo = findMonorepoTemplate(cwd, path, fs) !== undefined;
   if (manifest.compile_worker_fingerprint !== undefined && inMonorepo) {
+    // Resolve the base branch dynamically — repos can use main, master, or
+    // something custom (e.g., `develop`). `getDefaultBranch` reads
+    // origin/HEAD with fallback to main/master. The base-ref/diff lookups
+    // below are themselves best-effort, so a wrong guess just no-ops the
+    // drift check rather than throwing.
+    let baseBranch = 'main';
+    try {
+      baseBranch = getDefaultBranch(cwd);
+      // totem-context: getDefaultBranch fall-through is best-effort; baseBranch keeps the 'main' initializer when git is unavailable or no remote is configured
+    } catch (err) {
+      void err;
+    }
     const baseFingerprint = tryReadBaseFingerprint({
       cwd,
       manifestPath,
@@ -123,12 +136,14 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
       CompileManifestSchema,
       pathMod: path,
       findRepoRootSync,
+      baseBranch,
     });
     if (baseFingerprint !== undefined && baseFingerprint !== manifest.compile_worker_fingerprint) {
       const compileTemplatesChanged = branchDiffTouches({
         cwd,
         relPath: COMPILE_TEMPLATES_REL_PATH,
         safeExec,
+        baseBranch,
       });
       if (compileTemplatesChanged) {
         log.info(
@@ -139,7 +154,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
         throw new TotemError(
           'COMPILE_FAILED',
           `Compile-worker fingerprint drift detected without a packages/cli/src/commands/compile-templates.ts change.\n` +
-            `  Base (origin/main): ${baseFingerprint}\n` +
+            `  Base (origin/${baseBranch}): ${baseFingerprint}\n` +
             `  Current:            ${manifest.compile_worker_fingerprint}`,
           'Update packages/cli/src/commands/compile-templates.ts to make the worker change explicit, or pass --allow-compile-drift with a "## Compile Drift Justification" PR-body heading (or TOTEM_DRIFT_JUSTIFICATION env var when no PR exists yet).',
         );
@@ -196,8 +211,17 @@ function tryReadBaseFingerprint(args: {
   CompileManifestSchema: typeof import('@mmnto/totem').CompileManifestSchema;
   pathMod: typeof import('node:path');
   findRepoRootSync: typeof import('@mmnto/totem').findRepoRootSync;
+  baseBranch: string;
 }): string | undefined {
-  const { cwd, manifestPath, safeExec, CompileManifestSchema, pathMod, findRepoRootSync } = args;
+  const {
+    cwd,
+    manifestPath,
+    safeExec,
+    CompileManifestSchema,
+    pathMod,
+    findRepoRootSync,
+    baseBranch,
+  } = args;
   // `git show <ref>:<path>` expects `<path>` relative to the repo root, not
   // the current working directory. When verify-manifest runs from a sub-dir
   // of the repo, `path.relative(cwd, manifestPath)` would produce a path
@@ -207,11 +231,12 @@ function tryReadBaseFingerprint(args: {
   // case / 8.3 short-name resolution. See packages/core/src/sys/git.ts.
   const pathBase = findRepoRootSync(cwd) ?? cwd;
   const relPath = pathMod.relative(pathBase, manifestPath).replace(/\\/g, '/');
-  // Prefer origin/main as the canonical source — local `main` may be stale
-  // when the user hasn't pulled in a while. CI environments may only have
-  // origin/<branch> at all; local dev usually has both, and an out-of-date
-  // local main would produce false-positive or false-negative drift signals.
-  for (const ref of ['origin/main', 'main']) {
+  // Prefer origin/<base> as the canonical source — the local copy may be
+  // stale when the user hasn't pulled in a while. CI environments may only
+  // have origin/<branch> at all; local dev usually has both, and an
+  // out-of-date local copy would produce false-positive or false-negative
+  // drift signals.
+  for (const ref of [`origin/${baseBranch}`, baseBranch]) {
     try {
       const raw = safeExec('git', ['show', `${ref}:${relPath}`], {
         cwd,
@@ -235,9 +260,17 @@ function tryReadBaseFingerprint(args: {
  * — a missing diff treats the drift as unjustified, forcing the user to
  * either commit the template change or use the override flag.
  */
-function branchDiffTouches(args: { cwd: string; relPath: string; safeExec: SafeExec }): boolean {
-  const { cwd, relPath, safeExec } = args;
-  for (const ref of ['main', 'origin/main']) {
+function branchDiffTouches(args: {
+  cwd: string;
+  relPath: string;
+  safeExec: SafeExec;
+  baseBranch: string;
+}): boolean {
+  const { cwd, relPath, safeExec, baseBranch } = args;
+  // Prefer origin/<base> to match `tryReadBaseFingerprint`'s ref order;
+  // stale local refs would produce inconsistent drift signals between the
+  // base-fingerprint read and the template-change detection.
+  for (const ref of [`origin/${baseBranch}`, baseBranch]) {
     try {
       const raw = safeExec('git', ['diff', '--name-only', `${ref}...HEAD`], {
         cwd,
