@@ -211,6 +211,14 @@ async function emitTelemetry(
     } catch (err) {
       void err;
     }
+    // `justification` is intentionally an empty string for the non-bypass
+    // path. The LedgerEventSchema declares `justification: z.string().default('')`
+    // (no `.min(1)`), so empty strings are valid input. Audit consumers that
+    // need to find bypassed events filter on `.justification != ""` rather
+    // than treating absence as the signal — keeps the on-disk shape consistent
+    // across event types where empty justification is the norm
+    // (`suppress`, `override`, `exemption` all write `''` on the no-context path).
+    const justification = bypassed && bypassJustification !== undefined ? bypassJustification : '';
     for (const f of findings) {
       appendLedgerEvent(totemDir, {
         timestamp: new Date().toISOString(),
@@ -219,7 +227,7 @@ async function emitTelemetry(
         file: f.file,
         line: f.line,
         activity_name: f.file,
-        justification: bypassed && bypassJustification !== undefined ? bypassJustification : '',
+        justification,
         source: 'lint',
         ...(cliVersion !== undefined ? { cli_version: cliVersion } : {}),
       });
