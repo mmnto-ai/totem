@@ -38,6 +38,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   const path = await import('node:path');
   const {
     CompileManifestSchema,
+    findRepoRootSync,
     generateInputHash,
     generateOutputHash,
     readCompileManifest,
@@ -121,6 +122,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
       safeExec,
       CompileManifestSchema,
       pathMod: path,
+      findRepoRootSync,
     });
     if (baseFingerprint !== undefined && baseFingerprint !== manifest.compile_worker_fingerprint) {
       const compileTemplatesChanged = branchDiffTouches({
@@ -193,28 +195,17 @@ function tryReadBaseFingerprint(args: {
   safeExec: SafeExec;
   CompileManifestSchema: typeof import('@mmnto/totem').CompileManifestSchema;
   pathMod: typeof import('node:path');
+  findRepoRootSync: typeof import('@mmnto/totem').findRepoRootSync;
 }): string | undefined {
-  const { cwd, manifestPath, safeExec, CompileManifestSchema, pathMod } = args;
+  const { cwd, manifestPath, safeExec, CompileManifestSchema, pathMod, findRepoRootSync } = args;
   // `git show <ref>:<path>` expects `<path>` relative to the repo root, not
   // the current working directory. When verify-manifest runs from a sub-dir
   // of the repo, `path.relative(cwd, manifestPath)` would produce a path
-  // that git rejects. Resolve the repo root via `git rev-parse` first; fall
-  // back to cwd-relative if rev-parse fails (best-effort path).
-  let pathBase = cwd;
-  try {
-    // safeExec's default `trim: true` already strips the trailing newline
-    // that `git rev-parse --show-toplevel` emits (see exec.ts:77), so the
-    // returned path is directly usable by `pathMod.relative` below — no
-    // defensive .trim() needed here.
-    pathBase = safeExec('git', ['rev-parse', '--show-toplevel'], {
-      cwd,
-      timeout: AUX_LOOKUP_TIMEOUT_MS,
-      maxBuffer: AUX_LOOKUP_MAX_BUFFER,
-    });
-    // totem-context: git rev-parse fall-through is best-effort; pathBase keeps the cwd initializer when not running inside a git repo
-  } catch (err) {
-    void err;
-  }
+  // that git rejects. `findRepoRootSync` walks up looking for `.git/` — the
+  // JS-side variant of `resolveGitRoot` that's portable on Windows where
+  // `git rev-parse --show-toplevel` may emit a path differing from cwd in
+  // case / 8.3 short-name resolution. See packages/core/src/sys/git.ts.
+  const pathBase = findRepoRootSync(cwd) ?? cwd;
   const relPath = pathMod.relative(pathBase, manifestPath).replace(/\\/g, '/');
   // Prefer origin/main as the canonical source — local `main` may be stale
   // when the user hasn't pulled in a while. CI environments may only have

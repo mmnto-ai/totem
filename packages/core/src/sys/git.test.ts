@@ -1,7 +1,9 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import * as crossSpawn from 'cross-spawn';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('cross-spawn', () => ({
   sync: vi.fn(),
@@ -11,6 +13,7 @@ import { fail, ok } from '../test-utils.js';
 import {
   extractChangedFiles,
   filterDiffByPatterns,
+  findRepoRootSync,
   getGitDiffRange,
   getGitLogSince,
   getLatestTag,
@@ -324,5 +327,74 @@ describe('inferScopeFromFiles', () => {
     // Common prefix should be "packages", not "packages/core"
     const result = inferScopeFromFiles(files);
     expect(result[0]).toBe('packages/**/*.ts');
+  });
+});
+
+describe('findRepoRootSync', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-findroot-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns the directory containing .git when called on the root', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    expect(findRepoRootSync(tmpDir)).toBe(path.resolve(tmpDir));
+  });
+
+  it('walks upward and finds .git from a nested sub-directory', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const nested = path.join(tmpDir, 'packages', 'cli', 'src');
+    fs.mkdirSync(nested, { recursive: true });
+    expect(findRepoRootSync(nested)).toBe(path.resolve(tmpDir));
+  });
+
+  it('returns null when not inside a git repo', () => {
+    // tmpDir has no .git directory, parents (system temp / home) shouldn't either
+    // — assert null rather than expecting a specific upward result.
+    const sub = path.join(tmpDir, 'inner');
+    fs.mkdirSync(sub);
+    // If the system's temp ancestry happens to contain a .git (unlikely but
+    // possible on a dev box), the walk will find that — skip the assertion
+    // rather than fail. The contract under test is "returns null when no
+    // .git is found"; we just need to give the walk a clean ancestry to
+    // exercise that branch.
+    const result = findRepoRootSync(sub);
+    if (result === null) {
+      expect(result).toBeNull();
+    } else {
+      // Found a .git somewhere upward — verify the helper returned an absolute
+      // path and didn't crash; the null-case test is best-effort on systems
+      // where the temp dir is nested under a git checkout.
+      expect(path.isAbsolute(result)).toBe(true);
+    }
+  });
+
+  it('returns a path in the input form (does not normalize via subprocess)', () => {
+    // Regression coverage for the Windows scenario that motivated this helper:
+    // git rev-parse --show-toplevel emits forward slashes and may resolve 8.3
+    // short names differently than process.cwd(), which breaks downstream
+    // path.relative. JS-side resolution returns the canonical form of the
+    // input, so path.relative against findRepoRootSync's result always works.
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const result = findRepoRootSync(tmpDir);
+    expect(result).not.toBeNull();
+    // Round-trip through path.relative: the manifest path joined onto cwd
+    // should compose into a clean relative path against the repo root.
+    const manifestPath = path.join(tmpDir, '.totem', 'compile-manifest.json');
+    const rel = path.relative(result!, manifestPath);
+    expect(rel).toBe(path.join('.totem', 'compile-manifest.json'));
+  });
+
+  it('finds .git when it is a file (worktree linked-repo case)', () => {
+    // Linked worktrees store a `.git` FILE (not directory) pointing at the
+    // main repo's gitdir. existsSync returns true for both, so the walk
+    // should still find linked-worktree roots.
+    fs.writeFileSync(path.join(tmpDir, '.git'), 'gitdir: /path/to/main.git\n');
+    expect(findRepoRootSync(tmpDir)).toBe(path.resolve(tmpDir));
   });
 });

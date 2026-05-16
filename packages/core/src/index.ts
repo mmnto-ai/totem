@@ -471,6 +471,7 @@ export { describeSafeExecError, safeExec } from './sys/exec.js';
 export {
   extractChangedFiles,
   filterDiffByPatterns,
+  findRepoRootSync,
   getDefaultBranch,
   getGitBranch,
   getGitBranchDiff,
