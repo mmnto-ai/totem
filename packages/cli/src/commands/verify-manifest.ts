@@ -212,7 +212,9 @@ function tryReadBaseFingerprint(args: {
       maxBuffer: AUX_LOOKUP_MAX_BUFFER,
     });
     // totem-context: git rev-parse fall-through is best-effort; pathBase keeps the cwd initializer when not running inside a git repo
-  } catch {}
+  } catch (err) {
+    void err;
+  }
   const relPath = pathMod.relative(pathBase, manifestPath).replace(/\\/g, '/');
   // Prefer origin/main as the canonical source — local `main` may be stale
   // when the user hasn't pulled in a while. CI environments may only have
