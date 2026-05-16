@@ -18,7 +18,7 @@
 
   **New `@mmnto/totem` exports:** `extractBadgesFromDiff`, `verifyToolClaims`, `verifySelfReferenceLinks`, `DEFAULT_TOOL_INTEGRATIONS`, `ToolIntegrationConfigSchema`, `BadgeVerificationResultSchema`, plus types `ExtractedBadge` / `ToolIntegrationConfig` / `BadgeVerificationResult` / `PathExistsPredicate`.
 
-  **Scope cut (Q1 from spec):** Verification C (gh-api shape-usage threshold) deferred to a follow-on PR. A + B mechanize the 2/3 empirical-anchor majority; C carries a network dependency (gh CLI + auth + rate limits → graceful-degrade) that deserves its own PR description and test plan.
+  **Scope cut (Q1 from spec):** Verification C (gh-api shape-usage threshold) deferred to a follow-on PR. A + B mechanize 2 of the 3 documented failures; C carries a network dependency (gh CLI + auth + rate limits → graceful-degrade) that deserves its own PR description and test plan.
 
   **Doctrine framing:** This PR is the _deterministic-tier_ complement to:
   - `mmnto-ai/totem-strategy#331` (Proposal 277) — the LLM-tier Ollama spot-check.
