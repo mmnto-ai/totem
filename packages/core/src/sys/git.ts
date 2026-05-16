@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { matchesGlob } from '../compiler.js';
@@ -276,6 +277,33 @@ export function isFileDirty(cwd: string, filePath: string): boolean {
  * error, timeout, corrupted index — throws `TotemGitError` so callers cannot
  * confuse "not a repo" with "git broke" (mmnto/totem#1440).
  */
+/**
+ * Resolve the git repository root via a JS-side walk-up looking for `.git/`,
+ * rather than shelling out to `git rev-parse --show-toplevel`. Sibling to
+ * {@link resolveGitRoot}; prefer this variant when the caller will combine
+ * the returned root with paths derived from `process.cwd()` — git's output
+ * normalizes case + may resolve Windows 8.3 short names (`RUNNER~1`) to long
+ * names (`runneradmin`), and the divergence breaks `path.relative` even when
+ * both paths point at the same directory. A JS-side walk returns a path in
+ * cwd's own form, so downstream `path.relative` works portably.
+ *
+ * Returns `null` when `start` is not inside a git repository (or any parent
+ * is not). Never throws — best-effort by contract. No subprocess overhead.
+ */
+export function findRepoRootSync(start: string): string | null {
+  let current = path.resolve(start);
+  // Bound the walk at a generous depth to defuse hypothetical symlink loops
+  // — `path.dirname` already terminates at filesystem roots via the
+  // `parent === current` check, but layered defense doesn't cost anything.
+  for (let i = 0; i < 64; i++) {
+    if (fs.existsSync(path.join(current, '.git'))) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  return null;
+}
+
 export function resolveGitRoot(cwd: string): string | null {
   try {
     const root = safeExec('git', ['rev-parse', '--show-toplevel'], {

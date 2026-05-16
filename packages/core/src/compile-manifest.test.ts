@@ -283,6 +283,46 @@ describe('writeCompileManifest + readCompileManifest', () => {
 
     expect(loaded).toEqual(manifest);
   });
+
+  // Pre-#1937 manifests pre-date the compile_worker_fingerprint field. The
+  // schema must accept them as-is so an old manifest on disk continues to
+  // parse after the consumer upgrades the CLI. Migration is additive — the
+  // next `totem compile` writes the field; until then, drift surveillance
+  // no-ops gracefully.
+  it('accepts a pre-#1937 manifest without compile_worker_fingerprint', () => {
+    const manifestPath = path.join(tmpDir, 'compile-manifest.json');
+    fs.writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        compiled_at: '2026-03-22T12:00:00Z',
+        model: 'claude-sonnet-4-6',
+        input_hash: 'c'.repeat(64),
+        output_hash: 'd'.repeat(64),
+        rule_count: 7,
+      }) + '\n',
+    );
+
+    const loaded = readCompileManifest(manifestPath);
+    expect(loaded.compile_worker_fingerprint).toBeUndefined();
+    expect(loaded.rule_count).toBe(7);
+  });
+
+  it('roundtrips a manifest with compile_worker_fingerprint', () => {
+    const manifestPath = path.join(tmpDir, 'compile-manifest.json');
+    const manifest: CompileManifest = {
+      compiled_at: '2026-03-22T12:00:00Z',
+      model: 'claude-sonnet-4-6',
+      input_hash: 'e'.repeat(64),
+      output_hash: 'f'.repeat(64),
+      rule_count: 99,
+      compile_worker_fingerprint: '0'.repeat(64),
+    };
+
+    writeCompileManifest(manifestPath, manifest);
+    const loaded = readCompileManifest(manifestPath);
+
+    expect(loaded).toEqual(manifest);
+  });
 });
 
 describe('readCompileManifest error handling', () => {

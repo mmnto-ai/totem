@@ -436,6 +436,14 @@ export {
   writeCompileManifest,
 } from './compile-manifest.js';
 
+// Compile-worker fingerprint (producer attestation — Proposal 278 § Action 3)
+export type { CompileWorkerFingerprintInputs } from './compile-worker-fingerprint.js';
+export {
+  computeCompileWorkerFingerprint,
+  modelStripsTemperature,
+  readPromptTemplateContentHash,
+} from './compile-worker-fingerprint.js';
+
 // Global registry (multi-totem workspace discovery)
 export type { RegistryEntry, TotemRegistry } from './registry.js';
 export { readRegistry, updateRegistryEntry } from './registry.js';
@@ -463,6 +471,7 @@ export { describeSafeExecError, safeExec } from './sys/exec.js';
 export {
   extractChangedFiles,
   filterDiffByPatterns,
+  findRepoRootSync,
   getDefaultBranch,
   getGitBranch,
   getGitBranchDiff,

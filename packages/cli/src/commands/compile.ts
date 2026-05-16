@@ -413,6 +413,7 @@ export async function compileCommand(
     await import('./compile-templates.js');
   const fs = await import('node:fs');
   const path = await import('node:path');
+  const url = await import('node:url');
   const { log } = await import('../ui.js');
   const { isGlobalConfigPath, loadConfig, loadEnv, resolveConfigPath, runOrchestrator } =
     await import('../utils.js');
@@ -436,6 +437,11 @@ export async function compileCommand(
     readAllLessons,
     readCompileManifest,
     resolveStage4Baseline,
+    appendLedgerEvent,
+    computeCompileWorkerFingerprint,
+    modelStripsTemperature,
+    readPromptTemplateContentHash,
+    readSessionId,
     safeExec,
     sanitizeForTerminal,
     saveCompiledRulesFile,
@@ -447,6 +453,73 @@ export async function compileCommand(
     verifyRuleExamples,
     writeCompileManifest,
   } = await import('@mmnto/totem');
+
+  // Compile-worker fingerprint resolved relative to the running compile.js.
+  // import.meta.url points to dist/commands/compile.js at runtime; the
+  // sibling compile-templates.js is the prompt source-of-truth — both
+  // `totem compile` and `totem verify-manifest` resolve against the same
+  // dist file, so the fingerprint is internally consistent across the
+  // drift-surveillance surface. Phase 1 hashes the built .js; per
+  // Proposal 278 § Action 3 Path A the .ts source and built .js move in
+  // lockstep through tsc, so drift surfaces either way.
+  const computeFingerprintForManifest = (): string | undefined => {
+    // Phase 1 anthropic-only per Proposal 278 § Phase 1 scope. Other
+    // providers leave the fingerprint undefined; verify-manifest's drift
+    // check no-ops when either side is undefined. Shell-orchestrator
+    // capture lands in Phase 2.
+    if (config.orchestrator?.provider !== 'anthropic') return undefined;
+    const model = options.model ?? config.orchestrator.defaultModel ?? 'unknown';
+    // Intent-not-reality (Tenet 19): the fingerprint records what the
+    // worker is *configured* to send, not what the API accepts. compile.ts
+    // hardcodes temperature: 0 in the runOrchestrator call below — for
+    // models that reject sampling params (Opus 4.7+), the fingerprint
+    // records absence even though the runtime call still passes 0.
+    // mmnto-ai/totem#1476 tracks the latent SDK fix for the 7 sites.
+    const temperature = modelStripsTemperature(model) ? undefined : 0;
+    // import.meta.url points to compile.js in built/installed CLI, compile.ts
+    // when running via tsx / ts-node in dev. Resolve the sibling template
+    // with the same extension so both paths succeed without hardcoding .js.
+    const compilePath = url.fileURLToPath(import.meta.url);
+    const ext = path.extname(compilePath); // '.js' in built CLI, '.ts' under tsx
+    const promptTemplatePath = path.resolve(path.dirname(compilePath), `compile-templates${ext}`);
+    const promptTemplateContentHash = readPromptTemplateContentHash(promptTemplatePath);
+    return computeCompileWorkerFingerprint({
+      model,
+      ...(temperature !== undefined ? { temperature } : {}),
+      // seed: omitted — Anthropic does not expose seed on the messages API.
+      // Advisory slot reserved for Phase 2 providers (OpenAI, Ollama).
+      promptTemplateContentHash,
+    });
+  };
+
+  // Emit a single compile_run ledger event after manifest write. Fire-and-forget
+  // per the writer contract (lesson-b1bae311 — telemetry is a sensor, not an
+  // actuator). source: 'lint' (compile is part of the lint command family);
+  // activity_name carries the provider so audit consumers can group by worker
+  // type. session_id is read best-effort from `.totem/ledger/.session-id` so
+  // SessionStart-hook'd runs get cross-event correlation; CI / hookless runs
+  // emit without it (matches `logMcpCall` in packages/mcp/src/ledger-writer.ts).
+  // agent_source is intentionally omitted — compile.ts has no reliable way to
+  // attribute its caller to claude/gemini/human until A.3.c wires the
+  // orchestrator → telemetry correlation. Schema (compile_run) shipped in
+  // Proposal 278 § Action 3 (vi).
+  const logCompileRun = (totemDir: string): void => {
+    try {
+      const provider = config.orchestrator?.provider ?? 'unknown';
+      const sessionId = readSessionId(totemDir);
+      appendLedgerEvent(totemDir, {
+        timestamp: new Date().toISOString(),
+        type: 'compile_run',
+        activity_name: provider,
+        source: 'lint',
+        justification: '',
+        ...(sessionId !== undefined ? { session_id: sessionId } : {}),
+      });
+      // totem-context: fire-and-forget telemetry; ledger write failure must not crash compile (lesson-b1bae311)
+    } catch (err) {
+      void err;
+    }
+  };
 
   // Guard: throw a specific NO_LESSONS_DIR error instead of a generic
   // TotemParseError when lessonsDir is absent or is not a directory.
@@ -1192,13 +1265,18 @@ export async function compileCommand(
           // also fires on pure input-hash drift — rewriting only the manifest,
           // leaving the rules file untouched.
           const outputHash = generateOutputHash(rulesPath);
+          const postPruneFingerprint = computeFingerprintForManifest();
           writeCompileManifest(manifestPath, {
             compiled_at: new Date().toISOString(),
             model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
             input_hash: currentInputHash,
             output_hash: outputHash,
             rule_count: freshRules.length,
+            ...(postPruneFingerprint !== undefined
+              ? { compile_worker_fingerprint: postPruneFingerprint }
+              : {}),
           });
+          logCompileRun(totemDir);
           log.dim(TAG, `Manifest: ${currentInputHash.slice(0, 8)}…→${outputHash.slice(0, 8)}…`); // totem-context: provenance trace matches active-compile branch
           reportedNonCompilable = freshNonCompilable.length;
           reportedCompiled = freshRules.length;
@@ -1736,13 +1814,18 @@ export async function compileCommand(
         ensureLessonsDir(lessonsDir);
         const inputHash = generateInputHash(lessonsDir);
         const outputHash = generateOutputHash(rulesPath);
+        const fullRecompileFingerprint = computeFingerprintForManifest();
         writeCompileManifest(manifestPath, {
           compiled_at: new Date().toISOString(),
           model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
           input_hash: inputHash,
           output_hash: outputHash,
           rule_count: newRules.length,
+          ...(fullRecompileFingerprint !== undefined
+            ? { compile_worker_fingerprint: fullRecompileFingerprint }
+            : {}),
         });
+        logCompileRun(totemDir);
         log.dim(TAG, `Manifest: ${inputHash.slice(0, 8)}…→${outputHash.slice(0, 8)}…`);
 
         spinner.succeed(
