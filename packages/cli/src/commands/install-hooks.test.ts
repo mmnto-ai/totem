@@ -226,6 +226,19 @@ describe('buildPrePushHook', () => {
     expect(hook).toContain('$TOTEM_CMD lint');
   });
 
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('contains $TOTEM_CMD verify-badges (mmnto-ai/totem#1926)', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    // totem-context: substring match on hook script content (not secret masking) — toContain is correct here
+    expect(hook).toContain('$TOTEM_CMD verify-badges');
+  });
+
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('gates verify-badges on README.md existing', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toMatch(/-f "README\.md".*verify-badges/s);
+  });
+
   it('does NOT contain old flag-file references', () => {
     const hook = buildPrePushHook(FALLBACK);
     expect(hook).not.toContain('.lint-passed');

@@ -244,6 +244,20 @@ program
   });
 
 program
+  .command('verify-badges')
+  .description('Verify shields.io badges in README.md (deterministic claim-discipline gate)')
+  .action(async () => {
+    try {
+      const { verifyBadgesCliCommand } = await import('./commands/verify-badges.js');
+      await verifyBadgesCliCommand();
+    } catch (err) {
+      handleError(err);
+      // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the stats command pattern.
+      throw err;
+    }
+  });
+
+program
   .command('import')
   .description('Import rules from external linter configs (ESLint, Semgrep)')
   .option('--from-semgrep <path>', 'Import rules from a Semgrep YAML rules file')

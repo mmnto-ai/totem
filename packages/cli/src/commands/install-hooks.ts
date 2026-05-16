@@ -342,6 +342,13 @@ if [ -n "$TOTEM_CMD" ]; then
       exit 1
     fi
   fi
+
+  # Verify shields.io badges in README.md (mmnto-ai/totem#1926 — deterministic claim-discipline)
+  if [ -f "README.md" ] && [ -f ".totem/compiled-rules.json" ]; then
+    if ! $TOTEM_CMD verify-badges; then
+      exit 1
+    fi
+  fi
 ${shieldBlock}
 fi
 

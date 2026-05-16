@@ -2,6 +2,22 @@
 export type { FindingCategory, FindingSeverity, FindingSource, TotemFinding } from './finding.js';
 export { findingToViolation, violationToFinding } from './finding.js';
 
+// Badge verifier (mmnto-ai/totem#1926 — deterministic-tier mechanism)
+export type {
+  BadgeVerificationResult,
+  ExtractedBadge,
+  PathExistsPredicate,
+  ToolIntegrationConfig,
+} from './badge-verifier.js';
+export {
+  BadgeVerificationResultSchema,
+  DEFAULT_TOOL_INTEGRATIONS,
+  extractBadgesFromDiff,
+  ToolIntegrationConfigSchema,
+  verifySelfReferenceLinks,
+  verifyToolClaims,
+} from './badge-verifier.js';
+
 // Error hierarchy
 export type { TotemErrorCode } from './errors.js';
 export {
