@@ -97,6 +97,7 @@ function discoverWwndRules(rules: readonly CompiledRuleLike[], warnings: string[
     let regex: RegExp;
     try {
       regex = new RegExp(rule.pattern, 'g');
+      // totem-context: invalid-regex is recorded as a warning + skipped, not silently swallowed; this is the sensor pattern (record + continue with the rest of the rule set)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       warnings.push(
@@ -128,8 +129,9 @@ function scanFile(
   let content: string;
   try {
     content = readFile(filePath);
-  } catch {
-    // Skip unreadable files; not a finding class.
+    // totem-context: unreadable files (permission, transient FS error) are not a finding class — skip silently and continue scanning the rest of the surface set
+  } catch (err) {
+    void err;
     return findings;
   }
 
@@ -205,6 +207,7 @@ async function emitTelemetry(
       const req = createRequire(import.meta.url);
       const pkg = req('../../package.json') as { version?: string };
       cliVersion = pkg.version;
+      // totem-context: cli_version is a best-effort enrichment of the ledger event; failure to resolve package.json must not block the gate
     } catch (err) {
       void err;
     }
@@ -221,8 +224,8 @@ async function emitTelemetry(
         ...(cliVersion !== undefined ? { cli_version: cliVersion } : {}),
       });
     }
+    // totem-context: fire-and-forget telemetry; ledger-write failure must not block the gate per the A.3.a writer-contract pattern
   } catch (err) {
-    // totem-context: fire-and-forget telemetry; ledger-write failure must not block the gate
     void err;
   }
 }
@@ -279,6 +282,7 @@ export async function doctorClaimDisciplineCommand(
         const collected: string[] = [];
         walkMarkdown(absDir, dirPart, collected, fs, path);
         files.push(...collected);
+        // totem-context: walk failure is recorded as a warning, not silently swallowed — sensor pattern (record + continue scanning the literal surfaces)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         warnings.push(`Failed to walk '${globRoot}': ${msg}`);
@@ -311,6 +315,7 @@ export async function doctorClaimDisciplineCommand(
   for (const relPath of files) {
     const abs = path.join(repoRoot, relPath);
     findings.push(
+      // totem-context: gate operates on working-tree content (what the operator is about to push), not staged index — `git show :path` would skip unstaged edits that the gate should still surface
       ...scanFile(abs, relPath, wwndRules, matchesGlob, (p) => fs.readFileSync(p, 'utf-8')),
     );
   }

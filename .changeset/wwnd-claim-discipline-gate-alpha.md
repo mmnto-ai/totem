@@ -38,13 +38,13 @@ All schema changes are additive — no migration cost for existing manifests or 
     [Pp]romises\s+to)\b
 ```
 
-Severity: `warning`. Scope: README.md, AGENTS.md, design-tenets.md, docs/wiki/\*\*. Mechanizes Tenet 19 § How to apply item 4 (covenant claims must name structural backing or soften to present-tense intent). Empirical seed corpus: N=4 within 24h on 2026-05-15 (mmnto-ai/totem#1925, #1932, #1933), all caught post-merge by external review.
+Severity: `warning`. Scope: README.md, AGENTS.md, design-tenets.md, and `docs/wiki/` (recursive). Mechanizes Tenet 19 § How to apply item 4 (covenant claims must name structural backing or soften to present-tense intent). Empirical seed corpus: N=4 within 24h on 2026-05-15 (mmnto-ai/totem#1925, #1932, #1933), all caught post-merge by external review.
 
 Compiles via Pipeline 1 (manual regex, zero LLM call) per the A3 hybrid rule-authoring criterion: when the proposal specifies the exact pattern, the rule lands deterministic and the lesson documents the pattern post-hoc.
 
 **Compile Drift Justification.** The Pipeline 1 add for Rule 1 triggered known compile-corpus drift on 130 sibling rule hashes (lesson sources unchanged; only `lessonHash` rotated). This is the corpus-drift class named in [Proposal 278 § Action 4](https://github.com/mmnto-ai/totem-strategy/blob/main/proposals/active/278-compile-worker-determinism-interim-policy.md) (mmnto-ai/totem#1938) and Proposal 281 (axis-4, strategy-Claude drafting in parallel). The new compile output is internally consistent: `verify-manifest` passes (482 rules, hashes match). The drift gate is operating as designed — registering the rotation rather than preventing it (prevention requires axis-4 proposalization, deferred). The `.coderabbit.yaml` exclusion for `.totem/compiled-rules.json` landed in the first commit so bot review focuses on the meaningful change surface.
 
-**Empirical bonus** from smoke-testing the subcommand: it found 1 pre-existing `"guarantees"` in `docs/wiki/governing-ai-agents.md:58`. The gate is already doing useful work. Addressing or accepting the finding is out of scope for PR α; surfacing it is the load-bearing demonstration.
+**Empirical bonus** from smoke-testing the subcommand: it surfaced 1 pre-existing absolute-promise match in `docs/wiki/governing-ai-agents.md:58`. The gate is already doing useful work. Addressing or accepting the finding is out of scope for PR α; surfacing it is the load-bearing demonstration.
 
 **Tests:** 22 new tests (6 schema, 13 subcommand, 4 hook content); full suite 2192/2192 passing.
 
