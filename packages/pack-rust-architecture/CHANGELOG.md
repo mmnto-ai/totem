@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.0
+
+Coordinated cohort bump — no direct changes in this package; consumes the `@mmnto/totem` minor.
+
 ## 1.40.2
 
 ### Patch Changes
