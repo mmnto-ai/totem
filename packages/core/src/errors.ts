@@ -36,7 +36,8 @@ export type TotemErrorCode =
   | 'HOOKS_LOAD_FAILED'
   | 'SESSION_ID_WRITE_FAILED'
   | 'SESSION_ID_READ_FAILED'
-  | 'BADGE_VERIFICATION_FAILED';
+  | 'BADGE_VERIFICATION_FAILED'
+  | 'CLAIM_DISCIPLINE_FAILED';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;
