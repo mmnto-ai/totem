@@ -15,6 +15,10 @@ export const CompileManifestSchema = z.object({
   input_hash: z.string(),
   output_hash: z.string(),
   rule_count: z.number().int().nonnegative(),
+  // Producer attestation orthogonal to output_hash (recompute trigger).
+  // Optional for backward-compat with pre-#1937 manifests; only the anthropic
+  // provider populates it in Phase 1. Per Proposal 278 § Action 3.
+  compile_worker_fingerprint: z.string().optional(),
 });
 
 export type CompileManifest = z.infer<typeof CompileManifestSchema>;

@@ -654,10 +654,14 @@ program
 program
   .command('verify-manifest')
   .description('Verify compiled-rules.json matches the compile manifest (CI gate)')
-  .action(async () => {
+  .option(
+    '--allow-compile-drift',
+    'Override compile-worker fingerprint drift. CI requires a `## Compile Drift Justification` heading in the PR body; pre-push without an open PR requires TOTEM_DRIFT_JUSTIFICATION env var to be set.',
+  )
+  .action(async (options: { allowCompileDrift?: boolean }) => {
     try {
       const { verifyManifestCommand } = await import('./commands/verify-manifest.js');
-      await verifyManifestCommand();
+      await verifyManifestCommand({ allowCompileDrift: options.allowCompileDrift });
     } catch (err) {
       handleError(err);
     }

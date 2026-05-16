@@ -21,6 +21,10 @@ export const LedgerEventSchema = z.object({
    *  - `tool_call_first_significant` — first non-Read/Grep/Glob orchestrator tool call in session
    *  - `hook_fire`                   — lifecycle hook executed (see `activity_name` for which hook)
    *  - `session_start`               — SessionStart hook fired; new `session_id` minted
+   *  - `compile_run`                 — `totem compile` worker invocation (see `activity_name` for provider).
+   *                                    Best-effort `session_id` only; `agent_source` deferred to A.3.c when
+   *                                    the orchestrator → telemetry correlation lands (same constraint as
+   *                                    `mcp_call`, which also leaves `agent_source` undefined today).
    *
    *  Schema-level: `ruleId` + `file` are optional to accommodate activity events. Writer-side
    *  discipline enforces required-by-type. Promotion to `z.discriminatedUnion` deferred to A.3.c
@@ -34,6 +38,7 @@ export const LedgerEventSchema = z.object({
     'tool_call_first_significant',
     'hook_fire',
     'session_start',
+    'compile_run',
   ]),
   /** Rule ID (lessonHash) for override events. Optional; required by writer for suppress/override/exemption. */
   ruleId: z.string().trim().min(1).optional(),
