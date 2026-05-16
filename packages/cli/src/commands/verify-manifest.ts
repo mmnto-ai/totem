@@ -109,9 +109,10 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   // Phase 1 scope per Proposal 278 is internal compile-worker surveillance —
   // the fingerprint is still recorded in their manifest for observability,
   // but the fail-loud gate only fires inside the monorepo. Detected via
-  // existence of the template source at its monorepo-relative path.
-  const monorepoTemplatePath = path.join(cwd, COMPILE_TEMPLATES_REL_PATH);
-  const inMonorepo = fs.existsSync(monorepoTemplatePath);
+  // existence of the template source at its monorepo-relative path. Walk up
+  // from cwd so the check survives running from a sub-directory of the
+  // monorepo (e.g., `cd packages/cli && pnpm totem verify-manifest`).
+  const inMonorepo = findMonorepoTemplate(cwd, path, fs) !== undefined;
   if (manifest.compile_worker_fingerprint !== undefined && inMonorepo) {
     const baseFingerprint = tryReadBaseFingerprint({
       cwd,
@@ -158,6 +159,28 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
 type SafeExec = typeof import('@mmnto/totem').safeExec;
 
 /**
+ * Walk upward from `start` looking for `COMPILE_TEMPLATES_REL_PATH`. Returns
+ * the absolute path when found, undefined when the search reaches the
+ * filesystem root without a match. Allows `verify-manifest` to detect that
+ * it's running inside the totem monorepo regardless of which sub-directory
+ * the caller invoked it from.
+ */
+function findMonorepoTemplate(
+  start: string,
+  pathMod: typeof import('node:path'),
+  fsMod: typeof import('node:fs'),
+): string | undefined {
+  let current = pathMod.resolve(start);
+  while (true) {
+    const candidate = pathMod.join(current, COMPILE_TEMPLATES_REL_PATH);
+    if (fsMod.existsSync(candidate)) return candidate;
+    const parent = pathMod.dirname(current);
+    if (parent === current) return undefined; // hit filesystem root
+    current = parent;
+  }
+}
+
+/**
  * Read the `compile_worker_fingerprint` field from origin/main's compile
  * manifest. Best-effort: returns undefined when origin/main is unreachable,
  * the manifest doesn't exist on origin/main, or parsing fails. Callers must
@@ -172,8 +195,11 @@ function tryReadBaseFingerprint(args: {
 }): string | undefined {
   const { cwd, manifestPath, safeExec, CompileManifestSchema, pathMod } = args;
   const relPath = pathMod.relative(cwd, manifestPath).replace(/\\/g, '/');
-  // Try local main first, then origin/main — CI may only have origin/<branch>.
-  for (const ref of ['main', 'origin/main']) {
+  // Prefer origin/main as the canonical source — local `main` may be stale
+  // when the user hasn't pulled in a while. CI environments may only have
+  // origin/<branch> at all; local dev usually has both, and an out-of-date
+  // local main would produce false-positive or false-negative drift signals.
+  for (const ref of ['origin/main', 'main']) {
     try {
       const raw = safeExec('git', ['show', `${ref}:${relPath}`], {
         cwd,

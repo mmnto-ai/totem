@@ -476,8 +476,12 @@ export async function compileCommand(
     // records absence even though the runtime call still passes 0.
     // mmnto-ai/totem#1476 tracks the latent SDK fix for the 7 sites.
     const temperature = modelStripsTemperature(model) ? undefined : 0;
-    const compileJsPath = url.fileURLToPath(import.meta.url);
-    const promptTemplatePath = path.resolve(path.dirname(compileJsPath), 'compile-templates.js');
+    // import.meta.url points to compile.js in built/installed CLI, compile.ts
+    // when running via tsx / ts-node in dev. Resolve the sibling template
+    // with the same extension so both paths succeed without hardcoding .js.
+    const compilePath = url.fileURLToPath(import.meta.url);
+    const ext = path.extname(compilePath); // '.js' in built CLI, '.ts' under tsx
+    const promptTemplatePath = path.resolve(path.dirname(compilePath), `compile-templates${ext}`);
     const promptTemplateContentHash = readPromptTemplateContentHash(promptTemplatePath);
     return computeCompileWorkerFingerprint({
       model,
