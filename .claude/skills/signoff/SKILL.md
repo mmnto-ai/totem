@@ -5,27 +5,40 @@ description: End-of-session — update memory, write journal entry, clean up
 
 <!-- totem:skill-start -->
 
-End-of-session wrap-up:
+End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in the per-repo `.totem/orchestration/<agent-id>/` tree (gitignored) — NOT the substrate. Substrate stays as a frozen archive for forensic reads; the active surface is local.
 
-1. Update `MEMORY.md` with any new state (version shipped, tickets closed, key decisions)
-2. Write a journal entry to the substrate journal at `<substrate>/.journal/totem/<filename>.md` summarizing today's work. Use `resolveSubstratePaths(gitRoot).journalRoot` from `@mmnto/totem` to locate the substrate; if `source === 'none'`, fall back to repo-local `.journal/totem/` and warn (ADR-090 graceful degradation).
-3. Commit + push the substrate journal entry from `mmnto-ai/totem-substrate` (NOT this repo — `.journal/` is sediment-frozen here per ADR-100). Use rebase-and-retry on the push since other agents may sign off concurrently:
+1. **Update memory.** Update auto-memory files (e.g. `MEMORY.md`, topic memories) with any new state — version shipped, tickets closed, key decisions, banked feedback or doctrine signals.
+
+2. **Write a journal entry to the per-repo orchestration path.** Filename convention: `<model>-NNNN-<short-topic-slug>.md` (e.g., `claude-0057-phase-4-resolver-shipped.md`).
+
+   **Resolve the path two steps:**
+
+   a. **Identify your agent-id** from the current repo's basename. The hardcoded map (Proposal 282 § Scope item 3 — keep in sync with the ADR-106 cohort list):
+
+   | Repo (`git rev-parse --show-toplevel` basename) | Claude agent-id | Gemini agent-id |
+   |---|---|---|
+   | `totem` | `totem-claude` | `totem-gemini` |
+   | `totem-strategy` | `strategy-claude` | `strategy-gemini` |
+   | `liquid-city` | `lc-claude` | `lc-gemini` |
+   | `arhgap11` | `arhgap11-claude` | `arhgap11-gemini` |
+   | `totem-status` | _(no Claude variant)_ | `status-gemini` |
+   | `totem-playground` | _(orphan stream — no native agent)_ | _(orphan stream)_ |
+
+   Override hook: if the consuming repo carries `.totem/orchestration/config.json` with a `host_agents: string[]` field, prefer that list over the hardcoded map. Reserved for repos that legitimately host an agent not in the default map.
+
+   b. **Resolve the journal directory** via `resolveOrchestrationPaths(repoRoot, agentId).journal` from `@mmnto/totem`. Returns the absolute path to `<repoRoot>/.totem/orchestration/<agent-id>/journal/`. If `source === 'none'` (the tree does not exist yet in this repo), create the directory first via `mkdir -p`; the path is gitignored and safe to create.
+
+3. **No commit, no push.** `.totem/orchestration/` is gitignored — local filesystem write is the entire operation. No more substrate rebase-retry loops; the cross-agent write-collision class is eliminated by the single-writer-per-path invariant (you only ever write into your own `<agent-id>/` subtree).
+
+4. **Clean up stale local branches:**
 
    ```bash
-   cd <substrate-repo-root>
-   git add .journal/totem/<filename>.md
-   git commit -m "journal(totem): <slug>"
-   pushed=0
-   for i in 1 2 3 4 5; do
-     git push origin main && { pushed=1; break; }
-     git pull --rebase --autostash origin main || { echo "Rebase conflict — manual resolution needed"; break; }
-     sleep 1
-   done
-   [ "$pushed" = 1 ] || { echo "ERROR: substrate push failed — surface to user"; exit 1; }
+   git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D
    ```
 
-   **Why the retry loop:** Substrate `main` accepts only fast-forward pushes. If a peer push (strategy-Claude, lc-Claude, status-Claude, etc.) lands between your commit and your push, yours fails with `non-fast-forward`. Per-agent journal filenames (`<model>-NNNN-*.md`) don't collide, so the rebase auto-succeeds without conflict — typically resolves within 1-2 retries. After 5 retries surface failure to the user; that's likely a genuine same-file edit (e.g., two recipients moving the same `_broadcast/` file to `processed/`) that needs manual resolution.
+5. **Report:** what shipped, what's pending, what's next.
 
-4. Clean up stale local branches: `git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D`
-5. Report: what shipped, what's pending, what's next
+**Cross-repo handoffs** (when you need to dispatch a message to another agent) write to your own `<repoRoot>/.totem/orchestration/<agent-id>/outbox/<YYYY-MM-DDTHHMMZ>-<your-agent-id>.md` with `to: <recipient-agent-id>` in the frontmatter. Recipients discover inbound handoffs by polling the single-level glob `<workspace>/*/.totem/orchestration/*/outbox/*.md` filtered by their own `to:` frontmatter match.
+
+**Substrate (legacy) is read-only.** Do NOT write new content to `mmnto-ai/totem-substrate:.handoff/` or `:.journal/`. The substrate stays mounted as a frozen archive accessible via `resolveSubstratePaths(cwd)` for forensic reads; the cutover broadcast (when it lands) will confirm the final substrate-write cutoff.
 <!-- totem:skill-end -->

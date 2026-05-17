@@ -185,6 +185,107 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
     }
   });
 
+  it('prefers per-repo orchestration over substrate (Proposal 282 / ADR-106)', () => {
+    // Proposal 282 invariant: when the strategy repo carries a populated
+    // `.totem/orchestration/strategy-claude/journal/`, that's the active
+    // surface and substrate becomes the frozen-archive fallback. The
+    // orchestration entry MUST win even when substrate also resolves with
+    // a newer-named file.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-orch-pref-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      // Strategy clone with its own orchestration tree (the active layer).
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      const orchestrationJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'journal',
+      );
+      fs.mkdirSync(orchestrationJournal, { recursive: true });
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(orchestrationJournal, 'claude-0042-orchestration-active.md'), '');
+
+      // Substrate clone with a newer-named entry (proves substrate is the fallback,
+      // not preferred — orchestration wins regardless of substrate's file ordering).
+      const substrateDir = path.join(parent, 'totem-substrate');
+      fs.mkdirSync(substrateDir);
+      // totem-context: substrate fixture build — shape gate, not gitRoot probe.
+      fs.mkdirSync(path.join(substrateDir, '.git'));
+      fs.mkdirSync(path.join(substrateDir, '.handoff'));
+      const substrateJournal = path.join(substrateDir, '.journal');
+      fs.mkdirSync(substrateJournal);
+      // totem-context: writing test journal markdown to a journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(substrateJournal, '2099-12-31-substrate-newer.md'), '');
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        // Orchestration layer wins even though substrate has a newer-named file.
+        expect(ptr.latestJournal).toBe('claude-0042-orchestration-active.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
+  it('falls back to substrate when orchestration tree exists but is empty', () => {
+    // Proposal 282 partial-presence: if the strategy repo's orchestration
+    // tree exists with no journal entries yet (newly-initialized agent),
+    // the extractor must fall through to substrate rather than report
+    // an empty active layer as authoritative.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-orch-empty-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      // Empty orchestration journal — directory exists but no .md files.
+      const orchestrationJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'journal',
+      );
+      fs.mkdirSync(orchestrationJournal, { recursive: true });
+
+      // Substrate with an entry — should be the source when orchestration is empty.
+      const substrateDir = path.join(parent, 'totem-substrate');
+      fs.mkdirSync(substrateDir);
+      // totem-context: substrate fixture build — shape gate, not gitRoot probe.
+      fs.mkdirSync(path.join(substrateDir, '.git'));
+      fs.mkdirSync(path.join(substrateDir, '.handoff'));
+      const substrateJournal = path.join(substrateDir, '.journal');
+      fs.mkdirSync(substrateJournal);
+      // totem-context: writing test journal markdown to a journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(substrateJournal, '2026-05-04-substrate-archive.md'), '');
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('2026-05-04-substrate-archive.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
   it('falls back to repo-local sediment when substrate is unreachable', () => {
     // Phase C ADR-090 invariant: when substrate is absent, latestJournal
     // reads from repo-local sediment (the now-frozen pre-extraction path).
