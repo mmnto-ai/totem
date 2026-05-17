@@ -202,6 +202,70 @@ describe('LedgerEventSchema', () => {
       expect(result.data.correlation_id).toBe('6ba7b810-9dad-11d1-80b4-00c04fd430c8');
     }
   });
+
+  // ─── claim_discipline_finding (Proposal 279) ──────────
+
+  it('accepts a claim_discipline_finding event with ruleId + surface + cli_version', () => {
+    const event = makeActivityEvent({
+      type: 'claim_discipline_finding',
+      ruleId: 'abcd1234',
+      activity_name: 'README.md',
+      cli_version: '1.42.0',
+    });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe('claim_discipline_finding');
+      expect(result.data.ruleId).toBe('abcd1234');
+      expect(result.data.activity_name).toBe('README.md');
+      expect(result.data.cli_version).toBe('1.42.0');
+    }
+  });
+
+  it('accepts cli_version as an optional field on activity events', () => {
+    const event = makeActivityEvent({ cli_version: '1.42.0' });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.cli_version).toBe('1.42.0');
+  });
+
+  it('accepts addressed_in_pr as an optional boolean', () => {
+    for (const value of [true, false] as const) {
+      const event = makeActivityEvent({
+        type: 'claim_discipline_finding',
+        ruleId: 'abcd1234',
+        addressed_in_pr: value,
+      });
+      const result = LedgerEventSchema.safeParse(event);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.addressed_in_pr).toBe(value);
+    }
+  });
+
+  it('omits cli_version and addressed_in_pr when not supplied (backward compat)', () => {
+    const event = makeActivityEvent();
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cli_version).toBeUndefined();
+      expect(result.data.addressed_in_pr).toBeUndefined();
+    }
+  });
+
+  it('rejects a non-string cli_version', () => {
+    const event = makeActivityEvent({
+      // @ts-expect-error — intentionally invalid for the test
+      cli_version: 142,
+    });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty-string cli_version (trimmed-min-1 semantic)', () => {
+    const event = makeActivityEvent({ cli_version: '   ' });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(false);
+  });
 });
 
 // ─── Test-fixture per-branch field-presence (factory output validation) ─────

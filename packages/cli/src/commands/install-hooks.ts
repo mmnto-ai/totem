@@ -349,6 +349,17 @@ if [ -n "$TOTEM_CMD" ]; then
       exit 1
     fi
   fi
+
+  # WWND claim-discipline gate (Proposal 279 § Implementation Notes Q3 —
+  # slot after verify-badges; gates on public-surface absolute promises,
+  # missing-Goal-prefix, covenant-without-backing). Fires only when at
+  # least one in-scope surface exists. Bypass with mandatory justification:
+  #   TOTEM_GATE_BYPASS_JUSTIFICATION="<reason>" git push
+  if [ -f ".totem/compiled-rules.json" ] && { [ -f "README.md" ] || [ -f "AGENTS.md" ] || [ -f "design-tenets.md" ] || [ -d "docs/wiki" ]; }; then
+    if ! $TOTEM_CMD doctor --claim-discipline --strict; then
+      exit 1
+    fi
+  fi
 ${shieldBlock}
 fi
 

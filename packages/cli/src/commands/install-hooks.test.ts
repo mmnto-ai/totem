@@ -239,6 +239,37 @@ describe('buildPrePushHook', () => {
     expect(hook).toMatch(/-f "README\.md".*verify-badges/s);
   });
 
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('contains $TOTEM_CMD doctor --claim-discipline --strict (Proposal 279 Q3)', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toContain('$TOTEM_CMD doctor --claim-discipline --strict');
+  });
+
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('gates claim-discipline on at-least-one in-scope public surface existing', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    // The gate fires when any of README.md, AGENTS.md, design-tenets.md, or docs/wiki/ exists
+    expect(hook).toMatch(
+      /-f "README\.md".*-f "AGENTS\.md".*-f "design-tenets\.md".*-d "docs\/wiki"/s,
+    );
+  });
+
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('slots claim-discipline after verify-badges in the pre-push sequence', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    const verifyBadgesIdx = hook.indexOf('$TOTEM_CMD verify-badges');
+    const claimDisciplineIdx = hook.indexOf('$TOTEM_CMD doctor --claim-discipline');
+    expect(verifyBadgesIdx).toBeGreaterThan(-1);
+    expect(claimDisciplineIdx).toBeGreaterThan(-1);
+    expect(claimDisciplineIdx).toBeGreaterThan(verifyBadgesIdx);
+  });
+
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('mentions TOTEM_GATE_BYPASS_JUSTIFICATION as the bypass mechanism (Proposal 279 Q3 standardized convention)', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toContain('TOTEM_GATE_BYPASS_JUSTIFICATION');
+  });
+
   it('does NOT contain old flag-file references', () => {
     const hook = buildPrePushHook(FALLBACK);
     expect(hook).not.toContain('.lint-passed');

@@ -1,5 +1,5 @@
 ---
-rule: b84fb92bc2313a47
+rule: 61bb8b8b88d2ecab
 file: src/config.ts
 ---
 

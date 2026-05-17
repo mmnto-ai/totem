@@ -948,8 +948,18 @@ program
     '--strict',
     'Exit non-zero if any check reports a `fail` status (gating mode for hooks / CI)',
   )
-  .action(async (opts: { pr?: boolean; strict?: boolean }) => {
+  .option(
+    '--claim-discipline',
+    'Run only the WWND claim-discipline checks against public surfaces (Proposal 279)',
+  )
+  .action(async (opts: { pr?: boolean; strict?: boolean; claimDiscipline?: boolean }) => {
     try {
+      if (opts.claimDiscipline) {
+        const { doctorClaimDisciplineCliCommand } =
+          await import('./commands/doctor-claim-discipline.js');
+        await doctorClaimDisciplineCliCommand({ strict: opts.strict });
+        return;
+      }
       const { doctorCommand } = await import('./commands/doctor.js');
       const results = await doctorCommand(opts);
       if (opts.strict && results.some((r) => r.status === 'fail')) {
