@@ -67,13 +67,13 @@ interface WwndRule {
 }
 
 interface CompiledRuleLike {
-  lessonHash: string;
-  lessonHeading: string;
-  pattern: string;
-  engine?: string;
+  lessonHash: unknown;
+  lessonHeading: unknown;
+  pattern: unknown;
+  engine?: unknown;
   severity?: 'error' | 'warning';
-  fileGlobs?: string[];
-  status?: string;
+  fileGlobs?: unknown;
+  status?: unknown;
 }
 
 /**
@@ -84,12 +84,18 @@ interface CompiledRuleLike {
 function discoverWwndRules(rules: readonly CompiledRuleLike[], warnings: string[]): WwndRule[] {
   const out: WwndRule[] = [];
   for (const rule of rules) {
+    // Runtime type guards — `loadCompiledRules` validates schema, but cast-at-boundary
+    // means malformed disk data could still slip through. Defense-in-depth guards
+    // degrade gracefully instead of throwing during pre-push gating.
+    if (typeof rule.lessonHeading !== 'string') continue;
+    if (typeof rule.lessonHash !== 'string') continue;
+    if (typeof rule.pattern !== 'string') continue;
     if (!rule.lessonHeading.startsWith(WWND_HEADING_PREFIX)) continue;
     if (rule.engine !== undefined && rule.engine !== 'regex') {
       // Non-regex WWND rules (ast / ast-grep) need engine-specific dispatch
       // not yet implemented in PR α; flag explicitly so PR β knows to wire it.
       warnings.push(
-        `WWND rule '${rule.lessonHeading}' uses engine '${rule.engine}' which is not yet supported by the claim-discipline scanner. Rule skipped.`,
+        `WWND rule '${rule.lessonHeading}' uses engine '${String(rule.engine)}' which is not yet supported by the claim-discipline scanner. Rule skipped.`,
       );
       continue;
     }
@@ -105,12 +111,16 @@ function discoverWwndRules(rules: readonly CompiledRuleLike[], warnings: string[
       );
       continue;
     }
+    // Filter fileGlobs to known-string entries; absent or non-array → undefined.
+    const safeFileGlobs = Array.isArray(rule.fileGlobs)
+      ? rule.fileGlobs.filter((g): g is string => typeof g === 'string' && g.length > 0)
+      : undefined;
     out.push({
       lessonHash: rule.lessonHash,
       lessonHeading: rule.lessonHeading,
       pattern: regex,
       severity: rule.severity ?? 'warning',
-      fileGlobs: rule.fileGlobs,
+      fileGlobs: safeFileGlobs,
     });
   }
   return out;
@@ -124,6 +134,7 @@ function scanFile(
   rules: readonly WwndRule[],
   matchesGlob: (path: string, glob: string) => boolean,
   readFile: (p: string) => string,
+  sanitizeForTerminal: (s: string) => string,
 ): ClaimDisciplineFinding[] {
   const findings: ClaimDisciplineFinding[] = [];
   let content: string;
@@ -156,7 +167,10 @@ function scanFile(
           ruleHeading: rule.lessonHeading,
           file: relPath,
           line: i + 1,
-          match: m[0],
+          // Sanitize-at-source: README/AGENTS prose is untrusted (could carry terminal
+          // control sequences). Sanitize once here so downstream consumers (ledger writer,
+          // CLI logger) all get safe text. Same hardening pattern verify-badges uses.
+          match: sanitizeForTerminal(m[0]),
           severity: rule.severity,
         });
       }
@@ -249,7 +263,8 @@ async function emitTelemetry(
 export async function doctorClaimDisciplineCommand(
   options: ClaimDisciplineOptions = {},
 ): Promise<ClaimDisciplineResult> {
-  const { loadCompiledRules, matchesGlob, resolveGitRoot } = await import('@mmnto/totem');
+  const { loadCompiledRules, matchesGlob, resolveGitRoot, sanitizeForTerminal } =
+    await import('@mmnto/totem');
   const path = await import('node:path');
   const fs = await import('node:fs');
 
@@ -309,7 +324,20 @@ export async function doctorClaimDisciplineCommand(
     warnings.push('.totem/compiled-rules.json not found — skipping claim-discipline check.');
     return { valid: true, findings, warnings, bypassed: false };
   }
-  const rules = loadCompiledRules(rulesPath) as CompiledRuleLike[];
+  // Graceful recovery on corrupt/malformed compiled-rules.json — pre-push gating must
+  // not crash on file corruption or partial writes. Empty rule set + warning is the
+  // sensor-pattern equivalent of the "no WWND rules found" path below.
+  let rules: CompiledRuleLike[];
+  try {
+    rules = loadCompiledRules(rulesPath) as CompiledRuleLike[];
+    // totem-context: load failure is recorded as a warning + recovered-to-empty, not silently swallowed; matches the file-corruption-recovery pattern used elsewhere for config artifacts
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    warnings.push(
+      `Failed to load .totem/compiled-rules.json (${msg}) — claim-discipline check skipped. Run 'totem lesson compile' to regenerate.`,
+    );
+    return { valid: true, findings, warnings, bypassed: false };
+  }
   const wwndRules = discoverWwndRules(rules, warnings);
 
   if (wwndRules.length === 0) {
@@ -324,12 +352,23 @@ export async function doctorClaimDisciplineCommand(
     const abs = path.join(repoRoot, relPath);
     findings.push(
       // totem-context: gate operates on working-tree content (what the operator is about to push), not staged index — `git show :path` would skip unstaged edits that the gate should still surface
-      ...scanFile(abs, relPath, wwndRules, matchesGlob, (p) => fs.readFileSync(p, 'utf-8')),
+      ...scanFile(
+        abs,
+        relPath,
+        wwndRules,
+        matchesGlob,
+        (p) => fs.readFileSync(p, 'utf-8'),
+        sanitizeForTerminal,
+      ),
     );
   }
 
   // ─── Bypass handling ──────────────────────────────────
-  const bypassJustification = env[BYPASS_ENV_VAR]?.trim();
+  // Sanitize the raw env-var value before downstream use — operators can set arbitrary
+  // bytes; the same terminal-control-sequence hardening applies as for `match`.
+  const rawJustification = env[BYPASS_ENV_VAR]?.trim();
+  const bypassJustification =
+    rawJustification !== undefined ? sanitizeForTerminal(rawJustification) : undefined;
   const bypassed = bypassJustification !== undefined && bypassJustification.length > 0;
 
   // ─── Emit telemetry ───────────────────────────────────
@@ -350,12 +389,18 @@ export async function doctorClaimDisciplineCommand(
 
 // ─── CLI entry ──────────────────────────────────────────
 
-export interface ClaimDisciplineCliOptions {
+export interface ClaimDisciplineCliOptions extends ClaimDisciplineOptions {
   /**
    * Strict mode: promote `warning`-severity findings to gate failures (same
    * semantic as `totem doctor --strict`). Absent the flag, only
    * `error`-severity findings fail the gate. The pre-push hook invokes
    * `--claim-discipline --strict` per Proposal 279 § Implementation Notes Q3.
+   *
+   * `strict` is CLI-presentation-only — the programmatic `doctorClaimDisciplineCommand`
+   * always returns the same findings; this flag controls whether the CLI throws on
+   * warning-severity findings. Inherited test-injection fields (`envForTest`,
+   * `filesForTest`, `repoRootForTest`) pass through to the programmatic command for
+   * integration testing.
    */
   strict?: boolean;
 }
@@ -378,7 +423,12 @@ export async function doctorClaimDisciplineCliCommand(
     warn: warnColor,
   } = await import('../ui.js');
 
-  const result = await doctorClaimDisciplineCommand();
+  // Strip `strict` (CLI-only) before passing the rest through to the programmatic
+  // command, which doesn't accept it. The remaining fields (envForTest / filesForTest /
+  // repoRootForTest) are inherited from ClaimDisciplineOptions and form the integration
+  // test surface that GCA's R1 finding asked us to wire.
+  const { strict, ...programmaticOptions } = options;
+  const result = await doctorClaimDisciplineCommand(programmaticOptions);
 
   for (const w of result.warnings) {
     log.warn(TAG, w);
@@ -420,7 +470,7 @@ export async function doctorClaimDisciplineCliCommand(
   // Strict mode promotes warnings to gate failures (Proposal 279 § Implementation Notes Q3
   // — the pre-push hook invokes `--claim-discipline --strict` and expects warnings to fail
   // the push when present).
-  if (options.strict && warningCount > 0) {
+  if (strict && warningCount > 0) {
     throw new TotemError(
       'CLAIM_DISCIPLINE_FAILED',
       `${warningCount} warning-severity claim-discipline finding(s) under --strict.`,
