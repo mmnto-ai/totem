@@ -45,6 +45,7 @@ function mkOrchestrationTree(
 }
 
 beforeEach(() => {
+  // totem-context: test fixture only; agents do not consume this temp dir.
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-orchestration-resolver-'));
   repoRoot = mkDir(path.join(tmpRoot, 'repo'));
 });
@@ -104,9 +105,13 @@ describe('resolveOrchestrationPaths — full tree', () => {
     const gemini = resolveOrchestrationPaths(repoRoot, 'totem-gemini');
     expect(claude.source).toBe('orchestration');
     expect(gemini.source).toBe('orchestration');
+    expect(claude.journal).toBe(
+      path.normalize(path.join(repoRoot, '.totem', 'orchestration', 'totem-claude', 'journal')),
+    );
+    expect(gemini.journal).toBe(
+      path.normalize(path.join(repoRoot, '.totem', 'orchestration', 'totem-gemini', 'journal')),
+    );
     expect(claude.journal).not.toBe(gemini.journal);
-    expect(claude.journal).toContain('totem-claude');
-    expect(gemini.journal).toContain('totem-gemini');
   });
 
   it('resolves the same agent across distinct repo roots independently', () => {
@@ -115,9 +120,13 @@ describe('resolveOrchestrationPaths — full tree', () => {
     mkOrchestrationTree(otherRepo, 'totem-claude', 'all');
     const a = resolveOrchestrationPaths(repoRoot, 'totem-claude');
     const b = resolveOrchestrationPaths(otherRepo, 'totem-claude');
+    expect(a.journal).toBe(
+      path.normalize(path.join(repoRoot, '.totem', 'orchestration', 'totem-claude', 'journal')),
+    );
+    expect(b.journal).toBe(
+      path.normalize(path.join(otherRepo, '.totem', 'orchestration', 'totem-claude', 'journal')),
+    );
     expect(a.journal).not.toBe(b.journal);
-    expect(a.journal).toContain(path.normalize(repoRoot));
-    expect(b.journal).toContain(path.normalize(otherRepo));
   });
 });
 
@@ -158,6 +167,7 @@ describe('resolveOrchestrationPaths — robustness', () => {
   it('treats a file in place of a subdir as absent', () => {
     const base = path.join(repoRoot, '.totem', 'orchestration', 'totem-claude');
     mkDir(base);
+    // totem-context: writing a placeholder file to test the file-vs-directory predicate in the resolver; not a hooks-manager bypass — `journal` here is an orchestration subdir name, not a git hook path.
     fs.writeFileSync(path.join(base, 'journal'), '');
     const result = resolveOrchestrationPaths(repoRoot, 'totem-claude');
     // journal exists as a file, not a directory → treated as absent
@@ -166,8 +176,8 @@ describe('resolveOrchestrationPaths — robustness', () => {
 
   it('normalizes paths when given a repoRoot with redundant separators', () => {
     mkOrchestrationTree(repoRoot, 'totem-claude', 'all');
-    // Intentionally pass a non-normalized repo root (extra trailing sep + redundant sep).
-    const noisy = `${repoRoot}${path.sep}${path.sep}.${path.sep}`;
+    // Intentionally pass a non-normalized repo root (trailing separators + redundant `.`).
+    const noisy = path.join(repoRoot, '.', '.');
     const result = resolveOrchestrationPaths(noisy, 'totem-claude');
     expect(result.source).toBe('orchestration');
     expect(result.outbox).toBe(
