@@ -36,7 +36,9 @@ At end of session, after the main task is wrapped: when the user signals complet
 4. **Clean up stale local branches:**
 
    ```bash
-   git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D
+   git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | while read -r branch track; do
+     [[ "$track" == "[gone]" ]] && git branch -D -- "$branch"
+   done
    ```
 
 5. **Report:** what shipped, what's pending, what's next.
