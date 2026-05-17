@@ -17,6 +17,7 @@ import {
   CompiledRulesFileSchema,
   readJsonSafe,
   resolveGitRoot,
+  resolveOrchestrationPaths,
   resolveStrategyRoot,
   resolveSubstratePaths,
   safeExec,
@@ -82,16 +83,24 @@ export function extractGitState(cwd: string): GitState {
 
 /**
  * Resolve the strategy-state pointer for the MCP `describe_project` payload
- * (mmnto-ai/totem#1710). After ADR-100 Phase C (mmnto-ai/totem#1820), this
- * uses two resolvers: `resolveStrategyRoot` for the strategy SHA (still in
- * `mmnto-ai/totem-strategy`) and `resolveSubstratePaths` for the journal
- * lookup (now in `mmnto-ai/totem-substrate`, with sediment fallback).
+ * (mmnto-ai/totem#1710). After Proposal 282 / ADR-106, journal discovery
+ * walks two layers:
+ *
+ *   1. **Orchestration (active):** the strategy repo's per-repo
+ *      `.totem/orchestration/strategy-claude/journal/` (Proposal 282).
+ *   2. **Substrate (frozen archive):** the legacy
+ *      `<parent>/totem-substrate/.journal/` clone, with repo-local
+ *      sediment fallback (ADR-100). Read only when orchestration is
+ *      empty so historical journals continue to surface during the
+ *      bootstrap window and afterward.
+ *
+ * The strategy SHA still resolves through `resolveStrategyRoot`.
  *
  * Two outcomes:
  * - **Resolved:** `{ resolved: true, sha, latestJournal }`. `sha` and
  *   `latestJournal` follow the existing graceful-degrade contract — null when
  *   `git rev-parse` fails on the strategy repo or when no journal directory
- *   resolves. The agent gets a real pointer when one exists.
+ *   resolves on either layer. The agent gets a real pointer when one exists.
  * - **Unresolved:** `{ resolved: false, reason }`. Strategy resolver couldn't
  *   find the strategy repo at all. The agent reads the resolver's actionable
  *   reason instead of seeing an empty pointer.
@@ -117,20 +126,56 @@ export function extractStrategyPointer(
 
   let latestJournal: string | null = null;
   try {
-    // Substrate-preferred-with-sediment-fallback resolution per ADR-100 Q8:
-    // the resolver returns substrate `<parent>/totem-substrate/.journal/` when
-    // the sibling clone is reachable, else the repo-local sediment
-    // `<cwd>/.journal/`. Null `journalRoot` means neither resolved — the
-    // ADR-090 graceful-degrade path.
-    const substrate = resolveSubstratePaths(cwd, { config });
-    if (substrate.journalRoot !== null) {
-      const entries = fs
-        .readdirSync(substrate.journalRoot)
-        .filter((f) => f.endsWith('.md'))
-        .sort();
-      latestJournal = entries.length > 0 ? entries[entries.length - 1]! : null;
+    // Layer 1 — orchestration (active, post-Proposal-282): the strategy
+    // repo's per-repo `.totem/orchestration/<agent-id>/journal/` is the
+    // live write target. Scan BOTH strategy-claude AND strategy-gemini
+    // journals; the strategy repo can host both agents and either may
+    // hold the latest entry. Resolver returns source: 'orchestration'
+    // when at least one of an agent's subdirs exists; we read `journal`
+    // when it's populated and fall through otherwise.
+    // Per-agent reads share the outer try/catch — a permission error on one
+    // journal correlates strongly with the other (same disk, same mount, same
+    // process credentials), so per-agent isolation buys little and would
+    // require swallow-and-continue catches that the fail-open-catch ban
+    // (Tenet 4) reasonably restricts.
+    // Filename sort works WITHIN one agent's directory (same `<model>-NNNN-*`
+    // prefix is monotonic by session counter), but breaks ACROSS agents
+    // because `claude-9999-*` sorts before `gemini-0001-*`. Pick each agent's
+    // latest by filename, then tiebreak across agents by mtime — only N
+    // stat() calls (one per agent dir), and the within-agent sort stays cheap.
+    const strategyAgents = ['strategy-claude', 'strategy-gemini'] as const;
+    const candidates: Array<{ entry: string; mtime: number }> = [];
+    for (const agent of strategyAgents) {
+      const orchestration = resolveOrchestrationPaths(strategyDir, agent);
+      if (orchestration.journal === null) continue;
+      const journalDir = orchestration.journal;
+      const entries = fs.readdirSync(journalDir).filter((f) => f.endsWith('.md'));
+      if (entries.length === 0) continue;
+      entries.sort();
+      const latest = entries[entries.length - 1]!;
+      const mtime = fs.statSync(path.join(journalDir, latest)).mtimeMs;
+      candidates.push({ entry: latest, mtime });
     }
-    // totem-context: ADR-090 substrate graceful degradation — null when journalRoot unreachable.
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.mtime - a.mtime);
+      latestJournal = candidates[0]!.entry;
+    }
+
+    // Layer 2 — substrate / sediment (frozen archive, ADR-100): used
+    // when orchestration is absent or empty across both strategy agents,
+    // so historical journals continue to surface during the bootstrap
+    // window and after the cohort cutover for forensic reads.
+    if (latestJournal === null) {
+      const substrate = resolveSubstratePaths(cwd, { config });
+      if (substrate.journalRoot !== null) {
+        const entries = fs
+          .readdirSync(substrate.journalRoot)
+          .filter((f) => f.endsWith('.md'))
+          .sort();
+        latestJournal = entries.length > 0 ? entries[entries.length - 1]! : null;
+      }
+    }
+    // totem-context: intentional fall-through — orchestration + substrate read paths are best-effort sensors; ADR-090 graceful degradation means we return null for latestJournal rather than crash the whole describe_project payload.
   } catch {
     latestJournal = null;
   }

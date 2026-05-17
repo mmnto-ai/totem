@@ -185,6 +185,269 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
     }
   });
 
+  it('prefers per-repo orchestration over substrate (Proposal 282 / ADR-106)', () => {
+    // Proposal 282 invariant: when the strategy repo carries a populated
+    // `.totem/orchestration/strategy-claude/journal/`, that's the active
+    // surface and substrate becomes the frozen-archive fallback. The
+    // orchestration entry MUST win even when substrate also resolves with
+    // a newer-named file.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-orch-pref-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      // Strategy clone with its own orchestration tree (the active layer).
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      const orchestrationJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'journal',
+      );
+      fs.mkdirSync(orchestrationJournal, { recursive: true });
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(orchestrationJournal, 'claude-0042-orchestration-active.md'), '');
+
+      // Substrate clone with a newer-named entry (proves substrate is the fallback,
+      // not preferred — orchestration wins regardless of substrate's file ordering).
+      const substrateDir = path.join(parent, 'totem-substrate');
+      fs.mkdirSync(substrateDir);
+      // totem-context: substrate fixture build — shape gate, not gitRoot probe.
+      fs.mkdirSync(path.join(substrateDir, '.git'));
+      fs.mkdirSync(path.join(substrateDir, '.handoff'));
+      const substrateJournal = path.join(substrateDir, '.journal');
+      fs.mkdirSync(substrateJournal);
+      // totem-context: writing test journal markdown to a journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(substrateJournal, '2099-12-31-substrate-newer.md'), '');
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        // Orchestration layer wins even though substrate has a newer-named file.
+        expect(ptr.latestJournal).toBe('claude-0042-orchestration-active.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
+  it('reads from strategy-gemini journal when only the Gemini agent is populated (GCA R2)', () => {
+    // Strategy repo can host both strategy-claude and strategy-gemini;
+    // the extractor must surface the latest from either. This test
+    // covers the Gemini-only case: strategy-claude has no journal tree;
+    // strategy-gemini has the live entries.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-strat-gemini-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      // Only strategy-gemini has a populated journal.
+      const geminiJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-gemini',
+        'journal',
+      );
+      fs.mkdirSync(geminiJournal, { recursive: true });
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(geminiJournal, 'gemini-0007-strategy-active.md'), '');
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('gemini-0007-strategy-active.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
+  it('merges strategy-claude and strategy-gemini journals and returns the latest (GCA R2)', () => {
+    // Both strategy agents populated; the extractor returns the most-recent
+    // entry across both agents. Within an agent's directory the filename
+    // counter is monotonic (same `<model>-NNNN-*` prefix), but ACROSS agents
+    // mtime is the only reliable axis — alphabetical sort always puts
+    // `gemini-*` after `claude-*`, which would falsely report the newest
+    // gemini entry as latest even when claude wrote more recently.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-strat-merged-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      const claudeJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'journal',
+      );
+      const geminiJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-gemini',
+        'journal',
+      );
+      fs.mkdirSync(claudeJournal, { recursive: true });
+      fs.mkdirSync(geminiJournal, { recursive: true });
+
+      const claudeOlder = path.join(claudeJournal, 'claude-0050-older.md');
+      const geminiOlder = path.join(geminiJournal, 'gemini-0001-also-older.md');
+      const geminiNewest = path.join(geminiJournal, 'gemini-0050-newest.md');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(claudeOlder, '');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(geminiOlder, '');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(geminiNewest, '');
+
+      // Explicit mtimes — Windows mtime resolution can tie sequential writes
+      // at the same millisecond, which would otherwise leave the
+      // candidate.sort stable-by-iteration-order (strategy-claude first).
+      const now = Date.now() / 1000;
+      fs.utimesSync(claudeOlder, now - 7200, now - 7200);
+      fs.utimesSync(geminiOlder, now - 3600, now - 3600);
+      fs.utimesSync(geminiNewest, now, now);
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('gemini-0050-newest.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
+  it('uses mtime — not filename — to break ties across strategy-claude vs strategy-gemini', () => {
+    // Cross-agent merge: filename sort across `claude-*` vs `gemini-*`
+    // prefixes always puts gemini last alphabetically, so a naive merge-then-
+    // alphabetical-sort would pick the latest gemini entry even when claude
+    // wrote more recently. Explicit mtimes drive the tiebreak deterministically.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-strat-mtime-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      const claudeJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'journal',
+      );
+      const geminiJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-gemini',
+        'journal',
+      );
+      fs.mkdirSync(claudeJournal, { recursive: true });
+      fs.mkdirSync(geminiJournal, { recursive: true });
+
+      const geminiPath = path.join(geminiJournal, 'gemini-0050-older.md');
+      const claudePath = path.join(claudeJournal, 'claude-9999-newer.md');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(geminiPath, '');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(claudePath, '');
+
+      // Explicit mtime ordering: gemini older (1 hour ago), claude newer (now).
+      // Naive alphabetical sort would pick `gemini-0050-older.md` because
+      // `'c' < 'g'`; mtime tiebreak picks `claude-9999-newer.md`.
+      const now = Date.now() / 1000;
+      const oneHourAgo = now - 3600;
+      fs.utimesSync(geminiPath, oneHourAgo, oneHourAgo);
+      fs.utimesSync(claudePath, now, now);
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('claude-9999-newer.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
+  it('falls back to substrate when orchestration tree exists but is empty', () => {
+    // Proposal 282 partial-presence: if the strategy repo's orchestration
+    // tree exists with no journal entries yet (newly-initialized agent),
+    // the extractor must fall through to substrate rather than report
+    // an empty active layer as authoritative.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-orch-empty-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      // Empty orchestration journal — directory exists but no .md files.
+      const orchestrationJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'journal',
+      );
+      fs.mkdirSync(orchestrationJournal, { recursive: true });
+
+      // Substrate with an entry — should be the source when orchestration is empty.
+      const substrateDir = path.join(parent, 'totem-substrate');
+      fs.mkdirSync(substrateDir);
+      // totem-context: substrate fixture build — shape gate, not gitRoot probe.
+      fs.mkdirSync(path.join(substrateDir, '.git'));
+      fs.mkdirSync(path.join(substrateDir, '.handoff'));
+      const substrateJournal = path.join(substrateDir, '.journal');
+      fs.mkdirSync(substrateJournal);
+      // totem-context: writing test journal markdown to a journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(substrateJournal, '2026-05-04-substrate-archive.md'), '');
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('2026-05-04-substrate-archive.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
   it('falls back to repo-local sediment when substrate is unreachable', () => {
     // Phase C ADR-090 invariant: when substrate is absent, latestJournal
     // reads from repo-local sediment (the now-frozen pre-extraction path).
