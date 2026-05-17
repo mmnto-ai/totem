@@ -326,6 +326,65 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
     }
   });
 
+  it('uses mtime — not filename — to break ties across strategy-claude vs strategy-gemini', () => {
+    // Cross-agent merge: filename sort across `claude-*` vs `gemini-*`
+    // prefixes always puts gemini last alphabetically, so a naive merge-then-
+    // alphabetical-sort would pick the latest gemini entry even when claude
+    // wrote more recently. Explicit mtimes drive the tiebreak deterministically.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-strat-mtime-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      const claudeJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'journal',
+      );
+      const geminiJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-gemini',
+        'journal',
+      );
+      fs.mkdirSync(claudeJournal, { recursive: true });
+      fs.mkdirSync(geminiJournal, { recursive: true });
+
+      const geminiPath = path.join(geminiJournal, 'gemini-0050-older.md');
+      const claudePath = path.join(claudeJournal, 'claude-9999-newer.md');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(geminiPath, '');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(claudePath, '');
+
+      // Explicit mtime ordering: gemini older (1 hour ago), claude newer (now).
+      // Naive alphabetical sort would pick `gemini-0050-older.md` because
+      // `'c' < 'g'`; mtime tiebreak picks `claude-9999-newer.md`.
+      const now = Date.now() / 1000;
+      const oneHourAgo = now - 3600;
+      fs.utimesSync(geminiPath, oneHourAgo, oneHourAgo);
+      fs.utimesSync(claudePath, now, now);
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('claude-9999-newer.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
   it('falls back to substrate when orchestration tree exists but is empty', () => {
     // Proposal 282 partial-presence: if the strategy repo's orchestration
     // tree exists with no journal entries yet (newly-initialized agent),

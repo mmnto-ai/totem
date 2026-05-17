@@ -138,18 +138,27 @@ export function extractStrategyPointer(
     // process credentials), so per-agent isolation buys little and would
     // require swallow-and-continue catches that the fail-open-catch ban
     // (Tenet 4) reasonably restricts.
+    // Filename sort works WITHIN one agent's directory (same `<model>-NNNN-*`
+    // prefix is monotonic by session counter), but breaks ACROSS agents
+    // because `claude-9999-*` sorts before `gemini-0001-*`. Pick each agent's
+    // latest by filename, then tiebreak across agents by mtime — only N
+    // stat() calls (one per agent dir), and the within-agent sort stays cheap.
     const strategyAgents = ['strategy-claude', 'strategy-gemini'] as const;
-    const orchestrationEntries: string[] = [];
+    const candidates: Array<{ entry: string; mtime: number }> = [];
     for (const agent of strategyAgents) {
       const orchestration = resolveOrchestrationPaths(strategyDir, agent);
-      if (orchestration.journal !== null) {
-        const entries = fs.readdirSync(orchestration.journal).filter((f) => f.endsWith('.md'));
-        orchestrationEntries.push(...entries);
-      }
+      if (orchestration.journal === null) continue;
+      const journalDir = orchestration.journal;
+      const entries = fs.readdirSync(journalDir).filter((f) => f.endsWith('.md'));
+      if (entries.length === 0) continue;
+      entries.sort();
+      const latest = entries[entries.length - 1]!;
+      const mtime = fs.statSync(path.join(journalDir, latest)).mtimeMs;
+      candidates.push({ entry: latest, mtime });
     }
-    if (orchestrationEntries.length > 0) {
-      orchestrationEntries.sort();
-      latestJournal = orchestrationEntries[orchestrationEntries.length - 1]!;
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.mtime - a.mtime);
+      latestJournal = candidates[0]!.entry;
     }
 
     // Layer 2 — substrate / sediment (frozen archive, ADR-100): used
