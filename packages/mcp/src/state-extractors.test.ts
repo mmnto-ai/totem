@@ -278,8 +278,12 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
   });
 
   it('merges strategy-claude and strategy-gemini journals and returns the latest (GCA R2)', () => {
-    // Both strategy agents populated; merged sort should return the
-    // alphabetically-last filename across both agents' journals.
+    // Both strategy agents populated; the extractor returns the most-recent
+    // entry across both agents. Within an agent's directory the filename
+    // counter is monotonic (same `<model>-NNNN-*` prefix), but ACROSS agents
+    // mtime is the only reliable axis — alphabetical sort always puts
+    // `gemini-*` after `claude-*`, which would falsely report the newest
+    // gemini entry as latest even when claude wrote more recently.
     // totem-context: test fixture only; agents do not consume this temp dir.
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-strat-merged-'));
     try {
@@ -304,13 +308,24 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
       );
       fs.mkdirSync(claudeJournal, { recursive: true });
       fs.mkdirSync(geminiJournal, { recursive: true });
-      // Sort order on filenames: 'claude-0050-...' < 'gemini-0001-...' < 'gemini-0050-...'
+
+      const claudeOlder = path.join(claudeJournal, 'claude-0050-older.md');
+      const geminiOlder = path.join(geminiJournal, 'gemini-0001-also-older.md');
+      const geminiNewest = path.join(geminiJournal, 'gemini-0050-newest.md');
       // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
-      fs.writeFileSync(path.join(claudeJournal, 'claude-0050-older.md'), '');
+      fs.writeFileSync(claudeOlder, '');
       // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
-      fs.writeFileSync(path.join(geminiJournal, 'gemini-0001-also-older.md'), '');
+      fs.writeFileSync(geminiOlder, '');
       // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
-      fs.writeFileSync(path.join(geminiJournal, 'gemini-0050-newest.md'), '');
+      fs.writeFileSync(geminiNewest, '');
+
+      // Explicit mtimes — Windows mtime resolution can tie sequential writes
+      // at the same millisecond, which would otherwise leave the
+      // candidate.sort stable-by-iteration-order (strategy-claude first).
+      const now = Date.now() / 1000;
+      fs.utimesSync(claudeOlder, now - 7200, now - 7200);
+      fs.utimesSync(geminiOlder, now - 3600, now - 3600);
+      fs.utimesSync(geminiNewest, now, now);
 
       const repo = path.join(parent, 'repo');
       fs.mkdirSync(repo);
