@@ -238,6 +238,94 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
     }
   });
 
+  it('reads from strategy-gemini journal when only the Gemini agent is populated (GCA R2)', () => {
+    // Strategy repo can host both strategy-claude and strategy-gemini;
+    // the extractor must surface the latest from either. This test
+    // covers the Gemini-only case: strategy-claude has no journal tree;
+    // strategy-gemini has the live entries.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-strat-gemini-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      // Only strategy-gemini has a populated journal.
+      const geminiJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-gemini',
+        'journal',
+      );
+      fs.mkdirSync(geminiJournal, { recursive: true });
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(geminiJournal, 'gemini-0007-strategy-active.md'), '');
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('gemini-0007-strategy-active.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
+  it('merges strategy-claude and strategy-gemini journals and returns the latest (GCA R2)', () => {
+    // Both strategy agents populated; merged sort should return the
+    // alphabetically-last filename across both agents' journals.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-strat-merged-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      const claudeJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'journal',
+      );
+      const geminiJournal = path.join(
+        strategyDir,
+        '.totem',
+        'orchestration',
+        'strategy-gemini',
+        'journal',
+      );
+      fs.mkdirSync(claudeJournal, { recursive: true });
+      fs.mkdirSync(geminiJournal, { recursive: true });
+      // Sort order on filenames: 'claude-0050-...' < 'gemini-0001-...' < 'gemini-0050-...'
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(claudeJournal, 'claude-0050-older.md'), '');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(geminiJournal, 'gemini-0001-also-older.md'), '');
+      // totem-context: writing test journal markdown to an orchestration journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(geminiJournal, 'gemini-0050-newest.md'), '');
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('gemini-0050-newest.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
   it('falls back to substrate when orchestration tree exists but is empty', () => {
     // Proposal 282 partial-presence: if the strategy repo's orchestration
     // tree exists with no journal entries yet (newly-initialized agent),

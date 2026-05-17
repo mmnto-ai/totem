@@ -456,7 +456,7 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
 
    Override hook: if the consuming repo carries \`.totem/orchestration/config.json\` with a \`host_agents: string[]\` field, prefer that list over the hardcoded map. Reserved for repos that legitimately host an agent not in the default map.
 
-   b. **Resolve the journal directory** via \`resolveOrchestrationPaths(repoRoot, agentId).journal\` from \`@mmnto/totem\`. Returns the absolute path to \`<repoRoot>/.totem/orchestration/<agent-id>/journal/\`. If \`source === 'none'\` (the tree does not exist yet in this repo), create the directory first via \`mkdir -p\`; the path is gitignored and safe to create.
+   b. **Resolve the journal directory** via \`resolveOrchestrationPaths(repoRoot, agentId).journal\` from \`@mmnto/totem\`. Returns the absolute path to \`<repoRoot>/.totem/orchestration/<agent-id>/journal/\` when the tree exists. If \`source === 'none'\` (the tree does not exist yet in this repo) the resolver returns \`null\` for every path field — in that case, construct the path manually as \`<repoRoot>/.totem/orchestration/<agent-id>/journal/\` and create the directory first via \`mkdir -p\`; the path is gitignored and safe to create.
 
 3. **No commit, no push.** \`.totem/orchestration/\` is gitignored — local filesystem write is the entire operation. No more substrate rebase-retry loops; the cross-agent write-collision class is eliminated by the single-writer-per-path invariant (you only ever write into your own \`<agent-id>/\` subtree).
 

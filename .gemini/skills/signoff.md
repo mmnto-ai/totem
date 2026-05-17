@@ -29,7 +29,7 @@ At end of session, after the main task is wrapped: when the user signals complet
 
    Override hook: if the consuming repo carries `.totem/orchestration/config.json` with a `host_agents: string[]` field, prefer that list over the hardcoded map. Reserved for repos that legitimately host an agent not in the default map.
 
-   b. **Resolve the journal directory.** The Node-side primitive is `resolveOrchestrationPaths(repoRoot, agentId).journal` from `@mmnto/totem`; invoke via shell as needed. The journal directory is `<repoRoot>/.totem/orchestration/<agent-id>/journal/`. If absent, create it first (`mkdir -p`); the path is gitignored and safe to create.
+   b. **Resolve the journal directory.** The Node-side primitive is `resolveOrchestrationPaths(repoRoot, agentId).journal` from `@mmnto/totem`; invoke via shell as needed. The journal directory is `<repoRoot>/.totem/orchestration/<agent-id>/journal/` when the tree exists. If `source === 'none'` (tree absent) the resolver returns `null` for every path field — construct the path manually using the same formula and create the directory first (`mkdir -p`); the path is gitignored and safe to create.
 
 3. **No commit, no push.** `.totem/orchestration/` is gitignored — local filesystem write is the entire operation. No substrate rebase-retry loops; the cross-agent write-collision class is eliminated by the single-writer-per-path invariant (only ever write into your own `<agent-id>/` subtree).
 

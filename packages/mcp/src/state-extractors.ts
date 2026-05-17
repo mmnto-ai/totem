@@ -127,25 +127,35 @@ export function extractStrategyPointer(
   let latestJournal: string | null = null;
   try {
     // Layer 1 — orchestration (active, post-Proposal-282): the strategy
-    // repo's per-repo `.totem/orchestration/strategy-claude/journal/`
-    // is the live write target. Resolver returns source: 'orchestration'
-    // when at least one of the agent's subdirs exists; we read `journal`
+    // repo's per-repo `.totem/orchestration/<agent-id>/journal/` is the
+    // live write target. Scan BOTH strategy-claude AND strategy-gemini
+    // journals; the strategy repo can host both agents and either may
+    // hold the latest entry. Resolver returns source: 'orchestration'
+    // when at least one of an agent's subdirs exists; we read `journal`
     // when it's populated and fall through otherwise.
-    const orchestration = resolveOrchestrationPaths(strategyDir, 'strategy-claude');
-    if (orchestration.journal !== null) {
-      const entries = fs
-        .readdirSync(orchestration.journal)
-        .filter((f) => f.endsWith('.md'))
-        .sort();
-      if (entries.length > 0) {
-        latestJournal = entries[entries.length - 1]!;
+    // Per-agent reads share the outer try/catch — a permission error on one
+    // journal correlates strongly with the other (same disk, same mount, same
+    // process credentials), so per-agent isolation buys little and would
+    // require swallow-and-continue catches that the fail-open-catch ban
+    // (Tenet 4) reasonably restricts.
+    const strategyAgents = ['strategy-claude', 'strategy-gemini'] as const;
+    const orchestrationEntries: string[] = [];
+    for (const agent of strategyAgents) {
+      const orchestration = resolveOrchestrationPaths(strategyDir, agent);
+      if (orchestration.journal !== null) {
+        const entries = fs.readdirSync(orchestration.journal).filter((f) => f.endsWith('.md'));
+        orchestrationEntries.push(...entries);
       }
+    }
+    if (orchestrationEntries.length > 0) {
+      orchestrationEntries.sort();
+      latestJournal = orchestrationEntries[orchestrationEntries.length - 1]!;
     }
 
     // Layer 2 — substrate / sediment (frozen archive, ADR-100): used
-    // when orchestration is absent or empty, so historical journals
-    // continue to surface during the bootstrap window and after the
-    // cohort cutover for forensic reads.
+    // when orchestration is absent or empty across both strategy agents,
+    // so historical journals continue to surface during the bootstrap
+    // window and after the cohort cutover for forensic reads.
     if (latestJournal === null) {
       const substrate = resolveSubstratePaths(cwd, { config });
       if (substrate.journalRoot !== null) {
@@ -156,7 +166,7 @@ export function extractStrategyPointer(
         latestJournal = entries.length > 0 ? entries[entries.length - 1]! : null;
       }
     }
-    // totem-context: ADR-090 substrate graceful degradation — null when neither layer resolves.
+    // totem-context: intentional fall-through — orchestration + substrate read paths are best-effort sensors; ADR-090 graceful degradation means we return null for latestJournal rather than crash the whole describe_project payload.
   } catch {
     latestJournal = null;
   }
