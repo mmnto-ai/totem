@@ -194,3 +194,53 @@ describe('resolveOrchestrationPaths — robustness', () => {
     }
   });
 });
+
+// ─── agentId validation (defense-in-depth against path traversal) ──────────
+
+describe('resolveOrchestrationPaths — agentId validation', () => {
+  it("returns source: 'none' for an empty agentId", () => {
+    const result = resolveOrchestrationPaths(repoRoot, '');
+    expect(result.source).toBe('none');
+    expect(result.outbox).toBeNull();
+    expect(result.processed).toBeNull();
+    expect(result.journal).toBeNull();
+  });
+
+  it("returns source: 'none' when agentId contains '..' (parent-dir traversal)", () => {
+    // A traversal-bearing agentId without the validation would normalize to
+    // an absolute path outside `.totem/orchestration/`; the validation
+    // short-circuits before path composition.
+    mkOrchestrationTree(repoRoot, 'totem-claude', 'all');
+    const result = resolveOrchestrationPaths(repoRoot, '../etc');
+    expect(result.source).toBe('none');
+    expect(result.outbox).toBeNull();
+  });
+
+  it("returns source: 'none' when agentId contains '/' (POSIX path separator)", () => {
+    const result = resolveOrchestrationPaths(repoRoot, 'totem/claude');
+    expect(result.source).toBe('none');
+    expect(result.journal).toBeNull();
+  });
+
+  it("returns source: 'none' when agentId contains '\\' (Windows path separator)", () => {
+    const result = resolveOrchestrationPaths(repoRoot, 'totem\\claude');
+    expect(result.source).toBe('none');
+    expect(result.journal).toBeNull();
+  });
+
+  it("returns source: 'none' when agentId contains a null byte", () => {
+    const result = resolveOrchestrationPaths(repoRoot, 'totem-claude\0/etc');
+    expect(result.source).toBe('none');
+    expect(result.journal).toBeNull();
+  });
+
+  it("returns source: 'none' for non-string agentId (defensive type check)", () => {
+    // Defense against untyped JS callers passing through the override hook.
+    // totem-context: cast through `unknown` to reach the runtime path that
+    // TypeScript would otherwise forbid; the validation must hold even
+    // when a config.json supplies non-string `host_agents` entries.
+    const result = resolveOrchestrationPaths(repoRoot, null as unknown as string);
+    expect(result.source).toBe('none');
+    expect(result.outbox).toBeNull();
+  });
+});

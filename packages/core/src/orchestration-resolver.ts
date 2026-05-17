@@ -71,7 +71,37 @@ function isDirectory(p: string): boolean {
  *   the identifier is `<stream>-<vendor>` and disambiguates from human
  *   names or repo names.
  */
+/**
+ * Path-traversal pattern for `agentId` validation. Matches:
+ * - `/` or `\` (POSIX or Windows path separators)
+ * - `\0` (null byte — POSIX path-truncation class)
+ * - `..` (parent-directory traversal)
+ *
+ * Regex form rather than `.includes()` is deliberate: the lint corpus
+ * treats `.includes()` as file-identification (`.test.`, `README`, marker
+ * scans) and produces false-positive findings on input-sanitization
+ * checks. A single anchored predicate keeps both intent and lint clean.
+ */
+const AGENT_ID_TRAVERSAL_PATTERN = /[/\\\0]|\.\./;
+
 export function resolveOrchestrationPaths(repoRoot: string, agentId: string): OrchestrationPaths {
+  // Defense-in-depth: reject path-traversal patterns in `agentId` before
+  // composing the base path. The hardcoded map in the /signoff skill is
+  // safe, but `.totem/orchestration/config.json` carries a `host_agents`
+  // override (intentionally — for repos that legitimately host an agent
+  // outside the default map). A malicious or buggy override
+  // (`'..', '../..', 'a/b'`) would otherwise escape `.totem/orchestration/`
+  // because `path.normalize` collapses `..` segments before the existence
+  // check sees them. Same 'none' return shape as a missing tree — callers
+  // already tolerate that branch.
+  if (
+    typeof agentId !== 'string' ||
+    agentId.length === 0 ||
+    AGENT_ID_TRAVERSAL_PATTERN.test(agentId)
+  ) {
+    return { outbox: null, processed: null, journal: null, source: 'none' };
+  }
+
   const base = path.normalize(path.join(repoRoot, '.totem', 'orchestration', agentId));
   const outbox = path.normalize(path.join(base, 'outbox'));
   const processed = path.normalize(path.join(base, 'processed'));
