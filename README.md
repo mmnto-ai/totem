@@ -175,7 +175,7 @@ See the Wiki for how to use Totem to govern your workflows:
 ### Deep Dives
 
 - [CLI Reference](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/cli-reference.md)
-- [Architecture & Workflows](https://github.com/mmnto-ai/totem/blob/main/docs/reference/architecture-diagram.md)
+- [Architecture & Workflows](https://github.com/mmnto-ai/totem/blob/main/docs/reference/architecture.md)
 - [MCP Server Setup](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/mcp-setup.md)
 - [CI/CD Integration](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/ci-integration.md)
 

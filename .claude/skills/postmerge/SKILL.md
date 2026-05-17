@@ -73,10 +73,9 @@ with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
 
 6. Stage only the artifacts we keep: new lessons, the mutated rules
    file, the refreshed manifest, and the regenerated exports. Do NOT
-   stage `docs/active_work.md`, `docs/roadmap.md`, or
-   `docs/architecture.md` unless you hand-edited them deliberately
-   (those are `totem docs` targets and a postmerge run should not
-   rewrite them):
+   stage `docs/wiki/roadmap.md` or `docs/reference/architecture.md`
+   unless you hand-edited them deliberately (those are `totem docs`
+   targets and a postmerge run should not rewrite them):
    `git add .totem/lessons/ .totem/compiled-rules.json .totem/compile-manifest.json .github/copilot-instructions.md .junie/skills/totem-rules/rules.md`
 
 7. Commit:

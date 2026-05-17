@@ -5,7 +5,7 @@
 # Mermaid node labels cannot contain // — GitHub lexer treats it as comment syntax
 
 ## What happened
-The architecture diagram at `docs/reference/architecture-diagram.md` failed to render on GitHub with "Lexical error on line 9. Unrecognized text." The node label `[// totem-context:<br/>or --override]` confused the mermaid parser because `//` is interpreted as comment syntax.
+The architecture diagram at `docs/reference/architecture.md` failed to render on GitHub with "Lexical error on line 9. Unrecognized text." The node label `[// totem-context:<br/>or --override]` confused the mermaid parser because `//` is interpreted as comment syntax.
 
 ## Rule
 When writing mermaid diagram node labels, avoid `//` characters. Use plain text descriptions instead of code syntax. If you must include special characters, wrap the label in double quotes: `["label text"]`.
