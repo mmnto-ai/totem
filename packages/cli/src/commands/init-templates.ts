@@ -445,14 +445,14 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
 
    a. **Identify your agent-id** from the current repo's basename. The hardcoded map (Proposal 282 § Scope item 3 — keep in sync with the ADR-106 cohort list):
 
-   | Repo (\`git rev-parse --show-toplevel\` basename) | Claude agent-id | Gemini agent-id |
-   |---|---|---|
-   | \`totem\` | \`totem-claude\` | \`totem-gemini\` |
-   | \`totem-strategy\` | \`strategy-claude\` | \`strategy-gemini\` |
-   | \`liquid-city\` | \`lc-claude\` | \`lc-gemini\` |
-   | \`arhgap11\` | \`arhgap11-claude\` | \`arhgap11-gemini\` |
-   | \`totem-status\` | _(no Claude variant)_ | \`status-gemini\` |
-   | \`totem-playground\` | _(orphan stream — no native agent)_ | _(orphan stream)_ |
+   | Repo (\`git rev-parse --show-toplevel\` basename) | Claude agent-id                     | Gemini agent-id   |
+   | ----------------------------------------------- | ----------------------------------- | ----------------- |
+   | \`totem\`                                         | \`totem-claude\`                      | \`totem-gemini\`    |
+   | \`totem-strategy\`                                | \`strategy-claude\`                   | \`strategy-gemini\` |
+   | \`liquid-city\`                                   | \`lc-claude\`                         | \`lc-gemini\`       |
+   | \`arhgap11\`                                      | \`arhgap11-claude\`                   | \`arhgap11-gemini\` |
+   | \`totem-status\`                                  | _(no Claude variant)_               | \`status-gemini\`   |
+   | \`totem-playground\`                              | _(orphan stream — no native agent)_ | _(orphan stream)_ |
 
    Override hook: if the consuming repo carries \`.totem/orchestration/config.json\` with a \`host_agents: string[]\` field, prefer that list over the hardcoded map. Reserved for repos that legitimately host an agent not in the default map.
 
@@ -473,6 +473,7 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
 **Cross-repo handoffs** (when you need to dispatch a message to another agent) write to your own \`<repoRoot>/.totem/orchestration/<agent-id>/outbox/<YYYY-MM-DDTHHMMZ>-<your-agent-id>.md\` with \`to: <recipient-agent-id>\` in the frontmatter. Recipients discover inbound handoffs by polling the single-level glob \`<workspace>/*/.totem/orchestration/*/outbox/*.md\` filtered by their own \`to:\` frontmatter match.
 
 **Substrate (legacy) is read-only.** Do NOT write new content to \`mmnto-ai/totem-substrate:.handoff/\` or \`:.journal/\`. The substrate stays mounted as a frozen archive accessible via \`resolveSubstratePaths(cwd)\` for forensic reads; the cutover broadcast (when it lands) will confirm the final substrate-write cutoff.
+
 ${SKILL_MARKER_END}
 `;
 

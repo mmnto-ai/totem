@@ -18,14 +18,14 @@ At end of session, after the main task is wrapped: when the user signals complet
 
    a. **Identify the agent-id from the current repo's basename.** Hardcoded map (Proposal 282 § Scope item 3 — keep in sync with the ADR-106 cohort list):
 
-   | Repo (`git rev-parse --show-toplevel` basename) | Gemini agent-id |
-   |---|---|
-   | `totem` | `totem-gemini` |
-   | `totem-strategy` | `strategy-gemini` |
-   | `liquid-city` | `lc-gemini` |
-   | `arhgap11` | `arhgap11-gemini` |
-   | `totem-status` | `status-gemini` |
-   | `totem-playground` | _(orphan stream — no native agent)_ |
+   | Repo (`git rev-parse --show-toplevel` basename) | Gemini agent-id                     |
+   | ----------------------------------------------- | ----------------------------------- |
+   | `totem`                                         | `totem-gemini`                      |
+   | `totem-strategy`                                | `strategy-gemini`                   |
+   | `liquid-city`                                   | `lc-gemini`                         |
+   | `arhgap11`                                      | `arhgap11-gemini`                   |
+   | `totem-status`                                  | `status-gemini`                     |
+   | `totem-playground`                              | _(orphan stream — no native agent)_ |
 
    Override hook: if the consuming repo carries `.totem/orchestration/config.json` with a `host_agents: string[]` field, prefer that list over the hardcoded map. Reserved for repos that legitimately host an agent not in the default map.
 
