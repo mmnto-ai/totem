@@ -55,6 +55,12 @@ packages/pack-rust-architecture/tree-sitter-rust.wasm
 .totem/installed-packs.json
 .totem/index-manifest.json
 
+# Local-only orchestration per Proposal 282 (mmnto-ai/totem-strategy#341).
+# Each agent writes journals + handoffs into .totem/orchestration/<agent-id>/.
+# Contents are intentionally NOT tracked — substrate (mmnto-ai/totem-substrate)
+# remains the frozen archive for historical orchestration through cutover.
+.totem/orchestration/
+
 # Local scratchpad (personal scratch files go here, not in root)
 scratchpad/
 design/
