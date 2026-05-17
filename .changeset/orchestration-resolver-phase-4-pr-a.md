@@ -1,14 +1,14 @@
 ---
-'@mmnto/totem': minor
-'@mmnto/mcp': minor
-'@mmnto/cli': minor
+'@mmnto/totem': patch
+'@mmnto/mcp': patch
+'@mmnto/cli': patch
 ---
 
 feat(core+mcp+skills): orchestration resolver + extractor swap + signoff skill (Proposal 282 / ADR-106 Phase 4 PR A)
 
 Ships the totem-Claude impl-lane slice of [mmnto-ai/totem-strategy#341](https://github.com/mmnto-ai/totem-strategy/pull/341) (Proposal 282 — Local-Only Orchestration, accepted) per the Phase 4 dispatch at `mmnto-ai/totem-substrate:.handoff/totem-claude/processed/2026-05-17T0929Z-strategy-claude.md`. Substrate stays mounted as a frozen archive for forensic reads; new inter-agent coordination flows through per-repo paths.
 
-**New `@mmnto/totem` exports:** `resolveOrchestrationPaths` and the `OrchestrationPaths` discriminated-union type. The resolver returns `{ outbox, processed, journal, source }` for a given `(repoRoot, agentId)`, where each path field is the absolute path to that subdir or `null` when it doesn't exist. `source: 'orchestration' | 'none'` is the precedence-chain signal — orchestration when at least one subdir exists, none otherwise. Same purity stance as `resolveStrategyRoot` / `resolveSubstratePaths`: no caching, no side effects, no logging.
+**New `@mmnto/totem` exports:** `resolveOrchestrationPaths` and the `OrchestrationPaths` discriminated-union type. The resolver returns `{ outbox, processed, journal, source }` for a given `(repoRoot, agentId)`, where each path field is the path to that subdir or `null` when it doesn't exist. Per the JSDoc contract, `repoRoot` is supplied absolute (callers resolve via `resolveStrategyRoot` / `resolveGitRoot` / `process.cwd()` upstream). `source: 'orchestration' | 'none'` is the precedence-chain signal — orchestration when at least one subdir exists, none otherwise. Same purity stance as `resolveStrategyRoot` / `resolveSubstratePaths`: no caching, no side effects, no logging.
 
 **Additive sibling.** `resolveSubstratePaths` stays live for frozen-archive reads; the two resolvers run in parallel through and after the cohort cutover so downstream consumers can migrate independently. No removal of substrate-resolver code in Phase 4.
 
