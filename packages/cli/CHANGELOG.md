@@ -30,7 +30,7 @@
 
   **Rule 1 (Absolute-promise detection)** lands as a Pipeline 1 lesson with inline regex pattern from Proposal 279 § Scope:
 
-  ```
+  ```regex
   \b(?:[Ww]ill\s+(?:stay|remain|always\s+be|never\s+(?:change|move))|
       [Ww]on['']t\s+(?:change|ever)|
       [Gg]uarantees|
@@ -45,7 +45,7 @@
 
   **Empirical bonus** from smoke-testing the subcommand: it surfaced 1 pre-existing absolute-promise match in `docs/wiki/governing-ai-agents.md:58`. The gate is already doing useful work. Addressing or accepting the finding is out of scope for PR α; surfacing it is the load-bearing demonstration.
 
-  **Tests:** 22 new tests (6 schema, 13 subcommand, 4 hook content); full suite 2192/2192 passing.
+  **Tests:** 23 new tests (6 schema, 13 subcommand, 4 hook content); full suite 2192/2192 passing.
 
   **Out of scope (PR β):** Rule 2 (marketing-absolutes — direct + retro-lesson), Rules 3-5 (missing-Goal-prefix, falsifying-metric on ADRs, covenant-without-backing — all lesson→compile per the hybrid criterion), four-week calibration window start, false-positive shavings against the empirical N=5 corpus, ast/ast-grep engine dispatch in the scanner.
 
