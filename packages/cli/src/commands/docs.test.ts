@@ -131,11 +131,11 @@ describe('docsCommand', () => {
   it('filters docs with --only', async () => {
     mockConfig([
       { path: 'README.md', description: 'readme', trigger: 'post-release' },
-      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' },
+      { path: 'docs/wiki/roadmap.md', description: 'roadmap', trigger: 'post-release' },
     ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
-    writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
+    writeDoc(tmpDir, 'docs/wiki/roadmap.md', '# Old Roadmap\n');
 
     await docsCommand([], { only: 'readme', yes: true });
 
@@ -188,11 +188,11 @@ describe('docsCommand', () => {
   it('processes multiple docs sequentially', async () => {
     mockConfig([
       { path: 'README.md', description: 'readme', trigger: 'post-release' },
-      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' },
+      { path: 'docs/wiki/roadmap.md', description: 'roadmap', trigger: 'post-release' },
     ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
-    writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
+    writeDoc(tmpDir, 'docs/wiki/roadmap.md', '# Old Roadmap\n');
 
     await docsCommand([], { yes: true });
 
@@ -255,11 +255,11 @@ describe('docsCommand', () => {
   it('targets a single doc by path', async () => {
     mockConfig([
       { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      { path: 'docs/wiki/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
     ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
-    writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
+    writeDoc(tmpDir, 'docs/wiki/roadmap.md', '# Old Roadmap\n');
 
     await docsCommand(['README.md'], { yes: true });
 
@@ -269,15 +269,19 @@ describe('docsCommand', () => {
   it('targets multiple docs by path', async () => {
     mockConfig([
       { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
-      { path: 'docs/architecture.md', description: 'arch', trigger: 'post-release' as const },
+      { path: 'docs/wiki/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      {
+        path: 'docs/reference/architecture.md',
+        description: 'arch',
+        trigger: 'post-release' as const,
+      },
     ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
-    writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
-    writeDoc(tmpDir, 'docs/architecture.md', '# Old Arch\n');
+    writeDoc(tmpDir, 'docs/wiki/roadmap.md', '# Old Roadmap\n');
+    writeDoc(tmpDir, 'docs/reference/architecture.md', '# Old Arch\n');
 
-    await docsCommand(['README.md', 'docs/roadmap.md'], { yes: true });
+    await docsCommand(['README.md', 'docs/wiki/roadmap.md'], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(2);
   });
@@ -285,7 +289,7 @@ describe('docsCommand', () => {
   it('normalizes ./prefix in positional paths', async () => {
     mockConfig([
       { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      { path: 'docs/wiki/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
     ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
@@ -326,7 +330,7 @@ describe('docsCommand', () => {
   it('throws when both positional paths and --only are provided', async () => {
     mockConfig([
       { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      { path: 'docs/wiki/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
     ]);
 
     await expect(docsCommand(['README.md'], { only: 'roadmap' })).rejects.toThrow(
@@ -348,13 +352,15 @@ describe('docsCommand', () => {
   it('scopes dirty check to targeted docs only', async () => {
     mockConfig([
       { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      { path: 'docs/wiki/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
     ]);
 
     // Only roadmap is dirty, but we're targeting README
-    vi.mocked(isFileDirty).mockImplementation((_cwd, filePath) => filePath === 'docs/roadmap.md');
+    vi.mocked(isFileDirty).mockImplementation(
+      (_cwd, filePath) => filePath === 'docs/wiki/roadmap.md',
+    );
     writeDoc(tmpDir, 'README.md', '# Old README\n');
-    writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
+    writeDoc(tmpDir, 'docs/wiki/roadmap.md', '# Old Roadmap\n');
 
     // Should succeed — README is not dirty
     await docsCommand(['README.md'], { yes: true });
@@ -620,7 +626,7 @@ describe('resolveIsUserFacing', () => {
   it('returns false for non-readme files when userFacing is undefined', () => {
     expect(
       resolveIsUserFacing({
-        path: 'docs/roadmap.md',
+        path: 'docs/wiki/roadmap.md',
         description: 'roadmap',
         trigger: 'post-release',
       }),
@@ -630,7 +636,7 @@ describe('resolveIsUserFacing', () => {
   it('returns true for non-readme files when userFacing is true', () => {
     expect(
       resolveIsUserFacing({
-        path: 'docs/architecture.md',
+        path: 'docs/reference/architecture.md',
         description: 'arch',
         trigger: 'post-release',
         userFacing: true,

@@ -37,8 +37,8 @@ function makeSpec(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
     content: 'Architecture overview content here.',
     contextPrefix: 'Architecture > Overview',
-    filePath: 'docs/architecture.md',
-    absoluteFilePath: 'docs/architecture.md',
+    filePath: 'docs/reference/architecture.md',
+    absoluteFilePath: 'docs/reference/architecture.md',
     type: 'spec',
     label: 'Architecture > Overview',
     score: 0.45,
@@ -292,7 +292,7 @@ describe('retrieveContext partitioning', () => {
   it('lessons from lessons.md are separated from regular specs', async () => {
     // Simulate what retrieveContext produces: lessons in lessons array, specs in specs array
     const ctx: RetrievedContext = {
-      specs: [makeSpec({ filePath: 'docs/architecture.md' })],
+      specs: [makeSpec({ filePath: 'docs/reference/architecture.md' })],
       sessions: [],
       code: [],
       lessons: [makeLesson({ filePath: '.totem/lessons.md' })],

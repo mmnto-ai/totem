@@ -40,13 +40,11 @@ const config: TotemConfig = {
   },
 
   docs: [
-    { path: 'docs/roadmap.md', description: 'Strategic roadmap with phase progress' },
+    { path: 'docs/wiki/roadmap.md', description: 'Strategic roadmap with phase progress' },
     {
-      path: 'docs/active_work.md',
-      description:
-        'Current priorities and next issue triage. Only reference OPEN issues — do not include closed or nonexistent issue numbers from prior versions of this document.',
+      path: 'docs/reference/architecture.md',
+      description: 'Technical architecture and system design',
     },
-    { path: 'docs/architecture.md', description: 'Technical architecture and system design' },
   ],
 
   ignorePatterns: [

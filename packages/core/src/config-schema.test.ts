@@ -91,7 +91,7 @@ describe('TotemConfigSchema', () => {
       targets: BASE_TARGETS,
       docs: [
         { path: 'README.md', description: 'Public README', trigger: 'post-release' },
-        { path: 'docs/roadmap.md', description: 'Roadmap' },
+        { path: 'docs/wiki/roadmap.md', description: 'Roadmap' },
       ],
     });
     expect(result.success).toBe(true);
@@ -482,7 +482,7 @@ describe('DocTargetSchema', () => {
 
   it('accepts on-change trigger', () => {
     const result = DocTargetSchema.safeParse({
-      path: 'docs/architecture.md',
+      path: 'docs/reference/architecture.md',
       description: 'Architecture',
       trigger: 'on-change',
     });
@@ -525,7 +525,7 @@ describe('DocTargetSchema', () => {
 
   it('parses successfully with userFacing: true', () => {
     const result = DocTargetSchema.safeParse({
-      path: 'docs/architecture.md',
+      path: 'docs/reference/architecture.md',
       description: 'Architecture docs',
       userFacing: true,
     });

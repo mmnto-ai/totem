@@ -1100,7 +1100,7 @@ describe('partitionLessons', () => {
       { ...makeResult('.totem/lessons/lesson-abc.md', 'Lesson A'), type: 'lesson' as const },
       makeResult('docs/spec.md', 'Spec B'),
       { ...makeResult('.totem/lessons/lesson-def.md', 'Lesson C'), type: 'lesson' as const },
-      makeResult('docs/architecture.md', 'Arch D'),
+      makeResult('docs/reference/architecture.md', 'Arch D'),
     ];
     const { lessons, specs } = partitionLessons(allSpecs, 10, 10);
     expect(lessons).toHaveLength(2);

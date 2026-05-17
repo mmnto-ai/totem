@@ -221,7 +221,7 @@ Fetches merged PRs, reads comments, and extracts systemic architectural traps. A
 
 ### `totem triage`
 
-Fetches open GitHub issues and generates a prioritized roadmap. Ideal for planning your next task in `docs/active_work.md`.
+Fetches open GitHub issues and generates a prioritized roadmap. Ideal for planning your next task.
 
 ### `totem triage-pr <pr-number>`
 
