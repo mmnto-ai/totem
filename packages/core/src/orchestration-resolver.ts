@@ -102,7 +102,14 @@ export function resolveOrchestrationPaths(repoRoot: string, agentId: string): Or
     return { outbox: null, processed: null, journal: null, source: 'none' };
   }
 
-  const base = path.normalize(path.join(repoRoot, '.totem', 'orchestration', agentId));
+  // Resolve `repoRoot` to absolute before composition. Without this, a
+  // caller that supplies a relative anchor (against the contract on the
+  // `repoRoot` JSDoc above) returns relative paths in `outbox` /
+  // `processed` / `journal` — a quiet correctness slip rather than a
+  // loud error. `resolveSubstratePaths` runs the same anchor through
+  // `path.resolve` for the same reason; symmetric guarantee.
+  const resolvedRoot = path.resolve(repoRoot);
+  const base = path.normalize(path.join(resolvedRoot, '.totem', 'orchestration', agentId));
   const outbox = path.normalize(path.join(base, 'outbox'));
   const processed = path.normalize(path.join(base, 'processed'));
   const journal = path.normalize(path.join(base, 'journal'));

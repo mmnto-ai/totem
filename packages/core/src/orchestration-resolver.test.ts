@@ -185,6 +185,22 @@ describe('resolveOrchestrationPaths — robustness', () => {
     );
   });
 
+  it('returns absolute paths when given a relative repoRoot (parity with resolveSubstratePaths)', () => {
+    // Contract violation case: caller passes a relative anchor. Without
+    // `path.resolve` at the top of the resolver, the output would be
+    // relative too — a quiet correctness slip. Mirrors
+    // `resolveSubstratePaths` (substrate-resolver.ts) which runs
+    // `path.resolve(configRoot)` on its anchor for the same reason.
+    mkOrchestrationTree(repoRoot, 'totem-claude', 'all');
+    const relativeRepo = path.relative(process.cwd(), repoRoot);
+    const result = resolveOrchestrationPaths(relativeRepo, 'totem-claude');
+    expect(result.source).toBe('orchestration');
+    expect(result.outbox).not.toBeNull();
+    expect(path.isAbsolute(result.outbox!)).toBe(true);
+    expect(path.isAbsolute(result.processed!)).toBe(true);
+    expect(path.isAbsolute(result.journal!)).toBe(true);
+  });
+
   it('OrchestrationPaths exported type is discriminable on source', () => {
     const result: OrchestrationPaths = resolveOrchestrationPaths(repoRoot, 'totem-claude');
     if (result.source === 'none') {
