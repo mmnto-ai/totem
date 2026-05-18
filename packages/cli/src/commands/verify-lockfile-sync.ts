@@ -36,7 +36,7 @@ const DEP_BUMP_RE = /^\+\s*"(?!version")[^"]+"\s*:\s*"[\^~]?\d+\.\d+/m;
 
 export interface VerifyLockfileSyncResult {
   valid: boolean;
-  /** Set only when valid === false; describes the failure and recovery action. */
+  /** Set only when valid === false; describes the detected failure. The recovery action lives on the TotemError's recoveryHint at the CLI layer. */
   reason?: string;
 }
 
@@ -156,9 +156,7 @@ export async function verifyLockfileSyncCommand(): Promise<VerifyLockfileSyncRes
   if (DEP_BUMP_RE.test(unifiedDiff)) {
     return {
       valid: false,
-      reason:
-        `Tracked lockfile detected, but ${LOCKFILE_PATH} is missing from the diff range while a package.json adds a dependency pin. ` +
-        `Run \`pnpm install\` and stage ${LOCKFILE_PATH} before pushing.`,
+      reason: `Tracked lockfile detected, but ${LOCKFILE_PATH} is missing from the diff range while a package.json adds a dependency pin.`,
     };
   }
 
@@ -174,13 +172,9 @@ export async function verifyLockfileSyncCommand(): Promise<VerifyLockfileSyncRes
  */
 export async function verifyLockfileSyncCliCommand(): Promise<void> {
   const { TotemError } = await import('@mmnto/totem');
-  const { bold, errorColor, log } = await import('../ui.js');
 
   const result = await verifyLockfileSyncCommand();
   if (!result.valid) {
-    log.error('Totem Error', result.reason!);
-    const label = errorColor(bold('FAIL'));
-    log.error('Totem Error', `${label} — Lockfile sync verification failed.`);
     throw new TotemError(
       'CHECK_FAILED',
       result.reason!,

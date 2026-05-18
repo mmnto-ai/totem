@@ -137,7 +137,7 @@ describe('verifyLockfileSyncCommand', () => {
     const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
     const result = await verifyLockfileSyncCommand();
     expect(result.valid).toBe(false);
-    expect(result.reason).toMatch(/pnpm install/);
+    expect(result.reason).toMatch(/Tracked lockfile detected/);
     expect(result.reason).toMatch(/pnpm-lock\.yaml/);
   });
 
@@ -244,7 +244,8 @@ describe('verifyLockfileSyncCommand', () => {
     const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
     const result = await verifyLockfileSyncCommand();
     expect(result.valid).toBe(false);
-    expect(result.reason).toMatch(/Run `pnpm install`/);
+    expect(result.reason).toMatch(/Tracked lockfile detected/);
+    expect(result.reason).toMatch(/package\.json adds a dependency pin/);
   });
 
   it('falls through to pass when getDefaultBranch throws (degraded git state)', async () => {
@@ -308,7 +309,16 @@ describe('verifyLockfileSyncCliCommand', () => {
       };
     });
     const { verifyLockfileSyncCliCommand } = await import('./verify-lockfile-sync.js');
-    await expect(verifyLockfileSyncCliCommand()).rejects.toThrow(/pnpm install/);
+    // The thrown TotemError's message describes the failure; the recovery
+    // action (`pnpm install`) lives on recoveryHint, which the top-level
+    // handleError prints under "Fix:" — separate-concerns per the codebase
+    // pattern at verify-badges.ts:99-109.
+    await expect(verifyLockfileSyncCliCommand()).rejects.toThrow(/Tracked lockfile detected/);
+    try {
+      await verifyLockfileSyncCliCommand();
+    } catch (err) {
+      expect((err as Error & { recoveryHint?: string }).recoveryHint).toMatch(/pnpm install/);
+    }
   });
 
   it('resolves cleanly when the underlying check passes', async () => {
