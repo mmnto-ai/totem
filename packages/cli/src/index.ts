@@ -682,6 +682,22 @@ program
   });
 
 program
+  .command('verify-lockfile-sync')
+  .description(
+    'Verify pnpm-lock.yaml is in the diff range when a package.json adds a dependency pin (cohort-sync gate, mmnto-ai/totem#1961)',
+  )
+  .action(async () => {
+    try {
+      const { verifyLockfileSyncCliCommand } = await import('./commands/verify-lockfile-sync.js');
+      await verifyLockfileSyncCliCommand();
+    } catch (err) {
+      handleError(err);
+      // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the verify-badges pattern above.
+      throw err;
+    }
+  });
+
+program
   .command('import')
   .description('Import rules from external linter configs (ESLint, Semgrep)')
   .option('--from-semgrep <path>', 'Import rules from a Semgrep YAML rules file')

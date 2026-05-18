@@ -350,6 +350,18 @@ if [ -n "$TOTEM_CMD" ]; then
     fi
   fi
 
+  # Verify lockfile-sync (mmnto-ai/totem#1961 — block caret bumps committed
+  # without a regenerated pnpm-lock.yaml). Gate is universally applicable to
+  # any repo that tracks pnpm-lock.yaml; pre-conditions are checked inside
+  # the command (lockfile tracked + diff range resolvable). Slotted before
+  # the WWND claim-discipline gate so this mechanical fast-fail runs before
+  # the slower prose-discipline walk.
+  if [ -f "pnpm-lock.yaml" ]; then
+    if ! $TOTEM_CMD verify-lockfile-sync; then
+      exit 1
+    fi
+  fi
+
   # WWND claim-discipline gate (Proposal 279 § Implementation Notes Q3 —
   # slot after verify-badges; gates on public-surface absolute promises,
   # missing-Goal-prefix, covenant-without-backing). Fires only when at
