@@ -1,5 +1,7 @@
 # @mmnto/pack-agent-security
 
+## 1.43.5
+
 ## 1.43.4
 
 ## 1.43.3
