@@ -182,7 +182,7 @@ export async function verifyLockfileSyncCliCommand(): Promise<void> {
     const label = errorColor(bold('FAIL'));
     log.error('Totem Error', `${label} — Lockfile sync verification failed.`);
     throw new TotemError(
-      'LOCKFILE_SYNC_FAILED',
+      'CHECK_FAILED',
       result.reason!,
       `Run \`pnpm install\` from the repo root to regenerate ${LOCKFILE_PATH}, then stage and commit it before re-pushing. CI runs with \`--frozen-lockfile\` and rejects pushes where a tracked package.json declares dependency pins that the lockfile does not reflect.`,
     );
