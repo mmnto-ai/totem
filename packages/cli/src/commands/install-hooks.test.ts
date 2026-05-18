@@ -240,6 +240,34 @@ describe('buildPrePushHook', () => {
   });
 
   // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('contains $TOTEM_CMD verify-lockfile-sync (mmnto-ai/totem#1961)', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    // totem-context: substring match on hook script content (not secret masking) — toContain is correct here
+    expect(hook).toContain('$TOTEM_CMD verify-lockfile-sync');
+  });
+
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('gates verify-lockfile-sync on pnpm-lock.yaml existing', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toMatch(/-f "pnpm-lock\.yaml".*verify-lockfile-sync/s);
+  });
+
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
+  it('slots verify-lockfile-sync before claim-discipline in the pre-push sequence', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    // Assert presence with toContain (precise matcher); index comparison is
+    // safe only because both substrings are guaranteed present by the
+    // toContain assertions above.
+    // totem-context: substring match on hook script content (not secret masking) — toContain is correct here
+    expect(hook).toContain('$TOTEM_CMD verify-lockfile-sync');
+    // totem-context: substring match on hook script content (not secret masking) — toContain is correct here
+    expect(hook).toContain('$TOTEM_CMD doctor --claim-discipline');
+    const lockfileIdx = hook.indexOf('$TOTEM_CMD verify-lockfile-sync');
+    const claimDisciplineIdx = hook.indexOf('$TOTEM_CMD doctor --claim-discipline');
+    expect(lockfileIdx).toBeLessThan(claimDisciplineIdx);
+  });
+
+  // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
   it('contains $TOTEM_CMD doctor --claim-discipline --strict (Proposal 279 Q3)', () => {
     const hook = buildPrePushHook(FALLBACK);
     expect(hook).toContain('$TOTEM_CMD doctor --claim-discipline --strict');
