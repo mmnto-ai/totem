@@ -16,8 +16,10 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const HOOK_PATH = path.resolve(__dirname, '../../.git/hooks/pre-push');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const HOOK_PATH = path.resolve(HERE, '../../.git/hooks/pre-push');
 
 function hashHook(): { exists: boolean; hash: string; size: number } {
   if (!fs.existsSync(HOOK_PATH)) {
