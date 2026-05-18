@@ -1,5 +1,7 @@
 # @mmnto/totem
 
+## 1.43.3
+
 ## 1.43.2
 
 ### Patch Changes
