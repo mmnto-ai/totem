@@ -13,5 +13,11 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.integration.test.ts'],
     testTimeout: TEST_TIMEOUT_MS,
+    // mmnto-ai/totem#1942 — asserts the real `.git/hooks/pre-push` is not
+    // mutated by any test in the suite. Localizes test-isolation defects in
+    // CLI integration tests that spawn the built binary with a cwd that
+    // resolves to the real repo (e.g., the shield alias's silent
+    // pre-push hook upgrader).
+    globalSetup: ['./vitest.global-setup.ts'],
   },
 });
