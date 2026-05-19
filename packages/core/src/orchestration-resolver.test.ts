@@ -15,7 +15,11 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { type OrchestrationPaths, resolveOrchestrationPaths } from './orchestration-resolver.js';
+import {
+  type OrchestrationPaths,
+  resolveOrchestrationPaths,
+  resolveSelfAgents,
+} from './orchestration-resolver.js';
 import { cleanTmpDir } from './test-utils.js';
 
 let tmpRoot: string;
@@ -258,5 +262,215 @@ describe('resolveOrchestrationPaths — agentId validation', () => {
     const result = resolveOrchestrationPaths(repoRoot, null as unknown as string);
     expect(result.source).toBe('none');
     expect(result.outbox).toBeNull();
+  });
+});
+
+// ─── resolveSelfAgents (mmnto-ai/totem#1970, ADR-106 § 3 / ADR-107) ────────
+
+/**
+ * Build a `.totem/orchestration/config.json` with the given content. Caller
+ * controls the directory creation flow so malformed-JSON and missing-dir
+ * edge cases stay explicit in the test body.
+ */
+function writeConfig(repoRoot: string, content: string): void {
+  const dir = path.join(repoRoot, '.totem', 'orchestration');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'config.json'), content, 'utf-8');
+}
+
+describe('resolveSelfAgents — basename map (default precedence)', () => {
+  it('returns Claude+Gemini pair for `totem`', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('returns strategy pair for `totem-strategy`', () => {
+    const strategyRoot = mkDir(path.join(tmpRoot, 'totem-strategy'));
+    const result = resolveSelfAgents(strategyRoot, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+  });
+
+  it('returns lc pair for `liquid-city`', () => {
+    const lcRoot = mkDir(path.join(tmpRoot, 'liquid-city'));
+    const result = resolveSelfAgents(lcRoot, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
+  });
+
+  it('returns single Gemini agent for `totem-status` (no Claude variant)', () => {
+    const statusRoot = mkDir(path.join(tmpRoot, 'totem-status'));
+    const result = resolveSelfAgents(statusRoot, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['status-gemini']);
+  });
+
+  it("returns source: 'none' and empty list for orphan-stream repo `totem-playground`", () => {
+    const orphanRoot = mkDir(path.join(tmpRoot, 'totem-playground'));
+    const result = resolveSelfAgents(orphanRoot, {});
+    // Empty cohort map entry falls through to 'none' (no agents to claim).
+    expect(result.source).toBe('none');
+    expect(result.agents).toEqual([]);
+  });
+
+  it("returns source: 'none' for an unknown repo basename", () => {
+    const unknownRoot = mkDir(path.join(tmpRoot, 'some-third-party-repo'));
+    const result = resolveSelfAgents(unknownRoot, {});
+    expect(result.source).toBe('none');
+    expect(result.agents).toEqual([]);
+  });
+});
+
+describe('resolveSelfAgents — config.json host_agents override', () => {
+  it('prefers host_agents over the basename map when both are present', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: ['custom-claude'] }));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('config');
+    expect(result.agents).toEqual(['custom-claude']);
+  });
+
+  it('lets host_agents promote an orphan-stream repo to a real agent host', () => {
+    const orphanRoot = mkDir(path.join(tmpRoot, 'totem-playground'));
+    writeConfig(orphanRoot, JSON.stringify({ host_agents: ['playground-claude'] }));
+    const result = resolveSelfAgents(orphanRoot, {});
+    expect(result.source).toBe('config');
+    expect(result.agents).toEqual(['playground-claude']);
+  });
+
+  it('falls through to the basename map when host_agents is empty', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: [] }));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('falls through when host_agents is not an array', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: 'totem-claude' }));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('map');
+  });
+
+  it('falls through on malformed JSON without throwing', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, '{ "host_agents": [not-json]');
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('drops path-traversal entries from host_agents before returning', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(
+      totemRoot,
+      JSON.stringify({ host_agents: ['..', '../escape', 'a/b', 'valid-agent'] }),
+    );
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('config');
+    expect(result.agents).toEqual(['valid-agent']);
+  });
+
+  it('rejects mixed-type host_agents and falls through to basename map', () => {
+    // Zod array schema is strict: any non-string entry fails the parse, so the
+    // whole config is ignored. Stricter than silent per-entry filtering, but
+    // safer — a typo-by-author or accidental object literal in the array gets
+    // a deterministic fall-through to the cohort default rather than a silently
+    // partial agent list.
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(
+      totemRoot,
+      JSON.stringify({ host_agents: [null, 42, { agent: 'x' }, 'real-agent'] }),
+    );
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('rejects empty-string entries in host_agents (z.string().min(1))', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: ['', 'real-agent'] }));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('map');
+  });
+});
+
+describe('resolveSelfAgents — TOTEM_SELF_AGENT env var (highest precedence)', () => {
+  it('overrides both config and basename map', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: ['config-agent'] }));
+    const result = resolveSelfAgents(totemRoot, { TOTEM_SELF_AGENT: 'env-agent' });
+    expect(result.source).toBe('env');
+    expect(result.agents).toEqual(['env-agent']);
+  });
+
+  it('parses a comma-separated list', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot, {
+      TOTEM_SELF_AGENT: 'totem-claude, totem-gemini ,extra-agent',
+    });
+    expect(result.source).toBe('env');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'extra-agent']);
+  });
+
+  it('drops empty/whitespace entries', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot, { TOTEM_SELF_AGENT: 'a,, ,b,' });
+    expect(result.source).toBe('env');
+    expect(result.agents).toEqual(['a', 'b']);
+  });
+
+  it('drops path-traversal entries from env var', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot, {
+      TOTEM_SELF_AGENT: '..,../escape,a/b,real-agent',
+    });
+    expect(result.source).toBe('env');
+    expect(result.agents).toEqual(['real-agent']);
+  });
+
+  it('falls through to config when env var is empty after sanitization', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: ['config-agent'] }));
+    const result = resolveSelfAgents(totemRoot, { TOTEM_SELF_AGENT: '..,,, ' });
+    expect(result.source).toBe('config');
+    expect(result.agents).toEqual(['config-agent']);
+  });
+
+  it('falls through to basename map when env var is whitespace-only', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot, { TOTEM_SELF_AGENT: '   ' });
+    expect(result.source).toBe('map');
+  });
+
+  it('defaults to process.env when env arg omitted', () => {
+    // No env-arg branch: just confirm the call shape is callable without
+    // mutating real env. The env-precedence semantics are exercised by the
+    // injected-env tests above; this asserts the default-argument branch
+    // is reachable without throwing.
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot);
+    expect(result.agents.length).toBeGreaterThan(0);
+  });
+});
+
+describe('resolveSelfAgents — path-normalization', () => {
+  it('resolves relative repo paths via path.resolve before basename lookup', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    // Pass an obviously-non-absolute path; the resolver must normalize it.
+    const relative = path.relative(process.cwd(), totemRoot);
+    const result = resolveSelfAgents(relative, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('handles trailing path separators in repoRoot', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot + path.sep, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
   });
 });

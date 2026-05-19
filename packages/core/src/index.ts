@@ -509,8 +509,8 @@ export { resolveSubstratePaths } from './substrate-resolver.js';
 // Orchestration-path resolver (mmnto-ai/totem-strategy#341, ADR-106 — Proposal 282)
 // Additive sibling to resolveSubstratePaths; substrate stays live as the
 // frozen-archive read path while orchestration is the active read+write surface.
-export type { OrchestrationPaths } from './orchestration-resolver.js';
-export { resolveOrchestrationPaths } from './orchestration-resolver.js';
+export type { OrchestrationPaths, SelfAgentResolution } from './orchestration-resolver.js';
+export { resolveOrchestrationPaths, resolveSelfAgents } from './orchestration-resolver.js';
 
 // Semgrep adapter (Pipeline 4 — import rules from Semgrep YAML)
 export type { SemgrepImportResult } from './semgrep-adapter.js';
