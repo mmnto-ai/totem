@@ -454,6 +454,10 @@ describe('pollMail — workspace', () => {
     const recursive = poll({ recursive: true });
     expect(recursive.mail).toHaveLength(1);
     expect(recursive.mail[0]!.subject).toBe('nested');
+    // Label uses the immediate parent dir (where `.totem/orchestration/`
+    // lives), not the top-level wrapper — readers expect "the repo" to be
+    // the leaf, not the container.
+    expect(recursive.mail[0]!.repo).toBe('nested-strategy');
   });
 
   it('skips dot-directories and node_modules during recursive scan', () => {

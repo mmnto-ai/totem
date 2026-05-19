@@ -235,7 +235,11 @@ function enumerateOutboxes(
       if (child.name === 'node_modules') continue;
       stack.push({
         dir: path.join(node.dir, child.name),
-        label: node.label,
+        // Use the immediate-parent directory name as the repo label for
+        // nested layouts (e.g. `wrapper/nested-strategy/.totem/orchestration/`
+        // surfaces as repo='nested-strategy'). The top-level label is
+        // misleading when the orchestration tree lives under a wrapper dir.
+        label: child.name,
         depth: node.depth + 1,
       });
     }
