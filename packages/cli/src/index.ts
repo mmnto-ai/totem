@@ -595,6 +595,31 @@ program
     }
   });
 
+// Canonical cross-repo outbox poll (mmnto-ai/totem#1970; ADR-106 § 3 / ADR-107).
+// Replaces ad-hoc per-hook implementations with one cohort-portable surface.
+program
+  .command('mail')
+  .description('Show unread cross-repo mail addressed to this repo’s agent(s) (ADR-106 § 3)')
+  .option('--json', 'Emit JSON to stdout instead of human-readable text to stderr')
+  .option(
+    '--recursive',
+    'Walk the workspace recursively for nested layouts (default: single-level siblings)',
+  )
+  .option(
+    '--workspace <path>',
+    'Workspace dir to scan (default: $TOTEM_WORKSPACE, else parent of cwd)',
+  )
+  .action(async (opts: { json?: boolean; recursive?: boolean; workspace?: string }) => {
+    try {
+      const { mailCommand } = await import('./commands/mail.js');
+      await mailCommand(opts);
+    } catch (err) {
+      handleError(err);
+      // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the verify-badges pattern above.
+      throw err;
+    }
+  });
+
 program
   .command('remove-secret <index>')
   .description('Remove a custom secret from .totem/secrets.json by index (from list-secrets)')
