@@ -140,10 +140,8 @@ function drainProcessedDir(dir: string, into: Set<string>): void {
     for (const entry of fs.readdirSync(dir)) {
       if (entry.endsWith('.md')) into.add(entry);
     }
-    // totem-context: an unreadable processed/ should not block the poll — recipients
-    // can still surface raw inbound; same best-effort stance as the strategy reference impl.
   } catch {
-    // best-effort; missing/unreadable processed/ does not block the poll
+    // totem-context: intentional cleanup — an unreadable processed/ subtree (EACCES, race with concurrent rename) must not block the poll; recipients still surface raw inbound with a stale exclusion set. Same best-effort stance as the strategy reference impl.
   }
 }
 
@@ -183,6 +181,7 @@ function enumerateOutboxes(
       .filter((d) => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
       .map((d) => d.name)
       .sort();
+    // totem-context: intentional cleanup — a workspace readdir failure (EACCES, ENOTDIR via raced symlink) is recorded as a structured warning so the CLI surfaces it; throwing here would block hook-driven session start over a non-fatal scan issue.
   } catch (err) {
     warnings.push(`workspace scan failed: ${String(err)}`);
     return slots;
@@ -193,6 +192,7 @@ function enumerateOutboxes(
     let agents: string[];
     try {
       agents = fs.readdirSync(orchDir).sort();
+      // totem-context: intentional cleanup — per-repo readdir failure skips this slot and lets the rest of the scan proceed; one inaccessible orchestration tree must not block sibling repos.
     } catch {
       return;
     }
@@ -227,6 +227,7 @@ function enumerateOutboxes(
     let children: fs.Dirent[];
     try {
       children = fs.readdirSync(node.dir, { withFileTypes: true });
+      // totem-context: intentional cleanup — recursive-descent readdir failure on one node skips that subtree and continues the walk; a single inaccessible dir must not abort the whole scan.
     } catch {
       continue;
     }
@@ -295,6 +296,7 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
         .filter((f) => f.endsWith('.md'))
         .sort()
         .reverse();
+      // totem-context: intentional cleanup — outbox readdir failure (mid-rename race, EACCES, removed-during-scan) skips this slot and lets the rest of the workspace continue.
     } catch {
       continue;
     }
@@ -307,6 +309,7 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       let content: string;
       try {
         content = fs.readFileSync(path.join(slot.outbox, file), 'utf-8');
+        // totem-context: intentional cleanup — per-file readFileSync failure skips that file and continues the scan; mail surfacing must degrade gracefully on a single unreadable handoff (mid-write race or transient FS hiccup).
       } catch {
         continue;
       }
