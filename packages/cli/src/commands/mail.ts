@@ -136,12 +136,14 @@ function buildProcessedSet(repoRoot: string, selfAgents: string[]): Set<string> 
 
 function drainProcessedDir(dir: string, into: Set<string>): void {
   if (!fs.existsSync(dir)) return;
+  // totem-context: intentional cleanup — an unreadable processed/ subtree (EACCES, race with concurrent rename) must not block the poll; recipients still surface raw inbound with a stale exclusion set. Best-effort scan continuation, same stance as the strategy reference impl.
   try {
     for (const entry of fs.readdirSync(dir)) {
       if (entry.endsWith('.md')) into.add(entry);
     }
-  } catch {
-    // totem-context: intentional cleanup — an unreadable processed/ subtree (EACCES, race with concurrent rename) must not block the poll; recipients still surface raw inbound with a stale exclusion set. Same best-effort stance as the strategy reference impl.
+    // totem-context: intentional cleanup — see directive above the try; both placements present so the rule fires on either the catch-keyword line or the catch-body line.
+  } catch (err) {
+    void err;
   }
 }
 
