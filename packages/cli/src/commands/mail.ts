@@ -99,13 +99,33 @@ export interface MailCommandOptions {
  * Returns `null` if no `to:` field is present (the only frontmatter field
  * required for a file to be eligible mail).
  */
+/**
+ * Hard cap on bytes scanned for frontmatter when no blank-line separator
+ * exists. Defense against forged frontmatter: a malformed handoff without
+ * the `---\n\n` delimiter would otherwise let body lines starting with
+ * `to:` fabricate metadata. Real frontmatter is dozens of bytes; 2 KiB
+ * is generous-but-bounded.
+ */
+const MAX_HEADER_BYTES = 2048;
+
 function parseHeader(content: string): {
   to: string;
   from: string | null;
   subject: string | null;
   date: string | null;
 } | null {
-  const header = content.split(/\r?\n\r?\n/, 1)[0] ?? '';
+  // Defense in depth: real handoffs open with a YAML frontmatter delimiter.
+  // Reject anything that doesn't, so a stray .md file in an outbox cannot
+  // be coerced into mail.
+  if (!content.startsWith('---')) return null;
+
+  const parts = content.split(/\r?\n\r?\n/, 2);
+  const header = parts[0] ?? '';
+  // When there's no blank-line separator, the split returns the whole
+  // file as parts[0]. Cap header size in that case so body content can't
+  // fabricate `to:`/`from:` matches.
+  if (parts.length < 2 && content.length > MAX_HEADER_BYTES) return null;
+
   const toMatch = header.match(/^to:\s*(.+)$/im);
   if (!toMatch) return null;
   const fromMatch = header.match(/^from:\s*(.+)$/im);
@@ -290,20 +310,18 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
 
   const slots = enumerateOutboxes(workspace, opts.recursive === true, warnings);
 
-  const mail: MailEntry[] = [];
-  let scanned = 0;
-  let truncated = false;
-
-  outer: for (const slot of slots) {
+  // Two-pass scan for global newest-first fairness under MAX_SCAN.
+  // Pass 1 (cheap): readdirSync every outbox to collect all unread filenames.
+  // Pass 2 (expensive): sort globally by filename (ISO-timestamp prefix), then
+  // readFileSync only the top MAX_SCAN. Without the global sort, alphabet-early
+  // repos can exhaust the cap before later repos are touched (per GCA review on
+  // mmnto-ai/totem#1971). Pre-collect of cheap reads is faster than the prior
+  // interleaved per-slot loop when truncation actually trips.
+  const unread: Array<{ slot: OutboxSlot; file: string }> = [];
+  for (const slot of slots) {
     let files: string[];
     try {
-      // Sort DESC so newest-named (ISO-timestamp prefix) is scanned first;
-      // under MAX_SCAN, never drop recent unread mail in favor of stale tail.
-      files = fs
-        .readdirSync(slot.outbox)
-        .filter((f) => f.endsWith('.md'))
-        .sort()
-        .reverse();
+      files = fs.readdirSync(slot.outbox).filter((f) => f.endsWith('.md'));
       // totem-context: intentional cleanup — outbox readdir failure (mid-rename race, EACCES, removed-during-scan) emits a structured warning and skips this slot.
     } catch (err) {
       warnings.push(`outbox scan failed (${slot.repo}/${slot.agent}): ${String(err)}`);
@@ -311,38 +329,51 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     }
     for (const file of files) {
       if (processedNames.has(file)) continue;
-      if (scanned >= MAX_SCAN) {
-        truncated = true;
-        break outer;
-      }
-      scanned += 1;
-      let content: string;
-      try {
-        content = fs.readFileSync(path.join(slot.outbox, file), 'utf-8');
-        // totem-context: intentional cleanup — per-file readFileSync failure emits a structured warning and skips that file; mail surfacing must degrade gracefully on a single unreadable handoff (mid-write race or transient FS hiccup).
-      } catch (err) {
-        warnings.push(`mail read failed (${slot.repo}/${slot.agent}/${file}): ${String(err)}`);
-        continue;
-      }
-      const header = parseHeader(content);
-      if (!header) continue;
-      const toLower = header.to.toLowerCase();
-      if (toLower !== 'broadcast' && !selfLower.has(toLower)) continue;
-      mail.push({
-        file,
-        repo: slot.repo,
-        from: header.from ?? slot.agent,
-        to: header.to,
-        date: header.date,
-        subject: header.subject ?? '(no subject)',
-        filePath: path.join(slot.outbox, file),
-      });
+      unread.push({ slot, file });
     }
   }
 
-  // Newest-first sort. Date string sort works on ISO-ish timestamps used
-  // in filenames; the file basename fallback preserves order when `date:`
-  // is absent.
+  // Global newest-first by filename. ISO-timestamp prefixes give a total
+  // order; non-ISO filenames sort lexically (stable; only matters within a
+  // sender's outbox).
+  unread.sort((a, b) => b.file.localeCompare(a.file));
+
+  let scanned = 0;
+  let truncated = false;
+  if (unread.length > MAX_SCAN) {
+    truncated = true;
+  }
+
+  const mail: MailEntry[] = [];
+  const inScope = unread.length > MAX_SCAN ? unread.slice(0, MAX_SCAN) : unread;
+  for (const { slot, file } of inScope) {
+    scanned += 1;
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(slot.outbox, file), 'utf-8');
+      // totem-context: intentional cleanup — per-file readFileSync failure emits a structured warning and skips that file; mail surfacing must degrade gracefully on a single unreadable handoff (mid-write race or transient FS hiccup).
+    } catch (err) {
+      warnings.push(`mail read failed (${slot.repo}/${slot.agent}/${file}): ${String(err)}`);
+      continue;
+    }
+    const header = parseHeader(content);
+    if (!header) continue;
+    const toLower = header.to.toLowerCase();
+    if (toLower !== 'broadcast' && !selfLower.has(toLower)) continue;
+    mail.push({
+      file,
+      repo: slot.repo,
+      from: header.from ?? slot.agent,
+      to: header.to,
+      date: header.date,
+      subject: header.subject ?? '(no subject)',
+      filePath: path.join(slot.outbox, file),
+    });
+  }
+
+  // Re-sort the surviving mail by frontmatter date when available (filename
+  // sort already handled the primary order; this refines for files whose
+  // `date:` differs from the filename prefix).
   mail.sort((a, b) => (b.date ?? b.file).localeCompare(a.date ?? a.file));
 
   return {

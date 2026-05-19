@@ -497,6 +497,89 @@ describe('pollMail — MAX_SCAN truncation', () => {
     // Newest file (highest number) must be in the result; the cap drops the tail.
     expect(result.mail.some((m) => m.file === '00509.md')).toBe(true);
   });
+
+  it('preserves global newest-first ordering under truncation across repos (GCA R2 #1971)', () => {
+    // Without global ordering, alphabet-early repos (e.g. `apple-repo`) could
+    // hog MAX_SCAN. Confirm that the newest files across BOTH repos survive,
+    // even when alphabet-first repo has enough files to exhaust the cap alone.
+    const oldFiles: OutboxFile[] = [];
+    for (let i = 0; i < 600; i++) {
+      // Year 2024 — these are "old" in the global ordering.
+      oldFiles.push({
+        name: `2024-${String(i).padStart(5, '0')}.md`,
+        to: 'totem-claude',
+        subject: `old-${i}`,
+      });
+    }
+    writeOutbox('apple-repo', 'apple-sender', oldFiles);
+    const newFiles: OutboxFile[] = [];
+    for (let i = 0; i < 5; i++) {
+      // Year 2027 — newer than every apple-repo file. Global sort must
+      // surface these even though apple-repo would alphabetically come first.
+      newFiles.push({
+        name: `2027-${String(i).padStart(5, '0')}.md`,
+        to: 'totem-claude',
+        subject: `fresh-${i}`,
+      });
+    }
+    writeOutbox('zebra-repo', 'zebra-sender', newFiles);
+
+    const result = poll();
+    expect(result.truncated).toBe(true);
+    expect(result.scanned).toBe(500);
+    // All 5 fresh entries must be in the result. Pre-fix, they would have
+    // been dropped because apple-repo's 500 stale files hit the cap first.
+    const freshSubjects = result.mail.map((m) => m.subject).filter((s) => s.startsWith('fresh-'));
+    expect(freshSubjects).toHaveLength(5);
+  });
+});
+
+// ─── Frontmatter forge defense (GCA R2 security finding on #1971) ───────
+
+describe('pollMail — frontmatter forge defense', () => {
+  it('rejects files that do not start with the YAML `---` delimiter', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: 'no-delimiter.md',
+        to: 'unused',
+        raw: 'to: totem-claude\nsubject: forged\nbody text\n',
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toEqual([]);
+  });
+
+  it('rejects large files lacking a blank-line frontmatter separator', () => {
+    // Real frontmatter is tens of bytes; a file > 2 KiB without the
+    // blank-line separator is structurally malformed. Capping the header
+    // scan in that case prevents body lines from fabricating `to:` matches.
+    const filler = 'x'.repeat(2500);
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: 'huge-no-separator.md',
+        to: 'unused',
+        raw: `---\nfrom: strategy-claude\n${filler}\nto: totem-claude\nsubject: forged\n`,
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toEqual([]);
+  });
+
+  it('accepts a small file without a blank-line separator (header fits in MAX_HEADER_BYTES)', () => {
+    // Below the 2 KiB cap, the whole file is treated as header — that's the
+    // existing lenient behavior, preserved for valid handoffs that omit the
+    // trailing blank line.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: 'small-no-separator.md',
+        to: 'totem-claude',
+        raw: '---\nfrom: strategy-claude\nto: totem-claude\nsubject: tight\n---\n',
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('tight');
+  });
 });
 
 // ─── Structured warnings on FS failures ─────────────────
