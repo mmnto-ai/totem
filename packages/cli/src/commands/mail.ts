@@ -124,26 +124,30 @@ function parseHeader(content: string): {
  * already been actioned. Drains `processed/` and `processed/_broadcast/`
  * for each SELF_AGENT in the calling repo.
  */
-function buildProcessedSet(repoRoot: string, selfAgents: string[]): Set<string> {
+function buildProcessedSet(
+  repoRoot: string,
+  selfAgents: string[],
+  warnings: string[],
+): Set<string> {
   const processed = new Set<string>();
   for (const agent of selfAgents) {
     const agentDir = path.join(repoRoot, '.totem', 'orchestration', agent, 'processed');
-    drainProcessedDir(agentDir, processed);
-    drainProcessedDir(path.join(agentDir, '_broadcast'), processed);
+    drainProcessedDir(agentDir, processed, warnings);
+    drainProcessedDir(path.join(agentDir, '_broadcast'), processed, warnings);
   }
   return processed;
 }
 
-function drainProcessedDir(dir: string, into: Set<string>): void {
+function drainProcessedDir(dir: string, into: Set<string>, warnings: string[]): void {
   if (!fs.existsSync(dir)) return;
-  // totem-context: intentional cleanup — an unreadable processed/ subtree (EACCES, race with concurrent rename) must not block the poll; recipients still surface raw inbound with a stale exclusion set. Best-effort scan continuation, same stance as the strategy reference impl.
+  // totem-context: intentional cleanup — an unreadable processed/ subtree (EACCES, race with concurrent rename) emits a warning and degrades to a stale exclusion set rather than blocking the poll. Mail still surfaces; the agent may see already-actioned items in that worst case, which is observable (the warning) rather than silent.
   try {
     for (const entry of fs.readdirSync(dir)) {
       if (entry.endsWith('.md')) into.add(entry);
     }
-    // totem-context: intentional cleanup — see directive above the try; both placements present so the rule fires on either the catch-keyword line or the catch-body line.
+    // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
   } catch (err) {
-    void err;
+    warnings.push(`processed/ scan failed (${dir}): ${String(err)}`);
   }
 }
 
@@ -194,8 +198,9 @@ function enumerateOutboxes(
     let agents: string[];
     try {
       agents = fs.readdirSync(orchDir).sort();
-      // totem-context: intentional cleanup — per-repo readdir failure skips this slot and lets the rest of the scan proceed; one inaccessible orchestration tree must not block sibling repos.
-    } catch {
+      // totem-context: intentional cleanup — per-repo readdir failure skips this slot, emits a structured warning, and lets sibling repos continue; one inaccessible orchestration tree must not block the rest of the scan.
+    } catch (err) {
+      warnings.push(`orchestration scan failed (${repoLabel}): ${String(err)}`);
       return;
     }
     for (const agent of agents) {
@@ -229,8 +234,9 @@ function enumerateOutboxes(
     let children: fs.Dirent[];
     try {
       children = fs.readdirSync(node.dir, { withFileTypes: true });
-      // totem-context: intentional cleanup — recursive-descent readdir failure on one node skips that subtree and continues the walk; a single inaccessible dir must not abort the whole scan.
-    } catch {
+      // totem-context: intentional cleanup — recursive-descent readdir failure on one node emits a structured warning and skips that subtree; a single inaccessible dir must not abort the whole scan.
+    } catch (err) {
+      warnings.push(`recursive scan failed (${node.dir}): ${String(err)}`);
       continue;
     }
     for (const child of children) {
@@ -279,7 +285,7 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
 
   const processedNames =
     selfResolution.agents.length > 0
-      ? buildProcessedSet(repoRoot, selfResolution.agents)
+      ? buildProcessedSet(repoRoot, selfResolution.agents, warnings)
       : new Set<string>();
 
   const slots = enumerateOutboxes(workspace, opts.recursive === true, warnings);
@@ -298,21 +304,24 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
         .filter((f) => f.endsWith('.md'))
         .sort()
         .reverse();
-      // totem-context: intentional cleanup — outbox readdir failure (mid-rename race, EACCES, removed-during-scan) skips this slot and lets the rest of the workspace continue.
-    } catch {
+      // totem-context: intentional cleanup — outbox readdir failure (mid-rename race, EACCES, removed-during-scan) emits a structured warning and skips this slot.
+    } catch (err) {
+      warnings.push(`outbox scan failed (${slot.repo}/${slot.agent}): ${String(err)}`);
       continue;
     }
     for (const file of files) {
       if (processedNames.has(file)) continue;
-      if (++scanned > MAX_SCAN) {
+      if (scanned >= MAX_SCAN) {
         truncated = true;
         break outer;
       }
+      scanned += 1;
       let content: string;
       try {
         content = fs.readFileSync(path.join(slot.outbox, file), 'utf-8');
-        // totem-context: intentional cleanup — per-file readFileSync failure skips that file and continues the scan; mail surfacing must degrade gracefully on a single unreadable handoff (mid-write race or transient FS hiccup).
-      } catch {
+        // totem-context: intentional cleanup — per-file readFileSync failure emits a structured warning and skips that file; mail surfacing must degrade gracefully on a single unreadable handoff (mid-write race or transient FS hiccup).
+      } catch (err) {
+        warnings.push(`mail read failed (${slot.repo}/${slot.agent}/${file}): ${String(err)}`);
         continue;
       }
       const header = parseHeader(content);

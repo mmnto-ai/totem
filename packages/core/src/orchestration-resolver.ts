@@ -246,8 +246,9 @@ export function resolveSelfAgents(
         }
       }
       // totem-context: malformed config.json or schema-mismatch falls through to the basename map; the resolver is best-effort and never throws on a user-supplied config (the path-traversal guard above is the only invariant enforced).
-    } catch {
-      // fall through to basename map
+    } catch (err) {
+      // Intentional best-effort fallback to the basename map on parse/read failures.
+      void err;
     }
   }
 

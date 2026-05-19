@@ -478,7 +478,7 @@ describe('pollMail — workspace', () => {
 // ─── MAX_SCAN truncation ────────────────────────────────
 
 describe('pollMail — MAX_SCAN truncation', () => {
-  it('marks truncated and stops scanning when the cap is hit', () => {
+  it('marks truncated and stops scanning at the cap (scanned <= MAX_SCAN)', () => {
     // Generate > MAX_SCAN files (501) so the cap is exercised. Filenames
     // chosen ascending so DESC sort lists the highest-numbered first;
     // truncation drops the *oldest* tail, preserving the newest mail.
@@ -490,8 +490,31 @@ describe('pollMail — MAX_SCAN truncation', () => {
     writeOutbox('totem-strategy', 'strategy-claude', files);
     const result = poll();
     expect(result.truncated).toBe(true);
-    expect(result.scanned).toBeGreaterThan(500);
+    // Contract: scanned never exceeds MAX_SCAN. Documents the pre-increment
+    // off-by-one fix from CR R1 (#1971).
+    expect(result.scanned).toBeLessThanOrEqual(500);
+    expect(result.scanned).toBe(500);
     // Newest file (highest number) must be in the result; the cap drops the tail.
     expect(result.mail.some((m) => m.file === '00509.md')).toBe(true);
+  });
+});
+
+// ─── Structured warnings on FS failures ─────────────────
+
+describe('pollMail — structured warnings on FS failures', () => {
+  it('emits a warning when processed/ exists but is unreadable', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-05-18T1734Z.md', to: 'totem-claude', subject: 'live' },
+    ]);
+    // Create processed/ as a FILE (not a dir) so readdirSync throws ENOTDIR.
+    // existsSync is true (it's a file), readdir then fails — exercises the
+    // catch-and-warn path for processed/ specifically.
+    const selfProcessed = path.join(selfRepoRoot(), '.totem', 'orchestration', 'totem-claude');
+    mkDir(selfProcessed);
+    fs.writeFileSync(path.join(selfProcessed, 'processed'), 'not a directory');
+    const result = poll();
+    // Mail still surfaces (degraded — no exclusion filter), warning recorded.
+    expect(result.mail).toHaveLength(1);
+    expect(result.warnings.some((w) => w.startsWith('processed/ scan failed'))).toBe(true);
   });
 });
