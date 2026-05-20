@@ -143,18 +143,40 @@ async function buildStaticContext(gitRoot, branch, ticket) {
   let journalDir = null;
   let journalSourceLabel = null;
 
-  const orchestration = resolveOrchestrationPaths(gitRoot, SELF_AGENT);
-  if (orchestration.journal) {
-    journalDir = orchestration.journal;
-    journalSourceLabel = 'orchestration';
-  } else {
+  // Guard against stale dist exports: if a consumer ran the hook after pulling
+  // the new code but before rebuilding core, `resolveOrchestrationPaths` may
+  // be undefined on the imported module. Degrade to substrate fallback instead
+  // of throwing TypeError on the call site.
+  const orchestration =
+    typeof resolveOrchestrationPaths === 'function'
+      ? resolveOrchestrationPaths(gitRoot, SELF_AGENT)
+      : null;
+
+  if (orchestration && orchestration.journal) {
+    // Commit to orchestration only when it has at least one .md entry.
+    // A directory that exists but is empty (fresh agent bootstrap with no
+    // session writes yet) should fall through to substrate so historical
+    // journals stay visible during the transition window.
+    try {
+      if (readdirSync(orchestration.journal).some((f) => f.endsWith('.md'))) {
+        journalDir = orchestration.journal;
+        journalSourceLabel = 'orchestration';
+      }
+    } catch (err) {
+      process.stderr.write(
+        `[session-context] Could not enumerate orchestration journal: ${err.message}\n`,
+      );
+    }
+  }
+
+  if (!journalDir) {
     // Fall back to substrate for legacy/pre-cutover repos whose agent ECL
-    // hasn't been bootstrapped yet. Preserves visibility into historical
-    // journals during the transition window.
+    // hasn't been bootstrapped yet, OR repos whose per-repo journal directory
+    // exists but is empty.
     const substrate = resolveSubstratePaths(gitRoot);
     if (substrate.source === 'none') {
       process.stderr.write(
-        `[session-context] Per-repo journal at .totem/orchestration/${SELF_AGENT}/journal/ empty + substrate unreachable. ` +
+        `[session-context] Per-repo journal at .totem/orchestration/${SELF_AGENT}/journal/ missing or empty + substrate unreachable. ` +
           'Setup: write a journal entry, OR clone mmnto-ai/totem-substrate as sibling, OR set TOTEM_SUBSTRATE_PATH.\n',
       );
     } else if (substrate.journalRoot) {
