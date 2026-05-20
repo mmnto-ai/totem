@@ -24,6 +24,7 @@ async function loadResolvers(gitRoot) {
   return {
     resolveSubstratePaths: mod.resolveSubstratePaths,
     resolveStrategyRoot: mod.resolveStrategyRoot,
+    resolveOrchestrationPaths: mod.resolveOrchestrationPaths,
   };
 }
 
@@ -125,8 +126,10 @@ async function buildStaticContext(gitRoot, branch, ticket) {
 
   let resolveSubstratePaths;
   let resolveStrategyRoot;
+  let resolveOrchestrationPaths;
   try {
-    ({ resolveSubstratePaths, resolveStrategyRoot } = await loadResolvers(gitRoot));
+    ({ resolveSubstratePaths, resolveStrategyRoot, resolveOrchestrationPaths } =
+      await loadResolvers(gitRoot));
   } catch (err) {
     process.stderr.write(
       `[session-context] Resolvers unavailable (core dist missing?): ${err.message}\n`,
@@ -134,33 +137,74 @@ async function buildStaticContext(gitRoot, branch, ticket) {
     return lines.join('\n');
   }
 
-  // Substrate journal (per ADR-100 Phase C — `<substrate>/.journal/totem/`).
-  const substrate = resolveSubstratePaths(gitRoot);
-  if (substrate.source === 'none') {
-    process.stderr.write(
-      '[session-context] Substrate unreachable + repo-local sediment empty. ' +
-        'Setup: clone mmnto-ai/totem-substrate as sibling, OR set TOTEM_SUBSTRATE_PATH.\n',
-    );
-  } else if (substrate.journalRoot) {
-    const totemJournalDir = join(substrate.journalRoot, 'totem');
-    if (existsSync(totemJournalDir)) {
-      try {
-        const files = readdirSync(totemJournalDir)
-          .filter((f) => f.endsWith('.md'))
-          .sort()
-          .reverse();
-        if (files.length > 0) {
-          const latest = files[0];
-          lines.push(`Latest journal (${substrate.source}): ${latest}`);
-          const content = readFileSync(join(totemJournalDir, latest), 'utf-8');
-          const journalLines = content.split('\n').slice(0, 20);
-          lines.push(...journalLines);
-          lines.push('...');
-          lines.push('');
-        }
-      } catch (err) {
-        process.stderr.write(`[session-context] Could not read journal: ${err.message}\n`);
+  // Journal source resolution (per ADR-106 § 3 — per-repo orchestration ECL
+  // is canonical; substrate is frozen-archive, legacy fallback only).
+  // Mirrors the strategy-side fix at mmnto-ai/totem-strategy#371.
+  let journalDir = null;
+  let journalSourceLabel = null;
+
+  // Guard against stale dist exports: if a consumer ran the hook after pulling
+  // the new code but before rebuilding core, `resolveOrchestrationPaths` may
+  // be undefined on the imported module. Degrade to substrate fallback instead
+  // of throwing TypeError on the call site.
+  const orchestration =
+    typeof resolveOrchestrationPaths === 'function'
+      ? resolveOrchestrationPaths(gitRoot, SELF_AGENT)
+      : null;
+
+  if (orchestration && orchestration.journal) {
+    // Commit to orchestration only when it has at least one .md entry.
+    // A directory that exists but is empty (fresh agent bootstrap with no
+    // session writes yet) should fall through to substrate so historical
+    // journals stay visible during the transition window.
+    try {
+      if (readdirSync(orchestration.journal).some((f) => f.endsWith('.md'))) {
+        journalDir = orchestration.journal;
+        journalSourceLabel = 'orchestration';
       }
+    } catch (err) {
+      process.stderr.write(
+        `[session-context] Could not enumerate orchestration journal: ${err.message}\n`,
+      );
+    }
+  }
+
+  if (!journalDir) {
+    // Fall back to substrate for legacy/pre-cutover repos whose agent ECL
+    // hasn't been bootstrapped yet, OR repos whose per-repo journal directory
+    // exists but is empty.
+    const substrate = resolveSubstratePaths(gitRoot);
+    if (substrate.source === 'none') {
+      process.stderr.write(
+        `[session-context] Per-repo journal at .totem/orchestration/${SELF_AGENT}/journal/ missing or empty + substrate unreachable. ` +
+          'Setup: write a journal entry, OR clone mmnto-ai/totem-substrate as sibling, OR set TOTEM_SUBSTRATE_PATH.\n',
+      );
+    } else if (substrate.journalRoot) {
+      const totemJournalDir = join(substrate.journalRoot, 'totem');
+      if (existsSync(totemJournalDir)) {
+        journalDir = totemJournalDir;
+        journalSourceLabel = substrate.source;
+      }
+    }
+  }
+
+  if (journalDir) {
+    try {
+      const files = readdirSync(journalDir)
+        .filter((f) => f.endsWith('.md'))
+        .sort()
+        .reverse();
+      if (files.length > 0) {
+        const latest = files[0];
+        lines.push(`Latest journal (${journalSourceLabel}): ${latest}`);
+        const content = readFileSync(join(journalDir, latest), 'utf-8');
+        const journalLines = content.split('\n').slice(0, 20);
+        lines.push(...journalLines);
+        lines.push('...');
+        lines.push('');
+      }
+    } catch (err) {
+      process.stderr.write(`[session-context] Could not read journal: ${err.message}\n`);
     }
   }
 
