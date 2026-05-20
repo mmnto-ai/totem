@@ -27,6 +27,57 @@ async function loadResolvers(gitRoot) {
   };
 }
 
+// Per-repo convention per ADR-106 § 3. Env override for hook validation
+// (e.g. simulating another agent's view); not used in production.
+// Reject path separators / traversal in override — SELF_AGENT feeds into
+// pollMail's filename-matching, where a malicious value could route to
+// unintended outboxes.
+const DEFAULT_SELF_AGENT = 'totem-claude';
+const _agentOverride = process.env.TOTEM_HOOK_SELF_AGENT_OVERRIDE;
+const SELF_AGENT =
+  _agentOverride && !/[\\/]/.test(_agentOverride) && !_agentOverride.includes('..')
+    ? _agentOverride
+    : DEFAULT_SELF_AGENT;
+
+// Cross-repo inbound mail (ADR-106 § 3). Delegates to the canonical
+// `pollMail()` from `@mmnto/cli` (mmnto-ai/totem#1971, shipped in 1.44.0).
+// The mail command lives in the same workspace; load from packages/cli/dist
+// (the same workspace-relative pattern as loadResolvers above) rather than
+// node_modules — this hook ships in the totem monorepo.
+async function pollInboundMail(gitRoot) {
+  try {
+    const mailPath = join(gitRoot, 'packages', 'cli', 'dist', 'commands', 'mail.js');
+    if (!existsSync(mailPath)) {
+      return {
+        count: 0,
+        files: [],
+        scanError: '@mmnto/cli not built at packages/cli/dist; run pnpm -F @mmnto/cli build',
+      };
+    }
+    const { pollMail } = await import(pathToFileURL(mailPath).href);
+    // `|| {}` defensive: pollMail could theoretically return undefined on
+    // internal failure (its own catch path); destructuring null would throw.
+    const result =
+      pollMail({
+        repoRoot: gitRoot,
+        env: { TOTEM_SELF_AGENT: SELF_AGENT },
+      }) || {};
+    return {
+      count: (result.mail || []).length,
+      files: result.mail || [],
+      scanError: null,
+      scanned: result.scanned,
+      truncated: result.truncated,
+    };
+  } catch (err) {
+    return {
+      count: 0,
+      files: [],
+      scanError: String(err && err.message ? err.message : err),
+    };
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────
 
 function getBranch() {
@@ -106,6 +157,33 @@ async function buildStaticContext(gitRoot, branch, ticket) {
       }
     }
   }
+
+  // Cross-repo inbound mail (ADR-106 § 3). Surface BEFORE the active-proposal
+  // lookup so any unread handoff is the first inbound signal at session start.
+  // Per claude-0080 standing list (mmnto-ai/totem-strategy → cohort): this
+  // wiring is the consumer-side half of the canonical pollMail() loop;
+  // until now totem-claude's hook only emitted static context + vector search,
+  // leaving cross-repo handoffs invisible.
+  const inbox = await pollInboundMail(gitRoot);
+  lines.push('── Inbound mail (cross-repo outbox poll, ADR-106 § 3) ──');
+  if (inbox.scanError) {
+    lines.push(`Poll failed: ${inbox.scanError}`);
+  } else if (inbox.count === 0) {
+    lines.push(`No unread mail addressed to ${SELF_AGENT} or broadcast.`);
+  } else {
+    lines.push(`${inbox.count} unread for ${SELF_AGENT}:`);
+    inbox.files.slice(0, 10).forEach((m) => {
+      lines.push(`  - ${m.file} (from ${m.from} @ ${m.repo})`);
+      lines.push(`      subject: ${m.subject}`);
+    });
+    if (inbox.files.length > 10) {
+      lines.push(`  ... and ${inbox.files.length - 10} more.`);
+    }
+    if (inbox.truncated) {
+      lines.push(`  [scan truncated at ${inbox.scanned} files]`);
+    }
+  }
+  lines.push('');
 
   // Active proposal matching ticket — proposals live in totem-strategy
   // (NOT substrate; only `.handoff/` + `.journal/` were extracted per
