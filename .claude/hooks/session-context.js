@@ -51,6 +51,7 @@ async function pollInboundMail(gitRoot) {
       return {
         count: 0,
         files: [],
+        warnings: [],
         scanError: '@mmnto/cli not built at packages/cli/dist; run pnpm -F @mmnto/cli build',
       };
     }
@@ -65,6 +66,10 @@ async function pollInboundMail(gitRoot) {
     return {
       count: (result.mail || []).length,
       files: result.mail || [],
+      // Per-source repo poll failures (e.g. EACCES on a sibling's outbox,
+      // mid-rename race) surface here; pollMail does not throw on them.
+      // Surfaced in the session context per Tenet 13 (sensor visibility).
+      warnings: result.warnings || [],
       scanError: null,
       scanned: result.scanned,
       truncated: result.truncated,
@@ -73,6 +78,7 @@ async function pollInboundMail(gitRoot) {
     return {
       count: 0,
       files: [],
+      warnings: [],
       scanError: String(err && err.message ? err.message : err),
     };
   }
@@ -183,6 +189,12 @@ async function buildStaticContext(gitRoot, branch, ticket) {
       lines.push(`  [scan truncated at ${inbox.scanned} files]`);
     }
   }
+  // Surface per-source warnings (e.g. unreadable sibling outboxes) independently
+  // of the unread-count path — they can co-exist with both zero-mail and
+  // populated-mail states. Per Tenet 13: sensor visibility is the contract.
+  (inbox.warnings || []).forEach((w) => {
+    lines.push(`  Warning: ${w}`);
+  });
   lines.push('');
 
   // Active proposal matching ticket — proposals live in totem-strategy
