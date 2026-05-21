@@ -409,19 +409,26 @@ export async function runCompiledRules(
         // as a run-wide skip — log a warning, record an outcome, and let
         // regex results stand. The proper per-file degrade lives in
         // mmnto-ai/totem#1786; this is the gap-bridge.
-        // totem-context: matchAll suggested for security validations; here we
-        // parse a parser-error string (parser-controlled, not user input) and
-        // only ever care about the first language token, so match() is correct.
-        const languageMatches = [...msg.matchAll(/(\w+) is not supported in napi/gi)];
+        //
+        // Sanitize parser-error text before logging/persisting: ast-grep
+        // surfaces snippets of parsed content/paths which could contain
+        // terminal control bytes. Strip C0 controls (\x00-\x1F except \t \n)
+        // and DEL (\x7F) so warning output doesn't smuggle escape sequences
+        // through operator terminals or log aggregators.
+        const safeMsg = msg.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+        // matchAll used to satisfy a CodeRabbit security rule that prefers
+        // exhaustive iteration over single-match extraction; we still only
+        // need the first language token for the outcome shape.
+        const languageMatches = [...safeMsg.matchAll(/(\w+) is not supported in napi/gi)];
         astParseFailures.push({
           file: '*', // run-wide: catch is outside the per-file loop in core
           language: languageMatches[0] ? languageMatches[0][1]! : 'unknown',
-          message: msg.slice(0, 200),
+          message: safeMsg.slice(0, 200),
           mode: 'lenient',
         });
         log.warn(
           tag,
-          `AST rules skipped (--ast-parse-mode lenient, ${astParseFailures[0]!.language}): ${msg}`,
+          `AST rules skipped (--ast-parse-mode lenient, ${astParseFailures[0]!.language}): ${safeMsg}`,
         );
       } else {
         throw err;

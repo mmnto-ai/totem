@@ -17,7 +17,7 @@ export interface AstGrepMatch {
 // ─── Constants ──────────────────────────────────────
 
 const AST_GREP_HINT =
-  'Check the rule pattern syntax. If valid, the source file may contain syntax that crashes the parser.';
+  "Check the rule pattern syntax. If valid, the source file may contain syntax that crashes the parser, OR the language isn't supported on this platform (e.g. Rust on Windows). Operator escape: run `totem lint --ast-parse-mode lenient` (or set TOTEM_LINT_AST_PARSE_MODE=lenient) to skip AST rules. Durable per-file degrade tracked at mmnto-ai/totem#1786.";
 
 // ─── Language mapping ───────────────────────────────
 

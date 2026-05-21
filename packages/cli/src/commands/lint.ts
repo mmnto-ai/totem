@@ -105,7 +105,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     (process.env['TOTEM_LINT_AST_PARSE_MODE'] === 'lenient' ? 'lenient' : 'strict');
 
   const startTime = Date.now();
-  const { violations, rules, regexTimeouts, astParseFailures } = await runCompiledRules({
+  const { violations, rules, regexTimeouts } = await runCompiledRules({
     diff: result.diff,
     cwd,
     totemDir: config.totemDir,
@@ -136,23 +136,11 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     );
   }
 
-  // mmnto-ai/totem#1982: parallel strict-mode throw for AST parse failures.
-  // In strict mode the original TotemParseError already propagated from
-  // runCompiledRules (this branch never runs); in lenient mode the failures
-  // are recorded but exit stays clean. The strict branch here is defensive
-  // — if we ever route through alternative codepaths that surface
-  // astParseFailures without throwing, this preserves the exit-code contract.
-  if (astParseMode === 'strict' && astParseFailures.length > 0) {
-    const { TotemError } = await import('@mmnto/totem');
-    const summary = astParseFailures
-      .map((f) => `${f.language} on ${f.file}: ${f.message}`)
-      .join('; ');
-    throw new TotemError(
-      'CHECK_FAILED',
-      `AST parse failed on ${astParseFailures.length} target(s): ${summary}`,
-      "Run with '--ast-parse-mode lenient' (or set TOTEM_LINT_AST_PARSE_MODE=lenient) to skip AST rules for this run. Track 'mmnto-ai/totem#1786' for the durable per-file graceful-degrade fix.",
-    );
-  }
+  // mmnto-ai/totem#1982: in strict mode the original TotemParseError already
+  // propagated from runCompiledRules (see ast-grep-query.ts rethrow path),
+  // carrying the AST_GREP_HINT which names --ast-parse-mode lenient as the
+  // escape route. No parallel strict-mode throw needed at the lint.ts layer
+  // — astParseFailures is only populated in lenient mode, by design.
 
   // Post PR comment if requested (zero-API-keys invariant: only behind --pr-comment flag)
   if (options.prComment == null) return;
