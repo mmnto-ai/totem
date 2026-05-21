@@ -95,10 +95,9 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   const exportPaths = config.exports ? Object.values(config.exports) : undefined;
 
   const timeoutMode: TimeoutMode = options.timeoutMode ?? 'strict';
-  // mmnto-ai/totem#1982. CLI flag > env var > default 'strict'. The same
-  // resolution happens inside runCompiledRules for the no-CLI-caller case
-  // (test harness, programmatic use); the CLI-side resolution here is so
-  // the strict-mode throw below can decide based on the same value.
+  // mmnto-ai/totem#1982. CLI flag > env var > default 'strict'. Pre-resolved
+  // here for symmetry with timeoutMode; runCompiledRules re-resolves
+  // identically for the no-CLI-caller path (test harness, programmatic use).
   const astParseMode: TimeoutMode =
     options.astParseMode ??
     // totem-context: reading Node's process.env (cleaned by the runtime), not parsing a custom .env file; CRLF/quote-stripping rule doesn't apply.
