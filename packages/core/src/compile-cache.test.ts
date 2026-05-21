@@ -191,6 +191,27 @@ describe('cacheEntryPath', () => {
       path.join('/repo/.totem', 'cache', 'compile-lesson', 'aaaaaaaaaaaaaaaa.json'),
     );
   });
+
+  it('rejects non-SHA cache keys to prevent path traversal (CR R4 Major on #1983)', () => {
+    // Without the regex guard, a sourceHash carrying `/` or `..` would flow
+    // through path.join() and escape `<totemDir>/cache/compile-lesson`, letting
+    // lookup or write touch arbitrary files. computeLessonSourceHash always
+    // emits the matching shape; this catches caller misuse.
+    expect(() => cacheEntryPath('/some/.totem', '../../../etc/passwd')).toThrow(
+      /Invalid sourceHash/,
+    );
+    expect(() => cacheEntryPath('/some/.totem', 'a/b/c')).toThrow(/Invalid sourceHash/);
+    expect(() => cacheEntryPath('/some/.totem', '..')).toThrow(/Invalid sourceHash/);
+    expect(() => cacheEntryPath('/some/.totem', '')).toThrow(/Invalid sourceHash/);
+    expect(() => cacheEntryPath('/some/.totem', 'NOT_HEX_!@#$')).toThrow(/Invalid sourceHash/);
+    // Hex but wrong length
+    expect(() => cacheEntryPath('/some/.totem', 'abcdef')).toThrow(/Invalid sourceHash/);
+    // Uppercase hex — the regex requires lowercase for normalization
+    expect(() => cacheEntryPath('/some/.totem', 'A'.repeat(64))).toThrow(/Invalid sourceHash/);
+
+    // Sanity: a real digest is accepted
+    expect(() => cacheEntryPath('/some/.totem', 'a'.repeat(64))).not.toThrow();
+  });
 });
 
 // ─── lookupCacheEntry + writeCacheEntry round-trips ─
@@ -699,5 +720,70 @@ describe('writeCacheEntry return value', () => {
       buildCacheEntry(sourceHash, FINGERPRINT_A, makeCompiledResult('write-disabled')),
     );
     expect(result).toBe(false);
+  });
+
+  it('swallows a throwing onWarn — never propagates out of cache write (CR R4 Major on #1983)', () => {
+    // The cache's non-throwing contract requires that a caller-supplied onWarn
+    // cannot abort compile even when it itself throws. Without this, a
+    // misbehaving telemetry hook could escalate a benign cache-write failure
+    // into a hard compile abort.
+    const throwingWarn = (): never => {
+      throw new Error('caller-provided onWarn exploded');
+    };
+    // Force a write failure by pointing at a path that can't be created. On
+    // Windows this is a path with an invalid char; on POSIX a path under a
+    // file. Easiest cross-platform shape: pass a non-existent volume root.
+    const badDir = path.join(tmpDir, '\x00invalid');
+    const sourceHash = computeLessonSourceHash('write-with-throwing-onwarn');
+    const entry = buildCacheEntry(sourceHash, FINGERPRINT_A, makeCompiledResult('throwing-warn'));
+    expect(() => writeCacheEntry(badDir, entry, throwingWarn)).not.toThrow();
+  });
+});
+
+// ─── safeOnWarn guard via migrateFromCompiledRules ──
+
+describe('safeOnWarn (CR R4 Major on #1983)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTestTmpDir('totem-compile-cache-safewarn-');
+    delete process.env.TOTEM_DISABLE_COMPILE_CACHE;
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+    delete process.env.TOTEM_DISABLE_COMPILE_CACHE;
+  });
+
+  it('migrateFromCompiledRules: throwing onWarn does not abort the seed loop', () => {
+    // If onWarn throws on one input, subsequent inputs must still be processed.
+    // Without safeOnWarn the throw would escape the per-input catch and
+    // short-circuit the migration.
+    const throwingWarn = (): never => {
+      throw new Error('telemetry hook exploded');
+    };
+    // First input is malformed (heading has bad hash shape from buildCacheEntry
+    // path); subsequent valid inputs should still seed.
+    const inputs = [
+      {
+        lessonHash: 'will-warn-due-to-write-failure',
+        heading: 'Bad Lesson',
+        body: 'will fail to write\n',
+        output: makeCompiledResult('bad'),
+      },
+      {
+        lessonHash: 'will-seed',
+        heading: 'Good Lesson',
+        body: 'should-be-seeded\n',
+        output: makeCompiledResult('good'),
+      },
+    ];
+    // Force the first write to fail by passing a directory that can't be
+    // created (null byte). The throwing onWarn would normally explode the
+    // loop; with safeOnWarn the second input still seeds.
+    const badDir = path.join(tmpDir, '\x00invalid');
+    expect(() =>
+      migrateFromCompiledRules(badDir, FINGERPRINT_A, inputs, throwingWarn),
+    ).not.toThrow();
   });
 });

@@ -42,6 +42,30 @@ const CACHE_DIR = path.join('cache', 'compile-lesson');
 const HASH_FILENAME_PREFIX_LENGTH = 16;
 const DISABLE_ENV_VAR = 'TOTEM_DISABLE_COMPILE_CACHE';
 
+/**
+ * Strict sha256-hex shape for `sourceHash`. Used to gate `cacheEntryPath`
+ * against path-traversal inputs (`/`, `..`, etc.) per CR R4 Major on
+ * `mmnto-ai/totem#1983`. Matches the digest computeLessonSourceHash emits.
+ */
+const SOURCE_HASH_RE = /^[a-f0-9]{64}$/;
+
+/**
+ * Best-effort wrapper around an optional warning callback. The cache module's
+ * non-throwing contract requires that a caller-supplied `onWarn` cannot
+ * propagate exceptions out of cache write/seed paths — even an `onWarn` that
+ * throws must not abort compile. Per CR R4 Major on `mmnto-ai/totem#1983`.
+ */
+function safeOnWarn(onWarn: ((msg: string) => void) | undefined, message: string): void {
+  if (onWarn === undefined) return;
+  try {
+    onWarn(message);
+    // totem-context: intentional cleanup — onWarn must never propagate exceptions per the cache's non-throwing contract; swallow any caller-thrown errors silently.
+  } catch (err) {
+    // totem-context: intentional cleanup — onWarn must never propagate exceptions per the cache's non-throwing contract; swallow any caller-thrown errors silently.
+    void err;
+  }
+}
+
 // ─── Schema ─────────────────────────────────────────
 
 /**
@@ -164,6 +188,17 @@ export function composeLessonSourceForHash(heading: string, body: string): strin
  * does not check existence. Callers handle missing files.
  */
 export function cacheEntryPath(totemDir: string, sourceHash: string): string {
+  // Reject non-SHA inputs at the boundary (CR R4 Major on `mmnto-ai/totem#1983`).
+  // Without this, a sourceHash carrying `/` or `..` would flow through
+  // path.join() and escape `<totemDir>/cache/compile-lesson`, letting lookup or
+  // write touch arbitrary files. computeLessonSourceHash always emits the
+  // matching 64-char hex shape; this catches misuse where a caller hands us
+  // unvalidated input.
+  if (!SOURCE_HASH_RE.test(sourceHash)) {
+    throw new Error(
+      `[Totem Error] Invalid sourceHash: expected 64-char sha256 hex digest, got ${JSON.stringify(sourceHash.slice(0, 80))}`,
+    );
+  }
   const filename = `${sourceHash.slice(0, HASH_FILENAME_PREFIX_LENGTH)}.json`;
   return path.join(totemDir, CACHE_DIR, filename);
 }
@@ -263,7 +298,7 @@ export function writeCacheEntry(
   } catch (err) {
     // totem-context: intentional cleanup — cache writes are fire-and-forget; a failed write degrades to "no cache entry exists" on next lookup, never blocks compile.
     const msg = err instanceof Error ? err.message : String(err);
-    onWarn?.(`Compile cache write failed: ${msg}`);
+    safeOnWarn(onWarn, `Compile cache write failed: ${msg}`);
     return false;
   }
 }
@@ -351,11 +386,11 @@ export function migrateFromCompiledRules(
       } else {
         skipped += 1;
       }
-      // totem-context: intentional cleanup — migration is best-effort per-input; one bad lesson source must not abort seeding the rest. Failed inputs accumulate in `skipped` count and surface via onWarn for operator visibility.
+      // totem-context: intentional cleanup — migration is best-effort per-input; one bad lesson source must not abort seeding the rest. Failed inputs accumulate in `skipped` count and surface via safeOnWarn for operator visibility.
     } catch (err) {
-      // totem-context: intentional cleanup — migration is best-effort per-input; one bad lesson source must not abort seeding the rest. Failed inputs accumulate in `skipped` count and surface via onWarn for operator visibility.
+      // totem-context: intentional cleanup — migration is best-effort per-input; one bad lesson source must not abort seeding the rest. Failed inputs accumulate in `skipped` count and surface via safeOnWarn for operator visibility.
       const msg = err instanceof Error ? err.message : String(err);
-      onWarn?.(`Compile cache seed skipped for ${input.lessonHash}: ${msg}`);
+      safeOnWarn(onWarn, `Compile cache seed skipped for ${input.lessonHash}: ${msg}`);
       skipped += 1;
     }
   }
