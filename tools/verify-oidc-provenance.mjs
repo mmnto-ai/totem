@@ -28,6 +28,9 @@ import { spawnSync } from 'node:child_process';
 
 const MAX_ATTEMPTS = 5;
 const RETRY_DELAY_MS = 5000;
+// Bound the per-call npm view to defend against a wedged registry/network
+// (otherwise the CI step could hang up to the job-level timeout).
+const SPAWN_TIMEOUT_MS = 20_000;
 
 // On Windows, `npm` is a `.cmd` shim, and Node ≥ 20 refuses to spawnSync
 // .bat/.cmd files without shell: true (EINVAL). The workflow runs on
@@ -41,14 +44,22 @@ const EXPECTED_PROVENANCE_PREDICATE = 'https://slsa.dev/provenance/v1';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// fetchNpmView throws on hard failures (spawn, JSON parse) — those aren't
+// recoverable by retry, so a "loud crash" via thrown Error is the right
+// shape (.gemini/styleguide.md § 120 cause-chain rule). For soft failures
+// (registry returned non-zero status, often propagation lag), returns
+// `{ ok: false, err }` so the caller's retry loop can drive backoff.
 const fetchNpmView = (spec) => {
   const result = spawnSync('npm', ['view', spec, '--json'], {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: SPAWN_TIMEOUT_MS,
     ...SPAWN_OPTS_BASE,
   });
   if (result.error) {
-    return { ok: false, err: `spawn failed: ${result.error.message}` };
+    throw new Error('[Totem Error] verify-oidc: npm view spawn failed', {
+      cause: result.error,
+    });
   }
   if (result.status !== 0) {
     const stderr = (result.stderr || '').trim();
@@ -58,7 +69,7 @@ const fetchNpmView = (spec) => {
   try {
     return { ok: true, data: JSON.parse(result.stdout) };
   } catch (err) {
-    return { ok: false, err: `JSON parse failed: ${err.message}` };
+    throw new Error('[Totem Error] verify-oidc: JSON parse failed', { cause: err });
   }
 };
 
@@ -75,8 +86,8 @@ const fetchWithRetry = async (spec) => {
       await sleep(RETRY_DELAY_MS);
     }
   }
-  console.error(`[verify-oidc] Failed to fetch ${spec} after ${MAX_ATTEMPTS} attempts: ${lastErr}`);
-  process.exit(1);
+  console.error(`[verify-oidc] Failed to fetch ${spec} after ${MAX_ATTEMPTS} attempts:`, lastErr);
+  throw new Error(`[Totem Error] verify-oidc: registry fetch exhausted retries for ${spec}`);
 };
 
 // `npm view --json` returns `_npmUser` as a `<name> <<email>>` string
