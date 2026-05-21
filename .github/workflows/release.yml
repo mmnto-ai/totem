@@ -60,6 +60,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
+      # Tenet 15 axiom-mandate: convert post-publish provenance verification
+      # from manual `npm view` ritual into deterministic workflow gate.
+      # Fails the release loud (Tenet 4) if OIDC silently regressed to token
+      # auth — e.g. NPM_TOKEN re-added, `registry-url` re-written into .npmrc,
+      # trusted publisher misconfigured. See tools/verify-oidc-provenance.mjs.
+      # timeout-minutes caps the verify step at the YAML layer; the script's
+      # MAX_ATTEMPTS × SPAWN_TIMEOUT_MS + RETRY_DELAY_MS arithmetic bounds it
+      # to ~2 min/package (8 min worst case across 4 packages), but encoding
+      # the cap in the workflow makes the contract explicit rather than
+      # implicit in script constants.
+      - name: Verify OIDC provenance on published packages
+        if: steps.publish.outputs.published == 'true'
+        timeout-minutes: 4
+        run: node tools/verify-oidc-provenance.mjs
+        env:
+          PUBLISHED_PACKAGES: ${{ steps.publish.outputs.published_packages }}
+
       - name: Push release tags
         if: steps.publish.outputs.published == 'true'
         run: |
