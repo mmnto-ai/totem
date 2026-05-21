@@ -28,6 +28,11 @@ export const LedgerEventSchema = z.object({
    *  - `claim_discipline_finding`    — `totem doctor --claim-discipline` fired on a public-surface diff
    *                                    (README/AGENTS/design-tenets/wiki); see `ruleId` for which WWND
    *                                    rule fired and `activity_name` for the surface (Proposal 279).
+   *  - `compile_cache_decision`      — per-lesson per-compile-run record of cache outcome; `ruleId`
+   *                                    carries the lesson sourceHash and `activity_name` carries the
+   *                                    decision enum value (`cache_hit` / `cache_miss_source_changed` /
+   *                                    `cache_miss_fingerprint_changed` / `cache_miss_force` /
+   *                                    `cache_miss_no_prior_record`) per Proposal 281.
    *
    *  Schema-level: `ruleId` + `file` are optional to accommodate activity events. Writer-side
    *  discipline enforces required-by-type. Promotion to `z.discriminatedUnion` deferred to A.3.c
@@ -43,6 +48,7 @@ export const LedgerEventSchema = z.object({
     'session_start',
     'compile_run',
     'claim_discipline_finding',
+    'compile_cache_decision',
   ]),
   /** Rule ID (lessonHash) for override events. Optional; required by writer for suppress/override/exemption. */
   ruleId: z.string().trim().min(1).optional(),
