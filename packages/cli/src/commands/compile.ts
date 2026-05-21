@@ -439,6 +439,7 @@ export async function compileCommand(
     resolveStage4Baseline,
     appendLedgerEvent,
     buildCacheEntry,
+    composeLessonSourceForHash,
     computeCompileWorkerFingerprint,
     computeLessonSourceHash,
     lookupCacheEntry,
@@ -1689,12 +1690,14 @@ export async function compileCommand(
               // recompile intent and must not short-circuit).
               const forceRecompile =
                 options.force === true || upgradeTargets?.has(lesson.hash) === true;
-              // Cache key must cover heading + body (CR Major catch on
-              // `mmnto-ai/totem#1983`). Hashing body alone would let a
-              // heading-only edit falsely hit the cache while the rotation-prone
-              // `lessonHash` shifts to reflect the new heading — stale output
-              // would survive into compiled-rules.json.
-              const sourceHash = computeLessonSourceHash(`${lesson.heading}\n${lesson.body}`);
+              // Cache key composition (CR Major on `mmnto-ai/totem#1983` R1)
+              // + same shape used by `migrateFromCompiledRules` to keep runtime
+              // and migration paths producing identical hashes for the same
+              // lesson (GCA R2 critical on the same PR). The shared helper is
+              // the canonical anchor — both paths route through it.
+              const sourceHash = computeLessonSourceHash(
+                composeLessonSourceForHash(lesson.heading, lesson.body),
+              );
               if (cacheFingerprint !== undefined) {
                 const lookup = lookupCacheEntry(totemDir, sourceHash, cacheFingerprint, {
                   force: forceRecompile,

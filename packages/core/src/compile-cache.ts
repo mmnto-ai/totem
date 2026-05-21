@@ -98,11 +98,29 @@ export type CacheDecision =
  * identical hashes for identical inputs.
  */
 export function computeLessonSourceHash(lessonSource: string): string {
-  // Normalization: collapse CRLF → LF + trim trailing whitespace per the impl
-  // contract. trimEnd() absorbs trailing-newline differences across IDEs /
-  // OSes (a save-with-final-newline vs. without should produce the same hash).
-  const normalized = lessonSource.replace(/\r\n/g, '\n').trimEnd();
+  // Normalization: collapse CRLF → LF ONLY. No trailing-whitespace trim — the
+  // canonical `generateInputHash` (`compile-manifest.ts`) and `lessonHash` (per
+  // `.gemini/styleguide.md` line 142) are both trailing-whitespace-sensitive.
+  // Trimming here would desynchronize the cache key from the canonical hashes:
+  // a whitespace-only edit would hit the cache (return stale lessonHash output)
+  // while the manifest pipeline would compute a fresh lessonHash for the same
+  // edit, breaking the deterministic link between lessons and rules.
+  // Reverses an over-correction from R1; per GCA R2 critical on `#1983`.
+  const normalized = lessonSource.replace(/\r\n/g, '\n');
   return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
+/**
+ * Compose the hashable lesson source from a parsed lesson's heading and body.
+ * Use this from any call site that has a parsed `LessonInput`-shaped object to
+ * ensure runtime and migration paths produce identical hashes for the same
+ * lesson. Without a shared composition helper, the runtime hash (computed from
+ * `lesson.heading` + `lesson.body`) and a migration hash (computed from raw
+ * file content with `## Lesson — ` framing) would diverge — exactly the bug
+ * GCA R2 surfaced on `#1983`.
+ */
+export function composeLessonSourceForHash(heading: string, body: string): string {
+  return `${heading}\n${body}`;
 }
 
 /**
@@ -232,8 +250,22 @@ export function buildCacheEntry(
 }
 
 interface MigrationSeedInput {
+  /** Canonical lesson hash (rotation-prone). Carried for diagnostics only. */
   lessonHash: string;
-  lessonSource: string;
+  /**
+   * Parsed lesson heading — the `## Lesson — …` heading-text minus the
+   * leading `##` markdown. MUST match what `readAllLessons` (or equivalent
+   * parser) provides at runtime to the compile path. Composed with `body`
+   * via `composeLessonSourceForHash` to produce the same sourceHash the
+   * runtime cache lookup will compute.
+   */
+  heading: string;
+  /**
+   * Parsed lesson body — the content between the heading and the next
+   * lesson heading. MUST match what `readAllLessons` provides at runtime.
+   */
+  body: string;
+  /** The compile output to seed into the cache. */
   output: CompileLessonResult;
 }
 
@@ -251,6 +283,11 @@ interface MigrationResult {
  *
  * Idempotent — running twice with the same inputs writes the same entries
  * a second time (overwrite). Per the impl contract § Migration sequence.
+ *
+ * Heading + body are taken separately (rather than a single raw-source
+ * string) to enforce the canonical `composeLessonSourceForHash` call shape.
+ * If migration accepted a free-form `lessonSource` string, the migration
+ * and runtime hash paths could diverge (per GCA R2 critical on `#1983`).
  */
 export function migrateFromCompiledRules(
   totemDir: string,
@@ -266,7 +303,8 @@ export function migrateFromCompiledRules(
   let skipped = 0;
   for (const input of inputs) {
     try {
-      const sourceHash = computeLessonSourceHash(input.lessonSource);
+      const sourceForHash = composeLessonSourceForHash(input.heading, input.body);
+      const sourceHash = computeLessonSourceHash(sourceForHash);
       const entry = buildCacheEntry(sourceHash, fingerprint, input.output);
       // writeCacheEntry returns false on I/O failure or when the cache is
       // disabled. Both count as "skipped" — seeded reflects entries actually

@@ -16,6 +16,7 @@ import {
   buildCacheEntry,
   type CacheEntry,
   cacheEntryPath,
+  composeLessonSourceForHash,
   computeLessonSourceHash,
   listCacheEntries,
   lookupCacheEntry,
@@ -112,16 +113,59 @@ describe('computeLessonSourceHash', () => {
     expect(hashBodyA).not.toBe(hashBodyB);
   });
 
-  it('normalizes trailing whitespace per the impl contract (GCA HIGH on #1983)', () => {
-    // The trimEnd() normalization absorbs trailing-newline / trailing-whitespace
-    // differences across save behaviors. Inputs that differ ONLY in trailing
-    // whitespace must hash identically — otherwise the cache misses on every
-    // editor-save-style change.
+  it('preserves trailing-whitespace sensitivity (GCA R2 critical on #1983)', () => {
+    // The canonical generateInputHash + lessonHash are trailing-whitespace
+    // sensitive (`compile-manifest.ts` does CRLF→LF normalization only; no
+    // trim). The cache key MUST match that sensitivity. If it didn't, a
+    // whitespace-only edit would hit the cache and return a rule with a stale
+    // lessonHash while the manifest pipeline computed a fresh lessonHash for
+    // the same edit — breaking the deterministic link between lessons and
+    // rules.
+    //
+    // GCA R1 originally flagged a missing .trimEnd() (citing my contract
+    // prose, which over-claimed normalization scope); GCA R2 reversed that
+    // finding by anchoring to the canonical hash shape. This test locks in
+    // the R2-correct behavior so future regressions to "more aggressive
+    // normalization" surface immediately.
     const base = 'lesson content';
-    expect(computeLessonSourceHash(base)).toBe(computeLessonSourceHash(base + '\n'));
-    expect(computeLessonSourceHash(base)).toBe(computeLessonSourceHash(base + '\n\n\n'));
-    expect(computeLessonSourceHash(base)).toBe(computeLessonSourceHash(base + '   \t  '));
-    expect(computeLessonSourceHash(base)).toBe(computeLessonSourceHash(base + ' \n \n'));
+    expect(computeLessonSourceHash(base)).not.toBe(computeLessonSourceHash(base + '\n'));
+    expect(computeLessonSourceHash(base)).not.toBe(computeLessonSourceHash(base + '\n\n\n'));
+    expect(computeLessonSourceHash(base)).not.toBe(computeLessonSourceHash(base + '   '));
+  });
+
+  it('normalizes CRLF to LF (cross-OS stability)', () => {
+    // The one normalization the canonical hash DOES apply: CRLF → LF. Same
+    // shape as `generateInputHash`. Without this, a Windows-saved lesson and
+    // a Unix-saved lesson with identical visible content would hash
+    // differently.
+    const lf = 'line one\nline two\nline three\n';
+    const crlf = 'line one\r\nline two\r\nline three\r\n';
+    expect(computeLessonSourceHash(lf)).toBe(computeLessonSourceHash(crlf));
+  });
+});
+
+// ─── composeLessonSourceForHash ─────────────────────
+
+describe('composeLessonSourceForHash', () => {
+  it('produces the same string for the same (heading, body) inputs', () => {
+    const a = composeLessonSourceForHash('My Heading', 'body text\n');
+    const b = composeLessonSourceForHash('My Heading', 'body text\n');
+    expect(a).toBe(b);
+  });
+
+  it('distinguishes heading-only edits from body-only edits', () => {
+    // Defends the runtime/migration hash-consistency contract (GCA R2 critical
+    // on #1983). Both call sites — compile.ts wiring and migrateFromCompiledRules
+    // — route through this helper. If a future refactor accidentally
+    // re-introduced separate composition logic on either side, the two paths
+    // would diverge again.
+    const headingChange = composeLessonSourceForHash('Heading A', 'shared body');
+    const headingChangeAlt = composeLessonSourceForHash('Heading B', 'shared body');
+    expect(headingChange).not.toBe(headingChangeAlt);
+
+    const bodyChange = composeLessonSourceForHash('shared heading', 'body A');
+    const bodyChangeAlt = composeLessonSourceForHash('shared heading', 'body B');
+    expect(bodyChange).not.toBe(bodyChangeAlt);
   });
 });
 
@@ -415,17 +459,20 @@ describe('migrateFromCompiledRules', () => {
     const inputs = [
       {
         lessonHash: 'seed-1',
-        lessonSource: 'seed lesson 1 source',
+        heading: 'Lesson 1 heading',
+        body: 'seed lesson 1 body content\n',
         output: makeCompiledResult('seed-1'),
       },
       {
         lessonHash: 'seed-2',
-        lessonSource: 'seed lesson 2 source',
+        heading: 'Lesson 2 heading',
+        body: 'seed lesson 2 body content\n',
         output: makeCompiledResult('seed-2'),
       },
       {
         lessonHash: 'seed-3',
-        lessonSource: 'seed lesson 3 source',
+        heading: 'Lesson 3 heading',
+        body: 'seed lesson 3 body content\n',
         output: makeCompiledResult('seed-3'),
       },
     ];
@@ -435,23 +482,50 @@ describe('migrateFromCompiledRules', () => {
     expect(result.skipped).toBe(0);
 
     for (const input of inputs) {
-      const sourceHash = computeLessonSourceHash(input.lessonSource);
+      // Migration must produce hashes that the runtime lookup can hit. Both
+      // paths route through `composeLessonSourceForHash` to guarantee this.
+      const sourceHash = computeLessonSourceHash(
+        composeLessonSourceForHash(input.heading, input.body),
+      );
       const lookup = lookupCacheEntry(tmpDir, sourceHash, FINGERPRINT_A);
       expect(lookup.decision).toBe('cache_hit');
     }
+  });
+
+  it('runtime/migration hash consistency (GCA R2 critical on #1983)', () => {
+    // Load-bearing regression test: a lesson seeded via the migration path
+    // MUST be hittable via the runtime lookup path using the same heading +
+    // body. Before this fix, migration hashed raw `lessonSource` (the parsed
+    // file content including markdown framing) while runtime hashed
+    // `${heading}\n${body}` — the same lesson produced two different hashes,
+    // making every migrated entry permanently unreachable.
+    const heading = 'Some lesson heading';
+    const body = 'body line 1\nbody line 2\n';
+    migrateFromCompiledRules(tmpDir, FINGERPRINT_A, [
+      { lessonHash: 'consistency-1', heading, body, output: makeCompiledResult('consistency-1') },
+    ]);
+
+    // Simulating the runtime call shape from compile.ts
+    const runtimeSourceHash = computeLessonSourceHash(composeLessonSourceForHash(heading, body));
+    const lookup = lookupCacheEntry(tmpDir, runtimeSourceHash, FINGERPRINT_A);
+    expect(lookup.decision).toBe('cache_hit');
+    expect(lookup.entry).not.toBeNull();
   });
 
   it('is idempotent — running twice produces the same on-disk state', () => {
     const inputs = [
       {
         lessonHash: 'idempotent-1',
-        lessonSource: 'idempotent source one',
+        heading: 'Idempotent heading',
+        body: 'idempotent source one body\n',
         output: makeCompiledResult('idempotent-1'),
       },
     ];
 
     migrateFromCompiledRules(tmpDir, FINGERPRINT_A, inputs);
-    const sourceHash = computeLessonSourceHash(inputs[0]!.lessonSource);
+    const sourceHash = computeLessonSourceHash(
+      composeLessonSourceForHash(inputs[0]!.heading, inputs[0]!.body),
+    );
     const after1 = fs.readFileSync(cacheEntryPath(tmpDir, sourceHash), 'utf-8');
 
     migrateFromCompiledRules(tmpDir, FINGERPRINT_A, inputs);
@@ -469,7 +543,8 @@ describe('migrateFromCompiledRules', () => {
     const inputs = [
       {
         lessonHash: 'disabled-1',
-        lessonSource: 'disabled source',
+        heading: 'Disabled heading',
+        body: 'disabled body\n',
         output: makeCompiledResult('disabled-1'),
       },
     ];
@@ -485,9 +560,9 @@ describe('migrateFromCompiledRules', () => {
     // bookkeeping path.
     process.env.TOTEM_DISABLE_COMPILE_CACHE = '1';
     const inputs = [
-      { lessonHash: 'a', lessonSource: 'a source', output: makeCompiledResult('a') },
-      { lessonHash: 'b', lessonSource: 'b source', output: makeCompiledResult('b') },
-      { lessonHash: 'c', lessonSource: 'c source', output: makeCompiledResult('c') },
+      { lessonHash: 'a', heading: 'Lesson A', body: 'a body\n', output: makeCompiledResult('a') },
+      { lessonHash: 'b', heading: 'Lesson B', body: 'b body\n', output: makeCompiledResult('b') },
+      { lessonHash: 'c', heading: 'Lesson C', body: 'c body\n', output: makeCompiledResult('c') },
     ];
     const result = migrateFromCompiledRules(tmpDir, FINGERPRINT_A, inputs);
     expect(result.seeded).toBe(0);

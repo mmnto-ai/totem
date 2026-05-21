@@ -450,6 +450,7 @@ export {
   buildCacheEntry,
   cacheEntryPath,
   CacheEntrySchema,
+  composeLessonSourceForHash,
   computeLessonSourceHash,
   listCacheEntries,
   lookupCacheEntry,
