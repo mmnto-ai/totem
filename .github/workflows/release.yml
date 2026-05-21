@@ -29,9 +29,14 @@ jobs:
 
       # npm OIDC trusted publishing landed in npm 11.5.1. Node 22 ships with
       # npm 10.9.x which throws ENEEDAUTH because it has no OIDC negotiation
-      # code path. Upgrade to the latest npm so `npm publish` auto-detects
+      # code path. Upgrade to a pinned npm 11.x so `npm publish` auto-detects
       # GitHub Actions OIDC and exchanges for a short-lived publish token.
-      - run: npm install -g npm@latest
+      #
+      # --force bypasses the self-upgrade race condition where npm loads its
+      # own code mid-install and the on-disk copy gets partially replaced,
+      # producing MODULE_NOT_FOUND for transitive deps like promise-retry.
+      # Pin version (not @latest) keeps this step deterministic.
+      - run: npm install -g --force npm@11.15.0
 
       - run: pnpm install --frozen-lockfile
 
