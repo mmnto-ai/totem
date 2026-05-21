@@ -1645,12 +1645,11 @@ export async function compileCommand(
         }
         const emitCacheDecisionEvent = (
           sourceHash: string,
-          decision:
-            | 'cache_hit'
-            | 'cache_miss_source_changed'
-            | 'cache_miss_fingerprint_changed'
-            | 'cache_miss_force'
-            | 'cache_miss_no_prior_record',
+          // Use the canonical CacheDecision union exported from core
+          // (compile-cache.ts). Inline-import-type avoids a top-level
+          // type-import while keeping the wrapper site in lockstep with
+          // future additions to the decision enum.
+          decision: import('@mmnto/totem').CacheDecision,
         ): void => {
           try {
             appendLedgerEvent(

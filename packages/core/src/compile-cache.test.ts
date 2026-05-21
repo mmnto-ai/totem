@@ -72,6 +72,14 @@ function makeSkippedResult(hash: string): CompileLessonResult {
   };
 }
 
+function makeNoopResult(): CompileLessonResult {
+  return { status: 'noop' };
+}
+
+function makeFailedResult(): CompileLessonResult {
+  return { status: 'failed' };
+}
+
 // ─── computeLessonSourceHash ────────────────────────
 
 describe('computeLessonSourceHash', () => {
@@ -469,6 +477,37 @@ describe('cache lookup + write round-trip', () => {
     const result = lookupCacheEntry(tmpDir, sourceHash, FINGERPRINT_A);
     expect(result.decision).toBe('cache_hit');
     expect(result.entry?.output.status).toBe('skipped');
+  });
+
+  it('round-trips a noop CompileLessonResult', () => {
+    // Closes a CompileLessonResult variant-coverage gap. `noop` is the
+    // discriminator emitted when a compile invocation has nothing to do (e.g.,
+    // an upgrade-batch run where the lesson body is unchanged); the cache must
+    // round-trip it without dropping the status field through schema
+    // validation.
+    const sourceHash = computeLessonSourceHash('lesson that is a noop');
+    const entry = buildCacheEntry(sourceHash, FINGERPRINT_A, makeNoopResult());
+    writeCacheEntry(tmpDir, entry);
+
+    const result = lookupCacheEntry(tmpDir, sourceHash, FINGERPRINT_A);
+    expect(result.decision).toBe('cache_hit');
+    expect(result.entry?.output.status).toBe('noop');
+  });
+
+  it('round-trips a failed CompileLessonResult (defensive — failures normally bypass cache)', () => {
+    // compile.ts wraps the parallel-compile path and explicitly skips writing
+    // `failed` outputs (failures are transient; caching them would poison
+    // subsequent runs). But the cache primitives themselves must handle the
+    // shape correctly when a caller writes one directly — guards against
+    // schema regressions that would break the discriminated union for the
+    // failed variant.
+    const sourceHash = computeLessonSourceHash('lesson that failed');
+    const entry = buildCacheEntry(sourceHash, FINGERPRINT_A, makeFailedResult());
+    writeCacheEntry(tmpDir, entry);
+
+    const result = lookupCacheEntry(tmpDir, sourceHash, FINGERPRINT_A);
+    expect(result.decision).toBe('cache_hit');
+    expect(result.entry?.output.status).toBe('failed');
   });
 });
 
