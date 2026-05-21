@@ -4203,25 +4203,6 @@
       "severity": "error"
     },
     {
-      "lessonHash": "9823710ec0b487d8",
-      "lessonHeading": "Proactively remove references to planned features from user",
-      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
-      "message": "Proactively remove references to planned features from user",
-      "engine": "regex",
-      "compiledAt": "2026-04-07T03:48:16.284Z",
-      "createdAt": "2026-04-07T03:48:16.284Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.mdx",
-        "docs/**/*",
-        "guides/**/*",
-        "!docs/roadmap.md",
-        "!docs/wiki/roadmap.md",
-        "!docs/active_work.md"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "a6902a95ca7ee1d6",
       "lessonHeading": "Use byte-level binary size checks",
       "pattern": "\\[\\[?\\s*\"?\\$[A-Z_]*MB[A-Z_]*\"?\\s+-(?:gt|ge|lt|le|eq|ne)\\s+\\d+",
@@ -5833,27 +5814,6 @@
       "status": "archived",
       "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 41 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/assets/compiled-baseline.test.ts, packages/cli/src/commands/config-drift.test.ts, packages/cli/src/commands/docs.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/extract-shared.ts (+ 36 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-04T05:50:36.072Z",
-      "unverified": true
-    },
-    {
-      "lessonHash": "817eec739b533bad",
-      "lessonHeading": "Hook stderr diagnostics use script-identifier prefix, not",
-      "pattern": "process\\.stderr\\.write\\(['\"]\\[Totem Error\\]",
-      "message": "Hook stderr diagnostics must use a script-identifier prefix (e.g. '[auto-context]'), not '[Totem Error]'. The '[Totem Error]' prefix is reserved for thrown Error objects per styleguide §3.",
-      "engine": "regex",
-      "badExample": "process.stderr.write('[Totem Error] failed to load proposals\\n');",
-      "goodExample": "process.stderr.write('[auto-context] failed to load proposals\\n');",
-      "compiledAt": "2026-05-05T04:03:03.425Z",
-      "createdAt": "2026-05-05T04:03:03.425Z",
-      "fileGlobs": [
-        "**/.claude/hooks/**/*.js",
-        "**/.gemini/hooks/**/*.js",
-        "packages/cli/src/hooks/**/*.ts"
-      ],
-      "severity": "warning",
-      "status": "archived",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/init-templates.ts. reasonCode: stage4-out-of-scope-match.",
-      "archivedAt": "2026-05-05T04:03:03.864Z",
       "unverified": true
     },
     {
@@ -8546,11 +8506,9 @@
     {
       "lessonHash": "ef18015c7c3d78ae",
       "lessonHeading": "WWND Rule 1: Absolute-promise detection on public surfaces",
+      "pattern": "\\b(?:[Ww]ill\\s+(?:stay|remain|always\\s+be|never\\s+(?:change|move))|[Ww]on['']t\\s+(?:change|ever)|[Gg]uarantees|[Pp]romises\\s+to)\\b",
       "message": "Absolute future-tense promise detected — flag for [Tenet 19 § How to apply item 4](https://github.com/mmnto-ai/totem-strategy/blob/main/design-tenets.md#19-claim-discipline). Either (a) name the structural backing inline (LICENSE, ADR-084 covenant clause, foundation governance, etc.) so a naive reader can verify the promise is actually backed, or (b) soften to present-tense intent (\"we aim to keep X stable\", \"the core stays free under the current LICENSE\"). The unbacked future-tense form is the same shape that [`mmnto-ai/totem#1933`](https://github.com/mmnto-ai/totem/pull/1933) was flagged for by CodeRabbit R3.\n\n### Bad Example\n\n```markdown\nThe core will always be free. The MIT license guarantees this. We promise to never change the terms.\n```\n\n### Good Example\n\n```markdown\nThe core stays free under the MIT LICENSE in this repository, governed by ADR-084 (Open Source Commitment). Material covenant changes require a doctrine ADR with a 30-day notice window.\n```\n\n## Why this is a deterministic regex rule\n\n[Tenet 19 § How to apply item 4](https://github.com/mmnto-ai/totem-strategy/blob/main/design-tenets.md#19-claim-discipline) names the failure mode structurally: covenant claims that read as absolute future-tense promises without naming the structural backing that holds them. The empirical seed corpus was N=4 within a 24-hour window on 2026-05-15 — the [`mmnto-ai/totem#1925`](https://github.com/mmnto-ai/totem/pull/1925) / [`#1932`](https://github.com/mmnto-ai/totem/pull/1932) / [`#1933`](https://github.com/mmnto-ai/totem/pull/1933) cluster — all caught post-merge by external review (user audit, lc-Claude empirical audit, CodeRabbit absolutes catch). The pattern that fired all four was the same: an absolute promise with no inline backing.\n\nThe compiled regex catches the highest-density subset of those phrasings (`will stay`, `will always be`, `will never change`, `won't change`, `guarantees`, `promises to`). Severity is `warning` rather than `error` because some uses are legitimate when the backing is named adjacent — the gate reports the finding; the author either adds the backing or softens, but the push isn't blocked. The Tier 0 pre-push hook ([Proposal 279 § Implementation Notes Q3](https://github.com/mmnto-ai/totem-strategy/blob/main/proposals/active/279-wwnd-claim-discipline-gate.md#pre-push-hook-sequencing-q3)) surfaces the finding before merge.\n\nScope is intentionally narrow: only public claim surfaces (`README.md`, `AGENTS.md`, `design-tenets.md`, `docs/wiki/**`) where naive-reader decode matters. Internal docs, source code, test fixtures, and PR comments are out of scope — those audiences can be expected to interpret prose-discipline context that public consumers cannot.\n\n## Why this lands as a direct rule (Pipeline 1)\n\nThis is one of the \"proposal specifies the exact pattern\" rules per [cross-stream coordination 2026-05-16T20:35Z](https://github.com/mmnto-ai/totem-substrate/blob/main/.handoff/totem-claude/processed/2026-05-16T2035Z-strategy-claude.md): when the regex is named upstream by the proposal author, the deterministic rule lands directly via Pipeline 1 (`**Pattern:**` field, no LLM call), and the lesson documents the pattern post-hoc. The discovery surface — *which* regex catches the failure class — was already settled by [Proposal 279](https://github.com/mmnto-ai/totem-strategy/blob/main/proposals/active/279-wwnd-claim-discipline-gate.md) § Scope. The compile pipeline LLM would have re-typed it; that LLM cost is avoidable.",
       "engine": "regex",
-      "severity": "warning",
-      "manual": true,
-      "pattern": "\\b(?:[Ww]ill\\s+(?:stay|remain|always\\s+be|never\\s+(?:change|move))|[Ww]on['']t\\s+(?:change|ever)|[Gg]uarantees|[Pp]romises\\s+to)\\b",
       "compiledAt": "2026-05-16T21:46:10.120Z",
       "createdAt": "2026-05-16T21:46:10.120Z",
       "fileGlobs": [
@@ -8558,6 +8516,47 @@
         "**/AGENTS.md",
         "**/design-tenets.md",
         "docs/wiki/**"
+      ],
+      "severity": "warning",
+      "manual": true,
+      "unverified": true
+    },
+    {
+      "lessonHash": "42559b2f75734104",
+      "lessonHeading": "Hook stderr diagnostics use script-identifier prefix, not",
+      "message": "Hook stderr diagnostics must use the script-identifier prefix (e.g., '[auto-context]', '[session-context]'), not '[Totem Error]'. The '[Totem Error]' prefix is reserved for thrown Error objects per styleguide §3.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "process\\.stderr\\.write\\([^)]*\\[Totem Error\\]",
+      "compiledAt": "2026-05-21T17:00:37.880Z",
+      "createdAt": "2026-05-21T17:00:37.880Z",
+      "fileGlobs": [
+        ".claude/hooks/**/*.js",
+        ".gemini/hooks/**/*.js",
+        "packages/cli/src/hooks/**/*.ts",
+        "packages/cli/src/hooks/**/*.js"
+      ],
+      "badExample": "process.stderr.write('[Totem Error] Failed to load proposals\\n');",
+      "goodExample": "process.stderr.write('[auto-context] Failed to load proposals\\n');",
+      "unverified": true,
+      "status": "untested-against-codebase"
+    },
+    {
+      "lessonHash": "c2d9e854231b78f1",
+      "lessonHeading": "Proactively remove references to planned features from user",
+      "message": "Proactively remove references to planned features from user",
+      "engine": "regex",
+      "severity": "warning",
+      "manual": true,
+      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
+      "compiledAt": "2026-05-21T17:00:26.725Z",
+      "createdAt": "2026-05-21T17:00:26.725Z",
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.mdx",
+        "docs/**/*",
+        "guides/**/*",
+        "!docs/wiki/roadmap.md"
       ],
       "unverified": true
     }
@@ -8890,11 +8889,6 @@
     },
     {
       "hash": "16b2e18eb1b0c4a1",
-      "title": "(legacy entry)",
-      "reasonCode": "legacy-unknown"
-    },
-    {
-      "hash": "17a23ffa1d63e157",
       "title": "(legacy entry)",
       "reasonCode": "legacy-unknown"
     },
