@@ -23,7 +23,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+          # No registry-url: it writes an .npmrc with
+          # _authToken=${NODE_AUTH_TOKEN}, which blocks npm's OIDC
+          # trusted-publishing negotiation. See #1180 + #1182 history.
 
       - run: pnpm install --frozen-lockfile
 
@@ -32,25 +34,28 @@ jobs:
       - name: Allow tag overwrites for republish resilience
         run: git config --global push.followTags false
 
-      - name: Create Release PR or Publish
+      - name: Create Release PR (version-only)
         id: changesets
         uses: changesets/action@v1
         with:
           version: pnpm run version
-          publish: pnpm run release
-          createGithubReleases: true
+          # No `publish` parameter: `changeset publish` does not propagate
+          # OIDC tokens correctly to pnpm child processes
+          # (changesets/action#515). Publishing happens in the next step
+          # via tools/publish-oidc.mjs, which uses npm CLI directly.
+          createGithubReleases: false
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          # changesets-action reads NPM_TOKEN (not NODE_AUTH_TOKEN). When this
-          # env var is unset, the action falls back to OIDC trusted publishing.
-          # OIDC silently 404'd on @mmnto/pack-rust-architecture@1.45.0 (run
-          # 26214453900, attempts 1+2), so expose NPM_TOKEN as the primary
-          # auth path. NODE_AUTH_TOKEN stays for setup-node's .npmrc auth line.
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish unpublished packages via OIDC
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        id: publish
+        run: node tools/publish-oidc.mjs
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Push release tags
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.publish.outputs.published == 'true'
         run: |
           git push origin --tags --force
           git tag -f v0
