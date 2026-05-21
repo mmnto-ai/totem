@@ -206,11 +206,12 @@ async function buildStaticContext(gitRoot, branch, ticket) {
         //
         // 250 is a headroom-vs-budget compromise: it fully covers every recent
         // claude-006x journal (max 170 lines) without paying the worst-case
-        // cost against the MAX_TOTAL_CHARS budget below (a 500-cap journal at
-        // ~100 chars/line would alone exceed the 10k budget and crowd out
-        // vector context). Deeper rebalancing (raise the budget, switch to
-        // char-based truncation, re-order static vs vector concatenation) is
-        // out of scope for the truncation-bug fix.
+        // cost against the MAX_TOTAL_CHARS budget below (a 250-cap journal at
+        // ~100 chars/line approaches but doesn't routinely exceed the 10k
+        // budget; a 500-cap would routinely exceed it and crowd out vector
+        // context). Deeper rebalancing (raise the budget, switch to char-based
+        // truncation, re-order static vs vector concatenation) is out of scope
+        // for the truncation-bug fix and is being tracked separately.
         const JOURNAL_DISPLAY_LINE_CAP = 250;
         const allJournalLines = content.split('\n');
         const journalLines = allJournalLines.slice(0, JOURNAL_DISPLAY_LINE_CAP);
