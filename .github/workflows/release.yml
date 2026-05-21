@@ -41,6 +41,12 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          # changesets-action reads NPM_TOKEN (not NODE_AUTH_TOKEN). When this
+          # env var is unset, the action falls back to OIDC trusted publishing.
+          # OIDC silently 404'd on @mmnto/pack-rust-architecture@1.45.0 (run
+          # 26214453900, attempts 1+2), so expose NPM_TOKEN as the primary
+          # auth path. NODE_AUTH_TOKEN stays for setup-node's .npmrc auth line.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Push release tags
