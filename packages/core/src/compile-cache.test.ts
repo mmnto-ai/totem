@@ -175,14 +175,21 @@ describe('cacheEntryPath', () => {
   it('uses the first 16 chars of the source hash as the filename', () => {
     const totemDir = '/some/dir/.totem';
     const sourceHash = 'abcdef0123456789' + '0'.repeat(48);
-    const expected = path.join(
-      totemDir,
-      '.totem',
-      'cache',
-      'compile-lesson',
-      'abcdef0123456789.json',
-    );
+    const expected = path.join(totemDir, 'cache', 'compile-lesson', 'abcdef0123456789.json');
     expect(cacheEntryPath(totemDir, sourceHash)).toBe(expected);
+  });
+
+  it('does not duplicate the .totem prefix when totemDir already includes it (CR R3 Major on #1983)', () => {
+    // Regression: an earlier draft hardcoded `.totem` into CACHE_DIR. Joined
+    // with totemDir (which already resolves to `<repo>/.totem`), the cache
+    // landed at `<repo>/.totem/.totem/cache/compile-lesson/...` — outside the
+    // documented path and invisible to tooling that scans `<totemDir>/cache`.
+    const totemDir = '/repo/.totem';
+    const result = cacheEntryPath(totemDir, 'a'.repeat(64));
+    expect(result).not.toContain(path.join('.totem', '.totem'));
+    expect(result).toBe(
+      path.join('/repo/.totem', 'cache', 'compile-lesson', 'aaaaaaaaaaaaaaaa.json'),
+    );
   });
 });
 
@@ -351,6 +358,49 @@ describe('cache lookup + write round-trip', () => {
     expect(result.decision).toBe('cache_miss_no_prior_record');
   });
 
+  it('incomplete cache payload (compiled without rule) is rejected (CR R3 Major on #1983)', () => {
+    // Status enum alone is not sufficient validation — a truncated payload like
+    // `{ status: 'compiled' }` would survive a minimal schema and crash the
+    // cache-hit path on the missing `rule` dereference. The discriminated union
+    // requires the per-variant fields downstream consumers depend on.
+    const sourceHash = computeLessonSourceHash('lesson with compiled-no-rule cache entry');
+    const filePath = cacheEntryPath(tmpDir, sourceHash);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        sourceHash,
+        fingerprint: FINGERPRINT_A,
+        output: { status: 'compiled' }, // missing required `rule`
+        compiledAt: '2026-05-21T00:00:00.000Z',
+      }),
+      'utf-8',
+    );
+
+    const result = lookupCacheEntry(tmpDir, sourceHash, FINGERPRINT_A);
+    expect(result.decision).toBe('cache_miss_no_prior_record');
+    expect(result.entry).toBeNull();
+  });
+
+  it('incomplete cache payload (skipped without hash/reasonCode) is rejected (CR R3 Major on #1983)', () => {
+    const sourceHash = computeLessonSourceHash('lesson with skipped-no-fields cache entry');
+    const filePath = cacheEntryPath(tmpDir, sourceHash);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        sourceHash,
+        fingerprint: FINGERPRINT_A,
+        output: { status: 'skipped' }, // missing required `hash` and `reasonCode`
+        compiledAt: '2026-05-21T00:00:00.000Z',
+      }),
+      'utf-8',
+    );
+
+    const result = lookupCacheEntry(tmpDir, sourceHash, FINGERPRINT_A);
+    expect(result.decision).toBe('cache_miss_no_prior_record');
+  });
+
   it('hash-disagreeing cache file is treated as cache miss', () => {
     // Defensive against manual cache edits — if the file at path-for-hash-X
     // contains an entry claiming sourceHash-Y, treat as miss.
@@ -362,7 +412,9 @@ describe('cache lookup + write round-trip', () => {
       JSON.stringify({
         sourceHash: 'some-other-hash',
         fingerprint: FINGERPRINT_A,
-        output: { status: 'compiled' },
+        // Valid `compiled` shape so the schema check passes and the lookup
+        // reaches the sourceHash-disagreement defense (the assertion under test).
+        output: { status: 'compiled', rule: { lessonHash: 'whatever' } },
         compiledAt: '2026-05-21T00:00:00.000Z',
       }),
       'utf-8',

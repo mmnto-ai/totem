@@ -34,27 +34,63 @@ import type { CompileLessonResult } from './compile-lesson.js';
 
 // ─── Constants ──────────────────────────────────────
 
-const CACHE_DIR = path.join('.totem', 'cache', 'compile-lesson');
+// CACHE_DIR is resolved relative to `totemDir` (the already-configured
+// `.totem` location). Including `.totem` in this constant duplicated the
+// prefix and landed cache files at `<totemDir>/.totem/cache/...` instead of
+// `<totemDir>/cache/...`. Per CR R3 Major on `mmnto-ai/totem#1983`.
+const CACHE_DIR = path.join('cache', 'compile-lesson');
 const HASH_FILENAME_PREFIX_LENGTH = 16;
 const DISABLE_ENV_VAR = 'TOTEM_DISABLE_COMPILE_CACHE';
 
 // ─── Schema ─────────────────────────────────────────
 
 /**
- * Minimal validator for the `output` field. CompileLessonResult is a
- * discriminated union with no runtime Zod schema today; deeply validating
- * the variant payloads would couple this module to every change in
- * `compile-lesson.ts`. Instead, we check the discriminator value is one of
- * the known statuses; downstream consumers can rely on the type assertion.
- * Per the impl contract § "graceful — bad cache entry → recompile, not
- * crash" — corrupt outputs fail this gate and trigger a cache miss.
+ * Validator for the `output` field. CompileLessonResult is a discriminated
+ * union (status: 'compiled' | 'skipped' | 'failed' | 'noop'); each variant
+ * carries required fields that downstream consumers dereference unconditionally
+ * (e.g., the cache-hit path reads `result.rule` for compiled outputs and
+ * `result.hash` / `result.reasonCode` for skipped outputs). A minimal
+ * status-only schema would accept truncated cache files like
+ * `{ output: { status: 'compiled' } }` and break the file's own "bad cache
+ * entry → miss, not crash" contract on the next lookup.
+ *
+ * Per CR R3 Major on `mmnto-ai/totem#1983`: validate the required-per-variant
+ * shape so structurally incomplete payloads are rejected upfront. `rule` is
+ * `z.unknown()` to avoid coupling this module to the full `CompiledRule`
+ * shape (changes to that schema must not invalidate every cohort's cache);
+ * variant-required fields like `hash` and `reasonCode` are typed concretely
+ * since they're the dereferences that would crash.
  */
-const COMPILE_LESSON_STATUS = ['compiled', 'skipped', 'failed', 'noop'] as const;
-const CompileLessonResultMinimalSchema = z
-  .object({
-    status: z.enum(COMPILE_LESSON_STATUS),
-  })
-  .passthrough();
+const CompileLessonResultMinimalSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('compiled'),
+      // `rule` MUST be a non-null object (the CompiledRule payload). z.unknown()
+      // would accept missing fields too, which defeats the contract — a payload
+      // like `{ status: 'compiled' }` would survive validation and crash the
+      // cache-hit path on `result.rule` dereference. `z.record(z.unknown())`
+      // requires an object without coupling to CompiledRule's exact shape.
+      rule: z.record(z.unknown()),
+    })
+    .passthrough(),
+  z
+    .object({
+      status: z.literal('skipped'),
+      hash: z.string(),
+      reasonCode: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      status: z.literal('failed'),
+    })
+    .passthrough(),
+  z
+    .object({
+      status: z.literal('noop'),
+    })
+    .passthrough(),
+]);
 
 /**
  * Cache entry for one lesson's compile output.
