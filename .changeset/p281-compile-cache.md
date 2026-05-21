@@ -26,11 +26,11 @@ Layered (not composite). `stableId` first when present (P280 reservation; v1 nev
 
 ## Telemetry
 
-`compile_cache_decision` event per lesson per compile run. Best-effort fire-and-forget; ledger-write failures never block compile.
+`compile_cache_decision` event per lesson per compile run. Best-effort fire-and-forget; ledger-write failures are swallowed at the writer site so a degraded ledger does not block compile.
 
 ## Emergency escape
 
-`TOTEM_DISABLE_COMPILE_CACHE=1` reverts cache to no-op (lookup → no-prior-record, write → no-op). Emergency only — deprecation-watch tracked post-PR-open.
+`TOTEM_DISABLE_COMPILE_CACHE=1` reverts cache behavior to the pre-#NNNN status quo (lookup returns no-prior-record, write becomes a no-op). Emergency-only; deprecation-watch tracked post-PR-open.
 
 ## Falsifying metric
 

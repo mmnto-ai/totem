@@ -150,10 +150,9 @@ export function lookupCacheEntry(
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     raw = JSON.parse(content);
+    // totem-context: intentional cleanup — a bad cache entry must downgrade to a miss, never propagate; the cache is a side-channel optimization, not a load-bearing data path.
   } catch {
-    // totem-context: intentional cleanup — bad cache entry is treated as a
-    // miss, never propagated upward. Graceful per the impl contract §
-    // "Reject and treat as cache miss on schema mismatch".
+    // totem-context: intentional cleanup — a bad cache entry must downgrade to a miss, never propagate; the cache is a side-channel optimization, not a load-bearing data path.
     return { entry: null, decision: 'cache_miss_no_prior_record' };
   }
 
@@ -196,7 +195,9 @@ export function writeCacheEntry(
     const filePath = cacheEntryPath(totemDir, entry.sourceHash);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(entry, null, 2) + '\n', 'utf-8');
+    // totem-context: intentional cleanup — cache writes are fire-and-forget; a failed write degrades to "no cache entry exists" on next lookup, never blocks compile.
   } catch (err) {
+    // totem-context: intentional cleanup — cache writes are fire-and-forget; a failed write degrades to "no cache entry exists" on next lookup, never blocks compile.
     const msg = err instanceof Error ? err.message : String(err);
     onWarn?.(`Compile cache write failed: ${msg}`);
   }
@@ -258,7 +259,9 @@ export function migrateFromCompiledRules(
       const entry = buildCacheEntry(sourceHash, fingerprint, input.output);
       writeCacheEntry(totemDir, entry, onWarn);
       seeded += 1;
+      // totem-context: intentional cleanup — migration is best-effort per-input; one bad lesson source must not abort seeding the rest. Failed inputs accumulate in `skipped` count and surface via onWarn for operator visibility.
     } catch (err) {
+      // totem-context: intentional cleanup — migration is best-effort per-input; one bad lesson source must not abort seeding the rest. Failed inputs accumulate in `skipped` count and surface via onWarn for operator visibility.
       const msg = err instanceof Error ? err.message : String(err);
       onWarn?.(`Compile cache seed skipped for ${input.lessonHash}: ${msg}`);
       skipped += 1;
