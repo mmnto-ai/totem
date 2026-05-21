@@ -4,7 +4,7 @@
 
 ### Minor Changes
 
-- 388dd95: feat(cli+core): Proposal 281 per-lesson compile cache (incremental compilation) (#NNNN)
+- 388dd95: feat(cli+core): Proposal 281 per-lesson compile cache (incremental compilation) (#1983)
 
   Implements [Proposal 281 (Per-Lesson Hash Stability)](https://github.com/mmnto-ai/totem-strategy/blob/main/proposals/accepted/281-per-lesson-hash-stability.md), accepted via [`mmnto-ai/totem-strategy#387`](https://github.com/mmnto-ai/totem-strategy/pull/387) on 2026-05-20. Closes the first of two freeze-lift gates for `project_rule_compilation_freeze_2026_05_17` (Path A per [ADR-108](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-108-agent-state-continuity-architecture-synthesis.md)).
 
@@ -30,7 +30,7 @@
 
   ## Emergency escape
 
-  `TOTEM_DISABLE_COMPILE_CACHE=1` reverts cache behavior to the pre-#NNNN status quo (lookup returns no-prior-record, write becomes a no-op). Emergency-only; deprecation-watch tracked post-PR-open.
+  `TOTEM_DISABLE_COMPILE_CACHE=1` reverts cache behavior to the pre-#1983 status quo (lookup returns no-prior-record, write becomes a no-op). Emergency-only; deprecation-watch tracked post-PR-open.
 
   ## Falsifying metric
 
