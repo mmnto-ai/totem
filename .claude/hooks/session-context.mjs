@@ -198,9 +198,15 @@ async function buildStaticContext(gitRoot, branch, ticket) {
         const latest = files[0];
         lines.push(`Latest journal (${journalSourceLabel}): ${latest}`);
         const content = readFileSync(join(journalDir, latest), 'utf-8');
-        const journalLines = content.split('\n').slice(0, 20);
+        // Cap was 20 — far below the size of a normal journal entry
+        // (recent claude-006x entries are 87–170 lines, with the FIRST MOVE
+        // block and load-bearing context past line 20). The 20-line truncation
+        // was cutting off the cross-session-context surface for every cohort
+        // session start. See mmnto-ai/totem#1993.
+        const JOURNAL_DISPLAY_LINE_CAP = 500;
+        const journalLines = content.split('\n').slice(0, JOURNAL_DISPLAY_LINE_CAP);
         lines.push(...journalLines);
-        lines.push('...');
+        if (journalLines.length === JOURNAL_DISPLAY_LINE_CAP) lines.push('...');
         lines.push('');
       }
     } catch (err) {
