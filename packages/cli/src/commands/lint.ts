@@ -17,6 +17,14 @@ export interface LintOptions {
    * does not contribute to the exit code.
    */
   timeoutMode?: TimeoutMode;
+  /**
+   * AST parse-failure mode (mmnto-ai/totem#1982). `strict` (default)
+   * surfaces ast-grep / Tree-sitter parse errors as a non-zero exit.
+   * `lenient` skips all AST rules for the run with a visible warning —
+   * operator escape hatch for the gap until the per-file degrade in
+   * mmnto-ai/totem#1786 ships. Env: `TOTEM_LINT_AST_PARSE_MODE`.
+   */
+  astParseMode?: TimeoutMode;
 }
 
 // ─── Command ────────────────────────────────────────
@@ -87,9 +95,17 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   const exportPaths = config.exports ? Object.values(config.exports) : undefined;
 
   const timeoutMode: TimeoutMode = options.timeoutMode ?? 'strict';
+  // mmnto-ai/totem#1982. CLI flag > env var > default 'strict'. The same
+  // resolution happens inside runCompiledRules for the no-CLI-caller case
+  // (test harness, programmatic use); the CLI-side resolution here is so
+  // the strict-mode throw below can decide based on the same value.
+  const astParseMode: TimeoutMode =
+    options.astParseMode ??
+    // totem-context: reading Node's process.env (cleaned by the runtime), not parsing a custom .env file; CRLF/quote-stripping rule doesn't apply.
+    (process.env['TOTEM_LINT_AST_PARSE_MODE'] === 'lenient' ? 'lenient' : 'strict');
 
   const startTime = Date.now();
-  const { violations, rules, regexTimeouts } = await runCompiledRules({
+  const { violations, rules, regexTimeouts, astParseFailures } = await runCompiledRules({
     diff: result.diff,
     cwd,
     totemDir: config.totemDir,
@@ -101,6 +117,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     configRoot,
     isStaged: !!options.staged,
     regexTimeoutMode: timeoutMode,
+    astParseMode,
   });
 
   // mmnto-ai/totem#1641: strict mode surfaces any regex-evaluation timeout
@@ -116,6 +133,24 @@ export async function lintCommand(options: LintOptions): Promise<void> {
       'CHECK_FAILED',
       `Regex evaluation timed out on ${regexTimeouts.length} rule-file pair(s): ${summary}`,
       "Run with '--timeout-mode lenient' to skip timing-out rules, archive the offending rule via 'totem doctor --pr', or increase the timeout budget.",
+    );
+  }
+
+  // mmnto-ai/totem#1982: parallel strict-mode throw for AST parse failures.
+  // In strict mode the original TotemParseError already propagated from
+  // runCompiledRules (this branch never runs); in lenient mode the failures
+  // are recorded but exit stays clean. The strict branch here is defensive
+  // — if we ever route through alternative codepaths that surface
+  // astParseFailures without throwing, this preserves the exit-code contract.
+  if (astParseMode === 'strict' && astParseFailures.length > 0) {
+    const { TotemError } = await import('@mmnto/totem');
+    const summary = astParseFailures
+      .map((f) => `${f.language} on ${f.file}: ${f.message}`)
+      .join('; ');
+    throw new TotemError(
+      'CHECK_FAILED',
+      `AST parse failed on ${astParseFailures.length} target(s): ${summary}`,
+      "Run with '--ast-parse-mode lenient' (or set TOTEM_LINT_AST_PARSE_MODE=lenient) to skip AST rules for this run. Track 'mmnto-ai/totem#1786' for the durable per-file graceful-degrade fix.",
     );
   }
 

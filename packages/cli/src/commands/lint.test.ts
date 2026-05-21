@@ -39,6 +39,7 @@ vi.mock('./run-compiled-rules.js', () => ({
     output: '',
     findings: [],
     regexTimeouts: [],
+    astParseFailures: [],
   }),
 }));
 
@@ -210,6 +211,7 @@ describe('lintCommand regex timeout handling', () => {
         regexTimeouts: [
           { ruleHash: 'hungRule', file: 'app.ts', elapsedMs: 120, mode: 'strict' as const },
         ],
+        astParseFailures: [],
       }),
     }));
 
@@ -229,6 +231,7 @@ describe('lintCommand regex timeout handling', () => {
         regexTimeouts: [
           { ruleHash: 'hungRule', file: 'app.ts', elapsedMs: 120, mode: 'lenient' as const },
         ],
+        astParseFailures: [],
       }),
     }));
 
@@ -246,6 +249,7 @@ describe('lintCommand regex timeout handling', () => {
         output: '',
         findings: [],
         regexTimeouts: [],
+        astParseFailures: [],
       }),
     }));
 

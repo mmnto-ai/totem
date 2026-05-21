@@ -91,6 +91,7 @@ function diffResult(
   };
 }
 
+// totem-context: helper has no OrExit suffix; test fixture builder returning a literal result object
 function runCompiledRulesPassResult() {
   return {
     violations: [],
@@ -98,6 +99,7 @@ function runCompiledRulesPassResult() {
     output: 'PASS',
     findings: [],
     regexTimeouts: [],
+    astParseFailures: [],
   };
 }
 

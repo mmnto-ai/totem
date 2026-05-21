@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CompiledRule } from '@mmnto/totem';
 import * as totem from '@mmnto/totem';
-import { readLedgerEvents, saveCompiledRules, TotemError } from '@mmnto/totem';
+import { readLedgerEvents, saveCompiledRules, TotemError, TotemParseError } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { runCompiledRules } from './run-compiled-rules.js';
@@ -1217,6 +1217,187 @@ describe('TOTEM_LITE graceful AST degradation', () => {
         tag: 'Test',
       }),
     ).rejects.toThrow('[Totem Error] AST engine crashed');
+
+    spy.mockRestore();
+  });
+});
+
+// mmnto-ai/totem#1982 — operator escape for AST parse failures
+describe('--ast-parse-mode lenient', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-ast-parse-test-'));
+    fs.mkdirSync(path.join(tmpDir, TOTEM_DIR), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+    delete process.env['TOTEM_LINT_AST_PARSE_MODE'];
+  });
+
+  // totem-context: helper has no OrExit suffix; the rule misclassifies test-fixture builders that return literal objects
+  function makeAstRuleAndDiff() {
+    const astRule = makeRule('', 'rust pattern', 'No unsafe', {
+      engine: 'ast-grep',
+      astGrepPattern: 'unsafe { $$$ }',
+      fileGlobs: ['**/*.rs'],
+    });
+    saveCompiledRules(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), [astRule]);
+
+    const diff = `diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1 +1,2 @@
++unsafe { let p = std::ptr::null::<u8>(); }
+`;
+    return { astRule, diff };
+  }
+
+  it('strict mode (default): re-throws TotemParseError on parse failure', async () => {
+    const { diff } = makeAstRuleAndDiff();
+
+    const spy = vi
+      .spyOn(totem, 'applyAstRulesToAdditions')
+      .mockRejectedValueOnce(
+        new TotemParseError('ast-grep batch parse failed: rust is not supported in napi', ''),
+      );
+
+    await expect(
+      runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow('rust is not supported in napi');
+
+    spy.mockRestore();
+  });
+
+  it('lenient mode (CLI flag): captures parse failure, returns empty astViolations', async () => {
+    const { diff } = makeAstRuleAndDiff();
+
+    const spy = vi
+      .spyOn(totem, 'applyAstRulesToAdditions')
+      .mockRejectedValueOnce(
+        new TotemParseError('ast-grep batch parse failed: rust is not supported in napi', ''),
+      );
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+      astParseMode: 'lenient',
+    });
+
+    expect(result.violations).toHaveLength(0);
+    expect(result.astParseFailures).toHaveLength(1);
+    expect(result.astParseFailures[0]).toMatchObject({
+      file: '*',
+      language: 'rust',
+      mode: 'lenient',
+    });
+    expect(result.astParseFailures[0]!.message).toContain('rust is not supported in napi');
+
+    spy.mockRestore();
+  });
+
+  it('lenient mode (env var TOTEM_LINT_AST_PARSE_MODE): same behavior as CLI flag', async () => {
+    process.env['TOTEM_LINT_AST_PARSE_MODE'] = 'lenient';
+    const { diff } = makeAstRuleAndDiff();
+
+    const spy = vi
+      .spyOn(totem, 'applyAstRulesToAdditions')
+      .mockRejectedValueOnce(
+        new TotemParseError('ast-grep batch parse failed: rust is not supported in napi', ''),
+      );
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+      // No explicit astParseMode — env var takes effect
+    });
+
+    expect(result.astParseFailures).toHaveLength(1);
+    expect(result.astParseFailures[0]!.language).toBe('rust');
+
+    spy.mockRestore();
+  });
+
+  it('CLI flag overrides env var (flag wins)', async () => {
+    process.env['TOTEM_LINT_AST_PARSE_MODE'] = 'lenient';
+    const { diff } = makeAstRuleAndDiff();
+
+    const spy = vi
+      .spyOn(totem, 'applyAstRulesToAdditions')
+      .mockRejectedValueOnce(
+        new TotemParseError('ast-grep batch parse failed: rust is not supported in napi', ''),
+      );
+
+    // CLI flag explicitly says strict — should throw even though env says lenient
+    await expect(
+      runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+        astParseMode: 'strict',
+      }),
+    ).rejects.toThrow('rust is not supported in napi');
+
+    spy.mockRestore();
+  });
+
+  it('lenient mode with unrecognized failure message: language = "unknown"', async () => {
+    const { diff } = makeAstRuleAndDiff();
+
+    const spy = vi
+      .spyOn(totem, 'applyAstRulesToAdditions')
+      .mockRejectedValueOnce(new TotemParseError('AST parse failed: some other error format', ''));
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+      astParseMode: 'lenient',
+    });
+
+    expect(result.astParseFailures).toHaveLength(1);
+    expect(result.astParseFailures[0]!.language).toBe('unknown');
+
+    spy.mockRestore();
+  });
+
+  it('lenient mode does NOT swallow non-parse errors (preserves loud-crash for other failures)', async () => {
+    const { diff } = makeAstRuleAndDiff();
+
+    // Some other error class that's NOT TotemParseError (no PARSE_FAILED code)
+    const spy = vi
+      .spyOn(totem, 'applyAstRulesToAdditions')
+      .mockRejectedValueOnce(
+        new TotemError('LINT_LESSONS_FAILED', 'unrelated AST engine crash', ''),
+      );
+
+    await expect(
+      runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+        astParseMode: 'lenient',
+      }),
+    ).rejects.toThrow('unrelated AST engine crash');
 
     spy.mockRestore();
   });
