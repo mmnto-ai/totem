@@ -19,24 +19,19 @@ jobs:
 
       - uses: pnpm/action-setup@v5
 
+      # Node 24 ships with npm 11.x natively, which supports OIDC trusted
+      # publishing (added in npm 11.5.1). Node 22 ships with npm 10.9.x and
+      # `npm install -g npm@11.x` to self-upgrade is broken on the hosted
+      # runner (MODULE_NOT_FOUND: promise-retry — npm loads its own arborist
+      # code, then replaces files mid-install). Avoiding the self-upgrade
+      # entirely by using a Node version that ships the right npm.
+      # No registry-url: it writes an .npmrc with _authToken=${NODE_AUTH_TOKEN},
+      # which blocks npm's OIDC trusted-publishing negotiation. See #1180 +
+      # #1182 history.
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
-          # No registry-url: it writes an .npmrc with
-          # _authToken=${NODE_AUTH_TOKEN}, which blocks npm's OIDC
-          # trusted-publishing negotiation. See #1180 + #1182 history.
-
-      # npm OIDC trusted publishing landed in npm 11.5.1. Node 22 ships with
-      # npm 10.9.x which throws ENEEDAUTH because it has no OIDC negotiation
-      # code path. Upgrade to a pinned npm 11.x so `npm publish` auto-detects
-      # GitHub Actions OIDC and exchanges for a short-lived publish token.
-      #
-      # --force bypasses the self-upgrade race condition where npm loads its
-      # own code mid-install and the on-disk copy gets partially replaced,
-      # producing MODULE_NOT_FOUND for transitive deps like promise-retry.
-      # Pin version (not @latest) keeps this step deterministic.
-      - run: npm install -g --force npm@11.15.0
 
       - run: pnpm install --frozen-lockfile
 
