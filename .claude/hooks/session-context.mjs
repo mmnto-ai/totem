@@ -198,9 +198,25 @@ async function buildStaticContext(gitRoot, branch, ticket) {
         const latest = files[0];
         lines.push(`Latest journal (${journalSourceLabel}): ${latest}`);
         const content = readFileSync(join(journalDir, latest), 'utf-8');
-        const journalLines = content.split('\n').slice(0, 20);
+        // Cap was 20 — far below the size of a normal journal entry
+        // (recent claude-006x entries are 87–170 lines, with the FIRST MOVE
+        // block and load-bearing context past line 20). The 20-line truncation
+        // was cutting off the cross-session-context surface for every cohort
+        // session start. See mmnto-ai/totem#1993.
+        //
+        // 250 is a headroom-vs-budget compromise: it fully covers every recent
+        // claude-006x journal (max 170 lines) without paying the worst-case
+        // cost against the MAX_TOTAL_CHARS budget below (a 250-cap journal at
+        // ~100 chars/line approaches but doesn't routinely exceed the 10k
+        // budget; a 500-cap would routinely exceed it and crowd out vector
+        // context). Deeper rebalancing (raise the budget, switch to char-based
+        // truncation, re-order static vs vector concatenation) is out of scope
+        // for the truncation-bug fix and is being tracked separately.
+        const JOURNAL_DISPLAY_LINE_CAP = 250;
+        const allJournalLines = content.split('\n');
+        const journalLines = allJournalLines.slice(0, JOURNAL_DISPLAY_LINE_CAP);
         lines.push(...journalLines);
-        lines.push('...');
+        if (allJournalLines.length > JOURNAL_DISPLAY_LINE_CAP) lines.push('...');
         lines.push('');
       }
     } catch (err) {
