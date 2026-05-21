@@ -269,6 +269,10 @@ program
     '--timeout-mode <mode>',
     'Regex timeout mode: strict (default, fail CI on timeout) or lenient (skip timing-out rules with warning)',
   )
+  .option(
+    '--ast-parse-mode <mode>',
+    'AST parse failure mode: strict (default, fail CI on parse error) or lenient (skip all AST rules with warning). Env: TOTEM_LINT_AST_PARSE_MODE. Operator escape for mmnto-ai/totem#1786 gap.',
+  )
   .action(
     async (opts: {
       out?: string;
@@ -276,6 +280,7 @@ program
       staged?: boolean;
       prComment?: string | true;
       timeoutMode?: string;
+      astParseMode?: string;
     }) => {
       try {
         const { lintCommand } = await import('./commands/lint.js');
@@ -293,11 +298,24 @@ program
             'CONFIG_INVALID',
           );
         }
+        if (
+          opts.astParseMode &&
+          opts.astParseMode !== 'strict' &&
+          opts.astParseMode !== 'lenient'
+        ) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            `Invalid --ast-parse-mode "${opts.astParseMode}". Use "strict" or "lenient".`,
+            "Run 'totem lint --help' for valid options.",
+            'CONFIG_INVALID',
+          );
+        }
         await lintCommand({
           ...opts,
           format: opts.format as 'text' | 'sarif' | 'json' | undefined,
           prComment,
           timeoutMode: opts.timeoutMode as 'strict' | 'lenient' | undefined,
+          astParseMode: opts.astParseMode as 'strict' | 'lenient' | undefined,
         });
       } catch (err) {
         handleError(err);

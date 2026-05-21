@@ -17,6 +17,14 @@ export interface LintOptions {
    * does not contribute to the exit code.
    */
   timeoutMode?: TimeoutMode;
+  /**
+   * AST parse-failure mode (mmnto-ai/totem#1982). `strict` (default)
+   * surfaces ast-grep / Tree-sitter parse errors as a non-zero exit.
+   * `lenient` skips all AST rules for the run with a visible warning —
+   * operator escape hatch for the gap until the per-file degrade in
+   * mmnto-ai/totem#1786 ships. Env: `TOTEM_LINT_AST_PARSE_MODE`.
+   */
+  astParseMode?: TimeoutMode;
 }
 
 // ─── Command ────────────────────────────────────────
@@ -87,6 +95,13 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   const exportPaths = config.exports ? Object.values(config.exports) : undefined;
 
   const timeoutMode: TimeoutMode = options.timeoutMode ?? 'strict';
+  // mmnto-ai/totem#1982. CLI flag > env var > default 'strict'. Pre-resolved
+  // here for symmetry with timeoutMode; runCompiledRules re-resolves
+  // identically for the no-CLI-caller path (test harness, programmatic use).
+  const astParseMode: TimeoutMode =
+    options.astParseMode ??
+    // totem-context: reading Node's process.env (cleaned by the runtime), not parsing a custom .env file; CRLF/quote-stripping rule doesn't apply.
+    (process.env['TOTEM_LINT_AST_PARSE_MODE'] === 'lenient' ? 'lenient' : 'strict');
 
   const startTime = Date.now();
   const { violations, rules, regexTimeouts } = await runCompiledRules({
@@ -101,6 +116,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     configRoot,
     isStaged: !!options.staged,
     regexTimeoutMode: timeoutMode,
+    astParseMode,
   });
 
   // mmnto-ai/totem#1641: strict mode surfaces any regex-evaluation timeout
@@ -118,6 +134,12 @@ export async function lintCommand(options: LintOptions): Promise<void> {
       "Run with '--timeout-mode lenient' to skip timing-out rules, archive the offending rule via 'totem doctor --pr', or increase the timeout budget.",
     );
   }
+
+  // mmnto-ai/totem#1982: in strict mode the original TotemParseError already
+  // propagated from runCompiledRules (see ast-grep-query.ts rethrow path),
+  // carrying the AST_GREP_HINT which names --ast-parse-mode lenient as the
+  // escape route. No parallel strict-mode throw needed at the lint.ts layer
+  // — astParseFailures is only populated in lenient mode, by design.
 
   // Post PR comment if requested (zero-API-keys invariant: only behind --pr-comment flag)
   if (options.prComment == null) return;

@@ -11,6 +11,26 @@ import type { ShieldFormat } from './shield.js';
 
 // ─── Types ──────────────────────────────────────────
 
+/**
+ * File-level AST parse failure outcome (mmnto-ai/totem#1982). Parallel of
+ * {@link RuleTimeoutOutcome} but scoped to the FILE level — when ast-grep's
+ * native parser refuses a language (e.g. "rust is not supported in napi"
+ * on Windows), the failure cascades to every rule on that file. Granularity
+ * is therefore file, not rule.
+ *
+ * The proper per-file graceful-degrade lives in `mmnto-ai/totem#1786`; this
+ * outcome shape exists for the operator-escape `--ast-parse-mode lenient`
+ * gap-bridge.
+ */
+export interface AstParseFailureOutcome {
+  file: string;
+  /** Language the parser was invoked with (e.g. 'rust', 'python'). */
+  language: string;
+  /** First 200 chars of the underlying error message. */
+  message: string;
+  mode: TimeoutMode;
+}
+
 export interface RunCompiledRulesOptions {
   diff: string;
   cwd: string;
@@ -31,6 +51,17 @@ export interface RunCompiledRulesOptions {
    * with a visible warning and excludes timeouts from the exit code.
    */
   regexTimeoutMode?: TimeoutMode;
+  /**
+   * AST parse failure mode (mmnto-ai/totem#1982). `strict` (default)
+   * surfaces a `TotemParseError` from the AST pipeline (e.g. ast-grep
+   * native parser refusing an unsupported language) as a lint error.
+   * `lenient` skips ALL AST rules for the rest of the run with a visible
+   * warning and records the failure in `astParseFailures`. Note the
+   * asymmetry vs. `regexTimeoutMode`: AST lenient is run-wide because
+   * the parse failure escapes the per-file loop in core; per-file
+   * graceful-degrade is `mmnto-ai/totem#1786`'s lane.
+   */
+  astParseMode?: TimeoutMode;
 }
 
 export interface RunCompiledRulesResult {
@@ -46,6 +77,12 @@ export interface RunCompiledRulesResult {
    * warnings only.
    */
   regexTimeouts: RuleTimeoutOutcome[];
+  /**
+   * AST parse failures captured in lenient mode (mmnto-ai/totem#1982).
+   * Always empty in strict mode (parse errors propagate). Always empty
+   * on healthy runs.
+   */
+  astParseFailures: AstParseFailureOutcome[];
 }
 
 // ─── Constants ──────────────────────────────────────
@@ -95,6 +132,7 @@ export async function runCompiledRules(
     tag,
     isStaged,
     regexTimeoutMode,
+    astParseMode,
   } = options;
 
   // Per-invocation rule-engine context (ADR-071 + mmnto/totem#1441): logger
@@ -126,6 +164,7 @@ export async function runCompiledRules(
       rules: [],
       output: '',
       regexTimeouts: [],
+      astParseFailures: [],
     };
   }
 
@@ -287,6 +326,13 @@ export async function runCompiledRules(
   // Run AST rules (async — reads files and runs Tree-sitter/ast-grep queries)
   const astRules = rules.filter((r) => r.engine === 'ast' || r.engine === 'ast-grep');
   let astViolations: Violation[] = [];
+  const astParseFailures: AstParseFailureOutcome[] = [];
+  // mmnto-ai/totem#1982. Resolve effective mode with env override (matches
+  // the operator escape pattern: CLI flag > env var > default 'strict').
+  const effectiveAstParseMode: TimeoutMode =
+    astParseMode ??
+    // totem-context: reading Node's process.env (cleaned by the runtime), not parsing a custom .env file; CRLF/quote-stripping rule doesn't apply.
+    (process.env['TOTEM_LINT_AST_PARSE_MODE'] === 'lenient' ? 'lenient' : 'strict');
   if (astRules.length > 0) {
     log.dim(tag, `Running ${astRules.length} AST rule(s)...`);
     try {
@@ -351,10 +397,39 @@ export async function runCompiledRules(
       }
       const msg = err instanceof Error ? err.message : String(err);
       const isWasmFailure = /not initialized|wasm|web-tree-sitter/i.test(msg);
+      const isParseError = err instanceof TotemError && err.code === 'PARSE_FAILED';
       if (process.env['TOTEM_LITE'] === '1' && isWasmFailure) {
         // In the lite binary, WASM init may fail under Node.js (works in Bun).
         // Degrade gracefully: skip AST rules, warn, continue with regex results.
         log.warn(tag, `AST rules skipped (WASM engine unavailable): ${msg}`);
+      } else if (isParseError && effectiveAstParseMode === 'lenient') {
+        // mmnto-ai/totem#1982: operator escape hatch. AST parse failures
+        // (e.g. ast-grep native parser refusing an unsupported language on
+        // Windows) escape the per-file loop in core. In lenient mode, treat
+        // as a run-wide skip — log a warning, record an outcome, and let
+        // regex results stand. The proper per-file degrade lives in
+        // mmnto-ai/totem#1786; this is the gap-bridge.
+        //
+        // Sanitize parser-error text before logging/persisting: ast-grep
+        // surfaces snippets of parsed content/paths which could contain
+        // terminal control bytes. Strip C0 controls (\x00-\x1F except \t \n)
+        // and DEL (\x7F) so warning output doesn't smuggle escape sequences
+        // through operator terminals or log aggregators.
+        const safeMsg = msg.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+        // matchAll used to satisfy a CodeRabbit security rule that prefers
+        // exhaustive iteration over single-match extraction; we still only
+        // need the first language token for the outcome shape.
+        const languageMatches = [...safeMsg.matchAll(/(\w+) is not supported in napi/gi)];
+        astParseFailures.push({
+          file: '*', // run-wide: catch is outside the per-file loop in core
+          language: languageMatches[0] ? languageMatches[0][1]! : 'unknown',
+          message: safeMsg.slice(0, 200),
+          mode: 'lenient',
+        });
+        log.warn(
+          tag,
+          `AST rules skipped (--ast-parse-mode lenient, ${astParseFailures[0]!.language}): ${safeMsg}`,
+        );
       } else {
         throw err;
       }
@@ -540,5 +615,5 @@ export async function runCompiledRules(
     log.info(tag, `Verdict: ${verdictLabel} - ${rules.length} rules, 0 violations`);
   }
 
-  return { violations, findings, rules, output, regexTimeouts };
+  return { violations, findings, rules, output, regexTimeouts, astParseFailures };
 }
