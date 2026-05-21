@@ -7,8 +7,8 @@
  */
 
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -29,6 +29,24 @@ import { cleanTmpDir } from './test-utils.js';
 
 const FINGERPRINT_A = 'fingerprint-a-1234567890abcdef';
 const FINGERPRINT_B = 'fingerprint-b-fedcba0987654321';
+
+/**
+ * Workspace-scoped temp root per cohort lesson "os.tmpdir() for agent-readable
+ * temp files violates workspace boundary." Tests under this suite create per-it
+ * temp dirs under `<package>/.totem/temp/compile-cache-tests/<unique-prefix>`,
+ * cleaned in afterEach. `.totem/temp/` is already gitignored.
+ *
+ * Anchored to the test file's own location (not `process.cwd()`) so the path
+ * resolves to the package directory regardless of where vitest is invoked from.
+ */
+const TEST_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(TEST_FILE_DIR, '..');
+const TEST_TEMP_ROOT = path.join(PACKAGE_ROOT, '.totem', 'temp', 'compile-cache-tests');
+fs.mkdirSync(TEST_TEMP_ROOT, { recursive: true });
+
+function makeTestTmpDir(prefix: string): string {
+  return fs.mkdtempSync(path.join(TEST_TEMP_ROOT, prefix));
+}
 
 function makeCompiledResult(lessonHash: string): CompileLessonResult {
   return {
@@ -75,6 +93,36 @@ describe('computeLessonSourceHash', () => {
     const hash = computeLessonSourceHash('any content');
     expect(hash).toMatch(/^[a-f0-9]{64}$/);
   });
+
+  it('distinguishes heading-only edits from body-only edits (CR Major on #1983)', () => {
+    // The cache key in compile.ts composes `${lesson.heading}\n${lesson.body}`
+    // and hashes that. A heading-only edit must produce a different sourceHash
+    // (otherwise the cache hits + preserves stale lessonHash output that would
+    // ordinarily rotate to reflect the new heading). This test exercises the
+    // composition shape directly.
+    const body = 'lesson body content';
+    const hashA = computeLessonSourceHash(`Heading A\n${body}`);
+    const hashB = computeLessonSourceHash(`Heading B\n${body}`);
+    expect(hashA).not.toBe(hashB);
+
+    // And conversely, a body-only edit also invalidates.
+    const heading = 'Stable heading';
+    const hashBodyA = computeLessonSourceHash(`${heading}\nbody version A`);
+    const hashBodyB = computeLessonSourceHash(`${heading}\nbody version B`);
+    expect(hashBodyA).not.toBe(hashBodyB);
+  });
+
+  it('normalizes trailing whitespace per the impl contract (GCA HIGH on #1983)', () => {
+    // The trimEnd() normalization absorbs trailing-newline / trailing-whitespace
+    // differences across save behaviors. Inputs that differ ONLY in trailing
+    // whitespace must hash identically — otherwise the cache misses on every
+    // editor-save-style change.
+    const base = 'lesson content';
+    expect(computeLessonSourceHash(base)).toBe(computeLessonSourceHash(base + '\n'));
+    expect(computeLessonSourceHash(base)).toBe(computeLessonSourceHash(base + '\n\n\n'));
+    expect(computeLessonSourceHash(base)).toBe(computeLessonSourceHash(base + '   \t  '));
+    expect(computeLessonSourceHash(base)).toBe(computeLessonSourceHash(base + ' \n \n'));
+  });
 });
 
 // ─── cacheEntryPath ─────────────────────────────────
@@ -100,7 +148,7 @@ describe('cache lookup + write round-trip', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-cache-'));
+    tmpDir = makeTestTmpDir('totem-compile-cache-');
     delete process.env.TOTEM_DISABLE_COMPILE_CACHE;
   });
 
@@ -313,7 +361,7 @@ describe('TOTEM_DISABLE_COMPILE_CACHE env var', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-cache-env-'));
+    tmpDir = makeTestTmpDir('totem-compile-cache-env-');
   });
 
   afterEach(() => {
@@ -354,7 +402,7 @@ describe('migrateFromCompiledRules', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-cache-migrate-'));
+    tmpDir = makeTestTmpDir('totem-compile-cache-migrate-');
     delete process.env.TOTEM_DISABLE_COMPILE_CACHE;
   });
 
@@ -453,7 +501,7 @@ describe('listCacheEntries', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-cache-list-'));
+    tmpDir = makeTestTmpDir('totem-compile-cache-list-');
   });
 
   afterEach(() => {
@@ -498,7 +546,7 @@ describe('writeCacheEntry return value', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-cache-write-'));
+    tmpDir = makeTestTmpDir('totem-compile-cache-write-');
     delete process.env.TOTEM_DISABLE_COMPILE_CACHE;
   });
 

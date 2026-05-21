@@ -1622,15 +1622,25 @@ export async function compileCommand(
         // so caching would be unsafe. Matches the verify-manifest no-op
         // discipline on the same provider gap.
         const cacheFingerprint = computeFingerprintForManifest();
+        const cacheSessionId = readSessionId(totemDir);
         let cacheCliVersion: string | undefined;
         try {
           const { createRequire } = await import('node:module');
           const req = createRequire(import.meta.url);
           const pkg = req('../../package.json') as { version?: string };
           cacheCliVersion = pkg.version;
-          // totem-context: cli_version is a best-effort ledger enrichment; mirror of doctor-claim-discipline's pattern. Resolution failure must not block compile.
+          // totem-context: intentional cleanup — cli_version is a best-effort ledger enrichment; packaging-path resolution failure surfaces diagnostically via log.dim per CR R1 finding, but never blocks the compile path. Mirror of doctor-claim-discipline's pattern.
         } catch (err) {
-          void err;
+          // totem-context: intentional cleanup — cli_version is a best-effort ledger enrichment; packaging-path resolution failure surfaces diagnostically via log.dim per CR R1 finding, but never blocks the compile path.
+          // Surface at diagnostic level — silent swallow would mask packaging
+          // regressions that strip cli_version from every cache-telemetry event.
+          const errMsg =
+            // totem-context: String(err) is the canonical err-normalization idiom (10+ cohort precedents); the input-pattern lesson misfires on catch-block error extraction.
+            err instanceof Error ? err.message : String(err);
+          log.dim(
+            TAG,
+            `Unable to resolve CLI version for compile_cache_decision telemetry: ${errMsg}`,
+          );
         }
         const emitCacheDecisionEvent = (
           sourceHash: string,
@@ -1651,6 +1661,7 @@ export async function compileCommand(
                 justification: '',
                 source: 'lint',
                 activity_name: decision,
+                ...(cacheSessionId !== undefined ? { session_id: cacheSessionId } : {}),
                 ...(cacheCliVersion !== undefined ? { cli_version: cacheCliVersion } : {}),
               },
               (msg) => log.warn(TAG, msg),
@@ -1678,7 +1689,12 @@ export async function compileCommand(
               // recompile intent and must not short-circuit).
               const forceRecompile =
                 options.force === true || upgradeTargets?.has(lesson.hash) === true;
-              const sourceHash = computeLessonSourceHash(lesson.body);
+              // Cache key must cover heading + body (CR Major catch on
+              // `mmnto-ai/totem#1983`). Hashing body alone would let a
+              // heading-only edit falsely hit the cache while the rotation-prone
+              // `lessonHash` shifts to reflect the new heading — stale output
+              // would survive into compiled-rules.json.
+              const sourceHash = computeLessonSourceHash(`${lesson.heading}\n${lesson.body}`);
               if (cacheFingerprint !== undefined) {
                 const lookup = lookupCacheEntry(totemDir, sourceHash, cacheFingerprint, {
                   force: forceRecompile,

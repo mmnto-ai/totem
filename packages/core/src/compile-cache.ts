@@ -98,7 +98,10 @@ export type CacheDecision =
  * identical hashes for identical inputs.
  */
 export function computeLessonSourceHash(lessonSource: string): string {
-  const normalized = lessonSource.replace(/\r\n/g, '\n');
+  // Normalization: collapse CRLF → LF + trim trailing whitespace per the impl
+  // contract. trimEnd() absorbs trailing-newline differences across IDEs /
+  // OSes (a save-with-final-newline vs. without should produce the same hash).
+  const normalized = lessonSource.replace(/\r\n/g, '\n').trimEnd();
   return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
@@ -151,8 +154,9 @@ export function lookupCacheEntry(
     const content = fs.readFileSync(filePath, 'utf-8');
     raw = JSON.parse(content);
     // totem-context: intentional cleanup — a bad cache entry must downgrade to a miss, never propagate; the cache is a side-channel optimization, not a load-bearing data path.
-  } catch {
+  } catch (err) {
     // totem-context: intentional cleanup — a bad cache entry must downgrade to a miss, never propagate; the cache is a side-channel optimization, not a load-bearing data path.
+    void err;
     return { entry: null, decision: 'cache_miss_no_prior_record' };
   }
 
