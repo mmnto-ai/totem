@@ -27,6 +27,12 @@ jobs:
           # _authToken=${NODE_AUTH_TOKEN}, which blocks npm's OIDC
           # trusted-publishing negotiation. See #1180 + #1182 history.
 
+      # npm OIDC trusted publishing landed in npm 11.5.1. Node 22 ships with
+      # npm 10.9.x which throws ENEEDAUTH because it has no OIDC negotiation
+      # code path. Upgrade to the latest npm so `npm publish` auto-detects
+      # GitHub Actions OIDC and exchanges for a short-lived publish token.
+      - run: npm install -g npm@latest
+
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm build
