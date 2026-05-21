@@ -87,7 +87,9 @@ const fetchWithRetry = async (spec) => {
     }
   }
   console.error(`[verify-oidc] Failed to fetch ${spec} after ${MAX_ATTEMPTS} attempts:`, lastErr);
-  throw new Error(`[Totem Error] verify-oidc: registry fetch exhausted retries for ${spec}`);
+  throw new Error(`[Totem Error] verify-oidc: registry fetch exhausted retries for ${spec}`, {
+    cause: lastErr,
+  });
 };
 
 // `npm view --json` returns `_npmUser` as a `<name> <<email>>` string
@@ -182,4 +184,12 @@ const main = async () => {
   );
 };
 
-main();
+// Bare `main()` would leave the hard-throw paths as unhandled rejections.
+// Node 24's default `--unhandled-rejections=throw` makes that exit non-zero
+// today, but a future flag flip or wrapper that downgrades unhandled
+// rejections to warnings would silently let the workflow pass green on a
+// real provenance regression. Make the intent explicit.
+main().catch((err) => {
+  console.error('[verify-oidc] Fatal:', err);
+  process.exit(1);
+});
