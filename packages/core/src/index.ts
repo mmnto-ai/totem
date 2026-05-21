@@ -444,6 +444,19 @@ export {
   readPromptTemplateContentHash,
 } from './compile-worker-fingerprint.js';
 
+// Compile cache (Proposal 281 — Per-Lesson Hash Stability)
+export type { CacheDecision, CacheEntry } from './compile-cache.js';
+export {
+  buildCacheEntry,
+  cacheEntryPath,
+  CacheEntrySchema,
+  computeLessonSourceHash,
+  listCacheEntries,
+  lookupCacheEntry,
+  migrateFromCompiledRules,
+  writeCacheEntry,
+} from './compile-cache.js';
+
 // Global registry (multi-totem workspace discovery)
 export type { RegistryEntry, TotemRegistry } from './registry.js';
 export { readRegistry, updateRegistryEntry } from './registry.js';

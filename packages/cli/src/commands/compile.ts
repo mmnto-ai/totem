@@ -438,7 +438,10 @@ export async function compileCommand(
     readCompileManifest,
     resolveStage4Baseline,
     appendLedgerEvent,
+    buildCacheEntry,
     computeCompileWorkerFingerprint,
+    computeLessonSourceHash,
+    lookupCacheEntry,
     modelStripsTemperature,
     readPromptTemplateContentHash,
     readSessionId,
@@ -451,6 +454,7 @@ export async function compileCommand(
     STAGE4_MANIFEST_EXCLUSIONS,
     verifyAgainstCodebase,
     verifyRuleExamples,
+    writeCacheEntry,
     writeCompileManifest,
   } = await import('@mmnto/totem');
 
@@ -1611,15 +1615,82 @@ export async function compileCommand(
           MAX_CONCURRENCY,
           Math.max(1, Number.isNaN(parsed) ? DEFAULT_CONCURRENCY : parsed),
         );
+
+        // Proposal 281: resolve the compile-worker fingerprint once for the
+        // whole batch. When undefined (non-anthropic providers, Phase 1), the
+        // cache is bypassed — no fingerprint means no invalidation signal,
+        // so caching would be unsafe. Matches the verify-manifest no-op
+        // discipline on the same provider gap.
+        const cacheFingerprint = computeFingerprintForManifest();
+        let cacheCliVersion: string | undefined;
+        try {
+          const { createRequire } = await import('node:module');
+          const req = createRequire(import.meta.url);
+          const pkg = req('../../package.json') as { version?: string };
+          cacheCliVersion = pkg.version;
+          // totem-context: cli_version is a best-effort ledger enrichment; mirror of doctor-claim-discipline's pattern. Resolution failure must not block compile.
+        } catch (err) {
+          void err;
+        }
+        const emitCacheDecisionEvent = (
+          sourceHash: string,
+          decision:
+            | 'cache_hit'
+            | 'cache_miss_source_changed'
+            | 'cache_miss_fingerprint_changed'
+            | 'cache_miss_force'
+            | 'cache_miss_no_prior_record',
+        ): void => {
+          try {
+            appendLedgerEvent(
+              totemDir,
+              {
+                timestamp: new Date().toISOString(),
+                type: 'compile_cache_decision',
+                ruleId: sourceHash,
+                justification: '',
+                source: 'lint',
+                activity_name: decision,
+                ...(cacheCliVersion !== undefined ? { cli_version: cacheCliVersion } : {}),
+              },
+              (msg) => log.warn(TAG, msg),
+            );
+            // totem-context: intentional cleanup — telemetry is fire-and-forget; ledger-append failure must never crash the compile per the A.3.a writer contract.
+          } catch (err) {
+            // totem-context: intentional cleanup — telemetry is fire-and-forget; ledger-append failure must never crash the compile per the A.3.a writer contract.
+            log.warn(TAG, err instanceof Error ? err.message : String(err));
+          }
+        };
+
         for (let i = 0; i < toCompile.length; i += CONCURRENCY) {
           const batch = toCompile.slice(i, i + CONCURRENCY);
           const results = await Promise.all(
-            batch.map((lesson) => {
+            batch.map(async (lesson) => {
               // Per-lesson deps: telemetry prefix only applies to upgrade targets.
               // For upgradeBatch, each target may carry a distinct prefix.
               const lessonDeps = upgradeTargets?.has(lesson.hash)
                 ? { ...coreDeps, telemetryPrefix: upgradeTargets.get(lesson.hash) }
                 : coreDeps;
+
+              // Proposal 281: cache lookup pass. Bypass when fingerprint is
+              // undefined or when the operator forced recompilation via
+              // --force or via --upgrade-batch (upgrade targets are explicit
+              // recompile intent and must not short-circuit).
+              const forceRecompile =
+                options.force === true || upgradeTargets?.has(lesson.hash) === true;
+              const sourceHash = computeLessonSourceHash(lesson.body);
+              if (cacheFingerprint !== undefined) {
+                const lookup = lookupCacheEntry(totemDir, sourceHash, cacheFingerprint, {
+                  force: forceRecompile,
+                });
+                emitCacheDecisionEvent(sourceHash, lookup.decision);
+                if (lookup.entry !== null) {
+                  tracker.tick();
+                  spinner.update(tracker.format());
+                  return { lesson, result: lookup.entry.output };
+                }
+              }
+
               return withRetry(
                 () => compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, lessonDeps),
                 {
@@ -1634,6 +1705,14 @@ export async function compileCommand(
                 .then((result) => {
                   tracker.tick();
                   spinner.update(tracker.format());
+                  // Proposal 281: persist non-transient outcomes. Failed
+                  // results are transient and must not poison the cache;
+                  // compiled / skipped / noop are deterministic given the
+                  // (sourceHash, fingerprint) tuple.
+                  if (cacheFingerprint !== undefined && result.status !== 'failed') {
+                    const entry = buildCacheEntry(sourceHash, cacheFingerprint, result);
+                    writeCacheEntry(totemDir, entry, (msg) => log.warn(TAG, msg));
+                  }
                   return { lesson, result };
                 })
                 .catch((err) => {
