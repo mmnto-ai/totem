@@ -181,25 +181,32 @@ export function lookupCacheEntry(
  * the same `(sourceHash, fingerprint, output)` twice is a no-op-shaped
  * overwrite. Fire-and-forget: I/O failures are surfaced via `onWarn` and
  * never propagate (a failed cache write should not crash a compile).
+ *
+ * Returns `true` when the entry was successfully persisted, `false` on any
+ * I/O failure or when the cache is disabled via env var. Callers that need
+ * to track migration outcomes (e.g., `migrateFromCompiledRules`) inspect
+ * the return; callers that don't care can ignore it.
  */
 export function writeCacheEntry(
   totemDir: string,
   entry: CacheEntry,
   onWarn?: (msg: string) => void,
-): void {
+): boolean {
   if (process.env[DISABLE_ENV_VAR] === '1') {
-    return;
+    return false;
   }
 
   try {
     const filePath = cacheEntryPath(totemDir, entry.sourceHash);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(entry, null, 2) + '\n', 'utf-8');
+    return true;
     // totem-context: intentional cleanup — cache writes are fire-and-forget; a failed write degrades to "no cache entry exists" on next lookup, never blocks compile.
   } catch (err) {
     // totem-context: intentional cleanup — cache writes are fire-and-forget; a failed write degrades to "no cache entry exists" on next lookup, never blocks compile.
     const msg = err instanceof Error ? err.message : String(err);
     onWarn?.(`Compile cache write failed: ${msg}`);
+    return false;
   }
 }
 
@@ -257,8 +264,15 @@ export function migrateFromCompiledRules(
     try {
       const sourceHash = computeLessonSourceHash(input.lessonSource);
       const entry = buildCacheEntry(sourceHash, fingerprint, input.output);
-      writeCacheEntry(totemDir, entry, onWarn);
-      seeded += 1;
+      // writeCacheEntry returns false on I/O failure or when the cache is
+      // disabled. Both count as "skipped" — seeded reflects entries actually
+      // persisted to disk, matching the operator's mental model of the
+      // post-migration cache hit rate.
+      if (writeCacheEntry(totemDir, entry, onWarn)) {
+        seeded += 1;
+      } else {
+        skipped += 1;
+      }
       // totem-context: intentional cleanup — migration is best-effort per-input; one bad lesson source must not abort seeding the rest. Failed inputs accumulate in `skipped` count and surface via onWarn for operator visibility.
     } catch (err) {
       // totem-context: intentional cleanup — migration is best-effort per-input; one bad lesson source must not abort seeding the rest. Failed inputs accumulate in `skipped` count and surface via onWarn for operator visibility.

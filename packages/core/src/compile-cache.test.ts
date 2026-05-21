@@ -17,6 +17,7 @@ import {
   type CacheEntry,
   cacheEntryPath,
   computeLessonSourceHash,
+  listCacheEntries,
   lookupCacheEntry,
   migrateFromCompiledRules,
   writeCacheEntry,
@@ -427,5 +428,101 @@ describe('migrateFromCompiledRules', () => {
     const result = migrateFromCompiledRules(tmpDir, FINGERPRINT_A, inputs);
     expect(result.seeded).toBe(0);
     expect(result.skipped).toBe(1);
+  });
+
+  it('seeded count reflects entries actually persisted (write failures land in skipped)', () => {
+    // Defensive guarantee: even if `writeCacheEntry` returns false (write
+    // failure or env-disable), the seeded counter must not increment. This
+    // tests the writeCacheEntry boolean-return contract from the migration
+    // bookkeeping path.
+    process.env.TOTEM_DISABLE_COMPILE_CACHE = '1';
+    const inputs = [
+      { lessonHash: 'a', lessonSource: 'a source', output: makeCompiledResult('a') },
+      { lessonHash: 'b', lessonSource: 'b source', output: makeCompiledResult('b') },
+      { lessonHash: 'c', lessonSource: 'c source', output: makeCompiledResult('c') },
+    ];
+    const result = migrateFromCompiledRules(tmpDir, FINGERPRINT_A, inputs);
+    expect(result.seeded).toBe(0);
+    expect(result.skipped).toBe(3);
+  });
+});
+
+// ─── listCacheEntries ───────────────────────────────
+
+describe('listCacheEntries', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-cache-list-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('returns empty array when the cache directory does not exist', () => {
+    expect(listCacheEntries(tmpDir)).toEqual([]);
+  });
+
+  it('lists all written cache entry filenames', () => {
+    const sources = ['lesson alpha', 'lesson beta', 'lesson gamma'];
+    for (const src of sources) {
+      const sourceHash = computeLessonSourceHash(src);
+      writeCacheEntry(tmpDir, buildCacheEntry(sourceHash, FINGERPRINT_A, makeCompiledResult(src)));
+    }
+
+    const entries = listCacheEntries(tmpDir);
+    expect(entries.length).toBe(3);
+    for (const entry of entries) {
+      expect(entry).toMatch(/^[a-f0-9]{16}\.json$/);
+    }
+  });
+
+  it('ignores non-json files in the cache directory', () => {
+    const sourceHash = computeLessonSourceHash('only json counts');
+    writeCacheEntry(tmpDir, buildCacheEntry(sourceHash, FINGERPRINT_A, makeCompiledResult('only')));
+
+    // Drop a stray file beside the cache entries
+    const cacheDir = path.dirname(cacheEntryPath(tmpDir, sourceHash));
+    fs.writeFileSync(path.join(cacheDir, 'README.txt'), 'stray');
+
+    const entries = listCacheEntries(tmpDir);
+    expect(entries.length).toBe(1);
+    expect(entries[0]).toMatch(/\.json$/);
+  });
+});
+
+// ─── writeCacheEntry return value ───────────────────
+
+describe('writeCacheEntry return value', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-cache-write-'));
+    delete process.env.TOTEM_DISABLE_COMPILE_CACHE;
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+    delete process.env.TOTEM_DISABLE_COMPILE_CACHE;
+  });
+
+  it('returns true on successful write', () => {
+    const sourceHash = computeLessonSourceHash('write-ok source');
+    const result = writeCacheEntry(
+      tmpDir,
+      buildCacheEntry(sourceHash, FINGERPRINT_A, makeCompiledResult('write-ok')),
+    );
+    expect(result).toBe(true);
+  });
+
+  it('returns false when the env-var disables the cache', () => {
+    process.env.TOTEM_DISABLE_COMPILE_CACHE = '1';
+    const sourceHash = computeLessonSourceHash('write-disabled source');
+    const result = writeCacheEntry(
+      tmpDir,
+      buildCacheEntry(sourceHash, FINGERPRINT_A, makeCompiledResult('write-disabled')),
+    );
+    expect(result).toBe(false);
   });
 });
