@@ -33,8 +33,8 @@
  * Idempotency: skips packages already published at the same version on npm.
  */
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { appendFileSync, existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -121,7 +121,11 @@ for (const dir of PKG_ORDER) {
     console.error(packResult.stderr);
     process.exit(1);
   }
-  const tarballName = packResult.stdout.trim().split('\n').pop();
+  // pnpm pack writes the tarball name to the last line of stdout; in some
+  // configurations it may be an absolute path rather than a relative filename.
+  // basename() normalizes both cases to the bare filename so join() stays sane.
+  const tarballLine = packResult.stdout.trim().split('\n').pop();
+  const tarballName = tarballLine ? basename(tarballLine) : '';
   const tarballPath = join(pkgDir, tarballName);
   if (!tarballName || !existsSync(tarballPath)) {
     console.error(`[publish-oidc] Couldn't locate tarball after pnpm pack for ${pkg.name}`);
