@@ -36,7 +36,7 @@ Mark items as will-fix. No API calls — just acknowledge. The user will make co
 Auto-reply on the PR acknowledging the deferral:
 
 - **CodeRabbit items:** Reply inline to each thread with "Tracked in #NNN" or "Deferred — not blocking for this PR."
-- **GCA items:** DO NOT reply inline. Batch ALL GCA responses into ONE issue comment: `@gemini-code-assist` followed by a numbered list addressing each finding. Use `gh api repos/{owner}/{repo}/issues/$ARGUMENTS/comments --input -` with JSON payload.
+- **GCA items:** DO NOT reply inline. Batch ALL GCA responses into ONE issue comment: `@gemini-code-assist` followed by a numbered list addressing each finding. Use `gh pr comment $ARGUMENTS --body-file -` and pipe the comment body via stdin.
 - **SARIF items:** No reply needed (our own tool).
 
 ### `nit <numbers | category>`
