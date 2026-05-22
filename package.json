@@ -19,15 +19,15 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@changesets/cli": "^2.29.8",
+    "@changesets/cli": "^2.31.0",
     "@google/genai": "^1.44.0",
-    "eslint": "^10.0.2",
+    "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
     "markdown-magic": "^4.8.0",
-    "prettier": "^3.8.1",
-    "turbo": "^2.4.0",
+    "prettier": "^3.8.3",
+    "turbo": "^2.9.14",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.59.4"
   }
 }
