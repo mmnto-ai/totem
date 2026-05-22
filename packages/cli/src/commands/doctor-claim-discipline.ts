@@ -500,7 +500,10 @@ function resolveDiffChangedFiles(
     const output = safeExec(
       'git',
       ['diff', '--name-only', '--diff-filter=ACMR', `${base}...HEAD`],
-      { cwd: repoRoot },
+      // 10MB matches the cohort convention for git operations
+      // (`packages/core/src/sys/git.ts`); prevents `ENOBUFS` on
+      // repos with many changed files between the base and HEAD.
+      { cwd: repoRoot, maxBuffer: 10 * 1024 * 1024 },
     );
     return output
       .split('\n')
