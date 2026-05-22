@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm view *)",
+      "Bash(gdlint *)",
+      "Bash(gh search *)",
+      "mcp__totem-dev__search_knowledge",
+      "mcp__totem-strategy__search_knowledge"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
