@@ -283,6 +283,28 @@ describe('buildPrePushHook', () => {
     expect(hook).toContain('$TOTEM_CMD doctor --claim-discipline --strict --scope-to-diff');
   });
 
+  // totem-context: hook-content assertion (mmnto-ai/totem#2002 — bootstrap defensive degrade)
+  it('defensively degrades --scope-to-diff when CLI predates 1.47.0 (cohort bootstrap safety)', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    // The hook MUST detect --scope-to-diff support via --help and fall back to
+    // standing-scan when the resolved CLI doesn't carry the flag. Required so a
+    // cohort agent whose global @mmnto/cli predates 1.47.0 doesn't fail commander
+    // option-parse on every push during the publish-and-update window.
+    // totem-context: substring match on hook script content (not secret masking) — toContain is correct here
+    expect(hook).toContain('$TOTEM_CMD doctor --claim-discipline --help');
+    // totem-context: substring match on hook script content (not secret masking) — toContain is correct here
+    expect(hook).toContain("grep -q -- '--scope-to-diff'");
+    // Fallback branch must invoke the standing scan (no flag) so the gate still
+    // fires on older CLIs — the protection envelope is preserved, just at the
+    // pre-#2002 false-positive cost. The trailing `;` (vs ` --scope-to-diff;`)
+    // distinguishes this fallback invocation from the flagged-path invocation.
+    // totem-context: substring match on hook script content (not secret masking) — toContain is correct here
+    expect(hook).toContain('$TOTEM_CMD doctor --claim-discipline --strict;');
+    // User-visible hint nudges contributors to upgrade for the full defense.
+    // totem-context: substring match on hook script content (not secret masking) — toContain is correct here
+    expect(hook).toContain('compat mode (CLI <1.47.0)');
+  });
+
   // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
   it('gates claim-discipline on at-least-one in-scope public surface existing', () => {
     const hook = buildPrePushHook(FALLBACK);
