@@ -51,4 +51,4 @@ interface AstParseFailureOutcome {
 }
 ```
 
-Parser-error text is sanitized (C0 controls + DEL stripped; TAB/LF/CR preserved) before logging or persisting — defensive against terminal control bytes that ast-grep might surface in snippets of parsed content.
+Parser-error text is sanitized via the canonical `sanitizeForTerminal()` helper from `@mmnto/totem` core (`packages/core/src/terminal-sanitize.ts`) before logging or persisting. Strips CSI/ANSI escapes, C0 controls (including bare CR per CR [mmnto-ai/totem#1739](https://github.com/mmnto-ai/totem/issues/1739) R3 — cursor-rewind spoofing), and C1 controls (`\x80-\x9F`). Preserves TAB and LF. Defends against terminal injection from ast-grep's parsed-content snippets.

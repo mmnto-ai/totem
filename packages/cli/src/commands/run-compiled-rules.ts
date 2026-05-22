@@ -116,6 +116,7 @@ export async function runCompiledRules(
     RegexEvaluator,
     resolveGitRoot,
     safeExec,
+    sanitizeForTerminal,
     saveRuleMetrics,
     TotemError,
   } = await import('@mmnto/totem');
@@ -410,12 +411,12 @@ export async function runCompiledRules(
         // regex results stand. The proper per-file degrade lives in
         // mmnto-ai/totem#1786; this is the gap-bridge.
         //
-        // Sanitize parser-error text before logging/persisting: ast-grep
-        // surfaces snippets of parsed content/paths which could contain
-        // terminal control bytes. Strip C0 controls (\x00-\x1F except \t \n)
-        // and DEL (\x7F) so warning output doesn't smuggle escape sequences
-        // through operator terminals or log aggregators.
-        const safeMsg = msg.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+        // Sanitize parser-error text via the canonical sanitizeForTerminal
+        // (packages/core/src/terminal-sanitize.ts). ast-grep surfaces
+        // snippets of parsed content/paths which may contain terminal
+        // control bytes (CSI sequences, bare CR for cursor-rewind spoofing,
+        // C0/C1 controls). Defends per CR mmnto-ai/totem#1739 R3.
+        const safeMsg = sanitizeForTerminal(msg);
         // matchAll used to satisfy a CodeRabbit security rule that prefers
         // exhaustive iteration over single-match extraction; we still only
         // need the first language token for the outcome shape.
