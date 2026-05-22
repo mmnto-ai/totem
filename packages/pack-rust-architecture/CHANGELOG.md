@@ -1,5 +1,7 @@
 # Changelog
 
+## 1.47.1
+
 ## 1.47.0
 
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
