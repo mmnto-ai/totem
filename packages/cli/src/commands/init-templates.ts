@@ -454,9 +454,9 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
    | \`totem-status\`                                  | _(no Claude variant)_               | \`status-gemini\`   |
    | \`totem-playground\`                              | _(orphan stream — no native agent)_ | _(orphan stream)_ |
 
-   Override hook: if the consuming repo carries \`.totem/orchestration/config.json\` with a \`host_agents: string[]\` field, prefer that list over the hardcoded map. Reserved for repos that legitimately host an agent not in the default map.
+   Override hook: if the consuming repo carries \`.totem/orchestration/config.json\` with a \`host_agents: string[]\` field, that list **replaces** the basename map's answer for this repo (precedence: \`TOTEM_SELF_AGENT\` env > config.json \`host_agents\` > hardcoded basename map). The returned list of agent-ids is used by consumers (e.g., \`totem mail\`) to filter cross-repo handoffs — messages addressed to any agent-id in the list belong to this repo's session. Reserved for repos that legitimately host an agent not in the default map — e.g., a custom-named cohort variant or an orphan-stream repo declaring itself as an agent host.
 
-   **Visiting case.** If your row's Claude-agent-id column is \`_(no Claude variant)_\` or \`_(orphan stream — no native agent)_\`, you are visiting a repo that doesn't natively host your agent. Resolve the journal path to \`<repoRoot>/.totem/orchestration/<your-home-agent-id>/journal/\`, where \`<your-home-agent-id>\` is the agent-id from the row matching the repo you were last working in (e.g., \`strategy-claude\` visiting \`totem-status\` from \`totem-strategy\` writes to \`totem-status/.totem/orchestration/strategy-claude/journal/\`). The journal records the visiting agent's session state — the host repo doesn't need a native Claude agent to be a valid write target.
+   **Visiting case.** If your row's Claude-agent-id column is \`_(no Claude variant)_\` or \`_(orphan stream — no native agent)_\`, you are visiting a repo that doesn't natively host your agent. Resolve the journal path to \`<repoRoot>/.totem/orchestration/<your-home-agent-id>/journal/\`, where \`<your-home-agent-id>\` is your own agent-id (e.g., a \`strategy-claude\` session always writes as \`strategy-claude\` regardless of which repo it's visiting; concretely, \`strategy-claude\` visiting \`totem-status\` writes to \`totem-status/.totem/orchestration/strategy-claude/journal/\`). The journal records the visiting agent's session state — the host repo doesn't need a native Claude agent to be a valid write target.
 
    b. **Resolve the journal directory** via \`resolveOrchestrationPaths(repoRoot, agentId).journal\` from \`@mmnto/totem\`. Returns the absolute path to \`<repoRoot>/.totem/orchestration/<agent-id>/journal/\` when the tree exists. If \`source === 'none'\` (the tree does not exist yet in this repo) the resolver returns \`null\` for every path field — in that case, construct the path manually as \`<repoRoot>/.totem/orchestration/<agent-id>/journal/\` and create the directory first via \`mkdir -p\`; the path is gitignored and safe to create.
 
@@ -519,7 +519,7 @@ Mark items as will-fix. No API calls — just acknowledge. The user will make co
 Auto-reply on the PR acknowledging the deferral:
 
 - **CodeRabbit items:** Reply inline to each thread with "Tracked in #NNN" or "Deferred — not blocking for this PR."
-- **GCA items:** DO NOT reply inline. Batch ALL GCA responses into ONE issue comment: \`@gemini-code-assist\` followed by a numbered list addressing each finding. Use \`gh api repos/{owner}/{repo}/issues/$ARGUMENTS/comments --input -\` with JSON payload.
+- **GCA items:** DO NOT reply inline. Batch ALL GCA responses into ONE issue comment: \`@gemini-code-assist\` followed by a numbered list addressing each finding. Use \`gh pr comment $ARGUMENTS --body-file -\` and pipe the comment body via stdin.
 - **SARIF items:** No reply needed (our own tool).
 
 ### \`nit <numbers | category>\`
