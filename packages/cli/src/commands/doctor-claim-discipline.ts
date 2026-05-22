@@ -472,7 +472,11 @@ export interface ClaimDisciplineCliOptions extends ClaimDisciplineOptions {
  */
 function resolveDiffChangedFiles(
   repoRoot: string,
-  safeExec: (command: string, args: string[], options: { cwd: string }) => string,
+  safeExec: (
+    command: string,
+    args: string[],
+    options: { cwd: string; maxBuffer?: number },
+  ) => string,
 ): readonly string[] | undefined {
   // Try `merge-base HEAD @{upstream}` first. The three try/catch blocks below
   // are the canonical sensor pattern: record-via-undefined-return + fall back to
