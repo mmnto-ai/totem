@@ -3,6 +3,9 @@
   "version": "1.47.1",
   "description": "Persistent memory and context layer for AI agents",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

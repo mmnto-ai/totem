@@ -3,6 +3,9 @@
   "version": "1.47.1",
   "description": "CLI for Totem — AI persistent memory and context layer",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "bin": {
     "totem": "./dist/index.js"
   },
