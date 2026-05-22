@@ -474,24 +474,28 @@ function resolveDiffChangedFiles(
   repoRoot: string,
   safeExec: (command: string, args: string[], options: { cwd: string }) => string,
 ): readonly string[] | undefined {
-  // Try `merge-base HEAD @{upstream}` first.
+  // Try `merge-base HEAD @{upstream}` first. The three try/catch blocks below
+  // are the canonical sensor pattern: record-via-undefined-return + fall back to
+  // the next strategy (and ultimately to standing-gate full scan with an
+  // operator-visible warning surfaced by the CLI layer). Loud rethrow here
+  // would abort the pre-push gate on a benign "no upstream" or "no parent
+  // commit" condition.
   let base: string | undefined;
-  // totem-context: intentional cleanup — `merge-base @{upstream}` failure is the expected fall-through signal when no upstream is configured (fresh branch). Loud rethrow here would abort diff-resolution; the canonical sensor pattern is "record via undefined-return + try next strategy". The CLI layer surfaces total failure as a warning.
   try {
     base = safeExec('git', ['merge-base', 'HEAD', '@{upstream}'], { cwd: repoRoot }).trim();
+    // totem-context: intentional cleanup — `merge-base @{upstream}` failure is the expected fall-through signal when no upstream is configured (fresh branch); next strategy below.
   } catch {
     // No upstream / detached / etc — fall through to HEAD~1.
   }
   if (!base) {
-    // totem-context: intentional cleanup — `rev-parse HEAD~1` failure means no parent commit (single-commit branch); returning undefined signals "diff resolution failed entirely" so the CLI falls back to standing-gate full scan with an operator-visible warning.
     try {
       base = safeExec('git', ['rev-parse', 'HEAD~1'], { cwd: repoRoot }).trim();
+      // totem-context: intentional cleanup — `rev-parse HEAD~1` failure means no parent commit (single-commit branch); returning undefined here signals "diff resolution failed entirely" so the CLI falls back to standing-gate full scan with an operator-visible warning.
     } catch {
       return undefined;
     }
   }
   if (!base) return undefined;
-  // totem-context: intentional cleanup — `git diff` failure (resolved base became stale, repository corruption, etc.) returns undefined so the CLI falls back to standing-gate full scan with an operator-visible warning rather than aborting the pre-push gate entirely.
   try {
     const output = safeExec(
       'git',
@@ -502,6 +506,7 @@ function resolveDiffChangedFiles(
       .split('\n')
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+    // totem-context: intentional cleanup — `git diff` failure (resolved base became stale, repo corruption, etc.) returns undefined so the CLI falls back to standing-gate full scan with an operator-visible warning, rather than aborting the pre-push gate entirely.
   } catch {
     return undefined;
   }

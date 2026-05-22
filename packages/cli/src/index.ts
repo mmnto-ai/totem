@@ -1037,9 +1037,9 @@ program
         if (opts.strict && results.some((r) => r.status === 'fail')) {
           process.exitCode = 1;
         }
+        // totem-context: handleError() returns `never` (calls process.exit), so this catch terminates the process rather than silently swallowing — matches the CLI-entrypoint pattern used by every other commander action in this file.
       } catch (err) {
-        handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
-        throw err;
+        handleError(err);
       }
     },
   );
