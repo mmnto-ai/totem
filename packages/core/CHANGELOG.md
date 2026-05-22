@@ -140,6 +140,8 @@ _Cohort-link bump (no direct package changes). See `.changeset/config.json` for 
 
 ## 1.43.6
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.43.5
 
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
