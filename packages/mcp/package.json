@@ -3,6 +3,9 @@
   "version": "1.47.0",
   "description": "MCP server for Totem — AI persistent memory and context layer",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

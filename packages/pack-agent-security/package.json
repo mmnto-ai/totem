@@ -28,6 +28,7 @@
     "test": "vitest run"
   },
   "engines": {
+    "node": ">=22",
     "@mmnto/totem": "^1.26.0"
   },
   "devDependencies": {
