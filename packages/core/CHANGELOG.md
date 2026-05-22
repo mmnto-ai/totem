@@ -6,6 +6,8 @@ _Cohort-link bump for the Node 24 engine constraint enforcement shipping with th
 
 ## 1.47.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.47.0
 
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition; the `--scope-to-diff` feature driving this release ships in `@mmnto/cli`._
