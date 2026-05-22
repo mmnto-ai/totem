@@ -268,6 +268,127 @@ describe('doctorClaimDisciplineCommand', () => {
     expect(result.findings.some((f) => f.file === 'AGENTS.md')).toBe(true);
   });
 
+  // ─── Diff-scope narrowing (mmnto-ai/totem#2002) ──────
+
+  it('changedFiles narrows scan to intersection with WWND surfaces', async () => {
+    // README has a finding, AGENTS does NOT — narrowing to README should preserve the finding.
+    fs.writeFileSync(path.join(tmpDir, 'README.md'), 'We guarantees everything.\n');
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), 'Clean prose here.\n');
+    fs.writeFileSync(
+      path.join(tmpDir, '.totem', 'compiled-rules.json'),
+      buildRulesFile([
+        {
+          lessonHash: 'aaa1111111111111',
+          lessonHeading: 'WWND Rule 1: Absolute-promise detection on public surfaces',
+          pattern: ABSOLUTE_PROMISE_PATTERN,
+        },
+      ]),
+    );
+    const result = await doctorClaimDisciplineCommand({
+      repoRootForTest: tmpDir,
+      changedFiles: ['README.md'],
+    });
+    expect(result.findings.length).toBeGreaterThanOrEqual(1);
+    expect(result.findings.every((f) => f.file === 'README.md')).toBe(true);
+  });
+
+  it('changedFiles NOT containing the warning surface suppresses the finding', async () => {
+    // README has a standing-gate finding, but the diff doesn't touch README →
+    // narrowing eliminates the finding (the fix's core acceptance).
+    fs.writeFileSync(path.join(tmpDir, 'README.md'), 'We guarantees everything.\n');
+    fs.writeFileSync(
+      path.join(tmpDir, '.totem', 'compiled-rules.json'),
+      buildRulesFile([
+        {
+          lessonHash: 'aaa1111111111111',
+          lessonHeading: 'WWND Rule 1: Absolute-promise detection on public surfaces',
+          pattern: ABSOLUTE_PROMISE_PATTERN,
+        },
+      ]),
+    );
+    const result = await doctorClaimDisciplineCommand({
+      repoRootForTest: tmpDir,
+      changedFiles: ['packages/cli/src/foo.ts'],
+    });
+    expect(result.findings).toHaveLength(0);
+    expect(result.valid).toBe(true);
+  });
+
+  it('changedFiles empty array yields no findings (intersection empty)', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'README.md'), 'We guarantees everything.\n');
+    fs.writeFileSync(
+      path.join(tmpDir, '.totem', 'compiled-rules.json'),
+      buildRulesFile([
+        {
+          lessonHash: 'aaa1111111111111',
+          lessonHeading: 'WWND Rule 1: Absolute-promise detection on public surfaces',
+          pattern: ABSOLUTE_PROMISE_PATTERN,
+        },
+      ]),
+    );
+    const result = await doctorClaimDisciplineCommand({
+      repoRootForTest: tmpDir,
+      changedFiles: [],
+    });
+    expect(result.findings).toHaveLength(0);
+    expect(result.valid).toBe(true);
+  });
+
+  it('changedFiles undefined preserves standing-gate full scan', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'README.md'), 'We guarantees everything.\n');
+    fs.writeFileSync(
+      path.join(tmpDir, '.totem', 'compiled-rules.json'),
+      buildRulesFile([
+        {
+          lessonHash: 'aaa1111111111111',
+          lessonHeading: 'WWND Rule 1: Absolute-promise detection on public surfaces',
+          pattern: ABSOLUTE_PROMISE_PATTERN,
+        },
+      ]),
+    );
+    // No `changedFiles` field — should preserve existing behavior (find).
+    const result = await doctorClaimDisciplineCommand({ repoRootForTest: tmpDir });
+    expect(result.findings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('regression anchor for mmnto-ai/totem#2002: docs/wiki standing warning does not fire on unrelated CLI diff', async () => {
+    // Emulates #2002's exact scenario: a pre-existing WWND warning at
+    // `docs/wiki/governing-ai-agents.md` should NOT trigger when the operator's
+    // push only touches `packages/cli/src/foo.ts`. Before the fix, the
+    // standing-gate scan walked every in-scope surface unconditionally → N=8
+    // false-positive bypasses in <24hr (the issue's empirical anchor).
+    fs.mkdirSync(path.join(tmpDir, 'docs', 'wiki'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'wiki', 'governing-ai-agents.md'),
+      // Line 58-ish: a standing absolute-promise that has been there for ages.
+      '# Governance\n\n' +
+        Array.from({ length: 55 }, (_v, i) => `Line ${i + 1}\n`).join('') +
+        'The protocol guarantees agent behavior.\n',
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, '.totem', 'compiled-rules.json'),
+      buildRulesFile([
+        {
+          lessonHash: 'aaa1111111111111',
+          lessonHeading: 'WWND Rule 1: Absolute-promise detection on public surfaces',
+          pattern: ABSOLUTE_PROMISE_PATTERN,
+        },
+      ]),
+    );
+
+    // Full scan (no diff narrowing) — pre-fix behavior: standing warning fires.
+    const fullScan = await doctorClaimDisciplineCommand({ repoRootForTest: tmpDir });
+    expect(fullScan.findings.some((f) => f.file === 'docs/wiki/governing-ai-agents.md')).toBe(true);
+
+    // Diff-scoped scan with unrelated CLI file — post-fix behavior: no finding.
+    const scopedScan = await doctorClaimDisciplineCommand({
+      repoRootForTest: tmpDir,
+      changedFiles: ['packages/cli/src/foo.ts'],
+    });
+    expect(scopedScan.findings).toHaveLength(0);
+    expect(scopedScan.valid).toBe(true);
+  });
+
   it('recursively walks docs/wiki/ for .md files', async () => {
     fs.mkdirSync(path.join(tmpDir, 'docs', 'wiki', 'nested'), { recursive: true });
     fs.writeFileSync(

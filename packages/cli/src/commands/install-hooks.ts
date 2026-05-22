@@ -368,7 +368,13 @@ if [ -n "$TOTEM_CMD" ]; then
   # least one in-scope surface exists. Bypass with mandatory justification:
   #   TOTEM_GATE_BYPASS_JUSTIFICATION="<reason>" git push
   if [ -f ".totem/compiled-rules.json" ] && { [ -f "README.md" ] || [ -f "AGENTS.md" ] || [ -f "design-tenets.md" ] || [ -d "docs/wiki" ]; }; then
-    if ! $TOTEM_CMD doctor --claim-discipline --strict; then
+    # --scope-to-diff (mmnto-ai/totem#2002): narrow the WWND scan to files
+    # touched in the current push diff. Eliminates the standing-gate
+    # false-positive class where pre-existing warnings on in-scope surfaces
+    # (e.g. docs/wiki/governing-ai-agents.md) fire on diffs that don't touch
+    # those files. The flag falls back to a full scan if diff resolution
+    # fails (no upstream + no HEAD~1 — fresh/detached state).
+    if ! $TOTEM_CMD doctor --claim-discipline --strict --scope-to-diff; then
       exit 1
     fi
   fi

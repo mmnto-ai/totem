@@ -273,6 +273,16 @@ describe('buildPrePushHook', () => {
     expect(hook).toContain('$TOTEM_CMD doctor --claim-discipline --strict');
   });
 
+  // totem-context: hook-content assertion (mmnto-ai/totem#2002 — diff-scope narrowing)
+  it('contains --scope-to-diff on the claim-discipline invocation (mmnto-ai/totem#2002)', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    // The flag must appear on the same `doctor --claim-discipline` line so the
+    // hook narrows the WWND scan to diff-touched files. Standing-gate full scan
+    // produced N=8 false-positive bypasses in <24hr on a pre-existing surface
+    // warning at docs/wiki/governing-ai-agents.md before this change landed.
+    expect(hook).toContain('$TOTEM_CMD doctor --claim-discipline --strict --scope-to-diff');
+  });
+
   // totem-context: hook-content assertion (not an orchestrator test, no LLM calls — default vitest timeout is sufficient)
   it('gates claim-discipline on at-least-one in-scope public surface existing', () => {
     const hook = buildPrePushHook(FALLBACK);

@@ -54,6 +54,20 @@ export interface ClaimDisciplineOptions {
   filesForTest?: string[];
   /** Override repo root for tests (production calls resolveGitRoot). */
   repoRootForTest?: string;
+  /**
+   * When provided, narrow the in-scope WWND surface set to the intersection of
+   * (literal+glob walk) AND `changedFiles`. Paths must be posix-style (forward
+   * slashes), repo-root-relative — same shape as `git diff --name-only` output.
+   *
+   * `undefined` preserves the standing-gate behavior (full surface scan).
+   * Empty array means "no diff-touched WWND surfaces" → no findings.
+   *
+   * Anchor: mmnto-ai/totem#2002 — pre-existing WWND warnings at standing-gate
+   * surfaces (e.g. `docs/wiki/governing-ai-agents.md:58`) fire on every push
+   * regardless of diff scope. Diff-scope narrowing prevents that scope bug
+   * without papering over it via an allowlist.
+   */
+  changedFiles?: readonly string[];
 }
 
 // ─── Discovery helpers ──────────────────────────────────
@@ -313,8 +327,23 @@ export async function doctorClaimDisciplineCommand(
     }
   }
 
+  // ─── Diff-scope narrowing (mmnto-ai/totem#2002) ──────
+  // When `changedFiles` is provided, narrow the in-scope surface set to the
+  // intersection of `(WWND in-scope files)` AND `changedFiles`. Preserves the
+  // standing-gate behavior when `undefined`. The CLI layer resolves the diff
+  // list via `git diff --name-only --diff-filter=ACMR` and passes posix-style
+  // paths here; the literal+glob walk above also emits posix-style paths
+  // (`path.posix.join`), so set-membership comparison is path-shape-safe.
+  if (options.changedFiles !== undefined) {
+    const diffSet = new Set(options.changedFiles);
+    files = files.filter((f) => diffSet.has(f));
+  }
+
   if (files.length === 0) {
     // No in-scope surfaces present → nothing to check. Not a failure.
+    // Same response applies when diff-scope narrowing eliminates every file
+    // (operator's diff doesn't touch any WWND surface), which is the
+    // common-case acceptance path for the #2002 fix.
     return { valid: true, findings, warnings, bypassed: false };
   }
 
@@ -403,6 +432,76 @@ export interface ClaimDisciplineCliOptions extends ClaimDisciplineOptions {
    * integration testing.
    */
   strict?: boolean;
+  /**
+   * Diff-scope narrowing flag (mmnto-ai/totem#2002). When set, the CLI resolves
+   * the operator's diff-touched files via `git diff --name-only --diff-filter=ACMR
+   * <merge-base>...HEAD` and forwards the list as `changedFiles` to the
+   * programmatic command. Merge-base resolution prefers `git merge-base HEAD
+   * @{upstream}`; falls back to `HEAD~1` for unconfigured branches. On total
+   * resolution failure (detached HEAD with no parent + no upstream), emits a
+   * warning and proceeds with the standing-gate full scan.
+   *
+   * The pre-push hook passes `--scope-to-diff` so the gate only fires on files
+   * the operator's push actually touches — eliminating the #2002 false-positive
+   * class where unrelated diffs trigger pre-existing standing-gate warnings.
+   */
+  scopeToDiff?: boolean;
+  /**
+   * Test-only injection point for the diff-resolved file list. When set, bypasses
+   * the actual `git diff --name-only` invocation and forwards the array directly
+   * as `changedFiles`. Production callers leave this `undefined` and rely on
+   * `scopeToDiff` to trigger the real git resolution.
+   */
+  changedFilesForTest?: readonly string[];
+}
+
+/**
+ * Resolve diff-touched files relative to `repoRoot` via `git diff --name-only
+ * --diff-filter=ACMR <merge-base>...HEAD`. Returns `undefined` on resolution
+ * failure (no upstream + no `HEAD~1` + detached state); callers should then
+ * fall back to the standing-gate full scan and surface a warning.
+ *
+ * Ref-resolution order:
+ *   1. `git merge-base HEAD @{upstream}` — preferred when the branch has an
+ *      upstream (the normal pre-push state).
+ *   2. `HEAD~1` — fallback when no upstream is configured (fresh branch).
+ *   3. Give up — return `undefined`.
+ *
+ * Diff filter `ACMR` includes Added/Copied/Modified/Renamed; excludes Deleted
+ * (a deleted file can't trigger a WWND match) and Type-changed/Unmerged.
+ */
+function resolveDiffChangedFiles(
+  repoRoot: string,
+  safeExec: (command: string, args: string[], options: { cwd: string }) => string,
+): readonly string[] | undefined {
+  // Try `merge-base HEAD @{upstream}` first.
+  let base: string | undefined;
+  try {
+    base = safeExec('git', ['merge-base', 'HEAD', '@{upstream}'], { cwd: repoRoot }).trim();
+  } catch {
+    // No upstream / detached / etc — fall through to HEAD~1.
+  }
+  if (!base) {
+    try {
+      base = safeExec('git', ['rev-parse', 'HEAD~1'], { cwd: repoRoot }).trim();
+    } catch {
+      return undefined;
+    }
+  }
+  if (!base) return undefined;
+  try {
+    const output = safeExec(
+      'git',
+      ['diff', '--name-only', '--diff-filter=ACMR', `${base}...HEAD`],
+      { cwd: repoRoot },
+    );
+    return output
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -414,7 +513,7 @@ export interface ClaimDisciplineCliOptions extends ClaimDisciplineOptions {
 export async function doctorClaimDisciplineCliCommand(
   options: ClaimDisciplineCliOptions = {},
 ): Promise<void> {
-  const { TotemError } = await import('@mmnto/totem');
+  const { TotemError, resolveGitRoot, safeExec } = await import('@mmnto/totem');
   const {
     bold,
     errorColor,
@@ -423,12 +522,36 @@ export async function doctorClaimDisciplineCliCommand(
     warn: warnColor,
   } = await import('../ui.js');
 
-  // Strip `strict` (CLI-only) before passing the rest through to the programmatic
-  // command, which doesn't accept it. The remaining fields (envForTest / filesForTest /
-  // repoRootForTest) are inherited from ClaimDisciplineOptions and form the integration
-  // test surface that GCA's R1 finding asked us to wire.
-  const { strict, ...programmaticOptions } = options;
-  const result = await doctorClaimDisciplineCommand(programmaticOptions);
+  // Strip CLI-only fields (`strict`, `scopeToDiff`, `changedFilesForTest`) before
+  // passing the rest through to the programmatic command, which doesn't accept them.
+  // Remaining fields (envForTest / filesForTest / repoRootForTest / changedFiles) are
+  // inherited from ClaimDisciplineOptions and form the integration test surface.
+  const { strict, scopeToDiff, changedFilesForTest, ...programmaticOptions } = options;
+
+  // Resolve diff scope when `--scope-to-diff` is set (or test-injection short-circuit).
+  // mmnto-ai/totem#2002 — narrowing the standing-gate scan to diff-touched files
+  // prevents pre-existing surface warnings from firing on unrelated pushes.
+  let resolvedChangedFiles: readonly string[] | undefined = programmaticOptions.changedFiles;
+  if (resolvedChangedFiles === undefined && changedFilesForTest !== undefined) {
+    resolvedChangedFiles = changedFilesForTest;
+  } else if (resolvedChangedFiles === undefined && scopeToDiff === true) {
+    const repoRoot =
+      programmaticOptions.repoRootForTest ?? resolveGitRoot(process.cwd()) ?? process.cwd();
+    const resolved = resolveDiffChangedFiles(repoRoot, safeExec);
+    if (resolved === undefined) {
+      log.warn(
+        TAG,
+        '--scope-to-diff requested but no diff range could be resolved (no upstream, no HEAD~1). Falling back to standing-gate full scan.',
+      );
+    } else {
+      resolvedChangedFiles = resolved;
+    }
+  }
+
+  const result = await doctorClaimDisciplineCommand({
+    ...programmaticOptions,
+    ...(resolvedChangedFiles !== undefined ? { changedFiles: resolvedChangedFiles } : {}),
+  });
 
   for (const w of result.warnings) {
     log.warn(TAG, w);

@@ -1011,23 +1011,37 @@ program
     '--claim-discipline',
     'Run only the WWND claim-discipline checks against public surfaces (Proposal 279)',
   )
-  .action(async (opts: { pr?: boolean; strict?: boolean; claimDiscipline?: boolean }) => {
-    try {
-      if (opts.claimDiscipline) {
-        const { doctorClaimDisciplineCliCommand } =
-          await import('./commands/doctor-claim-discipline.js');
-        await doctorClaimDisciplineCliCommand({ strict: opts.strict });
-        return;
+  .option(
+    '--scope-to-diff',
+    'Narrow --claim-discipline scan to files in the current push diff (mmnto-ai/totem#2002 — prevents pre-existing standing-gate warnings from firing on unrelated diffs)',
+  )
+  .action(
+    async (opts: {
+      pr?: boolean;
+      strict?: boolean;
+      claimDiscipline?: boolean;
+      scopeToDiff?: boolean;
+    }) => {
+      try {
+        if (opts.claimDiscipline) {
+          const { doctorClaimDisciplineCliCommand } =
+            await import('./commands/doctor-claim-discipline.js');
+          await doctorClaimDisciplineCliCommand({
+            strict: opts.strict,
+            scopeToDiff: opts.scopeToDiff,
+          });
+          return;
+        }
+        const { doctorCommand } = await import('./commands/doctor.js');
+        const results = await doctorCommand(opts);
+        if (opts.strict && results.some((r) => r.status === 'fail')) {
+          process.exitCode = 1;
+        }
+      } catch (err) {
+        handleError(err);
       }
-      const { doctorCommand } = await import('./commands/doctor.js');
-      const results = await doctorCommand(opts);
-      if (opts.strict && results.some((r) => r.status === 'fail')) {
-        process.exitCode = 1;
-      }
-    } catch (err) {
-      handleError(err);
-    }
-  });
+    },
+  );
 
 program
   .command('status')
