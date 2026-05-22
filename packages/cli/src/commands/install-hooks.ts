@@ -368,8 +368,26 @@ if [ -n "$TOTEM_CMD" ]; then
   # least one in-scope surface exists. Bypass with mandatory justification:
   #   TOTEM_GATE_BYPASS_JUSTIFICATION="<reason>" git push
   if [ -f ".totem/compiled-rules.json" ] && { [ -f "README.md" ] || [ -f "AGENTS.md" ] || [ -f "design-tenets.md" ] || [ -d "docs/wiki" ]; }; then
-    if ! $TOTEM_CMD doctor --claim-discipline --strict; then
-      exit 1
+    # --scope-to-diff (mmnto-ai/totem#2002): narrow the WWND scan to files
+    # touched in the current push diff. Eliminates the standing-gate
+    # false-positive class where pre-existing warnings on in-scope surfaces
+    # (e.g. docs/wiki/governing-ai-agents.md) fire on diffs that don't touch
+    # those files. The flag falls back to a full scan if diff resolution
+    # fails (no upstream + no HEAD~1 — fresh/detached state).
+    #
+    # Defensive degrade: the hook MUST work when \$TOTEM_CMD resolves to an
+    # older CLI that doesn't yet ship --scope-to-diff (PATH-resolved global
+    # @mmnto/cli predates 1.47.0; cohort bootstrap window). Probe \`--help\`
+    # for flag support; fall back to the full standing scan if absent.
+    if $TOTEM_CMD doctor --claim-discipline --help 2>/dev/null | grep -q -- '--scope-to-diff'; then
+      if ! $TOTEM_CMD doctor --claim-discipline --strict --scope-to-diff; then
+        exit 1
+      fi
+    else
+      echo "[totem] Hook running in compat mode (CLI <1.47.0); 'npm i -g @mmnto/cli@latest' enables --scope-to-diff defense." >&2
+      if ! $TOTEM_CMD doctor --claim-discipline --strict; then
+        exit 1
+      fi
     fi
   fi
 ${shieldBlock}
