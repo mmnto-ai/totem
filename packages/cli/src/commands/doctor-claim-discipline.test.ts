@@ -358,12 +358,13 @@ describe('doctorClaimDisciplineCommand', () => {
     // standing-gate scan walked every in-scope surface unconditionally → N=8
     // false-positive bypasses in <24hr (the issue's empirical anchor).
     fs.mkdirSync(path.join(tmpDir, 'docs', 'wiki'), { recursive: true });
+    // Build content with a leading 55 filler lines so the standing absolute-promise
+    // lands at roughly the same line position as #2002's empirical anchor
+    // (`docs/wiki/governing-ai-agents.md:58`).
+    const fillerLines = Array.from({ length: 55 }, (_v, i) => `Line ${i + 1}`).join('\n');
     fs.writeFileSync(
       path.join(tmpDir, 'docs', 'wiki', 'governing-ai-agents.md'),
-      // Line 58-ish: a standing absolute-promise that has been there for ages.
-      '# Governance\n\n' +
-        Array.from({ length: 55 }, (_v, i) => `Line ${i + 1}\n`).join('') +
-        'The protocol guarantees agent behavior.\n',
+      `# Governance\n\n${fillerLines}\nThe protocol guarantees agent behavior.\n`,
     );
     fs.writeFileSync(
       path.join(tmpDir, '.totem', 'compiled-rules.json'),
