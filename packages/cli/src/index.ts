@@ -1038,7 +1038,8 @@ program
           process.exitCode = 1;
         }
       } catch (err) {
-        handleError(err);
+        handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+        throw err;
       }
     },
   );

@@ -476,12 +476,14 @@ function resolveDiffChangedFiles(
 ): readonly string[] | undefined {
   // Try `merge-base HEAD @{upstream}` first.
   let base: string | undefined;
+  // totem-context: intentional cleanup — `merge-base @{upstream}` failure is the expected fall-through signal when no upstream is configured (fresh branch). Loud rethrow here would abort diff-resolution; the canonical sensor pattern is "record via undefined-return + try next strategy". The CLI layer surfaces total failure as a warning.
   try {
     base = safeExec('git', ['merge-base', 'HEAD', '@{upstream}'], { cwd: repoRoot }).trim();
   } catch {
     // No upstream / detached / etc — fall through to HEAD~1.
   }
   if (!base) {
+    // totem-context: intentional cleanup — `rev-parse HEAD~1` failure means no parent commit (single-commit branch); returning undefined signals "diff resolution failed entirely" so the CLI falls back to standing-gate full scan with an operator-visible warning.
     try {
       base = safeExec('git', ['rev-parse', 'HEAD~1'], { cwd: repoRoot }).trim();
     } catch {
@@ -489,6 +491,7 @@ function resolveDiffChangedFiles(
     }
   }
   if (!base) return undefined;
+  // totem-context: intentional cleanup — `git diff` failure (resolved base became stale, repository corruption, etc.) returns undefined so the CLI falls back to standing-gate full scan with an operator-visible warning rather than aborting the pre-push gate entirely.
   try {
     const output = safeExec(
       'git',
