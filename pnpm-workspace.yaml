@@ -1,2 +1,18 @@
 packages:
   - 'packages/*'
+
+engineStrict: true
+
+strictDepBuilds: true
+allowBuilds:
+  '@ast-grep/lang-rust': true
+  'es5-ext': true
+  'esbuild': true
+  'protobufjs': true
+  'tree-sitter-javascript': true
+  'tree-sitter-typescript': true
+
+minimumReleaseAge: 1d
+# Cohort packages publish-then-install in the same CI window by design.
+minimumReleaseAgeExclude:
+  - '@mmnto/*'
