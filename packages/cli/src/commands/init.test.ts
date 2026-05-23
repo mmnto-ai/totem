@@ -1761,6 +1761,161 @@ LC-specific: run \`pnpm docs:inject\` before journal write.
   });
 });
 
+describe('scaffoldClaudeSkill --force-skill-refresh (W3.5, mmnto-ai/totem#2008)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-skill-force-test-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  // Invariant 1: default behavior is unchanged. Without force, marker-less
+  // files still hit the `preserved` outcome.
+  it('without force: marker-less file still preserved (default behavior unchanged)', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const userContent = '# My custom signoff\n\nDo it my way.\n';
+    fs.writeFileSync(filePath, userContent, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT);
+    expect(result.action).toBe('preserved');
+    expect(result.forceSuppressed).toBeUndefined();
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(userContent);
+  });
+
+  // Invariant 2: force overrides preservation for marker-less files. The
+  // result becomes `refreshed` with `forceSuppressed: true`, file content
+  // is byte-identical to canonical.
+  it('with force: marker-less file overwritten + forceSuppressed: true', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const userContent = '# My custom signoff\n\nDo it my way.\n';
+    fs.writeFileSync(filePath, userContent, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT, { force: true });
+    expect(result.action).toBe('refreshed');
+    expect(result.forceSuppressed).toBe(true);
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(SIGNOFF_SKILL_CONTENT);
+  });
+
+  // Invariant 3: force on a fresh repo (no existing file) is a no-op for
+  // force — outcome stays `created`, no `forceSuppressed` flag.
+  it('with force: fresh repo (no file) yields `created` with no forceSuppressed', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT, { force: true });
+    expect(result.action).toBe('created');
+    expect(result.forceSuppressed).toBeUndefined();
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(SIGNOFF_SKILL_CONTENT);
+  });
+
+  // Invariant 4: cross-marker preservation contract holds under force. For
+  // marker-bearing files, force does NOT additionally overwrite below-marker
+  // user customization — only the inside-marker section is refreshed.
+  it('with force: marker-bearing file preserves below-marker user content', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+
+    const stale = `---
+name: signoff
+description: stale
+---
+
+${SKILL_MARKER_START}
+OLD content.
+${SKILL_MARKER_END}
+
+## User addenda
+
+Force should NOT erase this line.
+`;
+    fs.writeFileSync(filePath, stale, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT, { force: true });
+    expect(result.action).toBe('refreshed');
+    // forceSuppressed is NOT set — the marker-bearing path was taken, not
+    // the no-marker suppression path.
+    expect(result.forceSuppressed).toBeUndefined();
+
+    const after = fs.readFileSync(filePath, 'utf-8');
+    expect(after).toContain('Force should NOT erase this line.');
+    const canonicalEnd = SIGNOFF_SKILL_CONTENT.indexOf(SKILL_MARKER_END);
+    expect(
+      after.startsWith(SIGNOFF_SKILL_CONTENT.slice(0, canonicalEnd + SKILL_MARKER_END.length)),
+    ).toBe(true);
+  });
+
+  // Invariant 5: force on marker-bearing files matches the default refresh
+  // path — no spurious forceSuppressed flag. (Combines with invariant 8: the
+  // caller's warn-fire condition must read `forceSuppressed === true`.)
+  it('with force: marker-bearing file refreshes without forceSuppressed flag', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+
+    // Marker-bearing file that's already canonical. Should match `unchanged`,
+    // not `refreshed` — but either way, no forceSuppressed flag.
+    fs.writeFileSync(filePath, SIGNOFF_SKILL_CONTENT, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT, { force: true });
+    expect(result.action).toBe('unchanged');
+    expect(result.forceSuppressed).toBeUndefined();
+  });
+
+  // Invariant 8: forceSuppressed is set ONLY on the no-marker suppression
+  // path. Both invariants 4 and 5 above already prove the negative case for
+  // marker-bearing files; this is an explicit assertion to lock the
+  // signal-to-noise discipline at the unit level.
+  it('forceSuppressed is set ONLY on the no-marker suppression path', () => {
+    const dir = path.join(tmpDir, '.claude', 'skills');
+    fs.mkdirSync(dir, { recursive: true });
+
+    // Case A: marker-less file + force → forceSuppressed: true
+    const markerLessPath = path.join(dir, 'a', 'SKILL.md');
+    fs.mkdirSync(path.dirname(markerLessPath), { recursive: true });
+    fs.writeFileSync(markerLessPath, 'no markers here\n', 'utf-8');
+    const a = scaffoldClaudeSkill(markerLessPath, SIGNOFF_SKILL_CONTENT, { force: true });
+    expect(a.forceSuppressed).toBe(true);
+
+    // Case B: marker-bearing file (stale inside-marker) + force → no flag
+    const markerBearingPath = path.join(dir, 'b', 'SKILL.md');
+    fs.mkdirSync(path.dirname(markerBearingPath), { recursive: true });
+    fs.writeFileSync(
+      markerBearingPath,
+      `${SKILL_MARKER_START}\nstale\n${SKILL_MARKER_END}\nuser addenda\n`,
+      'utf-8',
+    );
+    const b = scaffoldClaudeSkill(markerBearingPath, SIGNOFF_SKILL_CONTENT, { force: true });
+    expect(b.forceSuppressed).toBeUndefined();
+
+    // Case C: fresh repo + force → no flag (no suppression happened)
+    const freshPath = path.join(dir, 'c', 'SKILL.md');
+    const c = scaffoldClaudeSkill(freshPath, SIGNOFF_SKILL_CONTENT, { force: true });
+    expect(c.forceSuppressed).toBeUndefined();
+
+    // Case D: marker-less file + NO force → preserved, no flag (default path)
+    const markerLessPath2 = path.join(dir, 'd', 'SKILL.md');
+    fs.mkdirSync(path.dirname(markerLessPath2), { recursive: true });
+    fs.writeFileSync(markerLessPath2, 'no markers here either\n', 'utf-8');
+    const d = scaffoldClaudeSkill(markerLessPath2, SIGNOFF_SKILL_CONTENT);
+    expect(d.action).toBe('preserved');
+    expect(d.forceSuppressed).toBeUndefined();
+  });
+
+  // Invariant 2 (text alignment): the preserve-path error hint advertises
+  // the `--force-skill-refresh` flag as the explicit override path.
+  it('preserve-path error hint advertises --force-skill-refresh', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, '# Custom\n', 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT);
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('--force-skill-refresh');
+  });
+});
+
 describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890)', () => {
   // The canonical skill content embedded in init-templates.ts MUST match the
   // SKILL.md file checked into .claude/skills/<name>/SKILL.md verbatim. If

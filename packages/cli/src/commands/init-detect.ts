@@ -36,6 +36,10 @@ export interface HookInstallerResult {
   file: string;
   action: 'created' | 'exists' | 'skipped' | 'merged';
   err?: string;
+  /** Overrides the default action text in the post-init summary. Used by
+   *  force-mode skill refreshes (`--force-skill-refresh`, mmnto-ai/totem#2008)
+   *  to surface destructive-by-consent semantics in the summary line. */
+  summaryActionOverride?: string;
 }
 
 export interface AiToolInfo {
@@ -43,7 +47,10 @@ export interface AiToolInfo {
   mcpPath: string | null;
   reflexFile: string | null;
   serverEntry: Record<string, unknown> | null;
-  hookInstaller?: (cwd: string) => Promise<HookInstallerResult[]>;
+  hookInstaller?: (
+    cwd: string,
+    opts?: { forceSkillRefresh?: boolean },
+  ) => Promise<HookInstallerResult[]>;
 }
 
 export type EmbeddingTier = 'openai' | 'ollama' | 'gemini' | 'none';

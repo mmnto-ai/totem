@@ -335,7 +335,10 @@ export function scaffoldClaudeSessionStart(filePath: string): ScaffoldOutcome {
   );
 }
 
-async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
+async function installClaudeHooks(
+  cwd: string,
+  opts?: { forceSkillRefresh?: boolean },
+): Promise<HookInstallerResult[]> {
   // Bash gate architecture removed (Proposal 207). Write-time enforcement
   // re-introduced via PreWriteShield hook (mmnto-ai/totem#1846): blocks
   // bare cross-repo refs in substrate-participating paths before disk write.
@@ -395,7 +398,23 @@ async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
   //    preserved → 'skipped' (user content protected).
   for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
     const skillPath = path.join(cwd, '.claude', 'skills', skill.name, 'SKILL.md');
-    const skillResult = scaffoldClaudeSkill(skillPath, skill.content);
+    const skillRelative = `.claude/skills/${skill.name}/SKILL.md`;
+    const skillResult = scaffoldClaudeSkill(skillPath, skill.content, {
+      force: opts?.forceSkillRefresh === true,
+    });
+
+    // Per W3.5 (mmnto-ai/totem#2008): the per-file warn fires ONLY on the
+    // no-marker suppression path. Marker-bearing refreshes (which ride the
+    // normal `refreshed`/`unchanged` path) emit no warning — keeps the
+    // signal-to-noise discipline tight (locked by invariant 8 in the spec).
+    if (skillResult.forceSuppressed === true) {
+      const { log } = await import('../ui.js');
+      log.warn(
+        'Totem',
+        `Force-overwriting ${skillRelative}: no canonical markers found, user content overwritten`,
+      );
+    }
+
     const mappedAction: HookInstallerResult['action'] =
       skillResult.action === 'created'
         ? 'created'
@@ -405,8 +424,14 @@ async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
             ? 'exists'
             : 'skipped';
     results.push({
-      file: `.claude/skills/${skill.name}/SKILL.md`,
+      file: skillRelative,
       action: mappedAction,
+      ...(skillResult.forceSuppressed === true
+        ? {
+            summaryActionOverride:
+              'Force-overwritten: no canonical markers found, user content overwritten',
+          }
+        : {}),
       ...(skillResult.err ? { err: skillResult.err } : {}),
     });
   }
@@ -434,7 +459,15 @@ async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
 export function scaffoldClaudeSkill(
   filePath: string,
   canonicalContent: string,
-): { action: 'created' | 'refreshed' | 'unchanged' | 'preserved'; err?: string } {
+  options?: { force?: boolean },
+): {
+  action: 'created' | 'refreshed' | 'unchanged' | 'preserved';
+  /** True only when the no-marker guard was suppressed by `options.force`.
+   *  Lets callers emit the destructive-by-consent warning + summary line
+   *  surface (W3.5, mmnto-ai/totem#2008). */
+  forceSuppressed?: boolean;
+  err?: string;
+} {
   try {
     if (!fs.existsSync(filePath)) {
       const dir = path.dirname(filePath);
@@ -449,13 +482,19 @@ export function scaffoldClaudeSkill(
     const existingEnd = existing.indexOf(SKILL_MARKER_END);
     const existingStart = existing.indexOf(SKILL_MARKER_START);
 
-    // Preserve absolutely if either marker is missing or out of order — this
-    // is either a user-authored skill (no markers) or a malformed totem
-    // scaffold. Don't auto-rewrite; surface a migration hint instead.
+    // No-marker guard: file exists without canonical markers — either a user-
+    // authored skill or a malformed totem scaffold. Default behavior is
+    // preserve (return a migration hint via `err`). When `options.force === true`,
+    // the guard is suppressed: overwrite with canonical content and set
+    // `forceSuppressed` so the caller can surface the destructive event.
     if (existingStart === -1 || existingEnd === -1 || existingStart > existingEnd) {
+      if (options?.force === true) {
+        fs.writeFileSync(filePath, canonicalContent, 'utf-8');
+        return { action: 'refreshed', forceSuppressed: true };
+      }
       return {
         action: 'preserved',
-        err: `Skill file exists without canonical markers — preserving. To pick up the canonical refresh, move custom content below \`${SKILL_MARKER_END}\` (see mmnto-ai/totem#1890 migration checklist).`,
+        err: `Skill file exists without canonical markers — preserving. To pick up the canonical refresh, move custom content below \`${SKILL_MARKER_END}\` (see mmnto-ai/totem#1890 migration checklist). Or pass \`--force-skill-refresh\` to overwrite (user content will be lost).`,
       };
     }
 
@@ -729,6 +768,11 @@ export async function initCommand(options?: {
   pilot?: boolean;
   strict?: boolean;
   global?: boolean;
+  /** Force-overwrite distributed skill files lacking canonical markers
+   *  (W3.5, mmnto-ai/totem#2008). Default behavior preserves user-authored
+   *  or pre-marker scaffold files; force-mode suppresses ONLY the no-marker
+   *  guard. Marker-bearing files refresh via the normal path regardless. */
+  forceSkillRefresh?: boolean;
   /** Override home directory for testing. */
   _homeDir?: string;
 }): Promise<void> {
@@ -1203,16 +1247,22 @@ export default {
         // --- Hook installation for selected tools ---
         for (const tool of selectedTools) {
           if (!tool.hookInstaller) continue;
-          const results = await tool.hookInstaller(cwd);
+          const results = await tool.hookInstaller(cwd, {
+            forceSkillRefresh: options?.forceSkillRefresh === true,
+          });
           for (const result of results) {
             if (result.err) {
               log.error('Totem Error', `Hook scaffolding failed for ${result.file}: ${result.err}`); // totem-ignore — internal hook installer error
             } else if (result.action === 'created') {
-              summary.push({ file: result.file, action: `Scaffolded ${tool.name} hook` });
+              summary.push({
+                file: result.file,
+                action: result.summaryActionOverride ?? `Scaffolded ${tool.name} hook`,
+              });
             } else if (result.action === 'merged') {
               summary.push({
                 file: result.file,
-                action: `Merged ${tool.name} hook into existing config`,
+                action:
+                  result.summaryActionOverride ?? `Merged ${tool.name} hook into existing config`,
               });
             }
           }
