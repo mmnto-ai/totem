@@ -91,14 +91,25 @@ program
   .option('--pilot', 'Enable pilot mode — hooks warn instead of block during initial adoption')
   .option('--strict', 'Use strict enforcement tier (spec-required + review gate for agents)')
   .option('--global', 'Create a personal profile in ~/.totem/ for use across all projects')
+  .option(
+    '--force-skill-refresh',
+    'Force-overwrite skill files lacking canonical markers (may destroy user content; review the diff after)',
+  )
   .action(
-    async (options: { bare?: boolean; pilot?: boolean; strict?: boolean; global?: boolean }) => {
+    async (options: {
+      bare?: boolean;
+      pilot?: boolean;
+      strict?: boolean;
+      global?: boolean;
+      forceSkillRefresh?: boolean;
+    }) => {
       try {
         await initCommand({
           bare: options.bare,
           pilot: options.pilot,
           strict: options.strict,
           global: options.global,
+          forceSkillRefresh: options.forceSkillRefresh,
         });
       } catch (err) {
         handleError(err);
