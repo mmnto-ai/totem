@@ -1,5 +1,7 @@
 # @mmnto/pack-agent-security
 
+## 1.49.0
+
 ## 1.48.0
 
 _Cohort-link bump for the Node 24 engine constraint enforcement shipping with this release. The `engines.node: >=24` declaration aligns @mmnto/pack-agent-security's declared compatibility with the cohort's tested CI floor. See `@mmnto/cli` CHANGELOG for the full release rationale._
