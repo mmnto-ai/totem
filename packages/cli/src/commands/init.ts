@@ -429,7 +429,7 @@ async function installClaudeHooks(
       ...(skillResult.forceSuppressed === true
         ? {
             summaryActionOverride:
-              'Force-refreshed: no canonical markers found, user content overwritten',
+              'Force-overwritten: no canonical markers found, user content overwritten',
           }
         : {}),
       ...(skillResult.err ? { err: skillResult.err } : {}),
