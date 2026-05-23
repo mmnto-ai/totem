@@ -27,7 +27,7 @@ pnpm 11 dropped reading the `pnpm.*` field from `package.json` entirely; the can
 
 ## Workflow surface unchanged
 
-All 7 workflows (`ci`, `ci-integration`, `compile-manifest`, `lint`, `release`, `release-binary`, `totem-doctor`) remain on `pnpm/action-setup@v5` with no `version:` input — pnpm version is inferred from `packageManager`. The `pnpm/action-setup@v6` line has open inference bugs (`pnpm/action-setup#225`, `#227`) that would have forced an explicit `version: 11.2.2` pin; staying on `@v5` keeps the inference path clean and `packageManager` as the single source of truth.
+All 7 workflows (`ci`, `ci-integration`, `compile-manifest`, `lint`, `release`, `release-binary`, `totem-doctor`) remain on `pnpm/action-setup@v5` with no `version:` input — the pnpm release is inferred from `packageManager`. The `pnpm/action-setup@v6` line has open inference bugs (`pnpm/action-setup#225`, `#227`) that would have forced an explicit `version: 11.2.2` pin; staying on `@v5` keeps the inference path clean and `packageManager` as the single source of truth.
 
 ## Cross-stream coordination
 
