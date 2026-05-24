@@ -1,5 +1,9 @@
 # @mmnto/totem
 
+## 1.49.2
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.49.1
 
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
