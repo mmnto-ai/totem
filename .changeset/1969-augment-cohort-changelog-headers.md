@@ -23,7 +23,7 @@ Per strategy-claude's 2026-05-23T2114Z altitude call on `#1969` (with strategy-a
 
 ## Canonical note text
 
-```
+```text
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 ```
 
