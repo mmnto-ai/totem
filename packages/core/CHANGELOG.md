@@ -1,5 +1,9 @@
 # @mmnto/totem
 
+## 1.49.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.49.0
 
 _Cohort-link bump (no direct package changes). See `@mmnto/cli` CHANGELOG for the `--force-skill-refresh` feature driving this release._
