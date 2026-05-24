@@ -58,7 +58,11 @@ _Cohort-link bump (no direct package changes). See `.changeset/config.json` for 
 
 ## 1.43.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.42.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.41.0
 
@@ -195,6 +199,8 @@ Coordinated cohort bump — no direct changes to this pack.
 
 ## 1.37.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.36.0
 
 Coordinated cohort bump — no direct changes to this pack. See `@mmnto/cli`'s
@@ -202,9 +208,15 @@ CHANGELOG.md for the `totem hook` namespace entry.
 
 ## 1.35.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.34.3
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.34.2
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.34.1
 
@@ -218,17 +230,31 @@ CHANGELOG.md for the `totem init` Ollama floor probe entry.
 
 ## 1.33.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.32.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.31.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.30.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.30.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.29.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.28.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.28.0
 
@@ -260,7 +286,11 @@ CHANGELOG.md for the `totem init` Ollama floor probe entry.
 
 ## 1.27.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.26.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.26.0
 
@@ -293,6 +323,8 @@ CHANGELOG.md for the `totem init` Ollama floor probe entry.
   No code change. Constraint-only tightening.
 
 ## 1.25.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.24.0
 
@@ -347,21 +379,39 @@ CHANGELOG.md for the `totem init` Ollama floor probe entry.
 
 ## 1.22.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.21.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.20.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.19.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.18.3
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.18.2
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.18.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.18.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.17.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.17.0
 
@@ -378,6 +428,8 @@ CHANGELOG.md for the `totem init` Ollama floor probe entry.
   New core surface: `RetrospectRoundSchema`, `RetrospectClassificationSchema`, `RetrospectFindingSchema`, `RetrospectReportSchema` plus pure helpers `groupFindingsByRound`, `classifyFinding`, `buildStopConditions`, `computeDedupRate`, `signatureOfBody`, `toRoundPosition`, `toCrossPrBucket`. `toSeverityBucket` is now exported from `@mmnto/totem` so the bot-tax cluster (`#1715` + `#1714` + `#1713`) shares one severity vocabulary. `GitHubCliPrAdapter` gains a `fetchReviews(prNumber)` method that reads `gh api repos/.../pulls/N/reviews --paginate` for `commit_id` + `submitted_at` (the existing `fetchPr` JSON shape doesn't include `commit_id`).
 
 ## 1.16.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.16.0
 
@@ -401,13 +453,23 @@ CHANGELOG.md for the `totem init` Ollama floor probe entry.
 
 ## 1.15.9
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.15.8
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.15.7
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.15.6
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.15.5
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.15.4
 
@@ -524,6 +586,8 @@ CHANGELOG.md for the `totem init` Ollama floor probe entry.
 
 ## 1.14.17
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.14.16
 
 ### Patch Changes
@@ -582,6 +646,12 @@ CHANGELOG.md for the `totem init` Ollama floor probe entry.
 
 ## 1.14.13
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.14.12
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.14.11
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._

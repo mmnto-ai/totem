@@ -12,10 +12,11 @@
     "format:check": "prettier --check .",
     "prepare": "node tools/install-hooks.js",
     "changeset": "changeset",
-    "version": "changeset version",
+    "version": "changeset version && node tools/augment-cohort-changelog-headers.mjs",
     "release": "pnpm build && node tools/publish-oidc.mjs",
     "docs:inject": "node tools/docs-inject.cjs",
-    "test:docs": "node tools/docs-transforms.test.cjs"
+    "test:docs": "node tools/docs-transforms.test.cjs",
+    "test:augment-headers": "node tools/augment-cohort-changelog-headers.test.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

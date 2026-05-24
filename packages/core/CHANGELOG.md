@@ -443,6 +443,8 @@ Coordinated cohort bump — no direct changes in this package; consumes the `@mm
 
 ## 1.37.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.36.0
 
 ### Minor Changes
@@ -488,9 +490,15 @@ Coordinated cohort bump — no direct changes in this package; consumes the `@mm
 
 ## 1.35.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.34.3
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.34.2
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.34.1
 
@@ -647,6 +655,8 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 1.28.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.28.0
 
 ### Minor Changes
@@ -691,6 +701,8 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 1.26.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.26.0
 
 ### Minor Changes
@@ -712,6 +724,8 @@ entry that closes `mmnto-ai/totem#1851`).
   Closes #1803.
 
 ## 1.25.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.24.0
 
@@ -864,6 +878,8 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 1.20.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.19.0
 
 ### Minor Changes
@@ -904,6 +920,8 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 1.18.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.18.0
 
 ### Minor Changes
@@ -933,6 +951,8 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 1.17.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.17.0
 
 ### Minor Changes
@@ -948,6 +968,8 @@ entry that closes `mmnto-ai/totem#1851`).
   New core surface: `RetrospectRoundSchema`, `RetrospectClassificationSchema`, `RetrospectFindingSchema`, `RetrospectReportSchema` plus pure helpers `groupFindingsByRound`, `classifyFinding`, `buildStopConditions`, `computeDedupRate`, `signatureOfBody`, `toRoundPosition`, `toCrossPrBucket`. `toSeverityBucket` is now exported from `@mmnto/totem` so the bot-tax cluster (`#1715` + `#1714` + `#1713`) shares one severity vocabulary. `GitHubCliPrAdapter` gains a `fetchReviews(prNumber)` method that reads `gh api repos/.../pulls/N/reviews --paginate` for `commit_id` + `submitted_at` (the existing `fetchPr` JSON shape doesn't include `commit_id`).
 
 ## 1.16.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.16.0
 
@@ -1159,6 +1181,8 @@ entry that closes `mmnto-ai/totem#1851`).
   Detailed patch-level changes: CHANGELOG.md entries 1.14.1 through 1.14.17.
 
 ## 1.14.17
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.14.16
 
@@ -1487,6 +1511,8 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 1.14.2
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.14.1
 
 ### Patch Changes
@@ -1586,7 +1612,11 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 1.10.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.10.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.9.0
 
@@ -1609,6 +1639,8 @@ entry that closes `mmnto-ai/totem#1851`).
 - 1bb150d: Add Pipeline 3 example-based compilation prompt for Bad/Good code snippet lessons
 
 ## 1.8.3
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.8.2
 
@@ -1647,6 +1679,8 @@ entry that closes `mmnto-ai/totem#1851`).
   - `totem compile` now shows elapsed time and ETA with throughput-based estimation. Rate-limited LLM calls (429) are automatically retried with jittered exponential backoff.
 
 ## 1.7.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.7.0
 
@@ -2061,7 +2095,11 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 1.3.3
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.3.2
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 1.3.1
 
@@ -2143,6 +2181,8 @@ entry that closes `mmnto-ai/totem#1851`).
   Every error now includes a `recoveryHint` telling the user exactly how to fix it. New error classes: `TotemOrchestratorError`, `TotemGitError`. New error code: `GIT_FAILED`. Includes rule fix exempting error class imports from the static import lint rule.
 
 ## 0.43.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 0.42.0
 
@@ -2285,7 +2325,11 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 0.34.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 0.33.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 0.33.0
 
@@ -2362,7 +2406,11 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 0.26.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 0.26.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 0.25.0
 
@@ -2472,6 +2520,8 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 0.16.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 0.16.0
 
 ### Minor Changes
@@ -2492,7 +2542,11 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 0.13.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 0.12.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 0.11.0
 
@@ -2520,7 +2574,11 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 0.9.1
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 0.9.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 0.8.0
 
@@ -2554,11 +2612,19 @@ entry that closes `mmnto-ai/totem#1851`).
 
 ## 0.6.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 0.5.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 0.4.0
 
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 0.3.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
 
 ## 0.2.2
 
