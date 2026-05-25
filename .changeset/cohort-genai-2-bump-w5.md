@@ -8,14 +8,14 @@ Lifts the workspace pin on `@google/genai` from `^1.44.0` to `^2.6.0`, narrows t
 
 ## What ships
 
-| File                                   | Change                                                          |
-| -------------------------------------- | --------------------------------------------------------------- |
-| `package.json` (root devDep)           | `@google/genai`: `^1.44.0` -> `^2.6.0`                          |
-| `packages/cli/package.json` (devDep)   | `@google/genai`: `^1.44.0` -> `^2.6.0`                          |
-| `packages/cli/package.json` (peerDep)  | `@google/genai`: `>=1.0.0` -> `>=2.0.0` (optional, unchanged)   |
-| `packages/core/package.json` (peerDep) | `@google/genai`: `>=1.0.0` -> `>=2.0.0` (optional, unchanged)   |
-| `services/compile-worker/package.json` | `@google/genai`: `^1.0.0` -> `^2.6.0`                           |
-| `pnpm-lock.yaml`                       | Regenerated; 2.6.0 resolves cleanly, no peer warnings           |
+| File                                   | Change                                                        |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `package.json` (root devDep)           | `@google/genai`: `^1.44.0` -> `^2.6.0`                        |
+| `packages/cli/package.json` (devDep)   | `@google/genai`: `^1.44.0` -> `^2.6.0`                        |
+| `packages/cli/package.json` (peerDep)  | `@google/genai`: `>=1.0.0` -> `>=2.0.0` (optional, unchanged) |
+| `packages/core/package.json` (peerDep) | `@google/genai`: `>=1.0.0` -> `>=2.0.0` (optional, unchanged) |
+| `services/compile-worker/package.json` | `@google/genai`: `^1.0.0` -> `^2.6.0`                         |
+| `pnpm-lock.yaml`                       | Regenerated; 2.6.0 resolves cleanly, no peer warnings         |
 
 ## Empirical baseline (dry-run probe `2026-05-24T2207Z`)
 
