@@ -19,7 +19,7 @@ Lifts the workspace pin on `@google/genai` from `^1.44.0` to `^2.6.0`, narrows t
 
 ## Empirical baseline (dry-run probe `2026-05-24T2207Z`)
 
-- `pnpm install` on Node 24 from clean checkout — succeeded; 387 sub-packages resolved; no strict peer warnings emitted.
+- `pnpm install` on Node 24 from clean checkout — succeeded; 590 sub-packages resolved (re-verified in main checkout install-of-record at `2026-05-25T0054Z`); no strict peer warnings emitted on resolution. Note: subsequent CI Build & Lint surfaced a `strictDepBuilds` gate on the new `@google/genai@2.x` `prepare` script (1.x did not declare one) — fixed at commit `4600c62e` by adding `@google/genai` to `pnpm-workspace.yaml` `allowBuilds`.
 - `pnpm --filter @mmnto/totem build` (tsc) — zero TS errors against 2.6.0's `.d.ts`.
 - `pnpm --filter @mmnto/cli build` (tsc) — zero TS errors against 2.6.0's `.d.ts`.
 - `src/embedders/gemini-embedder.test.ts` — 15 / 15 pass.
