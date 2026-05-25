@@ -15,8 +15,8 @@ importers:
         specifier: ^2.31.0
         version: 2.31.0(@types/node@22.19.13)
       '@google/genai':
-        specifier: ^1.44.0
-        version: 1.44.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
+        specifier: ^2.6.0
+        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
       eslint:
         specifier: ^10.4.0
         version: 10.4.0(jiti@2.6.1)
@@ -79,8 +79,8 @@ importers:
         specifier: ^0.98.0
         version: 0.98.0(zod@3.25.76)
       '@google/genai':
-        specifier: ^1.44.0
-        version: 1.44.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
+        specifier: ^2.6.0
+        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.13
@@ -103,8 +103,8 @@ importers:
         specifier: ^0.42.0
         version: 0.42.0
       '@google/genai':
-        specifier: '>=1.0.0'
-        version: 1.44.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
+        specifier: '>=2.0.0'
+        version: 2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
       '@lancedb/lancedb':
         specifier: ^0.26.2
         version: 0.26.2(apache-arrow@17.0.0)
@@ -721,8 +721,8 @@ packages:
     resolution: {integrity: sha512-rZAP3aVgB9ds9KOeUSL+zZ21hPmo8dh6fnIFwRQj5EAZl9gzR7wxYbYXYysAM8CTqGmUGyp2S4kUdV17MnGuWQ==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@google/genai@1.44.0':
-    resolution: {integrity: sha512-kRt9ZtuXmz+tLlcNntN/VV4LRdpl6ZOu5B1KbfNgfR65db15O6sUQcwnwLka8sT/V6qysD93fWrgJHF2L7dA9A==}
+  '@google/genai@2.6.0':
+    resolution: {integrity: sha512-HjoW3mPuEn7pnuKABJl9VbDoWDSF4nbwYKYvYYor7YjPeDxrrBxHzu2d1Prcd+BAuC4w+85UP6y7ZdcrQAoO7g==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -3544,7 +3544,7 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@google/genai@1.44.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))':
+  '@google/genai@2.6.0(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))':
     dependencies:
       google-auth-library: 10.6.1
       p-retry: 4.6.2

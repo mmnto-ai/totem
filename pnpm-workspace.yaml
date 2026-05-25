@@ -6,6 +6,7 @@ engineStrict: true
 strictDepBuilds: true
 allowBuilds:
   '@ast-grep/lang-rust': true
+  '@google/genai': true
   'es5-ext': true
   'esbuild': true
   'protobufjs': true
