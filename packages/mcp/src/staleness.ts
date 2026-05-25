@@ -42,10 +42,12 @@ export function formatStaleness(isoStamp: string | null, now: Date = new Date())
   const diffDay = Math.floor(diffHr / 24);
   const stalePrefix = diffDay >= STALE_THRESHOLD_DAYS ? 'STALE: ' : '';
 
-  if (diffDay < 7) return `${stalePrefix}${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
+  const dayBody = `${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
+  if (diffDay < 7) return stalePrefix + dayBody;
 
   const diffWk = Math.floor(diffDay / 7);
-  if (diffWk < 4) return `${stalePrefix}${diffWk} week${diffWk === 1 ? '' : 's'} ago`;
+  const weekBody = `${diffWk} week${diffWk === 1 ? '' : 's'} ago`;
+  if (diffWk < 4) return stalePrefix + weekBody;
 
-  return `${stalePrefix}${diffDay} days ago`;
+  return stalePrefix + `${diffDay} days ago`;
 }
