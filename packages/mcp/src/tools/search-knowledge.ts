@@ -9,7 +9,8 @@ import { ContentTypeSchema } from '@mmnto/totem';
 import { getContext, reconnectStore } from '../context.js';
 import { logMcpCall } from '../ledger-writer.js';
 import { logSearch, setLogDir } from '../search-log.js';
-import { formatSystemWarning, formatXmlResponse } from '../xml-format.js';
+import { extractIndexState } from '../state-extractors.js';
+import { formatIndexEnvelope, formatSystemWarning, formatXmlResponse } from '../xml-format.js';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
@@ -344,8 +345,23 @@ async function performSearch(
   maxResults?: number,
   boundary?: string,
 ): Promise<ToolResult> {
-  const { config, linkedStores, linkedStoreInitErrors } = await getContext();
+  const { config, linkedStores, linkedStoreInitErrors, projectRoot } = await getContext();
   const finalLimit = maxResults ?? 5;
+
+  // Knowledge-index freshness envelope (mmnto-ai/totem#2029 — docs-drift Mech C).
+  // Computed per-call from cache/index-meta.json so consumers see staleness
+  // inline with retrieval. STALE prefix (>7 days) escalates to a system
+  // warning prepended above the envelope; populated/no-index envelope always
+  // prepends so callers can route on freshness without guessing.
+  const indexState = extractIndexState(projectRoot, config.totemDir);
+  const indexEnvelope = formatIndexEnvelope(indexState);
+  const staleWarning =
+    indexState.staleness?.startsWith('STALE:') === true
+      ? formatSystemWarning(
+          `Knowledge index has not synced recently (${indexState.staleness}). ` +
+            'Search results may not reflect on-disk state. Consider running `totem sync` before trusting these results.',
+        )
+      : null;
 
   // Per-query runtime failure log (mmnto/totem#1295). Populated by
   // `federatedSearch` when primary or any linked store errors during this
@@ -541,18 +557,19 @@ async function performSearch(
       };
     }
     const body = formatXmlResponse('knowledge', 'No results found.');
-    const text = runtimeWarning ? runtimeWarning + '\n\n' + body : body; // totem-ignore #1294 — system-generated + XML-wrapped
+    const text = composeResponseText({ runtimeWarning, staleWarning, indexEnvelope, body }); // totem-ignore #1294 — composed from system-generated + XML-wrapped pieces
     return { content: [{ type: 'text' as const, text }] };
   }
 
   const formatted = results.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
 
-  let text = formatXmlResponse('knowledge', formatted);
-
-  // Prepend the per-query runtime warning if federatedSearch populated it
-  if (runtimeWarning) {
-    text = runtimeWarning + '\n\n' + text; // totem-ignore #1294 — system-generated + XML-wrapped
-  }
+  const knowledgeBody = formatXmlResponse('knowledge', formatted);
+  let text = composeResponseText({
+    runtimeWarning,
+    staleWarning,
+    indexEnvelope,
+    body: knowledgeBody,
+  }); // totem-ignore #1294 — composed from system-generated + XML-wrapped pieces
 
   // Append a system warning when the payload is large enough to risk context pressure
   if (text.length > config.contextWarningThreshold) {
@@ -565,6 +582,32 @@ async function performSearch(
   }
 
   return { content: [{ type: 'text' as const, text }] };
+}
+
+/**
+ * Compose the final response text by stacking diagnostics on top of the
+ * knowledge body. Order (outermost → innermost):
+ *
+ *   1. runtime warning (per-call store failures from federatedSearch)
+ *   2. STALE warning (knowledge index >7 days old; mmnto-ai/totem#2029)
+ *   3. index-meta envelope (always-present freshness metadata)
+ *   4. body (the wrapped `<knowledge>` block OR "no results")
+ *
+ * Pieces are joined by blank lines so each is its own logical block in
+ * the agent's view. Null pieces are omitted; the body is required.
+ */
+function composeResponseText(parts: {
+  runtimeWarning: string | null;
+  staleWarning: string | null;
+  indexEnvelope: string;
+  body: string;
+}): string {
+  const blocks: string[] = [];
+  if (parts.runtimeWarning) blocks.push(parts.runtimeWarning);
+  if (parts.staleWarning) blocks.push(parts.staleWarning);
+  blocks.push(parts.indexEnvelope);
+  blocks.push(parts.body);
+  return blocks.join('\n\n');
 }
 
 export function registerSearchKnowledge(server: McpServer): void {

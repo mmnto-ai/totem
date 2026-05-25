@@ -120,6 +120,27 @@ export const MilestoneStateSchema = z.object({
 });
 export type MilestoneState = z.infer<typeof MilestoneStateSchema>;
 
+/**
+ * Knowledge-index freshness signal (mmnto-ai/totem#2029 — docs-drift Mech C).
+ *
+ * Sourced from `.totem/cache/index-meta.json.lastSync` (authoritative, written
+ * on every successful `runSync`) with `.totem/index-manifest.json.writtenAt`
+ * as fallback. Both fields are null on lite-tier configurations or before
+ * the first sync has completed — honest absence per Tenet 14.
+ *
+ * v1 surfaces envelope-level staleness only. Per-result `indexedAt` is OUT
+ * of scope because LanceDB rows do not currently carry per-row sync
+ * timestamps; populating a per-result `indexedAt` from the constant manifest
+ * value would be fake-presence data.
+ */
+export const IndexStateSchema = z.object({
+  /** ISO-8601 Z timestamp of last successful sync. Null on lite tier or pre-first-sync. */
+  lastSyncAt: z.string().nullable(),
+  /** Human-readable relative time, e.g. "5 minutes ago", "STALE: 14 days ago". Null when lastSyncAt is null. */
+  staleness: z.string().nullable(),
+});
+export type IndexState = z.infer<typeof IndexStateSchema>;
+
 export const RichProjectStateSchema = z.object({
   strategyPointer: StrategyPointerSchema,
   gitState: GitStateSchema,
@@ -135,6 +156,8 @@ export const RichProjectStateSchema = z.object({
   testCount: z.number().int().nonnegative().nullable(),
   milestone: MilestoneStateSchema,
   recentPrs: z.array(RecentPrSchema),
+  /** Index-freshness signal (mmnto-ai/totem#2029). */
+  indexState: IndexStateSchema,
 });
 
 export type RichProjectState = z.infer<typeof RichProjectStateSchema>;
