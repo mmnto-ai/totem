@@ -749,4 +749,38 @@ describe('extractIndexState (mmnto-ai/totem#2029)', () => {
     const state = extractIndexState(tmp, '.totem');
     expect(state.staleness).toMatch(/^STALE:/);
   });
+
+  it('returns null shape (not partial-populated) when lastSync is an unparseable string', () => {
+    // CR R1 catch on mmnto-ai/totem#2033: a corrupt timestamp should not
+    // leak a populated `lastSyncAt` with `staleness: null` — that breaks the
+    // "no-index vs indexed" signal contract.
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'cache', 'index-meta.json'),
+      JSON.stringify({ provider: 'openai', model: 'x', dimensions: 1536, lastSync: 'not-a-date' }),
+    );
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBeNull();
+    expect(state.staleness).toBeNull();
+  });
+
+  it('falls through from cache to manifest when cache carries unparseable timestamp', () => {
+    // Cache parse fails (timestamp invalid); manifest is well-formed.
+    // Resolver must reach the manifest, not stop at the cache miss.
+    const recent = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // 30 min ago
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'cache', 'index-meta.json'),
+      JSON.stringify({ provider: 'openai', model: 'x', dimensions: 1536, lastSync: 'garbage' }),
+    );
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'index-manifest.json'),
+      JSON.stringify({
+        schema: 'totem-index-manifest-v0.2',
+        writtenAt: recent,
+        documents: [],
+      }),
+    );
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBe(recent);
+    expect(state.staleness).toMatch(/minute/);
+  });
 });

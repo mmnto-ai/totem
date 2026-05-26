@@ -338,14 +338,23 @@ export function extractTestCount(_cwd: string): number | null {
  * ago" without re-deriving the relative time themselves.
  */
 export function extractIndexState(cwd: string, totemDir: string): IndexState {
+  // Validate the parsed timestamp via `formatStaleness` — when input is
+  // unparseable as ISO-8601, `formatStaleness` returns null. Returning a
+  // populated `lastSyncAt` with `staleness: null` would break the "no-index
+  // vs indexed" signal contract: callers couldn't distinguish lite-tier
+  // (both null) from corrupt-timestamp (string + null). Fall through to the
+  // next source on parse failure (CR R1 catch on mmnto-ai/totem#2033).
   const metaPath = path.join(cwd, totemDir, 'cache', 'index-meta.json');
   if (fs.existsSync(metaPath)) {
     try {
       const parsed = readJsonSafe<{ lastSync?: unknown }>(metaPath);
       if (typeof parsed.lastSync === 'string') {
-        return { lastSyncAt: parsed.lastSync, staleness: formatStaleness(parsed.lastSync) };
+        const staleness = formatStaleness(parsed.lastSync);
+        if (staleness !== null) {
+          return { lastSyncAt: parsed.lastSync, staleness };
+        }
       }
-      // totem-context: ADR-090 substrate graceful degradation — fall through to manifest on shape miss.
+      // totem-context: ADR-090 substrate graceful degradation — fall through to manifest on shape miss or unparseable timestamp.
     } catch {
       // totem-context: ADR-090 substrate graceful degradation — best-effort cache read; fall through to manifest.
     }
@@ -356,9 +365,12 @@ export function extractIndexState(cwd: string, totemDir: string): IndexState {
     try {
       const parsed = readJsonSafe<{ writtenAt?: unknown }>(manifestPath);
       if (typeof parsed.writtenAt === 'string') {
-        return { lastSyncAt: parsed.writtenAt, staleness: formatStaleness(parsed.writtenAt) };
+        const staleness = formatStaleness(parsed.writtenAt);
+        if (staleness !== null) {
+          return { lastSyncAt: parsed.writtenAt, staleness };
+        }
       }
-      // totem-context: ADR-090 substrate graceful degradation — null on shape miss.
+      // totem-context: ADR-090 substrate graceful degradation — null on shape miss or unparseable timestamp.
     } catch {
       // totem-context: ADR-090 substrate graceful degradation — best-effort manifest read; return null shape.
     }

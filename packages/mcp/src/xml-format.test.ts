@@ -101,4 +101,37 @@ describe('formatIndexEnvelope (mmnto-ai/totem#2029)', () => {
       '<index-meta lastSyncAt="2026-05-25T17:44:58.714Z" staleness="" />',
     );
   });
+
+  it('escapes embedded ampersands before other XML entities (XML 1.0 ordering)', () => {
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: 'a&b',
+        staleness: 'x&y',
+      }),
+    ).toBe('<index-meta lastSyncAt="a&amp;b" staleness="x&amp;y" />');
+  });
+
+  it('does not double-escape ampersands embedded next to other special chars', () => {
+    // Order-sensitive case: if `&` were escaped AFTER `"`, the `&` in
+    // `&quot;` would itself get escaped again into `&amp;quot;` — corrupting
+    // valid XML output. Test pins the correct ordering (`&` first).
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: '2026-05-25T17:44:58.714Z',
+        staleness: 'a"b',
+      }),
+    ).toBe('<index-meta lastSyncAt="2026-05-25T17:44:58.714Z" staleness="a&quot;b" />');
+  });
+
+  it('does not interpret $& back-references in attribute values (replacer-function defense)', () => {
+    // String.prototype.replace with a string second arg would interpret `$&`
+    // as the matched substring; replacer functions block that substitution.
+    // Test pins the function-replacer defense.
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: 'pre$&post',
+        staleness: null,
+      }),
+    ).toBe('<index-meta lastSyncAt="pre$&amp;post" staleness="" />');
+  });
 });
