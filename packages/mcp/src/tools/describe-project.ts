@@ -14,6 +14,7 @@ import { getContext, loadEnv } from '../context.js';
 import { type DescribeProjectOutput, type RichProjectState } from '../schemas/describe-project.js';
 import {
   extractGitState,
+  extractIndexState,
   extractLessonCount,
   extractMilestoneState,
   extractPackageVersions,
@@ -115,6 +116,7 @@ function buildRichState(
     testCount: extractTestCount(projectRoot),
     milestone: extractMilestoneState(projectRoot),
     recentPrs: extractRecentPrs(projectRoot),
+    indexState: extractIndexState(projectRoot, totemDir),
   };
 }
 

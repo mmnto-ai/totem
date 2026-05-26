@@ -63,6 +63,7 @@ describe('DescribeProjectOutputSchema backward compatibility', () => {
       testCount: null,
       milestone: { name: '1.15.0', gateTickets: ['#1479'], bestEffort: true as const },
       recentPrs: [{ title: 'feat: foo (#1)', date: '2026-04-16T00:00:00Z', squashSha: 'abcd123' }],
+      indexState: { lastSyncAt: null, staleness: null },
     };
     const parsed = DescribeProjectOutputSchema.parse({ ...legacyShape, richState: rich });
     expect(parsed.richState?.ruleCounts.active).toBe(10);
@@ -212,6 +213,7 @@ describe('RichProjectStateSchema', () => {
       testCount: null,
       milestone: { name: null, gateTickets: [], bestEffort: true },
       recentPrs: [],
+      indexState: { lastSyncAt: null, staleness: null },
     });
     expect(parsed.testCount).toBeNull();
   });
@@ -226,10 +228,42 @@ describe('RichProjectStateSchema', () => {
       testCount: null,
       milestone: { name: null, gateTickets: [], bestEffort: true },
       recentPrs: [],
+      indexState: { lastSyncAt: null, staleness: null },
     });
     if (!parsed.strategyPointer.resolved) {
       expect(parsed.strategyPointer.reason).toBe('no sibling, no submodule');
     }
+  });
+
+  it('requires indexState (mmnto-ai/totem#2029) and accepts populated values', () => {
+    const parsed = RichProjectStateSchema.parse({
+      strategyPointer: { resolved: true, sha: null, latestJournal: null },
+      gitState: { branch: null, uncommittedFiles: [], truncated: false },
+      packageVersions: {},
+      ruleCounts: { active: 0, archived: 0, nonCompilable: 0 },
+      lessonCount: 0,
+      testCount: null,
+      milestone: { name: null, gateTickets: [], bestEffort: true },
+      recentPrs: [],
+      indexState: { lastSyncAt: '2026-05-25T17:44:58.714Z', staleness: '3 hours ago' },
+    });
+    expect(parsed.indexState.lastSyncAt).toBe('2026-05-25T17:44:58.714Z');
+    expect(parsed.indexState.staleness).toBe('3 hours ago');
+  });
+
+  it('rejects rich-state payloads missing indexState', () => {
+    const result = RichProjectStateSchema.safeParse({
+      strategyPointer: { resolved: true, sha: null, latestJournal: null },
+      gitState: { branch: null, uncommittedFiles: [], truncated: false },
+      packageVersions: {},
+      ruleCounts: { active: 0, archived: 0, nonCompilable: 0 },
+      lessonCount: 0,
+      testCount: null,
+      milestone: { name: null, gateTickets: [], bestEffort: true },
+      recentPrs: [],
+      // indexState intentionally omitted
+    });
+    expect(result.success).toBe(false);
   });
 });
 

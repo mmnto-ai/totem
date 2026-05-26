@@ -11,6 +11,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 import { UNCOMMITTED_FILES_CAP } from './schemas/describe-project.js';
 import {
   extractGitState,
+  extractIndexState,
   extractLessonCount,
   extractMilestoneState,
   extractPackageVersions,
@@ -665,5 +666,121 @@ describe('temp dir cleanup safety', () => {
   });
   it('temp dir exists inside the test', () => {
     expect(fs.existsSync(tmp)).toBe(true);
+  });
+});
+
+describe('extractIndexState (mmnto-ai/totem#2029)', () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-indexstate-'));
+    fs.mkdirSync(path.join(tmp, '.totem', 'cache'), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, RM_OPTS);
+  });
+
+  it('returns null fields when no index-meta or manifest exists (lite tier)', () => {
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBeNull();
+    expect(state.staleness).toBeNull();
+  });
+
+  it('reads lastSync from cache/index-meta.json when present (authoritative source)', () => {
+    const recent = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // 5 min ago
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'cache', 'index-meta.json'),
+      JSON.stringify({ provider: 'openai', model: 'x', dimensions: 1536, lastSync: recent }),
+    );
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBe(recent);
+    expect(state.staleness).toMatch(/minute/);
+  });
+
+  it('falls back to index-manifest.json.writtenAt when cache is missing', () => {
+    // No cache/index-meta.json — only the manifest.
+    const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1 hour ago
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'index-manifest.json'),
+      JSON.stringify({ schema: 'totem-index-manifest-v0.2', writtenAt: recent, documents: [] }),
+    );
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBe(recent);
+    expect(state.staleness).toMatch(/hour/);
+  });
+
+  it('returns null fields when both files exist but are malformed', () => {
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'cache', 'index-meta.json'),
+      '{"not-the-right-shape":true}',
+    );
+    fs.writeFileSync(path.join(tmp, '.totem', 'index-manifest.json'), '{"also-wrong":true}');
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBeNull();
+    expect(state.staleness).toBeNull();
+  });
+
+  it('prefers cache/index-meta.json over manifest when both exist', () => {
+    const cacheStamp = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // 2 min ago
+    const manifestStamp = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(); // 2 days ago
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'cache', 'index-meta.json'),
+      JSON.stringify({ provider: 'openai', model: 'x', dimensions: 1536, lastSync: cacheStamp }),
+    );
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'index-manifest.json'),
+      JSON.stringify({
+        schema: 'totem-index-manifest-v0.2',
+        writtenAt: manifestStamp,
+        documents: [],
+      }),
+    );
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBe(cacheStamp);
+  });
+
+  it('formats STALE prefix for indexes older than the threshold', () => {
+    const old = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(); // 14 days ago
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'cache', 'index-meta.json'),
+      JSON.stringify({ provider: 'openai', model: 'x', dimensions: 1536, lastSync: old }),
+    );
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.staleness).toMatch(/^STALE:/);
+  });
+
+  it('returns null shape (not partial-populated) when lastSync is an unparseable string', () => {
+    // CR R1 catch on mmnto-ai/totem#2033: a corrupt timestamp should not
+    // leak a populated `lastSyncAt` with `staleness: null` — that breaks the
+    // "no-index vs indexed" signal contract.
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'cache', 'index-meta.json'),
+      JSON.stringify({ provider: 'openai', model: 'x', dimensions: 1536, lastSync: 'not-a-date' }),
+    );
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBeNull();
+    expect(state.staleness).toBeNull();
+  });
+
+  it('falls through from cache to manifest when cache carries unparseable timestamp', () => {
+    // Cache parse fails (timestamp invalid); manifest is well-formed.
+    // Resolver must reach the manifest, not stop at the cache miss.
+    const recent = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // 30 min ago
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'cache', 'index-meta.json'),
+      JSON.stringify({ provider: 'openai', model: 'x', dimensions: 1536, lastSync: 'garbage' }),
+    );
+    fs.writeFileSync(
+      path.join(tmp, '.totem', 'index-manifest.json'),
+      JSON.stringify({
+        schema: 'totem-index-manifest-v0.2',
+        writtenAt: recent,
+        documents: [],
+      }),
+    );
+    const state = extractIndexState(tmp, '.totem');
+    expect(state.lastSyncAt).toBe(recent);
+    expect(state.staleness).toMatch(/minute/);
   });
 });

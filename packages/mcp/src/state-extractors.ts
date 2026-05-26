@@ -27,6 +27,7 @@ import {
 
 import {
   type GitState,
+  type IndexState,
   type MilestoneState,
   RECENT_PRS_COUNT,
   type RecentPr,
@@ -34,6 +35,7 @@ import {
   type StrategyPointer,
   UNCOMMITTED_FILES_CAP,
 } from './schemas/describe-project.js';
+import { formatStaleness } from './staleness.js';
 
 /** Fixed-group package names whose versions show in the briefing. */
 const FIXED_GROUP_PACKAGES = [
@@ -317,6 +319,64 @@ export function extractMilestoneState(cwd: string): MilestoneState {
  */
 export function extractTestCount(_cwd: string): number | null {
   return null;
+}
+
+// ─── Knowledge-index freshness (mmnto-ai/totem#2029) ──────────────────────
+
+/**
+ * Read the last-sync timestamp from `.totem/cache/index-meta.json` (the
+ * authoritative source written on every successful `runSync`) with
+ * `.totem/index-manifest.json.writtenAt` as a fallback. Returns null
+ * fields on lite-tier configurations and pre-first-sync state — honest
+ * absence per Tenet 14.
+ *
+ * Two-level fallback: index-manifest.json is the more visible artifact
+ * and may be hand-restored from git history in some recovery flows.
+ *
+ * The staleness string is computed by `formatStaleness` against the
+ * current wall clock so consumers see "5 minutes ago" / "STALE: 14 days
+ * ago" without re-deriving the relative time themselves.
+ */
+export function extractIndexState(cwd: string, totemDir: string): IndexState {
+  // Validate the parsed timestamp via `formatStaleness` — when input is
+  // unparseable as ISO-8601, `formatStaleness` returns null. Returning a
+  // populated `lastSyncAt` with `staleness: null` would break the "no-index
+  // vs indexed" signal contract: callers couldn't distinguish lite-tier
+  // (both null) from corrupt-timestamp (string + null). Fall through to the
+  // next source on parse failure (CR R1 catch on mmnto-ai/totem#2033).
+  const metaPath = path.join(cwd, totemDir, 'cache', 'index-meta.json');
+  if (fs.existsSync(metaPath)) {
+    try {
+      const parsed = readJsonSafe<{ lastSync?: unknown }>(metaPath);
+      if (typeof parsed.lastSync === 'string') {
+        const staleness = formatStaleness(parsed.lastSync);
+        if (staleness !== null) {
+          return { lastSyncAt: parsed.lastSync, staleness };
+        }
+      }
+      // totem-context: ADR-090 substrate graceful degradation — fall through to manifest on shape miss or unparseable timestamp.
+    } catch {
+      // totem-context: ADR-090 substrate graceful degradation — best-effort cache read; fall through to manifest.
+    }
+  }
+
+  const manifestPath = path.join(cwd, totemDir, 'index-manifest.json');
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const parsed = readJsonSafe<{ writtenAt?: unknown }>(manifestPath);
+      if (typeof parsed.writtenAt === 'string') {
+        const staleness = formatStaleness(parsed.writtenAt);
+        if (staleness !== null) {
+          return { lastSyncAt: parsed.writtenAt, staleness };
+        }
+      }
+      // totem-context: ADR-090 substrate graceful degradation — null on shape miss or unparseable timestamp.
+    } catch {
+      // totem-context: ADR-090 substrate graceful degradation — best-effort manifest read; return null shape.
+    }
+  }
+
+  return { lastSyncAt: null, staleness: null };
 }
 
 // ─── Recent merged PRs from git log ────────────────────────────────────────

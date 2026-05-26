@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatSystemWarning, formatXmlResponse } from './xml-format.js';
+import { formatIndexEnvelope, formatSystemWarning, formatXmlResponse } from './xml-format.js';
 
 describe('formatXmlResponse', () => {
   it('wraps content in XML tags', () => {
@@ -50,5 +50,88 @@ describe('formatSystemWarning', () => {
     expect(result).toContain('<\\/totem_system_warning>');
     expect(result.startsWith('<totem_system_warning>')).toBe(true);
     expect(result.endsWith('</totem_system_warning>')).toBe(true);
+  });
+});
+
+describe('formatIndexEnvelope (mmnto-ai/totem#2029)', () => {
+  it('emits a status="no-index" envelope when lastSyncAt is null', () => {
+    expect(formatIndexEnvelope({ lastSyncAt: null, staleness: null })).toBe(
+      '<index-meta status="no-index" />',
+    );
+  });
+
+  it('emits populated attributes when lastSyncAt is set', () => {
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: '2026-05-25T17:44:58.714Z',
+        staleness: '3 hours ago',
+      }),
+    ).toBe('<index-meta lastSyncAt="2026-05-25T17:44:58.714Z" staleness="3 hours ago" />');
+  });
+
+  it('preserves STALE: prefix in the staleness attribute', () => {
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: '2026-05-11T00:00:00.000Z',
+        staleness: 'STALE: 14 days ago',
+      }),
+    ).toBe('<index-meta lastSyncAt="2026-05-11T00:00:00.000Z" staleness="STALE: 14 days ago" />');
+  });
+
+  it('escapes embedded double quotes in attribute values', () => {
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: 'fake"value',
+        staleness: 'still "quoted"',
+      }),
+    ).toBe('<index-meta lastSyncAt="fake&quot;value" staleness="still &quot;quoted&quot;" />');
+  });
+
+  it('escapes embedded less-than characters in attribute values', () => {
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: '2026-05-25T17:44:58.714Z',
+        staleness: '<unexpected>',
+      }),
+    ).toBe('<index-meta lastSyncAt="2026-05-25T17:44:58.714Z" staleness="&lt;unexpected>" />');
+  });
+
+  it('treats null staleness as an empty attribute', () => {
+    expect(formatIndexEnvelope({ lastSyncAt: '2026-05-25T17:44:58.714Z', staleness: null })).toBe(
+      '<index-meta lastSyncAt="2026-05-25T17:44:58.714Z" staleness="" />',
+    );
+  });
+
+  it('escapes embedded ampersands before other XML entities (XML 1.0 ordering)', () => {
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: 'a&b',
+        staleness: 'x&y',
+      }),
+    ).toBe('<index-meta lastSyncAt="a&amp;b" staleness="x&amp;y" />');
+  });
+
+  it('does not double-escape ampersands embedded next to other special chars', () => {
+    // Order-sensitive case: if `&` were escaped AFTER `"`, the `&` in
+    // `&quot;` would itself get escaped again into `&amp;quot;` — corrupting
+    // valid XML output. Test pins the correct ordering (`&` first).
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: '2026-05-25T17:44:58.714Z',
+        staleness: 'a"b',
+      }),
+    ).toBe('<index-meta lastSyncAt="2026-05-25T17:44:58.714Z" staleness="a&quot;b" />');
+  });
+
+  it('does not interpret $& back-references in attribute values (replacer-function defense)', () => {
+    // String.prototype.replace with a string second arg would interpret `$&`
+    // as the matched substring; replacer functions block that substitution.
+    // Test pins the function-replacer defense.
+    expect(
+      formatIndexEnvelope({
+        lastSyncAt: 'pre$&post',
+        staleness: null,
+      }),
+    ).toBe('<index-meta lastSyncAt="pre$&amp;post" staleness="" />');
   });
 });

@@ -144,6 +144,10 @@ vi.mock('../context.js', () => ({
 vi.mock('../xml-format.js', () => ({
   formatXmlResponse: vi.fn((_tag: string, msg: string) => msg),
   formatSystemWarning: vi.fn((msg: string) => `[SYSTEM WARNING] ${msg}`),
+  formatIndexEnvelope: vi.fn(
+    (_state: { lastSyncAt: string | null; staleness: string | null }) =>
+      '<index-meta status="mocked" />',
+  ),
 }));
 
 vi.mock('../search-log.js', () => ({
@@ -274,6 +278,10 @@ describe('search_knowledge', () => {
     vi.doMock('../xml-format.js', () => ({
       formatXmlResponse: vi.fn((_tag: string, msg: string) => msg),
       formatSystemWarning: vi.fn((msg: string) => `[SYSTEM WARNING] ${msg}`),
+      formatIndexEnvelope: vi.fn(
+        (_state: { lastSyncAt: string | null; staleness: string | null }) =>
+          '<index-meta status="mocked" />',
+      ),
     }));
 
     vi.doMock('../search-log.js', () => ({
@@ -1473,6 +1481,50 @@ describe('search_knowledge', () => {
       expect(text).toContain('[strategy] Linked');
       // Primary has no tag prefix (uses bare label)
       expect(text).toMatch(/### \d+\. Primary \(code\)/);
+    });
+  });
+
+  // --- Index staleness envelope (mmnto-ai/totem#2029) ---
+
+  describe('index-meta envelope (mmnto-ai/totem#2029)', () => {
+    it('prepends the index-meta envelope to successful search responses', async () => {
+      mockSearchResults = [
+        {
+          label: 'Cache invalidation',
+          type: 'lesson',
+          filePath: 'lessons/cache.md',
+          score: 0.95,
+          content: 'Cache invalidation is hard.',
+        },
+      ];
+
+      const result = (await handle({ query: 'cache' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBeUndefined();
+      // The mocked formatIndexEnvelope at line 144/277 returns this exact string
+      // for any input; the assertion proves the envelope was actually prepended.
+      expect(result.content[0]!.text).toContain('<index-meta status="mocked" />');
+      // Envelope must appear BEFORE the body content.
+      const envelopeIdx = result.content[0]!.text.indexOf('<index-meta');
+      const bodyIdx = result.content[0]!.text.indexOf('Cache invalidation');
+      expect(envelopeIdx).toBeGreaterThanOrEqual(0);
+      expect(envelopeIdx).toBeLessThan(bodyIdx);
+    });
+
+    it('prepends the index-meta envelope to no-results responses', async () => {
+      mockSearchResults = [];
+
+      const result = (await handle({ query: 'no matches' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0]!.text).toContain('<index-meta status="mocked" />');
+      expect(result.content[0]!.text).toContain('No results found');
     });
   });
 });
