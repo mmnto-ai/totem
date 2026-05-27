@@ -29,7 +29,7 @@ Not mechanically enforced. Follow because they reduce PR bot noise.
 - **After merging a PR:** `totem lesson extract <pr> --yes`, then `totem docs` if releasing. Lessons: `totem lesson extract <prs>` → `totem lesson compile`.
 - **NEVER bypass quality gates without a ticket.** No `--no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or CI-pacifying ignore patterns. Suppressions need a ticket-ref comment.
 - **Open PRs Ready, not Draft.** CR (`auto_review.drafts: false`) + GCA don't review Drafts; in this solo-dev + bot-review repo Draft has no audience.
-- **Vendor routing.** Claude is the default code executor (production code, tests, CLI, corpus). Gemini stays strategic (proposals, ADRs, audits, dissimilar-auditor passes). Cross-vendor second-opinion fine both directions; "Gemini implement" is not the default.
+- **Vendor routing.** Claude is the default code executor; Gemini stays strategic (proposals, ADRs, audits). Cross-vendor second-opinion fine both ways; "Gemini implement" is not the default.
 
 ## Contributor Principles
 
