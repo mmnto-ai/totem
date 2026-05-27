@@ -18,6 +18,7 @@ Canonical source of truth for how AI coding agents (Claude Code, Gemini CLI, Cur
 - Named constants for magic numbers. Zod at system boundaries only.
 - Run `pnpm run format` before committing.
 - **NEVER put secrets in config files.** `.env` only.
+- **Totem is NOT zero-user.** Ships in production on `satur8d` and `arhgap11` in addition to dogfooding this repo. Breaking changes need migration paths, not just "fix in next major."
 
 ## Totem Workflow
 
@@ -26,7 +27,9 @@ Not mechanically enforced. Follow because they reduce PR bot noise.
 - **Before coding:** `/preflight <issue>`. Create a feature branch.
 - **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
 - **After merging a PR:** `totem lesson extract <pr> --yes`, then `totem docs` if releasing. Lessons: `totem lesson extract <prs>` → `totem lesson compile`.
-- **NEVER use `git push --no-verify`.** Also no `totem-ignore` or `eslint-disable` without a ticket.
+- **NEVER bypass quality gates without a ticket.** No `--no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or CI-pacifying ignore patterns. Suppressions need a ticket-ref comment.
+- **Open PRs Ready, not Draft.** CR (`auto_review.drafts: false`) + GCA don't review Drafts; in this solo-dev + bot-review repo Draft has no audience.
+- **Vendor routing.** Claude is the default code executor; Gemini stays strategic (proposals, ADRs, audits). Cross-vendor second-opinion fine both ways; "Gemini implement" is not the default.
 
 ## Contributor Principles
 
