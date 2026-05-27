@@ -1,5 +1,11 @@
 # @mmnto/cli
 
+## 1.50.0
+
+### Patch Changes
+
+- @mmnto/totem@1.50.0
+
 ## 1.49.3
 
 ### Patch Changes
