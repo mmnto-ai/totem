@@ -18,7 +18,7 @@ Canonical source of truth for how AI coding agents (Claude Code, Gemini CLI, Cur
 - Named constants for magic numbers. Zod at system boundaries only.
 - Run `pnpm run format` before committing.
 - **NEVER put secrets in config files.** `.env` only.
-- **Totem is NOT zero-user.** Ships in production on `satur8d` (NBA sports intelligence) and `arhgap11` (3D voxel research game) in addition to dogfooding the totem repo itself. Architectural decisions should respect downstream consumers — breaking changes need migration paths, not just "fix in next major."
+- **Totem is NOT zero-user.** Ships in production on `satur8d` and `arhgap11` in addition to dogfooding this repo. Breaking changes need migration paths, not just "fix in next major."
 
 ## Totem Workflow
 
@@ -27,9 +27,9 @@ Not mechanically enforced. Follow because they reduce PR bot noise.
 - **Before coding:** `/preflight <issue>`. Create a feature branch.
 - **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
 - **After merging a PR:** `totem lesson extract <pr> --yes`, then `totem docs` if releasing. Lessons: `totem lesson extract <prs>` → `totem lesson compile`.
-- **NEVER bypass quality gates.** No `git push --no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or ignore patterns added to pass CI — without filing a ticket for the root cause. Suppressions need a comment referencing the ticket.
-- **Open PRs Ready-for-review, not Draft.** Solo-dev + bot-review repo: Draft state prevents the only reviewers (CodeRabbit, GCA) from engaging. CR's `.coderabbit.yaml` has `auto_review.drafts: false`; GCA behavior on Drafts is unreliable. Open Ready; flip to Draft only when you explicitly need WIP-without-bot-review.
-- **Vendor routing — code vs strategy.** Claude is the default code executor: production code, tests, CLI commands, corpus edits. Gemini stays strategic: proposals, ADR drafting, research spikes, schema sanity-checks, dissimilar-auditor passes. Cross-vendor "second pair of eyes" is fine in both directions; "Gemini implement this" is not the default.
+- **NEVER bypass quality gates without a ticket.** No `--no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or CI-pacifying ignore patterns. Suppressions need a ticket-ref comment.
+- **Open PRs Ready, not Draft.** CR (`auto_review.drafts: false`) + GCA don't review Drafts; in this solo-dev + bot-review repo Draft has no audience.
+- **Vendor routing.** Claude is the default code executor (production code, tests, CLI, corpus). Gemini stays strategic (proposals, ADRs, audits, dissimilar-auditor passes). Cross-vendor second-opinion fine both directions; "Gemini implement" is not the default.
 
 ## Contributor Principles
 
