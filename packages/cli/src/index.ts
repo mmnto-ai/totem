@@ -1146,6 +1146,10 @@ gateCmd
   .description('Evaluate a gate predicate; emit a GateVerdict (allow|warn|deny) as JSON to stdout')
   .requiredOption('--event <type>', 'Gate event type (e.g. freeze-check)')
   .requiredOption('--payload <json>', 'Gate-specific JSON payload')
+  .addHelpText(
+    'after',
+    `\nExample:\n  $ totem gate check --event freeze-check --payload '{"subsystem":"rule-compilation"}'\n`,
+  )
   .action(async (opts: { event: string; payload: string }) => {
     try {
       const { gateCheckCommand } = await import('./commands/gate.js');

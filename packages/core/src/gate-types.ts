@@ -8,6 +8,13 @@
  * codes and never mutates state (side-effect-free).
  */
 
+/**
+ * Host-agnostic verdict outcome — the host maps each onto its own enforcement
+ * convention (e.g. Claude PreToolUse exit 0/2):
+ *  - `allow` — predicate passed; permit the action.
+ *  - `warn`  — predicate flagged; advisory only, do NOT block (contract member; no gate emits it yet).
+ *  - `deny`  — predicate failed; block the action.
+ */
 export type GateDisposition = 'allow' | 'warn' | 'deny';
 
 export interface GateProvenance {

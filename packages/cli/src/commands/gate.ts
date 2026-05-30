@@ -26,8 +26,9 @@ export async function gateCheckCommand(opts: GateCheckCommandOptions): Promise<v
   } catch (err) {
     throw new TotemError(
       'GATE_INVALID',
-      `Invalid --payload JSON: ${err instanceof Error ? err.message : String(err)}`,
+      'Invalid --payload JSON',
       'Pass valid JSON, e.g. --payload \'{"subsystem":"rule-compilation"}\'.',
+      err,
     );
   }
 

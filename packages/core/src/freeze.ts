@@ -45,8 +45,10 @@ export function readFreezeConfig(totemDir: string): FreezeConfig | null {
       return null;
     }
     throw new TotemConfigError(
-      `Failed to read ${FREEZE_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to read ${FREEZE_FILE}`,
       'Check filesystem permissions for the .totem directory.',
+      'CONFIG_MISSING',
+      err,
     );
   }
 
@@ -55,8 +57,10 @@ export function readFreezeConfig(totemDir: string): FreezeConfig | null {
     parsed = JSON.parse(raw);
   } catch (err) {
     throw new TotemConfigError(
-      `Malformed ${FREEZE_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+      `Malformed ${FREEZE_FILE}`,
       'Fix the JSON syntax in .totem/freeze.json, or remove the file if nothing is frozen.',
+      'CONFIG_INVALID',
+      err,
     );
   }
 
@@ -65,6 +69,8 @@ export function readFreezeConfig(totemDir: string): FreezeConfig | null {
     throw new TotemConfigError(
       `Invalid ${FREEZE_FILE}: ${result.error.issues.map((i) => i.message).join('; ')}`,
       'freeze.json must be { frozen: [{ subsystem, since?, reason?, tracking?, "do-not"? }] }.',
+      'CONFIG_INVALID',
+      result.error,
     );
   }
 
