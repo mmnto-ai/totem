@@ -76,6 +76,30 @@ describe('evaluateGate — freeze-check', () => {
     expect(() => evaluateGate('freeze-check', {}, totemDir)).toThrow(/subsystem/i);
   });
 
+  it('throws on an empty or whitespace-only subsystem payload — never default-allow', () => {
+    writeFreeze(FROZEN);
+    expect(() => evaluateGate('freeze-check', { subsystem: '' }, totemDir)).toThrow(/subsystem/i);
+    expect(() => evaluateGate('freeze-check', { subsystem: '   ' }, totemDir)).toThrow(
+      /subsystem/i,
+    );
+  });
+
+  it('fails loud on a freeze entry with an empty subsystem', () => {
+    writeFreeze(JSON.stringify({ frozen: [{ subsystem: '' }] }));
+    expect(() => evaluateGate('freeze-check', { subsystem: 'x' }, totemDir)).toThrow(
+      TotemConfigError,
+    );
+  });
+
+  it('reflects a custom totemDir name in provenance.source', () => {
+    const customDir = path.join(tmpRoot, '.totem-custom');
+    fs.mkdirSync(customDir, { recursive: true });
+    fs.writeFileSync(path.join(customDir, 'freeze.json'), FROZEN);
+    const v = evaluateGate('freeze-check', { subsystem: 'rule-compilation' }, customDir);
+    expect(v.provenance.source).toBe('.totem-custom/freeze.json');
+    expect(v.disposition).toBe('deny');
+  });
+
   it('is side-effect-free — never writes or mutates state', () => {
     writeFreeze(FROZEN);
     const fp = path.join(totemDir, 'freeze.json');

@@ -1,5 +1,7 @@
+import * as path from 'node:path';
+
 import { TotemError } from './errors.js';
-import { readFreezeConfig } from './freeze.js';
+import { FREEZE_FILE, readFreezeConfig } from './freeze.js';
 import type { GateEvaluator, GateVerdict } from './gate-types.js';
 
 export const FREEZE_CHECK_EVENT = 'freeze-check';
@@ -22,16 +24,20 @@ const freezeCheckEvaluator: GateEvaluator = (payload, totemDir): GateVerdict => 
       ? (payload as { subsystem: string }).subsystem
       : undefined;
 
-  if (subsystem === undefined) {
+  if (subsystem === undefined || subsystem.trim() === '') {
     throw new TotemError(
       'GATE_INVALID',
-      'freeze-check payload requires a "subsystem" string.',
+      'freeze-check payload requires a non-empty "subsystem" string.',
       'Pass --payload \'{"subsystem":"<name>"}\'.',
     );
   }
 
   const checkedAt = new Date().toISOString();
-  const source = '.totem/freeze.json';
+  // Stable, OS-independent provenance label derived from the configured totem
+  // dir name (e.g. `.totem` or a custom `.totem-custom`) — NOT a resolvable
+  // absolute path. Forward-slash by construction so it is deterministic across
+  // platforms and machines (the audit trail must not leak cwd/host paths).
+  const source = `${path.basename(totemDir)}/${FREEZE_FILE}`;
   const config = readFreezeConfig(totemDir);
 
   if (config === null) {

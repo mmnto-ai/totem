@@ -8,7 +8,7 @@ import { TotemConfigError } from './errors.js';
 export const FREEZE_FILE = 'freeze.json';
 
 const FreezeEntrySchema = z.object({
-  subsystem: z.string(),
+  subsystem: z.string().min(1, 'subsystem must be a non-empty string'),
   since: z.string().optional(),
   reason: z.string().optional(),
   tracking: z.string().optional(),
