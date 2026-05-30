@@ -1,7 +1,5 @@
 import * as path from 'node:path';
 
-import { evaluateGate, TotemError } from '@mmnto/totem';
-
 import { isGlobalConfigPath, loadConfig, resolveConfigPath } from '../utils.js';
 
 export interface GateCheckCommandOptions {
@@ -20,6 +18,10 @@ export interface GateCheckCommandOptions {
  * silent default-allow.
  */
 export async function gateCheckCommand(opts: GateCheckCommandOptions): Promise<void> {
+  // Lazy-load @mmnto/totem inside the handler (ADR-072 §3) so the heavy core
+  // module never loads on unrelated CLI invocations (e.g. `totem --help`).
+  const { evaluateGate, TotemError } = await import('@mmnto/totem');
+
   let payload: unknown;
   try {
     payload = JSON.parse(opts.payload);

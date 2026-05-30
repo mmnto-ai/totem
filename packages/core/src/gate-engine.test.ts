@@ -28,11 +28,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  try {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
-  } catch {
-    /* best-effort cleanup (Windows ENOTEMPTY tolerance) */
-  }
+  // maxRetries/retryDelay rides out transient Windows ENOTEMPTY/EBUSY without
+  // an empty catch swallowing real teardown failures (repo test-cleanup idiom).
+  fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
 describe('evaluateGate — freeze-check', () => {
