@@ -1135,6 +1135,27 @@ hookCmd
     }
   });
 
+// ─── Gate noun-verb subcommands (WS3 — action-gate engine) ───
+
+const gateCmd = program
+  .command('gate')
+  .description('Gate engine — evaluate decidable predicates against deterministic state');
+
+gateCmd
+  .command('check')
+  .description('Evaluate a gate predicate; emit a GateVerdict (allow|warn|deny) as JSON to stdout')
+  .requiredOption('--event <type>', 'Gate event type (e.g. freeze-check)')
+  .requiredOption('--payload <json>', 'Gate-specific JSON payload')
+  .action(async (opts: { event: string; payload: string }) => {
+    try {
+      const { gateCheckCommand } = await import('./commands/gate.js');
+      await gateCheckCommand(opts);
+    } catch (err) {
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
+    }
+  });
+
 // ─── Lesson noun-verb subcommands ────────────────────────
 
 const lessonCmd = program.command('lesson').description('Manage project lessons');

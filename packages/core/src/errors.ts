@@ -37,7 +37,8 @@ export type TotemErrorCode =
   | 'SESSION_ID_WRITE_FAILED'
   | 'SESSION_ID_READ_FAILED'
   | 'BADGE_VERIFICATION_FAILED'
-  | 'CLAIM_DISCIPLINE_FAILED';
+  | 'CLAIM_DISCIPLINE_FAILED'
+  | 'GATE_INVALID';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;
