@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.51.0
+
+### Minor Changes
+
+- ff71d97: feat(cli+core): `totem gate check` action-gate engine + freeze-check reference gate (WS3, #2043)
+
 ## 1.50.0
 
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
