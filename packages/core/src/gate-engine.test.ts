@@ -84,6 +84,14 @@ describe('evaluateGate — freeze-check', () => {
     );
   });
 
+  it('denies a padded subsystem that matches a frozen entry (no whitespace bypass)', () => {
+    writeFreeze(FROZEN);
+    const v = evaluateGate('freeze-check', { subsystem: '  rule-compilation  ' }, totemDir);
+    expect(v.disposition).toBe('deny');
+    expect(v.provenance.matched).toBe('rule-compilation');
+    expect(v.provenance.ref).toBe('rule-compilation'); // normalized, not the padded input
+  });
+
   it('fails loud on a freeze entry with an empty subsystem', () => {
     writeFreeze(JSON.stringify({ frozen: [{ subsystem: '' }] }));
     expect(() => evaluateGate('freeze-check', { subsystem: 'x' }, totemDir)).toThrow(

@@ -17,14 +17,20 @@ export const FREEZE_CHECK_EVENT = 'freeze-check';
  * follow-on; V1 matches on the explicit `subsystem` field.
  */
 const freezeCheckEvaluator: GateEvaluator = (payload, totemDir): GateVerdict => {
-  const subsystem =
+  const rawSubsystem =
     payload &&
     typeof payload === 'object' &&
     typeof (payload as { subsystem?: unknown }).subsystem === 'string'
       ? (payload as { subsystem: string }).subsystem
       : undefined;
 
-  if (subsystem === undefined || subsystem.trim() === '') {
+  // Normalize ONCE so the non-empty guard, the freeze-match comparison, and the
+  // emitted provenance all use the same value. Otherwise a padded subsystem
+  // (e.g. " rule-compilation ") passes the guard but fails the exact match,
+  // silently turning a frozen subsystem into `allow` — a freeze bypass.
+  const subsystem = rawSubsystem?.trim();
+
+  if (!subsystem) {
     throw new TotemError(
       'GATE_INVALID',
       'freeze-check payload requires a non-empty "subsystem" string.',
