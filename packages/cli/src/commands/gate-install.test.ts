@@ -61,6 +61,19 @@ function gateEntryCount(cwd: string, event: string): number {
   ).length;
 }
 
+/** The single baked command string for a gate (or undefined if none/many). */
+function gateCommandFor(cwd: string, event: string): string | undefined {
+  const cmds: string[] = [];
+  for (const e of preToolUseEntries(cwd)) {
+    if (e.matcher !== 'Write|Edit' || !Array.isArray(e.hooks)) continue;
+    for (const h of e.hooks) {
+      const cmd = typeof h === 'string' ? h : ((h as { command?: string })?.command ?? '');
+      if (commandInstallsGate(cmd, event)) cmds.push(cmd);
+    }
+  }
+  return cmds.length === 1 ? cmds[0] : undefined;
+}
+
 describe('installGates / gate install (settings merge)', () => {
   let cwd: string;
   let originalCwd: string;
@@ -136,6 +149,124 @@ describe('installGates / gate install (settings merge)', () => {
     for (const event of knownGateEvents()) {
       expect(gateEntryCount(cwd, event)).toBe(1);
     }
+  });
+});
+
+// ─── FIX A: tier-AWARE upsert (update in place, never silent no-op/dup) ──
+//
+// Locks the tier-update behavior so it can never regress to either failure
+// mode the pre-fix tier-INDEPENDENT probe had: (a) a tier switch silently
+// dropped as a "skipped — no change" no-op, or (b) a second duplicate entry
+// for the same gate. The invariant: EXACTLY ONE entry per gate, ever, and the
+// baked tier flag flips in place on a different-tier re-install.
+describe('installGates tier-aware upsert (FIX A)', () => {
+  let cwd: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(cwd);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
+
+  it('default(strict) then re-install --strict → skipped, one entry, command keeps --strict', () => {
+    installGates(cwd, ['freeze-check']); // default tier === strict
+    const second = installGates(cwd, ['freeze-check'], 'strict');
+    const entryResult = second.find((r) => r.event === 'freeze-check');
+    expect(entryResult?.action).toBe('skipped');
+    expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
+    expect(gateCommandFor(cwd, 'freeze-check')).toContain('--strict');
+  });
+
+  it('--pilot then --strict → updated, ONE entry, command flips to --strict (not --pilot)', () => {
+    installGates(cwd, ['freeze-check'], 'pilot');
+    expect(gateCommandFor(cwd, 'freeze-check')).toContain('--pilot');
+
+    const switched = installGates(cwd, ['freeze-check'], 'strict');
+    const entryResult = switched.find((r) => r.event === 'freeze-check');
+    expect(entryResult?.action).toBe('updated');
+    // Exactly one entry — no duplicate created by the tier switch.
+    expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
+    const cmd = gateCommandFor(cwd, 'freeze-check');
+    expect(cmd).toContain('--strict');
+    expect(cmd).not.toContain('--pilot');
+  });
+
+  it('--strict then --pilot → updated back to --pilot, one entry', () => {
+    installGates(cwd, ['freeze-check'], 'strict');
+    const switched = installGates(cwd, ['freeze-check'], 'pilot');
+    const entryResult = switched.find((r) => r.event === 'freeze-check');
+    expect(entryResult?.action).toBe('updated');
+    expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
+    const cmd = gateCommandFor(cwd, 'freeze-check');
+    expect(cmd).toContain('--pilot');
+    expect(cmd).not.toContain('--strict');
+  });
+
+  it('init --gates= routes the tier through the same upsert (default then --pilot re-init)', async () => {
+    // First init at default (strict).
+    await initCommand({ bare: true, gates: 'freeze-check' });
+    expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
+    expect(gateCommandFor(cwd, 'freeze-check')).toContain('--strict');
+
+    // Re-init with --pilot → routes through the same installGates upsert:
+    // one entry at the right (pilot) tier, NOT a duplicate.
+    await initCommand({ bare: true, gates: 'freeze-check', pilot: true });
+    expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
+    const cmd = gateCommandFor(cwd, 'freeze-check');
+    expect(cmd).toContain('--pilot');
+    expect(cmd).not.toContain('--strict');
+  });
+
+  it('coexists with a pre-existing PreWriteShield Write|Edit entry (the post-init layout)', () => {
+    // Realistic post-`totem init` state: a PreWriteShield hook already sits in
+    // committed settings.json under the SAME 'Write|Edit' matcher the gate uses.
+    // The upsert must install the gate as a DISTINCT entry and, on a tier
+    // switch, update ONLY the gate entry — never touching PreWriteShield.
+    fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
+    const shieldCommand = 'node .claude/hooks/PreWriteShield.cjs';
+    fs.writeFileSync(
+      path.join(cwd, '.claude', 'settings.json'),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Write|Edit', hooks: [{ type: 'command', command: shieldCommand }] },
+          ],
+        },
+      }),
+    );
+    const hasShield = (): boolean =>
+      preToolUseEntries(cwd).some(
+        (e) =>
+          e.matcher === 'Write|Edit' &&
+          Array.isArray(e.hooks) &&
+          e.hooks.some((h) => {
+            const c = typeof h === 'string' ? h : ((h as { command?: string })?.command ?? '');
+            return c === shieldCommand;
+          }),
+      );
+
+    // Install the gate at pilot → a distinct second Write|Edit entry.
+    installGates(cwd, ['freeze-check'], 'pilot');
+    expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
+    expect(gateCommandFor(cwd, 'freeze-check')).toContain('--pilot');
+    expect(hasShield()).toBe(true);
+    expect(preToolUseEntries(cwd).filter((e) => e.matcher === 'Write|Edit').length).toBe(2);
+
+    // Tier switch → updates ONLY the gate entry in place; PreWriteShield stays.
+    const switched = installGates(cwd, ['freeze-check'], 'strict');
+    expect(switched.find((r) => r.event === 'freeze-check')?.action).toBe('updated');
+    expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
+    const cmd2 = gateCommandFor(cwd, 'freeze-check');
+    expect(cmd2).toContain('--strict');
+    expect(cmd2).not.toContain('--pilot');
+    expect(hasShield()).toBe(true);
+    expect(preToolUseEntries(cwd).filter((e) => e.matcher === 'Write|Edit').length).toBe(2);
   });
 });
 

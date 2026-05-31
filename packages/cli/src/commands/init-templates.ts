@@ -632,12 +632,20 @@ process.stdin.on('end', () => {
 // empty-subsystem guardrail (in the wrapper) is what keeps ordinary edits
 // passing through. Installed into committed \`.claude/settings.json\`
 // (team-level governance — gate opt-in is repo policy, Tenet 12).
+//
+// SOURCE OF TRUTH for the ACTUAL installed command is
+// gate-install.ts \`gateCommand(event, tier)\` — it builds the per-gate,
+// per-tier string at install time. This constant supplies ONLY the canonical
+// \`matcher\` and hook \`type\` (the fields \`gateEntry()\` reads); its \`command\`
+// here mirrors the DEFAULT install (freeze-check at the default \`--strict\`
+// tier) so a reader sees exactly what a default \`totem gate install\` bakes,
+// not a tier-less never-installed string.
 export const CLAUDE_GATE_WRAPPER_ENTRY = {
   matcher: 'Write|Edit',
   hooks: [
     {
       type: 'command',
-      command: 'node .claude/hooks/gate-wrapper.cjs --event freeze-check',
+      command: 'node .claude/hooks/gate-wrapper.cjs --event freeze-check --strict',
     },
   ],
 };

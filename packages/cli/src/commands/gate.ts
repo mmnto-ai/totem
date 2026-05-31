@@ -3,6 +3,14 @@ import * as path from 'node:path';
 import { isGlobalConfigPath, loadConfig, resolveConfigPath } from '../utils.js';
 import { type GateTier, installGates } from './gate-install.js';
 
+/**
+ * Command-specific log tag for non-error output (log.success / log.dim).
+ * `log.error` keeps the mandatory fixed literal `'Totem Error'` tag per the
+ * repo styleguide (command-specific tags for info/success/dim, the unified
+ * error tag for log.error).
+ */
+const TAG = 'Gate';
+
 export interface GateCheckCommandOptions {
   event: string;
   payload: string;
@@ -76,7 +84,8 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
   const { log } = await import('../ui.js');
 
   const cwd = process.cwd();
-  const results = installGates(cwd, events, resolveTier(opts));
+  const tier = resolveTier(opts);
+  const results = installGates(cwd, events, tier);
 
   for (const result of results) {
     if (result.err) {
@@ -85,11 +94,15 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
     }
     const label = result.event ? `${result.file} (${result.event})` : result.file;
     if (result.action === 'created') {
-      log.success('Totem', `Scaffolded ${label}`);
+      log.success(TAG, `Scaffolded ${label}`);
     } else if (result.action === 'merged') {
-      log.success('Totem', `Installed gate entry into ${label}`);
+      log.success(TAG, `Installed gate entry into ${label}`);
+    } else if (result.action === 'updated') {
+      // Tier switch: the one existing entry's command was rewritten in place.
+      log.success(TAG, `Updated ${result.event ?? result.file} tier to ${tier}`);
     } else {
-      log.dim('Totem', `${label} already present — no change`);
+      // Genuine same-tier no-op — the ONLY case that prints "no change".
+      log.dim(TAG, `${label} already present — no change`);
     }
   }
 }

@@ -1278,7 +1278,17 @@ export default {
           // resolveGateEvents validates a single name against the registry
           // and throws (fail-loud) on unknown — no default-install.
           const [validated] = await resolveGateEvents({ name });
-          gateEvents.push(validated!);
+          // resolveGateEvents returns a non-empty array or throws, so this
+          // never fires today — but guard explicitly (no fragile `!`): fail
+          // loud rather than push `undefined` if it ever returns empty.
+          if (!validated) {
+            throw new TotemError(
+              'GATE_INVALID',
+              `Gate "${name}" did not resolve.`,
+              'This is an internal error — the gate registry returned no event for a validated name.',
+            );
+          }
+          gateEvents.push(validated);
         }
       }
 
@@ -1289,7 +1299,7 @@ export default {
       const gateResults = installGates(cwd, gateEvents, gateTier);
       for (const result of gateResults) {
         if (result.err) {
-          log.error('Totem Error', `Gate install failed for ${result.file}: ${result.err}`); // totem-ignore — internal gate installer error
+          log.error('Totem Error', `Gate install failed for ${result.file}: ${result.err}`);
         } else if (result.action === 'created') {
           summary.push({
             file: result.file,
@@ -1299,6 +1309,13 @@ export default {
           summary.push({
             file: result.file,
             action: `Installed gate "${result.event}" into existing config`,
+          });
+        } else if (result.action === 'updated') {
+          // Tier switch on a re-init — the one existing entry was rewritten in
+          // place (NOT the misleading "already present — no change" no-op).
+          summary.push({
+            file: result.file,
+            action: `Updated gate "${result.event}" tier to ${gateTier}`,
           });
         }
       }

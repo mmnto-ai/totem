@@ -1,11 +1,6 @@
 import * as path from 'node:path';
 
-import {
-  type HostHookEntry,
-  mergeClaudeHooksKey,
-  preToolUseHasMatcher,
-  type ScaffoldOutcome,
-} from './host-hooks.js';
+import { type HostHookEntry, upsertClaudeHookCommand } from './host-hooks.js';
 import { scaffoldFile } from './init.js';
 import {
   CLAUDE_GATE_WRAPPER,
@@ -19,12 +14,13 @@ import {
  *
  * Single source of truth for BOTH the `totem gate install` verb and
  * `totem init --gates=` — neither owns a second copy of the merge logic.
- * Thin caller of the extracted `mergeClaudeHooksKey` merger (host-hooks.ts).
+ * Thin caller of the extracted `upsertClaudeHookCommand` upsert (host-hooks.ts).
  *
- * Idempotency keys on the ACTUAL baked command substring
- * (`gate-wrapper.cjs --event <name>`), so installing freeze-check twice is a
- * no-op while freeze-check + a future second gate produce two distinct
- * entries under the shared `Write|Edit` matcher.
+ * Tier-AWARE upsert keyed on the per-gate `--event <name>` identity (which is
+ * tier-independent): installing freeze-check twice at the SAME tier is a no-op,
+ * installing it at a DIFFERENT tier rewrites the one existing entry's command
+ * in place (never a duplicate), and freeze-check + a future second gate produce
+ * two distinct entries under the shared `Write|Edit` matcher.
  *
  * `--all` / unknown-gate validation is done by the CALLER against
  * `knownGateEvents()` (the registry is the single source of truth) — this
@@ -44,15 +40,16 @@ export type GateTier = 'strict' | 'pilot';
 const GATE_WRAPPER_BASENAME = 'gate-wrapper.cjs';
 
 /**
- * Collision-safe idempotency probe: does `command` install the gate for
+ * Collision-safe gate-identity probe: does `command` install the gate for
  * EXACTLY this `event`?
  *
  * Tokenize on whitespace and require BOTH the wrapper basename AND the token
  * immediately after `--event` to equal `event`. A loose substring `includes`
  * would let `--event freeze-check` spuriously match a future
  * `--event freeze-check-extended`. The probe is tier-INDEPENDENT (it ignores
- * the baked `--strict` / `--pilot` flag), so re-installing the same gate at a
- * different tier is still a no-op (one entry per gate, never duplicated).
+ * the baked `--strict` / `--pilot` flag), so it identifies the single existing
+ * entry for a gate REGARDLESS of tier — the upsert then either no-ops (same
+ * tier) or rewrites that one entry's command (tier switch), never duplicating.
  */
 export function commandInstallsGate(command: string, event: string): boolean {
   const tokens = command.split(/\s+/).filter((t) => t.length > 0);
@@ -81,16 +78,29 @@ function gateEntry(event: string, tier: GateTier): HostHookEntry {
   };
 }
 
+/**
+ * Outcome of a single gate install operation.
+ *
+ * Gate-specific (decoupled from `ScaffoldOutcome['action']`): it adds
+ * `'updated'`, which the wrapper-scaffold step can never produce but the
+ * tier-aware entry upsert can (re-installing a gate at a DIFFERENT tier
+ * rewrites the one existing entry's command in place).
+ *
+ * - `created` — fresh file / wrapper written
+ * - `merged`  — a new entry appended to existing settings
+ * - `updated` — an existing gate entry's command rewritten in place (tier
+ *               switch) — exactly one entry per gate, never duplicated
+ * - `skipped` — idempotent no-op (same-tier re-install, or the wrapper's
+ *               `exists` outcome normalized at the boundary; both mean "no
+ *               change")
+ */
+export type GateInstallAction = 'created' | 'merged' | 'updated' | 'skipped';
+
 export interface GateInstallResult {
   /** Repo-relative file the result pertains to. */
   file: string;
-  /**
-   * Outcome of the operation. Matches the actual returns: `created` (new
-   * wrapper / merged entry), `merged` (entry added to existing settings), or
-   * `skipped` (idempotent no-op). scaffoldFile's `exists` outcome is normalized
-   * to `skipped` at the boundary (see installGates) — both mean "no change".
-   */
-  action: ScaffoldOutcome['action'];
+  /** Outcome of the operation (see {@link GateInstallAction}). */
+  action: GateInstallAction;
   /** The gate event this result is for (entry results only). */
   event?: string;
   err?: string;
@@ -131,20 +141,18 @@ export function installGates(
     err: wrapperResult.err,
   });
 
-  // 2. Merge one PreToolUse entry per gate via the shared merger. The
-  //    idempotency probe matches the EXACT --event token (collision-safe and
-  //    tier-independent), so a re-run — even at a different tier — is a no-op
-  //    while a NEW gate adds a second distinct entry.
+  // 2. Tier-AWARE upsert of one PreToolUse entry per gate. The gate-identity
+  //    probe matches the EXACT --event token (collision-safe and
+  //    tier-independent), so the upsert keeps EXACTLY ONE entry per gate:
+  //    a same-tier re-run is a no-op (`skipped`), a different-tier re-install
+  //    rewrites that entry's command in place (`updated`), and a NEW gate adds
+  //    a second distinct entry (`merged`).
   for (const event of events) {
-    const entryResult = mergeClaudeHooksKey(
+    const entryResult = upsertClaudeHookCommand(
       settingsPath,
-      'PreToolUse',
+      GATE_MATCHER,
       gateEntry(event, tier),
-      (parsed) =>
-        preToolUseHasMatcher(parsed, GATE_MATCHER, (hook) => {
-          const cmd = typeof hook === 'string' ? hook : hook.command;
-          return typeof cmd === 'string' && commandInstallsGate(cmd, event);
-        }),
+      (cmd) => commandInstallsGate(cmd, event),
     );
     results.push({
       file: '.claude/settings.json',
