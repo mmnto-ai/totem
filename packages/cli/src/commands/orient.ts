@@ -163,7 +163,7 @@ async function deriveRepoSlug(cwd: string): Promise<{ slug: RepoSlug } | ErrorEn
     return { slug: { owner: parsed.owner.login, name: parsed.name } };
     // totem-context: a gh failure becomes a fail-loud { error } envelope (Tenet 4 — surfaced in the report, not swallowed); every other section still derives independently
   } catch (err) {
-    return { error: errMessage(err).trim().split('\n')[0] || 'gh repo view failed' };
+    return { error: errMessage(err) || 'gh repo view failed' };
   }
 }
 
@@ -405,7 +405,7 @@ const FOOTER = [
 
 function renderFreshness(f: OrientIndexFreshness): string {
   if (!f.synced) return '  freshness unknown — not yet synced (run `totem sync`)';
-  return `  index synced ${f.lastSync}${f.stale ? ' [STALE]' : ''}`;
+  return '  index synced ' + f.lastSync + (f.stale ? ' [STALE]' : '');
 }
 
 export function renderReport(report: OrientReport, boardConfigured: boolean): string {
@@ -433,7 +433,8 @@ export function renderReport(report: OrientReport, boardConfigured: boolean): st
   else if (report.openPRs.length === 0) out.push('  none');
   else
     for (const p of report.openPRs) {
-      out.push(`  #${p.number}${p.isDraft ? ' [draft]' : ''} ${p.title}  (${p.headRefName})`);
+      const head = `#${p.number}` + (p.isDraft ? ' [draft]' : '');
+      out.push(`  ${head} ${p.title}  (${p.headRefName})`);
     }
 
   // BOARD in-flight
@@ -445,7 +446,7 @@ export function renderReport(report: OrientReport, boardConfigured: boolean): st
   else
     for (const i of report.board) {
       const num = i.contentNumber ? `#${i.contentNumber} ` : '';
-      out.push(`  [${i.status}] ${num}${i.title}`);
+      out.push(`  [${i.status}] ${num}` + i.title);
     }
 
   // BOARD↔ISSUE COHERENCE (the new derived signal)
@@ -481,7 +482,8 @@ export function renderReport(report: OrientReport, boardConfigured: boolean): st
   else
     for (const i of report.otherOpenIssues) {
       const labels = i.labels.filter((l) => !NOISE_LABELS.has(l));
-      out.push(`  #${i.number} ${i.title}${labels.length ? `  [${labels.join(', ')}]` : ''}`);
+      const labelTag = labels.length ? `  [${labels.join(', ')}]` : '';
+      out.push(`  #${i.number} ${i.title}` + labelTag);
     }
 
   // INDEX FRESHNESS pointer (honest absence when never synced)
