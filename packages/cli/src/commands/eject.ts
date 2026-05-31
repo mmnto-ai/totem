@@ -29,6 +29,8 @@ const TOTEM_SCAFFOLDED_FILES = [
   '.claude/hooks/PreWriteShield.cjs',
   // Phase C slice 1 SessionStart (mmnto-ai/totem#1845).
   '.claude/hooks/SessionStart.cjs',
+  // PR-C action-gate wrapper (mmnto-ai/totem#2048, eject parity).
+  '.claude/hooks/gate-wrapper.cjs',
 ];
 
 // ─── Helpers ────────────────────────────────────────────
@@ -222,6 +224,9 @@ function scrubClaudeSettings(cwd: string, summary: EjectSummary): void {
  *     left over from when Phase B added the install side).
  *   - `hooks.SessionStart` entries whose command references `SessionStart.cjs`
  *     (Phase C slice 1 install — mmnto-ai/totem#1845).
+ *   - `hooks.PreToolUse` Write|Edit entries whose command references
+ *     `gate-wrapper.cjs` (PR-C action-gate install — mmnto-ai/totem#2048;
+ *     one per installed gate). Parity with `gate install` / `init --gates=`.
  *
  * User-defined entries (other matchers, other commands) are preserved.
  * Empty arrays/objects/files are pruned bottom-up to leave a clean
@@ -271,15 +276,21 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
 
   let mutated = false;
 
-  // PreToolUse → drop only the PreWriteShield entry. Other matchers
-  // (Bash legacy, user-defined Write|Edit) preserved. Array guard so a
-  // malformed-but-valid JSON shape (e.g., `"PreToolUse": null`) is
+  // PreToolUse → drop the PreWriteShield entry AND every action-gate
+  // wrapper entry (matcher Write|Edit, command references gate-wrapper.cjs;
+  // one per installed gate — PR-C eject parity, mmnto-ai/totem#2048). Other
+  // matchers (Bash legacy, user-defined Write|Edit) preserved. Array guard
+  // so a malformed-but-valid JSON shape (e.g., `"PreToolUse": null`) is
   // skipped instead of crashing the eject best-effort cleanup.
   const preToolUseRaw = hooks.PreToolUse;
   if (Array.isArray(preToolUseRaw)) {
     const preToolUse = preToolUseRaw as Array<{ matcher?: string; hooks?: Array<unknown> }>;
     const filtered = preToolUse.filter(
-      (entry) => !(entry.matcher === 'Write|Edit' && commandIncludes(entry, 'PreWriteShield')),
+      (entry) =>
+        !(
+          entry.matcher === 'Write|Edit' &&
+          (commandIncludes(entry, 'PreWriteShield') || commandIncludes(entry, 'gate-wrapper.cjs'))
+        ),
     );
     if (filtered.length !== preToolUse.length) {
       mutated = true;
