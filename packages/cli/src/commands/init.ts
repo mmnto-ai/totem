@@ -6,6 +6,13 @@ import { z } from 'zod';
 import type { IngestTarget } from '@mmnto/totem';
 
 import {
+  type HookCommandSchema,
+  mergeClaudeHooksKey,
+  type ParsedSettings,
+  preToolUseHasMatcher,
+  type ScaffoldOutcome,
+} from './host-hooks.js';
+import {
   AI_TOOLS,
   type AiToolInfo,
   type Ecosystem,
@@ -141,41 +148,13 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
 
 // --- Claude Code hook installer ---
 
-// Zod schema for the subset of settings.local.json that we need to validate.
-// Uses .passthrough() to preserve unknown keys during round-trip read/write.
-const HookCommandSchema = z.union([
-  z.string(),
-  z.object({ type: z.string(), command: z.string() }).passthrough(),
-]);
-
-const PreToolUseEntrySchema = z
-  .object({
-    matcher: z.string().optional(),
-    hooks: z.array(HookCommandSchema).optional(),
-  })
-  .passthrough();
-
-const SessionStartEntrySchema = z
-  .object({
-    // SessionStart entries do NOT carry a `matcher` field (unlike
-    // PreToolUse entries). Adding it here would silently drop unknown
-    // shapes; passthrough preserves any future fields without breaking
-    // round-trip read/write.
-    hooks: z.array(HookCommandSchema).optional(),
-  })
-  .passthrough();
-
-const ClaudeSettingsSchema = z
-  .object({
-    hooks: z
-      .object({
-        PreToolUse: z.array(PreToolUseEntrySchema).optional(),
-        SessionStart: z.array(SessionStartEntrySchema).optional(),
-      })
-      .passthrough()
-      .optional(),
-  })
-  .passthrough();
+// The settings-merge primitive (ClaudeSettingsSchema, HookCommandSchema,
+// mergeClaudeHooksKey, preToolUseHasMatcher, and the ScaffoldOutcome /
+// ParsedSettings / ClaudeHooksKey types) lives in host-hooks.js — the
+// namespace-neutral install primitive shared by gate-install, init, and
+// later Prop 257 (PR-C, mmnto-ai/totem#2048). The Totem-specific
+// idempotency probes (hasTotemShield, etc.) and the per-lifecycle scaffold
+// wrappers stay here.
 
 /** Check whether a hook entry already contains a totem review/shield reference. */
 function hasTotemShield(entry: z.infer<typeof HookCommandSchema>): boolean {
@@ -198,94 +177,6 @@ function hasPreWriteShield(entry: z.infer<typeof HookCommandSchema>): boolean {
 function hasTotemSessionStart(entry: z.infer<typeof HookCommandSchema>): boolean {
   if (typeof entry === 'string') return entry.includes('SessionStart.cjs');
   return entry.command.includes('SessionStart.cjs');
-}
-
-type ParsedSettings = z.infer<typeof ClaudeSettingsSchema>;
-type PreToolUseMatcher = 'Bash' | 'Write|Edit';
-type ScaffoldOutcome = { action: 'created' | 'merged' | 'skipped'; err?: string };
-type ClaudeHooksKey = 'PreToolUse' | 'SessionStart';
-type ClaudeHookEntry =
-  | typeof CLAUDE_PRETOOLUSE_ENTRY
-  | typeof CLAUDE_PREWRITESHIELD_ENTRY
-  | typeof CLAUDE_SESSION_START_ENTRY;
-
-/**
- * Shared merge logic for installing a single hook entry into a Claude
- * settings JSON file (`settings.local.json` or `settings.json`) under
- * `hooks.<key>`. Both `PreToolUse` and `SessionStart` lifecycles share
- * the same read → safeparse → idempotency probe → append → write shape;
- * this is the single source of truth.
- *
- * Idempotent: returns `'skipped'` if `alreadyInstalled(parsed)` is true.
- */
-function mergeClaudeHooksKey(
-  filePath: string,
-  hookKind: ClaudeHooksKey,
-  entry: ClaudeHookEntry,
-  alreadyInstalled: (parsed: ParsedSettings) => boolean,
-): ScaffoldOutcome {
-  try {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    const fileName = path.basename(filePath);
-
-    const fullConfig = { hooks: { [hookKind]: [entry] } };
-
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, JSON.stringify(fullConfig, null, 2) + '\n', 'utf-8');
-      return { action: 'created' };
-    }
-
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    let rawParsed: unknown;
-    try {
-      rawParsed = JSON.parse(raw);
-    } catch (err) {
-      throw new Error(`Could not parse ${fileName} (invalid JSON)`, {
-        cause: err instanceof Error ? err : new Error(String(err)),
-      });
-    }
-
-    const result = ClaudeSettingsSchema.safeParse(rawParsed);
-    if (!result.success) {
-      const detail = result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
-      // Prefix not added here — call site (initCommand) emits via
-      // log.error('Totem Error', ...) which adds the prefix automatically.
-      return {
-        action: 'skipped',
-        err: `Could not merge config: ${fileName} has unexpected shape: ${detail}`,
-      };
-    }
-
-    const parsed = result.data;
-    if (alreadyInstalled(parsed)) {
-      return { action: 'skipped' };
-    }
-
-    const existing = parsed.hooks?.[hookKind] ?? [];
-    const hooks = parsed.hooks ?? {};
-    hooks[hookKind] = [...existing, entry];
-    parsed.hooks = hooks;
-    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
-    return { action: 'merged' };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { action: 'skipped', err: `[Totem Error] ${message}` };
-  }
-}
-
-function preToolUseHasMatcher(
-  parsed: ParsedSettings,
-  matcher: PreToolUseMatcher,
-  probe: (entry: z.infer<typeof HookCommandSchema>) => boolean,
-): boolean {
-  const preToolUse = parsed.hooks?.PreToolUse ?? [];
-  return preToolUse.some(
-    (h) => h.matcher === matcher && Array.isArray(h.hooks) && h.hooks.some(probe),
-  );
 }
 
 function sessionStartHas(
@@ -773,6 +664,11 @@ export async function initCommand(options?: {
    *  or pre-marker scaffold files; force-mode suppresses ONLY the no-marker
    *  guard. Marker-bearing files refresh via the normal path regardless. */
   forceSkillRefresh?: boolean;
+  /** Install action-gate PreToolUse hooks (PR-C, mmnto-ai/totem#2048): a
+   *  comma-list of gate names (validated against `knownGateEvents()`) or
+   *  the literal `all`. Routes through the SAME `installGates` path the
+   *  `gate install` verb uses — no second copy of the merge logic. */
+  gates?: string;
   /** Override home directory for testing. */
   _homeDir?: string;
 }): Promise<void> {
@@ -1345,6 +1241,85 @@ export default {
         }
       }
     } // end of bare mode else block
+
+    // --- Always run: action-gate install (--gates=, PR-C mmnto-ai/totem#2048) ---
+    // Thin sugar that is INTENTIONALLY outside the bare-mode branch: gate
+    // opt-in is an independent, explicit flag (it works in bare repos too).
+    // Parses the comma-list (or `all`), validates each member against
+    // knownGateEvents() (fail loud on unknown), and routes through the SAME
+    // installGates() path the `gate install` verb uses — no second copy of
+    // the merge logic.
+    if (options?.gates) {
+      const { resolveGateEvents } = await import('./gate.js');
+      const { installGates } = await import('./gate-install.js');
+      const { TotemError, knownGateEvents } = await import('@mmnto/totem');
+      const requested = options.gates.trim();
+      let gateEvents: string[];
+      if (requested.toLowerCase() === 'all') {
+        gateEvents = await resolveGateEvents({ all: true });
+      } else {
+        const names = requested
+          .split(',')
+          .map((n) => n.trim())
+          .filter((n) => n.length > 0);
+        // Empty after parse/trim/filter (e.g. `--gates=,` or whitespace-only):
+        // fail loud rather than scaffolding an orphan wrapper with no entry.
+        // Restores parity with the verb's resolveGateEvents no-selection
+        // fail-loud (no default-install).
+        if (names.length === 0) {
+          throw new TotemError(
+            'GATE_INVALID',
+            'No gate selected in --gates=.',
+            `Pass --gates=all or one of: ${knownGateEvents().join(', ')}.`,
+          );
+        }
+        gateEvents = [];
+        for (const name of names) {
+          // resolveGateEvents validates a single name against the registry
+          // and throws (fail-loud) on unknown — no default-install.
+          const [validated] = await resolveGateEvents({ name });
+          // resolveGateEvents returns a non-empty array or throws, so this
+          // never fires today — but guard explicitly (no fragile `!`): fail
+          // loud rather than push `undefined` if it ever returns empty.
+          if (!validated) {
+            throw new TotemError(
+              'GATE_INVALID',
+              `Gate "${name}" did not resolve.`,
+              'This is an internal error — the gate registry returned no event for a validated name.',
+            );
+          }
+          gateEvents.push(validated);
+        }
+      }
+
+      // Tier is derived from the existing init options (pilot vs strict) and
+      // BAKED into the installed command at install time (the wrapper reads it
+      // ONLY from argv — no env override). Default install bakes --strict.
+      const gateTier = options?.pilot ? 'pilot' : 'strict';
+      const gateResults = installGates(cwd, gateEvents, gateTier);
+      for (const result of gateResults) {
+        if (result.err) {
+          log.error('Totem Error', `Gate install failed for ${result.file}: ${result.err}`);
+        } else if (result.action === 'created') {
+          summary.push({
+            file: result.file,
+            action: result.event ? `Scaffolded gate "${result.event}"` : 'Scaffolded gate wrapper',
+          });
+        } else if (result.action === 'merged') {
+          summary.push({
+            file: result.file,
+            action: `Installed gate "${result.event}" into existing config`,
+          });
+        } else if (result.action === 'updated') {
+          // Tier switch on a re-init — the one existing entry was rewritten in
+          // place (NOT the misleading "already present — no change" no-op).
+          summary.push({
+            file: result.file,
+            action: `Updated gate "${result.event}" tier to ${gateTier}`,
+          });
+        }
+      }
+    }
 
     // --- Print summary ---
     if (summary.length > 0) {

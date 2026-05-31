@@ -95,6 +95,10 @@ program
     '--force-skill-refresh',
     'Force-overwrite skill files lacking canonical markers (may destroy user content; review the diff after)',
   )
+  .option(
+    '--gates <list>',
+    'Install action-gate PreToolUse hooks: a comma-list of gate names (e.g. freeze-check) or "all"',
+  )
   .action(
     async (options: {
       bare?: boolean;
@@ -102,6 +106,7 @@ program
       strict?: boolean;
       global?: boolean;
       forceSkillRefresh?: boolean;
+      gates?: string;
     }) => {
       try {
         await initCommand({
@@ -110,6 +115,7 @@ program
           strict: options.strict,
           global: options.global,
           forceSkillRefresh: options.forceSkillRefresh,
+          gates: options.gates,
         });
       } catch (err) {
         handleError(err);
@@ -1159,6 +1165,34 @@ gateCmd
       throw err;
     }
   });
+
+gateCmd
+  .command('install [name]')
+  .description('Install a gate PreToolUse hook into committed .claude/settings.json (idempotent)')
+  .option('--all', 'Install every known gate (the knownGateEvents() registry)')
+  .option(
+    '--pilot',
+    'Bake the advisory pilot tier into the installed command (deny → exit 0 + stderr). Default is strict (deny → exit 2).',
+  )
+  .option('--strict', 'Bake the strict enforcement tier (the default; deny → exit 2)')
+  .addHelpText(
+    'after',
+    `\nExamples:\n  $ totem gate install --all\n  $ totem gate install freeze-check\n  $ totem gate install freeze-check --pilot\n`,
+  )
+  .action(
+    async (
+      name: string | undefined,
+      opts: { all?: boolean; pilot?: boolean; strict?: boolean },
+    ) => {
+      try {
+        const { gateInstallCommand } = await import('./commands/gate.js');
+        await gateInstallCommand({ all: opts.all, name, pilot: opts.pilot, strict: opts.strict });
+      } catch (err) {
+        handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+        throw err;
+      }
+    },
+  );
 
 // ─── Lesson noun-verb subcommands ────────────────────────
 
