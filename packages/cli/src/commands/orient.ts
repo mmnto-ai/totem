@@ -161,6 +161,7 @@ async function deriveRepoSlug(cwd: string): Promise<{ slug: RepoSlug } | ErrorEn
       return { error: 'unexpected `gh repo view` shape' };
     }
     return { slug: { owner: parsed.owner.login, name: parsed.name } };
+    // totem-context: a gh failure becomes a fail-loud { error } envelope (Tenet 4 — surfaced in the report, not swallowed); every other section still derives independently
   } catch (err) {
     return { error: errMessage(err).trim().split('\n')[0] || 'gh repo view failed' };
   }
@@ -179,6 +180,7 @@ async function deriveParked(repoRoot: string): Promise<Section<OrientParkedEntry
       reason: f.reason,
       tracking: f.tracking,
     }));
+    // totem-context: a freeze-read failure becomes a fail-loud { error } envelope (Tenet 4 — surfaced, not swallowed)
   } catch (err) {
     return { error: errMessage(err) };
   }
@@ -195,6 +197,7 @@ async function derivePRs(cwd: string): Promise<Section<OrientPr[]>> {
       headRefName: p.headRefName,
       isDraft: p.isDraft,
     }));
+    // totem-context: a gh PR-list failure becomes a fail-loud { error } envelope (Tenet 4 — surfaced, not swallowed)
   } catch (err) {
     return { error: errMessage(err) };
   }
@@ -209,6 +212,7 @@ async function deriveIssues(
     const { GitHubCliAdapter } = await import('../adapters/github-cli.js');
     const adapter = new GitHubCliAdapter(cwd);
     all = adapter.fetchOpenIssuesWithBody(ISSUE_LIMIT);
+    // totem-context: a gh issue-list failure becomes a fail-loud { error } envelope (Tenet 4 — surfaced, not swallowed)
   } catch (err) {
     return { error: errMessage(err) };
   }
@@ -275,6 +279,7 @@ async function resolveProjectNumber(cwd: string): Promise<number | undefined> {
     const configPath = resolveConfigPath(cwd);
     const config = await loadConfig(configPath);
     return config.orient?.projectNumber;
+    // totem-context: intentional — a missing/unreadable totem.config.ts is honest board-absence (Tenet 14), not an orient failure
   } catch {
     // No config / unreadable config is not an orient failure — board absence
     // is the honest state. (resolveConfigPath throws when no config exists.)
@@ -303,6 +308,7 @@ async function deriveBoard(cwd: string, owner: string | null): Promise<BoardDeri
       contentNumber: i.contentNumber,
     }));
     return { section: active, items, configured: true };
+    // totem-context: a gh board-fetch failure becomes a fail-loud { error } section envelope (Tenet 4 — surfaced, not swallowed)
   } catch (err) {
     return { section: { error: errMessage(err) }, items: null, configured: true };
   }
@@ -324,6 +330,7 @@ async function deriveIndexFreshness(repoRoot: string): Promise<OrientIndexFreshn
     if (!entry) return { synced: false };
     const age = Date.now() - new Date(entry.lastSync).getTime();
     return { synced: true, lastSync: formatRelativeTime(age), stale: age > STALE_MS };
+    // totem-context: intentional — an unreadable registry is honest "not synced" absence (Tenet 14) for a regenerable-cache pointer, not an orient failure
   } catch {
     // Registry unreadable → treat as not-synced honest absence, not an error
     // (it's a regenerable cache pointer, never load-bearing for orientation).

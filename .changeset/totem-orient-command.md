@@ -25,7 +25,7 @@ runs green when `@google/genai` is absent.
 Consumer-safety: owner is derived from `gh repo view`; the GH Project number is
 read from the new optional `orient.projectNumber` field in `totem.config.ts`
 (env `TOTEM_ORIENT_PROJECT` overrides last). With no project configured the
-board section is an honest absence — the cohort's board is never baked in.
+board section is an honest absence — the cohort's board is not baked in.
 
 Core (`@mmnto/totem`): adds the optional `orient.projectNumber` config field
 (`OrientConfigSchema`).
