@@ -7,6 +7,8 @@ export interface StandardPrListItem {
   number: number;
   title: string;
   headRefName: string;
+  /** Whether the PR is a draft. Drives the `[draft]` badge in `totem orient`. */
+  isDraft: boolean;
 }
 
 export interface StandardPrComment {

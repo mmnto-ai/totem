@@ -578,6 +578,24 @@ program
   });
 
 program
+  .command('orient')
+  .description(
+    'Derive session orientation from primitives (open PRs/issues/board/freeze) — zero LLM',
+  )
+  .option('--json', 'Output the OrientReport as structured JSON')
+  .action(async (opts: { json?: boolean }) => {
+    requireGhCli();
+    try {
+      const { orientCommand } = await import('./commands/orient.js');
+      await orientCommand(opts);
+    } catch (err) {
+      handleError(err);
+      // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the mail/verify-badges pattern.
+      throw err;
+    }
+  });
+
+program
   .command('handoff')
   .description('Scaffold a structured journal entry for end-of-session handoff')
   .option('--stdout', 'Print scaffold to stdout instead of opening in $EDITOR')

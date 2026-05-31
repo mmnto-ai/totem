@@ -109,4 +109,37 @@ describe('GitHubCliAdapter', () => {
       expect(() => adapter.fetchOpenIssues()).toThrow('GitHub CLI (gh) is required');
     });
   });
+
+  describe('fetchOpenIssuesWithBody', () => {
+    it('returns mapped issue items including body', () => {
+      mockedExec.mockReturnValue(
+        JSON.stringify([
+          {
+            number: 10,
+            title: 'Epic',
+            body: 'parent stuff',
+            labels: [{ name: 'type: epic' }],
+          },
+          { number: 11, title: 'Child', body: '**Parent:** #10', labels: [] },
+        ]),
+      );
+      const result = adapter.fetchOpenIssuesWithBody();
+      expect(result).toEqual([
+        { number: 10, title: 'Epic', body: 'parent stuff', labels: ['type: epic'] },
+        { number: 11, title: 'Child', body: '**Parent:** #10', labels: [] },
+      ]);
+    });
+
+    it('normalizes null body to empty string', () => {
+      mockedExec.mockReturnValue(
+        JSON.stringify([{ number: 1, title: 'No body', body: null, labels: [] }]),
+      );
+      expect(adapter.fetchOpenIssuesWithBody()[0]!.body).toBe('');
+    });
+
+    it('returns empty array when no open issues', () => {
+      mockedExec.mockReturnValue('[]');
+      expect(adapter.fetchOpenIssuesWithBody()).toEqual([]);
+    });
+  });
 });

@@ -4,7 +4,12 @@ import { z } from 'zod';
 
 import { getTagDate } from '../git.js';
 import { ghFetchAndParse } from './gh-utils.js';
-import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue-adapter.js';
+import type {
+  IssueAdapter,
+  StandardIssue,
+  StandardIssueListItem,
+  StandardIssueWithBody,
+} from './issue-adapter.js';
 
 export interface ClosedIssueListItem {
   number: number;
@@ -27,6 +32,13 @@ const GhIssueListItemSchema = z.object({
   title: z.string(),
   labels: z.array(z.object({ name: z.string() })),
   updatedAt: z.string().datetime(),
+});
+
+const GhIssueWithBodyListItemSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  body: z.string().nullable(),
+  labels: z.array(z.object({ name: z.string() })),
 });
 
 const GhClosedIssueListItemSchema = z.object({
@@ -137,6 +149,36 @@ export class GitHubCliAdapter implements IssueAdapter {
       labels: i.labels.map((l) => l.name),
       updatedAt: i.updatedAt,
       repo: this.repo,
+    }));
+  }
+
+  /**
+   * Fetch open issues including each issue's `body` (for `totem orient`'s
+   * epic→child grouping). Dedicated method rather than widening
+   * `fetchOpenIssues`, whose schema `triage` depends on.
+   */
+  fetchOpenIssuesWithBody(limit: number = DEFAULT_ISSUE_LIMIT): StandardIssueWithBody[] {
+    const issues = ghFetchAndParse(
+      [
+        ...this.repoFlag,
+        'issue',
+        'list',
+        '--state',
+        'open',
+        '--json',
+        'number,title,body,labels',
+        '--limit',
+        String(limit),
+      ],
+      z.array(GhIssueWithBodyListItemSchema),
+      'open issues with body',
+      this.cwd,
+    );
+    return issues.map((i) => ({
+      number: i.number,
+      title: i.title,
+      body: i.body ?? '',
+      labels: i.labels.map((l) => l.name),
     }));
   }
 }

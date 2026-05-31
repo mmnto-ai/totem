@@ -231,6 +231,26 @@ export const ConfigTierSchema = z.enum(['lite', 'standard', 'full']);
 export type ConfigTier = z.infer<typeof ConfigTierSchema>;
 
 /**
+ * `totem orient` configuration (mmnto-ai/totem#2044, WS2).
+ *
+ * `orient` derives session state from primitives (open PRs/issues/board/freeze)
+ * with zero LLM. The GH Project board is the only piece that cannot be derived
+ * from the current repo alone — a board lives under an `owner` and a numeric
+ * project id. Owner is derived from `gh repo view`; the project NUMBER is the
+ * one consumer-specific value, so it is read from this OPTIONAL field (env
+ * `TOTEM_ORIENT_PROJECT` overrides last). When unset, orient renders the board
+ * section as an honest "no board configured" absence — never an error
+ * (Tenet 14). This must NOT bake the cohort's board into a shipped command —
+ * Totem is NOT zero-user.
+ */
+export const OrientConfigSchema = z
+  .object({
+    /** GH Project number for the in-flight board section (e.g. 1). Optional. */
+    projectNumber: z.number().int().positive().optional(),
+  })
+  .optional();
+
+/**
  * Default source extensions used when computing the review content hash.
  * Historical hardcoded set, preserved for backward compatibility with
  * pre-#1527 consumers. Polyglot repos override via `review.sourceExtensions`.
@@ -441,6 +461,9 @@ export const TotemConfigSchema = z.object({
    *  Polyglot repos extend the default `['.ts', '.tsx', '.js', '.jsx']` to cover
    *  additional source languages (e.g., `['.rs', '.gd']` for Rust + Godot). */
   review: ReviewConfigSchema,
+
+  /** Optional: `totem orient` settings (e.g. `{ projectNumber: 1 }` for the GH Project board). */
+  orient: OrientConfigSchema,
 });
 
 /**
@@ -459,6 +482,7 @@ export type Orchestrator = z.infer<typeof OrchestratorSchema>;
 export type GarbageCollectionConfig = z.infer<typeof GarbageCollectionSchema>;
 export type DoctorConfig = z.infer<typeof DoctorConfigSchema>;
 export type DocTarget = z.infer<typeof DocTargetSchema>;
+export type OrientConfig = z.infer<typeof OrientConfigSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
 
 /**
