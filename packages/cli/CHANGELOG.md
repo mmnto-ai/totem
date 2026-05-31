@@ -1,5 +1,15 @@
 # @mmnto/cli
 
+## 1.52.0
+
+### Minor Changes
+
+- d1fc8eb: feat(cli): `totem gate install` + parameterized PreToolUse wrapper + `init --gates=` (WS3 install tail, #2048)
+
+### Patch Changes
+
+- @mmnto/totem@1.52.0
+
 ## 1.51.0
 
 ### Minor Changes
