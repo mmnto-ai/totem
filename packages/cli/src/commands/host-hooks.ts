@@ -115,7 +115,7 @@ export function mergeClaudeHooksKey(
     try {
       rawParsed = JSON.parse(raw);
     } catch (err) {
-      throw new Error(`Could not parse ${fileName} (invalid JSON)`, {
+      throw new Error(`[Totem Error] Could not parse ${fileName} (invalid JSON)`, {
         cause: err instanceof Error ? err : new Error(String(err)),
       });
     }
@@ -142,9 +142,16 @@ export function mergeClaudeHooksKey(
     parsed.hooks = hooks;
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
     return { action: 'merged' };
+    // totem-context: intentional — Result-returning installer; failures are reported
+    // to the caller via ScaffoldOutcome.err (surfaced by initCommand's log.error), not
+    // silently swallowed. Rethrowing would break the callers that branch on the returned
+    // { action, err }. Tenet 4 is satisfied by reporting the failure, not by throwing.
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { action: 'skipped', err: `[Totem Error] ${message}` };
+    return {
+      action: 'skipped',
+      err: message.startsWith('[Totem Error]') ? message : `[Totem Error] ${message}`,
+    };
   }
 }
 
