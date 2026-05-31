@@ -24,7 +24,6 @@ import { flagBoardIssueDrift, isActiveBoardItem } from './orient-coherence.js';
 
 // ─── Tunables ───────────────────────────────────────────
 
-const PR_LIMIT = 100;
 const ISSUE_LIMIT = 200;
 const EPIC_LABEL = 'type: epic';
 // Hide ai-workflow noise from the OTHER-issues label badges (matches the seed).
@@ -41,8 +40,15 @@ const PROJECT_NUMBER_RE = /^\d+$/;
 
 // ─── Report shape (the `--json` surface) ────────────────
 
+/** The `{ error }` envelope for an underivable section. The `error` key is the
+ *  external JSON-API field name (same convention as `json-output.ts`). */
+interface ErrorEnvelope {
+  // eslint-disable-next-line id-match -- 'error' is the standard JSON API field name for external consumers
+  error: string;
+}
+
 /** A section is EITHER its derived value OR an `{ error }` envelope — never silently omitted. */
-type Section<T> = T | { error: string };
+type Section<T> = T | ErrorEnvelope;
 
 export interface OrientParkedEntry {
   subsystem: string;
@@ -123,7 +129,7 @@ interface DerivedState {
   boardConfigured: boolean;
 }
 
-function isError<T>(s: Section<T>): s is { error: string } {
+function isError<T>(s: Section<T>): s is ErrorEnvelope {
   return typeof s === 'object' && s !== null && 'error' in s;
 }
 
@@ -142,7 +148,7 @@ const GH_TIMEOUT_MS = 20_000;
  * matching the codebase convention; static args only, so there is no injection
  * surface. Returns `{ error }` on failure (Tenet 4 — never a silent empty).
  */
-async function deriveRepoSlug(cwd: string): Promise<{ slug: RepoSlug } | { error: string }> {
+async function deriveRepoSlug(cwd: string): Promise<{ slug: RepoSlug } | ErrorEnvelope> {
   try {
     const { safeExec } = await import('@mmnto/totem');
     const raw = safeExec('gh', ['repo', 'view', '--json', 'owner,name'], {

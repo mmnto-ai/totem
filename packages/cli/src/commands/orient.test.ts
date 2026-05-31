@@ -153,8 +153,7 @@ describe('orient per-section failure isolation', () => {
     ]);
     await runJson();
     const r = parseJson();
-    expect(r.parked).toHaveProperty('error');
-    expect((r.parked as { error: string }).error).toMatch(/freeze\.json/i);
+    expect(r.parked).toHaveProperty('error', expect.stringMatching(/freeze\.json/i));
     // The PR section still derives — failure is isolated.
     expect(r.openPRs).toEqual([{ number: 9, title: 'fix', headRefName: 'fix/y', isDraft: false }]);
   });
