@@ -31,22 +31,37 @@ export function isActiveBoardItem(item: BoardItem): boolean {
 }
 
 /**
- * Flag active board cards whose linked issue is absent from the open-issue set.
+ * Flag active board cards whose linked issue is absent from THIS repo's open-issue set.
  *
- * - Considers ONLY active-status cards (terminal-status cards are never flagged).
- * - Considers ONLY cards with a linked `contentNumber` (draft cards / PR-backed
- *   cards without an issue number cannot drift against the issue set).
- * - Pure: derives solely from its two arguments — issues NO `gh` calls.
+ * Scoped to the current repo (`localSlug`) because GH Projects are commonly
+ * ORG-level boards spanning multiple repos: a card for another repo's issue —
+ * or a PR card, whose number lives in a different namespace than the issue set —
+ * compared against this repo's open-ISSUE set would false-flag every healthy
+ * cross-repo/PR card as "drift". A coherence sensor that cries wolf on healthy
+ * cards is worse than none, so the gate is deliberately conservative (derive no
+ * coherence rather than wrong coherence):
+ * - ONLY active-status cards (terminal-status cards are never flagged).
+ * - ONLY cards whose `contentRepo` is THIS repo; cross-repo / repo-unknown cards skipped.
+ * - ONLY `Issue`-type cards; PR cards and draft cards (no number) skipped.
+ * - Pure: derives solely from its arguments — issues NO `gh` calls.
+ *
+ * @param localSlug current repo as `owner/repo`; null (repo undetermined) ⇒ NO
+ *   coherence is derived, because an unscoped check can only be wrong.
  */
 export function flagBoardIssueDrift(
   boardItems: BoardItem[],
   openIssueNumbers: ReadonlySet<number>,
+  localSlug: string | null,
 ): BoardIssueCoherenceFlag[] {
   const flags: BoardIssueCoherenceFlag[] = [];
+  if (!localSlug) return flags;
   for (const item of boardItems) {
     if (!isActiveBoardItem(item)) continue;
     const issueNumber = item.contentNumber;
     if (issueNumber === undefined) continue;
+    // Org-board guard: only THIS repo's Issue cards can drift against its issue set.
+    if (item.contentRepo !== localSlug) continue;
+    if (item.contentType !== 'Issue') continue;
     if (openIssueNumbers.has(issueNumber)) continue;
     flags.push({
       boardItemTitle: item.title,

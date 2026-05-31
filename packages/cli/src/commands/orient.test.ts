@@ -227,10 +227,11 @@ describe('orient board + coherence', () => {
     mockFetchOpenIssuesWithBody.mockReturnValue([
       { number: 200, title: 'Open issue', body: '', labels: [] },
     ]);
+    const local = { contentRepo: 'mmnto-ai/totem', contentType: 'Issue' };
     mockFetchBoardItems.mockReturnValue([
-      { status: 'In Progress', title: 'Active drift', contentNumber: 100 }, // #100 not open → drift
-      { status: 'In Review', title: 'Active ok', contentNumber: 200 }, // open → ok
-      { status: 'Done', title: 'Terminal', contentNumber: 999 }, // terminal → filtered + never flagged
+      { status: 'In Progress', title: 'Active drift', contentNumber: 100, ...local }, // not open → drift
+      { status: 'In Review', title: 'Active ok', contentNumber: 200, ...local }, // open → ok
+      { status: 'Done', title: 'Terminal', contentNumber: 999, ...local }, // terminal → filtered + never flagged
     ]);
     await runJson();
     const r = parseJson();
@@ -246,6 +247,30 @@ describe('orient board + coherence', () => {
         kind: 'issue-closed-or-absent',
       },
     ]);
+  });
+
+  // Regression for the #2044 controller-review bug: GH Project #1 is an org board
+  // spanning repos. A card for a (still-open) strategy issue must SHOW on the board
+  // but NEVER be flagged as drift against THIS repo's open-issue set.
+  it('shows cross-repo cards on the board but never flags them as drift', async () => {
+    mockFetchOpenIssuesWithBody.mockReturnValue([]); // this repo has no open issues
+    mockFetchBoardItems.mockReturnValue([
+      {
+        status: 'In Progress',
+        title: 'Strategy work',
+        contentNumber: 433,
+        contentRepo: 'mmnto-ai/totem-strategy', // different repo
+        contentType: 'Issue',
+      },
+    ]);
+    await runJson();
+    const r = parseJson();
+    // Shown on the org board view…
+    expect(r.board).toEqual([
+      { status: 'In Progress', title: 'Strategy work', contentNumber: 433 },
+    ]);
+    // …but NOT flagged — #433 lives in another repo, not this repo's issue set.
+    expect(r.coherence).toEqual([]);
   });
 });
 
@@ -277,7 +302,13 @@ describe('orient --json and human render parity', () => {
   it('both surfaces honor the same active-board filter and coherence set', async () => {
     mockFetchOpenIssuesWithBody.mockReturnValue([]);
     mockFetchBoardItems.mockReturnValue([
-      { status: 'In Progress', title: 'Drifting card', contentNumber: 77 },
+      {
+        status: 'In Progress',
+        title: 'Drifting card',
+        contentNumber: 77,
+        contentRepo: 'mmnto-ai/totem',
+        contentType: 'Issue',
+      },
       { status: 'Todo', title: 'Hidden todo', contentNumber: 88 },
     ]);
 

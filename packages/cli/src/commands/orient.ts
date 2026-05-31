@@ -370,7 +370,7 @@ function deriveCoherence(state: DerivedState): Section<BoardIssueCoherenceFlag[]
   if (isError(state.board)) return { error: state.board.error };
   if (isError(state.issues)) return { error: state.issues.error };
   if (state.boardItems === null) return [];
-  return flagBoardIssueDrift(state.boardItems, state.issues.openNumbers);
+  return flagBoardIssueDrift(state.boardItems, state.issues.openNumbers, state.localSlug);
 }
 
 function toReport(state: DerivedState): OrientReport {
