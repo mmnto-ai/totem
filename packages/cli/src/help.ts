@@ -33,7 +33,7 @@ export const COMMAND_GROUPS: readonly CommandGroup[] = [
   },
   {
     name: 'Setup',
-    commands: ['init', 'sync', 'hooks', 'doctor', 'status', 'eject'],
+    commands: ['init', 'sync', 'hooks', 'doctor', 'status', 'orient', 'eject'],
   },
 ];
 

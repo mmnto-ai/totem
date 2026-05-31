@@ -49,6 +49,7 @@ export type {
   GarbageCollectionConfig,
   IngestTarget,
   Orchestrator,
+  OrientConfig,
   TotemConfig,
 } from './config-schema.js';
 export {
@@ -70,6 +71,7 @@ export {
   OllamaProviderSchema,
   OpenAIProviderSchema,
   OrchestratorSchema,
+  OrientConfigSchema,
   requireEmbedding,
   ReviewConfigSchema,
   ReviewSourceExtensionSchema,

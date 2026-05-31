@@ -21,6 +21,7 @@ const GhPrListItemSchema = z.object({
   number: z.number(),
   title: z.string(),
   headRefName: z.string(),
+  isDraft: z.boolean(),
 });
 
 const GhPrSchema = z.object({
@@ -113,7 +114,7 @@ export class GitHubCliPrAdapter implements PrAdapter {
 
   fetchOpenPRs(): StandardPrListItem[] {
     const prs = ghFetchAndParse(
-      ['pr', 'list', '--state', 'open', '--json', 'number,title,headRefName'],
+      ['pr', 'list', '--state', 'open', '--json', 'number,title,headRefName,isDraft'],
       z.array(GhPrListItemSchema),
       'open PRs',
       this.cwd,
@@ -122,6 +123,7 @@ export class GitHubCliPrAdapter implements PrAdapter {
       number: pr.number,
       title: pr.title,
       headRefName: pr.headRefName,
+      isDraft: pr.isDraft,
     }));
   }
 

@@ -23,14 +23,14 @@ describe('GitHubCliPrAdapter', () => {
     it('returns mapped PR list items', () => {
       mockedExec.mockReturnValue(
         JSON.stringify([
-          { number: 1, title: 'feat: add stuff', headRefName: 'feat/add-stuff' },
-          { number: 2, title: 'fix: bug', headRefName: 'fix/bug' },
+          { number: 1, title: 'feat: add stuff', headRefName: 'feat/add-stuff', isDraft: false },
+          { number: 2, title: 'fix: bug', headRefName: 'fix/bug', isDraft: true },
         ]),
       );
       const result = adapter.fetchOpenPRs();
       expect(result).toEqual([
-        { number: 1, title: 'feat: add stuff', headRefName: 'feat/add-stuff' },
-        { number: 2, title: 'fix: bug', headRefName: 'fix/bug' },
+        { number: 1, title: 'feat: add stuff', headRefName: 'feat/add-stuff', isDraft: false },
+        { number: 2, title: 'fix: bug', headRefName: 'fix/bug', isDraft: true },
       ]);
     });
 

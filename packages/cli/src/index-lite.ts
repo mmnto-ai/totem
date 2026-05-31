@@ -536,6 +536,10 @@ registerExcluded('spec <inputs...>', 'Generate a pre-work spec briefing');
 registerExcluded('handoff', 'Generate an end-of-session handoff snapshot');
 registerExcluded('triage-pr <pr-number>', 'Categorized triage view of bot review comments');
 registerExcluded('triage', 'Prioritize open issues into an active work roadmap');
+registerExcluded(
+  'orient',
+  'Derive session orientation from primitives (open PRs/issues/board/freeze)',
+);
 registerExcluded('check', 'Run lint + review sequentially');
 registerExcluded('wrap <pr-numbers...>', 'Post-merge workflow: learn from PR(s)');
 registerExcluded('docs [paths...]', 'Auto-update registered project docs');
