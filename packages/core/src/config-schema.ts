@@ -243,12 +243,10 @@ export type ConfigTier = z.infer<typeof ConfigTierSchema>;
  * (Tenet 14). This must NOT bake the cohort's board into a shipped command —
  * Totem is NOT zero-user.
  */
-export const OrientConfigSchema = z
-  .object({
-    /** GH Project number for the in-flight board section (e.g. 1). Optional. */
-    projectNumber: z.number().int().positive().optional(),
-  })
-  .optional();
+export const OrientConfigSchema = z.object({
+  /** GH Project number for the in-flight board section (e.g. 1). Optional. */
+  projectNumber: z.number().int().positive().optional(),
+});
 
 /**
  * Default source extensions used when computing the review content hash.
@@ -463,7 +461,7 @@ export const TotemConfigSchema = z.object({
   review: ReviewConfigSchema,
 
   /** Optional: `totem orient` settings (e.g. `{ projectNumber: 1 }` for the GH Project board). */
-  orient: OrientConfigSchema,
+  orient: OrientConfigSchema.optional(),
 });
 
 /**

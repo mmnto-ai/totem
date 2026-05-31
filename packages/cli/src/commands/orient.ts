@@ -101,6 +101,10 @@ export interface OrientReport {
   coherence: Section<BoardIssueCoherenceFlag[]>;
   epics: Section<OrientEpic[]>;
   otherOpenIssues: Section<OrientOtherIssue[]>;
+  /** Whether a board project number is configured. Distinguishes the JSON's
+   *  "no board configured" (false) from "board configured but empty" (true,
+   *  `board: []`) — without it the two collapse to the same shape (Tenet 14). */
+  boardConfigured: boolean;
 }
 
 // ─── Internal derived state ─────────────────────────────
@@ -223,7 +227,9 @@ async function deriveIssues(
   const childOf = new Map<number, StandardIssueWithBody[]>();
   for (const it of all) {
     const m = (it.body || '').match(PARENT_RE);
-    if (m && (!m[1] || (localSlug && m[1] === localSlug))) {
+    // Case-folded compare: GitHub owner/repo slugs are case-insensitive, so a
+    // casing skew must not stop a child attaching to its LOCAL parent epic.
+    if (m && (!m[1] || (localSlug && m[1].toLowerCase() === localSlug.toLowerCase()))) {
       const parent = Number(m[2]);
       const list = childOf.get(parent) ?? [];
       list.push(it);
@@ -262,36 +268,61 @@ interface BoardDerivation {
   configured: boolean;
 }
 
+/** Project-number resolution: a positive int, an honest "no board configured"
+ *  absence, or a LOUD set-but-malformed env state (Tenet 4 — never silent). */
+type ProjectNumberResolution =
+  | { kind: 'resolved'; projectNumber: number }
+  | { kind: 'unconfigured' }
+  | { kind: 'invalid'; raw: string };
+
 /**
  * Resolve the project number (consumer-safety, Q5): config `orient.projectNumber`
  * → env `TOTEM_ORIENT_PROJECT` (last override). No project configured ⇒ honest
- * absence (not an error). Returns `undefined` when no board is configured.
+ * absence (`unconfigured`). A set-but-non-numeric env var is `invalid` — surfaced
+ * loudly by the caller, NOT masqueraded as "no board configured" (Tenet 4).
  */
-async function resolveProjectNumber(cwd: string): Promise<number | undefined> {
+async function resolveProjectNumber(cwd: string): Promise<ProjectNumberResolution> {
   const env = process.env['TOTEM_ORIENT_PROJECT'];
   if (env !== undefined && env !== '') {
-    if (!PROJECT_NUMBER_RE.test(env)) return undefined;
-    return Number(env);
+    // Explicitly-set-but-malformed ⇒ LOUD: a user who set it expects a board, so
+    // don't degrade to silent "unconfigured" (the exact Tenet-4 drift greptile flagged).
+    if (!PROJECT_NUMBER_RE.test(env)) return { kind: 'invalid', raw: env };
+    return { kind: 'resolved', projectNumber: Number(env) };
   }
   // Optional config: orient must work even with NO totem.config.ts at all.
   try {
     const { loadConfig, resolveConfigPath } = await import('../utils.js');
     const configPath = resolveConfigPath(cwd);
     const config = await loadConfig(configPath);
-    return config.orient?.projectNumber;
+    const projectNumber = config.orient?.projectNumber;
+    return projectNumber === undefined
+      ? { kind: 'unconfigured' }
+      : { kind: 'resolved', projectNumber };
     // totem-context: intentional — a missing/unreadable totem.config.ts is honest board-absence (Tenet 14), not an orient failure
   } catch {
     // No config / unreadable config is not an orient failure — board absence
     // is the honest state. (resolveConfigPath throws when no config exists.)
-    return undefined;
+    return { kind: 'unconfigured' };
   }
 }
 
 async function deriveBoard(cwd: string, owner: string | null): Promise<BoardDerivation> {
-  const projectNumber = await resolveProjectNumber(cwd);
-  if (projectNumber === undefined) {
+  const resolution = await resolveProjectNumber(cwd);
+  if (resolution.kind === 'unconfigured') {
     return { section: [], items: null, configured: false };
   }
+  if (resolution.kind === 'invalid') {
+    // Fail loud (Tenet 4): a set-but-malformed TOTEM_ORIENT_PROJECT is an { error }
+    // board section + configured:true, NOT a silent "no board configured" absence.
+    return {
+      section: {
+        error: `TOTEM_ORIENT_PROJECT="${resolution.raw}" is not a positive integer (board not derived)`,
+      },
+      items: null,
+      configured: true,
+    };
+  }
+  const { projectNumber } = resolution;
   if (owner === null) {
     return {
       section: { error: 'board configured but repo owner could not be derived (gh repo view)' },
@@ -392,6 +423,7 @@ function toReport(state: DerivedState): OrientReport {
     coherence,
     epics: isError(state.issues) ? { error: state.issues.error } : state.issues.epics,
     otherOpenIssues: isError(state.issues) ? { error: state.issues.error } : state.issues.others,
+    boardConfigured: state.boardConfigured,
   };
 }
 
@@ -408,7 +440,7 @@ function renderFreshness(f: OrientIndexFreshness): string {
   return '  index synced ' + f.lastSync + (f.stale ? ' [STALE]' : '');
 }
 
-export function renderReport(report: OrientReport, boardConfigured: boolean): string {
+export function renderReport(report: OrientReport): string {
   const out: string[] = [];
   const repo = isError(report.repo) ? `(repo undetermined: ${report.repo.error})` : report.repo;
   out.push(`═══ totem orient — ${repo} ═══  derived ${report.derivedAt}`);
@@ -440,7 +472,7 @@ export function renderReport(report: OrientReport, boardConfigured: boolean): st
   // BOARD in-flight
   out.push('\n▣ BOARD in-flight  (active statuses only)');
   if (isError(report.board)) out.push(`  ⚠ could not derive: ${report.board.error}`);
-  else if (!boardConfigured)
+  else if (!report.boardConfigured)
     out.push('  no board configured (set orient.projectNumber in totem.config.ts)');
   else if (report.board.length === 0) out.push('  none (no items in an active status)');
   else
@@ -512,5 +544,5 @@ export async function orientCommand(opts: { json?: boolean }): Promise<void> {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     return;
   }
-  process.stdout.write(renderReport(report, state.boardConfigured) + '\n');
+  process.stdout.write(renderReport(report) + '\n');
 }

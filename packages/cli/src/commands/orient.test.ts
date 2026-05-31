@@ -247,6 +247,8 @@ describe('orient board + coherence', () => {
         kind: 'issue-closed-or-absent',
       },
     ]);
+    // JSON consumers can tell a configured board apart from an unconfigured one.
+    expect(r.boardConfigured).toBe(true);
   });
 
   // Regression for the #2044 controller-review bug: GH Project #1 is an org board
@@ -285,10 +287,44 @@ describe('orient honest-absence (no board configured)', () => {
     expect(stdout).not.toContain('could not derive');
   });
 
+  it('marks boardConfigured:false in --json so consumers tell it apart from an empty board', async () => {
+    // Unconfigured board and a configured-but-empty board both have `board: []`;
+    // the boolean is the only signal that disambiguates them for a JSON pipe.
+    mockLoadConfig.mockResolvedValue({ orient: undefined });
+    await runJson();
+    const r = parseJson();
+    expect(r.board).toEqual([]);
+    expect(r.boardConfigured).toBe(false);
+  });
+
   it('renders "freshness unknown — not yet synced" when no registry entry matches', async () => {
     mockReadRegistry.mockReturnValue({});
     await orientCommand({ json: false });
     expect(stdout).toContain('freshness unknown — not yet synced');
+  });
+});
+
+// ─── Fail loud, not silent absence: malformed board config ──
+//
+// A user who SET TOTEM_ORIENT_PROJECT expects a board; a non-numeric value must
+// surface as a loud { error } (Tenet 4), NOT masquerade as "no board configured".
+describe('orient fail-loud on invalid board config', () => {
+  it('a non-numeric TOTEM_ORIENT_PROJECT surfaces a board { error }, not honest absence', async () => {
+    process.env['TOTEM_ORIENT_PROJECT'] = 'my-project';
+    await runJson();
+    const r = parseJson();
+    expect(r.board).toHaveProperty('error', expect.stringMatching(/TOTEM_ORIENT_PROJECT/));
+    // configured:true — the user DID configure (just malformed), so it's not "no board".
+    expect(r.boardConfigured).toBe(true);
+    // Board fetch is never attempted for an invalid number (no extra gh call).
+    expect(mockFetchBoardItems).not.toHaveBeenCalled();
+  });
+
+  it('renders the malformed-config error loudly, not the "no board configured" line', async () => {
+    process.env['TOTEM_ORIENT_PROJECT'] = 'not-a-number';
+    await orientCommand({ json: false });
+    expect(stdout).toContain('could not derive');
+    expect(stdout).not.toContain('no board configured');
   });
 });
 
@@ -320,7 +356,7 @@ describe('orient --json and human render parity', () => {
     expect(r.coherence).toHaveLength(1);
 
     // Human surface, rendered from the SAME report
-    const human = renderReport(r, true);
+    const human = renderReport(r);
     expect(human).toContain('Drifting card');
     expect(human).not.toContain('Hidden todo'); // Todo filtered out of the active board
     expect(human).toContain('issue #77 is closed/absent'); // same coherence flag

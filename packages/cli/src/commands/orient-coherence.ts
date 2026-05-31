@@ -60,7 +60,9 @@ export function flagBoardIssueDrift(
     const issueNumber = item.contentNumber;
     if (issueNumber === undefined) continue;
     // Org-board guard: only THIS repo's Issue cards can drift against its issue set.
-    if (item.contentRepo !== localSlug) continue;
+    // Case-folded compare — GitHub owner/repo slugs are case-insensitive, so a casing
+    // skew between `gh repo view` and `gh project item-list` must not drop a valid check.
+    if (!item.contentRepo || item.contentRepo.toLowerCase() !== localSlug.toLowerCase()) continue;
     if (item.contentType !== 'Issue') continue;
     if (openIssueNumbers.has(issueNumber)) continue;
     flags.push({
