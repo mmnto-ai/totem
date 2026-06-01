@@ -106,9 +106,10 @@ try {
     timeout: 30000,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
-  // totem-context: intentional boot-safe best-effort — orient is additive to describe; a SessionStart hook must never crash the boot.
-} catch {
-  /* orient is best-effort; the describe briefing already emitted. Stay silent (boot-safe). */
+} catch (err) {
+  // Boot-safe: orient is additive to describe; a failure never blocks session start —
+  // surface a NON-fatal breadcrumb (matches the Claude-side hook) rather than swallow.
+  process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
 `;
 
@@ -421,11 +422,22 @@ try {
       encoding: 'utf-8',
       timeout: 30000,
     });
+    // spawnSync sets .error (it does NOT throw) on a spawn-level failure; re-throw so
+    // it surfaces through the catch breadcrumb below rather than writing '' silently.
+    if (orientResult.error) {
+      throw orientResult.error;
+    }
     process.stdout.write((orientResult.stdout || '') + (orientResult.stderr || ''));
   }
-  // totem-context: intentional boot-safe best-effort — a SessionStart hook must never crash the agent's boot; orient is additive to describe and degrades silently.
-} catch {
-  /* orient is best-effort; the describe briefing already emitted. Stay silent (boot-safe). */
+} catch (err) {
+  // Boot-safe: orient is additive to describe (already emitted), so a failure never
+  // blocks session start — but surface a NON-fatal breadcrumb to stderr (not stdout,
+  // to keep the prompt clean) for debuggability rather than swallowing silently.
+  process.stderr.write(
+    '[SessionStart] orient briefing unavailable (non-fatal): ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\\n',
+  );
 }
 `;
 
