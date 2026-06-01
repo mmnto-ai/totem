@@ -624,6 +624,13 @@ export function renderOrientForSession(report: OrientReport): string {
   if (isError(report.epics)) {
     out.push(`● issues: ⚠ could not derive: ${report.epics.error}`);
   } else {
+    // `epics` and `otherOpenIssues` share `deriveIssues`, so `toReport` errors
+    // them together today — but the type (`Section<...>`) permits an independent
+    // split. Surface an errored `otherOpenIssues` explicitly rather than silently
+    // coercing its count to 0 (Tenet 4 — never a silent omit, even type-only).
+    if (isError(report.otherOpenIssues)) {
+      out.push(`● other open issues: ⚠ could not derive: ${report.otherOpenIssues.error}`);
+    }
     const epicCount = report.epics.length;
     const otherCount = isError(report.otherOpenIssues) ? 0 : report.otherOpenIssues.length;
     const parts: string[] = [];

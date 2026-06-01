@@ -112,7 +112,12 @@ async function buildOrientBlock(gitRoot) {
     const report = await deriveOrientReport(gitRoot);
     return renderOrientForSession(report);
   } catch (err) {
-    process.stderr.write(`[session-context] orient block skipped: ${err.message}\n`);
+    // Match the sibling pollInboundMail's null-safe extraction: `err.message`
+    // alone throws a TypeError when `err` is null/undefined (crashing the very
+    // boot this catch protects) and prints "undefined" for non-Error throws.
+    process.stderr.write(
+      `[session-context] orient block skipped: ${err && err.message ? err.message : String(err)}\n`,
+    );
     return '';
   }
 }

@@ -489,6 +489,22 @@ describe('renderOrientForSession — bounded Tier-A projection', () => {
     expect(issuesErr).toContain('issues: ⚠ could not derive: gh issue list exploded');
   });
 
+  it('surfaces an otherOpenIssues error that splits independently from epics (Tenet 4 type-gap)', () => {
+    // toReport couples these today, but the type permits the split — a derived
+    // `epics` with an errored `otherOpenIssues` must still fail loud, not coerce
+    // the count to 0 silently.
+    const block = renderOrientForSession(
+      makeReport({
+        epics: [{ number: 1, title: 'Epic One', labels: ['type: epic'], subIssues: [] }],
+        otherOpenIssues: { error: 'gh issue list (others) exploded' },
+      }),
+    );
+    expect(block).toContain(
+      'other open issues: ⚠ could not derive: gh issue list (others) exploded',
+    );
+    expect(block).toContain('1 epic'); // epics still surface
+  });
+
   it('returns "" when there is nothing high-signal (so the hook omits the block)', () => {
     expect(renderOrientForSession(makeReport())).toBe('');
     // A zero count must NOT emit a "0 epics" pointer line.
