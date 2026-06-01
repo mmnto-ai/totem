@@ -82,7 +82,13 @@ vi.mock('../utils.js', () => ({
   loadConfig: () => mockLoadConfig(),
 }));
 
-import { orientCommand, type OrientReport, renderReport } from './orient.js';
+import {
+  deriveOrientReport,
+  orientCommand,
+  type OrientReport,
+  renderOrientForSession,
+  renderReport,
+} from './orient.js';
 
 // ─── Test harness ───────────────────────────────────────
 
@@ -377,5 +383,142 @@ describe('orient footer and #2018 structural guard', () => {
   it('never reaches the embedder (runs green with @google/genai absent)', async () => {
     await orientCommand({ json: false });
     expect(embedderTripwire).not.toHaveBeenCalled();
+  });
+});
+
+// ─── PR-2: programmatic entry + session-start projection (mmnto-ai/totem#2044) ──
+
+describe('deriveOrientReport — one derivation, two callers (cannot diverge)', () => {
+  it('returns the SAME report `orient --json` serializes (modulo the derivedAt stamp)', async () => {
+    // A small but non-empty world so the comparison is meaningful.
+    mockFetchOpenPRs.mockReturnValue([
+      { number: 42, title: 'do thing', headRefName: 'feat/x', isDraft: false },
+    ]);
+    mockFetchOpenIssuesWithBody.mockReturnValue([
+      { number: 7, title: 'Other Seven', body: '', labels: [] },
+    ]);
+
+    await runJson();
+    const fromCommand = parseJson();
+    const fromApi = await deriveOrientReport(repoRoot);
+
+    // derivedAt is a wall-clock stamp set per call — the only field allowed to differ.
+    const { derivedAt: _a, ...cmdRest } = fromCommand;
+    const { derivedAt: _b, ...apiRest } = fromApi;
+    expect(apiRest).toEqual(cmdRest);
+  });
+});
+
+describe('renderOrientForSession — bounded Tier-A projection', () => {
+  function makeReport(overrides: Partial<OrientReport> = {}): OrientReport {
+    return {
+      repo: 'mmnto-ai/totem',
+      derivedAt: '2026-06-01T00:00:00.000Z',
+      indexFreshness: { synced: false },
+      parked: [],
+      openPRs: [],
+      board: [],
+      coherence: [],
+      epics: [],
+      otherOpenIssues: [],
+      boardConfigured: false,
+      ...overrides,
+    };
+  }
+
+  it('surfaces high-value signals (parked, open PR, coherence drift) + a counts pointer', () => {
+    const block = renderOrientForSession(
+      makeReport({
+        parked: [{ subsystem: 'embedder', since: '2026-01-01' }],
+        openPRs: [{ number: 42, title: 'do thing', headRefName: 'feat/x', isDraft: false }],
+        coherence: [
+          {
+            boardItemTitle: 'Stale card',
+            boardStatus: 'In Progress',
+            issueNumber: 99,
+            kind: 'issue-closed-or-absent',
+          },
+        ],
+        epics: [{ number: 1, title: 'Epic One', labels: ['type: epic'], subIssues: [] }],
+        otherOpenIssues: [{ number: 7, title: 'Other Seven', labels: [] }],
+      }),
+    );
+    expect(block).toContain('embedder'); // parked subsystem
+    expect(block).toContain('#42'); // open PR
+    expect(block).toContain('do thing');
+    expect(block).toContain('#99'); // coherence drift
+    expect(block).toContain('1 epic · 1 other open issue'); // counts pointer
+    expect(block).toContain('run `totem orient`');
+  });
+
+  it('NEVER enumerates epics / children / other issues (the #467 Tier-A-lean guard)', () => {
+    const block = renderOrientForSession(
+      makeReport({
+        epics: [
+          {
+            number: 1,
+            title: 'Epic One',
+            labels: ['type: epic'],
+            subIssues: [{ number: 2, title: 'Child Two' }],
+          },
+        ],
+        otherOpenIssues: [{ number: 7, title: 'Other Seven', labels: [] }],
+      }),
+    );
+    // Counts only — the titles must not appear (pointers not bodies).
+    expect(block).toContain('1 epic · 1 other open issue');
+    expect(block).not.toContain('Epic One');
+    expect(block).not.toContain('Child Two');
+    expect(block).not.toContain('Other Seven');
+  });
+
+  it('an {error} section renders a fail-loud `⚠ could not derive` line, never a silent omit', () => {
+    const parkedErr = renderOrientForSession(
+      makeReport({ parked: { error: 'freeze.json unreadable' } }),
+    );
+    expect(parkedErr).toContain('⚠ could not derive');
+    expect(parkedErr).toContain('freeze.json unreadable');
+
+    // epics + otherOpenIssues share deriveIssues → one issues error line.
+    const issuesErr = renderOrientForSession(
+      makeReport({
+        epics: { error: 'gh issue list exploded' },
+        otherOpenIssues: { error: 'gh issue list exploded' },
+      }),
+    );
+    expect(issuesErr).toContain('issues: ⚠ could not derive: gh issue list exploded');
+  });
+
+  it('returns "" when there is nothing high-signal (so the hook omits the block)', () => {
+    expect(renderOrientForSession(makeReport())).toBe('');
+    // A zero count must NOT emit a "0 epics" pointer line.
+    expect(renderOrientForSession(makeReport({ epics: [], otherOpenIssues: [] }))).toBe('');
+  });
+
+  it('is HARD-BOUNDED — long content cannot blow past the char cap (net-neutral-truncation guardrail)', () => {
+    // Within the per-section item cap (10) but with long titles, so the CHAR
+    // ceiling — not the item cap — is what bounds the block.
+    const longTitle = 'x'.repeat(300);
+    const prs = Array.from({ length: 10 }, (_, i) => ({
+      number: i,
+      title: longTitle,
+      headRefName: `feat/branch-${i}`,
+      isDraft: false,
+    }));
+    const block = renderOrientForSession(makeReport({ openPRs: prs }));
+    // Bounded: ≤ SESSION_BLOCK_MAX_CHARS (1500) plus the short truncation marker.
+    expect(block.length).toBeLessThanOrEqual(1500 + 32);
+    expect(block).toContain('…(orient block truncated)');
+  });
+
+  it('caps per-section item counts with a "… and N more" overflow line', () => {
+    const flood = Array.from({ length: 25 }, (_, i) => ({
+      number: i,
+      title: `t${i}`,
+      headRefName: `b${i}`,
+      isDraft: false,
+    }));
+    const block = renderOrientForSession(makeReport({ openPRs: flood }));
+    expect(block).toContain('more open PRs');
   });
 });

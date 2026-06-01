@@ -427,6 +427,25 @@ function toReport(state: DerivedState): OrientReport {
   };
 }
 
+/**
+ * Programmatic entry: derive the full `OrientReport` for `cwd` WITHOUT writing
+ * stdout. Identical report to `orient --json` (one derivation, two callers —
+ * cannot diverge). Reused by `orientCommand` (the CLI surface) and the
+ * SessionStart hook (`.claude/hooks/session-context.mjs`, mmnto-ai/totem#2044
+ * PR-2), which dynamic-imports this from `packages/cli/dist/commands/orient.js`
+ * — the workspace-dist pattern, deliberately NOT the global `totem` binary
+ * (sidesteps the stale-resolve trap mmnto-ai/totem#2053).
+ *
+ * Latency note: orient's gh adapters are synchronous (`safeExec`/execFileSync),
+ * so this runs ~4 sequential blocking gh calls (repo view + PRs + issues + board),
+ * each bounded by the adapter's per-call timeout. Callers on a latency-sensitive
+ * path (the hook) wrap it best-effort and degrade on failure.
+ */
+export async function deriveOrientReport(cwd: string): Promise<OrientReport> {
+  const state = await derive(cwd);
+  return toReport(state);
+}
+
 // ─── Human render ───────────────────────────────────────
 
 const FOOTER = [
@@ -527,6 +546,105 @@ export function renderReport(report: OrientReport): string {
   return out.join('\n');
 }
 
+// ─── Session-start projection (the auto-injected Tier-A block) ──
+
+// Bounds for the session-start orient block (mmnto-ai/totem#2044 PR-2).
+// Binding guardrail (strategy charter 2026-06-01T0229Z, mmnto-ai/totem-strategy#467):
+// the block must be HARD-BOUNDED so it can never displace high-value session
+// content (journal carryforward, parked, inbound mail) past the hook's
+// MAX_TOTAL_CHARS cap — favorable ordering alone is insufficient, a runaway block
+// would itself crowd out high-value content. Net-neutral-or-positive on
+// high-value-content truncation; truncation absorbs the low-value vector tail.
+const SESSION_BLOCK_MAX_CHARS = 1500;
+const SESSION_PARKED_CAP = 8;
+const SESSION_PR_CAP = 10;
+const SESSION_COHERENCE_CAP = 10;
+
+/**
+ * Compact projection of an `OrientReport` for auto-injection at session start.
+ *
+ * Emits ONLY high-signal state — parked/frozen subsystems, open PRs, and board↔
+ * issue coherence drift — plus a one-line COUNTS pointer for epics/other-issues
+ * (NOT the full enumeration: "pointers not bodies", mmnto-ai/totem-strategy#467
+ * Tier-A discipline). An underivable section stays a `⚠ could not derive` line
+ * (Tenet 4 — never a silent omit), so the projection inherits orient's fail-loud
+ * contract. Hard-bounded by `SESSION_BLOCK_MAX_CHARS` (the guardrail above).
+ *
+ * Returns '' when there is nothing high-signal to surface (no parked, no PRs, no
+ * drift, no derivable counts) so the hook can omit the block entirely rather than
+ * inject an empty header.
+ */
+export function renderOrientForSession(report: OrientReport): string {
+  const out: string[] = [];
+  const repo = isError(report.repo) ? '(repo undetermined)' : report.repo;
+  out.push(`── orient (derived state): ${repo} ──`);
+  const headerLen = out.length;
+
+  // PARKED / FROZEN — you must not touch these subsystems (high value).
+  if (isError(report.parked)) {
+    out.push(`⛔ parked: ⚠ could not derive: ${report.parked.error}`);
+  } else if (report.parked.length > 0) {
+    const shown = report.parked.slice(0, SESSION_PARKED_CAP).map((f) => f.subsystem);
+    const more = report.parked.length > SESSION_PARKED_CAP ? ' …' : '';
+    out.push(`⛔ parked/frozen (${report.parked.length}): ${shown.join(', ')}` + more);
+  }
+
+  // OPEN PRs — what's in flight.
+  if (isError(report.openPRs)) {
+    out.push(`◐ open PRs: ⚠ could not derive: ${report.openPRs.error}`);
+  } else if (report.openPRs.length > 0) {
+    for (const p of report.openPRs.slice(0, SESSION_PR_CAP)) {
+      const draft = p.isDraft ? ' [draft]' : '';
+      out.push(`◐ PR #${p.number}` + draft + ` ${p.title} (${p.headRefName})`);
+    }
+    if (report.openPRs.length > SESSION_PR_CAP) {
+      out.push(`  … and ${report.openPRs.length - SESSION_PR_CAP} more open PRs`);
+    }
+  }
+
+  // BOARD↔ISSUE COHERENCE drift — the anomaly signal (active card, issue closed/absent).
+  if (isError(report.coherence)) {
+    out.push(`⚖ coherence: ⚠ could not derive: ${report.coherence.error}`);
+  } else if (report.coherence.length > 0) {
+    for (const c of report.coherence.slice(0, SESSION_COHERENCE_CAP)) {
+      out.push(
+        `⚖ drift: [${c.boardStatus}] "${c.boardItemTitle}" → #${c.issueNumber} closed/absent`,
+      );
+    }
+    if (report.coherence.length > SESSION_COHERENCE_CAP) {
+      out.push(`  … and ${report.coherence.length - SESSION_COHERENCE_CAP} more drift flags`);
+    }
+  }
+
+  // COUNTS pointer — NOT the enumeration (Tier-A lean: the agent runs `totem
+  // orient` on demand for the full epic/issue board). One fail-loud line if the
+  // issue derivation failed — epics + otherOpenIssues share `deriveIssues`, so
+  // they error together with the same message; surface it once, never drop it
+  // silently (Tenet 4). A zero count emits nothing (no "0 epics" noise).
+  if (isError(report.epics)) {
+    out.push(`● issues: ⚠ could not derive: ${report.epics.error}`);
+  } else {
+    const epicCount = report.epics.length;
+    const otherCount = isError(report.otherOpenIssues) ? 0 : report.otherOpenIssues.length;
+    const parts: string[] = [];
+    if (epicCount > 0) parts.push(`${epicCount} epic${epicCount === 1 ? '' : 's'}`);
+    if (otherCount > 0) {
+      parts.push(`${otherCount} other open issue${otherCount === 1 ? '' : 's'}`);
+    }
+    if (parts.length > 0) {
+      out.push(`● ${parts.join(' · ')} — run \`totem orient\` for the full board`);
+    }
+  }
+
+  // Nothing high-signal beyond the header ⇒ let the hook omit the block.
+  if (out.length === headerLen) return '';
+
+  const block = out.join('\n');
+  return block.length > SESSION_BLOCK_MAX_CHARS
+    ? block.slice(0, SESSION_BLOCK_MAX_CHARS) + '\n  …(orient block truncated)'
+    : block;
+}
+
 // ─── Command entry ──────────────────────────────────────
 
 export async function orientCommand(opts: { json?: boolean }): Promise<void> {
@@ -537,8 +655,7 @@ export async function orientCommand(opts: { json?: boolean }): Promise<void> {
   const json = opts.json === true || isJsonMode();
 
   const cwd = process.cwd();
-  const state = await derive(cwd);
-  const report = toReport(state);
+  const report = await deriveOrientReport(cwd);
 
   if (json) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');

@@ -85,6 +85,38 @@ async function pollInboundMail(gitRoot) {
   }
 }
 
+// Derived session orientation (mmnto-ai/totem#2044 PR-2). Loads the orient
+// command's programmatic entry from the freshly-built workspace dist — the same
+// pattern as pollInboundMail / buildVectorContext, deliberately NOT the global
+// `totem` binary (sidesteps the stale-resolve trap mmnto-ai/totem#2053).
+//
+// Best-effort + bounded. orient runs ~4 sequential synchronous gh calls
+// (repo view + PRs + issues + board), each bounded by the adapter's per-call
+// timeout — a few seconds on a responsive gh. A SessionStart hook must never
+// crash the boot (lesson 8d363778): on a missing dist OR any failure we emit a
+// stderr diagnostic and return '' so the block is simply omitted. The rendered
+// block is itself hard-bounded by renderOrientForSession, so it can never
+// displace high-value content (the #467 net-neutral-truncation guardrail).
+async function buildOrientBlock(gitRoot) {
+  try {
+    const orientPath = join(gitRoot, 'packages', 'cli', 'dist', 'commands', 'orient.js');
+    if (!existsSync(orientPath)) {
+      process.stderr.write(
+        '[session-context] orient block skipped: @mmnto/cli not built at packages/cli/dist; run pnpm -F @mmnto/cli build\n',
+      );
+      return '';
+    }
+    const { deriveOrientReport, renderOrientForSession } = await import(
+      pathToFileURL(orientPath).href
+    );
+    const report = await deriveOrientReport(gitRoot);
+    return renderOrientForSession(report);
+  } catch (err) {
+    process.stderr.write(`[session-context] orient block skipped: ${err.message}\n`);
+    return '';
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────
 
 function getBranch() {
@@ -256,6 +288,20 @@ async function buildStaticContext(gitRoot, branch, ticket) {
     lines.push(`  Warning: ${w}`);
   });
   lines.push('');
+
+  // Derived orientation (parked / open PRs / coherence drift / counts pointer),
+  // mmnto-ai/totem#2044 PR-2. Placed in the high-value early tier but AFTER the
+  // journal carryforward and inbound mail: the main() slice keeps the first
+  // MAX_TOTAL_CHARS, so anything later is the first to truncate. orient is
+  // bounded and high-value, but journal + mail are higher — so orient sits ahead
+  // of only the (situational) active-proposal excerpt and the low-value vector
+  // tail. Net result: truncation eats the already-truncating vector tail, never
+  // journal/mail (strategy charter (A), 2026-06-01; #467 net-neutral guardrail).
+  const orientBlock = await buildOrientBlock(gitRoot);
+  if (orientBlock) {
+    lines.push(orientBlock);
+    lines.push('');
+  }
 
   // Active proposal matching ticket — proposals live in totem-strategy
   // (NOT substrate; only `.handoff/` + `.journal/` were extracted per
