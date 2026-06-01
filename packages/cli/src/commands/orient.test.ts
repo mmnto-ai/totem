@@ -538,3 +538,37 @@ describe('renderOrientForSession — bounded Tier-A projection', () => {
     expect(block).toContain('more open PRs');
   });
 });
+
+// ─── orient --session — boot-safe SessionStart projection (PR-3, #2044) ──
+
+describe('orient --session — boot-safe SessionStart projection', () => {
+  it('emits the bounded session projection to stdout when there is high-signal state', async () => {
+    mockFetchOpenPRs.mockReturnValue([
+      { number: 42, title: 'wire orient', headRefName: 'feat/orient', isDraft: false },
+    ]);
+    await orientCommand({ session: true });
+    // The bounded `renderOrientForSession` projection — header + the PR line…
+    expect(stdout).toContain('orient (derived state)');
+    expect(stdout).toContain('◐ PR #42');
+    // …NOT the full human render (that's `orient` without --session): no full
+    // banner header, no footer. The two surfaces must not be confused.
+    expect(stdout).not.toContain('═══ totem orient');
+    expect(stdout).not.toContain('end orient. State derives');
+  });
+
+  it('emits NOTHING when there is no high-signal state (so the hook omits the block)', async () => {
+    // beforeEach defaults: no PRs / issues / board / freeze → projection is "".
+    await orientCommand({ session: true });
+    expect(stdout).toBe('');
+  });
+
+  it('is boot-safe — a section failure surfaces a fail-loud line but never rejects', async () => {
+    // A malformed freeze.json makes the REAL readFreezeConfig throw, isolating the
+    // parked section to { error } (no thrown derivation). Proves the session path
+    // RESOLVES — a SessionStart hook must never crash the boot (lesson 8d363778) —
+    // AND surfaces the failure loudly (Tenet 4), never a silent blank.
+    fs.writeFileSync(path.join(tmpRoot, '.totem', 'freeze.json'), '{ not valid json');
+    await expect(orientCommand({ session: true })).resolves.toBeUndefined();
+    expect(stdout).toContain('could not derive');
+  });
+});

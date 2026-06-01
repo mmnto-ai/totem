@@ -63,6 +63,12 @@ const config: TotemConfig = {
 
   repositories: ['mmnto-ai/totem', 'mmnto-ai/totem-strategy'],
 
+  // mmnto-ai/totem#2044 (WS2 PR-3): wire the GH Project board into `totem orient`
+  // so its board / coherence-drift sections derive instead of rendering
+  // honest-absent. Both cohort repos map to org Project #1 (the Convergent Spine
+  // roadmap). `TOTEM_ORIENT_PROJECT` env still overrides at runtime.
+  orient: { projectNumber: 1 },
+
   // mmnto-ai/totem#1710: the strategy linkedIndex is auto-injected by the
   // MCP context init via `resolveStrategyRoot`. Listing it here is no
   // longer required — the resolver handles env / config / sibling /
