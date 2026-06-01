@@ -671,6 +671,14 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
   // `--json` so a `--session --json` invocation stays in the boot-safe path.
   if (opts.session === true) {
     try {
+      // --session is the hook render contract (raw text) and takes precedence over
+      // --json; surface the ignored flag on stderr rather than dropping it silently
+      // (mmnto-ai/totem#2062 greptile G2). Kept INSIDE the boot-safe try so it can never crash the
+      // hook, and on stderr so it never pollutes the session block on stdout.
+      const { isJsonMode } = await import('../json-output.js');
+      if (opts.json === true || isJsonMode()) {
+        process.stderr.write('[orient] --session takes precedence over --json; --json ignored\n');
+      }
       const report = await deriveOrientReport(cwd);
       const block = renderOrientForSession(report);
       if (block) process.stdout.write(block + '\n');

@@ -1,5 +1,10 @@
 import type { TotemConfig } from '@mmnto/totem';
 
+// The org-level GH Project board both cohort repos derive against (the Convergent
+// Spine roadmap = `orgs/mmnto-ai/projects/1`). Named so `totem orient`'s board wiring
+// reads by intent, not a bare literal.
+const ORIENT_PROJECT_NUMBER = 1;
+
 const config: TotemConfig = {
   targets: [
     { glob: 'packages/**/*.ts', type: 'code', strategy: 'typescript-ast' },
@@ -65,9 +70,8 @@ const config: TotemConfig = {
 
   // mmnto-ai/totem#2044 (WS2 PR-3): wire the GH Project board into `totem orient`
   // so its board / coherence-drift sections derive instead of rendering
-  // honest-absent. Both cohort repos map to org Project #1 (the Convergent Spine
-  // roadmap). `TOTEM_ORIENT_PROJECT` env still overrides at runtime.
-  orient: { projectNumber: 1 },
+  // honest-absent. `TOTEM_ORIENT_PROJECT` env still overrides at runtime.
+  orient: { projectNumber: ORIENT_PROJECT_NUMBER },
 
   // mmnto-ai/totem#1710: the strategy linkedIndex is auto-injected by the
   // MCP context init via `resolveStrategyRoot`. Listing it here is no

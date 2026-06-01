@@ -571,4 +571,24 @@ describe('orient --session — boot-safe SessionStart projection', () => {
     await expect(orientCommand({ session: true })).resolves.toBeUndefined();
     expect(stdout).toContain('could not derive');
   });
+
+  it('with --json: surfaces an ignored-flag note on stderr, still renders the raw block (not JSON)', async () => {
+    mockFetchOpenPRs.mockReturnValue([
+      { number: 42, title: 'wire orient', headRefName: 'feat/orient', isDraft: false },
+    ]);
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
+    await orientCommand({ session: true, json: true });
+    errSpy.mockRestore();
+    // The ignored --json is surfaced (not silently dropped) — greptile mmnto-ai/totem#2062 G2.
+    expect(stderr).toContain('--json ignored');
+    // …and stdout is still the bounded session projection, NOT the JSON report.
+    expect(stdout).toContain('◐ PR #42');
+    expect(stdout).not.toContain('"openPRs"');
+  });
 });
