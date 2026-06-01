@@ -1458,6 +1458,19 @@ describe('CLAUDE_SESSION_START template', () => {
     expect(CLAUDE_SESSION_START).not.toContain('design-tenets');
     expect(CLAUDE_SESSION_START).not.toContain('.journal/strategy');
   });
+
+  it('appends `totem orient --session` ADDITIVELY after the describe briefing (#2044 PR-3)', () => {
+    // Tenet 13 sensor separation: describe (static identity) is NOT replaced —
+    // orient (live in-flight state) is appended after it. Both must be present,
+    // and orient runs via the same node_modules/@mmnto/cli dist probe as describe.
+    expect(CLAUDE_SESSION_START).toContain("'describe'"); // describe retained
+    expect(CLAUDE_SESSION_START).toContain("'orient'");
+    expect(CLAUDE_SESSION_START).toContain("'--session'");
+    // Append, not prepend/replace: describe must precede orient in the script.
+    expect(CLAUDE_SESSION_START.indexOf("'describe'")).toBeLessThan(
+      CLAUDE_SESSION_START.indexOf("'--session'"),
+    );
+  });
 });
 
 describe('GEMINI_SESSION_START template', () => {
@@ -1495,6 +1508,16 @@ describe('GEMINI_SESSION_START template', () => {
     expect(GEMINI_SESSION_START).toContain('Briefing unavailable');
     expect(GEMINI_SESSION_START).not.toContain('design-tenets');
     expect(GEMINI_SESSION_START).not.toContain('.journal/strategy');
+  });
+
+  it('appends `totem orient --session` ADDITIVELY after describe (#2044 PR-3)', () => {
+    // Tenet 13: describe (static identity) retained; orient (live in-flight)
+    // appended after it — both present, describe first.
+    expect(GEMINI_SESSION_START).toContain("'totem describe'"); // retained
+    expect(GEMINI_SESSION_START).toContain("'totem orient --session'");
+    expect(GEMINI_SESSION_START.indexOf("'totem describe'")).toBeLessThan(
+      GEMINI_SESSION_START.indexOf("'totem orient --session'"),
+    );
   });
 });
 

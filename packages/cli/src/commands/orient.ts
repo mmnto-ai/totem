@@ -654,14 +654,54 @@ export function renderOrientForSession(report: OrientReport): string {
 
 // ─── Command entry ──────────────────────────────────────
 
-export async function orientCommand(opts: { json?: boolean }): Promise<void> {
+export async function orientCommand(opts: { json?: boolean; session?: boolean }): Promise<void> {
+  const cwd = process.cwd();
+
+  // Session-render mode (mmnto-ai/totem#2044 PR-3): emit ONLY the bounded
+  // `renderOrientForSession` projection so a SessionStart hook can inject it.
+  // The third caller of the single `deriveOrientReport` derivation (alongside
+  // `orient --json`, the human render, and the PR-2 in-process hook
+  // `session-context.mjs:buildOrientBlock`) — they cannot diverge.
+  //
+  // Boot-safety contract (lesson 8d363778): a SessionStart consumer must never
+  // have its boot crashed by orient. On ANY failure, write a stderr breadcrumb
+  // and NOTHING to stdout (the hook simply omits the block) — never throw, never
+  // exit non-zero. An empty block (nothing high-signal) likewise emits nothing,
+  // so the hook omits it rather than printing a bare header. Checked before
+  // `--json` so a `--session --json` invocation stays in the boot-safe path.
+  if (opts.session === true) {
+    try {
+      // --session is the hook render contract (raw text) and takes precedence over
+      // --json; surface the ignored flag on stderr rather than dropping it silently
+      // (mmnto-ai/totem#2062 greptile G2). Kept INSIDE the boot-safe try so it can never crash the
+      // hook, and on stderr so it never pollutes the session block on stdout.
+      const { isJsonMode } = await import('../json-output.js');
+      if (opts.json === true || isJsonMode()) {
+        process.stderr.write('[orient] --session takes precedence over --json; --json ignored\n');
+      }
+      const report = await deriveOrientReport(cwd);
+      const block = renderOrientForSession(report);
+      if (block) process.stdout.write(block + '\n');
+      // Boot-safe degradation: a SessionStart hook must never crash the agent's
+      // boot (lesson 8d363778), so this catch must NOT rethrow. The failure is
+      // surfaced LOUDLY via the stderr breadcrumb below (Tenet 4 satisfied by
+      // REPORTING, not propagating) and stdout stays empty so the hook omits the
+      // block. Mirrors the sibling session-context.mjs:buildOrientBlock (PR-2).
+      // totem-context: intentional boot-safe degradation, not a fail-open swallow.
+    } catch (err) {
+      process.stderr.write(
+        `[orient] session block skipped: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+    return;
+  }
+
   // Honor the subcommand flag AND the root program's global `--json` (commander
   // routes a leading `--json` to the root option; the root sets this env). Same
   // dual-source pattern other JSON-emitting commands use.
   const { isJsonMode } = await import('../json-output.js');
   const json = opts.json === true || isJsonMode();
 
-  const cwd = process.cwd();
   const report = await deriveOrientReport(cwd);
 
   if (json) {

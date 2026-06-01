@@ -583,8 +583,17 @@ program
     'Derive session orientation from primitives (open PRs/issues/board/freeze) — zero LLM',
   )
   .option('--json', 'Output the OrientReport as structured JSON')
-  .action(async (opts: { json?: boolean }) => {
-    requireGhCli();
+  .option(
+    '--session',
+    'Emit the bounded session-orientation block for a SessionStart hook (boot-safe; empty when nothing high-signal)',
+  )
+  .action(async (opts: { json?: boolean; session?: boolean }) => {
+    // Session-render mode runs INSIDE a SessionStart hook and must never hard-fail
+    // the boot: skip the hard `gh` gate. A missing/unauthenticated gh then degrades
+    // to per-section `⚠ could not derive` lines via renderOrientForSession (or an
+    // omitted block), never a process.exit(1) that would surface an error banner in
+    // the consumer's session context.
+    if (!opts.session) requireGhCli();
     try {
       const { orientCommand } = await import('./commands/orient.js');
       await orientCommand(opts);

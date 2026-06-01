@@ -98,6 +98,19 @@ try {
 } catch (err) {
   process.stdout.write('[Totem] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
+
+// totem orient --session — live derived in-flight state, ADDITIVE to describe
+// (mmnto-ai/totem#2044 PR-3). Own try/catch; orient --session is itself boot-safe.
+try {
+  execSync('totem orient --session', {
+    timeout: 30000,
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+} catch (err) {
+  // Boot-safe: orient is additive to describe; a failure never blocks session start —
+  // surface a NON-fatal breadcrumb (matches the Claude-side hook) rather than swallow.
+  process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
+}
 `;
 
 export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook
@@ -391,6 +404,37 @@ try {
 } catch (err) {
   process.stdout.write(
     '[Totem] Briefing unavailable: ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\\n',
+  );
+}
+
+// ─── totem orient --session — live derived in-flight state (mmnto-ai/totem#2044 PR-3) ──
+// ADDITIVE to describe (Tenet 13: describe = static identity sensor — scope/tier/
+// counts; orient = live in-flight sensor — open PRs/issues/board/freeze). Append,
+// never replace. Its OWN try/catch so an orient failure never disturbs the describe
+// briefing or the boot; \`orient --session\` is itself boot-safe (emits nothing when
+// nothing is high-signal, never exits non-zero, degrades to honest "could not derive").
+try {
+  const orientCliPath = join(process.cwd(), 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
+  if (existsSync(orientCliPath)) {
+    const orientResult = spawnSync(process.execPath, [orientCliPath, 'orient', '--session'], {
+      encoding: 'utf-8',
+      timeout: 30000,
+    });
+    // spawnSync sets .error (it does NOT throw) on a spawn-level failure; re-throw so
+    // it surfaces through the catch breadcrumb below rather than writing '' silently.
+    if (orientResult.error) {
+      throw orientResult.error;
+    }
+    process.stdout.write((orientResult.stdout || '') + (orientResult.stderr || ''));
+  }
+} catch (err) {
+  // Boot-safe: orient is additive to describe (already emitted), so a failure never
+  // blocks session start — but surface a NON-fatal breadcrumb to stderr (not stdout,
+  // to keep the prompt clean) for debuggability rather than swallowing silently.
+  process.stderr.write(
+    '[SessionStart] orient briefing unavailable (non-fatal): ' +
       (err instanceof Error ? err.message : String(err)) +
       '\\n',
   );
