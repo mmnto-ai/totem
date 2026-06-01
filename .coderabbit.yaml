@@ -67,8 +67,14 @@ reviews:
     ast-grep:
       enabled: true
       essential_rules: true
+    # ESLint is enforced authoritatively in CI ("Build & Lint" on macOS/Ubuntu/Windows,
+    # which blocks merge) and in the pre-push hook (`pnpm run lint`). CodeRabbit runs its
+    # own ESLint in an isolated sandbox that cannot install this repo's deps — the pnpm
+    # `workspace:*` protocol refs, the native `@lancedb/lancedb` binary, and ESLint 10 —
+    # so it emits a recurring, non-fatal "ESLint install failed" warning on every PR.
+    # Disabled as pure redundancy (no coverage loss); our ESLint gate is unchanged.
     eslint:
-      enabled: true
+      enabled: false
     shellcheck:
       enabled: true
     markdownlint:
