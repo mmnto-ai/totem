@@ -1208,7 +1208,11 @@ export async function compileCommand(
         const lessonsDir = path.join(totemDir, 'lessons');
         const manifestPath = path.join(totemDir, 'compile-manifest.json');
         ensureLessonsDir(lessonsDir);
-        const currentInputHash = generateInputHash(lessonsDir);
+        // Pass cwd so the producer hashes the same git-tracked set the
+        // consumers (verify-manifest/lint/status) check — keeps producer and
+        // consumer symmetric even when compile runs with an untracked lesson
+        // present (mmnto-ai/totem#2051 / mmnto-ai/totem#2055).
+        const currentInputHash = generateInputHash(lessonsDir, cwd);
         let existingManifestInputHash: string | null = null;
         try {
           existingManifestInputHash = readCompileManifest(manifestPath).input_hash;
@@ -1909,7 +1913,10 @@ export async function compileCommand(
         const lessonsDir = path.join(totemDir, 'lessons');
         const manifestPath = path.join(totemDir, 'compile-manifest.json');
         ensureLessonsDir(lessonsDir);
-        const inputHash = generateInputHash(lessonsDir);
+        // Tracked-only, matching the consumers — producer/consumer symmetry so
+        // an untracked scratch lesson never diverges the recorded hash
+        // (mmnto-ai/totem#2051 / mmnto-ai/totem#2055).
+        const inputHash = generateInputHash(lessonsDir, cwd);
         const outputHash = generateOutputHash(rulesPath);
         const fullRecompileFingerprint = computeFingerprintForManifest();
         writeCompileManifest(manifestPath, {
