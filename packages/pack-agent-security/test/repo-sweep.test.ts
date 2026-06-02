@@ -201,6 +201,13 @@ type AllowEntry = {
 
 const ALLOWLIST: AllowEntry[] = [
   {
+    hash: 'dd24f87f46e65812',
+    file: 'packages/core/src/sys/git.ts',
+    expectedCount: 1,
+    reason:
+      'listTrackedFilesUnder builds the NUL delimiter for `git ls-files -z` via String.fromCharCode(0) — a git output-parsing delimiter, not runtime string/command assembly. -z is required so tracked-lesson paths with spaces/unicode parse exactly (mmnto-ai/totem#2051 / mmnto-ai/totem#2055).',
+  },
+  {
     hash: 'c2c09301bb56a02b',
     file: 'packages/core/src/sys/exec.ts',
     expectedCount: 1,

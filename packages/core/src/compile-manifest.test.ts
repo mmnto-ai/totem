@@ -15,6 +15,7 @@ import {
   writeCompileManifest,
 } from './compile-manifest.js';
 import { TotemParseError } from './errors.js';
+import { safeExec } from './sys/exec.js';
 import { cleanTmpDir } from './test-utils.js';
 
 describe('generateInputHash', () => {
@@ -54,6 +55,49 @@ describe('generateInputHash', () => {
     expect(hash1).toBe(hash2);
     // Verify it's a valid hex SHA-256 (64 hex chars)
     expect(hash1).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('hashes git-tracked lessons only when repoCwd is inside a git repo', () => {
+    // Regression for the partial-freeze push-gate (mmnto-ai/totem#2051 /
+    // mmnto-ai/totem#2055): an untracked MCP scratch lesson must not diverge
+    // the input hash.
+    const repoDir = path.join(tmpDir, 'repo');
+    const lessonsDir = path.join(repoDir, '.totem', 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    safeExec('git', ['init', '-q'], { cwd: repoDir });
+
+    fs.writeFileSync(path.join(lessonsDir, 'lesson-aaa.md'), 'tracked lesson\n');
+    fs.writeFileSync(path.join(lessonsDir, 'lesson-bbb.md'), 'untracked scratch\n');
+    // A nested tracked lesson exercises the cross-platform separator path:
+    // collectMdFiles + the tracked set must agree on '/' regardless of OS.
+    fs.mkdirSync(path.join(lessonsDir, 'cat'), { recursive: true });
+    fs.writeFileSync(path.join(lessonsDir, 'cat', 'lesson-ccc.md'), 'nested tracked\n');
+    // Staging the index is enough for the tracked-file query — no commit needed.
+    safeExec('git', ['add', '.totem/lessons/lesson-aaa.md', '.totem/lessons/cat/lesson-ccc.md'], {
+      cwd: repoDir,
+    });
+
+    // Reference dir holding ONLY the tracked lessons at the same relative paths.
+    const refDir = path.join(tmpDir, 'ref');
+    fs.mkdirSync(path.join(refDir, 'cat'), { recursive: true });
+    fs.writeFileSync(path.join(refDir, 'lesson-aaa.md'), 'tracked lesson\n');
+    fs.writeFileSync(path.join(refDir, 'cat', 'lesson-ccc.md'), 'nested tracked\n');
+
+    const trackedOnly = generateInputHash(lessonsDir, repoDir);
+    const allFiles = generateInputHash(lessonsDir);
+
+    // tracked-only excludes the untracked scratch → equals the tracked-only reference
+    expect(trackedOnly).toBe(generateInputHash(refDir));
+    // legacy no-cwd form still sees both files, so it differs
+    expect(allFiles).not.toBe(trackedOnly);
+  });
+
+  it('falls back to hashing all .md when repoCwd is not a git repo', () => {
+    // tmpDir lives under os.tmpdir() — not a git repo, so findRepoRootSync → null
+    // and the function degrades to the legacy fs-walk (every .md hashed).
+    fs.writeFileSync(path.join(tmpDir, 'lesson-aaa.md'), 'a\n');
+    fs.writeFileSync(path.join(tmpDir, 'lesson-bbb.md'), 'b\n');
+    expect(generateInputHash(tmpDir, tmpDir)).toBe(generateInputHash(tmpDir));
   });
 });
 

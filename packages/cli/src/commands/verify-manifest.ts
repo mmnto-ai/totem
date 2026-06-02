@@ -64,7 +64,11 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   // readCompileManifest throws TotemParseError if missing or invalid
   const manifest = readCompileManifest(manifestPath);
 
-  const actualInputHash = generateInputHash(lessonsDir);
+  // Pass cwd so the input hash covers git-tracked lessons only — an untracked
+  // MCP scratch lesson must not trip this gate on an unrelated push
+  // (mmnto-ai/totem#2051 / mmnto-ai/totem#2055). Falls back to all-files when
+  // run outside a git repo.
+  const actualInputHash = generateInputHash(lessonsDir, cwd);
   const actualOutputHash = generateOutputHash(rulesPath);
 
   const mismatches: string[] = [];

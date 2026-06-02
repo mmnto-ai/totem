@@ -34,7 +34,7 @@ export async function statusCommand(): Promise<void> {
       const manifest = readCompileManifest(manifestPath);
       ruleCount = manifest.rule_count;
       const lessonsDir = path.join(totemDir, 'lessons');
-      const currentHash = generateInputHash(lessonsDir);
+      const currentHash = generateInputHash(lessonsDir, cwd);
       manifestStatus = currentHash === manifest.input_hash ? 'fresh' : 'stale';
     }
   } catch {

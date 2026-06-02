@@ -270,6 +270,54 @@ export function isFileDirty(cwd: string, filePath: string): boolean {
 }
 
 /**
+ * List git-tracked files under `dirAbs`, returned as `dirAbs`-relative
+ * forward-slash paths. Returns `null` (NOT an empty set) when the directory is
+ * outside a git repo OR git is unavailable/errors — the documented signal for
+ * callers to fall back to a filesystem walk rather than treat "git unavailable"
+ * as "nothing tracked." An empty set means the opposite: we ARE in a repo and
+ * genuinely nothing under `dirAbs` is tracked.
+ *
+ * Used by {@link generateInputHash} to exclude untracked working-tree lessons
+ * from the compile-manifest input hash — an untracked MCP scratch lesson must
+ * not diverge the hash and block an unrelated push (mmnto-ai/totem#2051 /
+ * mmnto-ai/totem#2055 working-tree-scope class). Fail-soft to `null` is
+ * deliberate: a git hiccup degrades to the legacy fs-walk (prior behavior),
+ * never a crash.
+ *
+ * Reads git's NUL-delimited output so paths with spaces or unicode parse
+ * exactly; the delimiter is built via `String.fromCharCode(0)` to keep this
+ * source free of a literal control byte.
+ */
+export function listTrackedFilesUnder(repoCwd: string, dirAbs: string): Set<string> | null {
+  const repoRoot = findRepoRootSync(repoCwd);
+  if (repoRoot === null) return null;
+  const prefix = path.relative(repoRoot, dirAbs).replace(/\\/g, '/');
+  // An empty prefix means dirAbs IS the repo root; git rejects an empty
+  // pathspec with a fatal "ambiguous argument", so scan from '.' in that case.
+  const pathspec = prefix === '' ? '.' : prefix;
+  try {
+    // git emits repo-root-relative forward-slash paths on all platforms.
+    const raw = safeExec('git', ['ls-files', '-z', '--', pathspec], {
+      cwd: repoRoot,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+    });
+    const nul = String.fromCharCode(0);
+    const tracked = new Set<string>();
+    const prefixSlash = prefix === '' ? '' : `${prefix}/`;
+    for (const entry of raw.split(nul)) {
+      if (entry.length === 0) continue;
+      const rel =
+        prefixSlash && entry.startsWith(prefixSlash) ? entry.slice(prefixSlash.length) : entry;
+      tracked.add(rel);
+    }
+    return tracked;
+    // totem-context: fail-soft — git failure degrades to the caller's legacy fs-walk (prior behavior), never masks a real error as "clean" (mmnto-ai/totem#2051)
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Resolve the git repository root from any subdirectory.
  * Returns the normalized absolute path when inside a git repo, or `null` only
  * when the directory is genuinely outside any git repo (the documented "not
