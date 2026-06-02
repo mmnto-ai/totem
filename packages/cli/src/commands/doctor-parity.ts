@@ -37,7 +37,7 @@ const CHECK_NAME = 'Parity';
  * @param cwd The directory to resolve config + manifest against (config/repo root).
  */
 export async function checkParity(cwd: string): Promise<DiagnosticResult[]> {
-  const { loadConfig, resolveConfigPath } = await import('../utils.js');
+  const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
   const { loadParityManifest, SUPPORTED_PARITY_SCHEMA_VERSION } = await import('@mmnto/totem');
 
   // Read the config best-effort: a missing/corrupt config is the honest-absent
@@ -47,8 +47,17 @@ export async function checkParity(cwd: string): Promise<DiagnosticResult[]> {
   let configValue: string | undefined;
   try {
     const configPath = resolveConfigPath(cwd);
-    const config = await loadConfig(configPath);
-    configValue = config.orient?.parityManifest;
+    // Repo-scoped by design: the manifest location is per-repo, so a config-less
+    // repo that only resolves the GLOBAL ~/.totem profile is honest-absent for
+    // parity. Never leak a global orient.parityManifest into a repo-less result
+    // (that would make the sensor machine-dependent) — only a repo-local config
+    // contributes the field.
+    if (isGlobalConfigPath(configPath)) {
+      configValue = undefined;
+    } else {
+      const config = await loadConfig(configPath);
+      configValue = config.orient?.parityManifest;
+    }
     // totem-context: a missing/corrupt totem config is the honest-absent path (treated as "no parity manifest configured"), not a sensor failure — the doctor runs against config-less repos by design.
   } catch (err) {
     if (err instanceof Error && err.message.length === 0) {
@@ -128,7 +137,8 @@ function rel(cwd: string, target: string): string {
 
 // ─── CLI entry ──────────────────────────────────────────
 
-const TAG = 'Parity';
+// Same value as CHECK_NAME — aliased (not re-literal'd) so the two can't drift.
+const TAG = CHECK_NAME;
 
 export interface ParityCliOptions {
   /**
@@ -151,7 +161,7 @@ export interface ParityCliOptions {
  * produces the non-zero exit code (no direct `process.exit` per AGENTS.md).
  */
 export async function doctorParityCliCommand(options: ParityCliOptions = {}): Promise<void> {
-  const { TotemError } = await import('@mmnto/totem');
+  const { TotemError, sanitizeForTerminal } = await import('@mmnto/totem');
   const {
     bold,
     errorColor,
@@ -160,24 +170,34 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
     warn: warnColor,
   } = await import('../ui.js');
 
+  // Manifest-derived text (paths, parse reasons, contract metadata) is sourced
+  // from repo-controlled files; sanitize + flatten before logging so embedded
+  // ANSI / newlines can't forge extra doctor lines (matches checkStrategyRoot
+  // in doctor.ts).
+  const render = (text: string): string =>
+    sanitizeForTerminal(text)
+      .replace(/[\t\n]+/g, ' ')
+      .replace(/ {2,}/g, ' ')
+      .trim();
+
   const cwd = options.cwdForTest ?? process.cwd();
   const results = await checkParity(cwd);
 
   for (const r of results) {
     switch (r.status) {
       case 'pass':
-        log.success(TAG, `${successColor(bold('PASS'))} — ${r.message}`);
+        log.success(TAG, `${successColor(bold('PASS'))} — ${render(r.message)}`);
         break;
       case 'warn':
-        log.warn(TAG, `${warnColor(bold('WARN'))} — ${r.message}`);
-        if (r.remediation) log.dim(TAG, `→ ${r.remediation}`);
+        log.warn(TAG, `${warnColor(bold('WARN'))} — ${render(r.message)}`);
+        if (r.remediation) log.dim(TAG, `→ ${render(r.remediation)}`);
         break;
       case 'fail':
-        log.error(TAG, `${errorColor(bold('FAIL'))} — ${r.message}`);
-        if (r.remediation) log.dim(TAG, `→ ${r.remediation}`);
+        log.error(TAG, `${errorColor(bold('FAIL'))} — ${render(r.message)}`);
+        if (r.remediation) log.dim(TAG, `→ ${render(r.remediation)}`);
         break;
       case 'skip':
-        log.dim(TAG, `SKIP — ${r.message}`);
+        log.dim(TAG, `SKIP — ${render(r.message)}`);
         break;
     }
   }

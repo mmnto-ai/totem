@@ -1072,6 +1072,13 @@ program
       parity?: boolean;
     }) => {
       try {
+        if (opts.claimDiscipline && opts.parity) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            'Cannot combine --claim-discipline with --parity.',
+            'Choose exactly one specialized doctor mode.',
+          );
+        }
         if (opts.claimDiscipline) {
           const { doctorClaimDisciplineCliCommand } =
             await import('./commands/doctor-claim-discipline.js');

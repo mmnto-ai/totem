@@ -96,9 +96,10 @@ describe('checkParity — honest-absent', () => {
   });
 
   it('treats a config-less repo as not-configured (skip, no throw)', async () => {
-    // No totem config at all → loadConfig path is best-effort honest-absent.
-    // (resolveConfigPath may fall to the global profile; either way the field
-    // is absent, so the sensor must skip, never throw.)
+    // No totem config at all → resolveConfigPath either throws (caught,
+    // best-effort) or resolves the GLOBAL ~/.totem profile, which checkParity
+    // explicitly ignores for repo-scoping (isGlobalConfigPath). Either way the
+    // result is a deterministic skip, regardless of any global orient.parityManifest.
     const results = await checkParity(tmpDir);
     expect(results).toHaveLength(1);
     expect(results[0]!.status).toBe('skip');

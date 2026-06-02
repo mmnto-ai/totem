@@ -175,9 +175,9 @@ export function resolveParityManifestPath(
   }
 
   const trimmed = configValue.trim();
-  const absolute = path.isAbsolute(trimmed)
-    ? path.normalize(trimmed)
-    : path.normalize(path.join(root, trimmed));
+  // path.resolve (not join) so a relative `root` still yields an ABSOLUTE path —
+  // the not-found / resolved branches document `path` as absolute.
+  const absolute = path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(root, trimmed);
 
   if (!fileExists(absolute)) {
     return { status: 'not-found', path: absolute };
