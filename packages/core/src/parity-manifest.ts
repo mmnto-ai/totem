@@ -240,19 +240,18 @@ export function parseParityManifest(yamlText: string): ParityManifestParseResult
   }
 
   // ── schema-version gate (BEFORE full validation) ──
-  // Read the version with a minimal probe so an unsupported version short-
-  // circuits before the v1-shaped contract schema rejects an incompatible
-  // future shape with a misleading error.
-  if (!doc || typeof doc !== 'object') {
-    return { status: 'unparseable', reason: 'Manifest is not a YAML mapping' };
-  }
-  const rawVersion = (doc as Record<string, unknown>)['schema-version'];
-  if (typeof rawVersion !== 'number') {
+  // Probe `schema-version` with a minimal Zod schema (NOT a type assertion) so
+  // an unsupported version short-circuits before the v1-shaped contract schema
+  // rejects an incompatible future shape with a misleading error. A non-mapping
+  // doc or a missing / non-numeric version fails the probe → unparseable.
+  const versionProbe = z.object({ 'schema-version': z.number() }).safeParse(doc);
+  if (!versionProbe.success) {
     return {
       status: 'unparseable',
-      reason: 'Manifest is missing a numeric `schema-version`',
+      reason: 'Manifest is not a mapping with a numeric `schema-version`',
     };
   }
+  const rawVersion = versionProbe.data['schema-version'];
   if (rawVersion !== SUPPORTED_PARITY_SCHEMA_VERSION) {
     return { status: 'unsupported-schema', schemaVersion: rawVersion };
   }
