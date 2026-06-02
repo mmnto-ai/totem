@@ -8,8 +8,8 @@ code_review:
   max_review_comments: 5
   pull_request_opened:
     help: false # Don't post help message on every PR
-    summary: true # Post PR summary
-    code_review: true # GCA ignores invoke commands when disabled, so must stay enabled
+    summary: false # off — CR already summarizes; keep GCA fully silent on open (no quota for a redundant summary)
+    code_review: false # on-demand — vendor-verified that `/gemini review` still triggers when this is off (mmnto-ai/totem-strategy#501 bot-protocols)
     include_drafts: true # Review draft PRs too
 
 # File Exclusions (glob patterns)

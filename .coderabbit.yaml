@@ -4,7 +4,8 @@ tone_instructions: >-
   Direct, technical. Flag real issues only. Totem is deterministic governance — Sensors not Actuators. Core engine (totem lint) is zero-LLM and offline. No statistical replacements, no coupling primitives, no cloud deps in enforcement. Tenets win.
 
 reviews:
-  profile: chill
+  # Trial: assertive cohort-wide (was chill) — mmnto-ai/totem-strategy#507 / #501. Keep until it annoys us.
+  profile: assertive
   high_level_summary: true
   high_level_summary_in_walkthrough: true
   sequence_diagrams: true
