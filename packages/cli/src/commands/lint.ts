@@ -69,7 +69,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
       const { log: uiLog } = await import('../ui.js');
       const manifest = readCompileManifest(manifestPath);
       const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
-      const currentInputHash = generateInputHash(lessonsDir);
+      const currentInputHash = generateInputHash(lessonsDir, cwd);
       if (currentInputHash !== manifest.input_hash) {
         uiLog.warn(
           TAG,

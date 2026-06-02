@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { getErrorMessage, TotemParseError } from './errors.js';
 import { readJsonSafe } from './sys/fs.js';
+import { listTrackedFilesUnder } from './sys/git.js';
 
 // ─── Schema ──────────────────────────────────────────
 
@@ -52,13 +53,34 @@ function collectMdFiles(baseDir: string, currentDir: string = baseDir): string[]
 }
 
 /**
- * Generate a deterministic SHA-256 hash of all `.md` lesson files in a directory.
+ * Generate a deterministic SHA-256 hash of `.md` lesson files in a directory.
  *
  * Files are discovered recursively, sorted alphabetically by relative path,
  * and line endings are normalized to `\n` before hashing.
+ *
+ * When `repoCwd` is supplied and resolves inside a git repository, only
+ * **git-tracked** lessons are hashed — untracked working-tree lessons (e.g. an
+ * MCP `add_lesson`/`extract` scratch file) are excluded so they cannot diverge
+ * the hash and block an unrelated push (mmnto-ai/totem#2051 / #2055
+ * working-tree-scope class). The producer (`totem compile`) runs on a clean
+ * tree, so the hash it records already equals the tracked-only hash; checkers
+ * (`verify-manifest`, `lint`, `status`) pass `repoCwd` to stay symmetric
+ * without forcing a recompile. Outside a git repo, or when git is unavailable,
+ * the function falls back to hashing every `.md` (the legacy/pure behavior) —
+ * so the default no-arg form is byte-for-byte unchanged.
  */
-export function generateInputHash(lessonsDir: string): string {
-  const files = collectMdFiles(lessonsDir).sort();
+export function generateInputHash(lessonsDir: string, repoCwd?: string): string {
+  let files = collectMdFiles(lessonsDir).sort();
+  if (repoCwd !== undefined) {
+    const tracked = listTrackedFilesUnder(repoCwd, lessonsDir);
+    if (tracked !== null) {
+      // collectMdFiles and listTrackedFilesUnder both emit '/'-separated paths,
+      // so the membership test already agrees cross-platform. Normalize the
+      // comparison key anyway so this filter never silently depends on a distant
+      // function preserving that invariant — a no-op on forward-slash input.
+      files = files.filter((relPath) => tracked.has(relPath.replace(/\\/g, '/')));
+    }
+  }
   const hash = crypto.createHash('sha256');
 
   for (const relPath of files) {

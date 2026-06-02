@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { generateInputHash, hashLesson, readCompileManifest } from '@mmnto/totem';
+import { generateInputHash, hashLesson, readCompileManifest, safeExec } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { compileCommand } from './compile.js';
@@ -183,6 +183,61 @@ describe('compileCommand no-op manifest refresh (#1337)', () => {
     // compiled-rules.json. Byte-for-byte equality is the strictest check.
     const rulesAfter = fs.readFileSync(rulesPath, 'utf-8');
     expect(rulesAfter).toBe(rulesBefore);
+  });
+
+  it('records a tracked-only input hash, excluding an untracked lesson (producer/consumer symmetry)', async () => {
+    // mmnto-ai/totem#2051 / mmnto-ai/totem#2055: the consumers
+    // (verify-manifest/lint/status) hash git-tracked lessons only. The producer
+    // (this command) must match — otherwise a `totem compile` run with an
+    // untracked scratch lesson present records an all-files hash and blocks the
+    // next push.
+    const trackedHeading = 'Use err in catch';
+    const trackedBody = 'Do not use the identifier "error" in catch blocks.';
+    const trackedHash = hashLesson(trackedHeading, trackedBody);
+
+    const scratchHeading = 'Untracked scratch lesson';
+    const scratchBody = 'This lesson is an uncommitted MCP scratch file.';
+    const scratchHash = hashLesson(scratchHeading, scratchBody);
+
+    // Both lessons are cached as rules so toCompile === 0 (orchestrator never runs).
+    setupWorkspace(tmpDir, {
+      lessons: {
+        'tracked.md': lessonMarkdown(trackedHeading, trackedBody),
+        'untracked.md': lessonMarkdown(scratchHeading, scratchBody),
+      },
+      rules: [
+        { lessonHash: trackedHash, lessonHeading: trackedHeading },
+        { lessonHash: scratchHash, lessonHeading: scratchHeading },
+      ],
+      // Force a manifest refresh so the producer rewrites input_hash.
+      manifestInputHash: '00000000000000000000000000000000deadbeef00000000000000000000cafe',
+    });
+
+    // Make tmpDir a git repo and stage ONLY the first lesson; 'untracked.md'
+    // stays unstaged — the scratch file the gate must ignore. safeExec is
+    // synchronous (wraps cross-spawn.sync), so these complete before
+    // compileCommand runs — no await, no race.
+    safeExec('git', ['init', '-q'], { cwd: tmpDir });
+    safeExec('git', ['add', '.totem/lessons/tracked.md'], { cwd: tmpDir });
+
+    const totemDir = path.join(tmpDir, '.totem');
+    const lessonsDir = path.join(totemDir, 'lessons');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+
+    const trackedOnlyHash = generateInputHash(lessonsDir, tmpDir);
+    const allFilesHash = generateInputHash(lessonsDir);
+    // Sanity: the untracked lesson genuinely shifts the all-files hash, so the
+    // assertion below is meaningful (not a tautology).
+    expect(trackedOnlyHash).not.toBe(allFilesHash);
+
+    await compileCommand({});
+
+    // The producer recorded the tracked-only hash — matching what
+    // verify-manifest computes on push — so the untracked scratch lesson does
+    // not desync producer and consumer.
+    const manifestAfter = readCompileManifest(manifestPath);
+    expect(manifestAfter.input_hash).toBe(trackedOnlyHash);
+    expect(manifestAfter.input_hash).not.toBe(allFilesHash);
   });
 
   it('leaves the manifest alone when there is no drift and no pruning needed', async () => {
