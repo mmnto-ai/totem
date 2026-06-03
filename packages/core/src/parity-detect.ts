@@ -194,32 +194,42 @@ function resolveRootForFallback(cwd: string, injected: string | null | undefined
 // ─── packageNameForContract ─────────────────────────────
 
 /**
- * Resolve the `@mmnto/*` package name a deps contract pins. Precedence:
- *   1. **canonical-source path locator** — when `canonicalSource` carries a
+ * Resolve the `@mmnto/*` (or vendor) package name a deps/vendor contract pins.
+ * Precedence:
+ *   1. **explicit `package:` field** (mmnto-ai/totem-strategy#517) — the
+ *      machine-parseable name, derive-not-guess. Preferred when present.
+ *   2. **canonical-source path locator** — when `canonicalSource` carries a
  *      `:path/to/package.json` segment (e.g. `mmnto-cli-version`'s
  *      `mmnto-ai/totem:packages/cli/package.json#version`), read the `name`
  *      from that package.json under `floorRoot`. Authoritative — no id guess.
- *   2. **id convention** — `mmnto-<x>-version` → `@mmnto/<x>`.
+ *   3. **id convention** — `mmnto-<x>-version` → `@mmnto/<x>` (fallback until all
+ *      contracts carry `package:`).
  *
- * Returns `undefined` for ids that don't match the `mmnto-…-version` convention
- * (e.g. `governance-doctrine`, `gate-config`) so ONLY the deps contracts this
- * slice handles resolve a package name; the CLI keeps the rest as `skip` stubs.
+ * Returns `undefined` for contracts with no `package:`, no path locator, and an
+ * id that doesn't match the convention (e.g. `governance-doctrine`, `gate-config`)
+ * so ONLY the contracts this slice handles resolve a name; the CLI keeps the rest
+ * as `skip` stubs.
  *
  * @param floorRoot Optional root the canonical-source path locator anchors at
- *                  (the resolved cohort-floor repo). Omit when only the id
- *                  convention is wanted.
+ *                  (the resolved cohort-floor repo). Omit when only `package:` /
+ *                  the id convention is wanted.
  */
 export function packageNameForContract(
   contract: ParityContract,
   floorRoot?: string,
 ): string | undefined {
-  // ── 1. canonical-source path locator → read `name` from that package.json ──
+  // ── 1. explicit `package:` field (derive-not-guess; strategy#517) ──
+  if (typeof contract.package === 'string' && contract.package.trim().length > 0) {
+    return contract.package.trim();
+  }
+
+  // ── 2. canonical-source path locator → read `name` from that package.json ──
   if (floorRoot !== undefined) {
     const fromLocator = packageNameFromCanonicalSource(contract.canonicalSource, floorRoot);
     if (fromLocator !== undefined) return fromLocator;
   }
 
-  // ── 2. id convention (mmnto-<x>-version → @mmnto/<x>) ──
+  // ── 3. id convention (mmnto-<x>-version → @mmnto/<x>) ──
   const match = contract.id.match(DEPS_CONTRACT_ID);
   if (match?.[1] === undefined) return undefined;
   // Concatenate (not template-interpolate) so the `@mmnto/` scope's own trailing
@@ -316,18 +326,22 @@ export function resolveCohortFloor(packageName: string, gitRoot: string): Cohort
  */
 function readVersionFromPackagesGlob(root: string, packageName: string): string | undefined {
   const packagesDir = path.join(root, 'packages');
-  let entries: fs.Dirent[];
+  let names: string[];
   try {
-    entries = fs.readdirSync(packagesDir, { withFileTypes: true });
+    names = fs.readdirSync(packagesDir);
     // totem-context: an absent or unreadable packages/ dir is the "not the monorepo here" signal — return undefined so the resolver falls through to the sibling / honest-absent layer rather than throwing.
   } catch {
     return undefined;
   }
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const pkgJson = path.join(packagesDir, entry.name, 'package.json');
-    const parsed = readPackageJson(pkgJson);
+  for (const name of names) {
+    const entryPath = path.join(packagesDir, name);
+    // Use the statSync-based `isDirectory` (follows symlinks) rather than a
+    // `Dirent.isDirectory()` filter — pnpm / workspace setups symlink package
+    // dirs, which the lstat-like Dirent check reports as non-directories and
+    // would skip (GCA review #2071).
+    if (!isDirectory(entryPath)) continue;
+    const parsed = readPackageJson(path.join(entryPath, 'package.json'));
     if (parsed?.name === packageName && typeof parsed.version === 'string') {
       return parsed.version;
     }
@@ -345,6 +359,13 @@ export interface DetectVersionPinnedContext {
   gitRoot: string;
   /** The current repo's cohort id (from {@link deriveCohortRepoId}) for `consumers` applicability. */
   repoId?: string;
+  /**
+   * Package name pre-resolved by the caller (the CLI resolves it once for
+   * routing — {@link packageNameForContract}). When provided, the detector skips
+   * re-resolving it (avoids a duplicate locator package.json read). Omit and the
+   * detector resolves it itself.
+   */
+  packageName?: string;
   /**
    * Test seam — override the consumer package.json read. Production callers omit
    * it and the detector reads `<cwd>/package.json`.
@@ -384,7 +405,17 @@ export function detectVersionPinnedContract(
   ctx: DetectVersionPinnedContext,
 ): ParityContractVerdict {
   // ── Applicability: consumers list ──
-  if (contract.consumers !== undefined && ctx.repoId !== undefined) {
+  if (contract.consumers !== undefined) {
+    if (ctx.repoId === undefined) {
+      // Can't decide applicability without a cohort id — surface it (honest-
+      // absent) rather than silently treating the contract as applicable, which
+      // would make the consumers scope a no-op for this repo (Tenet 4 / Greptile
+      // review #2071).
+      return {
+        status: 'skip',
+        message: `cannot determine applicability — repo id unresolvable; contract is scoped to consumers [${contract.consumers.join(', ')}]`,
+      };
+    }
     if (!contract.consumers.includes(ctx.repoId)) {
       return {
         status: 'skip',
@@ -393,10 +424,11 @@ export function detectVersionPinnedContract(
     }
   }
 
-  // ── Resolve the package name (id convention + canonical-source locator) ──
-  // Pass gitRoot as the floorRoot so a canonical-source path locator
-  // (mmnto-cli-version) reads the name from the in-tree package.json.
-  const packageName = packageNameForContract(contract, ctx.gitRoot);
+  // ── Resolve the package name (`package:` → locator → id convention) ──
+  // Prefer a name pre-resolved by the CLI (avoids re-reading a locator's
+  // package.json — Greptile review #2071); fall back to resolving here for
+  // standalone callers (tests). gitRoot is the floorRoot for a path locator.
+  const packageName = ctx.packageName ?? packageNameForContract(contract, ctx.gitRoot);
   if (packageName === undefined) {
     return {
       status: 'skip',
@@ -410,8 +442,9 @@ export function detectVersionPinnedContract(
   const declaredRange = consumerPkg ? findDeclaredRange(consumerPkg, packageName) : undefined;
   if (declaredRange === undefined) {
     // Applicable-but-missing: we already passed the `consumers` gate above, so
-    // this repo IS an applicable consumer (or applicability is underivable) — an
-    // expected pin that's absent is drift, NOT cohort-permitted absence. Held as
+    // this repo IS an applicable consumer (in `consumers`, or `consumers` absent
+    // = applies to all) — an expected pin that's absent is drift, NOT
+    // cohort-permitted absence. Held as
     // a skip-with-note while the manifest is scaffold (consumers lists are
     // best-effort); flips to `warn` once verified. Kept DISTINCT from the
     // not-a-consumer skip so the `consumers` field still does its job (strategy
@@ -474,22 +507,32 @@ export function detectVersionPinnedContract(
 }
 
 /**
- * Resolve the consumer's installed `@mmnto/*` version, mirroring
- * `resolveEngineVersion`'s require-with-ENOENT-fallback idiom: read
- * `<cwd>/node_modules/<pkg>/package.json#version`; on any read failure fall back
- * to `semver.minVersion(declaredRange)` (the floor the caret range implies).
- * Returns undefined only when neither resolves to a valid version.
+ * Resolve the consumer's installed `@mmnto/*` version. Walks UP the directory
+ * tree from `cwd` reading `<dir>/node_modules/<pkg>/package.json#version` at each
+ * ancestor — monorepo / pnpm / npm-workspace installs hoist deps to a parent or
+ * root `node_modules` rather than the sub-package's, so a cwd-only read would
+ * miss them (GCA review #2071). Mirrors Node's own upward node_modules
+ * resolution. On no hit, falls back to `semver.minVersion(declaredRange)` (the
+ * floor the caret range implies). Returns undefined only when neither resolves
+ * to a valid version.
  */
 function resolveInstalledVersion(
   cwd: string,
   packageName: string,
   declaredRange: string,
 ): string | undefined {
-  const installedPkg = readPackageJson(
-    path.join(cwd, 'node_modules', ...packageName.split('/'), 'package.json'),
-  );
-  if (installedPkg?.version !== undefined && semver.valid(installedPkg.version) !== null) {
-    return installedPkg.version;
+  const segments = packageName.split('/');
+  let dir = path.resolve(cwd);
+  for (;;) {
+    const installedPkg = readPackageJson(
+      path.join(dir, 'node_modules', ...segments, 'package.json'),
+    );
+    if (installedPkg?.version !== undefined && semver.valid(installedPkg.version) !== null) {
+      return installedPkg.version;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // reached the filesystem root
+    dir = parent;
   }
   // Fallback: the minimum version the declared range admits. `minVersion`
   // returns a SemVer or null; coerce to the bare version string.

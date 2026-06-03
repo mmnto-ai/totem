@@ -139,6 +139,19 @@ describe('packageNameForContract', () => {
     expect(packageNameForContract(depsContract({ id: 'agent-memory-doctrine' }))).toBeUndefined();
     expect(packageNameForContract(depsContract({ id: 'gate-config' }))).toBeUndefined();
   });
+
+  it('prefers an explicit package: field over the id convention (derive-not-guess, strategy#517)', () => {
+    // Vendor name + a non-conventional id: only the package: field can resolve it.
+    expect(
+      packageNameForContract(
+        depsContract({ id: 'google-genai-coupling', package: '@google/genai' }),
+      ),
+    ).toBe('@google/genai');
+    // package: wins even when the id convention WOULD match (no silent divergence).
+    expect(
+      packageNameForContract(depsContract({ id: 'mmnto-totem-version', package: '@mmnto/totem' })),
+    ).toBe('@mmnto/totem');
+  });
 });
 
 // ─── deriveCohortRepoId ─────────────────────────────────
@@ -287,6 +300,33 @@ describe('detectVersionPinnedContract', () => {
       baseCtx({ repoId: 'totem-status' }),
     );
     expect(verdict.status).toBe('skip');
+  });
+
+  it('SKIP — consumers present but repo id unresolvable: surface it, do NOT silently apply (Greptile P1)', () => {
+    writeSelfInTree(tmpRoot, '1.53.3');
+    writeConsumerPkg(tmpRoot, { '@mmnto/totem': '^1.50.0' });
+    const verdict = detectVersionPinnedContract(
+      depsContract({ consumers: ['totem-strategy'] }),
+      baseCtx({ repoId: undefined }),
+    );
+    expect(verdict.status).toBe('skip');
+    expect(verdict.message).toMatch(/cannot determine applicability|repo id unresolvable/i);
+  });
+
+  it('resolves an installed version hoisted to a PARENT node_modules (monorepo, GCA-1)', () => {
+    // Floor 2.0.0 self-in-tree at the git root; the consumer cwd is a nested
+    // subdir whose dep is hoisted to the root node_modules, not its own.
+    writeSelfInTree(tmpRoot, '2.0.0');
+    const sub = path.join(tmpRoot, 'apps', 'web');
+    fs.mkdirSync(sub, { recursive: true });
+    writeConsumerPkg(sub, { '@mmnto/totem': '^2.0.0' });
+    writeInstalled(tmpRoot, '@mmnto/totem', '2.0.0'); // hoisted at the root, not in sub
+    const verdict = detectVersionPinnedContract(
+      depsContract(),
+      baseCtx({ cwd: sub, gitRoot: tmpRoot, repoId: 'totem' }),
+    );
+    expect(verdict.status).toBe('pass');
+    expect(verdict.message).toContain('2.0.0');
   });
 
   it('SKIP — floor unresolvable (no self-in-tree, no sibling); reason in message, no throw', () => {

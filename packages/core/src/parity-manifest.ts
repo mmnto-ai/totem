@@ -87,6 +87,10 @@ const RawParityContractSchema = z.object({
   title: z.string().optional(),
   blocking: z.boolean().optional(),
   consumers: z.array(z.string()).optional(),
+  // Explicit package identifier (mmnto-ai/totem-strategy#517) — the machine-
+  // parseable name for version/vendor contracts, so the detector derives the
+  // package rather than guessing it from the id convention.
+  package: z.string().optional(),
 });
 
 /**
@@ -130,6 +134,12 @@ export interface ParityContract {
    * applies to all cohort repos (ADR-102 per-consumer applicability).
    */
   consumers?: string[];
+  /**
+   * Optional explicit package identifier (mmnto-ai/totem-strategy#517) — the
+   * machine-parseable `@mmnto/*` (or vendor) package name a version/vendor
+   * contract pins. Preferred over the id-convention guess when present.
+   */
+  package?: string;
 }
 
 /** A fully parsed + validated parity manifest. */
@@ -291,6 +301,7 @@ function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContra
     ...(raw.title !== undefined ? { title: raw.title } : {}),
     ...(raw.blocking !== undefined ? { blocking: raw.blocking } : {}),
     ...(raw.consumers !== undefined ? { consumers: raw.consumers } : {}),
+    ...(raw.package !== undefined ? { package: raw.package } : {}),
   };
 }
 

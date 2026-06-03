@@ -168,7 +168,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           };
         }
 
-        const verdict = detectVersionPinnedContract(c, { cwd, gitRoot, repoId });
+        const verdict = detectVersionPinnedContract(c, { cwd, gitRoot, repoId, packageName });
         if (verdict.status === 'warn' && c.blocking === true) {
           blockingDriftIds.push(c.id);
         }
@@ -297,18 +297,18 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
     }
   }
 
-  // Sensor-not-gate: only `--strict` + a `blocking: true` contract's drift
-  // promotes to a non-zero exit. A pre-existing `fail` status (none today, but
-  // future detection slices may emit one) also gates. Non-blocking drift never
-  // gates, even under `--strict`.
-  const failingFromStatus = results.filter((r) => r.status === 'fail').length;
-  const failingFromBlocking = options.strict ? blockingDriftIds.length : 0;
-  const totalFailures = failingFromStatus + failingFromBlocking;
-  if (options.strict && totalFailures > 0) {
+  // Sensor-not-gate: drift is report-only by default (exit 0). Only `--strict`
+  // promotes a `blocking: true` contract's drift to a non-zero exit; non-blocking
+  // drift never gates. PR-1's detector emits no raw `fail` status (version-pinned
+  // is pass/warn/skip), so the gate is purely the strict+blocking promotion — the
+  // gating model for a future slice that DOES emit a `fail` is settled when that
+  // slice lands (CR review #2071: keep the gate from suggesting a non-strict path
+  // that would break sensor-not-gate).
+  if (options.strict && blockingDriftIds.length > 0) {
     throw new TotemError(
       'PARITY_DRIFT_DETECTED',
-      `${totalFailures} parity contract(s) reported blocking drift under --strict.`,
-      'Reconcile each failing contract against its canonical source, then re-run totem doctor --parity --strict.',
+      `${blockingDriftIds.length} parity contract(s) reported blocking drift under --strict.`,
+      'Reconcile each blocking contract against its canonical source, then re-run totem doctor --parity --strict.',
     );
   }
 }
