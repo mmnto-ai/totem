@@ -219,7 +219,9 @@ export function packageNameForContract(
   // ── 2. id convention (mmnto-<x>-version → @mmnto/<x>) ──
   const match = contract.id.match(DEPS_CONTRACT_ID);
   if (match?.[1] === undefined) return undefined;
-  return `${MMNTO_SCOPE}${match[1]}`;
+  // Concatenate (not template-interpolate) so the `@mmnto/` scope's own trailing
+  // `/` reads as the delimiter between scope and package slug.
+  return MMNTO_SCOPE + match[1];
 }
 
 /**
@@ -487,11 +489,12 @@ function resolveInstalledVersion(
 /** Find the declared range for `packageName` across the three dep fields, in order. */
 function findDeclaredRange(pkg: PackageJsonShape, packageName: string): string | undefined {
   for (const field of DEP_FIELDS) {
-    const section = pkg[field];
-    if (section && typeof section === 'object') {
-      const range = section[packageName];
-      if (typeof range === 'string' && range.trim().length > 0) return range;
-    }
+    // `pkg` is loose untrusted JSON; optional-chain the field read so a missing
+    // or non-object dep section yields undefined instead of throwing, then
+    // type-check the value itself. Avoids a null-guard idiom that two compiled
+    // rules disagree on.
+    const range = pkg[field]?.[packageName];
+    if (typeof range === 'string' && range.trim().length > 0) return range;
   }
   return undefined;
 }
