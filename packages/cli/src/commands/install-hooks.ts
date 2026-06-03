@@ -43,18 +43,20 @@ export function detectTotemPrefix(cwd: string): string {
  *
  * Prefers the lockfile-pinned / in-tree build over a volatile ambient global
  * (mmnto-ai/totem#2053; Tenet 14 — never tie governance to volatile state). Order:
- * workspace-HEAD > local `node_modules/.bin` > `pnpm exec` > PATH global > dlx fallback.
+ * workspace-HEAD > pinned `node_modules/@mmnto/cli` > `pnpm exec` > PATH global > dlx fallback.
+ * Each pinned tier is identity-guarded on the `@mmnto/cli` package (not a bare `totem` bin name,
+ * which a colliding package could shadow).
  * A stale global shadowing a newer workspace build is the `lesson-1ef06d16` foot-gun this
  * order prevents. Sets TOTEM_CMD="" when unavailable — callers must guard with
  * `[ -n "$TOTEM_CMD" ]`. Never exits early, to avoid killing chained user hooks.
  */
 export function buildResolveBlock(fallbackCmd: string): string {
   return `# Resolve totem — prefer the pinned / in-tree build over a volatile ambient global
-# (mmnto-ai/totem#2053). Order: workspace-HEAD > local .bin > pnpm exec > PATH > dlx.
+# (mmnto-ai/totem#2053). Order: workspace-HEAD > pinned @mmnto/cli > pnpm exec > PATH > dlx.
 if [ -f packages/cli/dist/index.js ] && grep -q '"name": *"@mmnto/cli"' packages/cli/package.json 2>/dev/null; then
   TOTEM_CMD="node packages/cli/dist/index.js"
-elif [ -f node_modules/.bin/totem ]; then
-  TOTEM_CMD="node_modules/.bin/totem"
+elif [ -f node_modules/@mmnto/cli/dist/index.js ]; then
+  TOTEM_CMD="node node_modules/@mmnto/cli/dist/index.js"
 elif [ -f pnpm-workspace.yaml ] && pnpm exec totem --version >/dev/null 2>&1; then
   TOTEM_CMD="pnpm exec totem"
 elif command -v totem >/dev/null 2>&1; then
