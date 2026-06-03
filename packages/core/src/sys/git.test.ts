@@ -9,11 +9,13 @@ vi.mock('cross-spawn', () => ({
   sync: vi.fn(),
 }));
 
+import { TotemGitError } from '../errors.js';
 import { fail, ok } from '../test-utils.js';
 import {
   extractChangedFiles,
   filterDiffByPatterns,
   findRepoRootSync,
+  getGitBranchDiff,
   getGitDiffRange,
   getGitLogSince,
   getLatestTag,
@@ -101,6 +103,87 @@ describe('getGitDiffRange (#1717)', () => {
     expect(() => getGitDiffRange('/tmp', 'nope..nope')).toThrow(
       /Failed to compute diff for range 'nope..nope'/,
     );
+  });
+});
+
+describe('getGitBranchDiff base-ref resolution (#2054)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  /**
+   * Route the cross-spawn mock by which ref a `git diff <ref>...HEAD` call
+   * names, so tests assert *which ref wins* independent of call order (the
+   * exact thing #2054 changes). Keyed by bare ref (`main`, `origin/main`).
+   */
+  function routeDiffByRef(routes: Record<string, { ok?: string; fail?: string }>): void {
+    vi.mocked(crossSpawn.sync).mockImplementation((_command, args) => {
+      const range = (args ?? [])[1] ?? ''; // args === ['diff', '<ref>...HEAD']
+      const outcome = routes[range.replace(/\.\.\.HEAD$/, '')];
+      let result;
+      if (!outcome) result = fail(new Error(`unexpected git call: ${(args ?? []).join(' ')}`));
+      else if (outcome.fail) result = fail(new Error(outcome.fail));
+      else result = ok(outcome.ok ?? '');
+      // cross-spawn's full SpawnSyncReturns shape is irrelevant to these tests;
+      // the ok()/fail() fixtures carry the only fields safeExec reads.
+      return result as never;
+    });
+  }
+
+  it('prefers origin/<base> over a (possibly stale) local <base> when both resolve', () => {
+    // Old order [local, origin] short-circuits on the local ref and would
+    // return the stale-local diff; origin-first is the #2054 fix.
+    routeDiffByRef({
+      'origin/main': { ok: 'ORIGIN_DIFF' },
+      main: { ok: 'STALE_LOCAL_DIFF' },
+    });
+    expect(getGitBranchDiff('/tmp', 'main')).toBe('ORIGIN_DIFF');
+    expect(vi.mocked(crossSpawn.sync)).toHaveBeenNthCalledWith(
+      1,
+      'git',
+      ['diff', 'origin/main...HEAD'],
+      expect.any(Object),
+    );
+  });
+
+  it('normalizes an already-origin-prefixed base instead of doubling it (#2074)', () => {
+    // base='origin/main' must resolve `origin/main...HEAD`, never `origin/origin/main`.
+    routeDiffByRef({
+      'origin/main': { ok: 'ORIGIN_DIFF' },
+      main: { ok: 'LOCAL_DIFF' },
+    });
+    expect(getGitBranchDiff('/tmp', 'origin/main')).toBe('ORIGIN_DIFF');
+    expect(vi.mocked(crossSpawn.sync)).toHaveBeenNthCalledWith(
+      1,
+      'git',
+      ['diff', 'origin/main...HEAD'],
+      expect.any(Object),
+    );
+  });
+
+  it('falls back to local <base> when origin/<base> is absent (offline / no-remote — nothing lost)', () => {
+    routeDiffByRef({
+      'origin/main': { fail: "fatal: ambiguous argument 'origin/main...HEAD'" },
+      main: { ok: 'LOCAL_DIFF' },
+    });
+    expect(getGitBranchDiff('/tmp', 'main')).toBe('LOCAL_DIFF');
+  });
+
+  it('throws a TotemGitError with a fetch hint when neither ref resolves', () => {
+    routeDiffByRef({
+      'origin/main': { fail: 'fatal: bad revision' },
+      main: { fail: 'fatal: bad revision' },
+    });
+    let caught: unknown;
+    try {
+      getGitBranchDiff('/tmp', 'main');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TotemGitError);
+    if (caught instanceof TotemGitError) {
+      expect(caught.message).toMatch(/Failed to get branch diff \(main\.\.\.HEAD\)/);
+      // The fetch hint lives in the recovery field, not the message.
+      expect(caught.recoveryHint).toMatch(/git fetch origin main/);
+    }
   });
 });
 

@@ -149,6 +149,7 @@ export async function getDiffForReview(
     getGitBranchDiff,
     getGitDiff,
     getGitDiffRange,
+    sanitizeForTerminal,
   } = await import('@mmnto/totem');
 
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
@@ -175,7 +176,14 @@ export async function getDiffForReview(
 
     if (!diff.trim()) {
       const base = getDefaultBranch(cwd);
-      log.info(tag, `Diff source: branch-vs-base (${base}...HEAD)`);
+      // Sanitize the git-derived branch name before logging (terminal-injection
+      // hardening). Name both refs in resolution order so the line isn't
+      // misleading when the offline fallback to the local ref fires (mmnto-ai/totem#2054).
+      const safeBase = sanitizeForTerminal(base);
+      log.info(
+        tag,
+        `Diff source: branch-vs-base (origin/${safeBase}...HEAD, else local ${safeBase})`,
+      );
       diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
       source = 'branch-vs-base';
     }
