@@ -268,12 +268,15 @@ describe('detectVersionPinnedContract', () => {
     expect(verdict.status).not.toBe('fail');
   });
 
-  it('SKIP — pin not declared in the consumer package.json (cohort permits absence)', () => {
+  it('SKIP (distinct) — applicable consumer missing an expected pin is expected-but-absent, NOT cohort-permitted', () => {
     writeSelfInTree(tmpRoot, '1.53.3');
     writeConsumerPkg(tmpRoot, { 'unrelated-dep': '^1.0.0' });
     const verdict = detectVersionPinnedContract(depsContract(), baseCtx({ repoId: 'totem' }));
     expect(verdict.status).toBe('skip');
-    expect(verdict.message).toMatch(/not declared/i);
+    expect(verdict.message).toMatch(/expected but not declared|applicable consumer/i);
+    // Must stay DISTINCT from the not-a-consumer skip — else the consumers field
+    // does nothing for the missing case (strategy design-call 3).
+    expect(verdict.message).not.toMatch(/permits absence|not in consumers/i);
   });
 
   it('SKIP — consumers present and current repo not listed (not-a-consumer)', () => {

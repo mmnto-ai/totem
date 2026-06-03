@@ -17,9 +17,12 @@
  * `pass`/`warn`/`skip` — never `fail` — so the gate edge stays a CLI concern.
  *
  * Design invariants (mirroring `parity-manifest.ts` + `strategy-resolver.ts`):
- *   - **Honest-absent (Tenet 14):** absence is never an error. Pin not declared,
- *     not-a-consumer, floor-unresolvable, or a doctrine pin this slice doesn't
- *     handle → `skip` (the manifest's `-` "cohort permits absence"), never a
+ *   - **Honest-absent (Tenet 14):** absence is never an error. Not-a-consumer,
+ *     floor-unresolvable, or a doctrine pin this slice doesn't handle → `skip`
+ *     (the manifest's `-` "cohort permits absence"). An *applicable* consumer
+ *     missing an expected pin is also `skip` while the manifest is scaffold, but
+ *     kept DISTINCT (expected-but-absent → a `warn` once the consumers lists are
+ *     verified) so the `consumers` field still catches the missing case. Never a
  *     fabricated verdict.
  *   - **NEVER networks:** the cohort floor is derived LOCALLY — self-in-tree
  *     (the totem monorepo at the current git root) or a `../totem` sibling
@@ -406,9 +409,17 @@ export function detectVersionPinnedContract(
   const consumerPkg = readPkg(path.join(ctx.cwd, 'package.json'));
   const declaredRange = consumerPkg ? findDeclaredRange(consumerPkg, packageName) : undefined;
   if (declaredRange === undefined) {
+    // Applicable-but-missing: we already passed the `consumers` gate above, so
+    // this repo IS an applicable consumer (or applicability is underivable) — an
+    // expected pin that's absent is drift, NOT cohort-permitted absence. Held as
+    // a skip-with-note while the manifest is scaffold (consumers lists are
+    // best-effort); flips to `warn` once verified. Kept DISTINCT from the
+    // not-a-consumer skip so the `consumers` field still does its job (strategy
+    // ack 2026-06-03T0156Z, design-call 3).
     return {
       status: 'skip',
-      message: `${packageName} not declared in this consumer (cohort permits absence)`,
+      message: `${packageName} expected but not declared — applicable consumer (scaffold: skip; becomes a drift warn once consumers are verified)`,
+      remediation: `Declare ${packageName} in this repo's package.json, or drop this repo from the contract's consumers list if it genuinely does not apply here.`,
     };
   }
 
