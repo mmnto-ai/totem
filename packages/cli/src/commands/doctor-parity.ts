@@ -45,6 +45,12 @@ export async function checkParity(cwd: string): Promise<DiagnosticResult[]> {
   // fallback in doctorCommand — surface only on a defective error object so
   // sentinels still propagate.
   let configValue: string | undefined;
+  // Relative manifest paths anchor at the config's OWN directory, not the
+  // invocation cwd, so the field resolves consistently no matter which subdir
+  // the doctor runs from. resolveConfigPath only checks cwd + the global profile
+  // today (no upward walk), so this equals cwd for the local case — the explicit
+  // anchor just keeps it correct if resolution ever changes.
+  let manifestRoot = cwd;
   try {
     const configPath = resolveConfigPath(cwd);
     // Repo-scoped by design: the manifest location is per-repo, so a config-less
@@ -55,6 +61,7 @@ export async function checkParity(cwd: string): Promise<DiagnosticResult[]> {
     if (isGlobalConfigPath(configPath)) {
       configValue = undefined;
     } else {
+      manifestRoot = path.dirname(configPath);
       const config = await loadConfig(configPath);
       configValue = config.orient?.parityManifest;
     }
@@ -66,7 +73,7 @@ export async function checkParity(cwd: string): Promise<DiagnosticResult[]> {
     configValue = undefined;
   }
 
-  const result = loadParityManifest(configValue, cwd);
+  const result = loadParityManifest(configValue, manifestRoot);
 
   switch (result.status) {
     case 'not-configured':
