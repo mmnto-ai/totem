@@ -115,16 +115,17 @@ describe('getGitBranchDiff base-ref resolution (#2054)', () => {
    * exact thing #2054 changes). Keyed by bare ref (`main`, `origin/main`).
    */
   function routeDiffByRef(routes: Record<string, { ok?: string; fail?: string }>): void {
-    vi.mocked(crossSpawn.sync).mockImplementation(((...callArgs: unknown[]) => {
-      const args = (callArgs[1] as readonly string[] | undefined) ?? [];
-      const range = args[1] ?? ''; // args === ['diff', '<ref>...HEAD']
-      for (const [ref, outcome] of Object.entries(routes)) {
-        if (range === `${ref}...HEAD`) {
-          return outcome.fail ? fail(new Error(outcome.fail)) : ok(outcome.ok ?? '');
-        }
-      }
-      return fail(new Error(`unexpected git call: ${args.join(' ')}`));
-    }) as never);
+    vi.mocked(crossSpawn.sync).mockImplementation((_command, args) => {
+      const range = (args ?? [])[1] ?? ''; // args === ['diff', '<ref>...HEAD']
+      const outcome = routes[range.replace(/\.\.\.HEAD$/, '')];
+      let result;
+      if (!outcome) result = fail(new Error(`unexpected git call: ${(args ?? []).join(' ')}`));
+      else if (outcome.fail) result = fail(new Error(outcome.fail));
+      else result = ok(outcome.ok ?? '');
+      // cross-spawn's full SpawnSyncReturns shape is irrelevant to these tests;
+      // the ok()/fail() fixtures carry the only fields safeExec reads.
+      return result as never;
+    });
   }
 
   it('prefers origin/<base> over a (possibly stale) local <base> when both resolve', () => {
@@ -163,9 +164,11 @@ describe('getGitBranchDiff base-ref resolution (#2054)', () => {
       caught = err;
     }
     expect(caught).toBeInstanceOf(TotemGitError);
-    expect((caught as Error).message).toMatch(/Failed to get branch diff \(main\.\.\.HEAD\)/);
-    // The fetch hint lives in the recovery field, not the message.
-    expect((caught as TotemGitError).recoveryHint).toMatch(/git fetch origin main/);
+    if (caught instanceof TotemGitError) {
+      expect(caught.message).toMatch(/Failed to get branch diff \(main\.\.\.HEAD\)/);
+      // The fetch hint lives in the recovery field, not the message.
+      expect(caught.recoveryHint).toMatch(/git fetch origin main/);
+    }
   });
 });
 
