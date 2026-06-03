@@ -534,6 +534,23 @@ export { resolveSubstratePaths } from './substrate-resolver.js';
 export type { OrchestrationPaths, SelfAgentResolution } from './orchestration-resolver.js';
 export { resolveOrchestrationPaths, resolveSelfAgents } from './orchestration-resolver.js';
 
+// Parity-manifest parser + config-path resolver (mmnto-ai/totem-strategy#448)
+export type {
+  ParityContract,
+  ParityManifest,
+  ParityManifestLoadResult,
+  ParityManifestParseResult,
+  ParityManifestPathStatus,
+  ParityTractability,
+} from './parity-manifest.js';
+export {
+  loadParityManifest,
+  ParityTractabilitySchema,
+  parseParityManifest,
+  resolveParityManifestPath,
+  SUPPORTED_PARITY_SCHEMA_VERSION,
+} from './parity-manifest.js';
+
 // Semgrep adapter (Pipeline 4 — import rules from Semgrep YAML)
 export type { SemgrepImportResult } from './semgrep-adapter.js';
 export { parseSemgrepRules } from './semgrep-adapter.js';

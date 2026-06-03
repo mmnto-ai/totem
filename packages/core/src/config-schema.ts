@@ -246,6 +246,17 @@ export type ConfigTier = z.infer<typeof ConfigTierSchema>;
 export const OrientConfigSchema = z.object({
   /** GH Project number for the in-flight board section (e.g. 1). Optional. */
   projectNumber: z.number().int().positive().optional(),
+  /**
+   * Config-path to the cohort parity manifest (`parity-manifest.yaml`) the
+   * `totem doctor --parity` sensor parses for cross-repo drift
+   * (mmnto-ai/totem-strategy#448). Mirrors `projectNumber` as the one
+   * consumer-specific value the sensor cannot derive from the repo alone —
+   * the manifest is strategy-owned, so its location is per-consumer. Resolved
+   * relative to the config/repo root by `resolveParityManifestPath`. OPTIONAL:
+   * when unset, the sensor renders an honest "no parity manifest configured"
+   * skip — never an error (Tenet 14, honest-absent).
+   */
+  parityManifest: z.string().optional(),
 });
 
 /**

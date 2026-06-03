@@ -1059,14 +1059,26 @@ program
     '--scope-to-diff',
     'Narrow --claim-discipline scan to files in the current push diff (mmnto-ai/totem#2002 — prevents pre-existing standing-gate warnings from firing on unrelated diffs)',
   )
+  .option(
+    '--parity',
+    'Run only the parity-drift sensor against the cohort parity manifest (mmnto-ai/totem-strategy#448)',
+  )
   .action(
     async (opts: {
       pr?: boolean;
       strict?: boolean;
       claimDiscipline?: boolean;
       scopeToDiff?: boolean;
+      parity?: boolean;
     }) => {
       try {
+        if (opts.claimDiscipline && opts.parity) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            'Cannot combine --claim-discipline with --parity.',
+            'Choose exactly one specialized doctor mode.',
+          );
+        }
         if (opts.claimDiscipline) {
           const { doctorClaimDisciplineCliCommand } =
             await import('./commands/doctor-claim-discipline.js');
@@ -1074,6 +1086,11 @@ program
             strict: opts.strict,
             scopeToDiff: opts.scopeToDiff,
           });
+          return;
+        }
+        if (opts.parity) {
+          const { doctorParityCliCommand } = await import('./commands/doctor-parity.js');
+          await doctorParityCliCommand({ strict: opts.strict });
           return;
         }
         const { doctorCommand } = await import('./commands/doctor.js');

@@ -38,7 +38,8 @@ export type TotemErrorCode =
   | 'SESSION_ID_READ_FAILED'
   | 'BADGE_VERIFICATION_FAILED'
   | 'CLAIM_DISCIPLINE_FAILED'
-  | 'GATE_INVALID';
+  | 'GATE_INVALID'
+  | 'PARITY_DRIFT_DETECTED';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;
