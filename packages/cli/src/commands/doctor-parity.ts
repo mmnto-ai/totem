@@ -200,7 +200,9 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
         if (r.remediation) log.dim(TAG, `→ ${render(r.remediation)}`);
         break;
       case 'fail':
-        log.error(TAG, `${errorColor(bold('FAIL'))} — ${render(r.message)}`);
+        // Mandated 'Totem Error' tag (packages/cli convention) — marks internal
+        // error output, distinct from the contextual TAG used for pass/warn/skip.
+        log.error('Totem Error', `${errorColor(bold('FAIL'))} — ${render(r.message)}`);
         if (r.remediation) log.dim(TAG, `→ ${render(r.remediation)}`);
         break;
       case 'skip':
