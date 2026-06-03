@@ -1,17 +1,23 @@
 /**
  * Parity-drift sensor for `totem doctor --parity` (mmnto-ai/totem-strategy#448).
  *
- * SKELETON (first slice): resolve the consumer-configured `orient.parityManifest`
- * config-path → parse + Zod-validate the strategy-owned `parity-manifest.yaml`
- * → emit `DiagnosticResult`s. Per-contract drift detection is OUT OF SCOPE for
- * this skeleton (it needs populated deps contracts + per-dimension semantics);
- * each per-contract line is a `skip` info stub here.
+ * PR-1 (mmnto-ai/totem#2069): resolve the consumer-configured
+ * `orient.parityManifest` config-path → parse + Zod-validate the strategy-owned
+ * `parity-manifest.yaml` → emit `DiagnosticResult`s. The FIRST detection slice
+ * is wired here: each `version-pinned` contract whose id resolves a deps package
+ * name (`mmnto-cli-version`, `mmnto-totem-version`, `mmnto-mcp-version`,
+ * `mmnto-pack-rust-architecture-version`) runs through the core
+ * `detectVersionPinnedContract` engine (pin-currency verdict, local-only floor).
+ * ALL other contracts — mechanical, manual-attestation, and the version-pinned
+ * DOCTRINE pins (`governance-doctrine` / `agent-memory-doctrine`, which derive
+ * no deps package name) — keep the `skip` info stub (their drift detection is a
+ * follow-on).
  *
- * Sensor-not-gate: this surface emits `skip`/`warn`/`pass` only — it never
- * produces a `fail` in the skeleton. The `--strict` exit-code decision lives at
- * the CLI edge (reusing the existing doctor `--strict` logic); a `fail` only
- * becomes possible once per-contract drift detection lands. The `blocking`
- * contract field is parsed but unused here (per-contract gating is post-skeleton).
+ * Sensor-not-gate: the core detector returns `skip`/`warn`/`pass` only — never
+ * `fail`. The `--strict` exit-code decision lives at the CLI edge: a `warn` from
+ * a `blocking: true` contract is promoted to `fail` (non-zero) ONLY under
+ * `--strict`. The detector carries that promotion eligibility back via
+ * `blockingDriftIds` so the command can gate without re-loading the manifest.
  *
  * Honest-absent (Tenet 14): unconfigured → exactly one `skip` line; never an
  * error. Configured-but-missing / unparseable / unsupported-schema → `warn`,
@@ -22,23 +28,46 @@
 
 import * as path from 'node:path';
 
+import type { ParityContract, ParityContractVerdict } from '@mmnto/totem';
+
 import type { DiagnosticResult } from './doctor.js';
 
 const CHECK_NAME = 'Parity';
 
 /**
+ * Result of a parity check: the rendered `DiagnosticResult` lines plus the set
+ * of contract ids that produced a drift `warn` AND are `blocking: true`. The
+ * command promotes exactly these to `fail` under `--strict` — carrying the ids
+ * here avoids re-loading the manifest at the CLI edge to recover the `blocking`
+ * flag (which `DiagnosticResult` does not carry).
+ */
+export interface ParityCheckResult {
+  results: DiagnosticResult[];
+  /** Contract ids whose `warn` is `--strict`-promotable (blocking + drift). */
+  blockingDriftIds: string[];
+}
+
+/**
  * Resolve, parse, and report the parity manifest as `DiagnosticResult`s.
  *
- * Returns an ARRAY: the first entry is always the section summary line; in the
- * `ok` path it is followed by one `skip` info stub per contract (the
- * per-contract drift verdict is deferred). All other paths return a single
- * summary entry.
+ * Returns `{ results, blockingDriftIds }`: `results[0]` is always the section
+ * summary line; in the `ok` path it is followed by one line per contract — a
+ * pin-currency verdict for the deps version-pinned contracts, a `skip` stub for
+ * everything else. All non-`ok` paths return a single summary entry and an empty
+ * `blockingDriftIds`.
  *
  * @param cwd The directory to resolve config + manifest against (config/repo root).
  */
-export async function checkParity(cwd: string): Promise<DiagnosticResult[]> {
+export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
-  const { loadParityManifest, SUPPORTED_PARITY_SCHEMA_VERSION } = await import('@mmnto/totem');
+  const {
+    deriveCohortRepoId,
+    detectVersionPinnedContract,
+    loadParityManifest,
+    packageNameForContract,
+    resolveGitRoot,
+    SUPPORTED_PARITY_SCHEMA_VERSION,
+  } = await import('@mmnto/totem');
 
   // Read the config best-effort: a missing/corrupt config is the honest-absent
   // path (no parity manifest configured), not a crash. Mirrors the config-load
@@ -78,43 +107,35 @@ export async function checkParity(cwd: string): Promise<DiagnosticResult[]> {
   switch (result.status) {
     case 'not-configured':
       // Honest-absent: exactly one skip line. Not a failure.
-      return [
-        {
-          name: CHECK_NAME,
-          status: 'skip',
-          message: 'no parity manifest configured',
-        },
-      ];
+      return single({
+        name: CHECK_NAME,
+        status: 'skip',
+        message: 'no parity manifest configured',
+      });
 
     case 'not-found':
-      return [
-        {
-          name: CHECK_NAME,
-          status: 'warn',
-          message: `parity manifest not found at ${rel(cwd, result.path)}`,
-          remediation: 'Fix orient.parityManifest in your totem config to point at the manifest.',
-        },
-      ];
+      return single({
+        name: CHECK_NAME,
+        status: 'warn',
+        message: `parity manifest not found at ${rel(cwd, result.path)}`,
+        remediation: 'Fix orient.parityManifest in your totem config to point at the manifest.',
+      });
 
     case 'unparseable':
-      return [
-        {
-          name: CHECK_NAME,
-          status: 'warn',
-          message: `parity manifest unreadable at ${rel(cwd, result.path)}: ${result.reason}`,
-          remediation: 'Fix the manifest YAML / schema, then re-run totem doctor --parity.',
-        },
-      ];
+      return single({
+        name: CHECK_NAME,
+        status: 'warn',
+        message: `parity manifest unreadable at ${rel(cwd, result.path)}: ${result.reason}`,
+        remediation: 'Fix the manifest YAML / schema, then re-run totem doctor --parity.',
+      });
 
     case 'unsupported-schema':
-      return [
-        {
-          name: CHECK_NAME,
-          status: 'warn',
-          message: `parity manifest schema v${result.schemaVersion} unsupported (this doctor supports v${SUPPORTED_PARITY_SCHEMA_VERSION})`,
-          remediation: 'Upgrade @mmnto/cli or align the manifest schema-version.',
-        },
-      ];
+      return single({
+        name: CHECK_NAME,
+        status: 'warn',
+        message: `parity manifest schema v${result.schemaVersion} unsupported (this doctor supports v${SUPPORTED_PARITY_SCHEMA_VERSION})`,
+        remediation: 'Upgrade @mmnto/cli or align the manifest schema-version.',
+      });
 
     case 'ok': {
       const { contracts } = result.manifest;
@@ -123,16 +144,71 @@ export async function checkParity(cwd: string): Promise<DiagnosticResult[]> {
         status: 'pass',
         message: `parity manifest: ${contracts.length} contract(s) loaded`,
       };
-      // Per-contract skeleton stubs. Drift detection is deferred — each line is
-      // an info `skip` carrying the contract id + dimension + tractability so
-      // the surface is shaped for the follow-on without asserting a verdict.
-      const perContract: DiagnosticResult[] = contracts.map((c) => ({
-        name: `Parity: ${c.id}`,
-        status: 'skip',
-        message: `${c.dimension} (${c.tractability}) — drift detection not yet implemented`,
-      }));
-      return [summary, ...perContract];
+
+      // Shared detection context. The cohort floor + repoId derive from the git
+      // root (anchored there, not the deep cwd — mirrors the core resolver).
+      // resolveGitRoot returns null outside a repo; fall back to cwd so the
+      // local self-in-tree / sibling probes still have an anchor.
+      const gitRoot = safeGitRoot(resolveGitRoot, cwd) ?? cwd;
+      const repoId = deriveCohortRepoId(cwd, { gitRoot });
+
+      const blockingDriftIds: string[] = [];
+      const perContract: DiagnosticResult[] = contracts.map((c) => {
+        // PR-1 only senses version-pinned DEPS contracts (those that resolve a
+        // package name). Everything else — mechanical, manual-attestation, and
+        // the version-pinned doctrine pins (no deps package name) — keeps the
+        // skip stub until its detection slice lands.
+        const packageName =
+          c.tractability === 'version-pinned' ? packageNameForContract(c, gitRoot) : undefined;
+        if (packageName === undefined) {
+          return {
+            name: `Parity: ${c.id}`,
+            status: 'skip',
+            message: `${c.dimension} (${c.tractability}) — drift detection not yet implemented`,
+          };
+        }
+
+        const verdict = detectVersionPinnedContract(c, { cwd, gitRoot, repoId, packageName });
+        if (verdict.status === 'warn' && c.blocking === true) {
+          blockingDriftIds.push(c.id);
+        }
+        return verdictToDiagnostic(c, verdict);
+      });
+
+      return { results: [summary, ...perContract], blockingDriftIds };
     }
+  }
+}
+
+/** Wrap a single summary line in the `ParityCheckResult` shape (no blocking ids). */
+function single(result: DiagnosticResult): ParityCheckResult {
+  return { results: [result], blockingDriftIds: [] };
+}
+
+/** Map a core `ParityContractVerdict` to a CLI `DiagnosticResult` for one contract. */
+function verdictToDiagnostic(
+  contract: ParityContract,
+  verdict: ParityContractVerdict,
+): DiagnosticResult {
+  return {
+    name: `Parity: ${contract.id}`,
+    status: verdict.status,
+    message: verdict.message,
+    ...(verdict.remediation !== undefined ? { remediation: verdict.remediation } : {}),
+  };
+}
+
+/**
+ * Resolve the git root, swallowing the `TotemGitError` that `resolveGitRoot`
+ * throws on a git hiccup (permission error / corrupted index) — the parity
+ * sensor degrades to the cwd anchor rather than crashing the doctor pipeline.
+ */
+function safeGitRoot(resolve: (cwd: string) => string | null, cwd: string): string | null {
+  try {
+    return resolve(cwd);
+    // totem-context: resolveGitRoot throws on permission errors / corrupted index; the parity sensor degrades to a cwd anchor rather than crashing — a git hiccup must not sink the doctor pipeline.
+  } catch {
+    return null;
   }
 }
 
@@ -149,13 +225,14 @@ const TAG = CHECK_NAME;
 
 export interface ParityCliOptions {
   /**
-   * Strict mode (Proposal 273 / 279 `--strict` semantics): promote any `fail`
-   * DiagnosticResult to a gate failure (non-zero exit) via a thrown TotemError.
+   * Strict mode (Proposal 273 / 279 `--strict` semantics): promote drift to a
+   * gate failure (non-zero exit) via a thrown TotemError.
    *
-   * In the SKELETON this never fires — `checkParity` emits only `skip`/`warn`/
-   * `pass`, never `fail` (per-contract drift detection is deferred). The wiring
-   * is present so `--strict` composes once a `fail` becomes possible. Default
-   * (non-strict) is sensor-not-gate: `warn`s report and exit 0.
+   * Sensor-not-gate is the default: a drift `warn` reports and exits 0. Under
+   * `--strict`, a `warn` from a `blocking: true` contract (its id carried in
+   * `checkParity`'s `blockingDriftIds`) is rendered as `FAIL` and promoted to a
+   * non-zero exit. Non-blocking drift stays a `warn` even under `--strict` — the
+   * contract's `blocking` flag, not the flag alone, gates the exit code.
    */
   strict?: boolean;
   /** Test seam — production callers omit and the command uses `process.cwd()`. */
@@ -164,8 +241,9 @@ export interface ParityCliOptions {
 
 /**
  * CLI entry — runs `checkParity`, renders each `DiagnosticResult`, and throws a
- * `TotemError` on `fail` under `--strict` so the top-level `handleError`
- * produces the non-zero exit code (no direct `process.exit` per AGENTS.md).
+ * `TotemError` when a blocking contract drifted under `--strict` so the
+ * top-level `handleError` produces the non-zero exit code (no direct
+ * `process.exit` per AGENTS.md).
  */
 export async function doctorParityCliCommand(options: ParityCliOptions = {}): Promise<void> {
   const { TotemError, sanitizeForTerminal } = await import('@mmnto/totem');
@@ -188,10 +266,18 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
       .trim();
 
   const cwd = options.cwdForTest ?? process.cwd();
-  const results = await checkParity(cwd);
+  const { results, blockingDriftIds } = await checkParity(cwd);
+
+  // Under --strict, a blocking contract's drift `warn` is rendered + gated as a
+  // FAIL. We match by the `Parity: <id>` line name so the rendered status agrees
+  // with the exit code. blockingDriftIds is empty in the non-strict path's
+  // effect (the promotion only fires under --strict), so this Set is cheap.
+  const promotable = new Set(blockingDriftIds.map((id) => `Parity: ${id}`));
 
   for (const r of results) {
-    switch (r.status) {
+    const status =
+      options.strict && r.status === 'warn' && promotable.has(r.name) ? 'fail' : r.status;
+    switch (status) {
       case 'pass':
         log.success(TAG, `${successColor(bold('PASS'))} — ${render(r.message)}`);
         break;
@@ -211,15 +297,18 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
     }
   }
 
-  // Sensor-not-gate: only `--strict` promotes `fail` to a non-zero exit. The
-  // skeleton never emits `fail`, so this is inert until per-contract drift
-  // detection lands; the wiring composes ahead of that follow-on.
-  const failures = results.filter((r) => r.status === 'fail');
-  if (options.strict && failures.length > 0) {
+  // Sensor-not-gate: drift is report-only by default (exit 0). Only `--strict`
+  // promotes a `blocking: true` contract's drift to a non-zero exit; non-blocking
+  // drift never gates. PR-1's detector emits no raw `fail` status (version-pinned
+  // is pass/warn/skip), so the gate is purely the strict+blocking promotion — the
+  // gating model for a future slice that DOES emit a `fail` is settled when that
+  // slice lands (CR review #2071: keep the gate from suggesting a non-strict path
+  // that would break sensor-not-gate).
+  if (options.strict && blockingDriftIds.length > 0) {
     throw new TotemError(
       'PARITY_DRIFT_DETECTED',
-      `${failures.length} parity contract(s) reported drift under --strict.`,
-      'Reconcile each failing contract against its canonical source, then re-run totem doctor --parity --strict.',
+      `${blockingDriftIds.length} parity contract(s) reported blocking drift under --strict.`,
+      'Reconcile each blocking contract against its canonical source, then re-run totem doctor --parity --strict.',
     );
   }
 }

@@ -551,6 +551,21 @@ export {
   SUPPORTED_PARITY_SCHEMA_VERSION,
 } from './parity-manifest.js';
 
+// Version-pinned parity drift detector (PR-1, mmnto-ai/totem#2069)
+export type {
+  CohortFloorStatus,
+  DeriveCohortRepoIdOptions,
+  DetectVersionPinnedContext,
+  PackageJsonShape,
+  ParityContractVerdict,
+} from './parity-detect.js';
+export {
+  deriveCohortRepoId,
+  detectVersionPinnedContract,
+  packageNameForContract,
+  resolveCohortFloor,
+} from './parity-detect.js';
+
 // Semgrep adapter (Pipeline 4 — import rules from Semgrep YAML)
 export type { SemgrepImportResult } from './semgrep-adapter.js';
 export { parseSemgrepRules } from './semgrep-adapter.js';
