@@ -144,6 +144,21 @@ describe('getGitBranchDiff base-ref resolution (#2054)', () => {
     );
   });
 
+  it('normalizes an already-origin-prefixed base instead of doubling it (#2074)', () => {
+    // base='origin/main' must resolve `origin/main...HEAD`, never `origin/origin/main`.
+    routeDiffByRef({
+      'origin/main': { ok: 'ORIGIN_DIFF' },
+      main: { ok: 'LOCAL_DIFF' },
+    });
+    expect(getGitBranchDiff('/tmp', 'origin/main')).toBe('ORIGIN_DIFF');
+    expect(vi.mocked(crossSpawn.sync)).toHaveBeenNthCalledWith(
+      1,
+      'git',
+      ['diff', 'origin/main...HEAD'],
+      expect.any(Object),
+    );
+  });
+
   it('falls back to local <base> when origin/<base> is absent (offline / no-remote — nothing lost)', () => {
     routeDiffByRef({
       'origin/main': { fail: "fatal: ambiguous argument 'origin/main...HEAD'" },

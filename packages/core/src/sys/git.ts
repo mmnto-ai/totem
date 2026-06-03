@@ -125,8 +125,11 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
   // in review/lint). `origin/<base>` is the current merged base and is a local
   // ref (no network); three-dot `...HEAD` resolves merge-base = the true fork
   // point. Falls back to local <base> when origin is absent (offline / no-remote).
-  // This audit (#2054) supersedes lesson-8d9946e1's "local before remote" default.
-  const refs = [`origin/${baseBranch}`, baseBranch];
+  // This audit (mmnto-ai/totem#2054) supersedes lesson-8d9946e1's "local before remote" default.
+  // Normalize off any `origin/` prefix first so an already-remote-prefixed base
+  // can't become `origin/origin/<base>` — an invalid ref + wasted spawn (mmnto-ai/totem#2074).
+  const localRef = baseBranch.replace(/^origin\//, '');
+  const refs = [`origin/${localRef}`, localRef];
   for (const ref of refs) {
     try {
       return safeExec('git', ['diff', `${ref}...HEAD`], {
@@ -140,8 +143,8 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
       if (ref === refs[refs.length - 1]) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new TotemGitError(
-          `Failed to get branch diff (${baseBranch}...HEAD): ${msg}`,
-          `Ensure the base branch '${baseBranch}' exists locally or as a remote ref. Try 'git fetch origin ${baseBranch}'.`,
+          `Failed to get branch diff (${localRef}...HEAD): ${msg}`,
+          `Ensure the base branch '${localRef}' exists locally or as a remote ref. Try 'git fetch origin ${localRef}'.`,
           err,
         );
       }
