@@ -68,4 +68,4 @@ This pack is the first non-trivial consumer of the ADR-097 § 10 Pack v0.1 subst
 
 ## License
 
-MIT. Same as the Totem monorepo.
+Apache-2.0. Same as the Totem monorepo.

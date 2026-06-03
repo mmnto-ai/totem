@@ -25,4 +25,4 @@ Will land with `totem install pack/agent-security` once the pack resolver ships.
 
 ## License
 
-MIT. Same as the Totem monorepo.
+Apache-2.0. Same as the Totem monorepo.
