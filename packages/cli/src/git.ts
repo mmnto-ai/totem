@@ -175,7 +175,8 @@ export async function getDiffForReview(
 
     if (!diff.trim()) {
       const base = getDefaultBranch(cwd);
-      log.info(tag, `Diff source: branch-vs-base (${base}...HEAD)`);
+      // Resolution prefers origin/<base> over the (often stale) local ref (#2054).
+      log.info(tag, `Diff source: branch-vs-base (prefers origin/${base}...HEAD)`);
       diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
       source = 'branch-vs-base';
     }
