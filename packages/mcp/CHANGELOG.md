@@ -1,5 +1,11 @@
 # @mmnto/mcp
 
+## 1.53.5
+
+### Patch Changes
+
+- @mmnto/totem@1.53.5
+
 ## 1.53.4
 
 ### Patch Changes
