@@ -166,6 +166,34 @@ describe('buildResolveBlock', () => {
     const dlxIdx = block.indexOf('pnpm dlx @mmnto/cli');
     expect(workspaceIdx).toBeLessThan(dlxIdx);
   });
+
+  it('prioritizes workspace HEAD over local and global binaries in resolve block (mmnto-ai/totem#2053)', () => {
+    const block = buildResolveBlock('pnpm dlx @mmnto/cli');
+    const workspaceHead = block.indexOf('node packages/cli/dist/index.js');
+    const localBin = block.indexOf('node_modules/.bin/totem');
+    const pnpmExec = block.indexOf('pnpm exec totem');
+    const pathGlobal = block.indexOf('command -v totem');
+    const fallback = block.indexOf('pnpm dlx @mmnto/cli');
+    // Every tier is present.
+    for (const idx of [workspaceHead, localBin, pnpmExec, pathGlobal, fallback]) {
+      expect(idx).toBeGreaterThan(-1);
+    }
+    // Strict precedence: pinned / in-tree beats the volatile ambient PATH global (Tenet 14).
+    expect(workspaceHead).toBeLessThan(localBin);
+    expect(localBin).toBeLessThan(pnpmExec);
+    expect(pnpmExec).toBeLessThan(pathGlobal);
+    expect(pathGlobal).toBeLessThan(fallback);
+  });
+
+  it('guards the workspace-HEAD tier on the @mmnto/cli name + built dist, and uses -f for the local bin (mmnto-ai/totem#2053)', () => {
+    const block = buildResolveBlock('pnpm dlx @mmnto/cli');
+    // Tier-1 requires BOTH the built dist and the @mmnto/cli package name (no consumer false-match).
+    expect(block).toContain('packages/cli/dist/index.js');
+    expect(block).toContain('"name": *"@mmnto/cli"');
+    // Windows shim compat: -f (file-exists), never -x, for the local .bin check.
+    expect(block).toContain('[ -f node_modules/.bin/totem ]');
+    expect(block).not.toContain('[ -x node_modules/.bin/totem ]');
+  });
 });
 
 describe('buildPreCommitHook', () => {

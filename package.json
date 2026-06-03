@@ -23,6 +23,7 @@
     "@anthropic-ai/sdk": "^0.98.0",
     "@changesets/cli": "^2.31.0",
     "@google/genai": "^2.6.0",
+    "@mmnto/cli": "workspace:*",
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^13.0.0",
