@@ -17,7 +17,7 @@ When using LLMs on projects, I found that agents kept making the same architectu
 
 They can make the wrong way look brilliant (until you realize what happened). They'll rarely ask: _"doesn't a shared helper already exist for this?"_
 
-Totem is what I extracted to solve that friction. It's a file-based toolkit. The lint engine, substrate, and knowledge index are deterministic; the compiler and review commands are LLM-powered. Agents read from and write to a substrate of plain markdown lessons, a queryable knowledge index, compiled lint rules, and CLI primitives in order to coordinate work. The structural pieces (the substrate, the index, the compiled-rule lint engine) ship today. The discipline and telemetry layers (whether agents consistently query the index, whether compliance gets measured end-to-end) are in active development; see [What Works and What Doesn't](#what-works-and-what-doesnt) for the honest split.
+Totem is what I extracted to solve that friction. It's a file-based toolkit. The lint engine, substrate, and knowledge index are deterministic; the compiler and review commands are LLM-powered. Agents read from and write to a substrate of plain markdown lessons, a queryable knowledge index, compiled lint rules, and CLI primitives — so context stays queryable, rules stay enforceable, and state stays derivable. The structural pieces (the substrate, the index, the compiled-rule lint engine) ship today. The discipline and telemetry layers (whether agents consistently query the index, whether compliance gets measured end-to-end) are in active development; see [What Works and What Doesn't](#what-works-and-what-doesnt) for the honest split.
 
 ---
 
