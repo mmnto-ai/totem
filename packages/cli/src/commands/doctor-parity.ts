@@ -259,6 +259,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   const {
     deriveCohortRepoId,
     detectGeneratedArtifactContract,
+    detectManualAttestationContract,
     detectMechanicalContract,
     detectVersionPinnedContract,
     extractManagedBlock,
@@ -506,7 +507,22 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           return lines;
         }
 
-        // ── manual-attestation + anything else → skip stub (the mmnto-ai/totem#2073 tail) ──
+        // ── manual-attestation (mmnto-ai/totem#2073 manual-attestation slice) ──
+        // The claim-class with no mechanical sensor: the detector surfaces the
+        // tracked vendor-SDK pin (package set) or doctrine-currency row (no package)
+        // as `info`, or honest-absent `skip` — NEVER pass/warn/fail/unknown. An
+        // `info` can't enter blockingDriftIds, so these contracts cannot fail even
+        // under --strict (the manifest's "never fails" contract).
+        if (c.tractability === 'manual-attestation') {
+          // The detector reads the sub-class discriminant (`c.package`) + the
+          // canonical source directly off the contract. `package:` set ⇒ vendor-SDK
+          // pin read; unset ⇒ doctrine-row pure-info surface. No `attested` yet (the
+          // schema has no last-attested field — strategy's follow-on lane).
+          const verdict = detectManualAttestationContract(c, { cwd, repoId });
+          return [verdictToLine(c, verdict)];
+        }
+
+        // ── anything else (a future tractability) → skip stub; the slice boundary stays observable ──
         return [
           stub(c, `${c.dimension} (${c.tractability}) — drift detection not yet implemented`),
         ];

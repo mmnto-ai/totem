@@ -582,3 +582,94 @@ describe('doctorParityCliCommand — --strict fail-promotion', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+// ─── manual-attestation detection wiring (mmnto-ai/totem#2073 manual-attestation slice) ──
+
+/**
+ * A manifest carrying both manual-attestation sub-classes: two doctrine rows
+ * (no package, cross-repo canonical) + two vendor-SDK couplings (package set),
+ * one of the latter scoped to a consumer this repo is NOT, to exercise the skip.
+ */
+const MANUAL_ATTEST_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: governance-doctrine
+    dimension: doctrine
+    canonical-source: mmnto-ai/totem-strategy:AGENTS.md
+    detection-method: doctor surfaces last attested and flags staleness only
+    expected-value-or-derivation: tracked for doctrine-currency visibility
+    tractability: manual-attestation
+    tracking-issue: mmnto-ai/totem-strategy#511
+  - id: google-genai-coupling
+    dimension: dependency-cohort
+    canonical-source: null
+    package: '@google/genai'
+    detection-method: doctor surfaces each consumer's pin + last-attested; flags staleness only
+    expected-value-or-derivation: tracked for coupling visibility
+    tractability: manual-attestation
+    tracking-issue: mmnto-ai/totem#2018
+  - id: anthropic-sdk-coupling
+    dimension: dependency-cohort
+    canonical-source: null
+    package: '@anthropic-ai/sdk'
+    detection-method: doctor surfaces each consumer's pin + last-attested; flags staleness only
+    expected-value-or-derivation: tracked for coupling visibility
+    tractability: manual-attestation
+    tracking-issue: mmnto-ai/totem-strategy#482
+    consumers:
+      - liquid-city
+`;
+
+describe('checkParity — manual-attestation wiring', () => {
+  it('routes both sub-classes off the stub: doctrine → info surface, vendor-SDK → info pin, scoped-out → skip', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', MANUAL_ATTEST_MANIFEST_YAML);
+    // The consumer declares @google/genai so its coupling surfaces a pin; this
+    // repo is not `liquid-city`, so the anthropic coupling lands on a scope skip.
+    writeConsumerDeps({ '@google/genai': '^0.3.0' });
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const perContract = results.slice(1);
+
+    const doctrine = perContract.find((r) => r.name === 'Parity: governance-doctrine')!;
+    expect(doctrine.status).toBe('info');
+    expect(doctrine.message).toContain('mmnto-ai/totem-strategy:AGENTS.md');
+    expect(doctrine.message).toContain('mmnto-ai/totem-strategy#511');
+    expect(doctrine.message).not.toContain('not yet implemented');
+
+    const genai = perContract.find((r) => r.name === 'Parity: google-genai-coupling')!;
+    expect(genai.status).toBe('info');
+    expect(genai.message).toContain('@google/genai');
+    expect(genai.message).toContain('^0.3.0');
+
+    const anthropic = perContract.find((r) => r.name === 'Parity: anthropic-sdk-coupling')!;
+    expect(anthropic.status).toBe('skip');
+    expect(anthropic.message).toMatch(/cohort permits absence/i);
+    expect(anthropic.message).not.toContain('not yet implemented');
+
+    // No manual-attestation contract is rendered as the old stub, fail, or warn.
+    expect(perContract.every((r) => !r.message.includes('not yet implemented'))).toBe(true);
+    expect(results.some((r) => r.status === 'fail' || r.status === 'warn')).toBe(false);
+    expect(blockingDriftIds).toHaveLength(0);
+  });
+
+  it('manual-attestation is structurally non-gating: a blocking:true contract never enters blockingDriftIds', async () => {
+    // Even marked blocking, an info verdict (the manual-attestation ceiling) never
+    // promotes — the contract cannot fail even under --strict.
+    const blockingManifest = MANUAL_ATTEST_MANIFEST_YAML.replace(
+      'tracking-issue: mmnto-ai/totem-strategy#511\n',
+      'tracking-issue: mmnto-ai/totem-strategy#511\n    blocking: true\n',
+    );
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', blockingManifest);
+    writeConsumerDeps({ '@google/genai': '^0.3.0' });
+
+    const { blockingDriftIds } = await checkParity(tmpDir);
+    expect(blockingDriftIds).toHaveLength(0);
+
+    // And the CLI command resolves (no throw) under --strict.
+    await expect(
+      doctorParityCliCommand({ strict: true, cwdForTest: tmpDir }),
+    ).resolves.toBeUndefined();
+  });
+});

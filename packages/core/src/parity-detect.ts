@@ -567,6 +567,153 @@ function findDeclaredRange(pkg: PackageJsonShape, packageName: string): string |
   return undefined;
 }
 
+// ─── Manual-attestation detector (mmnto-ai/totem#2073 manual-attestation slice) ──
+
+/**
+ * Inputs + test seams for {@link detectManualAttestationContract}. The sub-class
+ * discriminant (`package:`) + the canonical source are read DIRECTLY off the
+ * `contract` argument (single source of truth) — the context carries only the
+ * consumer-local read seams + the reserved attestation date.
+ */
+export interface DetectManualAttestationContext {
+  /** The consumer repo to read `package.json` from (the vendor-SDK pin read). */
+  cwd: string;
+  /** The current repo's cohort id (from {@link deriveCohortRepoId}) for `consumers` applicability. */
+  repoId?: string;
+  /**
+   * OPTIONAL local attestation date (ISO-8601). Absent today — the manifest schema
+   * has no `last-attested:` field yet; strategy owns that follow-on (#2073 design
+   * 2045Z). RESERVED seam so date-staleness is a clean drop-in: when a date lands
+   * the message reports it, but the VERDICT stays `info` regardless — staleness is
+   * a message refinement, NEVER a status change (manual-attestation never warns).
+   */
+  attested?: string;
+  /**
+   * Test seam — override the consumer package.json read. Production callers omit it
+   * and the detector reads `<cwd>/package.json`. Invoked ONLY on the vendor-SDK
+   * path; the doctrine-row path performs no read at all (a throwing seam proves it).
+   *
+   * Scope note (Greptile review on mmnto-ai/totem#2080): this seam covers ONLY the
+   * top-level consumer package.json read (the declared-range lookup). The
+   * installed-version half (`resolveInstalledVersion`) reads the REAL `node_modules`
+   * ancestry and, for any VALID range, falls back to `semver.minVersion(range)` — so
+   * `"installed: unresolved"` arises solely from an UNPARSEABLE range, never from
+   * absent node_modules. A test injecting this seam with a valid range but no on-disk
+   * install therefore sees the minVersion fallback BY DESIGN. The boundary is shared
+   * verbatim with `detectVersionPinnedContract` (same `resolveInstalledVersion`, same
+   * seam scope) — deliberately not widened here to keep the two detectors aligned.
+   */
+  readPackageJson?: (absPath: string) => PackageJsonShape | undefined;
+}
+
+/**
+ * Detect "drift" for ONE `manual-attestation` contract — the claim-class with NO
+ * mechanical sensor (Tenet 19). The verdict ceiling is **`info` or `skip` ONLY**:
+ * the doctor may SURFACE the tracked coupling/doctrine + FLAG staleness, but may
+ * NEVER assert drift (`warn`), failure (`fail`), currency (`pass`), or an
+ * unprovable-canonical (`unknown`) — there is no canonical to prove against. This
+ * is the manifest's "surfaces last-attested + flags staleness only, NEVER fails"
+ * contract, claim-class-tighter than the mechanical / version-pinned detectors
+ * (which may `warn`). The `info`/`skip` ceiling means the contract can never enter
+ * the CLI's `blockingDriftIds`, so it is structurally incapable of failing even
+ * under `--strict`.
+ *
+ * Two sub-classes, discriminated by the contract's `package:`:
+ *   - **vendor-SDK coupling** (`packageName` set — `@google/genai`,
+ *     `@anthropic-ai/sdk`): reads the consumer's LOCAL pin (declared range +
+ *     resolved installed version, reusing the version-pinned machinery) and
+ *     surfaces it as `info` — NO cohort floor exists, so NO currency claim is made
+ *     (Tenet 16, attest-don't-enforce). The DURABLE manual-attestation case.
+ *   - **doctrine row** (`packageName` unset — `governance-doctrine`,
+ *     `agent-memory-doctrine`): `canonicalSource` is a cross-repo AGENTS.md the
+ *     local-read-only doctor must NOT fetch. Emits a pure `info` doctrine-currency
+ *     surface from the contract fields with ZERO on-disk I/O. TRANSIENT — graduates
+ *     to version-pinned when doctrine-distribution ships (strategy#511 / #526).
+ *
+ * NEVER throws (reads degrade to skip), NEVER networks, NEVER reads the cross-repo
+ * `canonicalSource`, and NEVER emits `pass`/`warn`/`fail`/`unknown`.
+ */
+export function detectManualAttestationContract(
+  contract: ParityContract,
+  ctx: DetectManualAttestationContext,
+): ParityContractVerdict {
+  // ── Applicability: consumers list (verbatim parity with detectVersionPinnedContract) ──
+  if (contract.consumers !== undefined) {
+    if (ctx.repoId === undefined) {
+      return {
+        status: 'skip',
+        message: `cannot determine applicability — repo id unresolvable; contract is scoped to consumers [${contract.consumers.join(', ')}]`,
+      };
+    }
+    if (!contract.consumers.includes(ctx.repoId)) {
+      return {
+        status: 'skip',
+        message: `cohort permits absence here (${ctx.repoId} not in consumers)`,
+      };
+    }
+  }
+
+  // The last-attested suffix: a date if one was supplied (the reserved seam — the
+  // manifest has no `last-attested:` field yet), else the honest "not recorded".
+  // NEVER fabricated; a present date refines the MESSAGE, never the status.
+  const trimmedAttested = ctx.attested?.trim();
+  const attestedSuffix = trimmedAttested
+    ? `last attested ${trimmedAttested}`
+    : 'last attested: not recorded';
+
+  // The `package:` field is the sub-class discriminant, read directly off the
+  // contract (single source of truth). A whitespace-only value is treated as
+  // absent (doctrine-like) rather than a degenerate vendor pin (`|| undefined`
+  // collapses an empty trim to the doctrine-row branch).
+  const pkg = contract.package?.trim() || undefined;
+
+  // ── Doctrine row (no package): a pure info surface, ZERO on-disk I/O ──
+  // canonicalSource is cross-repo (mmnto-ai/totem-strategy:AGENTS.md); the
+  // local-read-only doctor surfaces it as TEXT and never resolves it.
+  if (pkg === undefined) {
+    const source = contract.canonicalSource?.trim() || 'no external canonical source';
+    return {
+      status: 'info',
+      message: `doctrine currency tracked — ${contract.dimension} (canonical: ${source}); no local pin mechanism, pending doctrine-distribution (${contract.trackingIssue}). ${attestedSuffix}`,
+    };
+  }
+
+  // ── Vendor-SDK coupling (package set): surface the consumer's LOCAL pin ──
+  // Reuse the version-pinned package.json read, but STOP before any floor compare —
+  // there is no agreed cohort floor (Tenet 16), so the doctor asserts NO currency;
+  // the verdict is an info visibility surface, never pass/warn.
+  const readPkg = ctx.readPackageJson ?? readPackageJson;
+  const consumerPkg = readPkg(path.join(ctx.cwd, 'package.json'));
+  const declaredRange = consumerPkg ? findDeclaredRange(consumerPkg, pkg) : undefined;
+
+  if (declaredRange === undefined) {
+    // Applicable consumer, but the vendor SDK is not declared here. UNLIKE the
+    // version-pinned applicable-but-missing case (which becomes a drift `warn` once
+    // consumers are verified), a manual-attestation coupling NEVER warns: vendor
+    // spread is permitted by design (no cohort floor) → honest-absent skip.
+    return {
+      status: 'skip',
+      message: `${pkg} coupling not present here — cohort permits vendor spread (attest-don't-enforce)`,
+    };
+  }
+
+  // Resolve the installed version only for a valid range — guard FIRST so a garbage
+  // range never reaches semver.minVersion (resolveInstalledVersion's fallback). An
+  // unparseable range still surfaces as info (the coupling IS declared), just with
+  // installed unresolved — never a throw, never a warn.
+  const installed =
+    semver.validRange(declaredRange) !== null
+      ? resolveInstalledVersion(ctx.cwd, pkg, declaredRange)
+      : undefined;
+  const installedText =
+    installed !== undefined ? `installed ${installed}` : 'installed: unresolved';
+
+  return {
+    status: 'info',
+    message: `${pkg} coupling tracked — declared ${declaredRange}, ${installedText}; no cohort floor (Tenet 16, attest only). ${attestedSuffix}`,
+  };
+}
+
 // ─── Mechanical content-equality detector (mmnto-ai/totem#2073) ──
 
 /**
