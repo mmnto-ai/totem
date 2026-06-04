@@ -23,9 +23,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   deriveCohortRepoId,
+  type DetectMechanicalContext,
+  detectMechanicalContract,
   type DetectVersionPinnedContext,
   detectVersionPinnedContract,
+  extractManagedBlock,
+  hashManagedBlock,
+  normalizeManagedBlock,
   packageNameForContract,
+  parseForkMarker,
   resolveCohortFloor,
 } from './parity-detect.js';
 import type { ParityContract } from './parity-manifest.js';
@@ -380,5 +386,189 @@ describe('detectVersionPinnedContract', () => {
     const verdict = detectVersionPinnedContract(depsContract(), baseCtx({ repoId: 'totem' }));
     expect(verdict.message).not.toMatch(/content|file|hash|byte/i);
     expect(verdict.message).toMatch(/version|pin|floor|install/i);
+  });
+});
+
+// ─── Mechanical content-equality detector (mmnto-ai/totem#2073) ──
+
+const MARKERS = { start: '<!-- totem:skill-start -->', end: '<!-- totem:skill-end -->' };
+
+/**
+ * Build a distributed skill artifact: a managed block between the markers, with
+ * an optional `fork` marker placed AFTER the end marker (user-customization
+ * territory — outside the compared block, so the marker itself never drifts).
+ */
+function skillFile(body: string, opts: { fork?: string } = {}): string {
+  const trailer = opts.fork !== undefined ? `\n${opts.fork}\n` : '';
+  return `---\nname: x\n---\n\n${MARKERS.start}\n${body}\n${MARKERS.end}\n${trailer}`;
+}
+
+/** Write a consumer artifact at `<tmpRoot>/<rel>`; returns the absolute path. */
+function writeArtifact(rel: string, content: string): string {
+  const abs = path.join(tmpRoot, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content, 'utf-8');
+  return abs;
+}
+
+/** Base mechanical context; canonicalBlock + consumerPath default to a known artifact. */
+function mechCtx(over: Partial<DetectMechanicalContext> = {}): DetectMechanicalContext {
+  return {
+    canonicalBlock: 'CANONICAL BODY\nline two',
+    consumerPath: path.join(tmpRoot, '.claude/skills/x/SKILL.md'),
+    markers: MARKERS,
+    ...over,
+  };
+}
+
+describe('normalizeManagedBlock', () => {
+  it('collapses CRLF and lone CR to LF', () => {
+    expect(normalizeManagedBlock('a\r\nb\rc')).toBe('a\nb\nc');
+  });
+
+  it('strips trailing whitespace per line and trims surrounding blank lines', () => {
+    expect(normalizeManagedBlock('\n\na  \nb\t\n\n')).toBe('a\nb');
+  });
+});
+
+describe('extractManagedBlock', () => {
+  it('returns the content between the first start and the following end marker', () => {
+    expect(extractManagedBlock(`pre ${MARKERS.start}INNER${MARKERS.end} post`, MARKERS)).toBe(
+      'INNER',
+    );
+  });
+
+  it('returns undefined when either marker is absent', () => {
+    expect(extractManagedBlock(`only ${MARKERS.start} no end`, MARKERS)).toBeUndefined();
+    expect(extractManagedBlock('no markers at all', MARKERS)).toBeUndefined();
+  });
+});
+
+describe('parseForkMarker', () => {
+  it('parses reason/owner/attested, whitespace-tolerant', () => {
+    expect(
+      parseForkMarker('<!--  totem:fork   reason="x y"  owner="me" attested="2026-06-03" -->'),
+    ).toEqual({ reason: 'x y', owner: 'me', attested: '2026-06-03' });
+  });
+
+  it('returns an empty object for a bare marker, undefined when absent', () => {
+    expect(parseForkMarker('<!-- totem:fork -->')).toEqual({});
+    expect(parseForkMarker('no marker here')).toBeUndefined();
+  });
+
+  it('matches a fork marker authored across multiple lines (dotAll)', () => {
+    expect(parseForkMarker('<!-- totem:fork\n  reason="multi line"\n  owner="me"\n-->')).toEqual({
+      reason: 'multi line',
+      owner: 'me',
+    });
+  });
+});
+
+describe('detectMechanicalContract', () => {
+  it('pass — consumer block equals canonical after normalization', () => {
+    const consumerPath = writeArtifact(
+      '.claude/skills/x/SKILL.md',
+      skillFile('CANONICAL BODY\nline two'),
+    );
+    expect(detectMechanicalContract(mechCtx({ consumerPath })).status).toBe('pass');
+  });
+
+  it('pass — CRLF consumer vs LF canonical, otherwise identical (win32 guard, req #3)', () => {
+    const crlf = skillFile('CANONICAL BODY\nline two').replace(/\n/g, '\r\n');
+    const consumerPath = writeArtifact('.claude/skills/x/SKILL.md', crlf);
+    expect(detectMechanicalContract(mechCtx({ consumerPath })).status).toBe('pass');
+  });
+
+  it('pass — a trailing-whitespace-only difference normalizes equal', () => {
+    const consumerPath = writeArtifact(
+      '.claude/skills/x/SKILL.md',
+      skillFile('CANONICAL BODY  \nline two\t'),
+    );
+    expect(detectMechanicalContract(mechCtx({ consumerPath })).status).toBe('pass');
+  });
+
+  it('warn — drift with no fork marker, reporting the consumer content-hash', () => {
+    const consumerPath = writeArtifact('.claude/skills/x/SKILL.md', skillFile('DRIFTED BODY'));
+    const v = detectMechanicalContract(mechCtx({ consumerPath }));
+    expect(v.status).toBe('warn');
+    expect(v.message).toMatch(/drift/i);
+    expect(v.message).toContain(hashManagedBlock(normalizeManagedBlock('DRIFTED BODY')));
+  });
+
+  it('info — drift WITH a fork marker is an attested intentional fork, never warn (req #7)', () => {
+    const consumerPath = writeArtifact(
+      '.claude/skills/x/SKILL.md',
+      skillFile('DRIFTED BODY', {
+        fork: '<!-- totem:fork reason="local override" owner="satur8d" attested="2026-06-03" -->',
+      }),
+    );
+    const v = detectMechanicalContract(mechCtx({ consumerPath }));
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/intentional fork/i);
+    expect(v.message).toContain('2026-06-03');
+  });
+
+  it('pass — a fork marker present but content actually matching is still pass (no false fork)', () => {
+    const consumerPath = writeArtifact(
+      '.claude/skills/x/SKILL.md',
+      skillFile('CANONICAL BODY\nline two', { fork: '<!-- totem:fork reason="x" -->' }),
+    );
+    expect(detectMechanicalContract(mechCtx({ consumerPath })).status).toBe('pass');
+  });
+
+  it('unknown — an unresolvable canonical is never rendered pass (Stale-Doctor-Paradox guard)', () => {
+    const consumerPath = writeArtifact('.claude/skills/x/SKILL.md', skillFile('whatever'));
+    const v = detectMechanicalContract(mechCtx({ consumerPath, canonicalBlock: undefined }));
+    expect(v.status).toBe('unknown');
+    expect(v.status).not.toBe('pass');
+  });
+
+  it('pass — a legitimately EMPTY canonical block is compared, not conflated with unknown', () => {
+    // Markers present but no content on both sides → equal → pass, NOT unknown
+    // (empty `''` is distinct from an unresolvable `undefined`).
+    const consumerPath = writeArtifact('.claude/skills/x/SKILL.md', skillFile(''));
+    const v = detectMechanicalContract(mechCtx({ consumerPath, canonicalBlock: '' }));
+    expect(v.status).toBe('pass');
+  });
+
+  it('skip — consumer artifact absent (cohort permits absence), distinct from drift', () => {
+    const v = detectMechanicalContract(
+      mechCtx({ consumerPath: path.join(tmpRoot, 'nope/SKILL.md') }),
+    );
+    expect(v.status).toBe('skip');
+  });
+
+  it('warn — a present file with markers stripped is unmanaged drift, not pass', () => {
+    const consumerPath = writeArtifact('.claude/skills/x/SKILL.md', 'no markers, just text');
+    const v = detectMechanicalContract(mechCtx({ consumerPath }));
+    expect(v.status).toBe('warn');
+    expect(v.message).toMatch(/markers absent|unmanaged/i);
+  });
+
+  it('info — a marker-stripped file carrying a totem:fork marker is an intentional fork, not drift', () => {
+    const consumerPath = writeArtifact(
+      '.claude/skills/x/SKILL.md',
+      'heavily customized, no skill markers\n<!-- totem:fork reason="full rewrite" attested="2026-06-03" -->',
+    );
+    const v = detectMechanicalContract(mechCtx({ consumerPath }));
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/intentional fork/i);
+  });
+
+  it('never emits fail and degrades a missing read to skip (detector invariant)', () => {
+    const v = detectMechanicalContract(mechCtx({ readFile: () => undefined }));
+    expect(v.status).toBe('skip');
+    expect(v.status).not.toBe('fail');
+  });
+
+  it('binary self-report (req #5) — names the resolving @mmnto/cli in the verdict', () => {
+    const consumerPath = writeArtifact(
+      '.claude/skills/x/SKILL.md',
+      skillFile('CANONICAL BODY\nline two'),
+    );
+    const v = detectMechanicalContract(
+      mechCtx({ consumerPath, binary: { version: '1.53.5', path: '/usr/local/bin/totem' } }),
+    );
+    expect(v.message).toContain('@mmnto/cli@1.53.5');
   });
 });

@@ -33,6 +33,7 @@
  *     the sensor must never crash the doctor pipeline.
  */
 
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -69,13 +70,26 @@ const DEP_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies'] a
 // ─── Verdict type ───────────────────────────────────────
 
 /**
- * Core-local per-contract verdict. The CLI maps this to its `DiagnosticResult`
- * (core cannot depend on cli). The detector emits ONLY `pass`/`warn`/`skip` —
- * `fail` is reserved for the CLI's `--strict`/`blocking` promotion edge — but
- * `fail` stays in the union so the CLI mapping is total over the same shape.
+ * Core-local per-contract verdict. The CLI renders this directly (core cannot
+ * depend on cli's `DiagnosticResult`/`CheckStatus`). The verdict vocabulary is
+ * intentionally WIDER than the shared `CheckStatus` so the parity sensor can
+ * honor the round's verdict-state split (mmnto-ai/totem#2073 req #1 — don't
+ * collapse to a binary pass/fail) without rippling `CheckStatus` across every
+ * unrelated doctor check:
+ *   - `pass`    — verified equal / current.
+ *   - `warn`    — drift (sensor-not-gate default; the CLI promotes a `warn` from
+ *                 a `blocking: true` contract to `fail` ONLY under `--strict`).
+ *   - `info`    — an intentional, attested fork (req #7) — NEVER gated/promoted.
+ *   - `unknown` — the Stale-Doctor-Paradox state: the canonical could not be
+ *                 resolved, so the doctor can prove neither drift NOR currency.
+ *                 NEVER rendered as `pass` (no self-certification); NEVER gated.
+ *   - `skip`    — not-applicable / cohort-permits-absence / out of this slice.
+ *
+ * `fail` stays in the union as the CLI-edge promotion target, but a DETECTOR
+ * never emits it (the gate edge is a CLI concern, unchanged from PR-1).
  */
 export interface ParityContractVerdict {
-  status: 'pass' | 'warn' | 'fail' | 'skip';
+  status: 'pass' | 'warn' | 'fail' | 'info' | 'unknown' | 'skip';
   message: string;
   remediation?: string;
 }
@@ -553,7 +567,258 @@ function findDeclaredRange(pkg: PackageJsonShape, packageName: string): string |
   return undefined;
 }
 
+// ─── Mechanical content-equality detector (mmnto-ai/totem#2073) ──
+
+/**
+ * A consumer's hand-added fork/override marker (mmnto-ai/totem#2073 req #7).
+ * When present on a managed-block artifact, a content difference reads as an
+ * INTENTIONAL, attested fork (`info`) rather than drift (`warn`). Sibling to —
+ * NOT merged with — Proposal 292's publisher-generated currency sidecar
+ * (strategy-claude 2026-06-04T0158Z: shared `totem:` namespace + `attested`
+ * (ISO-8601) / `owner` field conventions, but separate author + lifecycle).
+ *
+ * Shape: `<!-- totem:fork reason="…" owner="…" attested="YYYY-MM-DD" -->`.
+ * Every attribute is optional — a bare `totem:fork` marker still flags a fork.
+ */
+export interface ForkMarker {
+  reason?: string;
+  owner?: string;
+  /** ISO-8601 date the fork was last attested (as authored; not validated here). */
+  attested?: string;
+}
+
+/** The marker pair delimiting a managed block within a distributed artifact. */
+export interface ManagedBlockMarkers {
+  start: string;
+  end: string;
+}
+
+/** Inputs + test seams for {@link detectMechanicalContract}. */
+export interface DetectMechanicalContext {
+  /**
+   * The canonical managed-block content, ALREADY extracted from the running
+   * `@mmnto/cli`'s own template by the CLI (core cannot import init-templates —
+   * wrong dependency direction). `undefined`/empty signals the canonical was
+   * unresolvable → `unknown` (the Stale-Doctor-Paradox guard).
+   */
+  canonicalBlock: string | undefined;
+  /** Absolute path to the consumer artifact on disk (e.g. `.claude/skills/<n>/SKILL.md`). */
+  consumerPath: string;
+  /** The marker pair delimiting the managed block in BOTH canonical + consumer. */
+  markers: ManagedBlockMarkers;
+  /**
+   * Running `@mmnto/cli` provenance for the req-#5 self-report. The
+   * Stale-Doctor-Paradox includes the doctor ITSELF being a shadowed/stale
+   * binary supplying a stale in-process canonical; surfacing which binary
+   * computed the verdict keeps the skills verdict honest about its own
+   * provenance (a one-line self-report, not a resolver cascade — that's the
+   * on-disk hooks case).
+   */
+  binary?: { version: string; path: string };
+  /**
+   * Test seam — override the consumer file read. Production callers omit it and
+   * the detector reads `<consumerPath>` (UTF-8); a read failure is honest-absent.
+   */
+  readFile?: (absPath: string) => string | undefined;
+}
+
+/**
+ * Normalize a managed block for content comparison (req #3): CRLF / lone-CR → LF,
+ * strip trailing whitespace per line, and trim leading/trailing blank lines. Two
+ * blocks that differ ONLY in line endings or trailing whitespace — the win32
+ * checkout false-positive class — normalize equal.
+ */
+export function normalizeManagedBlock(block: string): string {
+  return block
+    .replace(/\r\n?/g, '\n') // CRLF + lone CR → LF
+    .replace(/[ \t]+$/gm, '') // trailing whitespace per line
+    .replace(/^\n+/, '') // leading blank lines
+    .replace(/\n+$/, ''); // trailing blank lines
+}
+
+/**
+ * Extract the content BETWEEN the first `markers.start` and the first following
+ * `markers.end`. Returns undefined when either marker is absent (an unmanaged or
+ * marker-stripped file). The markers themselves are excluded from the result.
+ */
+export function extractManagedBlock(
+  content: string,
+  markers: ManagedBlockMarkers,
+): string | undefined {
+  const startIdx = content.indexOf(markers.start);
+  if (startIdx === -1) return undefined;
+  const afterStart = startIdx + markers.start.length;
+  const endIdx = content.indexOf(markers.end, afterStart);
+  if (endIdx === -1) return undefined;
+  return content.slice(afterStart, endIdx);
+}
+
+/**
+ * Parse a `<!-- totem:fork reason="…" owner="…" attested="…" -->` marker from
+ * anywhere in `content`. Whitespace-tolerant (mirrors `REFLEX_VERSION_RE`).
+ * Returns undefined when no marker is present; each attribute is independently
+ * optional, so a bare `<!-- totem:fork -->` returns an empty marker object
+ * (still a fork signal). The attribute patterns are fixed literals (no dynamic
+ * RegExp) and linear (no nested quantifiers) — ReDoS-safe.
+ */
+export function parseForkMarker(content: string): ForkMarker | undefined {
+  // `s` (dotAll) so a marker authored across multiple lines still matches; `.*?`
+  // stays non-greedy + bounded by the first `-->`, so it remains linear (ReDoS-safe).
+  const markerMatch = /<!--\s*totem:fork\b(.*?)-->/is.exec(content);
+  if (markerMatch === null) return undefined;
+  const attrsText = markerMatch[1] ?? '';
+  const marker: ForkMarker = {};
+  // Iterate ALL key="value" pairs with matchAll (not a single match() — per the
+  // security lesson, one match() lets a safe prefix shadow later pairs); a
+  // marker's attributes are unordered + each independently optional.
+  for (const pair of attrsText.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
+    const value = pair[2] ?? '';
+    if (pair[1] === 'reason') marker.reason = value;
+    else if (pair[1] === 'owner') marker.owner = value;
+    else if (pair[1] === 'attested') marker.attested = value;
+  }
+  return marker;
+}
+
+/**
+ * Short content hash (sha256, first 12 hex chars) of a normalized block, for the
+ * verdict's machine-readable record (req #6). The hash IS the content-equality
+ * evidence — bytes, never prose-parsing (req #2's spirit).
+ */
+export function hashManagedBlock(normalized: string): string {
+  return crypto.createHash('sha256').update(normalized, 'utf-8').digest('hex').slice(0, 12);
+}
+
+/** Format a fork marker's attested/owner attributes as a message suffix. */
+function formatForkMeta(fork: ForkMarker): string {
+  return (
+    (fork.attested !== undefined ? `, attested ${fork.attested}` : '') +
+    (fork.owner !== undefined ? `, owner ${fork.owner}` : '')
+  );
+}
+
+/**
+ * Detect drift for ONE mechanical managed-block contract (the #2073 mechanical
+ * skills slice). Compares the consumer's installed managed-block against the
+ * running `@mmnto/cli`'s own canonical block (passed in by the CLI), normalized
+ * for line-endings + trailing whitespace (req #3) and content-hashed (req #6).
+ * Honors the verdict-state split (req #1) + the fork marker (req #7):
+ *
+ *   - `pass`    — normalized blocks equal.
+ *   - `warn`    — blocks differ, no fork marker (drift); reports both short hashes.
+ *   - `info`    — blocks differ AND a `totem:fork` marker is present (attested fork).
+ *   - `unknown` — canonical unresolvable (the doctor may itself be stale/shadowed);
+ *                 never self-certify as `pass`.
+ *   - `skip`    — consumer artifact not installed (cohort permits absence).
+ *
+ * NEVER throws (reads degrade), NEVER networks (canonical is in-process), NEVER
+ * emits `fail` (the gate edge is a CLI concern, unchanged from PR-1).
+ */
+export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityContractVerdict {
+  const provenance =
+    ctx.binary !== undefined
+      ? ` (checked by @mmnto/cli@${ctx.binary.version} at ${ctx.binary.path})`
+      : '';
+  // Append the binary self-report (req #5) by concatenation (not interpolation)
+  // so the provenance suffix never reads as a jammed token in a message.
+  const tag = (msg: string): string => msg + provenance;
+
+  // ── Canonical unresolvable → unknown (Stale-Doctor-Paradox guard) ──
+  // `undefined` = the CLI could not extract the canonical (a build/marker bug);
+  // an EMPTY string is a legitimately empty template that must still be COMPARED,
+  // not conflated with unresolvable (GCA + Greptile review on the PR). `=== undefined`
+  // is a single condition, so there's no boolean `||` for a numeric-default rule to misread.
+  if (ctx.canonicalBlock === undefined) {
+    return {
+      status: 'unknown',
+      message: tag(
+        'cannot resolve canonical template from the running @mmnto/cli — verdict unprovable',
+      ),
+      remediation:
+        'Reinstall @mmnto/cli (the running binary may be stale or shadowed), then re-run totem doctor --parity.',
+    };
+  }
+  const canonical = ctx.canonicalBlock;
+
+  // ── Read the consumer artifact (absent → skip; cohort permits absence) ──
+  const readFile = ctx.readFile ?? readFileText;
+  const consumerContent = readFile(ctx.consumerPath);
+  if (consumerContent === undefined) {
+    return {
+      status: 'skip',
+      message: `artifact not installed at ${ctx.consumerPath} — cohort permits absence`,
+      remediation:
+        'Run totem init to install the distributed artifact, or ignore if this repo intentionally omits it.',
+    };
+  }
+
+  // ── Extract the consumer's managed block ──
+  const consumerBlock = extractManagedBlock(consumerContent, ctx.markers);
+  if (consumerBlock === undefined) {
+    // Markers absent. A fork marker still signals an INTENTIONAL override (a
+    // heavy fork can strip the managed-block markers entirely) → `info`; only an
+    // unmarked, unmanaged file is drift `warn`.
+    const strippedFork = parseForkMarker(consumerContent);
+    if (strippedFork !== undefined) {
+      return {
+        status: 'info',
+        message: tag(
+          `intentional fork${formatForkMeta(strippedFork)} — managed-block markers absent in ${ctx.consumerPath}`,
+        ),
+      };
+    }
+    return {
+      status: 'warn',
+      message: `managed-block markers absent in ${ctx.consumerPath} — file is unmanaged or marker-stripped`,
+      remediation:
+        'Re-run totem init to restore the managed block, or add a totem:fork marker if this divergence is intentional.',
+    };
+  }
+
+  // ── Normalize + compare (req #3) ──
+  const canonicalNorm = normalizeManagedBlock(canonical);
+  const consumerNorm = normalizeManagedBlock(consumerBlock);
+
+  if (canonicalNorm === consumerNorm) {
+    return {
+      status: 'pass',
+      message: tag(`matches canonical — hash ${hashManagedBlock(consumerNorm)}`),
+    };
+  }
+
+  // ── Differ: an attested fork is `info`; otherwise drift `warn` (req #7 + #1) ──
+  const fork = parseForkMarker(consumerContent);
+  if (fork !== undefined) {
+    return {
+      status: 'info',
+      message: tag(
+        `intentional fork${formatForkMeta(fork)} — differs from canonical (consumer ${hashManagedBlock(consumerNorm)} vs canonical ${hashManagedBlock(canonicalNorm)})`,
+      ),
+    };
+  }
+
+  return {
+    status: 'warn',
+    message: tag(
+      `drift — consumer ${hashManagedBlock(consumerNorm)} != canonical ${hashManagedBlock(canonicalNorm)}`,
+    ),
+    remediation:
+      'Reconcile the artifact to the canonical (re-run totem init), or add a totem:fork marker if the divergence is intentional.',
+  };
+}
+
 // ─── Shared filesystem helpers ──────────────────────────
+
+/** Read a UTF-8 text file, or undefined on any read failure (honest-absent). */
+function readFileText(absPath: string): string | undefined {
+  try {
+    // totem-context: a runtime sensor must read the ACTUAL on-disk installed artifact (not the git-index version — a consumer's installed skill may be untracked), and this detector is synchronous by design (mirrors readPackageJson / isDirectory below); making one reader async would ripple through the whole pure detector.
+    return fs.readFileSync(absPath, 'utf-8');
+    // totem-context: a missing / unreadable artifact is the honest-absent signal the mechanical detector degrades to a skip on; rethrowing would force the caller to wrap a routine absence in try/catch.
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Read + JSON-parse a package.json into the loose {@link PackageJsonShape}.

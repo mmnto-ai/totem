@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { checkParity, doctorParityCliCommand } from './doctor-parity.js';
+import { DISTRIBUTED_CLAUDE_SKILLS, SKILL_MARKER_START } from './init-templates.js';
 
 // Minimal valid totem config — `targets` is the only required array; everything
 // else defaults. `orient.parityManifest` is added per-test as needed.
@@ -292,6 +293,108 @@ describe('checkParity — version-pinned wiring', () => {
   });
 });
 
+// ─── mechanical skills detection wiring (#2073) ─────────
+
+/** A manifest with the claude-skills mechanical contract (all distributed skills). */
+const SKILLS_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: claude-skills
+    dimension: skills
+    canonical-source: mmnto-ai/totem:packages/cli/src/commands/init-templates.ts#DISTRIBUTED_CLAUDE_SKILLS
+    detection-method: managed-block content equality per distributed skill
+    expected-value-or-derivation: consumer skill managed-blocks match distributed source
+    tractability: mechanical
+    tracking-issue: mmnto-ai/totem-strategy#497
+`;
+
+/** Write a consumer skill artifact at `.claude/skills/<name>/SKILL.md`. */
+function writeSkill(name: string, content: string): void {
+  const abs = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md');
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content, 'utf-8');
+}
+
+describe('checkParity — mechanical skills wiring (#2073)', () => {
+  it('emits one line per distributed skill; PASS when each consumer block matches canonical', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', SKILLS_MANIFEST_YAML);
+    // Install every distributed skill verbatim → each block matches its canonical.
+    for (const s of DISTRIBUTED_CLAUDE_SKILLS) writeSkill(s.name, s.content);
+
+    const { results } = await checkParity(tmpDir);
+    const skillLines = results.filter((r) => r.name.startsWith('Parity: claude-skills'));
+    expect(skillLines).toHaveLength(DISTRIBUTED_CLAUDE_SKILLS.length);
+    expect(skillLines.every((r) => r.status === 'pass')).toBe(true);
+  });
+
+  it('WARN on a drifted skill block with no fork marker', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', SKILLS_MANIFEST_YAML);
+    const first = DISTRIBUTED_CLAUDE_SKILLS[0]!;
+    // Inject drift INSIDE the managed block (right after the start marker).
+    writeSkill(
+      first.name,
+      first.content.replace(SKILL_MARKER_START, `${SKILL_MARKER_START}\nDRIFT INJECTED`),
+    );
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === `Parity: claude-skills (${first.name})`)!;
+    expect(line.status).toBe('warn');
+    expect(line.message).toMatch(/drift/i);
+  });
+
+  it('INFO (not warn) when a drifted skill carries a totem:fork marker', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', SKILLS_MANIFEST_YAML);
+    const first = DISTRIBUTED_CLAUDE_SKILLS[0]!;
+    const drifted = first.content.replace(
+      SKILL_MARKER_START,
+      `${SKILL_MARKER_START}\nDRIFT INJECTED`,
+    );
+    writeSkill(
+      first.name,
+      `${drifted}\n<!-- totem:fork reason="local override" owner="satur8d" attested="2026-06-03" -->\n`,
+    );
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === `Parity: claude-skills (${first.name})`)!;
+    expect(line.status).toBe('info');
+    expect(line.message).toMatch(/intentional fork/i);
+  });
+
+  it('SKIP when a skill artifact is not installed (cohort permits absence), never fail', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', SKILLS_MANIFEST_YAML);
+    // Install nothing → every skill line is a skip.
+
+    const { results } = await checkParity(tmpDir);
+    const skillLines = results.filter((r) => r.name.startsWith('Parity: claude-skills'));
+    expect(skillLines.length).toBeGreaterThan(0);
+    expect(skillLines.every((r) => r.status === 'skip')).toBe(true);
+    expect(results.some((r) => r.status === 'fail')).toBe(false);
+  });
+
+  it('tags a blocking multi-artifact contract id ONCE even when several artifacts drift', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest(
+      'm.yaml',
+      SKILLS_MANIFEST_YAML.replace(
+        'tracking-issue: mmnto-ai/totem-strategy#497\n',
+        'tracking-issue: mmnto-ai/totem-strategy#497\n    blocking: true\n',
+      ),
+    );
+    // Drift EVERY distributed skill → multiple warns under the one blocking
+    // contract; its id must appear exactly once in blockingDriftIds.
+    for (const s of DISTRIBUTED_CLAUDE_SKILLS) {
+      writeSkill(s.name, s.content.replace(SKILL_MARKER_START, `${SKILL_MARKER_START}\nDRIFT`));
+    }
+
+    const { blockingDriftIds } = await checkParity(tmpDir);
+    expect(blockingDriftIds).toEqual(['claude-skills']);
+  });
+});
+
 describe('doctorParityCliCommand — --strict fail-promotion', () => {
   it('throws PARITY_DRIFT_DETECTED when a blocking contract drifted under --strict', async () => {
     writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
@@ -315,6 +418,23 @@ describe('doctorParityCliCommand — --strict fail-promotion', () => {
     await expect(
       doctorParityCliCommand({ strict: false, cwdForTest: tmpDir }),
     ).resolves.toBeUndefined();
+  });
+
+  it('throws under --strict when a blocking MECHANICAL contract drifts across multiple artifacts', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest(
+      'm.yaml',
+      SKILLS_MANIFEST_YAML.replace(
+        'tracking-issue: mmnto-ai/totem-strategy#497\n',
+        'tracking-issue: mmnto-ai/totem-strategy#497\n    blocking: true\n',
+      ),
+    );
+    for (const s of DISTRIBUTED_CLAUDE_SKILLS) {
+      writeSkill(s.name, s.content.replace(SKILL_MARKER_START, `${SKILL_MARKER_START}\nDRIFT`));
+    }
+    await expect(doctorParityCliCommand({ strict: true, cwdForTest: tmpDir })).rejects.toThrow(
+      /PARITY_DRIFT_DETECTED|blocking drift/i,
+    );
   });
 
   it('does NOT throw under --strict when drift is NON-blocking (only blocking gates)', async () => {
