@@ -5,10 +5,10 @@ import * as readline from 'node:readline/promises';
 
 import { resolveGitRoot } from '../git.js';
 
-const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
-const TOTEM_HOOK_END = '[totem] end post-merge';
-const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
-const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
+export const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
+export const TOTEM_HOOK_END = '[totem] end post-merge';
+export const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
+export const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 export const TOTEM_PRECOMMIT_MARKER = '[totem] pre-commit hook';
 export const TOTEM_PREPUSH_MARKER = '[totem] pre-push hook';
 
@@ -69,7 +69,7 @@ else
 fi`;
 }
 
-function buildHookContent(fallbackCmd: string): string {
+export function buildHookContent(fallbackCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_HOOK_MARKER} — background re-index after pull/merge.
 

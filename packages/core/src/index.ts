@@ -556,6 +556,7 @@ export {
 export type {
   CohortFloorStatus,
   DeriveCohortRepoIdOptions,
+  DetectGeneratedArtifactContext,
   DetectMechanicalContext,
   DetectVersionPinnedContext,
   ForkMarker,
@@ -565,6 +566,7 @@ export type {
 } from './parity-detect.js';
 export {
   deriveCohortRepoId,
+  detectGeneratedArtifactContract,
   detectMechanicalContract,
   detectVersionPinnedContract,
   extractManagedBlock,

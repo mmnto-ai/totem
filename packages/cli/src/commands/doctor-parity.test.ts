@@ -23,6 +23,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 import { checkParity, doctorParityCliCommand } from './doctor-parity.js';
 import { DISTRIBUTED_CLAUDE_SKILLS, SKILL_MARKER_START } from './init-templates.js';
+import {
+  buildHookContent,
+  buildPostCheckoutHookContent,
+  buildPreCommitHook,
+  buildPrePushHook,
+  getFallbackCommand,
+  TOTEM_PREPUSH_MARKER,
+} from './install-hooks.js';
 
 // Minimal valid totem config — `targets` is the only required array; everything
 // else defaults. `orient.parityManifest` is added per-test as needed.
@@ -392,6 +400,117 @@ describe('checkParity — mechanical skills wiring (#2073)', () => {
 
     const { blockingDriftIds } = await checkParity(tmpDir);
     expect(blockingDriftIds).toEqual(['claude-skills']);
+  });
+});
+
+// ─── mechanical git-hooks detection wiring (#2073 hooks slice) ──
+
+/** A manifest with the git-hooks mechanical contract. */
+const HOOKS_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: git-hooks
+    dimension: lifecycle-wiring
+    canonical-source: mmnto-ai/totem:packages/cli/src/commands/init-templates.ts#hooks
+    detection-method: presence + content equality of post-checkout / post-merge / pre-commit / pre-push
+    expected-value-or-derivation: installed hooks match distributed templates at pinned @mmnto/cli
+    tractability: mechanical
+    tracking-issue: mmnto-ai/totem-strategy#482
+`;
+
+/** Write a git hook fixture at `<tmpDir>/.git/hooks/<name>`. */
+function writeGitHook(name: string, content: string): void {
+  const abs = path.join(tmpDir, '.git', 'hooks', name);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content, 'utf-8');
+}
+
+/** Install every git hook VERBATIM from the running generator (the clean PASS case). */
+function installCurrentHooks(): void {
+  const fallbackCmd = getFallbackCommand(tmpDir);
+  writeGitHook('pre-commit', buildPreCommitHook('standard'));
+  writeGitHook('pre-push', buildPrePushHook(fallbackCmd, 'standard'));
+  writeGitHook('post-merge', buildHookContent(fallbackCmd));
+  writeGitHook('post-checkout', buildPostCheckoutHookContent(fallbackCmd));
+}
+
+describe('checkParity — mechanical git-hooks wiring (#2073)', () => {
+  it('emits one line per git hook; all SKIP when no hooks are installed (presence)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', HOOKS_MANIFEST_YAML);
+
+    const { results } = await checkParity(tmpDir);
+    const hookLines = results.filter((r) => r.name.startsWith('Parity: git-hooks'));
+    expect(hookLines).toHaveLength(4);
+    expect(hookLines.every((r) => r.status === 'skip')).toBe(true);
+  });
+
+  it('PASS on every hook when each matches the per-repo regenerated canonical', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', HOOKS_MANIFEST_YAML);
+    installCurrentHooks();
+
+    const { results } = await checkParity(tmpDir);
+    const hookLines = results.filter((r) => r.name.startsWith('Parity: git-hooks'));
+    expect(hookLines).toHaveLength(4);
+    expect(hookLines.every((r) => r.status === 'pass')).toBe(true);
+  });
+
+  it('WARN — a pre-push frozen at an older generator is drift (the mmnto-ai/totem#1854 keystone)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', HOOKS_MANIFEST_YAML);
+    // Owned hook (starts with the totem shebang + marker) but stale body → drift.
+    writeGitHook(
+      'pre-push',
+      `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER} — stateless enforcement.\nif command -v totem; then TOTEM_CMD="totem"; fi\n`,
+    );
+
+    const { results } = await checkParity(tmpDir);
+    const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
+    expect(prePush.status).toBe('warn');
+    expect(prePush.message).toMatch(/drift/i);
+  });
+
+  it('SKIP — a present non-totem hook is a pure user hook, never warn (presence semantics)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', HOOKS_MANIFEST_YAML);
+    writeGitHook('pre-push', '#!/bin/sh\necho my own pre-push hook\n');
+
+    const { results } = await checkParity(tmpDir);
+    const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
+    expect(prePush.status).toBe('skip');
+    expect(prePush.status).not.toBe('warn');
+  });
+
+  it('WARN — tier drift: a standard hook under a strict-configured repo (tier-aware canonical)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\nhooks:\n  tier: strict\n`);
+    writeManifest('m.yaml', HOOKS_MANIFEST_YAML);
+    // Install the STANDARD pre-push, but the repo is configured strict → drift.
+    writeGitHook('pre-push', buildPrePushHook(getFallbackCommand(tmpDir), 'standard'));
+
+    const { results } = await checkParity(tmpDir);
+    const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
+    expect(prePush.status).toBe('warn');
+  });
+
+  it('a blocking git-hooks drift tags the contract id ONCE (the --strict promotion seam)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest(
+      'm.yaml',
+      HOOKS_MANIFEST_YAML.replace(
+        'tracking-issue: mmnto-ai/totem-strategy#482\n',
+        'tracking-issue: mmnto-ai/totem-strategy#482\n    blocking: true\n',
+      ),
+    );
+    // Drift two owned hooks → multiple warns under the one blocking contract.
+    writeGitHook(
+      'pre-push',
+      `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER} — stateless enforcement.\nSTALE\n`,
+    );
+    writeGitHook('pre-commit', `#!/bin/sh\n# [totem] pre-commit hook\nSTALE\n`);
+
+    const { blockingDriftIds } = await checkParity(tmpDir);
+    expect(blockingDriftIds).toEqual(['git-hooks']);
   });
 });
 
