@@ -552,17 +552,26 @@ export {
 } from './parity-manifest.js';
 
 // Version-pinned parity drift detector (PR-1, mmnto-ai/totem#2069)
+// + mechanical content-equality detector (mmnto-ai/totem#2073 skills slice)
 export type {
   CohortFloorStatus,
   DeriveCohortRepoIdOptions,
+  DetectMechanicalContext,
   DetectVersionPinnedContext,
+  ForkMarker,
+  ManagedBlockMarkers,
   PackageJsonShape,
   ParityContractVerdict,
 } from './parity-detect.js';
 export {
   deriveCohortRepoId,
+  detectMechanicalContract,
   detectVersionPinnedContract,
+  extractManagedBlock,
+  hashManagedBlock,
+  normalizeManagedBlock,
   packageNameForContract,
+  parseForkMarker,
   resolveCohortFloor,
 } from './parity-detect.js';
 
