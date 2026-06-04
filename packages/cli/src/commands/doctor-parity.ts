@@ -133,6 +133,88 @@ function mechanicalArtifactsFor(
   }
 }
 
+// ─── Git-hook artifact registry (CLI-side, mmnto-ai/totem#2073 hooks slice) ──
+
+/**
+ * The running `@mmnto/cli`'s own hook generators + markers, dynamic-imported by the
+ * caller from `install-hooks` (kept off the CLI cold-start graph) and threaded in so
+ * the registry stays a pure function. The canonical for each hook is REGENERATED for
+ * THIS repo (its package manager via `fallbackCmd`, its `tier`) — never a frozen
+ * string, so an npm consumer's `npx`-flavored hook does not read as drift against a
+ * pnpm canonical (the parameterization-aware contract, mmnto-ai/totem#2053).
+ */
+interface HookBuilderSource {
+  buildPreCommitHook: (tier?: 'strict' | 'standard') => string;
+  buildPrePushHook: (fallbackCmd: string, tier?: 'strict' | 'standard') => string;
+  buildHookContent: (fallbackCmd: string) => string;
+  buildPostCheckoutHookContent: (fallbackCmd: string) => string;
+  markers: {
+    preCommit: string;
+    prePush: string;
+    postMerge: { start: string; end: string };
+    postCheckout: { start: string; end: string };
+  };
+}
+
+/**
+ * One on-disk git hook a `git-hooks` contract maps to: the consumer path under
+ * `.git/hooks/`, the regenerated canonical content, the ownership/presence marker,
+ * an optional end marker (post-merge / post-checkout carry one; pre-commit / pre-push
+ * do not), and the display name for its verdict line.
+ */
+interface GeneratedArtifact {
+  consumerPath: string;
+  canonicalContent: string | undefined;
+  ownershipMarker: string;
+  endMarker?: string;
+  lineName: string;
+}
+
+/**
+ * Resolve the four git-hook artifacts the `git-hooks` contract checks, each with a
+ * per-repo regenerated canonical. Checks `.git/hooks/*` only — hook-manager installs
+ * (`.totem/hooks/*.sh` for husky / lefthook) are a follow-on (no cohort consumer uses
+ * one today); the detector's present-without-marker → `skip` keeps a manager repo
+ * honest in the meantime.
+ */
+function gitHookArtifactsFor(
+  gitRoot: string,
+  tier: 'strict' | 'standard',
+  fallbackCmd: string,
+  builders: HookBuilderSource,
+): GeneratedArtifact[] {
+  const hooksDir = path.join(gitRoot, '.git', 'hooks');
+  const m = builders.markers;
+  return [
+    {
+      consumerPath: path.join(hooksDir, 'pre-commit'),
+      canonicalContent: builders.buildPreCommitHook(tier),
+      ownershipMarker: m.preCommit,
+      lineName: 'Parity: git-hooks (pre-commit)',
+    },
+    {
+      consumerPath: path.join(hooksDir, 'pre-push'),
+      canonicalContent: builders.buildPrePushHook(fallbackCmd, tier),
+      ownershipMarker: m.prePush,
+      lineName: 'Parity: git-hooks (pre-push)',
+    },
+    {
+      consumerPath: path.join(hooksDir, 'post-merge'),
+      canonicalContent: builders.buildHookContent(fallbackCmd),
+      ownershipMarker: m.postMerge.start,
+      endMarker: m.postMerge.end,
+      lineName: 'Parity: git-hooks (post-merge)',
+    },
+    {
+      consumerPath: path.join(hooksDir, 'post-checkout'),
+      canonicalContent: builders.buildPostCheckoutHookContent(fallbackCmd),
+      ownershipMarker: m.postCheckout.start,
+      endMarker: m.postCheckout.end,
+      lineName: 'Parity: git-hooks (post-checkout)',
+    },
+  ];
+}
+
 /**
  * Resolve the running `@mmnto/cli`'s version + install path for the req-#5
  * binary self-report (the Stale-Doctor-Paradox guard — surface WHICH binary
@@ -176,6 +258,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
   const {
     deriveCohortRepoId,
+    detectGeneratedArtifactContract,
     detectMechanicalContract,
     detectVersionPinnedContract,
     extractManagedBlock,
@@ -196,6 +279,11 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   // today (no upward walk), so this equals cwd for the local case — the explicit
   // anchor just keeps it correct if resolution ever changes.
   let manifestRoot = cwd;
+  // Tier the git hooks were generated at. Resolved the SAME way `hooksCommand` does
+  // (config.hooks.tier, default 'standard') so the doctor regenerates the canonical
+  // at the CONFIGURED tier — a hook on disk that does not match its repo's configured
+  // tier is genuine drift, which the content compare correctly surfaces.
+  let hookTier: 'strict' | 'standard' = 'standard';
   try {
     const configPath = resolveConfigPath(cwd);
     // Repo-scoped by design: the manifest location is per-repo, so a config-less
@@ -209,6 +297,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       manifestRoot = path.dirname(configPath);
       const config = await loadConfig(configPath);
       configValue = config.orient?.parityManifest;
+      hookTier = config.hooks?.tier ?? 'standard';
     }
     // totem-context: a missing/corrupt totem config is the honest-absent path (treated as "no parity manifest configured"), not a sensor failure — the doctor runs against config-less repos by design.
   } catch (err) {
@@ -278,6 +367,35 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         markers: { start: SKILL_MARKER_START, end: SKILL_MARKER_END },
       };
 
+      // The running CLI's own hook generators + markers + package-manager probe,
+      // lazy-loaded on the ok path only (cold-start guideline). The canonical for
+      // each git hook is regenerated per-repo from these (mmnto-ai/totem#2073 hooks slice).
+      const {
+        buildPreCommitHook,
+        buildPrePushHook,
+        buildHookContent,
+        buildPostCheckoutHookContent,
+        getFallbackCommand,
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PREPUSH_MARKER,
+        TOTEM_HOOK_MARKER,
+        TOTEM_HOOK_END,
+        TOTEM_CHECKOUT_MARKER,
+        TOTEM_CHECKOUT_END,
+      } = await import('./install-hooks.js');
+      const hookBuilders: HookBuilderSource = {
+        buildPreCommitHook,
+        buildPrePushHook,
+        buildHookContent,
+        buildPostCheckoutHookContent,
+        markers: {
+          preCommit: TOTEM_PRECOMMIT_MARKER,
+          prePush: TOTEM_PREPUSH_MARKER,
+          postMerge: { start: TOTEM_HOOK_MARKER, end: TOTEM_HOOK_END },
+          postCheckout: { start: TOTEM_CHECKOUT_MARKER, end: TOTEM_CHECKOUT_END },
+        },
+      };
+
       // Shared detection context. The cohort floor + repoId derive from the git
       // root (anchored there, not the deep cwd — mirrors the core resolver).
       // resolveGitRoot returns null outside a repo; fall back to cwd so the
@@ -285,6 +403,9 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const gitRoot = safeGitRoot(resolveGitRoot, cwd) ?? cwd;
       const repoId = deriveCohortRepoId(cwd, { gitRoot });
       const binary = resolveRunningBinary(url, createRequire);
+      // Derived from the repo's lockfile (the SAME probe the installer uses), so the
+      // regenerated git-hook canonical matches THIS repo's package manager — no false drift.
+      const fallbackCmd = getFallbackCommand(gitRoot);
 
       const blockingDriftIds: string[] = [];
       // flatMap, not map: a mechanical contract (claude-skills) expands to one
@@ -304,8 +425,55 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           return [verdictToLine(c, verdict)];
         }
 
-        // ── mechanical managed-block content-equality (mmnto-ai/totem#2073 skills slice) ──
+        // ── mechanical content-equality (mmnto-ai/totem#2073) ──
         if (c.tractability === 'mechanical') {
+          // Honor the contract's `consumers` scope before sensing drift (mirrors
+          // detectVersionPinnedContract, which self-guards). A scoped mechanical
+          // contract must not emit drift — or, under --strict, fail — in a repo that
+          // is not an intended consumer (CodeRabbit review on mmnto-ai/totem#2079).
+          if (c.consumers !== undefined) {
+            if (repoId === undefined) {
+              return [
+                lineFor(`Parity: ${c.id}`, {
+                  status: 'skip',
+                  message: `cannot determine applicability — repo id unresolvable; contract is scoped to consumers [${c.consumers.join(', ')}]`,
+                }),
+              ];
+            }
+            if (!c.consumers.includes(repoId)) {
+              return [
+                lineFor(`Parity: ${c.id}`, {
+                  status: 'skip',
+                  message: `cohort permits absence here (${repoId} not in consumers)`,
+                }),
+              ];
+            }
+          }
+
+          // git hooks: regenerate the canonical per-repo (package manager + tier) via
+          // the running generator and content-compare — catches stale-version drift
+          // (the detection half of mmnto-ai/totem#1854) without a frozen-string false-positive.
+          if (c.id === 'git-hooks') {
+            const artifacts = gitHookArtifactsFor(gitRoot, hookTier, fallbackCmd, hookBuilders);
+            // A drift on any hook tags the contract id at most ONCE so the --strict
+            // count reflects contracts, not artifacts (mirrors the skills branch).
+            let blockingDrift = false;
+            const lines = artifacts.map((a) => {
+              const verdict = detectGeneratedArtifactContract({
+                canonicalContent: a.canonicalContent,
+                consumerPath: a.consumerPath,
+                ownershipMarker: a.ownershipMarker,
+                ...(a.endMarker !== undefined ? { endMarker: a.endMarker } : {}),
+                ...(binary !== undefined ? { binary } : {}),
+              });
+              if (verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
+              return lineFor(a.lineName, verdict);
+            });
+            if (blockingDrift) blockingDriftIds.push(c.id);
+            return lines;
+          }
+
+          // skills: managed-block content equality against the in-process template.
           const artifacts = mechanicalArtifactsFor(
             c.id,
             gitRoot,

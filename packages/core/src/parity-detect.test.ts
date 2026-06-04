@@ -23,6 +23,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   deriveCohortRepoId,
+  type DetectGeneratedArtifactContext,
+  detectGeneratedArtifactContract,
   type DetectMechanicalContext,
   detectMechanicalContract,
   type DetectVersionPinnedContext,
@@ -570,5 +572,241 @@ describe('detectMechanicalContract', () => {
       mechCtx({ consumerPath, binary: { version: '1.53.5', path: '/usr/local/bin/totem' } }),
     );
     expect(v.message).toContain('@mmnto/cli@1.53.5');
+  });
+});
+
+// ─── Generated-artifact (git-hooks) content-equality detector (mmnto-ai/totem#2073) ──
+
+const PREPUSH_MARKER = '[totem] pre-push hook';
+const POSTMERGE_MARKER = '[totem] post-merge hook';
+const POSTMERGE_END = '[totem] end post-merge';
+
+/** A totem-OWNED whole-file hook (pre-push style — start marker only, no end). */
+function ownedPrePush(body: string): string {
+  return `#!/bin/sh\n# ${PREPUSH_MARKER} — stateless enforcement.\n${body}\n`;
+}
+
+/** A totem-OWNED whole-file hook with start + end markers (post-merge style). */
+function ownedPostMerge(body: string): string {
+  return `#!/bin/sh\n# ${POSTMERGE_MARKER} — background re-index.\n${body}\n# ${POSTMERGE_END}\n`;
+}
+
+/** A user's own hook with the totem block APPENDED (shebang stripped, post-merge style). */
+function appendedPostMerge(userBody: string, totemBody: string): string {
+  return `#!/usr/bin/env bash\n${userBody}\n\n# ${POSTMERGE_MARKER} — background re-index.\n${totemBody}\n# ${POSTMERGE_END}\n`;
+}
+
+/** A user's own hook with the totem block APPENDED (pre-push style — no end marker). */
+function appendedPrePush(userBody: string, totemBody: string): string {
+  return `#!/usr/bin/env bash\n${userBody}\n\n# ${PREPUSH_MARKER} — stateless enforcement.\n${totemBody}\n`;
+}
+
+/** Base context for a pre-push (no end marker) artifact at `.git/hooks/pre-push`. */
+function genCtx(
+  over: Partial<DetectGeneratedArtifactContext> = {},
+): DetectGeneratedArtifactContext {
+  return {
+    canonicalContent: ownedPrePush('echo current'),
+    consumerPath: path.join(tmpRoot, '.git/hooks/pre-push'),
+    ownershipMarker: PREPUSH_MARKER,
+    ...over,
+  };
+}
+
+describe('detectGeneratedArtifactContract', () => {
+  it('pass — totem-owned hook equals the regenerated canonical', () => {
+    const consumerPath = writeArtifact('.git/hooks/pre-push', ownedPrePush('echo current'));
+    expect(detectGeneratedArtifactContract(genCtx({ consumerPath })).status).toBe('pass');
+  });
+
+  it('pass — CRLF consumer vs LF canonical, otherwise identical (win32 checkout guard)', () => {
+    const consumerPath = writeArtifact(
+      '.git/hooks/pre-push',
+      ownedPrePush('echo current').replace(/\n/g, '\r\n'),
+    );
+    expect(detectGeneratedArtifactContract(genCtx({ consumerPath })).status).toBe('pass');
+  });
+
+  it('warn — a hook frozen at an older generator (stale pre-#2053 resolve order) is drift (the mmnto-ai/totem#1854 keystone)', () => {
+    // The detection half of mmnto-ai/totem#1854: a consumer sitting on an old hook the
+    // current generator would no longer emit MUST surface as drift, not a false pass.
+    const stale = ownedPrePush('if command -v totem; then TOTEM_CMD="totem"; fi');
+    const current = ownedPrePush('if [ -f node_modules/@mmnto/cli/dist/index.js ]; then :; fi');
+    const consumerPath = writeArtifact('.git/hooks/pre-push', stale);
+    const v = detectGeneratedArtifactContract(genCtx({ consumerPath, canonicalContent: current }));
+    expect(v.status).toBe('warn');
+    expect(v.message).toMatch(/drift/i);
+  });
+
+  it('pass — parameterized canonical: an npm-flavored hook matches an npm-flavored canonical (no false drift)', () => {
+    // The detector compares against a canonical regenerated with THIS repo's package
+    // manager (npx), so an npm consumer never reads as drift against a pnpm canonical.
+    const npm = ownedPrePush('TOTEM_CMD="npx @mmnto/cli"');
+    const consumerPath = writeArtifact('.git/hooks/pre-push', npm);
+    expect(
+      detectGeneratedArtifactContract(genCtx({ consumerPath, canonicalContent: npm })).status,
+    ).toBe('pass');
+  });
+
+  it('info — an owned hook that drifted but carries a totem:fork marker is an attested fork, not warn', () => {
+    const consumerPath = writeArtifact(
+      '.git/hooks/pre-push',
+      ownedPrePush(
+        'echo drifted\n# <!-- totem:fork reason="local gate" owner="satur8d" attested="2026-06-04" -->',
+      ),
+    );
+    const v = detectGeneratedArtifactContract(genCtx({ consumerPath }));
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/intentional fork/i);
+    expect(v.message).toContain('2026-06-04');
+  });
+
+  it('skip — hook absent (cohort permits absence), distinct from drift', () => {
+    const v = detectGeneratedArtifactContract(
+      genCtx({ consumerPath: path.join(tmpRoot, '.git/hooks/nope') }),
+    );
+    expect(v.status).toBe('skip');
+    expect(v.message).toMatch(/not installed|permits absence/i);
+  });
+
+  it('skip — a present hook with NO totem marker is a pure user hook, not drift (presence semantics)', () => {
+    const consumerPath = writeArtifact('.git/hooks/pre-push', '#!/bin/sh\necho my own hook\n');
+    const v = detectGeneratedArtifactContract(genCtx({ consumerPath }));
+    expect(v.status).toBe('skip');
+    expect(v.message).toMatch(/not totem-managed|permits absence/i);
+    // Must NOT be a warn — totem simply is not installed here.
+    expect(v.status).not.toBe('warn');
+  });
+
+  it('unknown — an unregenerable canonical is never rendered pass (Stale-Doctor-Paradox guard)', () => {
+    const consumerPath = writeArtifact('.git/hooks/pre-push', ownedPrePush('echo current'));
+    const v = detectGeneratedArtifactContract(
+      genCtx({ consumerPath, canonicalContent: undefined }),
+    );
+    expect(v.status).toBe('unknown');
+    expect(v.status).not.toBe('pass');
+  });
+
+  it('pass — appended post-merge: totem region current within a user-managed hook (diff is user content)', () => {
+    const consumerPath = writeArtifact(
+      '.git/hooks/post-merge',
+      appendedPostMerge('echo user pre-step', 'sync incremental'),
+    );
+    const v = detectGeneratedArtifactContract({
+      canonicalContent: ownedPostMerge('sync incremental'),
+      consumerPath,
+      ownershipMarker: POSTMERGE_MARKER,
+      endMarker: POSTMERGE_END,
+    });
+    expect(v.status).toBe('pass');
+    expect(v.message).toMatch(/totem block current/i);
+  });
+
+  it('warn — appended post-merge: the totem region itself drifted', () => {
+    const consumerPath = writeArtifact(
+      '.git/hooks/post-merge',
+      appendedPostMerge('echo user pre-step', 'sync OLD'),
+    );
+    const v = detectGeneratedArtifactContract({
+      canonicalContent: ownedPostMerge('sync NEW'),
+      consumerPath,
+      ownershipMarker: POSTMERGE_MARKER,
+      endMarker: POSTMERGE_END,
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).toMatch(/drift/i);
+  });
+
+  it('unknown — totem block appended in a user pre-push hook (no end marker) cannot be isolated', () => {
+    const consumerPath = writeArtifact(
+      '.git/hooks/pre-push',
+      appendedPrePush('echo user pre-step', 'echo current'),
+    );
+    const v = detectGeneratedArtifactContract(genCtx({ consumerPath }));
+    expect(v.status).toBe('unknown');
+    expect(v.message).toMatch(/cannot isolate|embedded/i);
+    // Never a false warn — claim-class-tight.
+    expect(v.status).not.toBe('warn');
+  });
+
+  it('info — an appended (no-end-marker) hook carrying a totem:fork marker is an attested fork, not unknown', () => {
+    const consumerPath = writeArtifact(
+      '.git/hooks/pre-push',
+      appendedPrePush(
+        'echo user',
+        'echo custom\n# <!-- totem:fork reason="vendored" attested="2026-06-04" -->',
+      ),
+    );
+    const v = detectGeneratedArtifactContract(genCtx({ consumerPath }));
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/intentional fork/i);
+  });
+
+  it('never emits fail and degrades a missing read to skip (detector invariant)', () => {
+    const v = detectGeneratedArtifactContract(genCtx({ readFile: () => undefined }));
+    expect(v.status).toBe('skip');
+    expect(v.status).not.toBe('fail');
+  });
+
+  it('binary self-report (req #5) — names the resolving @mmnto/cli in the verdict', () => {
+    const consumerPath = writeArtifact('.git/hooks/pre-push', ownedPrePush('echo current'));
+    const v = detectGeneratedArtifactContract(
+      genCtx({ consumerPath, binary: { version: '1.53.5', path: '/usr/local/bin/totem' } }),
+    );
+    expect(v.message).toContain('@mmnto/cli@1.53.5');
+  });
+
+  it('warn — a fork marker in the USER preamble does NOT suppress totem-block drift (region-scoped, Greptile)', () => {
+    // Appended post-merge: the totem region drifted, but the fork marker sits in the
+    // user's OWN preamble (outside the totem block) — it must not demote warn → info.
+    const consumerPath = writeArtifact(
+      '.git/hooks/post-merge',
+      appendedPostMerge(
+        'echo user step\n# <!-- totem:fork reason="my own preamble" owner="someone" -->',
+        'sync OLD',
+      ),
+    );
+    const v = detectGeneratedArtifactContract({
+      canonicalContent: ownedPostMerge('sync NEW'),
+      consumerPath,
+      ownershipMarker: POSTMERGE_MARKER,
+      endMarker: POSTMERGE_END,
+    });
+    expect(v.status).toBe('warn');
+    expect(v.status).not.toBe('info');
+  });
+
+  it('info — a fork marker INSIDE the totem region is a genuine attestation', () => {
+    const consumerPath = writeArtifact(
+      '.git/hooks/post-merge',
+      appendedPostMerge(
+        'echo user step',
+        'sync OLD\n# <!-- totem:fork reason="vendored sync" attested="2026-06-04" -->',
+      ),
+    );
+    const v = detectGeneratedArtifactContract({
+      canonicalContent: ownedPostMerge('sync NEW'),
+      consumerPath,
+      ownershipMarker: POSTMERGE_MARKER,
+      endMarker: POSTMERGE_END,
+    });
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/intentional fork/i);
+  });
+
+  it('unknown — endMarker set but the canonical lacks its end marker is unprovable, never a false warn (Greptile)', () => {
+    // A regenerated canonical missing its own end marker (generator/marker misconfig)
+    // must not fall through to an owned-file `warn` — the comparison is unprovable.
+    const canonicalNoEnd = `#!/bin/sh\n# ${POSTMERGE_MARKER} — background re-index.\nsync\n`;
+    const consumerPath = writeArtifact('.git/hooks/post-merge', ownedPostMerge('sync'));
+    const v = detectGeneratedArtifactContract({
+      canonicalContent: canonicalNoEnd,
+      consumerPath,
+      ownershipMarker: POSTMERGE_MARKER,
+      endMarker: POSTMERGE_END,
+    });
+    expect(v.status).toBe('unknown');
+    expect(v.status).not.toBe('warn');
+    expect(v.message).toMatch(/canonical hook region|unprovable/i);
   });
 });
