@@ -427,6 +427,29 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
 
         // ── mechanical content-equality (mmnto-ai/totem#2073) ──
         if (c.tractability === 'mechanical') {
+          // Honor the contract's `consumers` scope before sensing drift (mirrors
+          // detectVersionPinnedContract, which self-guards). A scoped mechanical
+          // contract must not emit drift — or, under --strict, fail — in a repo that
+          // is not an intended consumer (CodeRabbit review on mmnto-ai/totem#2079).
+          if (c.consumers !== undefined) {
+            if (repoId === undefined) {
+              return [
+                lineFor(`Parity: ${c.id}`, {
+                  status: 'skip',
+                  message: `cannot determine applicability — repo id unresolvable; contract is scoped to consumers [${c.consumers.join(', ')}]`,
+                }),
+              ];
+            }
+            if (!c.consumers.includes(repoId)) {
+              return [
+                lineFor(`Parity: ${c.id}`, {
+                  status: 'skip',
+                  message: `cohort permits absence here (${repoId} not in consumers)`,
+                }),
+              ];
+            }
+          }
+
           // git hooks: regenerate the canonical per-repo (package manager + tier) via
           // the running generator and content-compare — catches stale-version drift
           // (the detection half of mmnto-ai/totem#1854) without a frozen-string false-positive.

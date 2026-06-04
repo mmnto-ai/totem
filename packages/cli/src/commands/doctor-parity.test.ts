@@ -479,7 +479,6 @@ describe('checkParity — mechanical git-hooks wiring (#2073)', () => {
     const { results } = await checkParity(tmpDir);
     const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
     expect(prePush.status).toBe('skip');
-    expect(prePush.status).not.toBe('warn');
   });
 
   it('WARN — tier drift: a standard hook under a strict-configured repo (tier-aware canonical)', async () => {
@@ -511,6 +510,21 @@ describe('checkParity — mechanical git-hooks wiring (#2073)', () => {
 
     const { blockingDriftIds } = await checkParity(tmpDir);
     expect(blockingDriftIds).toEqual(['git-hooks']);
+  });
+
+  it('SKIP — a git-hooks contract scoped to OTHER consumers does not run here (honors consumers)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', `${HOOKS_MANIFEST_YAML}    consumers:\n      - some-other-repo\n`);
+    // Even with the current hooks installed, an out-of-scope contract must not run
+    // (no per-artifact drift, no --strict fail) — mirrors the version-pinned guard.
+    installCurrentHooks();
+
+    const { results } = await checkParity(tmpDir);
+    const hookLines = results.filter((r) => r.name.startsWith('Parity: git-hooks'));
+    // ONE skip line for the whole contract — not four per-artifact verdicts.
+    expect(hookLines).toHaveLength(1);
+    expect(hookLines[0]!.status).toBe('skip');
+    expect(hookLines[0]!.message).toMatch(/not in consumers|permits absence|cannot determine/i);
   });
 });
 

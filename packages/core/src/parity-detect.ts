@@ -925,7 +925,7 @@ export function detectGeneratedArtifactContract(
       status: 'skip',
       message: `git hook not installed at ${ctx.consumerPath} — cohort permits absence`,
       remediation:
-        'Run totem hooks to install the managed git hooks, or ignore if this repo intentionally omits them.',
+        'Run totem hook install to install the managed git hooks, or ignore if this repo intentionally omits them.',
     };
   }
 
@@ -985,7 +985,7 @@ export function detectGeneratedArtifactContract(
           `drift — totem block ${hashManagedBlock(consumerRegionNorm)} != canonical ${hashManagedBlock(canonicalRegionNorm)}`,
         ),
         remediation:
-          'Re-run totem hooks to regenerate the managed block, or add a totem:fork marker if the divergence is intentional.',
+          'Re-run totem hook install to regenerate the managed block, or add a totem:fork marker if the divergence is intentional.',
       };
     }
     // End marker missing in the consumer (block truncated / marker-stripped) → fall
@@ -1010,7 +1010,7 @@ export function detectGeneratedArtifactContract(
         `drift — consumer ${hashManagedBlock(consumerNorm)} != canonical ${hashManagedBlock(canonicalNorm)}`,
       ),
       remediation:
-        'Re-run totem hooks to regenerate the hook from the current @mmnto/cli, or add a totem:fork marker if the divergence is intentional.',
+        'Re-run totem hook install to regenerate the hook from the current @mmnto/cli, or add a totem:fork marker if the divergence is intentional.',
     };
   }
 
@@ -1030,7 +1030,7 @@ export function detectGeneratedArtifactContract(
       `totem block embedded in a user-modified hook at ${ctx.consumerPath} — cannot isolate it for comparison`,
     ),
     remediation:
-      'Re-run totem hooks (or adopt a hook manager) so the managed block can be verified independently.',
+      'Re-run totem hook install (or adopt a hook manager) so the managed block can be verified independently.',
   };
 }
 
