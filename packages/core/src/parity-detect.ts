@@ -724,10 +724,11 @@ export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityCo
   const tag = (msg: string): string => msg + provenance;
 
   // ── Canonical unresolvable → unknown (Stale-Doctor-Paradox guard) ──
-  // Collapse a non-string / empty canonical to '' so the guard is a single
-  // length check (no boolean `||` for a numeric-default rule to misread).
-  const canonical = typeof ctx.canonicalBlock === 'string' ? ctx.canonicalBlock : '';
-  if (canonical.length === 0) {
+  // `undefined` = the CLI could not extract the canonical (a build/marker bug);
+  // an EMPTY string is a legitimately empty template that must still be COMPARED,
+  // not conflated with unresolvable (GCA + Greptile review on the PR). `=== undefined`
+  // is a single condition, so there's no boolean `||` for a numeric-default rule to misread.
+  if (ctx.canonicalBlock === undefined) {
     return {
       status: 'unknown',
       message: tag(
@@ -737,6 +738,7 @@ export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityCo
         'Reinstall @mmnto/cli (the running binary may be stale or shadowed), then re-run totem doctor --parity.',
     };
   }
+  const canonical = ctx.canonicalBlock;
 
   // ── Read the consumer artifact (absent → skip; cohort permits absence) ──
   const readFile = ctx.readFile ?? readFileText;

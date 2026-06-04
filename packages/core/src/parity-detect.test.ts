@@ -523,6 +523,14 @@ describe('detectMechanicalContract', () => {
     expect(v.status).not.toBe('pass');
   });
 
+  it('pass — a legitimately EMPTY canonical block is compared, not conflated with unknown', () => {
+    // Markers present but no content on both sides → equal → pass, NOT unknown
+    // (empty `''` is distinct from an unresolvable `undefined`).
+    const consumerPath = writeArtifact('.claude/skills/x/SKILL.md', skillFile(''));
+    const v = detectMechanicalContract(mechCtx({ consumerPath, canonicalBlock: '' }));
+    expect(v.status).toBe('pass');
+  });
+
   it('skip — consumer artifact absent (cohort permits absence), distinct from drift', () => {
     const v = detectMechanicalContract(
       mechCtx({ consumerPath: path.join(tmpRoot, 'nope/SKILL.md') }),

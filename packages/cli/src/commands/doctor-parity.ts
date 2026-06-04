@@ -154,12 +154,8 @@ function resolveRunningBinary(
     const pkg = req('../../package.json') as { version?: unknown };
     if (typeof pkg.version !== 'string') return undefined;
     return { version: pkg.version, path: cliRoot };
-  } catch (err) {
-    // The binary self-report is cosmetic — ANY resolution failure yields an
-    // unannotated verdict, never a crash (Tenet 13: a cosmetic read must not
-    // break the sensor). Re-throw a non-Error throw value so a truly anomalous
-    // failure still surfaces (fail-loud intent) rather than masking everything.
-    if (!(err instanceof Error)) throw err;
+    // totem-context: best-effort cosmetic read — the binary self-report degrades to absent on ANY resolution failure and NEVER re-throws (GCA review), so a shadowed / broken install can't crash the doctor pipeline (Tenet 13: a cosmetic read must not break the sensor).
+  } catch {
     return undefined;
   }
 }
@@ -473,6 +469,7 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
       case 'info':
         // An attested, intentional fork — neutral/informational, never gated.
         log.info(TAG, `${bold('INFO')} — ${render(r.message)}`);
+        if (r.remediation) log.dim(TAG, `→ ${render(r.remediation)}`);
         break;
       case 'unknown':
         // The Stale-Doctor-Paradox state: the canonical was unresolvable, so the
