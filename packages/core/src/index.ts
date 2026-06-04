@@ -557,6 +557,7 @@ export type {
   CohortFloorStatus,
   DeriveCohortRepoIdOptions,
   DetectGeneratedArtifactContext,
+  DetectManualAttestationContext,
   DetectMechanicalContext,
   DetectVersionPinnedContext,
   ForkMarker,
@@ -567,6 +568,7 @@ export type {
 export {
   deriveCohortRepoId,
   detectGeneratedArtifactContract,
+  detectManualAttestationContract,
   detectMechanicalContract,
   detectVersionPinnedContract,
   extractManagedBlock,

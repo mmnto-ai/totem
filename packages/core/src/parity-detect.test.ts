@@ -25,6 +25,8 @@ import {
   deriveCohortRepoId,
   type DetectGeneratedArtifactContext,
   detectGeneratedArtifactContract,
+  type DetectManualAttestationContext,
+  detectManualAttestationContract,
   type DetectMechanicalContext,
   detectMechanicalContract,
   type DetectVersionPinnedContext,
@@ -32,6 +34,7 @@ import {
   extractManagedBlock,
   hashManagedBlock,
   normalizeManagedBlock,
+  type PackageJsonShape,
   packageNameForContract,
   parseForkMarker,
   resolveCohortFloor,
@@ -808,5 +811,180 @@ describe('detectGeneratedArtifactContract', () => {
     expect(v.status).toBe('unknown');
     expect(v.status).not.toBe('warn');
     expect(v.message).toMatch(/canonical hook region|unprovable/i);
+  });
+});
+
+// ─── detectManualAttestationContract (mmnto-ai/totem#2073 manual-attestation slice) ──
+
+describe('detectManualAttestationContract', () => {
+  /** A vendor-SDK manual-attestation coupling (`package` set → local pin readable). */
+  function vendorContract(over: Partial<ParityContract> = {}): ParityContract {
+    return {
+      id: 'google-genai-coupling',
+      dimension: 'dependency-cohort',
+      canonicalSource: null,
+      detectionMethod: "doctor surfaces each consumer's pin + last-attested; flags staleness only",
+      expectedValueOrDerivation:
+        'tracked for coupling visibility; cohort floor is a pending decision',
+      tractability: 'manual-attestation',
+      trackingIssue: 'mmnto-ai/totem#2018',
+      package: '@google/genai',
+      ...over,
+    };
+  }
+
+  /** A doctrine manual-attestation row (no `package`; cross-repo canonical). */
+  function doctrineContract(over: Partial<ParityContract> = {}): ParityContract {
+    return {
+      id: 'governance-doctrine',
+      dimension: 'doctrine',
+      canonicalSource: 'mmnto-ai/totem-strategy:AGENTS.md',
+      detectionMethod: 'doctor surfaces "last attested <date/SHA>" and flags staleness only',
+      expectedValueOrDerivation:
+        'tracked for doctrine-currency visibility; the mechanical pin is a pending deliverable',
+      tractability: 'manual-attestation',
+      trackingIssue: 'mmnto-ai/totem-strategy#511',
+      ...over,
+    };
+  }
+
+  function maCtx(
+    over: Partial<DetectManualAttestationContext> = {},
+  ): DetectManualAttestationContext {
+    return { cwd: tmpRoot, repoId: 'totem', ...over };
+  }
+
+  /** A read seam that throws — proves the doctrine-row path performs NO package.json read. */
+  const throwingRead = (): PackageJsonShape | undefined => {
+    throw new Error('readPackageJson must not be called on the doctrine-row path');
+  };
+
+  // ── Vendor-SDK sub-class ──
+  it('vendor-SDK: declared + installed → info naming pkg, range, installed version, no-floor', () => {
+    writeConsumerPkg(tmpRoot, { '@google/genai': '^0.3.0' });
+    writeInstalled(tmpRoot, '@google/genai', '0.3.1');
+    const v = detectManualAttestationContract(vendorContract(), maCtx());
+    expect(v.status).toBe('info');
+    expect(v.message).toContain('@google/genai');
+    expect(v.message).toContain('^0.3.0');
+    expect(v.message).toContain('installed 0.3.1');
+    expect(v.message).toMatch(/no cohort floor|attest only/i);
+  });
+
+  it('vendor-SDK: applicable consumer but package NOT declared → skip, NOT warn (vendor spread permitted)', () => {
+    writeConsumerPkg(tmpRoot, { 'some-other-dep': '^1.0.0' });
+    const v = detectManualAttestationContract(vendorContract(), maCtx());
+    expect(v.status).toBe('skip');
+    expect(v.status).not.toBe('warn');
+    expect(v.message).toMatch(/not present here|vendor spread/i);
+  });
+
+  it('vendor-SDK: an unparseable declared range → info with installed unresolved (never throws, never warn)', () => {
+    writeConsumerPkg(tmpRoot, { '@google/genai': 'not-a-range' });
+    const v = detectManualAttestationContract(vendorContract(), maCtx());
+    expect(v.status).toBe('info');
+    expect(v.status).not.toBe('warn');
+    expect(v.message).toContain('installed: unresolved');
+  });
+
+  it('vendor-SDK with no consumer package.json at all → skip, never throws (production honest-absent reader)', () => {
+    // tmpRoot has no package.json written this case.
+    const v = detectManualAttestationContract(vendorContract(), maCtx());
+    expect(v.status).toBe('skip');
+  });
+
+  // ── consumers-scope guard (verbatim parity with detectVersionPinnedContract) ──
+  it('consumers scope: repo not in consumers → skip cohort-permits-absence', () => {
+    const v = detectManualAttestationContract(
+      vendorContract({
+        id: 'anthropic-sdk-coupling',
+        package: '@anthropic-ai/sdk',
+        consumers: ['totem', 'liquid-city'],
+      }),
+      maCtx({ repoId: 'totem-status' }),
+    );
+    expect(v.status).toBe('skip');
+    expect(v.message).toMatch(/cohort permits absence/i);
+  });
+
+  it('consumers scope: repoId unresolvable on a scoped contract → skip (cannot determine applicability)', () => {
+    const v = detectManualAttestationContract(
+      vendorContract({ consumers: ['totem'] }),
+      maCtx({ repoId: undefined }),
+    );
+    expect(v.status).toBe('skip');
+    expect(v.message).toMatch(/cannot determine applicability/i);
+  });
+
+  // ── Doctrine sub-class (zero I/O — local-read-only) ──
+  it('doctrine row: info naming canonicalSource + tracking issue + not-recorded; performs ZERO package.json read', () => {
+    const v = detectManualAttestationContract(
+      doctrineContract(),
+      // A throwing read seam proves the doctrine path never touches package.json.
+      maCtx({ readPackageJson: throwingRead }),
+    );
+    expect(v.status).toBe('info');
+    expect(v.message).toContain('mmnto-ai/totem-strategy:AGENTS.md');
+    expect(v.message).toContain('mmnto-ai/totem-strategy#511');
+    expect(v.message).toMatch(/last attested: not recorded/i);
+  });
+
+  it('doctrine row with a null canonicalSource → info with the no-external-source phrasing', () => {
+    const v = detectManualAttestationContract(
+      doctrineContract({ canonicalSource: null }),
+      maCtx({ readPackageJson: throwingRead }),
+    );
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/no external canonical source/i);
+  });
+
+  // ── attested seam (forward-compat for the strategy `last-attested:` follow-on) ──
+  it('attested date supplied → message reports it; status stays info (staleness is a message refinement, not a status)', () => {
+    const v = detectManualAttestationContract(
+      doctrineContract(),
+      maCtx({ attested: '2026-06-04', readPackageJson: throwingRead }),
+    );
+    expect(v.status).toBe('info');
+    expect(v.message).toContain('last attested 2026-06-04');
+  });
+
+  // ── Claim-class ceiling KEYSTONE: info|skip ONLY, never pass/warn/fail/unknown ──
+  it('claim-class ceiling: across every input shape the verdict is ONLY info or skip', () => {
+    writeConsumerPkg(tmpRoot, { '@google/genai': '^0.3.0' });
+    const verdicts = [
+      // vendor declared (resolves via minVersion fallback) → info
+      detectManualAttestationContract(vendorContract(), maCtx()),
+      // vendor not declared → skip
+      detectManualAttestationContract(vendorContract({ package: '@not/installed' }), maCtx()),
+      // vendor invalid range → info (installed unresolved)
+      detectManualAttestationContract(
+        vendorContract({ package: '@google/genai' }),
+        maCtx({ readPackageJson: () => ({ dependencies: { '@google/genai': '@@bad@@' } }) }),
+      ),
+      // not-a-consumer → skip
+      detectManualAttestationContract(
+        vendorContract({ consumers: ['liquid-city'] }),
+        maCtx({ repoId: 'totem-status' }),
+      ),
+      // repoId unresolvable on a scoped contract → skip
+      detectManualAttestationContract(
+        vendorContract({ consumers: ['totem'] }),
+        maCtx({ repoId: undefined }),
+      ),
+      // doctrine row → info
+      detectManualAttestationContract(doctrineContract(), maCtx({ readPackageJson: throwingRead })),
+      // doctrine null source → info
+      detectManualAttestationContract(
+        doctrineContract({ canonicalSource: null }),
+        maCtx({ readPackageJson: throwingRead }),
+      ),
+    ];
+    for (const v of verdicts) {
+      expect(['info', 'skip']).toContain(v.status);
+      expect(v.status).not.toBe('pass');
+      expect(v.status).not.toBe('warn');
+      expect(v.status).not.toBe('fail');
+      expect(v.status).not.toBe('unknown');
+    }
   });
 });
