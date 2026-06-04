@@ -954,13 +954,27 @@ export function detectGeneratedArtifactContract(
   // ── post-merge / post-checkout carry an end marker → isolate the totem region so a
   // user's surrounding content does not read as drift, and a drifted region does. ──
   if (ctx.endMarker !== undefined) {
+    const canonicalRegion = extractInclusiveRegion(canonical, ctx.ownershipMarker, ctx.endMarker);
+    // The regenerated canonical must contain its own end-marked region. If it does not
+    // (a generator/marker misconfig, or a truncated canonical), the region comparison is
+    // unprovable → unknown — mirroring the canonicalContent === undefined guard above,
+    // never a fall-through that could emit a false `warn` (Greptile review on mmnto-ai/totem#2079).
+    if (canonicalRegion === undefined) {
+      return {
+        status: 'unknown',
+        message: tag(
+          'cannot resolve the canonical hook region (end marker absent in the regenerated template) — verdict unprovable',
+        ),
+        remediation:
+          'Reinstall @mmnto/cli (the running binary may be stale or shadowed), then re-run totem doctor --parity.',
+      };
+    }
     const consumerRegion = extractInclusiveRegion(
       consumerContent,
       ctx.ownershipMarker,
       ctx.endMarker,
     );
-    const canonicalRegion = extractInclusiveRegion(canonical, ctx.ownershipMarker, ctx.endMarker);
-    if (consumerRegion !== undefined && canonicalRegion !== undefined) {
+    if (consumerRegion !== undefined) {
       const consumerRegionNorm = normalizeManagedBlock(consumerRegion);
       const canonicalRegionNorm = normalizeManagedBlock(canonicalRegion);
       if (consumerRegionNorm === canonicalRegionNorm) {
@@ -971,11 +985,15 @@ export function detectGeneratedArtifactContract(
           message: tag(`totem block current — hash ${hashManagedBlock(consumerRegionNorm)}`),
         };
       }
-      if (fork !== undefined) {
+      // Scope the fork attestation to the ISOLATED totem region — a totem:fork marker in
+      // the user's OWN surrounding shell must not suppress genuine totem-block drift
+      // (Greptile review on mmnto-ai/totem#2079).
+      const regionFork = parseForkMarker(consumerRegion);
+      if (regionFork !== undefined) {
         return {
           status: 'info',
           message: tag(
-            `intentional fork${formatForkMeta(fork)} — totem block differs in ${ctx.consumerPath}`,
+            `intentional fork${formatForkMeta(regionFork)} — totem block differs in ${ctx.consumerPath}`,
           ),
         };
       }
@@ -988,8 +1006,8 @@ export function detectGeneratedArtifactContract(
           'Re-run totem hook install to regenerate the managed block, or add a totem:fork marker if the divergence is intentional.',
       };
     }
-    // End marker missing in the consumer (block truncated / marker-stripped) → fall
-    // through to the ownership heuristic below.
+    // Consumer has the start marker but not the end (truncated / stripped) → fall through
+    // to the ownership heuristic below (owned → drift warn; appended → unknown).
   }
 
   // ── No end marker (pre-commit / pre-push), or the region could not be bracketed. ──

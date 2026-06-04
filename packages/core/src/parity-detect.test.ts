@@ -755,4 +755,58 @@ describe('detectGeneratedArtifactContract', () => {
     );
     expect(v.message).toContain('@mmnto/cli@1.53.5');
   });
+
+  it('warn — a fork marker in the USER preamble does NOT suppress totem-block drift (region-scoped, Greptile)', () => {
+    // Appended post-merge: the totem region drifted, but the fork marker sits in the
+    // user's OWN preamble (outside the totem block) — it must not demote warn → info.
+    const consumerPath = writeArtifact(
+      '.git/hooks/post-merge',
+      appendedPostMerge(
+        'echo user step\n# <!-- totem:fork reason="my own preamble" owner="someone" -->',
+        'sync OLD',
+      ),
+    );
+    const v = detectGeneratedArtifactContract({
+      canonicalContent: ownedPostMerge('sync NEW'),
+      consumerPath,
+      ownershipMarker: POSTMERGE_MARKER,
+      endMarker: POSTMERGE_END,
+    });
+    expect(v.status).toBe('warn');
+    expect(v.status).not.toBe('info');
+  });
+
+  it('info — a fork marker INSIDE the totem region is a genuine attestation', () => {
+    const consumerPath = writeArtifact(
+      '.git/hooks/post-merge',
+      appendedPostMerge(
+        'echo user step',
+        'sync OLD\n# <!-- totem:fork reason="vendored sync" attested="2026-06-04" -->',
+      ),
+    );
+    const v = detectGeneratedArtifactContract({
+      canonicalContent: ownedPostMerge('sync NEW'),
+      consumerPath,
+      ownershipMarker: POSTMERGE_MARKER,
+      endMarker: POSTMERGE_END,
+    });
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/intentional fork/i);
+  });
+
+  it('unknown — endMarker set but the canonical lacks its end marker is unprovable, never a false warn (Greptile)', () => {
+    // A regenerated canonical missing its own end marker (generator/marker misconfig)
+    // must not fall through to an owned-file `warn` — the comparison is unprovable.
+    const canonicalNoEnd = `#!/bin/sh\n# ${POSTMERGE_MARKER} — background re-index.\nsync\n`;
+    const consumerPath = writeArtifact('.git/hooks/post-merge', ownedPostMerge('sync'));
+    const v = detectGeneratedArtifactContract({
+      canonicalContent: canonicalNoEnd,
+      consumerPath,
+      ownershipMarker: POSTMERGE_MARKER,
+      endMarker: POSTMERGE_END,
+    });
+    expect(v.status).toBe('unknown');
+    expect(v.status).not.toBe('warn');
+    expect(v.message).toMatch(/canonical hook region|unprovable/i);
+  });
 });
