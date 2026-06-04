@@ -592,6 +592,16 @@ export interface DetectManualAttestationContext {
    * Test seam — override the consumer package.json read. Production callers omit it
    * and the detector reads `<cwd>/package.json`. Invoked ONLY on the vendor-SDK
    * path; the doctrine-row path performs no read at all (a throwing seam proves it).
+   *
+   * Scope note (Greptile review on mmnto-ai/totem#2080): this seam covers ONLY the
+   * top-level consumer package.json read (the declared-range lookup). The
+   * installed-version half (`resolveInstalledVersion`) reads the REAL `node_modules`
+   * ancestry and, for any VALID range, falls back to `semver.minVersion(range)` — so
+   * `"installed: unresolved"` arises solely from an UNPARSEABLE range, never from
+   * absent node_modules. A test injecting this seam with a valid range but no on-disk
+   * install therefore sees the minVersion fallback BY DESIGN. The boundary is shared
+   * verbatim with `detectVersionPinnedContract` (same `resolveInstalledVersion`, same
+   * seam scope) — deliberately not widened here to keep the two detectors aligned.
    */
   readPackageJson?: (absPath: string) => PackageJsonShape | undefined;
 }
@@ -646,27 +656,22 @@ export function detectManualAttestationContract(
   // The last-attested suffix: a date if one was supplied (the reserved seam — the
   // manifest has no `last-attested:` field yet), else the honest "not recorded".
   // NEVER fabricated; a present date refines the MESSAGE, never the status.
-  const attestedSuffix =
-    typeof ctx.attested === 'string' && ctx.attested.trim().length > 0
-      ? `last attested ${ctx.attested.trim()}`
-      : 'last attested: not recorded';
+  const trimmedAttested = ctx.attested?.trim();
+  const attestedSuffix = trimmedAttested
+    ? `last attested ${trimmedAttested}`
+    : 'last attested: not recorded';
 
   // The `package:` field is the sub-class discriminant, read directly off the
   // contract (single source of truth). A whitespace-only value is treated as
-  // absent (doctrine-like) rather than a degenerate vendor pin.
-  const pkg =
-    typeof contract.package === 'string' && contract.package.trim().length > 0
-      ? contract.package.trim()
-      : undefined;
+  // absent (doctrine-like) rather than a degenerate vendor pin (`|| undefined`
+  // collapses an empty trim to the doctrine-row branch).
+  const pkg = contract.package?.trim() || undefined;
 
   // ── Doctrine row (no package): a pure info surface, ZERO on-disk I/O ──
   // canonicalSource is cross-repo (mmnto-ai/totem-strategy:AGENTS.md); the
   // local-read-only doctor surfaces it as TEXT and never resolves it.
   if (pkg === undefined) {
-    const source =
-      typeof contract.canonicalSource === 'string' && contract.canonicalSource.trim().length > 0
-        ? contract.canonicalSource.trim()
-        : 'no external canonical source';
+    const source = contract.canonicalSource?.trim() || 'no external canonical source';
     return {
       status: 'info',
       message: `doctrine currency tracked — ${contract.dimension} (canonical: ${source}); no local pin mechanism, pending doctrine-distribution (${contract.trackingIssue}). ${attestedSuffix}`,
