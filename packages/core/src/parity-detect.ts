@@ -689,6 +689,14 @@ export function hashManagedBlock(normalized: string): string {
   return crypto.createHash('sha256').update(normalized, 'utf-8').digest('hex').slice(0, 12);
 }
 
+/** Format a fork marker's attested/owner attributes as a message suffix. */
+function formatForkMeta(fork: ForkMarker): string {
+  return (
+    (fork.attested !== undefined ? `, attested ${fork.attested}` : '') +
+    (fork.owner !== undefined ? `, owner ${fork.owner}` : '')
+  );
+}
+
 /**
  * Detect drift for ONE mechanical managed-block contract (the #2073 mechanical
  * skills slice). Compares the consumer's installed managed-block against the
@@ -742,14 +750,26 @@ export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityCo
     };
   }
 
-  // ── Extract the consumer's managed block (markers absent → warn: unmanaged) ──
+  // ── Extract the consumer's managed block ──
   const consumerBlock = extractManagedBlock(consumerContent, ctx.markers);
   if (consumerBlock === undefined) {
+    // Markers absent. A fork marker still signals an INTENTIONAL override (a
+    // heavy fork can strip the managed-block markers entirely) → `info`; only an
+    // unmarked, unmanaged file is drift `warn`.
+    const strippedFork = parseForkMarker(consumerContent);
+    if (strippedFork !== undefined) {
+      return {
+        status: 'info',
+        message: tag(
+          `intentional fork${formatForkMeta(strippedFork)} — managed-block markers absent in ${ctx.consumerPath}`,
+        ),
+      };
+    }
     return {
       status: 'warn',
       message: `managed-block markers absent in ${ctx.consumerPath} — file is unmanaged or marker-stripped`,
       remediation:
-        'Re-run totem init to restore the managed block, or add a totem:fork marker if this file is an intentional override.',
+        'Re-run totem init to restore the managed block, or add a totem:fork marker if this divergence is intentional.',
     };
   }
 
@@ -767,13 +787,10 @@ export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityCo
   // ── Differ: an attested fork is `info`; otherwise drift `warn` (req #7 + #1) ──
   const fork = parseForkMarker(consumerContent);
   if (fork !== undefined) {
-    const meta =
-      (fork.attested !== undefined ? `, attested ${fork.attested}` : '') +
-      (fork.owner !== undefined ? `, owner ${fork.owner}` : '');
     return {
       status: 'info',
       message: tag(
-        `intentional fork${meta} — differs from canonical (consumer ${hashManagedBlock(consumerNorm)} vs canonical ${hashManagedBlock(canonicalNorm)})`,
+        `intentional fork${formatForkMeta(fork)} — differs from canonical (consumer ${hashManagedBlock(consumerNorm)} vs canonical ${hashManagedBlock(canonicalNorm)})`,
       ),
     };
   }

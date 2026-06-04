@@ -537,6 +537,16 @@ describe('detectMechanicalContract', () => {
     expect(v.message).toMatch(/markers absent|unmanaged/i);
   });
 
+  it('info — a marker-stripped file carrying a totem:fork marker is an intentional fork, not drift', () => {
+    const consumerPath = writeArtifact(
+      '.claude/skills/x/SKILL.md',
+      'heavily customized, no skill markers\n<!-- totem:fork reason="full rewrite" attested="2026-06-03" -->',
+    );
+    const v = detectMechanicalContract(mechCtx({ consumerPath }));
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/intentional fork/i);
+  });
+
   it('never emits fail and degrades a missing read to skip (detector invariant)', () => {
     const v = detectMechanicalContract(mechCtx({ readFile: () => undefined }));
     expect(v.status).toBe('skip');

@@ -34,18 +34,13 @@
  * keep core off the CLI cold-start graph, matching the other doctor checks.
  */
 
-import { createRequire } from 'node:module';
 import * as path from 'node:path';
-import * as url from 'node:url';
 
 import type { ManagedBlockMarkers, ParityContract, ParityContractVerdict } from '@mmnto/totem';
 
-import {
-  DISTRIBUTED_CLAUDE_SKILLS,
-  REVIEW_REPLY_SKILL_CONTENT,
-  SKILL_MARKER_END,
-  SKILL_MARKER_START,
-} from './init-templates.js';
+// init-templates (large canonical strings) + the node:url / node:module builtins
+// are dynamic-imported inside checkParity per the packages/cli lazy-load
+// guideline — see the `ok` branch.
 
 const CHECK_NAME = 'Parity';
 
@@ -74,9 +69,6 @@ export interface ParityCheckResult {
 
 // ─── Mechanical artifact registry (CLI-side) ────────────
 
-/** The managed-block markers shared by every distributed skill artifact. */
-const SKILL_MARKERS: ManagedBlockMarkers = { start: SKILL_MARKER_START, end: SKILL_MARKER_END };
-
 /**
  * One on-disk artifact a mechanical contract maps to: the consumer file path,
  * its marker pair, the canonical block extracted from the running `@mmnto/cli`'s
@@ -87,6 +79,17 @@ interface MechanicalArtifact {
   markers: ManagedBlockMarkers;
   canonicalBlock: string | undefined;
   lineName: string;
+}
+
+/**
+ * The distributed-skill canonical sources, dynamic-imported by the caller from
+ * `init-templates` (kept off the CLI cold-start graph per the packages/cli
+ * lazy-load guideline) and threaded in so this registry stays a pure function.
+ */
+interface SkillTemplateSource {
+  distributedSkills: ReadonlyArray<{ name: string; content: string }>;
+  reviewReplyContent: string;
+  markers: ManagedBlockMarkers;
 }
 
 /**
@@ -105,21 +108,23 @@ function mechanicalArtifactsFor(
   contractId: string,
   gitRoot: string,
   extract: (content: string, markers: ManagedBlockMarkers) => string | undefined,
+  templates: SkillTemplateSource,
 ): MechanicalArtifact[] | undefined {
+  const { markers } = templates;
   switch (contractId) {
     case 'claude-skills':
-      return DISTRIBUTED_CLAUDE_SKILLS.map((s) => ({
+      return templates.distributedSkills.map((s) => ({
         consumerPath: path.join(gitRoot, '.claude', 'skills', s.name, 'SKILL.md'),
-        markers: SKILL_MARKERS,
-        canonicalBlock: extract(s.content, SKILL_MARKERS),
+        markers,
+        canonicalBlock: extract(s.content, markers),
         lineName: `Parity: claude-skills (${s.name})`,
       }));
     case 'review-reply-skill-content':
       return [
         {
           consumerPath: path.join(gitRoot, '.claude', 'skills', 'review-reply', 'SKILL.md'),
-          markers: SKILL_MARKERS,
-          canonicalBlock: extract(REVIEW_REPLY_SKILL_CONTENT, SKILL_MARKERS),
+          markers,
+          canonicalBlock: extract(templates.reviewReplyContent, markers),
           lineName: 'Parity: review-reply-skill-content',
         },
       ];
@@ -137,12 +142,15 @@ function mechanicalArtifactsFor(
  * own URL, so it names the actual running install (workspace dist vs a
  * node_modules vendor vs a global shadow).
  */
-function resolveRunningBinary(): { version: string; path: string } | undefined {
+function resolveRunningBinary(
+  urlMod: typeof import('node:url'),
+  createRequireFn: typeof import('node:module').createRequire,
+): { version: string; path: string } | undefined {
   try {
-    const here = url.fileURLToPath(import.meta.url);
+    const here = urlMod.fileURLToPath(import.meta.url);
     // dist/commands/doctor-parity.js → up two → the @mmnto/cli package root.
     const cliRoot = path.resolve(path.dirname(here), '..', '..');
-    const req = createRequire(import.meta.url);
+    const req = createRequireFn(import.meta.url);
     const pkg = req('../../package.json') as { version?: unknown };
     if (typeof pkg.version !== 'string') return undefined;
     return { version: pkg.version, path: cliRoot };
@@ -257,13 +265,30 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         message: `parity manifest: ${contracts.length} contract(s) loaded`,
       };
 
+      // Lazy-load init-templates (large canonical strings) + the node builtins
+      // only on the ok path — the honest-absent cases above never pay for them
+      // (packages/cli lazy-load guideline).
+      const { createRequire } = await import('node:module');
+      const url = await import('node:url');
+      const {
+        DISTRIBUTED_CLAUDE_SKILLS,
+        REVIEW_REPLY_SKILL_CONTENT,
+        SKILL_MARKER_START,
+        SKILL_MARKER_END,
+      } = await import('./init-templates.js');
+      const skillTemplates: SkillTemplateSource = {
+        distributedSkills: DISTRIBUTED_CLAUDE_SKILLS,
+        reviewReplyContent: REVIEW_REPLY_SKILL_CONTENT,
+        markers: { start: SKILL_MARKER_START, end: SKILL_MARKER_END },
+      };
+
       // Shared detection context. The cohort floor + repoId derive from the git
       // root (anchored there, not the deep cwd — mirrors the core resolver).
       // resolveGitRoot returns null outside a repo; fall back to cwd so the
       // local self-in-tree / sibling probes still have an anchor.
       const gitRoot = safeGitRoot(resolveGitRoot, cwd) ?? cwd;
       const repoId = deriveCohortRepoId(cwd, { gitRoot });
-      const binary = resolveRunningBinary();
+      const binary = resolveRunningBinary(url, createRequire);
 
       const blockingDriftIds: string[] = [];
       // flatMap, not map: a mechanical contract (claude-skills) expands to one
@@ -285,7 +310,12 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
 
         // ── mechanical managed-block content-equality (mmnto-ai/totem#2073 skills slice) ──
         if (c.tractability === 'mechanical') {
-          const artifacts = mechanicalArtifactsFor(c.id, gitRoot, extractManagedBlock);
+          const artifacts = mechanicalArtifactsFor(
+            c.id,
+            gitRoot,
+            extractManagedBlock,
+            skillTemplates,
+          );
           if (artifacts === undefined) {
             return [
               stub(
@@ -420,14 +450,18 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
   const { results, blockingDriftIds } = await checkParity(cwd);
 
   // Under --strict, a blocking contract's drift `warn` is rendered + gated as a
-  // FAIL. We match by the `Parity: <id>` line name so the rendered status agrees
-  // with the exit code. blockingDriftIds is empty in the non-strict path's
-  // effect (the promotion only fires under --strict), so this Set is cheap.
-  const promotable = new Set(blockingDriftIds.map((id) => `Parity: ${id}`));
+  // FAIL. A contract's drift can render across MULTIPLE artifact lines
+  // (e.g. `Parity: claude-skills (signoff)`), so a line is promotable when its
+  // name is the `Parity: <id>` summary OR a `Parity: <id> (…)` artifact line —
+  // an exact-name Set would leave the artifact lines rendered as WARN while the
+  // command still exits non-zero (GCA review on the PR). The trailing space
+  // guards against a contract id that is a prefix of another.
+  const isPromotable = (name: string): boolean =>
+    blockingDriftIds.some((id) => name === `Parity: ${id}` || name.startsWith(`Parity: ${id} `));
 
   for (const r of results) {
     const status =
-      options.strict && r.status === 'warn' && promotable.has(r.name) ? 'fail' : r.status;
+      options.strict && r.status === 'warn' && isPromotable(r.name) ? 'fail' : r.status;
     switch (status) {
       case 'pass':
         log.success(TAG, `${successColor(bold('PASS'))} — ${render(r.message)}`);

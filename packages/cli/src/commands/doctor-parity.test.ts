@@ -420,6 +420,23 @@ describe('doctorParityCliCommand — --strict fail-promotion', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('throws under --strict when a blocking MECHANICAL contract drifts across multiple artifacts', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest(
+      'm.yaml',
+      SKILLS_MANIFEST_YAML.replace(
+        'tracking-issue: mmnto-ai/totem-strategy#497\n',
+        'tracking-issue: mmnto-ai/totem-strategy#497\n    blocking: true\n',
+      ),
+    );
+    for (const s of DISTRIBUTED_CLAUDE_SKILLS) {
+      writeSkill(s.name, s.content.replace(SKILL_MARKER_START, `${SKILL_MARKER_START}\nDRIFT`));
+    }
+    await expect(doctorParityCliCommand({ strict: true, cwdForTest: tmpDir })).rejects.toThrow(
+      /PARITY_DRIFT_DETECTED|blocking drift/i,
+    );
+  });
+
   it('does NOT throw under --strict when drift is NON-blocking (only blocking gates)', async () => {
     writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
     writeManifest('m.yaml', DEPS_MANIFEST_YAML); // non-blocking
