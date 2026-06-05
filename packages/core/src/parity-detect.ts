@@ -990,6 +990,19 @@ export interface DetectGeneratedArtifactContext {
    * canonical-generator resolution; the detector just reports the resolved binary.
    */
   binary?: { version: string; path: string };
+  /**
+   * Human-facing noun for this artifact class in the absence/drift copy (e.g.
+   * `'git hook'`, `'SessionStart hook'`). Defaults to `'artifact'`. Threaded so the
+   * detector — now shared across git hooks AND the static SessionStart hooks — never
+   * hardcodes one class's terminology (Greptile review on mmnto-ai/totem#2082).
+   */
+  artifactLabel?: string;
+  /**
+   * The install/repair command the remediation points at — `'totem hook install'` for
+   * git hooks, `'totem init'` for SessionStart hooks. Defaults to `'totem init'` so a
+   * SessionStart absence/drift is never told to run the git-hook installer.
+   */
+  installCommand?: string;
   /** Test seam — override the consumer file read. Production callers omit it. */
   readFile?: (absPath: string) => string | undefined;
 }
@@ -1009,16 +1022,26 @@ function extractInclusiveRegion(content: string, start: string, end: string): st
 }
 
 /**
- * Whether a hook is a totem-OWNED whole file (generated verbatim by `build*Hook`)
- * rather than a totem block APPENDED into a pre-existing user hook. A generated
- * hook is `#!/bin/sh\n# <marker> …`, so the only content before the marker is the
- * shebang line plus the start of its comment; an appended hook carries the user's
- * prior hook content there.
+ * Whether a file is a totem-OWNED whole file (generated verbatim by a `build*`
+ * template) rather than a totem block APPENDED into a pre-existing user file. Two
+ * generated shapes are owned:
+ *   - **whole-file marker-at-start** — the ownership marker OPENS the file, so
+ *     nothing meaningful precedes it. The JS SessionStart hooks (`// [totem]
+ *     auto-generated …` at index 0, no shebang — mmnto-ai/totem#2073 orientation
+ *     slice) are this shape.
+ *   - **shell shebang + comment** — a shell hook generated as `#!/bin/sh\n#
+ *     <marker> …`, so the only content before the marker is the shebang line plus
+ *     the start of its comment (the git-hooks slice).
+ * An APPENDED block carries the user's prior content before the marker → NOT owned
+ * (the detector degrades it to `unknown`, claim-class-tight).
  */
 function isOwnedGeneratedFile(content: string, marker: string): boolean {
   const idx = content.indexOf(marker);
   if (idx === -1) return false;
-  return /^#![^\n]*\n#[ \t]*$/.test(content.slice(0, idx));
+  const before = content.slice(0, idx);
+  // Marker opens the file (whole-file JS templates), OR only a shebang + comment-
+  // start precedes it (shell hooks). User content before the marker → appended.
+  return before.trim().length === 0 || /^#![^\n]*\n#[ \t]*$/.test(before);
 }
 
 /**
@@ -1051,12 +1074,19 @@ export function detectGeneratedArtifactContract(
   // the provenance suffix never reads as a jammed token in a message.
   const tag = (msg: string): string => msg + provenance;
 
-  // ── Canonical unregenerable → unknown (Stale-Doctor-Paradox guard) ──
+  // Artifact-class copy (Greptile review on mmnto-ai/totem#2082): this detector serves
+  // both git hooks and the static SessionStart hooks, so the noun + install command are
+  // threaded in rather than hardcoded. Defaults keep standalone callers SessionStart-safe
+  // (never "run totem hook install" for a non-git artifact).
+  const label = ctx.artifactLabel ?? 'artifact';
+  const install = ctx.installCommand ?? 'totem init';
+
+  // ── Canonical unresolvable → unknown (Stale-Doctor-Paradox guard) ──
   if (ctx.canonicalContent === undefined) {
     return {
       status: 'unknown',
       message: tag(
-        'cannot regenerate canonical hook from the running @mmnto/cli — verdict unprovable',
+        `cannot resolve canonical ${label} from the running @mmnto/cli — verdict unprovable`,
       ),
       remediation:
         'Reinstall @mmnto/cli (the running binary may be stale or shadowed), then re-run totem doctor --parity.',
@@ -1070,9 +1100,8 @@ export function detectGeneratedArtifactContract(
   if (consumerContent === undefined) {
     return {
       status: 'skip',
-      message: `git hook not installed at ${ctx.consumerPath} — cohort permits absence`,
-      remediation:
-        'Run totem hook install to install the managed git hooks, or ignore if this repo intentionally omits them.',
+      message: `${label} not installed at ${ctx.consumerPath} — cohort permits absence`,
+      remediation: `Run ${install} to install the managed ${label}, or ignore if this repo intentionally omits it.`,
     };
   }
 
@@ -1110,7 +1139,7 @@ export function detectGeneratedArtifactContract(
       return {
         status: 'unknown',
         message: tag(
-          'cannot resolve the canonical hook region (end marker absent in the regenerated template) — verdict unprovable',
+          `cannot resolve the canonical ${label} region (end marker absent in the regenerated template) — verdict unprovable`,
         ),
         remediation:
           'Reinstall @mmnto/cli (the running binary may be stale or shadowed), then re-run totem doctor --parity.',
@@ -1149,8 +1178,7 @@ export function detectGeneratedArtifactContract(
         message: tag(
           `drift — totem block ${hashManagedBlock(consumerRegionNorm)} != canonical ${hashManagedBlock(canonicalRegionNorm)}`,
         ),
-        remediation:
-          'Re-run totem hook install to regenerate the managed block, or add a totem:fork marker if the divergence is intentional.',
+        remediation: `Re-run ${install} to regenerate the managed block, or add a totem:fork marker if the divergence is intentional.`,
       };
     }
     // Consumer has the start marker but not the end (truncated / stripped) → fall through
@@ -1174,28 +1202,26 @@ export function detectGeneratedArtifactContract(
       message: tag(
         `drift — consumer ${hashManagedBlock(consumerNorm)} != canonical ${hashManagedBlock(canonicalNorm)}`,
       ),
-      remediation:
-        'Re-run totem hook install to regenerate the hook from the current @mmnto/cli, or add a totem:fork marker if the divergence is intentional.',
+      remediation: `Re-run ${install} to regenerate the ${label} from the current @mmnto/cli, or add a totem:fork marker if the divergence is intentional.`,
     };
   }
 
-  // ── Totem block appended inside a user-modified hook with no end marker to ──
+  // ── Totem block appended inside a user-modified artifact with no end marker to ──
   // isolate it: can prove neither drift nor currency → unknown (claim-class-tight).
   if (fork !== undefined) {
     return {
       status: 'info',
       message: tag(
-        `intentional fork${formatForkMeta(fork)} — totem block embedded in a user-modified hook (${ctx.consumerPath})`,
+        `intentional fork${formatForkMeta(fork)} — totem block embedded in a user-modified ${label} (${ctx.consumerPath})`,
       ),
     };
   }
   return {
     status: 'unknown',
     message: tag(
-      `totem block embedded in a user-modified hook at ${ctx.consumerPath} — cannot isolate it for comparison`,
+      `totem block embedded in a user-modified ${label} at ${ctx.consumerPath} — cannot isolate it for comparison`,
     ),
-    remediation:
-      'Re-run totem hook install (or adopt a hook manager) so the managed block can be verified independently.',
+    remediation: `Re-run ${install} to restore the managed ${label}, or remove the local edits before the totem marker so it can be verified independently.`,
   };
 }
 

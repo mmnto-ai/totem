@@ -1,24 +1,28 @@
 /**
  * Parity-drift sensor for `totem doctor --parity` (mmnto-ai/totem-strategy#448).
  *
- * Two detection slices are wired here:
+ * Detection is wired across all three tractability classes (mmnto-ai/totem#2073):
  *   - **version-pinned** (PR-1, mmnto-ai/totem#2069): each deps contract whose id
  *     resolves an `@mmnto/*` package name runs through the core
  *     `detectVersionPinnedContract` engine (pin-currency verdict, local-only floor).
- *   - **mechanical content-equality** (mmnto-ai/totem#2073 skills slice): each
- *     managed-block contract this slice handles (`claude-skills`,
- *     `review-reply-skill-content`) compares the consumer's installed
- *     `.claude/skills/<name>/SKILL.md` managed-block against the running
- *     `@mmnto/cli`'s OWN canonical template (the in-process `init-templates`
- *     export — local-read-only, no node_modules reach-in), via the core
- *     `detectMechanicalContract` engine (CRLF/LF-normalized content-hash + a
- *     fork-marker → `info` escape + an `unknown` Stale-Doctor-Paradox guard).
+ *   - **mechanical content-equality** (mmnto-ai/totem#2073): three artifact shapes,
+ *     all local-read-only against the running `@mmnto/cli`'s OWN in-process template:
+ *       · **skills** (`claude-skills`): managed-block equality of
+ *         `.claude/skills/<name>/SKILL.md` via `detectMechanicalContract`.
+ *       · **git-hooks**: per-repo REGENERATED whole-file/region equality of the four
+ *         `.git/hooks/*` (package-manager + tier parameterized) via
+ *         `detectGeneratedArtifactContract` — catches stale-version drift (#1854).
+ *       · **session-start-orientation**: STATIC whole-file equality of the
+ *         `.claude/hooks/SessionStart.cjs` + `.gemini/hooks/SessionStart.js` templates,
+ *         also via `detectGeneratedArtifactContract` (no parameterization).
+ *   - **manual-attestation** (mmnto-ai/totem#2080): the no-mechanical-sensor class —
+ *     `detectManualAttestationContract` surfaces the doctrine-currency row / vendor-SDK
+ *     pin as `info` (or honest-absent `skip`), NEVER pass/warn/fail (the "never fails"
+ *     contract; structurally cannot gate under `--strict`).
  *
- * ALL other contracts — the parameterized hook contracts (`git-hooks`,
- * `session-start-orientation`), the file-value-equality bot-configs, the
- * structural-presence dimensions, and every `manual-attestation` contract —
- * keep the `skip` "not yet implemented" stub; their detection is a follow-on
- * slice (the #2073 tail).
+ * The remaining contracts — the file-value-equality bot-configs (`cr-profile` etc.)
+ * and the structural-presence dimensions — keep the `skip` "not yet implemented" stub;
+ * their detection is a follow-on.
  *
  * The parity sensor owns its OWN render + result type (`ParityLine`) carrying a
  * WIDER status vocabulary (pass/warn/fail/info/unknown/skip) than the shared
@@ -215,6 +219,50 @@ function gitHookArtifactsFor(
   ];
 }
 
+// ─── SessionStart hook artifact registry (CLI-side, mmnto-ai/totem#2073 orientation slice) ──
+
+/**
+ * The running `@mmnto/cli`'s own whole-file SessionStart hook templates, dynamic-
+ * imported by the caller from `init-templates` (kept off the cold-start graph) and
+ * threaded in so the registry stays a pure function. Unlike the git hooks these are
+ * STATIC — no package-manager / tier parameterization — so the canonical is the
+ * verbatim template string. Both vendor templates open with the same `marker`.
+ */
+interface SessionStartTemplateSource {
+  claude: string;
+  gemini: string;
+  marker: string;
+}
+
+/**
+ * Resolve the two whole-file SessionStart hook artifacts the `session-start-orientation`
+ * contract checks: `.claude/hooks/SessionStart.cjs` (canonical `CLAUDE_SESSION_START`)
+ * and `.gemini/hooks/SessionStart.js` (canonical `GEMINI_SESSION_START`). Whole-file
+ * static canonical, no end marker, no regeneration. A vendor file absent here is
+ * honest-absent `skip` (cohort permits absence) via the detector's presence semantics;
+ * a present file whose marker opens it but whose body drifted is `warn` (the orientation
+ * slice generalized `isOwnedGeneratedFile` to treat a marker-at-start JS file as owned).
+ */
+function sessionStartArtifactsFor(
+  gitRoot: string,
+  templates: SessionStartTemplateSource,
+): GeneratedArtifact[] {
+  return [
+    {
+      consumerPath: path.join(gitRoot, '.claude', 'hooks', 'SessionStart.cjs'),
+      canonicalContent: templates.claude,
+      ownershipMarker: templates.marker,
+      lineName: 'Parity: session-start-orientation (claude)',
+    },
+    {
+      consumerPath: path.join(gitRoot, '.gemini', 'hooks', 'SessionStart.js'),
+      canonicalContent: templates.gemini,
+      ownershipMarker: templates.marker,
+      lineName: 'Parity: session-start-orientation (gemini)',
+    },
+  ];
+}
+
 /**
  * Resolve the running `@mmnto/cli`'s version + install path for the req-#5
  * binary self-report (the Stale-Doctor-Paradox guard — surface WHICH binary
@@ -361,11 +409,21 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         REVIEW_REPLY_SKILL_CONTENT,
         SKILL_MARKER_START,
         SKILL_MARKER_END,
+        CLAUDE_SESSION_START,
+        GEMINI_SESSION_START,
+        SESSION_START_MARKER,
       } = await import('./init-templates.js');
       const skillTemplates: SkillTemplateSource = {
         distributedSkills: DISTRIBUTED_CLAUDE_SKILLS,
         reviewReplyContent: REVIEW_REPLY_SKILL_CONTENT,
         markers: { start: SKILL_MARKER_START, end: SKILL_MARKER_END },
+      };
+      // The running CLI's own whole-file SessionStart hook templates (static — no
+      // parameterization), lazy-loaded on the ok path only (mmnto-ai/totem#2073 orientation slice).
+      const sessionStartTemplates: SessionStartTemplateSource = {
+        claude: CLAUDE_SESSION_START,
+        gemini: GEMINI_SESSION_START,
+        marker: SESSION_START_MARKER,
       };
 
       // The running CLI's own hook generators + markers + package-manager probe,
@@ -451,19 +509,38 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
             }
           }
 
-          // git hooks: regenerate the canonical per-repo (package manager + tier) via
-          // the running generator and content-compare — catches stale-version drift
-          // (the detection half of mmnto-ai/totem#1854) without a frozen-string false-positive.
+          // Generated-artifact contracts (whole-file / region content-equality): the git
+          // hooks (regenerated per-repo for this package manager + tier — catches the
+          // stale-version drift half of mmnto-ai/totem#1854) and the static whole-file
+          // SessionStart hooks (orientation slice). Both resolve a GeneratedArtifact[] and
+          // run the same presence-aware detector + once-per-contract blocking tag.
+          let generatedArtifacts: GeneratedArtifact[] | undefined;
+          // Artifact-class copy threaded into the detector so the absence/drift
+          // remediation names the RIGHT installer per class (Greptile review on
+          // mmnto-ai/totem#2082): git hooks → `totem hook install`; the static
+          // SessionStart hooks → `totem init`.
+          let artifactLabel = 'artifact';
+          let installCommand = 'totem init';
           if (c.id === 'git-hooks') {
-            const artifacts = gitHookArtifactsFor(gitRoot, hookTier, fallbackCmd, hookBuilders);
-            // A drift on any hook tags the contract id at most ONCE so the --strict
+            generatedArtifacts = gitHookArtifactsFor(gitRoot, hookTier, fallbackCmd, hookBuilders);
+            artifactLabel = 'git hook';
+            installCommand = 'totem hook install';
+          } else if (c.id === 'session-start-orientation') {
+            generatedArtifacts = sessionStartArtifactsFor(gitRoot, sessionStartTemplates);
+            artifactLabel = 'SessionStart hook';
+            installCommand = 'totem init';
+          }
+          if (generatedArtifacts !== undefined) {
+            // A drift on any artifact tags the contract id at most ONCE so the --strict
             // count reflects contracts, not artifacts (mirrors the skills branch).
             let blockingDrift = false;
-            const lines = artifacts.map((a) => {
+            const lines = generatedArtifacts.map((a) => {
               const verdict = detectGeneratedArtifactContract({
                 canonicalContent: a.canonicalContent,
                 consumerPath: a.consumerPath,
                 ownershipMarker: a.ownershipMarker,
+                artifactLabel,
+                installCommand,
                 ...(a.endMarker !== undefined ? { endMarker: a.endMarker } : {}),
                 ...(binary !== undefined ? { binary } : {}),
               });

@@ -22,7 +22,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { checkParity, doctorParityCliCommand } from './doctor-parity.js';
-import { DISTRIBUTED_CLAUDE_SKILLS, SKILL_MARKER_START } from './init-templates.js';
+import {
+  CLAUDE_SESSION_START,
+  DISTRIBUTED_CLAUDE_SKILLS,
+  GEMINI_SESSION_START,
+  SESSION_START_MARKER,
+  SKILL_MARKER_START,
+} from './init-templates.js';
 import {
   buildHookContent,
   buildPostCheckoutHookContent,
@@ -177,18 +183,27 @@ describe('checkParity — success', () => {
     writeManifest('doctrine/parity-manifest.yaml', VALID_MANIFEST_YAML);
 
     const { results } = await checkParity(tmpDir);
-    // 1 summary + 4 per-contract lines.
-    expect(results).toHaveLength(5);
+    // 1 summary + 5 per-contract lines: session-start-orientation is now WIRED and
+    // expands to TWO artifacts (claude + gemini) — no longer a stub — plus the three
+    // single-line contracts (mmnto-cli-version, mcp-corpus-indexing, gate-config).
+    expect(results).toHaveLength(6);
 
     const summary = results[0]!;
     expect(summary.status).toBe('pass');
     expect(summary.message).toContain('4 contract(s) loaded');
 
     const perContract = results.slice(1);
-    // The mechanical contracts keep the skip stub.
-    const orientation = perContract.find((r) => r.name === 'Parity: session-start-orientation')!;
-    expect(orientation.status).toBe('skip');
-    expect(orientation.message).toContain('mechanical');
+    // session-start-orientation is wired to the two whole-file SessionStart hooks;
+    // neither is installed here, so both are skip (cohort permits absence), NOT the
+    // old "not yet implemented" stub.
+    const orientationLines = perContract.filter((r) =>
+      r.name.startsWith('Parity: session-start-orientation'),
+    );
+    expect(orientationLines).toHaveLength(2);
+    for (const line of orientationLines) {
+      expect(line.status).toBe('skip');
+      expect(line.message).not.toContain('not yet implemented');
+    }
     // The version-pinned deps contract (mmnto-cli-version) now runs the
     // detector — with no consumer pin declared here it lands on a `skip`
     // (cohort permits absence), NOT the old "not yet implemented" stub.
@@ -671,5 +686,74 @@ describe('checkParity — manual-attestation wiring', () => {
     await expect(
       doctorParityCliCommand({ strict: true, cwdForTest: tmpDir }),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ─── session-start-orientation detection wiring (mmnto-ai/totem#2073 orientation slice) ──
+
+/** A manifest with the single session-start-orientation mechanical contract. */
+const SESSION_START_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: session-start-orientation
+    dimension: orientation
+    canonical-source: mmnto-ai/totem:packages/cli/src/commands/init-templates.ts#SessionStart
+    detection-method: SessionStart hook present and invokes totem orient --session
+    expected-value-or-derivation: hook matches the distributed template at pinned @mmnto/cli
+    tractability: mechanical
+    tracking-issue: mmnto-ai/totem-strategy#438
+`;
+
+/** Write a repo file at a nested relative path under the temp consumer repo. */
+function writeRepoFile(relPath: string, content: string): void {
+  const abs = path.join(tmpDir, relPath);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content, 'utf-8');
+}
+
+describe('checkParity — session-start-orientation wiring', () => {
+  it('both SessionStart templates open with SESSION_START_MARKER (single-source-of-truth contract)', () => {
+    expect(GEMINI_SESSION_START.startsWith(SESSION_START_MARKER)).toBe(true);
+    expect(CLAUDE_SESSION_START.startsWith(SESSION_START_MARKER)).toBe(true);
+  });
+
+  it('routes to two lines (claude + gemini); a verbatim gemini hook → pass, absent claude → skip', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', SESSION_START_MANIFEST_YAML);
+    // Gemini hook installed verbatim → pass; Claude hook absent here → skip.
+    writeRepoFile('.gemini/hooks/SessionStart.js', GEMINI_SESSION_START);
+
+    const { results } = await checkParity(tmpDir);
+    const perContract = results.slice(1);
+    expect(perContract).toHaveLength(2);
+
+    const gemini = perContract.find(
+      (r) => r.name === 'Parity: session-start-orientation (gemini)',
+    )!;
+    expect(gemini.status).toBe('pass');
+    const claude = perContract.find(
+      (r) => r.name === 'Parity: session-start-orientation (claude)',
+    )!;
+    expect(claude.status).toBe('skip');
+    expect(perContract.every((r) => !r.message.includes('not yet implemented'))).toBe(true);
+  });
+
+  it('a drifted owned gemini SessionStart → warn (NOT unknown); blocking promotes to a --strict throw', async () => {
+    const blocking = SESSION_START_MANIFEST_YAML.replace(
+      'tracking-issue: mmnto-ai/totem-strategy#438\n',
+      'tracking-issue: mmnto-ai/totem-strategy#438\n    blocking: true\n',
+    );
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', blocking);
+    // Still owned (the marker opens the file), but the body drifted → warn, not unknown.
+    writeRepoFile('.gemini/hooks/SessionStart.js', `${GEMINI_SESSION_START}\n// local drift\n`);
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const gemini = results.find((r) => r.name === 'Parity: session-start-orientation (gemini)')!;
+    expect(gemini.status).toBe('warn');
+    expect(gemini.status).not.toBe('unknown');
+    expect(blockingDriftIds).toContain('session-start-orientation');
+
+    await expect(doctorParityCliCommand({ strict: true, cwdForTest: tmpDir })).rejects.toThrow();
   });
 });
