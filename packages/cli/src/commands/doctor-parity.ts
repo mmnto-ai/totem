@@ -515,10 +515,20 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           // SessionStart hooks (orientation slice). Both resolve a GeneratedArtifact[] and
           // run the same presence-aware detector + once-per-contract blocking tag.
           let generatedArtifacts: GeneratedArtifact[] | undefined;
+          // Artifact-class copy threaded into the detector so the absence/drift
+          // remediation names the RIGHT installer per class (Greptile review on
+          // mmnto-ai/totem#2082): git hooks → `totem hook install`; the static
+          // SessionStart hooks → `totem init`.
+          let artifactLabel = 'artifact';
+          let installCommand = 'totem init';
           if (c.id === 'git-hooks') {
             generatedArtifacts = gitHookArtifactsFor(gitRoot, hookTier, fallbackCmd, hookBuilders);
+            artifactLabel = 'git hook';
+            installCommand = 'totem hook install';
           } else if (c.id === 'session-start-orientation') {
             generatedArtifacts = sessionStartArtifactsFor(gitRoot, sessionStartTemplates);
+            artifactLabel = 'SessionStart hook';
+            installCommand = 'totem init';
           }
           if (generatedArtifacts !== undefined) {
             // A drift on any artifact tags the contract id at most ONCE so the --strict
@@ -529,6 +539,8 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
                 canonicalContent: a.canonicalContent,
                 consumerPath: a.consumerPath,
                 ownershipMarker: a.ownershipMarker,
+                artifactLabel,
+                installCommand,
                 ...(a.endMarker !== undefined ? { endMarker: a.endMarker } : {}),
                 ...(binary !== undefined ? { binary } : {}),
               });

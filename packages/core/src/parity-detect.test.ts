@@ -881,6 +881,40 @@ describe('detectGeneratedArtifactContract', () => {
     expect(v.status).toBe('skip');
     expect(v.status).not.toBe('warn');
   });
+
+  it('SessionStart absence + drift copy names the artifact + totem init, never the git-hook installer (Greptile #2082)', () => {
+    // Absent → skip copy + remediation must NOT point at the git-hook installer.
+    const absent = detectGeneratedArtifactContract(
+      genCtx({
+        consumerPath: path.join(tmpRoot, '.claude/hooks/SessionStart.cjs'),
+        ownershipMarker: SESSION_MARKER,
+        artifactLabel: 'SessionStart hook',
+        installCommand: 'totem init',
+      }),
+    );
+    expect(absent.status).toBe('skip');
+    expect(absent.message).toContain('SessionStart hook');
+    expect(absent.remediation).toContain('totem init');
+    expect(absent.remediation).not.toMatch(/totem hook install/i);
+
+    // Drifted owned → warn remediation points at totem init, not totem hook install.
+    const consumerPath = writeArtifact(
+      '.gemini/hooks/SessionStart.js',
+      ownedSessionStart('old();'),
+    );
+    const drifted = detectGeneratedArtifactContract(
+      genCtx({
+        consumerPath,
+        canonicalContent: ownedSessionStart('new();'),
+        ownershipMarker: SESSION_MARKER,
+        artifactLabel: 'SessionStart hook',
+        installCommand: 'totem init',
+      }),
+    );
+    expect(drifted.status).toBe('warn');
+    expect(drifted.remediation).toContain('totem init');
+    expect(drifted.remediation).not.toMatch(/totem hook install/i);
+  });
 });
 
 // ─── detectManualAttestationContract (mmnto-ai/totem#2073 manual-attestation slice) ──
