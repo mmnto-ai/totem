@@ -839,4 +839,21 @@ describe('doctorParityCliCommand — onlyWhenConfigured fold (#2085)', () => {
       doctorParityCliCommand({ strict: true, onlyWhenConfigured: true, cwdForTest: tmpDir }),
     ).resolves.toBeUndefined();
   });
+
+  it('RENDERS (does not no-op) under the fold when configured but the manifest file is missing', async () => {
+    // The fold gates on the field being SET (configured), not on the file loading —
+    // a configured-but-broken manifest must surface its WARN, never silently no-op.
+    // Guards the exact refactor hazard of flipping the early-return guard to
+    // `onlyWhenConfigured && configured` (which would swallow broken-manifest output).
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: missing.yaml\n`);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(
+        doctorParityCliCommand({ strict: true, onlyWhenConfigured: true, cwdForTest: tmpDir }),
+      ).resolves.toBeUndefined(); // not-found is a non-blocking WARN → renders, no throw
+      expect(errSpy).toHaveBeenCalled();
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
 });
