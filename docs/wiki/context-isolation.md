@@ -51,4 +51,4 @@ When investigating architectural rules or querying past lessons via the `search_
   Never query the global knowledge base without a boundary unless explicitly asked.
 ```
 
-By enforcing this reflex, sub-agents are mathematically starved of irrelevant context, guaranteeing strict architectural isolation per layer.
+By enforcing this reflex, sub-agents are scoped to the context relevant to their layer; isolation still depends on correct routing and agent behavior.

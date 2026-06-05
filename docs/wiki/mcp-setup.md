@@ -1,6 +1,6 @@
 # MCP Setup
 
-The Model Context Protocol (MCP) server provides your AI agent with persistent project memory. It allows tools like Claude Code, Cursor, and Gemini to `search_knowledge` before writing code and `add_lesson` when discovering traps.
+The Model Context Protocol (MCP) server provides your AI agent with a queryable local project index. It allows tools like Claude Code, Cursor, and Gemini to `search_knowledge` before writing code and `add_lesson` when discovering traps.
 
 ## Configuration
 
