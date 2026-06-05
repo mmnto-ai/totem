@@ -55,4 +55,4 @@ This works with any MCP-compatible agent: Claude, Gemini, Cursor, Windsurf. See 
 
 ## The Tradeoff
 
-Context injection and the MCP knowledge base improve agent behavior but cannot guarantee it. The pre-push lint gate guarantees compliance but only catches violations at push time. Used together, the agent gets the context to write correct code and the tripwire to catch it when it doesn't.
+Context injection and the MCP knowledge base improve agent behavior but cannot guarantee it. The pre-push lint gate guarantees configured lint checks run before push; it catches modeled violations at push time. Used together, the agent gets the context to write correct code and the tripwire to catch it when it doesn't.
