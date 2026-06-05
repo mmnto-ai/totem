@@ -81,6 +81,15 @@ export const BARE_REF_REGEX_SOURCE = '(?<!\\b[\\w-]+/[\\w-]+)#(\\d+)(?![-\\w])';
 
 // --- Gemini CLI hook templates ---
 
+/**
+ * The ownership/presence marker that opens BOTH whole-file SessionStart hook
+ * templates (`GEMINI_SESSION_START` + `CLAUDE_SESSION_START`). The
+ * `totem doctor --parity` orientation slice (mmnto-ai/totem#2073) keys
+ * presence-detection + owned-file classification on this marker; a test asserts
+ * both templates start with it, so the constant stays the single source of truth.
+ */
+export const SESSION_START_MARKER = '// [totem] auto-generated';
+
 export const GEMINI_SESSION_START = `// [totem] auto-generated — Gemini CLI SessionStart hook
 // Runs \`totem describe\` at the start of every Gemini CLI session to emit
 // the project-orientation banner ("[Describe] Project: ... Lessons: N

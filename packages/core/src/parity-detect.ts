@@ -1009,16 +1009,26 @@ function extractInclusiveRegion(content: string, start: string, end: string): st
 }
 
 /**
- * Whether a hook is a totem-OWNED whole file (generated verbatim by `build*Hook`)
- * rather than a totem block APPENDED into a pre-existing user hook. A generated
- * hook is `#!/bin/sh\n# <marker> …`, so the only content before the marker is the
- * shebang line plus the start of its comment; an appended hook carries the user's
- * prior hook content there.
+ * Whether a file is a totem-OWNED whole file (generated verbatim by a `build*`
+ * template) rather than a totem block APPENDED into a pre-existing user file. Two
+ * generated shapes are owned:
+ *   - **whole-file marker-at-start** — the ownership marker OPENS the file, so
+ *     nothing meaningful precedes it. The JS SessionStart hooks (`// [totem]
+ *     auto-generated …` at index 0, no shebang — mmnto-ai/totem#2073 orientation
+ *     slice) are this shape.
+ *   - **shell shebang + comment** — a shell hook generated as `#!/bin/sh\n#
+ *     <marker> …`, so the only content before the marker is the shebang line plus
+ *     the start of its comment (the git-hooks slice).
+ * An APPENDED block carries the user's prior content before the marker → NOT owned
+ * (the detector degrades it to `unknown`, claim-class-tight).
  */
 function isOwnedGeneratedFile(content: string, marker: string): boolean {
   const idx = content.indexOf(marker);
   if (idx === -1) return false;
-  return /^#![^\n]*\n#[ \t]*$/.test(content.slice(0, idx));
+  const before = content.slice(0, idx);
+  // Marker opens the file (whole-file JS templates), OR only a shebang + comment-
+  // start precedes it (shell hooks). User content before the marker → appended.
+  return before.trim().length === 0 || /^#![^\n]*\n#[ \t]*$/.test(before);
 }
 
 /**

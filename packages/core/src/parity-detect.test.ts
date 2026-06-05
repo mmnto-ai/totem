@@ -812,6 +812,75 @@ describe('detectGeneratedArtifactContract', () => {
     expect(v.status).not.toBe('warn');
     expect(v.message).toMatch(/canonical hook region|unprovable/i);
   });
+
+  // ── whole-file JS SessionStart hooks (mmnto-ai/totem#2073 orientation slice) ──
+  // The `// [totem] auto-generated` marker OPENS the file (no shell shebang), so
+  // isOwnedGeneratedFile must treat it as OWNED — a drifted JS hook is `warn`, not
+  // `unknown`. This exercises the generalization the orientation slice adds.
+  const SESSION_MARKER = '// [totem] auto-generated';
+  function ownedSessionStart(body: string): string {
+    return `${SESSION_MARKER} — SessionStart hook\nconst { execSync } = require('child_process');\n${body}\n`;
+  }
+
+  it('pass — owned whole-file JS SessionStart equals canonical (marker opens the file, no shebang)', () => {
+    const consumerPath = writeArtifact(
+      '.claude/hooks/SessionStart.cjs',
+      ownedSessionStart('run();'),
+    );
+    const v = detectGeneratedArtifactContract(
+      genCtx({
+        consumerPath,
+        canonicalContent: ownedSessionStart('run();'),
+        ownershipMarker: SESSION_MARKER,
+      }),
+    );
+    expect(v.status).toBe('pass');
+  });
+
+  it('warn — a drifted owned JS SessionStart is drift, NOT unknown (the orientation-slice keystone)', () => {
+    const consumerPath = writeArtifact(
+      '.gemini/hooks/SessionStart.js',
+      ownedSessionStart('runOld();'),
+    );
+    const v = detectGeneratedArtifactContract(
+      genCtx({
+        consumerPath,
+        canonicalContent: ownedSessionStart('runNew();'),
+        ownershipMarker: SESSION_MARKER,
+      }),
+    );
+    expect(v.status).toBe('warn');
+    expect(v.status).not.toBe('unknown');
+    expect(v.message).toMatch(/drift/i);
+  });
+
+  it('unknown — a JS file with USER content before the marker is appended, not owned (preserved)', () => {
+    const consumerPath = writeArtifact(
+      '.claude/hooks/SessionStart.cjs',
+      `// my own preamble\nconsole.log('user');\n${ownedSessionStart('run();')}`,
+    );
+    const v = detectGeneratedArtifactContract(
+      genCtx({
+        consumerPath,
+        canonicalContent: ownedSessionStart('run();'),
+        ownershipMarker: SESSION_MARKER,
+      }),
+    );
+    expect(v.status).toBe('unknown');
+    expect(v.status).not.toBe('warn');
+  });
+
+  it('skip — a present JS file with no totem marker is a user hook (presence semantics, not drift)', () => {
+    const consumerPath = writeArtifact(
+      '.gemini/hooks/SessionStart.js',
+      `console.log('my own session start');\n`,
+    );
+    const v = detectGeneratedArtifactContract(
+      genCtx({ consumerPath, ownershipMarker: SESSION_MARKER }),
+    );
+    expect(v.status).toBe('skip');
+    expect(v.status).not.toBe('warn');
+  });
 });
 
 // ─── detectManualAttestationContract (mmnto-ai/totem#2073 manual-attestation slice) ──
