@@ -69,6 +69,15 @@ export interface ParityCheckResult {
   results: ParityLine[];
   /** Contract ids whose `warn` is `--strict`-promotable (blocking + drift). */
   blockingDriftIds: string[];
+  /**
+   * Whether a repo-local `orient.parityManifest` field was configured (i.e.
+   * `configValue !== undefined` after the global-leak guard). NOT whether the
+   * manifest file loaded — a configured-but-broken manifest is `configured: true`
+   * so the `--strict` fold surfaces the error instead of silently no-op'ing.
+   * Lets the CLI edge fold parity into `--strict` only for repos that opted in
+   * (mmnto-ai/totem#2085, mmnto-ai/totem-strategy#545 Half 2).
+   */
+  configured: boolean;
 }
 
 // ─── Mechanical artifact registry (CLI-side) ────────────
@@ -356,40 +365,57 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
     configValue = undefined;
   }
 
+  // Single source of truth for "is parity configured here" — derived from the
+  // SAME resolution (incl. the isGlobalConfigPath guard above) so the CLI edge
+  // never re-derives config and never leaks a global manifest into the fold.
+  const configured = configValue !== undefined;
+
   const result = loadParityManifest(configValue, manifestRoot);
 
   switch (result.status) {
     case 'not-configured':
       // Honest-absent: exactly one skip line. Not a failure.
-      return single({
-        name: CHECK_NAME,
-        status: 'skip',
-        message: 'no parity manifest configured',
-      });
+      return single(
+        {
+          name: CHECK_NAME,
+          status: 'skip',
+          message: 'no parity manifest configured',
+        },
+        configured,
+      );
 
     case 'not-found':
-      return single({
-        name: CHECK_NAME,
-        status: 'warn',
-        message: `parity manifest not found at ${rel(cwd, result.path)}`,
-        remediation: 'Fix orient.parityManifest in your totem config to point at the manifest.',
-      });
+      return single(
+        {
+          name: CHECK_NAME,
+          status: 'warn',
+          message: `parity manifest not found at ${rel(cwd, result.path)}`,
+          remediation: 'Fix orient.parityManifest in your totem config to point at the manifest.',
+        },
+        configured,
+      );
 
     case 'unparseable':
-      return single({
-        name: CHECK_NAME,
-        status: 'warn',
-        message: `parity manifest unreadable at ${rel(cwd, result.path)}: ${result.reason}`,
-        remediation: 'Fix the manifest YAML / schema, then re-run totem doctor --parity.',
-      });
+      return single(
+        {
+          name: CHECK_NAME,
+          status: 'warn',
+          message: `parity manifest unreadable at ${rel(cwd, result.path)}: ${result.reason}`,
+          remediation: 'Fix the manifest YAML / schema, then re-run totem doctor --parity.',
+        },
+        configured,
+      );
 
     case 'unsupported-schema':
-      return single({
-        name: CHECK_NAME,
-        status: 'warn',
-        message: `parity manifest schema v${result.schemaVersion} unsupported (this doctor supports v${SUPPORTED_PARITY_SCHEMA_VERSION})`,
-        remediation: 'Upgrade @mmnto/cli or align the manifest schema-version.',
-      });
+      return single(
+        {
+          name: CHECK_NAME,
+          status: 'warn',
+          message: `parity manifest schema v${result.schemaVersion} unsupported (this doctor supports v${SUPPORTED_PARITY_SCHEMA_VERSION})`,
+          remediation: 'Upgrade @mmnto/cli or align the manifest schema-version.',
+        },
+        configured,
+      );
 
     case 'ok': {
       const { contracts } = result.manifest;
@@ -605,14 +631,14 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         ];
       });
 
-      return { results: [summary, ...perContract], blockingDriftIds };
+      return { results: [summary, ...perContract], blockingDriftIds, configured };
     }
   }
 }
 
 /** Wrap a single summary line in the `ParityCheckResult` shape (no blocking ids). */
-function single(result: ParityLine): ParityCheckResult {
-  return { results: [result], blockingDriftIds: [] };
+function single(result: ParityLine, configured: boolean): ParityCheckResult {
+  return { results: [result], blockingDriftIds: [], configured };
 }
 
 /** Map a core `ParityContractVerdict` to a `ParityLine` keyed by the contract id. */
@@ -673,6 +699,15 @@ export interface ParityCliOptions {
    * contract's `blocking` flag on a `warn`, not the flag alone, gates the exit.
    */
   strict?: boolean;
+  /**
+   * Folded-into-`--strict` mode (mmnto-ai/totem#2085, mmnto-ai/totem-strategy#545
+   * Half 2): when set, the command no-ops (renders nothing, throws nothing, exits 0)
+   * if no repo-local `orient.parityManifest` is configured — so `doctor --strict`
+   * exercises parity for opted-in repos while staying byte-identical for non-adopters
+   * (satur8d's zero-churn condition). Default (omitted) preserves the standalone
+   * `doctor --parity` behavior, which still renders the honest-absent SKIP line.
+   */
+  onlyWhenConfigured?: boolean;
   /** Test seam — production callers omit and the command uses `process.cwd()`. */
   cwdForTest?: string;
 }
@@ -704,7 +739,13 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
       .trim();
 
   const cwd = options.cwdForTest ?? process.cwd();
-  const { results, blockingDriftIds } = await checkParity(cwd);
+  const { results, blockingDriftIds, configured } = await checkParity(cwd);
+
+  // Folded-into-`--strict` no-op: when this run is the strict fold (not an explicit
+  // `doctor --parity`) and no repo-local manifest is configured, render and gate
+  // nothing — a non-adopter's `doctor --strict` stays byte-identical to before the
+  // fold. Explicit `--parity` (onlyWhenConfigured omitted) still shows the SKIP.
+  if (options.onlyWhenConfigured && !configured) return;
 
   // Under --strict, a blocking contract's drift `warn` is rendered + gated as a
   // FAIL. A contract's drift can render across MULTIPLE artifact lines
