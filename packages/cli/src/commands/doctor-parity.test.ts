@@ -18,7 +18,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { checkParity, doctorParityCliCommand } from './doctor-parity.js';
@@ -755,5 +755,88 @@ describe('checkParity — session-start-orientation wiring', () => {
     expect(blockingDriftIds).toContain('session-start-orientation');
 
     await expect(doctorParityCliCommand({ strict: true, cwdForTest: tmpDir })).rejects.toThrow();
+  });
+});
+
+// ─── S0: --strict parity fold (#2085, mmnto-ai/totem-strategy#545 Half 2) ──
+
+describe('checkParity — configured flag (#2085)', () => {
+  it('configured: false when no orient.parityManifest is set (honest-absent)', async () => {
+    writeConfig(BASE_CONFIG);
+    const { configured } = await checkParity(tmpDir);
+    expect(configured).toBe(false);
+  });
+
+  it('configured: false for a config-less repo (a global profile never leaks in)', async () => {
+    // No totem config at all → resolveConfigPath resolves the GLOBAL profile,
+    // which isGlobalConfigPath excludes — so `configured` stays false and the
+    // strict fold no-ops (a global orient.parityManifest must not leak into the gate).
+    const { configured } = await checkParity(tmpDir);
+    expect(configured).toBe(false);
+  });
+
+  it('configured: true when the field is set even if the manifest file is missing', async () => {
+    // "Configured" means the field is present, NOT that the file loaded — a broken
+    // manifest must still run under --strict to surface the error, not silently no-op.
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: nope.yaml\n`);
+    const { configured } = await checkParity(tmpDir);
+    expect(configured).toBe(true);
+  });
+
+  it('configured: true on a valid configured manifest', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', VALID_MANIFEST_YAML);
+    const { configured } = await checkParity(tmpDir);
+    expect(configured).toBe(true);
+  });
+});
+
+describe('doctorParityCliCommand — onlyWhenConfigured fold (#2085)', () => {
+  it('no-op (renders nothing, no throw) when unconfigured under the fold', async () => {
+    writeConfig(BASE_CONFIG); // no orient.parityManifest
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(
+        doctorParityCliCommand({ strict: true, onlyWhenConfigured: true, cwdForTest: tmpDir }),
+      ).resolves.toBeUndefined();
+      // Byte-identical to a --strict run that never touched parity (satur8d's
+      // zero-churn condition): zero parity lines for a non-adopter repo.
+      expect(errSpy).not.toHaveBeenCalled();
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('standalone (no onlyWhenConfigured) STILL renders the honest-absent SKIP', async () => {
+    writeConfig(BASE_CONFIG);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await doctorParityCliCommand({ strict: true, cwdForTest: tmpDir });
+      // onlyWhenConfigured defaults off → the explicit `doctor --parity` SKIP line
+      // is unchanged for the "I asked for parity" case.
+      expect(errSpy).toHaveBeenCalled();
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('runs + gates (throws) under the fold when a configured blocking contract drifts', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', BLOCKING_DEPS_MANIFEST_YAML);
+    writeFloorPackage('totem', '@mmnto/totem', '1.53.3');
+    writeConsumerDeps({ '@mmnto/totem': '^1.40.0' });
+    writeInstalled('@mmnto/totem', '1.40.0');
+
+    await expect(
+      doctorParityCliCommand({ strict: true, onlyWhenConfigured: true, cwdForTest: tmpDir }),
+    ).rejects.toThrow(/PARITY_DRIFT_DETECTED|blocking drift/i);
+  });
+
+  it('runs (no throw) under the fold on a configured manifest with no blocking drift', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', VALID_MANIFEST_YAML);
+    await expect(
+      doctorParityCliCommand({ strict: true, onlyWhenConfigured: true, cwdForTest: tmpDir }),
+    ).resolves.toBeUndefined();
   });
 });

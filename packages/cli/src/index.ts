@@ -1098,6 +1098,18 @@ program
         if (opts.strict && results.some((r) => r.status === 'fail')) {
           process.exitCode = 1;
         }
+        // S0 (mmnto-ai/totem#2085, mmnto-ai/totem-strategy#545 Half 2): fold parity
+        // into the strict suite. When a repo-local orient.parityManifest is configured,
+        // `doctor --strict` also exercises the parity sensor — so consumer CI (which
+        // runs `--strict`, not `--parity --strict`) is no longer green-by-not-checking.
+        // `onlyWhenConfigured` makes it a no-op (no output, no throw) for repos that
+        // never configured a manifest — zero churn for non-adopters. Per ADR-109 /
+        // Tenet 13 the throw-gate lives here at the CLI edge, not inside the composable
+        // doctorCommand. The `--parity` branch returned above, so this never double-runs.
+        if (opts.strict) {
+          const { doctorParityCliCommand } = await import('./commands/doctor-parity.js');
+          await doctorParityCliCommand({ strict: true, onlyWhenConfigured: true });
+        }
         // totem-context: handleError() returns `never` (calls process.exit), so this catch terminates the process rather than silently swallowing — matches the CLI-entrypoint pattern used by every other commander action in this file.
       } catch (err) {
         handleError(err);
