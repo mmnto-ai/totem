@@ -99,6 +99,10 @@ program
     '--gates <list>',
     'Install action-gate PreToolUse hooks: a comma-list of gate names (e.g. freeze-check) or "all"',
   )
+  .option(
+    '--doctrine',
+    'Wire orient.parityManifest to the installed @mmnto/strategy-doctrine pin (no-op until the pin is added)',
+  )
   .action(
     async (options: {
       bare?: boolean;
@@ -107,6 +111,7 @@ program
       global?: boolean;
       forceSkillRefresh?: boolean;
       gates?: string;
+      doctrine?: boolean;
     }) => {
       try {
         await initCommand({
@@ -116,6 +121,7 @@ program
           global: options.global,
           forceSkillRefresh: options.forceSkillRefresh,
           gates: options.gates,
+          doctrine: options.doctrine,
         });
       } catch (err) {
         handleError(err);

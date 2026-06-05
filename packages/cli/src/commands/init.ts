@@ -669,9 +669,71 @@ export async function initCommand(options?: {
    *  the literal `all`. Routes through the SAME `installGates` path the
    *  `gate install` verb uses — no second copy of the merge logic. */
   gates?: string;
+  /** Wire `orient.parityManifest` to the installed doctrine pin and exit
+   *  (mmnto-ai/totem#2088, Proposal 292 S1). Non-interactive; honest-absent
+   *  when the `@mmnto/strategy-doctrine` pin is not installed. */
+  doctrine?: boolean;
   /** Override home directory for testing. */
   _homeDir?: string;
 }): Promise<void> {
+  // ─── Doctrine pin wiring (mmnto-ai/totem#2088, Proposal 292 S1) ───
+  // Self-contained non-interactive path: point orient.parityManifest at the
+  // installed @mmnto/strategy-doctrine pin so `totem doctor --parity` stops
+  // honest-absent-SKIPping. Mirrors the --global early-return shape.
+  if (options?.doctrine) {
+    const { log } = await import('../ui.js');
+    const { TotemConfigError } = await import('@mmnto/totem');
+    const { DOCTRINE_PIN_PACKAGE, wireDoctrineManifest } = await import('./init-doctrine.js');
+
+    const outcome = await wireDoctrineManifest(process.cwd(), options._homeDir);
+    switch (outcome.kind) {
+      case 'pin-absent':
+        log.warn(
+          'Totem',
+          `Doctrine pin ${DOCTRINE_PIN_PACKAGE} is not installed (looked for ${outcome.manifestPath}).`,
+        );
+        log.info(
+          'Totem',
+          'Add it as a dependency, then re-run `totem init --doctrine`. Until then `totem doctor --parity` stays an honest skip.',
+        );
+        return;
+      case 'no-config':
+        throw new TotemConfigError(
+          'No Totem configuration found in this repo.',
+          'Run `totem init` first, then `totem init --doctrine`.',
+          'CONFIG_MISSING',
+        );
+      case 'global-only':
+        throw new TotemConfigError(
+          'Only a global ~/.totem profile was found — the parity manifest is a per-repo setting.',
+          'Run `totem init` in this repo first, then `totem init --doctrine`.',
+          'CONFIG_MISSING',
+        );
+      case 'already-set':
+        log.info(
+          'Totem',
+          `orient.parityManifest already configured in ${outcome.configPath}. Nothing to do.`,
+        );
+        return;
+      case 'manual': {
+        const where =
+          outcome.reason === 'orient-exists'
+            ? 'You already have an `orient` block — add this line inside it:'
+            : 'Could not safely auto-edit this config — add this manually:';
+        log.warn('Totem', `Could not auto-wire orient.parityManifest in ${outcome.configPath}.`);
+        log.info('Totem', `${where}\n${outcome.snippet}`);
+        return;
+      }
+      case 'written':
+        log.success(
+          'Totem',
+          `Wired orient.parityManifest → ${outcome.manifestPath} in ${outcome.configPath}.`,
+        );
+        log.dim('Totem', 'Run `totem doctor --parity` to sense cohort drift.');
+        return;
+    }
+  }
+
   // ─── Global profile shortcut ───────────────────────
   // totem-context: fs and path are static imports at top of file (lines 1-2)
   if (options?.global) {
