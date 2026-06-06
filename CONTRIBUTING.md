@@ -60,6 +60,13 @@ git clone https://github.com/mmnto-ai/totem-strategy.git
 
 This gives you the full surface without the submodule ceremony. If the strategy repo isn't present, the affected commands degrade with actionable error messages — they don't silently fail. Run `totem doctor` to see which surfaces are affected.
 
+## The `@mmnto/strategy-doctrine` Optional Pin
+
+The root `package.json` carries `@mmnto/strategy-doctrine` in `optionalDependencies`. It is a **restricted npm package** (cohort-internal doctrine snapshot — the data source for `totem doctor --parity`); installing it requires npm read-auth that external contributors don't have. This is expected and non-blocking:
+
+- **`pnpm install` on a fresh clone works without auth** — pnpm skips the optional pin gracefully, and `totem doctor --parity` degrades to a non-blocking WARN.
+- **Lockfile-mutating commands** (`pnpm add <pkg>`, `pnpm update`, regenerating `pnpm-lock.yaml`) fail without auth: even though the pin is optional, pnpm must still _resolve_ it into the lockfile, and the restricted registry metadata is not readable anonymously. If your contribution needs a dependency change, edit `package.json`, leave `pnpm-lock.yaml` untouched, and say so in the PR — a maintainer will regenerate the lockfile.
+
 ## Contributor License Agreement (CLA)
 
 All contributors must sign our [Contributor License Agreement](.github/CLA.md) before their first Pull Request can be merged. This is a one-time requirement.

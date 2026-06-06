@@ -71,7 +71,14 @@ const config: TotemConfig = {
   // mmnto-ai/totem#2044 (WS2 PR-3): wire the GH Project board into `totem orient`
   // so its board / coherence-drift sections derive instead of rendering
   // honest-absent. `TOTEM_ORIENT_PROJECT` env still overrides at runtime.
-  orient: { projectNumber: ORIENT_PROJECT_NUMBER },
+  // mmnto-ai/totem#2093 (Prop 292 S1): parityManifest resolves through the
+  // `@mmnto/strategy-doctrine` optionalDependencies pin (restricted pkg; npm
+  // read-auth required). Unauthed installs skip the optional pin and
+  // `doctor --parity` degrades to a non-blocking WARN — expected in public CI.
+  orient: {
+    projectNumber: ORIENT_PROJECT_NUMBER,
+    parityManifest: 'node_modules/@mmnto/strategy-doctrine/parity-manifest.yaml',
+  },
 
   // mmnto-ai/totem#1710: the strategy linkedIndex is auto-injected by the
   // MCP context init via `resolveStrategyRoot`. Listing it here is no

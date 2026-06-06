@@ -32,5 +32,8 @@
     "turbo": "^2.9.14",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.59.4"
+  },
+  "optionalDependencies": {
+    "@mmnto/strategy-doctrine": "0.1.1"
   }
 }
