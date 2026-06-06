@@ -324,6 +324,18 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
     );
   });
 
+  it('discloses only --base when --branch was not passed (Greptile on #2098)', async () => {
+    mockGetGitBranchDiff.mockReturnValue(diffFor('a.ts'));
+
+    await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Lint');
+
+    const disclosure = mockLog.info.mock.calls.find((c) => String(c[1]).startsWith('Diff source:'));
+    expect(disclosure).toBeDefined();
+    expect(disclosure![1]).toBe(
+      'Diff source: branch-vs-base (--base; origin/develop...HEAD, else local develop)',
+    );
+  });
+
   it('--branch + --staged throws FLAG_CONFLICT before any git function is invoked', async () => {
     await expect(
       getDiffForReview({ branch: true, staged: true }, config, '/tmp', 'Lint'),
@@ -352,6 +364,16 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
     ).rejects.toThrow(/--base.*--staged/);
 
     expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+  });
+
+  it('--base + --diff throws a conflict error before any git work (Greptile on #2098)', async () => {
+    await expect(
+      getDiffForReview({ base: 'main', diff: 'HEAD^..HEAD' }, config, '/tmp', 'Lint'),
+    ).rejects.toThrow(/--base.*--diff/);
+
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+    expect(mockGetGitDiffRange).not.toHaveBeenCalled();
+    expect(mockGetDefaultBranch).not.toHaveBeenCalled();
   });
 
   it('rejects a --base value with a leading dash (flag-injection guard)', async () => {

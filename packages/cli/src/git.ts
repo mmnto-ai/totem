@@ -184,11 +184,14 @@ export async function getDiffForReview(
   // error names the conflicting flags instead of silently preferring one
   // scope (the implicit-scope dishonesty mmnto-ai/totem#2055 exists to kill).
   const forcedBranchScope = options.branch === true || options.base !== undefined;
+  // Names the flag(s) the user actually passed — shared by the conflict error
+  // AND the diff-source disclosure line so neither cites a flag that wasn't
+  // given (a `--base`-only run must not log `--branch` — Greptile on #2098).
+  const forcingFlags = [
+    ...(options.branch ? ['--branch'] : []),
+    ...(options.base !== undefined ? ['--base'] : []),
+  ].join('/');
   if (forcedBranchScope) {
-    const forcingFlags = [
-      ...(options.branch ? ['--branch'] : []),
-      ...(options.base !== undefined ? ['--base'] : []),
-    ].join('/');
     const conflicting = [
       ...(options.staged ? ['--staged'] : []),
       ...(options.diff !== undefined ? ['--diff'] : []),
@@ -235,7 +238,7 @@ export async function getDiffForReview(
     const safeBase = sanitizeForTerminal(base);
     log.info(
       tag,
-      `Diff source: branch-vs-base (--branch; origin/${safeBase}...HEAD, else local ${safeBase})`,
+      `Diff source: branch-vs-base (${forcingFlags}; origin/${safeBase}...HEAD, else local ${safeBase})`,
     );
     diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
     source = 'branch-vs-base';
