@@ -535,6 +535,17 @@ export interface ShieldOptions {
   staged?: boolean;
   /** Explicit ref range for `git diff` (mmnto-ai/totem#1717). Bypasses implicit fallback chain. */
   diff?: string;
+  /**
+   * Force the branch-vs-base (push-gate) diff scope (mmnto-ai/totem#2091).
+   * Mutually exclusive with `staged` and `diff`.
+   */
+  branch?: boolean;
+  /**
+   * Explicit base branch name for the forced branch-vs-base scope
+   * (mmnto-ai/totem#2091). Implies `branch`; resolved via `getGitBranchDiff`'s
+   * origin-preference logic (mmnto-ai/totem#2054).
+   */
+  base?: string;
   mode?: 'standard' | 'structural';
   learn?: boolean;
   yes?: boolean;

@@ -67,13 +67,28 @@ vi.mock('@mmnto/totem', async () => {
   };
 });
 
+// Mock the ui logger so the #2090/#2091 tests can assert on the exact
+// disclosure / warning lines getDiffForReview emits.
+vi.mock('./ui.js', () => ({
+  log: {
+    info: vi.fn(),
+    success: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    dim: vi.fn(),
+  },
+}));
+
 // Must import after mock setup — vitest hoists vi.mock.
 // Aliased so the imports don't shadow the top-of-file re-export checks.
 const totemMod = await import('@mmnto/totem');
+const uiMod = await import('./ui.js');
 const mockSafeExec = vi.mocked(totemMod.safeExec);
 const mockGetGitDiff = vi.mocked(totemMod.getGitDiff);
 const mockGetGitBranchDiff = vi.mocked(totemMod.getGitBranchDiff);
 const mockGetGitDiffRange = vi.mocked(totemMod.getGitDiffRange);
+const mockGetDefaultBranch = vi.mocked(totemMod.getDefaultBranch);
+const mockLog = vi.mocked(uiMod.log);
 
 describe('isAncestor', () => {
   it('returns true for direct ancestor', () => {
@@ -242,5 +257,291 @@ describe('getDiffForReview --diff (#1717)', () => {
     expect(result).not.toBeNull();
     expect(result!.source).toBe('staged');
     expect(mockGetGitDiff).toHaveBeenCalledWith('staged', '/tmp');
+  });
+});
+
+// ─── getDiffForReview --branch/--base (#2091) ────────────
+
+/** Build a minimal unified diff touching the given files. */
+function diffFor(...files: string[]): string {
+  const lines = files.flatMap((f) => [
+    `diff --git a/${f} b/${f}`,
+    `--- a/${f}`,
+    `+++ b/${f}`,
+    '@@ -1 +1 @@',
+    '+x',
+  ]);
+  return `${lines.join('\n')}\n`;
+}
+
+describe('getDiffForReview --branch/--base (#2091)', () => {
+  const config = { ignorePatterns: [] as string[] };
+
+  beforeEach(() => {
+    mockGetGitDiffRange.mockReset();
+    mockGetGitDiff.mockReset();
+    mockGetGitBranchDiff.mockReset();
+    mockGetDefaultBranch.mockClear();
+    mockLog.info.mockClear();
+    mockLog.warn.mockClear();
+  });
+
+  it('--base forces branch scope even with a dirty working tree', async () => {
+    // Dirty tree: getGitDiff WOULD return uncommitted content — the forced
+    // path must never consult it, so none of it can enter the diff.
+    mockGetGitDiff.mockReturnValue(diffFor('dirty.ts'));
+    mockGetGitBranchDiff.mockReturnValue(diffFor('committed.ts'));
+
+    const result = await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Lint');
+
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe('branch-vs-base');
+    expect(result!.changedFiles).toEqual(['committed.ts']);
+    expect(mockGetGitDiff).not.toHaveBeenCalled();
+    expect(mockGetGitBranchDiff).toHaveBeenCalledWith('/tmp', 'develop');
+  });
+
+  it('--branch resolves the default branch and reports source: branch-vs-base', async () => {
+    mockGetGitBranchDiff.mockReturnValue(diffFor('a.ts'));
+
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe('branch-vs-base');
+    expect(mockGetGitBranchDiff).toHaveBeenCalledWith('/tmp', 'main');
+    expect(mockGetGitDiff).not.toHaveBeenCalled();
+  });
+
+  it('logs the forced diff-source disclosure line marking the forcing flag', async () => {
+    mockGetGitBranchDiff.mockReturnValue(diffFor('a.ts'));
+
+    await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    const disclosure = mockLog.info.mock.calls.find((c) => String(c[1]).startsWith('Diff source:'));
+    expect(disclosure).toBeDefined();
+    expect(disclosure![1]).toBe(
+      'Diff source: branch-vs-base (--branch; origin/main...HEAD, else local main)',
+    );
+  });
+
+  it('discloses only --base when --branch was not passed (Greptile on #2098)', async () => {
+    mockGetGitBranchDiff.mockReturnValue(diffFor('a.ts'));
+
+    await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Lint');
+
+    const disclosure = mockLog.info.mock.calls.find((c) => String(c[1]).startsWith('Diff source:'));
+    expect(disclosure).toBeDefined();
+    expect(disclosure![1]).toBe(
+      'Diff source: branch-vs-base (--base; origin/develop...HEAD, else local develop)',
+    );
+  });
+
+  it('--branch + --staged throws FLAG_CONFLICT before any git function is invoked', async () => {
+    await expect(
+      getDiffForReview({ branch: true, staged: true }, config, '/tmp', 'Lint'),
+    ).rejects.toMatchObject({ code: 'FLAG_CONFLICT' });
+
+    expect(mockGetGitDiff).not.toHaveBeenCalled();
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+    expect(mockGetGitDiffRange).not.toHaveBeenCalled();
+    expect(mockGetDefaultBranch).not.toHaveBeenCalled();
+  });
+
+  it('--branch + --diff throws a conflict error naming both flags before any git work', async () => {
+    await expect(
+      getDiffForReview({ branch: true, diff: 'HEAD^..HEAD' }, config, '/tmp', 'Lint'),
+    ).rejects.toThrow(/--branch.*--diff/);
+
+    expect(mockGetGitDiff).not.toHaveBeenCalled();
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+    expect(mockGetGitDiffRange).not.toHaveBeenCalled();
+    expect(mockGetDefaultBranch).not.toHaveBeenCalled();
+  });
+
+  it('--base + --staged throws a conflict error (base implies branch scope)', async () => {
+    await expect(
+      getDiffForReview({ base: 'main', staged: true }, config, '/tmp', 'Lint'),
+    ).rejects.toThrow(/--base.*--staged/);
+
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+  });
+
+  it('--base + --diff throws a conflict error before any git work (Greptile on #2098)', async () => {
+    await expect(
+      getDiffForReview({ base: 'main', diff: 'HEAD^..HEAD' }, config, '/tmp', 'Lint'),
+    ).rejects.toThrow(/--base.*--diff/);
+
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+    expect(mockGetGitDiffRange).not.toHaveBeenCalled();
+    expect(mockGetDefaultBranch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a --base value with a leading dash (flag-injection guard)', async () => {
+    await expect(getDiffForReview({ base: '--no-index' }, config, '/tmp', 'Lint')).rejects.toThrow(
+      /git-flag injection/,
+    );
+
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty/whitespace --base value', async () => {
+    await expect(getDiffForReview({ base: '   ' }, config, '/tmp', 'Lint')).rejects.toThrow(
+      /Empty base branch/,
+    );
+
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+  });
+
+  it('returns null with the existing no-changes warn when the forced branch diff is empty', async () => {
+    mockGetGitBranchDiff.mockReturnValue('');
+
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    const warned = mockLog.warn.mock.calls.find((c) =>
+      String(c[1]).includes('No changes detected'),
+    );
+    expect(warned).toBeDefined();
+  });
+
+  it('lets getGitBranchDiff errors bubble on the forced path', async () => {
+    mockGetGitBranchDiff.mockImplementation(() => {
+      // totem-context: throw inside a vitest mock to prove the forced path does NOT swallow getGitBranchDiff failures (its TotemGitError carries the actionable fetch hint); sentinel message is test-only
+      throw new Error('fatal: bad revision');
+    });
+
+    await expect(getDiffForReview({ branch: true }, config, '/tmp', 'Lint')).rejects.toThrow(
+      /bad revision/,
+    );
+  });
+});
+
+// ─── getDiffForReview narrow-scope warning (#2090) ───────
+
+describe('getDiffForReview narrow-scope warning (#2090)', () => {
+  const config = { ignorePatterns: [] as string[] };
+  const NARROW_SCOPE_RE = /pre-push gate checks the full branch/;
+
+  function findNarrowScopeWarning() {
+    return mockLog.warn.mock.calls.find((c) => NARROW_SCOPE_RE.test(String(c[1])));
+  }
+
+  beforeEach(() => {
+    mockGetGitDiffRange.mockReset();
+    mockGetGitDiff.mockReset();
+    mockGetGitBranchDiff.mockReset();
+    mockGetDefaultBranch.mockClear();
+    mockLog.info.mockClear();
+    mockLog.warn.mockClear();
+  });
+
+  it('warns with the set difference — overlap files are not double-counted', async () => {
+    mockGetGitDiff.mockReturnValue(diffFor('A.ts', 'B.ts'));
+    mockGetGitBranchDiff.mockReturnValue(diffFor('B.ts', 'C.ts', 'D.ts'));
+
+    const result = await getDiffForReview({ warnNarrowScope: true }, config, '/tmp', 'Lint');
+
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe('uncommitted');
+    const warning = findNarrowScopeWarning();
+    expect(warning).toBeDefined();
+    // B.ts overlaps both scopes — N must be 2 (C.ts, D.ts), not 3.
+    expect(warning![1]).toBe(
+      'Linting uncommitted changes only — the pre-push gate checks the full branch (2 more file(s)). Lint a clean tree or use `totem lint --branch` to match.',
+    );
+  });
+
+  it('computes N from the post-ignore-filter branch diff (ignored files excluded)', async () => {
+    const cfgWithIgnores = { ignorePatterns: ['package-lock.json'] };
+    mockGetGitDiff.mockReturnValue(diffFor('A.ts'));
+    mockGetGitBranchDiff.mockReturnValue(diffFor('B.ts', 'package-lock.json'));
+
+    await getDiffForReview({ warnNarrowScope: true }, cfgWithIgnores, '/tmp', 'Lint');
+
+    const warning = findNarrowScopeWarning();
+    expect(warning).toBeDefined();
+    // Raw --name-only would say 2; the gate-honest post-filter count is 1.
+    expect(warning![1]).toContain('(1 more file(s))');
+  });
+
+  it('staged-mode warning opens with "Linting staged changes only"', async () => {
+    mockGetGitDiff.mockReturnValue(diffFor('A.ts'));
+    mockGetGitBranchDiff.mockReturnValue(diffFor('A.ts', 'B.ts'));
+
+    const result = await getDiffForReview(
+      { staged: true, warnNarrowScope: true },
+      config,
+      '/tmp',
+      'Lint',
+    );
+
+    expect(result!.source).toBe('staged');
+    const warning = findNarrowScopeWarning();
+    expect(warning).toBeDefined();
+    expect(String(warning![1]).startsWith('Linting staged changes only —')).toBe(true);
+  });
+
+  it('does not warn when the set difference is empty', async () => {
+    mockGetGitDiff.mockReturnValue(diffFor('A.ts', 'B.ts'));
+    mockGetGitBranchDiff.mockReturnValue(diffFor('A.ts'));
+
+    await getDiffForReview({ warnNarrowScope: true }, config, '/tmp', 'Lint');
+
+    expect(findNarrowScopeWarning()).toBeUndefined();
+  });
+
+  it('does not warn when the source resolves to branch-vs-base (auto-fallback)', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiff.mockReturnValue(diffFor('A.ts'));
+
+    const result = await getDiffForReview({ warnNarrowScope: true }, config, '/tmp', 'Lint');
+
+    expect(result!.source).toBe('branch-vs-base');
+    expect(findNarrowScopeWarning()).toBeUndefined();
+    // Branch diff was computed once for the scope itself — never a second
+    // time for the warning.
+    expect(mockGetGitBranchDiff).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not warn when the source is explicit-range', async () => {
+    mockGetGitDiffRange.mockReturnValue(diffFor('A.ts'));
+
+    const result = await getDiffForReview(
+      { diff: 'HEAD^..HEAD', warnNarrowScope: true },
+      config,
+      '/tmp',
+      'Lint',
+    );
+
+    expect(result!.source).toBe('explicit-range');
+    expect(findNarrowScopeWarning()).toBeUndefined();
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+  });
+
+  it('does no branch-diff work and never warns when warnNarrowScope is unset (review path)', async () => {
+    mockGetGitDiff.mockReturnValue(diffFor('A.ts'));
+
+    await getDiffForReview({}, config, '/tmp', 'Review');
+
+    expect(findNarrowScopeWarning()).toBeUndefined();
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+  });
+
+  it('a throw inside the warning computation leaves the result identical to the no-warning case', async () => {
+    mockGetGitDiff.mockReturnValue(diffFor('A.ts'));
+    mockGetGitBranchDiff.mockImplementation(() => {
+      // totem-context: throw inside a vitest mock simulating a git failure (detached HEAD / no base) to prove the advisory is non-fatal per the Tenet-4 silent-skip row; sentinel message is test-only
+      throw new Error('fatal: no merge base');
+    });
+
+    const withFailure = await getDiffForReview({ warnNarrowScope: true }, config, '/tmp', 'Lint');
+
+    mockGetGitBranchDiff.mockReset();
+    mockLog.warn.mockClear();
+    const baseline = await getDiffForReview({}, config, '/tmp', 'Lint');
+
+    expect(withFailure).toEqual(baseline);
+    expect(withFailure!.source).toBe('uncommitted');
+    expect(findNarrowScopeWarning()).toBeUndefined();
   });
 });

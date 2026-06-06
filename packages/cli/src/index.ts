@@ -285,6 +285,14 @@ program
   .option('--format <format>', 'Output format: text (default), sarif, or json')
   .option('--staged', 'Lint only staged changes (default: all uncommitted)')
   .option(
+    '--branch',
+    'Force the branch-vs-base diff scope the pre-push gate checks, regardless of working-tree state (mutually exclusive with --staged)',
+  )
+  .option(
+    '--base <ref>',
+    'Base branch for the push-gate scope (implies --branch; resolved as origin/<ref>...HEAD, else local <ref>)',
+  )
+  .option(
     '--pr-comment [number]',
     'Post a summary comment on a PR (auto-infers number in GitHub Actions)',
   )
@@ -301,6 +309,8 @@ program
       out?: string;
       format?: string;
       staged?: boolean;
+      branch?: boolean;
+      base?: string;
       prComment?: string | true;
       timeoutMode?: string;
       astParseMode?: string;
@@ -358,6 +368,14 @@ const reviewOptions = (cmd: Command) =>
       '--diff <ref-range>',
       'Review an explicit git diff range (e.g. "HEAD^..HEAD" or "main...feature"). Bypasses the implicit working-tree → staged → branch-vs-base fallback.',
     )
+    .option(
+      '--branch',
+      'Force the branch-vs-base diff scope the pre-push gate checks, regardless of working-tree state (mutually exclusive with --staged and --diff)',
+    )
+    .option(
+      '--base <ref>',
+      'Base branch for the push-gate scope (implies --branch; resolved as origin/<ref>...HEAD, else local <ref>)',
+    )
     .option('--deterministic', 'REMOVED — use `totem lint` instead', false)
     .option('--format <format>', 'REMOVED — use `totem lint --format` instead')
     .option(
@@ -392,10 +410,12 @@ const reviewOptions = (cmd: Command) =>
       'after',
       [
         '',
-        'Diff resolution (when --diff is omitted):',
+        'Diff resolution (when --diff and --branch/--base are omitted):',
         '  1. --staged          → staged-only diff',
         '  2. (default)         → working-tree diff (all uncommitted)',
         '  3. (fallback)        → branch-vs-base diff when 1/2 produce nothing',
+        '--branch (or --base <ref>) forces scope 3 — the exact diff the pre-push',
+        'gate checks — regardless of working-tree state (mmnto-ai/totem#2091).',
         `The chosen path is logged to stderr; large diffs (>${REVIEW_DIFF_TRUNCATION_THRESHOLD} chars)`,
         'trigger an explicit truncation warning before the LLM call.',
         '',
@@ -426,6 +446,8 @@ async function runReview(opts: {
   fresh?: boolean;
   staged?: boolean;
   diff?: string;
+  branch?: boolean;
+  base?: string;
   deterministic?: boolean;
   format?: string;
   mode?: string;
@@ -444,6 +466,8 @@ async function runReview(opts: {
     await lintCommand({
       format: (opts.format as 'text' | 'sarif' | 'json') ?? 'text',
       staged: opts.staged,
+      branch: opts.branch,
+      base: opts.base,
       out: opts.out,
     });
     return;
