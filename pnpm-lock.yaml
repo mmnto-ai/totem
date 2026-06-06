@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    optionalDependencies:
+      '@mmnto/strategy-doctrine':
+        specifier: 0.1.1
+        version: 0.1.1
     devDependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.98.0
@@ -833,6 +837,9 @@ packages:
 
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
+
+  '@mmnto/strategy-doctrine@0.1.1':
+    resolution: {integrity: sha512-3l6F7eOm3qWJ9UTpOwIA6gzxD5y6wXqLEVlWXNrqez3qwjn+bhfvMEE4c10AD9ddXVbsDfBhMN+3+9yKELKflQ==}
 
   '@modelcontextprotocol/sdk@1.27.1':
     resolution: {integrity: sha512-sr6GbP+4edBwFndLbM60gf07z0FQ79gaExpnsjMGePXqFcSSb7t6iscpjk9DhFhwd+mTEQrzNafGP8/iGGFYaA==}
@@ -3649,6 +3656,9 @@ snapshots:
       fs-extra: 8.1.0
       globby: 11.1.0
       read-yaml-file: 1.1.0
+
+  '@mmnto/strategy-doctrine@0.1.1':
+    optional: true
 
   '@modelcontextprotocol/sdk@1.27.1(zod@3.25.76)':
     dependencies:
