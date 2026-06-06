@@ -169,6 +169,26 @@ describe('runEstimate', () => {
     }
   });
 
+  it('forwards --branch/--base to getDiffForReview without injecting warnNarrowScope (#2090/#2091)', async () => {
+    mockGetDiffForReview.mockResolvedValue(diffResult({ source: 'branch-vs-base' }));
+    mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate(
+      { estimate: true, branch: true, base: 'develop' },
+      makeConfig(),
+      tmpDir,
+      tmpDir,
+    );
+
+    expect(mockGetDiffForReview).toHaveBeenCalledTimes(1);
+    const optsArg = mockGetDiffForReview.mock.calls[0]![0];
+    expect(optsArg).toMatchObject({ branch: true, base: 'develop' });
+    // The narrow-scope warning (mmnto-ai/totem#2090) is a lint-only opt-in —
+    // the review/estimate path must never set it.
+    expect(optsArg).not.toHaveProperty('warnNarrowScope');
+  });
+
   it('emits a [Estimate] preamble before delegating to getDiffForReview', async () => {
     mockGetDiffForReview.mockResolvedValue(diffResult());
     mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());

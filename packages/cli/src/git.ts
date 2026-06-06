@@ -94,6 +94,27 @@ export interface DiffForReviewOptions {
   staged?: boolean;
   /** Explicit ref range (mmnto-ai/totem#1717). When set, bypasses the implicit fallback chain. */
   diff?: string;
+  /**
+   * Force the branch-vs-base (push-gate) diff scope regardless of working-tree
+   * state (mmnto-ai/totem#2091). Mutually exclusive with `staged` and `diff`.
+   */
+  branch?: boolean;
+  /**
+   * Explicit base branch NAME for the forced branch-vs-base scope
+   * (mmnto-ai/totem#2091). Resolved through `getGitBranchDiff`'s
+   * origin-preference logic (`origin/<base>...HEAD`, else local `<base>` —
+   * mmnto-ai/totem#2054); NOT a raw ref range. Setting `base` implies
+   * `branch`. Mutually exclusive with `staged` and `diff`.
+   */
+  base?: string;
+  /**
+   * Lint-only opt-in for the narrow-scope advisory (mmnto-ai/totem#2090).
+   * When the resolved source is `staged`/`uncommitted` and the branch-vs-base
+   * scope the pre-push gate checks would cover more files, a one-line warning
+   * names the gap. Never set by `review` — staged-slice review is routinely
+   * intentional (truncation-cliff workaround), so warning there trains ignore.
+   */
+  warnNarrowScope?: boolean;
 }
 
 export interface DiffForReviewConfig {
@@ -123,9 +144,12 @@ export const REVIEW_DIFF_TRUNCATION_THRESHOLD = 50_000;
  * Shared diff-fetching logic used by both `shield` and `lint` commands.
  *
  * Resolution order:
- *   1. `--diff <range>` (explicit, no fallback)
- *   2. `--staged` (staged-only) or working-tree (`all`) diff
- *   3. Branch-vs-base diff (`<default>...HEAD`) when 2 yields nothing
+ *   1. `--branch` / `--base <ref>` (forced push-gate scope, mmnto-ai/totem#2091 —
+ *      jumps straight to the branch-vs-base diff of step 4, ignoring the
+ *      working tree; mutually exclusive with 2 and 3)
+ *   2. `--diff <range>` (explicit, no fallback)
+ *   3. `--staged` (staged-only) or working-tree (`all`) diff
+ *   4. Branch-vs-base diff (`<default>...HEAD`) when 3 yields nothing
  *
  * The chosen resolution path is logged to stderr (mmnto-ai/totem#1717) so the operator's
  * mental model matches the actual git invocation. Diffs exceeding
@@ -143,6 +167,8 @@ export async function getDiffForReview(
 ): Promise<DiffForReviewResult | null> {
   const { log } = await import('./ui.js');
   const {
+    TotemError,
+    TotemGitError,
     extractChangedFiles,
     filterDiffByPatterns,
     getDefaultBranch,
@@ -152,12 +178,72 @@ export async function getDiffForReview(
     sanitizeForTerminal,
   } = await import('@mmnto/totem');
 
+  // ── Eager scope-selector validation (mmnto-ai/totem#2091) ──
+  // `--base` implies branch scope. Both are mutually exclusive with the
+  // other explicit scope selectors — validated BEFORE any git work so the
+  // error names the conflicting flags instead of silently preferring one
+  // scope (the implicit-scope dishonesty mmnto-ai/totem#2055 exists to kill).
+  const forcedBranchScope = options.branch === true || options.base !== undefined;
+  if (forcedBranchScope) {
+    const forcingFlags = [
+      ...(options.branch ? ['--branch'] : []),
+      ...(options.base !== undefined ? ['--base'] : []),
+    ].join('/');
+    const conflicting = [
+      ...(options.staged ? ['--staged'] : []),
+      ...(options.diff !== undefined ? ['--diff'] : []),
+    ];
+    if (conflicting.length > 0) {
+      throw new TotemError(
+        'FLAG_CONFLICT',
+        `${forcingFlags} cannot be combined with ${conflicting.join(', ')}: each selects a different diff scope, and silent precedence would hide which scope actually ran.`,
+        'Re-run with exactly one scope selector: --branch/--base <ref>, --staged, or --diff <range>.',
+      );
+    }
+    if (options.base !== undefined) {
+      // Mirrors getGitDiffRange's flag-injection guard (mmnto-ai/totem#1717):
+      // reject empty values and leading `-` before the name reaches git.
+      const trimmedBase = options.base.trim();
+      if (trimmedBase.length === 0) {
+        throw new TotemGitError(
+          'Empty base branch supplied to --base.',
+          'Provide a non-empty branch name, e.g. --base main.',
+        );
+      }
+      if (trimmedBase.startsWith('-')) {
+        throw new TotemGitError(
+          `Invalid base branch: ${trimmedBase}. Branch names may not start with '-' (git-flag injection guard).`,
+          'Provide a plain branch name such as "main" without leading dashes.',
+        );
+      }
+    }
+  }
+
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
 
   let diff: string;
   let source: DiffForReviewSource;
 
-  if (options.diff !== undefined) {
+  if (forcedBranchScope) {
+    // Forced push-gate scope (mmnto-ai/totem#2091): bypass the working-tree
+    // checks entirely and diff branch-vs-base — exactly what the pre-push
+    // gate evaluates. Reuses the auto-fallback's source value so downstream
+    // consumers treat forced and auto branch scope identically; the log line
+    // discloses the forcing. getGitBranchDiff's TotemGitError (with its
+    // "git fetch origin <ref>" hint) bubbles when the base resolves nowhere.
+    const base = options.base !== undefined ? options.base.trim() : getDefaultBranch(cwd);
+    const safeBase = sanitizeForTerminal(base);
+    log.info(
+      tag,
+      `Diff source: branch-vs-base (--branch; origin/${safeBase}...HEAD, else local ${safeBase})`,
+    );
+    diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
+    source = 'branch-vs-base';
+    if (!diff.trim()) {
+      log.warn(tag, 'No changes detected. Nothing to review.');
+      return null;
+    }
+  } else if (options.diff !== undefined) {
     // Explicit-range path — no fallback. getGitDiffRange rejects flag-injection
     // (leading `-`) and empty values; ignore patterns still apply per repo policy.
     log.info(tag, `Diff source: explicit range (${options.diff})`);
@@ -203,6 +289,36 @@ export async function getDiffForReview(
 
   const changedFiles = extractChangedFiles(diff);
   log.info(tag, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
+
+  // ── Narrow-scope advisory (mmnto-ai/totem#2090) — lint-only opt-in ──
+  // When lint resolved a working-tree scope, compare against the
+  // branch-vs-base scope the pre-push gate checks. The branch file set runs
+  // through the SAME post-ignore-filter pipeline as the gate would, so N
+  // counts only files the gate would actually lint (raw `--name-only`
+  // overcounts ignored files). Set difference avoids double-counting files
+  // changed both on the branch and in the working tree.
+  if (options.warnNarrowScope && (source === 'staged' || source === 'uncommitted')) {
+    try {
+      const branchDiff = filterDiffByPatterns(
+        getGitBranchDiff(cwd, getDefaultBranch(cwd)),
+        allIgnore,
+      );
+      const branchFiles = extractChangedFiles(branchDiff);
+      const currentScope = new Set(changedFiles);
+      const unlinted = branchFiles.filter((file) => !currentScope.has(file));
+      if (unlinted.length > 0) {
+        const opening =
+          source === 'staged' ? 'Linting staged changes only' : 'Linting uncommitted changes only';
+        log.warn(
+          tag,
+          `${opening} — the pre-push gate checks the full branch (${unlinted.length} more file(s)). Lint a clean tree or use \`totem lint --branch\` to match.`,
+        );
+      }
+      // totem-context: Tenet-4-justified silent skip (mmnto-ai/totem#2090) — the warning is a best-effort advisory ABOUT scope, not a verdict input; its failure states (detached HEAD, no base branch, shallow clone) are exactly where branch-vs-base scope is undefined, so there is no honest warning to emit. Lint's verdict, diff, and exit code are untouched.
+    } catch {
+      // Intentionally silent — see the totem-context justification above.
+    }
+  }
 
   return { diff, changedFiles, source };
 }

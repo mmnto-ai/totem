@@ -8,6 +8,17 @@ export interface LintOptions {
   out?: string;
   format?: ShieldFormat;
   staged?: boolean;
+  /**
+   * Force the branch-vs-base (push-gate) diff scope (mmnto-ai/totem#2091).
+   * Mutually exclusive with `staged`.
+   */
+  branch?: boolean;
+  /**
+   * Explicit base branch name for the forced branch-vs-base scope
+   * (mmnto-ai/totem#2091). Implies `branch`; resolved via `getGitBranchDiff`'s
+   * origin-preference logic (mmnto-ai/totem#2054).
+   */
+  base?: string;
   /** PR number to post a comment on, or `true` to auto-infer from GitHub Actions env */
   prComment?: number | true;
   /**
@@ -88,7 +99,10 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   const { runFirstLintPromote } = await import('./first-lint-promote-runner.js');
   await runFirstLintPromote({ cwd, configRoot, config, tag: TAG });
 
-  const result = await getDiffForReview(options, config, cwd, TAG);
+  // `warnNarrowScope: true` is the lint-only opt-in for the narrow-scope
+  // advisory (mmnto-ai/totem#2090) — review never sets it, so staged-slice
+  // reviews stay warning-free.
+  const result = await getDiffForReview({ ...options, warnNarrowScope: true }, config, cwd, TAG);
   if (!result) return;
 
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];

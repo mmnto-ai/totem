@@ -25,9 +25,12 @@ vi.mock('../utils.js', async () => {
 });
 
 // ─── Mock git to return a diff so lint proceeds ─────────
+// Spy-able so the #2090/#2091 forwarding tests can assert the exact
+// options object lintCommand hands to the shared diff resolver.
 
+const getDiffForReviewMock = vi.fn(async (..._args: unknown[]) => ({ diff: '' }));
 vi.mock('../git.js', () => ({
-  getDiffForReview: async () => ({ diff: '' }),
+  getDiffForReview: (...args: unknown[]) => getDiffForReviewMock(...args),
 }));
 
 // ─── Mock run-compiled-rules to avoid needing real rules ─
@@ -292,5 +295,43 @@ describe('lintCommand engine bootstrap wiring', () => {
     // also expands Windows 8.3 short names so the assertion is robust
     // on every CI runner.
     expect(fs.realpathSync.native(calledRoot as string)).toBe(fs.realpathSync.native(tmpDir));
+  });
+});
+
+// ─── Diff-scope forwarding (mmnto-ai/totem#2090 / #2091) ─
+
+describe('lintCommand diff-scope forwarding (#2090/#2091)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {};', 'utf-8');
+    getDiffForReviewMock.mockClear();
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('forwards --branch/--base and passes warnNarrowScope: true to getDiffForReview', async () => {
+    const { lintCommand } = await import('./lint.js');
+    await lintCommand({ branch: true, base: 'develop' });
+
+    expect(getDiffForReviewMock).toHaveBeenCalledTimes(1);
+    const optsArg = getDiffForReviewMock.mock.calls[0]![0];
+    expect(optsArg).toMatchObject({ branch: true, base: 'develop', warnNarrowScope: true });
+  });
+
+  it('opts in to the narrow-scope warning even when no scope flags are given', async () => {
+    const { lintCommand } = await import('./lint.js');
+    await lintCommand({});
+
+    expect(getDiffForReviewMock).toHaveBeenCalledTimes(1);
+    const optsArg = getDiffForReviewMock.mock.calls[0]![0];
+    expect(optsArg).toMatchObject({ warnNarrowScope: true });
   });
 });
