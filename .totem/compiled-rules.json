@@ -8524,10 +8524,11 @@
     {
       "lessonHash": "42559b2f75734104",
       "lessonHeading": "Hook stderr diagnostics use script-identifier prefix, not",
+      "pattern": "process\\.stderr\\.write\\([^)]*\\[Totem Error\\]",
       "message": "Hook stderr diagnostics must use the script-identifier prefix (e.g., '[auto-context]', '[session-context]'), not '[Totem Error]'. The '[Totem Error]' prefix is reserved for thrown Error objects per styleguide §3.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "process\\.stderr\\.write\\([^)]*\\[Totem Error\\]",
+      "badExample": "process.stderr.write('[Totem Error] Failed to load proposals\\n');",
+      "goodExample": "process.stderr.write('[auto-context] Failed to load proposals\\n');",
       "compiledAt": "2026-05-21T17:00:37.880Z",
       "createdAt": "2026-05-21T17:00:37.880Z",
       "fileGlobs": [
@@ -8536,19 +8537,16 @@
         "packages/cli/src/hooks/**/*.ts",
         "packages/cli/src/hooks/**/*.js"
       ],
-      "badExample": "process.stderr.write('[Totem Error] Failed to load proposals\\n');",
-      "goodExample": "process.stderr.write('[auto-context] Failed to load proposals\\n');",
-      "unverified": true,
-      "status": "untested-against-codebase"
+      "severity": "warning",
+      "status": "untested-against-codebase",
+      "unverified": true
     },
     {
       "lessonHash": "c2d9e854231b78f1",
       "lessonHeading": "Proactively remove references to planned features from user",
+      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
       "message": "Proactively remove references to planned features from user",
       "engine": "regex",
-      "severity": "warning",
-      "manual": true,
-      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
       "compiledAt": "2026-05-21T17:00:26.725Z",
       "createdAt": "2026-05-21T17:00:26.725Z",
       "fileGlobs": [
@@ -8558,7 +8556,29 @@
         "guides/**/*",
         "!docs/wiki/roadmap.md"
       ],
+      "severity": "warning",
+      "manual": true,
       "unverified": true
+    },
+    {
+      "lessonHash": "839aceddfb699160",
+      "lessonHeading": "a config line CI never executes is unverified, no matter",
+      "message": "pnpm minimumReleaseAge takes a bare number (minutes), not a duration string like '1d'. A string value causes NaN arithmetic and crashes every resolving install with 'Invalid time value'.",
+      "engine": "regex",
+      "severity": "error",
+      "pattern": "minimumReleaseAge\\s*:\\s*['\"]?\\d+[a-zA-Z]+['\"]?",
+      "compiledAt": "2026-06-07T02:04:45.430Z",
+      "createdAt": "2026-06-07T02:04:45.430Z",
+      "fileGlobs": [
+        "**/pnpm-workspace.yaml",
+        "**/.npmrc"
+      ],
+      "badExample": "minimumReleaseAge: '1d'",
+      "goodExample": "minimumReleaseAge: 1440 # 1 day in minutes",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-06-07T02:04:45.798Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/CHANGELOG.md. reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
@@ -14258,6 +14278,54 @@
       "title": "Key security audit findings and acceptable risks",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes a security audit summary with multiple architectural findings, mitigations, and accepted risks. The findings span memory limits (Zod config values), process execution patterns, regex allowlists, and trust model decisions — no single detectable code pattern captures the lesson's intent without producing either massive false positives or missing the nuanced context of each finding."
+    },
+    {
+      "hash": "501611a19daf5bb9",
+      "title": "Lockfile mutations require auth for optional dependencies",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a procedural/workflow constraint about developer environment setup (registry auth required before running lockfile-mutating commands). There is no detectable code pattern — the rule governs human behavior in a terminal, not source code constructs."
+    },
+    {
+      "hash": "b67cb7724df04673",
+      "title": "totem lint scopes to CHANGED lines, so extracting code",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a workflow/process guideline about running lint before pushing code that moves files, and about using totem-context directives instead of totem-ignore. There is no single detectable code pattern that represents a violation — the lesson is about developer workflow, git hook behavior, and diff scoping semantics, not a specific code construct."
+    },
+    {
+      "hash": "ba734ed4a16e07b1",
+      "title": "Avoid warnings for intentional narrow-scope workflows",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a conceptual UX/behavioral principle about when to suppress advisory warnings based on workflow context. There is no detectable code pattern that distinguishes intentional narrow-scope usage from unintentional narrow-scope usage."
+    },
+    {
+      "hash": "daa1783348385648",
+      "title": "Degrade gracefully on advisory warning failures",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural resilience principle (graceful degradation of advisory warnings) that cannot be expressed as a detectable code pattern. There is no specific syntactic construct to flag — the violation is the absence of a try/catch or fallback around advisory warning logic, which requires semantic understanding of which code paths are 'advisory' versus 'critical'."
+    },
+    {
+      "hash": "2df5822d1e197507",
+      "title": "Eagerly validate conflicting CLI scope selectors",
+      "reasonCode": "context-required",
+      "reason": "Lesson describes a runtime validation requirement (detecting conflicting CLI flag combinations before git operations begin), not a detectable source-code pattern. The hazard depends on the control-flow relationship between flag-parsing, conflict-checking, and git invocation across multiple call sites; no single-node regex or ast-grep pattern can express whether a conflict check is absent or misplaced relative to git work."
+    },
+    {
+      "hash": "e6554b64330d9bbd",
+      "title": "Warn on missing optional manifest assets",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/behavioral principle about how diagnostic tools should classify missing optional assets — there is no detectable code pattern (specific function call, import, or construct) that can be matched to identify violations of this guideline."
+    },
+    {
+      "hash": "e454c47de3efe004",
+      "title": "Calculate scope warnings using post-filter diffs",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an algorithmic/architectural principle about how to calculate scope warnings (using post-filter diffs rather than pre-filter counts). There is no detectable code pattern — the violation depends on the internal logic of a coverage calculation pipeline, not on any specific syntax, API call, or structural construct that a regex or AST rule could match."
+    },
+    {
+      "hash": "0426b3d40887c709",
+      "title": "Use optionalDependencies for restricted CI packages",
+      "reasonCode": "context-required",
+      "reason": "Lesson describes a package.json structural placement rule: a specific package must appear under 'optionalDependencies' rather than 'dependencies' or 'devDependencies'. Detecting which packages are 'restricted/private' requires knowledge of the registry auth context or a known list of private package names — neither of which can be expressed as a general pattern without producing massive false positives on legitimate devDependencies."
     }
   ]
 }
