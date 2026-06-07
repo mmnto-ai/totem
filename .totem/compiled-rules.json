@@ -8579,6 +8579,42 @@
       "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/CHANGELOG.md. reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-06-07T02:04:45.798Z",
       "unverified": true
+    },
+    {
+      "lessonHash": "904c066615bd94c4",
+      "lessonHeading": "Exclude timestamps from content addresses",
+      "message": "Do not include 'createdAt' (or other timestamp fields) in deterministic hash calculations — identical runs will fail to deduplicate across different execution times.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "hash($$$ARGS, createdAt, $$$REST)",
+      "compiledAt": "2026-06-07T19:41:53.478Z",
+      "createdAt": "2026-06-07T19:41:53.478Z",
+      "fileGlobs": [
+        "packages/core/src/artifacts/storage.ts"
+      ],
+      "badExample": "const addr = hash(content, createdAt, metadata);",
+      "goodExample": "const addr = hash(content, metadata);",
+      "unverified": true,
+      "status": "untested-against-codebase"
+    },
+    {
+      "lessonHash": "baffaac1dadd9f3e",
+      "lessonHeading": "Use atomic write-if-absent flags",
+      "message": "Use flag 'wx' instead of 'w' to prevent TOCTOU race conditions and enforce first-write-wins semantics",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "fs.writeFile($PATH, $DATA, { flag: 'w' })",
+      "compiledAt": "2026-06-07T19:42:29.872Z",
+      "createdAt": "2026-06-07T19:42:29.872Z",
+      "fileGlobs": [
+        "packages/core/src/artifacts/storage.ts"
+      ],
+      "badExample": "await fs.writeFile(path, data, { flag: 'w' });",
+      "goodExample": "await fs.writeFile(path, data, { flag: 'wx' });",
+      "unverified": true,
+      "status": "untested-against-codebase"
     }
   ],
   "nonCompilable": [
@@ -14344,6 +14380,30 @@
       "title": "Include all bot IDs in triage parsers",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes a completeness requirement (all active bot IDs must be present in a list), which requires semantic knowledge of which bots are currently active. No pattern can detect a missing entry in an enumeration without knowing the ground-truth set of required values."
+    },
+    {
+      "hash": "74ff33fc00277451",
+      "title": "Implement version-tolerant schema readers",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle (version-tolerant schema reading with major/minor version logic) that requires semantic analysis of runtime branching behavior — no single regex or AST pattern can detect whether a schema reader correctly accepts all minor versions while rejecting unknown majors."
+    },
+    {
+      "hash": "a2a2ae65c870d592",
+      "title": "Wrap schema validation in domain errors",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires detecting when a Zod error is caught and NOT rethrown as a domain error — this requires analyzing the catch clause body to determine whether the caught error is a ZodError and whether it is wrapped before rethrowing, which is multi-step semantic analysis that no single pattern or structural combinator can express."
+    },
+    {
+      "hash": "9b526b31a5e374bf",
+      "title": "Persist masked prompts in artifacts",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural data-flow requirement (masked prompts must be persisted rather than raw prompts) that cannot be detected from a single code pattern — determining whether a prompt has been DLP-masked before being written to persistent storage requires multi-file semantic analysis of the data flow between the masking step and the storage call."
+    },
+    {
+      "hash": "ad7725357294e9cf",
+      "title": "Hash prompt-visible grounding subsets",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural data-transformation principle (projecting to stable fields before hashing) that cannot be detected by inspecting any single code pattern — the violation requires knowing which fields are included in a hash input and whether they are environment-specific, which demands semantic analysis of the data flow."
     }
   ]
 }
