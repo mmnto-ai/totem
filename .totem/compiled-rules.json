@@ -8563,22 +8563,22 @@
     {
       "lessonHash": "839aceddfb699160",
       "lessonHeading": "a config line CI never executes is unverified, no matter",
+      "pattern": "minimumReleaseAge\\s*:\\s*['\"]?\\d+[a-zA-Z]+['\"]?",
       "message": "pnpm minimumReleaseAge takes a bare number (minutes), not a duration string like '1d'. A string value causes NaN arithmetic and crashes every resolving install with 'Invalid time value'.",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "minimumReleaseAge\\s*:\\s*['\"]?\\d+[a-zA-Z]+['\"]?",
+      "badExample": "minimumReleaseAge: '1d'",
+      "goodExample": "minimumReleaseAge: 1440 # 1 day in minutes",
       "compiledAt": "2026-06-07T02:04:45.430Z",
       "createdAt": "2026-06-07T02:04:45.430Z",
       "fileGlobs": [
         "**/pnpm-workspace.yaml",
         "**/.npmrc"
       ],
-      "badExample": "minimumReleaseAge: '1d'",
-      "goodExample": "minimumReleaseAge: 1440 # 1 day in minutes",
-      "unverified": true,
+      "severity": "error",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/CHANGELOG.md. reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-06-07T02:04:45.798Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/CHANGELOG.md. reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -14326,6 +14326,24 @@
       "title": "Use optionalDependencies for restricted CI packages",
       "reasonCode": "context-required",
       "reason": "Lesson describes a package.json structural placement rule: a specific package must appear under 'optionalDependencies' rather than 'dependencies' or 'devDependencies'. Detecting which packages are 'restricted/private' requires knowledge of the registry auth context or a known list of private package names — neither of which can be expressed as a general pattern without producing massive false positives on legitimate devDependencies."
+    },
+    {
+      "hash": "8fc9518536623e49",
+      "title": "Filter rule verification by fileGlobs",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a procedural/architectural requirement for a verification pipeline (filtering matches by fileGlobs before archiving), not a detectable code pattern in source files."
+    },
+    {
+      "hash": "611db5dd48f97f8d",
+      "title": "Guard git refs against flag injection",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires knowing which arguments are user-provided git refs and whether they are preceded by a '--' separator; a pattern cannot distinguish a guarded ref (preceded by '--') from an unguarded one without tracking argument position and the presence of the '--' sentinel across the call site."
+    },
+    {
+      "hash": "0926b8e544f13624",
+      "title": "Include all bot IDs in triage parsers",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a completeness requirement (all active bot IDs must be present in a list), which requires semantic knowledge of which bots are currently active. No pattern can detect a missing entry in an enumeration without knowing the ground-truth set of required values."
     }
   ]
 }

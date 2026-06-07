@@ -1360,6 +1360,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   );
   log.dim(DISPLAY_TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
+  // Grounded run artifact (mmnto-ai/totem#2100): always-on for the standard
+  // review verdict path — every run is a future eval fixture. Wholesale
+  // similarity-only grounding hash in slice 1; per-item classes are #2101.
+  const { calculateDeterministicHash, PROVENANCE_SIMILARITY_ONLY } = await import('@mmnto/totem');
   const content = await runOrchestrator({
     prompt,
     tag: TAG,
@@ -1369,6 +1373,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     configRoot,
     totalResults,
     temperature: 0,
+    artifact: {
+      groundingHash: calculateDeterministicHash(context),
+      provenanceSummary: PROVENANCE_SIMILARITY_ONLY,
+    },
   });
   if (content != null) {
     await handleVerdictResult(content, diff, options, config, cwd, configRoot, 'standard');

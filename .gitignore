@@ -47,6 +47,9 @@ packages/pack-rust-architecture/tree-sitter-rust.wasm
 .totem/sync.lock
 .totem/temp/
 .totem/cache/
+# Grounded run artifacts (mmnto-ai/totem#2100) — machine-local run records,
+# content-addressed, carry prompt content; never tracked.
+.totem/artifacts/
 .totem/secrets.json
 .totem/*.log
 .totem/*.jsonl

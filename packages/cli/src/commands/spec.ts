@@ -370,7 +370,27 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const prompt = await assemblePrompt(parsed, context, systemPrompt);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
+  // Grounded run artifact (mmnto-ai/totem#2100): always-on for spec —
+  // every run is a future eval fixture. The grounding hash covers the
+  // retrieved context wholesale; per-item provenance classes are #2101.
+  const { calculateDeterministicHash, PROVENANCE_SIMILARITY_ONLY } = await import('@mmnto/totem');
+  const content = await runOrchestrator({
+    prompt,
+    tag: TAG,
+    options,
+    config,
+    cwd,
+    // Anchor cache + artifacts at the config dir, not the invocation cwd —
+    // without this, a `totem spec` from a subdirectory writes artifacts to
+    // `<cwd>/.totem/` where the `totem artifact` verbs (which resolve from
+    // the config path) can never find them (Greptile P1 on #2114).
+    configRoot: path.dirname(configPath),
+    totalResults,
+    artifact: {
+      groundingHash: calculateDeterministicHash(context),
+      provenanceSummary: PROVENANCE_SIMILARITY_ONLY,
+    },
+  });
   if (content == null) return;
 
   if (options.stdout) {
