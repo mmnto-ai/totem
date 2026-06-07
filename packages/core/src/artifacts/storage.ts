@@ -18,7 +18,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { TotemParseError } from '../errors.js';
+import { rethrowAsParseError, TotemParseError } from '../errors.js';
 import { readJsonSafe } from '../sys/fs.js';
 import { calculateDeterministicHash } from './hash.js';
 import type { RunArtifact } from './schema.js';
@@ -81,10 +81,24 @@ export function saveRunArtifact(totemDirAbs: string, artifact: RunArtifact): Sav
   }
 
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(validated, null, 2), {
-    encoding: 'utf-8',
-    mode: 0o600, // matches the response-cache mode — run records carry prompt content
-  });
+  try {
+    // `wx` = atomic create-exclusive: closes the TOCTOU window between the
+    // existsSync fast-path and the write, so concurrent saves of the same
+    // hash can never overwrite the first record (CR review on #2114) —
+    // first-write-wins is enforced by the filesystem, not the check above.
+    fs.writeFileSync(filePath, JSON.stringify(validated, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600, // matches the response-cache mode — run records carry prompt content
+      flag: 'wx',
+    });
+  } catch (err) {
+    // A concurrent writer won the race — same hash ⇒ same logical content,
+    // so the existing record IS this save's outcome (append-only dedup).
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      return { hash, path: filePath, existed: true };
+    }
+    throw err;
+  }
   return { hash, path: filePath, existed: false };
 }
 
@@ -112,7 +126,19 @@ export function loadRunArtifact(totemDirAbs: string, hash: string): RunArtifact 
     if (migrate !== undefined) return migrate(raw);
   }
 
-  return RunArtifactSchema.parse(raw);
+  try {
+    return RunArtifactSchema.parse(raw);
+  } catch (err) {
+    // Normalize the ZodError to the module's stated load contract (GCA + CR
+    // review on #2114): JSON-read failures and schema failures both surface
+    // as TotemParseError, with the Zod issue text (incl. the rejected
+    // schemaVersion) preserved via the message + cause.
+    rethrowAsParseError(
+      `Run artifact ${hash} failed schema validation`,
+      err,
+      'The artifact may be corrupted or written by an incompatible totem version; re-emit it (or add the migration entry for its major).',
+    );
+  }
 }
 
 /** Best-effort major extraction from a raw parsed payload; undefined when absent/garbled. */

@@ -49,9 +49,12 @@ export const ADMISSION_COMPLETION_ONLY = 'completion_only' as const;
 /** sha256 hex content hash (full digest — identity, not display). */
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
+/** Major-1 semver literal — keep in sync with {@link RUN_ARTIFACT_KNOWN_MAJOR} (CR review on #2114: a literal beats runtime RegExp construction; the major only changes alongside a migration entry anyway). */
+const SCHEMA_VERSION_RE = /^1\.\d+\.\d+$/;
+
 /** Accept any 1.x version; reject other majors with the version named (F1). */
 const schemaVersionField = z.string().refine(
-  (v) => new RegExp(`^${RUN_ARTIFACT_KNOWN_MAJOR}\\.\\d+\\.\\d+$`).test(v),
+  (v) => SCHEMA_VERSION_RE.test(v),
   (v) => ({
     message: `unsupported run-artifact schemaVersion "${v}" — this reader understands major ${RUN_ARTIFACT_KNOWN_MAJOR}.x; a new major requires a migration entry in loadRunArtifact`,
   }),

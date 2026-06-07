@@ -3,12 +3,13 @@
  * verbs over the run-artifact primitives (mmnto-ai/totem#2100, operator
  * ruling: verbs ship in-slice — sensors nobody can invoke don't get
  * dogfooded). JSON to stdout, no interactivity; the primitives carry all the
- * semantics (`services/run-artifacts.ts`).
+ * semantics (`services/run-artifacts.ts`). Everything (including `node:path`)
+ * is lazy-imported per the CLI command-module contract.
  */
 
-import * as path from 'node:path';
-
 export async function artifactRerunCommand(hash: string): Promise<void> {
+  const path = await import('node:path');
+  const { sanitizeForTerminal } = await import('@mmnto/totem');
   const { log } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath, writeOutput } = await import('../utils.js');
   const { rerunArtifact } = await import('../services/run-artifacts.js');
@@ -19,7 +20,10 @@ export async function artifactRerunCommand(hash: string): Promise<void> {
   const config = await loadConfig(configPath);
   const configRoot = path.dirname(configPath);
 
-  log.info('Artifact', `Rerunning ${hash.slice(0, 12)}… with its recorded bundle + backend...`);
+  // Sanitize before logging — the hash is raw CLI input until loadRunArtifact
+  // gates it (CR review on #2114: terminal-escape injection).
+  const safeHashPreview = sanitizeForTerminal(hash).slice(0, 12);
+  log.info('Artifact', `Rerunning ${safeHashPreview}… with its recorded bundle + backend...`);
   const result = await rerunArtifact({ hash, config, cwd, configRoot });
   writeOutput(
     JSON.stringify(
@@ -31,6 +35,7 @@ export async function artifactRerunCommand(hash: string): Promise<void> {
 }
 
 export async function artifactCompareCommand(hashA: string, hashB: string): Promise<void> {
+  const path = await import('node:path');
   const { loadConfig, loadEnv, resolveConfigPath, writeOutput } = await import('../utils.js');
   const { compareArtifacts } = await import('../services/run-artifacts.js');
 

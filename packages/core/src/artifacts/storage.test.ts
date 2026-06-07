@@ -48,7 +48,9 @@ describe('run-artifact storage', () => {
   it('saves a valid artifact at its content-address and loads it back', () => {
     const saved = saveRunArtifact(totemDir, artifact());
     expect(saved.existed).toBe(false);
-    expect(saved.path).toBe(path.join(runsDir(totemDir), `${saved.hash}.json`));
+    // Explicit segments, not runsDir() — asserting against the helper under
+    // test would mask a path-layout regression (CR review on #2114).
+    expect(saved.path).toBe(path.join(totemDir, 'artifacts', 'runs', `${saved.hash}.json`));
     expect(fs.existsSync(saved.path)).toBe(true);
     expect(loadRunArtifact(totemDir, saved.hash)).toEqual(artifact());
   });

@@ -380,6 +380,11 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     options,
     config,
     cwd,
+    // Anchor cache + artifacts at the config dir, not the invocation cwd —
+    // without this, a `totem spec` from a subdirectory writes artifacts to
+    // `<cwd>/.totem/` where the `totem artifact` verbs (which resolve from
+    // the config path) can never find them (Greptile P1 on #2114).
+    configRoot: path.dirname(configPath),
     totalResults,
     artifact: {
       groundingHash: calculateDeterministicHash(context),

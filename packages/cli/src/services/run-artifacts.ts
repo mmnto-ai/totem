@@ -19,7 +19,7 @@
 import * as path from 'node:path';
 
 import type { RunArtifact, TotemConfig } from '@mmnto/totem';
-import { calculateDeterministicHash, loadRunArtifact } from '@mmnto/totem';
+import { calculateDeterministicHash, loadRunArtifact, TotemOrchestratorError } from '@mmnto/totem';
 
 import { runOrchestrator } from '../utils.js';
 
@@ -91,8 +91,10 @@ export async function rerunArtifact(opts: RerunArtifactOptions): Promise<RerunAr
   if (content === undefined || emitted === undefined) {
     // --raw can't happen (we don't pass it), so this is an emission failure —
     // the rerun ran but its record didn't land. Loud, not a silent partial.
-    throw new Error(
-      `Rerun of ${opts.hash.slice(0, 12)}… completed but no artifact was recorded — see the emission warning above.`,
+    // TotemOrchestratorError per the CLI error taxonomy (GCA review on #2114).
+    throw new TotemOrchestratorError(
+      `Rerun of ${opts.hash.slice(0, 12)}… completed but no artifact was recorded.`,
+      'See the emission warning above for why the record did not land, then retry the rerun.',
     );
   }
 
@@ -147,6 +149,12 @@ function tokenDelta(a: number | null | undefined, b: number | null | undefined):
 export function compareRunArtifacts(a: RunArtifact, b: RunArtifact): RunArtifactComparison {
   const backendDelta = BACKEND_FIELDS.filter((field) => a.backend[field] !== b.backend[field]);
 
+  const sameOutput = a.output.content === b.output.content;
+  // Short-circuit the second sha256 pass when the contents are byte-identical
+  // (Greptile review on #2114) — the equal-outputs fast path is explicit.
+  const contentHashA = calculateDeterministicHash(a.output.content);
+  const contentHashB = sameOutput ? contentHashA : calculateDeterministicHash(b.output.content);
+
   return {
     sameInput: a.inputHash === b.inputHash,
     sameGrounding:
@@ -154,11 +162,8 @@ export function compareRunArtifacts(a: RunArtifact, b: RunArtifact): RunArtifact
       a.grounding.provenanceSummary === b.grounding.provenanceSummary,
     sameBackend: backendDelta.length === 0,
     backendDelta,
-    sameOutput: a.output.content === b.output.content,
-    outputDelta: {
-      contentHashA: calculateDeterministicHash(a.output.content),
-      contentHashB: calculateDeterministicHash(b.output.content),
-    },
+    sameOutput,
+    outputDelta: { contentHashA, contentHashB },
     metricsDelta: {
       durationMs: b.output.metrics.durationMs - a.output.metrics.durationMs,
       inputTokens: tokenDelta(a.output.metrics.inputTokens, b.output.metrics.inputTokens),
