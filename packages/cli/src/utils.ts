@@ -5,10 +5,14 @@ import * as path from 'node:path';
 
 import dotenv from 'dotenv';
 
-import type { CustomSecret, SearchResult, TotemConfig } from '@mmnto/totem';
+import type { CustomSecret, RunArtifact, SearchResult, TotemConfig } from '@mmnto/totem';
 import {
+  ADMISSION_COMPLETION_ONLY,
+  calculateDeterministicHash,
   CONFIG_FILES,
   maskSecrets,
+  RUN_ARTIFACT_SCHEMA_VERSION,
+  saveRunArtifact,
   TotemConfigError,
   TotemConfigSchema,
   TotemOrchestratorError,
@@ -401,6 +405,30 @@ function buildResponseCacheHash(
 }
 
 /**
+ * Caller-supplied context for grounded run-artifact emission
+ * (mmnto-ai/totem#2100). STRICTLY additive: callers that omit `artifact`
+ * observe byte-identical `runOrchestrator` behavior — the #2106 constraint
+ * (12 call sites compile untouched; spec/review migrate first).
+ *
+ * The caller supplies what only it knows (its grounding context + how that
+ * context was assembled); `runOrchestrator` supplies what only IT knows (the
+ * post-DLP masked prompt, the post-quota-fallback resolved backend, the
+ * `OrchestratorResult` metrics that never leave this function).
+ */
+export interface RunArtifactRequest {
+  /** Deterministic hash of the grounding context the caller assembled (sha256 hex). */
+  groundingHash: string;
+  /** What KIND of grounding — slice 1 passes `PROVENANCE_SIMILARITY_ONLY` wholesale. */
+  provenanceSummary: string;
+  /** Deterministic diff input when the run was scoped (`lint/review --branch`, #2098). */
+  diffScope?: string;
+  /** The grounded spec contract, when the run senses against one. */
+  specContract?: string;
+  /** Fires after a successful write (or dedup hit) with the content address + path. */
+  onEmitted?: (hash: string, artifactPath: string) => void;
+}
+
+/**
  * Validate orchestrator config, then either output raw context (--raw) or
  * invoke the configured orchestrator provider and return the LLM content.
  *
@@ -428,6 +456,13 @@ export async function runOrchestrator(opts: {
   temperature?: number;
   /** User-defined custom secrets to redact via DLP before outbound LLM calls (#921). */
   customSecrets?: CustomSecret[];
+  /**
+   * Opt-in grounded run-artifact emission (mmnto-ai/totem#2100). When set, a
+   * successful ACTUAL invoke (never a response-cache hit) appends an immutable
+   * content-addressed record under `<totemDir>/artifacts/runs/`. Emission
+   * failure warns and never fails the run. Omitted = today's behavior.
+   */
+  artifact?: RunArtifactRequest;
 }): Promise<string | undefined> {
   const { prompt, systemPrompt, tag, options, config, cwd } = opts;
   const configRoot = opts.configRoot ?? cwd;
@@ -502,6 +537,12 @@ export async function runOrchestrator(opts: {
         const ageMs = Date.now() - cacheData.timestamp;
         if (ageMs < ttlSeconds * 1000) {
           log.dim(tag, `Result loaded from cache (TTL: ${ttlSeconds}s)`);
+          if (opts.artifact !== undefined) {
+            // mmnto-ai/totem#2100: artifacts record ACTUAL invokes. A cached
+            // response is a replay of an already-recorded run, not new ground
+            // truth — emitting here would forge a run that never happened.
+            log.dim(tag, 'Response cache hit — no run artifact emitted.');
+          }
           return cacheData.content;
         }
       } catch {
@@ -638,6 +679,72 @@ export async function runOrchestrator(opts: {
       );
     } catch {
       // Ignore cache write errors
+    }
+  }
+
+  // ── Grounded run-artifact emission (mmnto-ai/totem#2100) ──
+  // Placed AFTER the invoke + quota-fallback resolution so the record carries
+  // the RESOLVED backend (qualifiedModel reflects any fallback) and the
+  // MASKED prompt (what actually crossed the wire — raw would persist
+  // secrets to disk). Failure warns and never fails the run: the run's
+  // primary output is not hostage to its ledger (Tenet-4-compliant — the
+  // degradation is warned, never silent).
+  if (opts.artifact !== undefined) {
+    try {
+      const inputBundle = {
+        maskedPrompt: safePrompt,
+        ...(safeSystemPrompt !== undefined && safeSystemPrompt.length > 0
+          ? { maskedSystemPrompt: safeSystemPrompt }
+          : {}),
+        ...(opts.artifact.diffScope !== undefined ? { diffScope: opts.artifact.diffScope } : {}),
+        ...(opts.artifact.specContract !== undefined
+          ? { specContract: opts.artifact.specContract }
+          : {}),
+      };
+      const runArtifact: RunArtifact = {
+        schemaVersion: RUN_ARTIFACT_SCHEMA_VERSION,
+        inputBundle,
+        inputHash: calculateDeterministicHash(inputBundle),
+        grounding: {
+          hash: opts.artifact.groundingHash,
+          provenanceSummary: opts.artifact.provenanceSummary,
+        },
+        backend: {
+          provider: resolved.parsed.provider,
+          model,
+          qualifiedModel,
+          // Constant in slice 1 — every runOrchestrator backend is factually
+          // completion-only today; #2102 (admission contract) changes who
+          // supplies this value, not the field.
+          admissionClass: ADMISSION_COMPLETION_ONLY,
+          taskProfile: tag,
+          ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        },
+        output: {
+          content: result.content,
+          metrics: {
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            ...(result.cacheReadInputTokens !== undefined
+              ? { cacheReadInputTokens: result.cacheReadInputTokens }
+              : {}),
+            durationMs: result.durationMs,
+            ...(result.finishReason !== undefined ? { finishReason: result.finishReason } : {}),
+          },
+        },
+        createdAt: new Date().toISOString(),
+      };
+      const saved = saveRunArtifact(path.join(configRoot, config.totemDir), runArtifact);
+      log.dim(
+        tag,
+        `Run artifact ${saved.existed ? 'already recorded' : 'recorded'}: ${saved.hash.slice(0, 12)}…`,
+      );
+      opts.artifact.onEmitted?.(saved.hash, saved.path);
+    } catch (err) {
+      log.warn(
+        tag,
+        `Run artifact emission failed (run unaffected): ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

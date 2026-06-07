@@ -512,6 +512,38 @@ reviewOptions(
   }
 });
 
+// Grounded run artifacts (mmnto-ai/totem#2100): thin verbs over the
+// rerun/compare primitives — JSON out, no interactivity.
+const artifactCommand = program
+  .command('artifact')
+  .description('Inspect grounded run artifacts (.totem/artifacts/runs/)');
+
+artifactCommand
+  .command('rerun <hash>')
+  .description(
+    'Re-invoke a recorded run with its exact stored bundle + backend (emits a new artifact)',
+  )
+  .action(async (hash: string) => {
+    try {
+      const { artifactRerunCommand } = await import('./commands/artifact.js');
+      await artifactRerunCommand(hash);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+artifactCommand
+  .command('compare <hashA> <hashB>')
+  .description('Deterministic artifact-vs-artifact diff (structural equality + metric deltas)')
+  .action(async (hashA: string, hashB: string) => {
+    try {
+      const { artifactCompareCommand } = await import('./commands/artifact.js');
+      await artifactCompareCommand(hashA, hashB);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 program
   .command('triage-pr <pr-number>')
   .description('Categorized triage view of bot review comments on a PR')

@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
+import { RunArtifactSchema } from '@mmnto/totem';
 
 import { cleanTmpDir } from './test-utils.js';
 import {
@@ -1190,5 +1191,193 @@ describe('formatLessonSection', () => {
     const result = formatLessonSection([makeLesson('Short', 'A tiny lesson')], undefined, true);
     expect(result).toContain('A tiny lesson');
     expect(result).not.toContain('...');
+  });
+});
+
+// ─── runOrchestrator artifact emission (mmnto-ai/totem#2100) ──
+
+describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () => {
+  let tmpDir: string;
+
+  const GROUNDING_HASH = 'b'.repeat(64);
+
+  function artifactRequest(onEmitted?: (hash: string, artifactPath: string) => void) {
+    return {
+      groundingHash: GROUNDING_HASH,
+      provenanceSummary: 'similarity-only',
+      ...(onEmitted !== undefined ? { onEmitted } : {}),
+    };
+  }
+
+  function artifactConfig(overrides?: Partial<TotemConfig>): TotemConfig {
+    return {
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      orchestrator: {
+        provider: 'gemini',
+        defaultModel: 'gemini-3-flash-preview',
+      },
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+      ...overrides,
+    } as TotemConfig;
+  }
+
+  function runsDirPath(): string {
+    return path.join(tmpDir, '.totem', 'artifacts', 'runs');
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-artifact-emit-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    const mockInvoke = vi.fn().mockResolvedValue({
+      content: 'mock result',
+      inputTokens: 100,
+      outputTokens: 50,
+      durationMs: 500,
+    });
+    mockedCreateOrchestrator.mockReturnValue(mockInvoke);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanTmpDir(tmpDir);
+  });
+
+  it('emits content-addressed artifact with valid schema after successful orchestrator run', async () => {
+    const emitted: Array<{ hash: string; artifactPath: string }> = [];
+    const result = await runOrchestrator({
+      prompt: 'test prompt',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      artifact: artifactRequest((hash, artifactPath) => emitted.push({ hash, artifactPath })),
+    });
+
+    expect(result).toBe('mock result');
+    expect(emitted).toHaveLength(1);
+    const file = path.join(runsDirPath(), `${emitted[0]!.hash}.json`);
+    expect(emitted[0]!.artifactPath).toBe(file);
+    expect(fs.existsSync(file)).toBe(true);
+
+    const artifact = RunArtifactSchema.parse(JSON.parse(fs.readFileSync(file, 'utf-8')));
+    expect(artifact.inputBundle.maskedPrompt).toBe('test prompt');
+    expect(artifact.grounding).toEqual({
+      hash: GROUNDING_HASH,
+      provenanceSummary: 'similarity-only',
+    });
+    expect(artifact.backend.admissionClass).toBe('completion_only');
+    expect(artifact.backend.taskProfile).toBe('Spec');
+    expect(artifact.backend.provider).toBe('gemini');
+    expect(artifact.output.content).toBe('mock result');
+    expect(artifact.output.metrics).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 50,
+      durationMs: 500,
+    });
+  });
+
+  it('records the MASKED prompt — a custom secret never reaches the artifact', async () => {
+    const secret = 'SUPER-SECRET-TOKEN-12345';
+    const emitted: string[] = [];
+    await runOrchestrator({
+      prompt: `deploy with ${secret} now`,
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      customSecrets: [{ type: 'literal', value: secret }],
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    const file = path.join(runsDirPath(), `${emitted[0]!}.json`);
+    const rawOnDisk = fs.readFileSync(file, 'utf-8');
+    expect(rawOnDisk).not.toContain(secret);
+    const artifact = RunArtifactSchema.parse(JSON.parse(rawOnDisk));
+    expect(artifact.inputBundle.maskedPrompt).not.toContain(secret);
+  });
+
+  it('a response-cache hit emits NO artifact (artifacts record actual invokes)', async () => {
+    const onEmitted = vi.fn();
+    const opts = {
+      prompt: 'cacheable prompt',
+      tag: 'Spec', // Spec carries a default response-cache TTL
+      options: {},
+      config: artifactConfig(),
+      cwd: tmpDir,
+      artifact: { ...artifactRequest(), onEmitted },
+    };
+    await runOrchestrator(opts);
+    expect(onEmitted).toHaveBeenCalledTimes(1);
+    expect(fs.readdirSync(runsDirPath())).toHaveLength(1);
+
+    await runOrchestrator(opts); // second run hits the response cache
+    expect(onEmitted).toHaveBeenCalledTimes(1); // unchanged
+    expect(fs.readdirSync(runsDirPath())).toHaveLength(1); // unchanged
+  });
+
+  it('a non-opted caller creates no artifacts directory (byte-identical behavior)', async () => {
+    const result = await runOrchestrator({
+      prompt: 'plain run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+    });
+    expect(result).toBe('mock result');
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'artifacts'))).toBe(false);
+  });
+
+  it('an artifact write failure warns but never fails the run', async () => {
+    // Occupy the artifacts path with a FILE so mkdir of artifacts/runs throws.
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'artifacts'), 'not a directory');
+
+    const onEmitted = vi.fn();
+    const result = await runOrchestrator({
+      prompt: 'run whose ledger write fails',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      artifact: { ...artifactRequest(), onEmitted },
+    });
+
+    expect(result).toBe('mock result'); // the run is not hostage to its ledger
+    expect(onEmitted).not.toHaveBeenCalled();
+  });
+
+  it('after a quota fallback the artifact records the RESOLVED model, not the requested one', async () => {
+    const quotaErr = new Error('429 quota exhausted');
+    quotaErr.name = 'QuotaError';
+    const mockInvoke = vi
+      .fn()
+      .mockRejectedValueOnce(quotaErr)
+      .mockResolvedValue({ content: 'fallback result', durationMs: 300 });
+    mockedCreateOrchestrator.mockReturnValue(mockInvoke);
+
+    const emitted: string[] = [];
+    await runOrchestrator({
+      prompt: 'quota-bound prompt',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig({
+        orchestrator: {
+          provider: 'gemini',
+          defaultModel: 'gemini-3.1-pro-preview',
+          fallbackModel: 'gemini-3-flash-preview',
+        },
+      }),
+      cwd: tmpDir,
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    const file = path.join(runsDirPath(), `${emitted[0]!}.json`);
+    const artifact = RunArtifactSchema.parse(JSON.parse(fs.readFileSync(file, 'utf-8')));
+    expect(artifact.backend.qualifiedModel).toBe('gemini-3-flash-preview');
+    expect(artifact.output.content).toBe('fallback result');
   });
 });
