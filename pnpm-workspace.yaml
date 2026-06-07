@@ -13,7 +13,9 @@ allowBuilds:
   'tree-sitter-javascript': true
   'tree-sitter-typescript': true
 
-minimumReleaseAge: 1d
+# Minutes (pnpm 11.2.2 multiplies this raw — a duration string like `1d` yields
+# NaN → Invalid Date → "Invalid time value" crash on any resolving install).
+minimumReleaseAge: 1440
 # Cohort packages publish-then-install in the same CI window by design.
 minimumReleaseAgeExclude:
   - '@mmnto/*'
