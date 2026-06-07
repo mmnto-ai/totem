@@ -1,5 +1,9 @@
 # @mmnto/totem
 
+## 1.54.1
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 1.54.0
 
 ### Minor Changes
