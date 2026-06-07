@@ -1,0 +1,7 @@
+## Lesson — totem lint scopes to CHANGED lines, so extracting code
+
+**Tags:** totem-lint, pre-push-hook, code-extraction, trap, compiled-rules, totem-context
+
+`totem lint` scopes to CHANGED lines, so extracting code verbatim into a new file (e.g. lifting a shared helper like a settings-merge primitive out of a large module) surfaces that code's pre-existing/dormant compiled-rule violations as if they were NEW — they were only dormant because the lines were unchanged. Compounding this: the pre-push git hook runs `totem lint` via the PATH-resolved GLOBAL `totem` binary against the FULL branch-vs-main diff, a BROADER scope than a local `node packages/cli/dist/index.js lint` (which may diff only HEAD~1 or uncommitted, hiding the violations). Net: before the FIRST push of a PR that MOVES code, run a full-branch lint on a clean/committed tree — ideally via the same global binary the hook uses — to surface dormant debt up front instead of discovering it across multiple rejected pushes (format:check is repo-wide prettier and bites the same way on moved/old files). Fix moved code properly, or document a genuinely-intentional pattern with a single-line `// totem-context:` directive placed on the line DIRECTLY above the `} catch` (the rule checks that exact line); never paper over with a bare `// totem-ignore` (AGENTS.md forbids it without a ticket-ref).
+
+**Source:** mcp (added at 2026-05-31T04:11:42.530Z)
