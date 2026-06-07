@@ -513,6 +513,7 @@ export {
 export { readJsonSafe } from './sys/fs.js';
 
 // Grounded run artifacts (mmnto-ai/totem#2100, strategy#474 slice 1)
+export { calculateDeterministicHash } from './artifacts/hash.js';
 export type { InputBundle, RunArtifact } from './artifacts/schema.js';
 export {
   ADMISSION_COMPLETION_ONLY,
@@ -520,7 +521,6 @@ export {
   RUN_ARTIFACT_SCHEMA_VERSION,
   RunArtifactSchema,
 } from './artifacts/schema.js';
-export { calculateDeterministicHash } from './artifacts/hash.js';
 export type { SaveRunArtifactResult } from './artifacts/storage.js';
 export {
   computeRunArtifactContentHash,
