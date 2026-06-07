@@ -128,11 +128,8 @@ export function loadRunArtifact(totemDirAbs: string, hash: string): RunArtifact 
 
   try {
     return RunArtifactSchema.parse(raw);
+    // totem-context: rethrowAsParseError always throws (returns `never`) — this catch RE-throws via the shared helper, normalizing ZodError to the module's stated TotemParseError load contract (GCA + CR review on #2114); nothing is swallowed.
   } catch (err) {
-    // Normalize the ZodError to the module's stated load contract (GCA + CR
-    // review on #2114): JSON-read failures and schema failures both surface
-    // as TotemParseError, with the Zod issue text (incl. the rejected
-    // schemaVersion) preserved via the message + cause.
     rethrowAsParseError(
       `Run artifact ${hash} failed schema validation`,
       err,
