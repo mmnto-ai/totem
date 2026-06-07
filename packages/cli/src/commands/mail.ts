@@ -90,52 +90,93 @@ export interface MailCommandOptions {
 // ─── Frontmatter parsing ────────────────────────────────
 
 /**
- * Extract `to:` / `from:` / `subject:` / `date:` from a leading frontmatter
- * block. Restricts the regex search to the header (text before the first
- * blank line) so body lines starting with `to:` etc. cannot fabricate a
- * match or overwrite displayed metadata — same defense pattern as the
- * reference impl.
- *
- * Returns `null` if no `to:` field is present (the only frontmatter field
- * required for a file to be eligible mail).
+ * Hard cap on bytes searched for the CLOSING `---` frontmatter delimiter.
+ * Bounds regex work on pathological files. Genuine cohort frontmatter is
+ * multi-KiB — frontmatter-only dispatches carry the whole message in
+ * `subject:` (4,163 bytes observed live, mmnto-ai/totem#2118) — so the
+ * window is sized ~4× the observed max, NOT the "dozens of bytes" the
+ * 2 KiB predecessor assumed (that assumption silently dropped 8/8 of the
+ * misses in the #2118 forensics). A closing `---` beyond this window is
+ * treated as absent.
  */
-/**
- * Hard cap on bytes scanned for frontmatter when no blank-line separator
- * exists. Defense against forged frontmatter: a malformed handoff without
- * the `---\n\n` delimiter would otherwise let body lines starting with
- * `to:` fabricate metadata. Real frontmatter is dozens of bytes; 2 KiB
- * is generous-but-bounded.
- */
-const MAX_HEADER_BYTES = 2048;
+const MAX_HEADER_SEARCH_BYTES = 16_384;
 
-function parseHeader(content: string): {
-  to: string;
-  from: string | null;
-  subject: string | null;
-  date: string | null;
-} | null {
+/**
+ * Closing frontmatter delimiter: a `---` line after the opener (LF/CRLF/EOF),
+ * tolerating trailing whitespace on the line (hand-authored dispatches).
+ */
+const CLOSING_DELIMITER = /\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/**
+ * Discriminated parse result so the scan loop can warn on mail-shaped
+ * rejects (sender error — must be loud, Tenet 4) while staying silent on
+ * stray non-mail files (a warning there would be permanent, unclearable
+ * noise: the recipient cannot remove a sender's file). Carries the reject
+ * reason for the warning message. mmnto-ai/totem#2118: parse-null was the
+ * module's only warning-less failure path, and it ate real dispatches.
+ */
+type HeaderParse =
+  | {
+      ok: true;
+      header: { to: string; from: string | null; subject: string | null; date: string | null };
+    }
+  | { ok: false; mailShaped: boolean; reason: string };
+
+/**
+ * Extract `to:` / `from:` / `subject:` / `date:` from a leading frontmatter
+ * block. Restricts the regex search to the delimited header (text between
+ * the opening and closing `---` lines) so body lines starting with `to:`
+ * etc. cannot fabricate a match or overwrite displayed metadata.
+ *
+ * `to:` is the only frontmatter field required for a file to be eligible
+ * mail; a mail-shaped file without it is a reject, not a fallback.
+ */
+function parseHeader(content: string): HeaderParse {
   // Defense in depth: real handoffs open with a YAML frontmatter delimiter.
   // Reject anything that doesn't, so a stray .md file in an outbox cannot
   // be coerced into mail.
-  if (!content.startsWith('---')) return null;
+  if (!content.startsWith('---')) {
+    return { ok: false, mailShaped: false, reason: 'no opening --- delimiter' };
+  }
 
-  const parts = content.split(/\r?\n\r?\n/, 2);
-  const header = parts[0] ?? '';
-  // When there's no blank-line separator, the split returns the whole
-  // file as parts[0]. Cap header size in that case so body content can't
-  // fabricate `to:`/`from:` matches.
-  if (parts.length < 2 && content.length > MAX_HEADER_BYTES) return null;
+  // Parse to the CLOSING `---` line (mmnto-ai/totem#2118). The predecessor
+  // split on the first blank line and rejected any >2 KiB file without one —
+  // silently dropping every frontmatter-only dispatch over 2 KiB (the cohort
+  // convention puts the whole message in `subject:`, zero blank lines). The
+  // closing delimiter is the real header terminator; the byte cap bounds the
+  // SEARCH WINDOW instead of rejecting the file outright.
+  const window = content.slice(3, 3 + MAX_HEADER_SEARCH_BYTES);
+  const close = CLOSING_DELIMITER.exec(window);
+  if (!close) {
+    return {
+      ok: false,
+      mailShaped: true,
+      reason:
+        // The window starts at byte 3 (after the opener), so truncation only
+        // actually occurs past 3 + MAX — the window message must not fire for
+        // files the window fully covered (Greptile R1 on mmnto-ai/totem#2119).
+        content.length > 3 + MAX_HEADER_SEARCH_BYTES
+          ? `no closing --- within the ${MAX_HEADER_SEARCH_BYTES}-byte search window`
+          : 'no closing --- delimiter',
+    };
+  }
+  const header = window.slice(0, close.index);
 
   const toMatch = header.match(/^to:\s*(.+)$/im);
-  if (!toMatch) return null;
+  if (!toMatch) {
+    return { ok: false, mailShaped: true, reason: 'no to: field in frontmatter' };
+  }
   const fromMatch = header.match(/^from:\s*(.+)$/im);
   const subjectMatch = header.match(/^[-\s]*subject:\s*(.+)$/im);
   const dateMatch = header.match(/^date:\s*(.+)$/im);
   return {
-    to: toMatch[1]!.trim(),
-    from: fromMatch ? fromMatch[1]!.trim() : null,
-    subject: subjectMatch ? subjectMatch[1]!.trim() : null,
-    date: dateMatch ? dateMatch[1]!.trim() : null,
+    ok: true,
+    header: {
+      to: toMatch[1]!.trim(),
+      from: fromMatch ? fromMatch[1]!.trim() : null,
+      subject: subjectMatch ? subjectMatch[1]!.trim() : null,
+      date: dateMatch ? dateMatch[1]!.trim() : null,
+    },
   };
 }
 
@@ -356,8 +397,18 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       warnings.push(`mail read failed (${slot.repo}/${slot.agent}/${file}): ${String(err)}`);
       continue;
     }
-    const header = parseHeader(content);
-    if (!header) continue;
+    const parsed = parseHeader(content);
+    if (!parsed.ok) {
+      // Tenet 4 parity with the readFileSync path above: a mail-shaped file
+      // that fails to parse is the silent-drop hazard (mmnto-ai/totem#2118 —
+      // eight real dispatches vanished without a trace). Non-mail-shaped
+      // strays stay silent by design (see HeaderParse).
+      if (parsed.mailShaped) {
+        warnings.push(`mail parse failed (${slot.repo}/${slot.agent}/${file}): ${parsed.reason}`);
+      }
+      continue;
+    }
+    const header = parsed.header;
     const toLower = header.to.toLowerCase();
     if (toLower !== 'broadcast' && !selfLower.has(toLower)) continue;
     mail.push({

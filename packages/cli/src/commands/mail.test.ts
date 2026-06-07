@@ -12,10 +12,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
-import { type MailPollResult, pollMail } from './mail.js';
+import { mailCommand, type MailPollResult, pollMail } from './mail.js';
 
 // ─── Fixture helpers ────────────────────────────────────
 
@@ -96,6 +96,27 @@ function writeBroadcastProcessed(repo: string, recipientAgent: string, names: st
  */
 function selfRepoRoot(): string {
   return mkDir(path.join(workspace, 'totem'));
+}
+
+/**
+ * Build a frontmatter-only dispatch (zero blank lines) carrying the whole
+ * message in an oversized `subject:` — the cohort adr-098 shape whose
+ * silent drop is the mmnto-ai/totem#2118 regression class (observed live
+ * at 2,110–4,163 bytes; the predecessor parser rejected anything > 2 KiB
+ * without a blank-line separator).
+ */
+function frontmatterOnlyDispatch(subjectBytes: number, eol: '\n' | '\r\n' = '\n'): string {
+  return [
+    '---',
+    'schema: adr-098-v0.4',
+    'from: strategy-claude',
+    'to: totem-claude',
+    'date: 2026-06-07T2015Z',
+    `subject: "[${'W'.repeat(subjectBytes)}]"`,
+    'priority: normal',
+    '---',
+    '',
+  ].join(eol);
 }
 
 beforeEach(() => {
@@ -277,12 +298,17 @@ describe('pollMail — sort + metadata', () => {
 // ─── Frontmatter parsing robustness ─────────────────────
 
 describe('pollMail — frontmatter parsing', () => {
-  it('skips files without `to:` in the frontmatter', () => {
+  it('skips files without `to:` in the frontmatter — with a warning (mail-shaped sender error)', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: 'noto.md', to: 'totem-claude', raw: '---\nfrom: x\n---\n' },
     ]);
     const result = poll();
     expect(result.mail).toEqual([]);
+    // An outbox is dispatches-only by ADR-106 § 3; a `to:`-less mail-shaped
+    // file there is sender error, surfaced loud (mmnto-ai/totem#2118).
+    expect(
+      result.warnings.some((w) => w.startsWith('mail parse failed') && w.includes('noto.md')),
+    ).toBe(true);
   });
 
   it('only reads frontmatter from the header block (body `to:` cannot fabricate a match)', () => {
@@ -295,6 +321,10 @@ describe('pollMail — frontmatter parsing', () => {
     ]);
     const result = poll();
     expect(result.mail).toEqual([]);
+    // Rejected for the right reason: no `to:` INSIDE the delimited header.
+    expect(
+      result.warnings.some((w) => w.startsWith('mail parse failed') && w.includes('body-to.md')),
+    ).toBe(true);
   });
 
   it('handles CRLF line endings', () => {
@@ -537,7 +567,7 @@ describe('pollMail — MAX_SCAN truncation', () => {
 // ─── Frontmatter forge defense (GCA R2 security finding on #1971) ───────
 
 describe('pollMail — frontmatter forge defense', () => {
-  it('rejects files that do not start with the YAML `---` delimiter', () => {
+  it('rejects files that do not start with the YAML `---` delimiter — silently (not mail-shaped)', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       {
         name: 'no-delimiter.md',
@@ -547,28 +577,36 @@ describe('pollMail — frontmatter forge defense', () => {
     ]);
     const result = poll();
     expect(result.mail).toEqual([]);
+    // A stray .md is non-mail by contract; warning on it every poll would be
+    // permanent, unclearable noise (mmnto-ai/totem#2118 design note).
+    expect(result.warnings).toEqual([]);
   });
 
-  it('rejects large files lacking a blank-line frontmatter separator', () => {
-    // Real frontmatter is tens of bytes; a file > 2 KiB without the
-    // blank-line separator is structurally malformed. Capping the header
-    // scan in that case prevents body lines from fabricating `to:` matches.
+  it('rejects mail-shaped files with no closing `---` delimiter — and warns', () => {
+    // The forge defense, re-derived for delimiter parsing: without a closing
+    // `---`, body lines can't be distinguished from frontmatter, so the file
+    // is rejected — but LOUDLY now (mmnto-ai/totem#2118: parse-null was the
+    // only warning-less failure path in the module).
     const filler = 'x'.repeat(2500);
     writeOutbox('totem-strategy', 'strategy-claude', [
       {
-        name: 'huge-no-separator.md',
+        name: 'huge-no-close.md',
         to: 'unused',
         raw: `---\nfrom: strategy-claude\n${filler}\nto: totem-claude\nsubject: forged\n`,
       },
     ]);
     const result = poll();
     expect(result.mail).toEqual([]);
+    expect(
+      result.warnings.some(
+        (w) => w.startsWith('mail parse failed') && w.includes('huge-no-close.md'),
+      ),
+    ).toBe(true);
   });
 
-  it('accepts a small file without a blank-line separator (header fits in MAX_HEADER_BYTES)', () => {
-    // Below the 2 KiB cap, the whole file is treated as header — that's the
-    // existing lenient behavior, preserved for valid handoffs that omit the
-    // trailing blank line.
+  it('accepts a frontmatter-only file regardless of blank-line separators (delimiter semantics)', () => {
+    // Supersedes the old "small file without blank-line separator" leniency:
+    // the closing `---` is the header terminator, full stop.
     writeOutbox('totem-strategy', 'strategy-claude', [
       {
         name: 'small-no-separator.md',
@@ -579,6 +617,151 @@ describe('pollMail — frontmatter forge defense', () => {
     const result = poll();
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe('tight');
+  });
+});
+
+// ─── Frontmatter-only dispatches > 2 KiB (#2118 regression class) ───────
+
+describe('pollMail — frontmatter-only dispatches (#2118)', () => {
+  it('parses a frontmatter-only dispatch larger than 2 KiB with zero blank lines', () => {
+    // The 8/8 miss class: cohort dispatches carry the whole message in
+    // `subject:` (observed live at 2,110–4,163 bytes, zero blank lines). The
+    // predecessor parser silently dropped every one of these over 2 KiB.
+    const raw = frontmatterOnlyDispatch(3300);
+    expect(raw.length).toBeGreaterThan(2048); // guard: the fixture exercises the old cap
+    expect(raw).not.toMatch(/\n\n/); // guard: genuinely zero blank lines
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-07T2015Z-totem-claude.md', to: 'unused', raw },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.to).toBe('totem-claude');
+    expect(result.mail[0]!.date).toBe('2026-06-07T2015Z');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('parses a large frontmatter-only CRLF dispatch identically', () => {
+    const raw = frontmatterOnlyDispatch(3300, '\r\n');
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: 'crlf-large.md', to: 'unused', raw },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.to).toBe('totem-claude');
+  });
+
+  it('rejects a dispatch whose closing `---` sits beyond the search window — and warns', () => {
+    // Pathological-file bound: the cap now bounds the SEARCH WINDOW for the
+    // closing delimiter instead of rejecting any large no-blank-line file.
+    const raw = frontmatterOnlyDispatch(20_000);
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: 'over-window.md', to: 'unused', raw },
+    ]);
+    const result = poll();
+    expect(result.mail).toEqual([]);
+    expect(
+      result.warnings.some(
+        (w) => w.startsWith('mail parse failed') && w.includes('over-window.md'),
+      ),
+    ).toBe(true);
+  });
+
+  it('a blank line INSIDE the frontmatter does not truncate the header', () => {
+    // The old splitter cut the header at the first blank line — a blank line
+    // inside the frontmatter region hid every field after it.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: 'inner-blank.md',
+        to: 'unused',
+        raw: '---\nfrom: strategy-claude\n\nto: totem-claude\nsubject: post-blank\n---\n',
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('post-blank');
+  });
+
+  it('accepts trailing whitespace on the closing `---` line (hand-authored dispatches)', () => {
+    // Greptile R1 on mmnto-ai/totem#2119: tolerate `---  \n` as the closing
+    // delimiter. (The
+    // block-scalar rationale in the finding doesn't hold — YAML block-scalar
+    // content must be indented, so a column-0 `---` can't occur inside one —
+    // but trailing-whitespace tolerance is a real hand-edit robustness win.)
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: 'trailing-ws-close.md',
+        to: 'unused',
+        raw: '---\nfrom: strategy-claude\nto: totem-claude\nsubject: ws close\n---  \nBody.\n',
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('ws close');
+  });
+
+  it('reports the search-window reason only when content actually exceeds the window', () => {
+    // Greptile R1 on mmnto-ai/totem#2119: the window is content.slice(3, 3 +
+    // MAX), so files
+    // of MAX+1..MAX+3 bytes are NOT truncated — the reason must be the plain
+    // "no closing --- delimiter", reserving the window message for genuine
+    // truncation.
+    const atBoundary = `---\n${'x'.repeat(16_382)}`; // 16,386 bytes, no close
+    const overBoundary = `---\n${'x'.repeat(17_000)}`; // truncated by the window
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: 'at-boundary.md', to: 'unused', raw: atBoundary },
+      { name: 'over-boundary.md', to: 'unused', raw: overBoundary },
+    ]);
+    const result = poll();
+    expect(result.mail).toEqual([]);
+    const atWarning = result.warnings.find((w) => w.includes('at-boundary.md'));
+    const overWarning = result.warnings.find((w) => w.includes('over-boundary.md'));
+    expect(atWarning).toContain('no closing --- delimiter');
+    expect(atWarning).not.toContain('search window');
+    expect(overWarning).toContain('search window');
+  });
+
+  it('parses the interim sender-discipline shape (blank line + body footer after closing `---`)', () => {
+    // The cohort's send-side hotfix while old readers are deployed; the new
+    // parser must treat the footer as body, not header.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: 'footer.md',
+        to: 'unused',
+        raw: '---\nfrom: strategy-claude\nto: totem-claude\nsubject: with footer\n---\n\nFull content in subject above.\n',
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('with footer');
+  });
+});
+
+// ─── mailCommand --json (#2097) ─────────────────────────
+
+describe('mailCommand — --json output', () => {
+  it('emits valid JSON to stdout when json is set', async () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-07T2015Z.md', to: 'totem-claude', subject: 'json contract' },
+    ]);
+    const writes: string[] = [];
+    const spy = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
+        return true;
+      });
+    try {
+      await mailCommand({ json: true, repoRoot: selfRepoRoot(), workspace, env: {} });
+    } finally {
+      spy.mockRestore();
+    }
+    // The JSON contract is a single stdout write — one parseable payload,
+    // nothing interleaved.
+    expect(writes).toHaveLength(1);
+    const parsed = JSON.parse(writes[0]!) as MailPollResult;
+    expect(parsed.mail).toHaveLength(1);
+    expect(parsed.mail[0]!.subject).toBe('json contract');
+    expect(parsed.warnings).toEqual([]);
   });
 });
 

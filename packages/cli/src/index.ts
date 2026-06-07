@@ -735,16 +735,29 @@ program
     '--workspace <path>',
     'Workspace dir to scan (default: $TOTEM_WORKSPACE, else parent of cwd)',
   )
-  .action(async (opts: { json?: boolean; recursive?: boolean; workspace?: string }) => {
-    try {
-      const { mailCommand } = await import('./commands/mail.js');
-      await mailCommand(opts);
-    } catch (err) {
-      handleError(err);
-      // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the verify-badges pattern above.
-      throw err;
-    }
-  });
+  .action(
+    async (_opts: { json?: boolean; recursive?: boolean; workspace?: string }, cmd: Command) => {
+      try {
+        const { mailCommand } = await import('./commands/mail.js');
+        // The program-level `--json` (top of file) swallows the flag when it
+        // appears after the subcommand (commander parent/child option collision,
+        // mmnto-ai/totem#2097): the value lands on program.opts() and the action
+        // receives {}. optsWithGlobals() merges both scopes so `totem mail --json`
+        // and `totem --json mail` agree. Typed destructure so a future global
+        // option can't silently shadow a MailCommandOptions field.
+        const { json, recursive, workspace } = cmd.optsWithGlobals<{
+          json?: boolean;
+          recursive?: boolean;
+          workspace?: string;
+        }>();
+        await mailCommand({ json, recursive, workspace });
+      } catch (err) {
+        handleError(err);
+        // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the verify-badges pattern above.
+        throw err;
+      }
+    },
+  );
 
 program
   .command('remove-secret <index>')
