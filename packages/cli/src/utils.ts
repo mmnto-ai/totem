@@ -740,6 +740,7 @@ export async function runOrchestrator(opts: {
         `Run artifact ${saved.existed ? 'already recorded' : 'recorded'}: ${saved.hash.slice(0, 12)}…`,
       );
       opts.artifact.onEmitted?.(saved.hash, saved.path);
+      // totem-context: by-design degrade per the #2100 failure table — the ledger write is observability; rethrowing would hold the run's PRIMARY output hostage to its record. The degradation is WARNED (Tenet-4-compliant), never silent.
     } catch (err) {
       log.warn(
         tag,

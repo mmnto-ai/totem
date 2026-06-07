@@ -527,6 +527,7 @@ artifactCommand
     try {
       const { artifactRerunCommand } = await import('./commands/artifact.js');
       await artifactRerunCommand(hash);
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action in this file; nothing is swallowed.
     } catch (err) {
       handleError(err);
     }
@@ -539,6 +540,7 @@ artifactCommand
     try {
       const { artifactCompareCommand } = await import('./commands/artifact.js');
       await artifactCompareCommand(hashA, hashB);
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action in this file; nothing is swallowed.
     } catch (err) {
       handleError(err);
     }
