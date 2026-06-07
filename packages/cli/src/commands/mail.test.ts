@@ -681,6 +681,45 @@ describe('pollMail — frontmatter-only dispatches (#2118)', () => {
     expect(result.mail[0]!.subject).toBe('post-blank');
   });
 
+  it('accepts trailing whitespace on the closing `---` line (hand-authored dispatches)', () => {
+    // Greptile R1 on mmnto-ai/totem#2119: tolerate `---  \n` as the closing
+    // delimiter. (The
+    // block-scalar rationale in the finding doesn't hold — YAML block-scalar
+    // content must be indented, so a column-0 `---` can't occur inside one —
+    // but trailing-whitespace tolerance is a real hand-edit robustness win.)
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: 'trailing-ws-close.md',
+        to: 'unused',
+        raw: '---\nfrom: strategy-claude\nto: totem-claude\nsubject: ws close\n---  \nBody.\n',
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('ws close');
+  });
+
+  it('reports the search-window reason only when content actually exceeds the window', () => {
+    // Greptile R1 on mmnto-ai/totem#2119: the window is content.slice(3, 3 +
+    // MAX), so files
+    // of MAX+1..MAX+3 bytes are NOT truncated — the reason must be the plain
+    // "no closing --- delimiter", reserving the window message for genuine
+    // truncation.
+    const atBoundary = `---\n${'x'.repeat(16_382)}`; // 16,386 bytes, no close
+    const overBoundary = `---\n${'x'.repeat(17_000)}`; // truncated by the window
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: 'at-boundary.md', to: 'unused', raw: atBoundary },
+      { name: 'over-boundary.md', to: 'unused', raw: overBoundary },
+    ]);
+    const result = poll();
+    expect(result.mail).toEqual([]);
+    const atWarning = result.warnings.find((w) => w.includes('at-boundary.md'));
+    const overWarning = result.warnings.find((w) => w.includes('over-boundary.md'));
+    expect(atWarning).toContain('no closing --- delimiter');
+    expect(atWarning).not.toContain('search window');
+    expect(overWarning).toContain('search window');
+  });
+
   it('parses the interim sender-discipline shape (blank line + body footer after closing `---`)', () => {
     // The cohort's send-side hotfix while old readers are deployed; the new
     // parser must treat the footer as body, not header.

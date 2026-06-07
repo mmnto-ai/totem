@@ -743,8 +743,14 @@ program
         // appears after the subcommand (commander parent/child option collision,
         // mmnto-ai/totem#2097): the value lands on program.opts() and the action
         // receives {}. optsWithGlobals() merges both scopes so `totem mail --json`
-        // and `totem --json mail` agree.
-        await mailCommand(cmd.optsWithGlobals());
+        // and `totem --json mail` agree. Typed destructure so a future global
+        // option can't silently shadow a MailCommandOptions field.
+        const { json, recursive, workspace } = cmd.optsWithGlobals<{
+          json?: boolean;
+          recursive?: boolean;
+          workspace?: string;
+        }>();
+        await mailCommand({ json, recursive, workspace });
       } catch (err) {
         handleError(err);
         // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the verify-badges pattern above.

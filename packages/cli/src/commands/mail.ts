@@ -101,8 +101,11 @@ export interface MailCommandOptions {
  */
 const MAX_HEADER_SEARCH_BYTES = 16_384;
 
-/** Closing frontmatter delimiter: a `---` line after the opener (LF/CRLF/EOF). */
-const CLOSING_DELIMITER = /\r?\n---(?:\r?\n|$)/;
+/**
+ * Closing frontmatter delimiter: a `---` line after the opener (LF/CRLF/EOF),
+ * tolerating trailing whitespace on the line (hand-authored dispatches).
+ */
+const CLOSING_DELIMITER = /\r?\n---[ \t]*(?:\r?\n|$)/;
 
 /**
  * Discriminated parse result so the scan loop can warn on mail-shaped
@@ -149,7 +152,10 @@ function parseHeader(content: string): HeaderParse {
       ok: false,
       mailShaped: true,
       reason:
-        content.length > MAX_HEADER_SEARCH_BYTES
+        // The window starts at byte 3 (after the opener), so truncation only
+        // actually occurs past 3 + MAX — the window message must not fire for
+        // files the window fully covered (Greptile R1 on mmnto-ai/totem#2119).
+        content.length > 3 + MAX_HEADER_SEARCH_BYTES
           ? `no closing --- within the ${MAX_HEADER_SEARCH_BYTES}-byte search window`
           : 'no closing --- delimiter',
     };
