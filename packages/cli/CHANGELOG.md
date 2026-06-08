@@ -1,5 +1,20 @@
 # @mmnto/cli
 
+## 1.55.0
+
+### Minor Changes
+
+- 5256cb5: feat(orchestrator): grounding bundle with day-one provenance classes (#2101, strategy#474 slice 2).
+
+  Every run artifact now carries a per-item `grounding.bundle`: each delivered evidence item self-describes its provenance class (`similarity-only` | `structurally-verified` | `spec-contract` | `compiled-rule` — open vocabulary with canonical constants, consumers fail-safe-down on unknown classes), its identity (`sourceType`, `filePath`, optional `sourceRepo`; absent = the run's own repo), and a `contentHash` (identity, never bytes — the masked prompt already carries content once). The first cut wraps existing retrieval honestly as `similarity-only`; structural resolvers (#344/#375) graduate items later. `grounding.hash` becomes the deterministic hash of the bundle (recomputable from the artifact surface alone) and `provenanceSummary` is derived as a sorted class-count string (`similarity-only:14`; zero items → `ungrounded`). Bundle items are canonically sorted so retrieval order never moves the hash. Reruns carry the bundle verbatim. `RUN_ARTIFACT_SCHEMA_VERSION` bumps to 1.1.0 (additive; the version-tolerant reader parses slice-1 artifacts unchanged — they cannot be re-classed and stay as-is). New core exports: `GroundingItemSchema`, `GroundingBundleSchema`, `buildGroundingBundle`, `summarizeProvenance`, `PROVENANCE_CLASSES`, `PROVENANCE_UNGROUNDED`.
+
+### Patch Changes
+
+- 7cebd71: feat(doctor): wire the `last-attested:` manifest field through to manual-attestation rows (#2125). The parity-manifest schema parses the optional ISO-8601 `last-attested:` date (strategy#540) into `ParityContract.lastAttested`, and `doctor --parity` passes it to the detector's reserved `attested?:` seam — dated rows render `last attested <date>`, undated rows keep the honest `last attested: not recorded`. Message refinement only; the manual-attestation verdict ceiling (`info`/`skip`, never fails) is unchanged. Ships with the `@mmnto/strategy-doctrine` 0.1.3→0.1.4 pin bump that distributes the first attestation dates.
+- Updated dependencies [5256cb5]
+- Updated dependencies [7cebd71]
+  - @mmnto/totem@1.55.0
+
 ## 1.54.1
 
 ### Patch Changes
