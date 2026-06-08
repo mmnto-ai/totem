@@ -23,6 +23,15 @@ export interface NormalizedBotFinding {
   resolutionSignal?: 'reply' | 'resolved_thread' | 'none';
   /** The root comment ID of the thread this finding originated from */
   rootCommentId?: number;
+  /**
+   * Round disposition per the canonical decline taxonomy
+   * (doctrine bot-protocols.md §8.1; mmnto-ai/totem#2124). `declined` findings are
+   * kept out of lesson extraction so a refuted claim is never laundered into a rule.
+   * `undefined` means no disposition signal was available (treated as not-declined).
+   */
+  disposition?: 'accepted' | 'declined';
+  /** For `declined` findings: the human reply that signalled the decline (audit-breadcrumb / mmnto-ai/totem#2038 backfill reference). */
+  dispositionRationale?: string;
 }
 
 export interface CommentThread {
@@ -94,6 +103,17 @@ export const PUSHBACK_PATTERNS = [
   /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
   /\bdismiss(?:ed|ing)?\b/i,
   /\bjust\s+a\s+nit\b/i,
+  // Canonical decline taxonomy (doctrine bot-protocols.md §8.1 / mmnto-ai/totem-strategy#590):
+  // the inline free-text surface MUST recognize `decline`/`declined` + the `decline-*` classes,
+  // so a soft-decline ("addressed — declined, by design") is never misread as resolved and
+  // laundered into extraction (mmnto-ai/totem#2124). `[ds]?` also catches the `declines` inflection.
+  // Because `-` is a non-word character, `\b` fires before the hyphen in `decline-*` class tokens
+  // (decline-stylistic / -substantive / -hallucination), so this single pattern covers them too.
+  // (Deliberately object-free: requiring an object would miss bare `Declined` and the `decline-*`
+  // tokens, re-opening the mmnto-ai/totem#2124 laundering vector; over-matching cuts the safe way —
+  // a lost lesson, never a laundered one. Finer precision is the mmnto-ai/totem-strategy#474
+  // disposition-ledger's job, not this heuristic.)
+  /\bdecline[ds]?\b/i,
 ];
 
 /**
@@ -167,6 +187,9 @@ export function extractReviewBodyFindings(
         body: finding.content,
         suggestion: undefined,
         resolutionSignal: 'none',
+        // No thread reply exists for review-body findings, so no acceptance signal is
+        // available — leave `disposition` undefined (the JSDoc contract treats that as
+        // "not-declined"), rather than overstating it as `accepted`.
       });
     }
   }
@@ -187,10 +210,10 @@ export function extractPushbackFindings(threads: CommentThread[]): NormalizedBot
     const humanReplies = thread.comments.slice(1).filter((c) => !isBotComment(c.author));
     if (humanReplies.length === 0) continue;
 
-    const hasPushback = humanReplies.some((reply) =>
+    const pushbackReply = humanReplies.find((reply) =>
       PUSHBACK_PATTERNS.some((p) => p.test(reply.body)),
     );
-    if (!hasPushback) continue;
+    if (!pushbackReply) continue;
 
     const tool = detectBot(botComment.author);
     const severity =
@@ -213,6 +236,8 @@ export function extractPushbackFindings(threads: CommentThread[]): NormalizedBot
       suggestion: extractSuggestion(botComment.body),
       resolutionSignal: 'none',
       rootCommentId: botComment.id,
+      disposition: 'declined',
+      dispositionRationale: pushbackReply.body,
     });
   }
 
@@ -250,6 +275,7 @@ export function extractResolvedBotFindings(threads: CommentThread[]): Normalized
       suggestion,
       resolutionSignal: 'reply',
       rootCommentId: botComment.id,
+      disposition: 'accepted',
     });
   }
 

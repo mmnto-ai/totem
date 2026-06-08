@@ -248,6 +248,18 @@ export async function reviewLearnCommand(
   const { extractPushbackFindings } = await import('../parsers/bot-review-parser.js');
   const pushbackFindings = extractPushbackFindings(threads);
   if (pushbackFindings.length > 0) {
+    // Auditable disposition breadcrumb (mmnto-ai/totem#2124): every declined finding the
+    // resolution filter kept OUT of extraction is surfaced here — never a silent skip
+    // (Tenet 13 disposition-completeness; the reference for mmnto-ai/totem#2038 reason-code backfill).
+    // pf.file / pf.dispositionRationale are untrusted review content — sanitize before logging.
+    for (const pf of pushbackFindings) {
+      const safeFile = sanitize(pf.file).replace(/\s+/g, ' ').trim();
+      const loc = pf.line != null ? `${safeFile}:${pf.line}` : safeFile;
+      const reason = pf.dispositionRationale
+        ? ` — "${sanitize(pf.dispositionRationale).replace(/\s+/g, ' ').trim().slice(0, 80)}"`
+        : '';
+      log.info(TAG, `Declined finding skipped [${loc}], signal: inline-reply decline${reason}`);
+    }
     log.dim(
       TAG,
       `Found ${pushbackFindings.length} pushback finding(s) — tracking for exemption engine`,
