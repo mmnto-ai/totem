@@ -96,6 +96,35 @@ describe('rerunArtifact', () => {
     expect(result.content).toBe('rerun content');
   });
 
+  it('carries the grounding bundle verbatim on rerun — no new grounding claim (mmnto-ai/totem#2101)', async () => {
+    const bundle = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'c'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/x.ts',
+        },
+      ],
+    };
+    const bundledHash = saveRunArtifact(
+      path.join(tmpDir, '.totem'),
+      artifact({
+        inputBundle: { maskedPrompt: 'bundled prompt' },
+        grounding: { hash: 'd'.repeat(64), provenanceSummary: 'similarity-only:1', bundle },
+      }),
+    ).hash;
+
+    await rerunArtifact({ hash: bundledHash, config: config(), cwd: tmpDir });
+
+    const call = mockedRunOrchestrator.mock.calls[0]![0];
+    expect(call.artifact).toMatchObject({
+      groundingHash: 'd'.repeat(64),
+      provenanceSummary: 'similarity-only:1',
+      bundle,
+    });
+  });
+
   it('throws on a missing source hash without invoking anything', async () => {
     await expect(
       rerunArtifact({ hash: 'e'.repeat(64), config: config(), cwd: tmpDir }),

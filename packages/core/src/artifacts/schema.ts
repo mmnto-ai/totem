@@ -24,19 +24,50 @@
 
 import { z } from 'zod';
 
-/** The schemaVersion WRITTEN by this code. Readers accept any 1.x (F1). */
-export const RUN_ARTIFACT_SCHEMA_VERSION = '1.0.0';
+/**
+ * The schemaVersion WRITTEN by this code. Readers accept any 1.x (F1).
+ * 1.1.0 (mmnto-ai/totem#2101): `grounding` gained the optional per-item
+ * `bundle`, and `grounding.hash` semantics changed from hash-of-raw-context
+ * to hash-of-bundle — the minor is the observable marker for that meaning
+ * change; the registry stays empty because the tolerant reader parses both.
+ */
+export const RUN_ARTIFACT_SCHEMA_VERSION = '1.1.0';
 
 /** The major this reader understands; other majors need a migration entry. */
 export const RUN_ARTIFACT_KNOWN_MAJOR = 1;
 
 /**
- * Slice-1 wholesale provenance summary: the current ad-hoc context assembly is
- * similarity-retrieved, and the bundle must say so from day one (the
- * illusion-of-grounding trap cannot be retrofitted away). #2101 owns per-item
- * provenance classes; this stays a free string so that lands without a major.
+ * Canonical provenance classes (mmnto-ai/totem#2101, strategy#474 items 1+7).
+ * `similarity-only` is the honest class for today's retrieval; the others are
+ * reserved for graduation — `structurally-verified` lands via mmnto-ai/totem#344/#375
+ * resolvers, `spec-contract`/`compiled-rule` via their respective delivery
+ * paths. Schema-level validation stays an open string (extensible without a
+ * major — the same reasoning that kept slice 1's `provenanceSummary` free).
+ *
+ * Fail-safe-down rider (strategy review F2 on mmnto-ai/totem#2101): every consumer
+ * (summaries, eval thresholds, future conformance sensing) must treat a
+ * non-canonical class string as NOT-upgraded — lowest trust — so an invented
+ * class can never confer trust absent code-side graduation. Safe today
+ * because classes are builder-emitted constants, never model-supplied; the
+ * enforcement test rides mmnto-ai/totem#2103.
  */
 export const PROVENANCE_SIMILARITY_ONLY = 'similarity-only';
+export const PROVENANCE_STRUCTURALLY_VERIFIED = 'structurally-verified';
+export const PROVENANCE_SPEC_CONTRACT = 'spec-contract';
+export const PROVENANCE_COMPILED_RULE = 'compiled-rule';
+export const PROVENANCE_CLASSES = [
+  PROVENANCE_SIMILARITY_ONLY,
+  PROVENANCE_STRUCTURALLY_VERIFIED,
+  PROVENANCE_SPEC_CONTRACT,
+  PROVENANCE_COMPILED_RULE,
+] as const;
+
+/**
+ * `provenanceSummary` for a bundle with zero items: the run was UNGROUNDED —
+ * abstention named epistemically (what the absence means), not mechanically
+ * ("empty"). Honest-absent: a degraded run says so in its own record.
+ */
+export const PROVENANCE_UNGROUNDED = 'ungrounded';
 
 /**
  * Slice-1 admission class for both migrated callers (spec + review): factually
@@ -74,12 +105,49 @@ export const InputBundleSchema = z.object({
   specContract: z.string().optional(),
 });
 
+/**
+ * One delivered evidence item (mmnto-ai/totem#2101): identity + content hash
+ * + provenance class. NO content bytes — `inputBundle.maskedPrompt` already
+ * carries the bytes once; duplicating them bloats every artifact and creates
+ * a second DLP surface. Identity fields are required: fabricated or absent
+ * identity is the illusion-of-grounding trap the bundle exists to close.
+ */
+export const GroundingItemSchema = z.object({
+  /** Provenance class — open vocabulary, canonical values in {@link PROVENANCE_CLASSES}; consumers fail-safe-down on unknown strings (F2). */
+  provenance: z.string().min(1),
+  /** Deterministic hash of the delivered snippet content (identity, not bytes). */
+  contentHash: z.string().regex(SHA256_HEX, 'contentHash must be a sha256 hex digest'),
+  /** Retrieval partition the item entered the prompt under (`spec` | `session_log` | `code` | `lesson`). */
+  sourceType: z.string().min(1),
+  /** Path relative to the owning repo root — display + structural-resolution identity. */
+  filePath: z.string().min(1),
+  /** Linked-index name for cross-repo hits; ABSENT = the run's own repo (F1) — post-checks resolve `filePath` against the run's config root when absent. */
+  sourceRepo: z.string().min(1).optional(),
+});
+
+/**
+ * The per-item grounding record. No stored summary/count fields — counts are
+ * derived by `summarizeProvenance` (derive-or-couple: a stored mirror can
+ * drift from `items`).
+ */
+export const GroundingBundleSchema = z.object({
+  items: z.array(GroundingItemSchema),
+});
+
 /** What KIND of grounding the run had — day-one field, never retrofittable. */
 export const GroundingSchema = z.object({
-  /** Deterministic hash of the grounding context that entered the bundle. */
+  /**
+   * Deterministic hash of the grounding surface. From 1.1.0 this is
+   * `calculateDeterministicHash(bundle)` — the verifier recomputes it from
+   * the artifact surface ALONE (one enumeration, two readers). Slice-1
+   * artifacts (no `bundle`) carry their original hash-of-raw-context, which
+   * is self-consistent but not recomputable offline.
+   */
   hash: z.string().regex(SHA256_HEX, 'grounding.hash must be a sha256 hex digest'),
-  /** Wholesale class in slice 1 (`similarity-only`); per-item classes are #2101. */
+  /** Derived from the bundle since 1.1.0 (sorted class counts, or `ungrounded`); wholesale string in slice-1 artifacts. */
   provenanceSummary: z.string().min(1),
+  /** Per-item provenance record (mmnto-ai/totem#2101). Optional: slice-1 artifacts predate it and cannot be re-classed. */
+  bundle: GroundingBundleSchema.optional(),
 });
 
 /** Backend identity as RESOLVED (post quota-fallback), not as requested. */
@@ -126,3 +194,5 @@ export const RunArtifactSchema = z.object({
 
 export type RunArtifact = z.infer<typeof RunArtifactSchema>;
 export type InputBundle = z.infer<typeof InputBundleSchema>;
+export type GroundingItem = z.infer<typeof GroundingItemSchema>;
+export type GroundingBundle = z.infer<typeof GroundingBundleSchema>;
