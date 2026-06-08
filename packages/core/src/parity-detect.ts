@@ -581,11 +581,11 @@ export interface DetectManualAttestationContext {
   /** The current repo's cohort id (from {@link deriveCohortRepoId}) for `consumers` applicability. */
   repoId?: string;
   /**
-   * OPTIONAL local attestation date (ISO-8601). Absent today — the manifest schema
-   * has no `last-attested:` field yet; strategy owns that follow-on (#2073 design
-   * 2045Z). RESERVED seam so date-staleness is a clean drop-in: when a date lands
-   * the message reports it, but the VERDICT stays `info` regardless — staleness is
-   * a message refinement, NEVER a status change (manual-attestation never warns).
+   * OPTIONAL local attestation date (ISO-8601), sourced from the manifest's
+   * `last-attested:` field (strategy#540 shipped the producer; the doctor wires
+   * it through per mmnto-ai/totem#2125). When present the message reports it,
+   * but the VERDICT stays `info` regardless — staleness is a message
+   * refinement, NEVER a status change (manual-attestation never warns).
    */
   attested?: string;
   /**
@@ -653,9 +653,10 @@ export function detectManualAttestationContract(
     }
   }
 
-  // The last-attested suffix: a date if one was supplied (the reserved seam — the
-  // manifest has no `last-attested:` field yet), else the honest "not recorded".
-  // NEVER fabricated; a present date refines the MESSAGE, never the status.
+  // The last-attested suffix: the manifest's `last-attested:` date when one was
+  // supplied (strategy#540 via mmnto-ai/totem#2125), else the honest "not
+  // recorded". NEVER fabricated; a present date refines the MESSAGE, never the
+  // status.
   const trimmedAttested = ctx.attested?.trim();
   const attestedSuffix = trimmedAttested
     ? `last attested ${trimmedAttested}`

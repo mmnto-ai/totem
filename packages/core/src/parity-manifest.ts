@@ -91,6 +91,15 @@ const RawParityContractSchema = z.object({
   // parseable name for version/vendor contracts, so the detector derives the
   // package rather than guessing it from the id convention.
   package: z.string().optional(),
+  // Optional attestation date on manual-attestation rows (strategy#540 /
+  // mmnto-ai/totem#2125) — the producer for the detector's reserved
+  // `attested?:` seam. Message refinement only; never a verdict input.
+  // DELIBERATELY format-unvalidated (Greptile R1 on mmnto-ai/totem#2126,
+  // declined): a Zod rejection here is MANIFEST-WIDE — one malformed date
+  // would take all contracts dark as `unparseable` (a total sensor outage)
+  // versus rendering a verbatim blemish on one info line. Render-only field;
+  // the producer side schema-reviews the manifest before publish.
+  'last-attested': z.string().optional(),
 });
 
 /**
@@ -140,6 +149,16 @@ export interface ParityContract {
    * contract pins. Preferred over the id-convention guess when present.
    */
   package?: string;
+  /**
+   * Optional attestation marker (strategy#540 / mmnto-ai/totem#2125), present
+   * on manual-attestation rows whose claim was actually reviewed. An
+   * UNVALIDATED string carrying an intended ISO-8601 date — format is
+   * deliberately not enforced at the schema boundary (see the raw-schema note:
+   * rejection there is manifest-wide), so consumers must treat it as
+   * render-only text. Absent = no citable attestation event (honest-absent —
+   * the doctor renders "last attested: not recorded", never fabricates a date).
+   */
+  lastAttested?: string;
 }
 
 /** A fully parsed + validated parity manifest. */
@@ -294,6 +313,7 @@ function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContra
     dimension: raw.dimension,
     canonicalSource: raw['canonical-source'],
     ...(raw['source-note'] !== undefined ? { sourceNote: raw['source-note'] } : {}),
+    ...(raw['last-attested'] !== undefined ? { lastAttested: raw['last-attested'] } : {}),
     detectionMethod: raw['detection-method'],
     expectedValueOrDerivation: raw['expected-value-or-derivation'],
     tractability: raw.tractability,
