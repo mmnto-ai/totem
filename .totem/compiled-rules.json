@@ -8583,36 +8583,56 @@
     {
       "lessonHash": "904c066615bd94c4",
       "lessonHeading": "Exclude timestamps from content addresses",
+      "pattern": "",
       "message": "Do not include 'createdAt' (or other timestamp fields) in deterministic hash calculations — identical runs will fail to deduplicate across different execution times.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "hash($$$ARGS, createdAt, $$$REST)",
+      "badExample": "const addr = hash(content, createdAt, metadata);",
+      "goodExample": "const addr = hash(content, metadata);",
       "compiledAt": "2026-06-07T19:41:53.478Z",
       "createdAt": "2026-06-07T19:41:53.478Z",
       "fileGlobs": [
         "packages/core/src/artifacts/storage.ts"
       ],
-      "badExample": "const addr = hash(content, createdAt, metadata);",
-      "goodExample": "const addr = hash(content, metadata);",
-      "unverified": true,
-      "status": "untested-against-codebase"
+      "severity": "warning",
+      "status": "untested-against-codebase",
+      "unverified": true
     },
     {
       "lessonHash": "baffaac1dadd9f3e",
       "lessonHeading": "Use atomic write-if-absent flags",
+      "pattern": "",
       "message": "Use flag 'wx' instead of 'w' to prevent TOCTOU race conditions and enforce first-write-wins semantics",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "fs.writeFile($PATH, $DATA, { flag: 'w' })",
+      "badExample": "await fs.writeFile(path, data, { flag: 'w' });",
+      "goodExample": "await fs.writeFile(path, data, { flag: 'wx' });",
       "compiledAt": "2026-06-07T19:42:29.872Z",
       "createdAt": "2026-06-07T19:42:29.872Z",
       "fileGlobs": [
         "packages/core/src/artifacts/storage.ts"
       ],
-      "badExample": "await fs.writeFile(path, data, { flag: 'w' });",
-      "goodExample": "await fs.writeFile(path, data, { flag: 'wx' });",
+      "severity": "warning",
+      "status": "untested-against-codebase",
+      "unverified": true
+    },
+    {
+      "lessonHash": "3743c1ac58a8e1b5",
+      "lessonHeading": "Merge global options in subcommands",
+      "message": "Use optsWithGlobals() instead of opts() in subcommands to merge parent-level Commander options",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$CMD.opts()",
+      "compiledAt": "2026-06-08T03:05:46.563Z",
+      "createdAt": "2026-06-08T03:05:46.563Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "badExample": "const options = command.opts();",
+      "goodExample": "const options = command.optsWithGlobals();",
       "unverified": true,
       "status": "untested-against-codebase"
     }
@@ -14404,6 +14424,66 @@
       "title": "Hash prompt-visible grounding subsets",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural data-transformation principle (projecting to stable fields before hashing) that cannot be detected by inspecting any single code pattern — the violation requires knowing which fields are included in a hash input and whether they are environment-specific, which demands semantic analysis of the data flow."
+    },
+    {
+      "hash": "6ed4577ce4f9c533",
+      "title": "Use identity hashes over raw bytes",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural data-modeling principle (store hashes instead of raw bytes in grounding artifacts). There is no detectable code pattern that distinguishes a 'content hash' field from a 'raw bytes' field without semantic understanding of the data model and its purpose."
+    },
+    {
+      "hash": "52bb5e2fc4f0900f",
+      "title": "Discriminate warnings for stray files",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a conceptual architectural principle about warning message design and categorization — there is no detectable code pattern that distinguishes 'malformed expected files' from 'unrelated strays' without semantic knowledge of what files are expected in context."
+    },
+    {
+      "hash": "831a526c0cb833b7",
+      "title": "Canonically sort bundle items",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a data-ordering invariant that must hold before a hashing operation. Detecting violations requires knowing which array contains bundle items, whether a sort by the correct identity fields has been applied upstream, and whether the sort precedes the hash call — multi-step semantic analysis that no single regex or AST pattern can express."
+    },
+    {
+      "hash": "b911710b734e1a05",
+      "title": "Implement fail-safe-down for provenance classes",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural security principle (fail-safe-down for unknown provenance classes) that requires semantic analysis of how provenance metadata is consumed and what constitutes 'unknown or non-canonical' classes. No detectable code pattern can distinguish compliant from non-compliant handling of provenance class values without understanding the full trust evaluation logic."
+    },
+    {
+      "hash": "71e757e017a2cbda",
+      "title": "Align JSDoc with actual validation semantics",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a documentation accuracy requirement — that JSDoc comments must explicitly state when format validation is intentionally not enforced. There is no detectable code pattern that can distinguish a JSDoc comment that correctly documents the absence of validation from one that incorrectly omits that disclosure. Enforcing this requires semantic understanding of both the comment intent and the runtime behavior."
+    },
+    {
+      "hash": "b2f7fff0d01a5eec",
+      "title": "Maintain structural absence for optional fields",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a data-mapping architectural principle (preserving structural absence vs. fabricating default values for optional fields) that cannot be detected by a code pattern — the violation depends on semantic understanding of what constitutes 'absent' vs. 'fabricated' provenance in the domain model, not any detectable syntactic construct."
+    },
+    {
+      "hash": "d22bcb9ca9166bc4",
+      "title": "Avoid the cached-failed-optional pnpm trap",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a procedural workflow convention (use 'pnpm add' instead of manual lockfile edits when bumping pins) rather than a detectable code pattern in source files. The violation is an omitted CLI command during a dependency update workflow, not a structural or textual pattern that appears in committed code."
+    },
+    {
+      "hash": "52b5b3b7a4fd2c81",
+      "title": "Use delimiters for frontmatter parsing",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an algorithmic/architectural principle about frontmatter parsing strategy (delimiter-based vs blank-line splitting vs byte caps). There is no detectable code pattern that distinguishes a compliant delimiter-search implementation from a non-compliant blank-line split or byte-cap approach without semantic analysis of the parsing logic."
+    },
+    {
+      "hash": "6547c4586ac547c9",
+      "title": "Decouple attestation dates from status verdicts",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/design principle about how attestation dates should be treated relative to status verdict logic. There is no detectable code pattern that can distinguish 'date used as informational metadata' from 'date used to trigger a failure verdict' without semantic analysis of the control flow and data flow relationships between date values and status outcomes."
+    },
+    {
+      "hash": "c93ae909872fa54e",
+      "title": "Default absent sourceRepo to current repo",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a data-modeling convention (omit a field when a condition holds) that requires knowing the runtime value of 'sourceRepo' relative to the current repository context. No static pattern can determine whether a present 'sourceRepo' field matches or differs from the run's own repository."
     }
   ]
 }
