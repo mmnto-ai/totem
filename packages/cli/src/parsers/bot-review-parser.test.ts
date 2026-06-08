@@ -474,6 +474,21 @@ describe('decline taxonomy (mmnto-ai/totem#2124)', () => {
     expect(extractPushbackFindings([thread('Issue', 'decline-stylistic')])).toHaveLength(1);
   });
 
+  it('extractPushbackFindings: detects the "declines" (3rd-person) inflection', () => {
+    expect(extractPushbackFindings([thread('Issue', 'The reviewer declines this')])).toHaveLength(
+      1,
+    );
+  });
+
+  it('isThreadResolved: a soft-decline using "declines" is NOT laundered as resolved', () => {
+    // "Addressed" is positive, but "declines" is a decline inflection — the decline must win.
+    expect(
+      isThreadResolved(
+        thread('Issue', 'Addressed — the reviewer declines this as a false positive'),
+      ),
+    ).toBe(false);
+  });
+
   it('extractReviewBodyFindings: carries no disposition (no acceptance signal observed)', () => {
     const body = [
       '<details>',

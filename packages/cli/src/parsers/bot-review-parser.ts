@@ -106,10 +106,14 @@ export const PUSHBACK_PATTERNS = [
   // Canonical decline taxonomy (doctrine bot-protocols.md §8.1 / mmnto-ai/totem-strategy#590):
   // the inline free-text surface MUST recognize `decline`/`declined` + the `decline-*` classes,
   // so a soft-decline ("addressed — declined, by design") is never misread as resolved and
-  // laundered into extraction (mmnto-ai/totem#2124). Because `-` is a non-word character, `\b`
-  // also fires before the hyphen in `decline-*` class tokens (decline-stylistic / -substantive /
-  // -hallucination), so this single pattern already covers them — no separate class pattern needed.
-  /\bdeclined?\b/i,
+  // laundered into extraction (mmnto-ai/totem#2124). `[ds]?` also catches the `declines` inflection.
+  // Because `-` is a non-word character, `\b` fires before the hyphen in `decline-*` class tokens
+  // (decline-stylistic / -substantive / -hallucination), so this single pattern covers them too.
+  // (Deliberately object-free: requiring an object would miss bare `Declined` and the `decline-*`
+  // tokens, re-opening the mmnto-ai/totem#2124 laundering vector; over-matching cuts the safe way —
+  // a lost lesson, never a laundered one. Finer precision is the mmnto-ai/totem-strategy#474
+  // disposition-ledger's job, not this heuristic.)
+  /\bdecline[ds]?\b/i,
 ];
 
 /**
