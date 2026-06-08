@@ -150,10 +150,13 @@ export interface ParityContract {
    */
   package?: string;
   /**
-   * Optional ISO-8601 attestation date (strategy#540 / mmnto-ai/totem#2125),
-   * present on manual-attestation rows whose claim was actually reviewed.
-   * Absent = no citable attestation event (honest-absent — the doctor renders
-   * "last attested: not recorded", never fabricates a date).
+   * Optional attestation marker (strategy#540 / mmnto-ai/totem#2125), present
+   * on manual-attestation rows whose claim was actually reviewed. An
+   * UNVALIDATED string carrying an intended ISO-8601 date — format is
+   * deliberately not enforced at the schema boundary (see the raw-schema note:
+   * rejection there is manifest-wide), so consumers must treat it as
+   * render-only text. Absent = no citable attestation event (honest-absent —
+   * the doctor renders "last attested: not recorded", never fabricates a date).
    */
   lastAttested?: string;
 }
