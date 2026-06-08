@@ -190,6 +190,10 @@ describe('grounding schemas', () => {
       },
     };
     const parsed = RunArtifactSchema.parse(bundled);
+    // Explicit presence guard (Greptile R1 on mmnto-ai/totem#2122): an absent
+    // bundle must fail HERE as a clear assertion, not as a confusing
+    // crypto.update error inside the hash recompute below.
+    expect(parsed.grounding.bundle).toBeDefined();
     expect(parsed.grounding.bundle?.items).toHaveLength(1);
     // Invariant 4: the attested hash is recomputable from the artifact surface alone.
     expect(parsed.grounding.hash).toBe(calculateDeterministicHash(parsed.grounding.bundle));

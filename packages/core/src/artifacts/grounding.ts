@@ -95,8 +95,13 @@ export function summarizeProvenance(bundle: GroundingBundle): string {
   for (const item of bundle.items) {
     counts.set(item.provenance, (counts.get(item.provenance) ?? 0) + 1);
   }
-  return [...counts.keys()]
-    .sort(compareStrings)
-    .map((cls) => `${cls}:${counts.get(cls)}`)
-    .join(',');
+  return (
+    [...counts.keys()]
+      .sort(compareStrings)
+      // Non-null assertion: every key comes from the same map's own key set
+      // (Greptile R1 on mmnto-ai/totem#2122 — a future logic change must fail
+      // the type check, not silently render `class:undefined`).
+      .map((cls) => `${cls}:${counts.get(cls)!}`)
+      .join(',')
+  );
 }
