@@ -619,9 +619,14 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         if (c.tractability === 'manual-attestation') {
           // The detector reads the sub-class discriminant (`c.package`) + the
           // canonical source directly off the contract. `package:` set ⇒ vendor-SDK
-          // pin read; unset ⇒ doctrine-row pure-info surface. No `attested` yet (the
-          // schema has no last-attested field — strategy's follow-on lane).
-          const verdict = detectManualAttestationContract(c, { cwd, repoId });
+          // pin read; unset ⇒ doctrine-row pure-info surface. `attested` carries the
+          // manifest's `last-attested:` date when present (strategy#540 /
+          // mmnto-ai/totem#2125) — message refinement only, never a verdict input.
+          const verdict = detectManualAttestationContract(c, {
+            cwd,
+            repoId,
+            ...(c.lastAttested !== undefined ? { attested: c.lastAttested } : {}),
+          });
           return [verdictToLine(c, verdict)];
         }
 

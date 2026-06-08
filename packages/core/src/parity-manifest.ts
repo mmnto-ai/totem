@@ -91,6 +91,10 @@ const RawParityContractSchema = z.object({
   // parseable name for version/vendor contracts, so the detector derives the
   // package rather than guessing it from the id convention.
   package: z.string().optional(),
+  // Optional attestation date on manual-attestation rows (strategy#540 /
+  // mmnto-ai/totem#2125) — the producer for the detector's reserved
+  // `attested?:` seam. Message refinement only; never a verdict input.
+  'last-attested': z.string().optional(),
 });
 
 /**
@@ -140,6 +144,13 @@ export interface ParityContract {
    * contract pins. Preferred over the id-convention guess when present.
    */
   package?: string;
+  /**
+   * Optional ISO-8601 attestation date (strategy#540 / mmnto-ai/totem#2125),
+   * present on manual-attestation rows whose claim was actually reviewed.
+   * Absent = no citable attestation event (honest-absent — the doctor renders
+   * "last attested: not recorded", never fabricates a date).
+   */
+  lastAttested?: string;
 }
 
 /** A fully parsed + validated parity manifest. */
@@ -294,6 +305,7 @@ function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContra
     dimension: raw.dimension,
     canonicalSource: raw['canonical-source'],
     ...(raw['source-note'] !== undefined ? { sourceNote: raw['source-note'] } : {}),
+    ...(raw['last-attested'] !== undefined ? { lastAttested: raw['last-attested'] } : {}),
     detectionMethod: raw['detection-method'],
     expectedValueOrDerivation: raw['expected-value-or-derivation'],
     tractability: raw.tractability,

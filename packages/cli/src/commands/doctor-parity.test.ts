@@ -668,6 +668,32 @@ describe('checkParity — manual-attestation wiring', () => {
     expect(blockingDriftIds).toHaveLength(0);
   });
 
+  it('passes last-attested through to the detector — dated rows render the date, undated stay honest-absent (mmnto-ai/totem#2125)', async () => {
+    // strategy#540 shipped `last-attested:` in the manifest; the reserved
+    // `attested?:` seam gets its producer. Message refinement ONLY — the
+    // verdict stays `info` regardless (the never-fails keystone).
+    const datedManifest = MANUAL_ATTEST_MANIFEST_YAML.replace(
+      "    package: '@google/genai'\n",
+      "    package: '@google/genai'\n    last-attested: '2026-06-08'\n",
+    );
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', datedManifest);
+    writeConsumerDeps({ '@google/genai': '^0.3.0' });
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const perContract = results.slice(1);
+
+    const genai = perContract.find((r) => r.name === 'Parity: google-genai-coupling')!;
+    expect(genai.status).toBe('info'); // date refines the message, never the status
+    expect(genai.message).toContain('last attested 2026-06-08');
+
+    const doctrine = perContract.find((r) => r.name === 'Parity: governance-doctrine')!;
+    expect(doctrine.status).toBe('info');
+    expect(doctrine.message).toMatch(/last attested: not recorded/i); // undated row stays honest-absent
+
+    expect(blockingDriftIds).toHaveLength(0);
+  });
+
   it('manual-attestation is structurally non-gating: a blocking:true contract never enters blockingDriftIds', async () => {
     // Even marked blocking, an info verdict (the manual-attestation ceiling) never
     // promotes — the contract cannot fail even under --strict.

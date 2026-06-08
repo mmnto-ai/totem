@@ -180,6 +180,23 @@ describe('parseParityManifest', () => {
     expect('title' in orientation).toBe(false);
     expect('blocking' in orientation).toBe(false);
     expect('consumers' in orientation).toBe(false);
+    expect('lastAttested' in orientation).toBe(false);
+  });
+
+  it('maps last-attested to lastAttested; absent stays structurally absent (mmnto-ai/totem#2125)', () => {
+    // strategy#540: optional quoted ISO-8601 date on manual-attestation rows.
+    const dated = VALID_MANIFEST_YAML.replace(
+      'tracking-issue: mmnto-ai/totem#2018\n',
+      "tracking-issue: mmnto-ai/totem#2018\n    last-attested: '2026-06-08'\n",
+    );
+    const result = parseParityManifest(dated);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    const corpus = result.manifest.contracts[2]!;
+    expect(corpus.lastAttested).toBe('2026-06-08');
+    // Sibling rows without the field carry no key at all (honest-absent, no
+    // fabricated provenance).
+    expect('lastAttested' in result.manifest.contracts[0]!).toBe(false);
   });
 
   it('returns unparseable on invalid YAML (no throw)', () => {
