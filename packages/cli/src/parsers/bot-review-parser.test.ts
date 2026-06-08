@@ -422,3 +422,54 @@ describe('extractPushbackFindings', () => {
     expect(findings[0]!.severity).toBe('high');
   });
 });
+
+// ─── decline taxonomy / disposition (mmnto-ai/totem#2124, doctrine bot-protocols.md §8.1) ───
+
+describe('decline taxonomy (mmnto-ai/totem#2124)', () => {
+  const bot = 'coderabbitai[bot]';
+  const human = 'dev-user';
+  const thread = (botBody: string, reply: string): CommentThread => ({
+    path: 'src/foo.ts',
+    diffHunk: '@@ -1,3 +1,5 @@',
+    comments: [
+      { author: bot, body: botBody },
+      { author: human, body: reply },
+    ],
+  });
+
+  it('isThreadResolved: a bare "declined" reply is not resolved', () => {
+    expect(isThreadResolved(thread('Issue', 'Declined — premise is false'))).toBe(false);
+  });
+
+  it('isThreadResolved: decline-* class tokens are not resolved', () => {
+    expect(isThreadResolved(thread('Issue', 'decline-substantive: see lance-search.ts'))).toBe(
+      false,
+    );
+    expect(isThreadResolved(thread('Issue', 'decline-hallucination'))).toBe(false);
+  });
+
+  it('isThreadResolved: a soft-decline with a positive word is NOT laundered (the #2124 vector)', () => {
+    // "Addressed" is a positive signal, but the finding was declined. Pre-fix, the positive
+    // pattern won and this laundered into extraction. The decline term must win.
+    expect(
+      isThreadResolved(thread('Issue', 'Addressed — declined, sourceRepo is constructor-injected')),
+    ).toBe(false);
+  });
+
+  it('extractResolvedBotFindings: marks resolved findings disposition=accepted', () => {
+    const findings = extractResolvedBotFindings([thread('Issue', 'Fixed in abc1234')]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.disposition).toBe('accepted');
+  });
+
+  it('extractPushbackFindings: marks declines disposition=declined with the reply as rationale', () => {
+    const findings = extractPushbackFindings([thread('Issue', 'Declined — false positive')]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.disposition).toBe('declined');
+    expect(findings[0]!.dispositionRationale).toBe('Declined — false positive');
+  });
+
+  it('extractPushbackFindings: detects a decline-* class token as pushback', () => {
+    expect(extractPushbackFindings([thread('Issue', 'decline-stylistic')])).toHaveLength(1);
+  });
+});
