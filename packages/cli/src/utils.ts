@@ -5,9 +5,16 @@ import * as path from 'node:path';
 
 import dotenv from 'dotenv';
 
-import type { CustomSecret, RunArtifact, SearchResult, TotemConfig } from '@mmnto/totem';
+import type {
+  CustomSecret,
+  GroundingBundle,
+  RunArtifact,
+  SearchResult,
+  TotemConfig,
+} from '@mmnto/totem';
 import {
   ADMISSION_COMPLETION_ONLY,
+  buildGroundingBundle,
   calculateDeterministicHash,
   CONFIG_FILES,
   maskSecrets,
@@ -416,16 +423,47 @@ function buildResponseCacheHash(
  * `OrchestratorResult` metrics that never leave this function).
  */
 export interface RunArtifactRequest {
-  /** Deterministic hash of the grounding context the caller assembled (sha256 hex). */
+  /** Deterministic hash of the grounding surface — `calculateDeterministicHash(bundle)` when a bundle is supplied (mmnto-ai/totem#2101). */
   groundingHash: string;
-  /** What KIND of grounding — slice 1 passes `PROVENANCE_SIMILARITY_ONLY` wholesale. */
+  /** Derived class-count summary (`summarizeProvenance(bundle)`) when a bundle is supplied; explicit string otherwise (bundle-less reruns of slice-1 artifacts). */
   provenanceSummary: string;
+  /**
+   * Per-item provenance record (mmnto-ai/totem#2101), recorded verbatim into
+   * `grounding.bundle`. Optional ONLY for reruns of slice-1 artifacts, which
+   * carry their original grounding identity and have no bundle to forge.
+   */
+  bundle?: GroundingBundle;
   /** Deterministic diff input when the run was scoped (`lint/review --branch`, #2098). */
   diffScope?: string;
   /** The grounded spec contract, when the run senses against one. */
   specContract?: string;
   /** Fires after a successful write (or dedup hit) with the content address + path. */
   onEmitted?: (hash: string, artifactPath: string) => void;
+}
+
+/** The identity-relevant subset of a retrieval hit — what the bundle records. */
+type RetrievalItem = Pick<SearchResult, 'content' | 'filePath' | 'sourceRepo'>;
+
+/**
+ * Assemble the grounding bundle for the spec/review retrieval shape
+ * (mmnto-ai/totem#2101): every partition's items enter under their partition
+ * as `sourceType`, classed `similarity-only` by the core builder. Shared by
+ * both callers so the retrieval→bundle mapping has ONE enumeration — a
+ * caller-local copy that drifted would silently drop a partition from the
+ * provenance record.
+ */
+export function buildRetrievalGroundingBundle(context: {
+  specs: RetrievalItem[];
+  sessions: RetrievalItem[];
+  code: RetrievalItem[];
+  lessons: RetrievalItem[];
+}): GroundingBundle {
+  return buildGroundingBundle([
+    ...context.specs.map((result) => ({ sourceType: 'spec', result })),
+    ...context.sessions.map((result) => ({ sourceType: 'session_log', result })),
+    ...context.code.map((result) => ({ sourceType: 'code', result })),
+    ...context.lessons.map((result) => ({ sourceType: 'lesson', result })),
+  ]);
 }
 
 /**
@@ -708,6 +746,9 @@ export async function runOrchestrator(opts: {
         grounding: {
           hash: opts.artifact.groundingHash,
           provenanceSummary: opts.artifact.provenanceSummary,
+          // Verbatim passthrough — the bundle was assembled and hashed by the
+          // caller (mmnto-ai/totem#2101); this seam records, never re-derives or upgrades.
+          ...(opts.artifact.bundle !== undefined ? { bundle: opts.artifact.bundle } : {}),
         },
         backend: {
           provider: resolved.parsed.provider,

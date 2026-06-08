@@ -370,10 +370,14 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const prompt = await assemblePrompt(parsed, context, systemPrompt);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  // Grounded run artifact (mmnto-ai/totem#2100): always-on for spec —
-  // every run is a future eval fixture. The grounding hash covers the
-  // retrieved context wholesale; per-item provenance classes are #2101.
-  const { calculateDeterministicHash, PROVENANCE_SIMILARITY_ONLY } = await import('@mmnto/totem');
+  // Grounded run artifact (mmnto-ai/totem#2100): always-on for spec — every
+  // run is a future eval fixture. Per-item provenance bundle (mmnto-ai/totem#2101): every
+  // retrieved item enters classed similarity-only; hash + summary are DERIVED
+  // from the bundle, so the attested hash is recomputable from the artifact
+  // surface alone.
+  const { calculateDeterministicHash, summarizeProvenance } = await import('@mmnto/totem');
+  const { buildRetrievalGroundingBundle } = await import('../utils.js');
+  const groundingBundle = buildRetrievalGroundingBundle(context);
   const content = await runOrchestrator({
     prompt,
     tag: TAG,
@@ -387,8 +391,9 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     configRoot: path.dirname(configPath),
     totalResults,
     artifact: {
-      groundingHash: calculateDeterministicHash(context),
-      provenanceSummary: PROVENANCE_SIMILARITY_ONLY,
+      groundingHash: calculateDeterministicHash(groundingBundle),
+      provenanceSummary: summarizeProvenance(groundingBundle),
+      bundle: groundingBundle,
     },
   });
   if (content == null) return;

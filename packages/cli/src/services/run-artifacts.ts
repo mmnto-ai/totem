@@ -73,9 +73,11 @@ export async function rerunArtifact(opts: RerunArtifactOptions): Promise<RerunAr
       ? { temperature: source.backend.temperature }
       : {}),
     artifact: {
-      // The rerun makes no new grounding claim — identity carried verbatim.
+      // The rerun makes no new grounding claim — identity carried verbatim,
+      // including the per-item bundle when the source artifact has one (mmnto-ai/totem#2101).
       groundingHash: source.grounding.hash,
       provenanceSummary: source.grounding.provenanceSummary,
+      ...(source.grounding.bundle !== undefined ? { bundle: source.grounding.bundle } : {}),
       ...(source.inputBundle.diffScope !== undefined
         ? { diffScope: source.inputBundle.diffScope }
         : {}),

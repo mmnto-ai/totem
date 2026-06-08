@@ -6,10 +6,11 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
-import { RunArtifactSchema } from '@mmnto/totem';
+import { calculateDeterministicHash, RunArtifactSchema, summarizeProvenance } from '@mmnto/totem';
 
 import { cleanTmpDir } from './test-utils.js';
 import {
+  buildRetrievalGroundingBundle,
   formatLessonSection,
   formatResults,
   getSystemPrompt,
@@ -1194,6 +1195,46 @@ describe('formatLessonSection', () => {
   });
 });
 
+// ─── buildRetrievalGroundingBundle (mmnto-ai/totem#2101) ──
+
+describe('buildRetrievalGroundingBundle', () => {
+  function result(filePath: string, sourceRepo?: string) {
+    return {
+      content: `content of ${filePath}`,
+      filePath,
+      ...(sourceRepo !== undefined ? { sourceRepo } : {}),
+    };
+  }
+
+  it('maps every partition with its sourceType — item count equals retrieval totals (invariant 8)', () => {
+    const bundle = buildRetrievalGroundingBundle({
+      specs: [result('specs/a.md')],
+      sessions: [result('journal/s1.md'), result('journal/s2.md')],
+      code: [result('src/x.ts'), result('src/y.ts', 'strategy')],
+      lessons: [result('lessons/l1.md')],
+    });
+    expect(bundle.items).toHaveLength(6);
+    const byType = (t: string) => bundle.items.filter((i) => i.sourceType === t).length;
+    expect(byType('spec')).toBe(1);
+    expect(byType('session_log')).toBe(2);
+    expect(byType('code')).toBe(2);
+    expect(byType('lesson')).toBe(1);
+    expect(bundle.items.every((i) => i.provenance === 'similarity-only')).toBe(true);
+    expect(bundle.items.find((i) => i.filePath === 'src/y.ts')?.sourceRepo).toBe('strategy');
+  });
+
+  it('empty retrieval yields an empty bundle that summarizes as ungrounded', () => {
+    const bundle = buildRetrievalGroundingBundle({
+      specs: [],
+      sessions: [],
+      code: [],
+      lessons: [],
+    });
+    expect(bundle.items).toEqual([]);
+    expect(summarizeProvenance(bundle)).toBe('ungrounded');
+  });
+});
+
 // ─── runOrchestrator artifact emission (mmnto-ai/totem#2100) ──
 
 describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () => {
@@ -1273,11 +1314,48 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
     expect(artifact.backend.taskProfile).toBe('Spec');
     expect(artifact.backend.provider).toBe('gemini');
     expect(artifact.output.content).toBe('mock result');
+    expect(artifact.grounding.bundle).toBeUndefined(); // no bundle supplied → none recorded (never fabricated)
     expect(artifact.output.metrics).toMatchObject({
       inputTokens: 100,
       outputTokens: 50,
       durationMs: 500,
     });
+  });
+
+  it('records the grounding bundle verbatim and the attested hash recomputes from it (mmnto-ai/totem#2101)', async () => {
+    const bundle = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'c'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/x.ts',
+          sourceRepo: 'strategy',
+        },
+      ],
+    };
+    const emitted: string[] = [];
+    await runOrchestrator({
+      prompt: 'bundled run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      artifact: {
+        groundingHash: calculateDeterministicHash(bundle),
+        provenanceSummary: summarizeProvenance(bundle),
+        bundle,
+        onEmitted: (hash) => emitted.push(hash),
+      },
+    });
+
+    const file = path.join(runsDirPath(), `${emitted[0]!}.json`);
+    const artifact = RunArtifactSchema.parse(JSON.parse(fs.readFileSync(file, 'utf-8')));
+    expect(artifact.grounding.bundle).toEqual(bundle);
+    expect(artifact.grounding.provenanceSummary).toBe('similarity-only:1');
+    // Invariant 4 at the emission seam: one enumeration, two readers — the
+    // recorded hash is recomputable from the recorded bundle alone.
+    expect(artifact.grounding.hash).toBe(calculateDeterministicHash(artifact.grounding.bundle));
   });
 
   it('records the MASKED prompt — a custom secret never reaches the artifact', async () => {

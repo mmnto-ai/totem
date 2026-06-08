@@ -1361,9 +1361,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   log.dim(DISPLAY_TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   // Grounded run artifact (mmnto-ai/totem#2100): always-on for the standard
-  // review verdict path — every run is a future eval fixture. Wholesale
-  // similarity-only grounding hash in slice 1; per-item classes are #2101.
-  const { calculateDeterministicHash, PROVENANCE_SIMILARITY_ONLY } = await import('@mmnto/totem');
+  // review verdict path — every run is a future eval fixture. Per-item
+  // provenance bundle (mmnto-ai/totem#2101): every retrieved item enters classed
+  // similarity-only; hash + summary are DERIVED from the bundle.
+  const { calculateDeterministicHash, summarizeProvenance } = await import('@mmnto/totem');
+  const { buildRetrievalGroundingBundle } = await import('../utils.js');
+  const groundingBundle = buildRetrievalGroundingBundle(context);
   const content = await runOrchestrator({
     prompt,
     tag: TAG,
@@ -1374,8 +1377,9 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     totalResults,
     temperature: 0,
     artifact: {
-      groundingHash: calculateDeterministicHash(context),
-      provenanceSummary: PROVENANCE_SIMILARITY_ONLY,
+      groundingHash: calculateDeterministicHash(groundingBundle),
+      provenanceSummary: summarizeProvenance(groundingBundle),
+      bundle: groundingBundle,
     },
   });
   if (content != null) {
