@@ -5,6 +5,7 @@ import {
   detectBot,
   extractPushbackFindings,
   extractResolvedBotFindings,
+  extractReviewBodyFindings,
   extractSuggestion,
   isBotComment,
   isThreadResolved,
@@ -471,5 +472,26 @@ describe('decline taxonomy (mmnto-ai/totem#2124)', () => {
 
   it('extractPushbackFindings: detects a decline-* class token as pushback', () => {
     expect(extractPushbackFindings([thread('Issue', 'decline-stylistic')])).toHaveLength(1);
+  });
+
+  it('extractReviewBodyFindings: carries no disposition (no acceptance signal observed)', () => {
+    const body = [
+      '<details>',
+      '<summary>🧹 Nitpick comments (1)</summary><blockquote>',
+      '',
+      '<details>',
+      '<summary>src/foo.ts (1)</summary><blockquote>',
+      '',
+      '`10-12`: **Consider renaming the variable.**',
+      '',
+      'A clearer name would help.',
+      '',
+      '</blockquote></details>',
+      '',
+      '</blockquote></details>',
+    ].join('\n');
+    const findings = extractReviewBodyFindings([{ author: 'coderabbitai[bot]', body }]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.disposition).toBeUndefined();
   });
 });

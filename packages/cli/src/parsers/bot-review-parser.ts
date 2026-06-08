@@ -30,7 +30,7 @@ export interface NormalizedBotFinding {
    * `undefined` means no disposition signal was available (treated as not-declined).
    */
   disposition?: 'accepted' | 'declined';
-  /** For `declined` findings: the human reply that signalled the decline (audit-breadcrumb / mmnto-ai/totem#2038 backfill anchor). */
+  /** For `declined` findings: the human reply that signalled the decline (audit-breadcrumb / mmnto-ai/totem#2038 backfill reference). */
   dispositionRationale?: string;
 }
 
@@ -106,9 +106,10 @@ export const PUSHBACK_PATTERNS = [
   // Canonical decline taxonomy (doctrine bot-protocols.md §8.1 / mmnto-ai/totem-strategy#590):
   // the inline free-text surface MUST recognize `decline`/`declined` + the `decline-*` classes,
   // so a soft-decline ("addressed — declined, by design") is never misread as resolved and
-  // laundered into extraction (mmnto-ai/totem#2124).
+  // laundered into extraction (mmnto-ai/totem#2124). Because `-` is a non-word character, `\b`
+  // also fires before the hyphen in `decline-*` class tokens (decline-stylistic / -substantive /
+  // -hallucination), so this single pattern already covers them — no separate class pattern needed.
   /\bdeclined?\b/i,
-  /\bdecline-(?:stylistic|substantive|hallucination)\b/i,
 ];
 
 /**
@@ -182,7 +183,9 @@ export function extractReviewBodyFindings(
         body: finding.content,
         suggestion: undefined,
         resolutionSignal: 'none',
-        disposition: 'accepted',
+        // No thread reply exists for review-body findings, so no acceptance signal is
+        // available — leave `disposition` undefined (the JSDoc contract treats that as
+        // "not-declined"), rather than overstating it as `accepted`.
       });
     }
   }

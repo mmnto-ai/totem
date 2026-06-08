@@ -250,11 +250,13 @@ export async function reviewLearnCommand(
   if (pushbackFindings.length > 0) {
     // Auditable disposition breadcrumb (mmnto-ai/totem#2124): every declined finding the
     // resolution filter kept OUT of extraction is surfaced here — never a silent skip
-    // (Tenet 13 disposition-completeness; the anchor for mmnto-ai/totem#2038 reason-code backfill).
+    // (Tenet 13 disposition-completeness; the reference for mmnto-ai/totem#2038 reason-code backfill).
+    // pf.file / pf.dispositionRationale are untrusted review content — sanitize before logging.
     for (const pf of pushbackFindings) {
-      const loc = pf.line != null ? `${pf.file}:${pf.line}` : pf.file;
+      const safeFile = sanitize(pf.file).replace(/\s+/g, ' ').trim();
+      const loc = pf.line != null ? `${safeFile}:${pf.line}` : safeFile;
       const reason = pf.dispositionRationale
-        ? ` — "${pf.dispositionRationale.replace(/\s+/g, ' ').trim().slice(0, 80)}"`
+        ? ` — "${sanitize(pf.dispositionRationale).replace(/\s+/g, ' ').trim().slice(0, 80)}"`
         : '';
       log.info(TAG, `Declined finding skipped [${loc}], signal: inline-reply decline${reason}`);
     }
