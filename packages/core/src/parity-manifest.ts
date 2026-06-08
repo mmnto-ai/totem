@@ -94,6 +94,11 @@ const RawParityContractSchema = z.object({
   // Optional attestation date on manual-attestation rows (strategy#540 /
   // mmnto-ai/totem#2125) — the producer for the detector's reserved
   // `attested?:` seam. Message refinement only; never a verdict input.
+  // DELIBERATELY format-unvalidated (Greptile R1 on mmnto-ai/totem#2126,
+  // declined): a Zod rejection here is MANIFEST-WIDE — one malformed date
+  // would take all contracts dark as `unparseable` (a total sensor outage)
+  // versus rendering a verbatim blemish on one info line. Render-only field;
+  // the producer side schema-reviews the manifest before publish.
   'last-attested': z.string().optional(),
 });
 
