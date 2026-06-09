@@ -166,6 +166,17 @@ export function knownCohortAgents(): string[] {
 }
 
 /**
+ * True iff `id` is safe to use as a `.totem/orchestration/<id>/…` path segment
+ * (or any filename token): a non-empty string with no path separators, null
+ * byte, or `..` traversal. The single source of truth for the traversal guard —
+ * consumers (e.g. `totem mail send`'s `--from`/`--to` validation) reuse this
+ * rather than re-deriving the pattern (Greptile P2 on mmnto-ai/totem#2134).
+ */
+export function isPathSafeAgentId(id: string): boolean {
+  return typeof id === 'string' && id.length > 0 && !AGENT_ID_TRAVERSAL_PATTERN.test(id);
+}
+
+/**
  * Zod schema for the optional `<repoRoot>/.totem/orchestration/config.json`
  * override file. Only `host_agents` is consumed by the resolver; the
  * `passthrough()` allows unrelated fields (downstream consumers may add

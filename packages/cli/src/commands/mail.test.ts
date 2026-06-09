@@ -989,6 +989,26 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       }),
     ).toThrow(/path-traversal/);
   });
+
+  it('rejects a path-traversal --to and never escapes the outbox (#2134)', () => {
+    const repo = sendRepo();
+    expect(() =>
+      mailSend({
+        to: '../../../evil',
+        subject: 's',
+        from: 'totem-claude',
+        repoRoot: repo,
+        env: {},
+        now: fixedClock,
+        knownAgents: ['totem-claude'],
+      }),
+    ).toThrow(/path-traversal/);
+    // The guard fires before any mkdir/write, so nothing escaped — not even the
+    // sender's own outbox was created.
+    expect(
+      fs.existsSync(path.join(repo, '.totem', 'orchestration', 'totem-claude', 'outbox')),
+    ).toBe(false);
+  });
 });
 
 describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {

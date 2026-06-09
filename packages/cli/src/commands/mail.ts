@@ -21,7 +21,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { knownCohortAgents, resolveSelfAgents, TotemError } from '@mmnto/totem';
+import { isPathSafeAgentId, knownCohortAgents, resolveSelfAgents, TotemError } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -521,13 +521,6 @@ export async function mailCommand(opts: MailCommandOptions = {}): Promise<MailPo
 const ADR098_SCHEMA = 'adr-098-v0.4';
 
 /**
- * Path-traversal / empty guard for an agent-id used as an outbox directory
- * segment. Mirrors core's `AGENT_ID_TRAVERSAL_PATTERN` (not exported) so a
- * malicious or fat-fingered `--from` cannot escape `.totem/orchestration/`.
- */
-const AGENT_ID_UNSAFE = /[/\\\0]|\.\./;
-
-/**
  * Structurally-complete dispatch header. ADR-098 v0.4 compliance is enforced
  * *by construction*: you cannot build this object without `schema` / `from` /
  * `to` / `timestamp` / `subject` / `expectedAction`, so a structurally invalid
@@ -622,8 +615,11 @@ function yamlScalar(value: string): string {
 export function composeDispatch(header: DispatchHeader, body: string): string {
   const lines: string[] = ['---'];
   lines.push(`schema: ${header.schema}`);
-  lines.push(`from: ${header.from}`);
-  lines.push(`to: ${header.to}`);
+  // `from`/`to` are traversal-validated agent-ids, but YAML-quote them anyway
+  // (defense in depth) so a non-standard recipient can't inject frontmatter
+  // once the v0.4 derivation engine YAML-parses this (CodeRabbit, mmnto-ai/totem#2134).
+  lines.push(`from: ${yamlScalar(header.from)}`);
+  lines.push(`to: ${yamlScalar(header.to)}`);
   lines.push(`timestamp: ${header.timestamp}`);
   lines.push(`subject: ${yamlScalar(header.subject)}`);
   lines.push(`expected-action: ${yamlScalar(header.expectedAction)}`);
@@ -704,17 +700,30 @@ export function resolveSelfSender(
 }
 
 function assertSafeAgentId(id: string, label: string): void {
-  // totem-context: AGENT_ID_UNSAFE is a NON-global regex (no `g` flag), so
-  // `.test()` is stateless here — this is path-traversal sanitization on an
-  // agent-id used as a directory segment, NOT shell-command matching (the lint
-  // lesson's anchored-regex guidance targets command detection, not this).
-  if (id.length === 0 || AGENT_ID_UNSAFE.test(id)) {
+  // Reuse core's single traversal guard (`isPathSafeAgentId` →
+  // AGENT_ID_TRAVERSAL_PATTERN) rather than re-deriving the pattern — both the
+  // sender's `--from` (an outbox directory segment) and the recipient's `--to`
+  // (interpolated into the filename) must be blocked from `/`, `\`, `..`, or a
+  // null byte (Greptile P2 / GCA + CR path-traversal critical, mmnto-ai/totem#2134).
+  if (!isPathSafeAgentId(id)) {
     throw new TotemError(
       'MAIL_SEND_FAILED',
       `invalid --${label} "${id}" (path-traversal or empty)`,
       'pass a plain agent-id such as "totem-claude" (no path separators or "..").',
     );
   }
+}
+
+/**
+ * Reduce a recipient/agent token to a filename-safe form: a defense-in-depth
+ * layer on top of `assertSafeAgentId` (which already rejects traversal). Even a
+ * validated-but-odd `to` (e.g. a stray `:`/space — illegal in win32 filenames)
+ * cannot corrupt the outbox filename. Valid kebab agent-ids pass through
+ * unchanged; `broadcast` is preserved.
+ */
+function fileToken(value: string): string {
+  const cleaned = value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  return cleaned.length > 0 ? cleaned : 'recipient';
 }
 
 /**
@@ -780,6 +789,9 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
       '--to <recipient> is required',
       'pass --to <recipient-agent-id> (or "broadcast").',
     );
+  // `to` is interpolated into the outbox filename + the frontmatter — block
+  // path-traversal here, same guard as `from` (GCA/Greptile/CR critical, mmnto-ai/totem#2134).
+  assertSafeAgentId(to, 'to');
   const subject = opts.subject.trim();
   if (subject.length === 0)
     throw new TotemError(
@@ -824,9 +836,21 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
   const warnings = validateDispatchContent(header, opts.knownAgents ?? knownCohortAgents());
 
   const outboxDir = path.join(repoRoot, '.totem', 'orchestration', from, 'outbox');
-  fs.mkdirSync(outboxDir, { recursive: true });
+  try {
+    fs.mkdirSync(outboxDir, { recursive: true });
+    // totem-context: a failed outbox mkdir (EACCES, read-only FS, a file where
+    // the dir should be) means the dispatch cannot land — fail LOUD (Tenet 4)
+    // with the path, never proceed to a write that will also fail (GCA mmnto-ai/totem#2134).
+  } catch (err) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `could not create outbox directory (${outboxDir}): ${String(err)}`,
+      'check write permissions on the repo .totem/orchestration tree.',
+      err,
+    );
+  }
 
-  const base = `${compactStamp(now)}-${to}-${slugify(subject, opts.slug)}`;
+  const base = `${compactStamp(now)}-${fileToken(to)}-${slugify(subject, opts.slug)}`;
   const filePath = uniqueOutboxPath(outboxDir, base);
   const content = composeDispatch(header, body);
 
