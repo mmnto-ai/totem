@@ -86,6 +86,17 @@ function isDirectory(p: string): boolean {
  */
 const AGENT_ID_TRAVERSAL_PATTERN = /[/\\\0]|\.\./;
 
+/**
+ * Characters that no cohort agent-id legitimately contains and that are unsafe
+ * in a filename token or a logged/rendered string: Unicode control characters
+ * (`\p{Cc}` — terminal-injection into CLI logs and dispatch markdown),
+ * whitespace, and the win32-reserved set `< > : " | ? *`. Complements
+ * `AGENT_ID_TRAVERSAL_PATTERN` (separators, null byte, `..`) so that
+ * `isPathSafeAgentId` is a full path-segment guard, not only a traversal
+ * guard (CR R2 on mmnto-ai/totem#2134).
+ */
+const AGENT_ID_UNSAFE_CHAR_PATTERN = /[\p{Cc}\s<>:"|?*]/u;
+
 export function resolveOrchestrationPaths(repoRoot: string, agentId: string): OrchestrationPaths {
   // Defense-in-depth: reject path-traversal patterns in `agentId` before
   // composing the base path. The hardcoded map in the /signoff skill is
@@ -168,12 +179,20 @@ export function knownCohortAgents(): string[] {
 /**
  * True iff `id` is safe to use as a `.totem/orchestration/<id>/…` path segment
  * (or any filename token): a non-empty string with no path separators, null
- * byte, or `..` traversal. The single source of truth for the traversal guard —
+ * byte, or `..` traversal, and no control/whitespace/win32-reserved characters
+ * (which would otherwise propagate into dispatch markdown, filenames, and CLI
+ * logs — terminal-injection class). The single source of truth for the guard —
  * consumers (e.g. `totem mail send`'s `--from`/`--to` validation) reuse this
- * rather than re-deriving the pattern (Greptile P2 on mmnto-ai/totem#2134).
+ * rather than re-deriving the pattern (Greptile P2 + CR R2 on
+ * mmnto-ai/totem#2134).
  */
 export function isPathSafeAgentId(id: string): boolean {
-  return typeof id === 'string' && id.length > 0 && !AGENT_ID_TRAVERSAL_PATTERN.test(id);
+  return (
+    typeof id === 'string' &&
+    id.length > 0 &&
+    !AGENT_ID_TRAVERSAL_PATTERN.test(id) &&
+    !AGENT_ID_UNSAFE_CHAR_PATTERN.test(id)
+  );
 }
 
 /**

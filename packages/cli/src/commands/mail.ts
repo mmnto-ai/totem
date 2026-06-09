@@ -700,16 +700,18 @@ export function resolveSelfSender(
 }
 
 function assertSafeAgentId(id: string, label: string): void {
-  // Reuse core's single traversal guard (`isPathSafeAgentId` →
-  // AGENT_ID_TRAVERSAL_PATTERN) rather than re-deriving the pattern — both the
-  // sender's `--from` (an outbox directory segment) and the recipient's `--to`
-  // (interpolated into the filename) must be blocked from `/`, `\`, `..`, or a
-  // null byte (Greptile P2 / GCA + CR path-traversal critical, mmnto-ai/totem#2134).
+  // Reuse core's single path-segment guard (`isPathSafeAgentId`) rather than
+  // re-deriving the pattern — both the sender's `--from` (an outbox directory
+  // segment) and the recipient's `--to` (interpolated into the filename) must
+  // be blocked from `/`, `\`, `..`, a null byte (Greptile P2 / GCA + CR
+  // path-traversal critical, mmnto-ai/totem#2134), and from control/
+  // whitespace/win32-reserved characters that would propagate into the
+  // dispatch markdown and CLI logs (CR R2, same PR).
   if (!isPathSafeAgentId(id)) {
     throw new TotemError(
       'MAIL_SEND_FAILED',
-      `invalid --${label} "${id}" (path-traversal or empty)`,
-      'pass a plain agent-id such as "totem-claude" (no path separators or "..").',
+      `invalid --${label} "${id}" (path-traversal, unsafe characters, or empty)`,
+      'pass a plain agent-id such as "totem-claude" (no path separators, "..", whitespace, or control characters).',
     );
   }
 }
@@ -865,11 +867,24 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
     // remove any partial temp first (force suppresses ENOENT; maxRetries/
     // retryDelay guard a transient win32 lock), then surface the original
     // error with the path so the sender knows nothing shipped.
-    fs.rmSync(tmp, { force: true, maxRetries: 3, retryDelay: 50 });
+    const hint = 'check outbox directory permissions and available disk space.';
+    try {
+      fs.rmSync(tmp, { force: true, maxRetries: 3, retryDelay: 50 });
+    } catch (cleanupErr) {
+      // A failed cleanup must not shadow the actuation error (GCA R2 on
+      // mmnto-ai/totem#2134): rethrow the ORIGINAL failure as the cause, with
+      // the stranded-temp note folded into the message so both stay visible.
+      throw new TotemError(
+        'MAIL_SEND_FAILED',
+        `write failed (${filePath}): ${String(err)} (temp file ${tmp} could not be removed: ${String(cleanupErr)})`,
+        hint,
+        err,
+      );
+    }
     throw new TotemError(
       'MAIL_SEND_FAILED',
       `write failed (${filePath}): ${String(err)}`,
-      'check outbox directory permissions and available disk space.',
+      hint,
       err,
     );
   }

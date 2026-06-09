@@ -1009,6 +1009,55 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       fs.existsSync(path.join(repo, '.totem', 'orchestration', 'totem-claude', 'outbox')),
     ).toBe(false);
   });
+
+  it('rejects control/whitespace/win32-reserved characters in agent ids (#2134 R2)', () => {
+    const repo = sendRepo();
+    // Built via fromCharCode so the source file itself carries no raw control
+    // bytes; ESC is the canonical terminal-injection probe (CR R2).
+    const esc = String.fromCharCode(0x1b);
+    for (const evil of [`evil${esc}]0;pwn`, 'two words', 'a:b', 'a*b']) {
+      expect(() =>
+        mailSend({
+          to: evil,
+          subject: 's',
+          from: 'totem-claude',
+          repoRoot: repo,
+          env: {},
+          now: fixedClock,
+          knownAgents: ['totem-claude'],
+        }),
+      ).toThrow(/unsafe characters/);
+    }
+  });
+
+  it('surfaces the original write error even when temp cleanup also fails (#2134 R2)', () => {
+    // GCA R2: a cleanup rmSync that throws must not shadow the actuation
+    // error — the failed write is the signal. No fs mocking (ESM namespaces
+    // are not spyable): instead, learn the deterministic target path from a
+    // clean send, then plant a NON-EMPTY DIRECTORY at `<filePath>.tmp` so
+    // (a) writeFileSync(tmp) fails with the original error (EISDIR), and
+    // (b) the cleanup rmSync(tmp) also fails (directory, no `recursive`).
+    const repo = sendRepo();
+    const common = {
+      to: 'strategy-claude',
+      subject: 'shadow probe',
+      from: 'totem-claude',
+      repoRoot: repo,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    } as const;
+    const probe = mailSend({ ...common });
+    fs.rmSync(probe.filePath); // free the slot so the rerun recomputes the same path
+    const tmpAsDir = `${probe.filePath}.tmp`;
+    fs.mkdirSync(tmpAsDir);
+    fs.writeFileSync(path.join(tmpAsDir, 'occupant.txt'), 'x', 'utf-8');
+    try {
+      expect(() => mailSend({ ...common })).toThrow(/write failed.*could not be removed/);
+    } finally {
+      fs.rmSync(tmpAsDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
