@@ -15,7 +15,17 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
-import { mailCommand, type MailPollResult, pollMail } from './mail.js';
+import {
+  composeDispatch,
+  type DispatchHeader,
+  mailCommand,
+  type MailPollResult,
+  mailReply,
+  mailSend,
+  pollMail,
+  resolveSelfSender,
+  validateDispatchContent,
+} from './mail.js';
 
 // ─── Fixture helpers ────────────────────────────────────
 
@@ -782,5 +792,292 @@ describe('pollMail — structured warnings on FS failures', () => {
     // Mail still surfaces (degraded — no exclusion filter), warning recorded.
     expect(result.mail).toHaveLength(1);
     expect(result.warnings.some((w) => w.startsWith('processed/ scan failed'))).toBe(true);
+  });
+});
+
+// ─── Reader: timestamp: (ADR-098 v0.4) with date: fallback ──
+
+describe('parseHeader — timestamp:/date: precedence (mmnto-ai/totem#2042)', () => {
+  function rawDispatch(fields: string[]): string {
+    return ['---', ...fields, '---', '', 'body', ''].join('\n');
+  }
+
+  it('reads timestamp: as the displayed time', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-06-09T1734Z-ts.md',
+        to: 'totem-claude',
+        raw: rawDispatch([
+          'from: strategy-claude',
+          'to: totem-claude',
+          'timestamp: 2026-06-09T17:34:37.127Z',
+          'subject: ts-test',
+        ]),
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
+  });
+
+  it('prefers timestamp: over a legacy date: when both present', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-06-09T1734Z-both.md',
+        to: 'totem-claude',
+        raw: rawDispatch([
+          'from: strategy-claude',
+          'to: totem-claude',
+          'date: 2026-01-01T0000Z',
+          'timestamp: 2026-06-09T17:34:37.127Z',
+          'subject: both',
+        ]),
+      },
+    ]);
+    expect(poll().mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
+  });
+
+  it('still falls back to legacy date: (backwards-compat read)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-09T1734Z-legacy.md', to: 'totem-claude', date: '2026-05-18T1700Z' },
+    ]);
+    expect(poll().mail[0]!.date).toBe('2026-05-18T1700Z');
+  });
+});
+
+// ─── Outbound: send / reply (mmnto-ai/totem#2042) ───────
+
+describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
+  const fixedClock = (): Date => new Date('2026-06-09T17:34:37.127Z');
+  function sendRepo(basename = 'totem'): string {
+    return mkDir(path.join(workspace, basename));
+  }
+
+  it('writes a v0.4-compliant dispatch the poller reads back (sensor↔actuator round-trip)', () => {
+    const res = mailSend({
+      to: 'strategy-claude',
+      subject: 'lane handoff',
+      from: 'totem-claude',
+      body: 'the body',
+      repoRoot: sendRepo(),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude', 'totem-claude'],
+    });
+    // Structural v0.4 compliance, by construction.
+    const written = fs.readFileSync(res.filePath, 'utf-8');
+    expect(written).toContain('schema: adr-098-v0.4');
+    expect(written).toContain('timestamp: 2026-06-09T17:34:37.127Z');
+    expect(written).toContain('expected-action: none');
+    expect(res.warnings).toEqual([]);
+
+    // The poller (sensor) surfaces exactly what the actuator emitted.
+    const recipientRepo = mkDir(path.join(workspace, 'totem-strategy'));
+    const inbox = pollMail({ repoRoot: recipientRepo, workspace, env: {} });
+    expect(inbox.mail).toHaveLength(1);
+    expect(inbox.mail[0]!.to).toBe('strategy-claude');
+    expect(inbox.mail[0]!.from).toBe('totem-claude');
+    expect(inbox.mail[0]!.subject).toBe('lane handoff');
+    expect(inbox.mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
+  });
+
+  it('FAIL-OPEN: writes to an unknown recipient anyway, with a loud warning (inv6)', () => {
+    const res = mailSend({
+      to: 'totem-typoo',
+      subject: 's',
+      from: 'totem-claude',
+      repoRoot: sendRepo(),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude', 'totem-claude'],
+    });
+    expect(fs.existsSync(res.filePath)).toBe(true); // NOT blocked
+    expect(res.warnings.some((w) => w.includes('not a known cohort agent'))).toBe(true);
+  });
+
+  it('treats broadcast as a known recipient (no warning)', () => {
+    const res = mailSend({
+      to: 'broadcast',
+      subject: 's',
+      from: 'totem-claude',
+      repoRoot: sendRepo(),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['totem-claude'],
+    });
+    expect(res.warnings).toEqual([]);
+  });
+
+  it('hard-errors on ambiguous self with no --from (never silently picks one)', () => {
+    expect(() =>
+      mailSend({ to: 'strategy-claude', subject: 's', repoRoot: sendRepo('totem'), env: {} }),
+    ).toThrow(/ambiguous sender/);
+  });
+
+  it('hard-errors on unresolvable self (never writes .../undefined/outbox)', () => {
+    expect(() =>
+      mailSend({ to: 'x', subject: 's', repoRoot: sendRepo('not-a-cohort-repo'), env: {} }),
+    ).toThrow(/cannot resolve a sender/);
+  });
+
+  it('hard-errors on missing --to / --subject', () => {
+    const repo = sendRepo();
+    expect(() =>
+      mailSend({ to: '  ', subject: 's', from: 'totem-claude', repoRoot: repo, env: {} }),
+    ).toThrow(/--to/);
+    expect(() =>
+      mailSend({ to: 'x', subject: '', from: 'totem-claude', repoRoot: repo, env: {} }),
+    ).toThrow(/--subject/);
+  });
+
+  it('hard-errors on an unreadable --body-file (never ships an empty body)', () => {
+    expect(() =>
+      mailSend({
+        to: 'strategy-claude',
+        subject: 's',
+        from: 'totem-claude',
+        bodyFile: path.join(tmpRoot, 'no-such-body.md'),
+        repoRoot: sendRepo(),
+        env: {},
+        now: fixedClock,
+      }),
+    ).toThrow(/--body-file unreadable/);
+  });
+
+  it('disambiguates same-minute collisions into distinct files', () => {
+    const repo = sendRepo();
+    const common = {
+      to: 'strategy-claude',
+      subject: 'same slug here',
+      from: 'totem-claude',
+      repoRoot: repo,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    } as const;
+    const r1 = mailSend({ ...common });
+    const r2 = mailSend({ ...common });
+    expect(r1.filePath).not.toBe(r2.filePath);
+    expect(fs.existsSync(r1.filePath)).toBe(true);
+    expect(fs.existsSync(r2.filePath)).toBe(true);
+  });
+
+  it('creates the outbox tree on a fresh repo', () => {
+    const repo = sendRepo('totem');
+    const res = mailSend({
+      to: 'strategy-claude',
+      subject: 's',
+      from: 'totem-claude',
+      repoRoot: repo,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.filePath).toContain(path.join('.totem', 'orchestration', 'totem-claude', 'outbox'));
+    expect(fs.existsSync(res.filePath)).toBe(true);
+  });
+
+  it('rejects a path-traversal --from', () => {
+    expect(() =>
+      mailSend({
+        to: 'x',
+        subject: 's',
+        from: '../evil',
+        repoRoot: sendRepo(),
+        env: {},
+        now: fixedClock,
+      }),
+    ).toThrow(/path-traversal/);
+  });
+});
+
+describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
+  const fixedClock = (): Date => new Date('2026-06-09T18:00:00.000Z');
+
+  function writeSource(): string {
+    const outbox = mkDir(
+      path.join(
+        workspace,
+        'totem-strategy',
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'outbox',
+      ),
+    );
+    const p = path.join(outbox, '2026-06-09T1710Z-totem-claude-orig.md');
+    fs.writeFileSync(
+      p,
+      [
+        '---',
+        'schema: adr-098-v0.4',
+        'from: strategy-claude',
+        'to: totem-claude',
+        'timestamp: 2026-06-09T17:10:00.000Z',
+        'subject: Original subject',
+        '---',
+        '',
+        'orig body',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+    return p;
+  }
+
+  it('infers to/subject/in-reply-to from the source dispatch', () => {
+    const src = writeSource();
+    const res = mailReply(src, {
+      from: 'totem-claude',
+      repoRoot: mkDir(path.join(workspace, 'totem')),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.header.to).toBe('strategy-claude'); // = source.from
+    expect(res.header.subject).toBe('Re: Original subject');
+    expect(res.header.inReplyTo).toBe(src);
+  });
+
+  it('hard-errors when the source dispatch is missing', () => {
+    expect(() =>
+      mailReply(path.join(tmpRoot, 'nope.md'), {
+        from: 'totem-claude',
+        repoRoot: mkDir(path.join(workspace, 'totem')),
+        env: {},
+      }),
+    ).toThrow(/cannot read reply source dispatch/);
+  });
+});
+
+describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)', () => {
+  it('warns on unknown recipient, silent on known + broadcast (exact predicate)', () => {
+    expect(validateDispatchContent({ to: 'nope' }, ['totem-claude'])).toHaveLength(1);
+    expect(validateDispatchContent({ to: 'totem-claude' }, ['totem-claude'])).toHaveLength(0);
+    expect(validateDispatchContent({ to: 'broadcast' }, ['totem-claude'])).toHaveLength(0);
+    expect(validateDispatchContent({ to: 'TOTEM-CLAUDE' }, ['totem-claude'])).toHaveLength(0); // case-insensitive
+  });
+
+  it('quotes YAML-unsafe subjects so the emit is valid YAML (and unquotes refs)', () => {
+    const header: DispatchHeader = {
+      schema: 'adr-098-v0.4',
+      from: 'totem-claude',
+      to: 'strategy-claude',
+      timestamp: '2026-06-09T17:34:37.127Z',
+      subject: '[#42 brackets: and colon]',
+      expectedAction: 'none',
+      related: ['mmnto-ai/totem#2042'],
+    };
+    const md = composeDispatch(header, 'body');
+    expect(md).toContain('subject: "[#42 brackets: and colon]"');
+    expect(md).toContain('  - mmnto-ai/totem#2042'); // ref stays unquoted
+    expect(md).toContain('related-issues:');
+  });
+
+  it('resolveSelfSender: explicit > unambiguous map > error', () => {
+    const totemRepo = mkDir(path.join(workspace, 'totem'));
+    expect(resolveSelfSender(totemRepo, {}, 'totem-gemini')).toBe('totem-gemini'); // explicit wins
+    expect(resolveSelfSender(totemRepo, { TOTEM_SELF_AGENT: 'totem-claude' })).toBe('totem-claude'); // env → single
+    expect(() => resolveSelfSender(totemRepo, {})).toThrow(/ambiguous/); // map → 2 agents
   });
 });

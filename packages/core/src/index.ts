@@ -563,7 +563,11 @@ export { resolveSubstratePaths } from './substrate-resolver.js';
 // Additive sibling to resolveSubstratePaths; substrate stays live as the
 // frozen-archive read path while orchestration is the active read+write surface.
 export type { OrchestrationPaths, SelfAgentResolution } from './orchestration-resolver.js';
-export { resolveOrchestrationPaths, resolveSelfAgents } from './orchestration-resolver.js';
+export {
+  knownCohortAgents,
+  resolveOrchestrationPaths,
+  resolveSelfAgents,
+} from './orchestration-resolver.js';
 
 // Parity-manifest parser + config-path resolver (mmnto-ai/totem-strategy#448)
 export type {

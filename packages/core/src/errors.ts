@@ -39,7 +39,8 @@ export type TotemErrorCode =
   | 'BADGE_VERIFICATION_FAILED'
   | 'CLAIM_DISCIPLINE_FAILED'
   | 'GATE_INVALID'
-  | 'PARITY_DRIFT_DETECTED';
+  | 'PARITY_DRIFT_DETECTED'
+  | 'MAIL_SEND_FAILED';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

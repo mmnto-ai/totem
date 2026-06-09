@@ -153,6 +153,19 @@ const COHORT_AGENT_MAP: Readonly<Record<string, readonly string[]>> = Object.fre
 });
 
 /**
+ * Flattened set of all cohort agent-ids the basename map pre-knows, derived
+ * from `COHORT_AGENT_MAP` so there is exactly one source of truth (the very
+ * drift `totem mail send` exists to kill — a hardcoded recipient list in the
+ * actuator would re-introduce it). Consumed by the outbound mail validator
+ * (`mail send`) to flag an unknown recipient — a *content* warning, never a
+ * block (ADR-106 inv6 fail-open). `broadcast` is a valid recipient too, but
+ * it is a routing literal, not an agent, so callers handle it separately.
+ */
+export function knownCohortAgents(): string[] {
+  return Object.values(COHORT_AGENT_MAP).flat();
+}
+
+/**
  * Zod schema for the optional `<repoRoot>/.totem/orchestration/config.json`
  * override file. Only `host_agents` is consumed by the resolver; the
  * `passthrough()` allows unrelated fields (downstream consumers may add

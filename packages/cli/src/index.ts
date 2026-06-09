@@ -723,7 +723,10 @@ program
 
 // Canonical cross-repo outbox poll (mmnto-ai/totem#1970; ADR-106 § 3 / ADR-107).
 // Replaces ad-hoc per-hook implementations with one cohort-portable surface.
-program
+// `send`/`reply` subcommands (mmnto-ai/totem#2042) are the actuator half;
+// registering them also closes the silent fall-through trap — Commander now
+// rejects `totem mail <unknown>` instead of running the read as a no-op.
+const mailCmd = program
   .command('mail')
   .description('Show unread cross-repo mail addressed to this repo’s agent(s) (ADR-106 § 3)')
   .option('--json', 'Emit JSON to stdout instead of human-readable text to stderr')
@@ -755,6 +758,77 @@ program
         handleError(err);
         // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the verify-badges pattern above.
         throw err;
+      }
+    },
+  );
+
+mailCmd
+  .command('send')
+  .description(
+    'Compose + write a validated ADR-098 v0.4 dispatch to your outbox (mmnto-ai/totem#2042)',
+  )
+  .requiredOption('--to <agent>', 'Recipient agent-id (or "broadcast")')
+  .requiredOption('--subject <text>', 'Subject line')
+  .option('--from <agent>', 'Sender agent-id (default: resolved self; required if ambiguous)')
+  .option('--body-file <path>', 'Read the dispatch body from this file')
+  .option('--in-reply-to <path>', 'Source dispatch path this replies to')
+  .option('--priority <level>', 'priority: frontmatter value')
+  .option('--related <refs...>', 'related-issues: frontmatter refs')
+  .option('--expected-action <text>', 'expected-action: frontmatter (default: none)')
+  .option('--slug <slug>', 'Filename slug override (default: derived from subject)')
+  .action(
+    async (opts: {
+      to: string;
+      subject: string;
+      from?: string;
+      bodyFile?: string;
+      inReplyTo?: string;
+      priority?: string;
+      related?: string[];
+      expectedAction?: string;
+      slug?: string;
+    }) => {
+      try {
+        const { mailSend, mailSendCommand } = await import('./commands/mail.js');
+        await mailSendCommand(mailSend(opts));
+        // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
+mailCmd
+  .command('reply <source>')
+  .description(
+    'Reply to a dispatch — infers recipient + subject from the source (mmnto-ai/totem#2042)',
+  )
+  .option('--from <agent>', 'Sender agent-id (default: resolved self; required if ambiguous)')
+  .option('--body-file <path>', 'Read the reply body from this file')
+  .option('--subject <text>', 'Override the inferred "Re: …" subject')
+  .option('--to <agent>', 'Override the inferred recipient')
+  .option('--priority <level>', 'priority: frontmatter value')
+  .option('--related <refs...>', 'related-issues: frontmatter refs')
+  .option('--expected-action <text>', 'expected-action: frontmatter (default: none)')
+  .action(
+    async (
+      source: string,
+      opts: {
+        from?: string;
+        bodyFile?: string;
+        subject?: string;
+        to?: string;
+        priority?: string;
+        related?: string[];
+        expectedAction?: string;
+      },
+    ) => {
+      try {
+        const { mailReply, mailSendCommand } = await import('./commands/mail.js');
+        await mailSendCommand(mailReply(source, opts));
+        // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+      } catch (err) {
+        handleError(err);
       }
     },
   );
