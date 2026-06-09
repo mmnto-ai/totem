@@ -223,16 +223,16 @@ export interface SelfAgentResolution {
 
 /**
  * Parse a comma-separated `TOTEM_SELF_AGENT` value into a clean list.
- * Empty / whitespace-only entries dropped; path-traversal entries dropped.
+ * Empty / whitespace-only entries dropped; entries failing the full
+ * path-segment guard (traversal, control/whitespace/win32-reserved) dropped —
+ * the read path enforces the same contract as the mail actuator's recipient
+ * validation (CR R3 on mmnto-ai/totem#2134).
  */
 function parseEnvAgentList(raw: string): string[] {
-  return (
-    raw
-      .split(',')
-      .map((s) => s.trim())
-      // totem-context: AGENT_ID_TRAVERSAL_PATTERN is a non-global regex (no `g` flag), so `.test()` is stateless here; this is path-traversal sanitization, not shell-command identification.
-      .filter((s) => s.length > 0 && !AGENT_ID_TRAVERSAL_PATTERN.test(s))
-  );
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(isPathSafeAgentId);
 }
 
 /**
@@ -247,9 +247,10 @@ function parseEnvAgentList(raw: string): string[] {
  *   3. Hardcoded `COHORT_AGENT_MAP` by `path.basename(repoRoot)`
  *   4. `{ agents: [], source: 'none' }`
  *
- * Path-traversal entries (`..`, `/`, `\`, null byte) are dropped at every
- * layer — same guard as `resolveOrchestrationPaths`. An empty list from a
- * higher-precedence layer falls through to the next (so a malformed env
+ * Entries failing `isPathSafeAgentId` (path traversal, null byte, control/
+ * whitespace/win32-reserved characters) are dropped at every layer — the
+ * same contract the mail actuator enforces on recipients. An empty list from
+ * a higher-precedence layer falls through to the next (so a malformed env
  * var doesn't shadow a valid config or map entry).
  *
  * Pure utility — no caching, no logging, no side effects other than a
@@ -280,10 +281,10 @@ export function resolveSelfAgents(
       const content = fs.readFileSync(configPath, 'utf-8');
       const parseResult = ConfigSchema.safeParse(JSON.parse(content));
       if (parseResult.success && parseResult.data.host_agents !== undefined) {
-        const agents = parseResult.data.host_agents
-          .filter((a) => a.length > 0)
-          // totem-context: AGENT_ID_TRAVERSAL_PATTERN is non-global (no `g` flag), so `.test()` is stateless here; this is path-traversal sanitization on repo-controlled config input, not shell-command identification.
-          .filter((a) => !AGENT_ID_TRAVERSAL_PATTERN.test(a));
+        // Same full path-segment guard as the env layer (CR R3 on
+        // mmnto-ai/totem#2134): traversal AND control/whitespace/win32-reserved
+        // entries dropped from repo-controlled config input too.
+        const agents = parseResult.data.host_agents.filter(isPathSafeAgentId);
         if (agents.length > 0) {
           return { agents, source: 'config' };
         }

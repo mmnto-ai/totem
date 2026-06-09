@@ -376,6 +376,17 @@ describe('resolveSelfAgents — config.json host_agents override', () => {
     expect(result.agents).toEqual(['valid-agent']);
   });
 
+  it('drops control/whitespace/win32-reserved entries from host_agents (#2134 R3)', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(
+      totemRoot,
+      JSON.stringify({ host_agents: ['two words', 'a*b', 'a:b', 'valid-agent'] }),
+    );
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('config');
+    expect(result.agents).toEqual(['valid-agent']);
+  });
+
   it('rejects mixed-type host_agents and falls through to basename map', () => {
     // Zod array schema is strict: any non-string entry fails the parse, so the
     // whole config is ignored. Stricter than silent per-entry filtering, but
@@ -432,6 +443,17 @@ describe('resolveSelfAgents — TOTEM_SELF_AGENT env var (highest precedence)', 
     });
     expect(result.source).toBe('env');
     expect(result.agents).toEqual(['real-agent']);
+  });
+
+  it('drops control/whitespace/win32-reserved entries from env var (#2134 R3)', () => {
+    // The read path enforces the same full path-segment contract as the mail
+    // actuator's recipient validation — not just the traversal subset.
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot, {
+      TOTEM_SELF_AGENT: 'two words,a:b,a*b,ok-agent',
+    });
+    expect(result.source).toBe('env');
+    expect(result.agents).toEqual(['ok-agent']);
   });
 
   it('falls through to config when env var is empty after sanitization', () => {

@@ -1030,6 +1030,29 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
     }
   });
 
+  it('never echoes a rejected id raw — control bytes are JSON-escaped in the error (#2134 R3)', () => {
+    const esc = String.fromCharCode(0x1b);
+    let thrown: unknown;
+    try {
+      mailSend({
+        to: `evil${esc}x`,
+        subject: 's',
+        from: 'totem-claude',
+        repoRoot: sendRepo(),
+        env: {},
+        now: fixedClock,
+        knownAgents: ['totem-claude'],
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    // The rejection message must not re-create the very terminal injection it
+    // blocks: no raw ESC on stderr, only its JSON-escaped spelling.
+    expect(String(thrown)).not.toContain(esc);
+    expect(String(thrown)).toContain('u001b');
+  });
+
   it('surfaces the original write error even when temp cleanup also fails (#2134 R2)', () => {
     // GCA R2: a cleanup rmSync that throws must not shadow the actuation
     // error — the failed write is the signal. No fs mocking (ESM namespaces
@@ -1105,7 +1128,38 @@ describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
     });
     expect(res.header.to).toBe('strategy-claude'); // = source.from
     expect(res.header.subject).toBe('Re: Original subject');
-    expect(res.header.inReplyTo).toBe(src);
+    // Portable repo-relative wire form — never the absolute local path
+    // (GCA R3 on mmnto-ai/totem#2134: no drive letters/usernames in shared
+    // frontmatter).
+    expect(res.header.inReplyTo).toBe(
+      '.totem/orchestration/strategy-claude/outbox/2026-06-09T1710Z-totem-claude-orig.md',
+    );
+  });
+
+  it('falls back to the outbox-dir agent when the source has no from: (#2134 R3)', () => {
+    // Reader parity: pollMail accepts a from:-less dispatch by falling back to
+    // the outbox directory name — reply must not hard-fail where the reader
+    // succeeded.
+    const outbox = mkDir(
+      path.join(
+        workspace,
+        'totem-strategy',
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'outbox',
+      ),
+    );
+    const src = path.join(outbox, '2026-06-09T1700Z-totem-claude-legacy.md');
+    fs.writeFileSync(src, '---\nto: totem-claude\nsubject: legacy mail\n---\n\nBody.\n', 'utf-8');
+    const res = mailReply(src, {
+      from: 'totem-claude',
+      repoRoot: mkDir(path.join(workspace, 'totem')),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.header.to).toBe('strategy-claude'); // derived from <agent>/outbox/ layout
   });
 
   it('hard-errors when the source dispatch is missing', () => {
@@ -1141,6 +1195,48 @@ describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)'
     expect(md).toContain('subject: "[#42 brackets: and colon]"');
     expect(md).toContain('  - mmnto-ai/totem#2042'); // ref stays unquoted
     expect(md).toContain('related-issues:');
+  });
+
+  it('quotes boolean/null/numeric-shaped scalars so YAML readers keep the string type (#2134 R3)', () => {
+    const base: Omit<DispatchHeader, 'subject'> = {
+      schema: 'adr-098-v0.4',
+      from: 'totem-claude',
+      to: 'strategy-claude',
+      timestamp: '2026-06-09T17:34:37.127Z',
+      expectedAction: 'none',
+    };
+    for (const subject of ['true', 'NO', 'y', 'null', '~', '42', '-3.5', '1e5', '123.']) {
+      const md = composeDispatch({ ...base, subject }, 'body');
+      expect(md).toContain(`subject: ${JSON.stringify(subject)}`);
+    }
+    // Ordinary prose subjects stay unquoted (the de-facto wire shape).
+    expect(composeDispatch({ ...base, subject: 'plain words' }, 'body')).toContain(
+      'subject: plain words',
+    );
+  });
+
+  it('round-trips a quoted subject without accreting quotes (#2134 R3)', () => {
+    // compose → poll: the reader must surface the subject the sender typed,
+    // not yamlScalar's emit-quoting (CR R3 — `Re: "..."` accretion class).
+    const subject = 'R3: the colon-space forces quoting';
+    const md = composeDispatch(
+      {
+        schema: 'adr-098-v0.4',
+        from: 'strategy-claude',
+        to: 'totem-claude',
+        timestamp: '2026-06-09T17:34:37.127Z',
+        subject,
+        expectedAction: 'none',
+      },
+      'body',
+    );
+    expect(md).toContain(`subject: ${JSON.stringify(subject)}`); // quoted on the wire
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-09T1734Z-roundtrip.md', to: 'totem-claude', raw: md },
+    ]);
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe(subject); // unquoted on read
   });
 
   it('resolveSelfSender: explicit > unambiguous map > error', () => {

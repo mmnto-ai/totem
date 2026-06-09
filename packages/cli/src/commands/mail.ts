@@ -168,6 +168,7 @@ function parseHeader(content: string): HeaderParse {
   }
   const fromMatch = header.match(/^from:\s*(.+)$/im);
   const subjectMatch = header.match(/^[-\s]*subject:\s*(.+)$/im);
+  const subject = subjectMatch ? unquoteScalar(subjectMatch[1]!.trim()) : null;
   // ADR-098 v0.4 codified `timestamp:` (full RFC3339) as canonical, replacing
   // legacy `date:`; `date:` remains a backwards-compat read (the amendment's
   // own migration note). Read `timestamp:` first, fall back to `date:`. The
@@ -183,10 +184,30 @@ function parseHeader(content: string): HeaderParse {
     header: {
       to: toMatch[1]!.trim(),
       from: fromMatch ? fromMatch[1]!.trim() : null,
-      subject: subjectMatch ? subjectMatch[1]!.trim() : null,
+      subject,
       date: when !== null ? when.trim() : null,
     },
   };
+}
+
+/**
+ * Strict JSON-string shape: the exact output space of `yamlScalar`'s
+ * `JSON.stringify` quoting (double-quoted, every inner quote/backslash/control
+ * escaped). Anything else — hand-authored asymmetric quotes, raw control
+ * bytes, single quotes — deliberately does NOT match and reads verbatim.
+ */
+const JSON_STRING_SCALAR = /^"(?:[^"\\\p{Cc}]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"$/u;
+
+/**
+ * Undo `yamlScalar`'s double-quoting on read so quoted scalars round-trip:
+ * compose → parse → `Re: <subject>` must not accrete quotes, and `pollMail`
+ * must surface the subject the sender typed (CR R3 on mmnto-ai/totem#2134).
+ * The shape pre-check makes `JSON.parse` infallible here — no catch needed —
+ * and confines unquoting to strings `yamlScalar` itself could have emitted, so
+ * reader behavior for legacy/hand-authored mail is unchanged.
+ */
+function unquoteScalar(value: string): string {
+  return JSON_STRING_SCALAR.test(value) ? (JSON.parse(value) as string) : value;
 }
 
 /**
@@ -602,7 +623,13 @@ function yamlScalar(value: string): string {
     /[\n"]/.test(value) ||
     /^[[\]{}>|*&!%@`'"#-]/.test(value) ||
     /:\s/.test(value) ||
-    /\s#/.test(value);
+    /\s#/.test(value) ||
+    // YAML 1.1 plain-scalar coercion traps: a bare boolean/null/numeric-shaped
+    // value would parse as a non-string once the derivation engine YAML-parses
+    // the wire (GCA R3 on mmnto-ai/totem#2134; incl. YAML 1.1's bare y/n and
+    // exponential/trailing-dot floats). Quote to pin the string type.
+    /^(?:y|n|yes|no|true|false|on|off|null|~)$/i.test(value) ||
+    /^[+-]?(?:\d+\.?|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(value);
   return needsQuote ? JSON.stringify(value) : value;
 }
 
@@ -708,9 +735,12 @@ function assertSafeAgentId(id: string, label: string): void {
   // whitespace/win32-reserved characters that would propagate into the
   // dispatch markdown and CLI logs (CR R2, same PR).
   if (!isPathSafeAgentId(id)) {
+    // JSON-escape the echoed id: this rejection path exists precisely because
+    // the value may carry control bytes — echoing it raw to stderr would
+    // re-create the terminal injection it blocks (CR R3 on mmnto-ai/totem#2134).
     throw new TotemError(
       'MAIL_SEND_FAILED',
-      `invalid --${label} "${id}" (path-traversal, unsafe characters, or empty)`,
+      `invalid --${label} ${JSON.stringify(id)} (path-traversal, unsafe characters, or empty)`,
       'pass a plain agent-id such as "totem-claude" (no path separators, "..", whitespace, or control characters).',
     );
   }
@@ -895,9 +925,10 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
 /**
  * `totem mail reply <source>` — syntactic sugar over `mailSend`. Reads the
  * source dispatch (HARD error if missing/unparseable — reply structurally needs
- * it to infer the recipient + subject), then sends with `to = source.from`,
- * `subject = "Re: <source.subject>"`, and `in-reply-to = source path`. Any
- * field can still be overridden via opts.
+ * it to infer the recipient + subject), then sends with `to = source.from`
+ * (falling back to the source's outbox-dir agent, reader parity),
+ * `subject = "Re: <source.subject>"`, and `in-reply-to` set to the source's
+ * repo-relative wire form. Any field can still be overridden via opts.
  */
 export function mailReply(
   source: string,
@@ -926,7 +957,11 @@ export function mailReply(
       'the source must be an ADR-098 dispatch with a frontmatter block; use `mail send --to` for a fresh dispatch.',
     );
   }
-  const replyTo = opts.to ?? parsed.header.from ?? '';
+  // Reader-parity fallback (CR R3 on mmnto-ai/totem#2134): `pollMail` accepts
+  // a dispatch without `from:` by falling back to the outbox directory name,
+  // so a reply to such mail must not hard-fail where the reader succeeded —
+  // derive the sender from the `<agent>/outbox/<file>` layout.
+  const replyTo = opts.to ?? parsed.header.from ?? senderFromSourcePath(source) ?? '';
   if (replyTo.trim().length === 0) {
     throw new TotemError(
       'MAIL_SEND_FAILED',
@@ -935,7 +970,32 @@ export function mailReply(
     );
   }
   const subject = opts.subject ?? `Re: ${parsed.header.subject ?? '(no subject)'}`;
-  return mailSend({ ...opts, to: replyTo, subject, inReplyTo: source });
+  return mailSend({ ...opts, to: replyTo, subject, inReplyTo: portableSourceRef(source) });
+}
+
+/**
+ * Derive the sender agent-id from a dispatch path's `<agent>/outbox/<file>`
+ * layout — the same fallback `pollMail` applies when frontmatter omits
+ * `from:` (reader↔reply parity, CR R3 on mmnto-ai/totem#2134).
+ */
+function senderFromSourcePath(source: string): string | null {
+  const segments = path.resolve(source).split(/[/\\]/);
+  const outboxIdx = segments.lastIndexOf('outbox');
+  return outboxIdx > 0 ? (segments[outboxIdx - 1] ?? null) : null;
+}
+
+/**
+ * Reduce a reply-source path to the portable repo-relative wire form
+ * (`.totem/orchestration/<agent>/outbox/<file>` — the de-facto cohort shape
+ * for `in-reply-to:`) so an absolute local path never leaks machine-specific
+ * structure (drive letters, usernames) into shared frontmatter (GCA R3 on
+ * mmnto-ai/totem#2134). Falls back to the basename when the source lives
+ * outside a recognizable orchestration tree.
+ */
+function portableSourceRef(source: string): string {
+  const normalized = source.replace(/\\/g, '/');
+  const idx = normalized.lastIndexOf('.totem/orchestration/');
+  return idx >= 0 ? normalized.slice(idx) : path.basename(source);
 }
 
 /**
