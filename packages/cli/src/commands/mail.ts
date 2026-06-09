@@ -179,15 +179,31 @@ function parseHeader(content: string): HeaderParse {
   const timestampMatch = header.match(/^timestamp:\s*(.+)$/im);
   const dateMatch = header.match(/^date:\s*(.+)$/im);
   const when = timestampMatch ? timestampMatch[1]! : dateMatch ? dateMatch[1]! : null;
+  // Every field below is sender-controlled wire text that downstream writers
+  // (`formatTextResult` → stderr, `--json` consumers' logs) display verbatim —
+  // escape raw control bytes at this single boundary so no parse path (quoted,
+  // unquoted, hand-authored) can carry terminal-injection bytes into
+  // `MailEntry` (CR R5 on mmnto-ai/totem#2134; the unquoted exposure predates
+  // this PR — closing the whole class here, not just the unquote fallback).
   return {
     ok: true,
     header: {
-      to: toMatch[1]!.trim(),
-      from: fromMatch ? fromMatch[1]!.trim() : null,
-      subject,
-      date: when !== null ? when.trim() : null,
+      to: escapeControlBytes(toMatch[1]!.trim()),
+      from: fromMatch ? escapeControlBytes(fromMatch[1]!.trim()) : null,
+      subject: subject !== null ? escapeControlBytes(subject) : null,
+      date: when !== null ? escapeControlBytes(when.trim()) : null,
     },
   };
+}
+
+/**
+ * Replace each raw control byte with its JSON-escaped spelling (ESC becomes
+ * the six characters backslash-u-0-0-1-b, LF becomes backslash-n, …) so the
+ * value stays display-safe AND lossless — the escaped form is visible instead
+ * of interpreted. Printable text passes through unchanged.
+ */
+function escapeControlBytes(value: string): string {
+  return value.replace(/\p{Cc}/gu, (ch) => JSON.stringify(ch).slice(1, -1));
 }
 
 /**

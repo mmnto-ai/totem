@@ -1269,6 +1269,46 @@ describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)'
     }
   });
 
+  it('escapes raw control bytes from hand-authored wire fields (#2134 R5)', () => {
+    // The escaped-sequence guard (R4) covers the wire ENCODING of controls;
+    // this covers raw bytes typed directly into a dispatch — quoted, unquoted,
+    // and in from: — a reader exposure that predates the actuator.
+    const esc = String.fromCharCode(0x1b);
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-06-09T1737Z-rawquoted.md',
+        to: 'totem-claude',
+        raw: [
+          '---',
+          `from: strategy${esc}-claude`,
+          'to: totem-claude',
+          `subject: "quoted ${esc}[31m raw"`,
+          '---',
+          '',
+        ].join('\n'),
+      },
+      {
+        name: '2026-06-09T1738Z-rawunquoted.md',
+        to: 'totem-claude',
+        raw: [
+          '---',
+          'from: strategy-claude',
+          'to: totem-claude',
+          `subject: unquoted ${esc}[31m raw`,
+          '---',
+          '',
+        ].join('\n'),
+      },
+    ]);
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    expect(result.mail).toHaveLength(2);
+    for (const entry of result.mail) {
+      expect(entry.subject).not.toContain(esc);
+      expect(entry.from).not.toContain(esc);
+      expect(entry.subject).toContain('u001b'); // escaped spelling — lossless, visible
+    }
+  });
+
   it('resolveSelfSender: explicit > unambiguous map > error', () => {
     const totemRepo = mkDir(path.join(workspace, 'totem'));
     expect(resolveSelfSender(totemRepo, {}, 'totem-gemini')).toBe('totem-gemini'); // explicit wins
