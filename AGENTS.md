@@ -4,7 +4,7 @@ Canonical source of truth for how AI coding agents (Claude Code, Gemini CLI, Cur
 
 ## What Totem is
 
-Totem is a **deterministic, repo-anchored governance toolkit** — _rules you enforce, state you derive, context you query_. The moat is governance, not memory: lead with enforcement (`totem lint` + the gate engine), not recall. Derivation (`totem status` / `orient`, Tenet 20) and the queryable index + ECL serve it, never lead.
+Totem is a **deterministic, repo-scoped governance toolkit** — _rules you enforce, state you derive, context you query_. The moat is governance, not memory: lead with enforcement (`totem lint` + the gate engine), not recall. Derivation (`totem status` / `orient`, Tenet 20) and the queryable index serve it.
 
 ## Session Start Protocol (MANDATORY)
 
