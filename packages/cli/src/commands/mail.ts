@@ -191,23 +191,30 @@ function parseHeader(content: string): HeaderParse {
 }
 
 /**
- * Strict JSON-string shape: the exact output space of `yamlScalar`'s
- * `JSON.stringify` quoting (double-quoted, every inner quote/backslash/control
- * escaped). Anything else — hand-authored asymmetric quotes, raw control
- * bytes, single quotes — deliberately does NOT match and reads verbatim.
+ * Strict PRINTABLE JSON-string shape: a double-quoted scalar whose decoded
+ * value provably contains no control bytes. The only escapes admitted are
+ * `\"` `\\` `\/` — the ones that decode to printables. Escapes that decode to
+ * control bytes (`\n`, `\t`, `\b\f\r`, `\uXXXX`) deliberately do NOT match
+ * (CR R4 on mmnto-ai/totem#2134): a control-bearing quoted subject would
+ * otherwise decode into raw ESC/newline that `formatTextResult` writes to
+ * stderr — the same terminal-injection class the agent-id guard blocks.
+ * Likewise hand-authored asymmetric quotes, raw control bytes, and single
+ * quotes — all read verbatim.
  */
-const JSON_STRING_SCALAR = /^"(?:[^"\\\p{Cc}]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"$/u;
+const PRINTABLE_JSON_STRING_SCALAR = /^"(?:[^"\\\p{Cc}]|\\["\\/])*"$/u;
 
 /**
  * Undo `yamlScalar`'s double-quoting on read so quoted scalars round-trip:
  * compose → parse → `Re: <subject>` must not accrete quotes, and `pollMail`
  * must surface the subject the sender typed (CR R3 on mmnto-ai/totem#2134).
  * The shape pre-check makes `JSON.parse` infallible here — no catch needed —
- * and confines unquoting to strings `yamlScalar` itself could have emitted, so
- * reader behavior for legacy/hand-authored mail is unchanged.
+ * and confines unquoting to printable-only strings, so a wire value encoding
+ * control bytes surfaces in its escaped spelling instead of decoding into the
+ * terminal (display stays lossless AND injection-free), and reader behavior
+ * for legacy/hand-authored mail is unchanged.
  */
 function unquoteScalar(value: string): string {
-  return JSON_STRING_SCALAR.test(value) ? (JSON.parse(value) as string) : value;
+  return PRINTABLE_JSON_STRING_SCALAR.test(value) ? (JSON.parse(value) as string) : value;
 }
 
 /**

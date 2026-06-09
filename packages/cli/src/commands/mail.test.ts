@@ -1239,6 +1239,36 @@ describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)'
     expect(result.mail[0]!.subject).toBe(subject); // unquoted on read
   });
 
+  it('never decodes control/newline escapes out of a quoted subject (#2134 R4)', () => {
+    // A quoted wire subject encoding control bytes must surface in its escaped
+    // spelling — decoding it would hand `formatTextResult` raw ESC/newline for
+    // stderr (the terminal-injection class the agent-id guard blocks).
+    const escapedEsc = 'subject: "esc \\u001b[31m red"';
+    const escapedNewline = 'subject: "line1\\nline2"';
+    for (const [name, subjectLine] of [
+      ['2026-06-09T1735Z-esc.md', escapedEsc],
+      ['2026-06-09T1736Z-newline.md', escapedNewline],
+    ] as const) {
+      writeOutbox('totem-strategy', 'strategy-claude', [
+        {
+          name,
+          to: 'totem-claude',
+          raw: ['---', 'from: strategy-claude', 'to: totem-claude', subjectLine, '---', ''].join(
+            '\n',
+          ),
+        },
+      ]);
+    }
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    expect(result.mail).toHaveLength(2);
+    const esc = String.fromCharCode(0x1b);
+    for (const entry of result.mail) {
+      expect(entry.subject).not.toContain(esc);
+      expect(entry.subject).not.toContain('\n');
+      expect(entry.subject.startsWith('"')).toBe(true); // verbatim, still quoted
+    }
+  });
+
   it('resolveSelfSender: explicit > unambiguous map > error', () => {
     const totemRepo = mkDir(path.join(workspace, 'totem'));
     expect(resolveSelfSender(totemRepo, {}, 'totem-gemini')).toBe('totem-gemini'); // explicit wins
