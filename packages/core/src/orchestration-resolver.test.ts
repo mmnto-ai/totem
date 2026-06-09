@@ -16,6 +16,8 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  isPathSafeAgentId,
+  knownCohortAgents,
   type OrchestrationPaths,
   resolveOrchestrationPaths,
   resolveSelfAgents,
@@ -374,6 +376,17 @@ describe('resolveSelfAgents — config.json host_agents override', () => {
     expect(result.agents).toEqual(['valid-agent']);
   });
 
+  it('drops control/whitespace/win32-reserved entries from host_agents (#2134 R3)', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(
+      totemRoot,
+      JSON.stringify({ host_agents: ['two words', 'a*b', 'a:b', 'valid-agent'] }),
+    );
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('config');
+    expect(result.agents).toEqual(['valid-agent']);
+  });
+
   it('rejects mixed-type host_agents and falls through to basename map', () => {
     // Zod array schema is strict: any non-string entry fails the parse, so the
     // whole config is ignored. Stricter than silent per-entry filtering, but
@@ -432,6 +445,17 @@ describe('resolveSelfAgents — TOTEM_SELF_AGENT env var (highest precedence)', 
     expect(result.agents).toEqual(['real-agent']);
   });
 
+  it('drops control/whitespace/win32-reserved entries from env var (#2134 R3)', () => {
+    // The read path enforces the same full path-segment contract as the mail
+    // actuator's recipient validation — not just the traversal subset.
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    const result = resolveSelfAgents(totemRoot, {
+      TOTEM_SELF_AGENT: 'two words,a:b,a*b,ok-agent',
+    });
+    expect(result.source).toBe('env');
+    expect(result.agents).toEqual(['ok-agent']);
+  });
+
   it('falls through to config when env var is empty after sanitization', () => {
     const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
     writeConfig(totemRoot, JSON.stringify({ host_agents: ['config-agent'] }));
@@ -472,5 +496,53 @@ describe('resolveSelfAgents — path-normalization', () => {
     const result = resolveSelfAgents(totemRoot + path.sep, {});
     expect(result.source).toBe('map');
     expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+});
+
+describe('isPathSafeAgentId — path-segment guard (mmnto-ai/totem#2134)', () => {
+  it('accepts plain cohort agent-ids', () => {
+    for (const id of ['totem-claude', 'strategy-claude', 'status-gemini', 'broadcast', 'a.b_c-1']) {
+      expect(isPathSafeAgentId(id)).toBe(true);
+    }
+  });
+
+  it('rejects traversal, separators, and null bytes', () => {
+    for (const id of ['', '..', '../evil', 'a/b', 'a\\b', 'a\0b']) {
+      expect(isPathSafeAgentId(id)).toBe(false);
+    }
+  });
+
+  it('rejects control, whitespace, and win32-reserved characters (CR R2)', () => {
+    // Control/escape chars are terminal-injection vectors into logs and
+    // dispatch markdown; `< > : " | ? *` are illegal in win32 filenames.
+    // ESC/DEL are built via fromCharCode so the source carries no raw
+    // control bytes.
+    const esc = String.fromCharCode(0x1b);
+    const del = String.fromCharCode(0x7f);
+    const unsafe = [
+      'a b',
+      'a\tb',
+      'a\nb',
+      `esc${esc}[31m`,
+      `del${del}`,
+      ...'<>:"|?*'.split('').map((c) => `a${c}b`),
+    ];
+    for (const id of unsafe) {
+      expect(isPathSafeAgentId(id)).toBe(false);
+    }
+  });
+});
+
+describe('knownCohortAgents — single-source recipient set', () => {
+  it('derives from the cohort map and every id passes the path-segment guard', () => {
+    const agents = knownCohortAgents();
+    expect(agents).toContain('totem-claude');
+    expect(agents).toContain('strategy-claude');
+    // Self-consistency lock: an id added to COHORT_AGENT_MAP that fails the
+    // guard would be unroutable by `totem mail send` — catch it here, not in
+    // a failed dispatch.
+    for (const id of agents) {
+      expect(isPathSafeAgentId(id)).toBe(true);
+    }
   });
 });

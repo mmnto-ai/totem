@@ -86,6 +86,17 @@ function isDirectory(p: string): boolean {
  */
 const AGENT_ID_TRAVERSAL_PATTERN = /[/\\\0]|\.\./;
 
+/**
+ * Characters that no cohort agent-id legitimately contains and that are unsafe
+ * in a filename token or a logged/rendered string: Unicode control characters
+ * (`\p{Cc}` — terminal-injection into CLI logs and dispatch markdown),
+ * whitespace, and the win32-reserved set `< > : " | ? *`. Complements
+ * `AGENT_ID_TRAVERSAL_PATTERN` (separators, null byte, `..`) so that
+ * `isPathSafeAgentId` is a full path-segment guard, not only a traversal
+ * guard (CR R2 on mmnto-ai/totem#2134).
+ */
+const AGENT_ID_UNSAFE_CHAR_PATTERN = /[\p{Cc}\s<>:"|?*]/u;
+
 export function resolveOrchestrationPaths(repoRoot: string, agentId: string): OrchestrationPaths {
   // Defense-in-depth: reject path-traversal patterns in `agentId` before
   // composing the base path. The hardcoded map in the /signoff skill is
@@ -153,6 +164,38 @@ const COHORT_AGENT_MAP: Readonly<Record<string, readonly string[]>> = Object.fre
 });
 
 /**
+ * Flattened set of all cohort agent-ids the basename map pre-knows, derived
+ * from `COHORT_AGENT_MAP` so there is exactly one source of truth (the very
+ * drift `totem mail send` exists to kill — a hardcoded recipient list in the
+ * actuator would re-introduce it). Consumed by the outbound mail validator
+ * (`mail send`) to flag an unknown recipient — a *content* warning, never a
+ * block (ADR-106 inv6 fail-open). `broadcast` is a valid recipient too, but
+ * it is a routing literal, not an agent, so callers handle it separately.
+ */
+export function knownCohortAgents(): string[] {
+  return Object.values(COHORT_AGENT_MAP).flat();
+}
+
+/**
+ * True iff `id` is safe to use as a `.totem/orchestration/<id>/…` path segment
+ * (or any filename token): a non-empty string with no path separators, null
+ * byte, or `..` traversal, and no control/whitespace/win32-reserved characters
+ * (which would otherwise propagate into dispatch markdown, filenames, and CLI
+ * logs — terminal-injection class). The single source of truth for the guard —
+ * consumers (e.g. `totem mail send`'s `--from`/`--to` validation) reuse this
+ * rather than re-deriving the pattern (Greptile P2 + CR R2 on
+ * mmnto-ai/totem#2134).
+ */
+export function isPathSafeAgentId(id: string): boolean {
+  return (
+    typeof id === 'string' &&
+    id.length > 0 &&
+    !AGENT_ID_TRAVERSAL_PATTERN.test(id) &&
+    !AGENT_ID_UNSAFE_CHAR_PATTERN.test(id)
+  );
+}
+
+/**
  * Zod schema for the optional `<repoRoot>/.totem/orchestration/config.json`
  * override file. Only `host_agents` is consumed by the resolver; the
  * `passthrough()` allows unrelated fields (downstream consumers may add
@@ -180,16 +223,16 @@ export interface SelfAgentResolution {
 
 /**
  * Parse a comma-separated `TOTEM_SELF_AGENT` value into a clean list.
- * Empty / whitespace-only entries dropped; path-traversal entries dropped.
+ * Empty / whitespace-only entries dropped; entries failing the full
+ * path-segment guard (traversal, control/whitespace/win32-reserved) dropped —
+ * the read path enforces the same contract as the mail actuator's recipient
+ * validation (CR R3 on mmnto-ai/totem#2134).
  */
 function parseEnvAgentList(raw: string): string[] {
-  return (
-    raw
-      .split(',')
-      .map((s) => s.trim())
-      // totem-context: AGENT_ID_TRAVERSAL_PATTERN is a non-global regex (no `g` flag), so `.test()` is stateless here; this is path-traversal sanitization, not shell-command identification.
-      .filter((s) => s.length > 0 && !AGENT_ID_TRAVERSAL_PATTERN.test(s))
-  );
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(isPathSafeAgentId);
 }
 
 /**
@@ -204,9 +247,10 @@ function parseEnvAgentList(raw: string): string[] {
  *   3. Hardcoded `COHORT_AGENT_MAP` by `path.basename(repoRoot)`
  *   4. `{ agents: [], source: 'none' }`
  *
- * Path-traversal entries (`..`, `/`, `\`, null byte) are dropped at every
- * layer — same guard as `resolveOrchestrationPaths`. An empty list from a
- * higher-precedence layer falls through to the next (so a malformed env
+ * Entries failing `isPathSafeAgentId` (path traversal, null byte, control/
+ * whitespace/win32-reserved characters) are dropped at every layer — the
+ * same contract the mail actuator enforces on recipients. An empty list from
+ * a higher-precedence layer falls through to the next (so a malformed env
  * var doesn't shadow a valid config or map entry).
  *
  * Pure utility — no caching, no logging, no side effects other than a
@@ -237,10 +281,10 @@ export function resolveSelfAgents(
       const content = fs.readFileSync(configPath, 'utf-8');
       const parseResult = ConfigSchema.safeParse(JSON.parse(content));
       if (parseResult.success && parseResult.data.host_agents !== undefined) {
-        const agents = parseResult.data.host_agents
-          .filter((a) => a.length > 0)
-          // totem-context: AGENT_ID_TRAVERSAL_PATTERN is non-global (no `g` flag), so `.test()` is stateless here; this is path-traversal sanitization on repo-controlled config input, not shell-command identification.
-          .filter((a) => !AGENT_ID_TRAVERSAL_PATTERN.test(a));
+        // Same full path-segment guard as the env layer (CR R3 on
+        // mmnto-ai/totem#2134): traversal AND control/whitespace/win32-reserved
+        // entries dropped from repo-controlled config input too.
+        const agents = parseResult.data.host_agents.filter(isPathSafeAgentId);
         if (agents.length > 0) {
           return { agents, source: 'config' };
         }

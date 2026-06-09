@@ -15,7 +15,17 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
-import { mailCommand, type MailPollResult, pollMail } from './mail.js';
+import {
+  composeDispatch,
+  type DispatchHeader,
+  mailCommand,
+  type MailPollResult,
+  mailReply,
+  mailSend,
+  pollMail,
+  resolveSelfSender,
+  validateDispatchContent,
+} from './mail.js';
 
 // ─── Fixture helpers ────────────────────────────────────
 
@@ -782,5 +792,527 @@ describe('pollMail — structured warnings on FS failures', () => {
     // Mail still surfaces (degraded — no exclusion filter), warning recorded.
     expect(result.mail).toHaveLength(1);
     expect(result.warnings.some((w) => w.startsWith('processed/ scan failed'))).toBe(true);
+  });
+});
+
+// ─── Reader: timestamp: (ADR-098 v0.4) with date: fallback ──
+
+describe('parseHeader — timestamp:/date: precedence (mmnto-ai/totem#2042)', () => {
+  function rawDispatch(fields: string[]): string {
+    return ['---', ...fields, '---', '', 'body', ''].join('\n');
+  }
+
+  it('reads timestamp: as the displayed time', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-06-09T1734Z-ts.md',
+        to: 'totem-claude',
+        raw: rawDispatch([
+          'from: strategy-claude',
+          'to: totem-claude',
+          'timestamp: 2026-06-09T17:34:37.127Z',
+          'subject: ts-test',
+        ]),
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
+  });
+
+  it('prefers timestamp: over a legacy date: when both present', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-06-09T1734Z-both.md',
+        to: 'totem-claude',
+        raw: rawDispatch([
+          'from: strategy-claude',
+          'to: totem-claude',
+          'date: 2026-01-01T0000Z',
+          'timestamp: 2026-06-09T17:34:37.127Z',
+          'subject: both',
+        ]),
+      },
+    ]);
+    expect(poll().mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
+  });
+
+  it('still falls back to legacy date: (backwards-compat read)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-09T1734Z-legacy.md', to: 'totem-claude', date: '2026-05-18T1700Z' },
+    ]);
+    expect(poll().mail[0]!.date).toBe('2026-05-18T1700Z');
+  });
+});
+
+// ─── Outbound: send / reply (mmnto-ai/totem#2042) ───────
+
+describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
+  const fixedClock = (): Date => new Date('2026-06-09T17:34:37.127Z');
+  function sendRepo(basename = 'totem'): string {
+    return mkDir(path.join(workspace, basename));
+  }
+
+  it('writes a v0.4-compliant dispatch the poller reads back (sensor↔actuator round-trip)', () => {
+    const res = mailSend({
+      to: 'strategy-claude',
+      subject: 'lane handoff',
+      from: 'totem-claude',
+      body: 'the body',
+      repoRoot: sendRepo(),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude', 'totem-claude'],
+    });
+    // Structural v0.4 compliance, by construction.
+    const written = fs.readFileSync(res.filePath, 'utf-8');
+    expect(written).toContain('schema: adr-098-v0.4');
+    expect(written).toContain('timestamp: 2026-06-09T17:34:37.127Z');
+    expect(written).toContain('expected-action: none');
+    expect(res.warnings).toEqual([]);
+
+    // The poller (sensor) surfaces exactly what the actuator emitted.
+    const recipientRepo = mkDir(path.join(workspace, 'totem-strategy'));
+    const inbox = pollMail({ repoRoot: recipientRepo, workspace, env: {} });
+    expect(inbox.mail).toHaveLength(1);
+    expect(inbox.mail[0]!.to).toBe('strategy-claude');
+    expect(inbox.mail[0]!.from).toBe('totem-claude');
+    expect(inbox.mail[0]!.subject).toBe('lane handoff');
+    expect(inbox.mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
+  });
+
+  it('FAIL-OPEN: writes to an unknown recipient anyway, with a loud warning (inv6)', () => {
+    const res = mailSend({
+      to: 'totem-typoo',
+      subject: 's',
+      from: 'totem-claude',
+      repoRoot: sendRepo(),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude', 'totem-claude'],
+    });
+    expect(fs.existsSync(res.filePath)).toBe(true); // NOT blocked
+    expect(res.warnings.some((w) => w.includes('not a known cohort agent'))).toBe(true);
+  });
+
+  it('treats broadcast as a known recipient (no warning)', () => {
+    const res = mailSend({
+      to: 'broadcast',
+      subject: 's',
+      from: 'totem-claude',
+      repoRoot: sendRepo(),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['totem-claude'],
+    });
+    expect(res.warnings).toEqual([]);
+  });
+
+  it('hard-errors on ambiguous self with no --from (never silently picks one)', () => {
+    expect(() =>
+      mailSend({ to: 'strategy-claude', subject: 's', repoRoot: sendRepo('totem'), env: {} }),
+    ).toThrow(/ambiguous sender/);
+  });
+
+  it('hard-errors on unresolvable self (never writes .../undefined/outbox)', () => {
+    expect(() =>
+      mailSend({ to: 'x', subject: 's', repoRoot: sendRepo('not-a-cohort-repo'), env: {} }),
+    ).toThrow(/cannot resolve a sender/);
+  });
+
+  it('hard-errors on missing --to / --subject', () => {
+    const repo = sendRepo();
+    expect(() =>
+      mailSend({ to: '  ', subject: 's', from: 'totem-claude', repoRoot: repo, env: {} }),
+    ).toThrow(/--to/);
+    expect(() =>
+      mailSend({ to: 'x', subject: '', from: 'totem-claude', repoRoot: repo, env: {} }),
+    ).toThrow(/--subject/);
+  });
+
+  it('hard-errors on an unreadable --body-file (never ships an empty body)', () => {
+    expect(() =>
+      mailSend({
+        to: 'strategy-claude',
+        subject: 's',
+        from: 'totem-claude',
+        bodyFile: path.join(tmpRoot, 'no-such-body.md'),
+        repoRoot: sendRepo(),
+        env: {},
+        now: fixedClock,
+      }),
+    ).toThrow(/--body-file unreadable/);
+  });
+
+  it('disambiguates same-minute collisions into distinct files', () => {
+    const repo = sendRepo();
+    const common = {
+      to: 'strategy-claude',
+      subject: 'same slug here',
+      from: 'totem-claude',
+      repoRoot: repo,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    } as const;
+    const r1 = mailSend({ ...common });
+    const r2 = mailSend({ ...common });
+    expect(r1.filePath).not.toBe(r2.filePath);
+    expect(fs.existsSync(r1.filePath)).toBe(true);
+    expect(fs.existsSync(r2.filePath)).toBe(true);
+  });
+
+  it('creates the outbox tree on a fresh repo', () => {
+    const repo = sendRepo('totem');
+    const res = mailSend({
+      to: 'strategy-claude',
+      subject: 's',
+      from: 'totem-claude',
+      repoRoot: repo,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.filePath).toContain(path.join('.totem', 'orchestration', 'totem-claude', 'outbox'));
+    expect(fs.existsSync(res.filePath)).toBe(true);
+  });
+
+  it('rejects a path-traversal --from', () => {
+    expect(() =>
+      mailSend({
+        to: 'x',
+        subject: 's',
+        from: '../evil',
+        repoRoot: sendRepo(),
+        env: {},
+        now: fixedClock,
+      }),
+    ).toThrow(/path-traversal/);
+  });
+
+  it('rejects a path-traversal --to and never escapes the outbox (#2134)', () => {
+    const repo = sendRepo();
+    expect(() =>
+      mailSend({
+        to: '../../../evil',
+        subject: 's',
+        from: 'totem-claude',
+        repoRoot: repo,
+        env: {},
+        now: fixedClock,
+        knownAgents: ['totem-claude'],
+      }),
+    ).toThrow(/path-traversal/);
+    // The guard fires before any mkdir/write, so nothing escaped — not even the
+    // sender's own outbox was created.
+    expect(
+      fs.existsSync(path.join(repo, '.totem', 'orchestration', 'totem-claude', 'outbox')),
+    ).toBe(false);
+  });
+
+  it('rejects control/whitespace/win32-reserved characters in agent ids (#2134 R2)', () => {
+    const repo = sendRepo();
+    // Built via fromCharCode so the source file itself carries no raw control
+    // bytes; ESC is the canonical terminal-injection probe (CR R2).
+    const esc = String.fromCharCode(0x1b);
+    for (const evil of [`evil${esc}]0;pwn`, 'two words', 'a:b', 'a*b']) {
+      expect(() =>
+        mailSend({
+          to: evil,
+          subject: 's',
+          from: 'totem-claude',
+          repoRoot: repo,
+          env: {},
+          now: fixedClock,
+          knownAgents: ['totem-claude'],
+        }),
+      ).toThrow(/unsafe characters/);
+    }
+  });
+
+  it('never echoes a rejected id raw — control bytes are JSON-escaped in the error (#2134 R3)', () => {
+    const esc = String.fromCharCode(0x1b);
+    let thrown: unknown;
+    try {
+      mailSend({
+        to: `evil${esc}x`,
+        subject: 's',
+        from: 'totem-claude',
+        repoRoot: sendRepo(),
+        env: {},
+        now: fixedClock,
+        knownAgents: ['totem-claude'],
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    // The rejection message must not re-create the very terminal injection it
+    // blocks: no raw ESC on stderr, only its JSON-escaped spelling.
+    expect(String(thrown)).not.toContain(esc);
+    expect(String(thrown)).toContain('u001b');
+  });
+
+  it('surfaces the original write error even when temp cleanup also fails (#2134 R2)', () => {
+    // GCA R2: a cleanup rmSync that throws must not shadow the actuation
+    // error — the failed write is the signal. No fs mocking (ESM namespaces
+    // are not spyable): instead, learn the deterministic target path from a
+    // clean send, then plant a NON-EMPTY DIRECTORY at `<filePath>.tmp` so
+    // (a) writeFileSync(tmp) fails with the original error (EISDIR), and
+    // (b) the cleanup rmSync(tmp) also fails (directory, no `recursive`).
+    const repo = sendRepo();
+    const common = {
+      to: 'strategy-claude',
+      subject: 'shadow probe',
+      from: 'totem-claude',
+      repoRoot: repo,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    } as const;
+    const probe = mailSend({ ...common });
+    fs.rmSync(probe.filePath); // free the slot so the rerun recomputes the same path
+    const tmpAsDir = `${probe.filePath}.tmp`;
+    fs.mkdirSync(tmpAsDir);
+    fs.writeFileSync(path.join(tmpAsDir, 'occupant.txt'), 'x', 'utf-8');
+    try {
+      expect(() => mailSend({ ...common })).toThrow(/write failed.*could not be removed/);
+    } finally {
+      fs.rmSync(tmpAsDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
+  const fixedClock = (): Date => new Date('2026-06-09T18:00:00.000Z');
+
+  function writeSource(): string {
+    const outbox = mkDir(
+      path.join(
+        workspace,
+        'totem-strategy',
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'outbox',
+      ),
+    );
+    const p = path.join(outbox, '2026-06-09T1710Z-totem-claude-orig.md');
+    fs.writeFileSync(
+      p,
+      [
+        '---',
+        'schema: adr-098-v0.4',
+        'from: strategy-claude',
+        'to: totem-claude',
+        'timestamp: 2026-06-09T17:10:00.000Z',
+        'subject: Original subject',
+        '---',
+        '',
+        'orig body',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+    return p;
+  }
+
+  it('infers to/subject/in-reply-to from the source dispatch', () => {
+    const src = writeSource();
+    const res = mailReply(src, {
+      from: 'totem-claude',
+      repoRoot: mkDir(path.join(workspace, 'totem')),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.header.to).toBe('strategy-claude'); // = source.from
+    expect(res.header.subject).toBe('Re: Original subject');
+    // Portable repo-relative wire form — never the absolute local path
+    // (GCA R3 on mmnto-ai/totem#2134: no drive letters/usernames in shared
+    // frontmatter).
+    expect(res.header.inReplyTo).toBe(
+      '.totem/orchestration/strategy-claude/outbox/2026-06-09T1710Z-totem-claude-orig.md',
+    );
+  });
+
+  it('falls back to the outbox-dir agent when the source has no from: (#2134 R3)', () => {
+    // Reader parity: pollMail accepts a from:-less dispatch by falling back to
+    // the outbox directory name — reply must not hard-fail where the reader
+    // succeeded.
+    const outbox = mkDir(
+      path.join(
+        workspace,
+        'totem-strategy',
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'outbox',
+      ),
+    );
+    const src = path.join(outbox, '2026-06-09T1700Z-totem-claude-legacy.md');
+    fs.writeFileSync(src, '---\nto: totem-claude\nsubject: legacy mail\n---\n\nBody.\n', 'utf-8');
+    const res = mailReply(src, {
+      from: 'totem-claude',
+      repoRoot: mkDir(path.join(workspace, 'totem')),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.header.to).toBe('strategy-claude'); // derived from <agent>/outbox/ layout
+  });
+
+  it('hard-errors when the source dispatch is missing', () => {
+    expect(() =>
+      mailReply(path.join(tmpRoot, 'nope.md'), {
+        from: 'totem-claude',
+        repoRoot: mkDir(path.join(workspace, 'totem')),
+        env: {},
+      }),
+    ).toThrow(/cannot read reply source dispatch/);
+  });
+});
+
+describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)', () => {
+  it('warns on unknown recipient, silent on known + broadcast (exact predicate)', () => {
+    expect(validateDispatchContent({ to: 'nope' }, ['totem-claude'])).toHaveLength(1);
+    expect(validateDispatchContent({ to: 'totem-claude' }, ['totem-claude'])).toHaveLength(0);
+    expect(validateDispatchContent({ to: 'broadcast' }, ['totem-claude'])).toHaveLength(0);
+    expect(validateDispatchContent({ to: 'TOTEM-CLAUDE' }, ['totem-claude'])).toHaveLength(0); // case-insensitive
+  });
+
+  it('quotes YAML-unsafe subjects so the emit is valid YAML (and unquotes refs)', () => {
+    const header: DispatchHeader = {
+      schema: 'adr-098-v0.4',
+      from: 'totem-claude',
+      to: 'strategy-claude',
+      timestamp: '2026-06-09T17:34:37.127Z',
+      subject: '[#42 brackets: and colon]',
+      expectedAction: 'none',
+      related: ['mmnto-ai/totem#2042'],
+    };
+    const md = composeDispatch(header, 'body');
+    expect(md).toContain('subject: "[#42 brackets: and colon]"');
+    expect(md).toContain('  - mmnto-ai/totem#2042'); // ref stays unquoted
+    expect(md).toContain('related-issues:');
+  });
+
+  it('quotes boolean/null/numeric-shaped scalars so YAML readers keep the string type (#2134 R3)', () => {
+    const base: Omit<DispatchHeader, 'subject'> = {
+      schema: 'adr-098-v0.4',
+      from: 'totem-claude',
+      to: 'strategy-claude',
+      timestamp: '2026-06-09T17:34:37.127Z',
+      expectedAction: 'none',
+    };
+    for (const subject of ['true', 'NO', 'y', 'null', '~', '42', '-3.5', '1e5', '123.']) {
+      const md = composeDispatch({ ...base, subject }, 'body');
+      expect(md).toContain(`subject: ${JSON.stringify(subject)}`);
+    }
+    // Ordinary prose subjects stay unquoted (the de-facto wire shape).
+    expect(composeDispatch({ ...base, subject: 'plain words' }, 'body')).toContain(
+      'subject: plain words',
+    );
+  });
+
+  it('round-trips a quoted subject without accreting quotes (#2134 R3)', () => {
+    // compose → poll: the reader must surface the subject the sender typed,
+    // not yamlScalar's emit-quoting (CR R3 — `Re: "..."` accretion class).
+    const subject = 'R3: the colon-space forces quoting';
+    const md = composeDispatch(
+      {
+        schema: 'adr-098-v0.4',
+        from: 'strategy-claude',
+        to: 'totem-claude',
+        timestamp: '2026-06-09T17:34:37.127Z',
+        subject,
+        expectedAction: 'none',
+      },
+      'body',
+    );
+    expect(md).toContain(`subject: ${JSON.stringify(subject)}`); // quoted on the wire
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-09T1734Z-roundtrip.md', to: 'totem-claude', raw: md },
+    ]);
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe(subject); // unquoted on read
+  });
+
+  it('never decodes control/newline escapes out of a quoted subject (#2134 R4)', () => {
+    // A quoted wire subject encoding control bytes must surface in its escaped
+    // spelling — decoding it would hand `formatTextResult` raw ESC/newline for
+    // stderr (the terminal-injection class the agent-id guard blocks).
+    const escapedEsc = 'subject: "esc \\u001b[31m red"';
+    const escapedNewline = 'subject: "line1\\nline2"';
+    for (const [name, subjectLine] of [
+      ['2026-06-09T1735Z-esc.md', escapedEsc],
+      ['2026-06-09T1736Z-newline.md', escapedNewline],
+    ] as const) {
+      writeOutbox('totem-strategy', 'strategy-claude', [
+        {
+          name,
+          to: 'totem-claude',
+          raw: ['---', 'from: strategy-claude', 'to: totem-claude', subjectLine, '---', ''].join(
+            '\n',
+          ),
+        },
+      ]);
+    }
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    expect(result.mail).toHaveLength(2);
+    const esc = String.fromCharCode(0x1b);
+    for (const entry of result.mail) {
+      expect(entry.subject).not.toContain(esc);
+      expect(entry.subject).not.toContain('\n');
+      expect(entry.subject.startsWith('"')).toBe(true); // verbatim, still quoted
+    }
+  });
+
+  it('escapes raw control bytes from hand-authored wire fields (#2134 R5)', () => {
+    // The escaped-sequence guard (R4) covers the wire ENCODING of controls;
+    // this covers raw bytes typed directly into a dispatch — quoted, unquoted,
+    // and in from: — a reader exposure that predates the actuator.
+    const esc = String.fromCharCode(0x1b);
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-06-09T1737Z-rawquoted.md',
+        to: 'totem-claude',
+        raw: [
+          '---',
+          `from: strategy${esc}-claude`,
+          'to: totem-claude',
+          `subject: "quoted ${esc}[31m raw"`,
+          '---',
+          '',
+        ].join('\n'),
+      },
+      {
+        name: '2026-06-09T1738Z-rawunquoted.md',
+        to: 'totem-claude',
+        raw: [
+          '---',
+          'from: strategy-claude',
+          'to: totem-claude',
+          `subject: unquoted ${esc}[31m raw`,
+          '---',
+          '',
+        ].join('\n'),
+      },
+    ]);
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    expect(result.mail).toHaveLength(2);
+    for (const entry of result.mail) {
+      expect(entry.subject).not.toContain(esc);
+      expect(entry.from).not.toContain(esc);
+      expect(entry.subject).toContain('u001b'); // escaped spelling — lossless, visible
+    }
+  });
+
+  it('resolveSelfSender: explicit > unambiguous map > error', () => {
+    const totemRepo = mkDir(path.join(workspace, 'totem'));
+    expect(resolveSelfSender(totemRepo, {}, 'totem-gemini')).toBe('totem-gemini'); // explicit wins
+    expect(resolveSelfSender(totemRepo, { TOTEM_SELF_AGENT: 'totem-claude' })).toBe('totem-claude'); // env → single
+    expect(() => resolveSelfSender(totemRepo, {})).toThrow(/ambiguous/); // map → 2 agents
   });
 });

@@ -21,7 +21,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveSelfAgents } from '@mmnto/totem';
+import { isPathSafeAgentId, knownCohortAgents, resolveSelfAgents, TotemError } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -47,7 +47,7 @@ export interface MailEntry {
   from: string;
   /** Recipient (from frontmatter `to:`, preserved verbatim). */
   to: string;
-  /** ISO timestamp from frontmatter `date:`, or null if absent. */
+  /** ISO timestamp from frontmatter `timestamp:` (ADR-098 v0.4 canonical), falling back to legacy `date:`; null if absent. */
   date: string | null;
   /** Subject line from frontmatter, or `(no subject)` if absent. */
   subject: string;
@@ -168,16 +168,69 @@ function parseHeader(content: string): HeaderParse {
   }
   const fromMatch = header.match(/^from:\s*(.+)$/im);
   const subjectMatch = header.match(/^[-\s]*subject:\s*(.+)$/im);
+  const subject = subjectMatch ? unquoteScalar(subjectMatch[1]!.trim()) : null;
+  // ADR-098 v0.4 codified `timestamp:` (full RFC3339) as canonical, replacing
+  // legacy `date:`; `date:` remains a backwards-compat read (the amendment's
+  // own migration note). Read `timestamp:` first, fall back to `date:`. The
+  // surfaced field stays `MailEntry.date` (no rename) — it is the displayed
+  // time, and a cosmetic rename would widen blast radius across hooks +
+  // `--json` consumers for no contract gain (Tenet 5; strategy-claude concur
+  // 2026-06-09, folded into ADR-098's migration note on the strategy side).
+  const timestampMatch = header.match(/^timestamp:\s*(.+)$/im);
   const dateMatch = header.match(/^date:\s*(.+)$/im);
+  const when = timestampMatch ? timestampMatch[1]! : dateMatch ? dateMatch[1]! : null;
+  // Every field below is sender-controlled wire text that downstream writers
+  // (`formatTextResult` → stderr, `--json` consumers' logs) display verbatim —
+  // escape raw control bytes at this single boundary so no parse path (quoted,
+  // unquoted, hand-authored) can carry terminal-injection bytes into
+  // `MailEntry` (CR R5 on mmnto-ai/totem#2134; the unquoted exposure predates
+  // this PR — closing the whole class here, not just the unquote fallback).
   return {
     ok: true,
     header: {
-      to: toMatch[1]!.trim(),
-      from: fromMatch ? fromMatch[1]!.trim() : null,
-      subject: subjectMatch ? subjectMatch[1]!.trim() : null,
-      date: dateMatch ? dateMatch[1]!.trim() : null,
+      to: escapeControlBytes(toMatch[1]!.trim()),
+      from: fromMatch ? escapeControlBytes(fromMatch[1]!.trim()) : null,
+      subject: subject !== null ? escapeControlBytes(subject) : null,
+      date: when !== null ? escapeControlBytes(when.trim()) : null,
     },
   };
+}
+
+/**
+ * Replace each raw control byte with its JSON-escaped spelling (ESC becomes
+ * the six characters backslash-u-0-0-1-b, LF becomes backslash-n, …) so the
+ * value stays display-safe AND lossless — the escaped form is visible instead
+ * of interpreted. Printable text passes through unchanged.
+ */
+function escapeControlBytes(value: string): string {
+  return value.replace(/\p{Cc}/gu, (ch) => JSON.stringify(ch).slice(1, -1));
+}
+
+/**
+ * Strict PRINTABLE JSON-string shape: a double-quoted scalar whose decoded
+ * value provably contains no control bytes. The only escapes admitted are
+ * `\"` `\\` `\/` — the ones that decode to printables. Escapes that decode to
+ * control bytes (`\n`, `\t`, `\b\f\r`, `\uXXXX`) deliberately do NOT match
+ * (CR R4 on mmnto-ai/totem#2134): a control-bearing quoted subject would
+ * otherwise decode into raw ESC/newline that `formatTextResult` writes to
+ * stderr — the same terminal-injection class the agent-id guard blocks.
+ * Likewise hand-authored asymmetric quotes, raw control bytes, and single
+ * quotes — all read verbatim.
+ */
+const PRINTABLE_JSON_STRING_SCALAR = /^"(?:[^"\\\p{Cc}]|\\["\\/])*"$/u;
+
+/**
+ * Undo `yamlScalar`'s double-quoting on read so quoted scalars round-trip:
+ * compose → parse → `Re: <subject>` must not accrete quotes, and `pollMail`
+ * must surface the subject the sender typed (CR R3 on mmnto-ai/totem#2134).
+ * The shape pre-check makes `JSON.parse` infallible here — no catch needed —
+ * and confines unquoting to printable-only strings, so a wire value encoding
+ * control bytes surfaces in its escaped spelling instead of decoding into the
+ * terminal (display stays lossless AND injection-free), and reader behavior
+ * for legacy/hand-authored mail is unchanged.
+ */
+function unquoteScalar(value: string): string {
+  return PRINTABLE_JSON_STRING_SCALAR.test(value) ? (JSON.parse(value) as string) : value;
 }
 
 /**
@@ -484,5 +537,502 @@ export async function mailCommand(opts: MailCommandOptions = {}): Promise<MailPo
     log.info(TAG, line);
   }
 
+  return result;
+}
+
+// ─── Outbound: send / reply (mmnto-ai/totem#2042) ───────
+//
+// The actuator half of the ADR-106 coordination triad (sensor = `pollMail`
+// above). Before this, `totem mail send` silently fell through to the read
+// command and every dispatch was hand-authored against five undocumented
+// conventions — a discipline the protocol structurally could not satisfy
+// (Tenet 13: sensor without actuator). Three composing validity layers,
+// none violating ADR-106 inv6 (fail-open transport):
+//
+//   structural  — v0.4 compliance by CONSTRUCTION (the `DispatchHeader` type
+//                 makes a malformed-shape dispatch unrepresentable);
+//   content     — predicates that can't be guaranteed at construction
+//                 (recipient known? refs non-empty?) → LOUD warn + write
+//                 anyway (a blocked dispatch is worse than a malformed one,
+//                 the mmnto-ai/totem#2119 exhibit);
+//   reader      — `pollMail`'s scan-errors-always-warn is the never-silent
+//                 -drop backstop.
+//
+// (OQ-1 ruled 1b by satur8d 2026-06-09; emit-shape + reader `timestamp:` read
+// concurred by strategy-claude, ADR-098 owner, same day.)
+
+/** ADR-098 v0.4 canonical schema literal emitted by the actuator. */
+const ADR098_SCHEMA = 'adr-098-v0.4';
+
+/**
+ * Structurally-complete dispatch header. ADR-098 v0.4 compliance is enforced
+ * *by construction*: you cannot build this object without `schema` / `from` /
+ * `to` / `timestamp` / `subject` / `expectedAction`, so a structurally invalid
+ * dispatch is unrepresentable rather than rejected after the fact — the
+ * strongest form of "enforce via substrate" (inv2 realized). The content
+ * predicates that CANNOT be guaranteed at construction time (is the recipient
+ * a known agent? do refs resolve?) are the validator's job, and warn rather
+ * than block (inv6).
+ */
+export interface DispatchHeader {
+  schema: string;
+  from: string;
+  to: string;
+  /** Full RFC3339 UTC, e.g. `2026-06-09T17:34:37.127Z` (ADR-098 v0.4). */
+  timestamp: string;
+  subject: string;
+  /** ADR-098 v0.4 mandatory; the `none` literal for informational dispatches. */
+  expectedAction: string;
+  inReplyTo?: string;
+  priority?: string;
+  related?: string[];
+}
+
+export interface MailSendOptions {
+  /** Recipient agent-id (or `broadcast`). */
+  to: string;
+  /** Subject line (the cohort convention carries the gist here). */
+  subject: string;
+  /** Sender agent-id; default resolves from self, erroring if ambiguous. */
+  from?: string;
+  /** Read the dispatch body from this file (hard error if unreadable). */
+  bodyFile?: string;
+  /** Direct body text (test/stdin seam); `bodyFile` overrides when both set. */
+  body?: string;
+  /** `in-reply-to:` frontmatter — the source dispatch path. */
+  inReplyTo?: string;
+  /** `priority:` frontmatter. */
+  priority?: string;
+  /** `related-issues:` frontmatter list. */
+  related?: string[];
+  /** `expected-action:` frontmatter; defaults to the `none` literal. */
+  expectedAction?: string;
+  /** Filename slug override; default derived from the subject. */
+  slug?: string;
+  /** Repo root (default: cwd). Test injection point. */
+  repoRoot?: string;
+  /** Env override (default: process.env). Test injection point. */
+  env?: Record<string, string | undefined>;
+  /** Clock injection for deterministic timestamps/filenames in tests. */
+  now?: () => Date;
+  /** Known-recipient set override (default: `knownCohortAgents()`). */
+  knownAgents?: readonly string[];
+}
+
+export interface MailSendResult {
+  /** Absolute path of the written dispatch. */
+  filePath: string;
+  /** Basename of the written dispatch. */
+  fileName: string;
+  /** The composed (structurally-valid-by-construction) header. */
+  header: DispatchHeader;
+  /** Content-class warnings surfaced at emit-time; dispatch still written. */
+  warnings: string[];
+}
+
+/**
+ * Double-quote a frontmatter scalar (JSON form is a valid YAML double-quoted
+ * scalar) only when the raw value would otherwise mis-parse: edge whitespace,
+ * a newline/quote, a leading flow/indicator char, or a `: ` / ` #` sequence
+ * (YAML's map-value + comment triggers). Now that the actuator is the
+ * v0.4-compliant emitter, the output must be real YAML — the derivation engine
+ * will parse it, unlike the regex reader. Refs like `owner/repo#123` (no space
+ * before `#`) stay unquoted, matching the de-facto wire.
+ */
+function yamlScalar(value: string): string {
+  const needsQuote =
+    value === '' ||
+    value !== value.trim() ||
+    /[\n"]/.test(value) ||
+    /^[[\]{}>|*&!%@`'"#-]/.test(value) ||
+    /:\s/.test(value) ||
+    /\s#/.test(value) ||
+    // YAML 1.1 plain-scalar coercion traps: a bare boolean/null/numeric-shaped
+    // value would parse as a non-string once the derivation engine YAML-parses
+    // the wire (GCA R3 on mmnto-ai/totem#2134; incl. YAML 1.1's bare y/n and
+    // exponential/trailing-dot floats). Quote to pin the string type.
+    /^(?:y|n|yes|no|true|false|on|off|null|~)$/i.test(value) ||
+    /^[+-]?(?:\d+\.?|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(value);
+  return needsQuote ? JSON.stringify(value) : value;
+}
+
+/**
+ * Serialize a dispatch header + body to ADR-098 v0.4 markdown. Pure +
+ * deterministic — the round-trip anchor: its output MUST parse back through
+ * `parseHeader` (the sensor↔actuator "one enumeration, two readers" pairing).
+ * Frontmatter keys are kebab-case wire form, the surface the reader greps.
+ */
+export function composeDispatch(header: DispatchHeader, body: string): string {
+  const lines: string[] = ['---'];
+  lines.push(`schema: ${header.schema}`);
+  // `from`/`to` are traversal-validated agent-ids, but YAML-quote them anyway
+  // (defense in depth) so a non-standard recipient can't inject frontmatter
+  // once the v0.4 derivation engine YAML-parses this (CodeRabbit, mmnto-ai/totem#2134).
+  lines.push(`from: ${yamlScalar(header.from)}`);
+  lines.push(`to: ${yamlScalar(header.to)}`);
+  lines.push(`timestamp: ${header.timestamp}`);
+  lines.push(`subject: ${yamlScalar(header.subject)}`);
+  lines.push(`expected-action: ${yamlScalar(header.expectedAction)}`);
+  if (header.inReplyTo !== undefined) lines.push(`in-reply-to: ${yamlScalar(header.inReplyTo)}`);
+  if (header.priority !== undefined) lines.push(`priority: ${yamlScalar(header.priority)}`);
+  if (header.related !== undefined && header.related.length > 0) {
+    lines.push('related-issues:');
+    for (const ref of header.related) lines.push(`  - ${yamlScalar(ref)}`);
+  }
+  lines.push('---');
+  lines.push('');
+  // Exactly one trailing newline on the body for stable round-trips.
+  lines.push(body.replace(/\s+$/, ''));
+  lines.push('');
+  return lines.join('\n');
+}
+
+/**
+ * Content-class validation (inv1: exact predicates only — set membership and
+ * non-emptiness, never judgment). NEVER throws, NEVER blocks: returns warnings
+ * the caller surfaces at emit-time and writes anyway (inv6). The headline check
+ * is the unknown-recipient typo class (strategy-claude 2026-06-09): a typo'd
+ * recipient writes under a wrong name and is undelivered-but-not-errored unless
+ * the sender is told loudly.
+ */
+export function validateDispatchContent(
+  header: { to: string; related?: string[] },
+  knownAgents: readonly string[],
+): string[] {
+  const warnings: string[] = [];
+  const to = header.to.trim();
+  const known = new Set(knownAgents.map((a) => a.toLowerCase()));
+  if (to.toLowerCase() !== 'broadcast' && !known.has(to.toLowerCase())) {
+    warnings.push(
+      `recipient "${to}" is not a known cohort agent — the dispatch WILL be written but may be undeliverable (check for a typo). Known: ${[...knownAgents].sort().join(', ')}, broadcast.`,
+    );
+  }
+  if (header.related !== undefined) {
+    for (const ref of header.related) {
+      if (ref.trim().length === 0) {
+        warnings.push('a related-issues entry is empty/whitespace (kept verbatim).');
+      }
+    }
+  }
+  return warnings;
+}
+
+/**
+ * Resolve the single sender identity for an outbound dispatch. Unlike the
+ * reader (which resolves a SET of self-agents to filter by), send must pick
+ * ONE. Precedence: explicit `--from` > unambiguous `resolveSelfAgents` > error.
+ * A >1 ambiguous map (e.g. totem hosts both totem-claude + totem-gemini) is a
+ * hard usage error — never silently pick one (it would mis-attribute the
+ * dispatch). Zero is a hard error too — never write to `.../undefined/outbox`.
+ */
+export function resolveSelfSender(
+  repoRoot: string,
+  env: Record<string, string | undefined>,
+  explicitFrom?: string,
+): string {
+  if (explicitFrom !== undefined && explicitFrom.trim().length > 0) {
+    return explicitFrom.trim();
+  }
+  const resolved = resolveSelfAgents(repoRoot, env);
+  if (resolved.agents.length === 1) return resolved.agents[0]!;
+  if (resolved.agents.length === 0) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      'cannot resolve a sender identity for the outbound dispatch',
+      'set TOTEM_SELF_AGENT or pass --from <agent-id>.',
+    );
+  }
+  throw new TotemError(
+    'MAIL_SEND_FAILED',
+    `ambiguous sender — this repo hosts ${resolved.agents.join(', ')}`,
+    'pass --from <agent-id> to disambiguate.',
+  );
+}
+
+function assertSafeAgentId(id: string, label: string): void {
+  // Reuse core's single path-segment guard (`isPathSafeAgentId`) rather than
+  // re-deriving the pattern — both the sender's `--from` (an outbox directory
+  // segment) and the recipient's `--to` (interpolated into the filename) must
+  // be blocked from `/`, `\`, `..`, a null byte (Greptile P2 / GCA + CR
+  // path-traversal critical, mmnto-ai/totem#2134), and from control/
+  // whitespace/win32-reserved characters that would propagate into the
+  // dispatch markdown and CLI logs (CR R2, same PR).
+  if (!isPathSafeAgentId(id)) {
+    // JSON-escape the echoed id: this rejection path exists precisely because
+    // the value may carry control bytes — echoing it raw to stderr would
+    // re-create the terminal injection it blocks (CR R3 on mmnto-ai/totem#2134).
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `invalid --${label} ${JSON.stringify(id)} (path-traversal, unsafe characters, or empty)`,
+      'pass a plain agent-id such as "totem-claude" (no path separators, "..", whitespace, or control characters).',
+    );
+  }
+}
+
+/**
+ * Reduce a recipient/agent token to a filename-safe form: a defense-in-depth
+ * layer on top of `assertSafeAgentId` (which already rejects traversal). Even a
+ * validated-but-odd `to` (e.g. a stray `:`/space — illegal in win32 filenames)
+ * cannot corrupt the outbox filename. Valid kebab agent-ids pass through
+ * unchanged; `broadcast` is preserved.
+ */
+function fileToken(value: string): string {
+  const cleaned = value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  return cleaned.length > 0 ? cleaned : 'recipient';
+}
+
+/**
+ * Filename-safe minute-granularity UTC stamp: `YYYY-MM-DDTHHMMZ`. Colons are
+ * illegal in win32 filenames (strategy-claude 2026-06-09, non-negotiable) and
+ * this matches every existing outbox name; the frontmatter carries the full
+ * RFC3339 `timestamp:` separately.
+ */
+function compactStamp(d: Date): string {
+  const iso = d.toISOString();
+  // `17:34` → `1734` (drop the colon, illegal in win32 filenames).
+  const hhmm = iso.slice(11, 16).replace(':', '');
+  return `${iso.slice(0, 10)}T${hhmm}Z`;
+}
+
+/** Short, kebab filename slug (concise-dispatch-filename discipline: ~3-6 words). */
+function slugify(subject: string, explicit?: string): string {
+  const source = explicit !== undefined && explicit.trim().length > 0 ? explicit : subject;
+  const slug = source
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .split('-')
+    .filter((s) => s.length > 0)
+    .slice(0, 6)
+    .join('-')
+    .slice(0, 48);
+  return slug.length > 0 ? slug : 'dispatch';
+}
+
+/**
+ * First non-colliding outbox path for `<base>.md`, suffixing `-2`, `-3`, … on
+ * collision (two dispatches to the same recipient in the same minute with the
+ * same slug). Deterministic — no randomness.
+ */
+function uniqueOutboxPath(outboxDir: string, base: string): string {
+  let candidate = path.join(outboxDir, `${base}.md`);
+  let n = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(outboxDir, `${base}-${n}.md`);
+    n += 1;
+  }
+  return candidate;
+}
+
+/**
+ * Compose + validate + write an outbound dispatch to the sender's own outbox.
+ * Structural validity is by construction; content warnings are returned (the
+ * CLI wrapper surfaces them loudly) and never block the write. The only HARD
+ * failures are usage errors (missing to/subject, unresolvable/ambiguous self,
+ * unreadable body-file) and actuation failure (a write that didn't land —
+ * fail-loud, Tenet 4, the opposite of the inv6 content case).
+ */
+export function mailSend(opts: MailSendOptions): MailSendResult {
+  const env = opts.env ?? process.env;
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const now = (opts.now ?? (() => new Date()))();
+
+  const to = opts.to.trim();
+  if (to.length === 0)
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      '--to <recipient> is required',
+      'pass --to <recipient-agent-id> (or "broadcast").',
+    );
+  // `to` is interpolated into the outbox filename + the frontmatter — block
+  // path-traversal here, same guard as `from` (GCA/Greptile/CR critical, mmnto-ai/totem#2134).
+  assertSafeAgentId(to, 'to');
+  const subject = opts.subject.trim();
+  if (subject.length === 0)
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      '--subject <text> is required',
+      'pass --subject "<text>".',
+    );
+
+  const from = resolveSelfSender(repoRoot, env, opts.from);
+  assertSafeAgentId(from, 'from');
+
+  // Body precedence: bodyFile > body > empty. A declared --body-file that can't
+  // be read is a hard usage error — the intended body is lost, never silently
+  // ship an empty dispatch in its place.
+  let body = opts.body ?? '';
+  if (opts.bodyFile !== undefined) {
+    try {
+      body = fs.readFileSync(opts.bodyFile, 'utf-8');
+      // totem-context: a declared --body-file that can't be read is a hard usage error (the user named a body source that doesn't resolve); rethrow as a clear message rather than degrade to an empty dispatch.
+    } catch (err) {
+      throw new TotemError(
+        'MAIL_SEND_FAILED',
+        `--body-file unreadable (${opts.bodyFile}): ${String(err)}`,
+        'check the --body-file path exists and is readable.',
+        err,
+      );
+    }
+  }
+
+  const header: DispatchHeader = {
+    schema: ADR098_SCHEMA,
+    from,
+    to,
+    timestamp: now.toISOString(),
+    subject,
+    expectedAction: opts.expectedAction?.trim() || 'none',
+    ...(opts.inReplyTo !== undefined ? { inReplyTo: opts.inReplyTo } : {}),
+    ...(opts.priority !== undefined ? { priority: opts.priority } : {}),
+    ...(opts.related !== undefined && opts.related.length > 0 ? { related: opts.related } : {}),
+  };
+
+  const warnings = validateDispatchContent(header, opts.knownAgents ?? knownCohortAgents());
+
+  const outboxDir = path.join(repoRoot, '.totem', 'orchestration', from, 'outbox');
+  try {
+    fs.mkdirSync(outboxDir, { recursive: true });
+    // totem-context: a failed outbox mkdir (EACCES, read-only FS, a file where
+    // the dir should be) means the dispatch cannot land — fail LOUD (Tenet 4)
+    // with the path, never proceed to a write that will also fail (GCA mmnto-ai/totem#2134).
+  } catch (err) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `could not create outbox directory (${outboxDir}): ${String(err)}`,
+      'check write permissions on the repo .totem/orchestration tree.',
+      err,
+    );
+  }
+
+  const base = `${compactStamp(now)}-${fileToken(to)}-${slugify(subject, opts.slug)}`;
+  const filePath = uniqueOutboxPath(outboxDir, base);
+  const content = composeDispatch(header, body);
+
+  // Atomic write (ADR-106: temp + rename; readers never see a torn write).
+  const tmp = `${filePath}.tmp`;
+  try {
+    fs.writeFileSync(tmp, content, 'utf-8');
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    // Actuation failure is fail-LOUD (Tenet 4): a write that did not land is a
+    // silent drop — the inverse of the inv6 content-warn case. Best-effort
+    // remove any partial temp first (force suppresses ENOENT; maxRetries/
+    // retryDelay guard a transient win32 lock), then surface the original
+    // error with the path so the sender knows nothing shipped.
+    const hint = 'check outbox directory permissions and available disk space.';
+    try {
+      fs.rmSync(tmp, { force: true, maxRetries: 3, retryDelay: 50 });
+    } catch (cleanupErr) {
+      // A failed cleanup must not shadow the actuation error (GCA R2 on
+      // mmnto-ai/totem#2134): rethrow the ORIGINAL failure as the cause, with
+      // the stranded-temp note folded into the message so both stay visible.
+      throw new TotemError(
+        'MAIL_SEND_FAILED',
+        `write failed (${filePath}): ${String(err)} (temp file ${tmp} could not be removed: ${String(cleanupErr)})`,
+        hint,
+        err,
+      );
+    }
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `write failed (${filePath}): ${String(err)}`,
+      hint,
+      err,
+    );
+  }
+
+  return { filePath, fileName: path.basename(filePath), header, warnings };
+}
+
+/**
+ * `totem mail reply <source>` — syntactic sugar over `mailSend`. Reads the
+ * source dispatch (HARD error if missing/unparseable — reply structurally needs
+ * it to infer the recipient + subject), then sends with `to = source.from`
+ * (falling back to the source's outbox-dir agent, reader parity),
+ * `subject = "Re: <source.subject>"`, and `in-reply-to` set to the source's
+ * repo-relative wire form. Any field can still be overridden via opts.
+ */
+export function mailReply(
+  source: string,
+  opts: Omit<MailSendOptions, 'to' | 'subject' | 'inReplyTo'> & {
+    to?: string;
+    subject?: string;
+  } = {},
+): MailSendResult {
+  let content: string;
+  try {
+    content = fs.readFileSync(source, 'utf-8');
+    // totem-context: reply cannot proceed without the source (it infers to/subject from it) — a missing/unreadable source is a hard usage error, rethrown clearly, not a degraded send.
+  } catch (err) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `cannot read reply source dispatch (${source}): ${String(err)}`,
+      'check the reply <source> path exists and is readable.',
+      err,
+    );
+  }
+  const parsed = parseHeader(content);
+  if (!parsed.ok) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `reply source is not parseable mail (${source}): ${parsed.reason}`,
+      'the source must be an ADR-098 dispatch with a frontmatter block; use `mail send --to` for a fresh dispatch.',
+    );
+  }
+  // Reader-parity fallback (CR R3 on mmnto-ai/totem#2134): `pollMail` accepts
+  // a dispatch without `from:` by falling back to the outbox directory name,
+  // so a reply to such mail must not hard-fail where the reader succeeded —
+  // derive the sender from the `<agent>/outbox/<file>` layout.
+  const replyTo = opts.to ?? parsed.header.from ?? senderFromSourcePath(source) ?? '';
+  if (replyTo.trim().length === 0) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `reply source has no "from:" to reply to (${source})`,
+      'use `totem mail send --to <agent>` instead.',
+    );
+  }
+  const subject = opts.subject ?? `Re: ${parsed.header.subject ?? '(no subject)'}`;
+  return mailSend({ ...opts, to: replyTo, subject, inReplyTo: portableSourceRef(source) });
+}
+
+/**
+ * Derive the sender agent-id from a dispatch path's `<agent>/outbox/<file>`
+ * layout — the same fallback `pollMail` applies when frontmatter omits
+ * `from:` (reader↔reply parity, CR R3 on mmnto-ai/totem#2134).
+ */
+function senderFromSourcePath(source: string): string | null {
+  const segments = path.resolve(source).split(/[/\\]/);
+  const outboxIdx = segments.lastIndexOf('outbox');
+  return outboxIdx > 0 ? (segments[outboxIdx - 1] ?? null) : null;
+}
+
+/**
+ * Reduce a reply-source path to the portable repo-relative wire form
+ * (`.totem/orchestration/<agent>/outbox/<file>` — the de-facto cohort shape
+ * for `in-reply-to:`) so an absolute local path never leaks machine-specific
+ * structure (drive letters, usernames) into shared frontmatter (GCA R3 on
+ * mmnto-ai/totem#2134). Falls back to the basename when the source lives
+ * outside a recognizable orchestration tree.
+ */
+function portableSourceRef(source: string): string {
+  const normalized = source.replace(/\\/g, '/');
+  const idx = normalized.lastIndexOf('.totem/orchestration/');
+  return idx >= 0 ? normalized.slice(idx) : path.basename(source);
+}
+
+/**
+ * CLI wrapper for `mail send` / `mail reply`. Surfaces content warnings LOUDLY
+ * on stderr at emit-time (inv6: the dispatch still wrote — this is the typo
+ * backstop, not a block), then confirms the written path.
+ */
+export async function mailSendCommand(result: MailSendResult): Promise<MailSendResult> {
+  const { log } = await import('../ui.js');
+  for (const w of result.warnings) log.warn(TAG, w);
+  log.success(TAG, `Dispatch written: ${path.relative(process.cwd(), result.filePath)}`);
+  log.info(
+    TAG,
+    `  to: ${result.header.to} · from: ${result.header.from} · ${result.header.timestamp}`,
+  );
   return result;
 }
