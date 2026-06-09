@@ -1,6 +1,10 @@
 # Totem: Agent Instructions
 
-Canonical source of truth for how AI coding agents (Claude Code, Gemini CLI, Cursor, Windsurf, Copilot, etc.) behave in this repo. Per [Totem ADR-038](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-038-agents-md-standard.md), `mmnto-ai/totem` consolidates tool-specific instruction files into this single `AGENTS.md`. Thin `CLAUDE.md` / `GEMINI.md` redirect files exist only so each tool finds its way here. Junie reads `.junie/guidelines.md` directly until that migration follows.
+Canonical source of truth for how AI coding agents (Claude Code, Gemini CLI, Cursor, Windsurf, Copilot, etc.) behave in this repo. Per [Totem ADR-038](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-038-agents-md-standard.md), `mmnto-ai/totem` consolidates tool-specific instruction files into this single `AGENTS.md`. Thin `CLAUDE.md` / `GEMINI.md` redirect files exist only so each tool finds its way here.
+
+## What Totem is
+
+Totem is a **deterministic, repo-anchored governance toolkit** — _rules you enforce, state you derive, context you query_. The moat is governance, not memory: lead with enforcement (`totem lint` + the gate engine), not recall. Derivation (`totem status` / `orient`, Tenet 20) and the queryable index + ECL serve it, never lead.
 
 ## Session Start Protocol (MANDATORY)
 
@@ -73,8 +77,8 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 ## Detailed Docs (read when relevant)
 
-- [Architecture context](.claude/docs/architecture.md) — partitions, boundary parameter, linked indexes
-- [Contributing rules](.claude/docs/contributing.md) — `AI_PROMPT_BLOCK`, changesets, code style
-- [Agent workflow](.claude/docs/agent-workflow.md) — dispatch templates, delegation rules
-- [Gemini styleguide](.gemini/styleguide.md) — full code style and architecture rules (Gemini CLI sessions read this directly)
+- [Architecture context](.claude/docs/architecture.md)
+- [Contributing rules](.claude/docs/contributing.md)
+- [Agent workflow](.claude/docs/agent-workflow.md)
+- [Gemini styleguide](.gemini/styleguide.md)
 - Strategy ADRs: query `mcp__totem-strategy__search_knowledge`
