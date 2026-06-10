@@ -16,9 +16,14 @@ reviews:
   review_details: true
   poem: true
 
+  # On-demand only — operator ruling 2026-06-10 (mmnto-ai/totem-strategy#622):
+  # all three review bots (CR / GCA / Greptile) are opt-in per PR. Trigger
+  # stays `@coderabbitai review`. Doctrine: bot-protocols.md stack section
+  # (merged via mmnto-ai/totem-strategy#623); sensed by the `cr-on-demand`
+  # parity-manifest row.
   auto_review:
-    enabled: true
-    auto_incremental_review: true
+    enabled: false
+    auto_incremental_review: false
     drafts: false
 
   path_instructions:
