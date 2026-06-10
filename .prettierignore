@@ -10,4 +10,8 @@ pnpm-lock.yaml
 # Compiled rules hash must match compile-manifest.json — prettier would invalidate it
 .totem/compiled-rules.json
 .totem/compile-manifest.json
+# Distributed SessionStart hooks are generated verbatim from @mmnto/cli templates;
+# doctor --parity content-hashes them against the canonical — prettier rewrap reads as drift
+.claude/hooks/
+.gemini/hooks/
 cloc-results.json
