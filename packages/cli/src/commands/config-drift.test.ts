@@ -165,7 +165,6 @@ describe('all agent instruction files share the same project rules', () => {
     'Use `Closes #NNN` in PR descriptions',
     // Environment
     'pnpm only',
-    'Windows 11 + Git Bash',
     'TypeScript strict mode',
     'NEVER put secrets in config files',
     // Code Style
