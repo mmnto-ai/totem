@@ -393,7 +393,11 @@ function narrowStringArray(value: unknown): string[] | undefined {
     return trimmed.length > 0 ? [trimmed] : undefined;
   }
   if (Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === 'string')) {
-    return value as string[];
+    // Trim members + drop empties so list and bare-string inputs normalize
+    // identically (GCA + CR round-2 convergence on the #2140 PR) — equivalent
+    // YAML must not parse differently by authoring shape.
+    const trimmed = (value as string[]).map((v) => v.trim()).filter((v) => v.length > 0);
+    return trimmed.length > 0 ? trimmed : undefined;
   }
   return undefined;
 }

@@ -383,6 +383,30 @@ describe('parseParityManifest — promoted 296 fields (mmnto-ai/totem#2140)', ()
     expect('vendorAdapter' in result.manifest.contracts[0]!).toBe(false);
   });
 
+  it('TRIMS vendor-adapter LIST members + drops empties (list and bare-string normalize identically)', () => {
+    // GCA + CR round-2 convergence: `[' claude ', '  ']` must parse the same
+    // as `' claude '` — authoring shape must not change the parsed result.
+    const padded = PROMOTED_FIELDS_YAML.replace(
+      'vendor-adapter: [claude, gemini]',
+      "vendor-adapter: [' claude ', '  ']",
+    );
+    const result = parseParityManifest(padded);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.manifest.contracts[0]!.vendorAdapter).toEqual(['claude']);
+  });
+
+  it('an all-empty vendor-adapter list narrows to absent (not an empty array)', () => {
+    const empty = PROMOTED_FIELDS_YAML.replace(
+      'vendor-adapter: [claude, gemini]',
+      "vendor-adapter: ['  ', ' ']",
+    );
+    const result = parseParityManifest(empty);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect('vendorAdapter' in result.manifest.contracts[0]!).toBe(false);
+  });
+
   it('TRIMS a quoted promoted field with stray surrounding spaces (routing must still compare)', () => {
     // Greptile outside-diff finding on the #2140 PR: trimming only the
     // emptiness TEST but returning the raw value would let a padded
