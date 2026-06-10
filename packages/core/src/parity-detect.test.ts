@@ -1307,6 +1307,20 @@ describe('detectCapabilityProbeContract — settings-floor probe', () => {
     expect(v.status).toBe('pass');
   });
 
+  it('PASS when settings.json is a shape-invalid ARRAY (cannot express suppression; not walked as an object)', () => {
+    // GCA round 3: `typeof === 'object'` accepts arrays — guard mirrors
+    // totemServerNames. An array settings doc degrades to suppresses-nothing.
+    const abs = writeJson(tmpRoot, '.claude/settings.json', [{ disableAllHooks: true }]);
+    const v = detectCapabilityProbeContract({
+      kind: 'settings-floor',
+      consumerPath: abs,
+      mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('pass');
+  });
+
   it('UNKNOWN on unparseable settings JSON (cannot prove the floor either way)', () => {
     const abs = path.join(tmpRoot, '.claude', 'settings.json');
     fs.mkdirSync(path.dirname(abs), { recursive: true });

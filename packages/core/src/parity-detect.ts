@@ -1465,8 +1465,11 @@ export function detectCapabilityProbeContract(
       remediation: 'Fix the settings JSON syntax, then re-run totem doctor --parity.',
     };
   }
+  // Array guard mirrors totemServerNames (GCA round 3): an array settings doc
+  // is shape-invalid, cannot express suppression, and must not be walked as a
+  // key-value object — it degrades to the empty (suppresses-nothing) shape.
   const settings =
-    typeof probe.value === 'object' && probe.value !== null
+    typeof probe.value === 'object' && probe.value !== null && !Array.isArray(probe.value)
       ? (probe.value as Record<string, unknown>)
       : {};
 
