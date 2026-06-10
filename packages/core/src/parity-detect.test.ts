@@ -21,8 +21,10 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { TotemConfigError } from './errors.js';
 import {
   deriveCohortRepoId,
+  detectCapabilityProbeContract,
   type DetectGeneratedArtifactContext,
   detectGeneratedArtifactContract,
   type DetectManualAttestationContext,
@@ -1089,5 +1091,318 @@ describe('detectManualAttestationContract', () => {
       expect(v.status).not.toBe('fail');
       expect(v.status).not.toBe('unknown');
     }
+  });
+});
+
+// ─── detectCapabilityProbeContract (mmnto-ai/totem#2140) ──
+
+/** Write a JSON file at an arbitrary repo-relative path. */
+function writeJson(rootDir: string, rel: string, value: unknown): string {
+  const abs = path.join(rootDir, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, JSON.stringify(value, null, 2), 'utf-8');
+  return abs;
+}
+
+/** A realistic .mcp.json registering the totem MCP server. */
+const MCP_JSON_WITH_TOTEM = {
+  mcpServers: {
+    'totem-dev': { command: 'node', args: ['packages/mcp/dist/index.js'] },
+    'totem-strategy': { command: 'totem', args: ['mcp', '--root', '../totem-strategy'] },
+  },
+};
+
+describe('detectCapabilityProbeContract — mcp-registration probe', () => {
+  it('WARN when .mcp.json is absent — no registered query path is the drift this row exists for', () => {
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).toMatch(/no .mcp.json|not registered|no registered/i);
+  });
+
+  it('WARN when .mcp.json registers no totem server', () => {
+    const abs = writeJson(tmpRoot, '.mcp.json', {
+      mcpServers: { 'some-other': { command: 'other-tool', args: [] } },
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+    });
+    expect(v.status).toBe('warn');
+  });
+
+  it('PASS at the probed level when registered AND the row declares no stronger level', () => {
+    const abs = writeJson(tmpRoot, '.mcp.json', MCP_JSON_WITH_TOTEM);
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('pass');
+    // The §6(a)3 scoping: the verdict names the level it actually probed.
+    expect(v.message).toContain('present');
+  });
+
+  it('UNKNOWN (green-halo cap) when the row declares usable but the probe only proves present', () => {
+    // codex W3 / the 296 settlement class: a presence-only PASS must never read
+    // as a capability PASS. probedLevel < declared senses → cap at unknown.
+    const abs = writeJson(tmpRoot, '.mcp.json', MCP_JSON_WITH_TOTEM);
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+      declaredSenses: 'usable',
+    });
+    expect(v.status).toBe('unknown');
+    expect(v.message).toMatch(/usable/i);
+    expect(v.message).toMatch(/present/i);
+  });
+
+  it('UNKNOWN on unparseable .mcp.json (can prove neither registration nor absence)', () => {
+    const abs = path.join(tmpRoot, '.mcp.json');
+    fs.writeFileSync(abs, '{ not valid json', 'utf-8');
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+    });
+    expect(v.status).toBe('unknown');
+  });
+
+  it('WARN (no crash, no index-keyed names) when mcpServers is a malformed ARRAY', () => {
+    // GCA high on the #2140 PR: an array satisfies `typeof === 'object'` and
+    // Object.entries over it would derive index-keyed "names" ('0', '1').
+    const abs = writeJson(tmpRoot, '.mcp.json', {
+      mcpServers: [{ command: 'totem', args: ['mcp'] }],
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).not.toContain('[0]');
+  });
+
+  it('does NOT match a non-totem server whose command path merely contains "totem"', () => {
+    // Greptile P2 on the #2140 PR: a path segment like /home/totem-projects/
+    // must not classify an unrelated server as a totem server.
+    const abs = writeJson(tmpRoot, '.mcp.json', {
+      mcpServers: {
+        'other-mcp': { command: '/home/totem-projects/other-mcp/run.sh', args: ['--serve'] },
+      },
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+    });
+    expect(v.status).toBe('warn'); // not recognized as totem → no registered query path
+  });
+
+  it('DOES match a totem server by command basename or @mmnto arg (derive-not-hardcode)', () => {
+    const abs = writeJson(tmpRoot, '.mcp.json', {
+      mcpServers: {
+        'renamed-knowledge': { command: 'C:/tools/totem.exe', args: ['mcp'] },
+        'scoped-runner': { command: 'node', args: ['node_modules/@mmnto/mcp/dist/index.js'] },
+      },
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('pass');
+    expect(v.message).toContain('renamed-knowledge');
+    expect(v.message).toContain('scoped-runner');
+  });
+
+  it('NEVER throws — a throwing readFile seam degrades to a verdict', () => {
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      readFile: () => {
+        throw new TotemConfigError('synthetic read failure (test seam)', 'n/a — test fixture');
+      },
+    });
+    expect(['warn', 'unknown', 'skip']).toContain(v.status);
+  });
+});
+
+describe('detectCapabilityProbeContract — settings-floor probe', () => {
+  it('PASS when .claude/settings.json is absent — the floor is "not suppressed", not "configured"', () => {
+    const v = detectCapabilityProbeContract({
+      kind: 'settings-floor',
+      consumerPath: path.join(tmpRoot, '.claude', 'settings.json'),
+      mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('pass');
+  });
+
+  it('PASS when settings exist but suppress nothing', () => {
+    writeJson(tmpRoot, '.mcp.json', MCP_JSON_WITH_TOTEM);
+    const abs = writeJson(tmpRoot, '.claude/settings.json', {
+      permissions: { allow: ['Read', 'Glob'] },
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'settings-floor',
+      consumerPath: abs,
+      mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('pass');
+  });
+
+  it('WARN when disableAllHooks suppresses the hook floor', () => {
+    const abs = writeJson(tmpRoot, '.claude/settings.json', { disableAllHooks: true });
+    const v = detectCapabilityProbeContract({
+      kind: 'settings-floor',
+      consumerPath: abs,
+      mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).toContain('disableAllHooks');
+  });
+
+  it('WARN when a totem MCP server (derived from .mcp.json) is explicitly disabled', () => {
+    writeJson(tmpRoot, '.mcp.json', MCP_JSON_WITH_TOTEM);
+    const abs = writeJson(tmpRoot, '.claude/settings.json', {
+      disabledMcpjsonServers: ['totem-dev'],
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'settings-floor',
+      consumerPath: abs,
+      mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).toContain('totem-dev');
+  });
+
+  it('PASS when a NON-totem server is disabled — only the governance floor is in scope', () => {
+    writeJson(tmpRoot, '.mcp.json', MCP_JSON_WITH_TOTEM);
+    const abs = writeJson(tmpRoot, '.claude/settings.json', {
+      disabledMcpjsonServers: ['some-other'],
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'settings-floor',
+      consumerPath: abs,
+      mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('pass');
+  });
+
+  it('PASS when settings.json is a shape-invalid ARRAY (cannot express suppression; not walked as an object)', () => {
+    // GCA round 3: `typeof === 'object'` accepts arrays — guard mirrors
+    // totemServerNames. An array settings doc degrades to suppresses-nothing.
+    const abs = writeJson(tmpRoot, '.claude/settings.json', [{ disableAllHooks: true }]);
+    const v = detectCapabilityProbeContract({
+      kind: 'settings-floor',
+      consumerPath: abs,
+      mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('pass');
+  });
+
+  it('UNKNOWN on unparseable settings JSON (cannot prove the floor either way)', () => {
+    const abs = path.join(tmpRoot, '.claude', 'settings.json');
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, '{ nope', 'utf-8');
+    const v = detectCapabilityProbeContract({
+      kind: 'settings-floor',
+      consumerPath: abs,
+      mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('unknown');
+  });
+
+  it('probe verdicts never include fail or info', () => {
+    const abs = writeJson(tmpRoot, '.claude/settings.json', { disableAllHooks: true });
+    const verdicts = [
+      detectCapabilityProbeContract({
+        kind: 'settings-floor',
+        consumerPath: abs,
+        mcpJsonPath: path.join(tmpRoot, '.mcp.json'),
+        probedLevel: 'present',
+      }),
+      detectCapabilityProbeContract({
+        kind: 'mcp-registration',
+        consumerPath: path.join(tmpRoot, '.mcp.json'),
+        probedLevel: 'present',
+      }),
+    ];
+    for (const v of verdicts) {
+      expect(['pass', 'warn', 'skip', 'unknown']).toContain(v.status);
+    }
+  });
+});
+
+// ─── Declared-floor verdict rendering (mmnto-ai/totem#2140, 296 §6(a)3 post-#605) ──
+
+describe('declared-min fallback rendering', () => {
+  it('version-pinned PASS via the minVersion fallback renders the declared level + originating range', () => {
+    writeSelfInTree(tmpRoot, '1.50.0');
+    writeConsumerPkg(tmpRoot, { '@mmnto/totem': '^1.53.0' });
+    // NO writeInstalled — resolution falls back to minVersion of the range.
+    const verdict = detectVersionPinnedContract(depsContract(), baseCtx({ repoId: 'totem' }));
+    expect(verdict.status).toBe('pass');
+    expect(verdict.message).toMatch(/declared/i);
+    expect(verdict.message).toContain('^1.53.0'); // the originating range (codex I1)
+    expect(verdict.message).not.toMatch(/installed 1\.53\.0/);
+  });
+
+  it('version-pinned WARN via the minVersion fallback renders the declared level', () => {
+    writeSelfInTree(tmpRoot, '2.0.0');
+    writeConsumerPkg(tmpRoot, { '@mmnto/totem': '^1.40.0' });
+    const verdict = detectVersionPinnedContract(depsContract(), baseCtx({ repoId: 'totem' }));
+    expect(verdict.status).toBe('warn');
+    expect(verdict.message).toMatch(/declared/i);
+    expect(verdict.message).toContain('^1.40.0');
+  });
+
+  it('a RESOLVED install still renders as installed (no declared marking)', () => {
+    writeSelfInTree(tmpRoot, '1.50.0');
+    writeConsumerPkg(tmpRoot, { '@mmnto/totem': '^1.50.0' });
+    writeInstalled(tmpRoot, '@mmnto/totem', '1.53.3');
+    const verdict = detectVersionPinnedContract(depsContract(), baseCtx({ repoId: 'totem' }));
+    expect(verdict.status).toBe('pass');
+    expect(verdict.message).toContain('installed 1.53.3');
+    expect(verdict.message).not.toMatch(/declared-min/i);
+  });
+
+  it('manual-attestation vendor-SDK info renders declared-min when no install resolves (shared helper)', () => {
+    writeConsumerPkg(tmpRoot, { '@anthropic-ai/sdk': '^0.98.0' });
+    const v = detectManualAttestationContract(
+      depsContract({
+        id: 'anthropic-sdk-coupling',
+        tractability: 'manual-attestation',
+        package: '@anthropic-ai/sdk',
+        canonicalSource: null,
+      }),
+      { cwd: tmpRoot, repoId: 'totem' },
+    );
+    expect(v.status).toBe('info');
+    expect(v.message).toMatch(/declared/i);
+    expect(v.message).toContain('^0.98.0');
+    expect(v.message).not.toMatch(/installed 0\.98\.0/);
   });
 });
