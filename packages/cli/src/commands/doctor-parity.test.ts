@@ -883,3 +883,117 @@ describe('doctorParityCliCommand — onlyWhenConfigured fold (#2085)', () => {
     }
   });
 });
+
+// === Capability-probe routing (mmnto-ai/totem#2140) ===
+
+const PROBE_MANIFEST_YAML = `schema-version: 1
+status: active
+contracts:
+  - id: knowledge-search-access
+    dimension: knowledge-index
+    canonical-source: null
+    detection-method: capability probe, two rungs
+    expected-value-or-derivation: at least one working query path per agent surface
+    tractability: mechanical
+    manifestation: capability-probe
+    senses: usable
+    vendor-adapter: [claude]
+    tracking-issue: mmnto-ai/totem#2140
+  - id: claude-settings-minimum-capability
+    dimension: vendor-agent-surface
+    canonical-source: null
+    detection-method: JSON file-read of .claude/settings.json
+    expected-value-or-derivation: governance floor capabilities enabled-or-unsuppressed
+    tractability: mechanical
+    manifestation: capability-probe
+    senses: present
+    vendor-adapter: [claude]
+    tracking-issue: mmnto-ai/totem#2140
+`;
+
+describe('checkParity - capability-probe routing (mmnto-ai/totem#2140)', () => {
+  it('routes manifestation: capability-probe BEFORE tractability (mechanical rows do not stub)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', PROBE_MANIFEST_YAML);
+    const { results } = await checkParity(tmpDir);
+    const probeLines = results.filter(
+      (r) =>
+        r.name.includes('knowledge-search-access') ||
+        r.name.includes('claude-settings-minimum-capability'),
+    );
+    expect(probeLines).toHaveLength(2);
+    for (const line of probeLines) {
+      expect(line.message).not.toContain('not yet implemented');
+    }
+  });
+
+  it('knowledge-search-access with a registered totem server caps at UNKNOWN (declares usable, probe proves present)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', PROBE_MANIFEST_YAML);
+    fs.writeFileSync(
+      path.join(tmpDir, '.mcp.json'),
+      JSON.stringify({ mcpServers: { 'totem-dev': { command: 'node', args: ['mcp.js'] } } }),
+      'utf-8',
+    );
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('knowledge-search-access'))!;
+    expect(line.status).toBe('unknown');
+    expect(line.message).toMatch(/usable/i);
+  });
+
+  it('knowledge-search-access WARNs when no .mcp.json exists', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', PROBE_MANIFEST_YAML);
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('knowledge-search-access'))!;
+    expect(line.status).toBe('warn');
+  });
+
+  it('claude-settings-minimum-capability PASSes with no settings file (floor = not suppressed)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', PROBE_MANIFEST_YAML);
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('claude-settings-minimum-capability'))!;
+    expect(line.status).toBe('pass');
+    expect(line.message).toContain('present'); // names the probed level
+  });
+
+  it('a capability-probe row with no registered probe gets an honest skip stub', async () => {
+    const unknownRow = PROBE_MANIFEST_YAML.replace(
+      'id: knowledge-search-access',
+      'id: some-future-probe-row',
+    );
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', unknownRow);
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('some-future-probe-row'))!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toMatch(/probe not yet implemented|not yet implemented/i);
+  });
+
+  it('an UNRECOGNIZED manifestation value renders a loud per-row stub carrying the verbatim value', async () => {
+    const future = PROBE_MANIFEST_YAML.replace(
+      'manifestation: capability-probe\n    senses: usable',
+      'manifestation: quantum-entanglement\n    senses: usable',
+    );
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', future);
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('knowledge-search-access'))!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toContain('quantum-entanglement');
+  });
+
+  it('honors the consumers scope on probe rows (cohort permits absence)', async () => {
+    const scoped = PROBE_MANIFEST_YAML.replace(
+      'id: knowledge-search-access',
+      'id: knowledge-search-access\n    consumers: [some-other-repo]',
+    );
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', scoped);
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('knowledge-search-access'))!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toMatch(/permits absence|not in consumers/i);
+  });
+});

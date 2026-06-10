@@ -60,6 +60,35 @@ export const ParityTractabilitySchema = z.enum([
 ]);
 export type ParityTractability = z.infer<typeof ParityTractabilitySchema>;
 
+// ─── Promoted 296 deliverable-1 fields (mmnto-ai/totem#2140) ──
+
+/**
+ * The §6(a)2 manifestation-ladder rungs THIS doctor build recognizes (best →
+ * weakest). Deliberately NOT a Zod enum at the parse boundary: a closed enum
+ * would fail validation MANIFEST-WIDE on one future rung value — the exact
+ * total-outage class the 296 settlement (strategy#605) ruled additive fields
+ * around (and the `last-attested` format-unvalidation precedent). Routing
+ * narrows against this list; an unrecognized value stays verbatim on the row
+ * and surfaces as a per-row line, never a dark manifest.
+ */
+export const PARITY_MANIFESTATIONS = [
+  'correct-by-construction',
+  'managed-block',
+  'version-pin',
+  'attestation',
+  'capability-probe',
+] as const;
+export type ParityManifestation = (typeof PARITY_MANIFESTATIONS)[number];
+
+/**
+ * The §6(a)3 sensed-state scale (post-#605: `declared` is the floor — the
+ * minVersion-fallback honesty level). Ordered weakest → strongest so the
+ * probe-vs-declared comparison (the green-halo cap, mmnto-ai/totem#2140) can
+ * index into it. Same not-a-Zod-enum rationale as {@link PARITY_MANIFESTATIONS}.
+ */
+export const PARITY_SENSES = ['declared', 'present', 'loaded', 'usable'] as const;
+export type ParitySense = (typeof PARITY_SENSES)[number];
+
 // ─── Contract + manifest types ──────────────────────────
 
 /**
@@ -100,6 +129,16 @@ const RawParityContractSchema = z.object({
   // versus rendering a verbatim blemish on one info line. Render-only field;
   // the producer side schema-reviews the manifest before publish.
   'last-attested': z.string().optional(),
+  // The four promoted 296 deliverable-1 fields (strategy#605/#606,
+  // mmnto-ai/totem#2140). Max-tolerance at the raw boundary (`z.unknown()`) for
+  // the same manifest-wide-outage reason as `last-attested` above; shape
+  // narrowing happens per-row in `mapContract` (mis-shaped → field absent on
+  // that row, never a dark manifest). They are routing/render metadata, never
+  // verdict inputs, so per-row narrowing does not launder a verdict.
+  manifestation: z.unknown().optional(),
+  senses: z.unknown().optional(),
+  'vendor-adapter': z.unknown().optional(),
+  'repo-role-variance': z.unknown().optional(),
 });
 
 /**
@@ -159,6 +198,28 @@ export interface ParityContract {
    * the doctor renders "last attested: not recorded", never fabricates a date).
    */
   lastAttested?: string;
+  /**
+   * Optional §6(a)2 manifestation-ladder rung (promoted field, strategy#606).
+   * An open string, NOT `ParityManifestation` — recognized values are narrowed
+   * at the ROUTING edge against {@link PARITY_MANIFESTATIONS}; an unrecognized
+   * value rides verbatim so the router can surface it loudly per-row.
+   */
+  manifestation?: string;
+  /**
+   * Optional §6(a)3 sensed-state level the row's detection-method probes BY
+   * DESIGN (`declared|present|loaded|usable`). Open string for the same
+   * reason as `manifestation`. Runtime degradation below this level is a
+   * verdict-format concern (the declared-floor rendering), never a parse one.
+   */
+  senses?: string;
+  /**
+   * Optional vendor surfaces this row manifests through (promoted field).
+   * Normalized to an array — the manifest authors both `[claude, gemini]`
+   * lists and bare strings.
+   */
+  vendorAdapter?: string[];
+  /** Optional one-line legitimate role-based manifestation difference (§6(c)). */
+  repoRoleVariance?: string;
 }
 
 /** A fully parsed + validated parity manifest. */
@@ -306,8 +367,38 @@ export function parseParityManifest(yamlText: string): ParityManifestParseResult
   return { status: 'ok', manifest };
 }
 
+/**
+ * Narrow an unknown promoted-field value to a non-empty string, else undefined
+ * (mis-shaped → treated as absent on that row; see the raw-schema note — the
+ * field is routing/render metadata, so per-row absence beats manifest-wide
+ * unparseable).
+ */
+function narrowString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+/**
+ * Narrow an unknown `vendor-adapter` value to `string[]`: a YAML list of
+ * strings passes through; a bare string normalizes to a one-element array
+ * (both shapes appear in the promoted manifest). Any other shape — including a
+ * list with one non-string member — narrows to undefined (absent on that row).
+ */
+function narrowStringArray(value: unknown): string[] | undefined {
+  if (typeof value === 'string') {
+    return value.trim().length > 0 ? [value] : undefined;
+  }
+  if (Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === 'string')) {
+    return value as string[];
+  }
+  return undefined;
+}
+
 /** Map one validated raw contract to the camelCase public `ParityContract`. */
 function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContract {
+  const manifestation = narrowString(raw.manifestation);
+  const senses = narrowString(raw.senses);
+  const vendorAdapter = narrowStringArray(raw['vendor-adapter']);
+  const repoRoleVariance = narrowString(raw['repo-role-variance']);
   return {
     id: raw.id,
     dimension: raw.dimension,
@@ -322,6 +413,10 @@ function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContra
     ...(raw.blocking !== undefined ? { blocking: raw.blocking } : {}),
     ...(raw.consumers !== undefined ? { consumers: raw.consumers } : {}),
     ...(raw.package !== undefined ? { package: raw.package } : {}),
+    ...(manifestation !== undefined ? { manifestation } : {}),
+    ...(senses !== undefined ? { senses } : {}),
+    ...(vendorAdapter !== undefined ? { vendorAdapter } : {}),
+    ...(repoRoleVariance !== undefined ? { repoRoleVariance } : {}),
   };
 }
 

@@ -272,6 +272,60 @@ function sessionStartArtifactsFor(
   ];
 }
 
+// ─── Capability-probe registry (CLI-side, mmnto-ai/totem#2140) ──
+
+/**
+ * One probe a `manifestation: capability-probe` contract maps to: the core
+ * detector context minus the per-row `declaredSenses` (threaded at the call
+ * site from the contract), plus the display name. Mirrors the mechanical /
+ * generated-artifact registries: CLI owns the wiring, core owns the verdict.
+ */
+interface CapabilityProbeArtifact {
+  kind: 'mcp-registration' | 'settings-floor';
+  consumerPath: string;
+  mcpJsonPath?: string;
+  probedLevel: 'declared' | 'present' | 'loaded' | 'usable';
+  lineName: string;
+}
+
+/**
+ * Resolve the probe(s) a capability-probe contract runs, or `undefined` when
+ * this build ships no probe for the row (→ honest skip stub). Both deliverable-1
+ * probes are PRESENT-rung by design: `knowledge-search-access`'s usable rung (a
+ * live bounded search exec) is deliberately NOT shipped — real `totem search`
+ * embeds the query via a cloud API, which a 296 §12.5 never-network probe cannot
+ * run; the core detector caps the verdict at `unknown` accordingly (the
+ * green-halo cap) and the rung contradiction is flagged to strategy.
+ */
+function capabilityProbesFor(
+  contractId: string,
+  gitRoot: string,
+): CapabilityProbeArtifact[] | undefined {
+  switch (contractId) {
+    case 'knowledge-search-access':
+      return [
+        {
+          kind: 'mcp-registration',
+          consumerPath: path.join(gitRoot, '.mcp.json'),
+          probedLevel: 'present',
+          lineName: 'Parity: knowledge-search-access',
+        },
+      ];
+    case 'claude-settings-minimum-capability':
+      return [
+        {
+          kind: 'settings-floor',
+          consumerPath: path.join(gitRoot, '.claude', 'settings.json'),
+          mcpJsonPath: path.join(gitRoot, '.mcp.json'),
+          probedLevel: 'present',
+          lineName: 'Parity: claude-settings-minimum-capability',
+        },
+      ];
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Resolve the running `@mmnto/cli`'s version + install path for the req-#5
  * binary self-report (the Stale-Doctor-Paradox guard — surface WHICH binary
@@ -315,6 +369,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
   const {
     deriveCohortRepoId,
+    detectCapabilityProbeContract,
     detectGeneratedArtifactContract,
     detectManualAttestationContract,
     detectMechanicalContract,
@@ -322,6 +377,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
     extractManagedBlock,
     loadParityManifest,
     packageNameForContract,
+    PARITY_MANIFESTATIONS,
     resolveGitRoot,
     SUPPORTED_PARITY_SCHEMA_VERSION,
   } = await import('@mmnto/totem');
@@ -493,10 +549,79 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const fallbackCmd = getFallbackCommand(gitRoot);
 
       const blockingDriftIds: string[] = [];
+      // The consumers-scope guard shared by the routing branches that don't
+      // self-guard in core (mechanical + capability-probe): a scoped contract
+      // must not emit drift in a repo that is not an intended consumer.
+      const consumersSkip = (c: ParityContract): ParityLine[] | undefined => {
+        if (c.consumers === undefined) return undefined;
+        if (repoId === undefined) {
+          return [
+            lineFor(`Parity: ${c.id}`, {
+              status: 'skip',
+              message: `cannot determine applicability — repo id unresolvable; contract is scoped to consumers [${c.consumers.join(', ')}]`,
+            }),
+          ];
+        }
+        if (!c.consumers.includes(repoId)) {
+          return [
+            lineFor(`Parity: ${c.id}`, {
+              status: 'skip',
+              message: `cohort permits absence here (${repoId} not in consumers)`,
+            }),
+          ];
+        }
+        return undefined;
+      };
+
       // flatMap, not map: a mechanical contract (claude-skills) expands to one
       // line PER distributed skill, so the per-contract count can exceed the
       // contract count.
       const perContract: ParityLine[] = contracts.flatMap((c) => {
+        // ── manifestation routing (promoted field, mmnto-ai/totem#2140) ──
+        // capability-probe rows route BEFORE the tractability dispatch: both
+        // deliverable-1 rows are `tractability: mechanical` (Green-decidable)
+        // but sense via probes, not artifact content-equality. Recognized
+        // NON-probe rungs (managed-block, version-pin, …) are informational —
+        // they fall through to the existing tractability routing unchanged.
+        if (c.manifestation === 'capability-probe') {
+          const scopeSkip = consumersSkip(c);
+          if (scopeSkip !== undefined) return scopeSkip;
+          const probes = capabilityProbesFor(c.id, gitRoot);
+          if (probes === undefined) {
+            return [
+              stub(c, `${c.dimension} (capability-probe) — probe not yet implemented for this row`),
+            ];
+          }
+          let blockingDrift = false;
+          const lines = probes.map((p) => {
+            const verdict = detectCapabilityProbeContract({
+              kind: p.kind,
+              consumerPath: p.consumerPath,
+              probedLevel: p.probedLevel,
+              ...(p.mcpJsonPath !== undefined ? { mcpJsonPath: p.mcpJsonPath } : {}),
+              ...(c.senses !== undefined ? { declaredSenses: c.senses } : {}),
+            });
+            if (verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
+            return lineFor(p.lineName, verdict);
+          });
+          if (blockingDrift) blockingDriftIds.push(c.id);
+          return lines;
+        }
+        if (
+          c.manifestation !== undefined &&
+          !(PARITY_MANIFESTATIONS as readonly string[]).includes(c.manifestation)
+        ) {
+          // Fail-loud PER ROW, never per manifest (the total-outage guard): an
+          // unrecognized rung value surfaces verbatim instead of darking the
+          // sensor or silently mis-routing.
+          return [
+            stub(
+              c,
+              `manifestation '${c.manifestation}' unrecognized by this doctor — drift detection not yet implemented`,
+            ),
+          ];
+        }
+
         // ── version-pinned deps (PR-1) ──
         if (c.tractability === 'version-pinned') {
           const packageName = packageNameForContract(c, gitRoot);
@@ -516,24 +641,8 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           // detectVersionPinnedContract, which self-guards). A scoped mechanical
           // contract must not emit drift — or, under --strict, fail — in a repo that
           // is not an intended consumer (CodeRabbit review on mmnto-ai/totem#2079).
-          if (c.consumers !== undefined) {
-            if (repoId === undefined) {
-              return [
-                lineFor(`Parity: ${c.id}`, {
-                  status: 'skip',
-                  message: `cannot determine applicability — repo id unresolvable; contract is scoped to consumers [${c.consumers.join(', ')}]`,
-                }),
-              ];
-            }
-            if (!c.consumers.includes(repoId)) {
-              return [
-                lineFor(`Parity: ${c.id}`, {
-                  status: 'skip',
-                  message: `cohort permits absence here (${repoId} not in consumers)`,
-                }),
-              ];
-            }
-          }
+          const scopeSkip = consumersSkip(c);
+          if (scopeSkip !== undefined) return scopeSkip;
 
           // Generated-artifact contracts (whole-file / region content-equality): the git
           // hooks (regenerated per-repo for this package manager + tier — catches the

@@ -574,13 +574,17 @@ export {
 export type {
   ParityContract,
   ParityManifest,
+  ParityManifestation,
   ParityManifestLoadResult,
   ParityManifestParseResult,
   ParityManifestPathStatus,
+  ParitySense,
   ParityTractability,
 } from './parity-manifest.js';
 export {
   loadParityManifest,
+  PARITY_MANIFESTATIONS,
+  PARITY_SENSES,
   ParityTractabilitySchema,
   parseParityManifest,
   resolveParityManifestPath,
@@ -590,8 +594,10 @@ export {
 // Version-pinned parity drift detector (PR-1, mmnto-ai/totem#2069)
 // + mechanical content-equality detector (mmnto-ai/totem#2073 skills slice)
 export type {
+  CapabilityProbeKind,
   CohortFloorStatus,
   DeriveCohortRepoIdOptions,
+  DetectCapabilityProbeContext,
   DetectGeneratedArtifactContext,
   DetectManualAttestationContext,
   DetectMechanicalContext,
@@ -603,6 +609,7 @@ export type {
 } from './parity-detect.js';
 export {
   deriveCohortRepoId,
+  detectCapabilityProbeContract,
   detectGeneratedArtifactContract,
   detectManualAttestationContract,
   detectMechanicalContract,

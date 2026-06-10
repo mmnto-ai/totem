@@ -39,7 +39,7 @@ import * as path from 'node:path';
 
 import semver from 'semver';
 
-import type { ParityContract } from './parity-manifest.js';
+import { PARITY_SENSES, type ParityContract, type ParitySense } from './parity-manifest.js';
 import { safeExec } from './sys/exec.js';
 import { resolveGitRoot } from './sys/git.js';
 
@@ -480,13 +480,18 @@ export function detectVersionPinnedContract(
   }
 
   // ── Resolve the consumer's installed version (fallback: minVersion(range)) ──
-  const installed = resolveInstalledVersion(ctx.cwd, packageName, declaredRange);
-  if (installed === undefined) {
+  const resolved = resolveInstalledVersion(ctx.cwd, packageName, declaredRange);
+  if (resolved === undefined) {
     return {
       status: 'skip',
       message: `${packageName} pinned (${declaredRange}) but no resolvable installed version`,
     };
   }
+  const installed = resolved.version;
+  // The verdict-format constraint (296 §6(a)3 post-#605): a minVersion-derived
+  // version is a DECLARED-level claim — the message must carry the degraded
+  // level + the originating range, never read as installed-level.
+  const declaredOnly = resolved.source === 'declared-min';
 
   // ── Resolve the cohort floor (local-only; honest-absent on miss) ──
   const floor = resolveCohortFloor(packageName, ctx.gitRoot);
@@ -507,17 +512,44 @@ export function detectVersionPinnedContract(
   // currency, NOT semantic content — a version-pinned contract may never assert
   // file/content equality.
   if (semver.gte(installed, floor.version)) {
+    if (declaredOnly) {
+      return {
+        status: 'pass',
+        message: `${packageName} pin current at the declared level — declared-min ${installed} from range ${declaredRange} ≥ cohort floor ${floor.version} (${floor.source}); no installed copy resolved`,
+      };
+    }
     return {
       status: 'pass',
       message: `${packageName} pin current — installed ${installed} ≥ cohort floor ${floor.version} (${floor.source})`,
     };
   }
 
+  if (declaredOnly) {
+    return {
+      status: 'warn',
+      message: `${packageName} pin stale at the declared level — declared-min ${installed} from range ${declaredRange} < cohort floor ${floor.version} (${floor.source}); no installed copy resolved`,
+      remediation: `Bump the ${packageName} dependency to >= ${floor.version} and reinstall, then re-run totem doctor --parity.`,
+    };
+  }
   return {
     status: 'warn',
     message: `${packageName} pin stale — declared ${declaredRange}, installed ${installed} < cohort floor ${floor.version} (${floor.source})`,
     remediation: `Bump the ${packageName} dependency to >= ${floor.version} and reinstall, then re-run totem doctor --parity.`,
   };
+}
+
+/**
+ * A consumer version resolution, tagged with WHICH state-level produced it
+ * (mmnto-ai/totem#2140, the 296 §6(a)3 `declared` floor):
+ *   - `installed`    — read from an actual on-disk `node_modules` copy.
+ *   - `declared-min` — `semver.minVersion(declaredRange)`: derived from the
+ *     DECLARATION alone, below `present` on the sensed-state scale. Verdicts
+ *     built on this source must render the degraded level (the settled
+ *     verdict-format constraint, strategy#605) — never read as installed-level.
+ */
+interface ResolvedConsumerVersion {
+  version: string;
+  source: 'installed' | 'declared-min';
 }
 
 /**
@@ -527,14 +559,15 @@ export function detectVersionPinnedContract(
  * root `node_modules` rather than the sub-package's, so a cwd-only read would
  * miss them (GCA review #2071). Mirrors Node's own upward node_modules
  * resolution. On no hit, falls back to `semver.minVersion(declaredRange)` (the
- * floor the caret range implies). Returns undefined only when neither resolves
- * to a valid version.
+ * floor the caret range implies), tagged `declared-min` so callers render the
+ * degraded claim level. Returns undefined only when neither resolves to a
+ * valid version.
  */
 function resolveInstalledVersion(
   cwd: string,
   packageName: string,
   declaredRange: string,
-): string | undefined {
+): ResolvedConsumerVersion | undefined {
   const segments = packageName.split('/');
   let dir = path.resolve(cwd);
   for (;;) {
@@ -542,7 +575,7 @@ function resolveInstalledVersion(
       path.join(dir, 'node_modules', ...segments, 'package.json'),
     );
     if (installedPkg?.version !== undefined && semver.valid(installedPkg.version) !== null) {
-      return installedPkg.version;
+      return { version: installedPkg.version, source: 'installed' };
     }
     const parent = path.dirname(dir);
     if (parent === dir) break; // reached the filesystem root
@@ -551,7 +584,7 @@ function resolveInstalledVersion(
   // Fallback: the minimum version the declared range admits. `minVersion`
   // returns a SemVer or null; coerce to the bare version string.
   const min = semver.minVersion(declaredRange);
-  return min?.version;
+  return min === null ? undefined : { version: min.version, source: 'declared-min' };
 }
 
 /** Find the declared range for `packageName` across the three dep fields, in order. */
@@ -702,12 +735,18 @@ export function detectManualAttestationContract(
   // range never reaches semver.minVersion (resolveInstalledVersion's fallback). An
   // unparseable range still surfaces as info (the coupling IS declared), just with
   // installed unresolved — never a throw, never a warn.
-  const installed =
+  const resolved =
     semver.validRange(declaredRange) !== null
       ? resolveInstalledVersion(ctx.cwd, pkg, declaredRange)
       : undefined;
+  // Same verdict-format constraint as the version-pinned path (296 §6(a)3): a
+  // minVersion-derived value is a declared-level claim, marked as such.
   const installedText =
-    installed !== undefined ? `installed ${installed}` : 'installed: unresolved';
+    resolved === undefined
+      ? 'installed: unresolved'
+      : resolved.source === 'installed'
+        ? `installed ${resolved.version}`
+        : `declared-min ${resolved.version} from range ${declaredRange} (no installed copy resolved)`;
 
   return {
     status: 'info',
@@ -1224,6 +1263,232 @@ export function detectGeneratedArtifactContract(
     ),
     remediation: `Re-run ${install} to restore the managed ${label}, or remove the local edits before the totem marker so it can be verified independently.`,
   };
+}
+
+// ─── Capability-probe detector (mmnto-ai/totem#2140, 296 §6(a)2 probe rung) ──
+
+/**
+ * The probe sub-kinds this slice ships (the two deliverable-1 rows):
+ *   - `mcp-registration` — does `.mcp.json` register a totem MCP server? The
+ *     PRESENT rung of `knowledge-search-access` ("a working query path exists
+ *     from this agent surface"). The usable rung (a live bounded search exec)
+ *     is deliberately NOT shipped: real `totem search` embeds the query via a
+ *     cloud API, which a §12.5 never-network probe cannot run — flagged to
+ *     strategy with the row-downshift question.
+ *   - `settings-floor` — does `.claude/settings.json` suppress the governance
+ *     floor (`claude-settings-minimum-capability`)? Canonical-at-intent-altitude
+ *     (296 §6(c)): the canonical is a minimum-capability CONTRACT, so the probe
+ *     senses explicit SUPPRESSION only — an absent file (or any unrelated
+ *     content) is `pass`; the doctor never prescribes settings content.
+ */
+export type CapabilityProbeKind = 'mcp-registration' | 'settings-floor';
+
+/** Inputs + test seams for {@link detectCapabilityProbeContract}. */
+export interface DetectCapabilityProbeContext {
+  kind: CapabilityProbeKind;
+  /** Absolute path of the probed file (`.mcp.json` / `.claude/settings.json`). */
+  consumerPath: string;
+  /**
+   * `settings-floor` only: absolute path to `.mcp.json`, read to DERIVE the
+   * totem MCP server names cross-checked against `disabledMcpjsonServers`
+   * (derive-not-hardcode, Tenet 20). Absent/unreadable → nothing to cross-check
+   * (the MCP half of the floor is vacuous; the hooks half still applies).
+   */
+  mcpJsonPath?: string;
+  /** The state-level THIS probe proves by design (`present` for both kinds today). */
+  probedLevel: ParitySense;
+  /**
+   * The row's declared `senses:` (open string off the contract). When it names
+   * a RECOGNIZED level stronger than `probedLevel`, a would-be `pass` is capped
+   * at `unknown` — the green-halo invariant at probe altitude: a presence-PASS
+   * must never render as a capability-PASS (296 §6(a)3 / strategy#591).
+   */
+  declaredSenses?: string;
+  /** Test seam — override the file read. Production callers omit it. */
+  readFile?: (absPath: string) => string | undefined;
+}
+
+/** Rank a senses level on the §6(a)3 scale; -1 for unrecognized values. */
+function senseRank(level: string | undefined): number {
+  return level === undefined ? -1 : PARITY_SENSES.indexOf(level as ParitySense);
+}
+
+/** JSON file read that NEVER throws: absent / unparseable are first-class outcomes. */
+type JsonReadResult =
+  | { status: 'absent' }
+  | { status: 'unparseable' }
+  | { status: 'ok'; value: unknown };
+
+function readJsonResult(
+  readFile: (absPath: string) => string | undefined,
+  absPath: string,
+): JsonReadResult {
+  let raw: string | undefined;
+  try {
+    raw = readFile(absPath);
+    // totem-context: a throwing injected reader is the probe's degraded-read signal (the never-throws contract); treated as absent rather than crashing the doctor pipeline.
+  } catch {
+    raw = undefined;
+  }
+  if (raw === undefined) return { status: 'absent' };
+  try {
+    return { status: 'ok', value: JSON.parse(raw) };
+    // totem-context: malformed JSON is a first-class `unparseable` outcome the probe maps to an honest `unknown` — never a throw.
+  } catch {
+    return { status: 'unparseable' };
+  }
+}
+
+/**
+ * Derive the totem MCP server names registered in a parsed `.mcp.json` doc: an
+ * `mcpServers` entry counts when its NAME or its command/args text references
+ * totem (`totem` / `@mmnto`). Derivation, not a hardcoded name list, so renamed
+ * or per-repo servers still match (Tenet 20).
+ */
+function totemServerNames(doc: unknown): string[] {
+  if (typeof doc !== 'object' || doc === null) return [];
+  const servers = (doc as { mcpServers?: unknown }).mcpServers;
+  if (typeof servers !== 'object' || servers === null) return [];
+  const names: string[] = [];
+  for (const [name, config] of Object.entries(servers as Record<string, unknown>)) {
+    const command =
+      typeof config === 'object' && config !== null
+        ? String((config as { command?: unknown }).command ?? '')
+        : '';
+    const args =
+      typeof config === 'object' &&
+      config !== null &&
+      Array.isArray((config as { args?: unknown }).args)
+        ? ((config as { args: unknown[] }).args.filter((a) => typeof a === 'string') as string[])
+        : [];
+    const haystack = `${name} ${command} ${args.join(' ')}`.toLowerCase();
+    if (haystack.includes('totem') || haystack.includes('@mmnto')) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * Apply the green-halo cap to a would-be `pass`: when the row DECLARES a
+ * recognized senses level stronger than what this probe proved, the verdict is
+ * `unknown` (the declared contract is unprovable by this probe), never `pass`.
+ * Failure verdicts are NOT capped — a failed weaker rung disproves the stronger
+ * one (no registration ⇒ certainly not usable).
+ */
+function passAtProbedLevel(
+  ctx: DetectCapabilityProbeContext,
+  confirmation: string,
+): ParityContractVerdict {
+  const probed = senseRank(ctx.probedLevel);
+  const declared = senseRank(ctx.declaredSenses);
+  if (declared !== -1 && probed !== -1 && probed < declared) {
+    return {
+      status: 'unknown',
+      message: `manifest declares senses: ${ctx.declaredSenses}; this probe proves ${ctx.probedLevel} only — ${confirmation}; ${ctx.declaredSenses} is unprovable by a no-network probe (296 §12.5)`,
+    };
+  }
+  return {
+    status: 'pass',
+    message: `probed level: ${ctx.probedLevel} — ${confirmation}`,
+  };
+}
+
+/**
+ * Detect ONE capability-probe contract (`manifestation: capability-probe`,
+ * 296 §6(a)2). Deterministic, local-read-only, NEVER networks, NEVER throws,
+ * and NEVER emits `fail` (CLI edge owns promotion) or `info` (probes decide,
+ * they do not attest — "sense-only" means no actuator, not an info ceiling;
+ * the 296 §6(a)4 settled vocabulary is pass/warn/skip/unknown).
+ */
+export function detectCapabilityProbeContract(
+  ctx: DetectCapabilityProbeContext,
+): ParityContractVerdict {
+  const readFile = ctx.readFile ?? readFileText;
+
+  if (ctx.kind === 'mcp-registration') {
+    const probe = readJsonResult(readFile, ctx.consumerPath);
+    if (probe.status === 'absent') {
+      return {
+        status: 'warn',
+        message: `no .mcp.json at ${ctx.consumerPath} — no registered query path on this agent surface`,
+        remediation:
+          'Register the totem MCP server in .mcp.json (totem init scaffolds it), or use `pnpm exec totem search` as the non-MCP transport.',
+      };
+    }
+    if (probe.status === 'unparseable') {
+      return {
+        status: 'unknown',
+        message: `${ctx.consumerPath} is unparseable JSON — registration unprovable either way`,
+        remediation: 'Fix the .mcp.json syntax, then re-run totem doctor --parity.',
+      };
+    }
+    const names = totemServerNames(probe.value);
+    if (names.length === 0) {
+      return {
+        status: 'warn',
+        message: `.mcp.json registers no totem MCP server — no registered query path on this agent surface`,
+        remediation:
+          'Register the totem MCP server in .mcp.json (totem init scaffolds it), or use `pnpm exec totem search` as the non-MCP transport.',
+      };
+    }
+    return passAtProbedLevel(
+      ctx,
+      `totem MCP server(s) [${names.join(', ')}] registered in .mcp.json`,
+    );
+  }
+
+  // ── settings-floor ──
+  const probe = readJsonResult(readFile, ctx.consumerPath);
+  if (probe.status === 'absent') {
+    // The floor is "not suppressed", never "explicitly configured" — an absent
+    // settings file suppresses nothing (canonical-at-intent-altitude, 296 §6(c)).
+    return passAtProbedLevel(
+      ctx,
+      `no ${path.basename(ctx.consumerPath)} present; governance floor not suppressed (absent = unsuppressed)`,
+    );
+  }
+  if (probe.status === 'unparseable') {
+    return {
+      status: 'unknown',
+      message: `${ctx.consumerPath} is unparseable JSON — the governance floor is unprovable either way`,
+      remediation: 'Fix the settings JSON syntax, then re-run totem doctor --parity.',
+    };
+  }
+  const settings =
+    typeof probe.value === 'object' && probe.value !== null
+      ? (probe.value as Record<string, unknown>)
+      : {};
+
+  if (settings['disableAllHooks'] === true) {
+    return {
+      status: 'warn',
+      message: `governance floor suppressed — disableAllHooks: true in ${ctx.consumerPath} (SessionStart orientation cannot fire)`,
+      remediation:
+        'Remove disableAllHooks (or scope the suppression below the governance hooks) to restore the minimum-capability floor.',
+    };
+  }
+
+  const disabledRaw = settings['disabledMcpjsonServers'];
+  const disabled = Array.isArray(disabledRaw)
+    ? disabledRaw.filter((v): v is string => typeof v === 'string')
+    : [];
+  if (disabled.length > 0 && ctx.mcpJsonPath !== undefined) {
+    const mcpProbe = readJsonResult(readFile, ctx.mcpJsonPath);
+    const totemNames = mcpProbe.status === 'ok' ? totemServerNames(mcpProbe.value) : [];
+    const suppressed = totemNames.filter((n) => disabled.includes(n));
+    if (suppressed.length > 0) {
+      return {
+        status: 'warn',
+        message: `governance floor suppressed — totem MCP server(s) [${suppressed.join(', ')}] listed in disabledMcpjsonServers in ${ctx.consumerPath}`,
+        remediation:
+          'Remove the totem MCP server(s) from disabledMcpjsonServers to restore the minimum-capability floor.',
+      };
+    }
+  }
+
+  return passAtProbedLevel(
+    ctx,
+    `governance floor not suppressed in ${path.basename(ctx.consumerPath)}`,
+  );
 }
 
 // ─── Shared filesystem helpers ──────────────────────────

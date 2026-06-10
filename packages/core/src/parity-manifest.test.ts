@@ -285,3 +285,101 @@ describe('loadParityManifest', () => {
     expect(result.status).toBe('unparseable');
   });
 });
+
+// ─── Promoted 296 deliverable-1 fields (mmnto-ai/totem#2140) ──
+
+// A contract carrying all four promoted optional fields, in the shapes the
+// promoted manifest actually uses (strategy#606: `vendor-adapter` is a YAML
+// LIST; the rest are strings).
+const PROMOTED_FIELDS_YAML = `schema-version: 1
+status: active
+
+contracts:
+  - id: knowledge-search-access
+    dimension: knowledge-index
+    canonical-source: null
+    detection-method: capability probe, two rungs
+    expected-value-or-derivation: at least one working query path per agent surface
+    tractability: mechanical
+    manifestation: capability-probe
+    senses: usable
+    vendor-adapter: [claude, gemini]
+    repo-role-variance: publisher self-read skips on workspace pins (by design)
+    tracking-issue: mmnto-ai/totem#2140
+`;
+
+describe('parseParityManifest — promoted 296 fields (mmnto-ai/totem#2140)', () => {
+  it('parses all four promoted fields, mapping kebab-case → camelCase', () => {
+    const result = parseParityManifest(PROMOTED_FIELDS_YAML);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    const row = result.manifest.contracts[0]!;
+    expect(row.manifestation).toBe('capability-probe');
+    expect(row.senses).toBe('usable');
+    expect(row.vendorAdapter).toEqual(['claude', 'gemini']);
+    expect(row.repoRoleVariance).toBe('publisher self-read skips on workspace pins (by design)');
+  });
+
+  it('respects honest-absent mapping for promoted optional fields (no keys, no defaults)', () => {
+    const result = parseParityManifest(VALID_MANIFEST_YAML);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    for (const row of result.manifest.contracts) {
+      expect('manifestation' in row).toBe(false);
+      expect('senses' in row).toBe(false);
+      expect('vendorAdapter' in row).toBe(false);
+      expect('repoRoleVariance' in row).toBe(false);
+    }
+  });
+
+  it('normalizes a bare-string vendor-adapter to a one-element array', () => {
+    const bare = PROMOTED_FIELDS_YAML.replace(
+      'vendor-adapter: [claude, gemini]',
+      'vendor-adapter: claude',
+    );
+    const result = parseParityManifest(bare);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.manifest.contracts[0]!.vendorAdapter).toEqual(['claude']);
+  });
+
+  it('keeps an UNRECOGNIZED manifestation value verbatim — never a manifest-wide failure', () => {
+    // The total-outage guard (the 296 settlement class): a future rung value on
+    // one row must not take all contracts dark. The field is render/routing
+    // metadata, so an unknown value parses through verbatim; the ROUTER decides
+    // how to surface it (per-row stub line), never the parser.
+    const future = PROMOTED_FIELDS_YAML.replace(
+      'manifestation: capability-probe',
+      'manifestation: quantum-entanglement',
+    );
+    const result = parseParityManifest(future);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.manifest.contracts[0]!.manifestation).toBe('quantum-entanglement');
+  });
+
+  it('narrows a mis-shaped promoted field to absent without failing the manifest', () => {
+    // A numeric senses (authoring error) drops to absent on that row — never
+    // manifest-wide unparseable (the last-attested precedent: rejection at the
+    // raw boundary is a TOTAL sensor outage; narrowing is per-row).
+    const misShaped = PROMOTED_FIELDS_YAML.replace('senses: usable', 'senses: 3');
+    const result = parseParityManifest(misShaped);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    const row = result.manifest.contracts[0]!;
+    expect('senses' in row).toBe(false);
+    // The other promoted fields on the same row are unaffected.
+    expect(row.manifestation).toBe('capability-probe');
+  });
+
+  it('narrows a mis-shaped vendor-adapter (non-string list member) to absent', () => {
+    const misShaped = PROMOTED_FIELDS_YAML.replace(
+      'vendor-adapter: [claude, gemini]',
+      'vendor-adapter: [claude, 7]',
+    );
+    const result = parseParityManifest(misShaped);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect('vendorAdapter' in result.manifest.contracts[0]!).toBe(false);
+  });
+});
