@@ -9,7 +9,7 @@
 ## Environment
 
 - **pnpm only** (never npm/yarn). Use `pnpm dlx` (never `npx`).
-- Windows 11 + Git Bash. TypeScript strict mode.
+- TypeScript strict mode.
 - **NEVER put secrets in config files.** `.env` only.
 
 ## Code Style
