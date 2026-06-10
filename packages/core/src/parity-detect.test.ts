@@ -1174,6 +1174,55 @@ describe('detectCapabilityProbeContract — mcp-registration probe', () => {
     expect(v.status).toBe('unknown');
   });
 
+  it('WARN (no crash, no index-keyed names) when mcpServers is a malformed ARRAY', () => {
+    // GCA high on the #2140 PR: an array satisfies `typeof === 'object'` and
+    // Object.entries over it would derive index-keyed "names" ('0', '1').
+    const abs = writeJson(tmpRoot, '.mcp.json', {
+      mcpServers: [{ command: 'totem', args: ['mcp'] }],
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).not.toContain('[0]');
+  });
+
+  it('does NOT match a non-totem server whose command path merely contains "totem"', () => {
+    // Greptile P2 on the #2140 PR: a path segment like /home/totem-projects/
+    // must not classify an unrelated server as a totem server.
+    const abs = writeJson(tmpRoot, '.mcp.json', {
+      mcpServers: {
+        'other-mcp': { command: '/home/totem-projects/other-mcp/run.sh', args: ['--serve'] },
+      },
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+    });
+    expect(v.status).toBe('warn'); // not recognized as totem → no registered query path
+  });
+
+  it('DOES match a totem server by command basename or @mmnto arg (derive-not-hardcode)', () => {
+    const abs = writeJson(tmpRoot, '.mcp.json', {
+      mcpServers: {
+        'renamed-knowledge': { command: 'C:/tools/totem.exe', args: ['mcp'] },
+        'scoped-runner': { command: 'node', args: ['node_modules/@mmnto/mcp/dist/index.js'] },
+      },
+    });
+    const v = detectCapabilityProbeContract({
+      kind: 'mcp-registration',
+      consumerPath: abs,
+      probedLevel: 'present',
+      declaredSenses: 'present',
+    });
+    expect(v.status).toBe('pass');
+    expect(v.message).toContain('renamed-knowledge');
+    expect(v.message).toContain('scoped-runner');
+  });
+
   it('NEVER throws — a throwing readFile seam degrades to a verdict', () => {
     const v = detectCapabilityProbeContract({
       kind: 'mcp-registration',

@@ -371,10 +371,14 @@ export function parseParityManifest(yamlText: string): ParityManifestParseResult
  * Narrow an unknown promoted-field value to a non-empty string, else undefined
  * (mis-shaped → treated as absent on that row; see the raw-schema note — the
  * field is routing/render metadata, so per-row absence beats manifest-wide
- * unparseable).
+ * unparseable). Returns the TRIMMED value — a YAML-quoted field with stray
+ * surrounding spaces must still hit routing comparisons and the green-halo cap
+ * (Greptile outside-diff finding on the #2140 PR).
  */
 function narrowString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 /**
@@ -385,7 +389,8 @@ function narrowString(value: unknown): string | undefined {
  */
 function narrowStringArray(value: unknown): string[] | undefined {
   if (typeof value === 'string') {
-    return value.trim().length > 0 ? [value] : undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? [trimmed] : undefined;
   }
   if (Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === 'string')) {
     return value as string[];

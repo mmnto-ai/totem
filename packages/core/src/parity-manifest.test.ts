@@ -382,4 +382,20 @@ describe('parseParityManifest — promoted 296 fields (mmnto-ai/totem#2140)', ()
     if (result.status !== 'ok') return;
     expect('vendorAdapter' in result.manifest.contracts[0]!).toBe(false);
   });
+
+  it('TRIMS a quoted promoted field with stray surrounding spaces (routing must still compare)', () => {
+    // Greptile outside-diff finding on the #2140 PR: trimming only the
+    // emptiness TEST but returning the raw value would let a padded
+    // `manifestation: ' capability-probe '` dodge routing and the green-halo cap.
+    const padded = PROMOTED_FIELDS_YAML.replace(
+      'manifestation: capability-probe',
+      "manifestation: ' capability-probe '",
+    ).replace('senses: usable', "senses: ' usable '");
+    const result = parseParityManifest(padded);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    const row = result.manifest.contracts[0]!;
+    expect(row.manifestation).toBe('capability-probe');
+    expect(row.senses).toBe('usable');
+  });
 });

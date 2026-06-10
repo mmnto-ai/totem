@@ -1340,31 +1340,43 @@ function readJsonResult(
 }
 
 /**
- * Derive the totem MCP server names registered in a parsed `.mcp.json` doc: an
- * `mcpServers` entry counts when its NAME or its command/args text references
- * totem (`totem` / `@mmnto`). Derivation, not a hardcoded name list, so renamed
- * or per-repo servers still match (Tenet 20).
+ * Derive the totem MCP server names registered in a parsed `.mcp.json` doc.
+ * Derivation, not a hardcoded name list, so renamed or per-repo servers still
+ * match (Tenet 20) — but the signals are deliberately BOUNDED (GCA + Greptile
+ * round on the PR): a bare `totem` substring anywhere in a command/arg path
+ * would false-positive on unrelated servers under totem-named directories
+ * (`/home/totem-projects/other-mcp/run.sh`), and in the settings-floor probe a
+ * false positive becomes a spurious governance-floor WARN. An entry counts when:
+ *   - its NAME contains `totem`, or
+ *   - its command BASENAME is the totem binary, or
+ *   - an arg references the `@mmnto` package scope.
  */
 function totemServerNames(doc: unknown): string[] {
   if (typeof doc !== 'object' || doc === null) return [];
   const servers = (doc as { mcpServers?: unknown }).mcpServers;
-  if (typeof servers !== 'object' || servers === null) return [];
+  // Array.isArray guard: a malformed array still satisfies `typeof === 'object'`,
+  // and Object.entries over it would derive index-keyed "names" (GCA review).
+  if (typeof servers !== 'object' || servers === null || Array.isArray(servers)) return [];
   const names: string[] = [];
   for (const [name, config] of Object.entries(servers as Record<string, unknown>)) {
-    const command =
-      typeof config === 'object' && config !== null
-        ? String((config as { command?: unknown }).command ?? '')
-        : '';
-    const args =
-      typeof config === 'object' &&
-      config !== null &&
-      Array.isArray((config as { args?: unknown }).args)
-        ? ((config as { args: unknown[] }).args.filter((a) => typeof a === 'string') as string[])
-        : [];
-    const haystack = `${name} ${command} ${args.join(' ')}`.toLowerCase();
-    if (haystack.includes('totem') || haystack.includes('@mmnto')) names.push(name);
+    if (isTotemServer(name, config)) names.push(name);
   }
   return names;
+}
+
+/** The bounded totem-server signals for one `.mcp.json` entry (see {@link totemServerNames}). */
+function isTotemServer(name: string, config: unknown): boolean {
+  if (name.toLowerCase().includes('totem')) return true;
+  if (typeof config !== 'object' || config === null) return false;
+  const command = (config as { command?: unknown }).command;
+  if (typeof command === 'string') {
+    // Basename only, extension-tolerant — the command must BE the totem binary,
+    // not merely live under a totem-named path (the Greptile P2 class).
+    const base = path.basename(command.trim()).toLowerCase();
+    if (base === 'totem' || base === 'totem.exe' || base === 'totem.cmd') return true;
+  }
+  const args = (config as { args?: unknown }).args;
+  return Array.isArray(args) && args.some((a) => typeof a === 'string' && a.includes('@mmnto'));
 }
 
 /**
