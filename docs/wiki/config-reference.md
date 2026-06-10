@@ -27,6 +27,14 @@ export default {
       // Route specific commands to different models
       spec: 'anthropic:claude-3-7-sonnet-latest',
     },
+    capabilities: {
+      // Backend admission classes this orchestrator is declared capable of
+      // serving ('completion_only' | 'self_grounding_agent'). Absent =
+      // ['completion_only']. A caller requesting a class above
+      // 'completion_only' that is not declared here fails before any
+      // provider invoke.
+      admissionClasses: ['completion_only'],
+    },
   },
 
   // Command-Specific Options
