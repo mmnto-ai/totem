@@ -1,4 +1,11 @@
-import type { Orchestrator as OrchestratorConfig } from '@mmnto/totem';
+import type {
+  BackendAdmissionClass,
+  ContextPolicy,
+  GroundingBundle,
+  Orchestrator as OrchestratorConfig,
+  OutputContract,
+  RunMetadata,
+} from '@mmnto/totem';
 import { TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
 
 import { invokeShellOrchestrator } from './shell-orchestrator.js';
@@ -59,6 +66,27 @@ export interface OrchestratorInvokeOptions {
    * providers that support caching when `enableContextCaching` is true.
    */
   cacheTTL?: number;
+
+  // ─── Admission contract transport (mmnto-ai/totem#2102, strategy#474 slice 3) ──
+  //
+  // Providers are PURE TRANSPORT for these six fields: every vendor payload is
+  // built explicitly field-by-field, so no provider reads or acts on any of
+  // them this slice. Admission is decided in `runOrchestrator` (CLI seam);
+  // output enforcement is caller-side post-invocation (#2103) — Totem is not
+  // zero-user, so backend cooperation is never assumed.
+
+  /** Neutral task identity for routing/telemetry. Defaults to `tag` at the CLI seam — `tag` stays the UI/cache key. */
+  task?: string;
+  /** The delivered grounding identity (mmnto-ai/totem#2101), reconciled with `artifact.bundle` at the CLI seam. */
+  groundingBundle?: GroundingBundle;
+  /** Requested admission class — gated against `orchestrator.capabilities.admissionClasses` BEFORE any invoke. */
+  backendAdmissionClass?: BackendAdmissionClass;
+  /** Advisory context policy (budget unit: input tokens). Recorded, never enforced here. */
+  contextPolicy?: ContextPolicy;
+  /** Caller-declared output contract. Read by #2103 post-checks, never by providers. */
+  outputContract?: OutputContract;
+  /** Caller identity metadata, recorded verbatim into the run artifact. */
+  runMetadata?: RunMetadata;
 }
 
 /** A provider-bound function that invokes an LLM and returns the result. */
