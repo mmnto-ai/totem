@@ -32,7 +32,7 @@ Not mechanically enforced. Follow because they reduce PR bot noise.
 - **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
 - **After merging a PR:** `totem lesson extract <pr> --yes`, then `totem docs` if releasing. Lessons: `totem lesson extract <prs>` → `totem lesson compile`.
 - **NEVER bypass quality gates without a ticket.** No `--no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or CI-pacifying ignore patterns. Suppressions need a ticket-ref comment.
-- **Open PRs Ready, not Draft.** CR (`auto_review.drafts: false`) + GCA don't review Drafts; Drafts here have no review audience.
+- **Open PRs Ready, not Draft.** All three bots are on-demand (strategy#622); nothing auto-reviews a Draft OR a Ready PR — Ready signals review-readiness for the operator's trigger word.
 - **Vendor routing.** Claude is the default code executor; Gemini stays strategic (proposals, ADRs, audits). Cross-vendor second-opinion fine both ways; "Gemini implement" is not the default.
 
 ## Contributor Principles
@@ -50,10 +50,11 @@ Before posting ANY PR comment, replying to ANY bot, or running `gh pr comment` /
 <!-- totem:cr-disclaimer: cross-repo doctrine refs into private cohort repos (e.g., mmnto-ai/totem-strategy) remain canonical even when CR's URL-accessibility check returns 404 from the bot account — this is an access-class signal per doctrine § 2.4, not a link-class signal -->
 
 1. **Read** [`mmnto-ai/totem-strategy:doctrine/bot-protocols.md`](https://github.com/mmnto-ai/totem-strategy/blob/main/doctrine/bot-protocols.md) if you haven't this session.
-2. **Apply** the consolidated round-comment SOP (doctrine § 8.1) — ONE main-thread comment per round, structured table, tag only bots with a role this round.
-3. **Never** combine `@gemini-code-assist` + `/gemini review` in the same comment (doctrine § 1.2 — XOR Tag Rule).
-4. **Never** reply citing a SHA before pushing (doctrine § 1.1).
-5. **Workflow surface:** prefer the `/review-reply` skill — it operationalizes the SOP end-to-end.
+2. **Apply** the consolidated round-comment SOP (doctrine § 8.1) — ONE main-thread dispositions comment per round, structured table, tag only bots with a role this round; review triggers are NOT part of it (see 3).
+3. **All three bots are on-demand, point-in-time, and operator-gated** (none auto-reviews or re-reviews a push; ruled 2026-06-10/11, [strategy#622](https://github.com/mmnto-ai/totem-strategy/issues/622)): post a review trigger (`@coderabbitai review` / `@greptileai review` / `/gemini review`) only on an explicit per-invocation operator word — prep the round, surface _"ready: invoke X, or merge as-is"_ with a recommendation, and on the word, post the trigger as its own standalone, triggers-only comment (an embedded trigger routes CR to chat-mode and no review runs — mmnto-ai/totem#2150; on Windows send leading-slash bodies via PowerShell so the slash isn't path-munged).
+4. **Never** combine `@gemini-code-assist` + `/gemini review` in the same comment (doctrine § 1.2 — XOR Tag Rule).
+5. **Never** reply citing a SHA before pushing (doctrine § 1.1).
+6. **Workflow surface:** prefer the `/review-reply` skill — it operationalizes the SOP end-to-end.
 
 Enforcement stack per [ADR-105](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md): (1) PreToolUse hooks (queued — `mmnto-ai/totem#1900`); (2) skill instructions; (3) **this AGENTS.md** (baseline awareness for all vendor sessions); (4) auto-memory pointer (`feedback_bot_protocols_centralized`).
 
