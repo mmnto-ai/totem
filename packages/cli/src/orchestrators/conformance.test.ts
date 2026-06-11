@@ -336,16 +336,29 @@ describe('shell provider conformance', () => {
 
   // ─── Admission-contract transport (mmnto-ai/totem#2102) ──
 
-  it('ignores the admission transport fields — no leak into the spawned command', async () => {
+  it('ignores the admission transport fields — no leak anywhere in the spawn payload', async () => {
     const { spawn } = await import('node:child_process');
     emitSuccess('conformance-ok');
     const result = await invokeShellOrchestrator({ ...shellOpts(), ...ADMISSION_TRANSPORT });
 
     expect(result.content).toBe('conformance-ok');
-    const spawnedCmd = vi.mocked(spawn).mock.calls[0]![0] as string;
-    expect(spawnedCmd).toContain('echo');
+
+    // #2148 round-1: assert over the WHOLE spawn payload, not just the
+    // command string — normalized over node's two spawn overloads,
+    // (cmd, options) and (cmd, argv, options), so a transport value smuggled
+    // via argv, env, cwd, or any other option surfaces here too.
+    const spawnCall = vi.mocked(spawn).mock.calls[0]! as unknown[];
+    const command = spawnCall[0] as string;
+    const argv = Array.isArray(spawnCall[1]) ? (spawnCall[1] as string[]) : [];
+    const options = (Array.isArray(spawnCall[1]) ? spawnCall[2] : spawnCall[1]) ?? {};
+    const wholePayload = [command, JSON.stringify(argv), JSON.stringify(options)].join('\n');
+
+    // The legit command content still crosses the wire…
+    expect(command).toContain('echo');
+    expect(wholePayload).toContain('echo');
+    // …but none of the admission transport values appear ANYWHERE in it.
     for (const value of ['self_grounding_agent', 'conformance-task', '8000', 'citationsRequired']) {
-      expect(spawnedCmd).not.toContain(value);
+      expect(wholePayload).not.toContain(value);
     }
   });
 });

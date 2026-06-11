@@ -1627,6 +1627,33 @@ describe('runOrchestrator admission contract (#2102)', { timeout: 15_000 }, () =
     expect(hydrated.inputHash).toBe(bare.inputHash);
   });
 
+  it('a provider-qualified PRIMARY that resolves cross-provider under an elevated class is denied BEFORE the invoke', async () => {
+    // #2148 round-1 (CR major + Greptile P2): the capability declaration is
+    // config-level (base-provider scoped), but `resolveOrchestrator` can route
+    // a provider-qualified primary model to a DIFFERENT provider — the gate
+    // must hold per RESOLVED backend on the primary path too, not just the
+    // quota-fallback path.
+    const onEmitted = vi.fn();
+    await expect(
+      runOrchestrator({
+        prompt: 'cross-provider elevated primary',
+        tag: 'Spec',
+        options: { fresh: true, model: 'anthropic:claude-sonnet-4-6' },
+        config: declaredConfig(), // gemini base config WITH self_grounding_agent declared
+        cwd: tmpDir,
+        backendAdmissionClass: 'self_grounding_agent',
+        artifact: { ...artifactRequest(), onEmitted },
+      }),
+    ).rejects.toThrow(/cross-provider routing is not admitted/i);
+
+    // ZERO invokes: every orchestrator the mocked factory handed out stayed idle.
+    for (const created of mockedCreateOrchestrator.mock.results) {
+      expect(created.value).not.toHaveBeenCalled();
+    }
+    expect(onEmitted).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'artifacts'))).toBe(false);
+  });
+
   it('a declared self_grounding_agent run whose quota fallback resolves cross-provider fails BEFORE the fallback invoke (invariant 5)', async () => {
     const quotaErr = new Error('429 quota exhausted');
     quotaErr.name = 'QuotaError';
@@ -1816,6 +1843,48 @@ describe('runOrchestrator admission contract (#2102)', { timeout: 15_000 }, () =
 
     const artifact = readArtifact(emitted[0]!);
     expect(artifact.grounding.bundle).toEqual(bundle);
+    // #2148 round-1: the recorded hash must recompute from the recorded
+    // bundle — the adopted-bundle path verifies the attested hash (never
+    // recomputes it) before recording.
+    expect(artifact.grounding.hash).toBe(calculateDeterministicHash(artifact.grounding.bundle));
+  });
+
+  it('an adopted groundingBundle whose hash mismatches artifact.groundingHash is rejected before invoke (verify-and-reject)', async () => {
+    // #2148 round-1: with `artifact.bundle` omitted, the artifact records the
+    // ADOPTED `opts.groundingBundle` but used to trust `artifact.groundingHash`
+    // verbatim — persisting a record whose grounding.hash does not match its
+    // grounding.bundle. The seam records, never re-derives, so the fix is
+    // verify-and-reject, not recompute.
+    const bundle = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'c'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/x.ts',
+        },
+      ],
+    };
+    await expect(
+      runOrchestrator({
+        prompt: 'forged grounding hash',
+        tag: 'Spec',
+        options: { fresh: true },
+        config: plainConfig(),
+        cwd: tmpDir,
+        groundingBundle: bundle,
+        artifact: {
+          groundingHash: 'e'.repeat(64), // does NOT recompute from the adopted bundle
+          provenanceSummary: 'similarity-only:1',
+        },
+      }),
+    ).rejects.toThrow(/ambiguous grounding identity/i);
+
+    const invoke = mockedCreateOrchestrator.mock.results[0]?.value;
+    if (invoke !== undefined) {
+      expect(invoke).not.toHaveBeenCalled();
+    }
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'artifacts'))).toBe(false);
   });
 
   it('a supplied artifact.bundle flows into the invoke-seam groundingBundle role', async () => {
@@ -1875,5 +1944,53 @@ describe('runOrchestrator admission contract (#2102)', { timeout: 15_000 }, () =
 
     expect(result).toBe('mock result');
     expect(readArtifact(emitted[0]!).grounding.bundle).toEqual(bundle);
+  });
+
+  // ─── Response-cache key carries the contract (#2148 round-1) ──
+
+  it('absent contract fields leave the response-cache key byte-identical to the legacy shape (invariant 1 — legacy keys stay warm)', async () => {
+    await runOrchestrator({
+      prompt: 'cache key probe',
+      tag: 'Spec', // Spec carries a default response-cache TTL
+      options: {},
+      config: plainConfig(),
+      cwd: tmpDir,
+    });
+
+    // The exact legacy construction (see the null-byte delimiter test above):
+    // prompt, systemPrompt, qualifiedModel — and NOTHING else when every
+    // contract field is absent.
+    const legacyHash = crypto
+      .createHash('sha256')
+      .update('cache key probe')
+      .update('\0')
+      .update('')
+      .update('\0')
+      .update('gemini-3-flash-preview')
+      .digest('hex')
+      .slice(0, 16);
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', `spec-${legacyHash}.json`))).toBe(
+      true,
+    );
+  });
+
+  it('contract fields produce a distinct response-cache key, and differing in ONE contract field differs again (no aliasing)', async () => {
+    const shared = {
+      prompt: 'aliasing probe',
+      tag: 'Spec', // Spec carries a default response-cache TTL
+      options: {},
+      config: plainConfig(),
+      cwd: tmpDir,
+    };
+    await runOrchestrator(shared); // legacy-shaped
+    await runOrchestrator({ ...shared, contextPolicy: { budget: 8000 } });
+    await runOrchestrator({ ...shared, contextPolicy: { budget: 16_000 } });
+
+    // Three ACTUAL invokes — a contract-bearing call must never be served the
+    // legacy call's cached payload (or another contract's) as a replay.
+    const invoke = mockedCreateOrchestrator.mock.results[0]!.value;
+    expect(invoke).toHaveBeenCalledTimes(3);
+    // …and three distinct cache keys on disk.
+    expect(fs.readdirSync(path.join(tmpDir, '.totem', 'cache'))).toHaveLength(3);
   });
 });

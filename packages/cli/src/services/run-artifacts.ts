@@ -165,8 +165,24 @@ const BACKEND_FIELDS = [
   'temperature',
 ] as const;
 
-/** Admission members compared one by one (mmnto-ai/totem#2102) — mirrors {@link BACKEND_FIELDS}. */
-const ADMISSION_FIELDS = ['outputContract', 'contextPolicy', 'runMetadata'] as const;
+/** The artifact `admission` group's member names — the closed key union the schema defines. */
+type AdmissionField = keyof NonNullable<RunArtifact['admission']>;
+
+/**
+ * Admission members compared one by one (mmnto-ai/totem#2102) — mirrors
+ * {@link BACKEND_FIELDS}. Compile-time exhaustive against the artifact
+ * `admission` group (mmnto-ai/totem#2148 round-1): `satisfies Record<AdmissionField, true>`
+ * fails tsc when the schema gains a member this map doesn't name (missing
+ * key) AND when this map names a member the schema lost (excess key) — a
+ * schema field can never silently fall out of the compare delta.
+ */
+const ADMISSION_FIELD_SET = {
+  outputContract: true,
+  contextPolicy: true,
+  runMetadata: true,
+} as const satisfies Record<AdmissionField, true>;
+
+const ADMISSION_FIELDS = Object.keys(ADMISSION_FIELD_SET) as readonly AdmissionField[];
 
 /**
  * Structural member equality via the deterministic hash (key-order

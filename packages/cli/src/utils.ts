@@ -387,11 +387,32 @@ const DEFAULT_TTLS: Record<string, number> = {
 };
 
 /**
+ * The admission-contract fields that participate in the response-cache key
+ * (mmnto-ai/totem#2102, #2148 round-1): two calls differing solely in these
+ * fields must never alias to one cached payload. `groundingBundle` is the
+ * RECONCILED bundle (the transported identity), not just `opts.groundingBundle`.
+ */
+interface ResponseCacheContract {
+  groundingBundle?: GroundingBundle;
+  backendAdmissionClass?: BackendAdmissionClass;
+  outputContract?: OutputContract;
+  contextPolicy?: ContextPolicy;
+  runMetadata?: RunMetadata;
+}
+
+/**
  * Build the response-cache key for the orthogonal command-level cache (#52).
  *
  * Hashes prompt, systemPrompt, and the qualifiedModel string with `\0` byte
  * delimiters between every field so boundary-case inputs (e.g. `prompt="AB",
  * systemPrompt=""` vs `prompt="A", systemPrompt="B"`) produce distinct keys.
+ *
+ * When at least one admission-contract field is present (mmnto-ai/totem#2148
+ * round-1), a deterministic serialization of the contract joins the hash
+ * input so calls differing only in contract fields key separately. When
+ * every field is absent the hash input is BYTE-IDENTICAL to the legacy shape
+ * — invariant 1 (the mmnto/totem#1291 additive precedent): legacy callers'
+ * cache entries stay warm.
  *
  * Used by both the read path (lookup) and write path (store) inside
  * `runOrchestrator` to guarantee the keys are identical — extracted as a
@@ -404,16 +425,34 @@ function buildResponseCacheHash(
   prompt: string,
   systemPrompt: string | undefined,
   qualifiedModel: string,
+  contract?: ResponseCacheContract,
 ): string {
-  return crypto
+  const hash = crypto
     .createHash('sha256')
     .update(prompt)
     .update('\0')
     .update(systemPrompt ?? '')
     .update('\0')
-    .update(qualifiedModel)
-    .digest('hex')
-    .slice(0, 16);
+    .update(qualifiedModel);
+  // Conditional spreads: an absent field contributes NO key, so the
+  // all-absent contract is an empty object and the legacy branch below.
+  const contractFields = {
+    ...(contract?.groundingBundle !== undefined
+      ? { groundingBundleHash: calculateDeterministicHash(contract.groundingBundle) }
+      : {}),
+    ...(contract?.backendAdmissionClass !== undefined
+      ? { backendAdmissionClass: contract.backendAdmissionClass }
+      : {}),
+    ...(contract?.outputContract !== undefined ? { outputContract: contract.outputContract } : {}),
+    ...(contract?.contextPolicy !== undefined ? { contextPolicy: contract.contextPolicy } : {}),
+    ...(contract?.runMetadata !== undefined ? { runMetadata: contract.runMetadata } : {}),
+  };
+  if (Object.keys(contractFields).length > 0) {
+    // calculateDeterministicHash is key-order independent — the same identity
+    // primitive the artifacts use, so the serialization is deterministic.
+    hash.update('\0').update(calculateDeterministicHash(contractFields));
+  }
+  return hash.digest('hex').slice(0, 16);
 }
 
 /**
@@ -474,10 +513,16 @@ export function buildRetrievalGroundingBundle(context: {
 /**
  * Admission gate (mmnto-ai/totem#2102, strategy#474 slice 3): a requested
  * class above `completion_only` must be declared in
- * `orchestrator.capabilities.admissionClasses`. Decided per RESOLVED backend
- * before EACH invoke (primary AND quota-fallback) and fails BEFORE any
- * tokens are spent — a denied run emits no artifact. Declaration is a
- * capability claim only; output enforcement is caller-side (#2103).
+ * `orchestrator.capabilities.admissionClasses`. The declaration is
+ * CONFIG-LEVEL — scoped to the base provider — so this check alone is not
+ * per-resolved-backend: `resolveOrchestrator` can route a provider-qualified
+ * model (primary or fallback) to a different provider. It is therefore
+ * paired with a cross-provider denial on BOTH paths (mmnto-ai/totem#2148
+ * round-1 added the primary's): an elevated class whose resolved provider differs from the
+ * base config's fails loud. Together they decide admission per RESOLVED
+ * backend before EACH invoke, BEFORE any tokens are spent — a denied run
+ * emits no artifact. Declaration is a capability claim only; output
+ * enforcement is caller-side (mmnto-ai/totem#2103).
  */
 function assertAdmissionDeclared(
   requested: BackendAdmissionClass,
@@ -606,12 +651,44 @@ export async function runOrchestrator(opts: {
       'CONFIG_INVALID',
     );
   }
+  // mmnto-ai/totem#2148 round-1, VERIFY-AND-REJECT (never recompute — this seam records,
+  // never re-derives): when the artifact's bundle role is adopted from
+  // `opts.groundingBundle` (no `artifact.bundle` supplied), the caller-attested
+  // `artifact.groundingHash` must recompute from that adopted bundle —
+  // otherwise the artifact would persist a grounding.hash that does not match
+  // its recorded grounding.bundle.
+  if (
+    opts.artifact !== undefined &&
+    opts.groundingBundle !== undefined &&
+    opts.artifact.bundle === undefined &&
+    calculateDeterministicHash(opts.groundingBundle) !== opts.artifact.groundingHash
+  ) {
+    throw new TotemConfigError(
+      'Ambiguous grounding identity: artifact.groundingHash does not match the deterministic hash of the adopted groundingBundle.',
+      'Supply artifact.groundingHash as calculateDeterministicHash(groundingBundle), or make them agree.',
+      'CONFIG_INVALID',
+    );
+  }
   const groundingBundle = opts.groundingBundle ?? opts.artifact?.bundle;
 
   // #2102: caller-supplied wins over the defaults; the defaults reproduce
   // today's behavior exactly (taskProfile = tag, class = completion_only).
   const requestedAdmissionClass = opts.backendAdmissionClass ?? ADMISSION_COMPLETION_ONLY;
   const taskProfile = opts.task ?? tag;
+
+  // mmnto-ai/totem#2148 round-1: the contract fields participating in the response-cache
+  // key. Built ONCE from the caller-supplied (not defaulted) values plus the
+  // reconciled bundle, and passed to BOTH the read and write paths so the
+  // keys stay identical. All-absent = empty object = legacy key (invariant 1).
+  const cacheContract: ResponseCacheContract = {
+    ...(groundingBundle !== undefined ? { groundingBundle } : {}),
+    ...(opts.backendAdmissionClass !== undefined
+      ? { backendAdmissionClass: opts.backendAdmissionClass }
+      : {}),
+    ...(opts.outputContract !== undefined ? { outputContract: opts.outputContract } : {}),
+    ...(opts.contextPolicy !== undefined ? { contextPolicy: opts.contextPolicy } : {}),
+    ...(opts.runMetadata !== undefined ? { runMetadata: opts.runMetadata } : {}),
+  };
 
   const baseProvider = config.orchestrator.provider;
   const baseInvoke = createOrchestrator(config.orchestrator);
@@ -637,6 +714,23 @@ export async function runOrchestrator(opts: {
   // cache: a denied class must not be served a replay either). No tokens are
   // spent and no artifact is emitted for a denied run.
   assertAdmissionDeclared(requestedAdmissionClass, config.orchestrator);
+  // mmnto-ai/totem#2148 round-1: `resolveOrchestrator` can route a provider-qualified
+  // PRIMARY model to a DIFFERENT provider than the base config, and the
+  // capability declaration is config-level (base-provider scoped) — so an
+  // elevated class that passed the declaration check must still be denied
+  // when the primary resolves cross-provider, same conservative slice-3 rule
+  // as the quota-fallback path below. Per-provider capability declarations
+  // are the future relaxation.
+  if (
+    requestedAdmissionClass !== ADMISSION_COMPLETION_ONLY &&
+    resolved.parsed.provider !== baseProvider
+  ) {
+    throw new TotemConfigError(
+      `Admission denied: model '${rawModel}' resolves to provider '${resolved.parsed.provider}' (base config: '${baseProvider}') while admission class '${requestedAdmissionClass}' is requested — cross-provider routing is not admitted above '${ADMISSION_COMPLETION_ONLY}' until per-provider capability declarations exist.`,
+      'Use a model on the base provider, or drop the elevated backendAdmissionClass request.',
+      'CONFIG_INVALID',
+    );
+  }
 
   log.info(tag, `Model: ${bold(rawModel)}`);
 
@@ -645,7 +739,7 @@ export async function runOrchestrator(opts: {
   let cachePath = '';
 
   if (useCache) {
-    const hash = buildResponseCacheHash(prompt, systemPrompt, qualifiedModel);
+    const hash = buildResponseCacheHash(prompt, systemPrompt, qualifiedModel, cacheContract);
     const cacheDir = path.join(configRoot, config.totemDir, 'cache');
     cachePath = path.join(cacheDir, `${tagKey}-${hash}.json`);
 
@@ -823,7 +917,7 @@ export async function runOrchestrator(opts: {
       // resolution that may have happened above. Uses the same helper as the
       // read path so the keys are guaranteed identical (mmnto/totem#1291
       // mmnto/totem#1292 review fix from GCA + CodeRabbit).
-      const cacheHash = buildResponseCacheHash(prompt, systemPrompt, qualifiedModel);
+      const cacheHash = buildResponseCacheHash(prompt, systemPrompt, qualifiedModel, cacheContract);
       const cacheDir = path.join(configRoot, config.totemDir, 'cache');
       const finalCachePath = path.join(cacheDir, `${tagKey}-${cacheHash}.json`);
       fs.mkdirSync(cacheDir, { recursive: true });
