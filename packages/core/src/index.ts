@@ -31,6 +31,7 @@ export {
   TotemOrchestratorError,
   TotemParseError,
 } from './errors.js';
+export { buildMissingSdkHint } from './missing-sdk.js';
 
 // Gate engine (WS3 — Proposal 288 §6.2)
 export type { FreezeConfig, FreezeEntry } from './freeze.js';
