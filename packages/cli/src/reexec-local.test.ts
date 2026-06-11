@@ -184,6 +184,41 @@ describe('maybeReexecLocal', () => {
     ).toThrow();
   });
 
+  it("mirrors cross-spawn's real success shape — error: null must not crash the exit path", () => {
+    // Regression: cross-spawn fills `error: null` (not undefined) on success;
+    // 1.59.0 crashed every successful delegation here (live, first run).
+    writePinnedTier(tmpRoot);
+    const spawn = vi.fn().mockReturnValue({ status: 0, signal: null, error: null });
+    const status = maybeReexecLocal({
+      cwd: tmpRoot,
+      argv: ['--version'],
+      env: {},
+      selfPath: path.join(tmpRoot, 'elsewhere', 'index.js'),
+      spawn,
+    });
+    expect(status).toBe(0);
+  });
+
+  it('a spawn-level error is reported on stderr after the announce', () => {
+    writePinnedTier(tmpRoot);
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const spawn = vi.fn().mockReturnValue({ status: null, error: new Error('boom') });
+      const status = maybeReexecLocal({
+        cwd: tmpRoot,
+        argv: [],
+        env: {},
+        selfPath: path.join(tmpRoot, 'elsewhere', 'index.js'),
+        spawn,
+      });
+      expect(status).toBe(1);
+      const writes = stderr.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(writes).toContain('Delegation failed to start: boom');
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it('a null child status maps to failure, never silent success', () => {
     writePinnedTier(tmpRoot);
     const spawn = vi.fn().mockReturnValue({ status: null });

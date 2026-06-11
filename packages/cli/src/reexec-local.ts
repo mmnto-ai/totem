@@ -149,7 +149,10 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
   });
   // A spawn-level failure AFTER announcing delegation is reported, never
   // swallowed — the user saw the delegation start; they must see why it died.
-  if (child.error !== undefined) {
+  // Loose != null: cross-spawn fills `error: null` on SUCCESS (verified live
+  // on the 1.59.0 first run — a strict !== undefined check crashed every
+  // successful delegation's exit path).
+  if (child.error != null) {
     process.stderr.write(`[totem] Delegation failed to start: ${child.error.message}\n`);
   }
   return child.status ?? 1;
