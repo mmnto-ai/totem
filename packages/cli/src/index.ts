@@ -9,10 +9,19 @@ import { z } from 'zod';
 import { initCommand } from './commands/init.js';
 import { REVIEW_DIFF_TRUNCATION_THRESHOLD } from './git.js';
 import { TotemHelp } from './help.js';
+import { maybeReexecLocal } from './reexec-local.js';
 import { reapOrphanedTempFiles } from './utils.js';
 
 const require = createRequire(import.meta.url);
 const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
+
+// mmnto-ai/totem#2018 L1: when a foreign binary (ambient global) starts inside
+// a project carrying its own @mmnto/cli, delegate to the project-local build
+// BEFORE any command wiring — the wrong dependency tree must never get to run.
+const reexecStatus = maybeReexecLocal({ selfVersion: version });
+if (reexecStatus !== undefined) {
+  process.exit(reexecStatus);
+}
 
 // Retrospect thresholds (mmnto-ai/totem#1713). Shared across option default,
 // help text, and validation so they don't drift.

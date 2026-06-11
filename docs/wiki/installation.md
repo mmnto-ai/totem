@@ -14,6 +14,10 @@ pnpm dlx @mmnto/cli lint
 
 This ensures you are always running the latest version of the Codebase Immune System, with full access to the LanceDB vector database and LLM orchestrator.
 
+### Global installs delegate to the project-local CLI
+
+If you do install Totem globally, the binary prefers the project it runs in: when started inside a project that carries its own `@mmnto/cli` (a `node_modules` install, or the totem monorepo's built workspace), it delegates to that local build and announces the delegation on stderr. The project-local install is version-pinned and resolves the optional LLM SDK peer dependencies; the global binary cannot. Set `TOTEM_NO_REEXEC=1` to opt out and force the invoked binary to run in place.
+
 ## 2. Standalone Binary (Totem Lite)
 
 For developers working in pure Rust, Go, or Python environments who do not want to install a Node.js runtime, Totem 1.12.0 introduced the **Totem Lite** binary.
