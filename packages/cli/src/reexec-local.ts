@@ -126,6 +126,11 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
 
   const spawn = opts?.spawn ?? spawnSync;
   const argv = opts?.argv ?? process.argv.slice(2);
+  // totem-context: direct spawnSync justified — delegation needs stdio inherit
+  // + non-throwing exit-code propagation, which safeExec (pipe-buffered,
+  // throws on non-zero) cannot provide. Target is process.execPath + the
+  // identity-guarded local entry; argv as array, no shell. Allowlisted in
+  // pack-agent-security repo-sweep.
   const child = spawn(process.execPath, [local.entry, ...argv], {
     stdio: 'inherit',
     env: { ...env, TOTEM_NO_REEXEC: '1' },
