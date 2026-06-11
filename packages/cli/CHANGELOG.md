@@ -1,5 +1,18 @@
 # @mmnto/cli
 
+## 1.58.0
+
+### Minor Changes
+
+- 44a0a23: feat(orchestrator): backend admission contract (#2102, strategy#474 slice 3).
+
+  Both orchestrator seams are additively enriched with the adopted contract fields. Core gains `OutputContract` (`citationsRequired` / `verifyFallback` / `schema` — closed object), `ContextPolicy` (`budget`, validated `int().positive()`, unit: input tokens), `RunMetadata` (`caller` / `command`), an optional top-level `admission` group on the run artifact (additive 1.x — never inside `inputBundle`, so `inputHash` rerun/compare identity is untouched), the `ADMISSION_SELF_GROUNDING_AGENT` constant + `ADMISSION_CLASSES` tuple, and the inferred `BackendAdmissionClass` type. `OrchestratorInvokeOptions` and `runOrchestrator` gain six optional fields (`task`, `groundingBundle`, `backendAdmissionClass`, `contextPolicy`, `outputContract`, `runMetadata`) — providers stay pure transport (vendor payloads are byte-identical), and omitting every field is byte-identical to today. Admission is decided per RESOLVED backend before EACH invoke: a requested class above `completion_only` must be declared in the new `orchestrator.capabilities.admissionClasses` config field or the run fails loud before any tokens are spent, and a cross-provider quota fallback under an elevated class fails before the fallback invoke (primary + admission errors reported together). `groundingBundle` reconciles with `artifact.bundle` (mismatched hashes = hard ambiguous-grounding-identity error). `rerunArtifact` replays a recorded admission group + elevated class verbatim (no silent downgrade); `compareRunArtifacts` gains `sameAdmission` + `admissionDelta`. The spec and review callers now supply `backendAdmissionClass` + `runMetadata` explicitly.
+
+### Patch Changes
+
+- Updated dependencies [44a0a23]
+  - @mmnto/totem@1.58.0
+
 ## 1.57.0
 
 ### Minor Changes
