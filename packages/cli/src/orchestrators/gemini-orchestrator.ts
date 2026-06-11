@@ -1,4 +1,4 @@
-import { TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
+import { buildMissingSdkHint, TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
 
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
@@ -14,9 +14,11 @@ async function importGeminiSdk() {
   try {
     return await import('@google/genai');
   } catch {
+    // mmnto-ai/totem#2018 L2: context-correct remediation — "add the package" is the wrong
+    // fix when the SDK is installed and the running BINARY can't resolve it.
     throw new TotemConfigError(
       'Gemini SDK (@google/genai) is not installed.',
-      `Install it with: ${detectPackageManager()} add @google/genai`,
+      buildMissingSdkHint('@google/genai', { packageManager: detectPackageManager() }),
       'CONFIG_MISSING',
     );
   }

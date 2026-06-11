@@ -1,4 +1,4 @@
-import { TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
+import { buildMissingSdkHint, TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
 
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
@@ -20,9 +20,11 @@ async function importOpenAISdk() {
   try {
     return (await import('openai')).default;
   } catch {
+    // mmnto-ai/totem#2018 L2: context-correct remediation — "add the package" is the wrong
+    // fix when the SDK is installed and the running BINARY can't resolve it.
     throw new TotemConfigError(
       'OpenAI SDK (openai) is not installed.',
-      `Install it with: ${detectPackageManager()} add openai`,
+      buildMissingSdkHint('openai', { packageManager: detectPackageManager() }),
       'CONFIG_MISSING',
     );
   }

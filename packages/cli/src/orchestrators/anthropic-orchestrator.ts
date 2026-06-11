@@ -1,4 +1,4 @@
-import { TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
+import { buildMissingSdkHint, TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
 
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
@@ -22,9 +22,11 @@ async function importAnthropicSdk() {
   try {
     return (await import('@anthropic-ai/sdk')).default;
   } catch {
+    // mmnto-ai/totem#2018 L2: context-correct remediation — "add the package" is the wrong
+    // fix when the SDK is installed and the running BINARY can't resolve it.
     throw new TotemConfigError(
       'Anthropic SDK (@anthropic-ai/sdk) is not installed.',
-      `Install it with: ${detectPackageManager()} add @anthropic-ai/sdk`,
+      buildMissingSdkHint('@anthropic-ai/sdk', { packageManager: detectPackageManager() }),
       'CONFIG_MISSING',
     );
   }
