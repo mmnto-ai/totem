@@ -26,9 +26,9 @@ describe('buildMissingSdkHint (mmnto-ai/totem#2018 L2 — context-correct remedi
     );
     const installed = buildMissingSdkHint('@google/genai', { cwd: tmpRoot });
     // Branch (b): bare project, dep absent
-    const bare = buildMissingSdkHint('@google/genai', {
-      cwd: fs.mkdtempSync(path.join(os.tmpdir(), 'totem-bare-')),
-    });
+    const bareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-bare-'));
+    const bare = buildMissingSdkHint('@google/genai', { cwd: bareDir });
+    fs.rmSync(bareDir, { recursive: true, force: true });
     for (const hint of [installed, bare]) {
       expect(hint).not.toMatch(/add\s+-g|--global|install\s+-g/);
     }
@@ -69,6 +69,37 @@ describe('buildMissingSdkHint (mmnto-ai/totem#2018 L2 — context-correct remedi
     fs.writeFileSync(path.join(tmpRoot, 'packages', 'cli', 'dist', 'index.js'), '');
     const hint = buildMissingSdkHint('@google/genai', { cwd: tmpRoot });
     expect(hint).toContain('node packages/cli/dist/index.js');
+  });
+
+  it('workspace checkout WITH the SDK also in node_modules → the workspace hint still wins (branch priority)', () => {
+    // The realistic dogfood shape: a sibling devDependency lands the SDK in
+    // the workspace's node_modules. `exec totem` would re-route to the same
+    // unresolvable binary there — the workspace-build hint must win.
+    fs.mkdirSync(path.join(tmpRoot, 'packages', 'cli', 'dist'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpRoot, 'packages', 'cli', 'package.json'),
+      '{"name":"@mmnto/cli"}',
+    );
+    fs.mkdirSync(path.join(tmpRoot, 'node_modules', '@google', 'genai'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpRoot, 'node_modules', '@google', 'genai', 'package.json'),
+      '{"name":"@google/genai"}',
+    );
+    const hint = buildMissingSdkHint('@google/genai', { cwd: tmpRoot });
+    expect(hint).toContain('node packages/cli/dist/index.js');
+    expect(hint).not.toContain('exec totem');
+  });
+
+  it('packageManager defaults from npm_config_user_agent when not supplied', () => {
+    const saved = process.env['npm_config_user_agent'];
+    try {
+      process.env['npm_config_user_agent'] = 'yarn/4.0.0 npm/? node/v22';
+      const hint = buildMissingSdkHint('@google/genai', { cwd: tmpRoot });
+      expect(hint).toContain('yarn add @google/genai');
+    } finally {
+      if (saved === undefined) delete process.env['npm_config_user_agent'];
+      else process.env['npm_config_user_agent'] = saved;
+    }
   });
 
   it('dep genuinely absent → plain project-local install hint + the externalized-by-design context', () => {

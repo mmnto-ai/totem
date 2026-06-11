@@ -41,13 +41,31 @@ function isTotemWorkspaceRoot(dir: string): boolean {
 }
 
 /**
+ * Detect the active package manager from `npm_config_user_agent` (set by
+ * npm/pnpm/yarn/bun when running scripts). Falls back to pnpm — the case with
+ * no user agent is a direct global-binary invocation, where the hint's
+ * `exec totem` phrasing is pnpm-flavored anyway. Mirrors the CLI's
+ * `detectPackageManager` (core cannot import from the CLI package).
+ */
+function detectPackageManagerFromEnv(): string {
+  const ua = process.env['npm_config_user_agent'] ?? '';
+  if (ua.startsWith('npm')) return 'npm';
+  if (ua.startsWith('yarn')) return 'yarn';
+  if (ua.startsWith('bun')) return 'bun';
+  return 'pnpm';
+}
+
+/**
  * Build the recovery hint for a failed SDK import, branched on what is
  * actually true on disk:
  *
- * 1. The SDK IS installed in the project but this binary couldn't resolve it
+ * 1. The cwd is inside the totem monorepo → point at the workspace build.
+ *    Checked FIRST: in the workspace the SDK may ALSO sit in node_modules
+ *    (sibling devDependency), and the project-local-CLI hint is wrong there
+ *    (`exec totem` re-routes to the same unresolvable binary).
+ * 2. The SDK IS installed in the project but this binary couldn't resolve it
  *    → the binary is the problem (global install) — point at the
  *    project-local CLI, never at another install.
- * 2. The cwd is inside the totem monorepo → point at the workspace build.
  * 3. Otherwise → project-local install hint, with the externalized-by-design
  *    context and an explicit warning away from global installs.
  */
@@ -56,7 +74,15 @@ export function buildMissingSdkHint(
   opts?: { cwd?: string; packageManager?: string },
 ): string {
   const cwd = opts?.cwd ?? process.cwd();
-  const pm = opts?.packageManager ?? 'pnpm';
+  const pm = opts?.packageManager ?? detectPackageManagerFromEnv();
+
+  const workspaceRoot = findUp(cwd, isTotemWorkspaceRoot);
+  if (workspaceRoot !== undefined) {
+    return (
+      `This is a totem workspace checkout — run the workspace build, which resolves the SDKs: ` +
+      `node packages/cli/dist/index.js <command> (from ${workspaceRoot}), after ${pm} install + ${pm} run build.`
+    );
+  }
 
   const installRoot = findUp(cwd, (dir) => hasLocalInstall(dir, pkg));
   if (installRoot !== undefined) {
@@ -65,14 +91,6 @@ export function buildMissingSdkHint(
       'you are likely on a globally-installed totem, which never sees project dependencies ' +
       '(installing the SDK globally does not fix this either). ' +
       `Run the project-local CLI instead: ${pm} exec totem <command>`
-    );
-  }
-
-  const workspaceRoot = findUp(cwd, isTotemWorkspaceRoot);
-  if (workspaceRoot !== undefined) {
-    return (
-      `This is a totem workspace checkout — run the workspace build, which resolves the SDKs: ` +
-      `node packages/cli/dist/index.js <command> (from ${workspaceRoot}), after ${pm} install + ${pm} run build.`
     );
   }
 
