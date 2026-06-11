@@ -77,6 +77,26 @@ export const PROVENANCE_UNGROUNDED = 'ungrounded';
  */
 export const ADMISSION_COMPLETION_ONLY = 'completion_only' as const;
 
+/**
+ * Elevated admission class (mmnto-ai/totem#2102, strategy#474 slice 3): the
+ * backend is admitted to ground itself (agentic retrieval/tool use) rather
+ * than complete over caller-delivered context. Requestable only when declared
+ * in `orchestrator.capabilities.admissionClasses` — the admission gate in
+ * `runOrchestrator` fails loud pre-invoke otherwise.
+ */
+export const ADMISSION_SELF_GROUNDING_AGENT = 'self_grounding_agent' as const;
+
+/**
+ * Closed two-value enum this slice — single source of truth for both
+ * `BackendSchema.admissionClass` and the config-side capability declaration
+ * (`orchestrator.capabilities.admissionClasses`); a parallel definition is
+ * the drift vector the #1429 model-validation review named.
+ */
+export const ADMISSION_CLASSES = [
+  ADMISSION_COMPLETION_ONLY,
+  ADMISSION_SELF_GROUNDING_AGENT,
+] as const;
+
 /** sha256 hex content hash (full digest — identity, not display). */
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
@@ -156,10 +176,59 @@ export const BackendSchema = z.object({
   model: z.string().min(1),
   /** The full provider-qualified string telemetry/cache key on (`provider:model`). */
   qualifiedModel: z.string().min(1),
-  admissionClass: z.enum(['completion_only', 'self_grounding_agent']),
+  admissionClass: z.enum(ADMISSION_CLASSES),
   /** The command tag the run served (`Spec`, `Review`, ...) — the task profile. */
   taskProfile: z.string().min(1),
   temperature: z.number().optional(),
+});
+
+/**
+ * Caller-declared output contract (mmnto-ai/totem#2102): the citations-or-
+ * `VERIFY:` declaration. Callers write; #2103 post-checks read; providers
+ * transport, never enforce (Totem is not zero-user — backend cooperation is
+ * never assumed, enforcement is caller-side post-invocation). Closed object:
+ * extensible by additive optional fields, not an index signature.
+ */
+export const OutputContractSchema = z.object({
+  /** Response claims must carry citations into the delivered grounding. */
+  citationsRequired: z.boolean().optional(),
+  /** Whether an explicit `VERIFY:` escalation is an acceptable fallback for an uncitable claim. */
+  verifyFallback: z.boolean().optional(),
+  /** JSON-Schema definition for structured output. */
+  schema: z.record(z.unknown()).optional(),
+});
+
+/**
+ * Caller-declared context policy (mmnto-ai/totem#2102). Advisory this slice —
+ * recorded for honesty, enforced by nothing yet — but validated so
+ * declared-not-enforced never means accepting nonsense.
+ */
+export const ContextPolicySchema = z.object({
+  /** Advisory context budget. Unit: INPUT TOKENS. */
+  budget: z.number().int().positive().optional(),
+});
+
+/**
+ * Caller identity metadata (mmnto-ai/totem#2102, the #2100 runMetadata
+ * target) — recorded verbatim into the artifact.
+ */
+export const RunMetadataSchema = z.object({
+  /** The command/module that issued the run (e.g. `spec`, `review`). */
+  caller: z.string().min(1).optional(),
+  /** The CLI command identity the run served, when distinct from `caller`. */
+  command: z.string().min(1).optional(),
+});
+
+/**
+ * The admitted contract group (mmnto-ai/totem#2102). Top-level and optional,
+ * NOT inside `inputBundle` — `inputBundle` feeds `inputHash`, and polluting
+ * it would break rerun/compare identity for identical prompts. Recorded only
+ * when the caller supplied at least one member.
+ */
+const RunAdmissionSchema = z.object({
+  outputContract: OutputContractSchema.optional(),
+  contextPolicy: ContextPolicySchema.optional(),
+  runMetadata: RunMetadataSchema.optional(),
 });
 
 /**
@@ -185,6 +254,8 @@ export const RunArtifactSchema = z.object({
     content: z.string(),
     metrics: RunMetricsSchema,
   }),
+  /** Admitted contract group (mmnto-ai/totem#2102) — additive 1.x optional; slice-1/2 artifacts predate it. */
+  admission: RunAdmissionSchema.optional(),
   /**
    * ISO-8601 emission time. EXCLUDED from the content address (identical runs
    * dedup to one artifact regardless of when they ran) — observability only.
@@ -196,3 +267,8 @@ export type RunArtifact = z.infer<typeof RunArtifactSchema>;
 export type InputBundle = z.infer<typeof InputBundleSchema>;
 export type GroundingItem = z.infer<typeof GroundingItemSchema>;
 export type GroundingBundle = z.infer<typeof GroundingBundleSchema>;
+export type OutputContract = z.infer<typeof OutputContractSchema>;
+export type ContextPolicy = z.infer<typeof ContextPolicySchema>;
+export type RunMetadata = z.infer<typeof RunMetadataSchema>;
+/** Inferred from the `BackendSchema` enum — the canonical admission-class union (mmnto-ai/totem#2102). */
+export type BackendAdmissionClass = z.infer<typeof BackendSchema>['admissionClass'];

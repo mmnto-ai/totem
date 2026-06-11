@@ -1364,7 +1364,8 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // review verdict path — every run is a future eval fixture. Per-item
   // provenance bundle (mmnto-ai/totem#2101): every retrieved item enters classed
   // similarity-only; hash + summary are DERIVED from the bundle.
-  const { calculateDeterministicHash, summarizeProvenance } = await import('@mmnto/totem');
+  const { ADMISSION_COMPLETION_ONLY, calculateDeterministicHash, summarizeProvenance } =
+    await import('@mmnto/totem');
   const { buildRetrievalGroundingBundle } = await import('../utils.js');
   const groundingBundle = buildRetrievalGroundingBundle(context);
   const content = await runOrchestrator({
@@ -1376,6 +1377,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     configRoot,
     totalResults,
     temperature: 0,
+    // Admission contract (mmnto-ai/totem#2102): the same value the slice-1
+    // constant recorded, now caller-supplied — the review verdict path is
+    // factually completion-only. `caller` is the user-facing command identity
+    // (`totem review`; `shield` is its hidden deprecated alias).
+    backendAdmissionClass: ADMISSION_COMPLETION_ONLY,
+    runMetadata: { caller: 'review' },
     artifact: {
       groundingHash: calculateDeterministicHash(groundingBundle),
       provenanceSummary: summarizeProvenance(groundingBundle),

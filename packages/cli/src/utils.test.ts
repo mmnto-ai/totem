@@ -1459,3 +1459,538 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
     expect(artifact.output.content).toBe('fallback result');
   });
 });
+
+// ─── runOrchestrator admission contract (mmnto-ai/totem#2102) ──
+
+describe('runOrchestrator admission contract (#2102)', { timeout: 15_000 }, () => {
+  let tmpDir: string;
+
+  const GROUNDING_HASH = 'b'.repeat(64);
+
+  function artifactRequest(onEmitted?: (hash: string, artifactPath: string) => void) {
+    return {
+      groundingHash: GROUNDING_HASH,
+      provenanceSummary: 'similarity-only',
+      ...(onEmitted !== undefined ? { onEmitted } : {}),
+    };
+  }
+
+  /** Orchestrator config WITHOUT a declared capability (today's default). */
+  function plainConfig(overrides?: Partial<TotemConfig>): TotemConfig {
+    return {
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      orchestrator: {
+        provider: 'gemini',
+        defaultModel: 'gemini-3-flash-preview',
+      },
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+      ...overrides,
+    } as TotemConfig;
+  }
+
+  /** Orchestrator config that DECLARES self_grounding_agent capability. */
+  function declaredConfig(orchestratorOverrides?: Record<string, unknown>): TotemConfig {
+    const base = plainConfig();
+    return {
+      ...base,
+      orchestrator: {
+        ...base.orchestrator,
+        capabilities: { admissionClasses: ['self_grounding_agent'] },
+        ...orchestratorOverrides,
+      },
+    } as TotemConfig;
+  }
+
+  function runsDirPath(): string {
+    return path.join(tmpDir, '.totem', 'artifacts', 'runs');
+  }
+
+  function readArtifact(hash: string) {
+    const file = path.join(runsDirPath(), `${hash}.json`);
+    return RunArtifactSchema.parse(JSON.parse(fs.readFileSync(file, 'utf-8')));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-admission-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    const mockInvoke = vi.fn().mockResolvedValue({
+      content: 'mock result',
+      inputTokens: 100,
+      outputTokens: 50,
+      durationMs: 500,
+    });
+    mockedCreateOrchestrator.mockReturnValue(mockInvoke);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanTmpDir(tmpDir);
+  });
+
+  it('omitting every new field yields a byte-identical invoke payload and identical artifact backend (invariant 1)', async () => {
+    const emitted: string[] = [];
+    await runOrchestrator({
+      prompt: 'test prompt',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: plainConfig(),
+      cwd: tmpDir,
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    // Byte-identical provider payload: the EXACT pre-#2102 key set, no
+    // admission transport keys of any kind.
+    const invoke = mockedCreateOrchestrator.mock.results[0]!.value;
+    expect(invoke.mock.calls[0]![0]).toStrictEqual({
+      prompt: 'test prompt',
+      model: 'gemini-3-flash-preview',
+      cwd: tmpDir,
+      tag: 'Spec',
+      totemDir: '.totem',
+      temperature: undefined,
+    });
+
+    // Identical artifact backend — decided by DEFAULT now, not constant.
+    const artifact = readArtifact(emitted[0]!);
+    expect(artifact.backend.admissionClass).toBe('completion_only');
+    expect(artifact.backend.taskProfile).toBe('Spec');
+    expect(artifact.admission).toBeUndefined();
+  });
+
+  it('a requested-but-undeclared admission class fails loud before any invoke — no tokens, no artifact (invariant 2)', async () => {
+    await expect(
+      runOrchestrator({
+        prompt: 'elevated request',
+        tag: 'Spec',
+        options: { fresh: true },
+        config: plainConfig(), // no capabilities declared
+        cwd: tmpDir,
+        backendAdmissionClass: 'self_grounding_agent',
+        artifact: artifactRequest(),
+      }),
+    ).rejects.toThrow(/self_grounding_agent/);
+
+    const invoke = mockedCreateOrchestrator.mock.results[0]?.value;
+    if (invoke !== undefined) {
+      expect(invoke).not.toHaveBeenCalled();
+    }
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'artifacts'))).toBe(false);
+  });
+
+  it('the admitted class lands in backend.admissionClass verbatim; taskProfile records task ?? tag (invariant 3)', async () => {
+    const emitted: string[] = [];
+    await runOrchestrator({
+      prompt: 'admitted run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: declaredConfig(),
+      cwd: tmpDir,
+      backendAdmissionClass: 'self_grounding_agent',
+      task: 'eval-fixture',
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    const artifact = readArtifact(emitted[0]!);
+    expect(artifact.backend.admissionClass).toBe('self_grounding_agent');
+    expect(artifact.backend.taskProfile).toBe('eval-fixture');
+  });
+
+  it('inputHash is unaffected by every new contract field (invariant 4)', async () => {
+    const emitted: string[] = [];
+    const shared = {
+      prompt: 'identical prompt',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: declaredConfig(),
+      cwd: tmpDir,
+    };
+    await runOrchestrator({
+      ...shared,
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+    await runOrchestrator({
+      ...shared,
+      task: 'eval-fixture',
+      backendAdmissionClass: 'self_grounding_agent',
+      contextPolicy: { budget: 8000 },
+      outputContract: { citationsRequired: true },
+      runMetadata: { caller: 'test' },
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    const bare = readArtifact(emitted[0]!);
+    const hydrated = readArtifact(emitted[1]!);
+    expect(hydrated.inputHash).toBe(bare.inputHash);
+  });
+
+  it('a provider-qualified PRIMARY that resolves cross-provider under an elevated class is denied BEFORE the invoke', async () => {
+    // #2148 round-1 (CR major + Greptile P2): the capability declaration is
+    // config-level (base-provider scoped), but `resolveOrchestrator` can route
+    // a provider-qualified primary model to a DIFFERENT provider — the gate
+    // must hold per RESOLVED backend on the primary path too, not just the
+    // quota-fallback path.
+    const onEmitted = vi.fn();
+    await expect(
+      runOrchestrator({
+        prompt: 'cross-provider elevated primary',
+        tag: 'Spec',
+        options: { fresh: true, model: 'anthropic:claude-sonnet-4-6' },
+        config: declaredConfig(), // gemini base config WITH self_grounding_agent declared
+        cwd: tmpDir,
+        backendAdmissionClass: 'self_grounding_agent',
+        artifact: { ...artifactRequest(), onEmitted },
+      }),
+    ).rejects.toThrow(/cross-provider routing is not admitted/i);
+
+    // ZERO invokes: every orchestrator the mocked factory handed out stayed idle.
+    for (const created of mockedCreateOrchestrator.mock.results) {
+      expect(created.value).not.toHaveBeenCalled();
+    }
+    expect(onEmitted).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'artifacts'))).toBe(false);
+  });
+
+  it('a declared self_grounding_agent run whose quota fallback resolves cross-provider fails BEFORE the fallback invoke (invariant 5)', async () => {
+    const quotaErr = new Error('429 quota exhausted');
+    quotaErr.name = 'QuotaError';
+    const mockInvoke = vi.fn().mockRejectedValueOnce(quotaErr).mockResolvedValue({
+      content: 'fallback result',
+      durationMs: 300,
+    });
+    mockedCreateOrchestrator.mockReturnValue(mockInvoke);
+
+    const onEmitted = vi.fn();
+    await expect(
+      runOrchestrator({
+        prompt: 'elevated quota-bound run',
+        tag: 'Spec',
+        options: { fresh: true },
+        config: declaredConfig({ fallbackModel: 'anthropic:claude-sonnet-4-6' }),
+        cwd: tmpDir,
+        backendAdmissionClass: 'self_grounding_agent',
+        artifact: { ...artifactRequest(), onEmitted },
+      }),
+      // Primary error + admission error reported together.
+    ).rejects.toThrow(/429 quota exhausted[\s\S]*self_grounding_agent/);
+
+    // Exactly ONE invoke: the primary. The cross-provider fallback was never invoked.
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+    expect(onEmitted).not.toHaveBeenCalled();
+  });
+
+  it('a same-provider quota fallback under an elevated class is admitted', async () => {
+    const quotaErr = new Error('429 quota exhausted');
+    quotaErr.name = 'QuotaError';
+    const mockInvoke = vi.fn().mockRejectedValueOnce(quotaErr).mockResolvedValue({
+      content: 'fallback result',
+      durationMs: 300,
+    });
+    mockedCreateOrchestrator.mockReturnValue(mockInvoke);
+
+    const emitted: string[] = [];
+    const result = await runOrchestrator({
+      prompt: 'elevated quota-bound run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: declaredConfig({
+        defaultModel: 'gemini-3.1-pro-preview',
+        fallbackModel: 'gemini-3-flash-preview',
+      }),
+      cwd: tmpDir,
+      backendAdmissionClass: 'self_grounding_agent',
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    expect(result).toBe('fallback result');
+    const artifact = readArtifact(emitted[0]!);
+    expect(artifact.backend.admissionClass).toBe('self_grounding_agent');
+    expect(artifact.backend.qualifiedModel).toBe('gemini-3-flash-preview');
+  });
+
+  it('records the admission group only when at least one member is supplied', async () => {
+    const emitted: string[] = [];
+    const admission = {
+      outputContract: { citationsRequired: true, verifyFallback: true },
+      contextPolicy: { budget: 16_000 },
+      runMetadata: { caller: 'test', command: 'spec' },
+    };
+    await runOrchestrator({
+      prompt: 'contract run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: plainConfig(),
+      cwd: tmpDir,
+      ...admission,
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+    // Class-only run: backendAdmissionClass is recorded in backend, NOT the group.
+    await runOrchestrator({
+      prompt: 'class-only run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: declaredConfig(),
+      cwd: tmpDir,
+      backendAdmissionClass: 'self_grounding_agent',
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    const withGroup = readArtifact(emitted[0]!);
+    expect(withGroup.admission).toEqual(admission);
+
+    const classOnlyRaw = fs.readFileSync(path.join(runsDirPath(), `${emitted[1]!}.json`), 'utf-8');
+    expect(JSON.parse(classOnlyRaw)).not.toHaveProperty('admission');
+  });
+
+  it('threads the supplied transport fields to the provider invoke verbatim', async () => {
+    await runOrchestrator({
+      prompt: 'threaded run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: declaredConfig(),
+      cwd: tmpDir,
+      task: 'eval-fixture',
+      backendAdmissionClass: 'self_grounding_agent',
+      contextPolicy: { budget: 8000 },
+      outputContract: { citationsRequired: true },
+      runMetadata: { caller: 'test' },
+    });
+
+    const invoke = mockedCreateOrchestrator.mock.results[0]!.value;
+    expect(invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: 'eval-fixture',
+        backendAdmissionClass: 'self_grounding_agent',
+        contextPolicy: { budget: 8000 },
+        outputContract: { citationsRequired: true },
+        runMetadata: { caller: 'test' },
+      }),
+    );
+  });
+
+  it('mismatched groundingBundle and artifact.bundle is an ambiguous grounding identity — hard error before invoke', async () => {
+    const bundleA = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'c'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/a.ts',
+        },
+      ],
+    };
+    const bundleB = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'd'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/b.ts',
+        },
+      ],
+    };
+
+    await expect(
+      runOrchestrator({
+        prompt: 'ambiguous run',
+        tag: 'Spec',
+        options: { fresh: true },
+        config: plainConfig(),
+        cwd: tmpDir,
+        groundingBundle: bundleA,
+        artifact: {
+          groundingHash: calculateDeterministicHash(bundleB),
+          provenanceSummary: summarizeProvenance(bundleB),
+          bundle: bundleB,
+        },
+      }),
+    ).rejects.toThrow(/ambiguous grounding identity/i);
+
+    const invoke = mockedCreateOrchestrator.mock.results[0]?.value;
+    if (invoke !== undefined) {
+      expect(invoke).not.toHaveBeenCalled();
+    }
+  });
+
+  it('a supplied groundingBundle flows into the artifact bundle role when artifact.bundle is absent', async () => {
+    const bundle = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'c'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/x.ts',
+        },
+      ],
+    };
+    const emitted: string[] = [];
+    await runOrchestrator({
+      prompt: 'bundle-flow run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: plainConfig(),
+      cwd: tmpDir,
+      groundingBundle: bundle,
+      artifact: {
+        groundingHash: calculateDeterministicHash(bundle),
+        provenanceSummary: summarizeProvenance(bundle),
+        onEmitted: (hash) => emitted.push(hash),
+      },
+    });
+
+    const artifact = readArtifact(emitted[0]!);
+    expect(artifact.grounding.bundle).toEqual(bundle);
+    // #2148 round-1: the recorded hash must recompute from the recorded
+    // bundle — the adopted-bundle path verifies the attested hash (never
+    // recomputes it) before recording.
+    expect(artifact.grounding.hash).toBe(calculateDeterministicHash(artifact.grounding.bundle));
+  });
+
+  it('an adopted groundingBundle whose hash mismatches artifact.groundingHash is rejected before invoke (verify-and-reject)', async () => {
+    // #2148 round-1: with `artifact.bundle` omitted, the artifact records the
+    // ADOPTED `opts.groundingBundle` but used to trust `artifact.groundingHash`
+    // verbatim — persisting a record whose grounding.hash does not match its
+    // grounding.bundle. The seam records, never re-derives, so the fix is
+    // verify-and-reject, not recompute.
+    const bundle = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'c'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/x.ts',
+        },
+      ],
+    };
+    await expect(
+      runOrchestrator({
+        prompt: 'forged grounding hash',
+        tag: 'Spec',
+        options: { fresh: true },
+        config: plainConfig(),
+        cwd: tmpDir,
+        groundingBundle: bundle,
+        artifact: {
+          groundingHash: 'e'.repeat(64), // does NOT recompute from the adopted bundle
+          provenanceSummary: 'similarity-only:1',
+        },
+      }),
+    ).rejects.toThrow(/ambiguous grounding identity/i);
+
+    const invoke = mockedCreateOrchestrator.mock.results[0]?.value;
+    if (invoke !== undefined) {
+      expect(invoke).not.toHaveBeenCalled();
+    }
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'artifacts'))).toBe(false);
+  });
+
+  it('a supplied artifact.bundle flows into the invoke-seam groundingBundle role', async () => {
+    const bundle = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'c'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/x.ts',
+        },
+      ],
+    };
+    await runOrchestrator({
+      prompt: 'bundle-flow run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: plainConfig(),
+      cwd: tmpDir,
+      artifact: {
+        groundingHash: calculateDeterministicHash(bundle),
+        provenanceSummary: summarizeProvenance(bundle),
+        bundle,
+      },
+    });
+
+    const invoke = mockedCreateOrchestrator.mock.results[0]!.value;
+    expect(invoke).toHaveBeenCalledWith(expect.objectContaining({ groundingBundle: bundle }));
+  });
+
+  it('matching groundingBundle and artifact.bundle reconcile cleanly (no false ambiguity)', async () => {
+    const bundle = {
+      items: [
+        {
+          provenance: 'similarity-only',
+          contentHash: 'c'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/x.ts',
+        },
+      ],
+    };
+    const emitted: string[] = [];
+    const result = await runOrchestrator({
+      prompt: 'reconciled run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: plainConfig(),
+      cwd: tmpDir,
+      groundingBundle: bundle,
+      artifact: {
+        groundingHash: calculateDeterministicHash(bundle),
+        provenanceSummary: summarizeProvenance(bundle),
+        bundle,
+        onEmitted: (hash) => emitted.push(hash),
+      },
+    });
+
+    expect(result).toBe('mock result');
+    expect(readArtifact(emitted[0]!).grounding.bundle).toEqual(bundle);
+  });
+
+  // ─── Response-cache key carries the contract (#2148 round-1) ──
+
+  it('absent contract fields leave the response-cache key byte-identical to the legacy shape (invariant 1 — legacy keys stay warm)', async () => {
+    await runOrchestrator({
+      prompt: 'cache key probe',
+      tag: 'Spec', // Spec carries a default response-cache TTL
+      options: {},
+      config: plainConfig(),
+      cwd: tmpDir,
+    });
+
+    // The exact legacy construction (see the null-byte delimiter test above):
+    // prompt, systemPrompt, qualifiedModel — and NOTHING else when every
+    // contract field is absent.
+    const legacyHash = crypto
+      .createHash('sha256')
+      .update('cache key probe')
+      .update('\0')
+      .update('')
+      .update('\0')
+      .update('gemini-3-flash-preview')
+      .digest('hex')
+      .slice(0, 16);
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', `spec-${legacyHash}.json`))).toBe(
+      true,
+    );
+  });
+
+  it('contract fields produce a distinct response-cache key, and differing in ONE contract field differs again (no aliasing)', async () => {
+    const shared = {
+      prompt: 'aliasing probe',
+      tag: 'Spec', // Spec carries a default response-cache TTL
+      options: {},
+      config: plainConfig(),
+      cwd: tmpDir,
+    };
+    await runOrchestrator(shared); // legacy-shaped
+    await runOrchestrator({ ...shared, contextPolicy: { budget: 8000 } });
+    await runOrchestrator({ ...shared, contextPolicy: { budget: 16_000 } });
+
+    // Three ACTUAL invokes — a contract-bearing call must never be served the
+    // legacy call's cached payload (or another contract's) as a replay.
+    const invoke = mockedCreateOrchestrator.mock.results[0]!.value;
+    expect(invoke).toHaveBeenCalledTimes(3);
+    // …and three distinct cache keys on disk.
+    expect(fs.readdirSync(path.join(tmpDir, '.totem', 'cache'))).toHaveLength(3);
+  });
+});

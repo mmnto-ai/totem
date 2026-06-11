@@ -386,6 +386,69 @@ describe('OrchestratorSchema', () => {
       expect(result.success).toBe(true);
     }
   });
+
+  // ─── Capability declaration (mmnto-ai/totem#2102, strategy#474 slice 3) ──
+
+  it('accepts orchestrator config without capabilities (defaults to undefined)', () => {
+    const result = OrchestratorSchema.safeParse(ANTHROPIC_ORCHESTRATOR);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.capabilities).toBeUndefined();
+    }
+  });
+
+  it('accepts a declared admissionClasses capability list', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      defaultModel: 'claude-sonnet-4-6',
+      capabilities: { admissionClasses: ['completion_only', 'self_grounding_agent'] },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.capabilities?.admissionClasses).toEqual([
+        'completion_only',
+        'self_grounding_agent',
+      ]);
+    }
+  });
+
+  it('accepts an empty capabilities object (no classes declared)', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      capabilities: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.capabilities?.admissionClasses).toBeUndefined();
+    }
+  });
+
+  it('rejects an unknown admission class, failing on the admissionClasses path', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      capabilities: { admissionClasses: ['agentic_swarm'] },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const classIssues = result.error.issues.filter((i) => i.path.includes('admissionClasses'));
+      expect(classIssues.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('accepts capabilities on every provider variant', () => {
+    const capabilities = { admissionClasses: ['self_grounding_agent' as const] };
+    const variants = [
+      { provider: 'shell' as const, command: 'echo {file}', capabilities },
+      { provider: 'anthropic' as const, capabilities },
+      { provider: 'gemini' as const, capabilities },
+      { provider: 'openai' as const, capabilities },
+      { provider: 'ollama' as const, capabilities },
+    ];
+    for (const variant of variants) {
+      const result = OrchestratorSchema.safeParse(variant);
+      expect(result.success).toBe(true);
+    }
+  });
 });
 
 // ─── Backwards compatibility ─────────────────────────

@@ -512,20 +512,28 @@ export {
 // Filesystem helpers
 export { readJsonSafe } from './sys/fs.js';
 
-// Grounded run artifacts (mmnto-ai/totem#2100 slice 1, mmnto-ai/totem#2101 slice 2)
+// Grounded run artifacts (mmnto-ai/totem#2100 slice 1, mmnto-ai/totem#2101 slice 2, mmnto-ai/totem#2102 slice 3)
 export type { GroundingSourceItem } from './artifacts/grounding.js';
 export { buildGroundingBundle, summarizeProvenance } from './artifacts/grounding.js';
 export { calculateDeterministicHash } from './artifacts/hash.js';
 export type {
+  BackendAdmissionClass,
+  ContextPolicy,
   GroundingBundle,
   GroundingItem,
   InputBundle,
+  OutputContract,
   RunArtifact,
+  RunMetadata,
 } from './artifacts/schema.js';
 export {
+  ADMISSION_CLASSES,
   ADMISSION_COMPLETION_ONLY,
+  ADMISSION_SELF_GROUNDING_AGENT,
+  ContextPolicySchema,
   GroundingBundleSchema,
   GroundingItemSchema,
+  OutputContractSchema,
   PROVENANCE_CLASSES,
   PROVENANCE_COMPILED_RULE,
   PROVENANCE_SIMILARITY_ONLY,
@@ -534,6 +542,7 @@ export {
   PROVENANCE_UNGROUNDED,
   RUN_ARTIFACT_SCHEMA_VERSION,
   RunArtifactSchema,
+  RunMetadataSchema,
 } from './artifacts/schema.js';
 export type { SaveRunArtifactResult } from './artifacts/storage.js';
 export {

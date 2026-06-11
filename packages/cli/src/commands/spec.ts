@@ -375,7 +375,8 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // retrieved item enters classed similarity-only; hash + summary are DERIVED
   // from the bundle, so the attested hash is recomputable from the artifact
   // surface alone.
-  const { calculateDeterministicHash, summarizeProvenance } = await import('@mmnto/totem');
+  const { ADMISSION_COMPLETION_ONLY, calculateDeterministicHash, summarizeProvenance } =
+    await import('@mmnto/totem');
   const { buildRetrievalGroundingBundle } = await import('../utils.js');
   const groundingBundle = buildRetrievalGroundingBundle(context);
   const content = await runOrchestrator({
@@ -390,6 +391,10 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     // the config path) can never find them (Greptile P1 on #2114).
     configRoot: path.dirname(configPath),
     totalResults,
+    // Admission contract (mmnto-ai/totem#2102): the same value the slice-1
+    // constant recorded, now caller-supplied — spec is factually completion-only.
+    backendAdmissionClass: ADMISSION_COMPLETION_ONLY,
+    runMetadata: { caller: 'spec' },
     artifact: {
       groundingHash: calculateDeterministicHash(groundingBundle),
       provenanceSummary: summarizeProvenance(groundingBundle),

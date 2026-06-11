@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { ADMISSION_CLASSES } from './artifacts/schema.js';
 import { TotemConfigError } from './errors.js';
 import { CustomSecretSchema } from './secrets.js';
 
@@ -125,6 +126,22 @@ const BaseOrchestratorFields = {
    * https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
    */
   cacheTTL: z.union([z.literal(300), z.literal(3600)]).optional(),
+  /**
+   * Declared backend-capability contract (mmnto-ai/totem#2102, strategy#474
+   * slice 3). `admissionClasses` lists the backend admission classes this
+   * orchestrator is declared capable of serving; canonical values live in
+   * core `ADMISSION_CLASSES`. Read by the `runOrchestrator` admission gate
+   * only: a caller requesting a class above `completion_only` that is not
+   * declared here fails loud BEFORE any provider invoke (no tokens spent,
+   * no artifact emitted). Absent = `['completion_only']` — factually true
+   * of every backend today. A declaration is a capability claim, never an
+   * enforcement mechanism (output enforcement is caller-side, #2103).
+   */
+  capabilities: z
+    .object({
+      admissionClasses: z.array(z.enum(ADMISSION_CLASSES)).optional(),
+    })
+    .optional(),
 };
 
 export const ShellOrchestratorSchema = z.object({

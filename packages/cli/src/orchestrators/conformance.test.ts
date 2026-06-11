@@ -5,7 +5,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { OrchestratorResult } from './orchestrator.js';
+import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
 
 // ─── Mock SDKs ──────────────────────────────────────
 
@@ -78,6 +78,20 @@ const baseOpts = {
   totemDir: '.totem',
 };
 
+/**
+ * The six admission-contract transport fields (mmnto-ai/totem#2102). Providers
+ * are pure transport: every vendor payload is built explicitly field-by-field,
+ * so supplying these must leave the vendor call byte-identical.
+ */
+const ADMISSION_TRANSPORT: Partial<OrchestratorInvokeOptions> = {
+  task: 'conformance-task',
+  groundingBundle: { items: [] },
+  backendAdmissionClass: 'self_grounding_agent',
+  contextPolicy: { budget: 8000 },
+  outputContract: { citationsRequired: true, verifyFallback: true },
+  runMetadata: { caller: 'conformance' },
+};
+
 // ─── Conformance contract assertions ────────────────
 
 function assertOrchestratorResult(result: OrchestratorResult): void {
@@ -103,6 +117,10 @@ interface SdkFixture {
   setupQuota: () => void;
   setupGenericError: () => void;
   invoke: () => Promise<OrchestratorResult>;
+  /** The mocked vendor-SDK entry point — what actually crosses the wire. */
+  vendorMock: ReturnType<typeof vi.fn>;
+  /** Invoke with extra OrchestratorInvokeOptions layered over baseOpts. */
+  invokeWith: (extra: Partial<OrchestratorInvokeOptions>) => Promise<OrchestratorResult>;
 }
 
 const sdkFixtures: SdkFixture[] = [
@@ -125,6 +143,8 @@ const sdkFixtures: SdkFixture[] = [
       mockGenerateContent.mockRejectedValueOnce(new Error('Model not found'));
     },
     invoke: () => invokeGeminiOrchestrator(baseOpts),
+    vendorMock: mockGenerateContent,
+    invokeWith: (extra) => invokeGeminiOrchestrator({ ...baseOpts, ...extra }),
   },
   {
     name: 'anthropic',
@@ -143,6 +163,8 @@ const sdkFixtures: SdkFixture[] = [
       mockCreate.mockRejectedValueOnce(new Error('invalid_api_key'));
     },
     invoke: () => invokeAnthropicOrchestrator(baseOpts),
+    vendorMock: mockCreate,
+    invokeWith: (extra) => invokeAnthropicOrchestrator({ ...baseOpts, ...extra }),
   },
   {
     name: 'openai',
@@ -160,6 +182,8 @@ const sdkFixtures: SdkFixture[] = [
       mockChatCreate.mockRejectedValueOnce(new Error('invalid_api_key'));
     },
     invoke: () => invokeOpenAIOrchestrator(baseOpts),
+    vendorMock: mockChatCreate,
+    invokeWith: (extra) => invokeOpenAIOrchestrator({ ...baseOpts, ...extra }),
   },
 ];
 
@@ -202,6 +226,23 @@ describe.each(sdkFixtures)('$name provider conformance', (fixture) => {
     fixture.setupHappy();
     const result = await fixture.invoke();
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  // ─── Admission-contract transport (mmnto-ai/totem#2102) ──
+
+  it('vendor payload is byte-identical with and without the admission transport fields', async () => {
+    fixture.setupHappy();
+    await fixture.invokeWith({});
+    fixture.setupHappy();
+    await fixture.invokeWith(ADMISSION_TRANSPORT);
+
+    const [bare] = fixture.vendorMock.mock.calls[0]!;
+    const [withTransport] = fixture.vendorMock.mock.calls[1]!;
+    expect(withTransport).toEqual(bare);
+    // None of the Totem-specific transport keys leak into the vendor payload.
+    for (const key of Object.keys(ADMISSION_TRANSPORT)) {
+      expect(withTransport).not.toHaveProperty(key);
+    }
   });
 });
 
@@ -291,5 +332,33 @@ describe('shell provider conformance', () => {
     emitSuccess('ok');
     const result = await invokeShellOrchestrator(shellOpts());
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  // ─── Admission-contract transport (mmnto-ai/totem#2102) ──
+
+  it('ignores the admission transport fields — no leak anywhere in the spawn payload', async () => {
+    const { spawn } = await import('node:child_process');
+    emitSuccess('conformance-ok');
+    const result = await invokeShellOrchestrator({ ...shellOpts(), ...ADMISSION_TRANSPORT });
+
+    expect(result.content).toBe('conformance-ok');
+
+    // #2148 round-1: assert over the WHOLE spawn payload, not just the
+    // command string — normalized over node's two spawn overloads,
+    // (cmd, options) and (cmd, argv, options), so a transport value smuggled
+    // via argv, env, cwd, or any other option surfaces here too.
+    const spawnCall = vi.mocked(spawn).mock.calls[0]! as unknown[];
+    const command = spawnCall[0] as string;
+    const argv = Array.isArray(spawnCall[1]) ? (spawnCall[1] as string[]) : [];
+    const options = (Array.isArray(spawnCall[1]) ? spawnCall[2] : spawnCall[1]) ?? {};
+    const wholePayload = [command, JSON.stringify(argv), JSON.stringify(options)].join('\n');
+
+    // The legit command content still crosses the wire…
+    expect(command).toContain('echo');
+    expect(wholePayload).toContain('echo');
+    // …but none of the admission transport values appear ANYWHERE in it.
+    for (const value of ['self_grounding_agent', 'conformance-task', '8000', 'citationsRequired']) {
+      expect(wholePayload).not.toContain(value);
+    }
   });
 });
