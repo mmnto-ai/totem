@@ -14,6 +14,17 @@ import { reapOrphanedTempFiles } from './utils.js';
 const require = createRequire(import.meta.url);
 const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
 
+// mmnto-ai/totem#2018 L1: when a foreign binary (ambient global) starts inside
+// a project carrying its own @mmnto/cli, delegate to the project-local build
+// BEFORE any command wiring — the wrong dependency tree must never get to run.
+// Dynamic import per the CLI lazy-load convention; it still resolves eagerly
+// here by design — delegation has to happen before everything else.
+const { maybeReexecLocal } = await import('./reexec-local.js');
+const reexecStatus = maybeReexecLocal({ selfVersion: version });
+if (reexecStatus !== undefined) {
+  process.exit(reexecStatus);
+}
+
 // Retrospect thresholds (mmnto-ai/totem#1713). Shared across option default,
 // help text, and validation so they don't drift.
 const RETROSPECT_DEFAULT_THRESHOLD = 5;

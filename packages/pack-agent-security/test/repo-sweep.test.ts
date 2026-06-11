@@ -223,6 +223,13 @@ const ALLOWLIST: AllowEntry[] = [
   },
   {
     hash: 'c2c09301bb56a02b',
+    file: 'packages/cli/src/reexec-local.ts',
+    expectedCount: 1,
+    reason:
+      'The mmnto-ai/totem#2018 L1 prefer-local re-exec. Cannot route through safeExec: delegation needs stdio inherit (live passthrough of the child CLI session) and non-throwing exit-code propagation (a delegated `totem lint` exiting 1 is a normal outcome to forward, not an exception), while safeExec is pipe-buffered and throws on non-zero. The spawn target is process.execPath (node itself) + the identity-guarded @mmnto/cli entry path; argv rides as an array, no shell, TOTEM_NO_REEXEC loop guard on the child env.',
+  },
+  {
+    hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/doctor.ts',
     expectedCount: 7,
     reason:
