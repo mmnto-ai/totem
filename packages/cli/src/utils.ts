@@ -6,9 +6,14 @@ import * as path from 'node:path';
 import dotenv from 'dotenv';
 
 import type {
+  BackendAdmissionClass,
+  ContextPolicy,
   CustomSecret,
   GroundingBundle,
+  Orchestrator,
+  OutputContract,
   RunArtifact,
+  RunMetadata,
   SearchResult,
   TotemConfig,
 } from '@mmnto/totem';
@@ -467,6 +472,30 @@ export function buildRetrievalGroundingBundle(context: {
 }
 
 /**
+ * Admission gate (mmnto-ai/totem#2102, strategy#474 slice 3): a requested
+ * class above `completion_only` must be declared in
+ * `orchestrator.capabilities.admissionClasses`. Decided per RESOLVED backend
+ * before EACH invoke (primary AND quota-fallback) and fails BEFORE any
+ * tokens are spent — a denied run emits no artifact. Declaration is a
+ * capability claim only; output enforcement is caller-side (#2103).
+ */
+function assertAdmissionDeclared(
+  requested: BackendAdmissionClass,
+  orchestrator: Orchestrator,
+): void {
+  if (requested === ADMISSION_COMPLETION_ONLY) return;
+  // Absent declaration = ['completion_only'] — factually true of every backend today.
+  const declared = orchestrator.capabilities?.admissionClasses ?? [ADMISSION_COMPLETION_ONLY];
+  if (!declared.includes(requested)) {
+    throw new TotemConfigError(
+      `Admission denied: requested backend admission class '${requested}' is not declared in orchestrator.capabilities.admissionClasses.`,
+      "Declare the class in your orchestrator config (capabilities: { admissionClasses: ['self_grounding_agent'] }) or drop the backendAdmissionClass request.",
+      'CONFIG_INVALID',
+    );
+  }
+}
+
+/**
  * Validate orchestrator config, then either output raw context (--raw) or
  * invoke the configured orchestrator provider and return the LLM content.
  *
@@ -501,6 +530,27 @@ export async function runOrchestrator(opts: {
    * failure warns and never fails the run. Omitted = today's behavior.
    */
   artifact?: RunArtifactRequest;
+
+  // ─── Admission contract (mmnto-ai/totem#2102, strategy#474 slice 3) ──
+  // All six are optional and defaulted through the existing surfaces, so
+  // omitting every one is byte-identical to today (#1291 additive precedent).
+
+  /** Neutral task identity — records to `backend.taskProfile` as `task ?? tag` (`tag` stays the UI/cache/TTL key). */
+  task?: string;
+  /**
+   * The delivered grounding identity, reconciled with `artifact.bundle`:
+   * one supplied serves both roles; both supplied must hash-agree, else a
+   * hard ambiguous-grounding-identity error before any invoke.
+   */
+  groundingBundle?: GroundingBundle;
+  /** Requested admission class — gated against `orchestrator.capabilities.admissionClasses` before EACH invoke. Defaults to `completion_only`. */
+  backendAdmissionClass?: BackendAdmissionClass;
+  /** Advisory context policy (budget unit: input tokens) — recorded into the artifact `admission` group. */
+  contextPolicy?: ContextPolicy;
+  /** Caller-declared output contract — recorded; #2103 post-checks enforce. */
+  outputContract?: OutputContract;
+  /** Caller identity metadata — recorded verbatim into the artifact `admission` group. */
+  runMetadata?: RunMetadata;
 }): Promise<string | undefined> {
   const { prompt, systemPrompt, tag, options, config, cwd } = opts;
   const configRoot = opts.configRoot ?? cwd;
@@ -540,6 +590,29 @@ export async function runOrchestrator(opts: {
     );
   }
 
+  // ── Grounding identity reconciliation (mmnto-ai/totem#2102) ──
+  // One identity, two seams: when both are supplied they must agree; when
+  // only one is supplied it serves both roles (invoke-seam transport +
+  // artifact record).
+  if (
+    opts.groundingBundle !== undefined &&
+    opts.artifact?.bundle !== undefined &&
+    calculateDeterministicHash(opts.groundingBundle) !==
+      calculateDeterministicHash(opts.artifact.bundle)
+  ) {
+    throw new TotemConfigError(
+      'Ambiguous grounding identity: groundingBundle and artifact.bundle were both supplied with mismatched deterministic hashes.',
+      'Supply only one of the two, or make them agree.',
+      'CONFIG_INVALID',
+    );
+  }
+  const groundingBundle = opts.groundingBundle ?? opts.artifact?.bundle;
+
+  // #2102: caller-supplied wins over the defaults; the defaults reproduce
+  // today's behavior exactly (taskProfile = tag, class = completion_only).
+  const requestedAdmissionClass = opts.backendAdmissionClass ?? ADMISSION_COMPLETION_ONLY;
+  const taskProfile = opts.task ?? tag;
+
   const baseProvider = config.orchestrator.provider;
   const baseInvoke = createOrchestrator(config.orchestrator);
 
@@ -558,6 +631,13 @@ export async function runOrchestrator(opts: {
   let model = resolved.parsed.model;
   let qualifiedModel = resolved.qualifiedModel;
   let invoke = resolved.invoke;
+
+  // ── Admission gate, primary path (mmnto-ai/totem#2102) ──
+  // Decided per RESOLVED backend BEFORE the invoke (and before the response
+  // cache: a denied class must not be served a replay either). No tokens are
+  // spent and no artifact is emitted for a denied run.
+  assertAdmissionDeclared(requestedAdmissionClass, config.orchestrator);
+
   log.info(tag, `Model: ${bold(rawModel)}`);
 
   const ttlSeconds = config.orchestrator.cacheTtls?.[tagKey] ?? DEFAULT_TTLS[tagKey] ?? 0;
@@ -633,6 +713,21 @@ export async function runOrchestrator(opts: {
   const enableContextCaching = config.orchestrator.enableContextCaching;
   const cacheTTL = config.orchestrator.cacheTTL;
 
+  // #2102 transport: thread the adopted field names verbatim when supplied.
+  // Conditional spreads keep the omit-everything invoke payload byte-identical
+  // to today (#1291 additive precedent, invariant 1). Providers transport
+  // these, never read them this slice.
+  const admissionTransport = {
+    ...(opts.task !== undefined ? { task: opts.task } : {}),
+    ...(groundingBundle !== undefined ? { groundingBundle } : {}),
+    ...(opts.backendAdmissionClass !== undefined
+      ? { backendAdmissionClass: opts.backendAdmissionClass }
+      : {}),
+    ...(opts.contextPolicy !== undefined ? { contextPolicy: opts.contextPolicy } : {}),
+    ...(opts.outputContract !== undefined ? { outputContract: opts.outputContract } : {}),
+    ...(opts.runMetadata !== undefined ? { runMetadata: opts.runMetadata } : {}),
+  };
+
   let result: OrchestratorResult;
   try {
     result = await invoke({
@@ -645,6 +740,7 @@ export async function runOrchestrator(opts: {
       temperature: opts.temperature,
       ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
       ...(cacheTTL !== undefined ? { cacheTTL } : {}),
+      ...admissionTransport,
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'QuotaError') {
@@ -655,6 +751,29 @@ export async function runOrchestrator(opts: {
           `Quota exhausted for ${rawModel}. Retrying with fallback model: ${bold(rawFallback)}...`,
         );
         const fallbackResolved = resolveOrchestrator(rawFallback, baseProvider, baseInvoke);
+
+        // ── Admission gate, fallback path (mmnto-ai/totem#2102) ──
+        // `resolveOrchestrator` can route a provider-qualified fallbackModel
+        // to a DIFFERENT provider, and a single config-level declaration
+        // cannot honestly cover backends with different real capabilities.
+        // Slice-3 rule, conservative and deterministic: an elevated class
+        // admits the fallback only when it resolves to the SAME provider as
+        // the primary — cross-provider fails loud BEFORE the fallback invoke,
+        // reporting the primary and admission errors together. Per-provider
+        // capability declarations are the future relaxation.
+        if (
+          requestedAdmissionClass !== ADMISSION_COMPLETION_ONLY &&
+          fallbackResolved.parsed.provider !== resolved.parsed.provider
+        ) {
+          throw new TotemOrchestratorError(
+            `Primary model '${rawModel}' failed and the quota fallback '${rawFallback}' was denied admission.\n\n` +
+              `Primary error:\n${err.message}\n\n` +
+              `Admission error:\nfallback resolves to provider '${fallbackResolved.parsed.provider}' (primary: '${resolved.parsed.provider}') while admission class '${requestedAdmissionClass}' is requested — a cross-provider fallback is not admitted above '${ADMISSION_COMPLETION_ONLY}'.`,
+            'Use a same-provider fallbackModel, or drop the elevated backendAdmissionClass request.',
+            err,
+          );
+        }
+
         try {
           result = await fallbackResolved.invoke({
             prompt: safePrompt,
@@ -666,6 +785,7 @@ export async function runOrchestrator(opts: {
             temperature: opts.temperature,
             ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
             ...(cacheTTL !== undefined ? { cacheTTL } : {}),
+            ...admissionTransport,
           });
           // Update model/invoke so telemetry and cache log the correct values
           model = fallbackResolved.parsed.model;
@@ -747,18 +867,19 @@ export async function runOrchestrator(opts: {
           hash: opts.artifact.groundingHash,
           provenanceSummary: opts.artifact.provenanceSummary,
           // Verbatim passthrough — the bundle was assembled and hashed by the
-          // caller (mmnto-ai/totem#2101); this seam records, never re-derives or upgrades.
-          ...(opts.artifact.bundle !== undefined ? { bundle: opts.artifact.bundle } : {}),
+          // caller (mmnto-ai/totem#2101); this seam records, never re-derives
+          // or upgrades. Post-reconciliation (#2102): a caller-supplied
+          // `groundingBundle` serves this role when `artifact.bundle` is absent.
+          ...(groundingBundle !== undefined ? { bundle: groundingBundle } : {}),
         },
         backend: {
           provider: resolved.parsed.provider,
           model,
           qualifiedModel,
-          // Constant in slice 1 — every runOrchestrator backend is factually
-          // completion-only today; #2102 (admission contract) changes who
-          // supplies this value, not the field.
-          admissionClass: ADMISSION_COMPLETION_ONLY,
-          taskProfile: tag,
+          // #2102: caller-supplied wins; the default reproduces the slice-1
+          // constant — every undeclared backend is factually completion-only.
+          admissionClass: requestedAdmissionClass,
+          taskProfile,
           ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
         },
         output: {
@@ -773,6 +894,22 @@ export async function runOrchestrator(opts: {
             ...(result.finishReason !== undefined ? { finishReason: result.finishReason } : {}),
           },
         },
+        // #2102: the admitted contract group is recorded ONLY when the caller
+        // supplied at least one member — an omitted contract stays an omitted
+        // key, never an empty object (additive 1.x, slice-1 artifacts unchanged).
+        ...(opts.outputContract !== undefined ||
+        opts.contextPolicy !== undefined ||
+        opts.runMetadata !== undefined
+          ? {
+              admission: {
+                ...(opts.outputContract !== undefined
+                  ? { outputContract: opts.outputContract }
+                  : {}),
+                ...(opts.contextPolicy !== undefined ? { contextPolicy: opts.contextPolicy } : {}),
+                ...(opts.runMetadata !== undefined ? { runMetadata: opts.runMetadata } : {}),
+              },
+            }
+          : {}),
         createdAt: new Date().toISOString(),
       };
       const saved = saveRunArtifact(path.join(configRoot, config.totemDir), runArtifact);
