@@ -19,7 +19,12 @@
 import * as path from 'node:path';
 
 import type { RunArtifact, TotemConfig } from '@mmnto/totem';
-import { calculateDeterministicHash, loadRunArtifact, TotemOrchestratorError } from '@mmnto/totem';
+import {
+  ADMISSION_COMPLETION_ONLY,
+  calculateDeterministicHash,
+  loadRunArtifact,
+  TotemOrchestratorError,
+} from '@mmnto/totem';
 
 import { runOrchestrator } from '../utils.js';
 
@@ -72,6 +77,24 @@ export async function rerunArtifact(opts: RerunArtifactOptions): Promise<RerunAr
     ...(source.backend.temperature !== undefined
       ? { temperature: source.backend.temperature }
       : {}),
+    // ── Admission replay (mmnto-ai/totem#2102) ──
+    // The recorded contract replays verbatim: an elevated class re-enters the
+    // admission gate (a `self_grounding_agent` rerun must fail loud when the
+    // capability is no longer declared, never silently downgrade — Tenet 4).
+    // `completion_only` stays omitted: the default IS the constant, keeping a
+    // slice-1 rerun byte-identical to today (invariant 7).
+    ...(source.backend.admissionClass !== ADMISSION_COMPLETION_ONLY
+      ? { backendAdmissionClass: source.backend.admissionClass }
+      : {}),
+    ...(source.admission?.outputContract !== undefined
+      ? { outputContract: source.admission.outputContract }
+      : {}),
+    ...(source.admission?.contextPolicy !== undefined
+      ? { contextPolicy: source.admission.contextPolicy }
+      : {}),
+    ...(source.admission?.runMetadata !== undefined
+      ? { runMetadata: source.admission.runMetadata }
+      : {}),
     artifact: {
       // The rerun makes no new grounding claim — identity carried verbatim,
       // including the per-item bundle when the source artifact has one (mmnto-ai/totem#2101).
@@ -114,6 +137,10 @@ export interface RunArtifactComparison {
   sameBackend: boolean;
   /** Backend field names that differ (empty when sameBackend). */
   backendDelta: string[];
+  /** Admission-group equality (mmnto-ai/totem#2102) — presence AND content. */
+  sameAdmission: boolean;
+  /** Admission member names that differ (empty when sameAdmission). */
+  admissionDelta: string[];
   /** Byte equality of output content. */
   sameOutput: boolean;
   outputDelta: {
@@ -138,6 +165,19 @@ const BACKEND_FIELDS = [
   'temperature',
 ] as const;
 
+/** Admission members compared one by one (mmnto-ai/totem#2102) — mirrors {@link BACKEND_FIELDS}. */
+const ADMISSION_FIELDS = ['outputContract', 'contextPolicy', 'runMetadata'] as const;
+
+/**
+ * Structural member equality via the deterministic hash (key-order
+ * independent — the same identity primitive the artifacts use). Absent on
+ * both sides is equal; absent on one side is a NAMED delta, never hidden.
+ */
+function sameAdmissionMember(a: object | undefined, b: object | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return calculateDeterministicHash(a) === calculateDeterministicHash(b);
+}
+
 /** Numeric delta honoring honest-absent: null in, null out — never NaN. */
 function tokenDelta(a: number | null | undefined, b: number | null | undefined): number | null {
   if (typeof a !== 'number' || typeof b !== 'number') return null;
@@ -150,6 +190,10 @@ function tokenDelta(a: number | null | undefined, b: number | null | undefined):
  */
 export function compareRunArtifacts(a: RunArtifact, b: RunArtifact): RunArtifactComparison {
   const backendDelta = BACKEND_FIELDS.filter((field) => a.backend[field] !== b.backend[field]);
+
+  const admissionDelta = ADMISSION_FIELDS.filter(
+    (field) => !sameAdmissionMember(a.admission?.[field], b.admission?.[field]),
+  );
 
   const sameOutput = a.output.content === b.output.content;
   // Short-circuit the second sha256 pass when the contents are byte-identical
@@ -164,6 +208,8 @@ export function compareRunArtifacts(a: RunArtifact, b: RunArtifact): RunArtifact
       a.grounding.provenanceSummary === b.grounding.provenanceSummary,
     sameBackend: backendDelta.length === 0,
     backendDelta,
+    sameAdmission: admissionDelta.length === 0,
+    admissionDelta,
     sameOutput,
     outputDelta: { contentHashA, contentHashB },
     metricsDelta: {

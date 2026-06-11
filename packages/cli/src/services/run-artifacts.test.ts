@@ -131,6 +131,54 @@ describe('rerunArtifact', () => {
     ).rejects.toThrow();
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
+
+  // ─── Admission replay (mmnto-ai/totem#2102) ──
+
+  it('replays a recorded admission group + elevated class verbatim — no silent downgrade (invariant 7)', async () => {
+    const admission = {
+      outputContract: { citationsRequired: true, verifyFallback: true },
+      contextPolicy: { budget: 16_000 },
+      runMetadata: { caller: 'spec', command: 'spec' },
+    };
+    const elevatedHash = saveRunArtifact(
+      path.join(tmpDir, '.totem'),
+      artifact({
+        backend: {
+          provider: 'gemini',
+          model: 'gemini-3.1-pro-preview',
+          qualifiedModel: 'gemini:gemini-3.1-pro-preview',
+          admissionClass: 'self_grounding_agent',
+          taskProfile: 'Spec',
+        },
+        admission,
+      }),
+    ).hash;
+
+    await rerunArtifact({ hash: elevatedHash, config: config(), cwd: tmpDir });
+
+    const call = mockedRunOrchestrator.mock.calls[0]![0];
+    expect(call.backendAdmissionClass).toBe('self_grounding_agent');
+    expect(call.outputContract).toEqual(admission.outputContract);
+    expect(call.contextPolicy).toEqual(admission.contextPolicy);
+    expect(call.runMetadata).toEqual(admission.runMetadata);
+  });
+
+  it('rerunning an artifact without an admission group stays byte-identical to today (invariant 7)', async () => {
+    await rerunArtifact({ hash: sourceHash, config: config(), cwd: tmpDir });
+
+    const call = mockedRunOrchestrator.mock.calls[0]![0] as Record<string, unknown>;
+    // None of the #2102 keys appear — a slice-1 rerun is today's call shape.
+    for (const key of [
+      'task',
+      'groundingBundle',
+      'backendAdmissionClass',
+      'contextPolicy',
+      'outputContract',
+      'runMetadata',
+    ]) {
+      expect(call).not.toHaveProperty(key);
+    }
+  });
 });
 
 describe('compareRunArtifacts', () => {
@@ -195,5 +243,53 @@ describe('compareRunArtifacts', () => {
     const a = artifact();
     const b = artifact({ output: { content: 'y', metrics: { durationMs: 1 } } });
     expect(compareRunArtifacts(a, b)).toEqual(compareRunArtifacts(a, b));
+  });
+
+  // ─── Admission comparison (mmnto-ai/totem#2102) ──
+
+  it('two slice-1 artifacts (no admission group) compare as sameAdmission with an empty delta (invariant 6)', () => {
+    const cmp = compareRunArtifacts(artifact(), artifact());
+    expect(cmp.sameAdmission).toBe(true);
+    expect(cmp.admissionDelta).toEqual([]);
+  });
+
+  it('artifacts differing only in the admission group compare sameAdmission: false with a named delta (invariant 8)', () => {
+    const a = artifact({
+      admission: { contextPolicy: { budget: 8000 }, runMetadata: { caller: 'spec' } },
+    });
+    const b = artifact({
+      admission: { contextPolicy: { budget: 16_000 }, runMetadata: { caller: 'spec' } },
+    });
+    const cmp = compareRunArtifacts(a, b);
+    expect(cmp.sameAdmission).toBe(false);
+    expect(cmp.admissionDelta).toEqual(['contextPolicy']);
+    // Everything else is untouched — the delta is admission-only and NAMED.
+    expect(cmp.sameInput).toBe(true);
+    expect(cmp.sameGrounding).toBe(true);
+    expect(cmp.sameBackend).toBe(true);
+    expect(cmp.sameOutput).toBe(true);
+  });
+
+  it('admission-group presence vs absence names every present member in the delta', () => {
+    const withGroup = artifact({
+      admission: {
+        outputContract: { citationsRequired: true },
+        runMetadata: { caller: 'spec' },
+      },
+    });
+    const cmp = compareRunArtifacts(withGroup, artifact());
+    expect(cmp.sameAdmission).toBe(false);
+    expect(cmp.admissionDelta).toEqual(expect.arrayContaining(['outputContract', 'runMetadata']));
+    expect(cmp.admissionDelta).not.toContain('contextPolicy');
+  });
+
+  it('identical admission groups compare sameAdmission: true', () => {
+    const admission = {
+      outputContract: { citationsRequired: true, verifyFallback: false },
+      contextPolicy: { budget: 4096 },
+    };
+    const cmp = compareRunArtifacts(artifact({ admission }), artifact({ admission }));
+    expect(cmp.sameAdmission).toBe(true);
+    expect(cmp.admissionDelta).toEqual([]);
   });
 });
