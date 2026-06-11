@@ -34,11 +34,14 @@ function hasLocalInstall(dir: string, pkg: string): boolean {
 function isTotemWorkspaceRoot(dir: string): boolean {
   const cliPkg = path.join(dir, 'packages', 'cli', 'package.json');
   if (!fs.existsSync(cliPkg)) return false;
+  // totem-context: intentional cleanup — this is a best-effort detection probe
+  // inside error-message construction: an unreadable/invalid package.json means
+  // "not the totem workspace", a valid negative outcome, and throwing here would
+  // mask the REAL error (the missing SDK) this hint exists to explain.
   try {
     const parsed = JSON.parse(fs.readFileSync(cliPkg, 'utf-8')) as { name?: string };
     return parsed.name === '@mmnto/cli';
   } catch {
-    // Unreadable/invalid package.json — not a workspace we can point at.
     return false;
   }
 }
