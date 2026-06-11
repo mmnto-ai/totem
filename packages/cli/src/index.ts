@@ -9,7 +9,6 @@ import { z } from 'zod';
 import { initCommand } from './commands/init.js';
 import { REVIEW_DIFF_TRUNCATION_THRESHOLD } from './git.js';
 import { TotemHelp } from './help.js';
-import { maybeReexecLocal } from './reexec-local.js';
 import { reapOrphanedTempFiles } from './utils.js';
 
 const require = createRequire(import.meta.url);
@@ -18,6 +17,9 @@ const { version } = z.object({ version: z.string() }).parse(require('../package.
 // mmnto-ai/totem#2018 L1: when a foreign binary (ambient global) starts inside
 // a project carrying its own @mmnto/cli, delegate to the project-local build
 // BEFORE any command wiring — the wrong dependency tree must never get to run.
+// Dynamic import per the CLI lazy-load convention; it still resolves eagerly
+// here by design — delegation has to happen before everything else.
+const { maybeReexecLocal } = await import('./reexec-local.js');
 const reexecStatus = maybeReexecLocal({ selfVersion: version });
 if (reexecStatus !== undefined) {
   process.exit(reexecStatus);

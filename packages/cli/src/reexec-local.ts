@@ -112,11 +112,23 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
   if (env['TOTEM_NO_REEXEC'] === '1') return undefined;
 
   const cwd = opts?.cwd ?? process.cwd();
-  const local = resolveLocalEntry(cwd);
-  if (local === undefined) return undefined;
-
-  const selfPath = opts?.selfPath ?? process.argv[1] ?? '';
-  if (safeRealpath(local.entry) === safeRealpath(selfPath)) return undefined;
+  let local: LocalEntry | undefined;
+  let alreadyLocal = false;
+  try {
+    local = resolveLocalEntry(cwd);
+    if (local !== undefined) {
+      const selfPath = opts?.selfPath ?? process.argv[1] ?? '';
+      alreadyLocal = safeRealpath(local.entry) === safeRealpath(selfPath);
+    }
+  } catch (err) {
+    // The probe is best-effort: an unreadable path mid-walk (EACCES/EISDIR in
+    // sandboxed or permission-restricted environments) falls through to
+    // running in place — a probe failure must never crash the CLI with a raw
+    // I/O stack (mmnto-ai/totem#2153 round-1). TOTEM_DEBUG=1 surfaces it.
+    if (env['TOTEM_DEBUG'] === '1') throw err;
+    return undefined;
+  }
+  if (local === undefined || alreadyLocal) return undefined;
 
   const localLabel = local.version !== undefined ? `@mmnto/cli@${local.version}` : '@mmnto/cli';
   const selfLabel = opts?.selfVersion !== undefined ? ` (this binary: ${opts.selfVersion})` : '';
@@ -135,5 +147,10 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
     stdio: 'inherit',
     env: { ...env, TOTEM_NO_REEXEC: '1' },
   });
+  // A spawn-level failure AFTER announcing delegation is reported, never
+  // swallowed — the user saw the delegation start; they must see why it died.
+  if (child.error !== undefined) {
+    process.stderr.write(`[totem] Delegation failed to start: ${child.error.message}\n`);
+  }
   return child.status ?? 1;
 }

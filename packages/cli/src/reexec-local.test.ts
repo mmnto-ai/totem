@@ -151,6 +151,39 @@ describe('maybeReexecLocal', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
+  it('a probe I/O error falls through to running in place (#2153 round-1)', () => {
+    // packages/cli/package.json as a DIRECTORY: existsSync passes, readFileSync
+    // throws EISDIR mid-probe — the sandboxed-permissions class.
+    fs.mkdirSync(path.join(tmpRoot, 'packages', 'cli', 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(tmpRoot, 'packages', 'cli', 'dist', 'index.js'), '');
+    fs.mkdirSync(path.join(tmpRoot, 'packages', 'cli', 'package.json'));
+    const spawn = vi.fn();
+    const status = maybeReexecLocal({
+      cwd: tmpRoot,
+      argv: [],
+      env: {},
+      selfPath: path.join(tmpRoot, 'elsewhere', 'index.js'),
+      spawn,
+    });
+    expect(status).toBeUndefined();
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('TOTEM_DEBUG=1 surfaces the probe error instead of swallowing it', () => {
+    fs.mkdirSync(path.join(tmpRoot, 'packages', 'cli', 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(tmpRoot, 'packages', 'cli', 'dist', 'index.js'), '');
+    fs.mkdirSync(path.join(tmpRoot, 'packages', 'cli', 'package.json'));
+    expect(() =>
+      maybeReexecLocal({
+        cwd: tmpRoot,
+        argv: [],
+        env: { TOTEM_DEBUG: '1' },
+        selfPath: path.join(tmpRoot, 'elsewhere', 'index.js'),
+        spawn: vi.fn(),
+      }),
+    ).toThrow();
+  });
+
   it('a null child status maps to failure, never silent success', () => {
     writePinnedTier(tmpRoot);
     const spawn = vi.fn().mockReturnValue({ status: null });
