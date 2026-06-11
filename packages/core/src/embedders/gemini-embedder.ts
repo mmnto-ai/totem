@@ -53,10 +53,16 @@ async function importGeminiSdk(): Promise<{
     return await import('@google/genai');
   } catch {
     // mmnto-ai/totem#2018 L2: the remediation must branch on context — "pnpm add"
-    // is the wrong fix when the SDK is already installed and the BINARY can't see it.
+    // is the wrong fix when the SDK is already installed and the BINARY can't see
+    // it, and the provider alternative only applies when the SDK is genuinely
+    // absent (the openai provider needs its own externalized SDK, which would be
+    // just as unresolvable from a foreign binary — #2150 round-2).
     throw new TotemConfigError(
       'Gemini SDK (@google/genai) is not installed.',
-      `${buildMissingSdkHint('@google/genai')} Alternatively use provider: 'openai' in your embedding config.`,
+      buildMissingSdkHint('@google/genai', {
+        absentAlternative:
+          "Alternatively use provider: 'openai' in your embedding config (requires the openai package).",
+      }),
       'CONFIG_MISSING',
     );
   }

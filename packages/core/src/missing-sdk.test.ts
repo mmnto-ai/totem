@@ -90,6 +90,39 @@ describe('buildMissingSdkHint (mmnto-ai/totem#2018 L2 — context-correct remedi
     expect(hint).not.toContain('exec totem');
   });
 
+  it('absentAlternative rides ONLY the genuinely-absent branch — never the workspace or wrong-binary hints', () => {
+    const alternative = "Alternatively use provider: 'openai'.";
+    // Branch 3 (genuinely absent): alternative appended
+    const absent = buildMissingSdkHint('@google/genai', {
+      cwd: tmpRoot,
+      absentAlternative: alternative,
+    });
+    expect(absent).toContain(alternative);
+    // Branch 2 (installed, wrong binary): switching provider hits the same
+    // unresolvable-SDK wall — the alternative must NOT appear
+    fs.mkdirSync(path.join(tmpRoot, 'node_modules', '@google', 'genai'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpRoot, 'node_modules', '@google', 'genai', 'package.json'),
+      '{"name":"@google/genai"}',
+    );
+    const wrongBinary = buildMissingSdkHint('@google/genai', {
+      cwd: tmpRoot,
+      absentAlternative: alternative,
+    });
+    expect(wrongBinary).not.toContain('Alternatively');
+    // Branch 1 (workspace): precise fix only
+    fs.mkdirSync(path.join(tmpRoot, 'packages', 'cli'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpRoot, 'packages', 'cli', 'package.json'),
+      '{"name":"@mmnto/cli"}',
+    );
+    const workspace = buildMissingSdkHint('@google/genai', {
+      cwd: tmpRoot,
+      absentAlternative: alternative,
+    });
+    expect(workspace).not.toContain('Alternatively');
+  });
+
   it('packageManager defaults from npm_config_user_agent when not supplied', () => {
     const saved = process.env['npm_config_user_agent'];
     try {

@@ -71,7 +71,18 @@ function detectPackageManagerFromEnv(): string {
  */
 export function buildMissingSdkHint(
   pkg: string,
-  opts?: { cwd?: string; packageManager?: string },
+  opts?: {
+    cwd?: string;
+    packageManager?: string;
+    /**
+     * Extra sentence appended ONLY to the genuinely-absent branch (e.g. "use
+     * another provider"). In the workspace and binary-can't-resolve branches
+     * an alternative would dilute — or contradict — the precise fix: switching
+     * provider cannot help when the replacement SDK is just as unresolvable
+     * from the same binary (#2150 round-2).
+     */
+    absentAlternative?: string;
+  },
 ): string {
   const cwd = opts?.cwd ?? process.cwd();
   const pm = opts?.packageManager ?? detectPackageManagerFromEnv();
@@ -97,6 +108,7 @@ export function buildMissingSdkHint(
   return (
     `Install it in the project where totem runs: ${pm} add ${pkg}. ` +
     'The LLM SDKs are optional peer dependencies by design (mmnto-ai/totem#2018) — they resolve from YOUR project, ' +
-    'so a globally-installed totem cannot use them; prefer a project-local totem install.'
+    'so a globally-installed totem cannot use them; prefer a project-local totem install.' +
+    (opts?.absentAlternative !== undefined ? ` ${opts.absentAlternative}` : '')
   );
 }
