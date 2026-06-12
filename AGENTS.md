@@ -4,7 +4,7 @@ Canonical source of truth for how AI coding agents (Claude Code, Gemini CLI, Cur
 
 ## What Totem is
 
-Totem is a **deterministic, git-native governance toolkit** — _rules you enforce, state you derive, context you query_. The moat is governance, not memory: lead with enforcement (`totem lint` + the gate engine), not recall. Derivation (`totem status` / `orient`, Tenet 20) and the queryable index serve it.
+Totem is a **deterministic, git-native governance toolkit** — _rules you enforce, state you derive, context you query_. Lead with enforcement (`totem lint` + the gate engine), not recall. Derivation (`totem status` / `orient`, Tenet 20) and the queryable index serve it.
 
 ## Session Start Protocol (MANDATORY)
 
@@ -32,7 +32,7 @@ Not mechanically enforced. Follow because they reduce PR bot noise.
 - **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
 - **After merging a PR:** `totem lesson extract <pr> --yes`, then `totem docs` if releasing. Lessons: `totem lesson extract <prs>` → `totem lesson compile`.
 - **NEVER bypass quality gates without a ticket.** No `--no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or CI-pacifying ignore patterns. Suppressions need a ticket-ref comment.
-- **Open PRs Ready, not Draft.** CR (`auto_review.drafts: false`) + GCA don't review Drafts; Drafts here have no review audience.
+- **Open PRs Ready, not Draft.** Ready signals review-readiness for the operator's trigger word (strategy#622).
 - **Vendor routing.** Claude is the default code executor; Gemini stays strategic (proposals, ADRs, audits). Cross-vendor second-opinion fine both ways; "Gemini implement" is not the default.
 
 ## Contributor Principles
@@ -50,12 +50,12 @@ Before posting ANY PR comment, replying to ANY bot, or running `gh pr comment` /
 <!-- totem:cr-disclaimer: cross-repo doctrine refs into private cohort repos (e.g., mmnto-ai/totem-strategy) remain canonical even when CR's URL-accessibility check returns 404 from the bot account — this is an access-class signal per doctrine § 2.4, not a link-class signal -->
 
 1. **Read** [`mmnto-ai/totem-strategy:doctrine/bot-protocols.md`](https://github.com/mmnto-ai/totem-strategy/blob/main/doctrine/bot-protocols.md) if you haven't this session.
-2. **Apply** the consolidated round-comment SOP (doctrine § 8.1) — ONE main-thread comment per round, structured table, tag only bots with a role this round.
-3. **Never** combine `@gemini-code-assist` + `/gemini review` in the same comment (doctrine § 1.2 — XOR Tag Rule).
-4. **Never** reply citing a SHA before pushing (doctrine § 1.1).
-5. **Workflow surface:** prefer the `/review-reply` skill — it operationalizes the SOP end-to-end.
+2. **Apply** the round SOP (doctrine § 8.1) — ONE dispositions comment per round, tag only bots with a role; triggers separate (see 3).
+3. **Invocation is operator-gated; bots are on-demand** (strategy#622): post a trigger only on the operator's per-invocation word — surface _"ready: invoke X, or merge as-is"_ first. Triggers are standalone, triggers-only comments (embedded ⟹ CR chat-mode, totem#2150; Windows: Git-Bash mangles leading `/` — send via PowerShell).
+4. **Never** combine `@gemini-code-assist` + `/gemini review` in one comment (XOR, § 1.2); **never** cite a SHA before pushing (§ 1.1).
+5. **Prefer `/review-reply`** — it operationalizes the SOP end-to-end.
 
-Enforcement stack per [ADR-105](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md): (1) PreToolUse hooks (queued — `mmnto-ai/totem#1900`); (2) skill instructions; (3) **this AGENTS.md** (baseline awareness for all vendor sessions); (4) auto-memory pointer (`feedback_bot_protocols_centralized`).
+Enforcement stack per [ADR-105](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md): skill instructions → **this AGENTS.md** (baseline for all vendor sessions) → auto-memory pointer. (The #1900 hook layer was retired in the 2026-06-01 amendment.)
 
 ## Skills
 
