@@ -1,6 +1,0 @@
----
-'@mmnto/totem': minor
-'@mmnto/cli': minor
----
-
-Seat discovery derives from the orchestration directory layout, and the mail scan horizon stops eating self-addressed dispatches (mmnto-ai/totem#2141 + #2144). Core: `resolveSelfAgents` gains a dirs∪map layer — any `.totem/orchestration/<seat>/` directory registers that seat (repo+1 touches zero surfaces; the totem-codex exhibit), unioned with the basename map so roster siblings stay visible on partial-dir fresh clones; `source` reports `'dirs'`/`'dirs+map'` honestly; a `config.json host_agents` that omits a PRESENT seat dir keeps its replace semantics but now attaches a loud warning naming the omitted seat (the silent-unbind class); `knownCohortAgents(workspace?)` admits dir-registered seats as known recipients. CLI: `pollMail` reads bounded header windows instead of whole files (a >window header rejects LOUD, never silently), scans self-token filenames first while everything else holds today's global newest-first baseline (a filename token can promote but never demote — ordering must not become delivery), raises `MAX_SCAN` 500→5000 so the cap is a backstop instead of the operating regime, and emits a DIRECTED truncation warning naming self-addressed-looking files dropped beyond the horizon; `mail send`/`reply` gain `--workspace` for dir-derived recipient validation.
