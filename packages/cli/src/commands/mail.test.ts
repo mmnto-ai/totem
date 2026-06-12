@@ -518,19 +518,21 @@ describe('pollMail — workspace', () => {
 // ─── MAX_SCAN truncation ────────────────────────────────
 
 describe('pollMail — MAX_SCAN truncation', () => {
-  it('marks truncated and stops scanning at the cap (scanned <= MAX_SCAN)', () => {
-    // Generate > MAX_SCAN files (501) so the cap is exercised. Filenames
-    // chosen ascending so DESC sort lists the highest-numbered first;
-    // truncation drops the *oldest* tail, preserving the newest mail.
+  it('marks truncated and stops scanning at the cap (scanned <= maxScan)', () => {
+    // Cap MECHANICS exercised via the maxScan injection point (the production
+    // default is 5000 — mmnto-ai/totem#2144; building 5000-file fixtures per
+    // test would test the filesystem, not the cap). Filenames chosen ascending
+    // so DESC sort lists the highest-numbered first; truncation drops the
+    // *oldest* tail, preserving the newest mail.
     const files: OutboxFile[] = [];
     for (let i = 0; i < 510; i++) {
       const num = String(i).padStart(5, '0');
       files.push({ name: `${num}.md`, to: 'totem-claude', subject: `n${i}` });
     }
     writeOutbox('totem-strategy', 'strategy-claude', files);
-    const result = poll();
+    const result = poll({ maxScan: 500 });
     expect(result.truncated).toBe(true);
-    // Contract: scanned never exceeds MAX_SCAN. Documents the pre-increment
+    // Contract: scanned never exceeds the cap. Documents the pre-increment
     // off-by-one fix from CR R1 (#1971).
     expect(result.scanned).toBeLessThanOrEqual(500);
     expect(result.scanned).toBe(500);
@@ -538,9 +540,23 @@ describe('pollMail — MAX_SCAN truncation', () => {
     expect(result.mail.some((m) => m.file === '00509.md')).toBe(true);
   });
 
+  it('the default cap is no longer the operating regime: 510 unread files do NOT truncate (#2144)', () => {
+    // The inherited 500 tripped on every real poll once cohort outboxes
+    // outgrew it. The raised default must absorb today's realistic volume.
+    const files: OutboxFile[] = [];
+    for (let i = 0; i < 510; i++) {
+      const num = String(i).padStart(5, '0');
+      files.push({ name: `${num}.md`, to: 'totem-claude', subject: `n${i}` });
+    }
+    writeOutbox('totem-strategy', 'strategy-claude', files);
+    const result = poll();
+    expect(result.truncated).toBe(false);
+    expect(result.scanned).toBe(510);
+  });
+
   it('preserves global newest-first ordering under truncation across repos (GCA R2 #1971)', () => {
     // Without global ordering, alphabet-early repos (e.g. `apple-repo`) could
-    // hog MAX_SCAN. Confirm that the newest files across BOTH repos survive,
+    // hog the cap. Confirm that the newest files across BOTH repos survive,
     // even when alphabet-first repo has enough files to exhaust the cap alone.
     const oldFiles: OutboxFile[] = [];
     for (let i = 0; i < 600; i++) {
@@ -564,13 +580,224 @@ describe('pollMail — MAX_SCAN truncation', () => {
     }
     writeOutbox('zebra-repo', 'zebra-sender', newFiles);
 
-    const result = poll();
+    const result = poll({ maxScan: 500 });
     expect(result.truncated).toBe(true);
     expect(result.scanned).toBe(500);
     // All 5 fresh entries must be in the result. Pre-fix, they would have
     // been dropped because apple-repo's 500 stale files hit the cap first.
     const freshSubjects = result.mail.map((m) => m.subject).filter((s) => s.startsWith('fresh-'));
     expect(freshSubjects).toHaveLength(5);
+  });
+});
+
+// ─── Self-token priority + directed truncation warning (#2144) ───────────
+
+describe('pollMail — self-token scan priority (mmnto-ai/totem#2144)', () => {
+  it('a self-token file older than every other-recipient file still beats the cap (bucket A first)', () => {
+    // The #2144 victim class: old self-addressed mail crowded out of the
+    // horizon by newer other-seat traffic. The positional filename token
+    // rescues it ahead of the merged pool.
+    const others: OutboxFile[] = [];
+    for (let i = 0; i < 20; i++) {
+      others.push({
+        name: `2026-06-${String((i % 28) + 1).padStart(2, '0')}T${String(i).padStart(4, '0')}Z-lc-claude-n${i}.md`,
+        to: 'lc-claude',
+        subject: `other-${i}`,
+      });
+    }
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      ...others,
+      { name: '2020-01-01T0000Z-totem-claude-ancient.md', to: 'totem-claude', subject: 'ancient' },
+    ]);
+    const result = poll({ maxScan: 10 });
+    expect(result.truncated).toBe(true);
+    expect(result.mail.some((m) => m.subject === 'ancient')).toBe(true);
+  });
+
+  it('a known-other token with `to: self` inside is never demoted below the global baseline (codex F2)', () => {
+    // Ordering must not become delivery: the mislabeled-filename file is the
+    // NEWEST candidate, so today's global newest-first delivers it — the
+    // bucketing must too (other-token files stay MERGED at baseline, not
+    // demoted behind tokenless files).
+    const tokenless: OutboxFile[] = [];
+    for (let i = 0; i < 10; i++) {
+      tokenless.push({
+        name: `1999-legacy-${String(i).padStart(3, '0')}.md`,
+        to: 'lc-claude',
+        subject: `legacy-${i}`,
+      });
+    }
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      ...tokenless,
+      // Newest in the global DESC order ('2026…' outranks every '1999…'),
+      // token says lc-claude, header says totem-claude.
+      { name: '2026-12-31T2359Z-lc-claude-mislabeled.md', to: 'totem-claude', subject: 'rescue' },
+    ]);
+    const result = poll({ maxScan: 5 });
+    expect(result.truncated).toBe(true);
+    expect(result.mail.some((m) => m.subject === 'rescue')).toBe(true);
+  });
+
+  it('positional matching: a slug word equal to a self id does not claim bucket A (strategy 2b)', () => {
+    // `...-lc-claude-totem-claude-handoff.md` is addressed to lc-claude; the
+    // self id appears in the SLUG. Positional matching must not promote it —
+    // under a tight cap it competes at baseline and loses to newer files.
+    const fresh: OutboxFile[] = [];
+    for (let i = 0; i < 6; i++) {
+      fresh.push({
+        name: `2027-01-0${i + 1}T0000Z-lc-claude-n${i}.md`,
+        to: 'lc-claude',
+        subject: `fresh-${i}`,
+      });
+    }
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      ...fresh,
+      {
+        name: '2026-01-01T0000Z-lc-claude-totem-claude-handoff.md',
+        to: 'lc-claude',
+        subject: 'slug-trap',
+      },
+    ]);
+    const result = poll({ maxScan: 5 });
+    expect(result.truncated).toBe(true);
+    // Not delivered (addressed to lc-claude anyway) AND no directed warning —
+    // the slug-trap file must not be counted as possible self mail.
+    expect(result.warnings.every((w) => !w.includes('slug-trap'))).toBe(true);
+    expect(result.warnings.every((w) => !w.includes('beyond the scan horizon'))).toBe(true);
+  });
+
+  it('directed warning names self-token files dropped beyond the horizon; generic-only otherwise', () => {
+    const selfFlood: OutboxFile[] = [];
+    for (let i = 0; i < 6; i++) {
+      selfFlood.push({
+        name: `2026-06-0${i + 1}T0000Z-totem-claude-s${i}.md`,
+        to: 'totem-claude',
+        subject: `self-${i}`,
+      });
+    }
+    writeOutbox('totem-strategy', 'strategy-claude', selfFlood);
+    const result = poll({ maxScan: 3 });
+    expect(result.truncated).toBe(true);
+    const directed = result.warnings.filter((w) => w.includes('beyond the scan horizon'));
+    expect(directed).toHaveLength(1);
+    expect(directed[0]).toContain('2026-06-01T0000Z-totem-claude-s0.md');
+
+    // Other-recipient-only overflow: truncated, but no directed warning.
+    cleanTmpDir(tmpRoot);
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mail-'));
+    workspace = mkDir(path.join(tmpRoot, 'workspace'));
+    const otherFlood: OutboxFile[] = [];
+    for (let i = 0; i < 6; i++) {
+      otherFlood.push({
+        name: `2026-06-0${i + 1}T0000Z-lc-claude-o${i}.md`,
+        to: 'lc-claude',
+        subject: `other-${i}`,
+      });
+    }
+    writeOutbox('totem-strategy', 'strategy-claude', otherFlood);
+    const generic = poll({ maxScan: 3 });
+    expect(generic.truncated).toBe(true);
+    expect(generic.warnings.every((w) => !w.includes('beyond the scan horizon'))).toBe(true);
+  });
+});
+
+// ─── Bounded header reads (#2144, codex F3) ───────────────────────────────
+
+describe('pollMail — bounded header reads (mmnto-ai/totem#2144)', () => {
+  it('a multi-byte char split at the read boundary fails LOUD with the window reason (never silent)', () => {
+    // 4 opener bytes + 9000 × 2-byte 'é' = 18004 bytes, no closing delimiter
+    // within the 16387-byte window; byte 16387 lands mid-char. The reject
+    // must be the mail-shaped window warning — the inv6/Tenet-4 property.
+    const raw = `---\n${'é'.repeat(9000)}`;
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-01T0000Z-totem-claude-boundary.md', to: 'ignored', raw },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(0);
+    const parseWarnings = result.warnings.filter((w) => w.includes('byte search window'));
+    expect(parseWarnings).toHaveLength(1);
+    expect(parseWarnings[0]).toContain('boundary.md');
+  });
+
+  it('a closing delimiter split across the read boundary fails LOUD with the window reason', () => {
+    // Padding sized so `\n---\n` starts at byte 16386 and the 16387-byte read
+    // cuts it mid-delimiter: parse fails, sourceTruncated names the window.
+    const raw = `---\n${'x'.repeat(16382)}\n---\nto: totem-claude\n`;
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-01T0000Z-totem-claude-split.md', to: 'ignored', raw },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(0);
+    const parseWarnings = result.warnings.filter((w) => w.includes('byte search window'));
+    expect(parseWarnings).toHaveLength(1);
+  });
+});
+
+// ─── Send-side dir-derived recipient validation (#2141) ───────────────────
+
+describe('mailSend — workspace-known recipients (mmnto-ai/totem#2141)', () => {
+  it('a dir-registered seat in any workspace repo is a known recipient (no unknown-recipient warning)', () => {
+    const repoRoot = selfRepoRoot();
+    mkDir(path.join(workspace, 'other-repo', '.totem', 'orchestration', 'totem-codex'));
+    const result = mailSend({
+      to: 'totem-codex',
+      subject: 'design review ask',
+      from: 'totem-claude',
+      body: 'ping',
+      repoRoot,
+      workspace,
+      env: {},
+      now: () => new Date('2026-06-12T01:00:00Z'),
+    });
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('an unregistered recipient still warns (advisory, inv6 — the dispatch writes anyway)', () => {
+    const repoRoot = selfRepoRoot();
+    const result = mailSend({
+      to: 'nobody-anywhere',
+      subject: 'typo check',
+      from: 'totem-claude',
+      body: 'ping',
+      repoRoot,
+      workspace,
+      env: {},
+      now: () => new Date('2026-06-12T01:00:00Z'),
+    });
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('nobody-anywhere');
+    expect(fs.existsSync(result.filePath)).toBe(true);
+  });
+});
+
+// ─── Dir-derived self resolution surfaces through the poll (#2141) ────────
+
+describe('pollMail — dir-derived seats (mmnto-ai/totem#2141)', () => {
+  it('mail addressed to a dir-registered seat surfaces with source dirs+map (the totem-codex exhibit)', () => {
+    const repoRoot = selfRepoRoot();
+    mkDir(path.join(repoRoot, '.totem', 'orchestration', 'totem-codex'));
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-06-01T0000Z-totem-codex-hello.md', to: 'totem-codex', subject: 'for codex' },
+    ]);
+    const result = poll();
+    expect(result.selfAgents.source).toBe('dirs+map');
+    expect(result.selfAgents.agents).toContain('totem-codex');
+    expect(result.mail.some((m) => m.subject === 'for codex')).toBe(true);
+  });
+
+  it('the config warn-shape surfaces through the poll warnings stream', () => {
+    const repoRoot = selfRepoRoot();
+    const orchDir = mkDir(path.join(repoRoot, '.totem', 'orchestration'));
+    mkDir(path.join(orchDir, 'totem-codex'));
+    fs.writeFileSync(
+      path.join(orchDir, 'config.json'),
+      JSON.stringify({ host_agents: ['totem-claude'] }),
+      'utf-8',
+    );
+    const result = poll();
+    expect(result.selfAgents.source).toBe('config');
+    expect(result.warnings.some((w) => w.includes('omits present seat dir'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('totem-codex'))).toBe(true);
   });
 });
 
