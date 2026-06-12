@@ -490,6 +490,13 @@ export { mergeRules } from './pack-merge.js';
 export type { SafeExecOptions } from './sys/exec.js';
 export { describeSafeExecError, safeExec } from './sys/exec.js';
 
+// Git-Bash resolution (mmnto-ai/totem#2159 — bare `bash` is never spawned by repo tooling on win32)
+export {
+  _clearBashResolverCacheForTesting,
+  bashSpawnEnv,
+  resolveBash,
+} from './sys/bash-resolver.js';
+
 // Git utilities (pure helpers — no CLI dependencies)
 export {
   extractChangedFiles,

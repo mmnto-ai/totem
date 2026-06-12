@@ -13,6 +13,8 @@ import * as path from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { bashSpawnEnv, resolveBash } from '@mmnto/totem';
+
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const HOOK = path.join(ROOT, '.claude', 'hooks', 'pre-compact.sh');
 const CACHE = path.join(ROOT, '.totem', 'cache');
@@ -47,11 +49,17 @@ function getFreshArtifacts(callStart: number): string[] {
 function runHook(stdin = '', timeoutMs = HOOK_TIMEOUT_MS): RunResult {
   const start = Date.now();
   try {
-    const stdout = execFileSync('bash', [HOOK], {
+    // resolveBash + bashSpawnEnv, never bare 'bash' (mmnto-ai/totem#2159):
+    // outside MSYS/git-hook contexts a bare spawn resolves to WSL's Linux
+    // bash (cannot read D:\... paths), and even the right Git-Bash inherits
+    // a PATH without usr\bin, so the script's grep/tr/sha256sum children
+    // fail — these tests failed 5/5 under plain PowerShell before this.
+    const stdout = execFileSync(resolveBash(), [HOOK], {
       input: stdin,
       encoding: 'utf-8',
       timeout: timeoutMs,
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: bashSpawnEnv(),
     });
     return { stdout, stderr: '', exitCode: 0, durationMs: Date.now() - start };
   } catch (err: unknown) {
@@ -94,7 +102,9 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
   });
 
   it('hook passes bash syntax check', () => {
-    expect(() => execFileSync('bash', ['-n', HOOK], { stdio: 'pipe' })).not.toThrow();
+    expect(() =>
+      execFileSync(resolveBash(), ['-n', HOOK], { stdio: 'pipe', env: bashSpawnEnv() }),
+    ).not.toThrow();
   });
 
   it('installs an EXIT trap that coerces non-zero exits to exit 1', () => {
