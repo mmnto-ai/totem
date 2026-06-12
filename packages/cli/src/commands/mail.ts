@@ -8,9 +8,10 @@
  * unread mail addressed to themselves.
  *
  * SELF_AGENTS resolution flows through `resolveSelfAgents` from
- * `@mmnto/totem` (env > config.json > basename map). Workspace defaults to
- * the parent directory of the calling repo, overridable via the
- * `TOTEM_WORKSPACE` env var or `--workspace` flag.
+ * `@mmnto/totem` (env > config.json > seat dirs ∪ basename map — the dirs ARE
+ * the registration, mmnto-ai/totem#2141). Workspace defaults to the parent
+ * directory of the calling repo, overridable via the `TOTEM_WORKSPACE` env
+ * var or `--workspace` flag.
  *
  * Ports the strategy-side reference implementation
  * (`mmnto-ai/totem-strategy:.claude/hooks/SessionStart.cjs:pollInboundOutboxes`,
@@ -28,12 +29,16 @@ import { isPathSafeAgentId, knownCohortAgents, resolveSelfAgents, TotemError } f
 const TAG = 'Mail';
 
 /**
- * Hard cap on filesystem entries scanned per invocation. Matches the
- * strategy reference impl's MAX_SCAN; balances thoroughness against hook
- * latency. When tripped, the result carries `truncated: true` so the
- * caller can surface the warning instead of silently dropping mail.
+ * Hard cap on unread files OPENED per invocation — the OOM/latency backstop,
+ * not the operating regime (mmnto-ai/totem#2144: the inherited 500 became the
+ * regime once cohort outboxes outgrew it, and the post-cap `to:` filter made
+ * old self-addressed mail silently unreachable). Bounded header reads cap
+ * per-file cost at the header window, so 5000 × ~16KB ≈ 80MB worst-case
+ * (realistic ≈15MB) stays inside session-start hook budget on local disk.
+ * When tripped, the result carries `truncated: true` plus a DIRECTED warning
+ * when anything self-addressed-looking fell beyond the horizon.
  */
-const MAX_SCAN = 500;
+const MAX_SCAN = 5000;
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -57,10 +62,12 @@ export interface MailEntry {
 
 /** Aggregate result of a single poll. */
 export interface MailPollResult {
-  /** Resolution metadata describing how SELF_AGENTS was determined. */
+  /** Resolution metadata describing how SELF_AGENTS was determined. Keep the
+   * union in sync with core's `SelfAgentResolution['source']` (single-source
+   * follow-on noted on mmnto-ai/totem#2141). */
   selfAgents: {
     agents: string[];
-    source: 'env' | 'config' | 'map' | 'none';
+    source: 'env' | 'config' | 'dirs' | 'map' | 'dirs+map' | 'none';
   };
   /** Mail addressed to any SELF_AGENT or to `broadcast`, sorted newest-first. */
   mail: MailEntry[];
@@ -85,6 +92,9 @@ export interface MailCommandOptions {
   repoRoot?: string;
   /** Env override (default: `process.env`). Test injection point. */
   env?: Record<string, string | undefined>;
+  /** Scan cap override (default: `MAX_SCAN`). Test injection point — cap
+   * MECHANICS are exercised with small fixtures instead of 5000-file trees. */
+  maxScan?: number;
 }
 
 // ─── Frontmatter parsing ────────────────────────────────
@@ -131,7 +141,7 @@ type HeaderParse =
  * `to:` is the only frontmatter field required for a file to be eligible
  * mail; a mail-shaped file without it is a reject, not a fallback.
  */
-function parseHeader(content: string): HeaderParse {
+function parseHeader(content: string, sourceTruncated = false): HeaderParse {
   // Defense in depth: real handoffs open with a YAML frontmatter delimiter.
   // Reject anything that doesn't, so a stray .md file in an outbox cannot
   // be coerced into mail.
@@ -155,7 +165,10 @@ function parseHeader(content: string): HeaderParse {
         // The window starts at byte 3 (after the opener), so truncation only
         // actually occurs past 3 + MAX — the window message must not fire for
         // files the window fully covered (Greptile R1 on mmnto-ai/totem#2119).
-        content.length > 3 + MAX_HEADER_SEARCH_BYTES
+        // Under bounded reads `content.length` can never exceed the window, so
+        // the reader threads `sourceTruncated` (file extends past the bytes
+        // read) to keep the window message accurate (codex F3).
+        content.length > 3 + MAX_HEADER_SEARCH_BYTES || sourceTruncated
           ? `no closing --- within the ${MAX_HEADER_SEARCH_BYTES}-byte search window`
           : 'no closing --- delimiter',
     };
@@ -231,6 +244,44 @@ const PRINTABLE_JSON_STRING_SCALAR = /^"(?:[^"\\\p{Cc}]|\\["\\/])*"$/u;
  */
 function unquoteScalar(value: string): string {
   return PRINTABLE_JSON_STRING_SCALAR.test(value) ? (JSON.parse(value) as string) : value;
+}
+
+/**
+ * Bytes read per file when scanning headers: the opener (`---`) plus the
+ * `parseHeader` search window. For ASCII content this reproduces the
+ * whole-file parse byte-for-byte (the window slice sees identical text); for
+ * multi-byte content the decoded window can only be SHORTER than a whole-file
+ * read's, which converts an exotic >window header into the LOUD mail-shaped
+ * warning path — never a silent drop (codex F3, mmnto-ai/totem#2144).
+ */
+const HEADER_READ_BYTES = 3 + MAX_HEADER_SEARCH_BYTES;
+
+/** Bounded header read: content plus the truncation signal for warnings. */
+interface HeaderWindowRead {
+  content: string;
+  /** True iff the file extends past the bytes read (window semantics apply). */
+  sourceTruncated: boolean;
+}
+
+/**
+ * Read at most `HEADER_READ_BYTES` from the head of a file. The byte boundary
+ * lives HERE, not in `parseHeader` string slicing (codex F3) — the caller
+ * threads `sourceTruncated` into the parse-warning path so a no-closing-
+ * delimiter reject names the window when the window is why.
+ */
+function readHeaderWindow(filePath: string): HeaderWindowRead {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(HEADER_READ_BYTES);
+    const bytesRead = fs.readSync(fd, buf, 0, HEADER_READ_BYTES, 0);
+    const size = fs.fstatSync(fd).size;
+    return {
+      content: buf.toString('utf-8', 0, bytesRead),
+      sourceTruncated: size > bytesRead,
+    };
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 /**
@@ -391,6 +442,11 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   const selfLower = new Set(selfResolution.agents.map((a) => a.toLowerCase()));
 
   const warnings: string[] = [];
+  if (selfResolution.warnings !== undefined) {
+    // Resolver diagnostics are Tenet-4 loud by contract (today: the config
+    // warn-shape — host_agents omitting a present seat dir, mmnto-ai/totem#2141).
+    warnings.push(...selfResolution.warnings);
+  }
   if (selfResolution.agents.length === 0) {
     warnings.push(
       `no SELF_AGENT resolved (set TOTEM_SELF_AGENT, add .totem/orchestration/config.json host_agents, or run from a known cohort repo)`,
@@ -404,13 +460,14 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
 
   const slots = enumerateOutboxes(workspace, opts.recursive === true, warnings);
 
-  // Two-pass scan for global newest-first fairness under MAX_SCAN.
+  // Two-pass scan for fairness under MAX_SCAN.
   // Pass 1 (cheap): readdirSync every outbox to collect all unread filenames.
-  // Pass 2 (expensive): sort globally by filename (ISO-timestamp prefix), then
-  // readFileSync only the top MAX_SCAN. Without the global sort, alphabet-early
-  // repos can exhaust the cap before later repos are touched (per GCA review on
-  // mmnto-ai/totem#1971). Pre-collect of cheap reads is faster than the prior
-  // interleaved per-slot loop when truncation actually trips.
+  // Pass 2 (bounded): order self-token-first then global newest-first, and
+  // header-window-read only the top MAX_SCAN. Without the global sort,
+  // alphabet-early repos can exhaust the cap before later repos are touched
+  // (per GCA review on mmnto-ai/totem#1971); without the self-first bucket,
+  // other-recipient volume crowds self mail out of the horizon
+  // (mmnto-ai/totem#2144).
   const unread: Array<{ slot: OutboxSlot; file: string }> = [];
   for (const slot of slots) {
     let files: string[];
@@ -432,25 +489,65 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // sender's outbox).
   unread.sort((a, b) => b.file.localeCompare(a.file));
 
+  // Self-priority bucketing (mmnto-ai/totem#2144): files whose FILENAME
+  // recipient token — matched positionally, immediately after the compact
+  // stamp, so a slug word equal to a seat id cannot mis-bucket — names a
+  // SELF agent or `broadcast` scan first. Everything else (tokenless legacy
+  // names and known-other tokens alike) stays MERGED at the global
+  // newest-first baseline above: under a pre-parse cap, ordering becomes
+  // delivery, so a known-other token must never rank a file WORSE than
+  // today's scan would (codex F2 — a mislabeled filename carrying `to: self`
+  // inside). The token grants priority only; delivery truth stays the parsed
+  // `to:` field.
+  const stampPrefix = /^\d{4}-\d{2}-\d{2}T\d{4}Z-/;
+  const selfTokens = [...selfLower, 'broadcast'];
+  const hasSelfToken = (file: string): boolean => {
+    const stamp = stampPrefix.exec(file);
+    if (stamp === null) return false;
+    const rest = file.slice(stamp[0].length).toLowerCase();
+    return selfTokens.some((token) => rest === `${token}.md` || rest.startsWith(`${token}-`));
+  };
+  const ordered = [
+    ...unread.filter(({ file }) => hasSelfToken(file)),
+    ...unread.filter(({ file }) => !hasSelfToken(file)),
+  ];
+
+  const maxScan = opts.maxScan ?? MAX_SCAN;
   let scanned = 0;
   let truncated = false;
-  if (unread.length > MAX_SCAN) {
+  if (ordered.length > maxScan) {
     truncated = true;
+    // Directed truncation warning (Tenet 4): the dropped tail is checked by
+    // FILENAME (zero I/O) for self/broadcast tokens. Self-token files sort
+    // first, so any landing here means self-priority volume alone exceeded
+    // the cap — name them explicitly instead of hiding behind the generic
+    // truncation line.
+    const droppedSelf = ordered
+      .slice(maxScan)
+      .filter(({ file }) => hasSelfToken(file))
+      .map(({ slot, file }) => `${slot.repo}/${slot.agent}/${file}`);
+    if (droppedSelf.length > 0) {
+      const shown = droppedSelf.slice(0, 5);
+      if (droppedSelf.length > shown.length) {
+        shown.push(`(+${droppedSelf.length - shown.length} more)`);
+      }
+      warnings.push(`possible self-addressed mail beyond the scan horizon: ${shown.join(', ')}`);
+    }
   }
 
   const mail: MailEntry[] = [];
-  const inScope = unread.length > MAX_SCAN ? unread.slice(0, MAX_SCAN) : unread;
+  const inScope = ordered.length > maxScan ? ordered.slice(0, maxScan) : ordered;
   for (const { slot, file } of inScope) {
     scanned += 1;
-    let content: string;
+    let headerWindow: HeaderWindowRead;
     try {
-      content = fs.readFileSync(path.join(slot.outbox, file), 'utf-8');
-      // totem-context: intentional cleanup — per-file readFileSync failure emits a structured warning and skips that file; mail surfacing must degrade gracefully on a single unreadable handoff (mid-write race or transient FS hiccup).
+      headerWindow = readHeaderWindow(path.join(slot.outbox, file));
+      // totem-context: intentional cleanup — per-file read failure emits a structured warning and skips that file; mail surfacing must degrade gracefully on a single unreadable handoff (mid-write race or transient FS hiccup).
     } catch (err) {
       warnings.push(`mail read failed (${slot.repo}/${slot.agent}/${file}): ${String(err)}`);
       continue;
     }
-    const parsed = parseHeader(content);
+    const parsed = parseHeader(headerWindow.content, headerWindow.sourceTruncated);
     if (!parsed.ok) {
       // Tenet 4 parity with the readFileSync path above: a mail-shaped file
       // that fails to parse is the silent-drop hazard (mmnto-ai/totem#2118 —
@@ -609,6 +706,13 @@ export interface MailSendOptions {
   expectedAction?: string;
   /** Filename slug override; default derived from the subject. */
   slug?: string;
+  /**
+   * Workspace for dir-derived known-recipient validation (default:
+   * `TOTEM_WORKSPACE` env, else parent of repoRoot — the same resolution as
+   * `pollMail`). Advisory only (inv6): widens the known set so a
+   * dir-registered seat is not warned as unknown (mmnto-ai/totem#2141).
+   */
+  workspace?: string;
   /** Repo root (default: cwd). Test injection point. */
   repoRoot?: string;
   /** Env override (default: process.env). Test injection point. */
@@ -888,7 +992,16 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
     ...(opts.related !== undefined && opts.related.length > 0 ? { related: opts.related } : {}),
   };
 
-  const warnings = validateDispatchContent(header, opts.knownAgents ?? knownCohortAgents());
+  // Workspace-aware known set: a seat registered by its orchestration dir in
+  // ANY workspace repo is a known recipient (mmnto-ai/totem#2141) — same
+  // workspace resolution as `pollMail`, validation stays advisory (inv6).
+  const workspace = path.resolve(
+    opts.workspace ?? env['TOTEM_WORKSPACE'] ?? path.dirname(repoRoot),
+  );
+  const warnings = validateDispatchContent(
+    header,
+    opts.knownAgents ?? knownCohortAgents(workspace),
+  );
 
   const outboxDir = path.join(repoRoot, '.totem', 'orchestration', from, 'outbox');
   try {

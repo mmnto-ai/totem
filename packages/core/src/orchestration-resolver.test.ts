@@ -546,3 +546,152 @@ describe('knownCohortAgents — single-source recipient set', () => {
     }
   });
 });
+
+// ─── resolveSelfAgents — seat dirs (mmnto-ai/totem#2141) ───────────────────
+
+describe('resolveSelfAgents — seat dirs (mmnto-ai/totem#2141)', () => {
+  it('a BARE seat dir registers the seat with zero config/map presence (repo+1 zero surfaces)', () => {
+    // The totem-codex exhibit: unknown basename, no config, no subdirs — the
+    // directory alone IS the registration (design Q3: requiring subdirs would
+    // re-introduce a provisioning step).
+    const unknownRoot = mkDir(path.join(tmpRoot, 'some-third-party-repo'));
+    mkDir(path.join(unknownRoot, '.totem', 'orchestration', 'totem-codex'));
+    const result = resolveSelfAgents(unknownRoot, {});
+    expect(result.source).toBe('dirs');
+    expect(result.agents).toEqual(['totem-codex']);
+  });
+
+  it('unions dirs with the basename map — a map sibling without a dir stays visible (partial-dir clone)', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    mkDir(path.join(totemRoot, '.totem', 'orchestration', 'totem-codex'));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('dirs+map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-codex', 'totem-gemini']);
+  });
+
+  it("reports source 'dirs' when the map contributes nothing novel", () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    mkOrchestrationTree(totemRoot, 'totem-claude', 'all');
+    mkOrchestrationTree(totemRoot, 'totem-gemini', ['outbox']);
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('dirs');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('falls back to the map when the orchestration dir exists but holds no seat dirs', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    mkDir(path.join(totemRoot, '.totem', 'orchestration'));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('env still shadows the dirs layer entirely', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    mkDir(path.join(totemRoot, '.totem', 'orchestration', 'totem-codex'));
+    const result = resolveSelfAgents(totemRoot, { TOTEM_SELF_AGENT: 'env-agent' });
+    expect(result.source).toBe('env');
+    expect(result.agents).toEqual(['env-agent']);
+  });
+
+  it('excludes dot/underscore-prefixed, unsafe-named, and file (non-dir) entries from the dirs layer', () => {
+    const unknownRoot = mkDir(path.join(tmpRoot, 'plain-repo'));
+    const orchDir = mkDir(path.join(unknownRoot, '.totem', 'orchestration'));
+    mkDir(path.join(orchDir, 'real-seat'));
+    mkDir(path.join(orchDir, '_broadcast'));
+    mkDir(path.join(orchDir, '.hidden'));
+    mkDir(path.join(orchDir, 'two words'));
+    // totem-context: test fixture only — config.json here is a stray FILE proving the isDirectory filter, not a host_agents override (it would have to parse to matter, and the dirs-layer test wants it ignored).
+    fs.writeFileSync(path.join(orchDir, 'stray-file.md'), '');
+    const result = resolveSelfAgents(unknownRoot, {});
+    expect(result.source).toBe('dirs');
+    expect(result.agents).toEqual(['real-seat']);
+  });
+
+  it('resolver purity: a seat dir created between two calls is visible to the second (no caching)', () => {
+    const unknownRoot = mkDir(path.join(tmpRoot, 'plain-repo'));
+    mkDir(path.join(unknownRoot, '.totem', 'orchestration', 'first-seat'));
+    const before = resolveSelfAgents(unknownRoot, {});
+    expect(before.agents).toEqual(['first-seat']);
+    mkDir(path.join(unknownRoot, '.totem', 'orchestration', 'second-seat'));
+    const after = resolveSelfAgents(unknownRoot, {});
+    expect(after.agents).toEqual(['first-seat', 'second-seat']);
+  });
+});
+
+// ─── resolveSelfAgents — config warn-shape (mmnto-ai/totem#2141) ───────────
+
+describe('resolveSelfAgents — config warn-shape (mmnto-ai/totem#2141)', () => {
+  it('config keeps replace semantics but WARNS when it omits a present seat dir, naming the seat', () => {
+    // The silent-unbind class: totem-codex is dir-registered, config hides it
+    // from mail while totem-status's additive display still shows it bound.
+    // Replace semantics are the shipped contract; the suppression must be loud.
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: ['totem-claude'] }));
+    mkDir(path.join(totemRoot, '.totem', 'orchestration', 'totem-codex'));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('config');
+    expect(result.agents).toEqual(['totem-claude']);
+    expect(result.warnings).toBeDefined();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings![0]).toContain('totem-codex');
+  });
+
+  it('config covering every present seat dir carries no warnings', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: ['totem-claude', 'totem-codex'] }));
+    mkDir(path.join(totemRoot, '.totem', 'orchestration', 'totem-codex'));
+    mkOrchestrationTree(totemRoot, 'totem-claude', 'all');
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('config');
+    expect(result.warnings).toBeUndefined();
+  });
+
+  it('config with no seat dirs present carries no warnings (nothing omitted)', () => {
+    const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    writeConfig(totemRoot, JSON.stringify({ host_agents: ['custom-claude'] }));
+    const result = resolveSelfAgents(totemRoot, {});
+    expect(result.source).toBe('config');
+    expect(result.agents).toEqual(['custom-claude']);
+    expect(result.warnings).toBeUndefined();
+  });
+});
+
+// ─── knownCohortAgents — workspace discovery (mmnto-ai/totem#2141) ─────────
+
+describe('knownCohortAgents — workspace discovery (mmnto-ai/totem#2141)', () => {
+  it('zero-arg stays exactly the legacy map flatten (no dir contributions)', () => {
+    mkDir(path.join(tmpRoot, 'any-repo', '.totem', 'orchestration', 'totem-codex'));
+    const agents = knownCohortAgents();
+    expect(agents).not.toContain('totem-codex');
+  });
+
+  it('with workspace, a dir-registered seat in ANY immediate repo is known (union with the map)', () => {
+    mkDir(path.join(tmpRoot, 'any-repo', '.totem', 'orchestration', 'totem-codex'));
+    const agents = knownCohortAgents(tmpRoot);
+    expect(agents).toContain('totem-codex');
+    expect(agents).toContain('totem-claude');
+    expect(agents).toContain('strategy-claude');
+    // Sorted + deduplicated contract.
+    expect(agents).toEqual([...new Set(agents)].sort());
+  });
+
+  it('traversal stays one-level: a nested repo two levels down is NOT discovered (codex F4)', () => {
+    mkDir(path.join(tmpRoot, 'wrapper', 'nested-repo', '.totem', 'orchestration', 'deep-seat'));
+    const agents = knownCohortAgents(tmpRoot);
+    expect(agents).not.toContain('deep-seat');
+  });
+
+  it('skips dot-prefixed and node_modules workspace entries', () => {
+    mkDir(path.join(tmpRoot, '.hidden-repo', '.totem', 'orchestration', 'hidden-seat'));
+    mkDir(path.join(tmpRoot, 'node_modules', '.totem', 'orchestration', 'module-seat'));
+    const agents = knownCohortAgents(tmpRoot);
+    expect(agents).not.toContain('hidden-seat');
+    expect(agents).not.toContain('module-seat');
+  });
+
+  it('degrades to the map flatten when the workspace is unreadable (inv6 — advisory only)', () => {
+    const agents = knownCohortAgents(path.join(tmpRoot, 'does-not-exist'));
+    expect(agents).toEqual([...knownCohortAgents()].sort());
+  });
+});

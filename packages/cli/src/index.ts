@@ -787,6 +787,10 @@ mailCmd
   .option('--related <refs...>', 'related-issues: frontmatter refs')
   .option('--expected-action <text>', 'expected-action: frontmatter (default: none)')
   .option('--slug <slug>', 'Filename slug override (default: derived from subject)')
+  .option(
+    '--workspace <path>',
+    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
+  )
   .action(
     async (opts: {
       to: string;
@@ -798,6 +802,7 @@ mailCmd
       related?: string[];
       expectedAction?: string;
       slug?: string;
+      workspace?: string;
     }) => {
       try {
         const { mailSend, mailSendCommand } = await import('./commands/mail.js');
@@ -821,6 +826,10 @@ mailCmd
   .option('--priority <level>', 'priority: frontmatter value')
   .option('--related <refs...>', 'related-issues: frontmatter refs')
   .option('--expected-action <text>', 'expected-action: frontmatter (default: none)')
+  .option(
+    '--workspace <path>',
+    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
+  )
   .action(
     async (
       source: string,
@@ -832,6 +841,7 @@ mailCmd
         priority?: string;
         related?: string[];
         expectedAction?: string;
+        workspace?: string;
       },
     ) => {
       try {
