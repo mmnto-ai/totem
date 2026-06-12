@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { bashSpawnEnv, resolveBash } from '@mmnto/totem';
+
 import { writeReviewedContentHash } from './shield.js';
 
 // Resolve the bash hook script relative to the repo root so the test is
@@ -47,10 +49,16 @@ function gitCommitAll(cwd: string): void {
 }
 
 function runBashHook(cwd: string): string {
-  const out = execFileSync('bash', [HOOK_PATH], {
+  // resolveBash + bashSpawnEnv, never bare 'bash' (mmnto-ai/totem#2159):
+  // outside MSYS/git-hook contexts a bare spawn resolves to WSL's Linux bash
+  // (cannot read D:\... paths), and even the right Git-Bash inherits a PATH
+  // without usr\bin, so the script's grep/tr/sha256sum children fail — this
+  // parity suite failed 5/5 under plain PowerShell before.
+  const out = execFileSync(resolveBash(), [HOOK_PATH], {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf-8',
+    env: bashSpawnEnv(),
   });
   return out.trim();
 }

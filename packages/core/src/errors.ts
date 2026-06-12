@@ -40,7 +40,8 @@ export type TotemErrorCode =
   | 'CLAIM_DISCIPLINE_FAILED'
   | 'GATE_INVALID'
   | 'PARITY_DRIFT_DETECTED'
-  | 'MAIL_SEND_FAILED';
+  | 'MAIL_SEND_FAILED'
+  | 'BASH_RESOLUTION_FAILED';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;
