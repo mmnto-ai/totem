@@ -102,6 +102,20 @@ describe('resolveBash — conventional fallback (win32)', () => {
     vi.mocked(fs.existsSync).mockImplementation((p) => p === CONVENTIONAL_USR_BASH);
     expect(resolveBash()).toBe(CONVENTIONAL_USR_BASH);
   });
+
+  it('routes anomalous exec-path output (empty / relative) to the conventional probes (GCA #2162)', () => {
+    // Without the guard, path.resolve('') would derive the Git root from the
+    // CWD — a wrong-state class. Anomalies must behave like a failing git.
+    vi.mocked(os.platform).mockReturnValue('win32');
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === CONVENTIONAL_USR_BASH);
+
+    vi.mocked(safeExec).mockReturnValue('');
+    expect(resolveBash()).toBe(CONVENTIONAL_USR_BASH);
+
+    _clearBashResolverCacheForTesting();
+    vi.mocked(safeExec).mockReturnValue('relative/libexec/git-core');
+    expect(resolveBash()).toBe(CONVENTIONAL_USR_BASH);
+  });
 });
 
 describe('resolveBash — hard failure (win32, the no-bare-bash contract)', () => {

@@ -28,14 +28,20 @@ import * as path from 'node:path';
 import { TotemError } from '../errors.js';
 import { safeExec } from './exec.js';
 
+/** The memoized resolution: the bash to spawn + the Git root it came from. */
+interface ResolvedBash {
+  bash: string;
+  /** Git-for-Windows install root; null on POSIX (no tree to remember). */
+  root: string | null;
+}
+
 /**
  * Process-lifetime memo of an effectively immutable host fact (Git's install
  * root does not move mid-process). `git --exec-path` shells out, and
  * bash-spawning test helpers call the resolver per spawn — without the memo
- * a test file would pay the subprocess cost on every assertion. `root` is
- * null on POSIX (no Git-for-Windows tree to remember).
+ * a test file would pay the subprocess cost on every assertion.
  */
-let cached: { bash: string; root: string | null } | null = null;
+let cached: ResolvedBash | null = null;
 
 /** Conventional Git-for-Windows install roots probed when `git` itself is unavailable. */
 const CONVENTIONAL_GIT_ROOTS: readonly string[] = ['C:\\Program Files\\Git'];
@@ -46,17 +52,17 @@ function bashCandidatesUnder(gitRoot: string): string[] {
 }
 
 /**
- * Resolve the bash executable repo tooling must spawn. Returns `'bash'` on
- * POSIX (no subprocess spent); on win32 returns an absolute Git-Bash path or
- * throws `BASH_RESOLUTION_FAILED` — never the literal `'bash'`.
+ * Resolve and memoize. Always returns a non-null `ResolvedBash` or throws —
+ * both public surfaces consume this, so neither needs an unreachable
+ * null-narrowing branch (CR on mmnto-ai/totem#2162).
  */
-export function resolveBash(): string {
+function resolveCached(): ResolvedBash {
   if (cached !== null) {
-    return cached.bash;
+    return cached;
   }
   if (os.platform() !== 'win32') {
     cached = { bash: 'bash', root: null };
-    return cached.bash;
+    return cached;
   }
 
   const probed: string[] = [];
@@ -67,13 +73,21 @@ export function resolveBash(): string {
   // normalizes the mixed forward/backslash output Git emits on Windows.
   // totem-context: intentional cleanup — a missing/failing `git` here is the routine fall-to-conventional-probes signal, and the probe chain ends in a HARD TotemError below; nothing degrades silently.
   try {
+    // `safeExec` auto-trims trailing whitespace by default (the documented
+    // exec.ts contract), so the trailing-newline class cannot reach
+    // `path.resolve` (CR on mmnto-ai/totem#2162). The guard below covers the
+    // residual anomaly class — empty or relative output from an exotic git
+    // shim — by routing it to the conventional probes (GCA, same PR):
+    // `path.resolve('')` would otherwise derive the root from the CWD.
     const execPath = safeExec('git', ['--exec-path']);
-    const gitRoot = path.resolve(execPath, '..', '..', '..');
-    for (const candidate of bashCandidatesUnder(gitRoot)) {
-      probed.push(candidate);
-      if (fs.existsSync(candidate)) {
-        cached = { bash: candidate, root: gitRoot };
-        return cached.bash;
+    if (execPath.length > 0 && path.isAbsolute(execPath)) {
+      const gitRoot = path.resolve(execPath, '..', '..', '..');
+      for (const candidate of bashCandidatesUnder(gitRoot)) {
+        probed.push(candidate);
+        if (fs.existsSync(candidate)) {
+          cached = { bash: candidate, root: gitRoot };
+          return cached;
+        }
       }
     }
     // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
@@ -86,7 +100,7 @@ export function resolveBash(): string {
       probed.push(candidate);
       if (fs.existsSync(candidate)) {
         cached = { bash: candidate, root };
-        return cached.bash;
+        return cached;
       }
     }
   }
@@ -96,6 +110,15 @@ export function resolveBash(): string {
     `no Git-Bash found on win32 (probed: ${probed.join(', ')})`,
     'install Git for Windows (its usr\\bin\\bash.exe is the required bash) — bare `bash` resolves to WSL on this host and cannot read Windows paths (mmnto-ai/totem#2159).',
   );
+}
+
+/**
+ * Resolve the bash executable repo tooling must spawn. Returns `'bash'` on
+ * POSIX (no subprocess spent); on win32 returns an absolute Git-Bash path or
+ * throws `BASH_RESOLUTION_FAILED` — never the literal `'bash'`.
+ */
+export function resolveBash(): string {
+  return resolveCached().bash;
 }
 
 /**
@@ -113,11 +136,11 @@ export function resolveBash(): string {
  * `PATH` spelling alongside an inherited `Path` is undefined behavior).
  */
 export function bashSpawnEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  resolveBash();
-  if (cached === null || cached.root === null) {
+  const { root } = resolveCached();
+  if (root === null) {
     return base;
   }
-  const segments = [path.join(cached.root, 'usr', 'bin'), path.join(cached.root, 'bin')];
+  const segments = [path.join(root, 'usr', 'bin'), path.join(root, 'bin')];
   const pathKey = Object.keys(base).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
   const current = base[pathKey];
   if (current !== undefined && current.length > 0) {
@@ -130,6 +153,8 @@ export function bashSpawnEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Proc
  * Reset the module memo so unit tests can exercise every resolution branch
  * without cross-test bleed. Test-only by convention (underscore prefix);
  * production callers have no reason to clear an immutable host fact.
+ *
+ * @internal
  */
 export function _clearBashResolverCacheForTesting(): void {
   cached = null;
