@@ -22,7 +22,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { isPathSafeAgentId, knownCohortAgents, resolveSelfAgents, TotemError } from '@mmnto/totem';
+import {
+  isPathSafeAgentId,
+  knownCohortAgents,
+  resolveSelfAgents,
+  type SelfAgentResolution,
+  TotemError,
+} from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -62,12 +68,13 @@ export interface MailEntry {
 
 /** Aggregate result of a single poll. */
 export interface MailPollResult {
-  /** Resolution metadata describing how SELF_AGENTS was determined. Keep the
-   * union in sync with core's `SelfAgentResolution['source']` (single-source
-   * follow-on noted on mmnto-ai/totem#2141). */
+  /** Resolution metadata describing how SELF_AGENTS was determined. `source`
+   * is single-sourced from core's `SelfAgentResolution` (Greptile P2 on
+   * mmnto-ai/totem#2160 — a manual copy would compile-error in the wrong
+   * place if core ever narrowed a literal). */
   selfAgents: {
     agents: string[];
-    source: 'env' | 'config' | 'dirs' | 'map' | 'dirs+map' | 'none';
+    source: SelfAgentResolution['source'];
   };
   /** Mail addressed to any SELF_AGENT or to `broadcast`, sorted newest-first. */
   mail: MailEntry[];
@@ -272,12 +279,15 @@ interface HeaderWindowRead {
 function readHeaderWindow(filePath: string): HeaderWindowRead {
   const fd = fs.openSync(filePath, 'r');
   try {
-    const buf = Buffer.alloc(HEADER_READ_BYTES);
-    const bytesRead = fs.readSync(fd, buf, 0, HEADER_READ_BYTES, 0);
-    const size = fs.fstatSync(fd).size;
+    // Sentinel read (+1 byte, never decoded): `bytesRead > HEADER_READ_BYTES`
+    // IS the past-the-window signal — equivalent to the fstat-size check
+    // (bytesRead = N+1 ⟺ size > N) at one fewer syscall per scanned file,
+    // which matters at the 5000-file cap (Greptile P2, mmnto-ai/totem#2160).
+    const buf = Buffer.alloc(HEADER_READ_BYTES + 1);
+    const bytesRead = fs.readSync(fd, buf, 0, HEADER_READ_BYTES + 1, 0);
     return {
-      content: buf.toString('utf-8', 0, bytesRead),
-      sourceTruncated: size > bytesRead,
+      content: buf.toString('utf-8', 0, Math.min(bytesRead, HEADER_READ_BYTES)),
+      sourceTruncated: bytesRead > HEADER_READ_BYTES,
     };
   } finally {
     fs.closeSync(fd);

@@ -199,8 +199,9 @@ function readSeatDirs(repoRoot: string): string[] {
 }
 
 /**
- * Known cohort agent-ids. Zero-arg: exactly the legacy `COHORT_AGENT_MAP`
- * flatten (back-compat — one source of truth for the pre-known roster). With
+ * Known cohort agent-ids, sorted. Zero-arg: the `COHORT_AGENT_MAP` flatten
+ * (one source of truth for the pre-known roster — sorted so both call shapes
+ * share one ordering contract, CR on mmnto-ai/totem#2160). With
  * `workspace`: the map UNION every seat directory registered in any immediate
  * workspace repo (`<workspace>/<repo>/.totem/orchestration/<seat>/`), so a
  * dir-registered seat (e.g. totem-codex) is a known recipient with zero
@@ -216,7 +217,7 @@ function readSeatDirs(repoRoot: string): string[] {
 export function knownCohortAgents(workspace?: string): string[] {
   const fromMap = Object.values(COHORT_AGENT_MAP).flat();
   if (workspace === undefined) {
-    return fromMap;
+    return [...fromMap].sort();
   }
   const known = new Set(fromMap);
   const resolvedWorkspace = path.resolve(workspace);
