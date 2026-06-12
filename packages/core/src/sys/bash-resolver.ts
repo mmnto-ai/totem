@@ -117,11 +117,13 @@ export function bashSpawnEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Proc
   if (cached === null || cached.root === null) {
     return base;
   }
-  const prepend = [path.join(cached.root, 'usr', 'bin'), path.join(cached.root, 'bin')];
+  const segments = [path.join(cached.root, 'usr', 'bin'), path.join(cached.root, 'bin')];
   const pathKey = Object.keys(base).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
   const current = base[pathKey];
-  const tail = current !== undefined && current.length > 0 ? `${path.delimiter}${current}` : '';
-  return { ...base, [pathKey]: `${prepend.join(path.delimiter)}${tail}` };
+  if (current !== undefined && current.length > 0) {
+    segments.push(current);
+  }
+  return { ...base, [pathKey]: segments.join(path.delimiter) };
 }
 
 /**

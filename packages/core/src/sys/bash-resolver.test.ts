@@ -154,10 +154,12 @@ describe('bashSpawnEnv — child PATH for the spawned bash (#2159 second layer)'
     vi.mocked(fs.existsSync).mockImplementation((p) => p === USR_BASH);
 
     const env = bashSpawnEnv({ PATH: 'C:\\Windows\\system32' });
-    const expectedPrefix = [path.join(GIT_ROOT, 'usr', 'bin'), path.join(GIT_ROOT, 'bin')].join(
-      path.delimiter,
-    );
-    expect(env['PATH']).toBe(`${expectedPrefix}${path.delimiter}C:\\Windows\\system32`);
+    const expected = [
+      path.join(GIT_ROOT, 'usr', 'bin'),
+      path.join(GIT_ROOT, 'bin'),
+      'C:\\Windows\\system32',
+    ].join(path.delimiter);
+    expect(env['PATH']).toBe(expected);
   });
 
   it("preserves the inherited PATH key's casing (no second spelling introduced)", () => {
