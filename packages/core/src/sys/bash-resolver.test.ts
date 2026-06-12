@@ -31,10 +31,14 @@ vi.mock('./exec.js', async (importOriginal) => {
   return { ...actual, safeExec: vi.fn(actual.safeExec) };
 });
 
-const GIT_ROOT = path.resolve('D:/Git');
-const USR_BASH = path.join(GIT_ROOT, 'usr', 'bin', 'bash.exe');
-const BIN_BASH = path.join(GIT_ROOT, 'bin', 'bash.exe');
-const CONVENTIONAL_USR_BASH = path.join('C:\\Program Files\\Git', 'usr', 'bin', 'bash.exe');
+// path.win32 throughout: these fixtures describe WINDOWS paths while the
+// suite runs on any host (POSIX CI runners' ambient `path` flavor neither
+// recognizes drive-letters as absolute nor joins with backslashes — the
+// class the ubuntu/macos runners caught on mmnto-ai/totem#2162).
+const GIT_ROOT = path.win32.resolve('D:/Git');
+const USR_BASH = path.win32.join(GIT_ROOT, 'usr', 'bin', 'bash.exe');
+const BIN_BASH = path.win32.join(GIT_ROOT, 'bin', 'bash.exe');
+const CONVENTIONAL_USR_BASH = path.win32.join('C:\\Program Files\\Git', 'usr', 'bin', 'bash.exe');
 
 beforeEach(() => {
   _clearBashResolverCacheForTesting();
@@ -169,10 +173,10 @@ describe('bashSpawnEnv — child PATH for the spawned bash (#2159 second layer)'
 
     const env = bashSpawnEnv({ PATH: 'C:\\Windows\\system32' });
     const expected = [
-      path.join(GIT_ROOT, 'usr', 'bin'),
-      path.join(GIT_ROOT, 'bin'),
+      path.win32.join(GIT_ROOT, 'usr', 'bin'),
+      path.win32.join(GIT_ROOT, 'bin'),
       'C:\\Windows\\system32',
-    ].join(path.delimiter);
+    ].join(path.win32.delimiter);
     expect(env['PATH']).toBe(expected);
   });
 
@@ -182,7 +186,7 @@ describe('bashSpawnEnv — child PATH for the spawned bash (#2159 second layer)'
     vi.mocked(fs.existsSync).mockImplementation((p) => p === USR_BASH);
 
     const env = bashSpawnEnv({ Path: 'C:\\Windows\\system32', FOO: 'bar' });
-    expect(env['Path']).toContain(path.join(GIT_ROOT, 'usr', 'bin'));
+    expect(env['Path']).toContain(path.win32.join(GIT_ROOT, 'usr', 'bin'));
     expect(Object.keys(env).filter((k) => k.toUpperCase() === 'PATH')).toEqual(['Path']);
     expect(env['FOO']).toBe('bar');
   });
@@ -194,7 +198,9 @@ describe('bashSpawnEnv — child PATH for the spawned bash (#2159 second layer)'
 
     const env = bashSpawnEnv({});
     expect(env['PATH']).toBe(
-      [path.join(GIT_ROOT, 'usr', 'bin'), path.join(GIT_ROOT, 'bin')].join(path.delimiter),
+      [path.win32.join(GIT_ROOT, 'usr', 'bin'), path.win32.join(GIT_ROOT, 'bin')].join(
+        path.win32.delimiter,
+      ),
     );
   });
 });

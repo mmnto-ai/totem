@@ -46,9 +46,18 @@ let cached: ResolvedBash | null = null;
 /** Conventional Git-for-Windows install roots probed when `git` itself is unavailable. */
 const CONVENTIONAL_GIT_ROOTS: readonly string[] = ['C:\\Program Files\\Git'];
 
-/** The two bash locations inside a Git-for-Windows root, preferred first. */
+/**
+ * The two bash locations inside a Git-for-Windows root, preferred first.
+ * `path.win32` explicitly: this branch composes WINDOWS paths by definition,
+ * and the unit tests mock `os.platform()` from POSIX CI hosts where the
+ * ambient `path` flavor would silently build mixed-separator paths (the
+ * exact class the ubuntu/macos runners caught on mmnto-ai/totem#2162).
+ */
 function bashCandidatesUnder(gitRoot: string): string[] {
-  return [path.join(gitRoot, 'usr', 'bin', 'bash.exe'), path.join(gitRoot, 'bin', 'bash.exe')];
+  return [
+    path.win32.join(gitRoot, 'usr', 'bin', 'bash.exe'),
+    path.win32.join(gitRoot, 'bin', 'bash.exe'),
+  ];
 }
 
 /**
@@ -80,8 +89,8 @@ function resolveCached(): ResolvedBash {
     // shim — by routing it to the conventional probes (GCA, same PR):
     // `path.resolve('')` would otherwise derive the root from the CWD.
     const execPath = safeExec('git', ['--exec-path']);
-    if (execPath.length > 0 && path.isAbsolute(execPath)) {
-      const gitRoot = path.resolve(execPath, '..', '..', '..');
+    if (execPath.length > 0 && path.win32.isAbsolute(execPath)) {
+      const gitRoot = path.win32.resolve(execPath, '..', '..', '..');
       for (const candidate of bashCandidatesUnder(gitRoot)) {
         probed.push(candidate);
         if (fs.existsSync(candidate)) {
@@ -140,13 +149,16 @@ export function bashSpawnEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Proc
   if (root === null) {
     return base;
   }
-  const segments = [path.join(root, 'usr', 'bin'), path.join(root, 'bin')];
+  // root non-null ⟹ win32 resolution: compose a WINDOWS PATH value
+  // (`path.win32` flavor + `;` delimiter) regardless of the host running
+  // this code — see bashCandidatesUnder.
+  const segments = [path.win32.join(root, 'usr', 'bin'), path.win32.join(root, 'bin')];
   const pathKey = Object.keys(base).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
   const current = base[pathKey];
   if (current !== undefined && current.length > 0) {
     segments.push(current);
   }
-  return { ...base, [pathKey]: segments.join(path.delimiter) };
+  return { ...base, [pathKey]: segments.join(path.win32.delimiter) };
 }
 
 /**
