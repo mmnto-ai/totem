@@ -1,5 +1,12 @@
 # @mmnto/cli
 
+## 1.61.0
+
+### Patch Changes
+
+- Updated dependencies [b5f0bf5]
+  - @mmnto/totem@1.61.0
+
 ## 1.60.0
 
 ### Minor Changes
