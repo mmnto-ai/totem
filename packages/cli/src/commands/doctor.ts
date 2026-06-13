@@ -1686,6 +1686,8 @@ export async function checkFreezes(cwd: string, totemDir = '.totem'): Promise<Di
   try {
     const { readEffectiveFreezes } = await import('@mmnto/totem');
     const { DOCTRINE_PIN_PACKAGE } = await import('./init-doctrine.js');
+    // No await: readEffectiveFreezes is synchronous — the async signature
+    // exists for the dynamic imports above (CR mmnto-ai/totem#2168 nit).
     const result = readEffectiveFreezes(cwd, path.join(cwd, totemDir), DOCTRINE_PIN_PACKAGE);
 
     const channel = ((): string => {

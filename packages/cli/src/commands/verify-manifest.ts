@@ -115,7 +115,12 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
         freezeMatch.provenance === 'cohort'
           ? `cohort freeze via ${DOCTRINE_PIN_PACKAGE}@${freezeMatch.sourceVersion ?? '?'}`
           : 'local freeze';
-      log.warn(TAG, 'Input hash mismatch — lessons changed since last compile.');
+      // Full mismatch detail (expected/actual hashes) rides the warn path too —
+      // the downgraded trace must be as diagnosable as the blocking one
+      // (Greptile mmnto-ai/totem#2168: no second run needed to see which hash moved).
+      for (const msg of mismatches) {
+        log.warn(TAG, msg);
+      }
       log.warn(
         TAG,
         `Lesson-only staleness downgraded to WARN: "${freezeMatch.entry.subsystem}" is frozen (${source}) — push proceeds with NO compile invocation while the freeze stands.`,
@@ -245,7 +250,12 @@ async function consultRuleCompilationFreeze(args: {
     const { DOCTRINE_PIN_PACKAGE } = await import('./init-doctrine.js');
     const result = readEffectiveFreezes(args.cwd, args.totemDir, DOCTRINE_PIN_PACKAGE);
     for (const w of result.warnings) args.warn(w);
-    return result.entries.find((f) => f.entry.id === RULE_COMPILATION_FREEZE_ID);
+    const matches = result.entries.filter((f) => f.entry.id === RULE_COMPILATION_FREEZE_ID);
+    // Cohort-first naming: when BOTH a local and a cohort rule-compilation
+    // freeze are active (possible once the strategy-side emit lands), the
+    // verdict is identical either way, but the logged source/tracking ref
+    // should canonically name the cohort hold (CR mmnto-ai/totem#2168 F2 — log quality).
+    return matches.find((f) => f.provenance === 'cohort') ?? matches[0];
     // totem-context: consult failure degrades to no-freeze-visible — the staleness gate stays blocking (conservative); never a silent pass
   } catch (err) {
     args.warn(

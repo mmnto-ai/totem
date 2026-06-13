@@ -163,8 +163,12 @@ export function readCohortFreezes(cwd: string, packageName: string): CohortFreez
 
   let packageVersion: string | undefined;
   try {
-    const pkg = readJsonSafe<{ version?: unknown }>(path.join(pkgDir, 'package.json'));
-    if (typeof pkg.version === 'string') packageVersion = pkg.version;
+    // `| null` is honest typing: a package.json containing literal `null` is
+    // valid JSON, and readJsonSafe returns it as-is (failures THROW
+    // TotemParseError — it never returns undefined). The guard keeps that
+    // edge on the explicit path instead of riding the catch (GCA mmnto-ai/totem#2168).
+    const pkg = readJsonSafe<{ version?: unknown } | null>(path.join(pkgDir, 'package.json'));
+    if (pkg && typeof pkg.version === 'string') packageVersion = pkg.version;
     // totem-context: unreadable/odd snapshot package.json is non-fatal — provenance renders without a version, the freeze read proceeds
   } catch {
     warnings.push(`${packageName}/package.json unreadable — provenance version unavailable.`);
@@ -244,6 +248,13 @@ export interface EffectiveFreezeResult {
  * No dedup, no demotion: a subsystem frozen both locally and cohort-wide
  * yields two entries with distinct provenance. The LOCAL read keeps its
  * fail-closed contract — a corrupt local freeze file still THROWS.
+ *
+ * @param cwd - Repo root; anchors the upward `node_modules` walk for the
+ *   cohort read.
+ * @param totemDir - Absolute path to the `.totem` directory (NOT the repo
+ *   root) — passed straight to `readFreezeConfig`'s path join.
+ * @param packageName - Doctrine snapshot package to resolve (caller-injected;
+ *   core stays cohort-agnostic).
  */
 export function readEffectiveFreezes(
   cwd: string,

@@ -69,6 +69,10 @@ export interface OrientParkedEntry {
  * absent-file / corrupt / genuinely-none must never flatten into "none").
  * `underivable` = the effective read threw before the cohort read completed
  * (e.g. corrupt LOCAL freeze.json — see the parked section's error envelope).
+ * `underivable` is a CLI-ONLY extension of core's `CohortFreezeStatus` —
+ * don't assign `EffectiveFreezeResult.cohortStatus` here except through the
+ * deriveParked path, which owns the extension (CR mmnto-ai/totem#2168 F1: the wider union
+ * accepts the core type, never the reverse).
  */
 export interface OrientFreezeChannel {
   cohortStatus: 'ok' | 'absent-package' | 'absent-file' | 'corrupt' | 'underivable';
