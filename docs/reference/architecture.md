@@ -388,10 +388,12 @@ orchestrator: {
   provider: 'shell',
   command: 'gemini --model {model} -o json -e none < {file}',
   defaultModel: 'gemini-3-flash-preview',
-  fallbackModel: 'gemini-2.5-flash',
+  fallbackModel: 'gemini-3.1-flash-lite',
   overrides: { spec: 'gemini-3.1-pro-preview' },
 }
 ```
+
+> **Note:** This example uses the Gemini CLI, whose consumer access (AI Pro / Ultra / free) is retiring **June 18, 2026** — see [supported-models.md](supported-models.md#google-gemini). The shell provider accepts any CLI that emits one-shot JSON; substitute your tool's command accordingly.
 
 ### Generic OpenAI Provider (native API)
 
@@ -422,8 +424,8 @@ Direct SDK calls via Google GenAI. Requires API keys and adheres to bound consen
 ```typescript
 orchestrator: {
   provider: 'gemini',
-  defaultModel: 'gemini-2.5-flash',
-  fallbackModel: 'gemini-2.5-pro',
+  defaultModel: 'gemini-3-flash-preview',
+  fallbackModel: 'gemini-3.1-pro-preview',
 }
 ```
 
