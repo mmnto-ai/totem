@@ -393,6 +393,8 @@ orchestrator: {
 }
 ```
 
+> **Note:** This example uses the Gemini CLI, whose consumer access (AI Pro / Ultra / free) is retiring **June 18, 2026** — see [supported-models.md](supported-models.md#google-gemini). The shell provider accepts any CLI that emits one-shot JSON; substitute your tool's command accordingly.
+
 ### Generic OpenAI Provider (native API)
 
 Direct SDK calls using the standard OpenAI-compatible format. Defaults to `gpt-5.4-mini` for execution capabilities:

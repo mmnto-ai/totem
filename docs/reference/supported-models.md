@@ -14,15 +14,15 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 
 ### Google Gemini
 
-| Role                | Model ID                         | Notes                                                                          |
-| ------------------- | -------------------------------- | ------------------------------------------------------------------------------ |
-| Flagship (agentic)  | `gemini-3.5-flash`               | GA flagship — coding/agentic; Gemini API + Antigravity (per Google model docs) |
-| Default (fast)      | `gemini-3-flash-preview`         | Preview — current Totem default                                                |
-| Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026)                                   |
-| Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                        |
-| Fast-lite (newest)  | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost                                       |
-| Stable fast         | `gemini-2.5-flash`               | GA — **deprecating June 17, 2026**                                             |
-| Stable pro          | `gemini-2.5-pro`                 | GA — **deprecating June 17, 2026**                                             |
+| Role                | Model ID                         | Notes                                                                                                                               |
+| ------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Flagship (agentic)  | `gemini-3.5-flash`               | GA flagship — coding/agentic; Gemini API + Antigravity. **Not Totem's default** (default stays `gemini-3-flash-preview`, next row). |
+| Default (fast)      | `gemini-3-flash-preview`         | Preview — current Totem default                                                                                                     |
+| Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026)                                                                                        |
+| Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                                                                             |
+| Fast-lite (newest)  | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost                                                                                            |
+| Stable fast         | `gemini-2.5-flash`               | GA — **deprecating June 17, 2026**                                                                                                  |
+| Stable pro          | `gemini-2.5-pro`                 | GA — **deprecating June 17, 2026**                                                                                                  |
 
 **Listing API:** `GET https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY`
 
