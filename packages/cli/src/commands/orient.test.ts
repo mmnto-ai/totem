@@ -174,7 +174,7 @@ describe('orient per-section failure isolation', () => {
     await runJson();
     const r = parseJson();
     expect(r.parked).toEqual([
-      { subsystem: 'embedder', since: '2026-01-01', reason: 'blocked. extra' },
+      { subsystem: 'embedder', since: '2026-01-01', reason: 'blocked. extra', provenance: 'local' },
     ]);
   });
 });
@@ -369,6 +369,63 @@ describe('orient --json and human render parity', () => {
   });
 });
 
+// ─── PARKED channel-state rendering (#2167 — codex W1: states never flatten) ──
+
+describe('renderReport — freeze channel states render distinctly', () => {
+  function reportWith(
+    freezeChannel: OrientReport['freezeChannel'],
+    parked: OrientReport['parked'] = [],
+  ): OrientReport {
+    return {
+      repo: 'mmnto-ai/totem',
+      derivedAt: '2026-06-01T00:00:00.000Z',
+      indexFreshness: { synced: false },
+      parked,
+      freezeChannel,
+      openPRs: [],
+      board: [],
+      coherence: [],
+      epics: [],
+      otherOpenIssues: [],
+      boardConfigured: false,
+    };
+  }
+
+  it('renders the four channel states with distinct lines (none never lies)', () => {
+    const absentPkg = renderReport(reportWith({ cohortStatus: 'absent-package', warnings: [] }));
+    expect(absentPkg).toContain('cohort channel not adopted');
+
+    const absentFile = renderReport(
+      reportWith({ cohortStatus: 'absent-file', cohortPackageVersion: '0.1.5', warnings: [] }),
+    );
+    expect(absentFile).toContain('predates freeze distribution');
+    expect(absentFile).toContain('0.1.5');
+
+    const corrupt = renderReport(reportWith({ cohortStatus: 'corrupt', warnings: ['bad json'] }));
+    expect(corrupt).toContain('cohort channel CORRUPT');
+    expect(corrupt).toContain('⚠ bad json');
+
+    const ok = renderReport(reportWith({ cohortStatus: 'ok', warnings: [] }));
+    expect(ok).not.toContain('cohort channel');
+  });
+
+  it('tags cohort-provenance entries with the snapshot version; local entries stay untagged', () => {
+    const human = renderReport(
+      reportWith({ cohortStatus: 'ok', cohortPackageVersion: '0.2.0', warnings: [] }, [
+        { subsystem: 'embedder', since: '2026-01-01', provenance: 'local' },
+        {
+          subsystem: 'rule-compilation (legacy lesson-compile path)',
+          since: '2026-05-17',
+          provenance: 'cohort',
+          sourceVersion: '0.2.0',
+        },
+      ]),
+    );
+    expect(human).toContain('[cohort @ strategy-doctrine 0.2.0]');
+    expect(human).toMatch(/• embedder (?!\[)/);
+  });
+});
+
 // ─── Footer + embedder tripwire ─────────────────────────
 
 describe('orient footer and #2018 structural guard', () => {
@@ -416,6 +473,7 @@ describe('renderOrientForSession — bounded Tier-A projection', () => {
       derivedAt: '2026-06-01T00:00:00.000Z',
       indexFreshness: { synced: false },
       parked: [],
+      freezeChannel: { cohortStatus: 'absent-package', warnings: [] },
       openPRs: [],
       board: [],
       coherence: [],
@@ -449,6 +507,30 @@ describe('renderOrientForSession — bounded Tier-A projection', () => {
     expect(block).toContain('#99'); // coherence drift
     expect(block).toContain('1 epic · 1 other open issue'); // counts pointer
     expect(block).toContain('run `totem orient`');
+  });
+
+  it('tags cohort-provenance parked entries and flags a corrupt channel (high-signal only)', () => {
+    const block = renderOrientForSession(
+      makeReport({
+        parked: [
+          { subsystem: 'embedder', since: '2026-01-01', provenance: 'local' },
+          {
+            subsystem: 'rule-compilation (legacy lesson-compile path)',
+            provenance: 'cohort',
+            sourceVersion: '0.2.0',
+          },
+        ],
+        freezeChannel: { cohortStatus: 'corrupt', warnings: ['bad snapshot'] },
+      }),
+    );
+    expect(block).toContain('[cohort@0.2.0]');
+    expect(block).toContain('cohort freeze channel CORRUPT');
+
+    // Honest absences stay quiet at the session surface (high-signal only).
+    const quiet = renderOrientForSession(
+      makeReport({ freezeChannel: { cohortStatus: 'absent-package', warnings: [] } }),
+    );
+    expect(quiet).not.toContain('cohort');
   });
 
   it('NEVER enumerates epics / children / other issues (the #467 Tier-A-lean guard)', () => {

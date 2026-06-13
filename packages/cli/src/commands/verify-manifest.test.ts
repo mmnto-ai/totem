@@ -405,3 +405,162 @@ describe('verify-manifest fingerprint drift', () => {
     await verifyManifestCommand({ allowCompileDrift: true });
   });
 });
+
+// ─── Freeze-aware lesson-staleness verdict (#2137, strategy#584 sub-task 4) ──
+
+describe('verify-manifest — freeze-aware lesson-staleness verdict', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  const RULE_COMPILATION_ENTRY = {
+    subsystem: 'rule-compilation (legacy lesson-compile path)',
+    id: 'rule-compilation',
+    scope: 'cohort',
+    tracking: 'multi-gate lift status',
+  };
+
+  function writeLocalFreeze(frozen: unknown[]): void {
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'freeze.json'), JSON.stringify({ frozen }));
+  }
+
+  function installSnapshotFixture(freeze: unknown): void {
+    const pkgDir = path.join(tmpDir, 'node_modules', '@mmnto', 'strategy-doctrine');
+    fs.mkdirSync(pkgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({ name: '@mmnto/strategy-doctrine', version: '0.2.0' }),
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'freeze.json'),
+      typeof freeze === 'string' ? freeze : JSON.stringify(freeze),
+    );
+  }
+
+  /** Input-hash-only drift: bank a new lesson AFTER the manifest was written. */
+  function makeLessonStale(lessonsDir: string): void {
+    fs.writeFileSync(path.join(lessonsDir, 'lesson-2.md'), '# Lesson — Newly banked\n\nFresh.\n');
+  }
+
+  function tamperRules(rulesPath: string): void {
+    fs.writeFileSync(
+      rulesPath,
+      JSON.stringify({ rules: [{ id: 'r1', pattern: 'TAMPERED', message: 'evil' }] }, null, 2) +
+        '\n',
+    );
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {};', 'utf-8');
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    vi.restoreAllMocks();
+  });
+
+  it('downgrades input-only staleness to exit-0 warn under a LOCAL rule-compilation freeze (Q3 any-provenance)', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    writeLocalFreeze([{ ...RULE_COMPILATION_ENTRY, scope: 'local' }]);
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
+  it('downgrades input-only staleness under a COHORT freeze from the distributed snapshot', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    installSnapshotFixture({ frozen: [RULE_COMPILATION_ENTRY] });
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
+  it('still fails on output-hash tamper while the freeze is active (Tenet 20)', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    writeLocalFreeze([{ ...RULE_COMPILATION_ENTRY, scope: 'local' }]);
+    tamperRules(rulesPath);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+
+  it('still fails when BOTH hashes drift while the freeze is active', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    writeLocalFreeze([{ ...RULE_COMPILATION_ENTRY, scope: 'local' }]);
+    makeLessonStale(lessonsDir);
+    tamperRules(rulesPath);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+
+  it('blocks input-only staleness exactly as before when NO freeze is visible', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+
+  it('blocks under a freeze with a DIFFERENT id (non-compile freezes never downgrade)', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    writeLocalFreeze([{ subsystem: 'embedder', id: 'embedder-tuning', scope: 'local' }]);
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+
+  it('blocks under an id-LESS entry even when the subsystem prose mentions rule-compilation', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    writeLocalFreeze([{ subsystem: 'rule-compilation (legacy lesson-compile path)' }]);
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+
+  it('downgrades on a REWORDED subsystem with intact id (the silent-unbind defense)', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    writeLocalFreeze([
+      { subsystem: 'legacy compile pipeline (renamed)', id: 'rule-compilation', scope: 'local' },
+    ]);
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
+  it('blocks conservatively when the distributed snapshot is corrupt (warn AND fail)', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    installSnapshotFixture('{ not json');
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+
+  it('blocks conservatively when the LOCAL freeze file is corrupt (consult degrades, gate stays blocking)', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'freeze.json'), '{ corrupt');
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+});

@@ -14,6 +14,7 @@ import {
   checkCompiledRules,
   checkConfig,
   checkEmbeddingConfig,
+  checkFreezes,
   checkGitHooks,
   checkGrandfatheredRules,
   checkIndex,
@@ -427,6 +428,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Upgrade Candidates',
   'Stale Rules',
   'Grandfathered Rules',
+  'Freeze state',
 ] as const;
 
 describe('doctorCommand', () => {
@@ -2491,5 +2493,68 @@ describe('findLegacyGrandfatheredRules + checkGrandfatheredRules', () => {
     expect(result.message).toMatch(/2 no-goodExample/);
     expect(result.remediation).toContain('ADR-091 Stage 4');
     expect(result.remediation).toContain('mmnto-ai/totem#1504');
+  });
+});
+
+// ─── checkFreezes (#2167 — sensor-only freeze surfacing) ────────────────
+
+describe('checkFreezes', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-doctor-freeze-'));
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
+
+  function installSnapshot(freeze: unknown): void {
+    const pkgDir = path.join(tmpDir, 'node_modules', '@mmnto', 'strategy-doctrine');
+    fs.mkdirSync(pkgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({ name: '@mmnto/strategy-doctrine', version: '0.2.0' }),
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'freeze.json'),
+      typeof freeze === 'string' ? freeze : JSON.stringify(freeze),
+    );
+  }
+
+  it('passes with the not-adopted channel note when nothing is frozen anywhere', async () => {
+    const result = await checkFreezes(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('No active freezes');
+    expect(result.message).toContain('not adopted');
+  });
+
+  it('warns (never fails) with provenance tags when freezes are active', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.totem', 'freeze.json'),
+      JSON.stringify({ frozen: [{ subsystem: 'embedder', scope: 'local' }] }),
+    );
+    installSnapshot({
+      frozen: [{ subsystem: 'rule-compilation (legacy)', id: 'rule-compilation', scope: 'cohort' }],
+    });
+    const result = await checkFreezes(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('"embedder" [local]');
+    expect(result.message).toContain('[cohort@0.2.0]');
+  });
+
+  it('warns on a corrupt distributed snapshot — sensor-only, never a fail status', async () => {
+    installSnapshot('{ not json');
+    const result = await checkFreezes(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('CORRUPT');
+  });
+
+  it('warns (not fail) when the LOCAL freeze file is corrupt — doctor reports, the gate layer gates', async () => {
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'freeze.json'), '{ corrupt');
+    const result = await checkFreezes(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('underivable');
   });
 });

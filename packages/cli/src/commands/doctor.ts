@@ -1672,6 +1672,78 @@ export async function runSelfHealing(cwd: string): Promise<void> {
   }
 }
 
+/**
+ * Sensor-only freeze surfacing (strategy#584 read half, mmnto-ai/totem#2167). Renders the
+ * effective freeze union (repo-local ∪ distributed cohort) with per-source
+ * channel status — absent-package / absent-file / corrupt / genuinely-none
+ * stay distinct (codex W1). NEVER emits 'fail': freezes are sensed state, not
+ * drift, and doctor `--strict` gates on fail — a freeze (or a broken channel)
+ * must report loudly without gating (Tenet 13; the gate consumer is
+ * verify-manifest, not doctor).
+ */
+export async function checkFreezes(cwd: string, totemDir = '.totem'): Promise<DiagnosticResult> {
+  const name = 'Freeze state';
+  try {
+    const { readEffectiveFreezes } = await import('@mmnto/totem');
+    const { DOCTRINE_PIN_PACKAGE } = await import('./init-doctrine.js');
+    // No await: readEffectiveFreezes is synchronous — the async signature
+    // exists for the dynamic imports above (CR mmnto-ai/totem#2168 nit).
+    const result = readEffectiveFreezes(cwd, path.join(cwd, totemDir), DOCTRINE_PIN_PACKAGE);
+
+    const channel = ((): string => {
+      switch (result.cohortStatus) {
+        case 'ok':
+          return `cohort channel ok (${DOCTRINE_PIN_PACKAGE}@${result.cohortPackageVersion ?? '?'})`;
+        case 'absent-package':
+          return 'cohort channel not adopted (doctrine snapshot not installed)';
+        case 'absent-file':
+          return `cohort channel: snapshot ${result.cohortPackageVersion ?? '?'} predates freeze distribution`;
+        case 'corrupt':
+          return 'cohort channel CORRUPT — distributed freezes treated as none (conservative)';
+      }
+    })();
+
+    const warningsSuffix =
+      result.warnings.length > 0 ? ` Warnings: ${result.warnings.join(' | ')}` : '';
+
+    if (result.entries.length === 0) {
+      return {
+        name,
+        status: result.cohortStatus === 'corrupt' || result.warnings.length > 0 ? 'warn' : 'pass',
+        message: `No active freezes; ${channel}.${warningsSuffix}`,
+        ...(result.cohortStatus === 'corrupt'
+          ? {
+              remediation:
+                'Republish or pin-bump the doctrine snapshot; until then consumers treat distributed freezes as none.',
+            }
+          : {}),
+      };
+    }
+
+    const described = result.entries.map((f) => {
+      const provTag =
+        f.provenance === 'cohort' ? ` [cohort@${f.sourceVersion ?? '?'}]` : ' [local]';
+      return `"${f.entry.subsystem}"${provTag}`;
+    });
+    return {
+      name,
+      status: 'warn',
+      message: `Active freeze(s): ${described.join(', ')}; ${channel}.${warningsSuffix}`,
+      remediation:
+        'Respect each do-not list; entries lift at their tracking refs. This row never gates (sensor-only).',
+    };
+    // totem-context: a corrupt LOCAL freeze.json throws fail-closed in the reader; doctor reports it loudly as warn-class diagnostics rather than gating (sensor-only row)
+  } catch (err) {
+    return {
+      name,
+      status: 'warn',
+      message: `Freeze state underivable: ${err instanceof Error ? err.message : String(err)}`,
+      remediation:
+        'Fix .totem/freeze.json — gate consumers stay conservative while it is unreadable.',
+    };
+  }
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export async function doctorCommand(options: DoctorOptions = {}): Promise<DiagnosticResult[]> {
@@ -1728,6 +1800,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkUpgradeCandidates(cwd),
     await checkStaleRules(cwd, '.totem', doctorThresholds),
     await checkGrandfatheredRules(cwd),
+    await checkFreezes(cwd),
   ];
 
   for (const result of results) {
