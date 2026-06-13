@@ -388,7 +388,7 @@ orchestrator: {
   provider: 'shell',
   command: 'gemini --model {model} -o json -e none < {file}',
   defaultModel: 'gemini-3-flash-preview',
-  fallbackModel: 'gemini-2.5-flash',
+  fallbackModel: 'gemini-3.1-flash-lite',
   overrides: { spec: 'gemini-3.1-pro-preview' },
 }
 ```
@@ -422,8 +422,8 @@ Direct SDK calls via Google GenAI. Requires API keys and adheres to bound consen
 ```typescript
 orchestrator: {
   provider: 'gemini',
-  defaultModel: 'gemini-2.5-flash',
-  fallbackModel: 'gemini-2.5-pro',
+  defaultModel: 'gemini-3-flash-preview',
+  fallbackModel: 'gemini-3.1-pro-preview',
 }
 ```
 
