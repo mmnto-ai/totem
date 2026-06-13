@@ -393,16 +393,6 @@ orchestrator: {
 }
 ```
 
-The same provider runs the **Antigravity CLI** (`agy`) — the successor to the Gemini CLI (which is being retired in favor of `agy`; see [supported-models.md](supported-models.md)) — as a shell target like any other agent CLI. The command below mirrors the Gemini CLI's flag interface; confirm against your installed `agy` version:
-
-```typescript
-orchestrator: {
-  provider: 'shell',
-  command: 'agy --model {model} -o json -e none < {file}',
-  defaultModel: 'gemini-3.5-flash',
-}
-```
-
 ### Generic OpenAI Provider (native API)
 
 Direct SDK calls using the standard OpenAI-compatible format. Defaults to `gpt-5.4-mini` for execution capabilities:

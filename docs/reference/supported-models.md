@@ -14,22 +14,22 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 
 ### Google Gemini
 
-| Role                | Model ID                         | Notes                                        |
-| ------------------- | -------------------------------- | -------------------------------------------- |
+| Role                | Model ID                         | Notes                                                                          |
+| ------------------- | -------------------------------- | ------------------------------------------------------------------------------ |
 | Flagship (agentic)  | `gemini-3.5-flash`               | GA flagship — coding/agentic; Gemini API + Antigravity (per Google model docs) |
-| Default (fast)      | `gemini-3-flash-preview`         | Preview — current Totem default              |
-| Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026) |
-| Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks      |
-| Fast-lite (newest)  | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost     |
-| Stable fast         | `gemini-2.5-flash`               | GA — **deprecating June 17, 2026**           |
-| Stable pro          | `gemini-2.5-pro`                 | GA — **deprecating June 17, 2026**           |
+| Default (fast)      | `gemini-3-flash-preview`         | Preview — current Totem default                                                |
+| Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026)                                   |
+| Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                        |
+| Fast-lite (newest)  | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost                                       |
+| Stable fast         | `gemini-2.5-flash`               | GA — **deprecating June 17, 2026**                                             |
+| Stable pro          | `gemini-2.5-pro`                 | GA — **deprecating June 17, 2026**                                             |
 
 **Listing API:** `GET https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY`
 
 - Auth: API key as query parameter
 - Docs: https://ai.google.dev/api/models
 - Note: `gemini-3-pro-preview` was discontinued March 26, 2026. Use `gemini-3.1-pro-preview`.
-- **Gemini CLI → Antigravity CLI (`agy`):** per Google's announced transition, the Gemini CLI is folding into the Antigravity CLI, with consumer Gemini CLI / Code Assist access ending mid-2026 (enterprise retains access). The shell-provider orchestrator (see [architecture.md](architecture.md)) can invoke `agy` as a CLI target like any other tool; `gemini-3.5-flash` is reachable via the Gemini API and Antigravity. Confirm exact dates and CLI flags against Google's current docs before relying on them.
+- **Gemini CLI → Antigravity (`agy`):** Google is retiring the Gemini CLI and Gemini Code Assist IDE extensions for consumer (AI Pro / Ultra / free) usage on **June 18, 2026**, folding them into the Antigravity platform (enterprise retains access). `gemini-3.5-flash` is reachable via the Gemini API and Antigravity. Note: Antigravity's `agy` is an _agentic_ CLI (a harness, not a one-shot `-o json` completion tool), so it is **not** a drop-in shell-provider orchestrator target — integration is TBD.
 
 ### Anthropic (Claude)
 
