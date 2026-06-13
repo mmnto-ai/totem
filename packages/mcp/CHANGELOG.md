@@ -1,5 +1,12 @@
 # @mmnto/mcp
 
+## 1.62.0
+
+### Patch Changes
+
+- Updated dependencies [eec7060]
+  - @mmnto/totem@1.62.0
+
 ## 1.61.0
 
 ### Patch Changes

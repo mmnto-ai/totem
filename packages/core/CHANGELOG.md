@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.62.0
+
+### Minor Changes
+
+- eec7060: Distributed cohort-freeze read + freeze-aware verify-manifest verdict (mmnto-ai/totem#2167 + mmnto-ai/totem#2137; strategy#584 sub-tasks 2–4). Core: `FreezeEntrySchema` gains `scope: 'local' | 'cohort'` (default `local`) and an optional schema-validated kebab `id` (the stable machine match key); new exports `readCohortFreezes(cwd, packageName)` (never-throws distributed reader off the installed doctrine snapshot — distinct `ok | absent-package | absent-file | corrupt` channel statuses, read-time `scope: cohort` leak filter, warnings returned in the result, zero-network) and `readEffectiveFreezes` (local ∪ cohort union with per-entry provenance + per-source status that survives to every surface; the local read keeps its ADR-109 fail-closed throw), plus `RULE_COMPILATION_FREEZE_ID`. CLI: orient's PARKED section and the SessionStart projection render cohort entries with `[cohort @ strategy-doctrine <v>]` provenance and the channel state distinctly (a corrupt snapshot is loud; honest absences are distinguishable); doctor gains a sensor-only `Freeze state` row (warn-class at most — never gates); `verify-manifest` consults the effective freeze and, when an entry with id `rule-compilation` is active at ANY provenance, downgrades lesson-only staleness (input-hash mismatch only) from block to warn — push proceeds with zero compile invocation and zero artifact churn while the freeze stands. Output-hash drift still fails regardless of freeze state; no freeze visible keeps 1.61.0 behavior; any consult failure degrades to no-freeze-visible (conservative block). The gate change covers the pre-push hook, CI, and manual runs through the one CLI command — no hook re-install anywhere.
+
 ## 1.61.0
 
 ### Minor Changes
