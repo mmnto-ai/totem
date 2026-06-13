@@ -1,6 +1,6 @@
 # Supported Models & AI Tools Reference
 
-> **Last validated:** 2026-05-02 (1.25.0 ship state)
+> **Last validated:** 2026-05-02 (1.25.0 ship state). The Gemini tier below was refreshed 2026-06-13 from Google's published model docs (a targeted update, not a full re-validation).
 
 Totem supports four LLM provider families for orchestration, and exports project
 knowledge to all major AI coding tools. This document tracks model IDs, tool
@@ -16,6 +16,7 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 
 | Role                | Model ID                         | Notes                                        |
 | ------------------- | -------------------------------- | -------------------------------------------- |
+| Flagship (agentic)  | `gemini-3.5-flash`               | GA flagship — coding/agentic; Gemini API + Antigravity (per Google model docs) |
 | Default (fast)      | `gemini-3-flash-preview`         | Preview — current Totem default              |
 | Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026) |
 | Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks      |
@@ -28,6 +29,7 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 - Auth: API key as query parameter
 - Docs: https://ai.google.dev/api/models
 - Note: `gemini-3-pro-preview` was discontinued March 26, 2026. Use `gemini-3.1-pro-preview`.
+- **Gemini CLI → Antigravity CLI (`agy`):** per Google's announced transition, the Gemini CLI is folding into the Antigravity CLI, with consumer Gemini CLI / Code Assist access ending mid-2026 (enterprise retains access). The shell-provider orchestrator (see [architecture.md](architecture.md)) can invoke `agy` as a CLI target like any other tool; `gemini-3.5-flash` is reachable via the Gemini API and Antigravity. Confirm exact dates and CLI flags against Google's current docs before relying on them.
 
 ### Anthropic (Claude)
 
