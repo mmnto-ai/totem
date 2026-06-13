@@ -34,8 +34,24 @@ export {
 export { buildMissingSdkHint } from './missing-sdk.js';
 
 // Gate engine (WS3 — Proposal 288 §6.2)
-export type { FreezeConfig, FreezeEntry } from './freeze.js';
-export { FREEZE_FILE, readFreezeConfig } from './freeze.js';
+export type {
+  ActiveFreeze,
+  CohortFreezeResult,
+  CohortFreezeStatus,
+  EffectiveFreezeResult,
+  FreezeConfig,
+  FreezeEntry,
+  FreezeScope,
+  LocalFreezeStatus,
+} from './freeze.js';
+export {
+  FREEZE_FILE,
+  FreezeScopeSchema,
+  readCohortFreezes,
+  readEffectiveFreezes,
+  readFreezeConfig,
+  RULE_COMPILATION_FREEZE_ID,
+} from './freeze.js';
 export { evaluateGate, FREEZE_CHECK_EVENT, knownGateEvents } from './gate-engine.js';
 export type { GateDisposition, GateEvaluator, GateProvenance, GateVerdict } from './gate-types.js';
 

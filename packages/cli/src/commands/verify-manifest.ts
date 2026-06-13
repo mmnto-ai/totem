@@ -71,9 +71,12 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   const actualInputHash = generateInputHash(lessonsDir, cwd);
   const actualOutputHash = generateOutputHash(rulesPath);
 
+  const inputMismatch = actualInputHash !== manifest.input_hash;
+  const outputMismatch = actualOutputHash !== manifest.output_hash;
+
   const mismatches: string[] = [];
 
-  if (actualInputHash !== manifest.input_hash) {
+  if (inputMismatch) {
     mismatches.push(
       `Input hash mismatch — lessons changed since last compile.\n` +
         `  Expected: ${manifest.input_hash}\n` +
@@ -81,7 +84,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
     );
   }
 
-  if (actualOutputHash !== manifest.output_hash) {
+  if (outputMismatch) {
     mismatches.push(
       `Output hash mismatch — compiled-rules.json was modified outside totem compile.\n` +
         `  Expected: ${manifest.output_hash}\n` +
@@ -89,17 +92,53 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
     );
   }
 
+  let freezeDowngraded = false;
   if (mismatches.length > 0) {
-    for (const msg of mismatches) {
-      log.error('Totem Error', msg);
+    // Freeze consult (mmnto-ai/totem#2137, strategy#584 sub-task 4 — the 0014Z ruled shape).
+    // Sensing above is unchanged (Tenet 13): hashes report disk truth; the
+    // freeze only moves the VERDICT for the lesson-only case. The consult runs
+    // whenever drift is sensed so channel warnings surface even on blocking
+    // paths (a corrupt distributed snapshot warns AND fails).
+    const freezeMatch = await consultRuleCompilationFreeze({
+      cwd,
+      totemDir: path.join(cwd, config.totemDir),
+      warn: (msg) => log.warn(TAG, msg),
+    });
+
+    if (inputMismatch && !outputMismatch && freezeMatch !== undefined) {
+      // Lesson-only staleness + active rule-compilation freeze (any
+      // provenance) ⟹ WARN, exit 0: push proceeds, zero compile invocation,
+      // zero artifact churn. Output-hash drift never takes this path —
+      // the regenerable cache stays protected (Tenet 20).
+      const { DOCTRINE_PIN_PACKAGE } = await import('./init-doctrine.js');
+      const source =
+        freezeMatch.provenance === 'cohort'
+          ? `cohort freeze via ${DOCTRINE_PIN_PACKAGE}@${freezeMatch.sourceVersion ?? '?'}`
+          : 'local freeze';
+      log.warn(TAG, 'Input hash mismatch — lessons changed since last compile.');
+      log.warn(
+        TAG,
+        `Lesson-only staleness downgraded to WARN: "${freezeMatch.entry.subsystem}" is frozen (${source}) — push proceeds with NO compile invocation while the freeze stands.`,
+      );
+      if (freezeMatch.entry.tracking)
+        log.warn(TAG, `Freeze tracking: ${freezeMatch.entry.tracking}`);
+      log.warn(
+        TAG,
+        'Accrued lesson staleness blocks again at unfreeze; a real compile settles it then.',
+      );
+      freezeDowngraded = true;
+    } else {
+      for (const msg of mismatches) {
+        log.error('Totem Error', msg);
+      }
+      const label = errorColor(bold('FAIL'));
+      log.error('Totem Error', `${label} — Manifest verification failed.`);
+      throw new TotemError(
+        'COMPILE_FAILED',
+        'Compile manifest verification failed.',
+        'Run "totem compile" to regenerate the manifest.',
+      );
     }
-    const label = errorColor(bold('FAIL'));
-    log.error('Totem Error', `${label} — Manifest verification failed.`);
-    throw new TotemError(
-      'COMPILE_FAILED',
-      'Compile manifest verification failed.',
-      'Run "totem compile" to regenerate the manifest.',
-    );
   }
 
   // ─── Fingerprint drift check (Proposal 278 § Action 3) ───
@@ -173,7 +212,47 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   }
 
   const label = successColor(bold('PASS'));
-  log.success(TAG, `${label} — Manifest verified: ${manifest.rule_count} rules, hashes match.`);
+  if (freezeDowngraded) {
+    log.success(
+      TAG,
+      `${label} — Manifest accepted under freeze: lesson staleness warned (not blocked); ${manifest.rule_count} rules, output hash matches.`,
+    );
+  } else {
+    log.success(TAG, `${label} — Manifest verified: ${manifest.rule_count} rules, hashes match.`);
+  }
+}
+
+/**
+ * Effective-freeze consult for the staleness verdict (mmnto-ai/totem#2137). Returns the
+ * active entry whose `id` is the shared `RULE_COMPILATION_FREEZE_ID` constant
+ * (imported from core — never a duplicate literal), at ANY provenance: a
+ * repo that deliberately froze its own compile path gets the same
+ * no-invocation behavior as the cohort hold (mmnto-ai/totem#2167 round, Q3 ruling).
+ *
+ * ANY consult failure — including a corrupt LOCAL freeze.json, which the
+ * core reader throws on fail-closed — degrades to `undefined`
+ * (no-freeze-visible) with a loud warning: the conservative direction, since
+ * the staleness gate then stays blocking. This consult can weaken a block
+ * into a warn, so its own failure must never do so.
+ */
+async function consultRuleCompilationFreeze(args: {
+  cwd: string;
+  totemDir: string;
+  warn: (msg: string) => void;
+}): Promise<import('@mmnto/totem').ActiveFreeze | undefined> {
+  try {
+    const { readEffectiveFreezes, RULE_COMPILATION_FREEZE_ID } = await import('@mmnto/totem');
+    const { DOCTRINE_PIN_PACKAGE } = await import('./init-doctrine.js');
+    const result = readEffectiveFreezes(args.cwd, args.totemDir, DOCTRINE_PIN_PACKAGE);
+    for (const w of result.warnings) args.warn(w);
+    return result.entries.find((f) => f.entry.id === RULE_COMPILATION_FREEZE_ID);
+    // totem-context: consult failure degrades to no-freeze-visible — the staleness gate stays blocking (conservative); never a silent pass
+  } catch (err) {
+    args.warn(
+      `Freeze consult failed (${err instanceof Error ? err.message : String(err)}) — proceeding as no-freeze-visible; the staleness gate stays blocking.`,
+    );
+    return undefined;
+  }
 }
 
 // ─── Auxiliary git + gh lookups (best-effort) ───────────

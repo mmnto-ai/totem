@@ -55,6 +55,25 @@ export interface OrientParkedEntry {
   since?: string;
   reason?: string;
   tracking?: string;
+  /** Where the entry came from: this repo's freeze.json or the distributed
+   *  doctrine snapshot (strategy#584 read half). Additive — absent in
+   *  pre-cohort reports. */
+  provenance?: 'local' | 'cohort';
+  /** Snapshot package version (cohort provenance only). */
+  sourceVersion?: string;
+}
+
+/**
+ * Distributed-channel status for the PARKED section (codex W1 on the
+ * mmnto-ai/totem#2167 round: per-source status must SURVIVE to every surface — absent-package /
+ * absent-file / corrupt / genuinely-none must never flatten into "none").
+ * `underivable` = the effective read threw before the cohort read completed
+ * (e.g. corrupt LOCAL freeze.json — see the parked section's error envelope).
+ */
+export interface OrientFreezeChannel {
+  cohortStatus: 'ok' | 'absent-package' | 'absent-file' | 'corrupt' | 'underivable';
+  cohortPackageVersion?: string;
+  warnings: string[];
 }
 
 export interface OrientPr {
@@ -96,6 +115,8 @@ export interface OrientReport {
   derivedAt: string;
   indexFreshness: OrientIndexFreshness;
   parked: Section<OrientParkedEntry[]>;
+  /** Always present beside `parked` — channel state never flattens into "none". */
+  freezeChannel: OrientFreezeChannel;
   openPRs: Section<OrientPr[]>;
   board: Section<OrientBoardItem[]>;
   coherence: Section<BoardIssueCoherenceFlag[]>;
@@ -125,6 +146,7 @@ interface DerivedState {
   localSlug: string | null;
   indexFreshness: OrientIndexFreshness;
   parked: Section<OrientParkedEntry[]>;
+  freezeChannel: OrientFreezeChannel;
   openPRs: Section<OrientPr[]>;
   board: Section<OrientBoardItem[]>;
   /** null when the board could not be derived → coherence can't be computed. */
@@ -171,22 +193,40 @@ async function deriveRepoSlug(cwd: string): Promise<{ slug: RepoSlug } | ErrorEn
   }
 }
 
-async function deriveParked(repoRoot: string): Promise<Section<OrientParkedEntry[]>> {
+async function deriveParked(
+  repoRoot: string,
+): Promise<{ parked: Section<OrientParkedEntry[]>; freezeChannel: OrientFreezeChannel }> {
   try {
-    const { readFreezeConfig } = await import('@mmnto/totem');
+    const { readEffectiveFreezes } = await import('@mmnto/totem');
+    const { DOCTRINE_PIN_PACKAGE } = await import('./init-doctrine.js');
     const path = await import('node:path');
     const totemDir = path.join(repoRoot, '.totem');
-    const config = readFreezeConfig(totemDir);
-    if (!config) return [];
-    return config.frozen.map((f) => ({
-      subsystem: f.subsystem,
-      since: f.since,
-      reason: f.reason,
-      tracking: f.tracking,
-    }));
-    // totem-context: a freeze-read failure becomes a fail-loud { error } envelope (Tenet 4 — surfaced, not swallowed)
+    // The package walk anchors at repoRoot, NOT process.cwd(): the installed
+    // snapshot is repo-state, and orient's two callers (CLI command, session
+    // hook via deriveOrientReport) must derive identical reports regardless
+    // of invocation directory (one derivation, two callers — cannot diverge).
+    const result = readEffectiveFreezes(repoRoot, totemDir, DOCTRINE_PIN_PACKAGE);
+    return {
+      parked: result.entries.map((f) => ({
+        subsystem: f.entry.subsystem,
+        since: f.entry.since,
+        reason: f.entry.reason,
+        tracking: f.entry.tracking,
+        provenance: f.provenance,
+        sourceVersion: f.sourceVersion,
+      })),
+      freezeChannel: {
+        cohortStatus: result.cohortStatus,
+        cohortPackageVersion: result.cohortPackageVersion,
+        warnings: result.warnings,
+      },
+    };
+    // totem-context: a freeze-read failure becomes a fail-loud { error } envelope (Tenet 4 — surfaced, not swallowed); the channel renders 'underivable' rather than a fabricated absence
   } catch (err) {
-    return { error: errMessage(err) };
+    return {
+      parked: { error: errMessage(err) }, // totem-context: fail-loud envelope — surfaced in the report, not swallowed
+      freezeChannel: { cohortStatus: 'underivable', warnings: [] }, // totem-context: honest 'underivable', never a fabricated absence
+    };
   }
 }
 
@@ -382,7 +422,7 @@ async function derive(cwd: string): Promise<DerivedState> {
   const localSlug = isError(slugResult) ? null : `${slugResult.slug.owner}/${slugResult.slug.name}`;
   const owner = isError(slugResult) ? null : slugResult.slug.owner;
 
-  const [indexFreshness, parked, openPRs, issues, board] = await Promise.all([
+  const [indexFreshness, parkedResult, openPRs, issues, board] = await Promise.all([
     deriveIndexFreshness(repoRoot),
     deriveParked(repoRoot),
     derivePRs(cwd),
@@ -394,7 +434,8 @@ async function derive(cwd: string): Promise<DerivedState> {
     repo,
     localSlug,
     indexFreshness,
-    parked,
+    parked: parkedResult.parked,
+    freezeChannel: parkedResult.freezeChannel,
     openPRs,
     board: board.section,
     boardItems: board.items,
@@ -418,6 +459,7 @@ function toReport(state: DerivedState): OrientReport {
     derivedAt: new Date().toISOString(),
     indexFreshness: state.indexFreshness,
     parked: state.parked,
+    freezeChannel: state.freezeChannel,
     openPRs: state.openPRs,
     board: state.board,
     coherence,
@@ -468,15 +510,40 @@ export function renderReport(report: OrientReport): string {
   );
 
   // PARKED
-  out.push('\n⛔ PARKED / FROZEN  (.totem/freeze.json)');
+  out.push('\n⛔ PARKED / FROZEN  (.totem/freeze.json ∪ cohort doctrine snapshot)');
   if (isError(report.parked)) out.push(`  ⚠ could not derive: ${report.parked.error}`);
   else if (report.parked.length === 0) out.push('  none');
   else
     for (const f of report.parked) {
       const reason = (f.reason || '').split('. ')[0];
-      out.push(`  • ${f.subsystem} (since ${f.since || '?'})${reason ? ` — ${reason}` : ''}`);
+      const name =
+        f.provenance === 'cohort'
+          ? `${f.subsystem} [cohort @ strategy-doctrine ${f.sourceVersion ?? '?'}]`
+          : f.subsystem;
+      out.push(`  • ${name} (since ${f.since || '?'})${reason ? ` — ${reason}` : ''}`);
       if (f.tracking) out.push(`      tracking: ${f.tracking}`);
     }
+  // Channel state renders distinctly — absent-package / absent-file / corrupt /
+  // genuinely-none never flatten into "none" (Tenet 14; codex W1 on mmnto-ai/totem#2167).
+  switch (report.freezeChannel.cohortStatus) {
+    case 'ok':
+      break;
+    case 'absent-package':
+      out.push('  (cohort channel not adopted — doctrine snapshot package not installed)');
+      break;
+    case 'absent-file':
+      out.push(
+        `  (cohort channel: snapshot ${report.freezeChannel.cohortPackageVersion ?? '?'} predates freeze distribution — cohort freezes underivable)`,
+      );
+      break;
+    case 'corrupt':
+      out.push('  ⚠ cohort channel CORRUPT — distributed freezes treated as none (conservative)');
+      break;
+    case 'underivable':
+      out.push('  ⚠ freeze channel underivable (see error above)');
+      break;
+  }
+  for (const w of report.freezeChannel.warnings) out.push(`  ⚠ ${w}`);
 
   // OPEN PRs
   out.push('\n◐ OPEN PRs');
@@ -584,9 +651,18 @@ export function renderOrientForSession(report: OrientReport): string {
   if (isError(report.parked)) {
     out.push(`⛔ parked: ⚠ could not derive: ${report.parked.error}`);
   } else if (report.parked.length > 0) {
-    const shown = report.parked.slice(0, SESSION_PARKED_CAP).map((f) => f.subsystem);
+    const shown = report.parked.slice(0, SESSION_PARKED_CAP).map((f) => {
+      const provTag = f.provenance === 'cohort' ? ` [cohort@${f.sourceVersion ?? '?'}]` : '';
+      return f.subsystem + provTag;
+    });
     const more = report.parked.length > SESSION_PARKED_CAP ? ' …' : '';
     out.push(`⛔ parked/frozen (${report.parked.length}): ${shown.join(', ')}` + more);
+  }
+  // High-signal channel failure only: a corrupt distributed snapshot means real
+  // cohort holds may be invisible this session (honest absences stay quiet here;
+  // the full orient render carries them).
+  if (report.freezeChannel.cohortStatus === 'corrupt') {
+    out.push('⛔ ⚠ cohort freeze channel CORRUPT — distributed holds may be invisible');
   }
 
   // OPEN PRs — what's in flight.
