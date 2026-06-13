@@ -223,11 +223,23 @@ async function deriveParked(
     };
     // totem-context: a freeze-read failure becomes a fail-loud { error } envelope (Tenet 4 — surfaced, not swallowed); the channel renders 'underivable' rather than a fabricated absence
   } catch (err) {
-    return {
-      parked: { error: errMessage(err) }, // totem-context: fail-loud envelope — surfaced in the report, not swallowed
-      freezeChannel: { cohortStatus: 'underivable', warnings: [] }, // totem-context: honest 'underivable', never a fabricated absence
-    };
+    return underivableParked(err); // totem-context: fail-loud envelope — surfaced in the report, not swallowed
   }
+}
+
+/**
+ * Fail-loud parked envelope (Tenet 4) + honest 'underivable' channel. Fresh
+ * object per call — a shared constant would alias the warnings array across
+ * reports.
+ */
+function underivableParked(err: unknown): {
+  parked: Section<OrientParkedEntry[]>;
+  freezeChannel: OrientFreezeChannel;
+} {
+  return {
+    parked: { error: errMessage(err) },
+    freezeChannel: { cohortStatus: 'underivable', warnings: [] },
+  };
 }
 
 async function derivePRs(cwd: string): Promise<Section<OrientPr[]>> {
