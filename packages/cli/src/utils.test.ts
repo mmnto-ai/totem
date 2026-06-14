@@ -10,10 +10,14 @@ import { calculateDeterministicHash, RunArtifactSchema, summarizeProvenance } fr
 
 import { cleanTmpDir } from './test-utils.js';
 import {
+  applyCodeBlindGuard,
   buildRetrievalGroundingBundle,
+  CODE_BLIND_BANNER,
+  CODE_BLIND_PROMPT_DIRECTIVE,
   formatLessonSection,
   formatResults,
   getSystemPrompt,
+  isCodeBlind,
   isGlobalConfigPath,
   loadConfig,
   loadEnv,
@@ -1232,6 +1236,52 @@ describe('buildRetrievalGroundingBundle', () => {
     });
     expect(bundle.items).toEqual([]);
     expect(summarizeProvenance(bundle)).toBe('ungrounded');
+  });
+});
+
+// ─── code-blind grounding guard (mmnto-ai/totem#2106, strategy#474) ──
+
+describe('code-blind grounding guard', () => {
+  const withCode = {
+    code: [makeResult({ label: 'x', filePath: 'src/x.ts', score: 1, content: 'c' })],
+  };
+
+  describe('isCodeBlind', () => {
+    it('is true iff zero code chunks were retrieved — keyed strictly on code', () => {
+      expect(isCodeBlind({ code: [] })).toBe(true);
+      expect(isCodeBlind(withCode)).toBe(false);
+    });
+  });
+
+  describe('applyCodeBlindGuard', () => {
+    const SYS = 'SYSTEM PROMPT';
+
+    it('on 0 code: fires, surfaces the banner, appends the directive to the system prompt', () => {
+      const r = applyCodeBlindGuard({ code: [] }, SYS);
+      expect(r.codeBlind).toBe(true);
+      expect(r.banner).toBe(CODE_BLIND_BANNER);
+      // Exact: the original system prompt comes first, directive appended.
+      expect(r.systemPrompt).toBe(`${SYS}\n\n${CODE_BLIND_PROMPT_DIRECTIVE}`);
+    });
+
+    it('with code: does not fire, no banner, system prompt returned unchanged', () => {
+      const r = applyCodeBlindGuard(withCode, SYS);
+      expect(r.codeBlind).toBe(false);
+      expect(r.banner).toBeUndefined();
+      expect(r.systemPrompt).toBe(SYS);
+    });
+
+    it('does not throw or disable on 0 code — returns a usable prompt (anti-abort, strategy#474)', () => {
+      expect(() => applyCodeBlindGuard({ code: [] }, SYS)).not.toThrow();
+      // The command proceeds: a directive-augmented prompt is returned, not an abort.
+      expect(applyCodeBlindGuard({ code: [] }, SYS).systemPrompt).toBe(
+        `${SYS}\n\n${CODE_BLIND_PROMPT_DIRECTIVE}`,
+      );
+    });
+
+    it('banner is advisory-neutral, not error-toned (strategy#474 Q2)', () => {
+      expect(CODE_BLIND_BANNER).not.toMatch(/\b(error|fail(ed|ure)?|abort)\b/i);
+    });
   });
 });
 

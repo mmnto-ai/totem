@@ -242,6 +242,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   } = await import('@mmnto/totem');
   const { log } = await import('../ui.js');
   const {
+    applyCodeBlindGuard,
     getSystemPrompt,
     loadConfig,
     loadEnv,
@@ -366,8 +367,14 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // Resolve system prompt (allow .totem/prompts/spec.md override)
   const systemPrompt = getSystemPrompt('spec', SYSTEM_PROMPT, cwd, config.totemDir);
 
+  // Code-blind grounding guard (mmnto-ai/totem#2106): 0 code retrieved → surface
+  // an advisory banner + fold a suppression directive into the prompt; never
+  // disables (strategy#474 interim ruling).
+  const codeBlindGuard = applyCodeBlindGuard(context, systemPrompt);
+  if (codeBlindGuard.banner) log.warn(TAG, codeBlindGuard.banner);
+
   // Assemble prompt
-  const prompt = await assemblePrompt(parsed, context, systemPrompt);
+  const prompt = await assemblePrompt(parsed, context, codeBlindGuard.systemPrompt);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   // Grounded run artifact (mmnto-ai/totem#2100): always-on for spec — every
@@ -394,7 +401,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     // Admission contract (mmnto-ai/totem#2102): the same value the slice-1
     // constant recorded, now caller-supplied — spec is factually completion-only.
     backendAdmissionClass: ADMISSION_COMPLETION_ONLY,
-    runMetadata: { caller: 'spec' },
+    runMetadata: { caller: 'spec', codeBlind: codeBlindGuard.codeBlind },
     artifact: {
       groundingHash: calculateDeterministicHash(groundingBundle),
       provenanceSummary: summarizeProvenance(groundingBundle),

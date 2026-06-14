@@ -217,6 +217,14 @@ export const RunMetadataSchema = z.object({
   caller: z.string().min(1).optional(),
   /** The CLI command identity the run served, when distinct from `caller`. */
   command: z.string().min(1).optional(),
+  /**
+   * Whether the code-blind grounding guard fired for this run (mmnto-ai/totem#2106):
+   * zero code chunks were retrieved, so the prompt carried the suppression
+   * directive and the output is degraded/caveated. Recorded so run artifacts
+   * (eval fixtures, #2100) are filterable by guard activation without
+   * recomputing `code.length === 0` from the grounding bundle.
+   */
+  codeBlind: z.boolean().optional(),
 });
 
 /**
