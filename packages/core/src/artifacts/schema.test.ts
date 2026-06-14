@@ -156,4 +156,13 @@ describe('admission contract schemas (#2102)', () => {
     expect(RunMetadataSchema.safeParse({ caller: '' }).success).toBe(false);
     expect(RunMetadataSchema.safeParse({ command: '' }).success).toBe(false);
   });
+
+  it('RunMetadata accepts an optional codeBlind flag (mmnto-ai/totem#2106)', () => {
+    expect(RunMetadataSchema.safeParse({ caller: 'spec', codeBlind: true }).success).toBe(true);
+    expect(RunMetadataSchema.safeParse({ caller: 'review', codeBlind: false }).success).toBe(true);
+    // Optional: absent stays undefined, not defaulted.
+    expect(RunMetadataSchema.parse({ caller: 'spec' }).codeBlind).toBeUndefined();
+    // Wrong type is rejected.
+    expect(RunMetadataSchema.safeParse({ caller: 'spec', codeBlind: 'yes' }).success).toBe(false);
+  });
 });

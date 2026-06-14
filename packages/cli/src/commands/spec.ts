@@ -401,7 +401,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     // Admission contract (mmnto-ai/totem#2102): the same value the slice-1
     // constant recorded, now caller-supplied — spec is factually completion-only.
     backendAdmissionClass: ADMISSION_COMPLETION_ONLY,
-    runMetadata: { caller: 'spec' },
+    runMetadata: { caller: 'spec', codeBlind: codeBlindGuard.codeBlind },
     artifact: {
       groundingHash: calculateDeterministicHash(groundingBundle),
       provenanceSummary: summarizeProvenance(groundingBundle),

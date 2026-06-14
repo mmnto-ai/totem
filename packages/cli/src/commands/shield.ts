@@ -1389,7 +1389,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     // factually completion-only. `caller` is the user-facing command identity
     // (`totem review`; `shield` is its hidden deprecated alias).
     backendAdmissionClass: ADMISSION_COMPLETION_ONLY,
-    runMetadata: { caller: 'review' },
+    runMetadata: { caller: 'review', codeBlind: codeBlindGuard.codeBlind },
     artifact: {
       groundingHash: calculateDeterministicHash(groundingBundle),
       provenanceSummary: summarizeProvenance(groundingBundle),
