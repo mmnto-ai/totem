@@ -28,16 +28,48 @@ jobs:
 
       - run: pnpm build
 
-      - name: Run totem lint (PR diff)
+      # ADVISORY until the rule-compilation freeze lifts (the convergent spine).
+      # The compiled lesson-rules carry frozen #2055-class false-positives that
+      # cannot be recompiled away under the freeze (safe-regex2 ReDoS gate). A
+      # perma-red check trains bypass-blindness and masks a future REAL regression
+      # (red->red is invisible) — so the job keeps RUNNING (findings still print)
+      # but is non-failing. The clean deterministic gates stay hard in the pre-push
+      # hook + the PR bot review is the real gate. Drop continue-on-error when the
+      # spine makes these rules legitimate again.
+      # mmnto-ai/totem-strategy#430 · mmnto-ai/totem#2055 · mirrors strategy#656
+      - name: Run totem lint (ADVISORY — frozen lesson-rules pending spine)
+        id: totem_lint
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          # Ensure the base branch is available for diff
-          git fetch origin ${{ github.base_ref }} --depth=1
+          # Ensure the base branch is available for diff (env-mapped to avoid
+          # template injection into the shell — zizmor template-injection).
+          git fetch origin "$BASE_REF" --depth=1
           node packages/cli/dist/index.js lint
 
+      # Surface the advisory state as a REAL GitHub annotation (PR checks pane +
+      # annotations rail), not just the step name — so a green job never reads as
+      # "lint clean" when the frozen rules actually flagged something
+      # (never-skip-silently). Fires only when the advisory lint had findings.
+      - name: Advisory annotation (when totem lint flagged findings)
+        if: steps.totem_lint.outcome == 'failure'
+        run: |
+          echo "::warning title=Totem lint ADVISORY::Totem lint flagged findings but the job is advisory — these may be #2055-class false-positives from frozen lesson-rules (safe-regex2 freeze). Drop continue-on-error when the spine recompiles. Refs: mmnto-ai/totem#2055, mmnto-ai/totem-strategy#430."
+
+      # NOTE (advisory posture): the SARIF steps below still run while the lint job
+      # is advisory, so frozen #2055-class false-positives surface as Code Scanning
+      # alerts under the `totem-lint` category. Kept ON deliberately — the findings
+      # are an audit trail for the #474 false-positive measurement, and the dedicated
+      # `totem-lint` category keeps them from masking CodeQL alerts (separate
+      # category). Revisit (gate the upload) if the category gets noisy enough to
+      # bury a real finding. Refs: mmnto-ai/totem#2055.
       - name: Generate SARIF report
         if: always()
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1 2>/dev/null || true
+          git fetch origin "$BASE_REF" --depth=1 2>/dev/null || true
           node packages/cli/dist/index.js lint --format sarif --out totem-lint.sarif || true
 
       - name: Upload SARIF to GitHub Security
