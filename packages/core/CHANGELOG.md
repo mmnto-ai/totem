@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.63.0
+
+### Minor Changes
+
+- 92e852f: feat(spec,review): code-blind grounding guard — when `totem spec` / `totem review` retrieve zero code chunks, surface an advisory banner ("no code context — architecture claims unverified") and fold a suppression directive into the orchestrator prompt so the model degrades to the retrieved specs/sessions/lessons instead of confabulating file/type/system specifics (the lc#463 "invented a whole architecture" class). Interim fail-loud guard per strategy#474: the command still runs — it does not disable. The banner is the deterministic, code-emitted signal; the prompt directive is best-effort. Fires strictly on 0 code, independent of specs/sessions/lessons. The guard's activation is recorded on `RunMetadata.codeBlind` so run artifacts (eval fixtures, #2100) are filterable by it. Hard structural post-checks remain the #474 redesign (mmnto-ai/totem#2103). (mmnto-ai/totem#2106)
+
 ## 1.62.0
 
 ### Minor Changes
