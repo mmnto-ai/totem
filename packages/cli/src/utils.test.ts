@@ -1256,29 +1256,31 @@ describe('code-blind grounding guard', () => {
   describe('applyCodeBlindGuard', () => {
     const SYS = 'SYSTEM PROMPT';
 
-    it('on 0 code: fires, surfaces the banner, augments the system prompt with the directive', () => {
+    it('on 0 code: fires, surfaces the banner, appends the directive to the system prompt', () => {
       const r = applyCodeBlindGuard({ code: [] }, SYS);
       expect(r.codeBlind).toBe(true);
       expect(r.banner).toBe(CODE_BLIND_BANNER);
-      expect(r.systemPrompt.startsWith(SYS)).toBe(true);
-      expect(r.systemPrompt).toContain(CODE_BLIND_PROMPT_DIRECTIVE);
+      // Exact: the original system prompt comes first, directive appended.
+      expect(r.systemPrompt).toBe(`${SYS}\n\n${CODE_BLIND_PROMPT_DIRECTIVE}`);
     });
 
-    it('with code: does not fire, no banner, system prompt returned unchanged (directive absent)', () => {
+    it('with code: does not fire, no banner, system prompt returned unchanged', () => {
       const r = applyCodeBlindGuard(withCode, SYS);
       expect(r.codeBlind).toBe(false);
       expect(r.banner).toBeUndefined();
       expect(r.systemPrompt).toBe(SYS);
-      expect(r.systemPrompt).not.toContain(CODE_BLIND_PROMPT_DIRECTIVE);
     });
 
-    it('never throws / never disables — always returns a usable system prompt (NOT abort, strategy#474)', () => {
+    it('does not throw or disable on 0 code — returns a usable prompt (anti-abort, strategy#474)', () => {
       expect(() => applyCodeBlindGuard({ code: [] }, SYS)).not.toThrow();
-      expect(applyCodeBlindGuard({ code: [] }, SYS).systemPrompt.length).toBeGreaterThan(0);
+      // The command proceeds: a directive-augmented prompt is returned, not an abort.
+      expect(applyCodeBlindGuard({ code: [] }, SYS).systemPrompt).toBe(
+        `${SYS}\n\n${CODE_BLIND_PROMPT_DIRECTIVE}`,
+      );
     });
 
-    it('banner is advisory-neutral, not error-toned (strategy#474 Q2) — a legit 0-code spec is not a failure', () => {
-      expect(CODE_BLIND_BANNER.toLowerCase()).not.toMatch(/\b(error|fail(ed|ure)?|abort)\b/);
+    it('banner is advisory-neutral, not error-toned (strategy#474 Q2)', () => {
+      expect(CODE_BLIND_BANNER).not.toMatch(/\b(error|fail(ed|ure)?|abort)\b/i);
     });
   });
 });
