@@ -75,7 +75,8 @@ describe('isContained — win32-safe containment', () => {
   it('rejects parent-traversal escape', () => {
     expect(isContained('/repo', '../../etc/passwd')).toBe(false);
   });
-  it('rejects mixed-separator traversal (win32)', () => {
+  it('rejects backslash-separator traversal on any platform', () => {
+    // POSIX treats `\` as a literal char; normalization must still catch this escape.
     expect(isContained('/repo', 'src\\..\\..\\etc/passwd')).toBe(false);
   });
   it('rejects an absolute path', () => {

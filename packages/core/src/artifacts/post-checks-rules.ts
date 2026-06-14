@@ -47,8 +47,13 @@ function readFileVia(ctx: PostCheckContext, absPath: string): string | undefined
  */
 export function isContained(configRoot: string, citedPath: string): boolean {
   if (path.isAbsolute(citedPath) || /^[a-zA-Z]:/.test(citedPath)) return false;
+  // Normalize separators BEFORE resolving: on POSIX `\` is a literal filename
+  // char, so `src\..\..\etc/passwd` would NOT get its `..` collapsed by
+  // path.resolve and would escape the root undetected. Forward-slashing first
+  // makes traversal detection identical on win32 and POSIX.
+  const normalizedCited = citedPath.replace(/\\/g, '/');
   const root = path.resolve(configRoot).replace(/\\/g, '/');
-  const resolved = path.resolve(configRoot, citedPath).replace(/\\/g, '/');
+  const resolved = path.resolve(configRoot, normalizedCited).replace(/\\/g, '/');
   return resolved === root || resolved.startsWith(root + '/');
 }
 
@@ -74,8 +79,8 @@ export function extractCitations(content: string): Citation[] {
     const token = match[1].trim();
     const parsed = /^(.+?)(?::(\d+)(?:-(\d+))?)?$/.exec(token);
     if (parsed === null) continue;
-    const filePath = parsed[1];
-    if (!filePath.includes('/') && !filePath.includes('\\') && !KNOWN_EXTENSION.test(filePath)) {
+    const filePath = parsed[1].replace(/\\/g, '/');
+    if (!filePath.includes('/') && !KNOWN_EXTENSION.test(filePath)) {
       continue;
     }
     const citation: Citation = { raw: token, filePath };
