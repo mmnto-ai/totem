@@ -194,7 +194,12 @@ export function buildIndexManifest(input: {
 export async function runSync(
   config: TotemConfig,
   options: SyncOptions,
-): Promise<{ chunksProcessed: number; filesProcessed: number; totalChunks: number }> {
+): Promise<{
+  chunksProcessed: number;
+  filesProcessed: number;
+  totalChunks: number;
+  orphansPurged: number;
+}> {
   const { projectRoot, onProgress } = options;
   const log = onProgress ?? (() => {});
   const totemDir = path.join(projectRoot, config.totemDir);
@@ -206,10 +211,41 @@ export async function runSync(
   );
 }
 
+/**
+ * Normalize a path separator to forward slashes for orphan COMPARISON only.
+ * Deletes always use the raw stored path (mmnto-ai/totem#2151 W1): `deleteByFile`
+ * matches the stored literal, so a legacy `src\x.ts` row must delete with
+ * backslashes while never being false-orphaned against a forward-slash live path.
+ */
+function normalizeRel(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
+/**
+ * Reconcile indexed paths against the working tree: an indexed path with no live
+ * counterpart is an orphan to purge (mmnto-ai/totem#2151). Compares on a
+ * separator-normalized key but RETURNS THE RAW indexed path (the caller deletes
+ * via `deleteByFile`, a stored-literal match). Independent of the git diff
+ * window — that independence is what self-heals deletions the baseline already
+ * advanced past, and de-targeted / newly-ignored files git never reports.
+ */
+export function computeOrphanPaths(
+  indexedRawPaths: string[],
+  liveRelativePaths: string[],
+): string[] {
+  const live = new Set(liveRelativePaths.map(normalizeRel));
+  return indexedRawPaths.filter((raw) => !live.has(normalizeRel(raw)));
+}
+
 async function runSyncInner(
   config: TotemConfig,
   options: SyncOptions,
-): Promise<{ chunksProcessed: number; filesProcessed: number; totalChunks: number }> {
+): Promise<{
+  chunksProcessed: number;
+  filesProcessed: number;
+  totalChunks: number;
+  orphansPurged: number;
+}> {
   const { projectRoot, onProgress } = options;
   let incremental = options.incremental;
   const log = onProgress ?? (() => {});
@@ -258,15 +294,30 @@ async function runSyncInner(
       log(`Full sync (fallback): ${filesToProcess.length} files to process`);
     } else {
       const changedSet = new Set(changedPaths);
-      const allFileSet = new Set(allFiles.map((f) => f.relativePath));
 
-      // Partition: files that still exist get re-indexed, missing files get deleted
+      // Re-embed stays diff-scoped: only changed files that still exist.
       filesToProcess = allFiles.filter((f) => changedSet.has(f.relativePath));
-      deletedPaths = changedPaths.filter((p) => !allFileSet.has(p));
+
+      // Deletion is reconciliation-based, NOT diff-derived (mmnto-ai/totem#2151):
+      // purge any indexed path no longer in the working tree, regardless of the
+      // git diff window — self-heals deletions, renames-into-ignored, and
+      // de-targeted files even after the baseline advanced past them. On read
+      // failure, skip the purge this run (warn, no false purge); a later sync heals.
+      try {
+        deletedPaths = computeOrphanPaths(
+          await store.getDistinctPaths(),
+          allFiles.map((f) => f.relativePath),
+        );
+        // totem-context: intentional warn+skip on a getDistinctPaths read failure (mmnto-ai/totem#2151 Q3, cohort-endorsed) — never a false purge; a later sync reconciles, and the Warning below means it is not silent degradation.
+      } catch (err) {
+        log(
+          `  Warning: orphan reconciliation skipped (getDistinctPaths failed): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
 
       log(
         `Incremental sync: ${filesToProcess.length} changed files` +
-          (deletedPaths.length > 0 ? `, ${deletedPaths.length} deleted` : '') +
+          (deletedPaths.length > 0 ? `, ${deletedPaths.length} orphaned` : '') +
           ` (of ${allFiles.length} total)`,
       );
     }
@@ -277,16 +328,24 @@ async function runSyncInner(
     log(`Full sync: ${filesToProcess.length} files to process`);
   }
 
-  // 3b. Purge chunks from deleted files before ingesting new ones
+  // 3b. Purge orphaned chunks (reconciliation result) before ingesting new ones.
+  let orphansPurged = 0;
   for (const deletedPath of deletedPaths) {
     try {
       await store.deleteByFile(deletedPath);
-      log(`  Purged chunks for deleted file: ${deletedPath}`);
+      orphansPurged++;
+      log(`  Purged chunks for orphaned file: ${deletedPath}`);
+      // totem-context: best-effort per-file purge — warn+skip; the orphan stays
+      // indexed and the next reconciliation retries it (deleteByFile is idempotent),
+      // so one bad row never aborts the whole sync (mmnto-ai/totem#2151).
     } catch (err) {
       log(
         `  Warning: failed to purge ${deletedPath}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+  if (orphansPurged > 0) {
+    log(`Purged ${orphansPurged} orphaned file(s) from the index.`);
   }
 
   // 4. Chunk files and stream to LanceDB in batches (bounded memory)
@@ -360,8 +419,12 @@ async function runSyncInner(
 
   log(`Sync complete: ${totalChunks} chunks from ${filesToProcess.length} files`);
 
-  // Build/rebuild FTS index for hybrid search (FTS indexes don't auto-update on add)
-  if (totalChunks > 0) {
+  // Build/rebuild FTS index for hybrid search (FTS indexes don't auto-update on
+  // add — or on delete: a purge-only sync must still rebuild so the FTS view
+  // drops the orphaned files' content, mmnto-ai/totem#2151 Tenet 20).
+  // Sum (not ||): both are non-negative counts, so > 0 iff either is — and it
+  // sidesteps the logical-OR numeric-default lint without changing the meaning.
+  if (totalChunks + orphansPurged > 0) {
     log('Building FTS index for hybrid search...');
     await store.createFtsIndex();
     log(
@@ -413,5 +476,6 @@ async function runSyncInner(
     chunksProcessed: totalChunks,
     filesProcessed: filesToProcess.length,
     totalChunks: totalStoredChunks,
+    orphansPurged,
   };
 }

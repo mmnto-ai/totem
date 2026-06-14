@@ -7,7 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TotemConfig } from '../config-schema.js';
 import { TotemConfigSchema } from '../config-schema.js';
 import { cleanTmpDir } from '../test-utils.js';
-import { buildIndexManifest, INDEX_MANIFEST_SCHEMA, runSync } from './pipeline.js';
+import {
+  buildIndexManifest,
+  computeOrphanPaths,
+  INDEX_MANIFEST_SCHEMA,
+  runSync,
+} from './pipeline.js';
 
 // Import the internal helpers via a workaround — we test the state file contract
 // since readSyncState/writeSyncState are not exported directly.
@@ -74,34 +79,38 @@ describe('sync state persistence', () => {
   });
 });
 
-describe('deleted file partitioning', () => {
-  it('identifies files in changedPaths but missing from allFiles as deleted', () => {
-    const changedPaths = ['src/a.ts', 'src/b.ts', 'src/deleted.ts'];
-    const allFileSet = new Set(['src/a.ts', 'src/b.ts']);
-
-    const deletedPaths = changedPaths.filter((p) => !allFileSet.has(p));
-
-    expect(deletedPaths).toEqual(['src/deleted.ts']);
+describe('orphan reconciliation (computeOrphanPaths)', () => {
+  it('flags an indexed path absent from the working tree as an orphan', () => {
+    expect(computeOrphanPaths(['src/a.ts', 'src/gone.ts'], ['src/a.ts'])).toEqual(['src/gone.ts']);
   });
 
-  it('returns empty when all changed files still exist', () => {
-    const changedPaths = ['src/a.ts'];
-    const allFileSet = new Set(['src/a.ts', 'src/b.ts']);
-
-    const deletedPaths = changedPaths.filter((p) => !allFileSet.has(p));
-
-    expect(deletedPaths).toEqual([]);
+  it('returns no orphans when every indexed path is still live', () => {
+    expect(computeOrphanPaths(['src/a.ts', 'src/b.ts'], ['src/a.ts', 'src/b.ts'])).toEqual([]);
   });
 
-  it('handles renamed files (old path deleted, new path exists)', () => {
-    const changedPaths = ['src/old-name.ts', 'src/new-name.ts'];
-    const allFileSet = new Set(['src/new-name.ts']);
+  it('W1: a live file stored with backslashes is NOT orphaned by its forward-slash live path', () => {
+    // Legacy/raw stored separator vs normalized resolved path — must not false-purge.
+    expect(computeOrphanPaths(['src\\live.ts'], ['src/live.ts'])).toEqual([]);
+  });
 
-    const filesToProcess = changedPaths.filter((p) => allFileSet.has(p));
-    const deletedPaths = changedPaths.filter((p) => !allFileSet.has(p));
+  it('W1: an orphaned backslash path is returned RAW so deleteByFile matches the stored literal', () => {
+    expect(computeOrphanPaths(['src\\deleted.ts'], ['src/other.ts'])).toEqual(['src\\deleted.ts']);
+  });
 
-    expect(filesToProcess).toEqual(['src/new-name.ts']);
-    expect(deletedPaths).toEqual(['src/old-name.ts']);
+  it('purges a de-targeted / newly-ignored file that left allFiles even though it exists on disk', () => {
+    expect(computeOrphanPaths(['src/foo.ts'], [])).toEqual(['src/foo.ts']);
+  });
+
+  it('rename-into-ignored (#624): the old indexed path is orphaned when neither old nor new is live', () => {
+    expect(computeOrphanPaths(['proposals/active/296.md'], ['proposals/other.md'])).toEqual([
+      'proposals/active/296.md',
+    ]);
+  });
+
+  it('W2: independent of the diff window — an orphan is found from indexed-vs-live alone', () => {
+    // The inputs are the indexed set and the working tree, never changedPaths,
+    // so an empty diff window cannot hide an orphan.
+    expect(computeOrphanPaths(['src/orphan.ts'], ['src/kept.ts'])).toEqual(['src/orphan.ts']);
   });
 });
 
