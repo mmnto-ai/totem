@@ -136,6 +136,10 @@ describe('resolveCaller — caller identity + taskProfile aliases', () => {
     expect(resolveCaller(makeArtifact({ caller: 'review', taskProfile: 'Spec' }))).toBe('review');
   });
 
+  it('lower-cases a capitalized explicit caller so caller-scoped gates still match', () => {
+    expect(resolveCaller(makeArtifact({ caller: 'Spec', taskProfile: 'Shield' }))).toBe('spec');
+  });
+
   it('falls back to taskProfile alias Spec → spec', () => {
     expect(resolveCaller(makeArtifact({ taskProfile: 'Spec' }))).toBe('spec');
   });

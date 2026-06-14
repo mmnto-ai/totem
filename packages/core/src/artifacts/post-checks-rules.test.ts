@@ -25,6 +25,7 @@ interface ArtifactOpts {
   caller?: string;
   taskProfile?: string;
   content?: string;
+  codeBlind?: boolean;
   outputContract?: {
     schema?: Record<string, unknown>;
     citationsRequired?: boolean;
@@ -34,15 +35,20 @@ interface ArtifactOpts {
 }
 
 function artifact(o: ArtifactOpts = {}): RunArtifact {
-  const { caller, taskProfile = 'Spec', content = '', outputContract, bundleItems } = o;
+  const { caller, taskProfile = 'Spec', content = '', codeBlind, outputContract, bundleItems } = o;
   const a: Record<string, unknown> = {
     backend: { taskProfile },
     output: { content },
     grounding: {},
   };
-  if (caller !== undefined || outputContract !== undefined) {
+  if (caller !== undefined || codeBlind !== undefined || outputContract !== undefined) {
     const admission: Record<string, unknown> = {};
-    if (caller !== undefined) admission.runMetadata = { caller };
+    if (caller !== undefined || codeBlind !== undefined) {
+      const runMetadata: Record<string, unknown> = {};
+      if (caller !== undefined) runMetadata.caller = caller;
+      if (codeBlind !== undefined) runMetadata.codeBlind = codeBlind;
+      admission.runMetadata = runMetadata;
+    }
     if (outputContract !== undefined) admission.outputContract = outputContract;
     a.admission = admission;
   }
@@ -261,9 +267,9 @@ describe('engine + DEFAULT_RULES integration', () => {
     expect(r.isRejected).toBe(false);
   });
 
-  it('a slice-1 historic artifact (no caller, no contract, no bundle) is all-abstain and does not reject', async () => {
-    const a = artifact({ caller: undefined, taskProfile: 'Spec', content: '' });
-    // taskProfile 'Spec' still resolves caller -> spec; use an unknown profile for a true historic no-caller run.
+  it('slice-1 historic artifact (unknown profile, no contract, no bundle) is all-abstain and does not reject', async () => {
+    // Unknown taskProfile + no caller → resolveCaller undefined → caller-scoped rules
+    // don't apply; the contract/bundle rules abstain. Protects retrofitted history.
     const historic = artifact({
       taskProfile: 'LegacyUnknown',
       content: 'plain text, no citations',
@@ -271,6 +277,22 @@ describe('engine + DEFAULT_RULES integration', () => {
     const r = await evaluatePostChecks(historic, DEFAULT_RULES, ctx());
     expect(r.isRejected).toBe(false);
     expect(r.findings.every((f) => f.verdict === 'abstain')).toBe(true);
-    void a;
+  });
+
+  it('code-blind profile: spec checks still run and a resolvable citation does not false-fail', async () => {
+    // agy must-cover profile (b): a code-blind spec run (zero code retrieved) still runs
+    // spec-verify; the codeBlind flag is inert to the gates and must not cause a fail.
+    const a = artifact({
+      caller: 'spec',
+      codeBlind: true,
+      content: 'see `packages/cli/src/utils/diff-selector.ts`',
+    });
+    const r = await evaluatePostChecks(
+      a,
+      DEFAULT_RULES,
+      ctx(['packages/cli/src/utils/diff-selector.ts']),
+    );
+    expect(r.isRejected).toBe(false);
+    expect(r.findings.find((f) => f.ruleName === 'spec-verify')?.verdict).toBe('pass');
   });
 });

@@ -108,7 +108,10 @@ const TASK_PROFILE_ALIASES: Readonly<Record<string, string>> = {
  */
 export function resolveCaller(artifact: RunArtifact): string | undefined {
   const caller = artifact.admission?.runMetadata?.caller;
-  if (caller !== undefined) return caller;
+  // Lower-case the explicit caller too (CR review): an artifact carrying
+  // `caller: 'Spec'` would otherwise be returned verbatim and silently skip every
+  // caller-scoped gate (which compare against lower-case `'spec'`/`'review'`).
+  if (caller !== undefined) return caller.toLowerCase();
   return TASK_PROFILE_ALIASES[artifact.backend.taskProfile];
 }
 

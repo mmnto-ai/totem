@@ -10,6 +10,10 @@
  * direct unit testing — they are the load-bearing edge-case surface (agy).
  */
 
+// `node:fs` is a STATIC import by design (CR #2177 review #3, declined): @mmnto/totem
+// (core) is a Node package — native LanceDB + tree-sitter bindings — never an
+// edge/Deno/browser target, so the module-load portability concern does not apply.
+// The `readFile` seam exists for test injection, not runtime portability.
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
@@ -52,9 +56,14 @@ export function isContained(configRoot: string, citedPath: string): boolean {
   // path.resolve and would escape the root undetected. Forward-slashing first
   // makes traversal detection identical on win32 and POSIX.
   const normalizedCited = citedPath.replace(/\\/g, '/');
-  const root = path.resolve(configRoot).replace(/\\/g, '/');
-  const resolved = path.resolve(configRoot, normalizedCited).replace(/\\/g, '/');
-  return resolved === root || resolved.startsWith(root + '/');
+  const root = path.resolve(configRoot);
+  const resolved = path.resolve(configRoot, normalizedCited);
+  // path.relative containment (GCA review): robust vs a `startsWith(root + '/')`
+  // prefix check — no hardcoded separator (so a filesystem-root config never
+  // double-slashes into a false fail), and a cross-drive escape comes back as an
+  // absolute path. `''` = the citation IS the root.
+  const rel = path.relative(root, resolved);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
 /** A parsed citation token: the path plus an optional 1-indexed line or line range. */
@@ -80,6 +89,9 @@ export function extractCitations(content: string): Citation[] {
     const parsed = /^(.+?)(?::(\d+)(?:-(\d+))?)?$/.exec(token);
     if (parsed === null) continue;
     const filePath = parsed[1].replace(/\\/g, '/');
+    // Skip URLs (CR review): a `https://…/x.ts` token has a separator + extension,
+    // would fail containment, and would false-fail a spec that links external docs.
+    if (/^https?:\/\//.test(filePath)) continue;
     if (!filePath.includes('/') && !KNOWN_EXTENSION.test(filePath)) {
       continue;
     }
@@ -163,7 +175,9 @@ export const citationResolvesRule: PostCheckRule = {
     }
     const bundlePaths =
       resolveCaller(a) === 'review' && a.grounding.bundle !== undefined
-        ? new Set(a.grounding.bundle.items.map((i) => i.filePath))
+        ? // normalize separators (GCA review): bundle filePaths may be win32 backslash,
+          // cited filePaths are forward-slashed, so compare on a common separator.
+          new Set(a.grounding.bundle.items.map((i) => i.filePath.replace(/\\/g, '/')))
         : undefined;
     const failures: string[] = [];
     for (const c of citations) {
@@ -221,7 +235,10 @@ export const specVerifyRule: PostCheckRule = {
       return { verdict: 'pass', message: `all ${citations.length} cited paths resolve` };
     }
     const verifyAllowed = a.admission?.outputContract?.verifyFallback !== false;
-    const hasVerifyMarker = /\bVERIFY:/.test(content);
+    // Strip fences before the marker search too (Greptile review) — a VERIFY: that
+    // exists only inside a code block (which extractCitations already strips) must
+    // not excuse unresolved paths the citation pass never saw.
+    const hasVerifyMarker = /\bVERIFY:/.test(content.replace(/```[\s\S]*?```/g, ''));
     if (verifyAllowed && hasVerifyMarker) {
       return {
         verdict: 'pass',
