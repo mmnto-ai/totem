@@ -317,7 +317,7 @@ async function runSyncInner(
 
       log(
         `Incremental sync: ${filesToProcess.length} changed files` +
-          (deletedPaths.length > 0 ? `, ${deletedPaths.length} orphaned` : '') +
+          (deletedPaths.length > 0 ? `, ${deletedPaths.length} orphan candidate(s)` : '') +
           ` (of ${allFiles.length} total)`,
       );
     }

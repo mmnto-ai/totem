@@ -554,7 +554,9 @@ export class LanceStore {
    * because callers purge via `deleteByFile`, which matches the stored literal;
    * separator normalization for comparison is the caller's job
    * (mmnto-ai/totem#2151 W1). Bounded `select(['filePath'])` projection — never
-   * pulls vectors or chunk bodies into memory.
+   * pulls vectors or chunk bodies into memory, but reads O(chunks) rows and
+   * dedups in JS (same shape as `manifestDocuments`); a DB-level DISTINCT is
+   * tracked in mmnto-ai/totem#2175 for large stores.
    */
   async getDistinctPaths(): Promise<string[]> {
     if (!this.table) return [];
