@@ -547,4 +547,32 @@ export class LanceStore {
       closeReadSnapshot(snapshot.db, this.onWarn);
     }
   }
+
+  /**
+   * Distinct raw `filePath` values currently in the store — the set of source
+   * files with at least one chunk. Returns paths AS STORED (NOT normalized),
+   * because callers purge via `deleteByFile`, which matches the stored literal;
+   * separator normalization for comparison is the caller's job
+   * (mmnto-ai/totem#2151 W1). Bounded `select(['filePath'])` projection — never
+   * pulls vectors or chunk bodies into memory, but reads O(chunks) rows and
+   * dedups in JS (same shape as `manifestDocuments`); a DB-level DISTINCT is
+   * tracked in mmnto-ai/totem#2175 for large stores.
+   */
+  async getDistinctPaths(): Promise<string[]> {
+    if (!this.table) return [];
+
+    const snapshot = await this.openReadSnapshot();
+    try {
+      if (!snapshot.table) return [];
+      const rows = await snapshot.table.query().select(['filePath']).toArray();
+      const paths = new Set<string>();
+      for (const r of rows) {
+        const p = r['filePath'];
+        if (typeof p === 'string') paths.add(p);
+      }
+      return [...paths];
+    } finally {
+      closeReadSnapshot(snapshot.db, this.onWarn);
+    }
+  }
 }

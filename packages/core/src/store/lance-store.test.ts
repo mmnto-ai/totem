@@ -125,6 +125,29 @@ describe('LanceStore', () => {
     });
   });
 
+  describe('getDistinctPaths', () => {
+    it('returns one entry per distinct filePath, deduped', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'src/a.ts', content: 'a1' }),
+        makeChunk({ filePath: 'src/a.ts', content: 'a2', label: 'fn b' }),
+        makeChunk({ filePath: 'src/b.ts', content: 'b1' }),
+      ]);
+      expect((await store.getDistinctPaths()).sort()).toEqual(['src/a.ts', 'src/b.ts']);
+    });
+
+    it('returns [] for an empty store', async () => {
+      expect(await store.getDistinctPaths()).toEqual([]);
+    });
+
+    it('preserves the raw stored path (no normalization) and round-trips through deleteByFile (#2151 W1)', async () => {
+      await store.insert([makeChunk({ filePath: 'src\\legacy.ts', content: 'legacy' })]);
+      expect(await store.getDistinctPaths()).toEqual(['src\\legacy.ts']);
+      // The raw backslash path must match the stored literal on delete.
+      await store.deleteByFile('src\\legacy.ts');
+      expect(await store.getDistinctPaths()).toEqual([]);
+    });
+  });
+
   describe('deleteByFile', () => {
     it('deletes chunks for a specific file', async () => {
       await store.insert([
