@@ -2,6 +2,7 @@ import type { ContentType, LanceStore, SearchResult, TotemConfig } from '@mmnto/
 
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import {
+  applyCodeBlindGuard,
   formatLessonSection,
   formatResults,
   getSystemPrompt,
@@ -1349,12 +1350,18 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Resolve system prompt (allow .totem/prompts/shield.md override)
   const systemPrompt = getSystemPrompt('shield', SYSTEM_PROMPT_V2, cwd, config.totemDir);
 
+  // Code-blind grounding guard (mmnto-ai/totem#2106): 0 code retrieved → surface
+  // an advisory banner + fold a suppression directive into the prompt; never
+  // disables (strategy#474 interim ruling).
+  const codeBlindGuard = applyCodeBlindGuard(context, systemPrompt);
+  if (codeBlindGuard.banner) log.warn(DISPLAY_TAG, codeBlindGuard.banner);
+
   // Assemble prompt — use filtered diff/files for LLM review
   const prompt = assemblePrompt(
     filteredDiff,
     filteredFiles,
     context,
-    systemPrompt,
+    codeBlindGuard.systemPrompt,
     smartHints,
     fileContext,
   );

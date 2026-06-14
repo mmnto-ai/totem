@@ -510,6 +510,76 @@ export function buildRetrievalGroundingBundle(context: {
   ]);
 }
 
+// ─── Code-blind grounding guard (mmnto-ai/totem#2106, strategy#474) ──
+//
+// Interim fail-loud guard for `spec`/`review`: when retrieval returns ZERO code
+// chunks, the LLM has no code grounding to verify any file/type/system claim
+// against — the lc#463 class where the tool confabulated a whole architecture.
+// Per the strategy#474 interim ruling this DEGRADES, it does NOT disable: a
+// deterministic, advisory banner is surfaced and a suppression directive is
+// folded into the system prompt so the model stays at the altitude the
+// retrieved specs/sessions/lessons support. The banner is the Tenet-4
+// guarantee (code-emitted, LLM-independent); the directive is best-effort.
+// Keyed strictly on `code` — independent of specs/sessions/lessons.
+
+/**
+ * User-facing notice surfaced on the 0-code path. Advisory-neutral by design
+ * (strategy#474 Q2): a broad/new-area `spec` can legitimately retrieve 0 code,
+ * so this must read as a caveat, not a hard failure.
+ */
+export const CODE_BLIND_BANNER =
+  'No code context retrieved — architecture claims are unverified against the codebase. Treat any file, type, or system specifics as unconfirmed assumptions, not facts.';
+
+/**
+ * Directive folded into the system prompt on the 0-code path so the model
+ * degrades instead of confabulating. Soft (LLM-side) by design — the banner
+ * carries the deterministic guarantee.
+ */
+export const CODE_BLIND_PROMPT_DIRECTIVE = [
+  '=== GROUNDING NOTICE: NO CODE RETRIEVED ===',
+  'Zero code was retrieved from the knowledge index for this run — you have NO grounding to verify code specifics against.',
+  'Do NOT assert the existence of specific files, types, classes, functions, modules, or directory layouts; you cannot confirm them.',
+  'Stay at the altitude the retrieved specs, sessions, and lessons actually support, and mark any architectural specifics as UNVERIFIED ASSUMPTIONS rather than established facts.',
+].join('\n');
+
+/**
+ * True when retrieval returned zero code chunks — the 0-code grounding signal
+ * (mmnto-ai/totem#2106). Keyed strictly on `code`, independent of
+ * specs/sessions/lessons.
+ */
+export function isCodeBlind(context: { code: readonly unknown[] }): boolean {
+  return context.code.length === 0;
+}
+
+export interface CodeBlindGuardResult {
+  /** Whether the 0-code guard fired. */
+  codeBlind: boolean;
+  /** System prompt to use: directive-augmented when `codeBlind`, else unchanged. */
+  systemPrompt: string;
+  /** User-facing banner — present iff `codeBlind`. */
+  banner?: string;
+}
+
+/**
+ * Apply the code-blind grounding guard for a `spec`/`review` run. Pure and
+ * total: never throws, never disables — the command always proceeds. Callers
+ * emit `banner` (when present) to their surface and pass `systemPrompt` on to
+ * prompt assembly.
+ */
+export function applyCodeBlindGuard(
+  context: { code: readonly unknown[] },
+  systemPrompt: string,
+): CodeBlindGuardResult {
+  if (!isCodeBlind(context)) {
+    return { codeBlind: false, systemPrompt };
+  }
+  return {
+    codeBlind: true,
+    systemPrompt: `${systemPrompt}\n\n${CODE_BLIND_PROMPT_DIRECTIVE}`,
+    banner: CODE_BLIND_BANNER,
+  };
+}
+
 /**
  * Admission gate (mmnto-ai/totem#2102, strategy#474 slice 3): a requested
  * class above `completion_only` must be declared in

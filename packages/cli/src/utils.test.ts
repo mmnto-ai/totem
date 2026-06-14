@@ -10,10 +10,14 @@ import { calculateDeterministicHash, RunArtifactSchema, summarizeProvenance } fr
 
 import { cleanTmpDir } from './test-utils.js';
 import {
+  applyCodeBlindGuard,
   buildRetrievalGroundingBundle,
+  CODE_BLIND_BANNER,
+  CODE_BLIND_PROMPT_DIRECTIVE,
   formatLessonSection,
   formatResults,
   getSystemPrompt,
+  isCodeBlind,
   isGlobalConfigPath,
   loadConfig,
   loadEnv,
@@ -1232,6 +1236,50 @@ describe('buildRetrievalGroundingBundle', () => {
     });
     expect(bundle.items).toEqual([]);
     expect(summarizeProvenance(bundle)).toBe('ungrounded');
+  });
+});
+
+// ─── code-blind grounding guard (mmnto-ai/totem#2106, strategy#474) ──
+
+describe('code-blind grounding guard', () => {
+  const withCode = {
+    code: [makeResult({ label: 'x', filePath: 'src/x.ts', score: 1, content: 'c' })],
+  };
+
+  describe('isCodeBlind', () => {
+    it('is true iff zero code chunks were retrieved — keyed strictly on code', () => {
+      expect(isCodeBlind({ code: [] })).toBe(true);
+      expect(isCodeBlind(withCode)).toBe(false);
+    });
+  });
+
+  describe('applyCodeBlindGuard', () => {
+    const SYS = 'SYSTEM PROMPT';
+
+    it('on 0 code: fires, surfaces the banner, augments the system prompt with the directive', () => {
+      const r = applyCodeBlindGuard({ code: [] }, SYS);
+      expect(r.codeBlind).toBe(true);
+      expect(r.banner).toBe(CODE_BLIND_BANNER);
+      expect(r.systemPrompt.startsWith(SYS)).toBe(true);
+      expect(r.systemPrompt).toContain(CODE_BLIND_PROMPT_DIRECTIVE);
+    });
+
+    it('with code: does not fire, no banner, system prompt returned unchanged (directive absent)', () => {
+      const r = applyCodeBlindGuard(withCode, SYS);
+      expect(r.codeBlind).toBe(false);
+      expect(r.banner).toBeUndefined();
+      expect(r.systemPrompt).toBe(SYS);
+      expect(r.systemPrompt).not.toContain(CODE_BLIND_PROMPT_DIRECTIVE);
+    });
+
+    it('never throws / never disables — always returns a usable system prompt (NOT abort, strategy#474)', () => {
+      expect(() => applyCodeBlindGuard({ code: [] }, SYS)).not.toThrow();
+      expect(applyCodeBlindGuard({ code: [] }, SYS).systemPrompt.length).toBeGreaterThan(0);
+    });
+
+    it('banner is advisory-neutral, not error-toned (strategy#474 Q2) — a legit 0-code spec is not a failure', () => {
+      expect(CODE_BLIND_BANNER.toLowerCase()).not.toMatch(/\b(error|fail(ed|ure)?|abort)\b/);
+    });
   });
 });
 
