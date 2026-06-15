@@ -599,6 +599,38 @@ export {
   runsDir,
   saveRunArtifact,
 } from './artifacts/storage.js';
+// Panel synthesis — independent lanes, script aggregation (mmnto-ai/totem#2104 slice 5)
+export type {
+  PanelArtifact,
+  PanelDiversity,
+  PanelDiversityClass,
+  PanelLane,
+  PanelLaneInput,
+  PanelSynthesis,
+  PersistedPostCheckFinding,
+  PersistedPostCheckReport,
+  SavePanelArtifactResult,
+  SynthesisFinding,
+} from './artifacts/panel.js';
+export {
+  assemblePanelArtifact,
+  classifyDiversity,
+  computePanelArtifactContentHash,
+  PANEL_ARTIFACT_KNOWN_MAJOR,
+  PANEL_ARTIFACT_SCHEMA_VERSION,
+  PanelArtifactSchema,
+  PanelDiversityClassSchema,
+  PanelDiversitySchema,
+  PanelLaneSchema,
+  panelsDir,
+  PanelSynthesisSchema,
+  PersistedPostCheckFindingSchema,
+  PersistedPostCheckReportSchema,
+  readPanelArtifact,
+  SynthesisFindingSchema,
+  synthesizePanel,
+  writePanelArtifact,
+} from './artifacts/panel.js';
 
 // Strategy-root resolver (mmnto-ai/totem#1710)
 export type {
