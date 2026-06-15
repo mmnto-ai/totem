@@ -46,16 +46,17 @@ export const PANEL_ARTIFACT_KNOWN_MAJOR = 1;
 /** Major-1 semver literal — keep in sync with {@link PANEL_ARTIFACT_KNOWN_MAJOR} (a literal beats runtime RegExp construction; the major only changes alongside a migration entry). */
 const PANEL_SCHEMA_VERSION_RE = /^1\.\d+\.\d+$/;
 
-/** Accept any 1.x version; reject other majors with the version named (F1). */
-const panelSchemaVersionField = z.string().refine(
-  (v) => PANEL_SCHEMA_VERSION_RE.test(v),
-  (v) => ({
-    message: `unsupported panel-artifact schemaVersion "${v}" — this reader understands major ${PANEL_ARTIFACT_KNOWN_MAJOR}.x; a new major requires a migration entry in readPanelArtifact`,
-  }),
-);
+/** Accept any 1.x version; reject other majors loud (F1). Zod `.regex()` is the
+ * validation boundary (mirrors schema.ts's `z.string().regex(...)`) — not a bare
+ * RegExp.test; the ZodError carries the offending value. */
+const panelSchemaVersionField = z.string().regex(PANEL_SCHEMA_VERSION_RE, {
+  message: `unsupported panel-artifact schemaVersion — this reader understands major ${PANEL_ARTIFACT_KNOWN_MAJOR}.x; a new major requires a migration entry in readPanelArtifact`,
+});
 
 /** sha256 hex content hash (full digest — identity, not display). */
 const SHA256_HEX = /^[0-9a-f]{64}$/;
+/** Zod guard for the content-address id — the validation boundary (mirrors schema.ts; no bare RegExp.test). */
+const Sha256HexSchema = z.string().regex(SHA256_HEX);
 
 // ─── Diversity ──────────────────────────────────────────────────────────────
 
@@ -440,7 +441,7 @@ export function writePanelArtifact(
       flag: 'wx',
     });
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+    if (err !== null && typeof err === 'object' && 'code' in err && err.code === 'EEXIST') {
       return { hash, path: filePath, existed: true };
     }
     throw err;
@@ -455,7 +456,7 @@ export function writePanelArtifact(
  * — loud, never a silent partial (Tenet 4).
  */
 export function readPanelArtifact(totemDirAbs: string, hash: string): PanelArtifact {
-  if (!SHA256_HEX.test(hash)) {
+  if (!Sha256HexSchema.safeParse(hash).success) {
     throw new TotemParseError(
       `Invalid panel-artifact id "${hash}" — expected a 64-char sha256 hex content address.`,
       'Pass the hash exactly as reported at emission (or from the artifacts/panels/ filename).',
@@ -487,8 +488,8 @@ export function readPanelArtifact(totemDirAbs: string, hash: string): PanelArtif
 
 /** Best-effort major extraction from a raw parsed payload; undefined when absent/garbled. */
 function readMajor(raw: unknown): number | undefined {
-  if (typeof raw !== 'object' || raw === null) return undefined;
-  const version = (raw as Record<string, unknown>)['schemaVersion'];
+  if (typeof raw !== 'object' || raw === null || !('schemaVersion' in raw)) return undefined;
+  const version = raw.schemaVersion;
   if (typeof version !== 'string') return undefined;
   const major = Number.parseInt(version.split('.')[0] ?? '', 10);
   return Number.isNaN(major) ? undefined : major;
