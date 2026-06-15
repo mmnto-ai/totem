@@ -309,6 +309,14 @@ describe('cross-field invariants fail parse, not silently pass (greptile P2, CR 
     c.diversity.providers = [...c.diversity.providers, 'extra'];
     expect(() => PanelArtifactSchema.parse(c)).toThrow();
   });
+
+  it('a providers array with wrong contents (right length + distinct count) fails parse', () => {
+    const c = structuredClone(valid());
+    // lanes are l1=gemini, l2=anthropic; swap providers so length (2) and distinct
+    // count (2) still match but the per-lane mapping is wrong (CodeRabbit round 2).
+    c.diversity.providers = ['anthropic', 'gemini'];
+    expect(() => PanelArtifactSchema.parse(c)).toThrow();
+  });
 });
 
 // ─── storage: content-address, dedup, round-trip, invariant-at-read ──────────

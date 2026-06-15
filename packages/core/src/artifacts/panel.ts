@@ -230,6 +230,18 @@ export const PanelArtifactSchema = z
         message: 'diversity.distinctProviders must equal the number of distinct providers',
       });
     }
+    // providers[] must be GROUNDED in the lane records, not merely correct-length
+    // (CodeRabbit on mmnto-ai/totem#2179): both are in canonical laneId order, so
+    // providers[i] must equal lanes[i]'s backend.provider — otherwise `class` /
+    // `diversityConfidence` could disagree with the actual lanes undetected.
+    a.lanes.forEach((lane, i) => {
+      if (a.diversity.providers[i] !== lane.artifact.backend.provider) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `diversity.providers[${i}] must equal lanes[${i}].artifact.backend.provider ("${lane.artifact.backend.provider}")`,
+        });
+      }
+    });
     const vd = a.synthesis.verdictDistribution;
     if (vd.accepted + vd.rejected !== n) {
       ctx.addIssue({
