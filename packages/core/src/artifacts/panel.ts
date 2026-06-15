@@ -223,25 +223,54 @@ export const PanelArtifactSchema = z
         code: z.ZodIssueCode.custom,
         message: `diversity.providers length (${a.diversity.providers.length}) must equal lane count (${n})`,
       });
-    }
-    if (a.diversity.distinctProviders !== new Set(a.diversity.providers).size) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'diversity.distinctProviders must equal the number of distinct providers',
+    } else {
+      // providers[] must be GROUNDED in the lane records, not merely correct-length
+      // (CodeRabbit on mmnto-ai/totem#2179): both are in canonical laneId order, so
+      // providers[i] must equal lanes[i]'s backend.provider. Only run when lengths
+      // align — otherwise the length issue above already names the root cause, so
+      // skipping avoids duplicate issues for one fault (CR noise note on #2179).
+      a.lanes.forEach((lane, i) => {
+        if (a.diversity.providers[i] !== lane.artifact.backend.provider) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `diversity.providers[${i}] must equal lanes[${i}].artifact.backend.provider ("${lane.artifact.backend.provider}")`,
+          });
+        }
       });
     }
-    // providers[] must be GROUNDED in the lane records, not merely correct-length
-    // (CodeRabbit on mmnto-ai/totem#2179): both are in canonical laneId order, so
-    // providers[i] must equal lanes[i]'s backend.provider — otherwise `class` /
-    // `diversityConfidence` could disagree with the actual lanes undetected.
-    a.lanes.forEach((lane, i) => {
-      if (a.diversity.providers[i] !== lane.artifact.backend.provider) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `diversity.providers[${i}] must equal lanes[${i}].artifact.backend.provider ("${lane.artifact.backend.provider}")`,
-        });
-      }
-    });
+    // The diversity LABEL fields (distinctProviders / class / unrecognizedProviders /
+    // diversityConfidence) are PURE FUNCTIONS of providers[] — re-derive and require a
+    // match, so a tampered artifact can't carry diversityConfidence:'verified' or
+    // class:'cross-vendor' over an unrecognized alias and bypass the PP1 tripwire at
+    // READ (greptile on mmnto-ai/totem#2179). classifyDiversity is the single source of truth.
+    const derived = classifyDiversity(a.diversity.providers);
+    if (a.diversity.distinctProviders !== derived.distinctProviders) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `diversity.distinctProviders (${a.diversity.distinctProviders}) must equal the value derived from providers (${derived.distinctProviders})`,
+      });
+    }
+    if (a.diversity.class !== derived.class) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `diversity.class "${a.diversity.class}" must equal the value derived from providers ("${derived.class}")`,
+      });
+    }
+    if (a.diversity.diversityConfidence !== derived.diversityConfidence) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `diversity.diversityConfidence "${a.diversity.diversityConfidence}" must equal the value derived from providers ("${derived.diversityConfidence}")`,
+      });
+    }
+    if (
+      a.diversity.unrecognizedProviders.length !== derived.unrecognizedProviders.length ||
+      !a.diversity.unrecognizedProviders.every((p, i) => p === derived.unrecognizedProviders[i])
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `diversity.unrecognizedProviders must equal the set derived from providers ([${derived.unrecognizedProviders.join(', ')}])`,
+      });
+    }
     const vd = a.synthesis.verdictDistribution;
     if (vd.accepted + vd.rejected !== n) {
       ctx.addIssue({

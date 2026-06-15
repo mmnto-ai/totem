@@ -317,6 +317,34 @@ describe('cross-field invariants fail parse, not silently pass (greptile P2, CR 
     c.diversity.providers = ['anthropic', 'gemini'];
     expect(() => PanelArtifactSchema.parse(c)).toThrow();
   });
+
+  it('a diversityConfidence overclaiming "verified" over an unrecognized provider fails parse (greptile — PP1 read guard)', () => {
+    // A lane genuinely on an unrecognized provider assembles correctly as coarse.
+    const a = assemblePanelArtifact(
+      [
+        lane('l1', 'gemini', [finding('rA', 'pass')]),
+        lane('l2', 'vertex', [finding('rA', 'pass')]),
+      ],
+      AT,
+    );
+    expect(a.diversity.diversityConfidence).toBe('coarse'); // sanity: correct assembly
+    const c = structuredClone(a);
+    c.diversity.diversityConfidence = 'verified'; // overclaim — must not pass read
+    expect(() => PanelArtifactSchema.parse(c)).toThrow();
+  });
+
+  it('a class inconsistent with providers fails parse (greptile — re-derived label)', () => {
+    const a = assemblePanelArtifact(
+      [
+        lane('l1', 'gemini', [finding('rA', 'pass')]),
+        lane('l2', 'gemini', [finding('rA', 'pass')]),
+      ],
+      AT,
+    );
+    const c = structuredClone(a); // providers ['gemini','gemini'] ⇒ same-vendor-isolated
+    c.diversity.class = 'cross-vendor'; // overclaim
+    expect(() => PanelArtifactSchema.parse(c)).toThrow();
+  });
 });
 
 // ─── storage: content-address, dedup, round-trip, invariant-at-read ──────────
