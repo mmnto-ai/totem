@@ -139,11 +139,9 @@ export async function evaluatePostChecks(
   for (const rule of rules) {
     if (!rule.appliesTo(artifact)) continue;
     let result: CheckResult;
-    // totem-context: fail-loud, not swallow — a rule's own throw is converted into a
-    // 'fail' finding at the rule's declared tier (OQ4) and surfaced in the report. Only
-    // rule.evaluate is wrapped, so a genuine engine-integrity fault still bubbles out.
     try {
       result = await rule.evaluate(artifact, ctx);
+      // totem-context: fail-loud — a rule throw becomes a tier-preserving 'fail' finding (OQ4).
     } catch (err) {
       result = {
         verdict: 'fail',

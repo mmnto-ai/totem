@@ -30,10 +30,9 @@ const CANONICAL_PROVENANCE: ReadonlySet<string> = new Set(PROVENANCE_CLASSES);
 
 /** Default file read: returns the text, or `undefined` if the path does not resolve (honest-absent). */
 function defaultReadFile(absPath: string): string | undefined {
-  // totem-context: honest-absent — a missing/unreadable cited file returns undefined, a
-  // meaningful "not found" signal the citation rules convert into a decidable fail.
   try {
     return readFileSync(absPath, 'utf8');
+    // totem-context: honest-absent — undefined means "not found", consumed as a citation fail.
   } catch {
     return undefined;
   }
@@ -139,11 +138,10 @@ export const structuredOutputRule: PostCheckRule = {
     if (a.admission?.outputContract?.schema === undefined) {
       return { verdict: 'abstain', message: 'no outputContract.schema declared' };
     }
-    // totem-context: fail-loud — a JSON parse failure becomes a decidable 'fail' verdict
-    // (the gate the contract declares), never a silent pass.
     try {
       JSON.parse(a.output.content);
       return { verdict: 'pass', message: 'output parses as JSON (shape-validation deferred)' };
+      // totem-context: fail-loud — a parse failure becomes a decidable 'fail' verdict, not a silent pass.
     } catch {
       return {
         verdict: 'fail',
