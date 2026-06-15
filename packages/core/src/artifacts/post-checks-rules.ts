@@ -160,6 +160,13 @@ export const structuredOutputRule: PostCheckRule = {
  * outside the delivered grounding bundle is also a fail (review cites what it was
  * given). Claim *support* (does the cited text back the claim) stays sensor-only
  * — out of scope here (ADR-109).
+ *
+ * Intentional overlap (CR #2177 review): on a `spec` run with `citationsRequired`,
+ * an unresolved path is ALSO flagged by spec-verify — both correctly fail it, so the
+ * report can carry two decidable findings for one path. The rules are independent by
+ * design (different escapes: spec-verify owns the `VERIFY:` fallback, this owns
+ * line-range + bundle membership); de-duplicating overlapping decidable fails belongs
+ * at the live-wiring / aggregation layer (#2104), not by coupling rules in this slice.
  */
 export const citationResolvesRule: PostCheckRule = {
   name: 'citation-resolves',

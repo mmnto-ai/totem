@@ -112,6 +112,9 @@ describe('extractCitations', () => {
   it('ignores backticked tokens with no separator or known extension', () => {
     expect(extractCitations('run `main` then `pnpm test`')).toEqual([]);
   });
+  it('ignores URL tokens even when they carry a separator and a known extension', () => {
+    expect(extractCitations('see `https://pkg.go.dev/path/filepath.ts`')).toEqual([]);
+  });
   it('keeps a bare filename with a known extension', () => {
     expect(extractCitations('the `tsconfig.json` file').map((c) => c.filePath)).toEqual([
       'tsconfig.json',
