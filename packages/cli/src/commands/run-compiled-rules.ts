@@ -482,9 +482,26 @@ export async function runCompiledRules(
     );
   }
 
-  // Classify violations by severity (computed once, reused across all output formats)
-  const errors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
-  const warnings = violations.filter((v) => (v.rule.severity ?? 'error') === 'warning');
+  // Classify violations into blocking (exit-1) vs advisory (printed, non-blocking).
+  // Computed once, reused across all output formats.
+  //
+  // mmnto-ai/totem#2181 — engine-type advisory split. `totem lint` runs only
+  // .totem/compiled-rules.json, and every rule there is a frozen compiled lesson
+  // (un-recompilable under the standing rule-compilation freeze). The regex engine
+  // is the false-positive flood that forced `--no-verify` on every #2179 push; the
+  // ast/ast-grep family is the structural/precision class that earns hard
+  // enforcement. Demote the whole regex class to advisory — printed, excluded from
+  // the exit-1 tally — REGARDLESS of severity (one discriminator: engine, not
+  // engine×severity; Tenet 21). Hard engines keep their existing severity behavior
+  // (error blocks, warning doesn't) — that is "stay hard". `engine` is a required
+  // enum, so `!== 'regex'` is exactly the ast/ast-grep family (mirrors the astRules
+  // filter above). The durable provenance/ruleClass marker rides the spine
+  // (mmnto-ai/totem-strategy#516); engine-type is the conservative interim proxy.
+  const isBlocking = (v: Violation): boolean =>
+    (v.rule.engine === 'ast' || v.rule.engine === 'ast-grep') &&
+    (v.rule.severity ?? 'error') === 'error';
+  const errors = violations.filter(isBlocking);
+  const warnings = violations.filter((v) => !isBlocking(v));
 
   // Convert to unified findings model once (ADR-071)
   const { violationToFinding } = await import('@mmnto/totem');
@@ -584,6 +601,9 @@ export async function runCompiledRules(
       if (warnings.length > 0) {
         lines.push('');
         lines.push('### Warnings');
+        lines.push(
+          '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules are sensed-not-enforced under the rule-compilation freeze (mmnto-ai/totem#2181); PR review is the real sensor._',
+        );
         for (const v of warnings) {
           lines.push(`- **${v.file}:${v.lineNumber}** - ${v.rule.message}`);
           lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
