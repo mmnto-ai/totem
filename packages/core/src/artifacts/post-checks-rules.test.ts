@@ -85,6 +85,9 @@ describe('isContained — win32-safe containment', () => {
     // POSIX treats `\` as a literal char; normalization must still catch this escape.
     expect(isContained('/repo', 'src\\..\\..\\etc/passwd')).toBe(false);
   });
+  it('does not false-reject a filename that merely starts with .. (segment check, not startsWith)', () => {
+    expect(isContained('/repo', '..foo.ts')).toBe(true);
+  });
   it('rejects an absolute path', () => {
     expect(isContained('/repo', '/etc/passwd')).toBe(false);
   });

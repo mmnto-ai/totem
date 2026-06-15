@@ -57,13 +57,13 @@ export function isContained(configRoot: string, citedPath: string): boolean {
   // makes traversal detection identical on win32 and POSIX.
   const normalizedCited = citedPath.replace(/\\/g, '/');
   const root = path.resolve(configRoot);
-  const resolved = path.resolve(configRoot, normalizedCited);
-  // path.relative containment (GCA review): robust vs a `startsWith(root + '/')`
-  // prefix check — no hardcoded separator (so a filesystem-root config never
-  // double-slashes into a false fail), and a cross-drive escape comes back as an
-  // absolute path. `''` = the citation IS the root.
-  const rel = path.relative(root, resolved);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  // path.join (NOT path.resolve) so a normalized-absolute segment can't reset the
+  // base out of root (GCA review — absolute-path injection); then path.relative +
+  // a FIRST-SEGMENT check (not startsWith, which would false-reject a `..foo` file)
+  // and a cross-drive guard. No hardcoded separator → a filesystem-root config
+  // never double-slashes into a false fail.
+  const rel = path.relative(root, path.join(root, normalizedCited));
+  return rel.split(path.sep)[0] !== '..' && !path.isAbsolute(rel);
 }
 
 /** A parsed citation token: the path plus an optional 1-indexed line or line range. */

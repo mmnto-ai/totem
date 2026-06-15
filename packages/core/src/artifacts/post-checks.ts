@@ -82,6 +82,13 @@ export interface PostCheckContext {
 export interface PostCheckRule {
   name: string;
   tier: EnforcementTier;
+  /**
+   * Whether this rule applies to the artifact. MUST be a pure, non-throwing
+   * predicate — the engine wraps only `evaluate` (a rule throw → a tier-preserving
+   * fail), so a throwing `appliesTo` would escape as an unhandled engine fault
+   * (CR review). All built-in predicates are trivially safe; third-party rules
+   * must honor this.
+   */
   appliesTo(artifact: RunArtifact): boolean;
   evaluate(artifact: RunArtifact, ctx: PostCheckContext): CheckResult | Promise<CheckResult>;
 }
