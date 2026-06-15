@@ -568,6 +568,30 @@ export {
   RunArtifactSchema,
   RunMetadataSchema,
 } from './artifacts/schema.js';
+// Deterministic structural post-checks (mmnto-ai/totem#2103 slice 4)
+export type {
+  CheckResult,
+  CheckVerdict,
+  EnforcementTier,
+  OverrideSet,
+  PostCheckContext,
+  PostCheckFinding,
+  PostCheckReport,
+  PostCheckRule,
+} from './artifacts/post-checks.js';
+export { evaluatePostChecks, resolveCaller } from './artifacts/post-checks.js';
+export type { Citation } from './artifacts/post-checks-rules.js';
+export {
+  citationResolvesRule,
+  DEFAULT_RULES,
+  extractCitations,
+  isContained,
+  lineRefValid,
+  overrideReappearanceRule,
+  provenanceSensorRule,
+  specVerifyRule,
+  structuredOutputRule,
+} from './artifacts/post-checks-rules.js';
 export type { SaveRunArtifactResult } from './artifacts/storage.js';
 export {
   computeRunArtifactContentHash,
