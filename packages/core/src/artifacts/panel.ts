@@ -199,18 +199,67 @@ export const PanelLaneSchema = z.object({
 });
 export type PanelLane = z.infer<typeof PanelLaneSchema>;
 
-export const PanelArtifactSchema = z.object({
-  schemaVersion: panelSchemaVersionField,
-  /** Persisted lanes, canonical laneId order. At least one — a zero-lane panel is structurally meaningless. */
-  lanes: z.array(PanelLaneSchema).min(1),
-  diversity: PanelDiversitySchema,
-  synthesis: PanelSynthesisSchema,
-  /**
-   * ISO-8601 emission time. EXCLUDED from the content address (identical panels
-   * dedup regardless of when they ran) — observability only.
-   */
-  createdAt: z.string(),
-});
+export const PanelArtifactSchema = z
+  .object({
+    schemaVersion: panelSchemaVersionField,
+    /** Persisted lanes, canonical laneId order. At least one — a zero-lane panel is structurally meaningless. */
+    lanes: z.array(PanelLaneSchema).min(1),
+    diversity: PanelDiversitySchema,
+    synthesis: PanelSynthesisSchema,
+    /**
+     * ISO-8601 emission time. EXCLUDED from the content address (identical panels
+     * dedup regardless of when they ran) — observability only.
+     */
+    createdAt: z.string(),
+  })
+  // Cross-field invariants the sensor DOCUMENTS are now ENFORCED at the persisted
+  // boundary (greptile P2 on mmnto-ai/totem#2179): a hand-edited / corrupt artifact
+  // with inconsistent tallies must FAIL parse, not silently violate the stated
+  // guarantees — the same .refine() discipline as the ADR-109 isRejected check.
+  .superRefine((a, ctx) => {
+    const n = a.lanes.length;
+    if (a.diversity.providers.length !== n) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `diversity.providers length (${a.diversity.providers.length}) must equal lane count (${n})`,
+      });
+    }
+    if (a.diversity.distinctProviders !== new Set(a.diversity.providers).size) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'diversity.distinctProviders must equal the number of distinct providers',
+      });
+    }
+    const vd = a.synthesis.verdictDistribution;
+    if (vd.accepted + vd.rejected !== n) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `verdictDistribution (accepted ${vd.accepted} + rejected ${vd.rejected}) must sum to lane count (${n})`,
+      });
+    }
+    for (const f of a.synthesis.findings) {
+      const sum = f.verdicts.pass + f.verdicts.fail + f.verdicts.abstain;
+      if (sum !== n) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `finding "${f.ruleName}" verdicts sum (${sum}) must equal lane count (${n}) — present verdicts plus implicit abstain`,
+        });
+      }
+      if (f.divergent !== (f.verdicts.pass > 0 && f.verdicts.fail > 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `finding "${f.ruleName}" divergent flag must equal (pass > 0 && fail > 0)`,
+        });
+      }
+    }
+    const divergent = a.synthesis.findings.filter((f) => f.divergent).length;
+    if (a.synthesis.divergences !== divergent) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `synthesis.divergences (${a.synthesis.divergences}) must equal the count of divergent findings (${divergent})`,
+      });
+    }
+  });
 export type PanelArtifact = z.infer<typeof PanelArtifactSchema>;
 
 /**
@@ -346,8 +395,12 @@ export function assemblePanelArtifact(
   if (lanes.length === 0) {
     throw new Error('assemblePanelArtifact requires at least one lane (got 0).');
   }
+  // synthesizePanel owns its own canonical sort (it is independently callable), so
+  // hand it the raw lanes rather than a pre-sorted copy it would only re-sort (CR
+  // nit on mmnto-ai/totem#2179). `ordered` is assemble's OWN canonical order, needed
+  // for the persisted lanes[] and the per-lane diversity providers[] (both go to disk).
+  const synthesis = synthesizePanel(lanes);
   const ordered = [...lanes].sort((a, b) => a.laneId.localeCompare(b.laneId));
-  const synthesis = synthesizePanel(ordered);
   const diversity = classifyDiversity(ordered.map((l) => l.artifact.backend.provider));
   const persistedLanes: PanelLane[] = ordered.map((l) => ({
     laneId: l.laneId,
@@ -381,7 +434,9 @@ const PANELS_DIR_SEGMENTS = ['artifacts', 'panels'] as const;
 /**
  * Migration-on-read registry (F1). Keyed by MAJOR. EMPTY at 1.0.0 by design —
  * the policy requires a major bump to land its migration entry here before the
- * writer ships, so empty is the honest statement that no other major exists.
+ * writer ships, so empty is the honest statement that no other major exists. Each
+ * entry MUST return current-schema output; readPanelArtifact re-validates it via
+ * parse() before returning (CR note on mmnto-ai/totem#2179).
  */
 const MIGRATIONS: ReadonlyMap<number, (raw: unknown) => PanelArtifact> = new Map();
 
@@ -471,7 +526,10 @@ export function readPanelArtifact(totemDirAbs: string, hash: string): PanelArtif
   const major = readMajor(raw);
   if (major !== undefined) {
     const migrate = MIGRATIONS.get(major);
-    if (migrate !== undefined) return migrate(raw);
+    // Re-validate migrated output against the CURRENT schema before returning (CR
+    // note on mmnto-ai/totem#2179): a migration's contract is to PRODUCE the current
+    // shape, so a migration bug must fail loud here — never return it unvalidated.
+    if (migrate !== undefined) return PanelArtifactSchema.parse(migrate(raw));
   }
 
   try {

@@ -266,6 +266,51 @@ describe('assemblePanelArtifact + schema-version tolerance (F1)', () => {
   });
 });
 
+// ─── cross-field invariants Zod-enforced, not just documented (greptile P2 / CR) ──
+
+describe('cross-field invariants fail parse, not silently pass (greptile P2, CR F1/F2)', () => {
+  // rA: fail in l1, pass in l2 ⇒ divergent; 2 lanes ⇒ N=2, verdictDistribution {1,1}.
+  const valid = () =>
+    assemblePanelArtifact(
+      [
+        lane('l1', 'gemini', [finding('rA', 'fail')]),
+        lane('l2', 'anthropic', [finding('rA', 'pass')]),
+      ],
+      AT,
+    );
+
+  it('a verdictDistribution that does not sum to lane count fails parse', () => {
+    const c = structuredClone(valid());
+    c.synthesis.verdictDistribution.accepted = 99;
+    expect(() => PanelArtifactSchema.parse(c)).toThrow();
+  });
+
+  it('a finding whose verdicts do not sum to lane count fails parse', () => {
+    const c = structuredClone(valid());
+    c.synthesis.findings[0].verdicts.pass += 5;
+    expect(() => PanelArtifactSchema.parse(c)).toThrow();
+  });
+
+  it('a stale divergences count fails parse', () => {
+    const c = structuredClone(valid());
+    c.synthesis.divergences += 1;
+    expect(() => PanelArtifactSchema.parse(c)).toThrow();
+  });
+
+  it('a divergent flag inconsistent with its verdicts fails parse', () => {
+    const c = structuredClone(valid());
+    c.synthesis.findings[0].divergent = false; // rA is genuinely divergent
+    c.synthesis.divergences = 0; // keep the count consistent so only the flag check fires
+    expect(() => PanelArtifactSchema.parse(c)).toThrow();
+  });
+
+  it('a diversity.providers length mismatch with lane count fails parse', () => {
+    const c = structuredClone(valid());
+    c.diversity.providers = [...c.diversity.providers, 'extra'];
+    expect(() => PanelArtifactSchema.parse(c)).toThrow();
+  });
+});
+
 // ─── storage: content-address, dedup, round-trip, invariant-at-read ──────────
 
 describe('panel storage (mirrors run storage)', () => {
@@ -331,7 +376,22 @@ describe('panel storage (mirrors run storage)', () => {
     expect(() => readPanelArtifact(totemDir, hash)).toThrow(TotemParseError);
   });
 
+  it('rejects a disk panel with an inconsistent tally (greptile P2 / CR — re-auditable contract)', () => {
+    const a = assemblePanelArtifact([lane('l1', 'gemini', [finding('rA', 'pass')])], AT);
+    const corrupt = structuredClone(a);
+    corrupt.synthesis.verdictDistribution.accepted = 99; // no longer sums to lane count
+    const badHash = 'e'.repeat(64);
+    fs.mkdirSync(panelsDir(totemDir), { recursive: true });
+    fs.writeFileSync(path.join(panelsDir(totemDir), `${badHash}.json`), JSON.stringify(corrupt));
+    expect(() => readPanelArtifact(totemDir, badHash)).toThrow(TotemParseError);
+  });
+
   it('rejects an invalid id (not a sha256 hex)', () => {
     expect(() => readPanelArtifact(totemDir, 'not-a-hash')).toThrow(TotemParseError);
+  });
+
+  it('throws TotemParseError when a valid hash points to a non-existent file (greptile P2, doc contract)', () => {
+    const missing = 'f'.repeat(64); // well-formed id, but no file on disk
+    expect(() => readPanelArtifact(totemDir, missing)).toThrow(TotemParseError);
   });
 });
