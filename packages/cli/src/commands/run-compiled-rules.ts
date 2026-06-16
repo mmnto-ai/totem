@@ -482,9 +482,36 @@ export async function runCompiledRules(
     );
   }
 
-  // Classify violations by severity (computed once, reused across all output formats)
-  const errors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
-  const warnings = violations.filter((v) => (v.rule.severity ?? 'error') === 'warning');
+  // Classify violations into blocking (exit-1) vs advisory (printed, non-blocking).
+  // Computed once, reused across all output formats.
+  //
+  // mmnto-ai/totem#2181 — engine-type advisory split. `totem lint` runs only
+  // .totem/compiled-rules.json, and every rule there is a frozen compiled lesson
+  // (un-recompilable under the standing rule-compilation freeze). The regex engine
+  // is the false-positive flood that forced `--no-verify` on every #2179 push; the
+  // ast/ast-grep family is the structural/precision class that earns hard
+  // enforcement. Demote the whole regex class to advisory — printed, excluded from
+  // the exit-1 tally — REGARDLESS of severity (one discriminator: engine, not
+  // engine×severity; Tenet 21). Hard engines keep their existing severity behavior
+  // (error blocks, warning doesn't) — that is "stay hard".
+  //
+  // `isHardEngine` is the single source of truth for "blocks". Only an explicit
+  // ast/ast-grep engine is hard; a regex engine OR a legacy rule with no `engine`
+  // field falls to advisory — matching rule-engine.ts's `r.engine === 'regex' ||
+  // !r.engine` convention, where a missing engine is treated AS regex (gemini /
+  // greptile #2182). The durable provenance/ruleClass marker rides the spine
+  // (mmnto-ai/totem-strategy#516); engine-type is the conservative interim proxy.
+  const isHardEngine = (v: Violation): boolean =>
+    v.rule.engine === 'ast' || v.rule.engine === 'ast-grep';
+  const isBlocking = (v: Violation): boolean =>
+    isHardEngine(v) && (v.rule.severity ?? 'error') === 'error';
+  const errors = violations.filter(isBlocking);
+  const warnings = violations.filter((v) => !isBlocking(v));
+  // Whether any non-blocking finding is a frozen-lesson regex-class rule (regex, or a
+  // legacy rule with no engine) vs only ast/ast-grep probationary warnings. Gates the
+  // frozen-lesson wording in BOTH the text note and the SARIF summary, so an
+  // ast-warning-only run is never mislabeled as frozen-lesson (gemini/greptile #2182).
+  const hasFrozenLessonAdvisory = warnings.some((v) => !isHardEngine(v));
 
   // Convert to unified findings model once (ADR-071)
   const { violationToFinding } = await import('@mmnto/totem');
@@ -499,18 +526,20 @@ export async function runCompiledRules(
     const req = createRequire(import.meta.url);
     const version = (req('../../package.json') as { version: string }).version;
     const commitHash = getHeadSha(cwd) ?? undefined;
-    // SARIF is a strict channel for error-severity findings only.
-    // Warnings are probationary (Rule Nursery) and stay as local telemetry
-    // to prevent alert fatigue in the PR UI (Proposal 190).
+    // SARIF results carry only BLOCKING findings (ast/ast-grep error-severity).
+    // The non-blocking set — frozen-lesson regex rules (any severity, demoted to
+    // advisory under mmnto-ai/totem#2181) plus probationary warning-severity rules
+    // — is omitted from the per-finding annotations and surfaced as a single
+    // summary note, to avoid alert fatigue in the PR UI (Proposal 190).
     const sarif = buildSarifLog(errors, rules, { version, commitHash });
 
-    // Surface warning count as a single note so users know they exist
+    // Surface the non-blocking (advisory) count as a single note so users know they exist
     if (warnings.length > 0) {
       const summaryRuleIdx = sarif.runs[0].tool.driver.rules.length;
       sarif.runs[0].tool.driver.rules.push({
         id: 'totem/warning-summary',
         shortDescription: {
-          text: 'Probationary warnings detected — run `totem lint` locally to review',
+          text: 'Advisory (non-blocking) findings detected — run `totem lint` locally to review',
         },
       });
       sarif.runs[0].results.push({
@@ -518,7 +547,14 @@ export async function runCompiledRules(
         ruleIndex: summaryRuleIdx,
         level: 'note',
         message: {
-          text: `${warnings.length} warning-severity finding(s) detected. Warnings are probationary and not shown in PR reviews. Run \`totem lint\` locally to review.`,
+          // Conditionalize the frozen-lesson mention exactly like the text note
+          // (greptile #2182): an ast/ast-grep-warning-only run has no regex-class
+          // advisory, so it must not claim frozen-lesson regex rules.
+          text: `${warnings.length} advisory (non-blocking) finding(s) detected${
+            hasFrozenLessonAdvisory
+              ? ' (incl. frozen-lesson regex rules demoted under mmnto-ai/totem#2181)'
+              : ''
+          } — excluded from PR annotations. Run \`totem lint\` locally to review.`,
         },
         locations: [
           {
@@ -584,6 +620,16 @@ export async function runCompiledRules(
       if (warnings.length > 0) {
         lines.push('');
         lines.push('### Warnings');
+        // mmnto-ai/totem#2181: the frozen-lesson advisory note applies only to the
+        // regex-class (regex, or legacy no-engine). ast/ast-grep severity:warning
+        // findings also land in `warnings` (genuine Rule-Nursery probationary
+        // warnings) — emit the note only when a regex-class advisory is actually
+        // present, else a regex-free warning list is mislabeled (gemini #2182).
+        if (hasFrozenLessonAdvisory) {
+          lines.push(
+            '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules are sensed-not-enforced under the rule-compilation freeze (mmnto-ai/totem#2181); PR review is the real sensor._',
+          );
+        }
         for (const v of warnings) {
           lines.push(`- **${v.file}:${v.lineNumber}** - ${v.rule.message}`);
           lines.push(`  Pattern: \`/${v.rule.pattern}/\``);

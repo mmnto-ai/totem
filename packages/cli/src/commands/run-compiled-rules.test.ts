@@ -68,22 +68,28 @@ describe('runCompiledRules', () => {
 
   // ─── Regex matching ──────────────────────────────────
 
-  it('detects a violation when regex matches added line', async () => {
+  it('detects a regex violation but treats it as advisory — no throw (mmnto-ai/totem#2181)', async () => {
     const rules = [makeRule('console\\.log', 'Remove debug logging', 'No console.log')];
     writeRules(tmpDir, rules);
 
     const diff = makeDiff('src/app.ts', '  console.log("debug");');
 
-    // runCompiledRules throws SHIELD_FAILED for error-severity violations
-    await expect(
-      runCompiledRules({
-        diff,
-        cwd: tmpDir,
-        totemDir: TOTEM_DIR,
-        format: 'json',
-        tag: 'Test',
-      }),
-    ).rejects.toThrow('Violations detected');
+    // mmnto-ai/totem#2181: regex-engine (frozen-lesson) rules are advisory. The
+    // violation is still detected and printed, but it does NOT block — no throw,
+    // exit 0, counted as a (non-blocking) warning.
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(1);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.pass).toBe(true);
+    expect(parsed.errors).toBe(0);
+    expect(parsed.warnings).toBe(1);
   });
 
   it('returns no violations when regex does not match', async () => {
@@ -208,18 +214,21 @@ describe('runCompiledRules', () => {
     ];
     writeRules(tmpDir, rules);
 
-    // Diff with a .sh file — should match and throw
+    // Diff with a .sh file — should match the shell-only rule
     const shDiff = makeDiff('scripts/build.sh', '# TODO: fix later');
 
-    await expect(
-      runCompiledRules({
-        diff: shDiff,
-        cwd: tmpDir,
-        totemDir: TOTEM_DIR,
-        format: 'json',
-        tag: 'Test',
-      }),
-    ).rejects.toThrow('Violations detected');
+    // mmnto-ai/totem#2181: the glob still matches and the regex violation is
+    // recorded, but it is advisory (non-blocking) — no throw.
+    const result = await runCompiledRules({
+      diff: shDiff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(1);
+    expect(JSON.parse(result.output).pass).toBe(true);
   });
 
   // ─── Output formats ─────────────────────────────────
@@ -248,11 +257,23 @@ describe('runCompiledRules', () => {
     expect(parsed.violations).toHaveLength(0);
   });
 
-  it('throws SHIELD_FAILED for error-severity violations in text format', async () => {
-    const rules = [makeRule('badPattern', 'Found bad pattern', 'Bad pattern rule')];
+  it('throws SHIELD_FAILED for ast-grep (hard-engine) error-severity violations (mmnto-ai/totem#2181)', async () => {
+    // ast/ast-grep is the hard engine that STAYS blocking under #2181.
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+      }),
+    ];
     writeRules(tmpDir, rules);
 
-    const diff = makeDiff('src/index.ts', '  badPattern();');
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
 
     await expect(
       runCompiledRules({
@@ -314,21 +335,101 @@ describe('runCompiledRules', () => {
       ' }',
     ].join('\n');
 
-    // This will throw SHIELD_FAILED because there are error-severity violations
-    let caughtErr: unknown;
-    try {
-      await runCompiledRules({
+    // mmnto-ai/totem#2181: both rules are regex-engine → advisory. All violations
+    // are still reported, but the run does not block (no throw, pass true).
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations.length).toBeGreaterThanOrEqual(2);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.pass).toBe(true);
+    expect(parsed.errors).toBe(0);
+  });
+
+  // ─── Engine-type advisory split (mmnto-ai/totem#2181) ─────────
+
+  it('mixed run: the ast-grep error blocks even though the regex match is advisory', async () => {
+    const rules = [
+      // regex-engine → advisory (matches console.log on the added line)
+      makeRule('console\\.log', 'regex advisory', 'Regex rule'),
+      // ast-grep-engine → hard (matches the same line structurally)
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+    // The regex match alone would not block; the ast-grep error makes the run fail.
+    await expect(
+      runCompiledRules({
         diff,
         cwd: tmpDir,
         totemDir: TOTEM_DIR,
-        format: 'json',
+        format: 'text',
         tag: 'Test',
-      });
-    } catch (err) {
-      caughtErr = err;
-    }
+      }),
+    ).rejects.toThrow('Violations detected');
+  });
 
-    expect(caughtErr).toBeDefined();
+  it('emits the frozen-lesson advisory note when a regex advisory is present (mmnto-ai/totem#2182)', async () => {
+    const rules = [makeRule('console\\.log', 'Remove debug logging', 'No console.log')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("debug");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.output).toContain('sensed-not-enforced');
+  });
+
+  it('does NOT emit the frozen-lesson note for an ast-grep warning-only run (gemini #2182)', async () => {
+    // ast-grep severity:warning lands in `warnings` too, but it is NOT a
+    // frozen-lesson regex advisory — the note must not mislabel it.
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+        severity: 'warning',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(1);
+    expect(result.output).not.toContain('sensed-not-enforced');
   });
 
   // ─── Excluded files ──────────────────────────────────
@@ -378,9 +479,12 @@ describe('runCompiledRules', () => {
 
   // ─── SARIF output ──────────────────────────────────
 
-  it('SARIF output excludes warning-severity findings', async () => {
+  it('SARIF output excludes advisory (non-blocking) findings, emitting only a summary note (mmnto-ai/totem#2181)', async () => {
+    // Both a regex error-severity finding (now advisory under #2181) and a
+    // warning-severity finding are non-blocking, so neither appears as a SARIF
+    // result annotation — only the single summary note does. No throw.
     const rules = [
-      makeRule('errorPattern', 'This is an error', 'Error rule', { severity: 'error' }),
+      makeRule('errorPattern', 'This is a regex error', 'Error rule', { severity: 'error' }),
       makeRule('warnPattern', 'This is a warning', 'Warning rule', { severity: 'warning' }),
     ];
     writeRules(tmpDir, rules);
@@ -396,31 +500,8 @@ describe('runCompiledRules', () => {
       ' // end',
     ].join('\n');
 
-    // Error-severity violations cause a throw, but we need the SARIF output
-    let caughtErr: unknown;
-    try {
-      await runCompiledRules({
-        diff,
-        cwd: tmpDir,
-        totemDir: TOTEM_DIR,
-        format: 'sarif',
-        tag: 'Test',
-      });
-    } catch (err) {
-      caughtErr = err;
-    }
-
-    expect(caughtErr).toBeDefined();
-
-    // Read the SARIF output from the error or capture it via --out
-    // Since the function throws, check that warning-only runs produce clean SARIF
-    const warningOnlyRules = [
-      makeRule('warnPattern', 'This is a warning', 'Warning rule', { severity: 'warning' }),
-    ];
-    writeRules(tmpDir, warningOnlyRules);
-
     const result = await runCompiledRules({
-      diff: makeDiff('src/app.ts', '  warnPattern();'),
+      diff,
       cwd: tmpDir,
       totemDir: TOTEM_DIR,
       format: 'sarif',
@@ -429,12 +510,52 @@ describe('runCompiledRules', () => {
 
     const sarif = JSON.parse(result.output);
     const results = sarif.runs[0].results;
-    // Warning-only violations produce a single summary note, not individual annotations
+    // Non-blocking findings produce a single summary note, not individual annotations.
     expect(results).toHaveLength(1);
     expect(results[0].level).toBe('note');
     expect(results[0].ruleId).toBe('totem/warning-summary');
-    expect(results[0].message.text).toContain('1 warning-severity finding(s) detected');
+    // Tightened back (greptile #2182): assert the corrected, accurate message and
+    // guard against regressing to the stale "warning-severity" label — the bucket
+    // now includes regex error-severity findings demoted to advisory. Both rules are
+    // regex, so the frozen-lesson mention IS present.
+    expect(results[0].message.text).toContain('advisory (non-blocking) finding(s) detected');
+    expect(results[0].message.text).not.toContain('warning-severity');
+    expect(results[0].message.text).toContain('frozen-lesson');
     expect(results[0].message.text).toContain('totem lint');
+  });
+
+  it('SARIF advisory note omits the frozen-lesson mention for an ast-grep warning-only run (greptile #2182)', async () => {
+    // ast-grep severity:warning is non-blocking but NOT a frozen-lesson regex
+    // advisory — the SARIF summary must not claim frozen-lesson regex rules.
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+        severity: 'warning',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'sarif',
+      tag: 'Test',
+    });
+
+    const sarif = JSON.parse(result.output);
+    const results = sarif.runs[0].results;
+    expect(results).toHaveLength(1);
+    expect(results[0].message.text).toContain('advisory (non-blocking) finding(s) detected');
+    expect(results[0].message.text).not.toContain('frozen-lesson');
   });
 
   // ─── Ignore patterns ────────────────────────────────
