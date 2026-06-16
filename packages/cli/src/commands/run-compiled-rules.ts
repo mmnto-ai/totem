@@ -519,18 +519,20 @@ export async function runCompiledRules(
     const req = createRequire(import.meta.url);
     const version = (req('../../package.json') as { version: string }).version;
     const commitHash = getHeadSha(cwd) ?? undefined;
-    // SARIF is a strict channel for error-severity findings only.
-    // Warnings are probationary (Rule Nursery) and stay as local telemetry
-    // to prevent alert fatigue in the PR UI (Proposal 190).
+    // SARIF results carry only BLOCKING findings (ast/ast-grep error-severity).
+    // The non-blocking set — frozen-lesson regex rules (any severity, demoted to
+    // advisory under mmnto-ai/totem#2181) plus probationary warning-severity rules
+    // — is omitted from the per-finding annotations and surfaced as a single
+    // summary note, to avoid alert fatigue in the PR UI (Proposal 190).
     const sarif = buildSarifLog(errors, rules, { version, commitHash });
 
-    // Surface warning count as a single note so users know they exist
+    // Surface the non-blocking (advisory) count as a single note so users know they exist
     if (warnings.length > 0) {
       const summaryRuleIdx = sarif.runs[0].tool.driver.rules.length;
       sarif.runs[0].tool.driver.rules.push({
         id: 'totem/warning-summary',
         shortDescription: {
-          text: 'Probationary warnings detected — run `totem lint` locally to review',
+          text: 'Advisory (non-blocking) findings detected — run `totem lint` locally to review',
         },
       });
       sarif.runs[0].results.push({
@@ -538,7 +540,7 @@ export async function runCompiledRules(
         ruleIndex: summaryRuleIdx,
         level: 'note',
         message: {
-          text: `${warnings.length} warning-severity finding(s) detected. Warnings are probationary and not shown in PR reviews. Run \`totem lint\` locally to review.`,
+          text: `${warnings.length} advisory (non-blocking) finding(s) detected — frozen-lesson regex rules (mmnto-ai/totem#2181) and probationary warnings, excluded from PR annotations. Run \`totem lint\` locally to review.`,
         },
         locations: [
           {

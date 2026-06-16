@@ -514,7 +514,11 @@ describe('runCompiledRules', () => {
     expect(results).toHaveLength(1);
     expect(results[0].level).toBe('note');
     expect(results[0].ruleId).toBe('totem/warning-summary');
-    expect(results[0].message.text).toContain('finding(s) detected');
+    // Tightened back (greptile #2182): assert the corrected, accurate message and
+    // guard against regressing to the stale "warning-severity" label — the bucket
+    // now includes regex error-severity findings demoted to advisory.
+    expect(results[0].message.text).toContain('advisory (non-blocking) finding(s) detected');
+    expect(results[0].message.text).not.toContain('warning-severity');
     expect(results[0].message.text).toContain('totem lint');
   });
 
