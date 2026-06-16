@@ -384,6 +384,54 @@ describe('runCompiledRules', () => {
     ).rejects.toThrow('Violations detected');
   });
 
+  it('emits the frozen-lesson advisory note when a regex advisory is present (mmnto-ai/totem#2182)', async () => {
+    const rules = [makeRule('console\\.log', 'Remove debug logging', 'No console.log')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("debug");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.output).toContain('sensed-not-enforced');
+  });
+
+  it('does NOT emit the frozen-lesson note for an ast-grep warning-only run (gemini #2182)', async () => {
+    // ast-grep severity:warning lands in `warnings` too, but it is NOT a
+    // frozen-lesson regex advisory — the note must not mislabel it.
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+        severity: 'warning',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(1);
+    expect(result.output).not.toContain('sensed-not-enforced');
+  });
+
   // ─── Excluded files ──────────────────────────────────
 
   it('excludes compiled-rules.json from scanning', async () => {

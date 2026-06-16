@@ -493,9 +493,12 @@ export async function runCompiledRules(
   // enforcement. Demote the whole regex class to advisory — printed, excluded from
   // the exit-1 tally — REGARDLESS of severity (one discriminator: engine, not
   // engine×severity; Tenet 21). Hard engines keep their existing severity behavior
-  // (error blocks, warning doesn't) — that is "stay hard". `engine` is a required
-  // enum, so `!== 'regex'` is exactly the ast/ast-grep family (mirrors the astRules
-  // filter above). The durable provenance/ruleClass marker rides the spine
+  // (error blocks, warning doesn't) — that is "stay hard". Only an explicit
+  // ast/ast-grep engine blocks; any other engine (incl. a hypothetical legacy
+  // `undefined`) falls to advisory by design — the conservative default. A missing
+  // `engine` cannot actually reach here: it is a required enum and loadCompiledRules
+  // strict-parses the file, rejecting it with a regenerate hint otherwise
+  // (greptile #2182). The durable provenance/ruleClass marker rides the spine
   // (mmnto-ai/totem-strategy#516); engine-type is the conservative interim proxy.
   const isBlocking = (v: Violation): boolean =>
     (v.rule.engine === 'ast' || v.rule.engine === 'ast-grep') &&
@@ -601,9 +604,16 @@ export async function runCompiledRules(
       if (warnings.length > 0) {
         lines.push('');
         lines.push('### Warnings');
-        lines.push(
-          '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules are sensed-not-enforced under the rule-compilation freeze (mmnto-ai/totem#2181); PR review is the real sensor._',
-        );
+        // mmnto-ai/totem#2181: the frozen-lesson advisory note applies only to
+        // regex-engine findings. ast/ast-grep severity:warning findings can also
+        // land in `warnings` (genuine Rule-Nursery probationary warnings) — so only
+        // emit the note when a regex advisory is actually present, else a regex-free
+        // warning list would be mislabeled as frozen-lesson advisory (gemini #2182).
+        if (warnings.some((v) => v.rule.engine === 'regex')) {
+          lines.push(
+            '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules are sensed-not-enforced under the rule-compilation freeze (mmnto-ai/totem#2181); PR review is the real sensor._',
+          );
+        }
         for (const v of warnings) {
           lines.push(`- **${v.file}:${v.lineNumber}** - ${v.rule.message}`);
           lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
