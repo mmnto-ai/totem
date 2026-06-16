@@ -493,18 +493,25 @@ export async function runCompiledRules(
   // enforcement. Demote the whole regex class to advisory — printed, excluded from
   // the exit-1 tally — REGARDLESS of severity (one discriminator: engine, not
   // engine×severity; Tenet 21). Hard engines keep their existing severity behavior
-  // (error blocks, warning doesn't) — that is "stay hard". Only an explicit
-  // ast/ast-grep engine blocks; any other engine (incl. a hypothetical legacy
-  // `undefined`) falls to advisory by design — the conservative default. A missing
-  // `engine` cannot actually reach here: it is a required enum and loadCompiledRules
-  // strict-parses the file, rejecting it with a regenerate hint otherwise
-  // (greptile #2182). The durable provenance/ruleClass marker rides the spine
+  // (error blocks, warning doesn't) — that is "stay hard".
+  //
+  // `isHardEngine` is the single source of truth for "blocks". Only an explicit
+  // ast/ast-grep engine is hard; a regex engine OR a legacy rule with no `engine`
+  // field falls to advisory — matching rule-engine.ts's `r.engine === 'regex' ||
+  // !r.engine` convention, where a missing engine is treated AS regex (gemini /
+  // greptile #2182). The durable provenance/ruleClass marker rides the spine
   // (mmnto-ai/totem-strategy#516); engine-type is the conservative interim proxy.
+  const isHardEngine = (v: Violation): boolean =>
+    v.rule.engine === 'ast' || v.rule.engine === 'ast-grep';
   const isBlocking = (v: Violation): boolean =>
-    (v.rule.engine === 'ast' || v.rule.engine === 'ast-grep') &&
-    (v.rule.severity ?? 'error') === 'error';
+    isHardEngine(v) && (v.rule.severity ?? 'error') === 'error';
   const errors = violations.filter(isBlocking);
   const warnings = violations.filter((v) => !isBlocking(v));
+  // Whether any non-blocking finding is a frozen-lesson regex-class rule (regex, or a
+  // legacy rule with no engine) vs only ast/ast-grep probationary warnings. Gates the
+  // frozen-lesson wording in BOTH the text note and the SARIF summary, so an
+  // ast-warning-only run is never mislabeled as frozen-lesson (gemini/greptile #2182).
+  const hasFrozenLessonAdvisory = warnings.some((v) => !isHardEngine(v));
 
   // Convert to unified findings model once (ADR-071)
   const { violationToFinding } = await import('@mmnto/totem');
@@ -540,7 +547,14 @@ export async function runCompiledRules(
         ruleIndex: summaryRuleIdx,
         level: 'note',
         message: {
-          text: `${warnings.length} advisory (non-blocking) finding(s) detected — frozen-lesson regex rules (mmnto-ai/totem#2181) and probationary warnings, excluded from PR annotations. Run \`totem lint\` locally to review.`,
+          // Conditionalize the frozen-lesson mention exactly like the text note
+          // (greptile #2182): an ast/ast-grep-warning-only run has no regex-class
+          // advisory, so it must not claim frozen-lesson regex rules.
+          text: `${warnings.length} advisory (non-blocking) finding(s) detected${
+            hasFrozenLessonAdvisory
+              ? ' (incl. frozen-lesson regex rules demoted under mmnto-ai/totem#2181)'
+              : ''
+          } — excluded from PR annotations. Run \`totem lint\` locally to review.`,
         },
         locations: [
           {
@@ -606,12 +620,12 @@ export async function runCompiledRules(
       if (warnings.length > 0) {
         lines.push('');
         lines.push('### Warnings');
-        // mmnto-ai/totem#2181: the frozen-lesson advisory note applies only to
-        // regex-engine findings. ast/ast-grep severity:warning findings can also
-        // land in `warnings` (genuine Rule-Nursery probationary warnings) — so only
-        // emit the note when a regex advisory is actually present, else a regex-free
-        // warning list would be mislabeled as frozen-lesson advisory (gemini #2182).
-        if (warnings.some((v) => v.rule.engine === 'regex')) {
+        // mmnto-ai/totem#2181: the frozen-lesson advisory note applies only to the
+        // regex-class (regex, or legacy no-engine). ast/ast-grep severity:warning
+        // findings also land in `warnings` (genuine Rule-Nursery probationary
+        // warnings) — emit the note only when a regex-class advisory is actually
+        // present, else a regex-free warning list is mislabeled (gemini #2182).
+        if (hasFrozenLessonAdvisory) {
           lines.push(
             '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules are sensed-not-enforced under the rule-compilation freeze (mmnto-ai/totem#2181); PR review is the real sensor._',
           );

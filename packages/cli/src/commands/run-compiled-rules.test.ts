@@ -516,10 +516,46 @@ describe('runCompiledRules', () => {
     expect(results[0].ruleId).toBe('totem/warning-summary');
     // Tightened back (greptile #2182): assert the corrected, accurate message and
     // guard against regressing to the stale "warning-severity" label — the bucket
-    // now includes regex error-severity findings demoted to advisory.
+    // now includes regex error-severity findings demoted to advisory. Both rules are
+    // regex, so the frozen-lesson mention IS present.
     expect(results[0].message.text).toContain('advisory (non-blocking) finding(s) detected');
     expect(results[0].message.text).not.toContain('warning-severity');
+    expect(results[0].message.text).toContain('frozen-lesson');
     expect(results[0].message.text).toContain('totem lint');
+  });
+
+  it('SARIF advisory note omits the frozen-lesson mention for an ast-grep warning-only run (greptile #2182)', async () => {
+    // ast-grep severity:warning is non-blocking but NOT a frozen-lesson regex
+    // advisory — the SARIF summary must not claim frozen-lesson regex rules.
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+        severity: 'warning',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'sarif',
+      tag: 'Test',
+    });
+
+    const sarif = JSON.parse(result.output);
+    const results = sarif.runs[0].results;
+    expect(results).toHaveLength(1);
+    expect(results[0].message.text).toContain('advisory (non-blocking) finding(s) detected');
+    expect(results[0].message.text).not.toContain('frozen-lesson');
   });
 
   // ─── Ignore patterns ────────────────────────────────
