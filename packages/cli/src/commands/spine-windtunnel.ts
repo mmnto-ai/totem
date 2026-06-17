@@ -283,7 +283,7 @@ type SafeExecFn = typeof import('@mmnto/totem').safeExec;
  * swallow. Any other failure (bad ref, repo unreadable) re-throws so it is not
  * masked as a clean "false".
  */
-function isCommitAncestor(
+export function isCommitAncestor(
   ancestor: string,
   descendant: string,
   cwd: string,
@@ -307,7 +307,7 @@ function isCommitAncestor(
  * the lc clone. Throws on unresolvable blob for an evaluated added file (C2).
  * When lcDir is absent, returns null for all files (fail-open — harness mock).
  */
-function buildReadStrategy(
+export function buildReadStrategy(
   lcDir: string | undefined,
   asOfCommit: string,
   safeExec: SafeExecFn,
@@ -337,7 +337,7 @@ function buildReadStrategy(
  * an ancestor of HEAD. The lock blob at that commit must be byte-identical to
  * the current lock.
  */
-function verifyFreezeProof(lockPath: string, repoRoot: string, safeExec: SafeExecFn): void {
+export function verifyFreezeProof(lockPath: string, repoRoot: string, safeExec: SafeExecFn): void {
   const relLockPath = path.relative(repoRoot, lockPath).replace(/\\/g, '/');
 
   let logOutput: string;
@@ -371,20 +371,24 @@ function verifyFreezeProof(lockPath: string, repoRoot: string, safeExec: SafeExe
     );
   }
 
-  // Verify blob byte-identity
-  const currentContent = fs.readFileSync(lockPath, 'utf-8');
-  let historicContent: string;
+  // Verify blob identity via git object hashes (CRLF-immune, matching the
+  // .wind-tunnel-sha discipline) rather than a raw string compare — the latter
+  // spuriously fails on trailing-newline / line-ending normalization because
+  // `git show` output and the on-disk working file can differ by EOL alone.
+  let workingHash: string;
+  let committedHash: string;
   try {
-    historicContent = safeExec('git', ['show', `${freezeCommit}:${relLockPath}`], {
+    workingHash = safeExec('git', ['hash-object', lockPath], { cwd: repoRoot });
+    committedHash = safeExec('git', ['rev-parse', `${freezeCommit}:${relLockPath}`], {
       cwd: repoRoot,
     });
   } catch (err) {
     throw new Error(
-      `Wind-tunnel freeze proof: cannot read lock blob at ${freezeCommit}: ${err instanceof Error ? err.message : String(err)}`,
+      `Wind-tunnel freeze proof: cannot resolve lock blob at ${freezeCommit}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
-  if (currentContent !== historicContent) {
+  if (workingHash !== committedHash) {
     throw new Error(
       `Wind-tunnel freeze proof: current lock differs from the committed blob at ${freezeCommit} (C3 — lock was modified after freeze).`,
     );
@@ -397,7 +401,7 @@ function verifyFreezeProof(lockPath: string, repoRoot: string, safeExec: SafeExe
  * Compute gate-1-scoped fixtureSha via `git hash-object` over the control dir
  * (OQ3 — do NOT extend the existing .totem/tests FIXTURE_DIR).
  */
-function computeFixtureSha(
+export function computeFixtureSha(
   controlDir: string,
   repoRoot: string,
   safeExec: SafeExecFn,
@@ -432,7 +436,7 @@ function computeFixtureSha(
  * Assert corpus completeness (S4): resolvedPrs === selectionRule(asOfCommit).
  * In the harness phase this is a structural check only (no real lc API call).
  */
-async function assertCorpusCompleteness(
+export async function assertCorpusCompleteness(
   lock: import('@mmnto/totem').WindtunnelLock,
   lcDir: string,
   repoRoot: string,
