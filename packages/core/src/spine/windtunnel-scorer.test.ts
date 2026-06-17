@@ -368,11 +368,17 @@ describe('OQ2: mock engine coverage', () => {
   });
 });
 
-// ─── Bidirectional parity concept (S1+C1) ────────────
+// ─── Scorer-level FP handling (NOT the parity test) ──
+//
+// The real bidirectional firing-parity test (S1+C1) — replay firings ==
+// production firings through enrichWithAstContext + the rule engine, covering
+// both the regex/astContext over-fire suppression and the AST whole-file
+// under-fire cases — lives in `windtunnel-parity.test.ts`. That test exercises
+// the production classification path end-to-end; the case below only confirms
+// the scorer turns a labeled FP into a FAIL verdict.
 
-describe('bidirectional parity (S1+C1)', () => {
-  it('negative fixture: regex match suppressed in comment must not appear as TP', () => {
-    // Simulate a firing that should be FP (comment/string context suppressed in production)
+describe('scorer FP handling (see windtunnel-parity.test.ts for the real S1+C1 parity test)', () => {
+  it('a firing labeled FP (e.g. a comment-context match) yields FAIL with precision < 1', () => {
     const firing = makeFiring('rule-a', 1, 'corpus', '// const secret = "abc"');
     const gt = new Map<string, GroundTruthLabel>([[firing.labelId, 'FP']]);
     const result = scoreWindtunnel(baseInput({ firings: [firing], groundTruth: gt }));

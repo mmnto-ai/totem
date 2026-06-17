@@ -81,41 +81,13 @@ async function classifyFile(
     return;
   }
 
-  let content: string;
-  if (options.readStrategy) {
-    // Injection seam: callers supply post-image content for parity with the
-    // AST engine. null → skip (same as unreadable). Throws propagate (C2).
-    const injected = await options.readStrategy(file);
-    if (injected === null) {
-      onWarn?.(`AST gate: readStrategy returned null for ${file}, skipping classification`);
-      return;
-    }
-    content = injected;
-  } else {
-    try {
-      // Prefer staged content (git show :path) over disk file to match the diff being evaluated.
-      // Falls back to disk if git is unavailable or file isn't staged.
-      const { safeExec } = await import('./sys/exec.js');
-      content = safeExec('git', ['show', `:${file}`], { cwd });
-    } catch {
-      try {
-        content = fs.readFileSync(fullPath, 'utf-8');
-      } catch {
-        onWarn?.(`AST gate: cannot read ${file}, skipping classification`);
-        return;
-      }
-    }
-  }
+  const content = await resolveContent(file, fullPath, cwd, options);
+  if (content === null) return; // unreadable / readStrategy returned null — skip classification
 
   const lineNumbers = additions.map((a) => a.lineNumber);
 
-  let classifications: Map<number, AstContext>;
-  try {
-    classifications = await classifyLines(content, lineNumbers, lang);
-  } catch {
-    onWarn?.(`AST gate: parse failed for ${file}, skipping classification`);
-    return;
-  }
+  const classifications = await classifyContent(content, lineNumbers, lang, file, onWarn);
+  if (classifications === null) return; // parse failed — skip classification (fail-open)
 
   // Enrich additions with their AST context
   for (const addition of additions) {
@@ -123,5 +95,73 @@ async function classifyFile(
     if (ctx) {
       addition.astContext = ctx;
     }
+  }
+}
+
+/**
+ * Resolve the file content to classify. When `options.readStrategy` is set
+ * (the wind-tunnel parity seam, mmnto-ai/totem#2188), it is the sole source:
+ * a `null` return means "skip" (same as unreadable) and a throw propagates
+ * (C2 — a missing post-image blob must not silently no-match). When absent,
+ * the established staged (`git show :path`) → disk fallback is used.
+ *
+ * Returns `null` when the file cannot be read and classification should be
+ * skipped (fail-open — AST enrichment is advisory, not a hard sensor).
+ */
+async function resolveContent(
+  file: string,
+  fullPath: string,
+  cwd: string,
+  options: AstGateOptions,
+): Promise<string | null> {
+  if (options.readStrategy) {
+    const injected = await options.readStrategy(file);
+    if (injected === null) {
+      options.onWarn?.(`AST gate: readStrategy returned null for ${file}, skipping classification`);
+    }
+    return injected;
+  }
+
+  // totem-context: intentional fallback — git show :path is the preferred staged read; a non-staged file falls through to the disk read below (advisory AST enrichment, never a hard sensor).
+  try {
+    // Prefer staged content (git show :path) over disk file to match the diff being evaluated.
+    const { safeExec } = await import('./sys/exec.js');
+    return safeExec('git', ['show', `:${file}`], { cwd });
+  } catch (gitErr) {
+    // totem-context: intentional fallback — staged read missing/unavailable, read from disk; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    void gitErr;
+  }
+
+  // totem-context: intentional fail-open — an unreadable file degrades to skip-classification (advisory AST enrichment, never a hard sensor).
+  try {
+    return fs.readFileSync(fullPath, 'utf-8');
+  } catch (diskErr) {
+    // totem-context: intentional fail-open — unreadable file → skip classification; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    void diskErr;
+    options.onWarn?.(`AST gate: cannot read ${file}, skipping classification`);
+    return null;
+  }
+}
+
+/**
+ * Classify the given lines of `content`, returning the per-line AST context
+ * map. Returns `null` when the parse fails so the caller skips classification
+ * (fail-open — AST enrichment is advisory, not a hard sensor).
+ */
+async function classifyContent(
+  content: string,
+  lineNumbers: number[],
+  lang: Parameters<typeof classifyLines>[2],
+  file: string,
+  onWarn?: (msg: string) => void,
+): Promise<Map<number, AstContext> | null> {
+  // totem-context: intentional fail-open — an unparseable file degrades to skip-classification (advisory AST enrichment, never a hard sensor); dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+  try {
+    return await classifyLines(content, lineNumbers, lang);
+  } catch (parseErr) {
+    // totem-context: intentional fail-open — unparseable file → skip classification; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    void parseErr;
+    onWarn?.(`AST gate: parse failed for ${file}, skipping classification`);
+    return null;
   }
 }
