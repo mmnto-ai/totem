@@ -11,6 +11,15 @@ export interface AstGateOptions {
   cwd?: string;
   /** Optional callback for non-fatal warnings (e.g., file not readable) */
   onWarn?: (msg: string) => void;
+  /**
+   * Optional content injection seam (C1 — wind-tunnel parity).
+   * When provided, classifyFile uses this instead of git-show / disk reads,
+   * so regex astContext classification sees the same post-image content as
+   * the AST engine. Returning null skips classification for that file (same
+   * as an unreadable file). Throwing propagates — callers must not silently
+   * swallow (C2: missing blob is corpus shrinkage, not a clean no-match).
+   */
+  readStrategy?: (file: string) => Promise<string | null>;
 }
 
 // ─── Public API ─────────────────────────────────────
@@ -49,7 +58,7 @@ export async function enrichWithAstContext(
     const lang = extensionToLanguage(ext);
     if (!lang) continue; // Unsupported language — leave as undefined (fail-open)
 
-    promises.push(classifyFile(file, fileAdditions, lang, cwd, options.onWarn));
+    promises.push(classifyFile(file, fileAdditions, lang, cwd, options));
   }
 
   await Promise.all(promises);
@@ -60,8 +69,9 @@ async function classifyFile(
   additions: DiffAddition[],
   lang: Parameters<typeof classifyLines>[2],
   cwd: string,
-  onWarn?: (msg: string) => void,
+  options: AstGateOptions,
 ): Promise<void> {
+  const onWarn = options.onWarn;
   const fullPath = path.resolve(cwd, file);
 
   // Path containment: skip files that escape the working directory
@@ -72,17 +82,28 @@ async function classifyFile(
   }
 
   let content: string;
-  try {
-    // Prefer staged content (git show :path) over disk file to match the diff being evaluated.
-    // Falls back to disk if git is unavailable or file isn't staged.
-    const { safeExec } = await import('./sys/exec.js');
-    content = safeExec('git', ['show', `:${file}`], { cwd });
-  } catch {
-    try {
-      content = fs.readFileSync(fullPath, 'utf-8');
-    } catch {
-      onWarn?.(`AST gate: cannot read ${file}, skipping classification`);
+  if (options.readStrategy) {
+    // Injection seam: callers supply post-image content for parity with the
+    // AST engine. null → skip (same as unreadable). Throws propagate (C2).
+    const injected = await options.readStrategy(file);
+    if (injected === null) {
+      onWarn?.(`AST gate: readStrategy returned null for ${file}, skipping classification`);
       return;
+    }
+    content = injected;
+  } else {
+    try {
+      // Prefer staged content (git show :path) over disk file to match the diff being evaluated.
+      // Falls back to disk if git is unavailable or file isn't staged.
+      const { safeExec } = await import('./sys/exec.js');
+      content = safeExec('git', ['show', `:${file}`], { cwd });
+    } catch {
+      try {
+        content = fs.readFileSync(fullPath, 'utf-8');
+      } catch {
+        onWarn?.(`AST gate: cannot read ${file}, skipping classification`);
+        return;
+      }
     }
   }
 
