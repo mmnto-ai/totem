@@ -1774,6 +1774,61 @@ program
     }
   });
 
+// ─── Spine noun-verb subcommands (mmnto-ai/totem#2188) ──────────────────────
+
+const spineCmd = program
+  .command('spine')
+  .description('Spine evidence harness — Gate-1 wind-tunnel evaluation');
+
+const windtunnelCmd = spineCmd
+  .command('windtunnel')
+  .description('Gate-1 wind-tunnel: freeze corpus lock + run evidence harness');
+
+windtunnelCmd
+  .command('freeze')
+  .description('Validate and freeze the wind-tunnel corpus lock (schema + S4 completeness)')
+  .option(
+    '--lc-dir <path>',
+    'Path to the lc clone (env: TOTEM_LC_DIR)',
+    process.env['TOTEM_LC_DIR'],
+  )
+  .option(
+    '--lock-path <path>',
+    'Override the lock file path (default: .totem/spine/gate-1/windtunnel.lock.json)',
+  )
+  .action(async (opts: { lcDir?: string; lockPath?: string }) => {
+    try {
+      const { freezeCommand } = await import('./commands/spine-windtunnel.js');
+      await freezeCommand({ lcDir: opts.lcDir, lockPath: opts.lockPath });
+    } catch (err) {
+      handleError(err);
+      throw err;
+    }
+  });
+
+windtunnelCmd
+  .command('run')
+  .description('Run the wind-tunnel against the frozen corpus lock')
+  .option(
+    '--lc-dir <path>',
+    'Path to the lc clone (env: TOTEM_LC_DIR)',
+    process.env['TOTEM_LC_DIR'],
+  )
+  .option(
+    '--lock-path <path>',
+    'Override the lock file path (default: .totem/spine/gate-1/windtunnel.lock.json)',
+  )
+  .option('--phase <phase>', 'Required phase for this run (certifying rejects a harness lock, P1)')
+  .action(async (opts: { lcDir?: string; lockPath?: string; phase?: string }) => {
+    try {
+      const { runCommand } = await import('./commands/spine-windtunnel.js');
+      await runCommand({ lcDir: opts.lcDir, lockPath: opts.lockPath, phase: opts.phase });
+    } catch (err) {
+      handleError(err);
+      throw err;
+    }
+  });
+
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
 

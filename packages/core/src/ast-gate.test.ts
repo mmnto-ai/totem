@@ -126,4 +126,66 @@ describe('enrichWithAstContext', () => {
     expect(additions[0]!.astContext).toBeUndefined();
     expect(warnings.some((w) => w.includes('escapes project root'))).toBe(true);
   });
+
+  it('uses injected readStrategy content when provided (C1 seam)', async () => {
+    // readStrategy returns TypeScript with a comment — should classify as comment
+    const tsContent = '// a comment\nconst x = 1;\n';
+    const additions: DiffAddition[] = [
+      { file: 'src/app.ts', line: '// a comment', lineNumber: 1, precedingLine: null },
+      { file: 'src/app.ts', line: 'const x = 1;', lineNumber: 2, precedingLine: '// a comment' },
+    ];
+
+    await enrichWithAstContext(additions, {
+      cwd: tmpDir,
+      readStrategy: async (_file) => tsContent,
+    });
+
+    expect(additions[0]!.astContext).toBe('comment');
+    expect(additions[1]!.astContext).toBe('code');
+  });
+
+  it('skips classification and warns when readStrategy returns null', async () => {
+    const warnings: string[] = [];
+    const additions: DiffAddition[] = [
+      { file: 'src/app.ts', line: 'const x = 1;', lineNumber: 1, precedingLine: null },
+    ];
+
+    await enrichWithAstContext(additions, {
+      cwd: tmpDir,
+      readStrategy: async (_file) => null,
+      onWarn: (msg) => warnings.push(msg),
+    });
+
+    expect(additions[0]!.astContext).toBeUndefined();
+    expect(warnings.some((w) => w.includes('readStrategy returned null'))).toBe(true);
+  });
+
+  it('propagates readStrategy errors without falling back to disk (C2)', async () => {
+    const additions: DiffAddition[] = [
+      { file: 'src/app.ts', line: 'const x = 1;', lineNumber: 1, precedingLine: null },
+    ];
+
+    await expect(
+      enrichWithAstContext(additions, {
+        cwd: tmpDir,
+        readStrategy: async (_file) => {
+          throw new Error('blob not found in lc clone');
+        },
+      }),
+    ).rejects.toThrow('blob not found in lc clone');
+  });
+
+  it('preserves existing behavior when no readStrategy is provided', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'no-strategy.ts'),
+      '// comment line\nconst z = 99;\n',
+    );
+    const additions: DiffAddition[] = [
+      { file: 'src/no-strategy.ts', line: '// comment line', lineNumber: 1, precedingLine: null },
+    ];
+
+    await enrichWithAstContext(additions, { cwd: tmpDir });
+    // Disk fallback reads the file and classifies
+    expect(additions[0]!.astContext).toBe('comment');
+  });
 });
