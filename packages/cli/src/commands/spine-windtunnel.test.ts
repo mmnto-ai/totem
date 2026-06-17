@@ -185,82 +185,85 @@ describe('buildReadStrategy (C2 — post-image blob, throw on missing)', () => {
 
 // ─── computeFixtureSha (integrity) ───────────────────────
 
+/** Create populated positive + negative control dirs; returns [positive, negative]. */
+function makeControlDirs(repo: string): [string, string] {
+  const positive = path.join(repo, 'controls', 'positive');
+  const negative = path.join(repo, 'controls', 'negative');
+  fs.mkdirSync(positive, { recursive: true });
+  fs.mkdirSync(negative, { recursive: true });
+  fs.writeFileSync(path.join(positive, 'p1.diff'), 'positive control\n');
+  fs.writeFileSync(path.join(negative, 'n1.diff'), 'negative control\n');
+  return [positive, negative];
+}
+
 describe('computeFixtureSha (gate-1-scoped integrity hash)', () => {
-  it('returns null for an empty control dir', () => {
+  it('returns null when no control dir has files', () => {
     const repo = makeTmpRepo();
     const ctrl = path.join(repo, 'controls');
     fs.mkdirSync(ctrl, { recursive: true });
-    expect(computeFixtureSha(ctrl, repo, safeExec)).toBeNull();
+    expect(computeFixtureSha([ctrl], repo, safeExec)).toBeNull();
   });
 
-  it('returns a stable aggregate hash for a populated control dir', () => {
+  it('returns a stable aggregate hash across positive + negative dirs', () => {
     const repo = makeTmpRepo();
-    const ctrl = path.join(repo, 'controls');
-    fs.mkdirSync(ctrl, { recursive: true });
-    fs.writeFileSync(path.join(ctrl, 'a.diff'), 'aaa\n');
-    fs.writeFileSync(path.join(ctrl, 'b.diff'), 'bbb\n');
-    const first = computeFixtureSha(ctrl, repo, safeExec);
-    const second = computeFixtureSha(ctrl, repo, safeExec);
+    const dirs = makeControlDirs(repo);
+    const first = computeFixtureSha(dirs, repo, safeExec);
+    const second = computeFixtureSha(dirs, repo, safeExec);
     expect(first).toMatch(HEX40);
     expect(second).toBe(first);
   });
 
-  it('changes when a control file changes (tamper-evident)', () => {
+  it('changes when a POSITIVE control file changes (tamper-evident)', () => {
     const repo = makeTmpRepo();
-    const ctrl = path.join(repo, 'controls');
-    fs.mkdirSync(ctrl, { recursive: true });
-    fs.writeFileSync(path.join(ctrl, 'a.diff'), 'aaa\n');
-    const before = computeFixtureSha(ctrl, repo, safeExec);
-    fs.writeFileSync(path.join(ctrl, 'a.diff'), 'CHANGED\n');
-    const after = computeFixtureSha(ctrl, repo, safeExec);
-    expect(after).not.toBe(before);
+    const dirs = makeControlDirs(repo);
+    const before = computeFixtureSha(dirs, repo, safeExec);
+    fs.writeFileSync(path.join(dirs[0], 'p1.diff'), 'CHANGED\n');
+    expect(computeFixtureSha(dirs, repo, safeExec)).not.toBe(before);
   });
 
-  it('is stable across nested subdirectories (recursive + separator-normalized)', () => {
+  it('changes when a NEGATIVE control file changes (negative controls are protected too)', () => {
     const repo = makeTmpRepo();
-    const ctrl = path.join(repo, 'controls');
-    fs.mkdirSync(path.join(ctrl, 'positive'), { recursive: true });
-    fs.mkdirSync(path.join(ctrl, 'negative'), { recursive: true });
-    fs.writeFileSync(path.join(ctrl, 'positive', 'p1.diff'), 'p\n');
-    fs.writeFileSync(path.join(ctrl, 'negative', 'n1.diff'), 'n\n');
-    const first = computeFixtureSha(ctrl, repo, safeExec);
-    const second = computeFixtureSha(ctrl, repo, safeExec);
-    expect(first).toMatch(HEX40);
-    expect(second).toBe(first);
+    const dirs = makeControlDirs(repo);
+    const before = computeFixtureSha(dirs, repo, safeExec);
+    fs.writeFileSync(path.join(dirs[1], 'n1.diff'), 'CHANGED\n');
+    expect(computeFixtureSha(dirs, repo, safeExec)).not.toBe(before);
   });
 });
 
 // ─── verifyControlIntegrity (C6 / §5) ────────────────────
 
 describe('verifyControlIntegrity (C6 / §5 — mandatory, fail-loud)', () => {
-  it('throws when the control dir is missing (no silent skip)', () => {
+  it('throws when a control dir is missing (no silent skip)', () => {
     const repo = makeTmpRepo();
-    const ctrl = path.join(repo, 'controls'); // never created
-    expect(() => verifyControlIntegrity(ctrl, FAKE_SHA, repo, safeExec)).toThrow(/missing/);
+    const [positive] = makeControlDirs(repo);
+    const missingNegative = path.join(repo, 'controls', 'gone');
+    expect(() =>
+      verifyControlIntegrity([positive, missingNegative], FAKE_SHA, repo, safeExec),
+    ).toThrow(/missing/);
   });
 
-  it('throws when the control dir is empty', () => {
+  it('throws when the control dirs are empty', () => {
     const repo = makeTmpRepo();
-    const ctrl = path.join(repo, 'controls');
-    fs.mkdirSync(ctrl, { recursive: true });
-    expect(() => verifyControlIntegrity(ctrl, FAKE_SHA, repo, safeExec)).toThrow(/empty/);
+    const positive = path.join(repo, 'controls', 'positive');
+    const negative = path.join(repo, 'controls', 'negative');
+    fs.mkdirSync(positive, { recursive: true });
+    fs.mkdirSync(negative, { recursive: true });
+    expect(() => verifyControlIntegrity([positive, negative], FAKE_SHA, repo, safeExec)).toThrow(
+      /empty/,
+    );
   });
 
   it('throws on a fixtureSha mismatch (tamper)', () => {
     const repo = makeTmpRepo();
-    const ctrl = path.join(repo, 'controls');
-    fs.mkdirSync(ctrl, { recursive: true });
-    fs.writeFileSync(path.join(ctrl, 'a.diff'), 'aaa\n');
-    expect(() => verifyControlIntegrity(ctrl, 'f'.repeat(40), repo, safeExec)).toThrow(/expected/);
+    const dirs = makeControlDirs(repo);
+    expect(() => verifyControlIntegrity(dirs, 'f'.repeat(40), repo, safeExec)).toThrow(/expected/);
   });
 
-  it('passes when the control hash matches the declared fixtureSha', () => {
+  it('passes when the aggregate hash matches the declared fixtureSha', () => {
     const repo = makeTmpRepo();
-    const ctrl = path.join(repo, 'controls');
-    fs.mkdirSync(ctrl, { recursive: true });
-    fs.writeFileSync(path.join(ctrl, 'a.diff'), 'aaa\n');
-    const sha = computeFixtureSha(ctrl, repo, safeExec)!;
-    expect(() => verifyControlIntegrity(ctrl, sha, repo, safeExec)).not.toThrow();
+    const dirs = makeControlDirs(repo);
+    const sha = computeFixtureSha(dirs, repo, safeExec)!;
+    expect(() => verifyControlIntegrity(dirs, sha, repo, safeExec)).not.toThrow();
   });
 });
 
