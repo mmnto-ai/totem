@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.65.0
+
+### Minor Changes
+
+- 1c3e4d7: Gate-1 wind-tunnel evidence harness (mmnto-ai/totem#2188): add `WindtunnelLockSchema` + `WindtunnelLock` type (spine/windtunnel-lock.ts), pure `scoreWindtunnel` scorer (spine/windtunnel-scorer.ts), and `readStrategy` injection seam on `AstGateOptions` / `enrichWithAstContext` for regex+AST firing parity with production `totem lint` (C1).
+
 ## 1.64.2
 
 ### Patch Changes
