@@ -1522,4 +1522,154 @@ describe('--ast-parse-mode lenient', () => {
 
     spy.mockRestore();
   });
+
+  // ─── ruleClass marker (mmnto-ai/totem#2183) ─────────
+
+  const VALID_SHA = 'a'.repeat(40);
+  const passingLegitimacy = {
+    provenance: { mergedPr: 2183, reviewThread: 'pr#2183-thread', commitSha: VALID_SHA },
+    positiveControl: true,
+    negativeControl: true,
+  };
+  const failingLegitimacy = { ...passingLegitimacy, positiveControl: false };
+
+  it('keeps a legacy (un-stamped) ast-grep rule blocking — zero regression via the engine proxy (mmnto-ai/totem#2183, greptile #2186)', async () => {
+    // The spec invariant: a rule with no legitimacy/ruleClass falls to the
+    // engine proxy and ast/ast-grep STILL blocks. Guards hardTier's legacy
+    // fallback against a silent regression if it or isHardEngine is refactored.
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+    await expect(
+      runCompiledRules({ diff, cwd: tmpDir, totemDir: TOTEM_DIR, format: 'text', tag: 'Test' }),
+    ).rejects.toThrow('Violations detected');
+  });
+
+  it('blocks on a minted ruleClass:hard regex rule — overrides the engine proxy upward (mmnto-ai/totem#2183)', async () => {
+    const rules = [
+      makeRule('console\\.log', 'No console.log', 'No console.log', {
+        legitimacy: passingLegitimacy,
+        ruleClass: 'hard',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("x");');
+
+    await expect(
+      runCompiledRules({ diff, cwd: tmpDir, totemDir: TOTEM_DIR, format: 'text', tag: 'Test' }),
+    ).rejects.toThrow('Violations detected');
+  });
+
+  it('does not block on a minted ruleClass:advisory ast-grep rule — overrides the engine proxy downward (mmnto-ai/totem#2183)', async () => {
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+        legitimacy: failingLegitimacy,
+        ruleClass: 'advisory',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    const parsed = JSON.parse(result.output);
+    expect(parsed.pass).toBe(true);
+    expect(parsed.errors).toBe(0);
+    expect(parsed.warnings).toBe(1);
+  });
+
+  it('preserves the severity gate — a minted hard rule with severity:warning does not block (mmnto-ai/totem#2183, codex fold 2)', async () => {
+    const rules = [
+      makeRule('console\\.log', 'No console.log', 'No console.log', {
+        legitimacy: passingLegitimacy,
+        ruleClass: 'hard',
+        severity: 'warning',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("x");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    const parsed = JSON.parse(result.output);
+    expect(parsed.pass).toBe(true);
+    expect(parsed.warnings).toBe(1);
+    expect(parsed.errors).toBe(0);
+  });
+
+  it('labels a legacy (un-stamped) regex advisory as a frozen-lesson rule (mmnto-ai/totem#2181)', async () => {
+    const rules = [makeRule('console\\.log', 'No console.log', 'No console.log')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("x");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.output).toContain('Frozen-lesson');
+  });
+
+  it('does not mislabel a minted ruleClass:advisory regex rule as frozen-lesson (mmnto-ai/totem#2183, codex fold 2)', async () => {
+    const rules = [
+      makeRule('console\\.log', 'No console.log', 'No console.log', {
+        legitimacy: failingLegitimacy,
+        ruleClass: 'advisory',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("x");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(1);
+    expect(result.output).not.toContain('Frozen-lesson');
+  });
 });
