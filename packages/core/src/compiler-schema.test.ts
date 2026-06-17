@@ -927,8 +927,9 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       expect(() => ProvenanceRecordSchema.parse({ ...provenance, mergedPr: 2.5 })).toThrow();
     });
 
-    it('rejects an empty reviewThread', () => {
+    it('rejects an empty or whitespace-only reviewThread', () => {
       expect(() => ProvenanceRecordSchema.parse({ ...provenance, reviewThread: '' })).toThrow();
+      expect(() => ProvenanceRecordSchema.parse({ ...provenance, reviewThread: '   ' })).toThrow();
     });
 
     it('rejects a malformed commitSha (not 40-hex)', () => {

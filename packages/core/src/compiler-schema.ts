@@ -53,8 +53,8 @@ const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 export const ProvenanceRecordSchema = z.object({
   /** Merged PR the rule was mined from (positive integer PR number). */
   mergedPr: z.number().int().positive(),
-  /** Reference to the review thread that adjudicated the rule (non-empty). */
-  reviewThread: z.string().min(1),
+  /** Reference to the review thread that adjudicated the rule (non-empty; trimmed so whitespace-only is rejected). */
+  reviewThread: z.string().trim().min(1),
   /** Full 40-hex git commit SHA the rule was frozen at. */
   commitSha: z.string().regex(COMMIT_SHA_RE),
 });
