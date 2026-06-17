@@ -13,6 +13,7 @@ import {
   buildReadStrategy,
   computeFixtureSha,
   isCommitAncestor,
+  verifyControlIntegrity,
   verifyFreezeProof,
 } from './spine-windtunnel.js';
 
@@ -213,6 +214,53 @@ describe('computeFixtureSha (gate-1-scoped integrity hash)', () => {
     fs.writeFileSync(path.join(ctrl, 'a.diff'), 'CHANGED\n');
     const after = computeFixtureSha(ctrl, repo, safeExec);
     expect(after).not.toBe(before);
+  });
+
+  it('is stable across nested subdirectories (recursive + separator-normalized)', () => {
+    const repo = makeTmpRepo();
+    const ctrl = path.join(repo, 'controls');
+    fs.mkdirSync(path.join(ctrl, 'positive'), { recursive: true });
+    fs.mkdirSync(path.join(ctrl, 'negative'), { recursive: true });
+    fs.writeFileSync(path.join(ctrl, 'positive', 'p1.diff'), 'p\n');
+    fs.writeFileSync(path.join(ctrl, 'negative', 'n1.diff'), 'n\n');
+    const first = computeFixtureSha(ctrl, repo, safeExec);
+    const second = computeFixtureSha(ctrl, repo, safeExec);
+    expect(first).toMatch(HEX40);
+    expect(second).toBe(first);
+  });
+});
+
+// ─── verifyControlIntegrity (C6 / §5) ────────────────────
+
+describe('verifyControlIntegrity (C6 / §5 — mandatory, fail-loud)', () => {
+  it('throws when the control dir is missing (no silent skip)', () => {
+    const repo = makeTmpRepo();
+    const ctrl = path.join(repo, 'controls'); // never created
+    expect(() => verifyControlIntegrity(ctrl, FAKE_SHA, repo, safeExec)).toThrow(/missing/);
+  });
+
+  it('throws when the control dir is empty', () => {
+    const repo = makeTmpRepo();
+    const ctrl = path.join(repo, 'controls');
+    fs.mkdirSync(ctrl, { recursive: true });
+    expect(() => verifyControlIntegrity(ctrl, FAKE_SHA, repo, safeExec)).toThrow(/empty/);
+  });
+
+  it('throws on a fixtureSha mismatch (tamper)', () => {
+    const repo = makeTmpRepo();
+    const ctrl = path.join(repo, 'controls');
+    fs.mkdirSync(ctrl, { recursive: true });
+    fs.writeFileSync(path.join(ctrl, 'a.diff'), 'aaa\n');
+    expect(() => verifyControlIntegrity(ctrl, 'f'.repeat(40), repo, safeExec)).toThrow(/expected/);
+  });
+
+  it('passes when the control hash matches the declared fixtureSha', () => {
+    const repo = makeTmpRepo();
+    const ctrl = path.join(repo, 'controls');
+    fs.mkdirSync(ctrl, { recursive: true });
+    fs.writeFileSync(path.join(ctrl, 'a.diff'), 'aaa\n');
+    const sha = computeFixtureSha(ctrl, repo, safeExec)!;
+    expect(() => verifyControlIntegrity(ctrl, sha, repo, safeExec)).not.toThrow();
   });
 });
 

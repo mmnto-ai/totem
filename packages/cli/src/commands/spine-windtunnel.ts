@@ -189,18 +189,11 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   // C3: derive freeze proof from git history (not a self-embedded trusted field).
   verifyFreezeProof(lockPath, repoRoot, safeExec);
 
-  // C6: verify fixture integrity (controls.integrity.fixtureSha)
+  // C6 / §5: fixture integrity is MANDATORY — a missing or empty control dir
+  // while the lock declares a fixtureSha is corpus shrinkage / tampering, not a
+  // reason to skip. verifyControlIntegrity throws loud on missing/empty/mismatch.
   const controlDir = path.join(repoRoot, lock.controls.positiveRef);
-  if (fs.existsSync(controlDir)) {
-    const actualSha = computeFixtureSha(controlDir, repoRoot, safeExec);
-    if (actualSha && actualSha !== lock.controls.integrity.fixtureSha) {
-      throw new TotemError(
-        'CONFIG_INVALID',
-        `Control fixture integrity check failed: expected ${lock.controls.integrity.fixtureSha}, got ${actualSha}`,
-        'Revert the tampering or re-freeze the lock with the updated fixtureSha.',
-      );
-    }
-  }
+  verifyControlIntegrity(controlDir, lock.controls.integrity.fixtureSha, repoRoot, safeExec);
 
   console.error(`[WindtunnelRun] Lock valid — phase: ${lock.phase}`);
 
@@ -414,11 +407,19 @@ export function computeFixtureSha(
   const allEntries = fs.readdirSync(controlDir, { recursive: true });
   const files = allEntries
     .map((f) => (f instanceof Buffer ? f.toString('utf-8') : String(f)))
+    // Normalize to forward-slash BEFORE sorting (A3): Windows readdir yields
+    // '\' separators, which would otherwise reorder the sort and change the
+    // aggregate digest across platforms. path.join below re-localizes for IO.
+    .map((f) => f.replace(/\\/g, '/'))
     .filter((f) => !fs.statSync(path.join(controlDir, f)).isDirectory())
     .sort();
 
   if (files.length === 0) return null;
 
+  // `git hash-object <path>` applies the repo's clean/EOL filter by default
+  // (verified: a CRLF file under `* text=auto` hashes identically to its LF
+  // form), so each per-file hash is CRLF-immune WITHOUT --filters (and
+  // --no-filters would defeat that immunity).
   const hashes = files.map((f) => {
     const fullPath = path.join(controlDir, f);
     return safeExec('git', ['hash-object', fullPath], { cwd: repoRoot }).trim();
@@ -430,6 +431,35 @@ export function computeFixtureSha(
     cwd: repoRoot,
     input: combined,
   }).trim();
+}
+
+/**
+ * Verify control-fixture integrity (C6 / §5 no-silent-shrink). The lock ALWAYS
+ * declares a fixtureSha (schema-required), so a missing OR empty control dir is
+ * corpus shrinkage / tampering — it MUST fail loud, never silently pass.
+ */
+export function verifyControlIntegrity(
+  controlDir: string,
+  expectedSha: string,
+  repoRoot: string,
+  safeExec: SafeExecFn,
+): void {
+  if (!fs.existsSync(controlDir)) {
+    throw new Error(
+      `Wind-tunnel integrity: control dir ${controlDir} is missing but the lock declares fixtureSha ${expectedSha} (§5 no-silent-shrink). Restore the fixtures or re-freeze the lock.`,
+    );
+  }
+  const actualSha = computeFixtureSha(controlDir, repoRoot, safeExec);
+  if (actualSha === null) {
+    throw new Error(
+      `Wind-tunnel integrity: control dir ${controlDir} is empty but the lock declares fixtureSha ${expectedSha} (§5 no-silent-shrink). Restore the fixtures or re-freeze the lock.`,
+    );
+  }
+  if (actualSha !== expectedSha) {
+    throw new Error(
+      `Wind-tunnel integrity: control fixtures changed — expected ${expectedSha}, got ${actualSha}. Revert the tampering or re-freeze with the updated fixtureSha.`,
+    );
+  }
 }
 
 /**
