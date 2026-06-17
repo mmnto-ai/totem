@@ -1533,6 +1533,31 @@ describe('--ast-parse-mode lenient', () => {
   };
   const failingLegitimacy = { ...passingLegitimacy, positiveControl: false };
 
+  it('keeps a legacy (un-stamped) ast-grep rule blocking — zero regression via the engine proxy (mmnto-ai/totem#2183, greptile #2186)', async () => {
+    // The spec invariant: a rule with no legitimacy/ruleClass falls to the
+    // engine proxy and ast/ast-grep STILL blocks. Guards hardTier's legacy
+    // fallback against a silent regression if it or isHardEngine is refactored.
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      '// context\n  console.log("foo");\n// context\n',
+    );
+
+    const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+    await expect(
+      runCompiledRules({ diff, cwd: tmpDir, totemDir: TOTEM_DIR, format: 'text', tag: 'Test' }),
+    ).rejects.toThrow('Violations detected');
+  });
+
   it('blocks on a minted ruleClass:hard regex rule — overrides the engine proxy upward (mmnto-ai/totem#2183)', async () => {
     const rules = [
       makeRule('console\\.log', 'No console.log', 'No console.log', {

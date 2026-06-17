@@ -37,7 +37,16 @@ export type AstGrepYamlRule = NapiConfig;
 
 // ─── Legitimacy marker (mmnto-ai/totem#2183) ────────
 
-/** Full 40-hex git commit SHA. (Git content hashes elsewhere are 64-hex sha-256; a commit SHA is sha-1.) */
+/**
+ * Full 40-hex git commit SHA, lowercase. (Git content hashes elsewhere are
+ * 64-hex sha-256; a commit SHA is sha-1.) Lowercase-only is deliberate, not an
+ * oversight (GCA #2186): git emits canonical lowercase SHA-1, and the sole
+ * writer of `commitSha` is spine regeneration (strategy#516) deriving from git,
+ * so the canonical form is always lowercase. We validate that canonical form
+ * rather than accepting uppercase (`/i`) — admitting a non-canonical SHA would
+ * be a silent data-quality hole, and lower-casing it on parse would reintroduce
+ * the very transform/hash-stability hazard flagged for `reviewThread` below.
+ */
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 
 /**
@@ -53,8 +62,17 @@ const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 export const ProvenanceRecordSchema = z.object({
   /** Merged PR the rule was mined from (positive integer PR number). */
   mergedPr: z.number().int().positive(),
-  /** Reference to the review thread that adjudicated the rule (non-empty; trimmed so whitespace-only is rejected). */
-  reviewThread: z.string().trim().min(1),
+  /**
+   * Reference to the review thread that adjudicated the rule. Rejects empty and
+   * whitespace-only via a NON-MUTATING refinement (greptile/CR #2186): a
+   * `.trim()` transform would silently normalize a padded value on parse, so a
+   * stamped rule's on-disk JSON could differ from its parsed form and churn the
+   * manifest hash on the next `verify-manifest`. `.refine` validates without
+   * mutating, so the stored value round-trips byte-identically.
+   */
+  reviewThread: z.string().refine((s) => s.trim().length > 0, {
+    message: 'reviewThread must be a non-empty, non-whitespace reference',
+  }),
   /** Full 40-hex git commit SHA the rule was frozen at. */
   commitSha: z.string().regex(COMMIT_SHA_RE),
 });

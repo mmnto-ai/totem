@@ -887,6 +887,15 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       );
     });
 
+    it('rejects ruleClass:advisory without legitimacy (biconditional — both directions, CR #2186)', () => {
+      // The refinement fires on `hasLegitimacy !== hasRuleClass`, so a forged
+      // 'advisory' stamp with no legitimacy is rejected exactly like a forged
+      // 'hard' one — this documents the full ⟺ from tests alone.
+      expect(() => CompiledRuleSchema.parse({ ...baseRegexRule, ruleClass: 'advisory' })).toThrow(
+        /both present or both absent/,
+      );
+    });
+
     it('rejects legitimacy without ruleClass (minted rule missing its marker)', () => {
       expect(() =>
         CompiledRuleSchema.parse({ ...baseRegexRule, legitimacy: passingLegitimacy }),
@@ -939,6 +948,21 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       ).toThrow();
     });
 
+    it('rejects an uppercase commitSha — canonical lowercase only, not /i (GCA #2186 declined)', () => {
+      // git emits canonical lowercase SHA-1; the canonical writer derives from
+      // git, so we validate the canonical form rather than accept (or normalize)
+      // a non-canonical uppercase value. See COMMIT_SHA_RE comment.
+      expect(() =>
+        ProvenanceRecordSchema.parse({ ...provenance, commitSha: 'A'.repeat(40) }),
+      ).toThrow();
+    });
+
+    it('does not mutate a whitespace-padded reviewThread (non-mutating validator, greptile/CR #2186)', () => {
+      const padded = '  pr#2183-thread  ';
+      const parsed = ProvenanceRecordSchema.parse({ ...provenance, reviewThread: padded });
+      expect(parsed.reviewThread).toBe(padded);
+    });
+
     it('requires both controls explicitly (no defaulting) when legitimacy is present', () => {
       expect(() => LegitimacySchema.parse({ provenance, positiveControl: true })).toThrow();
     });
@@ -952,6 +976,18 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       expect(after).toBe(before);
       expect(after).not.toContain('legitimacy');
       expect(after).not.toContain('ruleClass');
+    });
+
+    it('serializes a STAMPED rule byte-identically across parse round-trips (greptile #2186)', () => {
+      // No schema field mutates a stamped rule's value, so parse →
+      // canonicalStringify → re-parse → canonicalStringify is a fixed point.
+      // Guards the spine-minted rule's hash against silent drift on load.
+      const stamped = { ...baseRegexRule, legitimacy: passingLegitimacy, ruleClass: 'hard' };
+      const first = canonicalStringify(CompiledRuleSchema.parse(stamped));
+      const second = canonicalStringify(CompiledRuleSchema.parse(JSON.parse(first)));
+      expect(second).toBe(first);
+      expect(first).toContain('legitimacy');
+      expect(first).toContain('ruleClass');
     });
   });
 });
