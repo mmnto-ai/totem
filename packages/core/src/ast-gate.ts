@@ -127,16 +127,16 @@ async function resolveContent(
     // Prefer staged content (git show :path) over disk file to match the diff being evaluated.
     const { safeExec } = await import('./sys/exec.js');
     return safeExec('git', ['show', `:${file}`], { cwd });
+    // totem-context: intentional fallback — staged read missing → disk read below.
   } catch (gitErr) {
-    // totem-context: intentional fallback — staged read missing/unavailable, read from disk; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     void gitErr;
   }
 
   // totem-context: intentional fail-open — an unreadable file degrades to skip-classification (advisory AST enrichment, never a hard sensor).
   try {
     return fs.readFileSync(fullPath, 'utf-8');
+    // totem-context: intentional fail-open — unreadable file → skip classification.
   } catch (diskErr) {
-    // totem-context: intentional fail-open — unreadable file → skip classification; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     void diskErr;
     options.onWarn?.(`AST gate: cannot read ${file}, skipping classification`);
     return null;
@@ -155,11 +155,11 @@ async function classifyContent(
   file: string,
   onWarn?: (msg: string) => void,
 ): Promise<Map<number, AstContext> | null> {
-  // totem-context: intentional fail-open — an unparseable file degrades to skip-classification (advisory AST enrichment, never a hard sensor); dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+  // totem-context: intentional fail-open — an unparseable file degrades to skip-classification (advisory AST enrichment, never a hard sensor).
   try {
     return await classifyLines(content, lineNumbers, lang);
+    // totem-context: intentional fail-open — unparseable file → skip classification.
   } catch (parseErr) {
-    // totem-context: intentional fail-open — unparseable file → skip classification; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     void parseErr;
     onWarn?.(`AST gate: parse failed for ${file}, skipping classification`);
     return null;

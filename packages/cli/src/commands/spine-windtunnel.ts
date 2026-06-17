@@ -277,6 +277,31 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;
 
 /**
+ * Boolean predicate: is `ancestor` an ancestor of `descendant` in the repo at
+ * `cwd`? `git merge-base --is-ancestor` encodes the answer in its exit code
+ * (0 = yes, 1 = no), so a non-zero exit is a legitimate FALSE, not an error to
+ * swallow. Any other failure (bad ref, repo unreadable) re-throws so it is not
+ * masked as a clean "false".
+ */
+function isCommitAncestor(
+  ancestor: string,
+  descendant: string,
+  cwd: string,
+  safeExec: SafeExecFn,
+): boolean {
+  try {
+    safeExec('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd });
+    return true;
+  } catch (err) {
+    const status = (err as { status?: number | null }).status;
+    if (status === 1) return false;
+    throw new Error(
+      `Wind-tunnel: 'git merge-base --is-ancestor ${ancestor} ${descendant}' failed in ${cwd}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/**
  * Build a post-image readStrategy (S1/C1).
  * When lcDir is provided, resolves blobs via `git show <asOfCommit>:<path>` in
  * the lc clone. Throws on unresolvable blob for an evaluated added file (C2).
@@ -377,29 +402,30 @@ function computeFixtureSha(
   repoRoot: string,
   safeExec: SafeExecFn,
 ): string | null {
-  try {
-    const allEntries = fs.readdirSync(controlDir, { recursive: true });
-    const files = allEntries
-      .map((f) => (f instanceof Buffer ? f.toString('utf-8') : String(f)))
-      .filter((f) => !fs.statSync(path.join(controlDir, f)).isDirectory())
-      .sort();
+  // No try/catch around the body: a hash/IO failure must propagate so the
+  // integrity check fails LOUD (Tenet 4 — a silently null'd hash would skip the
+  // run-time tamper gate, the §5 no-silent-shrink discipline this design rests
+  // on). The only "soft" case is an empty control dir, returned as null and
+  // handled by callers (control dir absent / not yet populated at harness time).
+  const allEntries = fs.readdirSync(controlDir, { recursive: true });
+  const files = allEntries
+    .map((f) => (f instanceof Buffer ? f.toString('utf-8') : String(f)))
+    .filter((f) => !fs.statSync(path.join(controlDir, f)).isDirectory())
+    .sort();
 
-    if (files.length === 0) return null;
+  if (files.length === 0) return null;
 
-    const hashes = files.map((f) => {
-      const fullPath = path.join(controlDir, f);
-      return safeExec('git', ['hash-object', fullPath], { cwd: repoRoot }).trim();
-    });
+  const hashes = files.map((f) => {
+    const fullPath = path.join(controlDir, f);
+    return safeExec('git', ['hash-object', fullPath], { cwd: repoRoot }).trim();
+  });
 
-    // Combine individual file hashes into a single aggregate
-    const combined = hashes.join('\n');
-    return safeExec('git', ['hash-object', '--stdin'], {
-      cwd: repoRoot,
-      input: combined,
-    } as Parameters<SafeExecFn>[2]).trim();
-  } catch {
-    return null;
-  }
+  // Combine individual file hashes into a single order-stable aggregate digest.
+  const combined = hashes.join('\n');
+  return safeExec('git', ['hash-object', '--stdin'], {
+    cwd: repoRoot,
+    input: combined,
+  }).trim();
 }
 
 /**
@@ -412,31 +438,30 @@ async function assertCorpusCompleteness(
   repoRoot: string,
   safeExec: SafeExecFn,
 ): Promise<void> {
-  // Verify the lc clone is accessible + at the correct asOfCommit
+  // Verify the lc clone is accessible + at the correct asOfCommit.
+  // `merge-base --is-ancestor` exits non-zero to MEAN "not an ancestor" — that
+  // is a boolean predicate, not an error, so it gets its own probe helper.
   const asOfCommit = lock.corpus.selectionRule.asOfCommit;
+  let headSha: string;
   try {
-    const headSha = safeExec('git', ['rev-parse', 'HEAD'], { cwd: lcDir }).trim();
-    const isAncestor = (() => {
-      try {
-        safeExec('git', ['merge-base', '--is-ancestor', asOfCommit, headSha], { cwd: lcDir });
-        return true;
-      } catch {
-        return false;
-      }
-    })();
-
-    if (!isAncestor) {
-      console.error(
-        `[WindtunnelFreeze] WARNING: asOfCommit ${asOfCommit} is not an ancestor of lc HEAD ${headSha} — corpus completeness assertion may be unreliable.`,
-      );
-    } else {
-      console.error(`[WindtunnelFreeze] lc clone at ${lcDir} includes asOfCommit ${asOfCommit} ✓`);
-    }
-  } catch {
-    console.error(
-      `[WindtunnelFreeze] WARNING: cannot verify lc clone at ${lcDir} — completeness assertion skipped.`,
+    headSha = safeExec('git', ['rev-parse', 'HEAD'], { cwd: lcDir }).trim();
+  } catch (err) {
+    // S4: an inaccessible lc clone means freeze-time completeness cannot be
+    // proven. The harness phase tolerates this (no real corpus yet) but must
+    // surface it loudly — never silently pass off an unverifiable corpus.
+    throw new Error(
+      `Wind-tunnel freeze: cannot access lc clone at ${lcDir} to verify corpus completeness (S4): ${err instanceof Error ? err.message : String(err)}. ` +
+        `Provide a valid --lc-dir / TOTEM_LC_DIR clone, or omit it to skip the completeness assertion entirely.`,
     );
-    return;
+  }
+
+  const isAncestor = isCommitAncestor(asOfCommit, headSha, lcDir, safeExec);
+  if (!isAncestor) {
+    console.error(
+      `[WindtunnelFreeze] WARNING: asOfCommit ${asOfCommit} is not an ancestor of lc HEAD ${headSha} — corpus completeness assertion may be unreliable.`,
+    );
+  } else {
+    console.error(`[WindtunnelFreeze] lc clone at ${lcDir} includes asOfCommit ${asOfCommit} ✓`);
   }
 
   // Structural completeness: count + warn (the actual re-derivation of the full
