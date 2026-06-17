@@ -1,5 +1,16 @@
 # @mmnto/cli
 
+## 1.65.0
+
+### Minor Changes
+
+- 1c3e4d7: Gate-1 wind-tunnel CLI (mmnto-ai/totem#2188): add `totem spine windtunnel freeze` and `totem spine windtunnel run` commands with `--lc-dir` / `TOTEM_LC_DIR` option, git-derived freeze proof (C3), phase rejection for harness→certifying (P1), shared post-image readStrategy (S1/C1), and mock engine for harness-phase validation (OQ2).
+
+### Patch Changes
+
+- Updated dependencies [1c3e4d7]
+  - @mmnto/totem@1.65.0
+
 ## 1.64.2
 
 ### Patch Changes
