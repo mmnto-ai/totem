@@ -495,23 +495,39 @@ export async function runCompiledRules(
   // engine×severity; Tenet 21). Hard engines keep their existing severity behavior
   // (error blocks, warning doesn't) — that is "stay hard".
   //
-  // `isHardEngine` is the single source of truth for "blocks". Only an explicit
-  // ast/ast-grep engine is hard; a regex engine OR a legacy rule with no `engine`
-  // field falls to advisory — matching rule-engine.ts's `r.engine === 'regex' ||
-  // !r.engine` convention, where a missing engine is treated AS regex (gemini /
-  // greptile #2182). The durable provenance/ruleClass marker rides the spine
-  // (mmnto-ai/totem-strategy#516); engine-type is the conservative interim proxy.
+  // mmnto-ai/totem#2183 — the durable provenance/ruleClass marker has now
+  // landed, so `ruleClass` is the authoritative hard-tier discriminator when
+  // present (spine-minted rules). `isHardEngine` survives ONLY as the legacy
+  // fallback for un-stamped rules: a regex engine OR a legacy rule with no
+  // `engine` field falls to advisory — matching rule-engine.ts's `r.engine ===
+  // 'regex' || !r.engine` convention, where a missing engine is treated AS
+  // regex (gemini / greptile #2182). The schema ⟺ invariant (compiler-schema.ts)
+  // guarantees a minted rule always carries `ruleClass`, so this proxy branch is
+  // reachable by legacy rules alone — demoted from a legitimacy signal to a
+  // legacy tier-display fallback (#2181 engine-type proxy retired). ADR-110
+  // pre-scoring: no Gate-1 legitimacy decision reads engine-type.
   const isHardEngine = (v: Violation): boolean =>
     v.rule.engine === 'ast' || v.rule.engine === 'ast-grep';
+  const hardTier = (v: Violation): boolean =>
+    v.rule.ruleClass != null ? v.rule.ruleClass === 'hard' : isHardEngine(v);
+  // `hardTier` replaces the hard-tier discriminator ONLY — the severity gate is
+  // unchanged (error blocks, warning doesn't): blocking = hard tier AND error.
   const isBlocking = (v: Violation): boolean =>
-    isHardEngine(v) && (v.rule.severity ?? 'error') === 'error';
+    hardTier(v) && (v.rule.severity ?? 'error') === 'error';
   const errors = violations.filter(isBlocking);
   const warnings = violations.filter((v) => !isBlocking(v));
   // Whether any non-blocking finding is a frozen-lesson regex-class rule (regex, or a
   // legacy rule with no engine) vs only ast/ast-grep probationary warnings. Gates the
   // frozen-lesson wording in BOTH the text note and the SARIF summary, so an
   // ast-warning-only run is never mislabeled as frozen-lesson (gemini/greptile #2182).
-  const hasFrozenLessonAdvisory = warnings.some((v) => !isHardEngine(v));
+  //
+  // mmnto-ai/totem#2183 — restrict to LEGACY (un-stamped) rules: a minted
+  // `ruleClass:'advisory'` rule is a real spine stamp, NOT a frozen-lesson
+  // demotion, so it must not be labeled frozen-lesson in user-facing output
+  // (codex fold 2). `ruleClass == null` is the legacy discriminator.
+  const hasFrozenLessonAdvisory = warnings.some(
+    (v) => v.rule.ruleClass == null && !isHardEngine(v),
+  );
 
   // Convert to unified findings model once (ADR-071)
   const { violationToFinding } = await import('@mmnto/totem');

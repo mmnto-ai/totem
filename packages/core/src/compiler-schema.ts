@@ -35,6 +35,49 @@ export const AstGrepYamlRuleSchema = NapiConfigSchema;
 
 export type AstGrepYamlRule = NapiConfig;
 
+// ─── Legitimacy marker (mmnto-ai/totem#2183) ────────
+
+/** Full 40-hex git commit SHA. (Git content hashes elsewhere are 64-hex sha-256; a commit SHA is sha-1.) */
+const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
+
+/**
+ * mmnto-ai/totem#2183 — the §3.1 provenance leg of the ADR-110 Gate-1
+ * legitimacy bar: the identity of the merged-PR history a regenerated rule was
+ * mined from. Structured and **mechanically validated** (NOT a bare string) so
+ * a placeholder cannot masquerade as provenance. Promotion state is NOT carried
+ * here — it lives on the owning rule's top-level `unverified` flag (ADR-089
+ * zero-trust), the single source of truth `deriveRuleClass` reads. Control
+ * *evidence* (which PRs/fixtures proved each control) rides the wind-tunnel
+ * manifest (ADR-110 §6), not the per-rule marker.
+ */
+export const ProvenanceRecordSchema = z.object({
+  /** Merged PR the rule was mined from (positive integer PR number). */
+  mergedPr: z.number().int().positive(),
+  /** Reference to the review thread that adjudicated the rule (non-empty). */
+  reviewThread: z.string().min(1),
+  /** Full 40-hex git commit SHA the rule was frozen at. */
+  commitSha: z.string().regex(COMMIT_SHA_RE),
+});
+
+export type ProvenanceRecord = z.infer<typeof ProvenanceRecordSchema>;
+
+/**
+ * mmnto-ai/totem#2183 — the three **peer** legs of the ADR-110 §3 legitimacy
+ * bar, mapping 1:1 onto the strategy#666 Tenet-9 three-check so the Gate-1
+ * wind-tunnel reads per-rule eligibility off the marker with no translation
+ * layer: `provenance` (§3.1) / `positiveControl` (§3.2) / `negativeControl`
+ * (§3.3). Controls are pass/fail booleans, **required** when `legitimacy` is
+ * present (never defaulted, so an absent control can't silently read as a
+ * failed one); the evidence behind each pass lives in the wind-tunnel manifest.
+ */
+export const LegitimacySchema = z.object({
+  provenance: ProvenanceRecordSchema,
+  positiveControl: z.boolean(),
+  negativeControl: z.boolean(),
+});
+
+export type Legitimacy = z.infer<typeof LegitimacySchema>;
+
 // ─── Compiled rule schemas ──────────────────────────
 
 const CompiledRuleBaseSchema = z.object({
@@ -192,6 +235,26 @@ const CompiledRuleBaseSchema = z.object({
    * produce identical output.
    */
   unverified: z.boolean().optional(),
+  /**
+   * mmnto-ai/totem#2183 — the ADR-110 §3 legitimacy bar (three peer legs). Set
+   * by spine rule-regeneration (strategy#516); **absent on every legacy rule.**
+   * When present, `ruleClass` MUST also be present and equal to
+   * `deriveRuleClass(rule)` — enforced by the superRefine on
+   * `CompiledRuleSchema`. Never written with defaults: absence is the legacy
+   * signal and preserves pre-#2183 manifest hashes via canonicalStringify.
+   */
+  legitimacy: LegitimacySchema.optional(),
+  /**
+   * mmnto-ai/totem#2183 — the first-class, **derived** enforcement-tier marker
+   * that retires the engine-type proxy (#2181). `'hard'` blocks (subject to the
+   * unchanged severity gate — error blocks, warning does not); `'advisory'` is
+   * printed, non-blocking. Derived from `legitimacy` at mint via
+   * `deriveRuleClass`; the reader TRUSTS this frozen stamp and never re-derives
+   * at lint-time (ADR-110 §1 mint+validate boundary; Tenet-15
+   * verifiable-freezing). Present **iff** `legitimacy` is present; absent ⇒ the
+   * reader falls back to the legacy engine-type proxy.
+   */
+  ruleClass: z.enum(['hard', 'advisory']).optional(),
 });
 
 /**
@@ -229,7 +292,74 @@ function refineAstGrepMutualExclusion(
   }
 }
 
-export const CompiledRuleSchema = CompiledRuleBaseSchema.superRefine(refineAstGrepMutualExclusion);
+/**
+ * mmnto-ai/totem#2183 — derive the enforcement tier from the ADR-110 §3
+ * legitimacy bar. Pure + deterministic (Tenet 9). A rule is `'hard'` ONLY when
+ * all three legs hold AND the rule is promoted: `legitimacy` present, the
+ * owning rule's ADR-089 `unverified` flag is not `true`, and both controls
+ * passed. Anything else — no legitimacy, unpromoted, or a failed control — is
+ * `'advisory'`. Promotion reads the rule's TOP-LEVEL `unverified` (the single
+ * source of truth; #1485 / #1479 already read it), never a nested copy.
+ *
+ * **Unwired** from `buildCompiledRule` in this slice: the rule-compilation
+ * freeze stands, so the sanctioned writer is spine regeneration (strategy#516),
+ * which owns the wiring. Exposed as a pure helper for that regenerator and for
+ * the consistency superRefine below.
+ */
+export function deriveRuleClass(rule: {
+  legitimacy?: Legitimacy;
+  unverified?: boolean;
+}): 'hard' | 'advisory' {
+  const leg = rule.legitimacy;
+  if (!leg) return 'advisory';
+  if (rule.unverified === true) return 'advisory';
+  if (!leg.positiveControl || !leg.negativeControl) return 'advisory';
+  return 'hard';
+}
+
+/**
+ * mmnto-ai/totem#2183 — the Gate-1 guardrail, enforced structurally at the
+ * runtime-parse boundary (ADR-110 §1; codex contract-lens). `legitimacy` and
+ * `ruleClass` are present together or absent together, and when present
+ * `ruleClass` must equal `deriveRuleClass(rule)`:
+ *   - `ruleClass` without `legitimacy` (a forged hard stamp) → parse-fail.
+ *   - `legitimacy` without `ruleClass` (a minted rule missing its marker) → parse-fail.
+ *   - `ruleClass !== deriveRuleClass(rule)` (inconsistent marker) → parse-fail.
+ *   - both absent (a legacy rule) → valid; the reader uses the engine proxy.
+ * Because this fires inside `CompiledRuleSchema` (which `loadCompiledRules`
+ * parses), `run-compiled-rules.ts` can never observe a forged stamped state —
+ * the engine-type proxy is reachable only by un-stamped legacy rules.
+ */
+function refineLegitimacyRuleClassConsistency(
+  data: { legitimacy?: Legitimacy; ruleClass?: 'hard' | 'advisory'; unverified?: boolean },
+  ctx: z.RefinementCtx,
+): void {
+  const hasLegitimacy = data.legitimacy !== undefined;
+  const hasRuleClass = data.ruleClass !== undefined;
+  if (hasLegitimacy !== hasRuleClass) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'legitimacy and ruleClass must be both present or both absent (mmnto-ai/totem#2183)',
+      path: [hasRuleClass ? 'legitimacy' : 'ruleClass'],
+    });
+    return;
+  }
+  if (hasLegitimacy && hasRuleClass) {
+    const expected = deriveRuleClass(data);
+    if (data.ruleClass !== expected) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `ruleClass '${data.ruleClass}' is inconsistent with the derived class '${expected}' (mmnto-ai/totem#2183)`,
+        path: ['ruleClass'],
+      });
+    }
+  }
+}
+
+export const CompiledRuleSchema = CompiledRuleBaseSchema.superRefine((data, ctx) => {
+  refineAstGrepMutualExclusion(data, ctx);
+  refineLegitimacyRuleClassConsistency(data, ctx);
+});
 
 export type CompiledRule = z.infer<typeof CompiledRuleSchema>;
 

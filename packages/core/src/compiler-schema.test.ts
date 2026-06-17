@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
+import { canonicalStringify } from './compile-manifest.js';
 import type { RuleEventCallback } from './compiler-schema.js';
 import {
   AstGrepYamlRuleSchema,
   CompiledRuleSchema,
   CompilerOutputSchema,
+  deriveRuleClass,
   LEDGER_RETRY_PENDING_CODES,
+  LegitimacySchema,
   NapiConfigSchema,
   NonCompilableEntryReadSchema,
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,
+  ProvenanceRecordSchema,
   shouldWriteToLedger,
 } from './compiler-schema.js';
 
@@ -804,5 +808,149 @@ describe('shouldWriteToLedger', () => {
     expect(shouldWriteToLedger('missing-badexample')).toBe(false);
     expect(shouldWriteToLedger('missing-goodexample')).toBe(false);
     expect(shouldWriteToLedger('matches-good-example')).toBe(false);
+  });
+});
+
+// ─── Legitimacy / ruleClass marker (mmnto-ai/totem#2183) ────
+
+describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
+  const VALID_SHA = 'a'.repeat(40);
+  const baseRegexRule = {
+    lessonHash: 'abc123def456',
+    lessonHeading: 'Test rule',
+    pattern: 'console\\.log',
+    message: 'No console.log',
+    engine: 'regex' as const,
+    compiledAt: '2026-06-17T00:00:00Z',
+  };
+  const provenance = {
+    mergedPr: 2183,
+    reviewThread: 'https://github.com/mmnto-ai/totem/pull/2183#discussion_r1',
+    commitSha: VALID_SHA,
+  };
+  const passingLegitimacy = { provenance, positiveControl: true, negativeControl: true };
+
+  describe('deriveRuleClass truth table', () => {
+    it('returns advisory when legitimacy is absent', () => {
+      expect(deriveRuleClass({})).toBe('advisory');
+    });
+
+    it('returns hard only when legitimacy present, promoted, and both controls pass', () => {
+      expect(deriveRuleClass({ legitimacy: passingLegitimacy })).toBe('hard');
+    });
+
+    it('returns advisory when the rule is unpromoted (unverified: true)', () => {
+      expect(deriveRuleClass({ legitimacy: passingLegitimacy, unverified: true })).toBe('advisory');
+    });
+
+    it('returns advisory when the positive control failed', () => {
+      expect(
+        deriveRuleClass({ legitimacy: { ...passingLegitimacy, positiveControl: false } }),
+      ).toBe('advisory');
+    });
+
+    it('returns advisory when the negative control failed', () => {
+      expect(
+        deriveRuleClass({ legitimacy: { ...passingLegitimacy, negativeControl: false } }),
+      ).toBe('advisory');
+    });
+  });
+
+  describe('schema ⟺ invariant on CompiledRuleSchema', () => {
+    it('accepts a legacy rule with neither field (proxy fallback path)', () => {
+      expect(() => CompiledRuleSchema.parse(baseRegexRule)).not.toThrow();
+    });
+
+    it('accepts a consistent hard stamp', () => {
+      expect(() =>
+        CompiledRuleSchema.parse({
+          ...baseRegexRule,
+          legitimacy: passingLegitimacy,
+          ruleClass: 'hard',
+        }),
+      ).not.toThrow();
+    });
+
+    it('accepts a consistent advisory stamp (a failed control)', () => {
+      expect(() =>
+        CompiledRuleSchema.parse({
+          ...baseRegexRule,
+          legitimacy: { ...passingLegitimacy, positiveControl: false },
+          ruleClass: 'advisory',
+        }),
+      ).not.toThrow();
+    });
+
+    it('rejects ruleClass without legitimacy (forged hard stamp)', () => {
+      expect(() => CompiledRuleSchema.parse({ ...baseRegexRule, ruleClass: 'hard' })).toThrow(
+        /both present or both absent/,
+      );
+    });
+
+    it('rejects legitimacy without ruleClass (minted rule missing its marker)', () => {
+      expect(() =>
+        CompiledRuleSchema.parse({ ...baseRegexRule, legitimacy: passingLegitimacy }),
+      ).toThrow(/both present or both absent/);
+    });
+
+    it('rejects an inconsistent marker (advisory where derive says hard)', () => {
+      expect(() =>
+        CompiledRuleSchema.parse({
+          ...baseRegexRule,
+          legitimacy: passingLegitimacy,
+          ruleClass: 'advisory',
+        }),
+      ).toThrow(/inconsistent with the derived class 'hard'/);
+    });
+
+    it('rejects an inconsistent marker (hard where a control failed)', () => {
+      expect(() =>
+        CompiledRuleSchema.parse({
+          ...baseRegexRule,
+          legitimacy: { ...passingLegitimacy, negativeControl: false },
+          ruleClass: 'hard',
+        }),
+      ).toThrow(/inconsistent with the derived class 'advisory'/);
+    });
+  });
+
+  describe('ProvenanceRecordSchema validation (codex fold 1)', () => {
+    it('accepts a well-formed provenance record', () => {
+      expect(() => ProvenanceRecordSchema.parse(provenance)).not.toThrow();
+    });
+
+    it('rejects a non-positive mergedPr', () => {
+      expect(() => ProvenanceRecordSchema.parse({ ...provenance, mergedPr: 0 })).toThrow();
+    });
+
+    it('rejects a non-integer mergedPr', () => {
+      expect(() => ProvenanceRecordSchema.parse({ ...provenance, mergedPr: 2.5 })).toThrow();
+    });
+
+    it('rejects an empty reviewThread', () => {
+      expect(() => ProvenanceRecordSchema.parse({ ...provenance, reviewThread: '' })).toThrow();
+    });
+
+    it('rejects a malformed commitSha (not 40-hex)', () => {
+      expect(() => ProvenanceRecordSchema.parse({ ...provenance, commitSha: 'abc123' })).toThrow();
+      expect(() =>
+        ProvenanceRecordSchema.parse({ ...provenance, commitSha: 'g'.repeat(40) }),
+      ).toThrow();
+    });
+
+    it('requires both controls explicitly (no defaulting) when legitimacy is present', () => {
+      expect(() => LegitimacySchema.parse({ provenance, positiveControl: true })).toThrow();
+    });
+  });
+
+  describe('manifest-hash stability', () => {
+    it('serializes a legacy rule byte-identically through a parse round-trip', () => {
+      const before = canonicalStringify(baseRegexRule);
+      const parsed = CompiledRuleSchema.parse(baseRegexRule);
+      const after = canonicalStringify(parsed);
+      expect(after).toBe(before);
+      expect(after).not.toContain('legitimacy');
+      expect(after).not.toContain('ruleClass');
+    });
   });
 });
