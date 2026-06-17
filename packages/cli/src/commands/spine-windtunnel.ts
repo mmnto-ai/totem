@@ -141,6 +141,21 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   const lcDir = opts.lcDir ?? process.env['TOTEM_LC_DIR'];
   const requestedPhase = opts.phase;
 
+  // Validate --phase up front: an unrecognized value (e.g. a typo "certifyng")
+  // would otherwise slip past the P1 guard below (which only matches the exact
+  // string "certifying") and silently run as if no phase were requested.
+  if (
+    requestedPhase !== undefined &&
+    requestedPhase !== 'harness' &&
+    requestedPhase !== 'certifying'
+  ) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Invalid --phase "${requestedPhase}" — must be "harness" or "certifying".`,
+      'Pass --phase certifying (or harness), or omit it.',
+    );
+  }
+
   // Read + validate the lock
   let rawJson: string;
   try {
@@ -373,7 +388,7 @@ export function verifyFreezeProof(lockPath: string, repoRoot: string, safeExec: 
   let workingHash: string;
   let committedHash: string;
   try {
-    workingHash = safeExec('git', ['hash-object', lockPath], { cwd: repoRoot }).trim();
+    workingHash = safeExec('git', ['hash-object', '--', lockPath], { cwd: repoRoot }).trim();
     committedHash = safeExec('git', ['rev-parse', `${freezeCommit}:${relLockPath}`], {
       cwd: repoRoot,
     }).trim();
@@ -439,7 +454,8 @@ export function computeFixtureSha(
   // --no-filters would defeat that immunity).
   const combined = entries
     .map(
-      (e) => `${e.key}:${safeExec('git', ['hash-object', e.fullPath], { cwd: repoRoot }).trim()}`,
+      (e) =>
+        `${e.key}:${safeExec('git', ['hash-object', '--', e.fullPath], { cwd: repoRoot }).trim()}`,
     )
     .join('\n');
 

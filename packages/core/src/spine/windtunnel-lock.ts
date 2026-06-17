@@ -56,7 +56,10 @@ export const WindtunnelLockSchema = z
       negativeRef: z.string(),
       integrity: z.object({
         mechanism: z.string(),
-        fixtureSha: z.string(),
+        // fixtureSha is a git hash-object digest (40-hex) that feeds the
+        // hard-error integrity gate — validate its format here so a malformed
+        // value fails at parse, not cryptically at run (greptile P2).
+        fixtureSha: z.string().regex(COMMIT_SHA_REGEX, 'fixtureSha must be a 40-hex SHA'),
       }),
     }),
     cullRateThreshold: z

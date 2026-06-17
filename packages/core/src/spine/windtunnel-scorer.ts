@@ -140,7 +140,12 @@ export function scoreWindtunnel(input: ScorerInput): WindtunnelVerdict {
   if (mintedRuleCount > 0 && culledCount / mintedRuleCount > cullRateThreshold) {
     return {
       verdict: 'HONEST-NEGATIVE',
-      precision: survivingRuleCount > 0 ? survivingRuleCount / mintedRuleCount : 0,
+      // precision is NOT computed here (this returns before FP/TP adjudication
+      // at Step 5), so report the same "not-computed" sentinel the exposure-floor
+      // HONEST-NEGATIVE path uses (0) — never a survival ratio mislabeled as
+      // precision. Whether a HONEST-NEGATIVE should instead carry the real
+      // precision-over-survivors is a §4/§5 contract question deferred to #2189.
+      precision: 0,
       mintedRuleCount,
       culledCount,
       survivingRuleCount,

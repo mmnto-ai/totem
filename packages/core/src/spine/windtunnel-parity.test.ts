@@ -58,6 +58,11 @@ const CONSOLE_LOG_AST_RULE: CompiledRule = {
 // Post-image fixture: the trigger token appears on a real code line (line 2)
 // AND inside a comment (line 3). A faithful replay fires a *violation* only on
 // the code line; the comment line is telemetry-only.
+//
+// The inline `// totem-ignore` markers below keep Totem's own corpus rules from
+// flagging the intentional `debugger` / `console.log` fixture tokens in this
+// test file — same pattern as ast-gate.test.ts and the pack-agent-security
+// fixtures. Bare (no ticket-ref) per the established test-fixture convention.
 const POST_IMAGE = [
   'function run() {', // 1
   '  debugger;', // 2 — real code → violation // totem-ignore

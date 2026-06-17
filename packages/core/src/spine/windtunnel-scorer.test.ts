@@ -226,6 +226,9 @@ describe('cull-rate guard (C5/S2)', () => {
     );
     expect(result.verdict).toBe('HONEST-NEGATIVE');
     expect(result.culledCount).toBe(2);
+    // precision is the not-computed sentinel (0), NOT a survival ratio
+    // (survivingRuleCount / mintedRuleCount) — locks the greptile-P1 / CR fix.
+    expect(result.precision).toBe(0);
   });
 
   it('does not apply cull-rate guard when mintedRuleCount = 0 (harness phase)', () => {
