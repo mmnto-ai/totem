@@ -31,7 +31,9 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
 
   const cwd = process.cwd();
   const repoRoot = resolveGitRoot(cwd) ?? cwd;
-  const lockPath = opts.lockPath ?? path.join(repoRoot, LOCK_REL_PATH);
+  const lockPath = opts.lockPath
+    ? path.resolve(cwd, opts.lockPath)
+    : path.join(repoRoot, LOCK_REL_PATH);
   const lcDir = opts.lcDir ?? process.env['TOTEM_LC_DIR'];
 
   // Read + validate the lock
@@ -128,18 +130,14 @@ export interface RunOptions {
  * Exit codes: 0 = PASS, 1 = FAIL / HONEST-NEGATIVE / needs-adjudication.
  */
 export async function runCommand(opts: RunOptions): Promise<void> {
-  const {
-    WindtunnelLockSchema,
-    safeExec,
-    resolveGitRoot,
-    TotemError,
-    scoreWindtunnel,
-    firingLabelId,
-  } = await import('@mmnto/totem');
+  const { WindtunnelLockSchema, safeExec, resolveGitRoot, TotemError, scoreWindtunnel } =
+    await import('@mmnto/totem');
 
   const cwd = process.cwd();
   const repoRoot = resolveGitRoot(cwd) ?? cwd;
-  const lockPath = opts.lockPath ?? path.join(repoRoot, LOCK_REL_PATH);
+  const lockPath = opts.lockPath
+    ? path.resolve(cwd, opts.lockPath)
+    : path.join(repoRoot, LOCK_REL_PATH);
   const lcDir = opts.lcDir ?? process.env['TOTEM_LC_DIR'];
   const requestedPhase = opts.phase;
 
@@ -267,9 +265,6 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   if (verdict.verdict !== 'PASS' || verdict.needsAdjudication.length > 0) {
     process.exitCode = 1;
   }
-
-  // Reference firingLabelId to satisfy the import (used in mock engine)
-  void firingLabelId;
 }
 
 // ─── Helpers ─────────────────────────────────────────
@@ -378,10 +373,10 @@ export function verifyFreezeProof(lockPath: string, repoRoot: string, safeExec: 
   let workingHash: string;
   let committedHash: string;
   try {
-    workingHash = safeExec('git', ['hash-object', lockPath], { cwd: repoRoot });
+    workingHash = safeExec('git', ['hash-object', lockPath], { cwd: repoRoot }).trim();
     committedHash = safeExec('git', ['rev-parse', `${freezeCommit}:${relLockPath}`], {
       cwd: repoRoot,
-    });
+    }).trim();
   } catch (err) {
     throw new Error(
       `Wind-tunnel freeze proof: cannot resolve lock blob at ${freezeCommit}: ${err instanceof Error ? err.message : String(err)}`,
