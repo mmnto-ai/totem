@@ -465,6 +465,18 @@ describe('enumeratePrMetas (mocked git)', () => {
       ),
     ).toThrow(/Malformed PR ref/);
   });
+
+  it('throws on a truncated/malformed git record (<5 fields) — never silent (CodeRabbit)', () => {
+    const truncated = `${R}${sha40(1)}${F}Jane <j@x.com>${F}feat: x (#5)`; // only 3 fields
+    expect(() =>
+      enumeratePrMetas(
+        'aof',
+        'lc',
+        mockSafeExec({ headSha: 'h'.repeat(40), isAncestor: true, log: truncated }),
+        HELPERS,
+      ),
+    ).toThrow(/malformed git log record/);
+  });
 });
 
 describe('assertCorpusCompleteness (S4, mocked git)', () => {

@@ -534,7 +534,6 @@ export async function assertCorpusCompleteness(
     parsePrNumber,
     parseRevertSha,
     isBotIdentity,
-    SelectionRuleParseError,
     TotemError,
   } = await import('@mmnto/totem');
 
@@ -602,17 +601,16 @@ export async function assertCorpusCompleteness(
       isBotIdentity,
     });
   } catch (err) {
-    // A malformed trailing ref in lc history is a config/contract fault — surface
-    // it as a TotemError, not a raw SelectionRuleParseError (greptile P2).
-    if (err instanceof SelectionRuleParseError) {
-      throw new TotemError(
-        'CONFIG_INVALID',
-        `Wind-tunnel freeze (S4): ${err.message}`,
-        'Fix the malformed merge subject in the lc history, or correct the frozen manifest.',
-        err,
-      );
-    }
-    throw err;
+    // Any enumeration fault — a malformed PR ref or a truncated/malformed git
+    // record — is a config/contract fault in the certifying context. Surface as
+    // a TotemError (with cause); never let it escape unwrapped or silently
+    // shrink the corpus (greptile + CodeRabbit).
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze (S4): corpus re-derivation failed — ${err instanceof Error ? err.message : String(err)}`,
+      'Fix the malformed merge subject / git history in the lc clone, or correct the frozen manifest.',
+      err,
+    );
   }
   const expected = resolveSelectionRule(metas, config);
   const actual = lock.corpus.resolvedPrs.map((p) => p.pr);
@@ -671,11 +669,20 @@ export function enumeratePrMetas(
   const metas: PrMeta[] = [];
   for (const rec of raw.split(R)) {
     if (rec.trim().length === 0) continue;
+    const parts = rec.split(F);
+    // A real record always has ≥5 F-delimited fields (sha, author, subject,
+    // body, files); fewer means truncated/malformed git output. Throw loud
+    // rather than silently dropping the PR (corpus shrinkage — the §5 failure
+    // mode this gate exists to block, CodeRabbit).
+    if (parts.length < 5) {
+      throw new Error(
+        `Wind-tunnel: malformed git log record (${parts.length} field(s), expected >=5) near "${(parts[0] ?? '').slice(0, 12)}"`,
+      );
+    }
     // Files trail the LAST field separator; only the body may contain an F, so
     // pop the files block off the end and rejoin the remainder as the body
     // (robust to a vanishingly rare F inside a commit body).
-    const parts = rec.split(F);
-    const filesBlock = parts.length > 4 ? parts.pop()! : '';
+    const filesBlock = parts.pop()!;
     const [sha = '', author = '', subject = '', ...bodyParts] = parts;
     const body = bodyParts.join(F);
     const pr = helpers.parsePrNumber(subject);

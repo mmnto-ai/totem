@@ -264,7 +264,7 @@ export function diffPrSets(expected: number[], actual: number[]): PrSetDiff {
   return { missing, extra };
 }
 
-/** Membership + count equality (NOT reference/order). */
+/** Order- and duplicate-invariant set-membership equality (both sides deduped). */
 export function prSetsEqual(expected: number[], actual: number[]): boolean {
   const d = diffPrSets(expected, actual);
   return d.missing.length === 0 && d.extra.length === 0;
