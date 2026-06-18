@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import type { PrMeta, SelectionRuleConfig, WindtunnelLock } from '@mmnto/totem';
+
 // ─── Named constants ─────────────────────────────────
 
 const LOCK_REL_PATH = '.totem/spine/gate-1/windtunnel.lock.json';
@@ -510,51 +512,160 @@ export function verifyControlIntegrity(
 }
 
 /**
- * Assert corpus completeness (S4): resolvedPrs === selectionRule(asOfCommit).
- * In the harness phase this is a structural check only (no real lc API call).
+ * Assert corpus completeness (S4, ADR-110 §6): the manifest's `resolvedPrs` must
+ * deep-set-equal `selectionRule(asOfCommit)` re-derived from the offline lc clone.
+ *
+ * - **Harness phase:** warn-only (no real corpus yet) — surfaces accessibility
+ *   but skips the re-derivation.
+ * - **Certifying phase:** hard error. Re-derives the code-touching PR set from
+ *   lc's squash history and throws on ANY membership/count divergence (§6: a
+ *   dropped/added/substituted PR voids the run). Requires a frozen
+ *   `codePathClassifier`.
  */
 export async function assertCorpusCompleteness(
-  lock: import('@mmnto/totem').WindtunnelLock,
+  lock: WindtunnelLock,
   lcDir: string,
   repoRoot: string,
   safeExec: SafeExecFn,
 ): Promise<void> {
-  // Verify the lc clone is accessible + at the correct asOfCommit.
-  // `merge-base --is-ancestor` exits non-zero to MEAN "not an ancestor" — that
-  // is a boolean predicate, not an error, so it gets its own probe helper.
-  const asOfCommit = lock.corpus.selectionRule.asOfCommit;
+  const {
+    resolveSelectionRule,
+    diffPrSets,
+    parsePrNumber,
+    parseRevertSha,
+    isBotIdentity,
+    TotemError,
+  } = await import('@mmnto/totem');
+
+  const sel = lock.corpus.selectionRule;
+  const asOfCommit = sel.asOfCommit;
+
+  // Verify the lc clone is accessible (CRLF-normalized output).
   let headSha: string;
   try {
-    headSha = safeExec('git', ['rev-parse', 'HEAD'], { cwd: lcDir }).trim();
+    headSha = safeExec('git', ['rev-parse', 'HEAD'], { cwd: lcDir }).replace(/\r\n/g, '\n').trim();
   } catch (err) {
-    // S4: an inaccessible lc clone means freeze-time completeness cannot be
-    // proven. The harness phase tolerates this (no real corpus yet) but must
-    // surface it loudly — never silently pass off an unverifiable corpus.
     throw new Error(
       `Wind-tunnel freeze: cannot access lc clone at ${lcDir} to verify corpus completeness (S4): ${err instanceof Error ? err.message : String(err)}. ` +
         `Provide a valid --lc-dir / TOTEM_LC_DIR clone, or omit it to skip the completeness assertion entirely.`,
     );
   }
 
+  // `merge-base --is-ancestor` encodes the answer in its exit code (boolean), so
+  // it gets its own probe helper.
   const isAncestor = isCommitAncestor(asOfCommit, headSha, lcDir, safeExec);
-  if (!isAncestor) {
+
+  // Harness phase: no real corpus yet — warn-only, skip the re-derivation.
+  if (lock.phase === 'harness') {
     console.error(
-      `[WindtunnelFreeze] WARNING: asOfCommit ${asOfCommit} is not an ancestor of lc HEAD ${headSha} — corpus completeness assertion may be unreliable.`,
+      isAncestor
+        ? `[WindtunnelFreeze] lc clone includes asOfCommit ${asOfCommit} ✓`
+        : `[WindtunnelFreeze] WARNING: asOfCommit ${asOfCommit} is not an ancestor of lc HEAD ${headSha} (harness — re-derivation skipped).`,
     );
-  } else {
-    console.error(`[WindtunnelFreeze] lc clone at ${lcDir} includes asOfCommit ${asOfCommit} ✓`);
+    console.error(
+      `[WindtunnelFreeze] harness phase — S4 corpus re-derivation skipped (warn-only). resolvedPrs: ${lock.corpus.resolvedPrs.length} entries.`,
+    );
+    void repoRoot;
+    return;
   }
 
-  // Structural completeness: count + warn (the actual re-derivation of the full
-  // code-touching PR set requires querying the lc repo's merge history, which
-  // is operator-level work; the tool asserts the lock is non-empty and warns
-  // if the resolvedPrs count seems low).
-  const prCount = lock.corpus.resolvedPrs.length;
-  console.error(
-    `[WindtunnelFreeze] resolvedPrs: ${prCount} entries (completeness requires operator verification against selectionRule)`,
-  );
+  // Certifying phase: hard-error re-derivation.
+  if (!isAncestor) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze (S4, certifying): asOfCommit ${asOfCommit} is not an ancestor of lc HEAD ${headSha} — cannot re-derive the corpus.`,
+      'Point --lc-dir at an lc clone whose history includes asOfCommit.',
+    );
+  }
+  if (!sel.codePathClassifier) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze (S4, certifying): corpus.selectionRule.codePathClassifier is required to re-derive the code-touching PR set — there is no safe default for "what counts as code".`,
+      'Add a frozen codePathClassifier { includeGlobs, excludeGlobs } to the manifest and re-freeze.',
+    );
+  }
 
-  void repoRoot; // used in freeze proof above
+  const config: SelectionRuleConfig = {
+    codePathClassifier: sel.codePathClassifier,
+    excludeRevertPairs: sel.excludeRevertPairs,
+    excludeBotPrs: sel.excludeBotPrs,
+    window: sel.window,
+  };
+  const metas = enumeratePrMetas(asOfCommit, lcDir, safeExec, {
+    parsePrNumber,
+    parseRevertSha,
+    isBotIdentity,
+  });
+  const expected = resolveSelectionRule(metas, config);
+  const actual = lock.corpus.resolvedPrs.map((p) => p.pr);
+  const diff = diffPrSets(expected, actual);
+  if (diff.missing.length > 0 || diff.extra.length > 0) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze (S4): corpus completeness FAILED — resolvedPrs ≠ selectionRule(${asOfCommit}).\n` +
+        `  Missing from manifest (present in git): [${diff.missing.join(', ')}]\n` +
+        `  Extra in manifest (absent from git):     [${diff.extra.join(', ')}]`,
+      'Fix the manifest resolvedPrs or codePathClassifier and re-freeze — §6: a corpus divergence voids the run.',
+    );
+  }
+  console.error(
+    `[WindtunnelFreeze] S4 corpus completeness VERIFIED: ${expected.length} PR(s) ≡ resolvedPrs ✓`,
+  );
+  void repoRoot;
+}
+
+/**
+ * Enumerate merged (squash) PRs reachable from `asOfCommit` in the lc clone as
+ * `PrMeta`. lc is 100% squash-merge: each ancestor commit's subject carries a
+ * trailing `(#N)`. Commits with no trailing ref are direct-to-main non-PRs and
+ * are SKIPPED (not errors); a malformed trailing ref throws (via `parsePrNumber`).
+ * All git output is CRLF-normalized before parsing (Windows hygiene).
+ */
+export function enumeratePrMetas(
+  asOfCommit: string,
+  lcDir: string,
+  safeExec: SafeExecFn,
+  helpers: {
+    parsePrNumber: (subject: string) => number | null;
+    parseRevertSha: (body: string) => string | undefined;
+    isBotIdentity: (author: string) => boolean;
+  },
+): PrMeta[] {
+  const F = '\x1f'; // field separator
+  const R = '\x1e'; // record separator (LEADS each commit so its trailing file list stays in-record)
+  // One `git log --name-only` call — the changed files trail each commit's format
+  // block within the same record, avoiding an N+1 `git diff-tree` spawn per commit.
+  const raw = safeExec(
+    'git',
+    ['log', asOfCommit, '--name-only', `--format=${R}%H${F}%an <%ae>${F}%s${F}%b${F}`],
+    { cwd: lcDir },
+  ).replace(/\r\n/g, '\n');
+
+  const metas: PrMeta[] = [];
+  for (const rec of raw.split(R)) {
+    if (rec.trim().length === 0) continue;
+    // Files trail the LAST field separator; only the body may contain an F, so
+    // pop the files block off the end and rejoin the remainder as the body
+    // (robust to a vanishingly rare F inside a commit body).
+    const parts = rec.split(F);
+    const filesBlock = parts.length > 4 ? parts.pop()! : '';
+    const [sha = '', author = '', subject = '', ...bodyParts] = parts;
+    const body = bodyParts.join(F);
+    const pr = helpers.parsePrNumber(subject);
+    if (pr === null) continue; // no trailing (#N) → direct-to-main non-PR, skip
+    metas.push({
+      pr,
+      mergeCommit: sha.trim().toLowerCase(),
+      author: author.trim(),
+      isBotAuthor: helpers.isBotIdentity(author),
+      revertsSha: helpers.parseRevertSha(body),
+      changedFiles: filesBlock
+        .split('\n')
+        .map((l) => l.trim().replace(/\\/g, '/'))
+        .filter(Boolean),
+    });
+  }
+  return metas;
 }
 
 // ─── Mock engine (harness phase) ─────────────────────

@@ -782,6 +782,23 @@ export {
 } from './retrospect.js';
 
 // Spine: Gate-1 wind-tunnel evidence harness (mmnto-ai/totem#2188)
+export type {
+  CodePathClassifier,
+  PrMeta,
+  PrSetDiff,
+  SelectionRuleConfig,
+} from './spine/selection-rule.js';
+export {
+  diffPrSets,
+  isBotIdentity,
+  isCodeTouching,
+  parsePrNumber,
+  parseRevertSha,
+  prSetsEqual,
+  resolveSelectionRule,
+  SelectionRuleParseError,
+  selectionRulePredicate,
+} from './spine/selection-rule.js';
 export type { WindtunnelLock } from './spine/windtunnel-lock.js';
 export { firingLabelId, WindtunnelLockSchema } from './spine/windtunnel-lock.js';
 export type {

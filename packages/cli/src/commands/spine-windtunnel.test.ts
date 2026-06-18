@@ -5,13 +5,20 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { WindtunnelLock } from '@mmnto/totem';
-import { safeExec, WindtunnelLockSchema } from '@mmnto/totem';
+import {
+  isBotIdentity,
+  parsePrNumber,
+  parseRevertSha,
+  safeExec,
+  WindtunnelLockSchema,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
   assertCorpusCompleteness,
   buildReadStrategy,
   computeFixtureSha,
+  enumeratePrMetas,
   isCommitAncestor,
   verifyControlIntegrity,
   verifyFreezeProof,
@@ -286,5 +293,213 @@ describe('assertCorpusCompleteness (S4 — loud on inaccessible clone)', () => {
     const repo = makeTmpRepo();
     const lock = makeLock(sha);
     await expect(assertCorpusCompleteness(lock, lcRepo, repo, safeExec)).resolves.toBeUndefined();
+  });
+});
+
+// ─── S4 selectionRule resolver (#2189 item 2, mocked git) ───
+
+const F = '\x1f';
+const R = '\x1e';
+const HELPERS = { parsePrNumber, parseRevertSha, isBotIdentity };
+const CLASSIFIER = { includeGlobs: ['packages/**/*.ts', 'src/**'], excludeGlobs: ['**/*.md'] };
+
+interface LogRecord {
+  sha: string;
+  author: string;
+  subject: string;
+  body?: string;
+  files?: string[];
+}
+
+/**
+ * Build a `git log --name-only --format=%x1e…` stream: a record separator leads
+ * each commit, the format fields follow, then the changed-file list — matching
+ * the single-call shape `enumeratePrMetas` parses.
+ */
+function buildLog(records: LogRecord[], eol: '\n' | '\r\n' = '\n'): string {
+  const stream = records
+    .map(
+      (r) =>
+        `${R}${r.sha}${F}${r.author}${F}${r.subject}${F}${r.body ?? ''}${F}\n${(r.files ?? []).join('\n')}\n`,
+    )
+    .join('');
+  return eol === '\r\n' ? stream.replace(/\n/g, '\r\n') : stream;
+}
+
+/** Mock safeExec routing the git calls the resolver makes (single `git log`). */
+function mockSafeExec(opts: {
+  headSha: string;
+  isAncestor: boolean;
+  log: string;
+}): typeof safeExec {
+  return ((file: string, args: string[]) => {
+    if (file !== 'git') throw new Error(`unexpected exec: ${file}`);
+    if (args[0] === 'rev-parse' && args[1] === 'HEAD') return opts.headSha;
+    if (args[0] === 'merge-base' && args[1] === '--is-ancestor') {
+      if (opts.isAncestor) return '';
+      const err = new Error('not an ancestor') as Error & { status: number };
+      err.status = 1;
+      throw err;
+    }
+    if (args[0] === 'log') return opts.log;
+    throw new Error(`unexpected git call: ${args.join(' ')}`);
+  }) as unknown as typeof safeExec;
+}
+
+const sha40 = (n: number): string => `${n}`.padStart(40, '0');
+
+function makeCertLock(
+  asOfCommit: string,
+  prNums: number[],
+  classifier: unknown = CLASSIFIER,
+): WindtunnelLock {
+  return WindtunnelLockSchema.parse({
+    schema: 'windtunnel.lock.v1',
+    canonicalPath: '.totem/spine/gate-1/windtunnel.lock.json',
+    gate: 'gate-1',
+    phase: 'certifying',
+    corpus: {
+      repo: 'mmnto-ai/liquid-city',
+      selectionRule: {
+        state: 'merged',
+        predicate: 'code-touching',
+        window: { type: 'all' },
+        asOfCommit,
+        ...(classifier != null ? { codePathClassifier: classifier } : {}),
+      },
+      resolvedPrs: prNums.map((n) => ({
+        pr: n,
+        mergeCommit: sha40(n),
+        baseSha: 'b'.repeat(40),
+        headSha: 'd'.repeat(40),
+      })),
+    },
+    fpDefinition: { rubricRef: 'r', groundTruthRef: 'g', adjudicator: 'a', precisionFloor: 1.0 },
+    controls: {
+      positiveRef: 'controls/positive/',
+      negativeRef: 'controls/negative/',
+      integrity: { mechanism: 'sha', fixtureSha: 'e'.repeat(40) },
+    },
+    cullRateThreshold: 0.5,
+    exposureDenominator: {
+      activeRulesEvaluated: { floor: 2 },
+      filesTouchedInWindow: { floor: 0 },
+      positiveControlsExercised: { floor: 0 },
+    },
+  });
+}
+
+// Scenario: git derives [534, 535]; #536 is docs-only → excluded.
+const SCENARIO_RECORDS: LogRecord[] = [
+  {
+    sha: sha40(534),
+    author: 'Jane <j@x.com>',
+    subject: 'feat: a (#534)',
+    files: ['packages/core/src/a.ts'],
+  },
+  { sha: sha40(535), author: 'Jane <j@x.com>', subject: 'fix: b (#535)', files: ['src/b.ts'] },
+  { sha: sha40(536), author: 'Jane <j@x.com>', subject: 'docs: c (#536)', files: ['README.md'] },
+];
+
+describe('enumeratePrMetas (mocked git)', () => {
+  it('parses PRs, skips no-ref commits, and is CRLF-immune (log + changed files)', () => {
+    const records: LogRecord[] = [
+      {
+        sha: sha40(534),
+        author: 'Jane <j@x.com>',
+        subject: 'feat: alpha (#534)',
+        files: ['packages/core/src/a.ts', 'packages/core/src/b.ts'],
+      },
+      {
+        sha: sha40(535),
+        author: 'dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>', // real git %an <%ae>
+        subject: 'chore(deps): bump (#535)',
+        files: ['package.json'],
+      },
+      {
+        sha: sha40(700),
+        author: 'Bot Op <o@x.com>',
+        subject: 'chore(deps): straight to main 1.66.0',
+        files: ['x.ts'],
+      },
+      {
+        sha: sha40(536),
+        author: 'Jane <j@x.com>',
+        subject: 'fix: revert it (#536)',
+        body: `This reverts commit ${sha40(534)}`,
+        files: ['src/x.ts'],
+      },
+    ];
+    const lf = enumeratePrMetas(
+      'aof',
+      'lc',
+      mockSafeExec({ headSha: 'h'.repeat(40), isAncestor: true, log: buildLog(records, '\n') }),
+      HELPERS,
+    );
+    const crlf = enumeratePrMetas(
+      'aof',
+      'lc',
+      mockSafeExec({ headSha: 'h'.repeat(40), isAncestor: true, log: buildLog(records, '\r\n') }),
+      HELPERS,
+    );
+    expect(lf).toEqual(crlf); // CRLF hygiene: identical metas + clean file paths regardless of EOL
+    expect(lf.map((m) => m.pr)).toEqual([534, 535, 536]); // direct-to-main (#700-slot) skipped
+    expect(lf.find((m) => m.pr === 535)!.isBotAuthor).toBe(true);
+    expect(lf.find((m) => m.pr === 536)!.revertsSha).toBe(sha40(534));
+    expect(lf.find((m) => m.pr === 534)!.changedFiles).toEqual([
+      'packages/core/src/a.ts',
+      'packages/core/src/b.ts',
+    ]); // no \r leaked
+  });
+
+  it('propagates a malformed trailing ref as a throw (never silent)', () => {
+    const records: LogRecord[] = [
+      { sha: sha40(1), author: 'Jane <j@x.com>', subject: 'bad (#abc)', files: ['src/x.ts'] },
+    ];
+    expect(() =>
+      enumeratePrMetas(
+        'aof',
+        'lc',
+        mockSafeExec({ headSha: 'h'.repeat(40), isAncestor: true, log: buildLog(records) }),
+        HELPERS,
+      ),
+    ).toThrow(/Malformed PR ref/);
+  });
+});
+
+describe('assertCorpusCompleteness (S4, mocked git)', () => {
+  const asOf = 'f'.repeat(40);
+  const exec = (isAncestor = true): typeof safeExec =>
+    mockSafeExec({ headSha: 'h'.repeat(40), isAncestor, log: buildLog(SCENARIO_RECORDS) });
+
+  it('harness phase is warn-only — never throws even on a count mismatch', async () => {
+    const lock = makeLock(asOf); // phase: harness, resolvedPrs: [#1]
+    await expect(assertCorpusCompleteness(lock, 'lc', 'repo', exec())).resolves.toBeUndefined();
+  });
+
+  it('certifying phase passes when resolvedPrs ≡ selectionRule', async () => {
+    const lock = makeCertLock(asOf, [534, 535]);
+    await expect(assertCorpusCompleteness(lock, 'lc', 'repo', exec())).resolves.toBeUndefined();
+  });
+
+  it('certifying phase throws naming missing + extra on divergence', async () => {
+    const lock = makeCertLock(asOf, [534, 999]); // missing 535, extra 999
+    await expect(assertCorpusCompleteness(lock, 'lc', 'repo', exec())).rejects.toThrow(
+      /Missing from manifest.*535[\s\S]*Extra in manifest.*999/,
+    );
+  });
+
+  it('certifying phase throws when codePathClassifier is absent', async () => {
+    const lock = makeCertLock(asOf, [534, 535], null);
+    await expect(assertCorpusCompleteness(lock, 'lc', 'repo', exec())).rejects.toThrow(
+      /codePathClassifier is required/,
+    );
+  });
+
+  it('certifying phase throws when asOfCommit is not an ancestor of lc HEAD', async () => {
+    const lock = makeCertLock(asOf, [534, 535]);
+    await expect(assertCorpusCompleteness(lock, 'lc', 'repo', exec(false))).rejects.toThrow(
+      /not an ancestor/,
+    );
   });
 });
