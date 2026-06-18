@@ -75,10 +75,11 @@ function escapeRegexChar(ch: string): string {
 
 /**
  * Translate a path glob to an anchored RegExp. Supports:
- *   `**​/`  → zero or more path segments
- *   `**`   → any characters including `/`
- *   `*`    → any characters except `/`
- *   `?`    → a single character except `/`
+ *   `**​/`     → zero or more path segments
+ *   `**`      → any characters including `/`
+ *   `*`       → any characters except `/`
+ *   `?`       → a single character except `/`
+ *   `{a,b,c}` → brace alternation (e.g. `**​/*.{ts,tsx}`)
  * Sufficient for the frozen code-path classifier; avoids a glob dependency and
  * keeps matching deterministic/offline.
  */
@@ -104,6 +105,19 @@ function globToRegExp(glob: string): RegExp {
     } else if (c === '?') {
       re += '[^/]';
       i += 1;
+    } else if (c === '{') {
+      const end = g.indexOf('}', i);
+      if (end > i) {
+        const alts = g
+          .slice(i + 1, end)
+          .split(',')
+          .map((alt) => alt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')); // alternatives are literals
+        re += `(?:${alts.join('|')})`; // '{ts,tsx}' → '(?:ts|tsx)'
+        i = end + 1;
+      } else {
+        re += escapeRegexChar(c); // unmatched '{' → literal
+        i += 1;
+      }
     } else {
       re += escapeRegexChar(c);
       i += 1;

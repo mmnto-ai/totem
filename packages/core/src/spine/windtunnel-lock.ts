@@ -49,7 +49,12 @@ export const WindtunnelLockSchema = z
         // code"). Flags default to the strategy-claude-ratified lean (exclude).
         codePathClassifier: z
           .object({
-            includeGlobs: z.array(z.string().min(1)),
+            // includeGlobs must list ≥1 glob — an empty set makes EVERY file
+            // non-code, so the certifying gate would false-fail "Extra: [all PRs]"
+            // (greptile P2). excludeGlobs may be empty (no exclusions).
+            includeGlobs: z
+              .array(z.string().min(1))
+              .min(1, 'includeGlobs must list at least one glob'),
             excludeGlobs: z.array(z.string().min(1)),
           })
           .optional(),

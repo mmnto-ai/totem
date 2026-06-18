@@ -77,6 +77,14 @@ describe('isCodeTouching — exclude wins at the file level', () => {
       true,
     );
   });
+
+  it('supports brace alternation (**/*.{ts,tsx}) — greptile P2', () => {
+    const c: CodePathClassifier = { includeGlobs: ['**/*.{ts,tsx,rs}'], excludeGlobs: [] };
+    expect(isCodeTouching(['src/a.ts'], c)).toBe(true);
+    expect(isCodeTouching(['packages/core/b.tsx'], c)).toBe(true);
+    expect(isCodeTouching(['crates/c.rs'], c)).toBe(true);
+    expect(isCodeTouching(['src/a.js'], c)).toBe(false);
+  });
 });
 
 // ─── isBotIdentity ───────────────────────────────────

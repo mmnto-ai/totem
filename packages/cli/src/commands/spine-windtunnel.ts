@@ -534,6 +534,7 @@ export async function assertCorpusCompleteness(
     parsePrNumber,
     parseRevertSha,
     isBotIdentity,
+    SelectionRuleParseError,
     TotemError,
   } = await import('@mmnto/totem');
 
@@ -545,9 +546,11 @@ export async function assertCorpusCompleteness(
   try {
     headSha = safeExec('git', ['rev-parse', 'HEAD'], { cwd: lcDir }).replace(/\r\n/g, '\n').trim();
   } catch (err) {
-    throw new Error(
-      `Wind-tunnel freeze: cannot access lc clone at ${lcDir} to verify corpus completeness (S4): ${err instanceof Error ? err.message : String(err)}. ` +
-        `Provide a valid --lc-dir / TOTEM_LC_DIR clone, or omit it to skip the completeness assertion entirely.`,
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze: cannot access lc clone at ${lcDir} to verify corpus completeness (S4).`,
+      'Provide a valid --lc-dir / TOTEM_LC_DIR clone, or omit it to skip the completeness assertion entirely.',
+      err,
     );
   }
 
@@ -591,11 +594,26 @@ export async function assertCorpusCompleteness(
     excludeBotPrs: sel.excludeBotPrs,
     window: sel.window,
   };
-  const metas = enumeratePrMetas(asOfCommit, lcDir, safeExec, {
-    parsePrNumber,
-    parseRevertSha,
-    isBotIdentity,
-  });
+  let metas: PrMeta[];
+  try {
+    metas = enumeratePrMetas(asOfCommit, lcDir, safeExec, {
+      parsePrNumber,
+      parseRevertSha,
+      isBotIdentity,
+    });
+  } catch (err) {
+    // A malformed trailing ref in lc history is a config/contract fault — surface
+    // it as a TotemError, not a raw SelectionRuleParseError (greptile P2).
+    if (err instanceof SelectionRuleParseError) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Wind-tunnel freeze (S4): ${err.message}`,
+        'Fix the malformed merge subject in the lc history, or correct the frozen manifest.',
+        err,
+      );
+    }
+    throw err;
+  }
   const expected = resolveSelectionRule(metas, config);
   const actual = lock.corpus.resolvedPrs.map((p) => p.pr);
   const diff = diffPrSets(expected, actual);
@@ -635,9 +653,18 @@ export function enumeratePrMetas(
   const R = '\x1e'; // record separator (LEADS each commit so its trailing file list stays in-record)
   // One `git log --name-only` call — the changed files trail each commit's format
   // block within the same record, avoiding an N+1 `git diff-tree` spawn per commit.
+  // `--end-of-options` guards asOfCommit from being parsed as an option even if a
+  // future caller passes an unvalidated ref (defense-in-depth; the lock schema
+  // already constrains asOfCommit to a 40-hex SHA, and safeExec uses no shell).
   const raw = safeExec(
     'git',
-    ['log', asOfCommit, '--name-only', `--format=${R}%H${F}%an <%ae>${F}%s${F}%b${F}`],
+    [
+      'log',
+      '--name-only',
+      `--format=${R}%H${F}%an <%ae>${F}%s${F}%b${F}`,
+      '--end-of-options',
+      asOfCommit,
+    ],
     { cwd: lcDir },
   ).replace(/\r\n/g, '\n');
 

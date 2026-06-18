@@ -502,4 +502,24 @@ describe('assertCorpusCompleteness (S4, mocked git)', () => {
       /not an ancestor/,
     );
   });
+
+  it('certifying phase wraps a malformed-ref parse error as a TotemError (greptile P2)', async () => {
+    const lock = makeCertLock(asOf, [534, 535]);
+    const badExec = mockSafeExec({
+      headSha: 'h'.repeat(40),
+      isAncestor: true,
+      log: buildLog([
+        { sha: sha40(1), author: 'Jane <j@x.com>', subject: 'bad (#abc)', files: ['src/x.ts'] },
+      ]),
+    });
+    await expect(assertCorpusCompleteness(lock, 'lc', 'repo', badExec)).rejects.toThrow(
+      /Wind-tunnel freeze \(S4\):.*Malformed PR ref/,
+    );
+  });
+
+  it('rejects a codePathClassifier with empty includeGlobs at parse (greptile P2)', () => {
+    expect(() => makeCertLock(asOf, [534], { includeGlobs: [], excludeGlobs: [] })).toThrow(
+      /at least one glob/,
+    );
+  });
 });
