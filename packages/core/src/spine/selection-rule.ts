@@ -29,7 +29,10 @@ export interface SelectionRuleConfig {
   excludeBotPrs: boolean;
   /**
    * Corpus window. `all` = every qualifying PR reachable from `asOfCommit`;
-   * `bounded` = the `n` MOST-RECENT qualifying PRs (newest-first by merge order).
+   * `bounded` = the `n` MOST-RECENT qualifying PRs. "Most recent" is by ANCESTRY
+   * (topological) order, NOT commit-date (ADR-110 §6 ancestry-not-timestamp): the
+   * caller enumerates `metas` newest-first via `git log --topo-order`, and this
+   * function takes the first `n` qualifying — see `resolveSelectionRule`.
    */
   window: { type: 'all' } | { type: 'bounded'; n: number };
 }
@@ -237,8 +240,9 @@ export function resolveSelectionRule(metas: PrMeta[], config: SelectionRuleConfi
   const isRevertedTarget = (mergeCommit: string): boolean =>
     revertedTargetShas.some((t) => mergeCommit.toLowerCase().startsWith(t));
 
-  // Qualifying PRs in INPUT order — the caller passes them in git-log order
-  // (newest-first), so a bounded window's "most recent N" is the first N here.
+  // Qualifying PRs in INPUT order — the caller passes them in `git log --topo-order`
+  // order (ancestry newest-first, NOT commit-date; ADR-110 §6 ancestry-not-timestamp),
+  // so a bounded window's "most recent N" is the first N here.
   const qualifying: number[] = [];
   const seen = new Set<number>();
   for (const m of metas) {

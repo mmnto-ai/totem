@@ -452,6 +452,26 @@ describe('enumeratePrMetas (mocked git)', () => {
     ]); // no \r leaked
   });
 
+  it('enumerates in ANCESTRY order via `git log --topo-order` (§6 ancestry-not-timestamp)', () => {
+    // A `bounded` window takes "the N most recent qualifying PRs" off the FRONT of
+    // this list, so the git emission order must be ancestry (topological), never
+    // commit-date — dates are non-monotonic/rewritable and would make the window's
+    // membership non-deterministic (ADR-110 §6; strategy-claude 2026-06-18 ruling).
+    let logArgs: string[] | undefined;
+    const capturing = ((file: string, args: string[]) => {
+      if (file === 'git' && args[0] === 'log') {
+        logArgs = args;
+        return buildLog(SCENARIO_RECORDS);
+      }
+      throw new Error(`unexpected git call: ${file} ${args.join(' ')}`);
+    }) as unknown as typeof safeExec;
+    enumeratePrMetas('aof', 'lc', capturing, HELPERS);
+    expect(logArgs).toContain('--topo-order');
+    // Must be a walk option (before the `--end-of-options`/ref boundary) so it
+    // actually governs ordering rather than being parsed as a pathspec.
+    expect(logArgs!.indexOf('--topo-order')).toBeLessThan(logArgs!.indexOf('--end-of-options'));
+  });
+
   it('propagates a malformed trailing ref as a throw (never silent)', () => {
     const records: LogRecord[] = [
       { sha: sha40(1), author: 'Jane <j@x.com>', subject: 'bad (#abc)', files: ['src/x.ts'] },
