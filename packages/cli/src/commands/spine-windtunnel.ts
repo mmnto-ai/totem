@@ -255,7 +255,17 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 
   // Print verdict — exposure tuple never collapsed
   console.log(`WindtunnelVerdict: ${verdict.verdict}`);
-  console.log(`  precision:         ${verdict.precision.toFixed(4)} (over surviving rules)`);
+  // Certifying precision is null on no-claim verdicts (#2189) — guard .toFixed.
+  const precisionStr =
+    verdict.precision === null
+      ? 'n/a (not computed — no-claim verdict)'
+      : verdict.precision.toFixed(4);
+  console.log(`  precision:         ${precisionStr} (certifying claim)`);
+  const survivorStr =
+    verdict.diagnostics.survivorPrecision === null
+      ? 'n/a'
+      : verdict.diagnostics.survivorPrecision.toFixed(4);
+  console.log(`  survivorPrecision: ${survivorStr} (diagnostic — over surviving rules)`);
   console.log(`  mintedRuleCount:   ${verdict.mintedRuleCount}`);
   console.log(`  culledCount:       ${verdict.culledCount}`);
   console.log(`  survivingRuleCount:${verdict.survivingRuleCount}`);
