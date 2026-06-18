@@ -11,10 +11,28 @@ export interface CullLedgerEntry {
   reason: 'negative-control-fired';
 }
 
+export interface WindtunnelDiagnostics {
+  /**
+   * Precision (TP/(TP+FP)) over labeled, surviving (non-culled,
+   * non-negative-control) firings. DESCRIPTIVE ONLY — informative even on
+   * no-claim verdicts ("culled 8/10, the 2 survivors were clean"). NEVER
+   * consulted for the gate decision and never mistakable for the certifying
+   * `precision`. null when no surviving firing is labeled.
+   */
+  survivorPrecision: number | null;
+}
+
 export interface WindtunnelVerdict {
   verdict: WindtunnelVerdictKind;
-  /** Precision over surviving rules (after cull). */
-  precision: number;
+  /**
+   * Certifying precision claim. A real value ONLY on verdicts that make a
+   * precision claim: PASS (1.0) and confirmed-FP FAIL (the breaching value,
+   * which IS the evidence). `null` on every no-claim verdict (exposure-floor /
+   * cull-rate / needs-adjudication HONEST-NEGATIVE, and vacuous-control FAIL).
+   * `null` ⟺ no precision claim; `0` is reserved for a real all-FP measurement
+   * and NEVER means "not computed" (#2189 ruling, strategy-claude 2026-06-17).
+   */
+  precision: number | null;
   mintedRuleCount: number;
   culledCount: number;
   survivingRuleCount: number;
@@ -25,6 +43,8 @@ export interface WindtunnelVerdict {
   nonVacuity: boolean;
   /** Label ids of firings with no ground-truth label (operator adjudication required). */
   needsAdjudication: string[];
+  /** Separately-namespaced descriptive diagnostics — never part of the gate decision. */
+  diagnostics: WindtunnelDiagnostics;
 }
 
 export interface RuleFiring {
@@ -64,13 +84,17 @@ export interface ScorerInput {
  * Score a wind-tunnel run. Pure function: no IO, no clock, no randomness.
  * Implements ADR-110 §4/§5 done-criterion exactly per spec invariants.
  *
- * Verdict ordering (highest precedence first):
- *   1. Exposure floor below minimum → HONEST-NEGATIVE (masquerade guard)
- *   2. Cull rate exceeds threshold → HONEST-NEGATIVE (cull-laundering guard)
- *   3. Positive control does not fire its target → FAIL (vacuous pass)
- *   4. Any firing labeled FP → FAIL (precision < 1.0)
- *   5. Any unlabeled firing → HONEST-NEGATIVE (needs adjudication, not PASS)
- *   6. All labeled TP → PASS
+ * Verdict ordering (highest precedence first) — #2189 ruling:
+ *   1. Any firing labeled FP → FAIL (confirmed FP is a claim; precision = breaching value)
+ *   2. Positive control does not fire its target → FAIL (vacuous pass; precision = null)
+ *   3. Exposure floor below minimum → HONEST-NEGATIVE (masquerade guard; precision = null)
+ *   4. Cull rate exceeds threshold → HONEST-NEGATIVE (cull-laundering guard; precision = null)
+ *   5. Any unlabeled firing → HONEST-NEGATIVE (needs adjudication, not PASS; precision = null)
+ *   6. All labeled TP → PASS (precision = 1.0)
+ *
+ * The FAIL tier (1–2) outranks the masquerade guards (3–4): a guard may only
+ * DEMOTE a would-be PASS, never UPGRADE a FAIL. survivorPrecision (diagnostics)
+ * carries the informative survivor ratio distinct from the certifying precision.
  */
 export function scoreWindtunnel(input: ScorerInput): WindtunnelVerdict {
   const {
@@ -114,86 +138,12 @@ export function scoreWindtunnel(input: ScorerInput): WindtunnelVerdict {
     actualExposure.positiveControlsExercised,
   ];
 
-  // Step 2: Exposure floor check (P2).
-  // activeRules < floor or positiveControls < floor → HONEST-NEGATIVE.
-  if (
-    actualExposure.activeRulesEvaluated < exposureFloors.activeRulesEvaluated ||
-    actualExposure.positiveControlsExercised < exposureFloors.positiveControlsExercised
-  ) {
-    return {
-      verdict: 'HONEST-NEGATIVE',
-      precision: 0,
-      mintedRuleCount,
-      culledCount,
-      survivingRuleCount,
-      exposureTuple,
-      cullLedger,
-      nonVacuity: false,
-      needsAdjudication,
-    };
-  }
-
-  // Step 3: Cull-rate guard (C5/S2).
-  // culledCount / mintedRuleCount > threshold → HONEST-NEGATIVE.
-  // Guard applies only when mintedRuleCount > 0 (avoids division by zero at
-  // harness phase where mintedRuleCount ≈ 0).
-  if (mintedRuleCount > 0 && culledCount / mintedRuleCount > cullRateThreshold) {
-    return {
-      verdict: 'HONEST-NEGATIVE',
-      // precision is NOT computed here (this returns before FP/TP adjudication
-      // at Step 5), so report the same "not-computed" sentinel the exposure-floor
-      // HONEST-NEGATIVE path uses (0) — never a survival ratio mislabeled as
-      // precision. Whether a HONEST-NEGATIVE should instead carry the real
-      // precision-over-survivors is a §4/§5 contract question deferred to #2189.
-      precision: 0,
-      mintedRuleCount,
-      culledCount,
-      survivingRuleCount,
-      exposureTuple,
-      cullLedger,
-      nonVacuity: false,
-      needsAdjudication,
-    };
-  }
-
-  // Step 4: Positive control non-vacuity check.
-  // Every positive control target must have its targetRuleId fire on an
-  // uncalled rule (not culled). A vacuous pass (rule never fires) → FAIL.
-  let nonVacuity = true;
-  for (const target of positiveControlTargets) {
-    const fired = firings.some(
-      (f) =>
-        f.controlKind === 'positive' &&
-        f.pr === target.pr &&
-        f.ruleId === target.targetRuleId &&
-        !culledRuleIds.has(f.ruleId),
-    );
-    if (!fired) {
-      nonVacuity = false;
-      break;
-    }
-  }
-
-  if (!nonVacuity) {
-    return {
-      verdict: 'FAIL',
-      precision: 0,
-      mintedRuleCount,
-      culledCount,
-      survivingRuleCount,
-      exposureTuple,
-      cullLedger,
-      nonVacuity: false,
-      needsAdjudication,
-    };
-  }
-
-  // Step 5: Check FP labels and collect unlabeled firings.
-  // Scope: non-negative-control, non-culled firings only.
+  // Step 2: Label surviving (non-negative-control, non-culled) firings. Computed
+  // BEFORE the masquerade guards because the FAIL tier outranks them (#2189) — we
+  // must know hasFp/nonVacuity before deciding whether a guard may short-circuit.
   let hasFp = false;
   let tpCount = 0;
   let labeledCount = 0;
-
   for (const firing of firings) {
     if (firing.controlKind === 'negative') continue;
     if (culledRuleIds.has(firing.ruleId)) continue;
@@ -210,49 +160,136 @@ export function scoreWindtunnel(input: ScorerInput): WindtunnelVerdict {
     }
   }
 
-  // FP → FAIL (precision < 1.0; zero-confirmed-FP floor violated)
+  // survivorPrecision (diagnostic, descriptive): TP/(TP+FP) over labeled surviving
+  // firings — informative even on no-claim verdicts, NEVER the gate decision.
+  const survivorPrecision = labeledCount > 0 ? tpCount / labeledCount : null;
+  const diagnostics: WindtunnelDiagnostics = { survivorPrecision };
+
+  // Step 3: Positive control non-vacuity check. Every positive control target
+  // must have its targetRuleId fire on an un-culled rule. A vacuous pass → FAIL.
+  let nonVacuity = true;
+  for (const target of positiveControlTargets) {
+    const fired = firings.some(
+      (f) =>
+        f.controlKind === 'positive' &&
+        f.pr === target.pr &&
+        f.ruleId === target.targetRuleId &&
+        !culledRuleIds.has(f.ruleId),
+    );
+    if (!fired) {
+      nonVacuity = false;
+      break;
+    }
+  }
+
+  // ── FAIL tier (outranks the masquerade guards, #2189) ──
+
+  // Step 4a: Confirmed FP → FAIL. precision = the breaching value (the evidence,
+  // must be reported). A 0 here is a REAL all-FP measurement, never a sentinel.
+  // labeledCount ≥ 1 whenever hasFp, so the ratio is always defined.
   if (hasFp) {
-    const precision = labeledCount > 0 ? tpCount / labeledCount : 0;
     return {
       verdict: 'FAIL',
-      precision,
+      precision: tpCount / labeledCount,
       mintedRuleCount,
       culledCount,
       survivingRuleCount,
       exposureTuple,
       cullLedger,
-      nonVacuity: true,
+      nonVacuity,
       needsAdjudication,
+      diagnostics,
     };
   }
 
-  // Unlabeled firings → not PASS (operator must adjudicate first)
-  if (needsAdjudication.length > 0) {
-    const precision = labeledCount > 0 ? tpCount / labeledCount : 1.0;
+  // Step 4b: Vacuous positive control → FAIL. precision = null — a structural
+  // failure makes no precision claim (#2189 Q-A); 0 would falsely read as all-FP.
+  if (!nonVacuity) {
+    return {
+      verdict: 'FAIL',
+      precision: null,
+      mintedRuleCount,
+      culledCount,
+      survivingRuleCount,
+      exposureTuple,
+      cullLedger,
+      nonVacuity: false,
+      needsAdjudication,
+      diagnostics,
+    };
+  }
+
+  // ── Masquerade guards (may only DEMOTE a would-be PASS) ──
+
+  // Step 5: Exposure floor (P2). activeRules/positiveControls below floor →
+  // HONEST-NEGATIVE (no claim → precision null). Ranked above needs-adjudication
+  // (Step 7): labeling won't rescue a sub-floor run (strategy-claude tie-break).
+  if (
+    actualExposure.activeRulesEvaluated < exposureFloors.activeRulesEvaluated ||
+    actualExposure.positiveControlsExercised < exposureFloors.positiveControlsExercised
+  ) {
     return {
       verdict: 'HONEST-NEGATIVE',
-      precision,
+      precision: null,
       mintedRuleCount,
       culledCount,
       survivingRuleCount,
       exposureTuple,
       cullLedger,
-      nonVacuity: true,
+      nonVacuity,
       needsAdjudication,
+      diagnostics,
     };
   }
 
-  // All firings labeled TP, exposure floors met, positive controls verified → PASS
-  const precision = labeledCount > 0 ? tpCount / labeledCount : 1.0;
+  // Step 6: Cull-rate guard (C5/S2). culledCount / mintedRuleCount > threshold →
+  // HONEST-NEGATIVE. Guard applies only when mintedRuleCount > 0 (avoids division
+  // by zero at the harness phase). No claim → precision null.
+  if (mintedRuleCount > 0 && culledCount / mintedRuleCount > cullRateThreshold) {
+    return {
+      verdict: 'HONEST-NEGATIVE',
+      precision: null,
+      mintedRuleCount,
+      culledCount,
+      survivingRuleCount,
+      exposureTuple,
+      cullLedger,
+      nonVacuity,
+      needsAdjudication,
+      diagnostics,
+    };
+  }
+
+  // Step 7: Unlabeled firings → not PASS (operator must adjudicate first). No
+  // claim → precision null.
+  if (needsAdjudication.length > 0) {
+    return {
+      verdict: 'HONEST-NEGATIVE',
+      precision: null,
+      mintedRuleCount,
+      culledCount,
+      survivingRuleCount,
+      exposureTuple,
+      cullLedger,
+      nonVacuity,
+      needsAdjudication,
+      diagnostics,
+    };
+  }
+
+  // Step 8: All firings labeled TP, exposure floors met, positive controls
+  // verified → PASS. precision = 1.0 (tpCount === labeledCount here; vacuously
+  // 1.0 when no firings — the harness phase).
   return {
     verdict: 'PASS',
-    precision,
+    precision: labeledCount > 0 ? tpCount / labeledCount : 1.0,
     mintedRuleCount,
     culledCount,
     survivingRuleCount,
     exposureTuple,
     cullLedger,
-    nonVacuity: true,
-    needsAdjudication: [],
+    nonVacuity,
+    needsAdjudication,
+    diagnostics,
   };
 }

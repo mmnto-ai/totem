@@ -226,9 +226,10 @@ describe('cull-rate guard (C5/S2)', () => {
     );
     expect(result.verdict).toBe('HONEST-NEGATIVE');
     expect(result.culledCount).toBe(2);
-    // precision is the not-computed sentinel (0), NOT a survival ratio
-    // (survivingRuleCount / mintedRuleCount) — locks the greptile-P1 / CR fix.
-    expect(result.precision).toBe(0);
+    // precision is the NULL not-computed sentinel on a no-claim verdict (#2189
+    // ruling) — NEVER 0 (a real all-FP value) and NEVER a survival ratio. Locks
+    // the greptile-P1 / CR fix + the strategy-claude 2026-06-17 sentinel ruling.
+    expect(result.precision).toBeNull();
   });
 
   it('does not apply cull-rate guard when mintedRuleCount = 0 (harness phase)', () => {
@@ -252,6 +253,219 @@ describe('cull-rate guard (C5/S2)', () => {
     );
     // No minted rules, no firings → PASS (vacuous but valid for harness)
     expect(result.verdict).toBe('PASS');
+  });
+});
+
+// ─── #2189 ruling: FAIL outranks the masquerade guards ──
+//
+// strategy-claude verdict-semantics RULING (2026-06-17): a confirmed FP — or a
+// vacuous positive control — is a *claim*, not a no-claim. It must FAIL even
+// when an exposure-floor / cull-rate masquerade guard would otherwise return
+// HONEST-NEGATIVE. The guards may only DEMOTE a would-be PASS; they may never
+// UPGRADE a FAIL. Under the pre-#2189 order these returned HONEST-NEGATIVE.
+
+describe('#2189: FAIL precedence outranks the masquerade guards', () => {
+  it('unconditionally evaluates to FAIL when a firing is labeled FP, ignoring a sub-floor exposure', () => {
+    const fp = makeFiring('rule-a', 1, 'corpus', '// const secret = "x"');
+    const gt = new Map<string, GroundTruthLabel>([[fp.labelId, 'FP']]);
+    const result = scoreWindtunnel(
+      baseInput({
+        firings: [fp],
+        groundTruth: gt,
+        // sub-floor exposure that WOULD trip HONEST-NEGATIVE first under the old order
+        actualExposure: {
+          activeRulesEvaluated: 1,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 0,
+        },
+        exposureFloors: {
+          activeRulesEvaluated: 2,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 0,
+        },
+      }),
+    );
+    expect(result.verdict).toBe('FAIL');
+  });
+
+  it('evaluates to FAIL when a firing is labeled FP, ignoring an over-threshold cull rate', () => {
+    // rule-a culled on a negative control (1/2 = 0.5 > threshold 0.4 → cull-rate HN
+    // under the old order); rule-b (surviving) fires a confirmed FP → must FAIL.
+    const culled = makeFiring('rule-a', 99, 'negative');
+    const fp = makeFiring('rule-b', 1, 'corpus', 'fp line');
+    const gt = new Map<string, GroundTruthLabel>([[fp.labelId, 'FP']]);
+    const result = scoreWindtunnel(
+      baseInput({
+        firings: [culled, fp],
+        mintedRuleIds: ['rule-a', 'rule-b'],
+        groundTruth: gt,
+        cullRateThreshold: 0.4,
+      }),
+    );
+    expect(result.verdict).toBe('FAIL');
+  });
+
+  it('evaluates to FAIL on a vacuous positive control even under a sub-floor exposure', () => {
+    const result = scoreWindtunnel(
+      baseInput({
+        positiveControlTargets: [{ pr: 10, targetRuleId: 'rule-a' }],
+        firings: [], // target never fires → vacuous
+        actualExposure: {
+          activeRulesEvaluated: 1,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 0,
+        },
+        exposureFloors: {
+          activeRulesEvaluated: 2,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 0,
+        },
+      }),
+    );
+    expect(result.verdict).toBe('FAIL');
+    expect(result.nonVacuity).toBe(false);
+  });
+
+  it('FP takes precedence over a vacuous positive control when both occur', () => {
+    // A confirmed FP on a corpus firing AND a positive control whose target
+    // never fires (vacuous). Step 4a (FP) precedes Step 4b (vacuous): the
+    // verdict is FAIL with the breaching precision 0.5 — NOT null (which the
+    // vacuous-control FAIL would have returned).
+    const fp = makeFiring('rule-b', 1, 'corpus', 'fp');
+    const tp = makeFiring('rule-c', 2, 'corpus', 'tp');
+    const result = scoreWindtunnel(
+      baseInput({
+        firings: [fp, tp],
+        mintedRuleIds: ['rule-a', 'rule-b', 'rule-c'],
+        groundTruth: new Map<string, GroundTruthLabel>([
+          [fp.labelId, 'FP'],
+          [tp.labelId, 'TP'],
+        ]),
+        positiveControlTargets: [{ pr: 10, targetRuleId: 'rule-a' }],
+      }),
+    );
+    expect(result.verdict).toBe('FAIL');
+    expect(result.nonVacuity).toBe(false);
+    expect(result.precision).toBe(0.5);
+  });
+});
+
+// ─── #2189 ruling: precision is a null no-claim sentinel ─
+//
+// precision carries a real value ONLY on verdicts that make a precision claim —
+// PASS (1.0) and confirmed-FP FAIL (the breaching value, which IS the evidence).
+// On every no-claim verdict it is null — NEVER 0 (a real all-FP value).
+
+describe('#2189: precision null-sentinel on no-claim verdicts', () => {
+  it('precision is null on an exposure-floor HONEST-NEGATIVE', () => {
+    const result = scoreWindtunnel(
+      baseInput({
+        actualExposure: {
+          activeRulesEvaluated: 1,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 0,
+        },
+        exposureFloors: {
+          activeRulesEvaluated: 2,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 0,
+        },
+      }),
+    );
+    expect(result.verdict).toBe('HONEST-NEGATIVE');
+    expect(result.precision).toBeNull();
+  });
+
+  it('precision is null on a needs-adjudication HONEST-NEGATIVE', () => {
+    const firing = makeFiring('rule-a', 1, 'corpus');
+    const result = scoreWindtunnel(baseInput({ firings: [firing], groundTruth: new Map() }));
+    expect(result.verdict).toBe('HONEST-NEGATIVE');
+    expect(result.needsAdjudication).toContain(firing.labelId);
+    expect(result.precision).toBeNull();
+  });
+
+  it('precision is null on a vacuous-control FAIL (structural failure, no precision claim — Q-A)', () => {
+    const result = scoreWindtunnel(
+      baseInput({ positiveControlTargets: [{ pr: 10, targetRuleId: 'rule-a' }], firings: [] }),
+    );
+    expect(result.verdict).toBe('FAIL');
+    expect(result.precision).toBeNull();
+  });
+
+  it('precision is a real value on PASS (1.0) and on FP-FAIL (the breaching value, never null)', () => {
+    const tp = makeFiring('rule-a', 1, 'corpus');
+    const pass = scoreWindtunnel(
+      baseInput({ firings: [tp], groundTruth: new Map([[tp.labelId, 'TP']]) }),
+    );
+    expect(pass.verdict).toBe('PASS');
+    expect(pass.precision).toBe(1.0);
+
+    // 1 FP + 1 TP → breaching precision 0.5, a real number (the evidence)
+    const fp = makeFiring('rule-a', 2, 'corpus', 'fp');
+    const tp2 = makeFiring('rule-b', 3, 'corpus', 'tp');
+    const fail = scoreWindtunnel(
+      baseInput({
+        firings: [fp, tp2],
+        groundTruth: new Map([
+          [fp.labelId, 'FP'],
+          [tp2.labelId, 'TP'],
+        ]),
+      }),
+    );
+    expect(fail.verdict).toBe('FAIL');
+    expect(fail.precision).toBe(0.5);
+  });
+
+  it('precision is 0 (a real all-FP measurement, never the not-computed sentinel) when every labeled firing is FP', () => {
+    // The ruling reserves 0 for a REAL all-FP value (precision = 0/N). A pure
+    // all-FP run must report precision === 0, distinct from the null sentinel
+    // — a regression that re-introduced 0-as-"not-computed" would break here.
+    const fpA = makeFiring('rule-a', 1, 'corpus', 'fp a');
+    const fpB = makeFiring('rule-b', 2, 'corpus', 'fp b');
+    const result = scoreWindtunnel(
+      baseInput({
+        firings: [fpA, fpB],
+        mintedRuleIds: ['rule-a', 'rule-b'],
+        groundTruth: new Map<string, GroundTruthLabel>([
+          [fpA.labelId, 'FP'],
+          [fpB.labelId, 'FP'],
+        ]),
+      }),
+    );
+    expect(result.verdict).toBe('FAIL');
+    expect(result.precision).toBe(0);
+  });
+});
+
+// ─── #2189 ruling: diagnostics.survivorPrecision is separate ─
+//
+// CR's survivor-precision is informative ("culled 8/10, the 2 survivors were
+// clean") but must NOT live on the certifying field. It is descriptive and
+// distinct from `precision`.
+
+describe('#2189: diagnostics.survivorPrecision is a separate descriptive field', () => {
+  it('carries the survivor ratio on a HONEST-NEGATIVE while certifying precision stays null', () => {
+    // Cull rule-a (over-threshold cull rate), survivor rule-b fires clean TP →
+    // survivor ratio 1.0, but the verdict is a no-claim HONEST-NEGATIVE so the
+    // certifying precision is null.
+    const culled = makeFiring('rule-a', 99, 'negative');
+    const survivorTp = makeFiring('rule-b', 1, 'corpus', 'clean');
+    const result = scoreWindtunnel(
+      baseInput({
+        firings: [culled, survivorTp],
+        mintedRuleIds: ['rule-a', 'rule-b'],
+        groundTruth: new Map<string, GroundTruthLabel>([[survivorTp.labelId, 'TP']]),
+        cullRateThreshold: 0.4, // 1/2 = 0.5 > 0.4 → cull-rate HONEST-NEGATIVE
+      }),
+    );
+    expect(result.verdict).toBe('HONEST-NEGATIVE');
+    expect(result.precision).toBeNull();
+    expect(result.diagnostics.survivorPrecision).toBe(1.0);
+  });
+
+  it('survivorPrecision is null when no surviving firing is labeled', () => {
+    const result = scoreWindtunnel(baseInput({ firings: [] }));
+    expect(result.diagnostics.survivorPrecision).toBeNull();
   });
 });
 

@@ -789,6 +789,7 @@ export type {
   GroundTruthLabel,
   RuleFiring,
   ScorerInput,
+  WindtunnelDiagnostics,
   WindtunnelVerdict,
   WindtunnelVerdictKind,
 } from './spine/windtunnel-scorer.js';
