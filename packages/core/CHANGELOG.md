@@ -1,5 +1,17 @@
 # @mmnto/totem
 
+## 1.66.0
+
+### Minor Changes
+
+- 3484fd4: Ratify wind-tunnel scorer verdict semantics (mmnto-ai/totem#2189, post-#2188 deferral item 3) per strategy-claude's 2026-06-17 verdict-semantics ruling (refines ADR-110 §4/§5):
+  - **FAIL outranks the masquerade guards.** `scoreWindtunnel` now evaluates the FAIL tier (confirmed-FP, vacuous positive control) before the exposure-floor and cull-rate guards. A confirmed FP under a thin exposure no longer masquerades as HONEST-NEGATIVE — the guards may only demote a would-be PASS, never upgrade a FAIL.
+  - **`WindtunnelVerdict.precision` is now `number | null`.** A real value only on verdicts that make a precision claim (PASS = 1.0; confirmed-FP FAIL = the breaching value, which is the evidence); `null` (not-computed) on every no-claim verdict (exposure-floor / cull-rate / needs-adjudication HONEST-NEGATIVE, and vacuous-control FAIL). This migrates the prior `precision: 0` placeholder — `0` is now reserved for a real all-FP measurement and never means "not computed".
+  - **New `WindtunnelVerdict.diagnostics.survivorPrecision`** carries the informative TP/(TP+FP)-over-survivors ratio, separately namespaced from the certifying `precision` and never part of the gate decision.
+  - Guard-tripped `HONEST-NEGATIVE` returns (exposure-floor / cull-rate) now report **truthful** `nonVacuity` (the computed value, not a hardcoded `false`) and a **populated** `needsAdjudication` array when unlabeled firings co-occur — a consequence of hoisting the labeling pass ahead of the masquerade guards. Consumers keying on `needsAdjudication.length` will now see that signal on guard-tripped runs where it was previously suppressed.
+
+  CLI `totem spine windtunnel run` output now prints the null-guarded certifying `precision` plus a `survivorPrecision` diagnostic line.
+
 ## 1.65.0
 
 ### Minor Changes
