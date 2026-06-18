@@ -651,6 +651,14 @@ export function enumeratePrMetas(
   const R = '\x1e'; // record separator (LEADS each commit so its trailing file list stays in-record)
   // One `git log --name-only` call — the changed files trail each commit's format
   // block within the same record, avoiding an N+1 `git diff-tree` spawn per commit.
+  // `--topo-order` makes the emission order ANCESTRY (topological), not commit-date:
+  // a `bounded` window's "most recent N qualifying PRs" must mean N-most-recent-by-
+  // ancestry, never by timestamp (ADR-110 §6 ancestry-not-timestamp; strategy-claude
+  // 2026-06-18 ruling). Commit dates are non-monotonic and rewritable (rebases, clock
+  // skew), so date order would make the window's membership non-deterministic; the
+  // reachable SET is unchanged either way, only the order the window slices on. The
+  // certifying phase runs `window: all` (order-irrelevant) today, so this hardens the
+  // `bounded` path against a future non-linear merge or date-skewed history.
   // `--end-of-options` guards asOfCommit from being parsed as an option even if a
   // future caller passes an unvalidated ref (defense-in-depth; the lock schema
   // already constrains asOfCommit to a 40-hex SHA, and safeExec uses no shell).
@@ -658,6 +666,7 @@ export function enumeratePrMetas(
     'git',
     [
       'log',
+      '--topo-order',
       '--name-only',
       `--format=${R}%H${F}%an <%ae>${F}%s${F}%b${F}`,
       '--end-of-options',
