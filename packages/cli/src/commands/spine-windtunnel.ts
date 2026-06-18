@@ -265,7 +265,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     verdict.diagnostics.survivorPrecision === null
       ? 'n/a'
       : verdict.diagnostics.survivorPrecision.toFixed(4);
-  console.log(`  survivorPrecision: ${survivorStr} (diagnostic — over surviving rules)`);
+  console.log(
+    `  survivorPrecision: ${survivorStr} (diagnostic — TP/(TP+FP) over surviving firings)`,
+  );
   console.log(`  mintedRuleCount:   ${verdict.mintedRuleCount}`);
   console.log(`  culledCount:       ${verdict.culledCount}`);
   console.log(`  survivingRuleCount:${verdict.survivingRuleCount}`);

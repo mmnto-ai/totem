@@ -325,6 +325,29 @@ describe('#2189: FAIL precedence outranks the masquerade guards', () => {
     expect(result.verdict).toBe('FAIL');
     expect(result.nonVacuity).toBe(false);
   });
+
+  it('FP takes precedence over a vacuous positive control when both occur', () => {
+    // A confirmed FP on a corpus firing AND a positive control whose target
+    // never fires (vacuous). Step 4a (FP) precedes Step 4b (vacuous): the
+    // verdict is FAIL with the breaching precision 0.5 — NOT null (which the
+    // vacuous-control FAIL would have returned).
+    const fp = makeFiring('rule-b', 1, 'corpus', 'fp');
+    const tp = makeFiring('rule-c', 2, 'corpus', 'tp');
+    const result = scoreWindtunnel(
+      baseInput({
+        firings: [fp, tp],
+        mintedRuleIds: ['rule-a', 'rule-b', 'rule-c'],
+        groundTruth: new Map<string, GroundTruthLabel>([
+          [fp.labelId, 'FP'],
+          [tp.labelId, 'TP'],
+        ]),
+        positiveControlTargets: [{ pr: 10, targetRuleId: 'rule-a' }],
+      }),
+    );
+    expect(result.verdict).toBe('FAIL');
+    expect(result.nonVacuity).toBe(false);
+    expect(result.precision).toBe(0.5);
+  });
 });
 
 // ─── #2189 ruling: precision is a null no-claim sentinel ─
@@ -391,6 +414,26 @@ describe('#2189: precision null-sentinel on no-claim verdicts', () => {
     );
     expect(fail.verdict).toBe('FAIL');
     expect(fail.precision).toBe(0.5);
+  });
+
+  it('precision is 0 (a real all-FP measurement, never the not-computed sentinel) when every labeled firing is FP', () => {
+    // The ruling reserves 0 for a REAL all-FP value (precision = 0/N). A pure
+    // all-FP run must report precision === 0, distinct from the null sentinel
+    // — a regression that re-introduced 0-as-"not-computed" would break here.
+    const fpA = makeFiring('rule-a', 1, 'corpus', 'fp a');
+    const fpB = makeFiring('rule-b', 2, 'corpus', 'fp b');
+    const result = scoreWindtunnel(
+      baseInput({
+        firings: [fpA, fpB],
+        mintedRuleIds: ['rule-a', 'rule-b'],
+        groundTruth: new Map<string, GroundTruthLabel>([
+          [fpA.labelId, 'FP'],
+          [fpB.labelId, 'FP'],
+        ]),
+      }),
+    );
+    expect(result.verdict).toBe('FAIL');
+    expect(result.precision).toBe(0);
   });
 });
 

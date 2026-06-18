@@ -13,11 +13,11 @@ export interface CullLedgerEntry {
 
 export interface WindtunnelDiagnostics {
   /**
-   * Precision (TP/(TP+FP)) over labeled, surviving (non-culled, non-control)
-   * firings. DESCRIPTIVE ONLY — informative even on no-claim verdicts ("culled
-   * 8/10, the 2 survivors were clean"). NEVER consulted for the gate decision
-   * and never mistakable for the certifying `precision`. null when no surviving
-   * firing is labeled.
+   * Precision (TP/(TP+FP)) over labeled, surviving (non-culled,
+   * non-negative-control) firings. DESCRIPTIVE ONLY — informative even on
+   * no-claim verdicts ("culled 8/10, the 2 survivors were clean"). NEVER
+   * consulted for the gate decision and never mistakable for the certifying
+   * `precision`. null when no surviving firing is labeled.
    */
   survivorPrecision: number | null;
 }
