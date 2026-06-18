@@ -42,6 +42,24 @@ export const WindtunnelLockSchema = z
           z.object({ type: z.literal('bounded'), n: z.number().int().positive() }),
         ]),
         asOfCommit: z.string().regex(COMMIT_SHA_REGEX, 'asOfCommit must be a 40-hex SHA'),
+        // S4 (#2189 item 2): the frozen code-path classifier + exclusion flags the
+        // resolver re-derives against. Additive-optional so existing harness locks
+        // parse unchanged; `codePathClassifier` is required at CERTIFYING resolve
+        // (the resolver hard-errors if absent — no safe code-default for "what is
+        // code"). Flags default to the strategy-claude-ratified lean (exclude).
+        codePathClassifier: z
+          .object({
+            // includeGlobs must list ≥1 glob — an empty set makes EVERY file
+            // non-code, so the certifying gate would false-fail "Extra: [all PRs]"
+            // (greptile P2). excludeGlobs may be empty (no exclusions).
+            includeGlobs: z
+              .array(z.string().min(1))
+              .min(1, 'includeGlobs must list at least one glob'),
+            excludeGlobs: z.array(z.string().min(1)),
+          })
+          .optional(),
+        excludeRevertPairs: z.boolean().default(true),
+        excludeBotPrs: z.boolean().default(true),
       }),
       resolvedPrs: z.array(ResolvedPrSchema).min(1, 'resolvedPrs must be non-empty'),
     }),
