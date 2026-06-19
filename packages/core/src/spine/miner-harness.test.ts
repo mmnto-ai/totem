@@ -151,6 +151,12 @@ describe('runFalsificationHarness — each red fixture fails on EXACTLY its clau
     expect(clauses(g)).toEqual(['e-emission']);
   });
 
+  it('(e-emission) provenance commitSha does not match the PR frozen merge commit', () => {
+    const g = clone(greenLedgers());
+    g.emission.entries[0].provenance.commitSha = sha(99); // PR 1's frozen merge commit is sha(1)
+    expect(clauses(g)).toEqual(['e-emission']);
+  });
+
   it('(f) seed class supplied to extraction', () => {
     const g = clone(greenLedgers());
     g.emission.extractionInputsAttestation.seedClassesProvided = true;
@@ -167,6 +173,13 @@ describe('runFalsificationHarness — each red fixture fails on EXACTLY its clau
   it('(h) held-out content fetch', () => {
     const g = clone(greenLedgers());
     g.apiUsage.heldOutFetchCount = 1;
+    expect(clauses(g)).toEqual(['h']);
+  });
+
+  it('(h) a held-out PR fetched under a mislabeled slice:train', () => {
+    const g = clone(greenLedgers());
+    // PR 3 is held-out; labeling the fetch "train" must NOT hide it (partition is derived).
+    g.apiUsage.entries.push({ targetPr: 3, slice: 'train', fetchKind: 'review-thread' });
     expect(clauses(g)).toEqual(['h']);
   });
 

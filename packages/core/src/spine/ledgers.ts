@@ -80,9 +80,21 @@ export type DropLedger = z.infer<typeof DropLedgerSchema>;
 // ── 3. Classifier ledger (reported in the done-criterion, §8) ────────────────
 
 export const ClassifierLedgerEntrySchema = z.object({
+  /**
+   * This classifier-ledger entry's own ref — the JOIN KEY that an emission entry's
+   * `classifierLedgerRef` points to (not necessarily the candidate's own
+   * `candidateRef`). Slice 1 joins on this ref + checks disposition consistency; a
+   * stricter same-candidate identity assertion is deferred to slice 2.
+   */
   candidateRef: nonEmpty('candidateRef'),
   disposition: ClassifierDispositionSchema,
-  /** Stage-4 Verify-Against-Codebase confirmation — the deterministic backstop. */
+  /**
+   * Stage-4 Verify-Against-Codebase confirmation — the deterministic backstop.
+   * NON-CERTIFYING IN SLICE 1: Stage-4 is wired in slice 4, so the harness does NOT
+   * yet require `stage4Confirmed === true` for compile-routed candidates (it checks
+   * disposition consistency only). The field is carried now so slice 4 can enforce
+   * it without a schema change.
+   */
   stage4Confirmed: z.boolean(),
 });
 export type ClassifierLedgerEntry = z.infer<typeof ClassifierLedgerEntrySchema>;
@@ -121,7 +133,26 @@ export const SplitLedgerSchema = z
       message: 'corpusMergeCommits must cover every corpus PR',
       path: ['corpusMergeCommits'],
     },
-  );
+  )
+  .superRefine((d, ctx) => {
+    // Duplicate rows would inflate the cover-base bag while the Set-based checks
+    // dedupe them away — reject duplicates in corpus and corpusMergeCommits.pr.
+    if (new Set(d.corpus).size !== d.corpus.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'corpus contains duplicate PRs',
+        path: ['corpus'],
+      });
+    }
+    const prs = d.corpusMergeCommits.map((e) => e.pr);
+    if (new Set(prs).size !== prs.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'corpusMergeCommits contains duplicate PRs',
+        path: ['corpusMergeCommits'],
+      });
+    }
+  });
 export type SplitLedger = z.infer<typeof SplitLedgerSchema>;
 
 // ── 5. API-usage ledger ──────────────────────────────────────────────────────

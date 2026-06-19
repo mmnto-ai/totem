@@ -29,31 +29,53 @@ const PrNumber = z.number().int().positive();
  * concrete `cutIndex` is the deferred window-open scalar (Deferred Decisions);
  * the field is required in the committed artifact, only its value is deferred.
  */
-export const SplitArtifactSchema = z.object({
-  asOfCommit: z.string().regex(COMMIT_SHA_RE),
-  /** The OLDER ancestry segment — the mining slice. */
-  trainPrs: z.array(PrNumber),
-  /** The NEWER held-out segment — control evaluation. Controls are tags within this. */
-  heldOutPrs: z.array(PrNumber),
-  /** Explicitly enumerated drops (the atomic revert pairs). */
-  excludedPrs: z.array(PrNumber),
-  /** Positive controls — a designated subset (tag) of `heldOutPrs`, never a separate cover bucket. */
-  positiveControlPrs: z.array(PrNumber),
-  /** Negative controls — a designated subset (tag) of `heldOutPrs`. */
-  negativeControlPrs: z.array(PrNumber),
-  splitRule: z.object({
-    /** Human-readable predicate expression that generated the corpus (mirrors the windtunnel lock's `selectionRule.predicate`). */
-    predicate: z.string().refine((s) => s.trim().length > 0, {
-      message: 'splitRule.predicate must be a non-empty expression',
+export const SplitArtifactSchema = z
+  .object({
+    asOfCommit: z.string().regex(COMMIT_SHA_RE),
+    /** The OLDER ancestry segment — the mining slice. */
+    trainPrs: z.array(PrNumber),
+    /** The NEWER held-out segment — control evaluation. Controls are tags within this. */
+    heldOutPrs: z.array(PrNumber),
+    /** Explicitly enumerated drops (the atomic revert pairs). */
+    excludedPrs: z.array(PrNumber),
+    /** Positive controls — a designated subset (tag) of `heldOutPrs`, never a separate cover bucket. */
+    positiveControlPrs: z.array(PrNumber),
+    /** Negative controls — a designated subset (tag) of `heldOutPrs`. */
+    negativeControlPrs: z.array(PrNumber),
+    splitRule: z.object({
+      /** Human-readable predicate expression that generated the corpus (mirrors the windtunnel lock's `selectionRule.predicate`). */
+      predicate: z.string().refine((s) => s.trim().length > 0, {
+        message: 'splitRule.predicate must be a non-empty expression',
+      }),
+      /**
+       * Forward-chronological ancestry cut: `trainPrs` = the `cutIndex` OLDEST
+       * corpus PRs (ancestry order), `heldOutPrs` = the newer remainder. Concrete
+       * value deferred to window-open (ADR-111 Deferred Decisions).
+       */
+      cutIndex: z.number().int().nonnegative(),
     }),
-    /**
-     * Forward-chronological ancestry cut: `trainPrs` = the `cutIndex` OLDEST
-     * corpus PRs (ancestry order), `heldOutPrs` = the newer remainder. Concrete
-     * value deferred to window-open (ADR-111 Deferred Decisions).
-     */
-    cutIndex: z.number().int().nonnegative(),
-  }),
-});
+  })
+  .superRefine((s, ctx) => {
+    // Disjoint cover is a BAG/ROW property, but the cover/overlap checks dedupe via
+    // Set semantics — so a duplicate row (e.g. trainPrs [1,1,2]) would slip through.
+    // Reject duplicates within each slice/control list at the schema boundary.
+    const lists: ReadonlyArray<readonly [string, number[]]> = [
+      ['trainPrs', s.trainPrs],
+      ['heldOutPrs', s.heldOutPrs],
+      ['excludedPrs', s.excludedPrs],
+      ['positiveControlPrs', s.positiveControlPrs],
+      ['negativeControlPrs', s.negativeControlPrs],
+    ];
+    for (const [field, arr] of lists) {
+      if (new Set(arr).size !== arr.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${field} contains duplicate PRs`,
+          path: [field],
+        });
+      }
+    }
+  });
 
 export type SplitArtifact = z.infer<typeof SplitArtifactSchema>;
 
@@ -182,12 +204,15 @@ function mergeCommitCollisionsAcrossSlices(
  * remain in the cover. Validates the result and throws `SplitCoverError` on any
  * cover/disjointness violation (Tenet 4) — a malformed split never freezes.
  *
- * NOTE (open integration detail, flagged to strategy-claude): how `excludedPrs`
- * (revert pairs) reconcile with `selectionRule`'s own `excludeRevertPairs`
- * (which drops them from its output) determines whether the `corpus` cover base
- * includes reverts. This producer is agnostic — it takes `corpus` + `excludedPrs`
- * as given; the caller resolves them consistently. The validator above is
- * correct either way.
+ * CONTRACT (corpus-scope model A, confirmed by totem-codex's #2200 review; pending
+ * strategy-claude's final §5 word): `corpus` is the cover BASE that INCLUDES the
+ * PRs later assigned to `excludedPrs` — i.e. `selectionRule` is resolved here with
+ * reverts retained, and `excludedPrs` enumerates them explicitly, so
+ * `train ⊎ heldOut ⊎ excluded == corpus` holds and every `excludedPr` is a corpus
+ * member. (The alternative — `selectionRule(asOfCommit)` pre-excludes reverts yet
+ * the split still records them in `excludedPrs` — is NOT supported by the current
+ * schema, which rejects excluded PRs outside the corpus; revisit only if strategy
+ * pins that model.) The fail-loud `excludedPrs ⊆ corpus` guard below enforces this.
  */
 export function resolveSplit(params: {
   asOfCommit: string;
@@ -240,11 +265,12 @@ export function resolveSplit(params: {
   const oldestFirstNonExcluded = [...newestFirstCorpus]
     .reverse()
     .filter((pr) => !excludedSet.has(pr));
-  // `slice` would silently clamp a too-large cutIndex, yielding an empty heldOut
-  // slice that bypasses control evaluation — fail loud on an out-of-bounds cut.
-  if (params.cutIndex > oldestFirstNonExcluded.length) {
+  // A certifying split needs BOTH a non-empty train slice and a non-empty held-out
+  // slice — cutIndex 0 (empty train) or == size (empty held-out, which `slice`
+  // reaches by silent clamp) makes the train/test contract vacuous. Fail loud.
+  if (params.cutIndex <= 0 || params.cutIndex >= oldestFirstNonExcluded.length) {
     throw new Error(
-      `[Totem Error] resolveSplit: cutIndex ${params.cutIndex} exceeds the non-excluded corpus size of ${oldestFirstNonExcluded.length}`,
+      `[Totem Error] resolveSplit: cutIndex ${params.cutIndex} must be strictly between 0 and the non-excluded corpus size ${oldestFirstNonExcluded.length} (non-empty train + held-out)`,
     );
   }
   const trainPrs = uniqueSorted(oldestFirstNonExcluded.slice(0, params.cutIndex));

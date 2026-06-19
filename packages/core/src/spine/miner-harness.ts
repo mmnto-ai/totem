@@ -152,11 +152,24 @@ function checkSplitCover(ledgers: MinerLedgers, out: FmViolation[]): void {
 // (e-emission) — every emitted candidate's provenance PR must be in the train slice.
 function checkEmissionMembership(ledgers: MinerLedgers, out: FmViolation[]): void {
   const trainSet = new Set(ledgers.split.split.trainPrs);
+  const mergeCommitByPr = new Map(
+    ledgers.split.corpusMergeCommits.map(({ pr, mergeCommit }) => [pr, mergeCommit]),
+  );
   for (const e of ledgers.emission.entries) {
     if (!trainSet.has(e.provenance.mergedPr)) {
       out.push({
         clause: 'e-emission',
         detail: `candidate ${e.candidateRef}: provenance PR ${e.provenance.mergedPr} is not in the train slice`,
+      });
+      continue;
+    }
+    // The provenance commit SHA must be the PR's frozen merge commit — a tuple
+    // carrying an arbitrary (or another PR's) SHA is provenance in name only.
+    const expectedSha = mergeCommitByPr.get(e.provenance.mergedPr);
+    if (expectedSha !== undefined && e.provenance.commitSha !== expectedSha) {
+      out.push({
+        clause: 'e-emission',
+        detail: `candidate ${e.candidateRef}: provenance commitSha does not match PR ${e.provenance.mergedPr}'s frozen merge commit`,
       });
     }
   }
@@ -172,13 +185,20 @@ function checkSeedBlindness(ledgers: MinerLedgers, out: FmViolation[]): void {
   }
 }
 
-// (h) — no content fetch against a held-out/control PR; the count MUST be 0.
+// (h) — no content fetch against a held-out/control PR. The actual partition is
+// DERIVED from the frozen split (heldOut membership), NOT trusted from the
+// ledger's self-declared `slice` label — a buggy/adversarial producer could read
+// held-out material and label it `slice: "train"`. The declared heldOutFetchCount
+// is likewise recomputed from the entries, never trusted as an independent claim.
 function checkApiUsage(ledgers: MinerLedgers, out: FmViolation[]): void {
-  const heldOutFetches = ledgers.apiUsage.entries.filter((f) => f.slice === 'heldOut');
-  if (ledgers.apiUsage.heldOutFetchCount !== 0 || heldOutFetches.length > 0) {
+  const heldOutSet = new Set(ledgers.split.split.heldOutPrs);
+  const heldOutFetches = ledgers.apiUsage.entries.filter(
+    (f) => heldOutSet.has(f.targetPr) || f.slice === 'heldOut',
+  );
+  if (heldOutFetches.length > 0 || ledgers.apiUsage.heldOutFetchCount !== heldOutFetches.length) {
     out.push({
       clause: 'h',
-      detail: `held-out fetches present (count=${ledgers.apiUsage.heldOutFetchCount}, entries=${heldOutFetches.length})`,
+      detail: `held-out fetch(es) present or miscounted (derived=${heldOutFetches.length}, declared=${ledgers.apiUsage.heldOutFetchCount}, targets=[${heldOutFetches.map((f) => f.targetPr)}])`,
     });
   }
 }

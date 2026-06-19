@@ -32,6 +32,10 @@ describe('validateSplitCover', () => {
     expect(validateSplitCover(split(), corpus, mc).ok).toBe(true);
   });
 
+  it('rejects duplicate PRs within a slice at the schema boundary', () => {
+    expect(() => split({ trainPrs: [1, 1, 2] })).toThrow(/duplicate/);
+  });
+
   it('flags an out-of-corpus member as FM(d) (cover.extra)', () => {
     const r = validateSplitCover(split({ heldOutPrs: [3, 4, 99] }), corpus, mcMap([...corpus, 99]));
     expect(r.cover.extra).toEqual([99]);
@@ -149,17 +153,25 @@ describe('resolveSplit — forward-ancestry cut', () => {
     ).toThrow(/does not cover the corpus/);
   });
 
+  const cutParams = (cutIndex: number) => ({
+    asOfCommit: sha(100),
+    corpus,
+    orderedNewestFirst: [4, 3, 2, 1],
+    excludedPrs: [] as number[],
+    cutIndex,
+    predicate: 'p',
+    mergeCommitByPr: mcMap(corpus),
+  });
+
   it('throws when cutIndex exceeds the non-excluded corpus size', () => {
-    expect(() =>
-      resolveSplit({
-        asOfCommit: sha(100),
-        corpus,
-        orderedNewestFirst: [4, 3, 2, 1],
-        excludedPrs: [],
-        cutIndex: 5, // corpus size is 4
-        predicate: 'p',
-        mergeCommitByPr: mcMap(corpus),
-      }),
-    ).toThrow(/cutIndex 5 exceeds/);
+    expect(() => resolveSplit(cutParams(5))).toThrow(/cutIndex 5 must be strictly between/);
+  });
+
+  it('throws when cutIndex is 0 (empty train slice)', () => {
+    expect(() => resolveSplit(cutParams(0))).toThrow(/cutIndex 0 must be strictly between/);
+  });
+
+  it('throws when cutIndex == size (empty held-out slice)', () => {
+    expect(() => resolveSplit(cutParams(4))).toThrow(/cutIndex 4 must be strictly between/);
   });
 });
