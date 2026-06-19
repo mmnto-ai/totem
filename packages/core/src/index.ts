@@ -784,8 +784,12 @@ export {
 // Spine: Gate-1 wind-tunnel evidence harness (mmnto-ai/totem#2188)
 export type { CandidateRuleRecord, ClassifierDisposition } from './spine/candidate-rule.js';
 export { CandidateRuleRecordSchema, ClassifierDispositionSchema } from './spine/candidate-rule.js';
+// `DraftCandidate` is intentionally NOT re-exported here — it is the transient
+// Extract→Classify intermediate (slice 3 maps it to `CandidateRuleRecord`).
+// Spine-internal consumers import it directly from './spine/extract.js'; keeping
+// it off the public barrel avoids inviting CLI-layer coupling to an ephemeral
+// type (greptile #2202). It stays reachable structurally via `ExtractStageResult`.
 export type {
-  DraftCandidate,
   DraftExtractor,
   ExtractStageDeps,
   ExtractStageResult,
