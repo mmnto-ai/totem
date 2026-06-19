@@ -66,8 +66,8 @@ export interface ReviewThread {
  */
 export interface ReviewThreadContent {
   pr: number;
-  /** Lowercase 40-hex merge-commit SHA — becomes the candidate's `provenance.commitSha`. */
-  headCommitSha: string;
+  /** Lowercase 40-hex merge-commit SHA (lc is squash-merge) — becomes the candidate's `provenance.commitSha`. */
+  mergeCommitSha: string;
   threads: ReviewThread[];
 }
 
@@ -108,22 +108,24 @@ export interface DraftCandidate {
 
 /**
  * Injected review-thread fetch port (ADR-111 §6 content-only). Core-defined,
- * CLI-implemented — keeps core network-free. MUST be called for train PRs only;
- * the orchestrator guarantees that by iterating the train slice.
+ * CLI-implemented — keeps core network-free. ASYNC: the CLI impl wraps the
+ * GitHub API (network IO). MUST be called for train PRs only; the orchestrator
+ * guarantees that by iterating the train slice.
  */
 export interface ReviewThreadSource {
-  fetch(pr: number): FetchResult;
+  fetch(pr: number): Promise<FetchResult>;
 }
 
 /**
- * Injected draft-DSL extractor port. List-shaped (fold 1): one thread can carry
- * multiple structural invariants, so it returns ZERO-or-more draft bodies. The
- * LLM lives behind this at the CLI layer (draft-only, Tenet-15); a deterministic
- * fixture impl drives tests. The miner is BLIND to seed classes (§7 / FM f): the
- * port is never handed one.
+ * Injected draft-DSL extractor port. ASYNC: the CLI impl wraps the LLM call
+ * (network IO). List-shaped (fold 1): one thread can carry multiple structural
+ * invariants, so it returns ZERO-or-more draft bodies. The LLM lives behind this
+ * at the CLI layer (draft-only, Tenet-15); a deterministic fixture impl drives
+ * tests. The miner is BLIND to seed classes (§7 / FM f): the port is never
+ * handed one.
  */
 export interface DraftExtractor {
-  draft(content: ReviewThreadContent): string[];
+  draft(content: ReviewThreadContent): Promise<string[]>;
 }
 
 /** Dependencies for a single Extract-stage run. */
@@ -203,7 +205,7 @@ function buildProvenance(
   const parsed = ProvenanceRecordSchema.safeParse({
     mergedPr: pr,
     reviewThread: `pulls/${pr}/comments`,
-    commitSha: content.headCommitSha,
+    commitSha: content.mergeCommitSha,
   });
   if (!parsed.success) {
     return {
@@ -217,8 +219,9 @@ function buildProvenance(
 // ── The Extract stage ─────────────────────────────────────────────────────────
 
 /**
- * Run the deterministic Stage-1 Extract over a frozen split. Pure given its
- * deps: identical `split` + deps → identical drafts, drops, and ledgers. The
+ * Run the deterministic Stage-1 Extract over a frozen split. Deterministic given
+ * its deps: identical `split` + deps → identical drafts, drops, and ledgers (the
+ * train slice is awaited sequentially, so ordering is stable). The
  * live LLM and GitHub IO are injected ports, so this orchestration is fully
  * CI-locked with a fixture extractor + a strict-spy fetch source.
  *
@@ -228,7 +231,10 @@ function buildProvenance(
  * `DraftCandidate` or loud-drop. Every train PR ends with at least one draft or
  * one drop (FM i, slice-2 half).
  */
-export function runExtractStage(split: SplitArtifact, deps: ExtractStageDeps): ExtractStageResult {
+export async function runExtractStage(
+  split: SplitArtifact,
+  deps: ExtractStageDeps,
+): Promise<ExtractStageResult> {
   const trainSet = new Set(split.trainPrs);
   const drafts: DraftCandidate[] = [];
   const dropEntries: DropLedgerEntry[] = [];
@@ -248,7 +254,7 @@ export function runExtractStage(split: SplitArtifact, deps: ExtractStageDeps): E
     // `slice: 'train'`.
     apiEntries.push({ targetPr: pr, slice: 'train', fetchKind: 'review-thread' });
 
-    const result = deps.source.fetch(pr);
+    const result = await deps.source.fetch(pr);
     if (result.kind === 'unreachable') {
       drop(pr, 'unreachable', result.detail ?? `review thread unreachable for train PR #${pr}`);
       continue;
@@ -276,7 +282,7 @@ export function runExtractStage(split: SplitArtifact, deps: ExtractStageDeps): E
     // a loud per-PR drop, not a run abort (Tenet 4: loud, recorded, continue).
     let draftBodies: string[];
     try {
-      draftBodies = deps.extractor.draft(content);
+      draftBodies = await deps.extractor.draft(content);
     } catch (err) {
       drop(
         pr,
