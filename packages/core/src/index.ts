@@ -782,6 +782,40 @@ export {
 } from './retrospect.js';
 
 // Spine: Gate-1 wind-tunnel evidence harness (mmnto-ai/totem#2188)
+export type { CandidateRuleRecord, ClassifierDisposition } from './spine/candidate-rule.js';
+export { CandidateRuleRecordSchema, ClassifierDispositionSchema } from './spine/candidate-rule.js';
+export type {
+  ApiFetchSlice,
+  ApiUsageLedger,
+  ApiUsageLedgerEntry,
+  ClassifierLedger,
+  ClassifierLedgerEntry,
+  DropLedger,
+  DropLedgerEntry,
+  DropReasonCode,
+  EmissionLedger,
+  EmissionLedgerEntry,
+  MinerLedgers,
+  Routing,
+  SplitLedger,
+} from './spine/ledgers.js';
+export {
+  ApiFetchSliceSchema,
+  ApiUsageLedgerEntrySchema,
+  ApiUsageLedgerSchema,
+  ClassifierLedgerEntrySchema,
+  ClassifierLedgerSchema,
+  DropLedgerEntrySchema,
+  DropLedgerSchema,
+  DropReasonCodeSchema,
+  EmissionLedgerEntrySchema,
+  EmissionLedgerSchema,
+  MinerLedgersSchema,
+  RoutingSchema,
+  SplitLedgerSchema,
+} from './spine/ledgers.js';
+export type { FalsificationResult, FmClause, FmViolation } from './spine/miner-harness.js';
+export { checkParsedLedgers, runFalsificationHarness } from './spine/miner-harness.js';
 export type {
   CodePathClassifier,
   PrMeta,
@@ -799,6 +833,14 @@ export {
   SelectionRuleParseError,
   selectionRulePredicate,
 } from './spine/selection-rule.js';
+export type { SplitArtifact, SplitCoverResult } from './spine/split.js';
+export {
+  mergeCommitMap,
+  resolveSplit,
+  SplitArtifactSchema,
+  SplitCoverError,
+  validateSplitCover,
+} from './spine/split.js';
 export type { WindtunnelLock } from './spine/windtunnel-lock.js';
 export { firingLabelId, WindtunnelLockSchema } from './spine/windtunnel-lock.js';
 export type {
