@@ -28,6 +28,18 @@ const PrNumber = z.number().int().positive();
 export const RoutingSchema = z.enum(['compile', 'rag-only']);
 export type Routing = z.infer<typeof RoutingSchema>;
 
+/**
+ * Provenance of a classifier-ledger disposition: a genuine classifier judgment
+ * (`classified`) vs a safe-default forced by classifier failure (`error-default`,
+ * always `behavioral`/RAG-only). Reported in the §8 done-criterion so a flaky
+ * classifier's error rate is a NAMED third cause of behavioral-heavy output —
+ * never conflated with "lc structural signal is sparse" (a valid HONEST-NEGATIVE)
+ * or "the classifier mis-routed everything" (Tenet 19). It is NOT a falsifying
+ * condition (no FM clause) — a done-criterion diagnostic, like `stage4Confirmed`.
+ */
+export const DispositionSourceSchema = z.enum(['classified', 'error-default']);
+export type DispositionSource = z.infer<typeof DispositionSourceSchema>;
+
 // ── 1. Emission ledger ──────────────────────────────────────────────────────
 
 export const EmissionLedgerEntrySchema = z.object({
@@ -96,6 +108,15 @@ export const ClassifierLedgerEntrySchema = z.object({
    * it without a schema change.
    */
   stage4Confirmed: z.boolean(),
+  /**
+   * Whether `disposition` is a genuine classifier judgment or a safe-default on
+   * classifier failure (always `behavioral`). Present-and-`'classified'` in normal
+   * runs; set `'error-default'` on the safe-default path (slice 3). Read by the §8
+   * terminal report (slice 5) to keep a flaky-classifier error rate from
+   * masquerading as structural-signal sparsity (Tenet 19, panel flag-5). Not an FM
+   * condition — a diagnostic, like `stage4Confirmed`.
+   */
+  dispositionSource: DispositionSourceSchema,
 });
 export type ClassifierLedgerEntry = z.infer<typeof ClassifierLedgerEntrySchema>;
 

@@ -34,8 +34,18 @@ function greenLedgers() {
     drop: { entries: [] as Array<Record<string, unknown>> },
     classifier: {
       entries: [
-        { candidateRef: 'cl-1', disposition: 'structural', stage4Confirmed: true },
-        { candidateRef: 'cl-2', disposition: 'structural', stage4Confirmed: true },
+        {
+          candidateRef: 'cl-1',
+          disposition: 'structural',
+          stage4Confirmed: true,
+          dispositionSource: 'classified',
+        },
+        {
+          candidateRef: 'cl-2',
+          disposition: 'structural',
+          stage4Confirmed: true,
+          dispositionSource: 'classified',
+        },
       ],
     },
     split: {
@@ -147,6 +157,7 @@ describe('runFalsificationHarness — each red fixture fails on EXACTLY its clau
       candidateRef: 'cl-3',
       disposition: 'structural',
       stage4Confirmed: true,
+      dispositionSource: 'classified',
     });
     expect(clauses(g)).toEqual(['e-emission']);
   });

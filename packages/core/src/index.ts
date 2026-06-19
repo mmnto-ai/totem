@@ -790,6 +790,18 @@ export { CandidateRuleRecordSchema, ClassifierDispositionSchema } from './spine/
 // it off the public barrel avoids inviting CLI-layer coupling to an ephemeral
 // type (greptile #2202). It stays reachable structurally via `ExtractStageResult`.
 export type {
+  ClassifierResult,
+  ClassifyStageDeps,
+  ClassifyStageResult,
+  DraftClassifier,
+} from './spine/classify.js';
+export {
+  assembleMinerLedgers,
+  ClassifierResultSchema,
+  dispositionToRouting,
+  runClassifyStage,
+} from './spine/classify.js';
+export type {
   DraftExtractor,
   ExtractStageDeps,
   ExtractStageResult,
@@ -806,6 +818,7 @@ export type {
   ApiUsageLedgerEntry,
   ClassifierLedger,
   ClassifierLedgerEntry,
+  DispositionSource,
   DropLedger,
   DropLedgerEntry,
   DropReasonCode,
@@ -821,6 +834,7 @@ export {
   ApiUsageLedgerSchema,
   ClassifierLedgerEntrySchema,
   ClassifierLedgerSchema,
+  DispositionSourceSchema,
   DropLedgerEntrySchema,
   DropLedgerSchema,
   DropReasonCodeSchema,
