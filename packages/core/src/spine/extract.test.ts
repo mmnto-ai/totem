@@ -218,18 +218,20 @@ describe('runExtractStage — drop reason codes', () => {
     expect(dropsFor(r, 1)[0]!.reasonCode).toBe('unparseable');
   });
 
-  it('unparseable: a thrown extractor is a loud per-PR drop, not a run abort', async () => {
+  it('a contract-violating extractor throw propagates (fail-loud, not swallowed)', async () => {
+    // The port contract is: return [] on a per-PR failure (the CLI adapter catches
+    // its own IO errors). A throw VIOLATES that contract and must NOT be silently
+    // swallowed — it propagates (Tenet 4). Per-PR resilience is the adapter's job;
+    // the []-returns path is covered by "extractor produced no draft" above.
     const throwingExtractor: DraftExtractor = {
       async draft(c) {
         if (c.pr === 1) throw new Error('boom');
         return [USABLE_DSL];
       },
     };
-    const r = await runExtractStage(split(), deps(spySource([1, 2]), throwingExtractor));
-    expect(dropsFor(r, 1)[0]!.reasonCode).toBe('unparseable');
-    expect(dropsFor(r, 1)[0]!.detail).toContain('extractor threw');
-    // PR 2 still processes — the run did not abort.
-    expect(r.drafts.map((d) => d.provenance.mergedPr)).toEqual([2]);
+    await expect(
+      runExtractStage(split(), deps(spySource([1, 2]), throwingExtractor)),
+    ).rejects.toThrow('boom');
   });
 });
 

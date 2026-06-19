@@ -34,6 +34,7 @@
 // the slice-4 compiler, never a manual-rule trust bypass.
 
 import { type ProvenanceRecord, ProvenanceRecordSchema } from '../compiler-schema.js';
+import { TotemParseError } from '../errors.js';
 import { extractManualPattern } from '../lesson-pattern.js';
 import type {
   ApiUsageLedger,
@@ -123,6 +124,14 @@ export interface ReviewThreadSource {
  * at the CLI layer (draft-only, Tenet-15); a deterministic fixture impl drives
  * tests. The miner is BLIND to seed classes (§7 / FM f): the port is never
  * handed one.
+ *
+ * Error contract: returns `[]` when it cannot draft from the thread — INCLUDING
+ * on its own internal/transient failure (the CLI adapter catches its LLM/network
+ * errors and surfaces `[]`). It MUST NOT throw for a per-PR content failure: an
+ * empty list is a loud drop below (FM-i-creditable), whereas a throw would abort
+ * the whole mining run. Keeping per-PR error handling in the adapter keeps the
+ * core orchestrator Tenet-4-clean (no swallowing catch); a contract-violating
+ * throw therefore propagates loudly rather than being silently absorbed.
  */
 export interface DraftExtractor {
   draft(content: ReviewThreadContent): Promise<string[]>;
@@ -185,8 +194,12 @@ function isUsableDsl(dslSource: string): boolean {
   if (dslSource.trim().length === 0) return false;
   try {
     return extractManualPattern(dslSource) !== null;
-  } catch {
-    return false;
+  } catch (err) {
+    // A TotemParseError is the EXPECTED authoring-error signal (e.g. a yaml fence
+    // under a non-ast-grep engine) → the draft is simply not usable DSL. Any OTHER
+    // error is an unexpected parser bug and must fail loud (Tenet 4).
+    if (err instanceof TotemParseError) return false;
+    throw err;
   }
 }
 
@@ -278,19 +291,11 @@ export async function runExtractStage(
       continue;
     }
 
-    // Draft zero-or-more DSL bodies (fold 1, list-shaped). A thrown extractor is
-    // a loud per-PR drop, not a run abort (Tenet 4: loud, recorded, continue).
-    let draftBodies: string[];
-    try {
-      draftBodies = await deps.extractor.draft(content);
-    } catch (err) {
-      drop(
-        pr,
-        'unparseable',
-        `extractor threw: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      continue;
-    }
+    // Draft zero-or-more DSL bodies (fold 1, list-shaped). Per the port's error
+    // contract the extractor returns [] on a per-PR failure (the CLI adapter
+    // catches its own LLM/network errors) — so the core needs no swallowing catch
+    // (Tenet 4). An empty list is a loud drop below, not a silent skip.
+    const draftBodies = await deps.extractor.draft(content);
 
     if (draftBodies.length === 0) {
       // A complete thread that yields no draft is a loud drop (keeps the train PR
