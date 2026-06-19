@@ -80,6 +80,8 @@ export interface SplitCoverResult {
   overlaps: { trainHeldOut: number[]; trainExcluded: number[]; heldOutExcluded: number[] };
   /** Control PRs not contained in `heldOutPrs` — controls must be tags WITHIN heldOut, not a separate bucket. */
   controlsOutsideHeldOut: number[];
+  /** PRs tagged as BOTH a positive and a negative control — a PR cannot be both (per-rule control coherence). */
+  controlOverlap: number[];
   /** Merge-commit SHAs appearing in more than one slice — disjoint by merge-commit, not only PR# (revert/target straddle guard). */
   mergeCommitCollisions: string[];
 }
@@ -102,6 +104,7 @@ function summarizeCover(r: SplitCoverResult): string {
   if (r.overlaps.heldOutExcluded.length)
     parts.push(`heldOut∩excluded=[${r.overlaps.heldOutExcluded}]`);
   if (r.controlsOutsideHeldOut.length) parts.push(`controls⊄heldOut=[${r.controlsOutsideHeldOut}]`);
+  if (r.controlOverlap.length) parts.push(`pos∩neg=[${r.controlOverlap}]`);
   if (r.mergeCommitCollisions.length)
     parts.push(`mergeCommitCollisions=[${r.mergeCommitCollisions}]`);
   return parts.join(' ');
@@ -133,6 +136,7 @@ export function validateSplitCover(
     [...split.positiveControlPrs, ...split.negativeControlPrs].filter((pr) => !heldOutSet.has(pr)),
   );
 
+  const controlOverlap = intersect(split.positiveControlPrs, split.negativeControlPrs);
   const mergeCommitCollisions = mergeCommitCollisionsAcrossSlices(split, mergeCommitByPr);
 
   const ok =
@@ -142,9 +146,10 @@ export function validateSplitCover(
     overlaps.trainExcluded.length === 0 &&
     overlaps.heldOutExcluded.length === 0 &&
     controlsOutsideHeldOut.length === 0 &&
+    controlOverlap.length === 0 &&
     mergeCommitCollisions.length === 0;
 
-  return { ok, cover, overlaps, controlsOutsideHeldOut, mergeCommitCollisions };
+  return { ok, cover, overlaps, controlsOutsideHeldOut, controlOverlap, mergeCommitCollisions };
 }
 
 /** SHAs whose owning PRs land in >1 slice. With 1:1 PR→SHA this also catches a malformed straddle. */

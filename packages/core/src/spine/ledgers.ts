@@ -61,8 +61,14 @@ export const DropReasonCodeSchema = z.enum([
 export type DropReasonCode = z.infer<typeof DropReasonCodeSchema>;
 
 export const DropLedgerEntrySchema = z.object({
-  /** Source PR of the dropped candidate, when known (absent only if provenance itself was incomplete). */
-  sourcePr: PrNumber.optional(),
+  /**
+   * Source PR of the dropped candidate. REQUIRED — the funnel always knows which
+   * train PR it is processing (it iterates the train slice), even for an
+   * `incomplete-provenance` drop where the review-thread/SHA is missing. An
+   * unrecorded source would make the drop uncreditable and open an undetectable
+   * FM(i) train-skip gap.
+   */
+  sourcePr: PrNumber,
   reasonCode: DropReasonCodeSchema,
   detail: z.string().optional(),
 });

@@ -31,7 +31,7 @@ function greenLedgers() {
       ],
       extractionInputsAttestation: { seedClassesProvided: false },
     },
-    drop: { entries: [] },
+    drop: { entries: [] as Array<Record<string, unknown>> },
     classifier: {
       entries: [
         { candidateRef: 'cl-1', disposition: 'structural', stage4Confirmed: true },
@@ -78,6 +78,14 @@ describe('runFalsificationHarness — green', () => {
     expect(r.ok).toBe(true);
     expect(r.violations).toEqual([]);
   });
+
+  it('allows a train PR in BOTH the emission and drop ledgers (FM(i) is at-least-one, not XOR)', () => {
+    const g = clone(greenLedgers());
+    // PR 2 already has an emitted candidate (c2); a second candidate from the same
+    // PR's review thread is dropped — in-both is legitimate, not a violation.
+    g.drop.entries.push({ sourcePr: 2, reasonCode: 'truncated' });
+    expect(runFalsificationHarness(g).ok).toBe(true);
+  });
 });
 
 describe('runFalsificationHarness — each red fixture fails on EXACTLY its clause', () => {
@@ -109,6 +117,12 @@ describe('runFalsificationHarness — each red fixture fails on EXACTLY its clau
   it('(e-split) control outside heldOut (slice disjointness)', () => {
     const g = clone(greenLedgers());
     g.split.split.positiveControlPrs = [1]; // a train PR, not in heldOut
+    expect(clauses(g)).toEqual(['e-split']);
+  });
+
+  it('(e-split) a PR tagged as both positive and negative control', () => {
+    const g = clone(greenLedgers());
+    g.split.split.negativeControlPrs = [3, 4]; // 3 is already a positive control
     expect(clauses(g)).toEqual(['e-split']);
   });
 

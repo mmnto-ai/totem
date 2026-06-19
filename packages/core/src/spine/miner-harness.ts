@@ -63,6 +63,10 @@ export function checkParsedLedgers(ledgers: MinerLedgers): FmViolation[] {
   return violations;
 }
 
+// Map a Zod parse failure to its FM clause by field path: `provenance.*` ⇒ FM(a)
+// (incomplete tuple), `unverified` ⇒ FM(b) (non-Yellow mint). These path strings
+// are PINNED by the (a)/(b) red-fixture tests — a schema field rename that broke
+// the mapping would fail those tests loudly, so the coupling is not silent.
 function mapZodIssueToClause(issue: { path: (string | number)[]; message: string }): FmViolation {
   const path = issue.path.join('.');
   const clause: FmClause = path.includes('unverified')
@@ -117,6 +121,7 @@ function checkSplitCover(ledgers: MinerLedgers, out: FmViolation[]): void {
     r.overlaps.trainExcluded.length +
     r.overlaps.heldOutExcluded.length +
     r.controlsOutsideHeldOut.length +
+    r.controlOverlap.length +
     r.mergeCommitCollisions.length;
   if (splitDisjointness > 0) {
     out.push({
@@ -124,7 +129,8 @@ function checkSplitCover(ledgers: MinerLedgers, out: FmViolation[]): void {
       detail:
         `slice disjointness violated — train∩heldOut=[${r.overlaps.trainHeldOut}] ` +
         `train∩excluded=[${r.overlaps.trainExcluded}] heldOut∩excluded=[${r.overlaps.heldOutExcluded}] ` +
-        `controls⊄heldOut=[${r.controlsOutsideHeldOut}] mergeCommitCollisions=[${r.mergeCommitCollisions}]`,
+        `controls⊄heldOut=[${r.controlsOutsideHeldOut}] pos∩neg=[${r.controlOverlap}] ` +
+        `mergeCommitCollisions=[${r.mergeCommitCollisions}]`,
     });
   }
 }
@@ -164,11 +170,14 @@ function checkApiUsage(ledgers: MinerLedgers, out: FmViolation[]): void {
 }
 
 // (i) — every train PR must be processed by the emission OR the drop ledger.
+// This is AT-LEAST-ONE (the ADR-111 FM(i) violation is "processed by NEITHER the
+// emission ledger NOR the drop ledger"), NOT exactly-one: a single PR's review
+// thread can yield multiple candidates, so the same train PR legitimately appears
+// in BOTH ledgers (one candidate emitted, another dropped). `sourcePr` is
+// required on every drop, so each drop is creditable here (no uncreditable gap).
 function checkTrainCoverage(ledgers: MinerLedgers, out: FmViolation[]): void {
   const emitted = new Set(ledgers.emission.entries.map((e) => e.provenance.mergedPr));
-  const dropped = new Set(
-    ledgers.drop.entries.map((d) => d.sourcePr).filter((pr): pr is number => pr !== undefined),
-  );
+  const dropped = new Set(ledgers.drop.entries.map((d) => d.sourcePr));
   for (const pr of ledgers.split.split.trainPrs) {
     if (!emitted.has(pr) && !dropped.has(pr)) {
       out.push({

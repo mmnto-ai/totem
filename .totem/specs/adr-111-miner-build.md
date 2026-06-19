@@ -45,7 +45,7 @@ Build the deterministic producer foundation — the `CandidateRuleRecord` Zod en
 - **`SplitArtifact` — persistent + frozen.** Committed under `.totem/spine/gate-1/split.lock.json` (sibling to `windtunnel.lock.json`). Created by `resolveSplit()` at split-freeze, **before extraction**; never mutated after freeze (frozen-before-window discipline, parallel to ADR-110's frozen-N). Read-only thereafter.
 - **The five ledgers — per-run.** Created at run start, written append-only per-stage, finalized at run end, consumed read-only by the harness. Each stage owns its writes; nothing re-mutates a finalized ledger.
 - **`CandidateRuleRecord[]` — per-run**, in-memory → emitted, flowing Stage-1 → Stage-2 → emission/drop ledger.
-- **The seam to get right:** the split is _persistent/frozen_ but the ledgers are _per-run_ — FM(i) asserts a per-run ledger (every `trainPr` in emission XOR drop) against the _frozen_ split, and **FM(e)'s emission half asserts the converse direction** (every emitted candidate's `provenance.mergedPr ∈` the frozen `trainPrs`). Both are frozen-split ↔ per-run reconciliations — the classic "flag consumed across lifecycle" hazard; the harness reconciles them explicitly, no shared mutable flag.
+- **The seam to get right:** the split is _persistent/frozen_ but the ledgers are _per-run_ — FM(i) asserts a per-run ledger (every `trainPr` in emission ∪ drop — **at-least-one**, since one PR may yield both an emitted and a dropped candidate) against the _frozen_ split, and **FM(e)'s emission half asserts the converse direction** (every emitted candidate's `provenance.mergedPr ∈` the frozen `trainPrs`). Both are frozen-split ↔ per-run reconciliations — the classic "flag consumed across lifecycle" hazard; the harness reconciles them explicitly, no shared mutable flag.
 
 ### Failure modes
 
@@ -73,7 +73,8 @@ No silent-degradation rows — every content/provenance failure resolves to a lo
 - A candidate missing any provenance field is dropped, never emitted (FM a).
 - Every emitted candidate has `unverified === true` literally (FM b).
 - A behavioral candidate never reaches compile-routed output and always carries a classifier-ledger entry (FM c).
-- Every `trainPr` appears in exactly one of {emission, drop} (FM i).
+- Every `trainPr` appears in **at least one** of {emission, drop} (FM(i) — the ADR violation is "processed by _neither_"; a PR may legitimately be in both, one candidate emitted and another dropped). Every drop carries a required `sourcePr` so it is creditable here.
+- Positive and negative control tags are disjoint — a PR is never both a positive and a negative control.
 - `ApiUsageLedger.heldOutFetchCount === 0` (FM h); emission ledger carries the seed-blindness attestation (FM f).
 - **Per-clause red fixtures:** for each of the 9 FM clauses, a hand-built failing fixture makes the harness fail on _exactly_ that clause (plus a green fixture that passes clean). **FM(e) gets two** red fixtures (split-disjointness + emission-membership); the (d)/(g) fixtures rely on the direction-disambiguated cover diagnostic. This is what makes slice 1 a real contract lock without an LLM (the #2188 control-fixture discipline).
 

@@ -58,6 +58,12 @@ describe('validateSplitCover', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('flags a PR tagged as both a positive and negative control', () => {
+    const r = validateSplitCover(split({ negativeControlPrs: [3, 4] }), corpus, mc);
+    expect(r.controlOverlap).toEqual([3]);
+    expect(r.ok).toBe(false);
+  });
+
   it('flags a merge-commit collision across slices', () => {
     const collide = new Map(mc);
     collide.set(3, sha(2)); // PR 3 (heldOut) collides with PR 2 (train)
