@@ -148,4 +148,18 @@ describe('resolveSplit — forward-ancestry cut', () => {
       }),
     ).toThrow(/does not cover the corpus/);
   });
+
+  it('throws when cutIndex exceeds the non-excluded corpus size', () => {
+    expect(() =>
+      resolveSplit({
+        asOfCommit: sha(100),
+        corpus,
+        orderedNewestFirst: [4, 3, 2, 1],
+        excludedPrs: [],
+        cutIndex: 5, // corpus size is 4
+        predicate: 'p',
+        mergeCommitByPr: mcMap(corpus),
+      }),
+    ).toThrow(/cutIndex 5 exceeds/);
+  });
 });

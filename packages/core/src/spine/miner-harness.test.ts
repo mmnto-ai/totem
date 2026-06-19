@@ -186,4 +186,12 @@ describe('runFalsificationHarness — schema completeness', () => {
     expect(r.ok).toBe(false);
     expect(r.violations.some((v) => v.clause === 'schema')).toBe(true);
   });
+
+  it('rejects a non-SHA mergeCommit in the split ledger', () => {
+    const g = clone(greenLedgers());
+    g.split.corpusMergeCommits[0].mergeCommit = 'not-a-sha';
+    const r = runFalsificationHarness(g);
+    expect(r.ok).toBe(false);
+    expect(r.violations.some((v) => v.clause === 'schema')).toBe(true);
+  });
 });

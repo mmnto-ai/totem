@@ -240,6 +240,13 @@ export function resolveSplit(params: {
   const oldestFirstNonExcluded = [...newestFirstCorpus]
     .reverse()
     .filter((pr) => !excludedSet.has(pr));
+  // `slice` would silently clamp a too-large cutIndex, yielding an empty heldOut
+  // slice that bypasses control evaluation — fail loud on an out-of-bounds cut.
+  if (params.cutIndex > oldestFirstNonExcluded.length) {
+    throw new Error(
+      `[Totem Error] resolveSplit: cutIndex ${params.cutIndex} exceeds the non-excluded corpus size of ${oldestFirstNonExcluded.length}`,
+    );
+  }
   const trainPrs = uniqueSorted(oldestFirstNonExcluded.slice(0, params.cutIndex));
   const heldOutPrs = uniqueSorted(oldestFirstNonExcluded.slice(params.cutIndex));
 

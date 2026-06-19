@@ -98,7 +98,16 @@ export const SplitLedgerSchema = z
     /** The frozen corpus = `selectionRule(asOfCommit)` the cover is checked against. */
     corpus: z.array(PrNumber),
     /** PR → merge-commit, for the disjoint-by-merge-commit check (rebuilds the map). */
-    corpusMergeCommits: z.array(z.object({ pr: PrNumber, mergeCommit: z.string() })),
+    corpusMergeCommits: z.array(
+      z.object({
+        pr: PrNumber,
+        // Lowercase 40-hex SHA (same canonical form as asOfCommit / provenance.commitSha)
+        // — a generic string would admit case/format bypasses of the collision check.
+        mergeCommit: z.string().regex(/^[0-9a-f]{40}$/, {
+          message: 'mergeCommit must be a lowercase 40-hex SHA',
+        }),
+      }),
+    ),
   })
   .refine(
     (d) => {
