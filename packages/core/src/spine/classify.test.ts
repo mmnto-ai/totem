@@ -256,6 +256,20 @@ describe('runClassifyStage — safe-default + fail-loud error contracts', () => 
       }),
     ).rejects.toThrow();
   });
+
+  it('rejects an error-default paired with a structural disposition (safe-default must be low-privilege)', async () => {
+    // A buggy adapter must not be able to compile-route a failure default: the
+    // ClassifierResultSchema refine rejects `{ structural, error-default }` before routing.
+    const inconsistent: DraftClassifier = {
+      classify: () =>
+        Promise.resolve({ disposition: 'structural', dispositionSource: 'error-default' }),
+    };
+    await expect(
+      runClassifyStage(extractResult({ drafts: [draft(1, STRUCT)] }), splitLedger(), {
+        classifier: inconsistent,
+      }),
+    ).rejects.toThrow();
+  });
 });
 
 // ── Fail-loud provenance re-check (FM(e-emission) at the stage boundary) ──────
@@ -279,6 +293,22 @@ describe('runClassifyStage — fail-loud provenance re-check', () => {
         classifier: always(asStructural),
       }),
     ).rejects.toThrow(/frozen merge commit/);
+  });
+
+  it('throws when the split ledger has no frozen merge commit for a train PR (unvalidated cover)', async () => {
+    // Cover-validity is the harness's job, not the SplitLedger schema's — so a caller
+    // can hand in a SplitLedger whose corpusMergeCommits omits a train PR. The stage
+    // must fail loud rather than mint a candidate with no frozen-SHA anchor.
+    const sl = splitLedger();
+    const holey: SplitLedger = {
+      ...sl,
+      corpusMergeCommits: sl.corpusMergeCommits.filter((e) => e.pr !== 1),
+    };
+    await expect(
+      runClassifyStage(extractResult({ drafts: [draft(1, STRUCT)] }), holey, {
+        classifier: always(asStructural),
+      }),
+    ).rejects.toThrow(/no frozen merge commit/);
   });
 });
 

@@ -62,10 +62,20 @@ import {
  * on classifier failure (see below). Parsed at the core boundary (a non-enum value
  * from a buggy adapter fails loud here, BEFORE routing/mint).
  */
-export const ClassifierResultSchema = z.object({
-  disposition: ClassifierDispositionSchema,
-  dispositionSource: DispositionSourceSchema,
-});
+export const ClassifierResultSchema = z
+  .object({
+    disposition: ClassifierDispositionSchema,
+    dispositionSource: DispositionSourceSchema,
+  })
+  .refine((v) => v.dispositionSource !== 'error-default' || v.disposition === 'behavioral', {
+    // The safe-default is low-privilege BY DEFINITION: an `error-default` is always
+    // `behavioral` (RAG-only), never compile-eligible. Enforce it structurally so a
+    // buggy adapter returning `{ structural, error-default }` cannot reach
+    // `dispositionToRouting` and compile-route a failure default (Tenet 15 > prose).
+    message:
+      "dispositionSource 'error-default' requires disposition 'behavioral' — the safe-default is always low-privilege (RAG-only), never compile-eligible",
+    path: ['disposition'],
+  });
 export type ClassifierResult = z.infer<typeof ClassifierResultSchema>;
 
 /**
