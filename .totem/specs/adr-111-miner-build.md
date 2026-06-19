@@ -287,3 +287,110 @@ No silent-degradation rows — the only "soft" path (classifier internal failure
 **Carried-forward (panel-confirmed):** flag-3 frozen-actuator seam = slice-4-binding (slice-3 mints only the `structural` _label_, compiles nothing); flag-4/#2201 (ADR-095 before-promotion gate) = independent of slice 3.
 
 **Pre-build status:** design folded + panel-reviewed (gemini APPROVE / strategy FAITHFUL+flag-5 / codex CONCERN-folds / agy PASS-folds — all convergent, no blockers; the binding fold is the auditable safe-default). **Build gated on operator greenlight (Phase-4 gate).**
+
+---
+
+## Implementation Design (Slice 4 — Stage-3 Compile + Stage-4 Verify-Against-Codebase)
+
+**Grounded:** 2026-06-19 via an Explore sweep of the compile/Stage-4 surface (kept off the controller context) + the slice-1/2/3 envelope/ledger/harness code. `totem spec` skipped (cross-repo-ADR-driven → confabulation risk, per #2172/0103). **Recovery note (2026-06-19):** this section was authored + panel-reviewed (4/4 convergent) but the on-disk append was lost (uncommitted spec WIP, consistent with the shared-working-tree cross-stream hazard — a co-resident checkout can clobber untracked WIP); reconstructed verbatim-faithful from the four 2211Z pre-build dispatches + the four panel verdicts (codex 2224Z / strategy 2226Z / agy 2228Z / gemini 2230Z) + strategy's 2153Z flag-3 read, all retained under `.totem/orchestration/totem-claude/{outbox,processed}/`.
+
+### Scope
+
+Build the **fresh non-frozen G-series compile actuator** + wire the shipped Stage-4 codebase verifier. For each **compile-routed (structural)** slice-3 `CandidateRuleRecord`: parse its `dslSource` (lesson-markdown body) into a `CompiledRule` via the reused `lesson-pattern.ts` format/parser + per-engine safety validators, mint it `unverified:true` with **`legitimacy`/`ruleClass` ABSENT**, run `verifyAgainstCodebase` (#1682) through an **injected `Stage4VerifierDeps` port**, map the Stage-4 outcome onto the rule's `status`/`confidence`/`severity`, and record the outcome on the classifier ledger (flip `stage4Confirmed` + set the new `stage4Outcome`). Output `CompiledCandidate[]` carrying `provenance` forward for slice-5's wind-tunnel stamp.
+
+**Will NOT:** call the frozen legacy actuator (`compileLesson`/`buildCompiledRule`/`buildManualRule`, the `LessonInput` path) — flag-3, BINDING; use any LLM (Stage-4 is the deterministic zero-LLM backstop, Tenet-15); stamp `legitimacy`/`ruleClass`/controls or run the wind-tunnel (slice 5); persist any rule to a loadable manifest (slice 5, after stamping); project `CandidateRuleRecord`/`CompiledCandidate` into `legitimacy.provenance` (slice 5).
+
+### The freeze boundary (flag-3 — RESOLVED, structurally)
+
+strategy-claude verified (2153Z + 2226Z) that **no G-series compile entrypoint exists** (`packages/core/src/spine/` has no `compile.ts`; the only `compile.ts` is the CLI's frozen `LessonInput → compiled-rules.json` actuator). So slice 4 **builds** the actuator; it cannot route through the frozen one (different input type — `CandidateRuleRecord` vs `LessonInput`). **The frozen boundary is the ACTUATOR, not the format/parser/validator:**
+
+- **Reuse permitted (outside freeze, confirmed by ≥3 live non-frozen call sites):** `extractManualPattern`/`engineFields` (`lesson-pattern.ts` — data-format/parser), `hashLesson` (pure util), `validateRegex` (defined in `compiler.ts`, NOT the frozen `compile-lesson.ts`; already consumed live by `eslint-adapter`/`lesson-linter`/`semgrep-adapter` — a frozen-internal fn wouldn't be a shared leaf; `freeze.json`'s `do-not` ops — edit `.totem/lessons/**`, run `totem lesson compile`, hand-edit `compiled-rules.json` — touch none of it), `verifyAgainstCodebase` (#1682, shipped).
+- **Forbidden (the line):** importing/calling `compileLesson`/`buildCompiledRule`/`buildManualRule`, or re-entering the `LessonInput` `compileCommand` path. ADR-103's full depth (DSL→IR→SMT→GFV) stays **inherited/deferred** per ADR-111 §2 — slice 4 builds only the compile _seam_ + the #1682 verifier.
+
+### Data model deltas (`packages/core/src/spine/`)
+
+- **`CompiledCandidate`** (`spine/compile.ts`, new) — `{ provenance: ProvenanceRecordSchema, classifierLedgerRef: string, rule: CompiledRule, stage4: Stage4VerificationResult }`. The slice-4 output, one per compiled (structural) candidate. Carries `provenance` **un-projected** (slice-5 projects it into `legitimacy.provenance`) and the full `stage4` payload (so the `no-matches` vs `out-of-scope` distinction survives to slice 5 — codex).
+- **`ClassifierLedgerEntry.stage4Outcome`** (`spine/ledgers.ts`, **the Q3 binding fold**) — additive enum riding alongside `stage4Confirmed`/`dispositionSource`: `'confirmed' | 'untested-no-matches' | 'archived-out-of-scope' | 'compile-rejected'`. The §8 done-criterion reads the **ledger** (not `rule.status`, which lives on the rule); the bare `stage4Confirmed:false` boolean **conflates** `no-matches→untested` (neutral/inconclusive) with `out-of-scope→archived` (the backstop _actively rejected_ a mis-structural candidate — a real classifier-over-eager thesis signal). Identical Tenet-19 shape to slice-3 flag-5 (`dispositionSource`). **No new FM clause** (a done-criterion reporting field, not a falsifying condition; harness a–i unchanged, fixtures gain the field).
+- **`CompiledRule`** — REUSE the shipped `CompiledRuleSchema`. Mint with `unverified:true`, NO `legitimacy`, NO `ruleClass`, **NO `manual:true`** (the reused markdown is the manual/Pipeline-1 _syntax_ but the provenance class is LLM-generated/unverified — codex). `refineLegitimacyRuleClassConsistency` requires both-present-or-both-absent; both-absent is valid. `pattern`/`astQuery`/`astGrepPattern`/`astGrepYamlRule` via `engineFields`; `fileGlobs` sanitized exactly as the existing compiler path; `lessonHash = hashLesson(...)`; any `compiledAt`/`createdAt`/`archivedAt` use **injected `now`**.
+
+### The actuator
+
+- **`compileCandidate(candidate, { now })`** — pure (no IO): throws on `classifierDisposition === 'behavioral'` (FM(c) code backstop); parses `dslSource` via `extractManualPattern`; **per-engine safety validation, fail-loud** — regex → `validateRegex`, ast-grep flat/yaml → `validateAstGrepPattern` (+ sanitized globs); on `{valid:false}` the candidate resolves to `stage4Outcome: 'compile-rejected'` (a counted, reported state — loud, never a silent compile or skipped check; strategy sharpening). A structural candidate whose `dslSource` yields **no usable pattern at all** → **throw** (producer-contract violation: slice-2's `isUsableDsl` preflight should have prevented emission; surfacing a preflight↔parser desync loudly, not routinely rejecting — agy red fixture #2).
+- **`runCompileStage(classifyResult, deps)`** — selects **only** compile-routed (structural) entries; compiles **sequentially in stable classify-output order** (ordinals before any async reorder); for each, runs Stage-4 then maps the outcome; updates the classifier ledger entry found by `classifierLedgerRef` — requiring **exactly one** match (missing/duplicate → fail loud; else confirmation is lost or applied to the wrong row — codex). `deps = { stage4: Stage4VerifierDeps, now: string }`.
+
+### Stage-4 outcome → status mapping
+
+| Stage-4 outcome        | `status`                                                                     | `confidence`/`severity`      | `stage4Confirmed` | `stage4Outcome`         |
+| ---------------------- | ---------------------------------------------------------------------------- | ---------------------------- | ----------------- | ----------------------- |
+| `in-scope-bad-example` | `active` (set explicitly)                                                    | `confidence: high`           | `true`            | `confirmed`             |
+| `candidate-debt`       | `active` (set explicitly)                                                    | `severity: warning` (forced) | `true`            | `confirmed`             |
+| `no-matches`           | `untested-against-codebase`                                                  | —                            | `false`           | `untested-no-matches`   |
+| `out-of-scope`         | `archived` (reason `stage4-out-of-scope-match`, `archivedAt`=injected `now`) | —                            | `false`           | `archived-out-of-scope` |
+| (validation failure)   | not produced as a rule                                                       | —                            | `false`           | `compile-rejected`      |
+
+`status:'active'` is set **explicitly** (never relying on legacy "missing status ⇒ active"). `stage4Confirmed` means "Stage-4 produced positive in-scope evidence sufficient for an active rule" → active outcomes confirmed, inert/archive/rejected not. **Out-of-scope archival is slice-4's call** (§4 deterministic structural backstop — the SAFE direction, demote-never-promote; distinct axis from the wind-tunnel's legitimacy-over-controls — strategy Q4).
+
+### Determinism (Tenet-15 / OQ1)
+
+Inject `now: string` (no `new Date()` in core — matches the `asOfCommit` frozen-timestamp discipline). **Sort `deps.stage4.listFiles()`** before feeding `verifyAgainstCodebase` (the verifier preserves file order for `candidateDebtLines`; unsorted walks change output — codex). Compile sequentially in stable order. Identical inputs + fixed deps → identical `CompiledCandidate[]` + ledgers.
+
+### State lifecycle
+
+- **`CompiledCandidate[]`** — per-run, in-memory, built as `runCompileStage` iterates; never persisted in slice 4 (non-persistence is the load-bearing §1 "blast-radius-zero" guard — slice 5 stamps before any manifest write).
+- **`ClassifierLedger`** — slice-3 wrote it; slice 4 **mutates the matched entry** (sets `stage4Confirmed` + `stage4Outcome`) as the sole slice-4 ledger write. No new ledger (§8 has five; Tenet-21).
+- Cross-lifecycle seam: the classifier ledger is written at classify (slice 3) and **completed** at compile (slice 4) — the matched-entry update is the only mutation, keyed by `classifierLedgerRef`, exactly-one-or-fail-loud.
+
+### Failure modes
+
+| Failure                                                                | Category           | Surface                                                              | Recovery                              |
+| ---------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------- | ------------------------------------- |
+| behavioral candidate handed to `compileCandidate`                      | contract violation | **throw** (FM(c) code backstop)                                      | fix routing; never compile behavioral |
+| structural `dslSource` yields no usable pattern                        | producer bug       | **throw** (preflight↔parser desync, fail loud — Tenet 4)             | fix slice-2 preflight / parser sync   |
+| pattern parses but fails `validateRegex`/`validateAstGrepPattern`      | runtime            | `stage4Outcome: 'compile-rejected'` (counted, reported; no rule)     | candidate not promoted; surfaced      |
+| missing or duplicate classifier-ledger entry for `classifierLedgerRef` | integrity          | **fail loud**                                                        | fix ref minting / join                |
+| `out-of-scope` (rule fires on clean baseline)                          | backstop           | `status: archived` (safe demote)                                     | rejected by producer before slice 5   |
+| `no-matches`                                                           | neutral            | `status: untested-against-codebase` (legitimately unconfirmed)       | wind-tunnel may still score (slice 5) |
+| ast/ast-grep-yaml rule verified without `workingDirectory`             | runtime            | **loud error** (never graceful-degrade to `no-matches` — agy fix #3) | set deps                              |
+| `deps.readFile` throws on a listed file                                | runtime            | **propagate loudly** preserving `cause` (agy fix #4)                 | —                                     |
+
+### Invariants to lock via tests (deterministic, fixture Stage-4 deps)
+
+- **Frozen-actuator never called** (agy fold-1, BINDING): spy/mock asserts `compileLesson`/`buildCompiledRule`/`buildManualRule` are never invoked in a G-series run; structural assertion that `compiledAt`/`createdAt`/`archivedAt` strictly equal injected `now` (no `new Date()`).
+- **Only structural compiles**: behavioral → throw (handed directly to `compileCandidate` AND present in `runCompileStage`'s input); `runCompileStage` selects only compile-routed entries.
+- **Four Stage-4 outcome maps** (agy fold-2): one fixture `Stage4VerifierDeps` file-map per outcome (`in-scope-bad-example`/`candidate-debt`/`no-matches`/`out-of-scope`) → asserts the status/confidence/severity/`stage4Confirmed`/`stage4Outcome` row above.
+- **Parse fidelity both engines**: regex AND ast-grep-yaml round-trip through `extractManualPattern`/`engineFields`.
+- **Mapping/mint constraints**: `unverified:true`; no `legitimacy`/`ruleClass`/`manual`; provenance + `classifierLedgerRef` on `CompiledCandidate` not the rule; `lessonHash = hashLesson(...)`; globs sanitized.
+- **Classifier-ledger join**: exactly-one match required; missing ref → fail loud; duplicate ref → fail loud; `stage4Confirmed`/`stage4Outcome` flip on the **right** `clr-…` row.
+- **`compile-rejected` on unsafe pattern**: a ReDoS-unsafe regex (and an invalid ast-grep rule) → `stage4Outcome: 'compile-rejected'`, no active rule.
+- **Determinism**: fixed `now` + fixed deps → byte-identical output; unsorted `listFiles` would change output (so the sort is locked).
+- **Red fixtures** (agy appendix): `unusable-dsl-source`→throw; `missing-working-directory`→loud; `readFile-failure`→propagate with `cause`.
+- **§8 harness end-to-end** (real classify→compile output → `runFalsificationHarness` green) + the OQ4 active-invariant red craft below.
+
+### §8 harness change (OQ4 — gemini/agy/strategy convergent)
+
+Add an `active ⟹ stage4Confirmed === true` consistency check, scoped to `status:'active'` rules **only** — explicitly **exempt** `archived` + `untested-against-codebase` (legitimately `stage4Confirmed:false`, NOT FM violations — agy fold-3). **No new FM letter** (strategy's lean; by-construction the `Stage4Decision` atomic map makes desync unreachable, but the check is locked symmetric to FM(c)). Red craft: an active rule with `stage4Confirmed:false` → hard harness failure; archived/untested pass clean. §8 can then report the verify-split "N structural-routed → A confirmed-active / B untested / C archived-by-backstop / D compile-rejected" (the compile-stage twin of the classifier-routing split §8 already reports).
+
+### Panel verdicts + folds (authoritative over inline text where they conflict)
+
+Four-seat cohort panel, all independent (#2167), **4/4 convergent, no blockers**:
+
+- **gemini** (tenet/architecture) — **APPROVED, no concerns** (7/7 PASS; Tenet-21 reuse, flag-3 boundary, Tenet-9 sensor-only/legitimacy-absent, Tenet-15 inject-`now`, core-IO-free DI, decomposition, OQ4-here all PASS).
+- **strategy-claude** (ADR-111 fidelity) — **FAITHFUL DISCHARGE + 1 binding fold (Q3)** + 4 confirmations: Q1/OQ3 `validateRegex` CONFIRMED outside-freeze (structural) + fail-loud-on-`{valid:false}` sharpening; Q4 archival = slice-4's (§4, distinct axis); Q5/OQ4 active⟹confirmed by-construction (verified≠certified), no new FM letter; OQ1/2/5 concur.
+- **codex** (contract/correctness) — **CONCERN → build-folds**: per-engine validator (`validateRegex` regex-only; ast-grep needs `validateAstGrepPattern`+globs; don't import `buildManualRule` for it); no `manual:true`; explicit `status:'active'` + injected-`now` timestamps; classifier-ledger join exactly-one; sort `listFiles`; retain `stage4` payload to slice 5 (no 6th ledger).
+- **agy** (build/test-completeness) — **PASS + 4 folds**: frozen import/call-spy; 4-outcome fixture maps; harness active-only exemption map; decoupled provenance handoff; + 4 red-fixture targets (behavioral-throw, unusable-dsl-throw, missing-workingDirectory-loud, readFile-failure-propagate).
+
+**Binding build item:** the Q3 `stage4Outcome` ledger field (3-seat: strategy Q3 = codex "stage4Confirmed loses no-matches vs out-of-scope" = the slice-3 flag-5 shape).
+
+### Carried-forward bindings (slice 5, pinned here)
+
+1. **Stamp-before-persist** — slice 5 stamps `legitimacy`/`ruleClass` BEFORE any write to a loadable manifest; never persist an unstamped `unverified:true` rule to `.totem/compiled-rules.json`.
+2. **Archived ≠ wind-tunnel FP** — `out-of-scope` archivals are rejected by the producer before the wind-tunnel; they never enter the scored set. Conversely Stage-4-`active` ≠ legitimate (still Yellow, still owes the wind-tunnel).
+3. **#2201 resolution-filtering** (ADR-111 §6/§8 — the ADR-095 label was strategy's mislabel, corrected) — before-promotion gate; lands in the slice-5 adapter's initial impl as a named, separately-reviewable sub-step (flag-4 holds by construction).
+4. **Engine-proxy verify** — confirm `run-compiled-rules.ts` honors top-level `unverified:true` so a leaked unstamped candidate can't read as `hard` (the engine-type proxy fallback for an unstamped rule).
+
+### Dispositions
+
+- **Operator 2026-06-19:** "finish the spine first" — **build greenlight** for slice 4 (Phase-4 gate cleared). Merge remains a separate explicit operator call per PR (close-keyword caution: PR "Part of #2199", #2199 stays open).
+- **Cohort panel (pre-build, 2026-06-19):** 4/4 convergent (above); the only build-blocking item was Q3 (the additive `stage4Outcome` field), folded into this design. strategy owns the ADR-111 §3 prose↔schema erratum + §5 codification (their fast-follows, non-blocking).
+
+**Pre-build status:** design folded + panel-blessed (4/4 approve) + re-persisted after WIP loss. **Build greenlit (operator 2026-06-19).** Next: slice 5 (certifying run = #2189 item 1) folds in #2201 + discharges the 4 bindings above.

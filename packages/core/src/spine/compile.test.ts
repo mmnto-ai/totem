@@ -1,0 +1,422 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import type { CandidateRuleRecord } from './candidate-rule.js';
+import {
+  type ClassifierResult,
+  type ClassifyStageResult,
+  type DraftClassifier,
+  runClassifyStage,
+} from './classify.js';
+import {
+  compileCandidate,
+  type CompiledCandidate,
+  type CompileStageDeps,
+  runCompileStage,
+} from './compile.js';
+import type { DraftCandidate, ExtractStageResult } from './extract.js';
+import type { MinerLedgers, SplitLedger } from './ledgers.js';
+import { runFalsificationHarness } from './miner-harness.js';
+
+// The frozen LessonInput actuator is wrapped in spies so the call-spy test (agy
+// fold-1) can assert the G-series path NEVER touches it. `validateAstGrepPattern`
+// (the one symbol compile.ts imports from this module) is preserved via `...actual`.
+vi.mock('../compile-lesson.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../compile-lesson.js')>();
+  return {
+    ...actual,
+    compileLesson: vi.fn(actual.compileLesson),
+    buildCompiledRule: vi.fn(actual.buildCompiledRule),
+    buildManualRule: vi.fn(actual.buildManualRule),
+  };
+});
+import * as frozenActuator from '../compile-lesson.js';
+
+const sha = (n: number): string => String(n).padStart(40, '0');
+const NOW = '2026-06-19T12:00:00.000Z';
+
+// ── dslSource fixtures (lesson-markdown bodies the slice-2/3 format produces) ──
+
+const REGEX_DSL = [
+  '**Pattern:** `forbiddenCall\\(`',
+  '**Engine:** regex',
+  '**Severity:** warning',
+  '',
+  '### Bad Example',
+  '```ts',
+  'forbiddenCall()',
+  '```',
+].join('\n');
+
+// Same pattern, severity error — used to prove candidate-debt FORCES warning.
+const REGEX_DSL_ERROR = REGEX_DSL.replace('**Severity:** warning', '**Severity:** error');
+
+// A ReDoS-unsafe pattern — `validateRegex` rejects → compile-rejected.
+const REDOS_DSL = ['**Pattern:** `(a+)+$`', '**Engine:** regex'].join('\n');
+
+// engine: ast (tree-sitter query) — no ReDoS validator, so it compiles; used to
+// exercise the workingDirectory guard without the ast-grep napi parser.
+const AST_DSL = ['**Pattern:** `(call_expression)`', '**Engine:** ast'].join('\n');
+
+// A compound ast-grep yaml rule — parse-fidelity check for the yaml engine.
+const ASTGREP_YAML_DSL = [
+  '**Engine:** ast-grep',
+  '**Pattern:**',
+  '```yaml',
+  'rule:',
+  '  pattern: console.log($MSG)',
+  '```',
+].join('\n');
+
+// No `**Pattern:**` — `extractManualPattern` returns null (a structural candidate
+// here is a producer-contract violation: slice-2 preflight should have dropped it).
+const NO_PATTERN_DSL = 'Prefer composition over inheritance — a behavioral note.';
+
+// ── Builders ──────────────────────────────────────────────────────────────────
+
+function candidateRule(
+  pr: number,
+  dslSource: string,
+  disposition: 'structural' | 'behavioral' = 'structural',
+  ordinal = 0,
+): CandidateRuleRecord {
+  return {
+    provenance: { mergedPr: pr, reviewThread: `rt-${pr}`, commitSha: sha(pr) },
+    classifierDisposition: disposition,
+    classifierLedgerRef: `clr-${pr}-${ordinal}`,
+    dslSource,
+    unverified: true,
+  };
+}
+
+/** A minimal ClassifyStageResult with emission + classifier ledgers consistent with the candidates. */
+function classifyResultOf(candidates: CandidateRuleRecord[]): ClassifyStageResult {
+  return {
+    candidates,
+    emissionLedger: {
+      entries: candidates.map((c, i) => ({
+        candidateRef: `cand-${c.provenance.mergedPr}-${i}`,
+        provenance: c.provenance,
+        classifierDisposition: c.classifierDisposition,
+        routing: c.classifierDisposition === 'structural' ? 'compile' : 'rag-only',
+        classifierLedgerRef: c.classifierLedgerRef,
+        unverified: true,
+      })),
+      extractionInputsAttestation: { seedClassesProvided: false },
+    },
+    classifierLedger: {
+      entries: candidates.map((c) => ({
+        candidateRef: c.classifierLedgerRef,
+        disposition: c.classifierDisposition,
+        stage4Confirmed: false,
+        dispositionSource: 'classified' as const,
+      })),
+    },
+  };
+}
+
+/** Stage-4 deps backed by an in-memory file map. `readFile` rejects for a listed-but-absent file. */
+function compileDeps(
+  files: Record<string, string>,
+  overrides: Partial<CompileStageDeps> = {},
+): CompileStageDeps {
+  return {
+    now: NOW,
+    stage4: {
+      listFiles: () => Promise.resolve(Object.keys(files)),
+      readFile: (f: string) =>
+        f in files ? Promise.resolve(files[f] as string) : Promise.reject(new Error(`absent ${f}`)),
+      ...overrides.stage4,
+    },
+    ...('baseline' in overrides ? { baseline: overrides.baseline } : {}),
+    ...('now' in overrides ? { now: overrides.now } : {}),
+  };
+}
+
+const single = (dsl: string, disp: 'structural' | 'behavioral' = 'structural') =>
+  classifyResultOf([candidateRule(1, dsl, disp)]);
+
+// ── compileCandidate (pure) ─────────────────────────────────────────────────
+
+describe('compileCandidate', () => {
+  it('compiles a regex structural candidate: unverified, no legitimacy/ruleClass/manual, injected now', () => {
+    const out = compileCandidate(candidateRule(1, REGEX_DSL), { now: NOW });
+    expect(out.kind).toBe('compiled');
+    if (out.kind !== 'compiled') throw new Error('unreachable');
+    const { rule } = out;
+    expect(rule.engine).toBe('regex');
+    expect(rule.pattern).toBe('forbiddenCall\\(');
+    expect(rule.unverified).toBe(true);
+    expect(rule.legitimacy).toBeUndefined();
+    expect(rule.ruleClass).toBeUndefined();
+    expect(rule.manual).toBeUndefined();
+    expect(rule.badExample).toBe('forbiddenCall()');
+    expect(rule.compiledAt).toBe(NOW);
+    expect(rule.createdAt).toBe(NOW);
+    expect(rule.lessonHeading).toBe('Gate-1 rule candidate (clr-1-0)');
+  });
+
+  it('throws on a behavioral candidate (FM(c) code backstop)', () => {
+    expect(() => compileCandidate(candidateRule(1, REGEX_DSL, 'behavioral'), { now: NOW })).toThrow(
+      /behavioral candidate .* must never be compiled/,
+    );
+  });
+
+  it('throws on a structural candidate with no usable pattern (preflight↔parser desync)', () => {
+    expect(() => compileCandidate(candidateRule(1, NO_PATTERN_DSL), { now: NOW })).toThrow(
+      /no usable pattern/,
+    );
+  });
+
+  it('rejects (not throws) a ReDoS-unsafe regex → compile-rejected', () => {
+    const out = compileCandidate(candidateRule(1, REDOS_DSL), { now: NOW });
+    expect(out.kind).toBe('rejected');
+  });
+
+  it('parses a compound ast-grep yaml rule (engine ast-grep, astGrepYamlRule populated)', () => {
+    const out = compileCandidate(candidateRule(1, ASTGREP_YAML_DSL), { now: NOW });
+    expect(out.kind).toBe('compiled');
+    if (out.kind !== 'compiled') throw new Error('unreachable');
+    expect(out.rule.engine).toBe('ast-grep');
+    expect(out.rule.astGrepYamlRule).toBeDefined();
+    expect(out.rule.pattern).toBe('');
+  });
+});
+
+// ── runCompileStage — the four Stage-4 outcome maps (regex, deterministic) ────
+
+describe('runCompileStage — Stage-4 outcome → status/ledger maps', () => {
+  it('in-scope-bad-example → active/high/confirmed', async () => {
+    const r = await runCompileStage(
+      single(REGEX_DSL),
+      compileDeps({ 'src/a.ts': 'forbiddenCall()' }),
+    );
+    expect(r.compiled).toHaveLength(1);
+    expect(r.compiled[0]?.stage4.outcome).toBe('in-scope-bad-example');
+    expect(r.compiled[0]?.rule.status).toBe('active');
+    expect(r.compiled[0]?.rule.confidence).toBe('high');
+    expect(r.classifierLedger.entries[0]?.stage4Confirmed).toBe(true);
+    expect(r.classifierLedger.entries[0]?.stage4Outcome).toBe('confirmed');
+  });
+
+  it('candidate-debt → active, severity FORCED to warning, confirmed', async () => {
+    const r = await runCompileStage(
+      single(REGEX_DSL_ERROR),
+      compileDeps({ 'src/a.ts': 'forbiddenCall(x)' }),
+    );
+    expect(r.compiled[0]?.stage4.outcome).toBe('candidate-debt');
+    expect(r.compiled[0]?.rule.status).toBe('active');
+    expect(r.compiled[0]?.rule.severity).toBe('warning'); // forced down from error
+    expect(r.classifierLedger.entries[0]?.stage4Outcome).toBe('confirmed');
+  });
+
+  it('no-matches → untested-against-codebase, not confirmed', async () => {
+    const r = await runCompileStage(
+      single(REGEX_DSL),
+      compileDeps({ 'src/a.ts': 'const ok = 1;' }),
+    );
+    expect(r.compiled[0]?.stage4.outcome).toBe('no-matches');
+    expect(r.compiled[0]?.rule.status).toBe('untested-against-codebase');
+    expect(r.classifierLedger.entries[0]?.stage4Confirmed).toBe(false);
+    expect(r.classifierLedger.entries[0]?.stage4Outcome).toBe('untested-no-matches');
+  });
+
+  it('out-of-scope (fires on a baseline file) → archived, archivedAt=now, not confirmed', async () => {
+    const r = await runCompileStage(
+      single(REGEX_DSL),
+      compileDeps({ 'src/a.test.ts': 'forbiddenCall()' }),
+    );
+    expect(r.compiled[0]?.stage4.outcome).toBe('out-of-scope');
+    expect(r.compiled[0]?.rule.status).toBe('archived');
+    expect(r.compiled[0]?.rule.archivedAt).toBe(NOW);
+    expect(r.compiled[0]?.rule.archivedReason).toMatch(/stage4-out-of-scope-match/);
+    expect(r.classifierLedger.entries[0]?.stage4Outcome).toBe('archived-out-of-scope');
+  });
+});
+
+// ── runCompileStage — routing, rejection, ledger join, fail-loud ──────────────
+
+describe('runCompileStage — selection, rejection & fail-loud', () => {
+  it('compiles only structural; skips behavioral (untouched ledger entry)', async () => {
+    const cls = classifyResultOf([
+      candidateRule(1, REGEX_DSL, 'structural'),
+      candidateRule(2, 'prefer X over Y', 'behavioral'),
+    ]);
+    const r = await runCompileStage(cls, compileDeps({ 'src/a.ts': 'forbiddenCall()' }));
+    expect(r.compiled).toHaveLength(1);
+    expect(r.compiled[0]?.classifierLedgerRef).toBe('clr-1-0');
+    const behavioral = r.classifierLedger.entries.find((e) => e.candidateRef === 'clr-2-0');
+    expect(behavioral?.stage4Confirmed).toBe(false);
+    expect(behavioral?.stage4Outcome).toBeUndefined(); // never compiled
+  });
+
+  it('records compile-rejected on the ledger and emits no CompiledCandidate', async () => {
+    const r = await runCompileStage(single(REDOS_DSL), compileDeps({ 'src/a.ts': 'aaaa' }));
+    expect(r.compiled).toHaveLength(0);
+    expect(r.classifierLedger.entries[0]?.stage4Confirmed).toBe(false);
+    expect(r.classifierLedger.entries[0]?.stage4Outcome).toBe('compile-rejected');
+  });
+
+  it('fails loud when a structural candidate has no matching classifier-ledger entry', async () => {
+    const cls = single(REGEX_DSL);
+    cls.classifierLedger.entries = []; // drop the join target
+    await expect(runCompileStage(cls, compileDeps({}))).rejects.toThrow(
+      /matches 0 classifier-ledger entries/,
+    );
+  });
+
+  it('fails loud on a duplicate classifier-ledger ref', async () => {
+    const cls = single(REGEX_DSL);
+    cls.classifierLedger.entries.push({ ...cls.classifierLedger.entries[0]! });
+    await expect(
+      runCompileStage(cls, compileDeps({ 'src/a.ts': 'forbiddenCall()' })),
+    ).rejects.toThrow(/matches 2 classifier-ledger entries/);
+  });
+
+  it('throws on an ast/ast-grep rule without a workingDirectory (never degrades to no-matches)', async () => {
+    await expect(
+      runCompileStage(single(AST_DSL), compileDeps({ 'src/a.ts': 'x' })),
+    ).rejects.toThrow(/requires deps\.stage4\.workingDirectory/);
+  });
+
+  it('propagates a readFile failure loudly (preserves cause)', async () => {
+    const deps: CompileStageDeps = {
+      now: NOW,
+      stage4: {
+        listFiles: () => Promise.resolve(['src/a.ts']),
+        readFile: () => Promise.reject(new Error('disk gone')),
+      },
+    };
+    await expect(runCompileStage(single(REGEX_DSL), deps)).rejects.toThrow(
+      /could not read src\/a\.ts/,
+    );
+  });
+
+  it('throws directly on a behavioral candidate handed to compileCandidate via the stage too', async () => {
+    // runCompileStage filters behavioral out, but compileCandidate is the FM(c) backstop.
+    expect(() =>
+      compileCandidate(candidateRule(9, REGEX_DSL, 'behavioral'), { now: NOW }),
+    ).toThrow();
+  });
+});
+
+// ── Determinism + provenance handoff ──────────────────────────────────────────
+
+describe('runCompileStage — determinism & handoff', () => {
+  it('is deterministic: identical inputs + fixed now/deps → identical output', async () => {
+    const files = { 'src/b.ts': 'forbiddenCall(y)', 'src/a.ts': 'forbiddenCall()' };
+    const a = await runCompileStage(single(REGEX_DSL), compileDeps(files));
+    const b = await runCompileStage(single(REGEX_DSL), compileDeps(files));
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('carries provenance forward un-projected onto the CompiledCandidate', async () => {
+    const r = await runCompileStage(
+      single(REGEX_DSL),
+      compileDeps({ 'src/a.ts': 'forbiddenCall()' }),
+    );
+    const cc: CompiledCandidate | undefined = r.compiled[0];
+    expect(cc?.provenance).toEqual({ mergedPr: 1, reviewThread: 'rt-1', commitSha: sha(1) });
+    expect(cc?.rule.legitimacy).toBeUndefined(); // slice-5 stamps it
+  });
+
+  it('never calls the frozen LessonInput actuator (compileLesson/buildCompiledRule/buildManualRule)', async () => {
+    await runCompileStage(single(REGEX_DSL), compileDeps({ 'src/a.ts': 'forbiddenCall()' }));
+    expect(vi.mocked(frozenActuator.compileLesson)).not.toHaveBeenCalled();
+    expect(vi.mocked(frozenActuator.buildCompiledRule)).not.toHaveBeenCalled();
+    expect(vi.mocked(frozenActuator.buildManualRule)).not.toHaveBeenCalled();
+  });
+});
+
+// ── End-to-end harness lock (real classify → compile → §8 harness green) ──────
+
+const asStructural: ClassifierResult = {
+  disposition: 'structural',
+  dispositionSource: 'classified',
+};
+const structuralClassifier: DraftClassifier = { classify: () => Promise.resolve(asStructural) };
+
+function draft(pr: number, dslSource: string): DraftCandidate {
+  return { provenance: { mergedPr: pr, reviewThread: `rt-${pr}`, commitSha: sha(pr) }, dslSource };
+}
+
+function extractResultOf(drafts: DraftCandidate[]): ExtractStageResult {
+  const prs = [...new Set(drafts.map((d) => d.provenance.mergedPr))].sort((a, b) => a - b);
+  return {
+    drafts,
+    dropLedger: { entries: [] },
+    apiUsageLedger: {
+      entries: prs.map((pr) => ({
+        targetPr: pr,
+        slice: 'train' as const,
+        fetchKind: 'review-thread',
+      })),
+      heldOutFetchCount: 0,
+    },
+    seedBlindness: { seedClassesProvided: false },
+  };
+}
+
+function splitLedgerFixture(): SplitLedger {
+  return {
+    split: {
+      asOfCommit: sha(100),
+      trainPrs: [1, 2],
+      heldOutPrs: [3, 4],
+      excludedPrs: [],
+      positiveControlPrs: [3],
+      negativeControlPrs: [4],
+      splitRule: { predicate: 'code-touching non-bot', cutIndex: 2 },
+    },
+    corpus: [1, 2, 3, 4],
+    corpusMergeCommits: [1, 2, 3, 4].map((pr) => ({ pr, mergeCommit: sha(pr) })),
+  };
+}
+
+describe('runCompileStage — end-to-end §8 harness lock', () => {
+  it('real classify → compile output passes runFalsificationHarness green', async () => {
+    const extract = extractResultOf([draft(1, REGEX_DSL), draft(2, REGEX_DSL)]);
+    const split = splitLedgerFixture();
+    const classify = await runClassifyStage(extract, split, { classifier: structuralClassifier });
+    const compileRes = await runCompileStage(
+      classify,
+      compileDeps({ 'src/a.ts': 'forbiddenCall()' }),
+    );
+
+    const ledgers: MinerLedgers = {
+      emission: classify.emissionLedger,
+      drop: extract.dropLedger,
+      classifier: compileRes.classifierLedger, // the COMPILE-UPDATED ledger
+      split,
+      apiUsage: extract.apiUsageLedger,
+    };
+    const result = runFalsificationHarness(ledgers);
+    expect(result.ok).toBe(true);
+    expect(result.violations).toEqual([]);
+    // both train PRs confirmed-active
+    expect(compileRes.compiled).toHaveLength(2);
+    expect(compileRes.classifierLedger.entries.every((e) => e.stage4Outcome === 'confirmed')).toBe(
+      true,
+    );
+  });
+
+  it('a desynced stage4Confirmed vs stage4Outcome trips the consistency guard', async () => {
+    const extract = extractResultOf([draft(1, REGEX_DSL), draft(2, REGEX_DSL)]);
+    const split = splitLedgerFixture();
+    const classify = await runClassifyStage(extract, split, { classifier: structuralClassifier });
+    const compileRes = await runCompileStage(
+      classify,
+      compileDeps({ 'src/a.ts': 'forbiddenCall()' }),
+    );
+    // Forge a desync: a confirmed outcome whose stage4Confirmed is flipped to false.
+    compileRes.classifierLedger.entries[0]!.stage4Confirmed = false;
+    const ledgers: MinerLedgers = {
+      emission: classify.emissionLedger,
+      drop: extract.dropLedger,
+      classifier: compileRes.classifierLedger,
+      split,
+      apiUsage: extract.apiUsageLedger,
+    };
+    const clauses = runFalsificationHarness(ledgers).violations.map((v) => v.clause);
+    expect(clauses).toContain('stage4-consistency');
+  });
+});

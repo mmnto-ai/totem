@@ -39,12 +39,14 @@ function greenLedgers() {
           disposition: 'structural',
           stage4Confirmed: true,
           dispositionSource: 'classified',
+          stage4Outcome: 'confirmed',
         },
         {
           candidateRef: 'cl-2',
           disposition: 'structural',
           stage4Confirmed: true,
           dispositionSource: 'classified',
+          stage4Outcome: 'confirmed',
         },
       ],
     },
@@ -158,6 +160,7 @@ describe('runFalsificationHarness — each red fixture fails on EXACTLY its clau
       disposition: 'structural',
       stage4Confirmed: true,
       dispositionSource: 'classified',
+      stage4Outcome: 'confirmed',
     });
     expect(clauses(g)).toEqual(['e-emission']);
   });
@@ -199,6 +202,40 @@ describe('runFalsificationHarness — each red fixture fails on EXACTLY its clau
     g.emission.entries.pop(); // remove the PR 2 candidate, do not drop it either
     g.classifier.entries.pop();
     expect(clauses(g)).toEqual(['i']);
+  });
+});
+
+describe('runFalsificationHarness — stage4 consistency (slice 4; NOT an FM letter)', () => {
+  it('flags a confirmed outcome whose stage4Confirmed is false (the OQ4 red craft)', () => {
+    const g = clone(greenLedgers());
+    g.classifier.entries[0].stage4Confirmed = false; // still stage4Outcome: 'confirmed'
+    expect(clauses(g)).toEqual(['stage4-consistency']);
+  });
+
+  it('flags stage4Confirmed:true with no recorded outcome (cannot be confirmed without evidence)', () => {
+    const g = clone(greenLedgers());
+    delete (g.classifier.entries[0] as Record<string, unknown>).stage4Outcome;
+    expect(clauses(g)).toEqual(['stage4-consistency']);
+  });
+
+  it('flags a compile-rejected outcome marked stage4Confirmed:true', () => {
+    const g = clone(greenLedgers());
+    g.classifier.entries[0].stage4Outcome = 'compile-rejected'; // stage4Confirmed still true
+    expect(clauses(g)).toEqual(['stage4-consistency']);
+  });
+
+  it('passes archived-out-of-scope with stage4Confirmed:false (legitimately unconfirmed — agy fold-3)', () => {
+    const g = clone(greenLedgers());
+    g.classifier.entries[0].stage4Confirmed = false;
+    g.classifier.entries[0].stage4Outcome = 'archived-out-of-scope';
+    expect(runFalsificationHarness(g).ok).toBe(true);
+  });
+
+  it('passes untested-no-matches with stage4Confirmed:false (legitimately unconfirmed)', () => {
+    const g = clone(greenLedgers());
+    g.classifier.entries[0].stage4Confirmed = false;
+    g.classifier.entries[0].stage4Outcome = 'untested-no-matches';
+    expect(runFalsificationHarness(g).ok).toBe(true);
   });
 });
 

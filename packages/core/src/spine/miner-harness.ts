@@ -22,6 +22,10 @@ export type FmClause =
   | 'g'
   | 'h'
   | 'i'
+  // NOT a Falsifying-Metric letter (a–i are unchanged). A done-criterion
+  // CONSISTENCY guard (slice 4): the compile/Stage-4 outcome recorded on a
+  // classifier entry must agree with its `stage4Confirmed` boolean.
+  | 'stage4-consistency'
   | 'schema';
 
 export interface FmViolation {
@@ -63,6 +67,7 @@ export function runFalsificationHarness(rawLedgers: unknown): FalsificationResul
 export function checkParsedLedgers(ledgers: MinerLedgers): FmViolation[] {
   const violations: FmViolation[] = [];
   checkClassifierRouting(ledgers, violations); // (c)
+  checkStage4Consistency(ledgers, violations); // (consistency, not an FM letter)
   checkSplitCover(ledgers, violations); // (d) / (g) / (e-split)
   checkEmissionMembership(ledgers, violations); // (e-emission)
   checkSeedBlindness(ledgers, violations); // (f)
@@ -112,6 +117,36 @@ function checkClassifierRouting(ledgers: MinerLedgers, out: FmViolation[]): void
       out.push({
         clause: 'c',
         detail: `candidate ${e.candidateRef}: compile-routed but classifier ledger attests behavioral`,
+      });
+    }
+  }
+}
+
+// (consistency, NOT an FM letter) — the compile/Stage-4 outcome recorded on a
+// classifier entry must agree with its `stage4Confirmed` boolean. By construction
+// `runCompileStage`'s atomic outcome→{status, stage4Confirmed, stage4Outcome} map
+// makes desync unreachable; this locks it anyway (symmetric to FM(c)'s by-
+// construction check). `confirmed` ⟺ `stage4Confirmed:true`; the three inert
+// outcomes ⟺ `false`; an entry with NO recorded outcome can never be confirmed
+// (nothing produced the evidence — e.g. a behavioral/rag-only or pre-compile entry).
+// Per the panel (strategy/codex/gemini flag-5 shape) this is a done-criterion guard,
+// NOT a new lettered Falsifying-Metric clause — a–i are unchanged.
+function checkStage4Consistency(ledgers: MinerLedgers, out: FmViolation[]): void {
+  for (const c of ledgers.classifier.entries) {
+    if (c.stage4Outcome === undefined) {
+      if (c.stage4Confirmed) {
+        out.push({
+          clause: 'stage4-consistency',
+          detail: `classifier entry ${c.candidateRef}: stage4Confirmed is true but no stage4Outcome was recorded`,
+        });
+      }
+      continue;
+    }
+    const confirmedByOutcome = c.stage4Outcome === 'confirmed';
+    if (c.stage4Confirmed !== confirmedByOutcome) {
+      out.push({
+        clause: 'stage4-consistency',
+        detail: `classifier entry ${c.candidateRef}: stage4Confirmed=${c.stage4Confirmed} is inconsistent with stage4Outcome='${c.stage4Outcome}'`,
       });
     }
   }

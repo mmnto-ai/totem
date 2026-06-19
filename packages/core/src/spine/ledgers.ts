@@ -40,6 +40,31 @@ export type Routing = z.infer<typeof RoutingSchema>;
 export const DispositionSourceSchema = z.enum(['classified', 'error-default']);
 export type DispositionSource = z.infer<typeof DispositionSourceSchema>;
 
+/**
+ * Compile + Stage-4 disposition of a compile-routed (structural) candidate (slice 4).
+ * Recorded additively on the classifier ledger so the §8 done-criterion (which reads
+ * the LEDGER, not the compiled `rule.status`) can distinguish the verify-stage outcomes
+ * rather than collapse them onto the `stage4Confirmed` boolean:
+ *   - `confirmed`             — Stage-4 found positive in-scope evidence (active rule).
+ *   - `untested-no-matches`   — Stage-4 ran, zero hits (neutral/inconclusive).
+ *   - `archived-out-of-scope` — the §4 backstop ACTIVELY rejected a mis-structural
+ *                               candidate (fired on the baseline) — a classifier-over-eager
+ *                               signal, NOT the same as `no-matches` (Tenet 19, the
+ *                               compile-stage twin of `dispositionSource`).
+ *   - `compile-rejected`      — the pattern parsed but failed per-engine safety
+ *                               validation (e.g. ReDoS); never produced as a rule.
+ * Absent on entries the compile stage never touched (behavioral/rag-only, or a
+ * classify-only run). NOT a falsifying condition (no FM clause) — a done-criterion
+ * diagnostic; the harness only locks its consistency with `stage4Confirmed`.
+ */
+export const Stage4LedgerOutcomeSchema = z.enum([
+  'confirmed',
+  'untested-no-matches',
+  'archived-out-of-scope',
+  'compile-rejected',
+]);
+export type Stage4LedgerOutcome = z.infer<typeof Stage4LedgerOutcomeSchema>;
+
 // ── 1. Emission ledger ──────────────────────────────────────────────────────
 
 export const EmissionLedgerEntrySchema = z.object({
@@ -117,6 +142,15 @@ export const ClassifierLedgerEntrySchema = z.object({
    * condition — a diagnostic, like `stage4Confirmed`.
    */
   dispositionSource: DispositionSourceSchema,
+  /**
+   * Compile + Stage-4 outcome (slice 4), set by `runCompileStage` on the matched
+   * compile-routed entry. OPTIONAL — absent until the compile stage runs (and
+   * never set on behavioral/rag-only entries, which are never compiled). When
+   * present it MUST be consistent with `stage4Confirmed`: `confirmed` ⟺
+   * `stage4Confirmed === true`; the other three outcomes ⟺ `false`. The §8 harness
+   * locks that consistency (no new FM clause) — see `Stage4LedgerOutcomeSchema`.
+   */
+  stage4Outcome: Stage4LedgerOutcomeSchema.optional(),
 });
 export type ClassifierLedgerEntry = z.infer<typeof ClassifierLedgerEntrySchema>;
 
