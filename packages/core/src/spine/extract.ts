@@ -278,6 +278,18 @@ export async function runExtractStage(
     }
     const content = result.content;
 
+    // Content-identity guard: the fetched content MUST be for the requested train
+    // PR. A source adapter that returns mismatched content would otherwise mint a
+    // draft attributed to the wrong PR — a provenance-integrity failure → loud drop.
+    if (content.pr !== pr) {
+      drop(
+        pr,
+        'incomplete-provenance',
+        `fetched content PR #${content.pr} does not match requested train PR #${pr}`,
+      );
+      continue;
+    }
+
     // Completeness (§6): ≥1 HUMAN review comment, non-empty.
     if (humanCommentCount(content) < 1) {
       drop(pr, 'truncated', 'no non-empty human review comment after bot filtering');

@@ -31,6 +31,19 @@ function split(overrides?: Partial<SplitArtifact>): SplitArtifact {
 const USABLE_DSL = '**Pattern:** foo';
 /** Non-empty, but no usable `**Pattern:**` — fails the preflight → `unparseable`. */
 const NO_PATTERN_DSL = 'This is just prose with no pattern field.';
+/**
+ * Non-empty, but makes `extractManualPattern` THROW a TotemParseError (a yaml
+ * `**Pattern:**` fence under a non-`ast-grep` engine). The preflight's catch
+ * converts that to a drop, never a propagated throw.
+ */
+const PARSER_THROW_DSL = [
+  '**Pattern:**',
+  '```yaml',
+  'rule:',
+  '  pattern: foo',
+  '```',
+  '**Engine:** regex',
+].join('\n');
 
 function content(pr: number, overrides?: Partial<ReviewThreadContent>): ReviewThreadContent {
   return {
@@ -201,10 +214,30 @@ describe('runExtractStage — drop reason codes', () => {
     expect(r.drafts).toEqual([]);
   });
 
+  it('incomplete-provenance: fetched content for the wrong PR is a loud drop (CR-3)', async () => {
+    const mismatched = content(2); // content says PR 2, but PR 1 was requested
+    const r = await runExtractStage(
+      solo(),
+      deps(spySource([1], new Map([[1, { kind: 'ok', content: mismatched }]])), fixtureExtractor()),
+    );
+    expect(dropsFor(r, 1)[0]!.reasonCode).toBe('incomplete-provenance');
+    expect(dropsFor(r, 1)[0]!.detail).toContain('does not match');
+    expect(r.drafts).toEqual([]);
+  });
+
   it('unparseable: a non-empty draft with no usable **Pattern:** (fold 4 preflight)', async () => {
     const r = await runExtractStage(
       solo(),
       deps(spySource([1]), fixtureExtractor(new Map([[1, [NO_PATTERN_DSL]]]))),
+    );
+    expect(dropsFor(r, 1)[0]!.reasonCode).toBe('unparseable');
+    expect(r.drafts).toEqual([]);
+  });
+
+  it('unparseable: a draft that makes the parser throw is converted to a drop, not propagated (CR-2)', async () => {
+    const r = await runExtractStage(
+      solo(),
+      deps(spySource([1]), fixtureExtractor(new Map([[1, [PARSER_THROW_DSL]]]))),
     );
     expect(dropsFor(r, 1)[0]!.reasonCode).toBe('unparseable');
     expect(r.drafts).toEqual([]);
