@@ -218,6 +218,25 @@ export function resolveSplit(params: {
     );
   }
 
+  // The merge-commit collision check silently skips PRs absent from the map, so a
+  // partial map would weaken the disjoint-by-merge-commit guard — require coverage.
+  const missingMergeCommits = params.corpus.filter((pr) => !params.mergeCommitByPr.has(pr));
+  if (missingMergeCommits.length > 0) {
+    throw new Error(
+      `[Totem Error] resolveSplit: mergeCommitByPr does not cover the corpus (missing merge commits for [${missingMergeCommits}])`,
+    );
+  }
+
+  // excludedPrs MUST be corpus-scoped revert pairs (ADR-111 §5: every listed PR is
+  // a corpus member). A non-corpus entry is a caller contract violation — fail loud
+  // (NOT silently filtered, which would hide the error and break total accounting).
+  const nonCorpusExcluded = params.excludedPrs.filter((pr) => !corpusSet.has(pr));
+  if (nonCorpusExcluded.length > 0) {
+    throw new Error(
+      `[Totem Error] resolveSplit: excludedPrs contains PRs outside the corpus [${nonCorpusExcluded}] — excludedPrs must be corpus-scoped (ADR-111 §5)`,
+    );
+  }
+
   const oldestFirstNonExcluded = [...newestFirstCorpus]
     .reverse()
     .filter((pr) => !excludedSet.has(pr));

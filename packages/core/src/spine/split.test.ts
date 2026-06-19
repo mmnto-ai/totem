@@ -92,14 +92,43 @@ describe('resolveSplit — forward-ancestry cut', () => {
     expect(s.heldOutPrs).toEqual([3, 4]);
   });
 
-  it('throws SplitCoverError when the result is not a clean cover', () => {
+  it('throws on excludedPrs outside the corpus (fail-loud, not silently filtered)', () => {
     expect(() =>
       resolveSplit({
         asOfCommit: sha(100),
         corpus,
         orderedNewestFirst: [4, 3, 2, 1],
-        excludedPrs: [99], // not in corpus → an extra union member → !cover
+        excludedPrs: [99], // not a corpus member
         cutIndex: 2,
+        predicate: 'p',
+        mergeCommitByPr: mcMap(corpus),
+      }),
+    ).toThrow(/excludedPrs contains PRs outside the corpus/);
+  });
+
+  it('throws when mergeCommitByPr does not cover the corpus', () => {
+    expect(() =>
+      resolveSplit({
+        asOfCommit: sha(100),
+        corpus,
+        orderedNewestFirst: [4, 3, 2, 1],
+        excludedPrs: [],
+        cutIndex: 2,
+        predicate: 'p',
+        mergeCommitByPr: mcMap([1, 2, 3]), // missing PR 4
+      }),
+    ).toThrow(/mergeCommitByPr does not cover the corpus/);
+  });
+
+  it('throws SplitCoverError when a designated control falls outside heldOut', () => {
+    expect(() =>
+      resolveSplit({
+        asOfCommit: sha(100),
+        corpus,
+        orderedNewestFirst: [4, 3, 2, 1],
+        excludedPrs: [],
+        cutIndex: 2,
+        positiveControlPrs: [1], // a train PR, not in heldOut
         predicate: 'p',
         mergeCommitByPr: mcMap(corpus),
       }),

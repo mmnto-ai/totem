@@ -102,6 +102,12 @@ function checkClassifierRouting(ledgers: MinerLedgers, out: FmViolation[]): void
         clause: 'c',
         detail: `candidate ${e.candidateRef}: no classifier-ledger entry for ref '${e.classifierLedgerRef}'`,
       });
+    } else if (e.classifierDisposition !== attesting.disposition) {
+      // The two ledgers disagree on this candidate's class — a producer integrity bug.
+      out.push({
+        clause: 'c',
+        detail: `candidate ${e.candidateRef}: emission disposition '${e.classifierDisposition}' does not match classifier-ledger disposition '${attesting.disposition}'`,
+      });
     } else if (e.routing === 'compile' && attesting.disposition === 'behavioral') {
       out.push({
         clause: 'c',

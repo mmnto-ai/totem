@@ -107,6 +107,13 @@ describe('runFalsificationHarness — each red fixture fails on EXACTLY its clau
     expect(clauses(g)).toEqual(['c']);
   });
 
+  it('(c) emission disposition disagrees with the classifier ledger', () => {
+    const g = clone(greenLedgers());
+    g.classifier.entries[0].disposition = 'behavioral'; // emission cl-1 attests structural
+    g.emission.entries[0].routing = 'rag-only'; // isolate the mismatch from compile-routing
+    expect(clauses(g)).toEqual(['c']);
+  });
+
   it('(d) out-of-corpus split member', () => {
     const g = clone(greenLedgers());
     g.split.split.heldOutPrs = [3, 4, 99];
