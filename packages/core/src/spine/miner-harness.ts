@@ -51,7 +51,15 @@ export function runFalsificationHarness(rawLedgers: unknown): FalsificationResul
   return { ok: violations.length === 0, violations };
 }
 
-/** Cross-cutting checks over already-valid ledgers (the structural a/b clauses are schema-enforced). */
+/**
+ * Cross-cutting checks over an ALREADY-VALIDATED `MinerLedgers`.
+ *
+ * ⚠ FM(a) (incomplete provenance) and FM(b) (non-`unverified` mint) are
+ * SCHEMA-ENFORCED and are NOT re-asserted here — a caller that hands in an
+ * in-process `MinerLedgers` gets no FM(a)/(b) coverage from this function. For
+ * untrusted/raw ledger JSON use {@link runFalsificationHarness}, which parses
+ * (catching FM(a)/(b)) before delegating here.
+ */
 export function checkParsedLedgers(ledgers: MinerLedgers): FmViolation[] {
   const violations: FmViolation[] = [];
   checkClassifierRouting(ledgers, violations); // (c)
@@ -63,18 +71,18 @@ export function checkParsedLedgers(ledgers: MinerLedgers): FmViolation[] {
   return violations;
 }
 
-// Map a Zod parse failure to its FM clause by field path: `provenance.*` ⇒ FM(a)
-// (incomplete tuple), `unverified` ⇒ FM(b) (non-Yellow mint). These path strings
-// are PINNED by the (a)/(b) red-fixture tests — a schema field rename that broke
-// the mapping would fail those tests loudly, so the coupling is not silent.
+// Map a Zod parse failure to its FM clause by a SEGMENT match on the issue path:
+// a `provenance` segment ⇒ FM(a) (incomplete tuple), an `unverified` segment ⇒
+// FM(b) (non-Yellow mint). Segment-level (not a substring on the joined path) so
+// a future field like `classifierProvenanceRef` can't masquerade as `provenance`.
 function mapZodIssueToClause(issue: { path: (string | number)[]; message: string }): FmViolation {
-  const path = issue.path.join('.');
-  const clause: FmClause = path.includes('unverified')
+  const segments = issue.path.map(String);
+  const clause: FmClause = segments.includes('unverified')
     ? 'b'
-    : path.includes('provenance')
+    : segments.includes('provenance')
       ? 'a'
       : 'schema';
-  return { clause, detail: `${path || '<root>'}: ${issue.message}` };
+  return { clause, detail: `${segments.join('.') || '<root>'}: ${issue.message}` };
 }
 
 // (c) — a behavioral candidate must never reach compile, and every emitted

@@ -43,6 +43,12 @@ describe('CandidateRuleRecordSchema', () => {
     ).toBe(false);
   });
 
+  it('rejects an empty dslSource', () => {
+    expect(CandidateRuleRecordSchema.safeParse({ ...base(), dslSource: '   ' }).success).toBe(
+      false,
+    );
+  });
+
   it('rejects an unknown classifier disposition', () => {
     expect(
       CandidateRuleRecordSchema.safeParse({ ...base(), classifierDisposition: 'semantic' }).success,

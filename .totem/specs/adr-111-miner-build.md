@@ -1,6 +1,6 @@
 # Totem-side Spine Gate-1 Rule-Mining Miner — Build Spec (ADR-111 producer)
 
-**Contract source of truth:** `git -C D:/Dev/totem-strategy show origin/main:adr/adr-111-spine-gate-1-rule-mining-miner.md` (merged squash `1b2aa3d`). Supporting: ADR-091 (5-stage funnel), ADR-110 (acceptance/read-side), ADR-103 (compiler), ADR-089 (zero-trust mint).
+**Contract source of truth:** `adr/adr-111-spine-gate-1-rule-mining-miner.md` on `mmnto-ai/totem-strategy@main` (merged squash `1b2aa3d`). Supporting: ADR-091 (5-stage funnel), ADR-110 (acceptance/read-side), ADR-103 (compiler), ADR-089 (zero-trust mint).
 **Supersedes:** the untracked pre-author design `.totem/specs/adr-111-gseries-miner.md` (4-clause FM, single ledger, no disjoint-cover) — the merged ADR is materially stricter; build to the merged contract.
 **Grounded:** 2026-06-18 via two parallel grounding sweeps (strategy contract + totem code-map). `totem spec` deliberately skipped (cross-repo-ADR-driven → confabulation risk, per #2172/0103).
 

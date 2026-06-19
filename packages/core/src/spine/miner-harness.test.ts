@@ -170,3 +170,13 @@ describe('runFalsificationHarness — each red fixture fails on EXACTLY its clau
     expect(clauses(g)).toEqual(['i']);
   });
 });
+
+describe('runFalsificationHarness — schema completeness', () => {
+  it('rejects a split ledger whose corpusMergeCommits omits a corpus PR', () => {
+    const g = clone(greenLedgers());
+    g.split.corpusMergeCommits = g.split.corpusMergeCommits.filter((e) => e.pr !== 3);
+    const r = runFalsificationHarness(g);
+    expect(r.ok).toBe(false);
+    expect(r.violations.some((v) => v.clause === 'schema')).toBe(true);
+  });
+});

@@ -55,9 +55,13 @@ export const CandidateRuleRecordSchema = z.object({
   }),
   /**
    * The generated DSL source (ADR-103 compiler input). LLM-draft-only until the
-   * deterministic funnel verifies it (ADR-111 §6 / Tenet-15 corollary).
+   * deterministic funnel verifies it (ADR-111 §6 / Tenet-15 corollary). Non-empty
+   * (same discipline as the reference fields): an empty DSL source is a degenerate
+   * candidate that must take the loud-drop path, not emit as valid.
    */
-  dslSource: z.string(),
+  dslSource: z.string().refine((s) => s.trim().length > 0, {
+    message: 'dslSource must be non-empty',
+  }),
   /**
    * Zero-trust mint flag (ADR-089 / ADR-111 FM(b)). Literally `true` — a
    * candidate is ALWAYS minted unverified/Yellow; anything else is a

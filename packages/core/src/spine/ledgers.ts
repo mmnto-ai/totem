@@ -92,13 +92,27 @@ export type ClassifierLedger = z.infer<typeof ClassifierLedgerSchema>;
 
 // ── 4. Split ledger — self-contained for the cover check ─────────────────────
 
-export const SplitLedgerSchema = z.object({
-  split: SplitArtifactSchema,
-  /** The frozen corpus = `selectionRule(asOfCommit)` the cover is checked against. */
-  corpus: z.array(PrNumber),
-  /** PR → merge-commit, for the disjoint-by-merge-commit check (rebuilds the map). */
-  corpusMergeCommits: z.array(z.object({ pr: PrNumber, mergeCommit: z.string() })),
-});
+export const SplitLedgerSchema = z
+  .object({
+    split: SplitArtifactSchema,
+    /** The frozen corpus = `selectionRule(asOfCommit)` the cover is checked against. */
+    corpus: z.array(PrNumber),
+    /** PR → merge-commit, for the disjoint-by-merge-commit check (rebuilds the map). */
+    corpusMergeCommits: z.array(z.object({ pr: PrNumber, mergeCommit: z.string() })),
+  })
+  .refine(
+    (d) => {
+      const covered = new Set(d.corpusMergeCommits.map((e) => e.pr));
+      return d.corpus.every((pr) => covered.has(pr));
+    },
+    {
+      // An incomplete map would silently skip merge-commit collision detection for
+      // the absent PRs — a straddling revert pair could escape the disjoint-by-
+      // merge-commit guard. Require full coverage of the corpus.
+      message: 'corpusMergeCommits must cover every corpus PR',
+      path: ['corpusMergeCommits'],
+    },
+  );
 export type SplitLedger = z.infer<typeof SplitLedgerSchema>;
 
 // ── 5. API-usage ledger ──────────────────────────────────────────────────────
