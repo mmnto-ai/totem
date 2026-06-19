@@ -785,6 +785,18 @@ export {
 export type { CandidateRuleRecord, ClassifierDisposition } from './spine/candidate-rule.js';
 export { CandidateRuleRecordSchema, ClassifierDispositionSchema } from './spine/candidate-rule.js';
 export type {
+  DraftCandidate,
+  DraftExtractor,
+  ExtractStageDeps,
+  ExtractStageResult,
+  FetchResult,
+  ReviewThread,
+  ReviewThreadComment,
+  ReviewThreadContent,
+  ReviewThreadSource,
+} from './spine/extract.js';
+export { runExtractStage } from './spine/extract.js';
+export type {
   ApiFetchSlice,
   ApiUsageLedger,
   ApiUsageLedgerEntry,
