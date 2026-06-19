@@ -61,7 +61,7 @@ export type SplitArtifact = z.infer<typeof SplitArtifactSchema>;
 export class SplitCoverError extends Error {
   constructor(public readonly result: SplitCoverResult) {
     super(
-      `split is not a valid disjoint cover of selectionRule(asOfCommit): ${summarizeCover(result)}`,
+      `[Totem Error] split is not a valid disjoint cover of selectionRule(asOfCommit): ${summarizeCover(result)}`,
     );
     this.name = 'SplitCoverError';
   }
@@ -214,7 +214,7 @@ export function resolveSplit(params: {
   const ordering = diffPrSets(params.corpus, newestFirstCorpus);
   if (ordering.missing.length > 0) {
     throw new Error(
-      `resolveSplit: orderedNewestFirst does not cover the corpus (missing ancestry order for [${ordering.missing}])`,
+      `[Totem Error] resolveSplit: orderedNewestFirst does not cover the corpus (missing ancestry order for [${ordering.missing}])`,
     );
   }
 
