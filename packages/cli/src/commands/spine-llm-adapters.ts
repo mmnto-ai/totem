@@ -71,7 +71,7 @@ type DraftCandidate = ExtractStageResult['drafts'][number];
 
 // ─── Named constants ─────────────────────────────────
 
-/** Decode temperature for the miner: 0 = determinism intent (replay still freezes the real output). */
+/** Default decode temperature for the miner: 0 = determinism intent (replay still freezes the real output). */
 const DEFAULT_TEMPERATURE = 0;
 /** Cache/telemetry tags (the `tag` is the UI/cache key; kept stable + descriptive). */
 const EXTRACT_TAG = 'spine-miner-extract';
@@ -512,6 +512,15 @@ export interface LiveAdapterDeps {
   model: string;
   cwd: string;
   totemDir: string;
+  /** Resolved provider id (e.g. `anthropic`) — enforced by the construction-time fold-C guard. */
+  provider: string;
+  /**
+   * Whether a credential for `provider` was resolved (the caller resolves this from
+   * config/env so the check stays pure + burns no live call — fold C / OQ5). The
+   * constructor throws `LlmAdapterConfigError` if false, so a credential-absent
+   * misconfig fails loud immediately, not silently at the end-of-run floor.
+   */
+  credentialPresent: boolean;
   /** Decode temperature (default 0). */
   temperature?: number;
   /** Override the frozen system prompt (defaults to the module constant). */
@@ -547,10 +556,17 @@ export class LiveDraftExtractor {
     this.totemDir = deps.totemDir;
     this.temperature = deps.temperature ?? DEFAULT_TEMPERATURE;
     this.systemPrompt = deps.systemPrompt ?? MINER_EXTRACT_SYSTEM_PROMPT;
-    if (this.model.trim().length === 0) throw new LlmAdapterConfigError(['model is empty']);
-    if (this.systemPrompt.trim().length === 0) {
-      throw new LlmAdapterConfigError(['extract system prompt is empty']);
-    }
+    // Fold C is now FULLY construction-time (greptile #2211): the constructor runs the
+    // COMPLETE static precondition check — provider + credential + model + prompt — not
+    // just model/prompt. Constructing a live adapter without a resolved provider/credential
+    // fails loud HERE, never silently at the assertPipelineProductive floor after a wasted
+    // mining loop. (assertLiveLlmAllowed already ran above, so CI is rejected first.)
+    verifyLlmAdapterConfig({
+      provider: deps.provider,
+      model: this.model,
+      credentialPresent: deps.credentialPresent,
+      systemPrompt: this.systemPrompt,
+    });
   }
 
   /** Live calls attempted. */
@@ -615,10 +631,13 @@ export class LiveDraftClassifier {
     this.totemDir = deps.totemDir;
     this.temperature = deps.temperature ?? DEFAULT_TEMPERATURE;
     this.systemPrompt = deps.systemPrompt ?? MINER_CLASSIFY_SYSTEM_PROMPT;
-    if (this.model.trim().length === 0) throw new LlmAdapterConfigError(['model is empty']);
-    if (this.systemPrompt.trim().length === 0) {
-      throw new LlmAdapterConfigError(['classify system prompt is empty']);
-    }
+    // Fold C fully construction-time (greptile #2211) — see LiveDraftExtractor.
+    verifyLlmAdapterConfig({
+      provider: deps.provider,
+      model: this.model,
+      credentialPresent: deps.credentialPresent,
+      systemPrompt: this.systemPrompt,
+    });
   }
 
   get attempts(): number {

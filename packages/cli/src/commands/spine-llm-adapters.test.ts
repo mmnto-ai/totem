@@ -76,6 +76,8 @@ function makeExtractor(
     model: 'test-model',
     cwd: '/tmp',
     totemDir: '.totem',
+    provider: 'anthropic',
+    credentialPresent: true,
     env,
   });
 }
@@ -88,6 +90,8 @@ function makeClassifier(
     model: 'test-model',
     cwd: '/tmp',
     totemDir: '.totem',
+    provider: 'anthropic',
+    credentialPresent: true,
     env,
   });
 }
@@ -329,6 +333,20 @@ describe('verifyLlmAdapterConfig (fold C, construction-time)', () => {
     expect(() => verifyLlmAdapterConfig({ ...ok, credentialPresent: false })).toThrow(
       LlmAdapterConfigError,
     );
+  });
+
+  it('the live adapter constructor enforces the FULL check (greptile #2211) — credential-absent throws AT construction', () => {
+    const deps = {
+      invoke: stubInvoke('NONE'),
+      model: 'm',
+      cwd: '/tmp',
+      totemDir: '.totem',
+      provider: 'anthropic',
+      credentialPresent: false,
+      env: NO_CI,
+    };
+    expect(() => new LiveDraftExtractor(deps)).toThrow(LlmAdapterConfigError);
+    expect(() => new LiveDraftClassifier(deps)).toThrow(LlmAdapterConfigError);
   });
 });
 
