@@ -272,13 +272,19 @@ describe('runCompileStage — selection, rejection & fail-loud', () => {
     ).rejects.toThrow(/matches 2 classifier-ledger entries/);
   });
 
-  it('throws on an ast/ast-grep rule without a workingDirectory (never degrades to no-matches)', async () => {
+  it('throws on an ast rule without a workingDirectory (never degrades to no-matches)', async () => {
     await expect(
       runCompileStage(single(AST_DSL), compileDeps({ 'src/a.ts': 'x' })),
     ).rejects.toThrow(/requires deps\.stage4\.workingDirectory/);
   });
 
-  it('propagates a readFile failure loudly (preserves cause)', async () => {
+  it('throws on an ast-grep rule without a workingDirectory too (both tree-sitter engines)', async () => {
+    await expect(
+      runCompileStage(single(ASTGREP_YAML_DSL), compileDeps({ 'src/a.ts': 'x' })),
+    ).rejects.toThrow(/requires deps\.stage4\.workingDirectory/);
+  });
+
+  it('propagates a readFile failure loudly, preserving the original cause', async () => {
     const deps: CompileStageDeps = {
       now: NOW,
       stage4: {
@@ -286,9 +292,15 @@ describe('runCompileStage — selection, rejection & fail-loud', () => {
         readFile: () => Promise.reject(new Error('disk gone')),
       },
     };
-    await expect(runCompileStage(single(REGEX_DSL), deps)).rejects.toThrow(
-      /could not read src\/a\.ts/,
+    // compile.ts owns "no swallowing catch" — assert the ORIGINAL error survives as
+    // the cause, not the verifier's wrapper message (which compile.ts does not own).
+    const err = await runCompileStage(single(REGEX_DSL), deps).then(
+      () => null,
+      (e: unknown) => e,
     );
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).cause).toBeInstanceOf(Error);
+    expect(((err as Error).cause as Error).message).toBe('disk gone');
   });
 
   it('throws directly on a behavioral candidate handed to compileCandidate via the stage too', async () => {

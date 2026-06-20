@@ -206,19 +206,24 @@ function mapStage4Outcome(outcome: Stage4Outcome, now: string): Stage4Mapping {
  * stable classify-output order (deterministic ordinals before any async reorder).
  * Returns the `CompiledCandidate[]` + the classifier ledger with `stage4Confirmed`
  * and `stage4Outcome` filled on every compile-routed entry (behavioral/rag-only
- * entries are left untouched). Mutates nothing; the input ledger is copied.
+ * entries are left untouched). Mutates nothing: returns a new ledger object with a
+ * new entries array — updated entries are spread copies, unmodified entries share
+ * the original reference (a structural copy, not a deep copy).
  */
 export async function runCompileStage(
   classify: ClassifyStageResult,
   deps: CompileStageDeps,
 ): Promise<CompileStageResult> {
   const baseline = deps.baseline ?? getDefaultBaseline();
-  // Determinism (codex fold): canonicalize the file-walk order before the verifier —
-  // it preserves file order for `candidateDebtLines`, so an unsorted `listFiles` would
-  // make the output (and `CompiledCandidate.stage4`) non-reproducible.
+  // Determinism (codex fold) + perf (GCA): resolve the file list ONCE, sorted, and
+  // reuse that snapshot for every candidate. `verifyAgainstCodebase` calls
+  // `listFiles()` on each invocation, so an un-memoized wrapper would re-walk the
+  // repo once per structural candidate (N walks); the frozen snapshot also keeps the
+  // file order identical across candidates. Lazy — a zero-candidate run never walks.
+  let fileSnapshot: readonly string[] | undefined;
   const stage4: Stage4VerifierDeps = {
     ...deps.stage4,
-    listFiles: async () => [...(await deps.stage4.listFiles())].sort(),
+    listFiles: async () => (fileSnapshot ??= [...(await deps.stage4.listFiles())].sort()),
   };
   const compiled: CompiledCandidate[] = [];
   const updates = new Map<
