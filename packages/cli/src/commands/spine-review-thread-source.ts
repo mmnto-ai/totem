@@ -213,8 +213,7 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
     let raw: string;
     try {
       raw = exec('gh', ['api', 'graphql', '-f', `query=${query}`]);
-      // totem-context: intentional §6 port contract — reify the IO failure into the
-      // discriminated FetchResult (surfaced loudly to core's drop ledger), never swallow.
+      // totem-context: intentional §6 port contract — reify IO failure into the discriminated FetchResult, surfaced loudly to core's drop ledger; never swallowed.
     } catch (err) {
       return {
         kind: 'unreachable',
@@ -230,8 +229,7 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
     let parsed: z.infer<typeof GqlResponseSchema>;
     try {
       parsed = GqlResponseSchema.parse(JSON.parse(raw));
-      // totem-context: intentional §6 port contract — reify the unparseable payload into
-      // the discriminated FetchResult (surfaced loudly to core's drop ledger), never swallow.
+      // totem-context: intentional §6 port contract — reify the unparseable payload into the discriminated FetchResult, surfaced loudly to core's drop ledger; never swallowed.
     } catch (err) {
       return {
         kind: 'unparseable',
