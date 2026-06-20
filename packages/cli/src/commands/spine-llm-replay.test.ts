@@ -1,0 +1,452 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  type ClassifierResult,
+  type ExtractStageResult,
+  type ReviewThread,
+  type ReviewThreadContent,
+} from '@mmnto/totem';
+
+import {
+  classifierInputKey,
+  computeRecordsHash,
+  DuplicateRecordError,
+  extractorInputKey,
+  FixtureIntegrityError,
+  RecordingDraftClassifier,
+  RecordingDraftExtractor,
+  REPLAY_ARTIFACT_KIND,
+  type ReplayArtifact,
+  ReplayArtifactSchema,
+  ReplayDraftClassifier,
+  ReplayDraftExtractor,
+  ReplayMissError,
+  type ReplayProvenance,
+  ReplayRecordSink,
+  serializeReplayArtifact,
+} from './spine-llm-replay.js';
+
+// `DraftCandidate` is the transient Extract→Classify intermediate (not on the
+// core barrel); reach it structurally via `ExtractStageResult` (matches the impl).
+type DraftCandidate = ExtractStageResult['drafts'][number];
+
+// ─── Stub ports (in-memory, deterministic — NO network, NO LLM) ──────────────
+
+/** A canned `DraftExtractor`: returns a fixed `string[]` keyed by PR (default to a 1-elem draft). */
+class StubExtractor {
+  constructor(private readonly byPr: Map<number, string[]>) {}
+  draft(content: ReviewThreadContent): Promise<string[]> {
+    return Promise.resolve(this.byPr.get(content.pr) ?? [`draft for PR ${content.pr}`]);
+  }
+}
+
+/** A canned `DraftClassifier`: returns a fixed result keyed by dslSource (default structural). */
+class StubClassifier {
+  constructor(private readonly byBody: Map<string, ClassifierResult>) {}
+  classify(draft: DraftCandidate): Promise<ClassifierResult> {
+    return Promise.resolve(
+      this.byBody.get(draft.dslSource) ?? {
+        disposition: 'structural',
+        dispositionSource: 'classified',
+      },
+    );
+  }
+}
+
+// ─── Fixture builders ────────────────────────────────
+
+const MERGE_SHA_A = 'a'.repeat(40);
+const MERGE_SHA_B = 'b'.repeat(40);
+
+function comment(author: string, body: string) {
+  return { author, body };
+}
+
+function thread(opts?: Partial<ReviewThread>): ReviewThread {
+  return {
+    path: opts?.path ?? 'packages/core/src/x.ts',
+    isResolved: opts?.isResolved ?? false,
+    isOutdated: opts?.isOutdated ?? false,
+    comments: opts?.comments ?? [comment('jane', 'a structural note')],
+  };
+}
+
+function content(opts?: {
+  pr?: number;
+  mergeCommitSha?: string;
+  threads?: ReviewThread[];
+}): ReviewThreadContent {
+  return {
+    pr: opts?.pr ?? 100,
+    mergeCommitSha: opts?.mergeCommitSha ?? MERGE_SHA_A,
+    threads: opts?.threads ?? [thread()],
+  };
+}
+
+function draft(opts?: { pr?: number; commitSha?: string; dslSource?: string }): DraftCandidate {
+  return {
+    provenance: {
+      mergedPr: opts?.pr ?? 100,
+      reviewThread: `pulls/${opts?.pr ?? 100}/comments`,
+      commitSha: opts?.commitSha ?? MERGE_SHA_A,
+    },
+    dslSource: opts?.dslSource ?? '**Pattern:** no-foo',
+  };
+}
+
+const STUB_PROVENANCE: ReplayProvenance = {
+  promptTemplateHash: 'p'.repeat(64),
+  systemPromptHash: 's'.repeat(64),
+  provider: 'anthropic',
+  model: 'stub-model-1',
+  temperature: 0,
+  orchestratorVersion: 'stub-orchestrator-0',
+  adapterKind: 'extractor+classifier',
+  keyVersion: 'v1',
+  totemVersion: '0.0.0-test',
+};
+
+/** Per-draft ref resolver: a stable (pr, dslSource) ordinal-free ref for tests. */
+function draftRefOf(d: DraftCandidate): string {
+  return `cand-${d.provenance.mergedPr}-${d.dslSource}`;
+}
+
+// ─── 1. Record → replay determinism (FM-a) ───────────
+
+describe('record → replay determinism (FM-a)', () => {
+  it('replays byte-identical extractor + classifier outputs recorded from a stub', async () => {
+    const sink = new ReplayRecordSink();
+    const recExtractor = new RecordingDraftExtractor(
+      new StubExtractor(new Map([[100, ['draft-A', 'draft-B']]])),
+      sink,
+    );
+    const recClassifier = new RecordingDraftClassifier(
+      new StubClassifier(
+        new Map([['draft-A', { disposition: 'behavioral', dispositionSource: 'classified' }]]),
+      ),
+      sink,
+      draftRefOf,
+    );
+
+    const c = content({ pr: 100 });
+    const recordedDrafts = await recExtractor.draft(c);
+    const d = draft({ pr: 100, dslSource: 'draft-A' });
+    const recordedClass = await recClassifier.classify(d);
+
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    const expectedHash = computeRecordsHash(artifact.records);
+
+    // Round-trip through serialization to prove the on-disk form replays too.
+    const reloaded = ReplayArtifactSchema.parse(JSON.parse(serializeReplayArtifact(artifact)));
+
+    const replayExtractor = new ReplayDraftExtractor(reloaded, expectedHash);
+    const replayClassifier = new ReplayDraftClassifier(reloaded, expectedHash, draftRefOf);
+
+    expect(await replayExtractor.draft(c)).toEqual(recordedDrafts);
+    expect(await replayClassifier.classify(d)).toEqual(recordedClass);
+    // And the recorded values are exactly what the stub produced.
+    expect(recordedDrafts).toEqual(['draft-A', 'draft-B']);
+    expect(recordedClass).toEqual({ disposition: 'behavioral', dispositionSource: 'classified' });
+  });
+
+  it('serializes deterministically regardless of record insertion order', async () => {
+    const buildSink = async (prs: number[]): Promise<ReplayArtifact> => {
+      const sink = new ReplayRecordSink();
+      const rec = new RecordingDraftExtractor(
+        new StubExtractor(new Map(prs.map((p) => [p, [`d-${p}`]]))),
+        sink,
+      );
+      for (const p of prs) await rec.draft(content({ pr: p }));
+      return sink.freeze(STUB_PROVENANCE);
+    };
+    const forward = serializeReplayArtifact(await buildSink([100, 200, 300]));
+    const reversed = serializeReplayArtifact(await buildSink([300, 200, 100]));
+    expect(forward).toBe(reversed);
+  });
+});
+
+// ─── 2. Drift / mutation red craft → FixtureIntegrityError ───────────────────
+
+describe('drift / mutation red craft (fold B integrity)', () => {
+  it('throws FixtureIntegrityError when a recorded entry is mutated without updating the expected hash', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(
+      new StubExtractor(new Map([[100, ['original']]])),
+      sink,
+    );
+    await rec.draft(content({ pr: 100 }));
+
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    const expectedHash = computeRecordsHash(artifact.records); // frozen at record time
+
+    // Tamper with ONE recorded raw entry, leaving the injected expected hash stale.
+    const key = extractorInputKey(content({ pr: 100 }));
+    const tampered: ReplayArtifact = {
+      ...artifact,
+      records: {
+        ...artifact.records,
+        extractor: { ...artifact.records.extractor, [key]: ['TAMPERED'] },
+      },
+    };
+
+    expect(() => new ReplayDraftExtractor(tampered, expectedHash)).toThrow(FixtureIntegrityError);
+    expect(() => new ReplayDraftExtractor(tampered, expectedHash)).toThrow(/expected .* got /);
+    // The classifier replay shares the same gate.
+    expect(() => new ReplayDraftClassifier(tampered, expectedHash, draftRefOf)).toThrow(
+      FixtureIntegrityError,
+    );
+  });
+
+  it('constructs cleanly when the expected hash matches the (untampered) records', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(new StubExtractor(new Map([[100, ['ok']]])), sink);
+    await rec.draft(content({ pr: 100 }));
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    expect(
+      () => new ReplayDraftExtractor(artifact, computeRecordsHash(artifact.records)),
+    ).not.toThrow();
+  });
+});
+
+// ─── 3. Replay miss red craft → ReplayMissError (not a safe-default) ─────────
+
+describe('replay miss red craft', () => {
+  it('throws ReplayMissError on an absent extractor inputKey — NOT a []', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(
+      new StubExtractor(new Map([[100, ['recorded']]])),
+      sink,
+    );
+    await rec.draft(content({ pr: 100 }));
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    const replay = new ReplayDraftExtractor(artifact, computeRecordsHash(artifact.records));
+
+    // PR 999 was never recorded → MISS. It REJECTS with ReplayMissError; it must
+    // NOT resolve to a safe-default [] (the whole point of the no-fallback rule).
+    const missContent = content({ pr: 999 });
+    await expect(replay.draft(missContent)).rejects.toBeInstanceOf(ReplayMissError);
+    let resolvedTo: string[] | undefined;
+    await replay.draft(missContent).then(
+      (v) => {
+        resolvedTo = v;
+      },
+      () => {
+        /* expected rejection */
+      },
+    );
+    expect(resolvedTo).toBeUndefined();
+  });
+
+  it('throws ReplayMissError on an absent classifier inputKey — NOT a {behavioral, error-default}', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftClassifier(new StubClassifier(new Map()), sink, draftRefOf);
+    await rec.classify(draft({ pr: 100, dslSource: 'recorded-body' }));
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    const replay = new ReplayDraftClassifier(
+      artifact,
+      computeRecordsHash(artifact.records),
+      draftRefOf,
+    );
+
+    await expect(
+      replay.classify(draft({ pr: 100, dslSource: 'never-recorded' })),
+    ).rejects.toBeInstanceOf(ReplayMissError);
+  });
+});
+
+// ─── 4. Recorded-empty vs miss ───────────────────────
+
+describe('recorded-empty vs miss (real rows, distinguishable from absence)', () => {
+  it('replays a recorded [] (extractor) as [] — a real row, not a miss', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(new StubExtractor(new Map([[100, []]])), sink);
+    const recorded = await rec.draft(content({ pr: 100 }));
+    expect(recorded).toEqual([]);
+
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    const replay = new ReplayDraftExtractor(artifact, computeRecordsHash(artifact.records));
+    // HIT on a recorded [] — returns [], does NOT throw ReplayMissError.
+    await expect(replay.draft(content({ pr: 100 }))).resolves.toEqual([]);
+  });
+
+  it('replays a recorded {behavioral, error-default} (classifier) as that exact value', async () => {
+    const errorDefault: ClassifierResult = {
+      disposition: 'behavioral',
+      dispositionSource: 'error-default',
+    };
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftClassifier(
+      new StubClassifier(new Map([['err-body', errorDefault]])),
+      sink,
+      draftRefOf,
+    );
+    const recorded = await rec.classify(draft({ pr: 100, dslSource: 'err-body' }));
+    expect(recorded).toEqual(errorDefault);
+
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    const replay = new ReplayDraftClassifier(
+      artifact,
+      computeRecordsHash(artifact.records),
+      draftRefOf,
+    );
+    await expect(replay.classify(draft({ pr: 100, dslSource: 'err-body' }))).resolves.toEqual(
+      errorDefault,
+    );
+  });
+});
+
+// ─── 5. Duplicate key → throws ───────────────────────
+
+describe('duplicate (adapterKind, inputKey) → DuplicateRecordError', () => {
+  it('throws when the same extractor input is recorded twice (never last-write-wins)', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(new StubExtractor(new Map([[100, ['x']]])), sink);
+    await rec.draft(content({ pr: 100 }));
+    await expect(rec.draft(content({ pr: 100 }))).rejects.toBeInstanceOf(DuplicateRecordError);
+  });
+
+  it('throws when the same classifier input (same draftRef) is recorded twice', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftClassifier(new StubClassifier(new Map()), sink, draftRefOf);
+    await rec.classify(draft({ pr: 100, dslSource: 'dup' }));
+    await expect(rec.classify(draft({ pr: 100, dslSource: 'dup' }))).rejects.toBeInstanceOf(
+      DuplicateRecordError,
+    );
+  });
+
+  it('does NOT collide two different sections sharing a coincidental key value', () => {
+    // extractor + classifier maps are independent; the same string in both is fine.
+    const sink = new ReplayRecordSink();
+    sink.recordExtractor('shared-key', ['e']);
+    expect(() =>
+      sink.recordClassifier('shared-key', {
+        disposition: 'structural',
+        dispositionSource: 'classified',
+      }),
+    ).not.toThrow();
+  });
+});
+
+// ─── 6. inputKey semantics (fold D) ──────────────────
+
+describe('extractorInputKey (fold D)', () => {
+  it('is stable for identical eligible content + same mergeCommitSha', () => {
+    const a = extractorInputKey(content({ pr: 100, mergeCommitSha: MERGE_SHA_A }));
+    const b = extractorInputKey(content({ pr: 100, mergeCommitSha: MERGE_SHA_A }));
+    expect(a).toBe(b);
+  });
+
+  it('differs when mergeCommitSha differs (provenance identity)', () => {
+    const a = extractorInputKey(content({ pr: 100, mergeCommitSha: MERGE_SHA_A }));
+    const b = extractorInputKey(content({ pr: 100, mergeCommitSha: MERGE_SHA_B }));
+    expect(a).not.toBe(b);
+  });
+
+  it('is INVARIANT to thread + comment reordering (normalization holds)', () => {
+    const t1 = thread({
+      path: 'a.ts',
+      comments: [comment('al', 'first'), comment('bo', 'second')],
+    });
+    const t2 = thread({ path: 'b.ts', comments: [comment('cy', 'third')] });
+    const forward = extractorInputKey(content({ threads: [t1, t2] }));
+    // Reverse the threads AND reverse t1's comments.
+    const t1rev = thread({
+      path: 'a.ts',
+      comments: [comment('bo', 'second'), comment('al', 'first')],
+    });
+    const reversed = extractorInputKey(content({ threads: [t2, t1rev] }));
+    expect(forward).toBe(reversed);
+  });
+
+  it('excludes resolved/outdated threads from the key (the port never sees them)', () => {
+    const eligible = thread({ path: 'a.ts', comments: [comment('al', 'keep')] });
+    const resolved = thread({ path: 'z.ts', isResolved: true, comments: [comment('zo', 'drop')] });
+    const withResolved = extractorInputKey(content({ threads: [eligible, resolved] }));
+    const withoutResolved = extractorInputKey(content({ threads: [eligible] }));
+    expect(withResolved).toBe(withoutResolved);
+  });
+});
+
+describe('classifierInputKey (fold D)', () => {
+  it('is stable for the same provenance + dslSource + draftRef', () => {
+    const d = draft({ pr: 100, dslSource: 'body' });
+    expect(classifierInputKey(d, 'ref-0')).toBe(classifierInputKey(d, 'ref-0'));
+  });
+
+  it('two drafts from the SAME provenance with different draftRef do NOT collide', () => {
+    const d = draft({ pr: 100, dslSource: 'identical-body' });
+    // The classifier does not dedupe — two drafts (same provenance, same body)
+    // must key distinctly via draftRef.
+    expect(classifierInputKey(d, 'ref-0')).not.toBe(classifierInputKey(d, 'ref-1'));
+  });
+
+  it('differs when dslSource differs', () => {
+    const a = classifierInputKey(draft({ pr: 100, dslSource: 'body-a' }), 'ref-0');
+    const b = classifierInputKey(draft({ pr: 100, dslSource: 'body-b' }), 'ref-0');
+    expect(a).not.toBe(b);
+  });
+});
+
+// ─── 7. Serialization hygiene ────────────────────────
+
+describe('serialization hygiene', () => {
+  it('serializes record keys SORTED (clean git diffs)', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(
+      new StubExtractor(
+        new Map([
+          [300, ['c']],
+          [100, ['a']],
+          [200, ['b']],
+        ]),
+      ),
+      sink,
+    );
+    // Record out of key order.
+    await rec.draft(content({ pr: 300 }));
+    await rec.draft(content({ pr: 100 }));
+    await rec.draft(content({ pr: 200 }));
+    const serialized = serializeReplayArtifact(sink.freeze(STUB_PROVENANCE));
+
+    const parsed = JSON.parse(serialized) as { records: { extractor: Record<string, unknown> } };
+    const keys = Object.keys(parsed.records.extractor);
+    expect(keys).toEqual([...keys].sort());
+    expect(keys).toHaveLength(3);
+  });
+
+  it('NEVER leaks durationMs / recordedAt / metadata into a record value', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(
+      new StubExtractor(new Map([[100, ['only-the-output']]])),
+      sink,
+    );
+    await rec.draft(content({ pr: 100 }));
+    const recC = new RecordingDraftClassifier(new StubClassifier(new Map()), sink, draftRefOf);
+    await recC.classify(draft({ pr: 100, dslSource: 'b' }));
+
+    const serialized = serializeReplayArtifact(sink.freeze(STUB_PROVENANCE));
+    // No non-deterministic / identifying metadata anywhere in the records block.
+    expect(serialized).not.toMatch(/durationMs|recordedAt|runId|run-id|localUser|userId/i);
+
+    const parsed = JSON.parse(serialized) as ReplayArtifact;
+    // Each record VALUE is strictly the port's output shape — nothing else.
+    const extractorVal = Object.values(parsed.records.extractor)[0];
+    expect(extractorVal).toEqual(['only-the-output']);
+    const classifierVal = Object.values(parsed.records.classifier)[0];
+    expect(Object.keys(classifierVal as object).sort()).toEqual([
+      'disposition',
+      'dispositionSource',
+    ]);
+  });
+
+  it('carries the artifact kind tag + provenance block OUTSIDE the records map', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(new StubExtractor(new Map([[100, ['x']]])), sink);
+    await rec.draft(content({ pr: 100 }));
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    expect(artifact.kind).toBe(REPLAY_ARTIFACT_KIND);
+    expect(artifact.provenance).toEqual(STUB_PROVENANCE);
+    // Provenance is not inside records.
+    expect(JSON.stringify(artifact.records)).not.toContain('anthropic');
+  });
+});
