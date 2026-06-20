@@ -313,6 +313,67 @@ describe('applyAstRulesToAdditions', () => {
     expect(violations.length).toBeGreaterThanOrEqual(1);
   });
 
+  // The same start-line suppression anchor flows through the tree-sitter
+  // (engine: 'ast') match path, whose AstMatch results gained the same
+  // startLineText/startPrecedingLineText fields. Cover it directly so a
+  // divergence in how the tree-sitter loop populates the anchor can't
+  // silently regress diff-scoped suppression (greptile #2216).
+  const treeSitterCatchRule = (): CompiledRule =>
+    makeRule({
+      engine: 'ast',
+      lessonHash: 'ts-fail-open-catch',
+      astQuery: '(catch_clause) @violation',
+    });
+
+  it('suppresses via a totem-context directive on the tree-sitter (ast) path when only the body is in the diff (#2214)', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      [
+        'try {', // 1
+        '  doWork();', // 2
+        '  // totem-context: best-effort cleanup, fail-soft', // 3
+        '} catch (err) {', // 4
+        '  return [];', // 5
+        '}', // 6
+        '',
+      ].join('\n'),
+    );
+
+    const additions = [makeAddition('src/app.ts', '  return [];', 5)];
+
+    const violations = await applyAstRulesToAdditions(
+      ctx,
+      [treeSitterCatchRule()],
+      additions,
+      tmpDir,
+    );
+    expect(violations).toHaveLength(0);
+  });
+
+  it('still fires on the tree-sitter (ast) path with NO directive when only the body is in the diff (#2214 — no over-suppression)', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      [
+        'try {', // 1
+        '  doWork();', // 2
+        '} catch (err) {', // 3
+        '  return [];', // 4
+        '}', // 5
+        '',
+      ].join('\n'),
+    );
+
+    const additions = [makeAddition('src/app.ts', '  return [];', 4)];
+
+    const violations = await applyAstRulesToAdditions(
+      ctx,
+      [treeSitterCatchRule()],
+      additions,
+      tmpDir,
+    );
+    expect(violations.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('compound rule with invalid NAPI config emits failure event without crashing', async () => {
     fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'const x = 1;\n');
 
