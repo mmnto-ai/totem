@@ -881,6 +881,7 @@ export async function runCertifyingEngine(
         err.message,
         'A firing-label collision voids the run — the labelId→evidenceRef join would overwrite. ' +
           'Measure on the frozen corpus; if collisions occur, extend the label with a diff-hunk span (NOT an ordinal).',
+        err,
       );
     }
     throw err;
