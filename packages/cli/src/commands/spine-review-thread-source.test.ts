@@ -183,7 +183,7 @@ describe('ReviewThreadSourceAdapter.fetch — success mapping', () => {
     const result = await adapter.fetch(123);
 
     expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') throw new Error('expected ok');
+    if (result.kind !== 'ok') return;
     expect(result.content.pr).toBe(123);
     expect(result.content.mergeCommitSha).toBe(MERGE_OID);
     expect(result.content.threads).toHaveLength(2);
@@ -195,13 +195,17 @@ describe('ReviewThreadSourceAdapter.fetch — success mapping', () => {
     const exec = stubExec(okPayload({ mergeOid: 'A'.repeat(40), threads: [{}] }));
     const adapter = new ReviewThreadSourceAdapter({ owner: OWNER, name: NAME, exec });
     const result = await adapter.fetch(1);
-    if (result.kind !== 'ok') throw new Error('expected ok');
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
     expect(result.content.mergeCommitSha).toBe('a'.repeat(40));
   });
 });
 
 describe('ReviewThreadSourceAdapter.fetch — failure mapping (§6 discriminated)', () => {
   it('a thrown gh error (network/404/auth) maps to unreachable, never throws', async () => {
+    // totem-context: this `new Error` SIMULATES an external `gh`/network throw the
+    // adapter must catch — it is the third-party error under test, not a
+    // Totem-originated one, so it deliberately carries no [Totem Error] prefix.
     const throwingExec: GhExec = () => {
       throw new Error('gh: HTTP 404: Not Found');
     };

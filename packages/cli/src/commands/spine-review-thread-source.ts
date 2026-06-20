@@ -25,8 +25,11 @@
 
 import { z } from 'zod';
 
+// Value imports from '@mmnto/totem' are lazy-loaded inside the exec seam (below)
+// to keep CLI startup fast — the core barrel pulls in heavy deps (LanceDB,
+// apache-arrow). Matches the spine-windtunnel.ts convention. Type-only imports
+// are erased at compile, so they stay static.
 import type { FetchResult, ReviewThread, ReviewThreadSource } from '@mmnto/totem';
-import { safeExec } from '@mmnto/totem';
 
 // ─── Named constants ─────────────────────────────────
 
@@ -119,11 +122,17 @@ export function buildReviewThreadsQuery(owner: string, name: string, pr: number)
 /**
  * The injectable command-exec seam. Matches the relevant part of `safeExec`'s
  * signature; the tests pass a fake that intercepts the outgoing GraphQL query
- * (no network). Defaults to the real `gh` invocation.
+ * (no network). When not injected, the adapter lazy-loads `safeExec` (below).
  */
 export type GhExec = (command: string, args: string[]) => string;
 
-function defaultExec(cwd: string): GhExec {
+/**
+ * Lazy-load `safeExec` and bind it to a `gh`-backed `GhExec` for `cwd`. The
+ * dynamic import keeps the heavy core barrel off the CLI startup path (the
+ * spine-windtunnel.ts convention).
+ */
+async function loadDefaultExec(cwd: string): Promise<GhExec> {
+  const { safeExec } = await import('@mmnto/totem');
   return (command, args) =>
     safeExec(command, args, {
       cwd,
@@ -174,22 +183,36 @@ export interface ReviewThreadSourceAdapterOptions {
 export class ReviewThreadSourceAdapter implements ReviewThreadSource {
   private readonly owner: string;
   private readonly name: string;
-  private readonly exec: GhExec;
+  private readonly cwd: string;
+  /** Injected exec (tests) or the memoized lazy-loaded default (real runs). */
+  private exec: GhExec | undefined;
 
   constructor(opts: ReviewThreadSourceAdapterOptions) {
     this.owner = opts.owner;
     this.name = opts.name;
-    this.exec = opts.exec ?? defaultExec(opts.cwd ?? process.cwd());
+    this.cwd = opts.cwd ?? process.cwd();
+    this.exec = opts.exec;
+  }
+
+  /** Resolve (and memoize) the exec seam, lazy-loading `safeExec` on first real use. */
+  private async resolveExec(): Promise<GhExec> {
+    if (!this.exec) this.exec = await loadDefaultExec(this.cwd);
+    return this.exec;
   }
 
   async fetch(pr: number): Promise<FetchResult> {
     const query = buildReviewThreadsQuery(this.owner, this.name, pr);
+    const exec = await this.resolveExec();
 
-    // IO: network / not-found / auth failures are 'unreachable' (never fetched a
-    // usable payload). NOT thrown — the orchestrator must not abort on one PR.
+    // totem-context: this catch does NOT silently degrade — it is the §6 port
+    // contract. A per-PR IO failure (network/404/auth) is reified into the
+    // discriminated FetchResult ('unreachable') and surfaced LOUDLY to core,
+    // which drop-ledgers it (a creditable FM-i drop). Re-throwing would abort the
+    // whole mining run on one bad PR, violating the orchestrator's train-slice
+    // sweep. The loud-fail lives in core's ledger, not a thrown exception.
     let raw: string;
     try {
-      raw = this.exec('gh', ['api', 'graphql', '-f', `query=${query}`]);
+      raw = exec('gh', ['api', 'graphql', '-f', `query=${query}`]);
     } catch (err) {
       return {
         kind: 'unreachable',
@@ -197,8 +220,11 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
       };
     }
 
-    // Parse + validate: a malformed / unmappable payload is 'unparseable' (fetched
-    // but unusable — a distinct route from 'unreachable', §6).
+    // totem-context: intentional — same §6 port contract as above. A malformed /
+    // unmappable payload is reified into FetchResult ('unparseable', a route
+    // distinct from 'unreachable') and surfaced LOUDLY to core for drop-ledgering,
+    // not swallowed. Re-throwing would abort the orchestrator's whole train-slice
+    // sweep on one bad payload.
     let parsed: z.infer<typeof GqlResponseSchema>;
     try {
       parsed = GqlResponseSchema.parse(JSON.parse(raw));
