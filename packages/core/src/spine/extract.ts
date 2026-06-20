@@ -1,12 +1,13 @@
-// ─── ADR-111 Stage-1 Extract (slice 2): review-thread → draft DSL ────────────
+// ─── ADR-111 Stage-1 Extract (slice 2; slice 5a resolution gate): review-thread → draft DSL ──
 //
 // The miner's deterministic Extract stage. It iterates the frozen split's TRAIN
-// slice ONLY, fetches each PR's review thread through an injected port, runs a
-// completeness check (≥1 HUMAN review comment), drafts zero-or-more
-// lesson-markdown DSL bodies through an injected `DraftExtractor` port, and
-// either carries a transient `DraftCandidate` or loud-drops to the drop ledger
-// with a reason code. It writes the drop + API-usage ledgers and the in-run
-// seed-blindness fact.
+// slice ONLY, fetches each PR's review thread through an injected port, applies
+// the resolution-eligibility gate (slice 5a: drop resolved/outdated threads,
+// mmnto-ai/totem#2201), runs a completeness check (≥1 HUMAN review comment on
+// the surviving threads), drafts zero-or-more lesson-markdown DSL bodies through
+// an injected `DraftExtractor` port, and either carries a transient
+// `DraftCandidate` or loud-drops to the drop ledger with a reason code. It writes
+// the drop + API-usage ledgers and the in-run seed-blindness fact.
 //
 // ZERO real LLM lives here: the `DraftExtractor` is a port, mocked in tests (the
 // #2188 mock-first discipline); the live LLM adapter rides a later slice. Core
@@ -54,10 +55,25 @@ export interface ReviewThreadComment {
   body: string;
 }
 
-/** A single review thread on a file path. */
+/**
+ * A single review thread on a file path.
+ *
+ * `isResolved` / `isOutdated` (slice 5a, mmnto-ai/totem#2201) are the per-thread
+ * resolution signal the live `ReviewThreadSource` adapter SURFACES from the
+ * GitHub `reviewThreads` payload — it does NOT filter on them. CRITICAL contract
+ * (the contract-owner ruling): the adapter fetches resolved/outdated threads WITH
+ * their flags and hands them to core; CORE decides eligibility + drop-ledgers (so
+ * every resolution rejection is auditable, §8 "every rejection ledgered"). A
+ * server-side / client-side `isResolved:false` pre-filter is FORBIDDEN — it would
+ * make the rejection unledgered (a silenced §6/FM violation).
+ */
 export interface ReviewThread {
   path: string;
   comments: ReviewThreadComment[];
+  /** GitHub `reviewThreads.isResolved` — the author marked this thread resolved. */
+  isResolved: boolean;
+  /** GitHub `reviewThreads.isOutdated` — the thread's diff hunk no longer matches HEAD. */
+  isOutdated: boolean;
 }
 
 /**
@@ -172,14 +188,26 @@ export interface ExtractStageResult {
  * empty thread is content-thin and must take the loud-drop path, never seed a
  * hallucinated draft.
  */
-function humanCommentCount(content: ReviewThreadContent): number {
+function humanCommentCount(threads: readonly ReviewThread[]): number {
   let count = 0;
-  for (const thread of content.threads) {
+  for (const thread of threads) {
     for (const comment of thread.comments) {
       if (comment.body.trim().length > 0 && !isBotIdentity(comment.author)) count++;
     }
   }
   return count;
+}
+
+/**
+ * The resolution-eligibility gate (slice 5a, mmnto-ai/totem#2201). A thread is
+ * INELIGIBLE if the author resolved it OR its diff hunk went outdated — either
+ * marks it as superseded review discussion, contamination the miner must not
+ * draft from. The adapter SURFACES `isResolved`/`isOutdated` (it never
+ * pre-filters); core decides here so the rejection is ledgered (§8). Returns the
+ * eligible (surviving) threads only.
+ */
+function eligibleThreads(threads: readonly ReviewThread[]): ReviewThread[] {
+  return threads.filter((t) => !t.isResolved && !t.isOutdated);
 }
 
 /**
@@ -239,10 +267,13 @@ function buildProvenance(
  * CI-locked with a fixture extractor + a strict-spy fetch source.
  *
  * Per train PR (and ONLY train PRs): log the fetch → fetch → on unreachable /
- * unparseable-at-source, loud-drop → completeness-check (≥1 human comment) →
- * build provenance → draft zero-or-more bodies → preflight each → carry a
- * `DraftCandidate` or loud-drop. Every train PR ends with at least one draft or
- * one drop (FM i, slice-2 half).
+ * unparseable-at-source, loud-drop → resolution-eligibility gate (slice 5a: drop
+ * `resolved-rejected` when the resolution gate empties an otherwise-human thread,
+ * else `truncated` when thin to begin with) → completeness-check (≥1 human
+ * comment on the survivors) → build provenance → draft zero-or-more bodies from
+ * the SURVIVING threads only → preflight each → carry a `DraftCandidate` or
+ * loud-drop. Every train PR ends with at least one draft or one drop (FM i,
+ * slice-2 half).
  */
 export async function runExtractStage(
   split: SplitArtifact,
@@ -290,9 +321,31 @@ export async function runExtractStage(
       continue;
     }
 
-    // Completeness (§6): ≥1 HUMAN review comment, non-empty.
-    if (humanCommentCount(content) < 1) {
-      drop(pr, 'truncated', 'no non-empty human review comment after bot filtering');
+    // Resolution-eligibility gate (slice 5a, mmnto-ai/totem#2201) — BEFORE the
+    // completeness check. The adapter surfaced per-thread `isResolved`/`isOutdated`
+    // (it never pre-filters); core decides + ledgers here so every resolution
+    // rejection is auditable (§8). Filter to eligible (non-resolved, non-outdated)
+    // threads and recount human comments on the SURVIVORS only.
+    const preFilterHumanCount = humanCommentCount(content.threads);
+    const survivingThreads = eligibleThreads(content.threads);
+    const survivorHumanCount = humanCommentCount(survivingThreads);
+
+    if (survivorHumanCount < 1) {
+      if (preFilterHumanCount >= 1) {
+        // The thread carried human content, but the resolution gate is what
+        // emptied it → `resolved-rejected` (an eligibility rejection, not thin
+        // content). Carry the concrete resolution evidence in the detail.
+        const ineligible = content.threads.length - survivingThreads.length;
+        drop(
+          pr,
+          'resolved-rejected',
+          `${ineligible} of ${content.threads.length} threads resolved/outdated; 0 eligible human comments remain`,
+        );
+      } else {
+        // Thin to begin with (0 human comments BEFORE the resolution gate) — the
+        // existing `truncated` path, NOT a resolution rejection.
+        drop(pr, 'truncated', 'no non-empty human review comment after bot filtering');
+      }
       continue;
     }
 
@@ -303,11 +356,15 @@ export async function runExtractStage(
       continue;
     }
 
-    // Draft zero-or-more DSL bodies (fold 1, list-shaped). Per the port's error
-    // contract the extractor returns [] on a per-PR failure (the CLI adapter
+    // Draft from the SURVIVING (eligible) threads ONLY — resolved/outdated threads
+    // are excluded from the extractor's input so no draft can be seeded from
+    // superseded review discussion (the `content.pr`/`mergeCommitSha` provenance
+    // is preserved). Zero-or-more DSL bodies (fold 1, list-shaped). Per the port's
+    // error contract the extractor returns [] on a per-PR failure (the CLI adapter
     // catches its own LLM/network errors) — so the core needs no swallowing catch
     // (Tenet 4). An empty list is a loud drop below, not a silent skip.
-    const draftBodies = await deps.extractor.draft(content);
+    const eligibleContent: ReviewThreadContent = { ...content, threads: survivingThreads };
+    const draftBodies = await deps.extractor.draft(eligibleContent);
 
     if (draftBodies.length === 0) {
       // A complete thread that yields no draft is a loud drop (keeps the train PR

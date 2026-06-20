@@ -94,6 +94,18 @@ export const DropReasonCodeSchema = z.enum([
   'truncated',
   'unparseable',
   'incomplete-provenance',
+  // 'resolved-rejected' (slice 5a, mmnto-ai/totem#2201) — an ELIGIBILITY
+  // rejection, semantically distinct from the four above. The content WAS
+  // fetched (not `unreachable`), CAN be complete (not `truncated`), and PARSES
+  // (not `unparseable`); its provenance is intact (not `incomplete-provenance`).
+  // It is dropped because every human comment lived on review threads whose
+  // resolution status (`isResolved || isOutdated`) marks them contamination: a
+  // resolved/outdated thread reflects a discussion the author already closed, so
+  // mining it would launder superseded review noise into a candidate rule. The
+  // §6 resolution gate (in `runExtractStage`) emptied the eligible-human-comment
+  // set — every such rejection is ledgered here (never silently pre-filtered by
+  // the adapter), satisfying §8 "every rejection ledgered" + the FM.
+  'resolved-rejected',
 ]);
 export type DropReasonCode = z.infer<typeof DropReasonCodeSchema>;
 
