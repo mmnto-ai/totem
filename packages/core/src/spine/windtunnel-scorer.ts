@@ -47,6 +47,20 @@ export interface WindtunnelVerdict {
   diagnostics: WindtunnelDiagnostics;
 }
 
+/**
+ * fold-D — one raw engine match that collapsed into a logical `RuleFiring`.
+ * A rule can match more than once under the same `labelId` (multiple AST nodes
+ * on one line, or distinct physical lines whose only difference is trailing
+ * whitespace that `normalizeMatchedLine` drops). Each such raw match is retained
+ * here so the cert-run report can show what backed a deduped firing.
+ */
+export interface FiringEvidence {
+  /** 1-based physical line number of the raw match in the post-image. */
+  lineNumber: number;
+  /** The raw (pre-normalization) matched line text. */
+  rawLine: string;
+}
+
 export interface RuleFiring {
   ruleId: string;
   pr: number;
@@ -57,6 +71,15 @@ export interface RuleFiring {
   targetRuleId?: string;
   /** Content-based label id (A2). Compute via firingLabelId from windtunnel-lock. */
   labelId: string;
+  /**
+   * fold-D — the raw engine matches that collapsed into this one logical firing.
+   * `buildFirings` dedups same-`labelId` matches to a SINGLE firing (the collapse
+   * is verdict-safe under ADR-110's 1.0 precision floor — it only shrinks the
+   * precision denominator, never flips PASS/FAIL) and retains the raw matches
+   * here for the report. Optional: scorer- and test-built firings need not carry
+   * it; an un-collapsed firing carries a single-element array.
+   */
+  evidence?: FiringEvidence[];
 }
 
 export interface ScorerInput {
