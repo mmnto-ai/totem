@@ -275,6 +275,13 @@ const ALLOWLIST: AllowEntry[] = [
   },
   {
     hash: 'c2c09301bb56a02b',
+    file: 'packages/cli/src/commands/spine-review-thread-source.ts',
+    expectedCount: 1,
+    reason:
+      'The ADR-111 slice-5a live ReviewThreadSource adapter invokes its injected `GhExec` seam (a function parameter named `exec`) once to run `gh api graphql` for a PR. The seam delegates to lazy-loaded `safeExec` (cross-spawn, no shell); the PR number is numeric and owner/name are JSON-escaped into a single `-f query=` argument — no shell-injection vector. Not `child_process.exec`; the rule fires only on the `exec(` call-shape (mmnto-ai/totem#2201).',
+  },
+  {
+    hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/orchestrators/orchestrator.ts',
     expectedCount: 1,
     reason: 'safeExec alias for git state probes inside the LLM orchestration pipeline.',
