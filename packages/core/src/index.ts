@@ -871,6 +871,21 @@ export {
   SplitCoverError,
   validateSplitCover,
 } from './spine/split.js';
+export type {
+  BuildFiringsInput,
+  BuildFiringsResult,
+  FiringLabelCollision,
+  PerRuleControlResult,
+  ResolvedPrDiff,
+} from './spine/windtunnel-firing.js';
+export {
+  ArchivedRuleInScopeError,
+  assertNoArchivedRules,
+  assertUniqueFiringLabels,
+  buildFirings,
+  computePerRuleControlResults,
+  FiringLabelCollisionError,
+} from './spine/windtunnel-firing.js';
 export type { WindtunnelLock } from './spine/windtunnel-lock.js';
 export { firingLabelId, WindtunnelLockSchema } from './spine/windtunnel-lock.js';
 export type {

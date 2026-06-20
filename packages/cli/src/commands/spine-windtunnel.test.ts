@@ -4,7 +4,13 @@ import * as path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { WindtunnelLock } from '@mmnto/totem';
+import type {
+  CompiledRule,
+  GroundTruthLabel,
+  ResolvedPrDiff,
+  RuleFiring,
+  WindtunnelLock,
+} from '@mmnto/totem';
 import {
   isBotIdentity,
   parsePrNumber,
@@ -17,9 +23,11 @@ import { cleanTmpDir } from '../test-utils.js';
 import {
   assertCorpusCompleteness,
   buildReadStrategy,
+  type CertifyingCorpus,
   computeFixtureSha,
   enumeratePrMetas,
   isCommitAncestor,
+  runCertifyingEngine,
   verifyControlIntegrity,
   verifyFreezeProof,
 } from './spine-windtunnel.js';
@@ -553,5 +561,92 @@ describe('assertCorpusCompleteness (S4, mocked git)', () => {
     expect(() => makeCertLock(asOf, [534], { includeGlobs: [], excludeGlobs: [] })).toThrow(
       /at least one glob/,
     );
+  });
+});
+
+// ─── runCertifyingEngine (5c-i — real engine wiring) ─────
+
+describe('runCertifyingEngine (5c-i — certifying real-engine path)', () => {
+  const asOf = 'f'.repeat(40);
+  const certLock = makeCertLock(asOf, [534, 535]);
+
+  /** A regex rule firing on the literal `debugger` token. */
+  const debuggerRule: CompiledRule = {
+    lessonHash: 'cert-debugger',
+    lessonHeading: 'No debugger',
+    pattern: 'debugger',
+    message: 'debugger statement',
+    engine: 'regex',
+    compiledAt: '2026-06-20T00:00:00.000Z',
+  };
+
+  /** readStrategy with a fixed post-image (zero-LLM, no disk, no network). */
+  const post = ['function run() {', '  debugger;', '}'].join('\n'); // totem-ignore
+  const fixedRead = async (): Promise<string | null> => post;
+
+  /** A PR diff that adds a `debugger;` line (the rule fires). */
+  function prDiff(pr: number, kind: ResolvedPrDiff['controlKind']): ResolvedPrDiff {
+    const diff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -0,0 +1,1 @@',
+      '+  debugger;', // totem-ignore
+    ].join('\n');
+    return { pr, diff, controlKind: kind };
+  }
+
+  it('throws a structured CONFIG_INVALID error when no corpus provider is wired', async () => {
+    await expect(runCertifyingEngine(certLock, fixedRead, undefined)).rejects.toThrow(
+      /no certifying-corpus provider wired/,
+    );
+  });
+
+  it('drives the real engine: fixture corpus → firings → labeled TP scores cleanly', async () => {
+    const corpus: CertifyingCorpus = {
+      rules: [debuggerRule],
+      prDiffs: [prDiff(534, 'corpus')],
+      groundTruth: new Map<string, GroundTruthLabel>(),
+    };
+    const result = await runCertifyingEngine(certLock, fixedRead, () => corpus);
+    expect(result.firings).toHaveLength(1);
+    expect(result.firings[0]!.ruleId).toBe('cert-debugger');
+    expect(result.mintedRuleIds).toEqual(['cert-debugger']);
+    // C2: one distinct file touched.
+    expect(result.filesTouchedInWindow).toBe(1);
+  });
+
+  it('fold-F: an archived rule in the corpus throws (engine never runs on it)', async () => {
+    const corpus: CertifyingCorpus = {
+      rules: [{ ...debuggerRule, status: 'archived' }],
+      prDiffs: [prDiff(534, 'corpus')],
+      groundTruth: new Map(),
+    };
+    await expect(runCertifyingEngine(certLock, fixedRead, () => corpus)).rejects.toThrow(
+      /archived rule/,
+    );
+  });
+
+  it('A1: a labelId collision surfaces as a CONFIG_INVALID error pre-score', async () => {
+    // Two PR diffs with the SAME pr + identical matched line → identical labelId.
+    const corpus: CertifyingCorpus = {
+      rules: [debuggerRule],
+      prDiffs: [prDiff(534, 'corpus'), prDiff(534, 'corpus')], // same pr, same line → collision
+      groundTruth: new Map(),
+    };
+    await expect(runCertifyingEngine(certLock, fixedRead, () => corpus)).rejects.toThrow(
+      /collision/,
+    );
+  });
+
+  it('fold-H: a negative-control firing passes through as controlKind:negative', async () => {
+    const corpus: CertifyingCorpus = {
+      rules: [debuggerRule],
+      prDiffs: [prDiff(999, 'negative')],
+      groundTruth: new Map(),
+    };
+    const result = await runCertifyingEngine(certLock, fixedRead, () => corpus);
+    const negFirings = result.firings.filter((f: RuleFiring) => f.controlKind === 'negative');
+    expect(negFirings).toHaveLength(1);
   });
 });

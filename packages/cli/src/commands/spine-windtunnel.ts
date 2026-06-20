@@ -119,6 +119,42 @@ export interface RunOptions {
   lcDir?: string;
   lockPath?: string;
   phase?: string;
+  /**
+   * 5c-ii injection seam (out of 5c-i scope to populate): the certifying corpus
+   * — resolved-PR diffs (corpus + controls), the active compiled rules, and the
+   * frozen ground-truth labels. When omitted on a certifying run, the real
+   * engine path throws a structured "corpus provider not wired" error rather
+   * than silently scoring an empty set. 5c-ii (the orchestrator) supplies the
+   * live-recorded corpus here; 5c-i unit tests supply a deterministic fixture.
+   */
+  certifyingCorpus?: CertifyingCorpusProvider;
+}
+
+/**
+ * The certifying corpus the real engine scores (5c-ii supplies this; 5c-i
+ * defines the seam + the deterministic engine that consumes it). Returns the
+ * active compiled rules (archived MUST be excluded — fold-F throws otherwise),
+ * the resolved-PR diffs (corpus + positive/negative controls), and the frozen
+ * ground-truth labels keyed by firingLabelId.
+ */
+export type CertifyingCorpusProvider = (
+  lock: WindtunnelLock,
+) => Promise<CertifyingCorpus> | CertifyingCorpus;
+
+export interface CertifyingCorpus {
+  rules: import('@mmnto/totem').CompiledRule[];
+  prDiffs: import('@mmnto/totem').ResolvedPrDiff[];
+  groundTruth: Map<string, import('@mmnto/totem').GroundTruthLabel>;
+}
+
+/** Internal shape the run command's scorer consumes (engine-agnostic). */
+interface EngineResult {
+  mintedRuleIds: string[];
+  firings: import('@mmnto/totem').RuleFiring[];
+  groundTruth: Map<string, import('@mmnto/totem').GroundTruthLabel>;
+  positiveControlTargets: Array<{ pr: number; targetRuleId: string }>;
+  /** C2 — real touched-file exposure (0 for the harness mock). */
+  filesTouchedInWindow: number;
 }
 
 /**
@@ -225,16 +261,19 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   // When lcDir is provided, resolve post-image blobs from the lc clone.
   const readStrategy = buildReadStrategy(lcDir, lock.corpus.selectionRule.asOfCommit, safeExec);
 
-  // Enrich with AST context for any additions (harness: no diff, so no additions).
-  // In the real certifying run, the caller would build additions from PR diffs
-  // and pass them through enrichWithAstContext + applyAstRulesToAdditions with
-  // the shared readStrategy (S1/C1 — same content for regex astContext + AST).
+  // Run the engine. Harness phase → mock engine (no real rules yet). Certifying
+  // phase → the REAL engine path (5c-i): build additions from each resolved-PR
+  // diff → enrichWithAstContext + applyAstRulesToAdditions with the shared
+  // post-image readStrategy → RuleFiring[] → A1 unique-label hard-gate → score.
+  // C2: filesTouchedInWindow is the real exposure computed from the diffs (no
+  // longer the hard-coded 0).
+  const engineResult =
+    lock.phase === 'certifying'
+      ? await runCertifyingEngine(lock, readStrategy, opts.certifyingCorpus)
+      : await runMockEngineAdapter(lock, readStrategy);
 
-  // Run the engine — harness phase uses mock engines.
-  const { mintedRuleIds, firings, groundTruth, positiveControlTargets } = await runMockEngine(
-    lock,
-    readStrategy,
-  );
+  const { mintedRuleIds, firings, groundTruth, positiveControlTargets, filesTouchedInWindow } =
+    engineResult;
 
   // Score
   const verdict = scoreWindtunnel({
@@ -250,7 +289,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     },
     actualExposure: {
       activeRulesEvaluated: mintedRuleIds.length,
-      filesTouchedInWindow: 0,
+      filesTouchedInWindow,
       positiveControlsExercised: positiveControlTargets.length,
     },
   });
@@ -750,4 +789,116 @@ async function runMockEngine(
   }
 
   return { mintedRuleIds, firings, groundTruth, positiveControlTargets };
+}
+
+/** Adapt the harness mock engine to the EngineResult shape (filesTouched = 0). */
+async function runMockEngineAdapter(
+  lock: WindtunnelLock,
+  readStrategy: (file: string) => Promise<string | null>,
+): Promise<EngineResult> {
+  const mock = await runMockEngine(lock, readStrategy);
+  return { ...mock, filesTouchedInWindow: 0 };
+}
+
+// ─── Real engine (certifying phase, 5c-i) ────────────
+
+/**
+ * Run the REAL engine for the certifying phase (5c-i — #2189 item 1).
+ *
+ * Replaces the mock for `--phase certifying`: drives each resolved-PR diff
+ * through `buildFirings` (core), which runs `enrichWithAstContext` +
+ * `applyAstRulesToAdditions` with the shared post-image `readStrategy` (S1/C1)
+ * and maps every violation to a `RuleFiring` (content-based labelId). Then:
+ *  - **fold-F**: `buildFirings` throws if any archived rule is in the scored set
+ *    (the engine never runs on an archived rule).
+ *  - **A1 (fold-D)**: `assertUniqueFiringLabels` hard-gates labelId uniqueness
+ *    BEFORE scoring (throws on collision, surfacing the offending refs).
+ *  - **C2**: `filesTouchedInWindow` is the real distinct-file exposure.
+ *  - **fold-H**: neg-control firings flow through as `controlKind:'negative'`;
+ *    unlabeled firings route to needsAdjudication via the scorer.
+ *
+ * The corpus itself (resolved-PR diffs + active rules + frozen ground truth) is
+ * supplied by the 5c-ii orchestrator via the `certifyingCorpus` seam. 5c-i owns
+ * the deterministic engine; it does NOT fetch/compile live data (out of scope).
+ */
+export async function runCertifyingEngine(
+  lock: WindtunnelLock,
+  readStrategy: (file: string) => Promise<string | null>,
+  corpusProvider?: CertifyingCorpusProvider,
+): Promise<EngineResult> {
+  const {
+    buildFirings,
+    assertUniqueFiringLabels,
+    resolveGitRoot,
+    TotemError,
+    FiringLabelCollisionError,
+  } = await import('@mmnto/totem');
+
+  if (!corpusProvider) {
+    // No silent empty-set scoring: a certifying run with no corpus provider is a
+    // wiring error (5c-ii supplies it). Fail loud + actionable (Tenet 4).
+    throw new TotemError(
+      'CONFIG_INVALID',
+      'Wind-tunnel certifying run: no certifying-corpus provider wired (5c-ii orchestration).',
+      'The deterministic real-engine firing path (5c-i) is in place, but the corpus ' +
+        '(resolved-PR diffs + compiled rules + ground truth) is supplied by the 5c-ii ' +
+        'orchestrator. Run via the certifying orchestrator once it lands.',
+    );
+  }
+
+  const corpus = await corpusProvider(lock);
+  const cwd = resolveGitRoot(process.cwd()) ?? process.cwd();
+  const ruleEngineCtx = {
+    logger: { warn: (msg: string) => console.error(`[WindtunnelRun] ${msg}`) },
+    state: { hasWarnedShieldContext: false },
+  };
+
+  // buildFirings runs fold-F (archived assert) internally before the engine; its
+  // only throw is ArchivedRuleInScopeError, which propagates. A1 (labelId
+  // collision) is deliberately NOT raised here — it is the caller's pre-score gate
+  // below (assertUniqueFiringLabels), so the structured per-collision report is
+  // threaded there rather than swallowed at construction. (greptile #2215 P2.)
+  const built = await buildFirings({
+    rules: corpus.rules,
+    prDiffs: corpus.prDiffs,
+    cwd,
+    readStrategy,
+    ruleEngineCtx,
+    onWarn: (msg) => console.error(`[WindtunnelRun] ${msg}`),
+  });
+
+  // A1 (fold-D): hard-gate labelId uniqueness BEFORE scoring (Tenet 4).
+  try {
+    assertUniqueFiringLabels(built.firings);
+  } catch (err) {
+    if (err instanceof FiringLabelCollisionError) {
+      console.error(`[WindtunnelRun] A1 firing-label collision (fold-D):`);
+      for (const c of err.collisions) {
+        console.error(`  • ${c.labelId.slice(0, 12)}… ×${c.evidenceRefs.length}`);
+      }
+      throw new TotemError(
+        'CONFIG_INVALID',
+        err.message,
+        'A firing-label collision voids the run — the labelId→evidenceRef join would overwrite. ' +
+          'Measure on the frozen corpus; if collisions occur, extend the label with a diff-hunk span (NOT an ordinal).',
+        err,
+      );
+    }
+    throw err;
+  }
+
+  const mintedRuleIds = corpus.rules.map((r) => r.lessonHash);
+  console.error(
+    `[WindtunnelRun] Certifying engine: ${mintedRuleIds.length} rule(s), ` +
+      `${corpus.prDiffs.length} PR diff(s), ${built.firings.length} firing(s), ` +
+      `${built.filesTouchedInWindow} file(s) touched.`,
+  );
+
+  return {
+    mintedRuleIds,
+    firings: built.firings,
+    groundTruth: corpus.groundTruth,
+    positiveControlTargets: built.positiveControlTargets,
+    filesTouchedInWindow: built.filesTouchedInWindow,
+  };
 }

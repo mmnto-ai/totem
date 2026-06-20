@@ -208,6 +208,45 @@ describe('exposure floor check (P2)', () => {
     );
     expect(result.verdict).toBe('PASS');
   });
+
+  // ── C2 (5c-i): the third exposure leg is now load-bearing ──
+
+  it('returns HONEST-NEGATIVE when filesTouchedInWindow < floor (C2 — third leg enforced)', () => {
+    const result = scoreWindtunnel(
+      baseInput({
+        actualExposure: {
+          activeRulesEvaluated: 3, // passes
+          filesTouchedInWindow: 1, // BELOW floor
+          positiveControlsExercised: 2, // passes
+        },
+        exposureFloors: {
+          activeRulesEvaluated: 2,
+          filesTouchedInWindow: 5,
+          positiveControlsExercised: 2,
+        },
+      }),
+    );
+    expect(result.verdict).toBe('HONEST-NEGATIVE');
+    expect(result.precision).toBeNull();
+  });
+
+  it('passes when filesTouchedInWindow exactly equals floor (C2 equality boundary)', () => {
+    const result = scoreWindtunnel(
+      baseInput({
+        actualExposure: {
+          activeRulesEvaluated: 3,
+          filesTouchedInWindow: 5,
+          positiveControlsExercised: 2,
+        },
+        exposureFloors: {
+          activeRulesEvaluated: 2,
+          filesTouchedInWindow: 5,
+          positiveControlsExercised: 2,
+        },
+      }),
+    );
+    expect(result.verdict).toBe('PASS');
+  });
 });
 
 // ─── Cull-rate guard → HONEST-NEGATIVE (C5/S2) ───────
