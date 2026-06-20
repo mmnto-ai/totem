@@ -235,7 +235,11 @@ export async function buildFirings(input: BuildFiringsInput): Promise<BuildFirin
     // SAME post-image content the AST engine will parse (S1).
     await enrichWithAstContext(additions, { cwd, readStrategy, onWarn });
 
-    // Regex-engine violations.
+    // Both engines receive the FULL rule set and self-filter by `rule.engine`
+    // into DISJOINT partitions — applyRulesToAdditions takes `engine === 'regex'
+    // || !engine`; applyAstRulesToAdditions takes `engine === 'ast' | 'ast-grep'`
+    // (rule-engine.ts). No rule is processed by both, so double-processing can
+    // never manufacture a same-rule labelId self-collision at the A1 gate. (CR #2215.)
     const regexViolations = applyRulesToAdditions(ruleEngineCtx, rules, additions);
     // AST / ast-grep violations (whole post-image via the shared readStrategy).
     const astViolations = await applyAstRulesToAdditions(
