@@ -346,15 +346,21 @@ export function serializeReplayArtifact(artifact: ReplayArtifact): string {
 }
 
 /**
- * The records-block CONTENT-HASH (fold B): sha256 over the canonically-serialized
- * records section ONLY. Deterministic + git-independent (the pure replay path has
- * no git dependency — contrast the wind-tunnel's `git hash-object`, which 5c may
- * switch to for wind-tunnel consistency, out of scope here). Hashing the records
- * (not the whole artifact) means a provenance-only edit is a SEPARATE concern;
- * the integrity gate's job is to detect a recorded-OUTPUT mutation.
+ * The artifact CONTENT-HASH (fold B + fold F): sha256 over the canonically-
+ * serialized WHOLE artifact (kind + provenance + records). Deterministic +
+ * git-independent (the pure replay path has no git dependency — contrast the
+ * wind-tunnel's `git hash-object`, which 5c may switch to for wind-tunnel
+ * consistency, out of scope here). Hashing the WHOLE artifact (not records-only)
+ * means the integrity gate ALSO COVERS the provenance block — so a prompt / model
+ * / key-version edit (e.g. `promptTemplateHash`) WITHOUT a re-record trips the
+ * gate (fold F: a prompt change must force a re-record, never silently serve
+ * stale outputs under a changed prompt). The expected hash is EXTERNAL (caller-
+ * injected; 5c sources it from a committed lock) — never embedded (a self-hash
+ * the artifact validates against itself is circular: a content+hash co-rewrite
+ * would pass its own check).
  */
-export function computeRecordsHash(records: ReplayRecords): string {
-  return sha256Hex(canonicalJson(ReplayRecordsSchema.parse(records)));
+export function computeArtifactHash(artifact: ReplayArtifact): string {
+  return sha256Hex(canonicalJson(ReplayArtifactSchema.parse(artifact)));
 }
 
 // ─── Record sink ─────────────────────────────────────
@@ -446,13 +452,14 @@ export class RecordingDraftClassifier {
 // ─── Replay decorators (PURE — zero live calls) ───────
 
 /**
- * Validate the loaded fixture's records content-hash against the EXTERNAL
- * expected hash (fold B). Throws `FixtureIntegrityError` on mismatch. Shared by
- * both replay decorators so the gate runs exactly once per construction with one
+ * Validate the loaded fixture's whole-artifact content-hash against the EXTERNAL
+ * expected hash (fold B + fold F — provenance is covered, so a prompt-hash edit
+ * trips the gate). Throws `FixtureIntegrityError` on mismatch. Shared by both
+ * replay decorators so the gate runs exactly once per construction with one
  * implementation.
  */
-function assertFixtureIntegrity(records: ReplayRecords, expectedHash: string): void {
-  const actualHash = computeRecordsHash(records);
+function assertFixtureIntegrity(artifact: ReplayArtifact, expectedHash: string): void {
+  const actualHash = computeArtifactHash(artifact);
   if (actualHash !== expectedHash) throw new FixtureIntegrityError(expectedHash, actualHash);
 }
 
@@ -462,17 +469,17 @@ function assertFixtureIntegrity(records: ReplayRecords, expectedHash: string): v
  *   - HIT  → return the recorded `string[]` (including a recorded `[]` — a real row);
  *   - MISS → throw `ReplayMissError` (NEVER fall back to `[]`).
  *
- * Integrity (fold B): the constructor takes the EXTERNAL expected content-hash,
- * computes the actual records hash, and throws `FixtureIntegrityError` AT
- * CONSTRUCTION on mismatch — so a tampered/drifted fixture can never serve a
- * single replay.
+ * Integrity (fold B + F): the constructor takes the EXTERNAL expected content-
+ * hash, computes the actual WHOLE-ARTIFACT hash (records + provenance), and throws
+ * `FixtureIntegrityError` AT CONSTRUCTION on mismatch — so a tampered/drifted
+ * fixture (records OR a prompt-provenance edit) can never serve a single replay.
  */
 export class ReplayDraftExtractor {
   private readonly records: ReplayRecords['extractor'];
 
   constructor(fixture: ReplayArtifact, expectedHash: string) {
     const parsed = ReplayArtifactSchema.parse(fixture);
-    assertFixtureIntegrity(parsed.records, expectedHash);
+    assertFixtureIntegrity(parsed, expectedHash);
     this.records = parsed.records.extractor;
   }
 
@@ -510,7 +517,7 @@ export class ReplayDraftClassifier {
     draftRef: (draft: DraftCandidate) => string,
   ) {
     const parsed = ReplayArtifactSchema.parse(fixture);
-    assertFixtureIntegrity(parsed.records, expectedHash);
+    assertFixtureIntegrity(parsed, expectedHash);
     this.records = parsed.records.classifier;
     this.draftRef = draftRef;
   }

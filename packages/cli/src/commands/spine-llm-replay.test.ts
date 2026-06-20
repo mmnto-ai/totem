@@ -9,7 +9,7 @@ import {
 
 import {
   classifierInputKey,
-  computeRecordsHash,
+  computeArtifactHash,
   DuplicateRecordError,
   extractorInputKey,
   FixtureIntegrityError,
@@ -134,7 +134,7 @@ describe('record → replay determinism (FM-a)', () => {
     const recordedClass = await recClassifier.classify(d);
 
     const artifact = sink.freeze(STUB_PROVENANCE);
-    const expectedHash = computeRecordsHash(artifact.records);
+    const expectedHash = computeArtifactHash(artifact);
 
     // Round-trip through serialization to prove the on-disk form replays too.
     const reloaded = ReplayArtifactSchema.parse(JSON.parse(serializeReplayArtifact(artifact)));
@@ -177,7 +177,7 @@ describe('drift / mutation red craft (fold B integrity)', () => {
     await rec.draft(content({ pr: 100 }));
 
     const artifact = sink.freeze(STUB_PROVENANCE);
-    const expectedHash = computeRecordsHash(artifact.records); // frozen at record time
+    const expectedHash = computeArtifactHash(artifact); // frozen at record time
 
     // Tamper with ONE recorded raw entry, leaving the injected expected hash stale.
     const key = extractorInputKey(content({ pr: 100 }));
@@ -202,9 +202,29 @@ describe('drift / mutation red craft (fold B integrity)', () => {
     const rec = new RecordingDraftExtractor(new StubExtractor(new Map([[100, ['ok']]])), sink);
     await rec.draft(content({ pr: 100 }));
     const artifact = sink.freeze(STUB_PROVENANCE);
-    expect(
-      () => new ReplayDraftExtractor(artifact, computeRecordsHash(artifact.records)),
-    ).not.toThrow();
+    expect(() => new ReplayDraftExtractor(artifact, computeArtifactHash(artifact))).not.toThrow();
+  });
+
+  it('throws FixtureIntegrityError when a PROVENANCE field is mutated (fold F — prompt-hash covered by the gate)', async () => {
+    const sink = new ReplayRecordSink();
+    const rec = new RecordingDraftExtractor(new StubExtractor(new Map([[100, ['ok']]])), sink);
+    await rec.draft(content({ pr: 100 }));
+    const artifact = sink.freeze(STUB_PROVENANCE);
+    const expectedHash = computeArtifactHash(artifact); // frozen at record time
+
+    // Edit a PROVENANCE field (the prompt-template hash) WITHOUT re-recording or
+    // updating the expected hash. The integrity gate covers the whole artifact, so
+    // a prompt change must force a re-record — it can NEVER silently serve the same
+    // recorded outputs under a changed prompt (fold F). The records are untouched,
+    // so a records-only hash would MISS this; the whole-artifact hash catches it.
+    const tampered: ReplayArtifact = {
+      ...artifact,
+      provenance: { ...artifact.provenance, promptTemplateHash: 'q'.repeat(64) },
+    };
+    expect(() => new ReplayDraftExtractor(tampered, expectedHash)).toThrow(FixtureIntegrityError);
+    expect(() => new ReplayDraftClassifier(tampered, expectedHash, draftRefOf)).toThrow(
+      FixtureIntegrityError,
+    );
   });
 });
 
@@ -219,7 +239,7 @@ describe('replay miss red craft', () => {
     );
     await rec.draft(content({ pr: 100 }));
     const artifact = sink.freeze(STUB_PROVENANCE);
-    const replay = new ReplayDraftExtractor(artifact, computeRecordsHash(artifact.records));
+    const replay = new ReplayDraftExtractor(artifact, computeArtifactHash(artifact));
 
     // PR 999 was never recorded → MISS. It REJECTS with ReplayMissError; it must
     // NOT resolve to a safe-default [] (the whole point of the no-fallback rule).
@@ -242,11 +262,7 @@ describe('replay miss red craft', () => {
     const rec = new RecordingDraftClassifier(new StubClassifier(new Map()), sink, draftRefOf);
     await rec.classify(draft({ pr: 100, dslSource: 'recorded-body' }));
     const artifact = sink.freeze(STUB_PROVENANCE);
-    const replay = new ReplayDraftClassifier(
-      artifact,
-      computeRecordsHash(artifact.records),
-      draftRefOf,
-    );
+    const replay = new ReplayDraftClassifier(artifact, computeArtifactHash(artifact), draftRefOf);
 
     await expect(
       replay.classify(draft({ pr: 100, dslSource: 'never-recorded' })),
@@ -264,7 +280,7 @@ describe('recorded-empty vs miss (real rows, distinguishable from absence)', () 
     expect(recorded).toEqual([]);
 
     const artifact = sink.freeze(STUB_PROVENANCE);
-    const replay = new ReplayDraftExtractor(artifact, computeRecordsHash(artifact.records));
+    const replay = new ReplayDraftExtractor(artifact, computeArtifactHash(artifact));
     // HIT on a recorded [] — returns [], does NOT throw ReplayMissError.
     await expect(replay.draft(content({ pr: 100 }))).resolves.toEqual([]);
   });
@@ -284,11 +300,7 @@ describe('recorded-empty vs miss (real rows, distinguishable from absence)', () 
     expect(recorded).toEqual(errorDefault);
 
     const artifact = sink.freeze(STUB_PROVENANCE);
-    const replay = new ReplayDraftClassifier(
-      artifact,
-      computeRecordsHash(artifact.records),
-      draftRefOf,
-    );
+    const replay = new ReplayDraftClassifier(artifact, computeArtifactHash(artifact), draftRefOf);
     await expect(replay.classify(draft({ pr: 100, dslSource: 'err-body' }))).resolves.toEqual(
       errorDefault,
     );
