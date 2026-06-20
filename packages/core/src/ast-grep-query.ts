@@ -12,6 +12,18 @@ export type AstGrepRule = string | NapiConfig;
 export interface AstGrepMatch {
   lineNumber: number;
   lineText: string;
+  /**
+   * Suppression anchor: the matched construct's start line text and the line
+   * immediately above it. The inline-directive convention (mmnto-ai/totem#1889)
+   * attaches `// totem-ignore` / `// totem-context:` to the construct's start
+   * line or the line above it, but `lineNumber` is the first *added* line
+   * within the node's range — under diff scope it can drift into the construct
+   * body, off the start line, so a directive on the start line is otherwise
+   * missed (mmnto-ai/totem#2214). Consumers check this anchor in addition to
+   * the reported line.
+   */
+  startLineText: string;
+  startPrecedingLineText: string | null;
 }
 
 // ─── Constants ──────────────────────────────────────
@@ -136,6 +148,10 @@ function executeQuery(
           results.push({
             lineNumber: lineNum,
             lineText: lines[lineNum - 1] ?? '',
+            // Suppression anchor — the construct's start line, which may differ
+            // from the reported (first-added) line under diff scope (#2214).
+            startLineText: lines[startLine - 1] ?? '',
+            startPrecedingLineText: startLine > 1 ? (lines[startLine - 2] ?? null) : null,
           });
           break;
         }

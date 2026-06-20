@@ -236,6 +236,42 @@ export function extractJustification(
   return '';
 }
 
+/**
+ * Resolve inline suppression for an AST (tree-sitter or ast-grep) match,
+ * checking BOTH directive anchors.
+ *
+ * The inline-directive convention (mmnto-ai/totem#1889) attaches a
+ * `// totem-ignore` / `// totem-context:` directive to the matched construct's
+ * start line or the line immediately above it. But the reported match line is
+ * the first *added* line within the node's range — under diff scope, where only
+ * a changed body line is an addition, it drifts off the construct's start line,
+ * so a directive on (or above) that start line is missed if we only check the
+ * matched line (mmnto-ai/totem#2214). We check the matched (first-added) line
+ * AND the construct's start-line anchor the match carries; a directive on
+ * either suppresses, making diff-scoped lint behave like full-tree lint.
+ */
+function resolveAstMatchSuppression(
+  ctx: RuleEngineContext,
+  match: { startLineText: string; startPrecedingLineText: string | null },
+  addition: DiffAddition | undefined,
+): { suppressed: boolean; justification: string } {
+  // Anchor 1 — the matched (first-added) line + its preceding line, from the diff.
+  if (addition && isSuppressed(ctx, addition.line, addition.precedingLine)) {
+    return {
+      suppressed: true,
+      justification: extractJustification(ctx, addition.line, addition.precedingLine),
+    };
+  }
+  // Anchor 2 — the construct's start line + the line above it (mmnto-ai/totem#2214).
+  if (isSuppressed(ctx, match.startLineText, match.startPrecedingLineText)) {
+    return {
+      suppressed: true,
+      justification: extractJustification(ctx, match.startLineText, match.startPrecedingLineText),
+    };
+  }
+  return { suppressed: false, justification: '' };
+}
+
 // ─── Regex rule execution ───────────────────────────
 
 /**
@@ -487,11 +523,12 @@ export async function applyAstRulesToAdditions(
 
           for (const match of matches) {
             const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-            if (addition && isSuppressed(ctx, addition.line, addition.precedingLine)) {
+            const { suppressed, justification } = resolveAstMatchSuppression(ctx, match, addition);
+            if (suppressed) {
               onRuleEvent?.('suppress', rule.lessonHash, {
                 file,
                 line: match.lineNumber,
-                justification: extractJustification(ctx, addition.line, addition.precedingLine),
+                justification,
                 immutable: rule.immutable,
               });
               continue;
@@ -572,13 +609,16 @@ export async function applyAstRulesToAdditions(
 
             for (const match of matches) {
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-              if (addition && isSuppressed(ctx, addition.line, addition.precedingLine)) {
+              const { suppressed, justification } = resolveAstMatchSuppression(
+                ctx,
+                match,
+                addition,
+              );
+              if (suppressed) {
                 onRuleEvent?.('suppress', rule.lessonHash, {
                   file,
                   line: match.lineNumber,
-                  justification: addition
-                    ? extractJustification(ctx, addition.line, addition.precedingLine)
-                    : '',
+                  justification,
                   immutable: rule.immutable,
                 });
                 continue;
