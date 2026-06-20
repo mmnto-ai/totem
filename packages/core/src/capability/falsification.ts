@@ -40,11 +40,17 @@ export function runCapabilityFalsification(
 
   // FM-c: regenerate's fail-loud throws (duplicate/absent/ambiguous join) ARE the
   // join-integrity guard. A throw here is a clause-c violation, not a crash.
+  // totem-context: intentional throw→finding conversion, NOT silent degradation. The
+  // falsification harness is a SENSOR — its contract is to RETURN violations, not throw.
+  // regenerateCapabilityLedger fails loud on a join-integrity breach; the harness
+  // surfaces that as a clause-`c` violation with the original message preserved in
+  // `detail`, so the signal is reported, never dropped (Tenet 4 satisfied).
   let ledger;
   try {
     ledger = regenerateCapabilityLedger(claims, resolutions, opts);
   } catch (err) {
-    violations.push({ clause: 'c', detail: (err as Error).message });
+    const detail = err instanceof Error ? err.message : String(err);
+    violations.push({ clause: 'c', detail });
     return { ok: false, violations };
   }
 
