@@ -49,6 +49,13 @@ export interface ReviewCatchMineResult {
   resolutions: CapabilityResolution[];
 }
 
+/** The three active paid review bots → their stable actor-id, keyed by EXACT login. */
+const REVIEW_BOT_ACTOR_IDS: Readonly<Record<string, string>> = {
+  'coderabbitai[bot]': 'coderabbit',
+  'gemini-code-assist[bot]': 'gemini-code-assist',
+  'greptile-apps[bot]': 'greptile',
+};
+
 /**
  * Resolve a GitHub author login to a stable Layer-B actor-id, COUPLING to existing
  * actors rather than minting a parallel scheme (#697 fold 5, corrected c.4755848293).
@@ -59,14 +66,11 @@ export interface ReviewCatchMineResult {
  * (no shipped #670 backend registry to couple to — forward-couple only IF #670 ships), so
  * they are NOT specially mapped. Model/backend identity is intentionally NOT folded into
  * the id (so the hit-rate aggregates across model swaps).
+ *
+ * @param author - the GitHub login of the finding's author (bot or cohort seat).
+ * @returns the stable actor-id — a known bot's canonical id, else the trimmed login.
+ * @throws if `author` is empty or whitespace-only (no silent empty actor-id).
  */
-/** The three active paid review bots → their stable actor-id, keyed by EXACT login. */
-const REVIEW_BOT_ACTOR_IDS: Readonly<Record<string, string>> = {
-  'coderabbitai[bot]': 'coderabbit',
-  'gemini-code-assist[bot]': 'gemini-code-assist',
-  'greptile-apps[bot]': 'greptile',
-};
-
 export function resolveActorId(author: string): string {
   const trimmed = author.trim();
   if (trimmed.length === 0) {
