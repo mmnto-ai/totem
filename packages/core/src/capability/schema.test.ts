@@ -76,6 +76,17 @@ describe('CapabilityClaimSchema', () => {
     ).toBe(false);
     expect(CapabilityClaimSchema.safeParse({ ...valid, agentSource: '  ' }).success).toBe(false);
   });
+
+  it('rejects a malformed assertedAt — date-only, offset, or empty (greptile P2)', () => {
+    expect(CapabilityClaimSchema.safeParse({ ...valid, assertedAt: '2026-06-20' }).success).toBe(
+      false,
+    );
+    expect(
+      CapabilityClaimSchema.safeParse({ ...valid, assertedAt: '2026-06-20T12:00:00+00:00' })
+        .success,
+    ).toBe(false);
+    expect(CapabilityClaimSchema.safeParse({ ...valid, assertedAt: '' }).success).toBe(false);
+  });
 });
 
 describe('CapabilityResolutionSchema', () => {
@@ -100,5 +111,11 @@ describe('CapabilityResolutionSchema', () => {
       CapabilityResolutionSchema.safeParse({ ...valid, supersedesResolutionId: 'rc-res:110' })
         .success,
     ).toBe(true);
+  });
+
+  it('rejects a malformed resolvedAt — date-only (greptile P2)', () => {
+    expect(
+      CapabilityResolutionSchema.safeParse({ ...valid, resolvedAt: '2026-06-20' }).success,
+    ).toBe(false);
   });
 });

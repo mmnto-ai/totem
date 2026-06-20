@@ -95,6 +95,17 @@ describe('regenerateCapabilityLedger — fold + hit-rate', () => {
     expect(row(ledger, 'cr')!.unresolvedN).toBe(1);
     expect(row(ledger, 'cr')!.decisiveN).toBe(0);
   });
+
+  it('compares the horizon chronologically across precision — equal instant is within-horizon (greptile P2)', () => {
+    // resolvedAt has no ms; horizon has ms — the SAME instant. A raw lexicographic compare
+    // would EXCLUDE it ('.' < 'Z'); the chronological compare correctly includes it (<=).
+    const ledger = regenerateCapabilityLedger(
+      [claim('1')],
+      [resolution('r1', '1', 'correct', { resolvedAt: '2026-06-20T12:00:00Z' })],
+      { resolutionHorizon: '2026-06-20T12:00:00.000Z' },
+    );
+    expect(row(ledger, 'cr')!.correctN).toBe(1);
+  });
 });
 
 describe('regenerateCapabilityLedger — supersession', () => {
@@ -144,6 +155,12 @@ describe('regenerateCapabilityLedger — FM-c join integrity (fail loud)', () =>
         { resolutionHorizon: HORIZON },
       ),
     ).toThrow(/duplicate resolutionId/);
+  });
+
+  it('throws on a duplicate claimId — would otherwise double-count unresolvedN (greptile P1)', () => {
+    expect(() =>
+      regenerateCapabilityLedger([claim('1'), claim('1')], [], { resolutionHorizon: HORIZON }),
+    ).toThrow(/duplicate claimId/);
   });
 
   it('throws on an ambiguous supersession terminal (two unsuperseded heads)', () => {

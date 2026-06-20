@@ -82,7 +82,11 @@ export const CapabilityClaimSchema = z.object({
   provenance: CapabilityProvenanceSchema,
   /** The source primitive's stable native id — the `claimId` discriminator that survives re-enumeration. */
   nativeKey: nonEmpty('nativeKey'),
-  assertedAt: nonEmpty('assertedAt'),
+  // RFC-3339 UTC (Z, no offset) — well-formedness lets the regenerator compare timestamps
+  // chronologically without a date-only / offset value silently misplacing the window.
+  assertedAt: z
+    .string()
+    .datetime({ message: 'assertedAt must be an RFC-3339 UTC datetime (Z suffix)' }),
   /** Descriptive metadata (incl. model/backend) — NEVER part of `claimId` (identity ≠ content). */
   payload: z.record(z.unknown()).optional(),
 });
@@ -99,7 +103,9 @@ export const CapabilityResolutionSchema = z.object({
   outcome: OutcomeSchema,
   resolutionSource: ResolutionSourceSchema,
   evidenceRef: nonEmpty('evidenceRef'),
-  resolvedAt: nonEmpty('resolvedAt'),
+  resolvedAt: z
+    .string()
+    .datetime({ message: 'resolvedAt must be an RFC-3339 UTC datetime (Z suffix)' }),
   /** Explicit supersession chain — preferred over `resolvedAt` ordering when present. */
   supersedesResolutionId: z.string().optional(),
 });

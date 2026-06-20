@@ -60,13 +60,24 @@ export interface ReviewCatchMineResult {
  * they are NOT specially mapped. Model/backend identity is intentionally NOT folded into
  * the id (so the hit-rate aggregates across model swaps).
  */
+/** The three active paid review bots → their stable actor-id, keyed by EXACT login. */
+const REVIEW_BOT_ACTOR_IDS: Readonly<Record<string, string>> = {
+  'coderabbitai[bot]': 'coderabbit',
+  'gemini-code-assist[bot]': 'gemini-code-assist',
+  'greptile-apps[bot]': 'greptile',
+};
+
 export function resolveActorId(author: string): string {
-  const a = author.trim().toLowerCase();
-  if (a.startsWith('coderabbit')) return 'coderabbit';
-  if (a.startsWith('gemini-code-assist')) return 'gemini-code-assist';
-  if (a.startsWith('greptile')) return 'greptile';
-  // A cohort seat (e.g. `totem-claude`, `strategy-codex`) — the login IS the actor-id.
-  return author.trim();
+  const trimmed = author.trim();
+  if (trimmed.length === 0) {
+    // Fail loud: an empty/whitespace login (e.g. a deleted GH user → null author) must
+    // never silently mint an empty actor-id (Tenet 4).
+    throw new Error('[Totem Error] resolveActorId: author login must be a non-empty string');
+  }
+  // EXACT login match, NOT a prefix — so a future variant like `greptile-enterprise[bot]`
+  // is not silently collapsed into `greptile` and mixed into its hit-rate (greptile P2).
+  // A cohort seat login (e.g. `totem-claude`) is unknown here → returned as its own id.
+  return REVIEW_BOT_ACTOR_IDS[trimmed.toLowerCase()] ?? trimmed;
 }
 
 /**
@@ -111,8 +122,10 @@ export function mineReviewCatch(findings: readonly MinedReviewFinding[]): Review
           outcome: f.disposition === 'accepted' ? 'correct' : 'wrong',
           // Deterministic read of the disposition primitive — never an LLM-judge (FM-b).
           resolutionSource: 'disposition-thread',
-          evidenceRef: f.dispositionEvidenceRef ?? nativeKey,
-          resolvedAt: f.resolvedAt ?? f.assertedAt,
+          // `?.trim() ||` (not `??`) so an empty/whitespace evidenceRef/resolvedAt falls
+          // back instead of tripping the schema's non-empty/datetime guards (GCA).
+          evidenceRef: f.dispositionEvidenceRef?.trim() || nativeKey,
+          resolvedAt: f.resolvedAt?.trim() || f.assertedAt,
         }),
       );
     }

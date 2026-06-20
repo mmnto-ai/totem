@@ -100,4 +100,21 @@ describe('runCapabilityFalsification', () => {
     expect(result.ok).toBe(false);
     expect(result.violations.map((v) => v.clause)).toContain('c');
   });
+
+  it('flags FM-c on a duplicate claimId (greptile P1)', () => {
+    const dupClaim: CapabilityClaim = {
+      claimId: 'same-claim',
+      agentSource: 'cr',
+      taskType: 'review-catch',
+      claimKind: 'review-finding',
+      provenance: { ref: 'x#1', commitSha: sha(1) },
+      nativeKey: 'gh-review-comment:1',
+      assertedAt: '2026-06-20T00:00:00.000Z',
+    };
+    const result = runCapabilityFalsification([dupClaim, { ...dupClaim }], [], {
+      resolutionHorizon: HORIZON,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.violations.map((v) => v.clause)).toContain('c');
+  });
 });

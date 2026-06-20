@@ -31,6 +31,17 @@ describe('resolveActorId — couple to the registries, do not mint', () => {
     expect(resolveActorId('qodo[bot]')).toBe('qodo[bot]');
   });
 
+  it('does NOT collapse an unknown bot variant into a shipped actor-id — exact match (greptile P2)', () => {
+    // A future `greptile-enterprise[bot]` must NOT become `greptile` (would mix hit-rates).
+    expect(resolveActorId('greptile-enterprise[bot]')).toBe('greptile-enterprise[bot]');
+    expect(resolveActorId('coderabbit-premium[bot]')).toBe('coderabbit-premium[bot]');
+  });
+
+  it('throws on an empty/whitespace author login (fail loud — GCA)', () => {
+    expect(() => resolveActorId('')).toThrow(/non-empty/);
+    expect(() => resolveActorId('   ')).toThrow(/non-empty/);
+  });
+
   it('keeps a cohort seat login as its own actor-id', () => {
     expect(resolveActorId('totem-claude')).toBe('totem-claude');
     expect(resolveActorId('strategy-codex')).toBe('strategy-codex');
