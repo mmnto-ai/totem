@@ -243,6 +243,24 @@ describe('ReviewThreadSourceAdapter.fetch — failure mapping (§6 discriminated
     });
     const result = await adapter.fetch(1);
     expect(result.kind).toBe('unreachable');
+    // PR-not-found detail names the PR, not the repository (CR + Greptile #2207).
+    if (result.kind === 'unreachable') expect(result.detail).toContain('not found in');
+  });
+
+  it('a null repository (inaccessible / token scope) maps to unreachable with a repo-specific detail', async () => {
+    const adapter = new ReviewThreadSourceAdapter({
+      owner: OWNER,
+      name: NAME,
+      exec: stubExec(JSON.stringify({ data: { repository: null } })),
+    });
+    const result = await adapter.fetch(1);
+    expect(result.kind).toBe('unreachable');
+    // Distinct from PR-not-found: the detail leads with the repository, not the PR
+    // (CR + Greptile #2207 — don't send a token-scope failure chasing a missing PR).
+    if (result.kind === 'unreachable') {
+      expect(result.detail).toContain('repository');
+      expect(result.detail).toContain('token scope');
+    }
   });
 
   it('a null merge commit (unmerged / missing) maps to unparseable', async () => {

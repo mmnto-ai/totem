@@ -42,6 +42,9 @@ const GH_MAX_BUFFER = 10 * 1024 * 1024;
  * fetched; if GitHub reports more, the adapter fails LOUD (`unparseable`) rather
  * than silently truncating the corpus (§6 no-silent-shrink). The Gate-1 corpus
  * PRs are small reviewed PRs, comfortably within one page.
+ *
+ * TODO(#2199): paginate reviewThreads/comments past one page if a future corpus
+ * PR ever exceeds PAGE_SIZE.
  */
 const PAGE_SIZE = 100;
 
@@ -184,20 +187,28 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
   private readonly owner: string;
   private readonly name: string;
   private readonly cwd: string;
-  /** Injected exec (tests) or the memoized lazy-loaded default (real runs). */
-  private exec: GhExec | undefined;
+  /** Injected exec seam (tests); when absent the default is lazy-loaded once via `execPromise`. */
+  private readonly injectedExec: GhExec | undefined;
+  /**
+   * Memoized lazy-load of the default `gh`-backed exec (real runs). Memoizes the
+   * PROMISE, not the resolved value, so concurrent `fetch()` calls on one adapter
+   * instance share a single `loadDefaultExec` instead of racing a `!this.exec`
+   * guard (CR #2207 — was benign since dynamic import is idempotent, now explicit).
+   */
+  private execPromise: Promise<GhExec> | undefined;
 
   constructor(opts: ReviewThreadSourceAdapterOptions) {
     this.owner = opts.owner;
     this.name = opts.name;
     this.cwd = opts.cwd ?? process.cwd();
-    this.exec = opts.exec;
+    this.injectedExec = opts.exec;
   }
 
-  /** Resolve (and memoize) the exec seam, lazy-loading `safeExec` on first real use. */
-  private async resolveExec(): Promise<GhExec> {
-    if (!this.exec) this.exec = await loadDefaultExec(this.cwd);
-    return this.exec;
+  /** Resolve the exec seam: the injected one (tests), else the memoized lazy-loaded default. */
+  private resolveExec(): Promise<GhExec> {
+    if (this.injectedExec) return Promise.resolve(this.injectedExec);
+    this.execPromise ??= loadDefaultExec(this.cwd);
+    return this.execPromise;
   }
 
   async fetch(pr: number): Promise<FetchResult> {
@@ -237,8 +248,19 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
       };
     }
 
+    // Distinguish a null repository (repo inaccessible / token lacks scope) from a
+    // null pullRequest (PR genuinely not found): both are `unreachable`, but they
+    // need different diagnostic leads, so the detail strings differ (CR + Greptile
+    // #2207 — a shared `!pull` guard would send a token-scope failure chasing a
+    // non-existent PR).
     const repo = parsed.data.repository;
-    const pull = repo?.pullRequest;
+    if (!repo) {
+      return {
+        kind: 'unreachable',
+        detail: `repository ${this.owner}/${this.name} not found or inaccessible (check owner/name + token scope) while fetching PR #${pr}`,
+      };
+    }
+    const pull = repo.pullRequest;
     if (!pull) {
       return { kind: 'unreachable', detail: `PR #${pr} not found in ${this.owner}/${this.name}` };
     }
@@ -255,14 +277,14 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
     if (pull.reviewThreads.pageInfo.hasNextPage) {
       return {
         kind: 'unparseable',
-        detail: `PR #${pr} has more than ${PAGE_SIZE} review threads (pagination unsupported in slice 5a)`,
+        detail: `PR #${pr} has more than ${PAGE_SIZE} review threads (pagination unsupported)`,
       };
     }
     for (const t of pull.reviewThreads.nodes) {
       if (t.comments.pageInfo.hasNextPage) {
         return {
           kind: 'unparseable',
-          detail: `PR #${pr} has a review thread with more than ${PAGE_SIZE} comments (pagination unsupported in slice 5a)`,
+          detail: `PR #${pr} has a review thread with more than ${PAGE_SIZE} comments (pagination unsupported)`,
         };
       }
     }

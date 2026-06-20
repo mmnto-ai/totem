@@ -339,7 +339,7 @@ export async function runExtractStage(
         drop(
           pr,
           'resolved-rejected',
-          `${ineligible} of ${content.threads.length} threads resolved/outdated; 0 eligible human comments remain`,
+          `${ineligible} of ${content.threads.length} threads resolved/outdated; ${survivorHumanCount} eligible human comments remain`,
         );
       } else {
         // Thin to begin with (0 human comments BEFORE the resolution gate) — the
