@@ -39,7 +39,11 @@ function resolveHooksDir() {
     );
     process.exit(0);
   }
-  const gitDir = isAbsolute(match[1]) ? match[1] : resolve(rootDir, match[1]);
+  // Defensive trim of the captured path: git does not write trailing whitespace,
+  // but a non-standard tool might, and an untrimmed value would silently break path
+  // resolution (CR #2209).
+  const rawGitDir = match[1].trim();
+  const gitDir = isAbsolute(rawGitDir) ? rawGitDir : resolve(rootDir, rawGitDir);
   // Hooks are shared across worktrees via the common git dir when one is declared.
   const commonDirFile = join(gitDir, 'commondir');
   if (existsSync(commonDirFile)) {

@@ -38,13 +38,19 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
-import {
-  type ClassifierResult,
-  ClassifierResultSchema,
-  type ExtractStageResult,
-  type ReviewThread,
-  type ReviewThreadComment,
-  type ReviewThreadContent,
+// Type-only imports from '@mmnto/totem' (erased at compile — no runtime cost). A
+// commands/ module must NOT statically import a runtime VALUE from the heavy core
+// barrel (LanceDB / apache-arrow) — the CLI dynamic-import styleguide (GCA #2209).
+// The classifier-result VALIDATION is therefore defined locally below (the replay
+// artifact schema is a CLI-layer concern — cohort panel, gemini), kept in parity
+// with core's `ClassifierResult` by a test, rather than statically importing core's
+// runtime `ClassifierResultSchema`.
+import type {
+  ClassifierResult,
+  ExtractStageResult,
+  ReviewThread,
+  ReviewThreadComment,
+  ReviewThreadContent,
 } from '@mmnto/totem';
 
 // `DraftCandidate` is intentionally NOT on the core public barrel (it is the
@@ -86,7 +92,7 @@ export class ReplayMissError extends Error {
 
   constructor(adapterKind: AdapterKind, inputKey: string) {
     super(
-      `[Totem Replay] ${adapterKind} replay MISS: inputKey ${inputKey} is absent from the frozen records. ` +
+      `${adapterKind} replay MISS: inputKey ${inputKey} is absent from the frozen records. ` +
         `A miss is a corpus-integrity failure (the frozen-experiment premise is broken), never a safe-default — ` +
         `re-record the replay fixture from the live adapter so it covers this input.`,
     );
@@ -110,7 +116,7 @@ export class FixtureIntegrityError extends Error {
 
   constructor(expectedHash: string, actualHash: string) {
     super(
-      `[Totem Replay] replay fixture integrity check failed — expected ${expectedHash} got ${actualHash}. ` +
+      `replay fixture integrity check failed — expected ${expectedHash} got ${actualHash}. ` +
         `The frozen LLM record/replay artifact was altered (tampered or drifted). Revert the change or ` +
         `re-freeze the lock with the updated content-hash.`,
     );
@@ -133,7 +139,7 @@ export class DuplicateRecordError extends Error {
 
   constructor(adapterKind: AdapterKind, inputKey: string) {
     super(
-      `[Totem Replay] duplicate record for ${adapterKind} inputKey ${inputKey} — the record sink is append-once ` +
+      `duplicate record for ${adapterKind} inputKey ${inputKey} — the record sink is append-once ` +
         `(never last-write-wins). A second output for the same input is a non-determinism leak in the recording run.`,
     );
     this.name = 'DuplicateRecordError';
@@ -208,22 +214,22 @@ function normalizeThread(thread: ReviewThread): {
 }
 
 /**
- * Normalize the eligible thread set: sort threads by (path, first-comment-body,
- * first-comment-author) AFTER per-thread comment normalization, so neither
- * thread order nor comment order from the provider can shift the key. Stripped
- * of any non-deterministic field — `ReviewThread` carries only `path`,
- * resolution flags, and `{author, body}` comments, all stable.
+ * Normalize the eligible thread set: per-thread comment-normalize, then sort by the
+ * FULL canonical JSON of each normalized thread. Sorting by `(path, first-comment)`
+ * was NOT a total order — two threads on the SAME path sharing a first comment but
+ * differing in LATER comments compared equal, so their provider array order leaked
+ * into the canonical payload and the same logical input keyed differently (greptile
+ * P1 + CR, #2209; a PR commonly has multiple threads on one file). Sorting by the
+ * whole canonical thread IS a total order: two threads compare equal only when
+ * byte-identical, so neither thread nor comment order from the provider can shift
+ * the key. Stripped of any non-deterministic field — `ReviewThread` carries only
+ * `path`, resolution flags, and `{author, body}` comments, all stable.
  */
 function normalizeThreads(threads: readonly ReviewThread[]): ReturnType<typeof normalizeThread>[] {
-  const normalized = threads.map(normalizeThread);
-  return normalized.sort((a, b) => {
-    if (a.path !== b.path) return a.path < b.path ? -1 : 1;
-    const ab = a.comments[0]?.body ?? '';
-    const bb = b.comments[0]?.body ?? '';
-    if (ab !== bb) return ab < bb ? -1 : 1;
-    const aa = a.comments[0]?.author ?? '';
-    const ba = b.comments[0]?.author ?? '';
-    return aa < ba ? -1 : aa > ba ? 1 : 0;
+  return threads.map(normalizeThread).sort((a, b) => {
+    const ka = canonicalJson(a);
+    const kb = canonicalJson(b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
   });
 }
 
@@ -315,11 +321,30 @@ export type ReplayProvenance = z.infer<typeof ReplayProvenanceSchema>;
  * premise. The maps are plain `Record<inputKey, output>`; record keys are
  * written SORTED by the canonical serializer (clean git diffs).
  */
+/**
+ * CLI-side validation of a recorded `ClassifierResult` (GCA #2209 + the cohort
+ * panel's "replay artifact schema is a CLI-layer concern", gemini): a LOCAL Zod
+ * schema rather than a static runtime import of core's `ClassifierResultSchema`
+ * (which would pull the heavy `@mmnto/totem` barrel onto the CLI-startup path).
+ * Mirrors core's shape AND its refinement (`error-default` ⟹ `behavioral`, the
+ * low-privilege safe-default) so a recorded `{structural, error-default}` is
+ * rejected. A test asserts parity with core, so this duplication can't silently
+ * drift if core's `ClassifierResult` changes.
+ */
+export const ClassifierResultLocalSchema = z
+  .object({
+    disposition: z.enum(['structural', 'behavioral']),
+    dispositionSource: z.enum(['classified', 'error-default']),
+  })
+  .refine((v) => v.dispositionSource !== 'error-default' || v.disposition === 'behavioral', {
+    message: "dispositionSource 'error-default' requires disposition 'behavioral'",
+  });
+
 export const ReplayRecordsSchema = z.object({
   /** `inputKey → DraftExtractor.draft()` return (a `string[]`; `[]` is a real row). */
   extractor: z.record(z.array(z.string())),
   /** `inputKey → DraftClassifier.classify()` return (a `ClassifierResult`). */
-  classifier: z.record(ClassifierResultSchema),
+  classifier: z.record(ClassifierResultLocalSchema),
 });
 export type ReplayRecords = z.infer<typeof ReplayRecordsSchema>;
 
@@ -335,11 +360,16 @@ export const ReplayArtifactSchema = z.object({
 export type ReplayArtifact = z.infer<typeof ReplayArtifactSchema>;
 
 /**
- * Serialize an artifact to canonical, key-SORTED JSON (pretty-printed for a
- * committable artifact + clean diffs). Record keys land sorted because the
+ * Serialize an artifact to canonical, key-SORTED JSON, PRETTY-printed for a
+ * committable artifact + clean diffs. Record keys land sorted because the
  * canonicalizer recursively sorts object keys — so re-freezing in a different
- * insertion order is a no-op diff. This is the ONE serializer used for both the
- * on-disk artifact and the content-hash input, so they can never drift.
+ * insertion order is a no-op diff.
+ *
+ * NOTE (greptile/CR #2209): the content-hash (`computeArtifactHash`) is computed
+ * over the MINIFIED canonical form (`canonicalJson`), NOT these pretty-printed
+ * bytes. Both run through the same `canonicalize` (so they never drift on key
+ * order), but they are NOT byte-identical — to verify integrity always call
+ * `computeArtifactHash(loadedArtifact)`; never `sha256` the raw file bytes.
  */
 export function serializeReplayArtifact(artifact: ReplayArtifact): string {
   return JSON.stringify(canonicalize(ReplayArtifactSchema.parse(artifact)), null, 2);
@@ -360,7 +390,17 @@ export function serializeReplayArtifact(artifact: ReplayArtifact): string {
  * would pass its own check).
  */
 export function computeArtifactHash(artifact: ReplayArtifact): string {
-  return sha256Hex(canonicalJson(ReplayArtifactSchema.parse(artifact)));
+  return hashParsedArtifact(ReplayArtifactSchema.parse(artifact));
+}
+
+/**
+ * Hash an ALREADY-parsed artifact — no redundant re-parse (CR #2209). The Replay
+ * constructors parse the fixture once, then the integrity gate hashes that parsed
+ * value directly via this helper; `computeArtifactHash` (public) parses first for
+ * untrusted input. Both produce the same digest for a valid artifact.
+ */
+function hashParsedArtifact(parsed: ReplayArtifact): string {
+  return sha256Hex(canonicalJson(parsed));
 }
 
 // ─── Record sink ─────────────────────────────────────
@@ -459,7 +499,9 @@ export class RecordingDraftClassifier {
  * implementation.
  */
 function assertFixtureIntegrity(artifact: ReplayArtifact, expectedHash: string): void {
-  const actualHash = computeArtifactHash(artifact);
+  // `artifact` is already Zod-parsed by the Replay constructor — hash it directly,
+  // no redundant re-parse (CR #2209; matters for high-volume 5c runs).
+  const actualHash = hashParsedArtifact(artifact);
   if (actualHash !== expectedHash) throw new FixtureIntegrityError(expectedHash, actualHash);
 }
 

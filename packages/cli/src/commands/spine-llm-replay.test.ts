@@ -9,6 +9,7 @@ import {
 
 import {
   classifierInputKey,
+  ClassifierResultLocalSchema,
   computeArtifactHash,
   DuplicateRecordError,
   extractorInputKey,
@@ -370,12 +371,52 @@ describe('extractorInputKey (fold D)', () => {
     expect(forward).toBe(reversed);
   });
 
+  it('is INVARIANT to reordering threads on the SAME path that differ in later comments', () => {
+    // The bug greptile P1 + CR caught: two threads on ONE path sharing a first
+    // comment but differing LATER compared equal under the old (path, first-comment)
+    // sort → provider order leaked into the key. The full-canonical-JSON total order
+    // fixes it. (comments normalize by (body, author): 'shared' sorts before 'tail-*'.)
+    const t1 = thread({
+      path: 'same.ts',
+      comments: [comment('al', 'shared'), comment('al', 'tail-1')],
+    });
+    const t2 = thread({
+      path: 'same.ts',
+      comments: [comment('al', 'shared'), comment('al', 'tail-2')],
+    });
+    const forward = extractorInputKey(content({ threads: [t1, t2] }));
+    const reversed = extractorInputKey(content({ threads: [t2, t1] }));
+    expect(forward).toBe(reversed);
+  });
+
   it('excludes resolved/outdated threads from the key (the port never sees them)', () => {
     const eligible = thread({ path: 'a.ts', comments: [comment('al', 'keep')] });
     const resolved = thread({ path: 'z.ts', isResolved: true, comments: [comment('zo', 'drop')] });
     const withResolved = extractorInputKey(content({ threads: [eligible, resolved] }));
     const withoutResolved = extractorInputKey(content({ threads: [eligible] }));
     expect(withResolved).toBe(withoutResolved);
+  });
+});
+
+describe('ClassifierResultLocalSchema parity with core (GCA #2209, option a)', () => {
+  it('accepts / rejects EXACTLY what core ClassifierResultSchema does', async () => {
+    // The local CLI-side schema avoids a static runtime import of core's barrel
+    // (CLI-startup styleguide). This test is the guard against drift: a test MAY
+    // static-import core (the rule is about command-file startup, not tests).
+    const { ClassifierResultSchema } = await import('@mmnto/totem');
+    const cases: unknown[] = [
+      { disposition: 'structural', dispositionSource: 'classified' }, // valid
+      { disposition: 'behavioral', dispositionSource: 'classified' }, // valid
+      { disposition: 'behavioral', dispositionSource: 'error-default' }, // valid (safe-default)
+      { disposition: 'structural', dispositionSource: 'error-default' }, // refine → invalid
+      { disposition: 'nope', dispositionSource: 'classified' }, // enum → invalid
+      { disposition: 'structural' }, // missing field → invalid
+    ];
+    for (const c of cases) {
+      expect(ClassifierResultLocalSchema.safeParse(c).success).toBe(
+        ClassifierResultSchema.safeParse(c).success,
+      );
+    }
   });
 });
 
