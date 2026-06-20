@@ -106,8 +106,12 @@ export const CapabilityResolutionSchema = z.object({
   resolvedAt: z
     .string()
     .datetime({ message: 'resolvedAt must be an RFC-3339 UTC datetime (Z suffix)' }),
-  /** Explicit supersession chain — preferred over `resolvedAt` ordering when present. */
-  supersedesResolutionId: z.string().optional(),
+  /**
+   * Explicit supersession chain — preferred over `resolvedAt` ordering when present.
+   * `nonEmpty` (not bare `z.string()`): a `""` pointer would be neither `undefined` nor a
+   * real resolutionId, silently activating chain logic on a ghost target (CR).
+   */
+  supersedesResolutionId: nonEmpty('supersedesResolutionId').optional(),
 });
 export type CapabilityResolution = z.infer<typeof CapabilityResolutionSchema>;
 

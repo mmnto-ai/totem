@@ -163,13 +163,26 @@ describe('regenerateCapabilityLedger — FM-c join integrity (fail loud)', () =>
     ).toThrow(/duplicate claimId/);
   });
 
+  it('throws on a dangling supersedesResolutionId — references an absent resolutionId (CR)', () => {
+    expect(() =>
+      regenerateCapabilityLedger(
+        [claim('1')],
+        [resolution('r1', '1', 'correct', { supersedesResolutionId: 'r-ghost' })],
+        { resolutionHorizon: HORIZON },
+      ),
+    ).toThrow(/references an absent resolutionId/);
+  });
+
   it('throws on an ambiguous supersession terminal (two unsuperseded heads)', () => {
+    // r3 supersedes r1 (a real pointer — no dangling ref); r2 and r3 are both unsuperseded
+    // heads → ambiguous. (Pointers are real so the dangling-ref guard does not fire first.)
     expect(() =>
       regenerateCapabilityLedger(
         [claim('1')],
         [
-          resolution('r1', '1', 'correct', { supersedesResolutionId: 'r0' }),
-          resolution('r2', '1', 'wrong', { supersedesResolutionId: 'rx' }),
+          resolution('r1', '1', 'correct'),
+          resolution('r2', '1', 'wrong'),
+          resolution('r3', '1', 'partial', { supersedesResolutionId: 'r1' }),
         ],
         { resolutionHorizon: HORIZON },
       ),

@@ -118,4 +118,13 @@ describe('CapabilityResolutionSchema', () => {
       CapabilityResolutionSchema.safeParse({ ...valid, resolvedAt: '2026-06-20' }).success,
     ).toBe(false);
   });
+
+  it('rejects an empty/whitespace supersedesResolutionId — ghost pointer (CR)', () => {
+    expect(
+      CapabilityResolutionSchema.safeParse({ ...valid, supersedesResolutionId: '' }).success,
+    ).toBe(false);
+    expect(
+      CapabilityResolutionSchema.safeParse({ ...valid, supersedesResolutionId: '   ' }).success,
+    ).toBe(false);
+  });
 });
