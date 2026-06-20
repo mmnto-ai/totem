@@ -221,11 +221,20 @@ export function scoreWindtunnel(input: ScorerInput): WindtunnelVerdict {
 
   // ── Masquerade guards (may only DEMOTE a would-be PASS) ──
 
-  // Step 5: Exposure floor (P2). activeRules/positiveControls below floor →
+  // Step 5: Exposure floor (P2 + C2). All THREE exposure legs are enforced:
+  // activeRules / filesTouchedInWindow / positiveControls below their floor →
   // HONEST-NEGATIVE (no claim → precision null). Ranked above needs-adjudication
   // (Step 7): labeling won't rescue a sub-floor run (strategy-claude tie-break).
+  //
+  // C2 (5c-i): `filesTouchedInWindow` was previously omitted (the CLI passed a
+  // hard-coded 0, so the leg was inert). The certifying run computes real
+  // touched-file exposure from the corpus/diffs; this guard makes the third leg
+  // load-bearing — a sub-floor file exposure is a masquerade (the run scanned too
+  // little of the window to make a precision claim) and must demote to
+  // HONEST-NEGATIVE even when the other two legs pass.
   if (
     actualExposure.activeRulesEvaluated < exposureFloors.activeRulesEvaluated ||
+    actualExposure.filesTouchedInWindow < exposureFloors.filesTouchedInWindow ||
     actualExposure.positiveControlsExercised < exposureFloors.positiveControlsExercised
   ) {
     return {
