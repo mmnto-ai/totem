@@ -308,17 +308,6 @@ export function computePerRuleControlResults(input: {
     if (f.controlKind === 'negative') culled.add(f.ruleId);
   }
 
-  // Per-rule negative-control evidence: the firings that PROVE a rule fired on a
-  // negative control (its negativeControl is therefore false — it gets culled).
-  // A clean rule has no negative-control firing → negativeControl true by absence.
-  const negFiringsByRule = new Map<string, string[]>();
-  for (const f of firings) {
-    if (f.controlKind !== 'negative') continue;
-    const arr = negFiringsByRule.get(f.ruleId) ?? [];
-    arr.push(f.labelId);
-    negFiringsByRule.set(f.ruleId, arr);
-  }
-
   // Per-rule positive-control evidence: a firing whose (pr, ruleId) matches a
   // declared positive-control target on a positive-control item.
   const targetByRule = new Map<string, Set<number>>();
@@ -342,13 +331,15 @@ export function computePerRuleControlResults(input: {
   for (const ruleId of mintedRuleIds) {
     if (culled.has(ruleId)) continue; // not a survivor — never stamped
     const posEvidence = posFiringsByRule.get(ruleId) ?? [];
-    const negEvidence = negFiringsByRule.get(ruleId) ?? [];
     result.set(ruleId, {
       // Per-rule, NOT global nonVacuity: true only if THIS rule fired its target.
       positiveControl: posEvidence.length > 0,
-      // Clean (passed) when the rule fired on NO negative control.
-      negativeControl: negEvidence.length === 0,
-      evidenceRefs: [...posEvidence, ...negEvidence],
+      // Survivors are non-culled by construction (a negative-control firing culls
+      // the rule and we `continue` above), so a rule reaching here fired on NO
+      // negative control → negativeControl is invariantly true; the negative leg
+      // carries no evidence refs (it is an absence, not a firing). (greptile #2215 P2.)
+      negativeControl: true,
+      evidenceRefs: posEvidence,
     });
   }
   return result;

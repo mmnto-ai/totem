@@ -853,29 +853,19 @@ export async function runCertifyingEngine(
     state: { hasWarnedShieldContext: false },
   };
 
-  let built;
-  try {
-    // buildFirings runs fold-F (archived assert) internally before the engine.
-    built = await buildFirings({
-      rules: corpus.rules,
-      prDiffs: corpus.prDiffs,
-      cwd,
-      readStrategy,
-      ruleEngineCtx,
-      onWarn: (msg) => console.error(`[WindtunnelRun] ${msg}`),
-    });
-  } catch (err) {
-    if (err instanceof FiringLabelCollisionError) {
-      // A1 collisions can also originate here if the engine produced duplicates
-      // — surface as a TotemError with the structured collision detail.
-      throw new TotemError(
-        'CONFIG_INVALID',
-        err.message,
-        'See A1 (fold-D) — measure collisions on the frozen corpus.',
-      );
-    }
-    throw err;
-  }
+  // buildFirings runs fold-F (archived assert) internally before the engine; its
+  // only throw is ArchivedRuleInScopeError, which propagates. A1 (labelId
+  // collision) is deliberately NOT raised here — it is the caller's pre-score gate
+  // below (assertUniqueFiringLabels), so the structured per-collision report is
+  // threaded there rather than swallowed at construction. (greptile #2215 P2.)
+  const built = await buildFirings({
+    rules: corpus.rules,
+    prDiffs: corpus.prDiffs,
+    cwd,
+    readStrategy,
+    ruleEngineCtx,
+    onWarn: (msg) => console.error(`[WindtunnelRun] ${msg}`),
+  });
 
   // A1 (fold-D): hard-gate labelId uniqueness BEFORE scoring (Tenet 4).
   try {
