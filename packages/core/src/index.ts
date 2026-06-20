@@ -883,3 +883,34 @@ export type {
   WindtunnelVerdictKind,
 } from './spine/windtunnel-scorer.js';
 export { scoreWindtunnel } from './spine/windtunnel-scorer.js';
+
+// ─── Layer-B cohort-capability ledger (totem-strategy#697) ───────────────────
+export type {
+  CapabilityFalsificationResult,
+  CapabilityFmClause,
+  CapabilityFmViolation,
+} from './capability/falsification.js';
+export { runCapabilityFalsification } from './capability/falsification.js';
+export type { RegenerateOptions } from './capability/regenerate.js';
+export { regenerateCapabilityLedger } from './capability/regenerate.js';
+export type { MinedReviewFinding, ReviewCatchMineResult } from './capability/review-catch.js';
+export { mineReviewCatch, resolveActorId } from './capability/review-catch.js';
+export type {
+  CapabilityClaim,
+  CapabilityLedger,
+  CapabilityLedgerRow,
+  CapabilityProvenance,
+  CapabilityResolution,
+  Outcome,
+  ResolutionSource,
+  TaskType,
+} from './capability/schema.js';
+export {
+  CapabilityClaimSchema,
+  CapabilityLedgerSchema,
+  CapabilityResolutionSchema,
+  deriveClaimId,
+  OutcomeSchema,
+  ResolutionSourceSchema,
+  TaskTypeSchema,
+} from './capability/schema.js';
