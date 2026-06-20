@@ -19,11 +19,16 @@ function finding(
 }
 
 describe('resolveActorId — couple to the registries, do not mint', () => {
-  it('maps review-bot logins to catalog backend ids', () => {
-    expect(resolveActorId('coderabbitai[bot]')).toBe('cr');
-    expect(resolveActorId('gemini-code-assist[bot]')).toBe('gca');
+  it('maps the three active review-bot logins to their stable actor-ids', () => {
+    expect(resolveActorId('coderabbitai[bot]')).toBe('coderabbit');
+    expect(resolveActorId('gemini-code-assist[bot]')).toBe('gemini-code-assist');
     expect(resolveActorId('greptile-apps[bot]')).toBe('greptile');
-    expect(resolveActorId('pr-agent[bot]')).toBe('pr-agent-L1');
+  });
+
+  it('does NOT specially map dropped/research-only backends (pr-agent/qodo)', () => {
+    // No shipped #670 registry to couple to — they fall through to the raw login.
+    expect(resolveActorId('pr-agent[bot]')).toBe('pr-agent[bot]');
+    expect(resolveActorId('qodo[bot]')).toBe('qodo[bot]');
   });
 
   it('keeps a cohort seat login as its own actor-id', () => {
@@ -83,8 +88,8 @@ describe('mineReviewCatch → regenerate — end-to-end division', () => {
     ]);
     const ledger = regenerateCapabilityLedger(claims, resolutions, { resolutionHorizon: HORIZON });
     const byAgent = Object.fromEntries(ledger.rows.map((r) => [r.agentSource, r.hitRate]));
-    expect(byAgent.cr).toBe(1); // 2/2
-    expect(byAgent.gca).toBe(0.5); // 1/2
+    expect(byAgent.coderabbit).toBe(1); // 2/2
+    expect(byAgent['gemini-code-assist']).toBe(0.5); // 1/2
     expect(byAgent['totem-claude']).toBe(1); // 1/1
   });
 });

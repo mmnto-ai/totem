@@ -51,17 +51,20 @@ export interface ReviewCatchMineResult {
 
 /**
  * Resolve a GitHub author login to a stable Layer-B actor-id, COUPLING to existing
- * registries rather than minting a parallel scheme (#697 fold 5): review backends →
- * the #670/#699 adapter catalog ids; cohort seats → their `cohort-roles.md` id (which a
- * cohort dispatch login already is). Model/backend identity is intentionally NOT folded
- * into the id (so the hit-rate aggregates across model swaps).
+ * actors rather than minting a parallel scheme (#697 fold 5, corrected c.4755848293).
+ * The namespace is `{ cohort agent-seats } ∪ { coderabbit, gemini-code-assist, greptile }`:
+ * the three ACTIVE paid review bots (de-facto home: `doctrine/bot-protocols.md` + the
+ * parity-manifest `bot-review-configs` dimension) + the cohort seats (a cohort dispatch
+ * login already IS its `cohort-roles.md` id). `pr-agent`/`qodo` are research-only/dropped
+ * (no shipped #670 backend registry to couple to — forward-couple only IF #670 ships), so
+ * they are NOT specially mapped. Model/backend identity is intentionally NOT folded into
+ * the id (so the hit-rate aggregates across model swaps).
  */
 export function resolveActorId(author: string): string {
   const a = author.trim().toLowerCase();
-  if (a.startsWith('coderabbit')) return 'cr';
-  if (a.startsWith('gemini-code-assist')) return 'gca';
+  if (a.startsWith('coderabbit')) return 'coderabbit';
+  if (a.startsWith('gemini-code-assist')) return 'gemini-code-assist';
   if (a.startsWith('greptile')) return 'greptile';
-  if (a.startsWith('pr-agent') || a.startsWith('qodo')) return 'pr-agent-L1';
   // A cohort seat (e.g. `totem-claude`, `strategy-codex`) — the login IS the actor-id.
   return author.trim();
 }
