@@ -219,6 +219,161 @@ describe('applyAstRulesToAdditions', () => {
     expect(violations[0]!.lineNumber).toBe(3);
   });
 
+  // ── Inline-suppression anchoring under diff scope (mmnto-ai/totem#2214) ──
+  // The reported match line is the first *added* line within a multi-line
+  // construct's range, so when only the catch BODY is in the diff the line
+  // drifts off the catch keyword line — and a directive on (or above) the
+  // catch line was missed. Suppression must anchor to the construct start.
+  const failOpenCatchRule = (): CompiledRule =>
+    makeRule({
+      engine: 'ast-grep',
+      lessonHash: 'fail-open-catch-ban',
+      astGrepPattern: undefined,
+      pattern: '',
+      astGrepYamlRule: {
+        rule: { kind: 'catch_clause', not: { has: { kind: 'throw_statement', stopBy: 'end' } } },
+      },
+    });
+
+  it('suppresses a fail-open catch via a totem-context directive ABOVE the catch when only the body is in the diff (#2214)', async () => {
+    // The try/catch wrapper + the directive pre-existed; only the body line
+    // changed. In diff scope the match line drifts to the added body line, so
+    // pre-#2214 the directive on line 3 (above the catch on line 4) was missed.
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      [
+        'try {', // 1
+        '  doWork();', // 2
+        '  // totem-context: best-effort cleanup, fail-soft', // 3
+        '} catch (err) {', // 4
+        '  return [];', // 5
+        '}', // 6
+        '',
+      ].join('\n'),
+    );
+
+    // Diff scope: ONLY the body line (5) is an addition; the catch line (4)
+    // and the directive (3) are unchanged context, absent from `additions`.
+    const additions = [makeAddition('src/app.ts', '  return [];', 5)];
+
+    const violations = await applyAstRulesToAdditions(
+      ctx,
+      [failOpenCatchRule()],
+      additions,
+      tmpDir,
+    );
+    expect(violations).toHaveLength(0);
+  });
+
+  it('suppresses a fail-open catch via an INLINE totem-context directive on the catch line when only the body is in the diff (#2214)', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      [
+        'try {', // 1
+        '  doWork();', // 2
+        '} catch (err) { // totem-context: best-effort cleanup, fail-soft', // 3
+        '  return [];', // 4
+        '}', // 5
+        '',
+      ].join('\n'),
+    );
+
+    const additions = [makeAddition('src/app.ts', '  return [];', 4)];
+
+    const violations = await applyAstRulesToAdditions(
+      ctx,
+      [failOpenCatchRule()],
+      additions,
+      tmpDir,
+    );
+    expect(violations).toHaveLength(0);
+  });
+
+  it('still fires on a fail-open catch with NO directive when only the body is in the diff (#2214 — no over-suppression)', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      [
+        'try {', // 1
+        '  doWork();', // 2
+        '} catch (err) {', // 3
+        '  return [];', // 4
+        '}', // 5
+        '',
+      ].join('\n'),
+    );
+
+    const additions = [makeAddition('src/app.ts', '  return [];', 4)];
+
+    const violations = await applyAstRulesToAdditions(
+      ctx,
+      [failOpenCatchRule()],
+      additions,
+      tmpDir,
+    );
+    expect(violations.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // The same start-line suppression anchor flows through the tree-sitter
+  // (engine: 'ast') match path, whose AstMatch results gained the same
+  // startLineText/startPrecedingLineText fields. Cover it directly so a
+  // divergence in how the tree-sitter loop populates the anchor can't
+  // silently regress diff-scoped suppression (greptile #2216).
+  const treeSitterCatchRule = (): CompiledRule =>
+    makeRule({
+      engine: 'ast',
+      lessonHash: 'ts-fail-open-catch',
+      astQuery: '(catch_clause) @violation',
+    });
+
+  it('suppresses via a totem-context directive on the tree-sitter (ast) path when only the body is in the diff (#2214)', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      [
+        'try {', // 1
+        '  doWork();', // 2
+        '  // totem-context: best-effort cleanup, fail-soft', // 3
+        '} catch (err) {', // 4
+        '  return [];', // 5
+        '}', // 6
+        '',
+      ].join('\n'),
+    );
+
+    const additions = [makeAddition('src/app.ts', '  return [];', 5)];
+
+    const violations = await applyAstRulesToAdditions(
+      ctx,
+      [treeSitterCatchRule()],
+      additions,
+      tmpDir,
+    );
+    expect(violations).toHaveLength(0);
+  });
+
+  it('still fires on the tree-sitter (ast) path with NO directive when only the body is in the diff (#2214 — no over-suppression)', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      [
+        'try {', // 1
+        '  doWork();', // 2
+        '} catch (err) {', // 3
+        '  return [];', // 4
+        '}', // 5
+        '',
+      ].join('\n'),
+    );
+
+    const additions = [makeAddition('src/app.ts', '  return [];', 4)];
+
+    const violations = await applyAstRulesToAdditions(
+      ctx,
+      [treeSitterCatchRule()],
+      additions,
+      tmpDir,
+    );
+    expect(violations.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('compound rule with invalid NAPI config emits failure event without crashing', async () => {
     fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'const x = 1;\n');
 
