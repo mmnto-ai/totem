@@ -11,7 +11,11 @@
 //       pinned formula over its counts (catches partial-inflation / wrong-denominator).
 
 import { canonicalStringify } from '../compile-manifest.js';
-import { regenerateCapabilityLedger, type RegenerateOptions } from './regenerate.js';
+import {
+  collectJoinIntegrityErrors,
+  regenerateCapabilityLedger,
+  type RegenerateOptions,
+} from './regenerate.js';
 import type { CapabilityClaim, CapabilityResolution } from './schema.js';
 
 export type CapabilityFmClause = 'a' | 'c' | 'd';
@@ -38,19 +42,16 @@ export function runCapabilityFalsification(
 ): CapabilityFalsificationResult {
   const violations: CapabilityFmViolation[] = [];
 
-  let ledger;
-  // FM-c: regenerate's fail-loud throws (duplicate/absent/ambiguous join) ARE the
-  // join-integrity guard. The harness is a SENSOR — its contract is to RETURN
-  // violations, not throw — so it converts that throw into a clause-`c` violation with
-  // the original message preserved in `detail` (reported, never dropped).
-  // totem-context: intentional throw→finding conversion, not silent degradation (Tenet 4).
-  try {
-    ledger = regenerateCapabilityLedger(claims, resolutions, opts);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
+  // FM-c: join integrity — collect the breaches (the SAME shared check `regenerate`
+  // throws on) and surface each as a clause-`c` violation. No swallowing catch: the
+  // regenerate call below runs only on a log already proven clean, so it cannot throw
+  // here — the harness reports integrity breaches as data, never drops them (Tenet 4).
+  for (const detail of collectJoinIntegrityErrors(claims, resolutions, opts)) {
     violations.push({ clause: 'c', detail });
-    return { ok: false, violations };
   }
+  if (violations.length > 0) return { ok: false, violations };
+
+  const ledger = regenerateCapabilityLedger(claims, resolutions, opts);
 
   // FM-a: regenerating again must produce a byte-identical ledger.
   const again = regenerateCapabilityLedger(claims, resolutions, opts);
