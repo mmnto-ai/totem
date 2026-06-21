@@ -95,6 +95,16 @@ export const WindtunnelLockSchema = z
           .string()
           .regex(SHA256_REGEX, 'llmReplaySha must be a 64-hex sha256')
           .optional(),
+        // #709 fold-2 (codex panel): an integrity digest over the canonical
+        // `pr-diffs.json` — the SCORING source `loadCertRunFixtures` reads
+        // independently of the control dirs. `fixtureSha` hashes only the
+        // control dirs, so a tampered `corpus`-kind (or any) row in pr-diffs.json
+        // would pass every runtime check. This sha256 (64-hex, over the canonical
+        // serialization) closes that hole; the certifying run/freeze re-derives +
+        // asserts it. Additive-optional: harness locks (no scoring corpus) parse
+        // unchanged; the certifying path hard-errors if absent (no safe default
+        // for an integrity hash).
+        prDiffsSha: z.string().regex(SHA256_REGEX, 'prDiffsSha must be a 64-hex sha256').optional(),
       }),
     }),
     cullRateThreshold: z

@@ -790,6 +790,20 @@ export { CandidateRuleRecordSchema, ClassifierDispositionSchema } from './spine/
 // it off the public barrel avoids inviting CLI-layer coupling to an ephemeral
 // type (greptile #2202). It stays reachable structurally via `ExtractStageResult`.
 export type {
+  CertCorpusSeed,
+  DerivedCorpus,
+  LockIntegrityInput,
+  PrControlKind,
+  PrDiffRole,
+  ResolvedPrInput,
+} from './spine/cert-corpus-seed.js';
+export {
+  buildWindtunnelLock,
+  CertCorpusSeedError,
+  CertCorpusSeedSchema,
+  deriveCorpus,
+} from './spine/cert-corpus-seed.js';
+export type {
   ClassifierResult,
   ClassifyStageDeps,
   ClassifyStageResult,

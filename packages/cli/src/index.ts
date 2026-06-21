@@ -1876,6 +1876,35 @@ windtunnelCmd
     },
   );
 
+windtunnelCmd
+  .command('materialize')
+  .description(
+    'Materialize the cert-run scoring corpus (lock + split + pr-diffs + control dirs) from a seed manifest + lc clone (strategy#709)',
+  )
+  .requiredOption('--manifest <path>', 'Path to the curated cert-corpus seed manifest (JSON)')
+  .option(
+    '--lc-dir <path>',
+    'Path to the lc clone (env: TOTEM_LC_DIR)',
+    process.env['TOTEM_LC_DIR'],
+  )
+  .option(
+    '--out <dir>',
+    'Override the gate-1 output dir (default: dirname of the seed canonicalPath, under the repo root)',
+  )
+  .action(async (opts: { manifest: string; lcDir?: string; out?: string }) => {
+    try {
+      const { materializeCommand } = await import('./commands/spine-cert-materialize.js');
+      await materializeCommand({
+        manifestPath: opts.manifest,
+        lcDir: opts.lcDir,
+        outDir: opts.out,
+      });
+    } catch (err) {
+      handleError(err);
+      throw err;
+    }
+  });
+
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
 
