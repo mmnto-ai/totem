@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { PrMeta, SelectionRuleConfig, WindtunnelLock } from '@mmnto/totem';
 
 import { persistCertifyingOutcome } from './spine-cert-persist.js';
+import { buildReplayCorpusProvider } from './spine-cert-run-corpus.js';
 
 // ─── Named constants ─────────────────────────────────
 
@@ -280,9 +281,40 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   // post-image readStrategy → RuleFiring[] → A1 unique-label hard-gate → score.
   // C2: filesTouchedInWindow is the real exposure computed from the diffs (no
   // longer the hard-coded 0).
+  // Certifying phase: use the injected corpus (tests) or build the REPLAY-mode
+  // provider from the committed cert-run fixtures under the gate-1 dir (5c-ii).
+  let corpusProvider = opts.certifyingCorpus;
+  if (lock.phase === 'certifying' && !corpusProvider) {
+    const gate1Dir = path.dirname(lockPath);
+    const asOf = lock.corpus.selectionRule.asOfCommit;
+    const stage4: import('@mmnto/totem').Stage4VerifierDeps = lcDir
+      ? {
+          listFiles: async () =>
+            safeExec('git', ['ls-tree', '-r', '--name-only', asOf], { cwd: lcDir })
+              .split('\n')
+              .filter(Boolean),
+          readFile: async (f: string) =>
+            safeExec('git', ['show', `${asOf}:${f.replace(/\\/g, '/')}`], { cwd: lcDir }),
+          workingDirectory: lcDir,
+        }
+      : {
+          // No lc clone → Stage-4 sees no files (rules read as 'no-matches' /
+          // untested, NOT archived) — the wind-tunnel firing/scoring still runs.
+          listFiles: async () => [],
+          readFile: async (f: string) => {
+            throw new Error(`Cert run: no lc clone (--lc-dir) — cannot read ${f} for Stage-4.`);
+          },
+        };
+    corpusProvider = buildReplayCorpusProvider({
+      gate1Dir,
+      stage4,
+      now: new Date().toISOString(),
+    });
+  }
+
   const engineResult =
     lock.phase === 'certifying'
-      ? await runCertifyingEngine(lock, readStrategy, opts.certifyingCorpus)
+      ? await runCertifyingEngine(lock, readStrategy, corpusProvider)
       : await runMockEngineAdapter(lock, readStrategy);
 
   const { mintedRuleIds, firings, groundTruth, positiveControlTargets, filesTouchedInWindow } =
