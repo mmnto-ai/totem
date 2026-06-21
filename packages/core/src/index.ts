@@ -844,6 +844,12 @@ export {
   RoutingSchema,
   SplitLedgerSchema,
 } from './spine/ledgers.js';
+export type {
+  LegitimacyProjectionInput,
+  LegitimacyProjectionResult,
+  LegitimacyProjectionSkip,
+} from './spine/legitimacy-projection.js';
+export { buildCertifiedRulesFile, projectLegitimacy } from './spine/legitimacy-projection.js';
 export type { FalsificationResult, FmClause, FmViolation } from './spine/miner-harness.js';
 export { checkParsedLedgers, runFalsificationHarness } from './spine/miner-harness.js';
 export type {
@@ -890,6 +896,7 @@ export type { WindtunnelLock } from './spine/windtunnel-lock.js';
 export { firingLabelId, WindtunnelLockSchema } from './spine/windtunnel-lock.js';
 export type {
   CullLedgerEntry,
+  FiringEvidence,
   GroundTruthLabel,
   RuleFiring,
   ScorerInput,
