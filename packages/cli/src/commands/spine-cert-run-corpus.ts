@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -175,6 +176,34 @@ export function buildReplayCorpusProvider(
     const { split, artifact, content, prDiffs, groundTruth } = await loadCertRunFixtures(
       opts.gate1Dir,
     );
+
+    // #2225 (#709 fold-2): hash-bind the SCORING source. `pr-diffs.json` is loaded +
+    // Zod-parsed but otherwise unprotected — `fixtureSha` covers only the control
+    // dirs — so a silent mutation of any row (advisory-window OR control) would
+    // corrupt the answer key while the control-dir gate stays green. Re-derive the
+    // digest over the EXACT on-disk bytes and assert vs the lock; fail loud (mirrors
+    // the llmReplaySha L2 gate; strategy ruled: verify at freeze AND run).
+    const expectedPrDiffsSha = lock.controls.integrity.prDiffsSha;
+    if (!expectedPrDiffsSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        'Certifying run: lock is missing controls.integrity.prDiffsSha (#709 fold-2) — the ' +
+          'pr-diffs.json scoring source cannot be integrity-checked.',
+        'Re-materialize the cert corpus with `spine windtunnel materialize`.',
+      );
+    }
+    const actualPrDiffsSha = createHash('sha256')
+      .update(fs.readFileSync(path.join(opts.gate1Dir, 'pr-diffs.json'), 'utf-8'), 'utf-8')
+      .digest('hex');
+    if (actualPrDiffsSha !== expectedPrDiffsSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Certifying run: pr-diffs.json integrity FAILED — expected ${expectedPrDiffsSha}, got ` +
+          `${actualPrDiffsSha} (the frozen scoring corpus was tampered or re-serialized).`,
+        'Restore the frozen pr-diffs.json or re-materialize the cert corpus.',
+      );
+    }
+
     const { extractor, classifier } = buildReplayAdapters(artifact, expectedHash);
 
     const { corpus, ledgers } = await buildCertifyingCorpus({

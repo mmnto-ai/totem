@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -110,6 +111,23 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
     console.error(
       `[WindtunnelFreeze] Control dirs [${controlDirs.join(', ')}] do not exist — integrity check skipped.`,
     );
+  }
+
+  // #2225 (#709 fold-2): pre-merge heads-up on the pr-diffs.json scoring-source
+  // digest (the hard gate is the certifying run). Warn-only, mirroring fixtureSha.
+  const prDiffsPath = path.join(path.dirname(lockPath), 'pr-diffs.json');
+  if (lock.controls.integrity.prDiffsSha && fs.existsSync(prDiffsPath)) {
+    const actual = createHash('sha256')
+      .update(fs.readFileSync(prDiffsPath, 'utf-8'), 'utf-8')
+      .digest('hex');
+    if (actual !== lock.controls.integrity.prDiffsSha) {
+      console.error(
+        `[WindtunnelFreeze] WARNING: controls.integrity.prDiffsSha in lock (${lock.controls.integrity.prDiffsSha}) does not match computed digest of pr-diffs.json (${actual})`,
+      );
+      console.error(`  Re-materialize the cert corpus or update prDiffsSha and re-freeze.`);
+    } else {
+      console.error(`[WindtunnelFreeze] pr-diffs.json digest verified: ${actual}`);
+    }
   }
 
   console.error(`[WindtunnelFreeze] DONE — lock at ${lockPath} is schema-valid.`);
