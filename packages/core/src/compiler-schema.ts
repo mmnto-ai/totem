@@ -745,11 +745,33 @@ export interface RegexValidation {
   reason?: string;
 }
 
+/**
+ * A parsed Tenet-4 shape-2 fail-soft attestation (mmnto-ai/totem#2214,
+ * strategy#702/#708). Recognized form: `// totem-context: fail-soft
+ * backstop=<name>`, naming the loud systemic backstop that licenses a blanket
+ * fail-soft catch. `backstop` is null when the author claimed `fail-soft` but
+ * named no backstop — malformed, the lint surfaces a non-blocking WARN. The
+ * lint establishes only token-PRESENCE; the backstop's loudness + per-item
+ * accounting are verified at review/ADR level, never by this sensor.
+ */
+export interface FailSoftAttestation {
+  kind: 'fail-soft';
+  /** The named loud systemic backstop, or null when missing/empty (malformed). */
+  backstop: string | null;
+}
+
 /** Context passed alongside rule events for Trap Ledger integration. */
 export interface RuleEventContext {
   file: string;
   line: number;
   justification?: string;
+  /**
+   * Populated on `'suppress'` events when the suppressing `// totem-context:`
+   * directive parses as a structured fail-soft attestation (mmnto-ai/totem#2214).
+   * Carries the typed exemption so downstream ledger writers (#697 Layer-B
+   * capability ledger) can audit attested fail-soft boundaries by named backstop.
+   */
+  attestation?: FailSoftAttestation;
   /** AST context where the rule fired (code, string, comment, regex). */
   astContext?: AstContext;
   /**
