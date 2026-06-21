@@ -802,6 +802,13 @@ export {
   runClassifyStage,
 } from './spine/classify.js';
 export type {
+  CompiledCandidate,
+  CompileOutcome,
+  CompileStageDeps,
+  CompileStageResult,
+} from './spine/compile.js';
+export { compileCandidate, runCompileStage } from './spine/compile.js';
+export type {
   DraftExtractor,
   ExtractStageDeps,
   ExtractStageResult,
