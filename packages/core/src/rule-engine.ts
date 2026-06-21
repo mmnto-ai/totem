@@ -250,7 +250,7 @@ export function extractJustification(
 // ("best-effort cleanup, fail-soft") are unaffected (additive, non-breaking).
 
 const FAIL_SOFT_LEAD_RE = /^fail-soft\b/;
-const FAIL_SOFT_BACKSTOP_RE = /\bbackstop=\s*([^\s,;]+)/;
+const FAIL_SOFT_BACKSTOP_RE = /\bbackstop\s*=\s*([^\s,;]+)/;
 
 /**
  * Parse a `// totem-context:` justification as a Tenet-4 shape-2 fail-soft

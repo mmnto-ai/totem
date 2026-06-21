@@ -389,13 +389,20 @@ describe('applyAstRulesToAdditions', () => {
       });
     });
 
-    it('tolerates a space after `backstop=` (a common authoring habit) (#2220 CR)', () => {
-      // `backstop= foo` must NOT silently read as malformed — the parser strips
-      // the optional whitespace after `=` rather than surprising the author.
-      expect(parseFailSoftAttestation('fail-soft backstop= assertPipelineProductive')).toEqual({
-        kind: 'fail-soft',
-        backstop: 'assertPipelineProductive',
-      });
+    it('tolerates whitespace around `backstop=` (a common authoring habit) (#2220 CR+GCA)', () => {
+      // `backstop = foo` / `backstop= foo` must NOT silently read as malformed —
+      // the parser strips optional whitespace on BOTH sides of `=` rather than
+      // surprising the author with a false missing-backstop warning.
+      for (const reason of [
+        'fail-soft backstop= assertPipelineProductive',
+        'fail-soft backstop =assertPipelineProductive',
+        'fail-soft backstop = assertPipelineProductive',
+      ]) {
+        expect(parseFailSoftAttestation(reason)).toEqual({
+          kind: 'fail-soft',
+          backstop: 'assertPipelineProductive',
+        });
+      }
     });
 
     it('parses a backstop-less fail-soft claim as malformed (backstop: null)', () => {
