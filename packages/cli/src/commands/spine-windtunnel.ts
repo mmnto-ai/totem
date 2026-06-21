@@ -113,20 +113,30 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
     );
   }
 
-  // #2225 (#709 fold-2): pre-merge heads-up on the pr-diffs.json scoring-source
-  // digest (the hard gate is the certifying run). Warn-only, mirroring fixtureSha.
-  const prDiffsPath = path.join(path.dirname(lockPath), 'pr-diffs.json');
-  if (lock.controls.integrity.prDiffsSha && fs.existsSync(prDiffsPath)) {
-    const actual = createHash('sha256')
-      .update(fs.readFileSync(prDiffsPath, 'utf-8'), 'utf-8')
-      .digest('hex');
-    if (actual !== lock.controls.integrity.prDiffsSha) {
-      console.error(
-        `[WindtunnelFreeze] WARNING: controls.integrity.prDiffsSha in lock (${lock.controls.integrity.prDiffsSha}) does not match computed digest of pr-diffs.json (${actual})`,
-      );
-      console.error(`  Re-materialize the cert corpus or update prDiffsSha and re-freeze.`);
+  // #2225 (#709 fold-2): pre-merge heads-up on the pr-diffs.json scoring-source digest
+  // (the hard gate is the certifying run). Warn-only, mirroring fixtureSha. CRLF→LF
+  // normalized so a Windows checkout doesn't spuriously warn (GCA).
+  if (lock.controls.integrity.prDiffsSha) {
+    const prDiffsPath = path.join(path.dirname(lockPath), 'pr-diffs.json');
+    if (fs.existsSync(prDiffsPath)) {
+      const actual = createHash('sha256')
+        .update(fs.readFileSync(prDiffsPath, 'utf-8').replace(/\r\n/g, '\n'), 'utf-8')
+        .digest('hex');
+      if (actual !== lock.controls.integrity.prDiffsSha) {
+        console.error(
+          `[WindtunnelFreeze] WARNING: controls.integrity.prDiffsSha in lock (${lock.controls.integrity.prDiffsSha}) does not match computed digest of pr-diffs.json (${actual})`,
+        );
+        console.error(`  Re-materialize the cert corpus or update prDiffsSha and re-freeze.`);
+      } else {
+        console.error(`[WindtunnelFreeze] pr-diffs.json digest verified: ${actual}`);
+      }
     } else {
-      console.error(`[WindtunnelFreeze] pr-diffs.json digest verified: ${actual}`);
+      // greptile: declared-but-missing — surface the gap proactively at freeze, not
+      // only later at run time via loadCertRunFixtures.
+      console.error(
+        `[WindtunnelFreeze] WARNING: lock declares controls.integrity.prDiffsSha but pr-diffs.json is missing at ${prDiffsPath} — the certifying run will fail.`,
+      );
+      console.error(`  Re-materialize the cert corpus to co-locate pr-diffs.json with the lock.`);
     }
   }
 

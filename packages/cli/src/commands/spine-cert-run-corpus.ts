@@ -173,16 +173,12 @@ export function buildReplayCorpusProvider(
       );
     }
 
-    const { split, artifact, content, prDiffs, groundTruth } = await loadCertRunFixtures(
-      opts.gate1Dir,
-    );
-
-    // #2225 (#709 fold-2): hash-bind the SCORING source. `pr-diffs.json` is loaded +
-    // Zod-parsed but otherwise unprotected — `fixtureSha` covers only the control
-    // dirs — so a silent mutation of any row (advisory-window OR control) would
-    // corrupt the answer key while the control-dir gate stays green. Re-derive the
-    // digest over the EXACT on-disk bytes and assert vs the lock; fail loud (mirrors
-    // the llmReplaySha L2 gate; strategy ruled: verify at freeze AND run).
+    // #2225 (#709 fold-2): hash-bind the SCORING source BEFORE loading + parsing it
+    // (verify-bytes-then-parse, matching the llmReplaySha gate's position — greptile).
+    // `pr-diffs.json` is otherwise unprotected — `fixtureSha` covers only the control
+    // dirs — so a silent mutation of any row (advisory-window OR control) would corrupt
+    // the answer key while the control-dir gate stays green. Fail loud (strategy ruled:
+    // verify at freeze AND run).
     const expectedPrDiffsSha = lock.controls.integrity.prDiffsSha;
     if (!expectedPrDiffsSha) {
       throw new TotemError(
@@ -192,8 +188,22 @@ export function buildReplayCorpusProvider(
         'Re-materialize the cert corpus with `spine windtunnel materialize`.',
       );
     }
+    const prDiffsPath = path.join(opts.gate1Dir, PR_DIFFS_FILE);
+    let prDiffsBytes: string;
+    try {
+      prDiffsBytes = fs.readFileSync(prDiffsPath, 'utf-8');
+    } catch (err) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Certifying run: pr-diffs.json not found at ${prDiffsPath}, but the lock declares a digest.`,
+        'Re-materialize the cert corpus so pr-diffs.json is co-located with the lock.',
+        err,
+      );
+    }
+    // Normalize CRLF→LF before hashing so a Windows checkout (git autocrlf) doesn't
+    // spuriously fail the gate — the producer stamps the digest over LF bytes (GCA).
     const actualPrDiffsSha = createHash('sha256')
-      .update(fs.readFileSync(path.join(opts.gate1Dir, 'pr-diffs.json'), 'utf-8'), 'utf-8')
+      .update(prDiffsBytes.replace(/\r\n/g, '\n'), 'utf-8')
       .digest('hex');
     if (actualPrDiffsSha !== expectedPrDiffsSha) {
       throw new TotemError(
@@ -204,6 +214,9 @@ export function buildReplayCorpusProvider(
       );
     }
 
+    const { split, artifact, content, prDiffs, groundTruth } = await loadCertRunFixtures(
+      opts.gate1Dir,
+    );
     const { extractor, classifier } = buildReplayAdapters(artifact, expectedHash);
 
     const { corpus, ledgers } = await buildCertifyingCorpus({

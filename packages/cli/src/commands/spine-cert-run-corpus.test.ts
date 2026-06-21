@@ -172,10 +172,13 @@ async function fixtureHash(): Promise<string> {
   return hash;
 }
 
-/** sha256 of the exact on-disk pr-diffs.json bytes — the digest the run gate (#2225) asserts. */
+/** sha256 of the CRLF→LF-normalized on-disk pr-diffs.json — the digest the run gate (#2225) asserts. */
 function prDiffsHash(): string {
   return createHash('sha256')
-    .update(fs.readFileSync(path.join(gate1Dir, 'pr-diffs.json'), 'utf-8'), 'utf-8')
+    .update(
+      fs.readFileSync(path.join(gate1Dir, 'pr-diffs.json'), 'utf-8').replace(/\r\n/g, '\n'),
+      'utf-8',
+    )
     .digest('hex');
 }
 
