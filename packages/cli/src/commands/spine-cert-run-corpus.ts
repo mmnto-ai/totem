@@ -3,17 +3,15 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
-import {
-  type GroundTruthLabel,
-  type MinerLedgers,
-  type ResolvedPrDiff,
-  type ReviewThreadContent,
-  type ReviewThreadSource,
-  SplitArtifactSchema,
-  type SplitLedger,
-  type Stage4VerifierDeps,
-  TotemError,
-  type WindtunnelLock,
+import type {
+  GroundTruthLabel,
+  MinerLedgers,
+  ResolvedPrDiff,
+  ReviewThreadContent,
+  ReviewThreadSource,
+  SplitLedger,
+  Stage4VerifierDeps,
+  WindtunnelLock,
 } from '@mmnto/totem';
 
 import { buildCertifyingCorpus } from './spine-cert-corpus.js';
@@ -55,30 +53,6 @@ const ResolvedPrDiffSchema = z.object({
 // firingLabelId → TP|FP
 const GroundTruthSchema = z.record(z.enum(['TP', 'FP']));
 
-function loadJson(file: string): unknown {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(file, 'utf-8');
-  } catch (err) {
-    throw new TotemError(
-      'CONFIG_INVALID',
-      `Cert-run fixture missing: ${file}`,
-      'Ensure the gate-1 fixture set exists and is readable.',
-      err,
-    );
-  }
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    throw new TotemError(
-      'CONFIG_INVALID',
-      `Cert-run fixture is not valid JSON (${file})`,
-      'Re-freeze the gate-1 fixtures with `spine windtunnel record`.',
-      err,
-    );
-  }
-}
-
 /** A zero-network ReviewThreadSource backed by committed, frozen review content. */
 function frozenSourceFrom(contents: ReviewThreadContent[]): ReviewThreadSource {
   const byPr = new Map(contents.map((c) => [c.pr, c]));
@@ -100,8 +74,39 @@ export interface CertRunFixtureInputs {
   groundTruth: Map<string, GroundTruthLabel>;
 }
 
-/** Load + validate the committed cert-run fixture inputs from the gate-1 dir. */
-export function loadCertRunFixtures(gate1Dir: string): CertRunFixtureInputs {
+/**
+ * Load + validate the committed cert-run fixture inputs from the gate-1 dir.
+ * Async so the `@mmnto/totem` runtime values (schema + error class) are
+ * dynamically imported per the CLI lazy-import convention, not pulled in at
+ * module load.
+ */
+export async function loadCertRunFixtures(gate1Dir: string): Promise<CertRunFixtureInputs> {
+  const { SplitArtifactSchema, TotemError } = await import('@mmnto/totem');
+
+  const loadJson = (file: string): unknown => {
+    let raw: string;
+    try {
+      raw = fs.readFileSync(file, 'utf-8');
+    } catch (err) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Cert-run fixture missing: ${file}`,
+        'Ensure the gate-1 fixture set exists and is readable.',
+        err,
+      );
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Cert-run fixture is not valid JSON (${file})`,
+        'Re-freeze the gate-1 fixtures with `spine windtunnel record`.',
+        err,
+      );
+    }
+  };
+
   const split = SplitArtifactSchema.parse(loadJson(path.join(gate1Dir, SPLIT_FILE)));
   const artifact = ReplayArtifactSchema.parse(loadJson(path.join(gate1Dir, REPLAY_FILE)));
   const content = z
@@ -156,6 +161,7 @@ export function buildReplayCorpusProvider(
   opts: ReplayCorpusProviderOptions,
 ): CertifyingCorpusProvider {
   return async (lock: WindtunnelLock): Promise<CertifyingCorpus> => {
+    const { TotemError } = await import('@mmnto/totem');
     const expectedHash = lock.controls.integrity.llmReplaySha;
     if (!expectedHash) {
       throw new TotemError(
@@ -166,7 +172,9 @@ export function buildReplayCorpusProvider(
       );
     }
 
-    const { split, artifact, content, prDiffs, groundTruth } = loadCertRunFixtures(opts.gate1Dir);
+    const { split, artifact, content, prDiffs, groundTruth } = await loadCertRunFixtures(
+      opts.gate1Dir,
+    );
     const { extractor, classifier } = buildReplayAdapters(artifact, expectedHash);
 
     const { corpus, ledgers } = await buildCertifyingCorpus({
