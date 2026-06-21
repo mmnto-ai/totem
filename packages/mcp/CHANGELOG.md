@@ -1,5 +1,12 @@
 # @mmnto/mcp
 
+## 1.72.0
+
+### Patch Changes
+
+- Updated dependencies [facc2fa]
+  - @mmnto/totem@1.72.0
+
 ## 1.71.1
 
 ### Patch Changes
