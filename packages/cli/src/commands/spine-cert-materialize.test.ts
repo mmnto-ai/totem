@@ -14,11 +14,7 @@ import {
 } from '@mmnto/totem';
 
 import { materializeCommand } from './spine-cert-materialize.js';
-import {
-  assertCorpusCompleteness,
-  computeFixtureSha,
-  verifyControlIntegrity,
-} from './spine-windtunnel.js';
+import { assertCorpusCompleteness, verifyControlIntegrity } from './spine-windtunnel.js';
 
 // ─── Programmatic git fixture (agy's substrate: real `git init`, pinned dates) ──
 
