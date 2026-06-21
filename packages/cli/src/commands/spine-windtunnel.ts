@@ -281,6 +281,10 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   // post-image readStrategy → RuleFiring[] → A1 unique-label hard-gate → score.
   // C2: filesTouchedInWindow is the real exposure computed from the diffs (no
   // longer the hard-coded 0).
+  // A single wall-clock stamp for the whole certifying run — threaded into both
+  // the replay-corpus provider (compile-stage timestamp) and the persist step
+  // (report generatedAt / filename slug) so the two artifacts share one moment.
+  const runNowIso = new Date().toISOString();
   // Certifying phase: use the injected corpus (tests) or build the REPLAY-mode
   // provider from the committed cert-run fixtures under the gate-1 dir (5c-ii).
   let corpusProvider = opts.certifyingCorpus;
@@ -302,13 +306,17 @@ export async function runCommand(opts: RunOptions): Promise<void> {
           // untested, NOT archived) — the wind-tunnel firing/scoring still runs.
           listFiles: async () => [],
           readFile: async (f: string) => {
-            throw new Error(`Cert run: no lc clone (--lc-dir) — cannot read ${f} for Stage-4.`);
+            throw new TotemError(
+              'CONFIG_INVALID',
+              `Cert run: no lc clone (--lc-dir) — cannot read ${f} for Stage-4.`,
+              'Provide the lc clone via --lc-dir or the TOTEM_LC_DIR environment variable.',
+            );
           },
         };
     corpusProvider = buildReplayCorpusProvider({
       gate1Dir,
       stage4,
-      now: new Date().toISOString(),
+      now: runNowIso,
     });
   }
 
@@ -379,7 +387,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   // repo's live `.totem/compiled-rules.json` is NEVER touched here; survivors land
   // in the gate-1 cert output, which strategy#516 promotes to the live corpus.
   if (lock.phase === 'certifying') {
-    const gate1Dir = path.join(repoRoot, '.totem', 'spine', 'gate-1');
+    // Persist beside the same gate-1 dir the fixtures were loaded from (line ~288),
+    // not a hardcoded path — keeps cert output co-located under a non-default --lock-path.
+    const gate1Dir = path.dirname(lockPath);
     const persistResult = await persistCertifyingOutcome({
       verdict,
       firings,
@@ -389,7 +399,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       provenanceByRule: engineResult.provenanceByRule,
       certifiedRulesOutPath: path.join(gate1Dir, 'compiled-rules.json'),
       reportDir: path.join(gate1Dir, 'run-reports'),
-      nowIso: new Date().toISOString(),
+      nowIso: runNowIso,
       asOfCommit: lock.corpus.selectionRule.asOfCommit,
     });
     console.error(

@@ -12,6 +12,7 @@ import {
   SplitArtifactSchema,
   type SplitLedger,
   type Stage4VerifierDeps,
+  TotemError,
   type WindtunnelLock,
 } from '@mmnto/totem';
 
@@ -58,13 +59,23 @@ function loadJson(file: string): unknown {
   let raw: string;
   try {
     raw = fs.readFileSync(file, 'utf-8');
-  } catch {
-    throw new Error(`Cert-run fixture missing: ${file}`);
+  } catch (err) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Cert-run fixture missing: ${file}`,
+      'Ensure the gate-1 fixture set exists and is readable.',
+      err,
+    );
   }
   try {
     return JSON.parse(raw);
   } catch (err) {
-    throw new Error(`Cert-run fixture is not valid JSON (${file}): ${(err as Error).message}`);
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Cert-run fixture is not valid JSON (${file})`,
+      'Re-freeze the gate-1 fixtures with `spine windtunnel record`.',
+      err,
+    );
   }
 }
 
@@ -147,9 +158,11 @@ export function buildReplayCorpusProvider(
   return async (lock: WindtunnelLock): Promise<CertifyingCorpus> => {
     const expectedHash = lock.controls.integrity.llmReplaySha;
     if (!expectedHash) {
-      throw new Error(
+      throw new TotemError(
+        'CONFIG_INVALID',
         'Certifying run: lock is missing controls.integrity.llmReplaySha (L2) — the frozen ' +
-          'llm-replay fixture cannot be integrity-checked. Re-freeze the lock after a `record` run.',
+          'llm-replay fixture cannot be integrity-checked.',
+        'Re-freeze the lock after a `record` run.',
       );
     }
 

@@ -119,6 +119,12 @@ export interface RecordCommandOptions {
   /** Gate-1 output dir (default: the lock's dir). */
   outputDir?: string;
   /**
+   * Operator attestation that seed classes were supplied to the live extract —
+   * flows into the fold-I FM-f `seedClassesProvided` ledger field. Default false
+   * (seed-blind), so an unset flag preserves the seed-blind-by-construction claim.
+   */
+  seedClassesProvided?: boolean;
+  /**
    * Record deps. Injected in tests; in the live CLI path the caller builds them
    * from the orchestrator config (createOrchestrator + the Live adapters + the
    * gh ReviewThreadSource). REQUIRED — there is no safe default LLM/provider, so
@@ -154,7 +160,7 @@ function capturingSource(
 export async function recordCommand(
   opts: RecordCommandOptions,
 ): Promise<{ artifactPath: string; contentPath: string; hash: string }> {
-  const { WindtunnelLockSchema, SplitArtifactSchema } = await import('@mmnto/totem');
+  const { WindtunnelLockSchema, SplitArtifactSchema, TotemError } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
   const lockPath = opts.lockPath
@@ -162,11 +168,35 @@ export async function recordCommand(
     : path.resolve(cwd, '.totem/spine/gate-1/windtunnel.lock.json');
   const gate1Dir = opts.outputDir ? path.resolve(cwd, opts.outputDir) : path.dirname(lockPath);
 
-  const lock: WindtunnelLock = WindtunnelLockSchema.parse(
-    JSON.parse(fs.readFileSync(lockPath, 'utf-8')),
-  );
+  // Guard the two critical reads: a missing file or malformed JSON surfaces as a
+  // structured TotemError (original error attached as cause), not a cryptic crash.
+  const readJsonFile = (p: string): unknown => {
+    let raw: string;
+    try {
+      raw = fs.readFileSync(p, 'utf-8');
+    } catch (err) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Record: required file not found at ${p}`,
+        'Ensure the gate-1 lock and split.json exist before recording.',
+        err,
+      );
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Record: ${p} is not valid JSON`,
+        'Fix the JSON syntax and retry.',
+        err,
+      );
+    }
+  };
+
+  const lock: WindtunnelLock = WindtunnelLockSchema.parse(readJsonFile(lockPath));
   const split: SplitArtifact = SplitArtifactSchema.parse(
-    JSON.parse(fs.readFileSync(path.join(gate1Dir, 'split.json'), 'utf-8')),
+    readJsonFile(path.join(gate1Dir, 'split.json')),
   );
 
   const splitLedger: SplitLedger = {
@@ -185,7 +215,7 @@ export async function recordCommand(
     source: capturingSource(opts.deps.source, capturedContent),
     liveExtractor: opts.deps.liveExtractor,
     liveClassifier: opts.deps.liveClassifier,
-    seedClassesProvided: false,
+    seedClassesProvided: opts.seedClassesProvided ?? false,
     provenance: opts.deps.provenance,
   });
 
@@ -232,6 +262,7 @@ export async function buildLiveRecordDeps(
   config: LiveRecordConfig,
 ): Promise<RecordDeps> {
   const { createOrchestrator } = await import('../orchestrators/orchestrator.js');
+  const { TotemError } = await import('@mmnto/totem');
   const {
     LiveDraftExtractor,
     LiveDraftClassifier,
@@ -243,14 +274,37 @@ export async function buildLiveRecordDeps(
 
   const [owner, name] = lock.corpus.repo.split('/');
   if (!owner || !name) {
-    throw new Error(`Record: lock.corpus.repo "${lock.corpus.repo}" is not "owner/name".`);
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Record: lock.corpus.repo "${lock.corpus.repo}" is not "owner/name".`,
+      'Set corpus.repo in the lock to the "owner/name" form.',
+    );
   }
   const env = config.env ?? process.env;
   const credentialPresent = Boolean(env[PROVIDER_CREDENTIAL_ENV[config.provider] ?? '']);
 
-  const invoke = createOrchestrator({ provider: config.provider } as Parameters<
-    typeof createOrchestrator
-  >[0]);
+  // Build a fully-typed OrchestratorConfig — no `as` cast. The live record path
+  // supports only the API-key providers (see PROVIDER_CREDENTIAL_ENV); `shell`
+  // and `ollama` carry required fields (command / baseUrl) the record path does
+  // not model, so the prior cast silently passed `command: undefined` for shell.
+  let invoke: ReturnType<typeof createOrchestrator>;
+  switch (config.provider) {
+    case 'anthropic':
+      invoke = createOrchestrator({ provider: 'anthropic' });
+      break;
+    case 'gemini':
+      invoke = createOrchestrator({ provider: 'gemini' });
+      break;
+    case 'openai':
+      invoke = createOrchestrator({ provider: 'openai' });
+      break;
+    default:
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Record: unsupported provider "${config.provider}" for the live record path.`,
+        'Use --provider with anthropic, gemini, or openai.',
+      );
+  }
   const totemDir = `${config.cwd}/.totem`;
   const adapterDeps = {
     invoke,
