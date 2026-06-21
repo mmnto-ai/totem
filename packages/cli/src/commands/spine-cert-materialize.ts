@@ -207,8 +207,10 @@ export async function materializeCommand(opts: MaterializeOptions): Promise<void
   writeCanonical(path.join(gate1Dir, 'pr-diffs.json'), prDiffs);
 
   // fold-2: content-addressed digest over the canonical pr-diffs (the SCORING source
-  // `loadCertRunFixtures` reads independently of the control dirs). freeze/run
-  // re-derives + asserts this; closes the hole `fixtureSha` (control-dirs-only) leaves.
+  // `loadCertRunFixtures` reads independently of the control dirs). The producer
+  // STAMPS it here; freeze/run will re-derive + assert it to close the hole
+  // `fixtureSha` (control-dirs-only) leaves — that enforcement is the follow-up
+  // slice (#2225), not yet wired, so the digest is stamped-but-not-yet-authoritative.
   const prDiffsSha = sha256Hex(canonicalStringify(prDiffs));
 
   // 6. Control dirs — one `<pr>.diff` per control PR, derived from the SAME resolved
