@@ -48,7 +48,11 @@ interface PrGitResolution {
  * corpus PR is code-touching by construction, so an empty diff means a wrong ref
  * or a silent git fault, not a real no-op (fold-3 no-silent-empty).
  */
-function resolvePrGit(lcDir: string, mergeCommit: string, safeExec: SafeExecFn): PrGitResolution {
+export function resolvePrGit(
+  lcDir: string,
+  mergeCommit: string,
+  safeExec: SafeExecFn,
+): PrGitResolution {
   const headSha = mergeCommit;
   const baseSha = gitText(
     ['rev-parse', '--verify', '--end-of-options', `${mergeCommit}^`],
@@ -109,6 +113,25 @@ export async function materializeCommand(opts: MaterializeOptions): Promise<void
       'Pass --lc-dir <path-to-liquid-city-clone> whose history includes the seed asOfCommit.',
     );
   }
+
+  // Constrain every seed-derived write/delete target to within `repoRoot` (CR
+  // panel 🔴): the producer mkdir/writes the gate-1 dir and RECURSIVELY deletes
+  // the control dirs, so an absolute or `../` ref in the seed (or a typo) could
+  // escape the workspace. `path.resolve` collapses `..` and lets an absolute ref
+  // ignore `repoRoot`; a `..`-leading or absolute relative path — or repoRoot
+  // itself — is refused fail-loud (no write/delete outside, never ON, the root).
+  const resolveWithinRepo = (input: string, field: string): string => {
+    const abs = path.resolve(repoRoot, input);
+    const rel = path.relative(repoRoot, abs);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `cert-corpus materialize: ${field} ("${input}") resolves outside (or onto) the repo root — refusing to write/delete there.`,
+        `Provide a repo-relative ${field} nested under ${repoRoot}.`,
+      );
+    }
+    return abs;
+  };
 
   // 1. Load + validate the curated seed manifest.
   let seedRaw: unknown;
@@ -197,26 +220,37 @@ export async function materializeCommand(opts: MaterializeOptions): Promise<void
   // 5. Write split.json + pr-diffs.json (canonical, sorted-key, LF + trailing newline).
   const gate1Dir = opts.outDir
     ? path.resolve(cwd, opts.outDir)
-    : path.join(repoRoot, path.dirname(seed.canonicalPath));
+    : resolveWithinRepo(path.dirname(seed.canonicalPath), 'seed.canonicalPath directory');
   fs.mkdirSync(gate1Dir, { recursive: true });
 
-  const writeCanonical = (file: string, value: unknown): void => {
-    fs.writeFileSync(file, `${canonicalStringify(value, 2)}\n`, 'utf-8');
+  // Atomic write (GCA panel): serialize to a temp file then rename, so a reader / CI
+  // gate never observes a partially-written manifest. Returns the exact bytes written,
+  // so an integrity digest can be taken over the on-disk content, not a re-derived
+  // form that could drift from it.
+  const writeCanonical = (file: string, value: unknown): string => {
+    const text = `${canonicalStringify(value, 2)}\n`;
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, text, 'utf-8');
+    fs.renameSync(tmp, file);
+    return text;
   };
   writeCanonical(path.join(gate1Dir, 'split.json'), split);
-  writeCanonical(path.join(gate1Dir, 'pr-diffs.json'), prDiffs);
+  const prDiffsText = writeCanonical(path.join(gate1Dir, 'pr-diffs.json'), prDiffs);
 
-  // fold-2: content-addressed digest over the canonical pr-diffs (the SCORING source
-  // `loadCertRunFixtures` reads independently of the control dirs). The producer
-  // STAMPS it here; freeze/run will re-derive + assert it to close the hole
-  // `fixtureSha` (control-dirs-only) leaves — that enforcement is the follow-up
-  // slice (#2225), not yet wired, so the digest is stamped-but-not-yet-authoritative.
-  const prDiffsSha = sha256Hex(canonicalStringify(prDiffs));
+  // fold-2: integrity digest over the EXACT on-disk `pr-diffs.json` bytes (indented +
+  // trailing newline, as written above) — the SCORING source `loadCertRunFixtures`
+  // reads independently of the control dirs. Hashing the on-disk bytes (not the
+  // compact `canonicalStringify`) lets a freeze/run enforcer `sha256` the file
+  // directly, tool-agnostically (greptile/GCA panel). The producer STAMPS it here;
+  // freeze/run will re-derive + assert it to close the hole `fixtureSha`
+  // (control-dirs-only) leaves — that enforcement is the follow-up slice (#2225),
+  // not yet wired, so the digest is stamped-but-not-yet-authoritative.
+  const prDiffsSha = sha256Hex(prDiffsText);
 
   // 6. Control dirs — one `<pr>.diff` per control PR, derived from the SAME resolved
   // diff (single-source, fold-5). Clean first so stale files never pollute fixtureSha.
-  const posDir = path.join(repoRoot, seed.controls.positiveRef);
-  const negDir = path.join(repoRoot, seed.controls.negativeRef);
+  const posDir = resolveWithinRepo(seed.controls.positiveRef, 'seed.controls.positiveRef');
+  const negDir = resolveWithinRepo(seed.controls.negativeRef, 'seed.controls.negativeRef');
   for (const dir of [posDir, negDir]) {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });

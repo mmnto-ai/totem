@@ -293,7 +293,9 @@ export function buildWindtunnelLock(params: {
         mechanism: seed.controls.mechanism,
         fixtureSha: integrity.fixtureSha,
         prDiffsSha: integrity.prDiffsSha,
-        ...(integrity.llmReplaySha ? { llmReplaySha: integrity.llmReplaySha } : {}),
+        // `!== undefined` (not truthy): an explicit `''` must reach the schema and
+        // fail its 64-hex regex, never be silently dropped (CR panel — fail-loud).
+        ...(integrity.llmReplaySha !== undefined ? { llmReplaySha: integrity.llmReplaySha } : {}),
       },
     },
     cullRateThreshold: seed.cullRateThreshold,

@@ -13,7 +13,7 @@ import {
   WindtunnelLockSchema,
 } from '@mmnto/totem';
 
-import { materializeCommand } from './spine-cert-materialize.js';
+import { materializeCommand, resolvePrGit } from './spine-cert-materialize.js';
 import { assertCorpusCompleteness, verifyControlIntegrity } from './spine-windtunnel.js';
 
 // ─── Programmatic git fixture (agy's substrate: real `git init`, pinned dates) ──
@@ -191,8 +191,11 @@ describe('materializeCommand', () => {
       safeExec,
     );
 
-    // fold-2 digest is correct + re-derivable (content-addressed over canonical pr-diffs).
-    expect(sha256(canonicalStringify(prDiffs))).toBe(lock.controls.integrity.prDiffsSha);
+    // fold-2 digest is the sha256 of the EXACT on-disk pr-diffs.json bytes — so a
+    // freeze/run enforcer can hash the file directly (greptile/GCA panel).
+    expect(sha256(fs.readFileSync(path.join(gate1, 'pr-diffs.json'), 'utf-8'))).toBe(
+      lock.controls.integrity.prDiffsSha,
+    );
   });
 
   it('is byte-deterministic — re-running yields identical fixture bytes', async () => {
@@ -245,15 +248,29 @@ describe('materializeCommand', () => {
       manifestPath: writeSeed(tmp, seedObject(headSha)),
     });
     const lock = WindtunnelLockSchema.parse(readJson(path.join(gate1, 'windtunnel.lock.json')));
-    const prDiffs = readJson(path.join(gate1, 'pr-diffs.json')) as Array<Record<string, unknown>>;
 
-    // a clean re-derive matches the stored digest...
-    expect(sha256(canonicalStringify(prDiffs))).toBe(lock.controls.integrity.prDiffsSha);
-    // ...a tampered control row does NOT (the hole fixtureSha alone leaves open).
+    // the digest = sha256 of the on-disk bytes, so reading the file back matches...
+    const onDisk = fs.readFileSync(path.join(gate1, 'pr-diffs.json'), 'utf-8');
+    expect(sha256(onDisk)).toBe(lock.controls.integrity.prDiffsSha);
+    // ...a tampered control row (re-serialized the same way) does NOT (the hole
+    // fixtureSha alone leaves open).
+    const prDiffs = JSON.parse(onDisk) as Array<Record<string, unknown>>;
     const tampered = prDiffs.map((d) =>
       d.pr === 7 ? { ...d, diff: `${d.diff as string}// x` } : d,
     );
-    expect(sha256(canonicalStringify(tampered))).not.toBe(lock.controls.integrity.prDiffsSha);
+    expect(sha256(`${canonicalStringify(tampered, 2)}\n`)).not.toBe(
+      lock.controls.integrity.prDiffsSha,
+    );
+  });
+
+  it('fold-3: resolvePrGit throws on an empty diff for a code-touching PR', () => {
+    // The guard `diff.trim().length === 0` in resolvePrGit isn't reachable via the
+    // matrix repo (the only empty-diff PRs are non-code → excluded before resolve),
+    // so exercise it directly: git succeeds (non-empty rev-parse) but the diff is
+    // empty — must fail loud, not silently emit an empty frozen fixture.
+    const fakeExec = ((_cmd: string, args: readonly string[]): string =>
+      args[0] === 'rev-parse' ? '0'.repeat(40) : '') as Parameters<typeof resolvePrGit>[2];
+    expect(() => resolvePrGit('/lc', 'a'.repeat(40), fakeExec)).toThrow(/EMPTY diff/);
   });
 
   it('fails loud on a malformed `(#abc)` merge subject (no silent shrink)', async () => {
