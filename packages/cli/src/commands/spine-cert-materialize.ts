@@ -29,9 +29,10 @@ function gitText(args: string[], cwd: string, safeExec: SafeExecFn, what: string
   try {
     return safeExec('git', args, { cwd }).replace(/\r\n/g, '\n');
   } catch (err) {
-    throw new Error(
-      `cert-corpus materialize: git ${what} failed in ${cwd} — ${err instanceof Error ? err.message : String(err)}`,
-    );
+    // §9: original as `cause`, never concatenate `err.message`. Stays a plain Error
+    // (like the shipped `enumeratePrMetas`) — wrapped into a TotemError at the
+    // command boundary, which carries this through the cause chain.
+    throw new Error(`cert-corpus materialize: git ${what} failed in ${cwd}`, { cause: err });
   }
 }
 
@@ -167,26 +168,20 @@ export async function materializeCommand(opts: MaterializeOptions): Promise<void
       isBotIdentity,
     });
   } catch (err) {
+    // §9: pass the original as `cause`, never concatenate `err.message` (the debug
+    // logger surfaces the cause chain). The hint points there for the specifics.
     throw new TotemError(
       'CONFIG_INVALID',
-      `cert-corpus materialize: PR enumeration failed off ${lcDir} — ${err instanceof Error ? err.message : String(err)}`,
-      'Verify --lc-dir is an lc clone whose history includes asOfCommit and the merge subjects are well-formed.',
+      `cert-corpus materialize: PR enumeration failed off ${lcDir}`,
+      'Verify --lc-dir is an lc clone whose history includes asOfCommit and the merge subjects are well-formed (TOTEM_DEBUG=1 surfaces the underlying fault).',
       err,
     );
   }
-  let derived;
-  try {
-    derived = deriveCorpus({ seed, metas });
-  } catch (err) {
-    // CertCorpusSeedError / SplitCoverError — already structured fail-loud.
-    throw new TotemError(
-      'CONFIG_INVALID',
-      `cert-corpus materialize: ${err instanceof Error ? err.message : String(err)}`,
-      'Fix the seed (controls / cutIndex / excludedPrs) and retry.',
-      err,
-    );
-  }
-  const { corpus, split, prDiffRoles } = derived;
+  // deriveCorpus throws CertCorpusSeedError / SplitCoverError — already structured,
+  // user-facing fail-loud errors; let them propagate verbatim (§9: don't re-wrap +
+  // concatenate err.message, which would bury the specific reason behind a
+  // debug-only cause).
+  const { corpus, split, prDiffRoles } = deriveCorpus({ seed, metas });
 
   // 3. Resolve git base/head/diff for EVERY corpus PR (fail-loud; validates non-empty).
   const mergeByPr = new Map(metas.map((m) => [m.pr, m.mergeCommit]));
@@ -196,10 +191,11 @@ export async function materializeCommand(opts: MaterializeOptions): Promise<void
       gitByPr.set(pr, resolvePrGit(lcDir, mergeByPr.get(pr)!, safeExec));
     }
   } catch (err) {
+    // §9: original as `cause`, no `err.message` concatenation.
     throw new TotemError(
       'CONFIG_INVALID',
-      `cert-corpus materialize: ${err instanceof Error ? err.message : String(err)}`,
-      'Verify the lc clone is complete at asOfCommit (all corpus merge commits + parents present).',
+      'cert-corpus materialize: git resolution failed for one or more corpus PRs',
+      'Verify the lc clone is complete at asOfCommit (all corpus merge commits + parents present); TOTEM_DEBUG=1 surfaces the underlying git fault.',
       err,
     );
   }
