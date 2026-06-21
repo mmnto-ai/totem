@@ -23,11 +23,14 @@ import { type WindtunnelLock, WindtunnelLockSchema } from './windtunnel-lock.js'
 
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 
+/** A required string that rejects whitespace-only values (`.min(1)` alone would admit `"   "`). */
+const nonBlank = (msg?: string): z.ZodString => z.string().trim().min(1, msg);
+
 // ─── Seed manifest schema (the curated answer-key inputs) ────────────────────
 
 const CodePathClassifierSeedSchema = z.object({
-  includeGlobs: z.array(z.string().min(1)).min(1, 'includeGlobs must list at least one glob'),
-  excludeGlobs: z.array(z.string().min(1)),
+  includeGlobs: z.array(nonBlank()).min(1, 'includeGlobs must list at least one glob'),
+  excludeGlobs: z.array(nonBlank()),
 });
 
 /**
@@ -39,14 +42,14 @@ const CodePathClassifierSeedSchema = z.object({
  */
 const PositiveControlSeedSchema = z.object({
   pr: z.number().int().positive(),
-  targetRuleId: z.string().min(1, 'a positive control must name its targetRuleId'),
+  targetRuleId: nonBlank('a positive control must name its targetRuleId'),
 });
 
 export const CertCorpusSeedSchema = z
   .object({
-    gate: z.string().min(1),
-    canonicalPath: z.string().min(1),
-    repo: z.string().min(1),
+    gate: nonBlank(),
+    canonicalPath: nonBlank(),
+    repo: nonBlank(),
     // The producer materializes the CERTIFYING scoring corpus; the harness phase
     // has no real corpus to materialize.
     phase: z.literal('certifying'),
@@ -71,9 +74,9 @@ export const CertCorpusSeedSchema = z
       excludedPrs: z.array(z.number().int().positive()).default([]),
     }),
     controls: z.object({
-      positiveRef: z.string().min(1),
-      negativeRef: z.string().min(1),
-      mechanism: z.string().min(1),
+      positiveRef: nonBlank(),
+      negativeRef: nonBlank(),
+      mechanism: nonBlank(),
       positive: z.array(PositiveControlSeedSchema).default([]),
       negative: z.array(z.number().int().positive()).default([]),
     }),
