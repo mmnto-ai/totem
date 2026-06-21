@@ -5,6 +5,10 @@ import { z } from 'zod';
 // ─── Named constants ─────────────────────────────────
 
 const COMMIT_SHA_REGEX = /^[0-9a-f]{40}$/;
+// llm-replay fixture hash is a sha256 digest (64-hex) from computeArtifactHash
+// over the whole replay artifact (incl. provenance), distinct from the 40-hex
+// git hash-object fixtureSha used for the control dirs.
+const SHA256_REGEX = /^[0-9a-f]{64}$/;
 const MIN_ACTIVE_RULES_FLOOR = 2;
 
 // ─── Sub-schemas ─────────────────────────────────────
@@ -78,6 +82,19 @@ export const WindtunnelLockSchema = z
         // hard-error integrity gate — validate its format here so a malformed
         // value fails at parse, not cryptically at run (greptile P2).
         fixtureSha: z.string().regex(COMMIT_SHA_REGEX, 'fixtureSha must be a 40-hex SHA'),
+        // L2 (5c-ii): the EXTERNAL expected-hash for the frozen `llm-replay.v1`
+        // fixture — a sha256 (64-hex) from `computeArtifactHash` over the whole
+        // replay artifact (incl. prompt/provider provenance). Single-homed here
+        // beside fixtureSha (Tenet 20: one freeze-manifest per cert run). The
+        // `run` path sources it and passes it to `assertFixtureIntegrity`, so a
+        // tampered/stale fixture fails loud. Additive-optional: harness locks
+        // (no LLM stage) parse unchanged; the certifying record/replay wiring
+        // requires it (the run hard-errors if absent — no safe default for an
+        // integrity hash).
+        llmReplaySha: z
+          .string()
+          .regex(SHA256_REGEX, 'llmReplaySha must be a 64-hex sha256')
+          .optional(),
       }),
     }),
     cullRateThreshold: z

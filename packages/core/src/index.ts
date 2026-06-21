@@ -802,6 +802,13 @@ export {
   runClassifyStage,
 } from './spine/classify.js';
 export type {
+  CompiledCandidate,
+  CompileOutcome,
+  CompileStageDeps,
+  CompileStageResult,
+} from './spine/compile.js';
+export { compileCandidate, runCompileStage } from './spine/compile.js';
+export type {
   DraftExtractor,
   ExtractStageDeps,
   ExtractStageResult,
@@ -844,6 +851,12 @@ export {
   RoutingSchema,
   SplitLedgerSchema,
 } from './spine/ledgers.js';
+export type {
+  LegitimacyProjectionInput,
+  LegitimacyProjectionResult,
+  LegitimacyProjectionSkip,
+} from './spine/legitimacy-projection.js';
+export { buildCertifiedRulesFile, projectLegitimacy } from './spine/legitimacy-projection.js';
 export type { FalsificationResult, FmClause, FmViolation } from './spine/miner-harness.js';
 export { checkParsedLedgers, runFalsificationHarness } from './spine/miner-harness.js';
 export type {
@@ -890,6 +903,7 @@ export type { WindtunnelLock } from './spine/windtunnel-lock.js';
 export { firingLabelId, WindtunnelLockSchema } from './spine/windtunnel-lock.js';
 export type {
   CullLedgerEntry,
+  FiringEvidence,
   GroundTruthLabel,
   RuleFiring,
   ScorerInput,

@@ -607,6 +607,7 @@ describe('runCertifyingEngine (5c-i — certifying real-engine path)', () => {
       rules: [debuggerRule],
       prDiffs: [prDiff(534, 'corpus')],
       groundTruth: new Map<string, GroundTruthLabel>(),
+      provenanceByRule: new Map(),
     };
     const result = await runCertifyingEngine(certLock, fixedRead, () => corpus);
     expect(result.firings).toHaveLength(1);
@@ -621,22 +622,26 @@ describe('runCertifyingEngine (5c-i — certifying real-engine path)', () => {
       rules: [{ ...debuggerRule, status: 'archived' }],
       prDiffs: [prDiff(534, 'corpus')],
       groundTruth: new Map(),
+      provenanceByRule: new Map(),
     };
     await expect(runCertifyingEngine(certLock, fixedRead, () => corpus)).rejects.toThrow(
       /archived rule/,
     );
   });
 
-  it('A1: a labelId collision surfaces as a CONFIG_INVALID error pre-score', async () => {
+  it('fold-D: two same-labelId firings (same pr, same line) DEDUP to one (no A1 throw)', async () => {
     // Two PR diffs with the SAME pr + identical matched line → identical labelId.
+    // Pre-fold-D this tripped the A1 throw; now buildFirings dedups to one logical
+    // firing (retaining both raw matches as evidence) and the run proceeds.
     const corpus: CertifyingCorpus = {
       rules: [debuggerRule],
-      prDiffs: [prDiff(534, 'corpus'), prDiff(534, 'corpus')], // same pr, same line → collision
+      prDiffs: [prDiff(534, 'corpus'), prDiff(534, 'corpus')], // same pr, same line → dedup
       groundTruth: new Map(),
+      provenanceByRule: new Map(),
     };
-    await expect(runCertifyingEngine(certLock, fixedRead, () => corpus)).rejects.toThrow(
-      /collision/,
-    );
+    const result = await runCertifyingEngine(certLock, fixedRead, () => corpus);
+    expect(result.firings).toHaveLength(1);
+    expect(result.firings[0]!.evidence).toHaveLength(2);
   });
 
   it('fold-H: a negative-control firing passes through as controlKind:negative', async () => {
@@ -644,6 +649,7 @@ describe('runCertifyingEngine (5c-i — certifying real-engine path)', () => {
       rules: [debuggerRule],
       prDiffs: [prDiff(999, 'negative')],
       groundTruth: new Map(),
+      provenanceByRule: new Map(),
     };
     const result = await runCertifyingEngine(certLock, fixedRead, () => corpus);
     const negFirings = result.firings.filter((f: RuleFiring) => f.controlKind === 'negative');

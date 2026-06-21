@@ -80,6 +80,23 @@ describe('WindtunnelLockSchema acceptance', () => {
     const result = WindtunnelLockSchema.safeParse(lock);
     expect(result.success).toBe(true);
   });
+
+  it('accepts an optional L2 llmReplaySha (64-hex sha256) beside fixtureSha', () => {
+    const result = WindtunnelLockSchema.safeParse(
+      validLock({
+        controls: {
+          positiveRef: 'controls/positive/',
+          negativeRef: 'controls/negative/',
+          integrity: {
+            mechanism: 'git-hash-object',
+            fixtureSha: VALID_SHA,
+            llmReplaySha: 'a'.repeat(64),
+          },
+        },
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
 });
 
 // ─── Schema rejection invariants ─────────────────────
@@ -88,6 +105,17 @@ describe('WindtunnelLockSchema rejection', () => {
   it('rejects precisionFloor !== 1.0', () => {
     const lock = validLock();
     (lock.fpDefinition as Record<string, unknown>).precisionFloor = 0.9;
+    const result = WindtunnelLockSchema.safeParse(lock);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an llmReplaySha that is not a 64-hex sha256 (e.g. a 40-hex git sha)', () => {
+    const lock = validLock();
+    (lock.controls as Record<string, unknown>).integrity = {
+      mechanism: 'git-hash-object',
+      fixtureSha: VALID_SHA,
+      llmReplaySha: VALID_SHA, // 40-hex — must fail the 64-hex sha256 regex
+    };
     const result = WindtunnelLockSchema.safeParse(lock);
     expect(result.success).toBe(false);
   });

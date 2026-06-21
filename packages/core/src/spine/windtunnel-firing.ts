@@ -128,16 +128,20 @@ export function assertNoArchivedRules(rules: CompiledRule[]): void {
   }
 }
 
-// ─── A1 (fold-D): hard-gate-unique FLOOR ─────────────
+// ─── A1 (fold-D): post-dedup uniqueness INVARIANT ────
 
 /**
- * A1 (fold-D) — hard-gate `firings.length === unique(labelIds).size` BEFORE
- * `scoreWindtunnel` (Tenet 4). On collision THROW, surfacing the colliding
- * labelIds + their evidence refs. We do NOT add an occurrence discriminator /
- * ordinal (strategy ruling: ordinal regresses `firingLabelId`'s line-drift
- * resistance); we measure collisions on the frozen corpus and fail loud if any
- * occur. Preserves the `labelId→evidenceRef` contract: a 1:1 labelId→firing map
- * is the invariant the ground-truth join depends on.
+ * A1 (fold-D) — assert `firings.length === unique(labelIds).size` BEFORE
+ * `scoreWindtunnel` (Tenet 4). Originally specced as a hard-gate FLOOR that
+ * threw on any collision; the strategy ruling (2026-06-20) DEMOTED it to a
+ * post-dedup invariant once `buildFirings` learned to collapse same-labelId
+ * matches (`dedupeFirings`). It still THROWS on a collision — but a collision
+ * here now means a dedup BUG (or a caller that bypassed `buildFirings`), not an
+ * honest multi-match line, so failing loud is correct. We deliberately do NOT
+ * add an occurrence discriminator / ordinal (it would regress `firingLabelId`'s
+ * line-drift resistance); a diff-hunk-span discriminator stays reserved. The
+ * invariant guards the `labelId→evidenceRef` contract the ground-truth join
+ * depends on: a 1:1 labelId→firing map.
  */
 export function assertUniqueFiringLabels(firings: RuleFiring[]): void {
   const byLabel = new Map<string, RuleFiring[]>();
@@ -206,9 +210,10 @@ export interface BuildFiringsResult {
  *  - **C2**: `filesTouchedInWindow` is the count of distinct post-image files
  *    across all diffs — the real third exposure leg.
  *
- * Note: A1 (assertUniqueFiringLabels) is the caller's pre-score gate so the
- * collision report can be threaded into the cert-run report; this function does
- * not swallow it.
+ * fold-D: before returning, same-`labelId` matches are collapsed to ONE logical
+ * firing (`dedupeFirings`), retaining every raw match as `evidence`. The caller's
+ * `assertUniqueFiringLabels` is therefore a post-dedup INVARIANT (it can no
+ * longer fire on an honest multi-match line), not a pre-score floor.
  */
 export async function buildFirings(input: BuildFiringsInput): Promise<BuildFiringsResult> {
   const { rules, prDiffs, cwd, readStrategy, ruleEngineCtx, onWarn } = input;
@@ -216,7 +221,8 @@ export async function buildFirings(input: BuildFiringsInput): Promise<BuildFirin
   // fold-F: hard-gate the scored set BEFORE touching the engine.
   assertNoArchivedRules(rules);
 
-  const firings: RuleFiring[] = [];
+  // Pre-dedup firings (one per raw engine match); collapsed by labelId at return.
+  const rawFirings: RuleFiring[] = [];
   const touchedFiles = new Set<string>();
   const positiveControlTargets: Array<{ pr: number; targetRuleId: string }> = [];
 
@@ -253,15 +259,45 @@ export async function buildFirings(input: BuildFiringsInput): Promise<BuildFirin
     );
 
     for (const v of [...regexViolations, ...astViolations]) {
-      firings.push(violationToFiring(v, prDiff));
+      rawFirings.push(violationToFiring(v, prDiff));
     }
   }
 
   return {
-    firings,
+    // fold-D: collapse same-labelId matches to ONE logical firing before scoring.
+    firings: dedupeFirings(rawFirings),
     filesTouchedInWindow: touchedFiles.size,
     positiveControlTargets,
   };
+}
+
+/**
+ * fold-D — collapse raw firings that share a `labelId` into ONE logical firing,
+ * retaining every raw match as `evidence`. Same-labelId matches arise when a
+ * rule matches more than once under the identical (ruleId, pr, filePath,
+ * normalizedLine) key — multiple matches on one line, or distinct physical lines
+ * whose trailing-whitespace difference normalizes away. Per the strategy ruling
+ * (2026-06-20) we DEDUP rather than throw or add an occurrence discriminator: an
+ * ordinal would regress `firingLabelId`'s deliberate line-drift resistance, and
+ * the collapse is verdict-safe under ADR-110's 1.0 precision floor (it only
+ * affects the precision denominator, never the binary verdict). A diff-hunk-span
+ * discriminator stays RESERVED (measure-first) if the frozen corpus ever needs
+ * it. The retained firing keeps the FIRST match's fields (identical across the
+ * group by construction of the key) and accumulates all matches' evidence; the
+ * caller's `assertUniqueFiringLabels` is then a post-dedup invariant, not a gate.
+ */
+function dedupeFirings(rawFirings: RuleFiring[]): RuleFiring[] {
+  const byLabel = new Map<string, RuleFiring>();
+  for (const f of rawFirings) {
+    const existing = byLabel.get(f.labelId);
+    if (!existing) {
+      byLabel.set(f.labelId, f);
+      continue;
+    }
+    // Collapse: append this raw match's evidence to the retained firing.
+    existing.evidence = [...(existing.evidence ?? []), ...(f.evidence ?? [])];
+  }
+  return [...byLabel.values()];
 }
 
 /** Map one engine `Violation` to a scored `RuleFiring` (content-based labelId). */
@@ -276,6 +312,8 @@ function violationToFiring(violation: Violation, prDiff: ResolvedPrDiff): RuleFi
     matchedLine,
     controlKind: prDiff.controlKind,
     labelId: firingLabelId(ruleId, prDiff.pr, filePath, matchedLine),
+    // fold-D: the raw match backing this firing (≥1 after dedup collapse).
+    evidence: [{ lineNumber: violation.lineNumber, rawLine: violation.line }],
   };
   // Carry the positive control's target so the scorer's non-vacuity check can
   // match on (pr, ruleId) — only meaningful for positive-control firings.

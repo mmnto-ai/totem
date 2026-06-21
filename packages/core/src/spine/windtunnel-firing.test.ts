@@ -240,6 +240,32 @@ describe('fold-F — archived rule in scored set throws (Tenet 4)', () => {
     expect(firedRuleIds.has('rule-debugger')).toBe(true);
     expect(firedRuleIds.has('rule-eval')).toBe(true);
   });
+
+  it('fold-D: collapses same-labelId matches to ONE firing, retaining raw matches as evidence', async () => {
+    // Two identical added lines normalize to the same matchedLine ⇒ the same
+    // (ruleId, pr, filePath, normalizedLine) ⇒ the same labelId. Pre-fold-D this
+    // tripped the A1 throw; the strategy ruling (2026-06-20) DEDUPs it to one
+    // logical firing, retaining both raw matches as evidence for the report.
+    const post = ['  debugger;', '  debugger;'].join('\n'); // totem-ignore
+    const prDiffs: ResolvedPrDiff[] = [
+      { pr: 200, diff: diffAdding(['  debugger;', '  debugger;']), controlKind: 'corpus' }, // totem-ignore
+    ];
+    const result = await buildFirings({
+      rules: [debuggerRule()],
+      prDiffs,
+      cwd: '/repo',
+      readStrategy: fixedReadStrategy(post),
+      ruleEngineCtx: makeRuleEngineCtx(),
+    });
+
+    // Collapsed to ONE logical firing...
+    expect(result.firings).toHaveLength(1);
+    // ...whose evidence retains BOTH raw matches.
+    expect(result.firings[0]!.evidence).toHaveLength(2);
+    expect(result.firings[0]!.evidence!.every((e) => e.rawLine.includes('debugger'))).toBe(true);
+    // The deduped output satisfies the (now post-dedup) A1 invariant.
+    expect(() => assertUniqueFiringLabels(result.firings)).not.toThrow();
+  });
 });
 
 // ─── A1 (fold-D): hard-gate-unique FLOOR ─────────────

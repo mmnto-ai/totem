@@ -46,6 +46,8 @@ packages/pack-rust-architecture/tree-sitter-rust.wasm
 .totem/ledger/
 .totem/sync.lock
 .totem/temp/
+# Agent draft scratch (dispatch/verdict drafts staged before ECL delivery); local-only, never tracked
+.totem/drafts/
 .totem/cache/
 # Grounded run artifacts (mmnto-ai/totem#2100) — machine-local run records,
 # content-addressed, carry prompt content; never tracked.

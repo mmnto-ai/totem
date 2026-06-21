@@ -1829,6 +1829,53 @@ windtunnelCmd
     }
   });
 
+windtunnelCmd
+  .command('record')
+  .description('Record the frozen llm-replay.v1 fixture (live extract+classify) for replay (A2)')
+  .option(
+    '--lock-path <path>',
+    'Override the lock file path (default: .totem/spine/gate-1/windtunnel.lock.json)',
+  )
+  .option('--provider <provider>', 'LLM provider for the live record run', 'anthropic')
+  .requiredOption('--model <model>', 'LLM model id for the live record run (no safe default)')
+  .option(
+    '--seed-classes-provided',
+    'Attest that seed classes were supplied to the live extract (fold-I FM-f). Default: false (seed-blind).',
+    false,
+  )
+  .action(
+    async (opts: {
+      lockPath?: string;
+      provider: string;
+      model: string;
+      seedClassesProvided?: boolean;
+    }) => {
+      try {
+        const fsm = await import('node:fs');
+        const { WindtunnelLockSchema } = await import('@mmnto/totem');
+        const { recordCommand, buildLiveRecordDeps } =
+          await import('./commands/spine-cert-record.js');
+        const cwd = process.cwd();
+        const lockPath = opts.lockPath ?? `${cwd}/.totem/spine/gate-1/windtunnel.lock.json`;
+        const lock = WindtunnelLockSchema.parse(JSON.parse(fsm.readFileSync(lockPath, 'utf-8')));
+        const deps = await buildLiveRecordDeps(lock, {
+          provider: opts.provider,
+          model: opts.model,
+          cwd,
+          totemVersion: version,
+        });
+        await recordCommand({
+          lockPath: opts.lockPath,
+          deps,
+          seedClassesProvided: opts.seedClassesProvided,
+        });
+      } catch (err) {
+        handleError(err);
+        throw err;
+      }
+    },
+  );
+
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
 
