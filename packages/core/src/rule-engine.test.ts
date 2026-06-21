@@ -17,6 +17,7 @@ import {
   applyRulesToAdditions,
   extractJustification,
   matchesGlob,
+  parseFailSoftAttestation,
   type RuleEngineContext,
 } from './rule-engine.js';
 import { cleanTmpDir, makeRuleEngineCtx } from './test-utils.js';
@@ -372,6 +373,122 @@ describe('applyAstRulesToAdditions', () => {
       tmpDir,
     );
     expect(violations.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── Fail-soft attestation carve-out (mmnto-ai/totem#2214 acceptance-#3) ──
+  // Tenet-4 shape 2: a blanket fail-soft catch is licensed when it names a loud
+  // systemic backstop. The structured `// totem-context: fail-soft backstop=<name>`
+  // attestation is RECOGNIZED (parsed + surfaced) so authors keep the honest
+  // catch_clause instead of the `.catch()` syntax dodge. A fail-soft claim with
+  // NO backstop always surfaces a WARN (never blocks) — strategy#702/#708 ruling.
+  describe('fail-soft attestation (shape 2)', () => {
+    it('parses a well-formed attestation to its named backstop', () => {
+      expect(parseFailSoftAttestation('fail-soft backstop=assertPipelineProductive')).toEqual({
+        kind: 'fail-soft',
+        backstop: 'assertPipelineProductive',
+      });
+    });
+
+    it('parses a backstop-less fail-soft claim as malformed (backstop: null)', () => {
+      expect(parseFailSoftAttestation('fail-soft')).toEqual({ kind: 'fail-soft', backstop: null });
+      expect(parseFailSoftAttestation('fail-soft backstop=')).toEqual({
+        kind: 'fail-soft',
+        backstop: null,
+      });
+    });
+
+    it('does NOT treat embedded "fail-soft" prose as an attestation (non-breaking)', () => {
+      // The ~25 existing `// totem-context:` escapes lead with prose; only a
+      // LEADING `fail-soft` token is the structured attestation, so they are
+      // unaffected (additive, never re-flagging committed code).
+      expect(parseFailSoftAttestation('best-effort cleanup, fail-soft')).toBeNull();
+      expect(parseFailSoftAttestation('intentional cleanup — telemetry sink')).toBeNull();
+    });
+
+    const writeCatch = (directiveLine: string): void =>
+      fs.writeFileSync(
+        path.join(tmpDir, 'src', 'app.ts'),
+        [
+          'try {',
+          '  doWork();',
+          `  ${directiveLine}`,
+          '} catch (err) {',
+          '  return [];',
+          '}',
+          '',
+        ].join('\n'),
+      );
+
+    it('suppresses with NO warn when the attestation names a backstop', async () => {
+      writeCatch('// totem-context: fail-soft backstop=assertPipelineProductive');
+      const additions = [makeAddition('src/app.ts', '  return [];', 5)];
+      const violations = await applyAstRulesToAdditions(
+        ctx,
+        [failOpenCatchRule()],
+        additions,
+        tmpDir,
+      );
+      expect(violations).toHaveLength(0);
+    });
+
+    it('suppresses the error BUT emits a WARN when the attestation names no backstop', async () => {
+      writeCatch('// totem-context: fail-soft');
+      const additions = [makeAddition('src/app.ts', '  return [];', 5)];
+      const violations = await applyAstRulesToAdditions(
+        ctx,
+        [failOpenCatchRule()],
+        additions,
+        tmpDir,
+      );
+      // The catch-ban error is suppressed; the only finding is the warn-severity
+      // missing-backstop diagnostic — non-blocking, never the original error.
+      expect(violations).toHaveLength(1);
+      expect(violations[0]!.rule.severity).toBe('warning');
+      expect(violations[0]!.rule.lessonHash).toBe('totem/fail-soft-missing-backstop');
+    });
+
+    it('emits the WARN on the tree-sitter (ast) path too (parity)', async () => {
+      writeCatch('// totem-context: fail-soft');
+      const additions = [makeAddition('src/app.ts', '  return [];', 5)];
+      const violations = await applyAstRulesToAdditions(
+        ctx,
+        [treeSitterCatchRule()],
+        additions,
+        tmpDir,
+      );
+      expect(violations).toHaveLength(1);
+      expect(violations[0]!.rule.severity).toBe('warning');
+    });
+
+    it('does NOT warn for a generic (non-fail-soft) context escape', async () => {
+      writeCatch('// totem-context: best-effort cleanup');
+      const additions = [makeAddition('src/app.ts', '  return [];', 5)];
+      const violations = await applyAstRulesToAdditions(
+        ctx,
+        [failOpenCatchRule()],
+        additions,
+        tmpDir,
+      );
+      expect(violations).toHaveLength(0);
+    });
+
+    it('surfaces the typed attestation on the suppress rule-event (#697 ledger surface)', async () => {
+      writeCatch('// totem-context: fail-soft backstop=assertProductive');
+      const additions = [makeAddition('src/app.ts', '  return [];', 5)];
+      const events: Array<{ event: string; context?: RuleEventContext }> = [];
+      await applyAstRulesToAdditions(
+        ctx,
+        [failOpenCatchRule()],
+        additions,
+        tmpDir,
+        (event, _hash, context) => events.push({ event, context }),
+      );
+      const suppress = events.find((e) => e.event === 'suppress');
+      expect(suppress?.context?.attestation).toEqual({
+        kind: 'fail-soft',
+        backstop: 'assertProductive',
+      });
+    });
   });
 
   it('compound rule with invalid NAPI config emits failure event without crashing', async () => {

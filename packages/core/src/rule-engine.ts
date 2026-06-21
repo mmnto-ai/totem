@@ -8,6 +8,7 @@ import { matchAstQueriesBatch } from './ast-query.js';
 import type {
   CompiledRule,
   DiffAddition,
+  FailSoftAttestation,
   RuleEventCallback,
   Violation,
 } from './compiler-schema.js';
@@ -236,6 +237,82 @@ export function extractJustification(
   return '';
 }
 
+// ─── Fail-soft attestation (Tenet-4 shape 2, mmnto-ai/totem#2214) ───
+//
+// The `lesson-fail-open-catch-ban` rule bans a `catch_clause` that swallows
+// without re-throwing. Tenet 4 (design-tenets.md, strategy#702/#708) licenses
+// ONE blanket-fail-soft shape: a declared IO/LLM/network boundary whose entire
+// surface is operational, guarded by a loud systemic backstop. The structured
+// `// totem-context: fail-soft backstop=<name>` attestation lets that legitimacy
+// be RECOGNIZED rather than dodged via `.catch()` (a call_expression the rule
+// never matches). Recognition is intentionally narrow — only a LEADING
+// `fail-soft` token is the attestation, so the ~25 existing prose escapes
+// ("best-effort cleanup, fail-soft") are unaffected (additive, non-breaking).
+
+const FAIL_SOFT_LEAD_RE = /^fail-soft\b/;
+const FAIL_SOFT_BACKSTOP_RE = /\bbackstop=([^\s,;]+)/;
+
+/**
+ * Parse a `// totem-context:` justification as a Tenet-4 shape-2 fail-soft
+ * attestation. Returns null unless the justification LEADS with `fail-soft`.
+ * A leading `fail-soft` with a non-empty `backstop=<name>` yields the named
+ * backstop; a leading `fail-soft` with no/empty backstop yields
+ * `{ backstop: null }` (malformed — callers surface a non-blocking WARN, never
+ * block: the lint establishes token-PRESENCE only, loudness + accounting are
+ * verified at review/ADR level — Tenet 13/19).
+ */
+export function parseFailSoftAttestation(justification: string): FailSoftAttestation | null {
+  const trimmed = justification.trim();
+  if (!FAIL_SOFT_LEAD_RE.test(trimmed)) return null;
+  const match = FAIL_SOFT_BACKSTOP_RE.exec(trimmed);
+  return { kind: 'fail-soft', backstop: match ? match[1]! : null };
+}
+
+/**
+ * Engine-emitted diagnostic (NOT a compiled rule) for a fail-soft attestation
+ * that names no backstop. Always surfaced so the grammar can't go decorative —
+ * an author must pay the structural cost of naming a loud backstop, else the
+ * suppression is the exact Tenet-4 drift ("without both, a blanket swallow is a
+ * real hole"). WARN, not ERROR: blocking CI is the consumer's actuator (Tenet
+ * 13), and the lint can't prove the backstop is loud/accounting-complete, so
+ * ERROR would overclaim and invite `backstop=anything` cargo-culting (Tenet 19).
+ * `engine: 'ast-grep'` + `severity: 'warning'` classify it as a non-blocking
+ * probationary advisory (run-compiled-rules.ts), never a frozen-lesson demotion.
+ */
+const FAIL_SOFT_MISSING_BACKSTOP_RULE: CompiledRule = {
+  lessonHash: 'totem/fail-soft-missing-backstop',
+  lessonHeading: 'Fail-soft attestation missing backstop',
+  pattern: '',
+  message:
+    'fail-soft attestation missing `backstop=<name>` — name your loud systemic ' +
+    'backstop (the assertion that throws on whole-boundary failure, e.g. ' +
+    'attempted>0 && succeeded===0 ⟹ throw). Its loudness and per-item accounting ' +
+    'are verified at review/ADR level, not by this lint (Tenet 4, design-tenets.md).',
+  engine: 'ast-grep',
+  severity: 'warning',
+  compiledAt: '2026-06-21T00:00:00.000Z',
+};
+
+/**
+ * Build the non-blocking warn Violation for a malformed fail-soft attestation
+ * (a `fail-soft` claim that names no backstop), or null when the attestation is
+ * absent or well-formed. Shared by the tree-sitter and ast-grep suppression
+ * paths so both surface the WARN identically (mmnto-ai/totem#2214).
+ */
+function attestationWarning(
+  attestation: FailSoftAttestation | null,
+  file: string,
+  match: { lineText: string; lineNumber: number },
+): Violation | null {
+  if (!attestation || attestation.backstop !== null) return null;
+  return {
+    rule: FAIL_SOFT_MISSING_BACKSTOP_RULE,
+    file,
+    line: match.lineText,
+    lineNumber: match.lineNumber,
+  };
+}
+
 /**
  * Resolve inline suppression for an AST (tree-sitter or ast-grep) match,
  * checking BOTH directive anchors.
@@ -254,22 +331,30 @@ function resolveAstMatchSuppression(
   ctx: RuleEngineContext,
   match: { startLineText: string; startPrecedingLineText: string | null },
   addition: DiffAddition | undefined,
-): { suppressed: boolean; justification: string } {
+): { suppressed: boolean; justification: string; attestation: FailSoftAttestation | null } {
   // Anchor 1 — the matched (first-added) line + its preceding line, from the diff.
   if (addition && isSuppressed(ctx, addition.line, addition.precedingLine)) {
+    const justification = extractJustification(ctx, addition.line, addition.precedingLine);
     return {
       suppressed: true,
-      justification: extractJustification(ctx, addition.line, addition.precedingLine),
+      justification,
+      attestation: parseFailSoftAttestation(justification),
     };
   }
   // Anchor 2 — the construct's start line + the line above it (mmnto-ai/totem#2214).
   if (isSuppressed(ctx, match.startLineText, match.startPrecedingLineText)) {
+    const justification = extractJustification(
+      ctx,
+      match.startLineText,
+      match.startPrecedingLineText,
+    );
     return {
       suppressed: true,
-      justification: extractJustification(ctx, match.startLineText, match.startPrecedingLineText),
+      justification,
+      attestation: parseFailSoftAttestation(justification),
     };
   }
-  return { suppressed: false, justification: '' };
+  return { suppressed: false, justification: '', attestation: null };
 }
 
 // ─── Regex rule execution ───────────────────────────
@@ -523,14 +608,21 @@ export async function applyAstRulesToAdditions(
 
           for (const match of matches) {
             const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-            const { suppressed, justification } = resolveAstMatchSuppression(ctx, match, addition);
+            const { suppressed, justification, attestation } = resolveAstMatchSuppression(
+              ctx,
+              match,
+              addition,
+            );
             if (suppressed) {
               onRuleEvent?.('suppress', rule.lessonHash, {
                 file,
                 line: match.lineNumber,
                 justification,
+                ...(attestation ? { attestation } : {}),
                 immutable: rule.immutable,
               });
+              const warning = attestationWarning(attestation, file, match);
+              if (warning) violations.push(warning);
               continue;
             }
 
@@ -609,7 +701,7 @@ export async function applyAstRulesToAdditions(
 
             for (const match of matches) {
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-              const { suppressed, justification } = resolveAstMatchSuppression(
+              const { suppressed, justification, attestation } = resolveAstMatchSuppression(
                 ctx,
                 match,
                 addition,
@@ -619,8 +711,11 @@ export async function applyAstRulesToAdditions(
                   file,
                   line: match.lineNumber,
                   justification,
+                  ...(attestation ? { attestation } : {}),
                   immutable: rule.immutable,
                 });
+                const warning = attestationWarning(attestation, file, match);
+                if (warning) violations.push(warning);
                 continue;
               }
 
