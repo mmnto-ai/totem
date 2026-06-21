@@ -300,6 +300,9 @@ const FAIL_SOFT_MISSING_BACKSTOP_RULE: CompiledRule = {
     'are verified at review/ADR level, not by this lint (Tenet 4, design-tenets.md).',
   engine: 'ast',
   severity: 'warning',
+  // Static engine constant, NOT a corpus-compiled rule — this date is inert
+  // (no freshness check or sort reads it; `violationToFinding` ignores it) and
+  // is deliberately fixed, never `new Date()`, to stay deterministic (#2220 CR).
   compiledAt: '2026-06-21T00:00:00.000Z',
 };
 
