@@ -389,6 +389,15 @@ describe('applyAstRulesToAdditions', () => {
       });
     });
 
+    it('tolerates a space after `backstop=` (a common authoring habit) (#2220 CR)', () => {
+      // `backstop= foo` must NOT silently read as malformed — the parser strips
+      // the optional whitespace after `=` rather than surprising the author.
+      expect(parseFailSoftAttestation('fail-soft backstop= assertPipelineProductive')).toEqual({
+        kind: 'fail-soft',
+        backstop: 'assertPipelineProductive',
+      });
+    });
+
     it('parses a backstop-less fail-soft claim as malformed (backstop: null)', () => {
       expect(parseFailSoftAttestation('fail-soft')).toEqual({ kind: 'fail-soft', backstop: null });
       expect(parseFailSoftAttestation('fail-soft backstop=')).toEqual({
@@ -458,6 +467,10 @@ describe('applyAstRulesToAdditions', () => {
       );
       expect(violations).toHaveLength(1);
       expect(violations[0]!.rule.severity).toBe('warning');
+      // Assert the lessonHash too (greptile #2220): a future warning rule reusing
+      // severity:'warning' would otherwise pass this parity test while emitting the
+      // wrong diagnostic.
+      expect(violations[0]!.rule.lessonHash).toBe('totem/fail-soft-missing-backstop');
     });
 
     it('does NOT warn for a generic (non-fail-soft) context escape', async () => {

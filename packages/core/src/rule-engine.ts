@@ -250,7 +250,7 @@ export function extractJustification(
 // ("best-effort cleanup, fail-soft") are unaffected (additive, non-breaking).
 
 const FAIL_SOFT_LEAD_RE = /^fail-soft\b/;
-const FAIL_SOFT_BACKSTOP_RE = /\bbackstop=([^\s,;]+)/;
+const FAIL_SOFT_BACKSTOP_RE = /\bbackstop=\s*([^\s,;]+)/;
 
 /**
  * Parse a `// totem-context:` justification as a Tenet-4 shape-2 fail-soft
@@ -276,8 +276,18 @@ export function parseFailSoftAttestation(justification: string): FailSoftAttesta
  * real hole"). WARN, not ERROR: blocking CI is the consumer's actuator (Tenet
  * 13), and the lint can't prove the backstop is loud/accounting-complete, so
  * ERROR would overclaim and invite `backstop=anything` cargo-culting (Tenet 19).
- * `engine: 'ast-grep'` + `severity: 'warning'` classify it as a non-blocking
- * probationary advisory (run-compiled-rules.ts), never a frozen-lesson demotion.
+ *
+ * It is constructed here and attached to a `Violation` directly — never loaded
+ * from `compiled-rules.json`, so it never flows through `CompiledRuleSchema`
+ * validation (GCA #2220); it is nonetheless schema-valid as written. `engine:
+ * 'ast'` is a TIER-CLASSIFICATION token, NOT a matcher claim: run-compiled-rules
+ * keys `severity: 'warning'` + a hard engine (`ast` / `ast-grep`) into a
+ * non-blocking probationary advisory, never a frozen-lesson demotion. `ast` is
+ * the schema-valid hard value (`ast-grep` would require a pattern). The warning
+ * fires from BOTH the tree-sitter and ast-grep suppression paths via
+ * `attestationWarning`, so its `engine` is path-agnostic by design — the stable
+ * identity is the `totem/fail-soft-missing-backstop` lessonHash, not `engine`
+ * (greptile #2220).
  */
 const FAIL_SOFT_MISSING_BACKSTOP_RULE: CompiledRule = {
   lessonHash: 'totem/fail-soft-missing-backstop',
@@ -288,7 +298,7 @@ const FAIL_SOFT_MISSING_BACKSTOP_RULE: CompiledRule = {
     'backstop (the assertion that throws on whole-boundary failure, e.g. ' +
     'attempted>0 && succeeded===0 ⟹ throw). Its loudness and per-item accounting ' +
     'are verified at review/ADR level, not by this lint (Tenet 4, design-tenets.md).',
-  engine: 'ast-grep',
+  engine: 'ast',
   severity: 'warning',
   compiledAt: '2026-06-21T00:00:00.000Z',
 };
