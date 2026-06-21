@@ -3,6 +3,8 @@ import * as path from 'node:path';
 
 import type { PrMeta, SelectionRuleConfig, WindtunnelLock } from '@mmnto/totem';
 
+import { persistCertifyingOutcome } from './spine-cert-persist.js';
+
 // ─── Named constants ─────────────────────────────────
 
 const LOCK_REL_PATH = '.totem/spine/gate-1/windtunnel.lock.json';
@@ -145,9 +147,16 @@ export interface CertifyingCorpus {
   rules: import('@mmnto/totem').CompiledRule[];
   prDiffs: import('@mmnto/totem').ResolvedPrDiff[];
   groundTruth: Map<string, import('@mmnto/totem').GroundTruthLabel>;
+  /**
+   * Mining provenance per rule (lessonHash → provenance) — supplied by the
+   * orchestrator from the candidate/emission records. fold-B needs it to stamp
+   * legitimacy; a survivor without provenance is surfaced as a skip, never
+   * fabricated.
+   */
+  provenanceByRule: Map<string, import('@mmnto/totem').ProvenanceRecord>;
 }
 
-/** Internal shape the run command's scorer consumes (engine-agnostic). */
+/** Internal shape the run command's scorer + persist step consume (engine-agnostic). */
 interface EngineResult {
   mintedRuleIds: string[];
   firings: import('@mmnto/totem').RuleFiring[];
@@ -155,6 +164,10 @@ interface EngineResult {
   positiveControlTargets: Array<{ pr: number; targetRuleId: string }>;
   /** C2 — real touched-file exposure (0 for the harness mock). */
   filesTouchedInWindow: number;
+  /** Candidate rules eligible for fold-B stamping (empty for the harness mock). */
+  candidates: import('@mmnto/totem').CompiledRule[];
+  /** Mining provenance per rule for fold-B (empty for the harness mock). */
+  provenanceByRule: Map<string, import('@mmnto/totem').ProvenanceRecord>;
 }
 
 /**
@@ -327,6 +340,32 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     for (const id of verdict.needsAdjudication) {
       console.log(`    • ${id}`);
     }
+  }
+
+  // 5c-ii: certifying-phase persistence — fold-B project → fold-C parse-before-write
+  // persist (PASS-survivors-only) + the transient cert-run report (§6 L3). The
+  // repo's live `.totem/compiled-rules.json` is NEVER touched here; survivors land
+  // in the gate-1 cert output, which strategy#516 promotes to the live corpus.
+  if (lock.phase === 'certifying') {
+    const gate1Dir = path.join(repoRoot, '.totem', 'spine', 'gate-1');
+    const persistResult = await persistCertifyingOutcome({
+      verdict,
+      firings,
+      mintedRuleIds,
+      positiveControlTargets,
+      candidates: engineResult.candidates,
+      provenanceByRule: engineResult.provenanceByRule,
+      certifiedRulesOutPath: path.join(gate1Dir, 'compiled-rules.json'),
+      reportDir: path.join(gate1Dir, 'run-reports'),
+      nowIso: new Date().toISOString(),
+      asOfCommit: lock.corpus.selectionRule.asOfCommit,
+    });
+    console.error(
+      `[WindtunnelRun] Cert-run report: ${persistResult.reportPath}` +
+        (persistResult.persisted
+          ? ` — ${persistResult.stampedCount} survivor(s) stamped → ${persistResult.certifiedRulesPath}`
+          : ` — no rules persisted (verdict ${verdict.verdict}); live corpus untouched`),
+    );
   }
 
   // Exit non-zero on FAIL / HONEST-NEGATIVE / needs-adjudication
@@ -797,7 +836,12 @@ async function runMockEngineAdapter(
   readStrategy: (file: string) => Promise<string | null>,
 ): Promise<EngineResult> {
   const mock = await runMockEngine(lock, readStrategy);
-  return { ...mock, filesTouchedInWindow: 0 };
+  return {
+    ...mock,
+    filesTouchedInWindow: 0,
+    candidates: [],
+    provenanceByRule: new Map(),
+  };
 }
 
 // ─── Real engine (certifying phase, 5c-i) ────────────
@@ -867,20 +911,23 @@ export async function runCertifyingEngine(
     onWarn: (msg) => console.error(`[WindtunnelRun] ${msg}`),
   });
 
-  // A1 (fold-D): hard-gate labelId uniqueness BEFORE scoring (Tenet 4).
+  // A1 (fold-D): post-dedup uniqueness INVARIANT before scoring (Tenet 4).
+  // `buildFirings` now collapses same-labelId matches (fold-D dedup), so this can
+  // no longer fire on an honest multi-match line — a collision here signals a
+  // dedup BUG, not corpus data, so it fails loud as an internal invariant.
   try {
     assertUniqueFiringLabels(built.firings);
   } catch (err) {
     if (err instanceof FiringLabelCollisionError) {
-      console.error(`[WindtunnelRun] A1 firing-label collision (fold-D):`);
+      console.error(`[WindtunnelRun] A1 post-dedup invariant violated (fold-D):`);
       for (const c of err.collisions) {
         console.error(`  • ${c.labelId.slice(0, 12)}… ×${c.evidenceRefs.length}`);
       }
       throw new TotemError(
         'CONFIG_INVALID',
         err.message,
-        'A firing-label collision voids the run — the labelId→evidenceRef join would overwrite. ' +
-          'Measure on the frozen corpus; if collisions occur, extend the label with a diff-hunk span (NOT an ordinal).',
+        'A post-dedup firing-label collision is an internal invariant violation: buildFirings ' +
+          'should have collapsed same-labelId matches. This indicates a dedup defect, not a corpus issue.',
         err,
       );
     }
@@ -900,5 +947,7 @@ export async function runCertifyingEngine(
     groundTruth: corpus.groundTruth,
     positiveControlTargets: built.positiveControlTargets,
     filesTouchedInWindow: built.filesTouchedInWindow,
+    candidates: corpus.rules,
+    provenanceByRule: corpus.provenanceByRule,
   };
 }
