@@ -833,6 +833,13 @@ export {
   CorpusDispositionsSchema,
   CorpusDispositionThreadSchema,
 } from './spine/corpus-dispositions.js';
+export type {
+  DeriveLabelDiagnostics,
+  DeriveLabelsResult,
+  LabelEvidence,
+  UnlabeledReason,
+} from './spine/derive-labels.js';
+export { deriveLabelsFromDispositions } from './spine/derive-labels.js';
 export type { DispositionClass, DispositionComment } from './spine/disposition-taxonomy.js';
 export { classifyDisposition, dispositionToLabel } from './spine/disposition-taxonomy.js';
 export type {

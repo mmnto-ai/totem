@@ -101,8 +101,13 @@ export class ArchivedRuleInScopeError extends Error {
  * whitespace is dropped so cosmetic EOL drift between the post-image and the
  * diff does not split a firing into a new labelId; interior content is
  * preserved (the label must still distinguish genuinely different lines).
+ *
+ * Exported so the 5d-iii label-deriver's span-join normalizes a disposition's
+ * added hunk rows with the EXACT same rule the firing's `matchedLine` uses —
+ * the content bind keys on the same bytes the labelId keys on, so the two can
+ * never silently drift apart (codex hard fold + the panel anti-drift mandate).
  */
-function normalizeMatchedLine(line: string): string {
+export function normalizeMatchedLine(line: string): string {
   return line.replace(/\s+$/, '');
 }
 
