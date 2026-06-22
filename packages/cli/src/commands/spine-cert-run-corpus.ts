@@ -176,12 +176,16 @@ export function buildGate1Stage4Deps(
 ): Stage4VerifierDeps {
   if (lcDir) {
     return {
+      // The `--` separator keeps the revision unambiguous from any path args and blocks
+      // arg injection (CR coding guideline) — this shared path decides which files
+      // Stage-4 sees for BOTH the run and the deriver, so rev/path ambiguity here would
+      // shift archived-rule decisions and the derived labels.
       listFiles: async () =>
-        safeExec('git', ['ls-tree', '-r', '--name-only', asOf], { cwd: lcDir })
+        safeExec('git', ['ls-tree', '-r', '--name-only', asOf, '--'], { cwd: lcDir })
           .split('\n')
           .filter(Boolean),
       readFile: async (f: string) =>
-        safeExec('git', ['show', `${asOf}:${f.replace(/\\/g, '/')}`], { cwd: lcDir }),
+        safeExec('git', ['show', `${asOf}:${f.replace(/\\/g, '/')}`, '--'], { cwd: lcDir }),
       workingDirectory: lcDir,
     };
   }

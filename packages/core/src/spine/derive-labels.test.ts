@@ -75,6 +75,16 @@ describe('deriveLabelsFromDispositions — span-join (added-line-only)', () => {
     expect(diagnostics.unlabeledByReason['no-matching-disposition']).toBe(1);
   });
 
+  it('binds a real added line that itself starts with `++` (diff row "+++i") — not a file header', () => {
+    const { labels } = deriveLabelsFromDispositions(
+      [firing({ labelId: 'L1', matchedLine: '++i;' })],
+      // source line `++i;` appears in a unified diff as the row "+++i;" (add-marker + content);
+      // it must bind, unlike the `+++ <path>` file header (CR #10 false-negative guard).
+      [disposition(1, [thread({ diffHunk: '@@ -1,1 +1,2 @@\n+++i;' })])],
+    );
+    expect(labels['L1']).toBe('TP');
+  });
+
   it('does NOT bind across files (path mismatch) even on identical added content', () => {
     const { labels } = deriveLabelsFromDispositions(
       [firing({ labelId: 'L1', filePath: 'src/a.ts' })],
@@ -117,6 +127,15 @@ describe('deriveLabelsFromDispositions — ambiguity', () => {
     );
     expect(labels['L1']).toBeUndefined();
     expect(diagnostics.unlabeledByReason['ambiguous-multiple-dispositions']).toBe(1);
+  });
+
+  it('throws loud on a duplicate-PR dispositions entry (no silent last-wins)', () => {
+    expect(() =>
+      deriveLabelsFromDispositions(
+        [firing({ labelId: 'L1' })],
+        [disposition(1, [thread({})]), disposition(1, [thread({})])],
+      ),
+    ).toThrow(/duplicate disposition entry for PR 1/);
   });
 });
 

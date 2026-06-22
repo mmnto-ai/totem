@@ -80,9 +80,21 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
       );
     }
   };
+  // Wrap JSON.parse so a malformed fixture surfaces a structured CLI error instead of a
+  // raw SyntaxError (GCA) — `TotemError('CONFIG_INVALID')` to match the CLI-layer
+  // convention in `loadCertRunFixtures` / `fetch-dispositions` (NOT TotemParseError,
+  // which the styleguide reserves for the core compile/parse layer).
+  const parseJson = (raw: string, p: string, hint: string): unknown => {
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      throw new TotemError('CONFIG_INVALID', `derive-labels: ${p} is not valid JSON`, hint, err);
+    }
+  };
 
+  const lockHint = 'Run `spine windtunnel materialize` first.';
   const lock = WindtunnelLockSchema.parse(
-    JSON.parse(readRaw(lockPath, 'Run `spine windtunnel materialize` first.')),
+    parseJson(readRaw(lockPath, lockHint), lockPath, lockHint),
   );
 
   // ── corpusDispositionsSha derive-time HARD-GATE (must LAND — the #2224 trap
@@ -113,7 +125,13 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
       'Restore the frozen corpus-dispositions.json or re-run `spine windtunnel fetch-dispositions`.',
     );
   }
-  const dispositions = CorpusDispositionsSchema.parse(JSON.parse(dispositionsRaw));
+  const dispositions = CorpusDispositionsSchema.parse(
+    parseJson(
+      dispositionsRaw,
+      dispositionsPath,
+      'Restore the frozen corpus-dispositions.json or re-run `spine windtunnel fetch-dispositions`.',
+    ),
+  );
 
   // ── Enumerate firings via the SHARED path — byte-identical to the certifying
   // run (assembleCertifyingCorpus + buildCertifyingFirings). skipGroundTruth: the
@@ -124,6 +142,12 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
   // `now` feeds the corpus compile-stage timestamp only; it does NOT enter the
   // content-based firing labelId, so the answer key is deterministic regardless.
   const now = new Date().toISOString();
+  // `seedClassesProvided` is intentionally omitted (defaults false), matching the run's
+  // `buildReplayCorpusProvider` call which also leaves it false (greptile). It is safe to
+  // pin: it is a fold-I §7 ledger ATTESTATION threaded only into the extract-stage ledger
+  // — it does not enter rule compilation or the content-based labelId — so it cannot break
+  // the byte-identical guarantee even if a future run set it. Thread it through both the
+  // run and the deriver together if it ever becomes a real RunOption.
   const { corpus } = await assembleCertifyingCorpus(
     { gate1Dir, stage4, now, skipGroundTruth: true },
     lock,

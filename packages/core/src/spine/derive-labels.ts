@@ -1,4 +1,4 @@
-import type { CorpusDisposition } from './corpus-dispositions.js';
+import type { CorpusDisposition, CorpusDispositionThread } from './corpus-dispositions.js';
 import { classifyDisposition, dispositionToLabel } from './disposition-taxonomy.js';
 import { normalizeMatchedLine } from './windtunnel-firing.js';
 import type { GroundTruthLabel, RuleFiring } from './windtunnel-scorer.js';
@@ -106,7 +106,10 @@ function addedHunkLines(diffHunk: string): Set<string> {
   const added = new Set<string>();
   for (const row of diffHunk.split('\n')) {
     if (row.charCodeAt(0) !== 0x2b /* '+' */) continue; // added rows only
-    if (row.startsWith('+++')) continue; // file header, not added content
+    // The unified-diff file header is "+++ <path>" — three '+' THEN A SPACE. A real
+    // added line such as `++i` appears as the diff row "+++i" (no space) and MUST
+    // bind, so match the header by its trailing space, not a bare `+++` prefix (CR).
+    if (/^\+\+\+ /.test(row)) continue; // file header, not added content
     added.add(normalizeMatchedLine(row.slice(1)));
   }
   return added;
@@ -120,8 +123,36 @@ export function deriveLabelsFromDispositions(
   firings: readonly RuleFiring[],
   dispositions: readonly CorpusDisposition[],
 ): DeriveLabelsResult {
+  // Index dispositions by PR. Fail loud on a duplicate-PR entry (greptile): a producer
+  // bug in `fetch-dispositions`, or a partially-valid manual edit that still passes the
+  // re-stamped `corpusDispositionsSha` gate, could ship two entries for one PR — and a
+  // silent last-wins Map would drop the first entry's threads, so firings that should
+  // bind to them get a wrong `no-matching-disposition` with no diagnostic. A structural
+  // input-contract violation throws (Tenet 4); only DATA ambiguity fails soft to UNLABELED.
   const dispByPr = new Map<number, CorpusDisposition>();
-  for (const d of dispositions) dispByPr.set(d.pr, d);
+  for (const d of dispositions) {
+    if (dispByPr.has(d.pr)) {
+      throw new Error(
+        `deriveLabelsFromDispositions: duplicate disposition entry for PR ${d.pr} — the ` +
+          `dispositions array must carry exactly one entry per PR (a producer or edit bug).`,
+      );
+    }
+    dispByPr.set(d.pr, d);
+  }
+
+  // Memoize the parsed added-line set per disposition THREAD: the span-join scans every
+  // thread for each corpus firing, so without this `addedHunkLines` would re-split +
+  // re-normalize the same `diffHunk` once per firing (GCA). The WeakMap keys on the
+  // thread object, so it's GC-friendly and stays internal to this call (still pure).
+  const addedLinesCache = new WeakMap<CorpusDispositionThread, Set<string>>();
+  const getAddedLines = (thread: CorpusDispositionThread): Set<string> => {
+    let cached = addedLinesCache.get(thread);
+    if (!cached) {
+      cached = addedHunkLines(thread.diffHunk);
+      addedLinesCache.set(thread, cached);
+    }
+    return cached;
+  };
 
   const labels: Record<string, GroundTruthLabel> = {};
   const evidence: LabelEvidence[] = [];
@@ -178,7 +209,7 @@ export function deriveLabelsFromDispositions(
           ? disp.threads.filter(
               (t) =>
                 t.path.replace(/\\/g, '/') === firing.filePath &&
-                addedHunkLines(t.diffHunk).has(firing.matchedLine),
+                getAddedLines(t).has(firing.matchedLine),
             )
           : [];
         if (bound.length !== 1) {
