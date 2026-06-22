@@ -70,12 +70,11 @@ export interface DispositionComment {
 const FIX_PATTERNS: readonly RegExp[] = [
   /\bfixed\b/i,
   // Confirmed-PAST construction only. The bare `addressed`/`applied`/`done` words —
-  // and the praise words `good catch`/`nice catch` (CR #2230 round-2) — were
-  // negation-blind ("this has not been addressed", "not a good catch …") and, in the
-  // praise case, not even a fix CONFIRMATION (acknowledging a real finding ≠ acting
-  // on it). All minted false TPs. The canonical bare accept `fixed` is kept; the TP
-  // signal "good catch, fixed!" is still covered by `fixed`. Finer negation handling
-  // is the 5d-ii real-corpus measure-first task (strategy-claude RULED #4 run-first).
+  // and the praise words `good catch`/`nice catch` (CR #2230 round-2) — were dropped:
+  // praise is not a fix CONFIRMATION (acknowledging a real finding ≠ acting on it),
+  // and the bare words minted false TPs. The canonical bare accept `fixed` is kept
+  // ("good catch, fixed!" still credits) but is now guarded against negation by
+  // `hasUnnegatedFix` (CR #2230 round-3 — "not fixed yet" no longer a false TP).
   /\b(?:has|have|now)\s+been\s+(?:fixed|addressed|applied)\b/i,
 ];
 
@@ -140,6 +139,35 @@ const STYLE_PATTERNS: readonly RegExp[] = [
 const matchesAny = (text: string, bank: readonly RegExp[]): boolean =>
   bank.some((p) => p.test(text));
 
+/**
+ * A negator that, in the same clause as a fix signal, VOIDS it — "this has not
+ * been fixed", "isn't fixed yet", "never addressed". (CR #2230 round-3: the bare
+ * `fixed` token was still negation-blind.) Applied ONLY to the FIX bank: none of
+ * its patterns are intrinsically negative, so a clause-scoped negator is an
+ * unambiguous inversion. The FALSE_POSITIVE bank deliberately does NOT get this —
+ * several of its patterns ARE negative constructions ("not a bug", "not applicable").
+ */
+const FIX_NEGATOR =
+  /\b(?:not|never|no|without|isn't|wasn't|hasn't|haven't|won't|doesn't|didn't|aren't|weren't)\b/i;
+
+/**
+ * Split into clauses for negation scoping. Breaks on sentence punctuation AND the
+ * contrastive conjunctions ("but"/"however"/"though") so "not sure, but I fixed it"
+ * keeps the fix in its own un-negated clause. Over-splitting only risks losing a
+ * true fix → UNLABELED → honest-negative (the safe direction), never a false TP.
+ */
+const splitClauses = (text: string): string[] =>
+  text.split(/[.!?;\n]+|\b(?:but|however|though)\b/i);
+
+/**
+ * A fix is credited only from a clause that matches a FIX pattern and carries no
+ * negator — so "fixed" survives ("good catch, fixed!") while "not been fixed yet"
+ * and "hasn't fixed it" do not (closing the negation class CR's adjacency-only
+ * `not\s+fixed` suggestion left open for the non-adjacent "not been fixed" form).
+ */
+const hasUnnegatedFix = (text: string): boolean =>
+  splitClauses(text).some((c) => matchesAny(c, FIX_PATTERNS) && !FIX_NEGATOR.test(c));
+
 // ── The classifier ───────────────────────────────────────────────────────────
 
 /**
@@ -168,7 +196,9 @@ export function classifyDisposition(comments: ReadonlyArray<DispositionComment>)
   if (humanText.length === 0) return 'ambiguous';
 
   const joined = humanText.join('\n');
-  const fix = matchesAny(joined, FIX_PATTERNS);
+  // Clause-scoped + negation-aware (CR #2230 round-3): "not fixed yet" / "hasn't
+  // been addressed" must not credit a fix. The other banks match on the whole text.
+  const fix = hasUnnegatedFix(joined);
   const fp = matchesAny(joined, FALSE_POSITIVE_PATTERNS);
   const scope = matchesAny(joined, SCOPE_PATTERNS);
   const defer = matchesAny(joined, DEFER_PATTERNS);

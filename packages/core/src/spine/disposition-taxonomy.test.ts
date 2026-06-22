@@ -181,4 +181,19 @@ describe('classifyDisposition — negation / over-match regressions (#2230 bot p
     // bare praise without a fix confirmation is not an accepted-fix (only "…, fixed" is).
     expect(classifyDisposition(thread('Good catch!'))).toBe('ambiguous');
   });
+
+  it('CR round-3 — `fixed` is negation-guarded: "not fixed yet" / "has not been fixed" are not TP', () => {
+    for (const reply of [
+      "This isn't fixed yet.",
+      'This has not been fixed.',
+      'Never fixed this.',
+      'No, that was not fixed.',
+    ]) {
+      expect(classifyDisposition(thread(reply))).not.toBe('accepted-fix');
+    }
+    // …but a genuine fix in its own clause still credits, even beside a negated one.
+    expect(classifyDisposition(thread('Not sure that was the cause, but I fixed it anyway.'))).toBe(
+      'accepted-fix',
+    );
+  });
 });
