@@ -16,6 +16,13 @@ reviews:
   review_details: true
   poem: true
 
+  # auto_review is off (below), so CR posts a "Review skipped" status comment on
+  # EVERY PR — pure noise without auto-invocation, and the surface that has caused
+  # review-triage misses (the skip banner read as "CR didn't review"). Suppress it
+  # (CR's own remediation: reviews.review_status). On-demand `@coderabbitai review`
+  # is unaffected — it still posts the full review.
+  review_status: false
+
   # On-demand only — operator ruling 2026-06-10 (mmnto-ai/totem-strategy#622):
   # all three review bots (CR / GCA / Greptile) are opt-in per PR. Trigger
   # stays `@coderabbitai review`. Doctrine: bot-protocols.md stack section
