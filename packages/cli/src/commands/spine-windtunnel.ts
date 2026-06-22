@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { PrMeta, SelectionRuleConfig, WindtunnelLock } from '@mmnto/totem';
 
 import { persistCertifyingOutcome } from './spine-cert-persist.js';
-import { buildReplayCorpusProvider } from './spine-cert-run-corpus.js';
+import { buildReplayCorpusProvider, PR_DIFFS_FILE } from './spine-cert-run-corpus.js';
 
 // ─── Named constants ─────────────────────────────────
 
@@ -110,6 +111,44 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
     console.error(
       `[WindtunnelFreeze] Control dirs [${controlDirs.join(', ')}] do not exist — integrity check skipped.`,
     );
+  }
+
+  // #2225 (#709 fold-2): pre-merge heads-up on the pr-diffs.json scoring-source digest
+  // (the hard gate is the certifying run). Warn-only, mirroring fixtureSha. CRLF→LF
+  // normalized so a Windows checkout doesn't spuriously warn (GCA).
+  if (lock.controls.integrity.prDiffsSha) {
+    // Co-location contract: pr-diffs.json lives in the gate-1 dir beside the lock —
+    // freeze resolves it via dirname(lockPath), the run via opts.gate1Dir (= the same
+    // dir). Shared `PR_DIFFS_FILE` constant so a rename can't drift between them (CR).
+    const prDiffsPath = path.join(path.dirname(lockPath), PR_DIFFS_FILE);
+    if (fs.existsSync(prDiffsPath)) {
+      const actual = createHash('sha256')
+        .update(fs.readFileSync(prDiffsPath, 'utf-8').replace(/\r\n/g, '\n'), 'utf-8')
+        .digest('hex');
+      if (actual !== lock.controls.integrity.prDiffsSha) {
+        console.error(
+          `[WindtunnelFreeze] WARNING: controls.integrity.prDiffsSha in lock (${lock.controls.integrity.prDiffsSha}) does not match computed digest of pr-diffs.json (${actual})`,
+        );
+        console.error(`  Re-materialize the cert corpus or update prDiffsSha and re-freeze.`);
+      } else {
+        console.error(`[WindtunnelFreeze] pr-diffs.json digest verified: ${actual}`);
+      }
+    } else {
+      // greptile: declared-but-missing — surface the gap proactively at freeze, not
+      // only later at run time via loadCertRunFixtures.
+      console.error(
+        `[WindtunnelFreeze] WARNING: lock declares controls.integrity.prDiffsSha but pr-diffs.json is missing at ${prDiffsPath} — the certifying run will fail.`,
+      );
+      console.error(`  Re-materialize the cert corpus to co-locate pr-diffs.json with the lock.`);
+    }
+  } else if (lock.phase === 'certifying') {
+    // CR: a certifying lock with NO prDiffsSha passes freeze clean, then the run
+    // hard-fails. Surface it here. (Harness locks legitimately have no scoring
+    // corpus — additive-optional — so this is certifying-scoped, not unconditional.)
+    console.error(
+      `[WindtunnelFreeze] WARNING: controls.integrity.prDiffsSha is absent on a certifying lock — the certifying run will hard-fail (#709 fold-2).`,
+    );
+    console.error(`  Re-materialize the cert corpus with \`spine windtunnel materialize\`.`);
   }
 
   console.error(`[WindtunnelFreeze] DONE — lock at ${lockPath} is schema-valid.`);

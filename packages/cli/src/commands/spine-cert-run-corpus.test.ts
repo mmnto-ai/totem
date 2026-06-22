@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -110,10 +111,10 @@ function stage4(files: Record<string, string>): Stage4VerifierDeps {
   };
 }
 
-/** A minimal lock partial — the provider reads only the L2 hash + resolved corpus. */
-function lockWith(llmReplaySha?: string): WindtunnelLock {
+/** A minimal lock partial — the provider reads the L2 hash, the pr-diffs digest, + resolved corpus. */
+function lockWith(llmReplaySha?: string, prDiffsSha?: string): WindtunnelLock {
   return {
-    controls: { integrity: { llmReplaySha } },
+    controls: { integrity: { llmReplaySha, prDiffsSha } },
     corpus: { resolvedPrs: [{ pr: 1, mergeCommit: sha(1) }] },
   } as unknown as WindtunnelLock;
 }
@@ -171,6 +172,16 @@ async function fixtureHash(): Promise<string> {
   return hash;
 }
 
+/** sha256 of the CRLF→LF-normalized on-disk pr-diffs.json — the digest the run gate (#2225) asserts. */
+function prDiffsHash(): string {
+  return createHash('sha256')
+    .update(
+      fs.readFileSync(path.join(gate1Dir, 'pr-diffs.json'), 'utf-8').replace(/\r\n/g, '\n'),
+      'utf-8',
+    )
+    .digest('hex');
+}
+
 // ─── Tests ───────────────────────────────────────────
 
 describe('buildReplayCorpusProvider (run-path)', () => {
@@ -186,7 +197,7 @@ describe('buildReplayCorpusProvider (run-path)', () => {
       },
     });
 
-    const corpus = await provider(lockWith(hash));
+    const corpus = await provider(lockWith(hash, prDiffsHash()));
 
     expect(corpus.rules).toHaveLength(1);
     expect(corpus.provenanceByRule.get(corpus.rules[0]!.lessonHash)?.mergedPr).toBe(1);
@@ -210,7 +221,35 @@ describe('buildReplayCorpusProvider (run-path)', () => {
       stage4: stage4({ 'src/a.ts': 'forbiddenCall()' }),
       now: NOW,
     });
-    await provider(lockWith(hash));
+    await provider(lockWith(hash, prDiffsHash()));
     expect(fs.existsSync(path.join(gate1Dir, 'miner-ledgers.json'))).toBe(true);
+  });
+
+  it('throws loud when the lock lacks the prDiffsSha digest (#2225 scoring-source gate)', async () => {
+    const hash = await fixtureHash();
+    const provider = buildReplayCorpusProvider({
+      gate1Dir,
+      stage4: stage4({ 'src/a.ts': 'forbiddenCall()' }),
+      now: NOW,
+    });
+    // llmReplaySha present, prDiffsSha omitted → the fold-2 gate fires.
+    await expect(provider(lockWith(hash, undefined))).rejects.toThrow(/prDiffsSha/);
+  });
+
+  it('throws loud when pr-diffs.json is tampered after freeze (#2225 fold-2)', async () => {
+    const hash = await fixtureHash();
+    const lock = lockWith(hash, prDiffsHash()); // digest captured over the frozen bytes
+    // a schema-valid but byte-different scoring source — passes Zod, fails the digest.
+    fs.writeFileSync(
+      path.join(gate1Dir, 'pr-diffs.json'),
+      JSON.stringify([{ pr: 1, diff: 'tampered', controlKind: 'corpus' }]),
+      'utf-8',
+    );
+    const provider = buildReplayCorpusProvider({
+      gate1Dir,
+      stage4: stage4({ 'src/a.ts': 'forbiddenCall()' }),
+      now: NOW,
+    });
+    await expect(provider(lock)).rejects.toThrow(/pr-diffs\.json integrity/);
   });
 });

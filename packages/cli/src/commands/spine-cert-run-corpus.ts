@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -24,7 +25,7 @@ import type { CertifyingCorpus, CertifyingCorpusProvider } from './spine-windtun
 const SPLIT_FILE = 'split.json';
 const REPLAY_FILE = 'llm-replay.v1.json';
 const CONTENT_FILE = 'review-content.json';
-const PR_DIFFS_FILE = 'pr-diffs.json';
+export const PR_DIFFS_FILE = 'pr-diffs.json';
 const GROUND_TRUTH_FILE = 'ground-truth-labels.json';
 const LEDGERS_FILE = 'miner-ledgers.json';
 
@@ -80,13 +81,15 @@ export interface CertRunFixtureInputs {
  * dynamically imported per the CLI lazy-import convention, not pulled in at
  * module load.
  */
-export async function loadCertRunFixtures(gate1Dir: string): Promise<CertRunFixtureInputs> {
+export async function loadCertRunFixtures(
+  gate1Dir: string,
+  opts?: { expectedPrDiffsSha?: string },
+): Promise<CertRunFixtureInputs> {
   const { SplitArtifactSchema, TotemError } = await import('@mmnto/totem');
 
-  const loadJson = (file: string): unknown => {
-    let raw: string;
+  const readRaw = (file: string): string => {
     try {
-      raw = fs.readFileSync(file, 'utf-8');
+      return fs.readFileSync(file, 'utf-8');
     } catch (err) {
       throw new TotemError(
         'CONFIG_INVALID',
@@ -95,6 +98,8 @@ export async function loadCertRunFixtures(gate1Dir: string): Promise<CertRunFixt
         err,
       );
     }
+  };
+  const parseJson = (raw: string, file: string): unknown => {
     try {
       return JSON.parse(raw);
     } catch (err) {
@@ -106,13 +111,35 @@ export async function loadCertRunFixtures(gate1Dir: string): Promise<CertRunFixt
       );
     }
   };
+  const loadJson = (file: string): unknown => parseJson(readRaw(file), file);
 
   const split = SplitArtifactSchema.parse(loadJson(path.join(gate1Dir, SPLIT_FILE)));
   const artifact = ReplayArtifactSchema.parse(loadJson(path.join(gate1Dir, REPLAY_FILE)));
   const content = z
     .array(ReviewThreadContentSchema)
     .parse(loadJson(path.join(gate1Dir, CONTENT_FILE)));
-  const prDiffs = z.array(ResolvedPrDiffSchema).parse(loadJson(path.join(gate1Dir, PR_DIFFS_FILE)));
+
+  // #2225 (#709 fold-2): verify-then-parse the SCORING source on a SINGLE read — the
+  // digest must cover the exact bytes that get parsed + scored, not a separate read
+  // (CR: no check/use split). CRLF→LF normalized to match the producer's LF-stamped
+  // digest. The absent-from-lock case is the caller's precondition (it omits the sha).
+  const prDiffsFile = path.join(gate1Dir, PR_DIFFS_FILE);
+  const prDiffsRaw = readRaw(prDiffsFile);
+  if (opts?.expectedPrDiffsSha !== undefined) {
+    const actual = createHash('sha256')
+      .update(prDiffsRaw.replace(/\r\n/g, '\n'), 'utf-8')
+      .digest('hex');
+    if (actual !== opts.expectedPrDiffsSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Certifying run: pr-diffs.json integrity FAILED — expected ${opts.expectedPrDiffsSha}, got ` +
+          `${actual} (the frozen scoring corpus was tampered or re-serialized).`,
+        'Restore the frozen pr-diffs.json or re-materialize the cert corpus.',
+      );
+    }
+  }
+  const prDiffs = z.array(ResolvedPrDiffSchema).parse(parseJson(prDiffsRaw, prDiffsFile));
+
   const gtRecord = GroundTruthSchema.parse(loadJson(path.join(gate1Dir, GROUND_TRUTH_FILE)));
   const groundTruth = new Map<string, GroundTruthLabel>(Object.entries(gtRecord));
   return { split, artifact, content, prDiffs, groundTruth };
@@ -172,8 +199,25 @@ export function buildReplayCorpusProvider(
       );
     }
 
+    // #2225 (#709 fold-2): hash-bind the SCORING source. `pr-diffs.json` is otherwise
+    // unprotected — `fixtureSha` covers only the control dirs — so a silent mutation of
+    // any row (advisory-window OR control) would corrupt the answer key while the
+    // control-dir gate stays green. The absent-from-lock case is a lock precondition
+    // (checked here); `loadCertRunFixtures` verifies the digest on the SAME read it
+    // parses — no check/use split (CR). Fail loud (strategy ruled: verify at freeze AND run).
+    const expectedPrDiffsSha = lock.controls.integrity.prDiffsSha;
+    if (!expectedPrDiffsSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        'Certifying run: lock is missing controls.integrity.prDiffsSha (#709 fold-2) — the ' +
+          'pr-diffs.json scoring source cannot be integrity-checked.',
+        'Re-materialize the cert corpus with `spine windtunnel materialize`.',
+      );
+    }
+
     const { split, artifact, content, prDiffs, groundTruth } = await loadCertRunFixtures(
       opts.gate1Dir,
+      { expectedPrDiffsSha },
     );
     const { extractor, classifier } = buildReplayAdapters(artifact, expectedHash);
 
