@@ -69,12 +69,15 @@ export interface DispositionComment {
  */
 const FIX_PATTERNS: readonly RegExp[] = [
   /\bfixed\b/i,
+  // Confirmed-PAST construction only. The bare `addressed`/`applied`/`done` words
+  // were negation-blind ("this has not been addressed", "not applied", "Well done,
+  // but this still needs work") and minted false TPs (greptile #2230 P1 +
+  // strategy-claude loose-token note). The canonical bare accept `fixed` is kept;
+  // finer negation handling is the 5d-ii real-corpus measure-first task
+  // (strategy-claude RULED #4 run-first), not a blind tighten here.
   /\b(?:has|have|now)\s+been\s+(?:fixed|addressed|applied)\b/i,
-  /\baddressed\b/i,
-  /\bapplied\b/i,
   /\bgood\s+catch\b/i,
   /\bnice\s+catch\b/i,
-  /\bdone\b/i,
 ];
 
 /**
@@ -88,9 +91,16 @@ const FALSE_POSITIVE_PATTERNS: readonly RegExp[] = [
   /\bnot\s+a\s+(?:bug|problem|issue|real)\b/i,
   /\b(?:works|working|behaves)\s+as\s+(?:intended|designed|expected)\b/i,
   /\bby\s+design\b/i,
-  /\bintentional(?:ly)?\b/i,
-  /\bnot\s+(?:applicable|relevant|correct|an\s+issue)\b/i,
-  /\bthis\s+is\s+(?:correct|fine|intended|safe)\b/i,
+  // Anchored to the AFFIRMATIVE copula. Bare `intentional(ly)` was negation- and
+  // future-blind: "this behavior is not intentional" (greptile #2230 :91) and
+  // "intentionally structured it, will fix the edge case" (strategy-claude note)
+  // both minted a false FP. `is intentional` keeps the genuine rebuttal.
+  /\bis\s+intentional\b/i,
+  // `correct` REMOVED from both `not …` and `this is …` (GCA #2230 :95). In review,
+  // "this is not correct" / "this is correct, I'll fix it" AGREE with the finding
+  // (a True Positive) — matching `correct` here inverted the label to FP.
+  /\bnot\s+(?:applicable|relevant|an\s+issue)\b/i,
+  /\bthis\s+is\s+(?:fine|intended|safe)\b/i,
   /\bincorrect\s+(?:finding|flag|warning|suggestion)\b/i,
 ];
 
@@ -109,7 +119,7 @@ const DEFER_PATTERNS: readonly RegExp[] = [
   /\btracked\s+in\s+#?\d+/i,
   /\bwon'?t\s+fix\b/i,
   /\b(?:later|future|subsequent|backlog)\b/i,
-  /\bTODO\b/,
+  /\bTODO\b/i, // /i for parity with every other bank (greptile #2230 :112 — "todo: track this")
 ];
 
 /** superseded decline (UNLABELED): the flagged code is gone. */

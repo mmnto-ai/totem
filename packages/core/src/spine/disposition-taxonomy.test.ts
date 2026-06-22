@@ -24,7 +24,7 @@ describe('classifyDisposition — accepted-fix ⟹ TP', () => {
     'Good catch, addressed.',
     'Nice catch — done.',
     'This has been fixed.',
-    'Applied the suggestion.',
+    'The fix has been applied.',
   ])('credits an unambiguous fix reply: %s', (reply) => {
     expect(classifyDisposition(thread(reply))).toBe('accepted-fix');
   });
@@ -40,9 +40,8 @@ describe('classifyDisposition — declined-as-false-positive ⟹ FP (correctness
     'Not a bug, the guard above covers it.',
     'Works as intended.',
     'This is by design.',
-    'Intentional — we want the eager throw.',
+    'This is intentional — we want the eager throw.',
     'Not applicable here.',
-    'This is correct.',
   ])('credits an unambiguous correctness rebuttal: %s', (reply) => {
     expect(classifyDisposition(thread(reply))).toBe('declined-as-false-positive');
   });
@@ -133,5 +132,45 @@ describe('classifyDisposition — bot replies are not dispositions', () => {
       { author: 'greptileai[bot]', body: 'Fixed in the suggested commit.' },
     ];
     expect(classifyDisposition(t)).toBe('ambiguous');
+  });
+});
+
+describe('classifyDisposition — negation / over-match regressions (#2230 bot panel + strategy-claude)', () => {
+  it('GCA :95 — "this is not correct" / "correct, I will fix it" is an AGREEMENT, never FP', () => {
+    expect(dispositionToLabel(classifyDisposition(thread('This is not correct.')))).not.toBe('FP');
+    expect(
+      dispositionToLabel(classifyDisposition(thread('You are correct, I will fix it.'))),
+    ).not.toBe('FP');
+  });
+
+  it('greptile :91 — "this behavior is not intentional" is not a false-positive rebuttal', () => {
+    expect(
+      classifyDisposition(thread('This behavior is not intentional but matches the contract.')),
+    ).not.toBe('declined-as-false-positive');
+  });
+
+  it('strategy-claude — "intentionally structured it, will fix the edge case" is not FP', () => {
+    // future-tense "will fix" is not in the fix bank; the anchored `is intentional`
+    // no longer trips on the bare adverb → no false FP.
+    expect(
+      classifyDisposition(thread('Intentionally structured it this way; will fix the edge case.')),
+    ).not.toBe('declined-as-false-positive');
+  });
+
+  it('greptile :78 P1 — negation-blind "not been addressed" / "not applied" is not a fix', () => {
+    expect(classifyDisposition(thread('This has not been addressed yet.'))).not.toBe(
+      'accepted-fix',
+    );
+    expect(classifyDisposition(thread('That was not applied.'))).not.toBe('accepted-fix');
+  });
+
+  it('strategy-claude / greptile — "Well done, but this still needs work" is not a fix', () => {
+    expect(classifyDisposition(thread('Well done, but this still needs work.'))).not.toBe(
+      'accepted-fix',
+    );
+  });
+
+  it('greptile :112 — lowercase "todo: track this" is recognized as a defer', () => {
+    expect(classifyDisposition(thread('todo: track this separately.'))).toBe('defer');
   });
 });
