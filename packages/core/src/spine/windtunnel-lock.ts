@@ -110,6 +110,22 @@ export const WindtunnelLockSchema = z
         // lands the certifying path will hard-error if absent (no safe default for
         // an integrity hash).
         prDiffsSha: z.string().regex(SHA256_REGEX, 'prDiffsSha must be a 64-hex sha256').optional(),
+        // #709 fold-2 sibling (5d-ii): an integrity digest over the frozen
+        // `corpus-dispositions.json` — the held-out disposition PROVENANCE the
+        // label-deriver classifies into the answer key. Unlike `prDiffsSha` (run-
+        // critical, the scoring source the run reads), this is a PROVENANCE digest:
+        // the deriver verifies it before deriving (Prop-285 §6.6 crystallized-
+        // hallucination guard — a tampered disposition would silently flip a label),
+        // and `freeze` surfaces a provenance warn. ENCODING (mirrors prDiffsSha):
+        // sha256 (64-hex) over the EXACT on-disk `corpus-dispositions.json` bytes
+        // (canonical 2-space JSON + trailing newline, CRLF→LF-normalized), so an
+        // enforcer can `sha256` the file directly. STAMPED by `fetch-dispositions`;
+        // the deriver re-derives + hard-fails on mismatch (5d-iii). Additive-
+        // optional: locks with no disposition source parse unchanged.
+        corpusDispositionsSha: z
+          .string()
+          .regex(SHA256_REGEX, 'corpusDispositionsSha must be a 64-hex sha256')
+          .optional(),
       }),
     }),
     cullRateThreshold: z

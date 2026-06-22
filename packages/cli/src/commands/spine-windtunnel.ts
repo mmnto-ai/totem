@@ -151,6 +151,36 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
     console.error(`  Re-materialize the cert corpus with \`spine windtunnel materialize\`.`);
   }
 
+  // #709 5d-ii: provenance heads-up on the corpus-dispositions.json digest. Unlike
+  // prDiffsSha (run-critical), this is PROVENANCE — the hard gate is the deriver
+  // (5d-iii) re-deriving over the frozen dispositions, so freeze is warn-only,
+  // mirroring the prDiffsSha/fixtureSha warn shape. CRLF→LF normalized.
+  if (lock.controls.integrity.corpusDispositionsSha) {
+    const dispositionsPath = path.join(path.dirname(lockPath), 'corpus-dispositions.json');
+    if (fs.existsSync(dispositionsPath)) {
+      const actual = createHash('sha256')
+        .update(fs.readFileSync(dispositionsPath, 'utf-8').replace(/\r\n/g, '\n'), 'utf-8')
+        .digest('hex');
+      if (actual !== lock.controls.integrity.corpusDispositionsSha) {
+        console.error(
+          `[WindtunnelFreeze] WARNING: controls.integrity.corpusDispositionsSha in lock (${lock.controls.integrity.corpusDispositionsSha}) does not match computed digest of corpus-dispositions.json (${actual})`,
+        );
+        console.error(
+          `  Re-run \`spine windtunnel fetch-dispositions\` or update corpusDispositionsSha and re-freeze.`,
+        );
+      } else {
+        console.error(`[WindtunnelFreeze] corpus-dispositions.json digest verified: ${actual}`);
+      }
+    } else {
+      console.error(
+        `[WindtunnelFreeze] WARNING: lock declares controls.integrity.corpusDispositionsSha but corpus-dispositions.json is missing at ${dispositionsPath} — the label-deriver will fail.`,
+      );
+      console.error(
+        `  Re-run \`spine windtunnel fetch-dispositions\` to co-locate it with the lock.`,
+      );
+    }
+  }
+
   console.error(`[WindtunnelFreeze] DONE — lock at ${lockPath} is schema-valid.`);
   console.error(`  Commit the lock file to establish the freeze proof (C3).`);
 }
