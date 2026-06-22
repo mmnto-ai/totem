@@ -112,7 +112,9 @@ describe('fetchDispositionsCommand', () => {
     writeFixtures(dir);
   });
   afterEach(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
+    // maxRetries/retryDelay: the repo convention for temp-dir teardown — guards the
+    // Windows file-lock ENOTEMPTY flake (describe.test.ts / doctor.test.ts pattern).
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('freezes corpus-dispositions.json for the corpus held-out PRs only (5, not 7/9)', async () => {
