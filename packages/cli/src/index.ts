@@ -1905,6 +1905,26 @@ windtunnelCmd
     }
   });
 
+windtunnelCmd
+  .command('fetch-dispositions')
+  .description(
+    'Freeze corpus-dispositions.json — the held-out PRs’ span-anchored review threads — and stamp corpusDispositionsSha (strategy#709, by-hand/live; never CI)',
+  )
+  .option(
+    '--lock-path <path>',
+    'Override the lock file path (default: .totem/spine/gate-1/windtunnel.lock.json)',
+  )
+  .option('--output-dir <dir>', 'Override the gate-1 output dir (default: the lock’s dir)')
+  .action(async (opts: { lockPath?: string; outputDir?: string }) => {
+    try {
+      const { fetchDispositionsCommand } = await import('./commands/spine-fetch-dispositions.js');
+      await fetchDispositionsCommand({ lockPath: opts.lockPath, outputDir: opts.outputDir });
+    } catch (err) {
+      handleError(err);
+      throw err;
+    }
+  });
+
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
 
