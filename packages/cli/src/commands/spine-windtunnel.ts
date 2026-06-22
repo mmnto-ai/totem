@@ -138,6 +138,14 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
       );
       console.error(`  Re-materialize the cert corpus to co-locate pr-diffs.json with the lock.`);
     }
+  } else if (lock.phase === 'certifying') {
+    // CR: a certifying lock with NO prDiffsSha passes freeze clean, then the run
+    // hard-fails. Surface it here. (Harness locks legitimately have no scoring
+    // corpus — additive-optional — so this is certifying-scoped, not unconditional.)
+    console.error(
+      `[WindtunnelFreeze] WARNING: controls.integrity.prDiffsSha is absent on a certifying lock — the certifying run will hard-fail (#709 fold-2).`,
+    );
+    console.error(`  Re-materialize the cert corpus with \`spine windtunnel materialize\`.`);
   }
 
   console.error(`[WindtunnelFreeze] DONE — lock at ${lockPath} is schema-valid.`);
