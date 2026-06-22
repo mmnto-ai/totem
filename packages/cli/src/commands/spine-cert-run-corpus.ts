@@ -89,7 +89,11 @@ export interface CertRunFixtureInputs {
  */
 export async function loadCertRunFixtures(
   gate1Dir: string,
-  opts?: { expectedPrDiffsSha?: string; skipGroundTruth?: boolean },
+  opts?: {
+    expectedPrDiffsSha?: string;
+    expectedGroundTruthSha?: string;
+    skipGroundTruth?: boolean;
+  },
 ): Promise<CertRunFixtureInputs> {
   const { SplitArtifactSchema, TotemError } = await import('@mmnto/totem');
 
@@ -155,7 +159,28 @@ export async function loadCertRunFixtures(
     return { split, artifact, content, prDiffs, groundTruth: new Map<string, GroundTruthLabel>() };
   }
 
-  const gtRecord = GroundTruthSchema.parse(loadJson(path.join(gate1Dir, GROUND_TRUTH_FILE)));
+  // #709 5d-iii-ii: verify-then-parse the ANSWER KEY on a SINGLE read — the run grades
+  // firings against the frozen ground-truth-labels.json, so the digest must cover the
+  // exact bytes parsed + scored, not a separate read (mirror prDiffsSha — no check/use
+  // split). CRLF→LF normalized to match the deriver's LF-stamped digest. The absent-from-
+  // lock case is the caller's precondition (it omits the sha). The deriver never reaches
+  // here — `skipGroundTruth` returns above, because it PRODUCES this file (circularity).
+  const groundTruthFile = path.join(gate1Dir, GROUND_TRUTH_FILE);
+  const groundTruthRaw = readRaw(groundTruthFile);
+  if (opts?.expectedGroundTruthSha !== undefined) {
+    const actual = createHash('sha256')
+      .update(groundTruthRaw.replace(/\r\n/g, '\n'), 'utf-8')
+      .digest('hex');
+    if (actual !== opts.expectedGroundTruthSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Certifying run: ground-truth-labels.json integrity FAILED — expected ${opts.expectedGroundTruthSha}, got ` +
+          `${actual} (the frozen answer key was tampered or re-serialized).`,
+        'Re-derive the answer key with `spine windtunnel derive-labels` or re-materialize the cert corpus.',
+      );
+    }
+  }
+  const gtRecord = GroundTruthSchema.parse(parseJson(groundTruthRaw, groundTruthFile));
   const groundTruth = new Map<string, GroundTruthLabel>(Object.entries(gtRecord));
   return { split, artifact, content, prDiffs, groundTruth };
 }
@@ -274,9 +299,28 @@ export async function assembleCertifyingCorpus(
     );
   }
 
+  // #709 5d-iii-ii: the ANSWER KEY digest is run-critical like prDiffsSha — the run reads
+  // the MATERIALIZED frozen labels (never re-derives), so without this the cert could grade
+  // against a tampered/stale answer key while every other gate stays green. Gated on the RUN
+  // path: the deriver (skipGroundTruth) PRODUCES ground-truth-labels.json + stamps
+  // groundTruthSha, so on a first derive the lock legitimately has none yet.
+  const expectedGroundTruthSha = lock.controls.integrity.groundTruthSha;
+  if (!opts.skipGroundTruth && !expectedGroundTruthSha) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      'Certifying run: lock is missing controls.integrity.groundTruthSha (#709 5d-iii) — the ' +
+        'ground-truth-labels.json answer key cannot be integrity-checked.',
+      'Re-derive the answer key with `spine windtunnel derive-labels` (it stamps groundTruthSha) and re-freeze.',
+    );
+  }
+
   const { split, artifact, content, prDiffs, groundTruth } = await loadCertRunFixtures(
     opts.gate1Dir,
-    { expectedPrDiffsSha, skipGroundTruth: opts.skipGroundTruth },
+    {
+      expectedPrDiffsSha,
+      expectedGroundTruthSha: opts.skipGroundTruth ? undefined : expectedGroundTruthSha,
+      skipGroundTruth: opts.skipGroundTruth,
+    },
   );
   const { extractor, classifier } = buildReplayAdapters(artifact, expectedHash);
 

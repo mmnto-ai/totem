@@ -111,10 +111,14 @@ function stage4(files: Record<string, string>): Stage4VerifierDeps {
   };
 }
 
-/** A minimal lock partial — the provider reads the L2 hash, the pr-diffs digest, + resolved corpus. */
-function lockWith(llmReplaySha?: string, prDiffsSha?: string): WindtunnelLock {
+/** A minimal lock partial — the provider reads the L2 hash, the pr-diffs + ground-truth digests, + resolved corpus. */
+function lockWith(
+  llmReplaySha?: string,
+  prDiffsSha?: string,
+  groundTruthSha?: string,
+): WindtunnelLock {
   return {
-    controls: { integrity: { llmReplaySha, prDiffsSha } },
+    controls: { integrity: { llmReplaySha, prDiffsSha, groundTruthSha } },
     corpus: { resolvedPrs: [{ pr: 1, mergeCommit: sha(1) }] },
   } as unknown as WindtunnelLock;
 }
@@ -182,6 +186,18 @@ function prDiffsHash(): string {
     .digest('hex');
 }
 
+/** sha256 of the CRLF→LF-normalized on-disk ground-truth-labels.json — the digest the run gate (#709 5d-iii-ii) asserts. */
+function groundTruthHash(): string {
+  return createHash('sha256')
+    .update(
+      fs
+        .readFileSync(path.join(gate1Dir, 'ground-truth-labels.json'), 'utf-8')
+        .replace(/\r\n/g, '\n'),
+      'utf-8',
+    )
+    .digest('hex');
+}
+
 // ─── Tests ───────────────────────────────────────────
 
 describe('buildReplayCorpusProvider (run-path)', () => {
@@ -197,7 +213,7 @@ describe('buildReplayCorpusProvider (run-path)', () => {
       },
     });
 
-    const corpus = await provider(lockWith(hash, prDiffsHash()));
+    const corpus = await provider(lockWith(hash, prDiffsHash(), groundTruthHash()));
 
     expect(corpus.rules).toHaveLength(1);
     expect(corpus.provenanceByRule.get(corpus.rules[0]!.lessonHash)?.mergedPr).toBe(1);
@@ -221,7 +237,7 @@ describe('buildReplayCorpusProvider (run-path)', () => {
       stage4: stage4({ 'src/a.ts': 'forbiddenCall()' }),
       now: NOW,
     });
-    await provider(lockWith(hash, prDiffsHash()));
+    await provider(lockWith(hash, prDiffsHash(), groundTruthHash()));
     expect(fs.existsSync(path.join(gate1Dir, 'miner-ledgers.json'))).toBe(true);
   });
 
@@ -238,8 +254,9 @@ describe('buildReplayCorpusProvider (run-path)', () => {
 
   it('throws loud when pr-diffs.json is tampered after freeze (#2225 fold-2)', async () => {
     const hash = await fixtureHash();
-    const lock = lockWith(hash, prDiffsHash()); // digest captured over the frozen bytes
+    const lock = lockWith(hash, prDiffsHash(), groundTruthHash()); // digests captured over the frozen bytes
     // a schema-valid but byte-different scoring source — passes Zod, fails the digest.
+    // (pr-diffs is verified BEFORE ground-truth in the loader, so this fires first.)
     fs.writeFileSync(
       path.join(gate1Dir, 'pr-diffs.json'),
       JSON.stringify([{ pr: 1, diff: 'tampered', controlKind: 'corpus' }]),
@@ -251,5 +268,39 @@ describe('buildReplayCorpusProvider (run-path)', () => {
       now: NOW,
     });
     await expect(provider(lock)).rejects.toThrow(/pr-diffs\.json integrity/);
+  });
+
+  it('throws loud when the lock lacks the groundTruthSha digest (#709 5d-iii-ii answer-key gate)', async () => {
+    const hash = await fixtureHash();
+    const provider = buildReplayCorpusProvider({
+      gate1Dir,
+      stage4: stage4({ 'src/a.ts': 'forbiddenCall()' }),
+      now: NOW,
+    });
+    // llmReplaySha + prDiffsSha present, groundTruthSha omitted → the run-path answer-key
+    // gate fires (the precondition is ordered after prDiffsSha, so the prDiffsSha-only
+    // tests above still trip their own error).
+    await expect(provider(lockWith(hash, prDiffsHash(), undefined))).rejects.toThrow(
+      /groundTruthSha/,
+    );
+  });
+
+  it('throws loud when ground-truth-labels.json is tampered after freeze (#709 5d-iii-ii)', async () => {
+    const hash = await fixtureHash();
+    // groundTruthSha captured over the pristine `{}` fixture from beforeEach, before the tamper below
+    const lock = lockWith(hash, prDiffsHash(), groundTruthHash());
+    // a schema-valid but byte-different answer key — passes Zod (firingLabelId → TP), fails
+    // the digest. pr-diffs stays intact so the ground-truth gate (read second) is what fires.
+    fs.writeFileSync(
+      path.join(gate1Dir, 'ground-truth-labels.json'),
+      JSON.stringify({ 'abc123:src/a.ts:1': 'TP' }),
+      'utf-8',
+    );
+    const provider = buildReplayCorpusProvider({
+      gate1Dir,
+      stage4: stage4({ 'src/a.ts': 'forbiddenCall()' }),
+      now: NOW,
+    });
+    await expect(provider(lock)).rejects.toThrow(/ground-truth-labels\.json integrity/);
   });
 });

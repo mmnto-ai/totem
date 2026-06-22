@@ -8,6 +8,7 @@ import { persistCertifyingOutcome } from './spine-cert-persist.js';
 import {
   buildGate1Stage4Deps,
   buildReplayCorpusProvider,
+  GROUND_TRUTH_FILE,
   PR_DIFFS_FILE,
 } from './spine-cert-run-corpus.js';
 
@@ -183,6 +184,44 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
         `  Re-run \`spine windtunnel fetch-dispositions\` to co-locate it with the lock.`,
       );
     }
+  }
+
+  // #709 5d-iii-ii: pre-merge heads-up on the ground-truth-labels.json ANSWER-KEY digest.
+  // Run-critical like prDiffsSha (the run reads the materialized frozen labels, never
+  // re-derives) — the hard gate is the certifying run via loadCertRunFixtures, so freeze is
+  // warn-only, mirroring the prDiffsSha shape (incl. the absent-on-certifying branch). The
+  // answer key co-locates with the lock; resolve it via dirname(lockPath). CRLF→LF normalized.
+  if (lock.controls.integrity.groundTruthSha) {
+    const groundTruthPath = path.join(path.dirname(lockPath), GROUND_TRUTH_FILE);
+    if (fs.existsSync(groundTruthPath)) {
+      const actual = createHash('sha256')
+        .update(fs.readFileSync(groundTruthPath, 'utf-8').replace(/\r\n/g, '\n'), 'utf-8')
+        .digest('hex');
+      if (actual !== lock.controls.integrity.groundTruthSha) {
+        console.error(
+          `[WindtunnelFreeze] WARNING: controls.integrity.groundTruthSha in lock (${lock.controls.integrity.groundTruthSha}) does not match computed digest of ground-truth-labels.json (${actual})`,
+        );
+        console.error(
+          `  Re-derive the answer key with \`spine windtunnel derive-labels\` or update groundTruthSha and re-freeze.`,
+        );
+      } else {
+        console.error(`[WindtunnelFreeze] ground-truth-labels.json digest verified: ${actual}`);
+      }
+    } else {
+      console.error(
+        `[WindtunnelFreeze] WARNING: lock declares controls.integrity.groundTruthSha but ground-truth-labels.json is missing at ${groundTruthPath} — the certifying run will fail.`,
+      );
+      console.error(
+        `  Re-derive the answer key with \`spine windtunnel derive-labels\` to co-locate it with the lock.`,
+      );
+    }
+  } else if (lock.phase === 'certifying') {
+    // CR-mirror (prDiffsSha): a certifying lock with NO groundTruthSha passes freeze clean,
+    // then the run hard-fails — surface it here. Additive-optional, so certifying-scoped, not
+    // unconditional; until `derive-labels` runs, the answer key isn't produced yet.
+    console.error(
+      `[WindtunnelFreeze] WARNING: controls.integrity.groundTruthSha is absent on a certifying lock — the certifying run will hard-fail (#709 5d-iii). Run \`spine windtunnel derive-labels\` to produce + stamp the answer key.`,
+    );
   }
 
   console.error(`[WindtunnelFreeze] DONE — lock at ${lockPath} is schema-valid.`);
