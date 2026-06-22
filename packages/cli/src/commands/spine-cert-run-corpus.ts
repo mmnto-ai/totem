@@ -233,17 +233,6 @@ export interface ReplayCorpusProviderOptions {
 }
 
 /**
- * Build the REPLAY-mode `CertifyingCorpusProvider` the certifying run injects.
- *
- * Loads the committed cert-run fixtures (split, frozen `llm-replay.v1` artifact,
- * frozen review content, resolved-PR diffs, ground-truth labels) from the gate-1
- * dir, constructs the zero-network replay adapters (gated on the lock's L2
- * `llmReplaySha`) + a frozen review-thread source, then composes them through
- * `buildCertifyingCorpus`. fold-I ledgers are emitted (default: written to
- * `miner-ledgers.json`) for §7 observability. Throws loud if the lock lacks the
- * L2 replay hash (no safe default for an integrity gate).
- */
-/**
  * Assemble the REPLAY-mode `CertifyingCorpus` (rules + prDiffs + provenance) from
  * the committed gate-1 fixtures — the SHARED path both the certifying run (via
  * `buildReplayCorpusProvider`) and the 5d-iii label-deriver call, so the corpus
@@ -305,6 +294,14 @@ export async function assembleCertifyingCorpus(
   });
 }
 
+/**
+ * Build the REPLAY-mode `CertifyingCorpusProvider` the certifying run injects: a thin
+ * wrapper over `assembleCertifyingCorpus` (fixture-load + replay adapters + the
+ * `buildCertifyingCorpus` composition) that also emits the fold-I miner ledgers
+ * (default: `miner-ledgers.json`) for §7 observability. The deriver calls
+ * `assembleCertifyingCorpus` directly instead (it skips ground-truth + discards the
+ * ledgers, which belong to the run artifact).
+ */
 export function buildReplayCorpusProvider(
   opts: ReplayCorpusProviderOptions,
 ): CertifyingCorpusProvider {
