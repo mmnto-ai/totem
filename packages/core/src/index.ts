@@ -822,6 +822,8 @@ export type {
   CompileStageResult,
 } from './spine/compile.js';
 export { compileCandidate, runCompileStage } from './spine/compile.js';
+export type { DispositionClass, DispositionComment } from './spine/disposition-taxonomy.js';
+export { classifyDisposition, dispositionToLabel } from './spine/disposition-taxonomy.js';
 export type {
   DraftExtractor,
   ExtractStageDeps,
