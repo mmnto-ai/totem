@@ -136,60 +136,54 @@ describe('classifyDisposition — bot replies are not dispositions', () => {
 });
 
 describe('classifyDisposition — negation / over-match regressions (#2230 bot panel + strategy-claude)', () => {
-  it('GCA :95 — "this is not correct" / "correct, I will fix it" is an AGREEMENT, never FP', () => {
-    expect(dispositionToLabel(classifyDisposition(thread('This is not correct.')))).not.toBe('FP');
-    expect(
-      dispositionToLabel(classifyDisposition(thread('You are correct, I will fix it.'))),
-    ).not.toBe('FP');
+  // CR #2230 round-4: every negation regression asserts FULLY UNLABELED
+  // (dispositionToLabel === null), not just "not the one label" — so a regression
+  // to EITHER mislabel (TP or FP) fails the test, not only the expected direction.
+  const isUnlabeled = (reply: string): boolean =>
+    dispositionToLabel(classifyDisposition(thread(reply))) === null;
+
+  it('GCA :95 — "this is not correct" / "correct, I will fix it" is an AGREEMENT, neither TP nor FP', () => {
+    expect(isUnlabeled('This is not correct.')).toBe(true);
+    expect(isUnlabeled('You are correct, I will fix it.')).toBe(true);
   });
 
   it('greptile :91 — "this behavior is not intentional" is not a false-positive rebuttal', () => {
-    expect(
-      classifyDisposition(thread('This behavior is not intentional but matches the contract.')),
-    ).not.toBe('declined-as-false-positive');
+    expect(isUnlabeled('This behavior is not intentional but matches the contract.')).toBe(true);
   });
 
   it('strategy-claude — "intentionally structured it, will fix the edge case" is not FP', () => {
     // future-tense "will fix" is not in the fix bank; the anchored `is intentional`
     // no longer trips on the bare adverb → no false FP.
-    expect(
-      classifyDisposition(thread('Intentionally structured it this way; will fix the edge case.')),
-    ).not.toBe('declined-as-false-positive');
+    expect(isUnlabeled('Intentionally structured it this way; will fix the edge case.')).toBe(true);
   });
 
   it('greptile :78 P1 — negation-blind "not been addressed" / "not applied" is not a fix', () => {
-    expect(classifyDisposition(thread('This has not been addressed yet.'))).not.toBe(
-      'accepted-fix',
-    );
-    expect(classifyDisposition(thread('That was not applied.'))).not.toBe('accepted-fix');
+    expect(isUnlabeled('This has not been addressed yet.')).toBe(true);
+    expect(isUnlabeled('That was not applied.')).toBe(true);
   });
 
   it('strategy-claude / greptile — "Well done, but this still needs work" is not a fix', () => {
-    expect(classifyDisposition(thread('Well done, but this still needs work.'))).not.toBe(
-      'accepted-fix',
-    );
+    expect(isUnlabeled('Well done, but this still needs work.')).toBe(true);
   });
 
   it('greptile :112 — lowercase "todo: track this" is recognized as a defer', () => {
     expect(classifyDisposition(thread('todo: track this separately.'))).toBe('defer');
   });
 
-  it('CR round-2 — praise words dropped: "not a good catch" is not a fix, "good catch" alone is not TP', () => {
-    expect(classifyDisposition(thread('Not a good catch — the guard is in the parent.'))).not.toBe(
-      'accepted-fix',
-    );
+  it('CR round-2 — praise words dropped: "not a good catch" / bare "good catch" are unlabeled', () => {
+    expect(isUnlabeled('Not a good catch — the guard is in the parent.')).toBe(true);
     // bare praise without a fix confirmation is not an accepted-fix (only "…, fixed" is).
     expect(classifyDisposition(thread('Good catch!'))).toBe('ambiguous');
   });
 
-  it('CR round-3 — `fixed` is negation-guarded: "not fixed yet" / "has not been fixed" are not TP', () => {
+  it('CR round-3 — `fixed` is negation-guarded: "not fixed yet" / "has not been fixed" are unlabeled', () => {
     for (const reply of [
       "This isn't fixed yet.",
       'This has not been fixed.',
       'Never fixed this.',
       'No, that was not fixed.',
     ]) {
-      expect(classifyDisposition(thread(reply))).not.toBe('accepted-fix');
+      expect(isUnlabeled(reply)).toBe(true);
     }
     // …but a genuine fix in its own clause still credits, even beside a negated one.
     expect(classifyDisposition(thread('Not sure that was the cause, but I fixed it anyway.'))).toBe(
