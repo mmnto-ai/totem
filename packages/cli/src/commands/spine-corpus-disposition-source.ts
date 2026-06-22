@@ -193,7 +193,10 @@ export class CorpusDispositionSourceAdapter {
           cwd: this.cwd,
           timeout: GH_TIMEOUT_MS,
           maxBuffer: GH_MAX_BUFFER,
-          env: { ...process.env, GH_PROMPT_DISABLED: '1' },
+          // Honor the injected env end-to-end (GCA #2231): `this.env` defaults to
+          // process.env live, so no behavior change there, but a fully-injected env
+          // now controls the subprocess too, not just the CI hard-gate check.
+          env: { ...this.env, GH_PROMPT_DISABLED: '1' },
         });
     })();
     return this.execPromise;
@@ -228,9 +231,37 @@ export class CorpusDispositionSourceAdapter {
       );
     }
 
+    let json: unknown;
+    try {
+      json = JSON.parse(raw);
+    } catch (err) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `corpus-disposition fetch: gh returned non-JSON for held-out PR #${pr}.`,
+        'The gh GraphQL response was not valid JSON.',
+        err,
+      );
+    }
+    // GitHub GraphQL returns HTTP 200 with `{ errors: [...] }` on auth/scope/query
+    // faults — JSON.parse succeeds but `data` is absent, so a bare schema-parse would
+    // throw a misleading "unparseable". Surface the REAL gh error first so a by-hand
+    // freeze diagnoses fast (greptile #2231 P2).
+    if (
+      json !== null &&
+      typeof json === 'object' &&
+      Array.isArray((json as { errors?: unknown }).errors)
+    ) {
+      const errs = (json as { errors: Array<{ message?: string }> }).errors;
+      const first = errs[0]?.message ?? 'unknown GraphQL error';
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `corpus-disposition fetch: GitHub GraphQL error for held-out PR #${pr}: ${first}`,
+        'Check gh auth + token scope for the repo (the freeze is all-or-nothing — no silent skip).',
+      );
+    }
     let parsed: z.infer<typeof GqlResponseSchema>;
     try {
-      parsed = GqlResponseSchema.parse(JSON.parse(raw));
+      parsed = GqlResponseSchema.parse(json);
     } catch (err) {
       throw new TotemError(
         'CONFIG_INVALID',

@@ -103,15 +103,19 @@ export async function fetchDispositionsCommand(opts: FetchDispositionsOptions): 
   // Build the live source from the lock's repo unless a fake is injected (tests).
   let source = opts.source;
   if (!source) {
-    const [owner, name] = lock.corpus.repo.split('/');
-    if (!owner || !name) {
+    // Require EXACTLY "owner/name" (greptile #2231 P2): a bare `!owner || !name`
+    // guard lets "github.com/owner/name" through as owner="github.com" → wrong
+    // fetch + a confusing "repo not found". The lock schema is plain z.string(),
+    // so this is the only parse-time defense.
+    const repoParts = lock.corpus.repo.split('/');
+    if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) {
       throw new TotemError(
         'CONFIG_INVALID',
         `fetch-dispositions: lock.corpus.repo "${lock.corpus.repo}" is not "owner/name".`,
         'Set corpus.repo in the lock to the "owner/name" form.',
       );
     }
-    source = new CorpusDispositionSourceAdapter({ owner, name, cwd });
+    source = new CorpusDispositionSourceAdapter({ owner: repoParts[0], name: repoParts[1], cwd });
   }
 
   // Fetch each held-out corpus PR (fail-loud — the freeze is all-or-nothing).

@@ -170,4 +170,15 @@ describe('fetchDispositionsCommand', () => {
       }),
     ).rejects.toThrow(/no held-out CORPUS PRs/i);
   });
+
+  it('rejects a non-"owner/name" lock repo before any fetch (greptile #2231)', async () => {
+    // A 3-part repo ("github.com/owner/name") must fail at parse, not slip through
+    // as owner="github.com". No injected source → the live repo-parse path runs.
+    const lock = JSON.parse(fs.readFileSync(path.join(dir, 'windtunnel.lock.json'), 'utf-8'));
+    lock.corpus.repo = 'github.com/mmnto-ai/liquid-city';
+    fs.writeFileSync(path.join(dir, 'windtunnel.lock.json'), JSON.stringify(lock, null, 2));
+    await expect(
+      fetchDispositionsCommand({ lockPath: path.join(dir, 'windtunnel.lock.json'), cwd: dir }),
+    ).rejects.toThrow(/is not "owner\/name"/i);
+  });
 });

@@ -196,4 +196,14 @@ describe('CorpusDispositionSourceAdapter.fetch', () => {
     });
     await expect(adapter.fetch(7)).rejects.toThrow(/no merge commit/i);
   });
+
+  it('surfaces a GitHub GraphQL error message, not a misleading "unparseable" (greptile #2231)', async () => {
+    const adapter = new CorpusDispositionSourceAdapter({
+      owner: OWNER,
+      name: NAME,
+      exec: stubExec(JSON.stringify({ errors: [{ message: 'Bad credentials' }] })),
+      env: {},
+    });
+    await expect(adapter.fetch(7)).rejects.toThrow(/GraphQL error.*Bad credentials/i);
+  });
 });
