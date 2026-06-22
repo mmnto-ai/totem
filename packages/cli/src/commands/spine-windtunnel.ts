@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { PrMeta, SelectionRuleConfig, WindtunnelLock } from '@mmnto/totem';
 
 import { persistCertifyingOutcome } from './spine-cert-persist.js';
-import { buildReplayCorpusProvider } from './spine-cert-run-corpus.js';
+import { buildReplayCorpusProvider, PR_DIFFS_FILE } from './spine-cert-run-corpus.js';
 
 // ─── Named constants ─────────────────────────────────
 
@@ -117,7 +117,10 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
   // (the hard gate is the certifying run). Warn-only, mirroring fixtureSha. CRLF→LF
   // normalized so a Windows checkout doesn't spuriously warn (GCA).
   if (lock.controls.integrity.prDiffsSha) {
-    const prDiffsPath = path.join(path.dirname(lockPath), 'pr-diffs.json');
+    // Co-location contract: pr-diffs.json lives in the gate-1 dir beside the lock —
+    // freeze resolves it via dirname(lockPath), the run via opts.gate1Dir (= the same
+    // dir). Shared `PR_DIFFS_FILE` constant so a rename can't drift between them (CR).
+    const prDiffsPath = path.join(path.dirname(lockPath), PR_DIFFS_FILE);
     if (fs.existsSync(prDiffsPath)) {
       const actual = createHash('sha256')
         .update(fs.readFileSync(prDiffsPath, 'utf-8').replace(/\r\n/g, '\n'), 'utf-8')

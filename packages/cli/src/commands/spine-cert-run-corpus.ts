@@ -25,7 +25,7 @@ import type { CertifyingCorpus, CertifyingCorpusProvider } from './spine-windtun
 const SPLIT_FILE = 'split.json';
 const REPLAY_FILE = 'llm-replay.v1.json';
 const CONTENT_FILE = 'review-content.json';
-const PR_DIFFS_FILE = 'pr-diffs.json';
+export const PR_DIFFS_FILE = 'pr-diffs.json';
 const GROUND_TRUTH_FILE = 'ground-truth-labels.json';
 const LEDGERS_FILE = 'miner-ledgers.json';
 
