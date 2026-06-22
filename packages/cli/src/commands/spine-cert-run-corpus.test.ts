@@ -287,7 +287,8 @@ describe('buildReplayCorpusProvider (run-path)', () => {
 
   it('throws loud when ground-truth-labels.json is tampered after freeze (#709 5d-iii-ii)', async () => {
     const hash = await fixtureHash();
-    const lock = lockWith(hash, prDiffsHash(), groundTruthHash()); // digest captured over `{}`
+    // groundTruthSha captured over the pristine `{}` fixture from beforeEach, before the tamper below
+    const lock = lockWith(hash, prDiffsHash(), groundTruthHash());
     // a schema-valid but byte-different answer key — passes Zod (firingLabelId → TP), fails
     // the digest. pr-diffs stays intact so the ground-truth gate (read second) is what fires.
     fs.writeFileSync(
