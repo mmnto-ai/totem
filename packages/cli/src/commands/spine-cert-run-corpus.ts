@@ -15,6 +15,9 @@ import type {
   WindtunnelLock,
 } from '@mmnto/totem';
 
+/** Local alias for the core git exec port (mirrors spine-windtunnel.ts / spine-cert-materialize.ts). */
+type SafeExecFn = typeof import('@mmnto/totem').safeExec;
+
 import { buildCertifyingCorpus } from './spine-cert-corpus.js';
 import { buildReplayAdapters } from './spine-cert-record.js';
 import { type ReplayArtifact, ReplayArtifactSchema } from './spine-llm-replay.js';
@@ -26,7 +29,10 @@ const SPLIT_FILE = 'split.json';
 const REPLAY_FILE = 'llm-replay.v1.json';
 const CONTENT_FILE = 'review-content.json';
 export const PR_DIFFS_FILE = 'pr-diffs.json';
-const GROUND_TRUTH_FILE = 'ground-truth-labels.json';
+/** The cert-run answer key — produced by `derive-labels` (5d-iii), read by the run. */
+export const GROUND_TRUTH_FILE = 'ground-truth-labels.json';
+/** The frozen held-out disposition provenance — produced by `fetch-dispositions` (5d-ii). */
+export const CORPUS_DISPOSITIONS_FILE = 'corpus-dispositions.json';
 const LEDGERS_FILE = 'miner-ledgers.json';
 
 // ─── Fixture schemas (the committed cert-run inputs) ──
@@ -83,7 +89,7 @@ export interface CertRunFixtureInputs {
  */
 export async function loadCertRunFixtures(
   gate1Dir: string,
-  opts?: { expectedPrDiffsSha?: string },
+  opts?: { expectedPrDiffsSha?: string; skipGroundTruth?: boolean },
 ): Promise<CertRunFixtureInputs> {
   const { SplitArtifactSchema, TotemError } = await import('@mmnto/totem');
 
@@ -140,9 +146,62 @@ export async function loadCertRunFixtures(
   }
   const prDiffs = z.array(ResolvedPrDiffSchema).parse(parseJson(prDiffsRaw, prDiffsFile));
 
+  // 5d-iii circularity guard: the label-deriver reuses this loader to enumerate
+  // firings byte-identically to the run, but it PRODUCES ground-truth-labels.json
+  // — so it must NOT read it (the file may not yet exist on a first derive, and
+  // reading it would make the deriver depend on its own output). `skipGroundTruth`
+  // returns an empty map; the run omits the flag and loads the frozen answer key.
+  if (opts?.skipGroundTruth) {
+    return { split, artifact, content, prDiffs, groundTruth: new Map<string, GroundTruthLabel>() };
+  }
+
   const gtRecord = GroundTruthSchema.parse(loadJson(path.join(gate1Dir, GROUND_TRUTH_FILE)));
   const groundTruth = new Map<string, GroundTruthLabel>(Object.entries(gtRecord));
   return { split, artifact, content, prDiffs, groundTruth };
+}
+
+/**
+ * Build the Stage-4 verifier deps (listFiles/readFile over the frozen post-image
+ * at `asOf`) — the SHARED constructor both the certifying run and the 5d-iii
+ * deriver use, so the archived-rule exclusion (hence the scored rule set, hence
+ * the firing labelIds) is identical. With an lc clone, files resolve via
+ * `git ls-tree`/`git show` at `asOf` (a local clone — zero network); without one,
+ * Stage-4 sees no files (rules read as untested, NOT archived). Tests inject a
+ * fake `Stage4VerifierDeps` into `assembleCertifyingCorpus` directly instead.
+ */
+export function buildGate1Stage4Deps(
+  lcDir: string | undefined,
+  asOf: string,
+  safeExec: SafeExecFn,
+): Stage4VerifierDeps {
+  if (lcDir) {
+    return {
+      // The `--` separator keeps the revision unambiguous from any path args and blocks
+      // arg injection (CR coding guideline) — this shared path decides which files
+      // Stage-4 sees for BOTH the run and the deriver, so rev/path ambiguity here would
+      // shift archived-rule decisions and the derived labels.
+      listFiles: async () =>
+        safeExec('git', ['ls-tree', '-r', '--name-only', asOf, '--'], { cwd: lcDir })
+          .split('\n')
+          .filter(Boolean),
+      readFile: async (f: string) =>
+        safeExec('git', ['show', `${asOf}:${f.replace(/\\/g, '/')}`, '--'], { cwd: lcDir }),
+      workingDirectory: lcDir,
+    };
+  }
+  return {
+    // No lc clone → Stage-4 sees no files (rules read as 'no-matches' / untested,
+    // NOT archived) — the wind-tunnel firing/scoring still runs.
+    listFiles: async () => [],
+    readFile: async (f: string) => {
+      const { TotemError } = await import('@mmnto/totem');
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Cert run: no lc clone (--lc-dir) — cannot read ${f} for Stage-4.`,
+        'Provide the lc clone via --lc-dir or the TOTEM_LC_DIR environment variable.',
+      );
+    },
+  };
 }
 
 /** Derive the SplitLedger from the loaded split + the lock's resolved corpus. */
@@ -174,65 +233,80 @@ export interface ReplayCorpusProviderOptions {
 }
 
 /**
- * Build the REPLAY-mode `CertifyingCorpusProvider` the certifying run injects.
- *
- * Loads the committed cert-run fixtures (split, frozen `llm-replay.v1` artifact,
- * frozen review content, resolved-PR diffs, ground-truth labels) from the gate-1
- * dir, constructs the zero-network replay adapters (gated on the lock's L2
- * `llmReplaySha`) + a frozen review-thread source, then composes them through
- * `buildCertifyingCorpus`. fold-I ledgers are emitted (default: written to
- * `miner-ledgers.json`) for §7 observability. Throws loud if the lock lacks the
- * L2 replay hash (no safe default for an integrity gate).
+ * Assemble the REPLAY-mode `CertifyingCorpus` (rules + prDiffs + provenance) from
+ * the committed gate-1 fixtures — the SHARED path both the certifying run (via
+ * `buildReplayCorpusProvider`) and the 5d-iii label-deriver call, so the corpus
+ * they enumerate firings over is byte-identical (the answer-key labelIds the
+ * deriver mints are the ones the run looks up). The deriver passes
+ * `skipGroundTruth: true` — it PRODUCES `ground-truth-labels.json`, so it must
+ * not read it (circularity guard); the run omits the flag and loads the frozen
+ * answer key. Returns the fold-I ledgers too; the caller decides whether to emit
+ * them (the run does; the deriver discards — they belong to the run artifact).
+ */
+export async function assembleCertifyingCorpus(
+  opts: ReplayCorpusProviderOptions & { skipGroundTruth?: boolean },
+  lock: WindtunnelLock,
+): Promise<{ corpus: CertifyingCorpus; ledgers: MinerLedgers }> {
+  const { TotemError } = await import('@mmnto/totem');
+  const expectedHash = lock.controls.integrity.llmReplaySha;
+  if (!expectedHash) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      'Certifying run: lock is missing controls.integrity.llmReplaySha (L2) — the frozen ' +
+        'llm-replay fixture cannot be integrity-checked.',
+      'Re-freeze the lock after a `record` run.',
+    );
+  }
+
+  // #2225 (#709 fold-2): hash-bind the SCORING source. `pr-diffs.json` is otherwise
+  // unprotected — `fixtureSha` covers only the control dirs — so a silent mutation of
+  // any row (advisory-window OR control) would corrupt the answer key while the
+  // control-dir gate stays green. The absent-from-lock case is a lock precondition
+  // (checked here); `loadCertRunFixtures` verifies the digest on the SAME read it
+  // parses — no check/use split (CR). Fail loud (strategy ruled: verify at freeze AND run).
+  const expectedPrDiffsSha = lock.controls.integrity.prDiffsSha;
+  if (!expectedPrDiffsSha) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      'Certifying run: lock is missing controls.integrity.prDiffsSha (#709 fold-2) — the ' +
+        'pr-diffs.json scoring source cannot be integrity-checked.',
+      'Re-materialize the cert corpus with `spine windtunnel materialize`.',
+    );
+  }
+
+  const { split, artifact, content, prDiffs, groundTruth } = await loadCertRunFixtures(
+    opts.gate1Dir,
+    { expectedPrDiffsSha, skipGroundTruth: opts.skipGroundTruth },
+  );
+  const { extractor, classifier } = buildReplayAdapters(artifact, expectedHash);
+
+  return buildCertifyingCorpus({
+    split,
+    splitLedger: splitLedgerFrom(split, lock),
+    source: frozenSourceFrom(content),
+    extractor,
+    classifier,
+    seedClassesProvided: opts.seedClassesProvided ?? false,
+    stage4: opts.stage4,
+    now: opts.now,
+    prDiffs,
+    groundTruth,
+  });
+}
+
+/**
+ * Build the REPLAY-mode `CertifyingCorpusProvider` the certifying run injects: a thin
+ * wrapper over `assembleCertifyingCorpus` (fixture-load + replay adapters + the
+ * `buildCertifyingCorpus` composition) that also emits the fold-I miner ledgers
+ * (default: `miner-ledgers.json`) for §7 observability. The deriver calls
+ * `assembleCertifyingCorpus` directly instead (it skips ground-truth + discards the
+ * ledgers, which belong to the run artifact).
  */
 export function buildReplayCorpusProvider(
   opts: ReplayCorpusProviderOptions,
 ): CertifyingCorpusProvider {
   return async (lock: WindtunnelLock): Promise<CertifyingCorpus> => {
-    const { TotemError } = await import('@mmnto/totem');
-    const expectedHash = lock.controls.integrity.llmReplaySha;
-    if (!expectedHash) {
-      throw new TotemError(
-        'CONFIG_INVALID',
-        'Certifying run: lock is missing controls.integrity.llmReplaySha (L2) — the frozen ' +
-          'llm-replay fixture cannot be integrity-checked.',
-        'Re-freeze the lock after a `record` run.',
-      );
-    }
-
-    // #2225 (#709 fold-2): hash-bind the SCORING source. `pr-diffs.json` is otherwise
-    // unprotected — `fixtureSha` covers only the control dirs — so a silent mutation of
-    // any row (advisory-window OR control) would corrupt the answer key while the
-    // control-dir gate stays green. The absent-from-lock case is a lock precondition
-    // (checked here); `loadCertRunFixtures` verifies the digest on the SAME read it
-    // parses — no check/use split (CR). Fail loud (strategy ruled: verify at freeze AND run).
-    const expectedPrDiffsSha = lock.controls.integrity.prDiffsSha;
-    if (!expectedPrDiffsSha) {
-      throw new TotemError(
-        'CONFIG_INVALID',
-        'Certifying run: lock is missing controls.integrity.prDiffsSha (#709 fold-2) — the ' +
-          'pr-diffs.json scoring source cannot be integrity-checked.',
-        'Re-materialize the cert corpus with `spine windtunnel materialize`.',
-      );
-    }
-
-    const { split, artifact, content, prDiffs, groundTruth } = await loadCertRunFixtures(
-      opts.gate1Dir,
-      { expectedPrDiffsSha },
-    );
-    const { extractor, classifier } = buildReplayAdapters(artifact, expectedHash);
-
-    const { corpus, ledgers } = await buildCertifyingCorpus({
-      split,
-      splitLedger: splitLedgerFrom(split, lock),
-      source: frozenSourceFrom(content),
-      extractor,
-      classifier,
-      seedClassesProvided: opts.seedClassesProvided ?? false,
-      stage4: opts.stage4,
-      now: opts.now,
-      prDiffs,
-      groundTruth,
-    });
+    const { corpus, ledgers } = await assembleCertifyingCorpus(opts, lock);
 
     // fold-I (§7): emit the miner ledgers, observable beside the cert-run report.
     if (opts.onLedgers) {

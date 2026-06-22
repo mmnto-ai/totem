@@ -126,6 +126,23 @@ export const WindtunnelLockSchema = z
           .string()
           .regex(SHA256_REGEX, 'corpusDispositionsSha must be a 64-hex sha256')
           .optional(),
+        // #709 5d-iii: an integrity digest over the frozen `ground-truth-labels.json`
+        // — the cert-run ANSWER KEY (firingLabelId → TP|FP) the deriver produces from
+        // the dispositions. Run-critical like `prDiffsSha`: the certifying run reads
+        // the MATERIALIZED frozen labels (never re-derives), so the digest is what
+        // makes "the answer key the run graded against is the one the deriver emitted"
+        // verifiable. ENCODING (mirrors prDiffsSha / corpusDispositionsSha): sha256
+        // (64-hex) over the EXACT on-disk `ground-truth-labels.json` bytes (canonical
+        // 2-space JSON + trailing newline, CRLF→LF-normalized), so an enforcer can
+        // `sha256` the file directly. STAMPED by `derive-labels` (5d-iii-i); the run's
+        // `loadCertRunFixtures` verify-then-parses it on a single read + `freeze` warns
+        // (5d-iii-ii). Additive-optional: locks with no derived answer key parse
+        // unchanged; once the run-enforcement lands the certifying path hard-errors if
+        // absent (no safe default for an integrity hash).
+        groundTruthSha: z
+          .string()
+          .regex(SHA256_REGEX, 'groundTruthSha must be a 64-hex sha256')
+          .optional(),
       }),
     }),
     cullRateThreshold: z

@@ -5,7 +5,11 @@ import * as path from 'node:path';
 import type { PrMeta, SelectionRuleConfig, WindtunnelLock } from '@mmnto/totem';
 
 import { persistCertifyingOutcome } from './spine-cert-persist.js';
-import { buildReplayCorpusProvider, PR_DIFFS_FILE } from './spine-cert-run-corpus.js';
+import {
+  buildGate1Stage4Deps,
+  buildReplayCorpusProvider,
+  PR_DIFFS_FILE,
+} from './spine-cert-run-corpus.js';
 
 // ─── Named constants ─────────────────────────────────
 
@@ -360,28 +364,8 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   if (lock.phase === 'certifying' && !corpusProvider) {
     const gate1Dir = path.dirname(lockPath);
     const asOf = lock.corpus.selectionRule.asOfCommit;
-    const stage4: import('@mmnto/totem').Stage4VerifierDeps = lcDir
-      ? {
-          listFiles: async () =>
-            safeExec('git', ['ls-tree', '-r', '--name-only', asOf], { cwd: lcDir })
-              .split('\n')
-              .filter(Boolean),
-          readFile: async (f: string) =>
-            safeExec('git', ['show', `${asOf}:${f.replace(/\\/g, '/')}`], { cwd: lcDir }),
-          workingDirectory: lcDir,
-        }
-      : {
-          // No lc clone → Stage-4 sees no files (rules read as 'no-matches' /
-          // untested, NOT archived) — the wind-tunnel firing/scoring still runs.
-          listFiles: async () => [],
-          readFile: async (f: string) => {
-            throw new TotemError(
-              'CONFIG_INVALID',
-              `Cert run: no lc clone (--lc-dir) — cannot read ${f} for Stage-4.`,
-              'Provide the lc clone via --lc-dir or the TOTEM_LC_DIR environment variable.',
-            );
-          },
-        };
+    // Shared Stage-4 constructor (the deriver builds it the same way — no drift).
+    const stage4 = buildGate1Stage4Deps(lcDir, asOf, safeExec);
     corpusProvider = buildReplayCorpusProvider({
       gate1Dir,
       stage4,
@@ -958,6 +942,77 @@ async function runMockEngineAdapter(
 // ─── Real engine (certifying phase, 5c-i) ────────────
 
 /**
+ * Build the certifying-run firings from a corpus's rules + prDiffs — the SHARED
+ * firing-setup the certifying run AND the 5d-iii label-deriver both call, so they
+ * enumerate byte-identical `RuleFiring` labelIds over the same fixtures. The panel
+ * anti-drift mandate: any divergence here (cwd resolution / ruleEngineCtx / the
+ * buildFirings call) would silently break the deriver↔run labelId join and void
+ * the answer key. Encapsulates:
+ *  - cwd resolution (`resolveGitRoot(process.cwd())` — NOT raw `process.cwd()`, #1304),
+ *  - the per-invocation `ruleEngineCtx` (logger + shield-warn state),
+ *  - `buildFirings` (fold-F archived-assert runs inside it),
+ *  - the A1 (fold-D) post-dedup labelId-uniqueness hard-gate.
+ * `logPrefix` differentiates the caller in warn output ([WindtunnelRun] / [DeriveLabels]).
+ */
+export async function buildCertifyingFirings(input: {
+  rules: import('@mmnto/totem').CompiledRule[];
+  prDiffs: import('@mmnto/totem').ResolvedPrDiff[];
+  readStrategy: (file: string) => Promise<string | null>;
+  logPrefix: string;
+}): Promise<import('@mmnto/totem').BuildFiringsResult> {
+  const {
+    buildFirings,
+    assertUniqueFiringLabels,
+    resolveGitRoot,
+    TotemError,
+    FiringLabelCollisionError,
+  } = await import('@mmnto/totem');
+
+  const cwd = resolveGitRoot(process.cwd()) ?? process.cwd();
+  const ruleEngineCtx = {
+    logger: { warn: (msg: string) => console.error(`${input.logPrefix} ${msg}`) },
+    state: { hasWarnedShieldContext: false },
+  };
+
+  // buildFirings runs fold-F (archived assert) internally before the engine; its
+  // only throw is ArchivedRuleInScopeError, which propagates. A1 (labelId
+  // collision) is the caller-side pre-score gate below — not raised at construction
+  // — so the structured per-collision report is threaded here. (greptile #2215 P2.)
+  const built = await buildFirings({
+    rules: input.rules,
+    prDiffs: input.prDiffs,
+    cwd,
+    readStrategy: input.readStrategy,
+    ruleEngineCtx,
+    onWarn: (msg) => console.error(`${input.logPrefix} ${msg}`),
+  });
+
+  // A1 (fold-D): post-dedup uniqueness INVARIANT before scoring (Tenet 4).
+  // `buildFirings` collapses same-labelId matches (fold-D dedup), so a collision
+  // here signals a dedup BUG, not corpus data — fail loud as an internal invariant.
+  try {
+    assertUniqueFiringLabels(built.firings);
+  } catch (err) {
+    if (err instanceof FiringLabelCollisionError) {
+      console.error(`${input.logPrefix} A1 post-dedup invariant violated (fold-D):`);
+      for (const c of err.collisions) {
+        console.error(`  • ${c.labelId.slice(0, 12)}… ×${c.evidenceRefs.length}`);
+      }
+      throw new TotemError(
+        'CONFIG_INVALID',
+        err.message,
+        'A post-dedup firing-label collision is an internal invariant violation: buildFirings ' +
+          'should have collapsed same-labelId matches. This indicates a dedup defect, not a corpus issue.',
+        err,
+      );
+    }
+    throw err;
+  }
+
+  return built;
+}
+
+/**
  * Run the REAL engine for the certifying phase (5c-i — #2189 item 1).
  *
  * Replaces the mock for `--phase certifying`: drives each resolved-PR diff
@@ -981,13 +1036,7 @@ export async function runCertifyingEngine(
   readStrategy: (file: string) => Promise<string | null>,
   corpusProvider?: CertifyingCorpusProvider,
 ): Promise<EngineResult> {
-  const {
-    buildFirings,
-    assertUniqueFiringLabels,
-    resolveGitRoot,
-    TotemError,
-    FiringLabelCollisionError,
-  } = await import('@mmnto/totem');
+  const { TotemError } = await import('@mmnto/totem');
 
   if (!corpusProvider) {
     // No silent empty-set scoring: a certifying run with no corpus provider is a
@@ -1002,48 +1051,16 @@ export async function runCertifyingEngine(
   }
 
   const corpus = await corpusProvider(lock);
-  const cwd = resolveGitRoot(process.cwd()) ?? process.cwd();
-  const ruleEngineCtx = {
-    logger: { warn: (msg: string) => console.error(`[WindtunnelRun] ${msg}`) },
-    state: { hasWarnedShieldContext: false },
-  };
-
-  // buildFirings runs fold-F (archived assert) internally before the engine; its
-  // only throw is ArchivedRuleInScopeError, which propagates. A1 (labelId
-  // collision) is deliberately NOT raised here — it is the caller's pre-score gate
-  // below (assertUniqueFiringLabels), so the structured per-collision report is
-  // threaded there rather than swallowed at construction. (greptile #2215 P2.)
-  const built = await buildFirings({
+  // Enumerate firings via the SHARED certifying firing-setup (cwd resolution +
+  // ruleEngineCtx + buildFirings + the A1 collision gate). The 5d-iii deriver calls
+  // the SAME path, so the answer-key labelIds it mints are byte-identical to the
+  // firings scored here — drift in this setup would silently void the answer key.
+  const built = await buildCertifyingFirings({
     rules: corpus.rules,
     prDiffs: corpus.prDiffs,
-    cwd,
     readStrategy,
-    ruleEngineCtx,
-    onWarn: (msg) => console.error(`[WindtunnelRun] ${msg}`),
+    logPrefix: '[WindtunnelRun]',
   });
-
-  // A1 (fold-D): post-dedup uniqueness INVARIANT before scoring (Tenet 4).
-  // `buildFirings` now collapses same-labelId matches (fold-D dedup), so this can
-  // no longer fire on an honest multi-match line — a collision here signals a
-  // dedup BUG, not corpus data, so it fails loud as an internal invariant.
-  try {
-    assertUniqueFiringLabels(built.firings);
-  } catch (err) {
-    if (err instanceof FiringLabelCollisionError) {
-      console.error(`[WindtunnelRun] A1 post-dedup invariant violated (fold-D):`);
-      for (const c of err.collisions) {
-        console.error(`  • ${c.labelId.slice(0, 12)}… ×${c.evidenceRefs.length}`);
-      }
-      throw new TotemError(
-        'CONFIG_INVALID',
-        err.message,
-        'A post-dedup firing-label collision is an internal invariant violation: buildFirings ' +
-          'should have collapsed same-labelId matches. This indicates a dedup defect, not a corpus issue.',
-        err,
-      );
-    }
-    throw err;
-  }
 
   const mintedRuleIds = corpus.rules.map((r) => r.lessonHash);
   console.error(

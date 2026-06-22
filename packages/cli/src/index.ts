@@ -1925,6 +1925,35 @@ windtunnelCmd
     }
   });
 
+windtunnelCmd
+  .command('derive-labels')
+  .description(
+    'Derive ground-truth-labels.json — the cert-run answer key (firingLabelId → TP|FP) — from the frozen dispositions, hard-gating corpusDispositionsSha and stamping groundTruthSha (strategy#709 5d-iii; by-hand/live, never CI)',
+  )
+  .option(
+    '--lc-dir <path>',
+    'Path to the lc clone (env: TOTEM_LC_DIR)',
+    process.env['TOTEM_LC_DIR'],
+  )
+  .option(
+    '--lock-path <path>',
+    'Override the lock file path (default: .totem/spine/gate-1/windtunnel.lock.json)',
+  )
+  .option('--output-dir <dir>', 'Override the gate-1 output dir (default: the lock’s dir)')
+  .action(async (opts: { lcDir?: string; lockPath?: string; outputDir?: string }) => {
+    try {
+      const { deriveLabelsCommand } = await import('./commands/spine-derive-labels.js');
+      await deriveLabelsCommand({
+        lcDir: opts.lcDir,
+        lockPath: opts.lockPath,
+        outputDir: opts.outputDir,
+      });
+    } catch (err) {
+      handleError(err);
+      throw err;
+    }
+  });
+
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
 
