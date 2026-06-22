@@ -21,8 +21,8 @@ function thread(...replies: string[]): DispositionComment[] {
 describe('classifyDisposition — accepted-fix ⟹ TP', () => {
   it.each([
     'Fixed in the latest push.',
-    'Good catch, addressed.',
-    'Nice catch — done.',
+    'Good catch — fixed.',
+    'It has now been addressed.',
     'This has been fixed.',
     'The fix has been applied.',
   ])('credits an unambiguous fix reply: %s', (reply) => {
@@ -172,5 +172,13 @@ describe('classifyDisposition — negation / over-match regressions (#2230 bot p
 
   it('greptile :112 — lowercase "todo: track this" is recognized as a defer', () => {
     expect(classifyDisposition(thread('todo: track this separately.'))).toBe('defer');
+  });
+
+  it('CR round-2 — praise words dropped: "not a good catch" is not a fix, "good catch" alone is not TP', () => {
+    expect(classifyDisposition(thread('Not a good catch — the guard is in the parent.'))).not.toBe(
+      'accepted-fix',
+    );
+    // bare praise without a fix confirmation is not an accepted-fix (only "…, fixed" is).
+    expect(classifyDisposition(thread('Good catch!'))).toBe('ambiguous');
   });
 });

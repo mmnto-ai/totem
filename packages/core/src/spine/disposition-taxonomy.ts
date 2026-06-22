@@ -69,15 +69,14 @@ export interface DispositionComment {
  */
 const FIX_PATTERNS: readonly RegExp[] = [
   /\bfixed\b/i,
-  // Confirmed-PAST construction only. The bare `addressed`/`applied`/`done` words
-  // were negation-blind ("this has not been addressed", "not applied", "Well done,
-  // but this still needs work") and minted false TPs (greptile #2230 P1 +
-  // strategy-claude loose-token note). The canonical bare accept `fixed` is kept;
-  // finer negation handling is the 5d-ii real-corpus measure-first task
-  // (strategy-claude RULED #4 run-first), not a blind tighten here.
+  // Confirmed-PAST construction only. The bare `addressed`/`applied`/`done` words —
+  // and the praise words `good catch`/`nice catch` (CR #2230 round-2) — were
+  // negation-blind ("this has not been addressed", "not a good catch …") and, in the
+  // praise case, not even a fix CONFIRMATION (acknowledging a real finding ≠ acting
+  // on it). All minted false TPs. The canonical bare accept `fixed` is kept; the TP
+  // signal "good catch, fixed!" is still covered by `fixed`. Finer negation handling
+  // is the 5d-ii real-corpus measure-first task (strategy-claude RULED #4 run-first).
   /\b(?:has|have|now)\s+been\s+(?:fixed|addressed|applied)\b/i,
-  /\bgood\s+catch\b/i,
-  /\bnice\s+catch\b/i,
 ];
 
 /**
@@ -200,8 +199,9 @@ export function classifyDisposition(comments: ReadonlyArray<DispositionComment>)
   if (defer) return 'defer';
   if (style) return 'style';
 
-  // 6. Human spoke but no recognizable disposition (incl. fix+softDecline or
-  // fp+softDecline impurity that fell through) → ambiguous.
+  // 6. Reached only when fix=false AND fp=false AND no soft-decline matched — the
+  // human spoke but carried no recognizable disposition. (Impure label-bearing
+  // cases are already caught by the `fix || fp` guard above, never here.)
   return 'ambiguous';
 }
 
