@@ -1,0 +1,35 @@
+{
+  "kind": "windtunnel-cert-run.v1",
+  "generatedAt": "2026-06-23T00:19:08.740Z",
+  "asOfCommit": "28882cdc9d2e99912370b19d86ccc14b77f461cf",
+  "verdict": {
+    "verdict": "FAIL",
+    "precision": null,
+    "mintedRuleCount": 3,
+    "culledCount": 0,
+    "survivingRuleCount": 3,
+    "exposureTuple": [
+      3,
+      93,
+      5
+    ],
+    "cullLedger": [],
+    "nonVacuity": false,
+    "needsAdjudication": [
+      "302d3280b8a69d0742779bd4202cdd75bc40f4e595306835e936aa0be945fecd",
+      "51bd0f9f28a0690a19ac1cc33446090cd7c19dd66aceb5164cfe4637c6d2ca41"
+    ],
+    "diagnostics": {
+      "survivorPrecision": null
+    }
+  },
+  "persisted": false,
+  "stampedRuleIds": [],
+  "skips": [
+    {
+      "reason": "verdict-not-pass",
+      "verdict": "FAIL"
+    }
+  ],
+  "firingCount": 2
+}
