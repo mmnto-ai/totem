@@ -346,9 +346,10 @@ export const ClassifierResultLocalSchema = z
  * artifact schema is a CLI-layer concern"): a LOCAL Zod schema rather than a static
  * runtime import of core's `DraftResultSchema` (which would pull the heavy
  * `@mmnto/totem` barrel onto the CLI-startup path). Mirrors core's shape AND its
- * "cause iff empty" refinement (the `NoDraftCauseSchema` enum, including the
- * replay-migration-only `legacy-unknown`); a test asserts parity with core so this
- * duplication can't silently drift if core's `DraftResult` changes.
+ * "cause iff empty" refinement LOGIC (the `NoDraftCauseSchema` enum, including the
+ * replay-migration-only `legacy-unknown`). Parity is accept/reject EQUIVALENCE,
+ * locked by a test — the local ZodError `message`/`path` stay intentionally concise
+ * (matching the `ClassifierResultLocalSchema` sibling), not byte-identical to core.
  */
 export const DraftResultLocalSchema = z
   .object({
@@ -546,8 +547,9 @@ function assertFixtureIntegrity(artifact: ReplayArtifact, expectedHash: string):
 /**
  * PURE replay of `DraftExtractor` — zero live LLM / network calls. Computes the
  * inputKey for the requested content, looks it up in the frozen records:
- *   - HIT  → return the recorded `string[]` (including a recorded `[]` — a real row);
- *   - MISS → throw `ReplayMissError` (NEVER fall back to `[]`).
+ *   - HIT  → return the recorded `DraftResult` (a recorded empty result is a real
+ *            row; a legacy bare-`string[]` row is normalized to a `DraftResult`);
+ *   - MISS → throw `ReplayMissError` (NEVER fall back to an empty result).
  *
  * Integrity (fold B + F): the constructor takes the EXTERNAL expected content-
  * hash, computes the actual WHOLE-ARTIFACT hash (records + provenance), and throws

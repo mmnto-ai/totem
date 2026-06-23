@@ -185,6 +185,38 @@ describe('parseExtractorOutput → DraftResult (NoDraftCause taxonomy)', () => {
   });
 });
 
+describe('legacy-unknown is replay-migration-only (never emitted by the live path)', () => {
+  // greptile #2240: the "REPLAY-MIGRATION ONLY" invariant on `legacy-unknown` is
+  // doc-only at the shared runExtractStage boundary (which MUST accept it, since the
+  // ReplayDraftExtractor legitimately produces it for a legacy bare-string[] row).
+  // Lock the invariant where it IS enforceable — the LIVE parse/adapter, which mint
+  // it nowhere by construction.
+  it('parseExtractorOutput never returns legacy-unknown for any input class', () => {
+    const inputs = [
+      '',
+      '   ',
+      'NONE',
+      'prose not json',
+      '[unterminated',
+      '{"disposition":"structural"}',
+      '42',
+      '[]',
+      '[""]',
+      '["**Pattern:** a"]',
+    ];
+    for (const raw of inputs) {
+      expect(parseExtractorOutput(raw).noDraftCause).not.toBe('legacy-unknown');
+    }
+  });
+
+  it('LiveDraftExtractor never tags legacy-unknown (invoke-error / decline / drafted)', async () => {
+    for (const inv of [throwingInvoke(), stubInvoke('NONE'), stubInvoke('["**Pattern:** a"]')]) {
+      const ext = makeExtractor(inv);
+      expect((await ext.draft(content())).noDraftCause).not.toBe('legacy-unknown');
+    }
+  });
+});
+
 // ─── 2. Classifier output parse (fold G — closed set) ─
 
 describe('parseClassifierOutput (fold G)', () => {

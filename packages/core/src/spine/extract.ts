@@ -411,7 +411,10 @@ export async function runExtractStage(
       drop(
         pr,
         'unparseable',
-        `extractor produced no draft from a complete thread (cause: ${draftResult.noDraftCause ?? 'unknown'})`,
+        // The boundary parse above + the "cause iff empty" refine guarantee
+        // `noDraftCause` is present in this empty-drafts branch — assert it rather
+        // than defend with a `?? 'unknown'` fallback that can never fire.
+        `extractor produced no draft from a complete thread (cause: ${draftResult.noDraftCause!})`,
         draftResult.noDraftCause,
       );
       continue;
