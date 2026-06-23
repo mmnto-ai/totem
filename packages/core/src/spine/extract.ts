@@ -34,6 +34,8 @@
 // Pipeline-1 trust class: every draft body is `unverified` and Stage-4-gated by
 // the slice-4 compiler, never a manual-rule trust bypass.
 
+import { z } from 'zod';
+
 import { type ProvenanceRecord, ProvenanceRecordSchema } from '../compiler-schema.js';
 import { TotemParseError } from '../errors.js';
 import { extractManualPattern } from '../lesson-pattern.js';
@@ -43,7 +45,9 @@ import type {
   DropLedger,
   DropLedgerEntry,
   DropReasonCode,
+  NoDraftCause,
 } from './ledgers.js';
+import { NoDraftCauseSchema } from './ledgers.js';
 import { isBotIdentity } from './selection-rule.js';
 import type { SplitArtifact } from './split.js';
 
@@ -134,23 +138,47 @@ export interface ReviewThreadSource {
 }
 
 /**
+ * The `DraftExtractor` port's return: the zero-or-more draft bodies PLUS, when the
+ * list is empty, WHY (`noDraftCause`). The cause is the extract-stage twin of the
+ * classifier's `dispositionSource` (a non-FM Tenet-19 diagnostic) — a bare `[]`
+ * conflated ≥6 causes (model declined / parser rejected a valid draft / transient
+ * invoke failure) the funnel could not tell apart. INVARIANT (refined): a cause is
+ * present IFF `drafts` is empty — a non-empty result carries drafts and no cause;
+ * an empty result MUST name its cause. Parsed at the core boundary so a
+ * contract-violating port (cause-without-empty, or empty-without-cause) fails loud
+ * before the drop ledger, exactly as `ClassifierResultSchema.parse` guards classify.
+ */
+export const DraftResultSchema = z
+  .object({
+    drafts: z.array(z.string()),
+    noDraftCause: NoDraftCauseSchema.optional(),
+  })
+  .refine((r) => (r.drafts.length === 0) === (r.noDraftCause !== undefined), {
+    message:
+      'noDraftCause must be present iff drafts is empty (the extract-stage diagnostic invariant)',
+    path: ['noDraftCause'],
+  });
+export type DraftResult = z.infer<typeof DraftResultSchema>;
+
+/**
  * Injected draft-DSL extractor port. ASYNC: the CLI impl wraps the LLM call
  * (network IO). List-shaped (fold 1): one thread can carry multiple structural
- * invariants, so it returns ZERO-or-more draft bodies. The LLM lives behind this
- * at the CLI layer (draft-only, Tenet-15); a deterministic fixture impl drives
- * tests. The miner is BLIND to seed classes (§7 / FM f): the port is never
- * handed one.
+ * invariants, so it returns ZERO-or-more draft bodies in `DraftResult.drafts`. The
+ * LLM lives behind this at the CLI layer (draft-only, Tenet-15); a deterministic
+ * fixture impl drives tests. The miner is BLIND to seed classes (§7 / FM f): the
+ * port is never handed one.
  *
- * Error contract: returns `[]` when it cannot draft from the thread — INCLUDING
- * on its own internal/transient failure (the CLI adapter catches its LLM/network
- * errors and surfaces `[]`). It MUST NOT throw for a per-PR content failure: an
- * empty list is a loud drop below (FM-i-creditable), whereas a throw would abort
- * the whole mining run. Keeping per-PR error handling in the adapter keeps the
- * core orchestrator Tenet-4-clean (no swallowing catch); a contract-violating
- * throw therefore propagates loudly rather than being silently absorbed.
+ * Error contract: returns `{ drafts: [], noDraftCause }` when it cannot draft —
+ * INCLUDING on its own internal/transient failure (the CLI adapter catches its
+ * LLM/network errors and surfaces `{ drafts: [], noDraftCause: 'invoke-error' }`).
+ * It MUST NOT throw for a per-PR content failure: an empty list is a loud,
+ * cause-tagged drop below (FM-i-creditable), whereas a throw would abort the whole
+ * mining run. Keeping per-PR error handling in the adapter keeps the core
+ * orchestrator Tenet-4-clean (no swallowing catch); a contract-violating throw
+ * therefore propagates loudly rather than being silently absorbed.
  */
 export interface DraftExtractor {
-  draft(content: ReviewThreadContent): Promise<string[]>;
+  draft(content: ReviewThreadContent): Promise<DraftResult>;
 }
 
 /** Dependencies for a single Extract-stage run. */
@@ -284,8 +312,13 @@ export async function runExtractStage(
   const dropEntries: DropLedgerEntry[] = [];
   const apiEntries: ApiUsageLedgerEntry[] = [];
 
-  const drop = (sourcePr: number, reasonCode: DropReasonCode, detail: string): void => {
-    dropEntries.push({ sourcePr, reasonCode, detail });
+  const drop = (
+    sourcePr: number,
+    reasonCode: DropReasonCode,
+    detail: string,
+    noDraftCause?: NoDraftCause,
+  ): void => {
+    dropEntries.push({ sourcePr, reasonCode, detail, ...(noDraftCause ? { noDraftCause } : {}) });
   };
 
   // Iterate the TRAIN slice ONLY — held-out / control / excluded PRs are never
@@ -364,12 +397,23 @@ export async function runExtractStage(
     // catches its own LLM/network errors) — so the core needs no swallowing catch
     // (Tenet 4). An empty list is a loud drop below, not a silent skip.
     const eligibleContent: ReviewThreadContent = { ...content, threads: survivingThreads };
-    const draftBodies = await deps.extractor.draft(eligibleContent);
+    // Parse the port result at the boundary (mirrors ClassifierResultSchema.parse in
+    // classify.ts): a contract-violating DraftResult (empty-without-cause or
+    // cause-without-empty from a buggy adapter) fails loud HERE, before the ledger.
+    const draftResult = DraftResultSchema.parse(await deps.extractor.draft(eligibleContent));
+    const draftBodies = draftResult.drafts;
 
     if (draftBodies.length === 0) {
       // A complete thread that yields no draft is a loud drop (keeps the train PR
-      // creditable under FM i), not a silent skip.
-      drop(pr, 'unparseable', 'extractor produced no draft from a complete thread');
+      // creditable under FM i), not a silent skip. The NO-DRAFT cause (Tenet-19
+      // diagnostic) is recorded so a parser/format/transient failure is never
+      // conflated with a legitimate model decline.
+      drop(
+        pr,
+        'unparseable',
+        `extractor produced no draft from a complete thread (cause: ${draftResult.noDraftCause ?? 'unknown'})`,
+        draftResult.noDraftCause,
+      );
       continue;
     }
 

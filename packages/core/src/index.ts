@@ -844,6 +844,7 @@ export type { DispositionClass, DispositionComment } from './spine/disposition-t
 export { classifyDisposition, dispositionToLabel } from './spine/disposition-taxonomy.js';
 export type {
   DraftExtractor,
+  DraftResult,
   ExtractStageDeps,
   ExtractStageResult,
   FetchResult,
@@ -852,7 +853,7 @@ export type {
   ReviewThreadContent,
   ReviewThreadSource,
 } from './spine/extract.js';
-export { runExtractStage } from './spine/extract.js';
+export { DraftResultSchema, runExtractStage } from './spine/extract.js';
 export type {
   ApiFetchSlice,
   ApiUsageLedger,
@@ -866,6 +867,7 @@ export type {
   EmissionLedger,
   EmissionLedgerEntry,
   MinerLedgers,
+  NoDraftCause,
   Routing,
   SplitLedger,
 } from './spine/ledgers.js';
@@ -882,6 +884,7 @@ export {
   EmissionLedgerEntrySchema,
   EmissionLedgerSchema,
   MinerLedgersSchema,
+  NoDraftCauseSchema,
   RoutingSchema,
   SplitLedgerSchema,
 } from './spine/ledgers.js';

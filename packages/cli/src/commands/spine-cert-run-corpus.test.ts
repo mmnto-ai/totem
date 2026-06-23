@@ -91,8 +91,8 @@ function fakeSource(): ReviewThreadSource {
 }
 function fakeExtractor(): DraftExtractor {
   return {
-    async draft(): Promise<string[]> {
-      return [REGEX_DSL];
+    async draft() {
+      return { drafts: [REGEX_DSL] };
     },
   };
 }

@@ -71,8 +71,8 @@ function frozenSource(): ReviewThreadSource {
 
 function liveExtractor(): DraftExtractor {
   return {
-    async draft(): Promise<string[]> {
-      return [REGEX_DSL];
+    async draft() {
+      return { drafts: [REGEX_DSL] };
     },
   };
 }
