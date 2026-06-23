@@ -248,7 +248,12 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
       (rawObj as { controls: { integrity: Record<string, unknown> } }).controls.integrity[
         'llmReplaySha'
       ] = computed;
-      fs.writeFileSync(lockPath, `${canonicalStringify(rawObj, 2)}\n`, 'utf-8');
+      // Atomic write (tmp + rename) — the lock is a critical artifact; a direct
+      // write interrupted mid-flush would corrupt it and break every downstream
+      // cert run (gemini). Mirrors materialize's `writeCanonical`.
+      const tmpLock = `${lockPath}.tmp`;
+      fs.writeFileSync(tmpLock, `${canonicalStringify(rawObj, 2)}\n`, 'utf-8');
+      fs.renameSync(tmpLock, lockPath);
       console.error(
         `[WindtunnelFreeze] Sealed controls.integrity.llmReplaySha = ${computed} ` +
           `(was ${current ?? 'absent'}) — lock updated; re-commit to refresh the freeze proof (C3).`,
@@ -277,8 +282,32 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
 export async function computeReplaySeal(replayPath: string): Promise<string | null> {
   if (!fs.existsSync(replayPath)) return null;
   const { computeArtifactHash, ReplayArtifactSchema } = await import('./spine-llm-replay.js');
-  const artifact = ReplayArtifactSchema.parse(JSON.parse(fs.readFileSync(replayPath, 'utf-8')));
-  return computeArtifactHash(artifact);
+  const { TotemError } = await import('@mmnto/totem');
+  // A malformed/stale fixture must fail loud + actionable, not propagate a raw
+  // SyntaxError/ZodError out of freeze (gemini/greptile). Use the spine family's
+  // TotemError('CONFIG_INVALID') — matching freeze's own lock-read + record's
+  // readJsonFile — not artifact-storage's TotemParseError.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(replayPath, 'utf-8'));
+  } catch (err) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze: ${REPLAY_FILE} at ${replayPath} is unreadable or not valid JSON — cannot compute the llmReplaySha seal.`,
+      'Re-run `spine windtunnel record` to regenerate a valid llm-replay fixture.',
+      err,
+    );
+  }
+  const result = ReplayArtifactSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze: ${REPLAY_FILE} failed llm-replay schema validation — the seal cannot be computed over a malformed fixture.`,
+      'Re-run `spine windtunnel record` to regenerate a schema-valid llm-replay fixture.',
+      result.error,
+    );
+  }
+  return computeArtifactHash(result.data);
 }
 
 // ─── run command ─────────────────────────────────────

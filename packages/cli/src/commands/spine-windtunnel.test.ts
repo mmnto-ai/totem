@@ -694,4 +694,20 @@ describe('computeReplaySeal (#2237 papercut-2 — llm-replay seal hash)', () => 
     fs.writeFileSync(replayPath, JSON.stringify(artifact), 'utf-8');
     expect(await computeReplaySeal(replayPath)).toBe(computeArtifactHash(artifact));
   });
+
+  it('throws a loud TotemError on invalid JSON (no raw SyntaxError escapes freeze)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-seal-'));
+    createdDirs.push(dir);
+    const replayPath = path.join(dir, 'llm-replay.v1.json');
+    fs.writeFileSync(replayPath, '{ this is not json', 'utf-8');
+    await expect(computeReplaySeal(replayPath)).rejects.toThrow(/not valid JSON/);
+  });
+
+  it('throws a loud TotemError on a schema-invalid fixture (no raw ZodError escapes freeze)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-seal-'));
+    createdDirs.push(dir);
+    const replayPath = path.join(dir, 'llm-replay.v1.json');
+    fs.writeFileSync(replayPath, JSON.stringify({ kind: 'wrong-kind' }), 'utf-8');
+    await expect(computeReplaySeal(replayPath)).rejects.toThrow(/schema validation/);
+  });
 });
