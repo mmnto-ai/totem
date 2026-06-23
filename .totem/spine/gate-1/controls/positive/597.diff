@@ -1,0 +1,2596 @@
+diff --git a/adr/adr-029-3d-render-migration.md b/adr/adr-029-3d-render-migration.md
+index 351ed60..bb29349 100644
+--- a/adr/adr-029-3d-render-migration.md
++++ b/adr/adr-029-3d-render-migration.md
+@@ -56,6 +56,10 @@ The migration is **broad-surface but low-core-risk**: rendering is downstream of
+ - **Migration-window length — DECIDED (satur8d 2026-06-19): no 2D fallback tail.** 2D is retained ONLY as a Tenet-7 build scaffold to keep `main` green across the migration PRs (P1–P4), and is **deleted at the flip (P5)** — no post-flip fallback flag is retained. This overrides the cohort's "keep a 2D fallback flag ~1 minor before deletion" recommendation; the migration window collapses to "as fast as the work lands," gated only by fixture-backed visual parity (§2 contract 9).
+ - **Cheap-wins re-sequencing (`mmnto-ai/liquid-city#555` / `mmnto-ai/liquid-city#556` / `mmnto-ai/liquid-city#557`) — DECIDED (satur8d 2026-06-19):** re-homed by visibility/durability, not run as a phase-0 batch. **`mmnto-ai/liquid-city#557` (speed) shipped first** (standalone sim-side, merged `7ff0d26`). **`mmnto-ai/liquid-city#555` (player-visual) folds into `mmnto-ai/liquid-city#558` / P1** — the rigged 3D player IS the legibility fix; no throwaway 2D. **`mmnto-ai/liquid-city#556` (loft) defers to phase 2** with the 3D horde (z-loft only reads once the perspective Camera3D + 3D horde land; tuning under top-down = blind calibration).
+ 
++## Amendments
++
++- **3D became the working default at P2b PR3 (satur8d 2026-06-22) — ahead of the planned P5 flip.** PR `mmnto-ai/liquid-city#597` set `use_3d_camera = true` by default. The §1 phased sequence flips the default only at **P5** on fixture-backed visual parity (§2 contract 9), with 2D as the working default through P1–P4; this moves the boot default forward. Rationale: by P2b PR3 the 3D path renders the player + the production VAT horde, and the operator chose 3D as the default working view ("2D only for debugging") rather than continue booting into 2D. **This does NOT collapse the P5 gate.** 2D is still retained as the Tenet-7 build scaffold (NOT deleted — the no-2D-fallback deletion still waits for P5's fixture-backed visual-parity gate, §Resolved Operator Calls), and `use_3d_camera` remains an operator toggle. Only the boot DEFAULT changed (3D-first); the parity gate and the 2D-deletion trigger are unchanged. P5 still stands: prove fixture-backed visual parity → delete 2D.
++
+ ## Non-goals
+ 
+ Touching the deterministic sim; multi-floor camera altitude tracking (Proposal 030 defers it); a big-bang rewrite.
+diff --git a/apps/game-godot/HordeRenderAdapter.gd b/apps/game-godot/HordeRenderAdapter.gd
+new file mode 100644
+index 0000000..1ca8856
+--- /dev/null
++++ b/apps/game-godot/HordeRenderAdapter.gd
+@@ -0,0 +1,415 @@
++class_name HordeRenderAdapter
++extends RefCounted
++
++# ADR-029 P2b PR3 — PRODUCTION 3D horde render adapter (Surface A consumer +
++# CUSTOM_DATA v1). Successor to the disposable proof `VatHordeAdapter`.
++#
++# Reads TWO FFI buffers each frame and assembles one stride-16 MultiMesh3D
++# buffer behind `use_3d_camera`:
++#   - get_agent_buffer()             — stride-8 Transform2D (position + heading)
++#   - get_agent_render_state_buffer()— stride-4 render-state record per slot
++#       [0] flags (LIVE/BALLISTIC + reserved gore), [1] health, [2] hitstop,
++#       [3] AnimIntent.
++#
++# Per slot it derives CUSTOM_DATA v1: x = per-slot anim clock (FROZEN while
++# hitstop > 0 — HitStop is the adapter not advancing the clock; the shader
++# never reads global TIME), y = clip index (AnimIntent → clip name → numeric
++# index from the bake table), z = health fraction, w = the packed flags uint
++# (floatBitsToUint round-trip proven bit-exact by spike 1).
++#
++# Boundaries (spec .totem/specs/p2b-3d-horde.md):
++#   - Owns the MultiMesh + buffer assembly + per-slot clocks. NEVER queries
++#     the sim FFI — sim_driver feeds it both buffers each frame.
++#   - Headless -> no-op (DisplayServer guard); rendering needs a real GPU.
++#   - Clocks keyed by stable BufferSlot; dead slots (zeroed transform) masked.
++
++const SHADER_PATH := "res://shaders/horde_render.gdshader"
++const VAT_DIR := "res://assets/vat-proof/"
++const VAT_STEM := "character-female-a"
++const AGENT_STRIDE := 8  # sim get_agent_buffer() Transform2D stride
++const OUT_STRIDE := 16  # MultiMesh3D: 12 Transform3D + 4 CUSTOM_DATA
++
++# AnimIntent — MIRROR of `density_feedback.rs` `AnimIntent` (the wire contract).
++# Locked against the Rust discriminants by tests/anim_intent_parity.rs.
++const ANIM_IDLE := 0
++const ANIM_LOCOMOTION := 1
++const ANIM_STAGGER := 2
++const ANIM_BALLISTIC := 3
++const ANIM_DEATH := 4
++const ANIM_ATTACK := 5
++const ANIM_INTENT_COUNT := 6
++
++# Render-state record layout — MIRROR of `density_feedback.rs`
++# RENDER_STATE_STRIDE + RS_* offsets.
++const RENDER_STATE_STRIDE := 4
++const RS_FLAGS := 0
++const RS_HEALTH := 1
++const RS_HITSTOP := 2
++const RS_INTENT := 3
++
++var _render_root: Node3D
++var _headless := false
++var _enabled := false
++var _ready := false
++## Production horde shows the real Kenney colormap texture by default (ADR-029
++## P2b PR3). The disposable proof defaulted this OFF for a clean perf baseline;
++## the production look wants the material. One UV texture sample — negligible.
++var _colormap_enabled := true
++## Dmg-based red health tint. OFF by default (clean Kenney textures for the
++## artist preview); enabled via `set_health_tint_enabled` (the `--health-tint`
++## launch flag wires it on for an A/B look). ADR-029 P2b PR3.
++var _health_tint_enabled := false
++
++var _mmi: MultiMeshInstance3D
++var _mm: MultiMesh
++var _mat: ShaderMaterial
++var _meta: Dictionary = {}
++
++# per-slot anim clock (indexed by stable BufferSlot)
++var _clock := PackedFloat32Array()
++var _was_live := PackedByteArray()
++var _out := PackedFloat32Array()
++var _scratch := PackedByteArray()  # 4-byte bitcast scratch for the w pack
++
++# AnimIntent -> clip row index (built from the bake clip table at setup).
++var _intent_clip := PackedInt32Array()
++
++# tunables (calibrated from the proof asset; shared with VatHordeAdapter)
++var character_scale := 1.0
++var y_offset := 0.19
++var facing_offset := 0.0
++
++# perf instrumentation
++var last_assembly_usec := 0
++var last_live := 0
++
++
++func _init(render_root: Node3D, headless: bool) -> void:
++	_render_root = render_root
++	_headless = headless
++	_scratch.resize(4)
++
++
++# Loads the VAT asset + builds the MultiMesh + the intent→clip table. Returns
++# false (no-op) when headless or on a load failure. Idempotent.
++func setup() -> bool:
++	if _ready:
++		return true
++	if _headless:
++		return false
++	# Runtime-load the source EXR at full RGBAF precision (NOT the imported
++	# .ctex, which VRAM-compresses / may half-float and step the vertices).
++	# load_from_file accepts res:// directly (FileAccess maps it to the project
++	# dir in editor/harness — probe-verified RGBAF, identical to a globalized
++	# path), so do NOT globalize_path: that yields an absolute OS path that can
++	# never resolve inside an exported .pck. NOTE: neither form is export-safe
++	# yet — the raw .exr is not packed into an export (imported assets ship as
++	# .ctex); the export-safe path is the deferred baked .res ImageTexture
++	# (mmnto-ai/liquid-city#599). This adapter is editor/harness-only today.
++	var img := Image.load_from_file(VAT_DIR + VAT_STEM + ".vat.exr")
++	if img == null:
++		push_error("HordeRenderAdapter: failed to load VAT EXR")
++		return false
++	if img.get_format() != Image.FORMAT_RGBAF:
++		img.convert(Image.FORMAT_RGBAF)
++	var tex := ImageTexture.create_from_image(img)
++
++	var meta_str := FileAccess.get_file_as_string(VAT_DIR + VAT_STEM + ".vat.json")
++	# JSON.parse_string returns null on malformed input; assigning null to the
++	# typed `_meta: Dictionary` would crash. Type-check before the assign so a
++	# corrupt sidecar fails loud via the is_empty() guard, not a Nil call.
++	var parsed: Variant = JSON.parse_string(meta_str) if meta_str != "" else {}
++	_meta = parsed if parsed is Dictionary else {}
++	if _meta.is_empty():
++		push_error("HordeRenderAdapter: failed to load VAT metadata (missing or malformed JSON)")
++		return false
++
++	var mesh := _load_mesh()
++	if mesh == null:
++		push_error("HordeRenderAdapter: failed to load VAT mesh")
++		return false
++
++	var shader := load(SHADER_PATH) as Shader
++	if shader == null:
++		push_error("HordeRenderAdapter: failed to load shader")
++		return false
++	_mat = ShaderMaterial.new()
++	_mat.shader = shader
++	_mat.set_shader_parameter("vat_tex", tex)
++	var cm := load(VAT_DIR + VAT_STEM + "_colormap.png") as Texture2D
++	if cm != null:
++		_mat.set_shader_parameter("colormap", cm)
++	_mat.set_shader_parameter("use_colormap", _colormap_enabled)
++	_mat.set_shader_parameter("use_health_tint", _health_tint_enabled)
++	# The .get default only fires when the key is ABSENT; a literal
++	# "total_rows": 0 from a corrupt bake would otherwise reach the shader and
++	# project every vertex to infinity → silently invisible horde (CR, #597).
++	# Clamp to >= 1 and warn loudly so a bad sidecar is diagnosable, not silent.
++	var raw_rows := int(_meta.get("total_rows", 1))
++	if raw_rows < 1:
++		push_warning(
++			(
++				"HordeRenderAdapter: total_rows=%d (<1) in bake meta — clamping to 1; check the sidecar for a corrupt bake."
++				% raw_rows
++			)
++		)
++	_mat.set_shader_parameter("total_rows", maxi(raw_rows, 1))
++	_mat.set_shader_parameter("fps", float(_meta.get("fps", 24.0)))
++	# A malformed sidecar could carry a non-Array under "clips"; the typed
++	# assignment would then crash, so coerce to [] and let the guards below run.
++	var raw_clips: Variant = _meta.get("clips", [])
++	var clips: Array = raw_clips if raw_clips is Array else []
++	# clip_count guards both ends: mini(...,8) because the shader arrays are [8],
++	# and maxi(...,1) because an empty/absent clip table would otherwise be 0 →
++	# the shader's `clamp(x, 0, clip_count-1)` underflows to -1 and indexes
++	# clip_row_start[-1] (same class as the total_rows guard above, CR #597).
++	var clip_count := maxi(mini(clips.size(), 8), 1)
++	if clips.is_empty():
++		push_warning(
++			"HordeRenderAdapter: bake meta has no clips — clamping clip_count to 1; check the sidecar."
++		)
++	_mat.set_shader_parameter("clip_count", clip_count)
++	var starts := PackedFloat32Array()
++	var counts := PackedFloat32Array()
++	starts.resize(8)
++	counts.resize(8)
++	# Unused rows default to a safe single-frame count, not 0 — a zero frame
++	# count would make the shader's clip duration collapse (CR #597).
++	counts.fill(1.0)
++	for i in clips.size():
++		if i >= 8:
++			break
++		# Guard non-Dictionary elements (corrupt sidecar): .get() on a non-Dict
++		# crashes; default such rows to clip 0 / single-frame.
++		var clip_data: Variant = clips[i]
++		if clip_data is Dictionary:
++			starts[i] = float(clip_data.get("row_start", 0))
++			# Clamp frame_count >= 1 so an explicit "frame_count": 0 can't reach
++			# the shader as a zero-length clip (CR #597).
++			counts[i] = maxf(float(clip_data.get("frame_count", 1)), 1.0)
++		else:
++			starts[i] = 0.0
++			counts[i] = 1.0
++	_mat.set_shader_parameter("clip_row_start", starts)
++	_mat.set_shader_parameter("clip_frame_count", counts)
++	_build_intent_clip_table(clips)
++
++	_mm = MultiMesh.new()
++	_mm.transform_format = MultiMesh.TRANSFORM_3D
++	_mm.use_custom_data = true
++	_mm.mesh = mesh
++	# the shader displaces VERTEX, so the bind-pose AABB understates extent —
++	# give a generous custom AABB so instances don't cull mid-animation.
++	mesh.custom_aabb = AABB(Vector3(-1.5, -1.5, -1.5), Vector3(3.0, 3.0, 3.0))
++
++	_mmi = MultiMeshInstance3D.new()
++	_mmi.name = "HordeRender"
++	_mmi.multimesh = _mm
++	_mmi.material_override = _mat
++	_mmi.visible = false
++	_render_root.add_child(_mmi)
++
++	_ready = true
++	return true
++
++
++# Map each AnimIntent to a clip row index by NAME preference, falling back to
++# clip 0 (the spec's "Godot maps anim_intent → clip name → numeric index from
++# the bake metadata"). Unknown names resolve to 0 so a sparse proof asset
++# (walk + die) still renders every intent without an out-of-range clip.
++func _build_intent_clip_table(clips: Array) -> void:
++	_intent_clip.resize(ANIM_INTENT_COUNT)
++	_intent_clip.fill(0)
++	var by_name := {}
++	for i in clips.size():
++		var clip_data: Variant = clips[i]
++		if not (clip_data is Dictionary):
++			continue
++		var nm := String(clip_data.get("name", ""))
++		if nm != "":
++			by_name[nm] = i
++	# preference lists per intent (first present name wins; else clip 0)
++	_intent_clip[ANIM_IDLE] = _first_clip(by_name, ["idle", "walk"])
++	_intent_clip[ANIM_LOCOMOTION] = _first_clip(by_name, ["walk", "run", "locomotion"])
++	_intent_clip[ANIM_STAGGER] = _first_clip(by_name, ["hit", "stagger", "walk"])
++	_intent_clip[ANIM_BALLISTIC] = _first_clip(by_name, ["fall", "flail", "walk"])
++	_intent_clip[ANIM_DEATH] = _first_clip(by_name, ["die", "death", "walk"])
++	_intent_clip[ANIM_ATTACK] = _first_clip(by_name, ["attack", "walk"])
++
++
++func _first_clip(by_name: Dictionary, names: Array) -> int:
++	for nm in names:
++		if by_name.has(nm):
++			return int(by_name[nm])
++	return 0
++
++
++func set_active(enabled: bool) -> void:
++	_enabled = enabled
++	if _mmi != null:
++		_mmi.visible = enabled and not _headless
++
++
++func is_active() -> bool:
++	return _enabled and _ready and not _headless
++
++
++func set_colormap_enabled(on: bool) -> void:
++	_colormap_enabled = on
++	if _mat != null:
++		_mat.set_shader_parameter("use_colormap", on)
++
++
++func is_colormap_enabled() -> bool:
++	return _colormap_enabled
++
++
++# Toggle the dmg-based red health tint (off by default — clean textures).
++func set_health_tint_enabled(on: bool) -> void:
++	_health_tint_enabled = on
++	if _mat != null:
++		_mat.set_shader_parameter("use_health_tint", on)
++
++
++# Per-frame: assemble the MultiMesh buffer from the stride-8 transform buffer +
++# the stride-4 render-state buffer. `render_state` may be empty/short (init
++# race / lock-poison) — missing records default to live-locomotion full-health.
++func update(
++	agent_buf: PackedFloat32Array, render_state: PackedByteArray, count: int, delta: float
++) -> void:
++	if not is_active():
++		return
++	# Defensive clamp: the loop reads agent_buf[s * AGENT_STRIDE ..]; if a
++	# desync ever hands us count > the transform buffer's capacity we'd index
++	# out of bounds and halt the script. Mirrors the short-render_state defense
++	# below. Normal path: count == agent_buf.size() / AGENT_STRIDE (no clamp).
++	var max_agents := agent_buf.size() / AGENT_STRIDE
++	if count > max_agents:
++		push_error(
++			(
++				"HordeRenderAdapter: count %d exceeds agent_buf capacity %d — clamping (FFI desync?)"
++				% [count, max_agents]
++			)
++		)
++		count = max_agents
++	var t0 := Time.get_ticks_usec()
++	_ensure_slots(count)
++	var needed := count * OUT_STRIDE
++	if _out.size() < needed:
++		_out.resize(needed)
++	var rs_len := render_state.size()
++
++	var live := 0
++	for s in count:
++		var bo := s * AGENT_STRIDE
++		var bxx := agent_buf[bo + 0]
++		var byx := agent_buf[bo + 1]
++		var ox := agent_buf[bo + 3]
++		var bxy := agent_buf[bo + 4]
++		var byy := agent_buf[bo + 5]
++		var oy := agent_buf[bo + 7]
++		# dead slots are zeroed by the snapshot writer -> all-zero basis
++		if absf(bxx) < 1e-9 and absf(bxy) < 1e-9 and absf(byx) < 1e-9 and absf(byy) < 1e-9:
++			_was_live[s] = 0
++			continue
++		if _was_live[s] == 0:
++			_clock[s] = 0.0  # (re)born / recycled slot -> fresh clock
++			_was_live[s] = 1
++
++		# render-state record (default to live-locomotion full-health if absent)
++		var ro := s * RENDER_STATE_STRIDE
++		var flags := 0
++		var health := 255
++		var hitstop := 0
++		var intent := ANIM_LOCOMOTION
++		if ro + RENDER_STATE_STRIDE <= rs_len:
++			flags = render_state[ro + RS_FLAGS]
++			health = render_state[ro + RS_HEALTH]
++			hitstop = render_state[ro + RS_HITSTOP]
++			intent = render_state[ro + RS_INTENT]
++
++		# HitStop = freeze this slot's clock; the rest keep advancing.
++		if hitstop == 0:
++			_clock[s] += delta
++
++		# sim heading (sim plane) -> Godot yaw about +Y; sim (X,Y) -> Godot (X,Z)
++		var heading := atan2(bxy, bxx)
++		var b := Basis(Vector3.UP, -heading + facing_offset)
++		if character_scale != 1.0:
++			b = b.scaled(Vector3(character_scale, character_scale, character_scale))
++		var po := live * OUT_STRIDE
++		_out[po + 0] = b.x.x
++		_out[po + 1] = b.y.x
++		_out[po + 2] = b.z.x
++		_out[po + 3] = ox
++		_out[po + 4] = b.x.y
++		_out[po + 5] = b.y.y
++		_out[po + 6] = b.z.y
++		_out[po + 7] = y_offset
++		_out[po + 8] = b.x.z
++		_out[po + 9] = b.y.z
++		_out[po + 10] = b.z.z
++		_out[po + 11] = oy
++		# CUSTOM_DATA v1: x=clock y=clip z=health_frac w=packed-flags-uint
++		_out[po + 12] = _clock[s]
++		_out[po + 13] = float(_intent_clip[clampi(intent, 0, ANIM_INTENT_COUNT - 1)])
++		_out[po + 14] = float(health) / 255.0
++		_out[po + 15] = _pack_flags(flags)
++		live += 1
++
++	_mm.instance_count = live
++	if live > 0:
++		_out.resize(live * OUT_STRIDE)
++		_mm.buffer = _out
++	last_assembly_usec = Time.get_ticks_usec() - t0
++	last_live = live
++
++
++# Bit-reinterpret the flags byte into CUSTOM_DATA.w (the shader decodes it with
++# floatBitsToUint). The value lives in the denormal float range, proven exact
++# by the floatBitsToUint round-trip spike. Higher bytes reserved (gore mask).
++func _pack_flags(flags: int) -> float:
++	_scratch.encode_u32(0, flags & 0xFFFFFFFF)
++	return _scratch.decode_float(0)
++
++
++func debug_status() -> String:
++	if not is_active():
++		return "Horde3D: off"
++	return "Horde3D: %d inst, asm %.2fms" % [last_live, last_assembly_usec / 1000.0]
++
++
++func _ensure_slots(count: int) -> void:
++	if _clock.size() >= count:
++		return
++	_clock.resize(count)
++	_was_live.resize(count)
++
++
++func _load_mesh() -> Mesh:
++	var scene := load(VAT_DIR + VAT_STEM + ".vat.glb") as PackedScene
++	if scene == null:
++		return null
++	var root := scene.instantiate()
++	if root == null:
++		return null
++	var mi := _find_mesh(root)
++	var mesh: Mesh = null
++	if mi != null:
++		mesh = mi.mesh
++	# `root` was instantiated but never add_child'd — it has no SceneTree, so
++	# queue_free() (which defers to the tree's end-of-frame sweep) would never
++	# run and the scene would leak. free() deallocates the orphan immediately.
++	# `mesh` is a Resource ref and survives the node teardown.
++	root.free()
++	return mesh
++
++
++func _find_mesh(n: Node) -> MeshInstance3D:
++	if n is MeshInstance3D:
++		return n
++	for c in n.get_children():
++		var r := _find_mesh(c)
++		if r != null:
++			return r
++	return null
+diff --git a/apps/game-godot/HordeRenderAdapter.gd.uid b/apps/game-godot/HordeRenderAdapter.gd.uid
+new file mode 100644
+index 0000000..40110eb
+--- /dev/null
++++ b/apps/game-godot/HordeRenderAdapter.gd.uid
+@@ -0,0 +1 @@
++uid://hrdto5hkjj2t
+diff --git a/apps/game-godot/Render3DAdapter.gd b/apps/game-godot/Render3DAdapter.gd
+index edf64dc..43a46c9 100644
+--- a/apps/game-godot/Render3DAdapter.gd
++++ b/apps/game-godot/Render3DAdapter.gd
+@@ -46,7 +46,19 @@ const VEHICLE_BAKE_OFFSET_Y: float = PI / 2.0
+ const VEHICLE_GLB_PATH: String = "res://assets/car-kit/sedan-sports.glb"
+ 
+ ## PR1c player-render-proxy `.glb` (committed per-pack, see assets/README.md).
+-const PLAYER_GLB_PATH: String = "res://assets/mini-characters/character-female-a.glb"
++## ADR-029 P2b PR3: a DISTINCT mini-character from the horde (which renders
++## character-female-a via the VAT), so the player reads as the player and not one
++## more zombie. Placeholder for the 3D-artist (Ruben) preview — swappable to any
++## character-{male,female}-{a..f}.
++const PLAYER_GLB_PATH: String = "res://assets/mini-characters/character-male-a.glb"
++## TEMP placeholder weapon (ADR-029 P2b PR3 — for the 3D-artist preview video;
++## Ruben replaces it). A static blaster `.glb` parented to the player proxy so it
++## inherits the aim-facing rotation. Offset/scale/yaw are eyeball placeholders
++## tuned on the live drive; the whole weapon block lifts out with the placeholder art.
++const WEAPON_GLB_PATH: String = "res://assets/blaster-kit/blaster-a.glb"
++const WEAPON_OFFSET := Vector3(0.12, 0.2, -0.2)  # local: right(+X), hand-height(+Y), forward(-Z)
++const WEAPON_SCALE := 0.5
++const WEAPON_YAW_DEG := 0.0
+ 
+ ## Perspective camera feel knobs (FOV + tilt) are `@export` vars on `sim_driver`
+ ## (`camera_3d_fov_deg` / `camera_3d_pitch_deg`), passed into `setup_camera` /
+@@ -138,6 +150,33 @@ func setup_player_proxy(is_headless: bool) -> void:
+ 		visual = stub
+ 	visual.name = "Visual"
+ 	_player_3d_proxy.add_child(visual)
++	# TEMP placeholder weapon (ADR-029 P2b PR3 — 3D-artist preview). A STATIC
++	# blaster `.glb` (no Skeleton3D / AnimationPlayer, so none of the headless
++	# anim-clock / leak risk that forces the player to stub), parented to the proxy
++	# so it inherits the aim-facing rotation. Skipped headless (no render + keeps
++	# the determinism fixtures asset-free); idempotent like the Visual above.
++	if not is_headless and _player_3d_proxy.get_node_or_null("Weapon") == null:
++		var wpacked := load(WEAPON_GLB_PATH) as PackedScene
++		if wpacked != null:
++			var instance := wpacked.instantiate()
++			var weapon := instance as Node3D
++			if weapon != null:
++				weapon.name = "Weapon"
++				weapon.position = WEAPON_OFFSET
++				weapon.scale = Vector3(WEAPON_SCALE, WEAPON_SCALE, WEAPON_SCALE)
++				weapon.rotation.y = deg_to_rad(WEAPON_YAW_DEG)
++				_player_3d_proxy.add_child(weapon)
++			elif instance != null:
++				# instantiate() succeeded but the root isn't a Node3D — free the
++				# orphan so the failed cast doesn't leak it (GCA #597).
++				instance.free()
++		else:
++			push_warning(
++				(
++					"Render3DAdapter: weapon .glb at %s failed to load (run --import?)"
++					% WEAPON_GLB_PATH
++				)
++			)
+ 
+ 
+ ## Populate the VehicleProxy3D body's visual child once (#567). Mirrors
+@@ -193,10 +232,13 @@ func setup_camera(
+ 	camera_zoom: float,
+ 	viewport_h: float,
+ 	fov_deg: float,
+-	pitch_deg: float
++	pitch_deg: float,
++	distance_scale: float = 1.0
+ ) -> void:
+ 	_camera_3d.projection = Camera3D.PROJECTION_PERSPECTIVE
+-	_apply_camera_pose(camera_world_pos, camera_zoom, viewport_h, fov_deg, pitch_deg)
++	_apply_camera_pose(
++		camera_world_pos, camera_zoom, viewport_h, fov_deg, pitch_deg, distance_scale
++	)
+ 
+ 
+ ## Per-frame 3D camera follow (moved from `sim_driver._physics_process`).
+@@ -207,9 +249,12 @@ func apply_camera(
+ 	camera_zoom: float,
+ 	viewport_h: float,
+ 	fov_deg: float,
+-	pitch_deg: float
++	pitch_deg: float,
++	distance_scale: float = 1.0
+ ) -> void:
+-	_apply_camera_pose(camera_world_pos, camera_zoom, viewport_h, fov_deg, pitch_deg)
++	_apply_camera_pose(
++		camera_world_pos, camera_zoom, viewport_h, fov_deg, pitch_deg, distance_scale
++	)
+ 
+ 
+ ## Shared camera pose write (collapses the position duplication CR flagged on
+@@ -236,12 +281,17 @@ func _apply_camera_pose(
+ 	camera_zoom: float,
+ 	viewport_h: float,
+ 	fov_deg: float,
+-	pitch_deg: float
++	pitch_deg: float,
++	distance_scale: float = 1.0
+ ) -> void:
+ 	_camera_3d.fov = fov_deg
+ 	var target := Vector3(camera_world_pos.x, 0.0, camera_world_pos.y)
+ 	var footprint_h: float = viewport_h / max(camera_zoom, 0.001)
+-	var dist: float = footprint_h / (2.0 * tan(deg_to_rad(fov_deg) * 0.5))
++	# `distance_scale` (sim_driver @export, default 1.0) is a TEMP 3D-only pull-in
++	# knob (ADR-029 P2b PR3) — < 1.0 brings the camera closer. It scales only the
++	# 3D camera distance; the zoom→footprint parity (and the shared 2D camera_zoom
++	# logic) is untouched. Lifts out at the Camera3D ADR overhaul.
++	var dist: float = footprint_h / (2.0 * tan(deg_to_rad(fov_deg) * 0.5)) * distance_scale
+ 	var pitch: float = deg_to_rad(pitch_deg)
+ 	_camera_3d.position = target + Vector3(0.0, dist * sin(pitch), dist * cos(pitch))
+ 	_camera_3d.look_at(target, Vector3(0, 0, -1))
+diff --git a/apps/game-godot/VatAssemblyBench.gd b/apps/game-godot/VatAssemblyBench.gd
+new file mode 100644
+index 0000000..c99326d
+--- /dev/null
++++ b/apps/game-godot/VatAssemblyBench.gd
+@@ -0,0 +1,202 @@
++extends Node3D
++
++# ADR-029 P2b PR3 — SPIKE 2: production VAT assembly cost (measurement gate).
++#
++# Decides the "Rust transform graduation" fork: do we keep the Godot-side buffer
++# assembly (P2a measured 0.26ms/512 for a bare transform copy) or graduate it to a
++# Rust get_agent_buffer_3d()? That call is justified ONLY if the *production* path —
++# 400 agents, full render-state eval + clip mapping + 16-float pack — shows cost.
++# P2a only measured a bare transform copy; this measures the real per-slot work.
++#
++# PURE CPU: this times the GDScript assembly, NOT rendering or GPU upload — so it
++# runs HEADLESS (no real FFI / GPU needed). The render-state buffer is SYNTHETIC
++# (the get_agent_render_state_buffer() FFI lands in PR3 proper); the per-slot WORK
++# is faithful to what that adapter will do (decode bits -> anim_intent -> clip,
++# basis-from-heading, bitcast-pack CUSTOM_DATA.w). Honest upper bound: the number
++# here is >= production (synthetic input is dense/all-live; no early-out on culled).
++#
++# Run (headless OK):
++#   <godot> --headless --path apps/game-godot res://vat_assembly_bench.tscn
++# Prints [asm-bench] lines (min/avg/p99 usec per assembly) and quits.
++
++const AGENT_STRIDE := 8  # sim get_agent_buffer() Transform2D stride
++const OUT_STRIDE := 16  # MultiMesh3D: 12 Transform3D + 4 CUSTOM_DATA
++const ITERS := 600  # assembly iterations timed per N (drop warm-up)
++const WARMUP := 60
++const COUNTS: Array[int] = [256, 400, 512, 1000]
++
++# horde-state bit protocol (mirror of density_feedback.rs — read-only here)
++const LIVE_BIT := 0x04
++const BALLISTIC_BIT := 0x10
++const STUCK_BIT := 0x80
++const HORDE_STATE_MASK := 0x03
++
++# anim_intent enum — values mirror the canonical AnimIntent (density_feedback.rs).
++# This bench DERIVES a representative intent from synthetic flags as a
++# conservative upper bound on per-slot work; the production adapter reads the
++# precomputed RS_INTENT byte (cheaper), so the measurement over-counts if
++# anything. Values kept identical to the wire enum so a future diff against the
++# adapter stays honest (CR / Greptile P2, #597). ATTACK is reserved (unused).
++const INTENT_IDLE := 0
++const INTENT_LOCOMOTION := 1
++const INTENT_STAGGER := 2
++const INTENT_BALLISTIC := 3
++const INTENT_DEATH := 4
++const INTENT_ATTACK := 5
++
++var _agent := PackedFloat32Array()  # synthetic stride-8 transforms
++var _state := PackedByteArray()  # synthetic render-state bytes (1/slot)
++var _health := PackedByteArray()  # synthetic health bytes (0..255)
++var _hitstop := PackedByteArray()  # synthetic hitstop remaining frames
++var _out := PackedFloat32Array()  # assembly target (reused)
++var _scratch := PackedByteArray()  # 4-byte bitcast scratch for the w pack
++
++
++func _ready() -> void:
++	_scratch.resize(4)
++	print("[asm-bench] start; headless=", DisplayServer.get_name() == "headless")
++	for n in COUNTS:
++		_run_count(n)
++	print("[asm-bench] DONE")
++	get_tree().quit(0)
++
++
++func _run_count(n: int) -> void:
++	_seed(n)
++	var samples := PackedFloat64Array()
++	samples.resize(ITERS)
++	for it in ITERS + WARMUP:
++		# vary the per-slot clock by iteration so nothing constant-folds (and the
++		# pack input changes), faithful to a live frame where clocks advance.
++		var t0 := Time.get_ticks_usec()
++		var live := _assemble(n, float(it) * 0.016)
++		var dt := Time.get_ticks_usec() - t0
++		if it >= WARMUP:
++			samples[it - WARMUP] = float(dt)
++		if it == WARMUP:
++			# sanity: report live count once (synthetic is all-live by construction)
++			_last_live = live
++	var sorted := Array(samples)
++	sorted.sort()
++	var mn: float = sorted[0]
++	var p99: float = sorted[int(floor(float(sorted.size() - 1) * 0.99))]
++	var sum := 0.0
++	for v in sorted:
++		sum += v
++	var avg := sum / float(sorted.size())
++	print(
++		(
++			"[asm-bench] N=%d live=%d min=%.1fus avg=%.1fus p99=%.1fus (%.3fms avg)"
++			% [n, _last_live, mn, avg, p99, avg / 1000.0]
++		)
++	)
++
++
++var _last_live := 0
++
++
++# One frame of production-representative assembly. Returns the live count.
++func _assemble(n: int, clock_base: float) -> int:
++	var needed := n * OUT_STRIDE
++	if _out.size() < needed:
++		_out.resize(needed)
++	var live := 0
++	for s in n:
++		var bo := s * AGENT_STRIDE
++		var bxx := _agent[bo + 0]
++		var byx := _agent[bo + 1]
++		var ox := _agent[bo + 3]
++		var bxy := _agent[bo + 4]
++		var byy := _agent[bo + 5]
++		var oy := _agent[bo + 7]
++		# dead-slot mask (zeroed basis) — same predicate the adapter uses
++		if absf(bxx) < 1e-9 and absf(bxy) < 1e-9 and absf(byx) < 1e-9 and absf(byy) < 1e-9:
++			continue
++
++		# --- render-state eval (the new per-slot work PR3 adds) ---
++		var st := _state[s]
++		var health_frac := float(_health[s]) / 255.0
++		var hitstop := _hitstop[s]
++		# Canonical priority is Death > Stagger > Ballistic > Idle
++		# (derive_anim_intent). The synthetic state byte has no Staggered bit, so
++		# hitstop > 0 proxies for stagger here — and the proxy is checked AFTER
++		# ballistic, a deliberate deviation from the canonical order. It only
++		# shifts which synthetic slots pick which clip; the per-slot work this
++		# bench measures is identical either way (CR #597).
++		var intent := INTENT_LOCOMOTION
++		if (st & LIVE_BIT) == 0:
++			intent = INTENT_DEATH
++		elif (st & BALLISTIC_BIT) != 0:
++			intent = INTENT_BALLISTIC
++		elif hitstop > 0:
++			intent = INTENT_STAGGER
++		elif (st & STUCK_BIT) != 0:
++			intent = INTENT_IDLE
++		var clip := float(intent)
++
++		# --- bitcast pack: CUSTOM_DATA.w = flags|intent|seg via floatBitsToUint round-trip ---
++		var flags := st & (LIVE_BIT | BALLISTIC_BIT | STUCK_BIT | HORDE_STATE_MASK)
++		var seg := 0  # reserved gore segment mask (0 in PR3)
++		var packed := (flags & 0xFF) | ((intent & 0xFF) << 8) | ((seg & 0xFFFF) << 16)
++		_scratch.encode_u32(0, packed)
++		var w := _scratch.decode_float(0)
++
++		# --- transform build (basis from heading; sim (X,Y) -> Godot (X,Z)) ---
++		var heading := atan2(bxy, bxx)
++		var b := Basis(Vector3.UP, -heading)
++		var po := live * OUT_STRIDE
++		_out[po + 0] = b.x.x
++		_out[po + 1] = b.y.x
++		_out[po + 2] = b.z.x
++		_out[po + 3] = ox
++		_out[po + 4] = b.x.y
++		_out[po + 5] = b.y.y
++		_out[po + 6] = b.z.y
++		_out[po + 7] = 0.19
++		_out[po + 8] = b.x.z
++		_out[po + 9] = b.y.z
++		_out[po + 10] = b.z.z
++		_out[po + 11] = oy
++		# CUSTOM_DATA v1: x=clock y=clip z=health_frac w=packed-flags
++		_out[po + 12] = clock_base + float(s) * 0.013
++		_out[po + 13] = clip
++		_out[po + 14] = health_frac
++		_out[po + 15] = w
++		live += 1
++	return live
++
++
++# Synthetic but representative inputs: all-live dense horde (worst case for asm),
++# varied heading/state/health so the per-slot branches actually diverge.
++func _seed(n: int) -> void:
++	_agent.resize(n * AGENT_STRIDE)
++	_state.resize(n)
++	_health.resize(n)
++	_hitstop.resize(n)
++	var side := int(ceil(sqrt(float(n))))
++	for i in n:
++		var gx := float(i % side) * 2.0
++		var gy := float(i / side) * 2.0
++		var ang := float(i) * 0.7
++		var cs := cos(ang)
++		var sn := sin(ang)
++		var o := i * AGENT_STRIDE
++		_agent[o + 0] = cs
++		_agent[o + 1] = -sn
++		_agent[o + 2] = 0.0
++		_agent[o + 3] = gx
++		_agent[o + 4] = sn
++		_agent[o + 5] = cs
++		_agent[o + 6] = 0.0
++		_agent[o + 7] = gy
++		# state: mostly live-locomotion, a sprinkling of ballistic/stuck/dead
++		var st := LIVE_BIT | (i % 3)  # HordeState 0..2 in low bits
++		if i % 11 == 0:
++			st |= BALLISTIC_BIT
++		if i % 7 == 0:
++			st |= STUCK_BIT
++		if i % 23 == 0:
++			st &= ~LIVE_BIT  # a few dead -> death intent (still rendered this frame)
++		_state[i] = st
++		_health[i] = (i * 37) % 256
++		_hitstop[i] = 3 if (i % 13 == 0) else 0
+diff --git a/apps/game-godot/VatAssemblyBench.gd.uid b/apps/game-godot/VatAssemblyBench.gd.uid
+new file mode 100644
+index 0000000..853cbbe
+--- /dev/null
++++ b/apps/game-godot/VatAssemblyBench.gd.uid
+@@ -0,0 +1 @@
++uid://be35ay5unbokh
+diff --git a/apps/game-godot/VatBitpackProbe.gd b/apps/game-godot/VatBitpackProbe.gd
+new file mode 100644
+index 0000000..b2c9e55
+--- /dev/null
++++ b/apps/game-godot/VatBitpackProbe.gd
+@@ -0,0 +1,221 @@
++extends Node3D
++
++# ADR-029 P2b PR3 — SPIKE 1: floatBitsToUint round-trip on INSTANCE_CUSTOM.
++#
++# Gates the CUSTOM_DATA.w packing decision (spec .totem/specs/p2b-3d-horde.md,
++# measurement gate 1). Packs a battery of known 32-bit patterns into the w channel
++# of a stride-16 MultiMesh buffer (the SAME storage path the production adapter
++# uses), and a self-checking shader emits GREEN per instance iff floatBitsToUint(w)
++# returns the exact bits (ground truth via a clean uniform, not the channel under
++# test). The CPU reads back one pixel per instance and reports PASS/FAIL per class.
++#
++# WHY it matters: the realistic pack (flags|intent|seg in the low 24 bits, high byte
++# zero) lands in the *denormal / zero-exponent* float range — exactly where a fp16
++# custom-data channel or a flush-to-zero driver would corrupt it. The denormal +
++# bitfield patterns below are the load-bearing cases; NaN/Inf test canonicalisation.
++#
++# Needs a REAL GPU (the shader must rasterise) — headless -> no-op + quit, like the
++# VAT path's headless guard. Run:
++#   <godot> --path apps/game-godot res://vat_bitpack_probe.tscn
++# Prints [bitpack] PASS/FAIL lines + a verdict, saves a capture, then quits.
++
++const SHADER_PATH := "res://shaders/vat_bitpack_probe.gdshader"
++const OUT_STRIDE := 16
++const SPACING := 2.0
++const SETTLE_FRAMES := 12  # let the GPU rasterise before readback
++const CAP_DIR := "user://vat_bitpack_probe/"
++
++# [pattern_u32, label, class] — class groups the verdict (finite / denormal / inf / nan).
++const PATTERNS: Array = [
++	[0x00000000, "zero", "finite"],
++	[0x80000000, "neg_zero", "finite"],
++	[0x3F800000, "one_1.0", "finite"],
++	[0xBF800000, "neg_one", "finite"],
++	[0x40490FDB, "pi_low_mantissa", "finite"],
++	[0xDEADBEEF, "arb_DEADBEEF", "finite"],
++	[0x12345678, "arb_12345678", "finite"],
++	[0xAAAAAAAA, "alt_AAAA", "finite"],
++	[0x55555555, "alt_5555", "finite"],
++	[0x3F800003, "normal_low_bits", "finite"],
++	[0x7F7FFFFF, "max_normal", "finite"],
++	[0x00800000, "min_normal", "finite"],
++	[0x00000001, "min_denormal", "denormal"],
++	[0x007FFFFF, "max_denormal", "denormal"],
++	[0x0000FFFF, "low16_denormal", "denormal"],
++	[0x0003A5C7, "pack_clip_flags_seg", "denormal"],  # realistic w-pack (low 24 bits)
++	[0x00A50003, "pack_alt", "denormal"],  # realistic w-pack
++	[0x00FF00FF, "pack_bytes", "denormal"],  # realistic w-pack
++	[0x7F800000, "pos_inf", "inf"],
++	[0xFF800000, "neg_inf", "inf"],
++	[0x7FC00000, "qNaN", "nan"],
++	[0x7FA00000, "sNaN", "nan"],
++	[0xFFFFFFFF, "all_ones", "nan"],
++]
++
++var _cam: Camera3D
++var _mmi: MultiMeshInstance3D
++var _frame := 0
++var _done := false
++var _scratch := PackedByteArray()
++
++
++func _ready() -> void:
++	_scratch.resize(4)
++	if DisplayServer.get_name() == "headless":
++		print("[bitpack] headless — cannot rasterise the shader; no-op + quit")
++		get_tree().quit(0)
++		return
++
++	var n := PATTERNS.size()
++	var side := int(ceil(sqrt(float(n))))
++
++	# camera: orthographic, on +Z looking at the XY grid (quads face +Z -> full-on)
++	_cam = Camera3D.new()
++	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
++	var extent := float(side) * SPACING
++	_cam.size = extent + SPACING
++	var cx := float(side - 1) * SPACING * 0.5
++	var cy := -float(int(ceil(float(n) / float(side))) - 1) * SPACING * 0.5
++	_cam.position = Vector3(cx, cy, 20.0)
++	_cam.look_at(Vector3(cx, cy, 0.0), Vector3.UP)
++	_cam.current = true
++	add_child(_cam)
++
++	# MultiMesh — SAME storage path as the production adapter (TRANSFORM_3D + custom data)
++	var mm := MultiMesh.new()
++	mm.transform_format = MultiMesh.TRANSFORM_3D
++	mm.use_custom_data = true
++	var quad := QuadMesh.new()
++	quad.size = Vector2(1.6, 1.6)
++	mm.mesh = quad
++
++	var mat := ShaderMaterial.new()
++	mat.shader = load(SHADER_PATH) as Shader
++
++	# ground truth: each u32 as its two's-complement int32 (clean uniform, full int32)
++	var expected := PackedInt32Array()
++	expected.resize(32)  # matches the shader's expected[32]; padding never indexed
++	for i in n:
++		var p: int = PATTERNS[i][0]
++		expected[i] = p if p < 0x80000000 else p - 0x100000000
++	mat.set_shader_parameter("expected", expected)
++
++	# buffer: 16 floats/instance; transform = identity at grid pos; w = bitcast(pattern)
++	var buf := PackedFloat32Array()
++	buf.resize(n * OUT_STRIDE)
++	for i in n:
++		var gx := float(i % side) * SPACING
++		var gy := -float(i / side) * SPACING
++		var po := i * OUT_STRIDE
++		# identity basis, translation (gx, gy, 0)
++		buf[po + 0] = 1.0
++		buf[po + 3] = gx
++		buf[po + 5] = 1.0
++		buf[po + 7] = gy
++		buf[po + 10] = 1.0
++		buf[po + 11] = 0.0
++		# CUSTOM_DATA: x/y/z unused, w = the bit pattern under test
++		buf[po + 15] = _bitcast(PATTERNS[i][0])
++	mm.instance_count = n
++	mm.buffer = buf
++
++	_mmi = MultiMeshInstance3D.new()
++	_mmi.multimesh = mm
++	_mmi.material_override = mat
++	add_child(_mmi)
++
++	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CAP_DIR))
++	print("[bitpack] start; patterns=", n)
++
++
++func _process(_delta: float) -> void:
++	if _done:
++		return
++	_frame += 1
++	if _frame < SETTLE_FRAMES:
++		return
++	_done = true
++	_verify()
++	get_tree().quit(0)
++
++
++func _verify() -> void:
++	var img := get_viewport().get_texture().get_image()
++	if img == null:
++		print("[bitpack] FAIL: no viewport image (cannot read back)")
++		return
++	var w := img.get_width()
++	var h := img.get_height()
++	var n := PATTERNS.size()
++	var fail_by_class := {"finite": 0, "denormal": 0, "inf": 0, "nan": 0}
++	var total_by_class := {"finite": 0, "denormal": 0, "inf": 0, "nan": 0}
++	var fails := 0
++
++	for i in n:
++		var p: int = PATTERNS[i][0]
++		var label: String = PATTERNS[i][1]
++		var cls: String = PATTERNS[i][2]
++		total_by_class[cls] += 1
++		# grid pos exactly as built in _ready()
++		var side := int(ceil(sqrt(float(n))))
++		var world := Vector3(float(i % side) * SPACING, -float(i / side) * SPACING, 0.0)
++		var sp := _cam.unproject_position(world)
++		var ok := _sample_pass(img, w, h, sp)
++		if not ok:
++			fails += 1
++			fail_by_class[cls] += 1
++		print("[bitpack] %s 0x%08X %s (%s)" % ["PASS" if ok else "FAIL", p, label, cls])
++
++	var shot := CAP_DIR + "bitpack.png"
++	img.save_png(ProjectSettings.globalize_path(shot))
++	print("[bitpack] capture %s" % shot)
++
++	print(
++		(
++			"[bitpack] by-class fails: finite=%d/%d denormal=%d/%d inf=%d/%d nan=%d/%d"
++			% [
++				fail_by_class["finite"],
++				total_by_class["finite"],
++				fail_by_class["denormal"],
++				total_by_class["denormal"],
++				fail_by_class["inf"],
++				total_by_class["inf"],
++				fail_by_class["nan"],
++				total_by_class["nan"],
++			]
++		)
++	)
++	# VERDICT: the production w-pack lives in the finite + denormal classes.
++	var pack_ok: bool = fail_by_class["finite"] == 0 and fail_by_class["denormal"] == 0
++	if fails == 0:
++		print("[bitpack] VERDICT: GO — full 32-bit round-trip exact (all classes incl. NaN/Inf)")
++	elif pack_ok:
++		print(
++			"[bitpack] VERDICT: GO (constrained) — finite+denormal exact; only NaN/Inf differ (pack avoids those)"
++		)
++	else:
++		print(
++			"[bitpack] VERDICT: NO-GO — finite/denormal corruption; w falls back to flags-only finite-normal subset"
++		)
++
++
++# argmax(green vs red) over a 3x3 neighbourhood — robust to sRGB/tonemap.
++func _sample_pass(img: Image, w: int, h: int, sp: Vector2) -> bool:
++	var votes := 0
++	var samples := 0
++	for dy in range(-1, 2):
++		for dx in range(-1, 2):
++			var x := int(round(sp.x)) + dx
++			var y := int(round(sp.y)) + dy
++			if x < 0 or y < 0 or x >= w or y >= h:
++				continue
++			var c := img.get_pixel(x, y)
++			samples += 1
++			if c.g > c.r:
++				votes += 1
++	return samples > 0 and votes * 2 > samples
++
++
++func _bitcast(u: int) -> float:
++	_scratch.encode_u32(0, u)
++	return _scratch.decode_float(0)
+diff --git a/apps/game-godot/VatBitpackProbe.gd.uid b/apps/game-godot/VatBitpackProbe.gd.uid
+new file mode 100644
+index 0000000..27a0793
+--- /dev/null
++++ b/apps/game-godot/VatBitpackProbe.gd.uid
+@@ -0,0 +1 @@
++uid://cfyjf7fvunlrg
+diff --git a/apps/game-godot/assets/README.md b/apps/game-godot/assets/README.md
+index be4e934..8957b85 100644
+--- a/apps/game-godot/assets/README.md
++++ b/apps/game-godot/assets/README.md
+@@ -51,6 +51,8 @@ assets/
+ |---|---|---|---|---|
+ | `mini-characters/character-female-a.glb` | Kenney — Mini Characters | CC0 | `Textures/colormap.png` (`6113ca7438d6f42a273498b357eb5c01`) | player avatar — ADR-029 P1c+ |
+ | `car-kit/sedan-sports.glb` | Kenney — Car Kit | CC0 | `Textures/colormap.png` (`451b163d51d08b73f7d98244fef3f979`) | demo vehicle — mmnto-ai/liquid-city#567 |
++| `mini-characters/character-male-a.glb` | Kenney — Mini Characters | CC0 | `Textures/colormap.png` (`6113ca7438d6f42a273498b357eb5c01`) | player avatar — distinct from the female-a VAT horde (placeholder, ADR-029 P2b PR3) |
++| `blaster-kit/blaster-a.glb` | Kenney — Blaster Kit | CC0 | `Textures/colormap.png` (`d399396bd54b6d062c41eaf42b99ac44`) | player weapon (placeholder, ADR-029 P2b PR3) |
+ 
+ > Kenney assets are CC0 (public domain) — attribution is optional but tracked here.
+ > A CC-BY asset entering the tree would make its manifest row's attribution mandatory.
+diff --git a/apps/game-godot/assets/blaster-kit/Textures/colormap.png b/apps/game-godot/assets/blaster-kit/Textures/colormap.png
+new file mode 100644
+index 0000000..503090e
+Binary files /dev/null and b/apps/game-godot/assets/blaster-kit/Textures/colormap.png differ
+diff --git a/apps/game-godot/assets/blaster-kit/Textures/colormap.png.import b/apps/game-godot/assets/blaster-kit/Textures/colormap.png.import
+new file mode 100644
+index 0000000..7407081
+--- /dev/null
++++ b/apps/game-godot/assets/blaster-kit/Textures/colormap.png.import
+@@ -0,0 +1,40 @@
++[remap]
++
++importer="texture"
++type="CompressedTexture2D"
++uid="uid://cuje3su1lfd0j"
++path="res://.godot/imported/colormap.png-b56b2832008153a2ee5ee1048f92d0b4.ctex"
++metadata={
++"vram_texture": false
++}
++
++[deps]
++
++source_file="res://assets/blaster-kit/Textures/colormap.png"
++dest_files=["res://.godot/imported/colormap.png-b56b2832008153a2ee5ee1048f92d0b4.ctex"]
++
++[params]
++
++compress/mode=0
++compress/high_quality=false
++compress/lossy_quality=0.7
++compress/uastc_level=0
++compress/rdo_quality_loss=0.0
++compress/hdr_compression=1
++compress/normal_map=0
++compress/channel_pack=0
++mipmaps/generate=false
++mipmaps/limit=-1
++roughness/mode=0
++roughness/src_normal=""
++process/channel_remap/red=0
++process/channel_remap/green=1
++process/channel_remap/blue=2
++process/channel_remap/alpha=3
++process/fix_alpha_border=true
++process/premult_alpha=false
++process/normal_map_invert_y=false
++process/hdr_as_srgb=false
++process/hdr_clamp_exposure=false
++process/size_limit=0
++detect_3d/compress_to=1
+diff --git a/apps/game-godot/assets/blaster-kit/blaster-a.glb b/apps/game-godot/assets/blaster-kit/blaster-a.glb
+new file mode 100644
+index 0000000..ef5ee12
+Binary files /dev/null and b/apps/game-godot/assets/blaster-kit/blaster-a.glb differ
+diff --git a/apps/game-godot/assets/blaster-kit/blaster-a.glb.import b/apps/game-godot/assets/blaster-kit/blaster-a.glb.import
+new file mode 100644
+index 0000000..e96026f
+--- /dev/null
++++ b/apps/game-godot/assets/blaster-kit/blaster-a.glb.import
+@@ -0,0 +1,42 @@
++[remap]
++
++importer="scene"
++importer_version=1
++type="PackedScene"
++uid="uid://31i4qyecirfy"
++path="res://.godot/imported/blaster-a.glb-193259eebb1d2260574ef614e11a6a64.scn"
++
++[deps]
++
++source_file="res://assets/blaster-kit/blaster-a.glb"
++dest_files=["res://.godot/imported/blaster-a.glb-193259eebb1d2260574ef614e11a6a64.scn"]
++
++[params]
++
++nodes/root_type=""
++nodes/root_name=""
++nodes/root_script=null
++nodes/apply_root_scale=true
++nodes/root_scale=1.0
++nodes/import_as_skeleton_bones=false
++nodes/use_name_suffixes=true
++nodes/use_node_type_suffixes=true
++meshes/ensure_tangents=true
++meshes/generate_lods=true
++meshes/create_shadow_meshes=true
++meshes/light_baking=1
++meshes/lightmap_texel_size=0.2
++meshes/force_disable_compression=false
++skins/use_named_skins=true
++animation/import=true
++animation/fps=30
++animation/trimming=false
++animation/remove_immutable_tracks=true
++animation/import_rest_as_RESET=false
++import_script/path=""
++materials/extract=0
++materials/extract_format=0
++materials/extract_path=""
++_subresources={}
++gltf/naming_version=2
++gltf/embedded_image_handling=1
+diff --git a/apps/game-godot/assets/mini-characters/character-male-a.glb b/apps/game-godot/assets/mini-characters/character-male-a.glb
+new file mode 100644
+index 0000000..18ff63f
+Binary files /dev/null and b/apps/game-godot/assets/mini-characters/character-male-a.glb differ
+diff --git a/apps/game-godot/assets/mini-characters/character-male-a.glb.import b/apps/game-godot/assets/mini-characters/character-male-a.glb.import
+new file mode 100644
+index 0000000..6d8d80d
+--- /dev/null
++++ b/apps/game-godot/assets/mini-characters/character-male-a.glb.import
+@@ -0,0 +1,42 @@
++[remap]
++
++importer="scene"
++importer_version=1
++type="PackedScene"
++uid="uid://ki7a4xypj43y"
++path="res://.godot/imported/character-male-a.glb-e532a02139fe98f40e3b57b57e884f3f.scn"
++
++[deps]
++
++source_file="res://assets/mini-characters/character-male-a.glb"
++dest_files=["res://.godot/imported/character-male-a.glb-e532a02139fe98f40e3b57b57e884f3f.scn"]
++
++[params]
++
++nodes/root_type=""
++nodes/root_name=""
++nodes/root_script=null
++nodes/apply_root_scale=true
++nodes/root_scale=1.0
++nodes/import_as_skeleton_bones=false
++nodes/use_name_suffixes=true
++nodes/use_node_type_suffixes=true
++meshes/ensure_tangents=true
++meshes/generate_lods=true
++meshes/create_shadow_meshes=true
++meshes/light_baking=1
++meshes/lightmap_texel_size=0.2
++meshes/force_disable_compression=false
++skins/use_named_skins=true
++animation/import=true
++animation/fps=30
++animation/trimming=false
++animation/remove_immutable_tracks=true
++animation/import_rest_as_RESET=false
++import_script/path=""
++materials/extract=0
++materials/extract_format=0
++materials/extract_path=""
++_subresources={}
++gltf/naming_version=2
++gltf/embedded_image_handling=1
+diff --git a/apps/game-godot/horde_render_bench.gd b/apps/game-godot/horde_render_bench.gd
+new file mode 100644
+index 0000000..bbd016c
+--- /dev/null
++++ b/apps/game-godot/horde_render_bench.gd
+@@ -0,0 +1,218 @@
++extends Node3D
++
++# ADR-029 P2b PR3 — production HordeRenderAdapter verification bench.
++#
++# Drives the production adapter from a SYNTHETIC stride-8 transform buffer + a
++# SYNTHETIC stride-4 render-state buffer (the get_agent_render_state_buffer()
++# FFI shape), exercising the NEW behaviors the disposable proof never did:
++#   - intent → clip selection (varied AnimIntent per slot),
++#   - HitStop clock-freeze (a slot with hitstop > 0 holds while the rest run),
++#   - health tint (z channel) + the packed-flags w channel (ballistic accent),
++#   - dead-slot masking (zeroed transform → not drawn).
++#
++# Asserts the CPU-side logic programmatically (clip table + clock freeze +
++# live count), then captures a frame for eyeballing. Needs a real GPU — run:
++#   <godot> --path apps/game-godot res://horde_render_bench.tscn
++# Prints [horde-bench] PASS/FAIL lines + a verdict, then quits.
++
++const N := 64
++const SPACING := 2.0
++const DELTA := 0.1
++const FRAMES := 4  # advance the clock a few frames before asserting
++const CAP_DIR := "user://horde_render_bench/"
++
++# mirror of HordeRenderAdapter's AnimIntent / render-state layout
++const ANIM_IDLE := 0
++const ANIM_LOCOMOTION := 1
++const ANIM_STAGGER := 2
++const ANIM_BALLISTIC := 3
++const ANIM_DEATH := 4
++const RENDER_STATE_STRIDE := 4
++const LIVE_BIT := 0x04
++const BALLISTIC_BIT := 0x10
++
++var _adapter: HordeRenderAdapter
++var _cam: Camera3D
++var _xf := PackedFloat32Array()
++var _rs := PackedByteArray()
++var _frame := 0
++var _done := false
++# slots reserved for the hitstop-freeze assertion
++var _frozen_slot := 5
++var _running_slot := 6
++
++
++func _ready() -> void:
++	if DisplayServer.get_name() == "headless":
++		print("[horde-bench] headless — cannot rasterise; no-op + quit")
++		get_tree().quit(0)
++		return
++	_cam = Camera3D.new()
++	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
++	_cam.fov = 55.0
++	_cam.current = true
++	add_child(_cam)
++	_frame_camera(N)
++
++	_adapter = HordeRenderAdapter.new(self, false)
++	if not _adapter.setup():
++		print("[horde-bench] FAIL: adapter setup returned false")
++		get_tree().quit(1)
++		return
++	_adapter.set_active(true)
++	_build_buffers()
++	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CAP_DIR))
++	print(
++		(
++			"[horde-bench] start; N=%d clips=%s"
++			% [N, str(_adapter._meta.get("clips", []).map(func(c): return c.get("name", "?")))]
++		)
++	)
++
++
++func _frame_camera(n: int) -> void:
++	var side := int(ceil(sqrt(float(n))))
++	var extent := float(side) * SPACING
++	var c := extent * 0.5
++	_cam.position = Vector3(c, extent * 0.95, extent * 1.45)
++	_cam.look_at(Vector3(c, 0.5, c), Vector3.UP)
++
++
++func _build_buffers() -> void:
++	_xf.resize(N * 8)
++	_rs.resize(N * RENDER_STATE_STRIDE)
++	var side := int(ceil(sqrt(float(N))))
++	for i in N:
++		var gx := float(i % side) * SPACING
++		var gy := float(i / side) * SPACING
++		var ang := float(i) * 0.7
++		var cs := cos(ang)
++		var sn := sin(ang)
++		var o := i * 8
++		# Transform2D: [bx.x, by.x, 0, ox, bx.y, by.y, 0, oy]
++		_xf[o + 0] = cs
++		_xf[o + 1] = -sn
++		_xf[o + 2] = 0.0
++		_xf[o + 3] = gx
++		_xf[o + 4] = sn
++		_xf[o + 5] = cs
++		_xf[o + 6] = 0.0
++		_xf[o + 7] = gy
++		# render-state record
++		var intent := i % 5  # cycle Idle/Locomotion/Stagger/Ballistic/Death
++		var health := (i * 37) % 256
++		var hitstop := 0
++		if i == _frozen_slot:
++			hitstop = 6  # this slot must NOT advance its clock
++			intent = ANIM_LOCOMOTION
++		if i == _running_slot:
++			intent = ANIM_LOCOMOTION  # control: must advance
++		# Compute flags from the FINAL intent, mirroring the production ABI:
++		# LIVE_BIT is clear for Death (CR #597) so the synthetic dataset never
++		# ships a contradictory LIVE_BIT + ANIM_DEATH record.
++		var flags := 0
++		if intent != ANIM_DEATH:
++			flags |= LIVE_BIT
++		if intent == ANIM_BALLISTIC:
++			flags |= BALLISTIC_BIT
++		var ro := i * RENDER_STATE_STRIDE
++		_rs[ro + 0] = flags
++		_rs[ro + 1] = health
++		_rs[ro + 2] = hitstop
++		_rs[ro + 3] = intent
++	# slot 0 = a dead slot (zeroed transform) → must be masked out of the draw
++	for k in 8:
++		_xf[k] = 0.0
++
++
++func _process(_delta: float) -> void:
++	if _done:
++		return
++	_adapter.update(_xf, _rs, N, DELTA)
++	_frame += 1
++	if _frame < FRAMES:
++		return
++	_done = true
++	var fails := _verify()
++	# Exit non-zero on any assertion failure so the bench can gate automation
++	# instead of always reporting success (CR #597).
++	get_tree().quit(0 if fails == 0 else 1)
++
++
++func _verify() -> int:
++	var fails := 0
++
++	# 1. intent → clip table well-formed + differentiates when ≥2 named clips.
++	var clips: Array = _adapter._meta.get("clips", [])
++	var clip_count := clips.size()
++	var loco_clip: int = _adapter._intent_clip[ANIM_LOCOMOTION]
++	var death_clip: int = _adapter._intent_clip[ANIM_DEATH]
++	if loco_clip < 0 or loco_clip >= clip_count or death_clip < 0 or death_clip >= clip_count:
++		fails += 1
++		print(
++			(
++				"[horde-bench] FAIL: clip out of range (Locomotion=%d, Death=%d, valid=0..%d)"
++				% [loco_clip, death_clip, clip_count - 1]
++			)
++		)
++	else:
++		print("[horde-bench] PASS: Locomotion → clip %d, Death → clip %d" % [loco_clip, death_clip])
++	if clip_count >= 2 and loco_clip == death_clip:
++		fails += 1
++		print(
++			"[horde-bench] FAIL: Locomotion and Death map to the same clip despite ≥2 named clips"
++		)
++	elif clip_count >= 2:
++		print("[horde-bench] PASS: intents differentiate (Locomotion ≠ Death clip)")
++
++	# 2. HitStop clock-freeze: the frozen slot held; the control advanced.
++	var frozen_clock: float = _adapter._clock[_frozen_slot]
++	var running_clock: float = _adapter._clock[_running_slot]
++	if frozen_clock != 0.0:
++		fails += 1
++		print(
++			"[horde-bench] FAIL: hitstop slot clock advanced to %.3f (must stay 0)" % frozen_clock
++		)
++	else:
++		print("[horde-bench] PASS: hitstop slot clock frozen at 0")
++	var expected_running := float(FRAMES) * DELTA
++	if absf(running_clock - expected_running) > 1e-4:
++		fails += 1
++		print(
++			(
++				"[horde-bench] FAIL: running slot clock %.3f, expected %.3f"
++				% [running_clock, expected_running]
++			)
++		)
++	else:
++		print("[horde-bench] PASS: running slot clock advanced to %.3f" % running_clock)
++
++	# 3. dead-slot masking: slot 0 zeroed → live count is N-1.
++	if _adapter.last_live != N - 1:
++		fails += 1
++		print(
++			(
++				"[horde-bench] FAIL: live=%d, expected %d (one dead slot masked)"
++				% [_adapter.last_live, N - 1]
++			)
++		)
++	else:
++		print("[horde-bench] PASS: dead slot masked (live=%d)" % _adapter.last_live)
++
++	# capture for eyeballing (health gradient + ballistic accents + animation)
++	var img := get_viewport().get_texture().get_image()
++	if img != null:
++		var path := CAP_DIR + "horde_render.png"
++		img.save_png(ProjectSettings.globalize_path(path))
++		print("[horde-bench] capture %s" % path)
++
++	if fails == 0:
++		print(
++			(
++				"[horde-bench] VERDICT: GO — production adapter logic verified (asm %.3fms @ %d)"
++				% [_adapter.last_assembly_usec / 1000.0, _adapter.last_live]
++			)
++		)
++	else:
++		print("[horde-bench] VERDICT: FAIL — %d assertion(s) failed" % fails)
++	return fails
+diff --git a/apps/game-godot/horde_render_bench.gd.uid b/apps/game-godot/horde_render_bench.gd.uid
+new file mode 100644
+index 0000000..33e0a81
+--- /dev/null
++++ b/apps/game-godot/horde_render_bench.gd.uid
+@@ -0,0 +1 @@
++uid://4bdqqcrlkbrl
+diff --git a/apps/game-godot/horde_render_bench.tscn b/apps/game-godot/horde_render_bench.tscn
+new file mode 100644
+index 0000000..c748a47
+--- /dev/null
++++ b/apps/game-godot/horde_render_bench.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://horde_render_bench.gd" id="1_hrb"]
++
++[node name="HordeRenderBench" type="Node3D"]
++script = ExtResource("1_hrb")
+diff --git a/apps/game-godot/shaders/horde_render.gdshader b/apps/game-godot/shaders/horde_render.gdshader
+new file mode 100644
+index 0000000..0c5e26a
+--- /dev/null
++++ b/apps/game-godot/shaders/horde_render.gdshader
+@@ -0,0 +1,78 @@
++shader_type spatial;
++render_mode unshaded;
++
++// ADR-029 P2b PR3 — production VAT horde shader (CUSTOM_DATA v1, the stable
++// P2b ABI). Successor to the disposable proof shader `vat_horde.gdshader`.
++//
++// Vertex positions come ENTIRELY from the baked float VAT texture (UV2.x =
++// the original vertex index as (index+0.5)/N — survives Godot vertex
++// splitting; row = animation frame from a PER-INSTANCE clock). There is NO
++// global TIME, so HitStop is the CPU-side adapter declining to advance a
++// slot's clock while the rest animate.
++//
++// INSTANCE_CUSTOM v1 (proven bit-exact through the channel by the
++// floatBitsToUint round-trip spike — finite + denormal classes all exact):
++//   x = anim clock (seconds, CPU-owned, stoppable for HitStop)
++//   y = clip index (numeric, from the bake clip table)
++//   z = health fraction [0,1] (unquantized — gore/dissolve math wants it raw)
++//   w = packed flags uint: floatBitsToUint(w) yields the Rust render-state
++//       flags byte (LIVE / BALLISTIC + reserved gore mask). The realistic
++//       pack lives in the denormal range, which the spike proved exact.
++
++uniform sampler2D vat_tex : filter_nearest, repeat_disable;
++uniform int total_rows = 1;
++uniform float fps = 24.0;
++uniform int clip_count = 1;
++uniform float clip_row_start[8];
++uniform float clip_frame_count[8];
++uniform vec3 base_color : source_color = vec3(0.30, 0.55, 0.30);
++uniform vec3 hurt_color : source_color = vec3(1.0, 0.05, 0.05);
++uniform vec3 ballistic_color : source_color = vec3(0.86, 0.66, 0.22);
++uniform bool use_colormap = false; // OFF = flat tint (clean perf path)
++uniform sampler2D colormap : filter_nearest, source_color; // Kenney palette (UV lookup)
++// ADR-029 P2b PR3: the dmg-based red health tint is OFF by default so the clean
++// Kenney textures show for the 3D-artist preview; flip on to re-enable health viz.
++uniform bool use_health_tint = false;
++
++// Flag bits — mirror of the Rust render-state flags byte (density_feedback.rs
++// BALLISTIC_BIT). Decoded from the packed `w` channel to prove the
++// floatBitsToUint ABI end-to-end; the gore mask (high bytes) is reserved.
++const uint BALLISTIC_BIT = 0x10u;
++
++varying float v_health;
++varying flat float v_ballistic;
++
++void vertex() {
++	// Self-safe clip index: setup() guards clip_count into [1, 8], but the
++	// shader must not trust the uniform — clamp into [0, 7] so neither a 0
++	// (underflow to -1) nor a clip_count/index > 8 can read past the
++	// 8-element clip_row_start / clip_frame_count uniforms (CR #597).
++	int max_clip = max(min(clip_count, 8) - 1, 0);
++	int clip = clamp(int(INSTANCE_CUSTOM.y + 0.5), 0, max_clip);
++	float cstart = clip_row_start[clip];
++	float ccount = max(clip_frame_count[clip], 1.0);
++	float dur = ccount / max(fps, 0.001); // guard div-by-zero on the fps uniform
++	float local = fract(INSTANCE_CUSTOM.x / dur); // [0,1) looped per-instance clock
++	float frame = min(floor(local * ccount), ccount - 1.0);
++	float v = (cstart + frame + 0.5) / float(total_rows);
++	VERTEX = textureLod(vat_tex, vec2(UV2.x, v), 0.0).xyz;
++	v_health = clamp(INSTANCE_CUSTOM.z, 0.0, 1.0);
++	uint flags = floatBitsToUint(INSTANCE_CUSTOM.w); // proven bit-exact (spike 1)
++	v_ballistic = ((flags & BALLISTIC_BIT) != 0u) ? 1.0 : 0.0;
++}
++
++void fragment() {
++	vec3 body = use_colormap ? texture(colormap, UV).rgb : base_color;
++	// Health tint: lerp toward hurt as health drops (z = health fraction). Gated
++	// OFF by default (use_health_tint) — clean Kenney textures for the preview.
++	if (use_health_tint) {
++		// Squared curve so damage reads EARLY (ADR-029 P2b PR3 showcase): a single
++		// pistol hit (70% health) already shows clearly red — `v_health*v_health`
++		// maps 0.7 → 0.49 (≈half red) instead of the faint 0.7 a linear lerp gives.
++		body = mix(hurt_color, body, v_health * v_health);
++	}
++	// Ballistic accent, decoded from the packed flags uint (exercises the
++	// CUSTOM_DATA.w ABI; gore-driven dissolve lands on the reserved mask).
++	body = mix(body, ballistic_color, 0.5 * v_ballistic);
++	ALBEDO = body;
++}
+diff --git a/apps/game-godot/shaders/horde_render.gdshader.uid b/apps/game-godot/shaders/horde_render.gdshader.uid
+new file mode 100644
+index 0000000..d75ffec
+--- /dev/null
++++ b/apps/game-godot/shaders/horde_render.gdshader.uid
+@@ -0,0 +1 @@
++uid://5s6emrb3ie3k
+diff --git a/apps/game-godot/shaders/vat_bitpack_probe.gdshader b/apps/game-godot/shaders/vat_bitpack_probe.gdshader
+new file mode 100644
+index 0000000..04d291b
+--- /dev/null
++++ b/apps/game-godot/shaders/vat_bitpack_probe.gdshader
+@@ -0,0 +1,31 @@
++shader_type spatial;
++render_mode unshaded;
++
++// ADR-029 P2b PR3 — SPIKE 1: floatBitsToUint round-trip on INSTANCE_CUSTOM.
++//
++// Gates CUSTOM_DATA.w packing: can a full 32-bit uint survive the
++// GDScript -> MultiMesh stride-16 buffer -> vertex shader -> floatBitsToUint()
++// path BIT-EXACT in Godot 4.6 (i.e. is the per-instance custom-data channel real
++// fp32, not fp16 / NaN-canonicalised / denormal-flushed)? If yes, w can carry a
++// packed uint; if not, w falls back to a flags-only finite-float subset.
++//
++// Self-checking: the EXPECTED uint arrives via a clean `expected[]` uniform (full
++// int32, NOT through the custom-data channel under test). The shader decodes the
++// channel-under-test with floatBitsToUint and emits GREEN iff the bits match the
++// ground truth, RED otherwise. CPU reads back one pixel per instance and classifies
++// by argmax(channel) — robust to sRGB/tonemap (a primary green stays > red).
++
++const int MAX_PATTERNS = 32;
++uniform int expected[MAX_PATTERNS]; // ground truth, two's-complement reinterpret of the u32
++
++varying flat float v_ok;
++
++void vertex() {
++	uint got = floatBitsToUint(INSTANCE_CUSTOM.w);      // the channel under test
++	uint want = uint(expected[INSTANCE_ID]);            // int->uint = bit reinterpret (GLSL)
++	v_ok = (got == want) ? 1.0 : 0.0;
++}
++
++void fragment() {
++	ALBEDO = (v_ok > 0.5) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
++}
+diff --git a/apps/game-godot/shaders/vat_bitpack_probe.gdshader.uid b/apps/game-godot/shaders/vat_bitpack_probe.gdshader.uid
+new file mode 100644
+index 0000000..e660629
+--- /dev/null
++++ b/apps/game-godot/shaders/vat_bitpack_probe.gdshader.uid
+@@ -0,0 +1 @@
++uid://cic3vr875c7fm
+diff --git a/apps/game-godot/sim_driver.gd b/apps/game-godot/sim_driver.gd
+index fd873e7..6ba57b3 100644
+--- a/apps/game-godot/sim_driver.gd
++++ b/apps/game-godot/sim_driver.gd
+@@ -160,11 +160,17 @@ const PLAYER_COMMAND_FIRE_PRIMARY: int = 3
+ ## than Hotline Miami claustrophobic close-zoom. @export_range ceiling
+ ## widened from 24 to 40 so the Inspector can sweep tighter values
+ ## without recompile.
+-@export_range(2.0, 40.0) var onfoot_zoom_level: float = 32.0  # totem-exception: hardcoded until ADR-004 tuning engine lands
++@export_range(2.0, 40.0) var onfoot_zoom_level: float = 40.0  # totem-exception: hardcoded until ADR-004 tuning engine lands
+ ## ADR-029 PR1c 3D-camera feel knobs (GCA re-review): perspective FOV + tilt,
+ ## Inspector-tunable on a live drive, passed into Render3DAdapter.setup/apply_camera.
+ @export_range(20.0, 90.0) var camera_3d_fov_deg: float = 55.0  # totem-exception: feel-knob default until ADR-004 tuning engine lands
+ @export_range(30.0, 90.0) var camera_3d_pitch_deg: float = 75.0  # totem-exception: feel-knob default (deg below horizontal; 90=straight-down) until ADR-004 tuning engine lands
++## ADR-029 P2b PR3 — TEMP 3D-camera distance scale. Multiplies the zoom-derived
++## camera distance; < 1.0 pulls the 3D camera closer (everything bigger). Does
++## NOT touch the shared `camera_zoom` logic, so the 2D path and the
++## speed/on-foot/F6 zoom values are all unaffected. Inspector-tunable on a live
++## drive; lifts out wholesale at the Camera3D ADR overhaul.
++@export_range(0.2, 2.0) var camera_3d_distance_scale: float = 0.45  # totem-exception: temp feel-knob until the Camera3D ADR overhaul
+ ## Vehicle speed (m/s) at which look-ahead and zoom saturate at their
+ ## max-speed values. The `@export_range` default is now overwritten in
+ ## `_ready` from the sim-side `VEHICLE_MAX_SPEED` constant via the
+@@ -197,7 +203,7 @@ const PLAYER_COMMAND_FIRE_PRIMARY: int = 3
+ ## _apply_use_3d_camera() which is also called once from _ready() to sync
+ ## initial state. is_node_ready() gate is required because the setter
+ ## fires during .tscn load before @onready vars are resolved.
+-@export var use_3d_camera: bool = false:
++@export var use_3d_camera: bool = true:
+ 	set = _set_use_3d_camera
+ ## Default agent body color. Saturated green against the dark project
+ ## background (#147 follow-on dark-theme palette). Pre-stages the
+@@ -544,6 +550,11 @@ var _render_adapter: Render3DAdapter = null
+ var _vat_adapter: VatHordeAdapter = null
+ var _vat_proof_enabled: bool = false
+ var _vat_colormap_enabled: bool = false
++## ADR-029 P2b PR3 — production 3D horde render adapter (Surface A consumer +
++## CUSTOM_DATA v1). Null until _ready; no-ops under --headless. Renders the live
++## horde in 3D whenever use_3d_camera is on (the disposable VAT proof above stays
++## a separate off-by-default debug toggle). See HordeRenderAdapter.gd.
++var _horde_adapter: HordeRenderAdapter = null
+ ## Diagnostic HUD reference (#146). Sibling node under root, populated
+ ## via `hud.set_value(key, value)` from `_physics_process` for entries
+ ## that need sim-side data (currently agent count). The HUD itself
+@@ -1117,6 +1128,15 @@ func _ready() -> void:
+ 		_vat_adapter = VatHordeAdapter.new(_render_3d_root, DisplayServer.get_name() == "headless")
+ 		if not _vat_adapter.setup() and DisplayServer.get_name() != "headless":
+ 			push_warning("sim_driver: VatHordeAdapter setup failed — VAT horde unavailable")
++	# ADR-029 P2b PR3 — the production 3D horde. Same Render3D parent + headless
++	# guard + reuse-guard shape as the VAT proof; fed both the stride-8 transform
++	# buffer and the stride-4 render-state buffer each frame from _physics_process.
++	if _horde_adapter == null:
++		_horde_adapter = HordeRenderAdapter.new(
++			_render_3d_root, DisplayServer.get_name() == "headless"
++		)
++		if not _horde_adapter.setup() and DisplayServer.get_name() != "headless":
++			push_warning("sim_driver: HordeRenderAdapter setup failed — 3D horde unavailable")
+ 	# Sync initial 3D-camera state to the Inspector-set use_3d_camera value.
+ 	# The setter that fired during .tscn load was no-op'd by the
+ 	# is_node_ready() gate (@onready refs weren't resolved yet); this is
+@@ -1560,7 +1580,8 @@ func _ready() -> void:
+ 		_camera_zoom,
+ 		get_viewport().get_visible_rect().size.y,
+ 		camera_3d_fov_deg,
+-		camera_3d_pitch_deg
++		camera_3d_pitch_deg,
++		camera_3d_distance_scale
+ 	)
+ 	# Slice 2.6: surface a one-shot warning if the playtest time-scale
+ 	# slider drifts from the slice-5 default of 4.0. This is
+@@ -1584,6 +1605,8 @@ func _ready() -> void:
+ 	# to ScriptedInput's parser, which silently ignores unrecognised flags.
+ 	if "--health-tint" in OS.get_cmdline_user_args():
+ 		_set_overlay("diag_overlays_mode", false)  # regular mode: bodies ON, overlays OFF
++		# Routes through _set_overlay → _apply_health_tint, which now drives the
++		# 3D horde adapter too (CR #597), so no separate horde call is needed here.
+ 		_set_overlay("health_tint", true)
+ 	# ADR-029 P2a — `-- --vat-proof` boots straight into the 3D camera with the
+ 	# VAT horde on, so a harness/fixture run captures the proof without the panel
+@@ -1745,6 +1768,12 @@ func _apply_health_tint(enabled: bool) -> void:
+ 	if enabled == _health_tint_enabled and enabled == _multimesh_uses_custom_data:
+ 		return
+ 	_health_tint_enabled = enabled
++	# Drive the 3D horde adapter from the canonical mutator so EVERY tint state
++	# change — boot flag, panel toggle, interior forced-tint — reaches the 3D
++	# horde, not just the boot flag (CR #597). Independent of the 2D MultiMesh,
++	# so it runs before the _multimesh null-guard.
++	if _horde_adapter != null:
++		_horde_adapter.set_health_tint_enabled(enabled)
+ 	if _multimesh == null:
+ 		return
+ 	# Godot REQUIRES instance_count == 0 to toggle use_custom_data — it errors
+@@ -2369,6 +2398,11 @@ func _physics_process(delta: float) -> void:
+ 	# single-canonical-Position and waste CPU). Hiding is presentation-
+ 	# only.
+ 	player_sprite.visible = (active_kind == ACTIVE_KIND_PLAYER)
++	# ADR-029 P2b PR3: mirror the 2D-sprite gate for the 3D player proxy. Without
++	# it the on-foot model (+ its child weapon) is left "orphaned" at the entry
++	# point when you drive off — the proxy transform syncs each frame but its
++	# visibility was never gated on the active entity. Hidden while driving.
++	_player_3d_proxy.visible = (active_kind == ACTIVE_KIND_PLAYER)
+ 
+ 	# M2 slice 1 PR2b: the cursor-aligned targeting reticule + OS-cursor hide.
+ 	# Visible only on-foot, with the transition cover DOWN (fresh is_transitioning()
+@@ -2681,7 +2715,8 @@ func _physics_process(delta: float) -> void:
+ 		_camera_zoom,
+ 		get_viewport().get_visible_rect().size.y,
+ 		camera_3d_fov_deg,
+-		camera_3d_pitch_deg
++		camera_3d_pitch_deg,
++		camera_3d_distance_scale
+ 	)
+ 	_last_active_kind = active_kind
+ 
+@@ -2706,6 +2741,10 @@ func _physics_process(delta: float) -> void:
+ 					% [_vat_adapter.debug_status(), Engine.get_frames_per_second()]
+ 				)
+ 			)
++	# ADR-029 P2b PR3 — feed the production 3D horde both the transform buffer
++	# and the render-state buffer (Surface A). Active whenever use_3d_camera is on.
++	if _horde_adapter != null and _horde_adapter.is_active():
++		_horde_adapter.update(xf, sim.get_agent_render_state_buffer(), count, delta)
+ 	# #146 HUD: push sim-side diagnostic values that the HUD itself
+ 	# can't compute (it sees only its own `_process` loop). `agents`
+ 	# is the post-snapshot agent count; `active` is the player/vehicle
+@@ -3122,6 +3161,10 @@ func _apply_use_3d_camera() -> void:
+ 	# follows use_3d_camera too. Independent of _render_adapter, like the 2D side.
+ 	if _vat_adapter != null:
+ 		_vat_adapter.set_active(_vat_proof_enabled and use_3d_camera)
++	# ADR-029 P2b PR3 — the production 3D horde renders under Render3D, so its
++	# visibility follows use_3d_camera (independent of _render_adapter, like above).
++	if _horde_adapter != null:
++		_horde_adapter.set_active(use_3d_camera)
+ 	# 3D-side render-path visibility (Render3D.visible + Camera3D.current)
+ 	# lives in the adapter (ADR-029 PR1b); update it only when the adapter
+ 	# is live (null in the degraded-init path that returned before
+diff --git a/apps/game-godot/vat_assembly_bench.tscn b/apps/game-godot/vat_assembly_bench.tscn
+new file mode 100644
+index 0000000..43b7d24
+--- /dev/null
++++ b/apps/game-godot/vat_assembly_bench.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://VatAssemblyBench.gd" id="1_asm"]
++
++[node name="VatAssemblyBench" type="Node3D"]
++script = ExtResource("1_asm")
+diff --git a/apps/game-godot/vat_bitpack_probe.tscn b/apps/game-godot/vat_bitpack_probe.tscn
+new file mode 100644
+index 0000000..2b9da4f
+--- /dev/null
++++ b/apps/game-godot/vat_bitpack_probe.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://VatBitpackProbe.gd" id="1_probe"]
++
++[node name="VatBitpackProbe" type="Node3D"]
++script = ExtResource("1_probe")
+diff --git a/packages/zomboid-sim/src/density_feedback.rs b/packages/zomboid-sim/src/density_feedback.rs
+index d036a8d..24a2b75 100644
+--- a/packages/zomboid-sim/src/density_feedback.rs
++++ b/packages/zomboid-sim/src/density_feedback.rs
+@@ -63,8 +63,10 @@ use std::sync::{Arc, RwLock};
+ 
+ use bevy_ecs::prelude::*;
+ 
+-use crate::components::{BufferSlot, Density, DisplacementHistory, Velocity, WorldPosition};
+-use crate::damage::Health;
++use crate::components::{
++    BallisticMode, BufferSlot, DeadTag, Density, DisplacementHistory, Velocity, WorldPosition,
++};
++use crate::damage::{Health, HitStop, Staggered};
+ use crate::flow_field::{FlowFields, IMPASSABLE};
+ use crate::tuning_stub::{
+     CELL_SIZE, DENSITY_BUMP_STREAM, DENSITY_BUMP_WALL, DENSITY_STREAM_THRESHOLD,
+@@ -552,6 +554,99 @@ impl AgentHealthBuffer {
+     }
+ }
+ 
++/// Semantic animation intent for an agent's render-LOD-0 / VAT clip
++/// selection (ADR-029 P2b). NET-NEW: the sim has no animation-state enum
++/// today — [`HordeState`] is *density* classification, not animation.
++///
++/// The sim publishes *intent* (what the agent is doing), NOT a clip id or
++/// a raw velocity; the Godot render adapter maps intent → clip name →
++/// numeric clip index from the bake metadata (the render-ownership split,
++/// ADR-029 fold). A pure function of the agent's components, so the byte is
++/// determinism-clean (ADR-013): same seed + input stream → same intent.
++///
++/// `#[repr(u8)]` values are the wire contract the GDScript adapter mirrors
++/// (the mirror + its parity test land with the production adapter in the
++/// next P2b slice). `Attack` is RESERVED — published only when the sim
++/// grows an attack component to drive it (none exists in P2b PR3), per the
++/// cohort fold "the attack clip lands only if the sim has an attack intent
++/// to publish."
++#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
++#[repr(u8)]
++pub enum AnimIntent {
++    /// Live, at rest — per-tick translation below the idle cutoff.
++    #[default]
++    Idle = 0,
++    /// Live, moving under its own locomotion.
++    Locomotion = 1,
++    /// Poise-broken: carries [`Staggered`].
++    Stagger = 2,
++    /// In-flight: carries [`BallisticMode`] (catapulted / tossed / launched).
++    Ballistic = 3,
++    /// Dying/dead this frame ([`DeadTag`] or `Health::is_dead`). Published
++    /// for ABI completeness; true death PLAYBACK is deferred (the snapshot
++    /// zeroes despawned slots, so render-death needs the linger /
++    /// last-transform contract — an ADR-029 P2b non-goal). The adapter
++    /// holds-pose / idles on Death until that contract lands.
++    Death = 4,
++    /// RESERVED — published only once an attack component exists to drive it.
++    Attack = 5,
++}
++
++/// Per-slot record stride for [`AgentRenderStateBuffer`] (ADR-029 P2b PR3,
++/// Surface A). Bytes per slot:
++///   `[0]` flags  — bit 2 [`LIVE_BIT`] + bit 4 [`BALLISTIC_BIT`] (reused from
++///                  the horde-state bit protocol). Bits 0/1/7 are unused in
++///                  render-state records today; bits 3/5/6 are reserved for
++///                  coarse gore flags.
++///   `[1]` health — [`quantize_health_fraction`] (255 = full, 0 = dead).
++///   `[2]` hitstop— [`HitStop::remaining_frames`] (0 = none); the render
++///                  adapter freezes that instance's anim clock while > 0.
++///   `[3]` intent — [`AnimIntent`] discriminant → clip (Godot-side map).
++///
++/// Surface A of the P2b ABI: the wide CPU-authoritative render state,
++/// consumed render-side to assemble `CUSTOM_DATA` — NOT uploaded to the GPU
++/// as a lookup texture. It supersedes the production path's need to read
++/// `get_agent_horde_states` + `get_agent_health_buffer` separately.
++/// Extending the record (e.g. a gore-segment byte) is a coordinated
++/// Rust+GDScript stride bump guarded by the buffer's parity test.
++pub const RENDER_STATE_STRIDE: usize = 4;
++
++/// `[0]` flags byte offset within a [`RENDER_STATE_STRIDE`] record.
++pub const RS_FLAGS: usize = 0;
++/// `[1]` health-fraction byte offset.
++pub const RS_HEALTH: usize = 1;
++/// `[2]` hit-stop-remaining-frames byte offset.
++pub const RS_HITSTOP: usize = 2;
++/// `[3]` [`AnimIntent`] discriminant byte offset.
++pub const RS_INTENT: usize = 3;
++
++/// Per-agent render-state FFI buffer (ADR-029 P2b PR3 — Surface A).
++///
++/// Mirrors [`AgentHordeStateBuffer`] / [`AgentHealthBuffer`] but carries a
++/// [`RENDER_STATE_STRIDE`]-byte record per slot (flags / health / hitstop /
++/// intent), indexed by [`BufferSlot`] so slot `i`'s record lives at
++/// `buf[i * RENDER_STATE_STRIDE ..]` and lines up with the agent whose
++/// transform is at `snapshot[i * SNAPSHOT_STRIDE]`. Written each tick by
++/// [`agent_render_state_publish_system`]; read by
++/// `ZomboidSim::get_agent_render_state_buffer` via `try_read` so a contended
++/// or poisoned lock never panics the Godot main thread. Pure function of
++/// components → determinism-clean (ADR-013).
++///
++/// Length parity with the snapshot slot count (× the stride) is locked by
++/// `agent_render_state_buffer_length_matches_snapshot_slot_count`.
++#[derive(Resource, Clone, Default)]
++pub struct AgentRenderStateBuffer(pub Arc<RwLock<Vec<u8>>>);
++
++impl AgentRenderStateBuffer {
++    pub fn new() -> Self {
++        Self::default()
++    }
++
++    pub fn handle(&self) -> Arc<RwLock<Vec<u8>>> {
++        Arc::clone(&self.0)
++    }
++}
++
+ /// Quantize a `Health` component to the 0–255 fraction byte the FFI ships.
+ ///
+ /// `round((current / max) * 255)` clamped to `[0, 255]`. Pure function —
+@@ -741,6 +836,130 @@ pub fn agent_horde_state_publish_system(
+     }
+ }
+ 
++/// Derive the semantic [`AnimIntent`] for one agent. Pure function of the
++/// agent's components — no RNG, no wall-clock, no cross-agent state — so the
++/// published byte is determinism-clean (ADR-013) and each branch of the
++/// priority ladder is trivially unit-testable.
++///
++/// Priority (first match wins): **Death > Stagger > Ballistic > Idle /
++/// Locomotion**. HitStop is deliberately NOT an intent — it freezes the
++/// *current* clip and ships in its own record byte, so a hit-stopped walking
++/// agent keeps `Locomotion` intent (the adapter just stops advancing its
++/// clock). The idle cutoff reuses the diagnostic stuck velocity-magnitude
++/// threshold ([`STUCK_VEL_MAG_SQ_THRESHOLD`]) as the PR3 starting heuristic;
++/// it can graduate to its own tunable if the idle band wants to differ from
++/// the stuck-diagnostic band.
++#[inline]
++pub fn derive_anim_intent(
++    health: Option<&Health>,
++    staggered: Option<&Staggered>,
++    ballistic: Option<&BallisticMode>,
++    dead: bool,
++    velocity: &Velocity,
++) -> AnimIntent {
++    if dead || health.is_some_and(|h| h.is_dead()) {
++        AnimIntent::Death
++    } else if staggered.is_some() {
++        AnimIntent::Stagger
++    } else if ballistic.is_some() {
++        AnimIntent::Ballistic
++    } else {
++        let mag_sq = velocity.dx * velocity.dx + velocity.dy * velocity.dy;
++        if mag_sq.is_finite() && mag_sq < STUCK_VEL_MAG_SQ_THRESHOLD {
++            AnimIntent::Idle
++        } else {
++            AnimIntent::Locomotion
++        }
++    }
++}
++
++/// Publish the per-agent render-state record buffer parallel to the snapshot
++/// (ADR-029 P2b PR3 — Surface A). Sibling of [`agent_health_publish_system`]
++/// / [`agent_horde_state_publish_system`]: pure component → bytes, indexed
++/// by [`BufferSlot`], FFI-only (no in-sim consumer). Sizing semantics mirror
++/// the siblings — re-use the allocation when the slot count is stable;
++/// resize + unconditional `fill(0)` so a despawned higher slot can't leave
++/// stale bytes in a reused lower record.
++///
++/// Schedule position (`systems.rs`): `.after(snapshot_write_system)
++/// .before(hit_stop_decay_system)` — the SAME pre-decay window the snapshot
++/// occupies, so the published `HitStop` / `Staggered` reflect the active
++/// frame Godot consumes (the decay systems run the tick after), and the
++/// read/write order against every component writer is fully pinned.
++///
++/// Determinism (ADR-013): each slot is written independently from a pure
++/// function of that agent's components, so archetype iteration order cannot
++/// perturb the output.
++// Clippy's `type_complexity` flags the 7-element Query tuple. Same rationale
++// as `vehicle_input_arbitration_system` / `damage_resolution_system`: a
++// dedicated `QueryData` derive isn't worth it at this slice's scope; the
++// annotation is targeted.
++#[allow(clippy::type_complexity)]
++pub fn agent_render_state_publish_system(
++    buffer: Res<AgentRenderStateBuffer>,
++    q: Query<(
++        &BufferSlot,
++        &Velocity,
++        Option<&Health>,
++        Option<&HitStop>,
++        Option<&Staggered>,
++        Option<&BallisticMode>,
++        Option<&DeadTag>,
++    )>,
++) {
++    // max_slot before the write guard so the O(N) scan stays out of the lock
++    // window (GCA R1 finding on `snapshot_write_system`, PR #87).
++    let max_slot = q.iter().map(|(slot, ..)| slot.0).max();
++    let Ok(mut buf) = buffer.0.write() else {
++        return;
++    };
++    let Some(max_slot) = max_slot else {
++        buf.clear();
++        return;
++    };
++    let required_len = (max_slot as usize + 1) * RENDER_STATE_STRIDE;
++    if buf.len() != required_len {
++        buf.resize(required_len, 0);
++    }
++    buf.fill(0);
++    for (slot, velocity, health, hitstop, staggered, ballistic, dead) in q.iter() {
++        let base = slot.0 as usize * RENDER_STATE_STRIDE;
++        let intent = derive_anim_intent(health, staggered, ballistic, dead.is_some(), velocity);
++        // LIVE_BIT mirrors the horde-state bit protocol: it must be CLEAR for a
++        // dead agent (`DeadTag` or `Health::is_dead` — exactly the predicate
++        // `derive_anim_intent` collapses into `AnimIntent::Death`), so the flags
++        // byte never contradicts the intent byte it ships alongside. A dead
++        // ballistic corpse is therefore `BALLISTIC_BIT` alone, not
++        // `LIVE_BIT | BALLISTIC_BIT`. No current consumer masks on LIVE_BIT, but
++        // the ABI is documented to be extended with gore-segment flags — a
++        // future `flags & LIVE_BIT == 0` skip must not read a dying corpse as
++        // live (Greptile P1 / GCA, #597).
++        let mut flags = if intent == AnimIntent::Death {
++            0
++        } else {
++            LIVE_BIT
++        };
++        if ballistic.is_some() {
++            flags |= BALLISTIC_BIT;
++        }
++        // Death always publishes health 0 so the record's fields never
++        // contradict each other — a `DeadTag` agent with no `Health` would
++        // otherwise ship intent=Death + flags=0 + health=255 (CR #597). Live
++        // agents missing `Health` → full (255), matching
++        // `get_agent_health_tint_buffer`'s "absent health = full/green" fallback.
++        let health_byte = if intent == AnimIntent::Death {
++            0
++        } else {
++            health.map_or(255, quantize_health_fraction)
++        };
++        let hitstop_frames = hitstop.map_or(0, |h| h.remaining_frames);
++        buf[base + RS_FLAGS] = flags;
++        buf[base + RS_HEALTH] = health_byte;
++        buf[base + RS_HITSTOP] = hitstop_frames;
++        buf[base + RS_INTENT] = intent as u8;
++    }
++}
++
+ /// Clamp-and-floor a world-space position to its grid cell. Returns
+ /// `None` for positions outside the grid (negative, non-finite, or
+ /// beyond `grid_w * cell_size` / `grid_h * cell_size`).
+@@ -1923,6 +2142,322 @@ mod tests {
+         assert_eq!(buf[2], 255, "live slot 2 carries its health byte");
+     }
+ 
++    fn run_render_state_publish(world: &mut World) {
++        let mut sys = IntoSystem::into_system(agent_render_state_publish_system);
++        sys.initialize(world);
++        let _ = sys.run((), world);
++        sys.apply_deferred(world);
++    }
++
++    #[test]
++    fn derive_anim_intent_priority_ladder() {
++        let moving = Velocity {
++            dx: 5.0,
++            dy: 0.0,
++            dz: 0.0,
++        };
++        let still = Velocity {
++            dx: 0.0,
++            dy: 0.0,
++            dz: 0.0,
++        };
++        let alive = Health {
++            current: 100.0,
++            max: 100.0,
++        };
++        let dead = Health {
++            current: 0.0,
++            max: 100.0,
++        };
++        let stag = Staggered {
++            remaining_duration: 0.2,
++        };
++        let ball = BallisticMode {
++            velocity: [1.0, 0.0, 2.0],
++            spawned_at_tick: 0,
++        };
++
++        // Death dominates everything (even with stagger + ballistic present).
++        assert_eq!(
++            derive_anim_intent(Some(&alive), Some(&stag), Some(&ball), true, &moving),
++            AnimIntent::Death
++        );
++        assert_eq!(
++            derive_anim_intent(Some(&dead), None, None, false, &moving),
++            AnimIntent::Death,
++            "is_dead health → Death even without DeadTag"
++        );
++        // Stagger over ballistic + locomotion.
++        assert_eq!(
++            derive_anim_intent(Some(&alive), Some(&stag), Some(&ball), false, &moving),
++            AnimIntent::Stagger
++        );
++        // Ballistic over locomotion.
++        assert_eq!(
++            derive_anim_intent(Some(&alive), None, Some(&ball), false, &moving),
++            AnimIntent::Ballistic
++        );
++        // Moving live agent → Locomotion; still agent → Idle.
++        assert_eq!(
++            derive_anim_intent(Some(&alive), None, None, false, &moving),
++            AnimIntent::Locomotion
++        );
++        assert_eq!(
++            derive_anim_intent(Some(&alive), None, None, false, &still),
++            AnimIntent::Idle
++        );
++        // Missing Health still classifies on motion (the publish system
++        // supplies the default health byte, not the derive).
++        assert_eq!(
++            derive_anim_intent(None, None, None, false, &still),
++            AnimIntent::Idle
++        );
++    }
++
++    #[test]
++    fn render_state_publish_writes_record_per_slot() {
++        let mut world = World::new();
++        let buffer = AgentRenderStateBuffer::default();
++        let handle = buffer.handle();
++        world.insert_resource(buffer);
++        // slot 0: moving, full health, no hitstop → Locomotion
++        world.spawn((
++            BufferSlot(0),
++            Velocity {
++                dx: 5.0,
++                dy: 0.0,
++                dz: 0.0,
++            },
++            Health {
++                current: 100.0,
++                max: 100.0,
++            },
++        ));
++        // slot 1: hit-stopped, half health, still → Idle + hitstop byte
++        world.spawn((
++            BufferSlot(1),
++            Velocity {
++                dx: 0.0,
++                dy: 0.0,
++                dz: 0.0,
++            },
++            Health {
++                current: 50.0,
++                max: 100.0,
++            },
++            HitStop {
++                remaining_frames: 6,
++            },
++        ));
++        // slot 2: ballistic → Ballistic intent + BALLISTIC_BIT flag
++        world.spawn((
++            BufferSlot(2),
++            Velocity {
++                dx: 1.0,
++                dy: 0.0,
++                dz: 0.0,
++            },
++            Health {
++                current: 80.0,
++                max: 100.0,
++            },
++            BallisticMode {
++                velocity: [1.0, 0.0, 3.0],
++                spawned_at_tick: 0,
++            },
++        ));
++        run_render_state_publish(&mut world);
++        let buf = handle.read().unwrap();
++        assert_eq!(buf.len(), 3 * RENDER_STATE_STRIDE);
++
++        assert_eq!(buf[RS_FLAGS], LIVE_BIT);
++        assert_eq!(buf[RS_HEALTH], 255);
++        assert_eq!(buf[RS_HITSTOP], 0);
++        assert_eq!(buf[RS_INTENT], AnimIntent::Locomotion as u8);
++
++        let b1 = RENDER_STATE_STRIDE;
++        assert_eq!(buf[b1 + RS_FLAGS], LIVE_BIT);
++        assert_eq!(buf[b1 + RS_HEALTH], 128, "half health → 128");
++        assert_eq!(buf[b1 + RS_HITSTOP], 6);
++        assert_eq!(buf[b1 + RS_INTENT], AnimIntent::Idle as u8);
++
++        let b2 = 2 * RENDER_STATE_STRIDE;
++        assert_eq!(buf[b2 + RS_FLAGS], LIVE_BIT | BALLISTIC_BIT);
++        assert_eq!(buf[b2 + RS_HEALTH], 204, "round(0.8 * 255) = 204");
++        assert_eq!(buf[b2 + RS_HITSTOP], 0);
++        assert_eq!(buf[b2 + RS_INTENT], AnimIntent::Ballistic as u8);
++    }
++
++    #[test]
++    fn render_state_publish_clears_live_bit_for_dead_agents() {
++        // The flags byte reuses the horde-state bit protocol where LIVE_BIT is
++        // CLEAR for a dead agent. The publish query iterates dead agents too —
++        // a `DeadTag` corpse rides the ballistic arc until it lands, and a
++        // lethally-damaged agent is `is_dead` the tick before despawn — so the
++        // byte must agree with the `AnimIntent::Death` it ships, or a future
++        // `flags & LIVE_BIT` consumer reads a corpse as live (Greptile P1 /
++        // GCA, #597). Note slot 2 of `render_state_publish_writes_record_per_slot`
++        // is a *live* ballistic agent (health 80, no DeadTag) and KEEPS LIVE_BIT;
++        // this test pins the dead side of that boundary.
++        let mut world = World::new();
++        let buffer = AgentRenderStateBuffer::default();
++        let handle = buffer.handle();
++        world.insert_resource(buffer);
++        // slot 0: DeadTag corpse mid-ballistic-arc → BALLISTIC_BIT only, Death.
++        world.spawn((
++            BufferSlot(0),
++            Velocity {
++                dx: 2.0,
++                dy: 0.0,
++                dz: 0.0,
++            },
++            Health {
++                current: 0.0,
++                max: 100.0,
++            },
++            BallisticMode {
++                velocity: [2.0, 0.0, 4.0],
++                spawned_at_tick: 0,
++            },
++            DeadTag,
++        ));
++        // slot 1: dead via zero health, NO DeadTag and NOT ballistic → flags 0.
++        world.spawn((
++            BufferSlot(1),
++            Velocity {
++                dx: 0.0,
++                dy: 0.0,
++                dz: 0.0,
++            },
++            Health {
++                current: 0.0,
++                max: 100.0,
++            },
++        ));
++        // slot 2: DeadTag with NO Health component — intent=Death, flags=0, and
++        // health must publish 0 (not the absent-Health 255 default), or the
++        // record contradicts itself (CR #597).
++        world.spawn((
++            BufferSlot(2),
++            Velocity {
++                dx: 0.0,
++                dy: 0.0,
++                dz: 0.0,
++            },
++            DeadTag,
++        ));
++        run_render_state_publish(&mut world);
++        let buf = handle.read().unwrap();
++
++        // Dead ballistic corpse: LIVE_BIT clear, BALLISTIC_BIT kept.
++        assert_eq!(
++            buf[RS_FLAGS], BALLISTIC_BIT,
++            "dead ballistic corpse must clear LIVE_BIT and keep BALLISTIC_BIT"
++        );
++        assert_eq!(
++            buf[RS_FLAGS] & LIVE_BIT,
++            0,
++            "LIVE_BIT must be clear for a dead agent"
++        );
++        assert_eq!(buf[RS_INTENT], AnimIntent::Death as u8);
++
++        // is_dead-via-health agent (no DeadTag, not ballistic): flags fully 0.
++        let b1 = RENDER_STATE_STRIDE;
++        assert_eq!(
++            buf[b1 + RS_FLAGS],
++            0,
++            "is_dead agent (no DeadTag) clears LIVE_BIT → flags 0"
++        );
++        assert_eq!(buf[b1 + RS_HEALTH], 0, "zero health → 0");
++        assert_eq!(buf[b1 + RS_INTENT], AnimIntent::Death as u8);
++
++        // DeadTag with no Health: health byte forced to 0, not the 255 default.
++        let b2 = 2 * RENDER_STATE_STRIDE;
++        assert_eq!(buf[b2 + RS_FLAGS], 0, "DeadTag (no Health) clears LIVE_BIT");
++        assert_eq!(
++            buf[b2 + RS_HEALTH],
++            0,
++            "Death forces health 0 even with no Health component"
++        );
++        assert_eq!(buf[b2 + RS_INTENT], AnimIntent::Death as u8);
++    }
++
++    #[test]
++    fn render_state_publish_zeros_despawned_prefix_record() {
++        // Non-recycling slots: a live slot 2 with absent 0/1 leaves their
++        // whole records zeroed by the unconditional `fill(0)`.
++        let mut world = World::new();
++        let buffer = AgentRenderStateBuffer::default();
++        let handle = buffer.handle();
++        world.insert_resource(buffer);
++        world.spawn((
++            BufferSlot(2),
++            Velocity {
++                dx: 5.0,
++                dy: 0.0,
++                dz: 0.0,
++            },
++            Health {
++                current: 100.0,
++                max: 100.0,
++            },
++        ));
++        run_render_state_publish(&mut world);
++        let buf = handle.read().unwrap();
++        assert_eq!(
++            buf.len(),
++            3 * RENDER_STATE_STRIDE,
++            "sized to max_slot (2) + 1"
++        );
++        assert!(
++            buf[0..2 * RENDER_STATE_STRIDE].iter().all(|&b| b == 0),
++            "absent slots 0 and 1 stay fully zeroed"
++        );
++        assert_eq!(buf[2 * RENDER_STATE_STRIDE + RS_FLAGS], LIVE_BIT);
++    }
++
++    #[test]
++    fn render_state_publish_empty_world_clears_buffer() {
++        let mut world = World::new();
++        let buffer = AgentRenderStateBuffer::default();
++        let handle = buffer.handle();
++        world.insert_resource(buffer);
++        handle.write().unwrap().extend_from_slice(&[1, 2, 3, 4]);
++        run_render_state_publish(&mut world);
++        assert!(handle.read().unwrap().is_empty());
++    }
++
++    /// Length parity with the snapshot slot count (× stride) — sibling of
++    /// `agent_health_buffer_length_matches_snapshot_slot_count`. FFI consumers
++    /// index the snapshot and render-state buffers by the same `BufferSlot`,
++    /// so the record count must equal the snapshot slot count.
++    #[test]
++    fn agent_render_state_buffer_length_matches_snapshot_slot_count() {
++        use crate::systems::SNAPSHOT_STRIDE;
++        use bevy_tasks::{ComputeTaskPool, TaskPool};
++
++        ComputeTaskPool::get_or_init(TaskPool::default);
++        let snapshot = SnapshotBuffer::new();
++        let snapshot_handle = snapshot.handle();
++        let render_buffer = AgentRenderStateBuffer::default();
++        let render_handle = render_buffer.handle();
++        let mut world = crate::systems::build_world(snapshot).unwrap();
++        world.insert_resource(AgentRenderStateBuffer(render_handle.clone()));
++        let mut schedule = build_sim_schedule();
++        schedule.run(&mut world);
++        let snapshot_floats = snapshot_handle.read().unwrap().len();
++        let render_bytes = render_handle.read().unwrap().len();
++        assert_eq!(snapshot_floats % SNAPSHOT_STRIDE, 0);
++        assert_eq!(
++            render_bytes,
++            (snapshot_floats / SNAPSHOT_STRIDE) * RENDER_STATE_STRIDE,
++            "render-state buffer length ({}) must equal snapshot slot count ({}) × stride ({})",
++            render_bytes,
++            snapshot_floats / SNAPSHOT_STRIDE,
++            RENDER_STATE_STRIDE
++        );
++    }
++
+     /// Length parity with the snapshot slot count — sibling of
+     /// `agent_horde_state_buffer_length_matches_snapshot_slot_count`. FFI
+     /// consumers index the snapshot, horde-state, and health buffers by the
+diff --git a/packages/zomboid-sim/src/fixture.rs b/packages/zomboid-sim/src/fixture.rs
+index a054676..2f07edb 100644
+--- a/packages/zomboid-sim/src/fixture.rs
++++ b/packages/zomboid-sim/src/fixture.rs
+@@ -23,7 +23,9 @@ use crate::components::{
+     Player, PlayerVelocity, Vehicle, VehicleHandle, VehicleInput, VisualLODMarker, WorldPosition,
+ };
+ use crate::damage::DamageEvent;
+-use crate::density_feedback::{AgentHealthBuffer, AgentHordeStateBuffer, DensityField};
++use crate::density_feedback::{
++    AgentHealthBuffer, AgentHordeStateBuffer, AgentRenderStateBuffer, DensityField,
++};
+ use crate::director::install_director_resources;
+ use crate::flow_field::FlowFields;
+ use crate::level::templates::{EdgeType, TemplateMetadata};
+@@ -1383,6 +1385,10 @@ pub fn build_world_from_fixture(
+     // overwritten in `ensure_initialized`. Required for the full-schedule
+     // `agent_health_publish_system`'s unconditional `Res` read.
+     world.insert_resource(AgentHealthBuffer::default());
++    // Render-state FFI buffer (ADR-029 P2b PR3 — Surface A). Fixture path
++    // mirrors `build_world_with_spawn`; required for the full-schedule
++    // `agent_render_state_publish_system`'s unconditional `Res` read.
++    world.insert_resource(AgentRenderStateBuffer::default());
+     world.insert_resource(PlayerPositionBuffer::default());
+     // ADR-029 P1: read-only velocity export — same full-schedule `Res`
+     // requirement as the position buffer; FFI repoint overwrites the Arc.
+diff --git a/packages/zomboid-sim/src/horde_speed.rs b/packages/zomboid-sim/src/horde_speed.rs
+index 58580e9..436f1a4 100644
+--- a/packages/zomboid-sim/src/horde_speed.rs
++++ b/packages/zomboid-sim/src/horde_speed.rs
+@@ -607,6 +607,10 @@ mod tests {
+         // under test and reads `Res<AgentHealthBuffer>` unconditionally;
+         // the default Arc suffices since the test reads ECS state directly.
+         world_b.insert_resource(crate::density_feedback::AgentHealthBuffer::default());
++        // Render-state FFI buffer (ADR-029 P2b PR3). Same rationale — the
++        // `agent_render_state_publish_system` runs in the schedule under test
++        // and reads `Res<AgentRenderStateBuffer>` unconditionally.
++        world_b.insert_resource(crate::density_feedback::AgentRenderStateBuffer::default());
+         // Spawn with a much wider stride so agents spread across many
+         // cells — max per-cell density stays at 1 (self only) which
+         // classifies Vagrant.
+diff --git a/packages/zomboid-sim/src/lib.rs b/packages/zomboid-sim/src/lib.rs
+index 4214cff..9d2b920 100644
+--- a/packages/zomboid-sim/src/lib.rs
++++ b/packages/zomboid-sim/src/lib.rs
+@@ -52,7 +52,7 @@ use godot::prelude::*;
+ 
+ use crate::active_entity::ActiveEntityKindBuffer;
+ use crate::active_entity::ActiveEntityPosition;
+-use crate::density_feedback::{AgentHealthBuffer, AgentHordeStateBuffer};
++use crate::density_feedback::{AgentHealthBuffer, AgentHordeStateBuffer, AgentRenderStateBuffer};
+ use crate::flow_field::{FlowField, FlowFields, IMPASSABLE, UNREACHABLE};
+ use crate::player::{
+     clamp_to_unit_circle, PlayerCommand, PlayerCommandBuffer, PlayerInputBuffer,
+@@ -274,6 +274,16 @@ pub struct ZomboidSim {
+     /// MultiMesh health-tint shader when the debug "Health Tint" toggle is
+     /// ON; the green→red color policy lives in the shader, not here.
+     agent_health_buffer: Arc<RwLock<Vec<u8>>>,
++    /// Render-state FFI buffer (ADR-029 P2b PR3 — Surface A). One
++    /// `RENDER_STATE_STRIDE`-byte record per agent slot (flags / health /
++    /// hitstop / `AnimIntent`), indexed by `BufferSlot` — same shared-Arc
++    /// pattern as `agent_health_buffer`. Written by
++    /// `agent_render_state_publish_system` each tick; read by
++    /// `get_agent_render_state_buffer` via `try_read`. Pure function of
++    /// components → determinism-clean (ADR-013). The wide CPU-authoritative
++    /// render state the production VAT / render-LOD-0 adapter consumes to
++    /// assemble `CUSTOM_DATA` (NOT a GPU lookup texture).
++    agent_render_state_buffer: Arc<RwLock<Vec<u8>>>,
+     /// Diagnostic-vis flow-field boundary-cell cache (#154), partitioned
+     /// per floor for ADR-026 Slice E.A's multi-floor `FlowFields` substrate.
+     /// `flow_boundary_cells[floor]` is the boundary set for that floor's
+@@ -1263,6 +1273,25 @@ impl ZomboidSim {
+         }
+     }
+ 
++    /// Render-state FFI (ADR-029 P2b PR3 — Surface A). Returns a
++    /// `PackedByteArray` of per-slot `RENDER_STATE_STRIDE`-byte records
++    /// (flags / health / hitstop / `AnimIntent`), indexed by `BufferSlot` so
++    /// record `i` (`buf[i * RENDER_STATE_STRIDE ..]`) lines up with the agent
++    /// whose transform is at `snapshot[i * SNAPSHOT_STRIDE]`. The production
++    /// VAT / render-LOD-0 adapter reads this one buffer to assemble
++    /// `CUSTOM_DATA` (clip from intent, clock-freeze from hitstop, tint/gore
++    /// from health), superseding separate `get_agent_horde_states` +
++    /// `get_agent_health_buffer` reads. Empty array on lock-poison — the
++    /// caller leaves the MultiMesh untouched for the frame, same contract as
++    /// `get_agent_horde_states`.
++    #[func]
++    fn get_agent_render_state_buffer(&self) -> PackedByteArray {
++        match self.agent_render_state_buffer.try_read() {
++            Ok(buf) => PackedByteArray::from(buf.as_slice()),
++            Err(_) => PackedByteArray::new(),
++        }
++    }
++
+     /// Pre-interleaved stride-12 MultiMesh buffer for the health-tint render
+     /// path (#523): per agent, the `SNAPSHOT_STRIDE` Transform2D floats from
+     /// `snapshot_buffer` followed by a `[health_frac, 0, 0, 0]` custom_data
+@@ -1395,6 +1424,13 @@ impl ZomboidSim {
+         // through this Arc each tick and `get_agent_health_buffer`
+         // reads via `try_read`.
+         w.insert_resource(AgentHealthBuffer(Arc::clone(&self.agent_health_buffer)));
++        // Render-state FFI buffer (ADR-029 P2b PR3 — Surface A). Same
++        // Arc-clone overwrite pattern — the ECS `agent_render_state_publish_
++        // system` writes through this Arc each tick and
++        // `get_agent_render_state_buffer` reads via `try_read`.
++        w.insert_resource(AgentRenderStateBuffer(Arc::clone(
++            &self.agent_render_state_buffer,
++        )));
+         // Slice-4 walls cache (ticket-010 / ADR-017 + ADR-003).
+         // Read from the `DistrictWallList` resource that
+         // `install_slice_4_block` inserted during `build_world`,
+diff --git a/packages/zomboid-sim/src/systems.rs b/packages/zomboid-sim/src/systems.rs
+index 00a450e..a996b8a 100644
+--- a/packages/zomboid-sim/src/systems.rs
++++ b/packages/zomboid-sim/src/systems.rs
+@@ -96,7 +96,8 @@ use crate::damage::{
+ };
+ use crate::density::density_system;
+ use crate::density_feedback::{
+-    agent_health_publish_system, agent_horde_state_publish_system, density_feedback_system,
++    agent_health_publish_system, agent_horde_state_publish_system,
++    agent_render_state_publish_system, density_feedback_system,
+ };
+ use crate::director::{
+     advance_sim_tick_count, register_director_systems, TacticalDirectorSet, TickAdvanceSet,
+@@ -582,6 +583,24 @@ fn add_sim_systems(schedule: &mut Schedule) {
+             .in_set(MainSimSet),
+     );
+ 
++    // Render-state publish (ADR-029 P2b PR3 — Surface A). Slots into the SAME
++    // pre-decay window the snapshot occupies: `.after(snapshot_write_system)`
++    // puts it past the upstream `ApplyDeferred` barriers and on the
++    // authoritative frame Godot consumes; `.before(hit_stop_decay_system)`
++    // (which the main chain runs after `snapshot_write_system`, ahead of
++    // `stagger_decay_system`) guarantees the published HitStop / Staggered
++    // reflect the ACTIVE frame, not the decayed one. These two edges also pin
++    // the read/write order against every writer of the components it reads
++    // (Health / HitStop / Staggered inserted by `damage_resolution_system`
++    // upstream of the snapshot; the decay systems downstream). FFI-only — no
++    // in-sim consumer; tests that don't exercise the FFI leave it at default.
++    schedule.add_systems(
++        agent_render_state_publish_system
++            .after(snapshot_write_system)
++            .before(hit_stop_decay_system)
++            .in_set(MainSimSet),
++    );
++
+     // Slice-5 mode-switch chain (PR #126 / ticket-011 — task 9 of
+     // .totem/specs/slice-5-active-entity-mode-switch.md). Three new
+     // systems land in front of the existing pipeline:
+diff --git a/packages/zomboid-sim/src/systems/lifecycle.rs b/packages/zomboid-sim/src/systems/lifecycle.rs
+index 9e155ed..70c2a8c 100644
+--- a/packages/zomboid-sim/src/systems/lifecycle.rs
++++ b/packages/zomboid-sim/src/systems/lifecycle.rs
+@@ -9,7 +9,9 @@ use bevy_ecs::prelude::*;
+ 
+ use crate::components::{Player, PlayerVelocity, WorldPosition};
+ use crate::damage::DamageEvent;
+-use crate::density_feedback::{AgentHealthBuffer, AgentHordeStateBuffer, DensityField};
++use crate::density_feedback::{
++    AgentHealthBuffer, AgentHordeStateBuffer, AgentRenderStateBuffer, DensityField,
++};
+ use crate::director::install_director_resources;
+ use crate::flow_field::FlowFields;
+ use crate::navlink::Navigation;
+@@ -224,6 +226,12 @@ where
+     // unconditionally, so the resource must exist in every world that runs
+     // the full schedule (tests included); only the FFI consumer differs.
+     world.insert_resource(AgentHealthBuffer::default());
++    // Render-state FFI buffer (ADR-029 P2b PR3 — Surface A). Same default-here
++    // / FFI-Arc-overwrite-in-`ensure_initialized` pattern; the full-schedule
++    // `agent_render_state_publish_system` reads `Res<AgentRenderStateBuffer>`
++    // unconditionally, so the resource must exist in every world that runs the
++    // schedule (tests included).
++    world.insert_resource(AgentRenderStateBuffer::default());
+     world.insert_resource(PlayerPositionBuffer::default());
+     // ADR-029 P1: the read-only velocity export. `player_velocity_publish_
+     // system` reads `Res<PlayerVelocityBuffer>` unconditionally, so the
+diff --git a/packages/zomboid-sim/src/tuning_stub.rs b/packages/zomboid-sim/src/tuning_stub.rs
+index 7093e01..524146a 100644
+--- a/packages/zomboid-sim/src/tuning_stub.rs
++++ b/packages/zomboid-sim/src/tuning_stub.rs
+@@ -404,7 +404,9 @@ pub const MELEE_RAW_AMOUNT: f32 = 40.0;
+ /// [`BALLISTIC_THRESHOLD`] so a melee shove never lofts a target into
+ /// the ballistic arc (on-foot combat is grounded; the launch path is the
+ /// vehicle hood-clip, not a punch).
+-pub const MELEE_IMPULSE: f32 = 80.0;
++// ADR-029 P2b PR3: bumped 80→200 for a visibly meaty melee shove on the 3D
++// horde. Still < BALLISTIC_THRESHOLD (225) → grounded knockback, never a launch.
++pub const MELEE_IMPULSE: f32 = 200.0;
+ 
+ /// Hitscan pistol max range (world units) along the aim ray.
+ pub const PISTOL_RANGE: f32 = 24.0;
+@@ -432,7 +434,9 @@ pub const PISTOL_RAW_AMOUNT: f32 = 60.0;
+ 
+ /// Pistol knockback impulse magnitude (N·s). Below [`BALLISTIC_THRESHOLD`]
+ /// for the same no-loft reason as [`MELEE_IMPULSE`].
+-pub const PISTOL_IMPULSE: f32 = 40.0;
++// ADR-029 P2b PR3: bumped 40→120 — the pistol gives "some, not much" pushback:
++// visibly shoves, but well below melee (200) and the ballistic launch threshold.
++pub const PISTOL_IMPULSE: f32 = 120.0;
+ 
+ // Structural invariants (build-time). Broadphase radii must stay under the
+ // spatial-hash query ceiling (styleguide Rule 17, same as the vehicle
+diff --git a/packages/zomboid-sim/tests/anim_intent_parity.rs b/packages/zomboid-sim/tests/anim_intent_parity.rs
+new file mode 100644
+index 0000000..ceffb39
+--- /dev/null
++++ b/packages/zomboid-sim/tests/anim_intent_parity.rs
+@@ -0,0 +1,108 @@
++//! Cross-language parity for the `AnimIntent` enum (ADR-029 P2b PR3).
++//!
++//! `AnimIntent` is canonical in `density_feedback.rs` as a `#[repr(u8)]` enum.
++//! The Godot production render adapter `HordeRenderAdapter.gd` mirrors the
++//! discriminants as `const ANIM_* := N`. This test reads the GDScript via
++//! `include_str!` and asserts the mirror matches the Rust discriminants,
++//! catching silent desync if a future change moves only one side — the same
++//! discipline `bit_protocol_parity.rs` applies to the horde-state bit protocol.
++//!
++//! Adding/moving an intent:
++//!   1. Edit the `AnimIntent` enum in `density_feedback.rs`.
++//!   2. Mirror the `const ANIM_* := N` in `HordeRenderAdapter.gd`.
++//!   3. Extend the mirror table below.
++
++use zomboid_sim::density_feedback::AnimIntent;
++
++const HORDE_RENDER_ADAPTER_GD: &str =
++    include_str!("../../../apps/game-godot/HordeRenderAdapter.gd");
++
++/// Scan a GDScript file for `const NAME := <decimal>` (or `const NAME: int =
++/// <decimal>`) and return the parsed `u8`. Returns `None` if absent. Matches
++/// at word boundaries so `const ANIM_IDLE` is not matched by a query for a
++/// shorter prefix.
++fn extract_const_int(content: &str, name: &str) -> Option<u8> {
++    let prefix = format!("const {name}");
++    for line in content.lines() {
++        let trimmed = line.trim_start();
++        if !trimmed.starts_with(&prefix) {
++            continue;
++        }
++        // Word-boundary: the char after the name must not extend an identifier
++        // (so `ANIM_DEATH` is not matched by a query for `ANIM_DEAT`, and a
++        // query for `ANIM_IDLE` does not match `const ANIM_IDLE_FOO`).
++        let after_name = &trimmed[prefix.len()..];
++        match after_name.chars().next() {
++            Some(c) if c.is_ascii_alphanumeric() || c == '_' => continue,
++            _ => {}
++        }
++        // Works for both `:=` (GDScript inference) and `: int =` forms — the
++        // value token is the first whitespace-delimited run after the `=`.
++        let Some(eq_pos) = trimmed.find('=') else {
++            continue;
++        };
++        let after_eq = trimmed[eq_pos + 1..].trim_start();
++        let Some(token) = after_eq.split_whitespace().next() else {
++            continue;
++        };
++        let token = token.trim_end_matches(',');
++        if let Ok(val) = token.parse::<u8>() {
++            return Some(val);
++        }
++    }
++    None
++}
++
++struct Mirror {
++    local_name: &'static str,
++    canonical: u8,
++}
++
++#[test]
++fn horde_render_adapter_gd_anim_intent_mirror_matches_rust() {
++    let mirrors = [
++        Mirror {
++            local_name: "ANIM_IDLE",
++            canonical: AnimIntent::Idle as u8,
++        },
++        Mirror {
++            local_name: "ANIM_LOCOMOTION",
++            canonical: AnimIntent::Locomotion as u8,
++        },
++        Mirror {
++            local_name: "ANIM_STAGGER",
++            canonical: AnimIntent::Stagger as u8,
++        },
++        Mirror {
++            local_name: "ANIM_BALLISTIC",
++            canonical: AnimIntent::Ballistic as u8,
++        },
++        Mirror {
++            local_name: "ANIM_DEATH",
++            canonical: AnimIntent::Death as u8,
++        },
++        Mirror {
++            local_name: "ANIM_ATTACK",
++            canonical: AnimIntent::Attack as u8,
++        },
++    ];
++    let mut failures = Vec::new();
++    for m in &mirrors {
++        match extract_const_int(HORDE_RENDER_ADAPTER_GD, m.local_name) {
++            Some(v) if v == m.canonical => {}
++            Some(v) => failures.push(format!(
++                "HordeRenderAdapter.gd: `const {}` = {}, expected {} (Rust AnimIntent)",
++                m.local_name, v, m.canonical
++            )),
++            None => failures.push(format!(
++                "HordeRenderAdapter.gd: `const {}` not found (expected {})",
++                m.local_name, m.canonical
++            )),
++        }
++    }
++    assert!(
++        failures.is_empty(),
++        "AnimIntent cross-language parity failures:\n  - {}",
++        failures.join("\n  - ")
++    );
++}

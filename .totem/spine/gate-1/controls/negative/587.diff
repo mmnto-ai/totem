@@ -1,0 +1,106 @@
+diff --git a/apps/game-godot/Render3DAdapter.gd b/apps/game-godot/Render3DAdapter.gd
+index 1c4c3ac..edf64dc 100644
+--- a/apps/game-godot/Render3DAdapter.gd
++++ b/apps/game-godot/Render3DAdapter.gd
+@@ -277,7 +277,7 @@ func sync_vehicle(vehicle_xf: Vector4) -> void:
+ 
+ 
+ ## Per-frame player-proxy transform sync (PR1c; mirrors `sync_vehicle`, also
+-## unconditional so the F2 camera toggle has zero latency). Position from the
++## unconditional so the 3D-camera toggle has zero latency). Position from the
+ ## unwrapped sim player position (sim-(X,Y) → Godot-(X,Z) basis remap; Y=0 ground
+ ## plane — any stand-on-ground mesh offset lives mesh-local on the visual child).
+ ##
+diff --git a/apps/game-godot/sim_driver.gd b/apps/game-godot/sim_driver.gd
+index 4a4554a..5f2bd99 100644
+--- a/apps/game-godot/sim_driver.gd
++++ b/apps/game-godot/sim_driver.gd
+@@ -185,9 +185,10 @@ const PLAYER_COMMAND_FIRE_PRIMARY: int = 3
+ ## next scene load.
+ @export_range(0.5, 30.0) var camera_max_vehicle_speed: float = 8.0
+ 
+-## Camera3D scaffold (#296). Inspector toggle + F2 runtime binding flips
++## Camera3D scaffold (#296). Inspector toggle + the debug-panel "3D Camera"
++## CheckButton (opened via backtick; the F2 hotkey was retired in PR #361) flip
+ ## between the slice-3 Camera2D + Polygon2D placeholder and the emerging
+-## Camera3D + PrismMesh wedge substrate (Proposal 030 §2.2 architectural
++## Camera3D + 3D render substrate (Proposal 030 §2.2 architectural
+ ## target). Default false to preserve Tenet 7 (Playable Prototype Always)
+ ## on merge — current playable behavior is unchanged. Toggling flips
+ ## SimDisplay.visible (hides 2D content), Render3D.visible (shows 3D
+@@ -944,9 +945,11 @@ func _ready() -> void:
+ 	# parallel writes (below) to null-deref. Push_error + halt is the
+ 	# right shape; scaffold is load-bearing for the 3D pivot path.
+ 	# set_process_input(false) is paired with set_physics_process(false)
+-	# so the F2 handler in _input (which routes through
+-	# _apply_use_3d_camera and dereferences 3D refs) cannot fire after a
+-	# degraded-init failure. _init_failed mirrors the input_router /
++	# so the _input handler (the retained F4 diag-mode hotkey) cannot fire
++	# after a degraded-init failure. The 3D-camera toggle is no longer an
++	# input hotkey — it comes via the debug-panel CheckButton →
++	# _set_use_3d_camera, which guards the 3D refs in _apply_use_3d_camera.
++	# _init_failed mirrors the input_router /
+ 	# camera == null pattern above so any downstream gate (re-init, etc.)
+ 	# sees the failure state.
+ 	if _camera_3d == null:
+@@ -1852,7 +1855,7 @@ func _build_wall_visuals(walls: PackedVector4Array) -> void:
+ 
+ 	# 3D building set (#304). 3D is the canonical render path
+ 	# going forward; the 2D Polygon2D wall loop below is legacy
+-	# (kept for the F2 toggle debug fallback while the agent
++	# (kept while the 2D render path is still live, since the agent
+ 	# MultiMesh + DiagOverlays paths are still 2D-only). Slice-4
+ 	# procgen emits ~3,600 1×1m impassable cells; rather than
+ 	# emit one BoxMesh per cell (which reads as a tiled grid of
+@@ -2396,20 +2399,20 @@ func _physics_process(delta: float) -> void:
+ 	# substrate landed in #301 (Camera3D scaffold #296 → RigidBody3D
+ 	# proxy #301). What remains: full removal of this 2D Polygon2D
+ 	# write path + the VehicleSprite node in main.tscn, contingent on
+-	# the Camera2D toggle being retired (currently F2 still toggles
+-	# Camera2D ↔ Camera3D so both render paths stay live).
++	# the 2D render path being retired (the debug-panel "3D Camera"
++	# toggle currently flips Camera2D ↔ Camera3D so both paths stay live).
+ 	var vehicle_xf: Vector4 = sim.get_vehicle_transform()
+ 	vehicle_sprite.position = Vector2(vehicle_xf.x, vehicle_xf.y)
+ 	vehicle_sprite.rotation = vehicle_xf.w
+ 	# Camera3D scaffold (#296) + RigidBody3D vehicle proxy (#301). The 3D
+ 	# vehicle-proxy transform sync moved to Render3DAdapter.sync_vehicle
+ 	# (ADR-029 PR1b) — same Vector4->planar projection, global_position
+-	# write, handedness flip, and apex-bake offset; see that method's doc.
++	# write, handedness flip, and the vehicle bake offset; see that method's doc.
+ 	# Per-frame write stays unconditional (no `if use_3d_camera` gate) so
+ 	# toggle latency stays zero.
+ 	_render_adapter.sync_vehicle(vehicle_xf)
+ 	# ADR-029 PR1c: player-proxy transform sync (mirrors sync_vehicle, also
+-	# unconditional so the F2 camera toggle has zero latency). Position from the
++	# unconditional so the 3D-camera toggle has zero latency). Position from the
+ 	# `player_pos` read above; facing = the last VALID aim (face-AIM, Q-B).
+ 	_render_adapter.sync_player(player_pos, _last_player_aim)
+ 
+@@ -3025,10 +3028,10 @@ func _extract_building_aabbs(walls: PackedVector4Array, grid_w: int, grid_h: int
+ 	return aabbs
+ 
+ 
+-## Inspector / F2 setter for use_3d_camera. Fires during .tscn load
++## Inspector / debug-panel-toggle setter for use_3d_camera. Fires during .tscn load
+ ## before @onready vars are resolved; the is_node_ready() gate covers
+ ## that case (the post-resolution apply happens in _ready). After _ready,
+-## any runtime write to use_3d_camera (Inspector edit, F2 toggle) flips
++## any runtime write to use_3d_camera (Inspector edit, the "3D Camera" panel toggle) flips
+ ## node state immediately via _apply_use_3d_camera.
+ func _set_use_3d_camera(value: bool) -> void:
+ 	use_3d_camera = value
+@@ -3047,9 +3050,10 @@ func _set_use_3d_camera(value: bool) -> void:
+ ## current. Camera3D.current is the actual 3D-render-source gate;
+ ## camera.enabled is the symmetric 2D-render gate (cleaner intent — when
+ ## 3D is active, the 2D pipeline contributes nothing). Defensive null
+-## check at the top covers the degraded-init re-entry case (F2 fires
+-## after a missing-node failure routes _input to set_process_input(false)
+-## above, but the setter can still be triggered by Inspector edits).
++## check at the top covers the degraded-init re-entry case: after a
++## missing-node failure disables input + physics processing, the setter can
++## still be triggered by the "3D Camera" panel toggle or an Inspector edit
++## (neither is gated by that set_process_input(false)).
+ func _apply_use_3d_camera() -> void:
+ 	if _camera_3d == null or _render_3d_root == null:
+ 		return

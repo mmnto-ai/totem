@@ -1,0 +1,481 @@
+diff --git a/.totem/specs/576.md b/.totem/specs/576.md
+index c2c2e92..3ce0875 100644
+--- a/.totem/specs/576.md
++++ b/.totem/specs/576.md
+@@ -75,7 +75,10 @@ Add the 8 fields + enum/const defs to `test_map_resource.gd`. Migrate **2 exempl
+ **PR2 — Full migration + fail-loud `validate_fixtures.gd`.**
+ Convert the validator from warning-walker to **fail-closed gate** (`quit(1)` on any presence/cross-field violation) via the existing `ResourceLoader.load()` fidelity path: presence — the **universal gate** (both classes): **`fixture_contract_version > 0` is the sole proxy for "intentionally migrated"** (`0` = unmigrated / pre-A2, the int default), plus `trace_issue != ""` **AND `oracle_description != ""`** required for **all** fixtures (an `oracle_kind` with no description is just a label — codex; traceability + an oracle contract are universal). `contract_justification` non-emptiness stays **Class-B-only** (the manual justification per A2 §1). All string-presence checks use **`.strip_edges().is_empty()`**, not bare `!= ""` — `@export_multiline` can serialize whitespace-only and slip a naive check (gemini). `run_class` / `termination_kind` / `oracle_kind` carry **no UNSET sentinel** — GDScript `@export` enums default to index `0` (`Automated` / `DriveScriptEnd` / `GoldenSummaryHash`), so an enum-*presence* check is **vacuous**; once `fixture_contract_version > 0` proves migration the enum values are authoritative and their *validity* is enforced by the **cross-field rules** below + cross-field, keyed on **explicit field names** (every `!= ""` below means `.strip_edges().is_empty() == false`, per the whitespace-aware rule above — GDScript strings default to `""`): **`run_class == Automated`** ⟹ `max_ticks > 0` **AND** `termination_kind ∈ {DriveScriptEnd, TickBudget, PilotBudget}` (enforces the A2 §1 bounded-mechanism lock — `Automated` + `termination_kind == Manual` is a fail-closed violation); **`run_class == Manual`** ⟹ `max_ticks == 0` **AND** `contract_justification != ""`. **Declared-mechanism existence (codex, critical)** — the validator proves the declared `termination_kind`'s backing data actually exists, not just the enum: `DriveScriptEnd` ⟹ non-null `drive_script` with non-empty entries; `PilotBudget` ⟹ non-empty `pilot_route` + `pilot_timeout_ticks > 0` (**both existing v0 `TestMapResource` fields** from the ADR-028 pilot work — not new A2 fields; `pilot_timeout_ticks` is already required `> 0` whenever `pilot_route` is set); `TickBudget` ⟹ **`drive_script` null or its entries empty** AND relies on PR3's budget-only path (no competing drive-end path — a `TickBudget` fixture *with* a drive script is really `DriveScriptEnd`, so the declared contract would be false; CR). Without it, `Automated + DriveScriptEnd + no drive_script + max_ticks > 0` passes the field check but never starts the harness → re-hangs until the watchdog kills it. **Anti-smuggling (codex; transitive — Greptile)** — **no Class-B (`Manual`) fixture reachable from a Class-A (`Automated`) entry through the transition graph** is allowed; rejected at *any* depth, not just the entry's direct `transition_fixtures` children (a Class-A→Class-A→Class-B path is the gap). Rides the same `visited`-set walk as the cycle-guard (else an automated run smuggles manual-only content through the nested registry). Migrate the remaining **13 root fixtures**, sorted Class-A/B (the 15 corpus minus PR1's 2 exemplars; `interior_01` is already covered by migrating `interior_breach_loop` in PR1 — **not** re-migrated here). Validator + its passing corpus land together. The validator still **walks** nested `transition_fixtures` for the presence/cross-field check (A2 §7) — walking ≠ re-migrating — and **carries a `visited` set (resource paths / object IDs), bailing on any already-visited node**: an author cycle (A breaches B, B breaches A) would otherwise infinite-recurse → editor stack-overflow (agy, critical). **Validator-runner wrapper lands here, not PR3 (codex + gemini):** add `pnpm validate:fixtures` running **two sequential Godot invocations** — `godot --headless --path apps/game-godot --import --quit` **then** `godot --headless --path apps/game-godot --script res://tools/validate_fixtures.gd` — **not** combined: `--import --script` in one command exits after the import phase and the script never runs (GCA, critical), which would silently no-op the validator. The `--import` step warms the cache + registers `class_name` and **wire it into the pre-push hook** — a `pnpm` script alone is discoverability, not enforcement (codex/gemini/agy); "local/pre-push" is only true if it actually runs on push.
+ 
+-**PR3 — Runtime enforcement + Totem sensor.**
++**PR3 — Runtime enforcement (+ Totem sensor, deferred).**
++
++> **Status (PR3 ship):** the three **runtime-enforcement** items below (Class-B hard-refuse, `max_ticks` budget + budget-only path, `--manual` launcher passthrough) ship in PR3. The **Totem regex sensor is DEFERRED** to a follow-up — it must compile into `compiled-rules.json` via `totem lesson compile`, which is under the operator's standing freeze (re-latched 2026-06-12; banked lessons stay uncommitted for the same reason). Operator ruling (2026-06-21): **defer the sensor; ship PR3 runtime-only.** Rationale: the sensor is the *weakest* enforcement layer (forbidden-marker-only, line-expressible) — the substantive presence/cross-field gate is the GDScript `validate_fixtures.gd`, which already runs on **pre-push** (PR2), and CI carries no Godot regardless, so deferring the sensor widens no gap the validator + runtime don't already cover locally. The sensor lands when the compile freeze lifts; tracked as the remaining unchecked item of mmnto-ai/liquid-city#576 (PR3 does **not** close mmnto-ai/liquid-city#576). The sensor bullet below is retained verbatim as the follow-up's design-of-record.
++
+ - `ScriptedInput`: **Class-B headless HARD-REFUSE** — in `_ready`/`_maybe_auto_start`, after the fixture loads, if `run_class == Manual` AND automated mode (`quit_on_end`/auto-start without an explicit `--manual`) → `push_error` + `quit(non-zero)` **before** the harness timer starts. Warn-only is the silent-degrade that caused the hang (A2 §6, Tenet 4). `--manual` permits Class-B on the live/human path without auto-starting the timer.
+ - `ScriptedInput`: **sim `max_ticks` budget** — count `_physics_process` ticks; at `max_ticks`, stop + write a structured failed summary (state at budget-exhaustion) + quit, *before* the launcher SIGKILL. The graceful inner layer. **Budget-only active mode (codex, critical)** — `start_script()` today returns inactive with no drive entries, so a `TickBudget` no-drive Class-A (`empty_grid_vehicle_east`) never starts the counter; PR3 adds a budget-only run path (or a `max_ticks` counter outside the `_active_entries` path). The failed summary is a **distinct `fixture_timeout` envelope** with a top-level `status` discriminator (in the family of ADR-025's `fixture_error` shape, § Parse-time validation surface) — **not** literally `.totem/specs/265.md` v1, which has no top-level `status` (codex); PR3 defines this as a **separate `fixture_timeout` envelope** (chosen over bumping `265.md`'s schema-version, which would ripple to every summary reader), so the verdict reader has a clear top-level `status` to branch on.
+ - **`tools/playtest-fixture.cjs` launcher passthrough (CR-3)** — accept `--manual` and forward it to the Godot process, suppressing `--auto-start`/`--quit-on-end` when set. Without this there is **no CLI path** to the manual mode `ScriptedInput` consumes, so a Class-B fixture would be unreachable from the launcher after PR3.
+diff --git a/apps/game-godot/HARNESS.md b/apps/game-godot/HARNESS.md
+index c7c05b0..1909233 100644
+--- a/apps/game-godot/HARNESS.md
++++ b/apps/game-godot/HARNESS.md
+@@ -178,13 +178,14 @@ Platform-divergence risk: GDScript's `JSON.stringify()` defaults are used (no fo
+ 
+ ## Closed-loop CLI invocation ([mmnto-ai/liquid-city#311](https://github.com/mmnto-ai/liquid-city/issues/311))
+ 
+-For batch / CI / AI-runnable playtests, the harness accepts CLI overrides via Godot's `--` user-args separator. All three flags are independently optional and compose:
++For batch / CI / AI-runnable playtests, the harness accepts CLI overrides via Godot's `--` user-args separator. These flags are independently optional and compose:
+ 
+ | Flag | Effect |
+ |---|---|
+ | `--fixture <path>` | Load the given `TestMapResource.tres` and replace `ScriptedInput.fixture` for this run. Path may be `res://`-prefixed or project-relative (e.g., `harness/fixtures/wall_stick_diagnostic.tres`). Inspector slot is the default; CLI wins for the run. |
+ | `--auto-start` | Set `harness_mode_enabled = true` so the deferred `_maybe_auto_start` engages `start_script()` once the `_ready` cascade settles. |
+ | `--quit-on-end` | Set `quit_on_end = true` so the Godot process exits at end-of-frame after the summary JSON writes. |
++| `--manual` | (PR3, ADR-025 A2) Opt into manual mode: a Class-B (`RunClass.MANUAL`) fixture is permitted on the live/human path — the operator drives and the timer does **not** auto-start. Without it, the automated path **hard-refuses** a manual fixture (see below). `pnpm playtest:fixture <path> --manual` forwards this and suppresses `--auto-start`/`--quit-on-end`. |
+ 
+ **Composed AI-runnable playtest** (the canonical closed-loop invocation):
+ 
+@@ -206,6 +207,14 @@ Add `--no-quit` to `pnpm playtest:fixture` for interactive observation (keeps `-
+ 
+ After the process exits, JSON lands at `user://harness_summaries/<UTC>.json` and burst captures at `user://frames/<session_tag>/burst-N-K.png`. Console output `ScriptedInput CLI: ...` lines confirm each flag was parsed. Unknown flags are silently ignored so adding new flags doesn't break existing invocations.
+ 
++### Runtime termination enforcement (ADR-025 A2, PR3)
++
++The fixture's declared **run-class** + **`max_ticks`** budget are enforced at runtime so an automated run can never hang (the `interior_breach_loop` hang that motivated A2):
++
++- **Class-B hard-refuse** — pointing the automated path (`--auto-start` / `--quit-on-end`, without `--manual`) at a `run_class == MANUAL` fixture **refuses loudly and exits non-zero (`2`) before the harness timer starts** (`push_error`, no world-build). A manual fixture has no bounded termination; warn-and-run was the silent-degrade A2 forbids. `--manual` is the explicit live/human opt-in.
++- **`max_ticks` budget** — `ScriptedInput` counts every harness tick; at `max_ticks` it force-terminates **before** the launcher's wall-clock watchdog SIGKILL (the graceful inner layer). A no-drive `TickBudget` fixture (`empty_grid_vehicle_east`) runs in **budget-only** mode — the counter is the entire run. Budget exhaustion writes a distinct **`fixture_timeout` envelope** (a top-level `status` key, distinct from the normal summary schema), not a 259 summary.
++- **Exit codes** — `0` clean drive-end **or** a planned `TickBudget` completion (`status: "budget_reached"`); `1` summary-write failure; `2` Class-B refused on the automated path; `3` `max_ticks` backstop tripped on a non-`TickBudget` fixture that failed to self-terminate (`status: "fixture_timeout"`); `124` the launcher watchdog SIGKILL (`run-godot.cjs`, the un-bypassable outer backstop).
++
+ ## Known limitations (v1)
+ 
+ - **Ghost slots in `slot_stuck_histogram`** — the sim's `BufferSlot` index recycling means a single `slot_index` row may aggregate stuck-tick counts from multiple unrelated agents over the run. Bit-stable across **identical-script** runs (the diff use case); across **different-script** runs the ghost-row count may vary. Spec §`slot_stuck_histogram` documents the FFI mechanic.
+diff --git a/apps/game-godot/ScriptedInput.gd b/apps/game-godot/ScriptedInput.gd
+index a97c0fc..c777266 100644
+--- a/apps/game-godot/ScriptedInput.gd
++++ b/apps/game-godot/ScriptedInput.gd
+@@ -61,6 +61,13 @@ const BALLISTIC_BIT: int = 0x10  # mirrors `density_feedback.rs:BALLISTIC_BIT`
+ const HARNESS_SPEC_VERSION: int = 1  # mirrors `.totem/specs/259.md` §JSON Summary Schema
+ const SUMMARY_DIR: String = "user://harness_summaries/"
+ 
++## PR3 (ADR-025 A2) harness exit codes. Distinct non-zero codes let the
++## launcher / closed-loop AI distinguish *why* a run ended without a clean
++## summary, beyond the watchdog's wall-clock SIGKILL (124, run-godot.cjs).
++const EXIT_SUMMARY_WRITE_FAILED: int = 1  # JSON artifact missing (pre-existing PR #314 contract)
++const EXIT_HARNESS_REFUSED: int = 2  # Class-B (Manual) fixture refused on the headless/automated path
++const EXIT_TICK_BUDGET_EXHAUSTED: int = 3  # max_ticks backstop tripped on a non-TickBudget fixture (failed to self-terminate)
++
+ # ---------- Inspector-tunable surface ----------
+ 
+ @export var harness_mode_enabled: bool = false  # starting-state flag (read once by start_script())
+@@ -183,6 +190,27 @@ var _summary_write_pending: bool = false
+ ## mid-run.
+ var _active_entries: Array[ScriptEntryResource] = []
+ 
++## PR3 (ADR-025 A2) max_ticks budget. `_max_ticks` snapshots the active
++## fixture's `max_ticks` at start_script (0 = no budget — non-fixture runs
++## have none). `_budget_ticks_elapsed` counts tick() calls; at the budget the
++## harness force-terminates via _trip_tick_budget() and writes the distinct
++## `fixture_timeout` envelope instead of the normal 259 summary — the
++## graceful inner layer that fires BEFORE the launcher's wall-clock SIGKILL.
++## `_budget_only` is the no-drive TickBudget run path (empty_grid_vehicle_east):
++## the harness runs + counts but has zero drive entries, so tick() skips
++## dwell-advancement. `_terminated_on_budget` routes the write + exit code.
++var _max_ticks: int = 0
++var _budget_ticks_elapsed: int = 0
++var _budget_only: bool = false
++var _terminated_on_budget: bool = false
++
++## PR3: explicit manual-mode opt-in (the `--manual` CLI flag). When true, a
++## Class-B (`RunClass.MANUAL`) fixture is permitted on the live/human path —
++## the operator drives and the timer does NOT auto-start. Without it, the
++## headless/automated path HARD-REFUSES a MANUAL fixture (ADR-025 A2 §6,
++## Tenet 4) before the harness timer ever starts.
++var _manual_mode: bool = false
++
+ # ---------- Lifecycle ----------
+ 
+ 
+@@ -210,6 +238,34 @@ func _ready() -> void:
+ 	# a fixture without permanently editing main.tscn — useful for batch
+ 	# playtests, CI, and AI-runnable harness invocations.
+ 	_apply_cli_overrides()
++	# PR3 (ADR-025 A2 §6, Tenet 4): Class-B headless HARD-REFUSE. A fixture
++	# declaring `run_class == MANUAL` has no bounded termination (no drive,
++	# `max_ticks == 0`); pointing the automated path (`--auto-start` /
++	# `--quit-on-end`) at it is the exact `interior_breach_loop` infinite hang
++	# that motivated A2. Refuse LOUDLY and quit non-zero BEFORE scheduling the
++	# harness timer — warn-only is the silent-degrade A2 forbids. `--manual`
++	# is the explicit live/human opt-in (the operator drives; no auto-start).
++	# Checked here (post-CLI, pre-auto-start) so the quit lands before any
++	# deferred start_script() and before world-build.
++	if (
++		fixture != null
++		and fixture.run_class == TestMapResource.RunClass.MANUAL
++		and not _manual_mode
++		and (harness_mode_enabled or quit_on_end)
++	):
++		push_error(
++			(
++				(
++					"ScriptedInput: REFUSED to auto-run Class-B (manual) fixture '%s' on the "
++					+ "headless/automated path — a manual fixture has no bounded termination and "
++					+ "would hang until the watchdog SIGKILL. Pass --manual to drive it live, or "
++					+ "point the runner at a Class-A (automated) fixture."
++				)
++				% fixture.fixture_name
++			)
++		)
++		get_tree().quit(EXIT_HARNESS_REFUSED)
++		return
+ 	# Schedule auto-start as a deferred call so it fires AFTER all _ready
+ 	# methods (sim_driver, InputRouter, ZomboidSim init) have completed —
+ 	# Godot calls _ready children-first, so an inline start_script() would
+@@ -331,6 +387,22 @@ func is_active() -> bool:
+ func tick(_delta: float) -> void:
+ 	if not is_active():
+ 		return
++	# PR3 max_ticks budget (ADR-025 A2). Count every harness tick; at the
++	# budget, force-terminate via the `fixture_timeout` envelope BEFORE the
++	# launcher's wall-clock SIGKILL (run-godot.cjs) — the graceful inner
++	# layer. Covers BOTH the drive-script backstop (a looping drive that
++	# overruns its budget) and the budget-only TickBudget path. `_max_ticks
++	# == 0` (non-fixture runs) disables the budget entirely.
++	if _max_ticks > 0:
++		_budget_ticks_elapsed += 1
++		if _budget_ticks_elapsed >= _max_ticks:
++			_trip_tick_budget()
++			return
++	# Budget-only run (no drive entries): the tick counter above IS the
++	# entire run. Skip dwell-advancement so the drive-end check below
++	# doesn't immediately stop_script() on an empty `_active_entries`.
++	if _budget_only:
++		return
+ 	if _entry_ticks_remaining <= 0:
+ 		# Dwell-enter for new entry (or stop_script if past end). Reads
+ 		# from `_active_entries` (resolved at start_script from either
+@@ -506,7 +578,10 @@ func _update_waypoint_axes_and_check_arrival() -> void:
+ 	# catches that loudly instead of letting NaN/Inf propagate into the
+ 	# input router and silently desync the determinism contract.
+ 	var axis_x: float = clamp(yaw_delta * _current_waypoint_steering_gain, -1.0, 1.0)
+-	assert(is_finite(axis_x), "ScriptedInput: WAYPOINT axis_x non-finite (sim FFI returned bad vehicle_yaw?)")
++	assert(
++		is_finite(axis_x),
++		"ScriptedInput: WAYPOINT axis_x non-finite (sim FFI returned bad vehicle_yaw?)"
++	)
+ 	_current_axis_x = axis_x
+ 	_current_axis_y = _current_waypoint_throttle
+ 
+@@ -590,6 +665,14 @@ func start_script() -> void:
+ 	# Master switch — the @export var is a "starting state" indicator for
+ 	# clean-scene-load runs, not a runtime gate (R5 GCA-R5-2).
+ 	harness_mode_enabled = true
++	# PR3 max_ticks budget snapshot (ADR-025 A2). The active fixture owns the
++	# budget; non-fixture runs (drive_script-only / inline script_entries)
++	# have none (0 = disabled). Reset the per-run budget accumulators here so
++	# a re-trigger starts a clean count.
++	_max_ticks = fixture.max_ticks if fixture != null else 0
++	_budget_ticks_elapsed = 0
++	_budget_only = false
++	_terminated_on_budget = false
+ 	# Resolve the active entry source. drive_script wrapper takes priority
+ 	# over the inline script_entries array; either non-empty path proceeds.
+ 	# Each entry is explicitly .duplicate(true)'d into `_active_entries`
+@@ -635,20 +718,38 @@ func start_script() -> void:
+ 	# state (drive_script null vs drive_script.entries empty vs both) so the
+ 	# operator can diagnose the misconfiguration without re-reading the spec.
+ 	if _active_entries.is_empty():
+-		var reason: String
+-		if fixture != null and fixture.drive_script != null and _fixture_loaded_successfully:
+-			reason = "fixture.drive_script wired but its entries are empty"
+-		elif fixture != null and not _fixture_loaded_successfully:
+-			reason = "fixture wired but failed to load (see earlier _ready warning)"
+-		elif drive_script != null:
+-			reason = "drive_script wired but drive_script.entries is empty"
+-		elif fixture != null:
+-			reason = "fixture wired without drive_script (geometry-only fixture)"
++		# PR3 budget-only run path (ADR-025 A2): a no-drive TickBudget Class-A
++		# fixture (empty_grid_vehicle_east) has zero drive entries but DOES
++		# declare a max_ticks budget. Run in budget-only mode so the tick
++		# counter engages and the run terminates on the backstop instead of
++		# never starting (the codex-flagged "TickBudget never starts the
++		# counter" gap). tick() skips dwell-advancement while `_budget_only`.
++		if fixture != null and _max_ticks > 0:
++			_budget_only = true
++			print(
++				(
++					(
++						"ScriptedInput: no drive entries but fixture declares max_ticks=%d; "
++						+ "running budget-only (terminates on the tick budget)"
++					)
++					% _max_ticks
++				)
++			)
+ 		else:
+-			reason = "no fixture, drive_script null, script_entries empty"
+-		push_warning("ScriptedInput: no drive entries (%s); harness inactive" % reason)
+-		_harness_active = false
+-		return
++			var reason: String
++			if fixture != null and fixture.drive_script != null and _fixture_loaded_successfully:
++				reason = "fixture.drive_script wired but its entries are empty"
++			elif fixture != null and not _fixture_loaded_successfully:
++				reason = "fixture wired but failed to load (see earlier _ready warning)"
++			elif drive_script != null:
++				reason = "drive_script wired but drive_script.entries is empty"
++			elif fixture != null:
++				reason = "fixture wired without drive_script (geometry-only fixture)"
++			else:
++				reason = "no fixture, drive_script null, script_entries empty"
++			push_warning("ScriptedInput: no drive entries (%s); harness inactive" % reason)
++			_harness_active = false
++			return
+ 	_harness_active = true
+ 	_entry_index = 0
+ 	_entry_ticks_remaining = 0  # next tick() triggers dwell-enter for entries[0]
+@@ -701,6 +802,33 @@ func stop_script() -> void:
+ 		_summary_write_pending = true
+ 
+ 
++## PR3 (ADR-025 A2): max_ticks budget exhaustion. Flags the run as
++## budget-terminated so write_summary_if_pending() emits the distinct
++## envelope (top-level `status`) instead of the normal 259 summary, then
++## stops the harness. The deferred write path performs the JSON write +
++## process exit (spec §JSON write timing). Reached from tick() for BOTH a
++## budget-only TickBudget run AND a looping-drive backstop trip — the log
++## message + severity reflect WHICH: a TickBudget fixture reaching its budget
++## is the PLANNED termination (`status: "budget_reached"`, exit 0) → an
++## informational `print`; any other kind is a backstop trip (the run FAILED
++## to self-terminate — `status: "fixture_timeout"`, exit 3) → `push_error`,
++## so a log scanner keyed on error-level output catches it, consistent with
++## the Class-B refuse (exit 2). (CR + Greptile P2.)
++func _trip_tick_budget() -> void:
++	_terminated_on_budget = true
++	var planned: bool = _is_tick_budget_fixture()
++	var summary_kind: String = "budget_reached" if planned else "fixture_timeout"
++	var msg: String = (
++		"ScriptedInput: max_ticks budget (%d) reached at tick %d (termination_kind=%s); terminating the run and writing a %s summary"
++		% [_max_ticks, _budget_ticks_elapsed, _termination_kind_name(), summary_kind]
++	)
++	if planned:
++		print(msg)
++	else:
++		push_error(msg)
++	stop_script()
++
++
+ ## Public entry-point invoked by sim_driver in the post-tick block when it
+ ## detects "harness just stopped this frame" via the `was_active_before_tick
+ ## && !is_active()` gate. One-shot — second call no-ops until the next
+@@ -713,12 +841,14 @@ func write_summary_if_pending(final_vehicle_xf: Vector4) -> void:
+ 	# Closed-loop AI / CI exit: after the JSON lands, optionally quit the
+ 	# process so the parent shell sees a clean exit code. call_deferred so
+ 	# any same-frame consumers (FrameRecorder final burst flush, etc.) get
+-	# their tick before the tree shuts down. Exit code mirrors the JSON
+-	# write status: 0 on success so batch / CI sees a clean exit; 1 on
+-	# write failure so the parent shell can detect the missing artifact
+-	# without parsing logs (R0 CR-major finding on PR #314).
++	# their tick before the tree shuts down. Exit code via _harness_exit_code:
++	# 0 on a clean drive-end OR a planned TickBudget completion; 1 on write
++	# failure (missing artifact — R0 CR-major finding on PR #314); 3 on a
++	# max_ticks backstop trip (a non-TickBudget run that failed to self-
++	# terminate) so the parent shell distinguishes "ran clean" from "had to
++	# be force-stopped" without parsing logs (PR3).
+ 	if quit_on_end:
+-		var exit_code: int = 0 if write_ok else 1
++		var exit_code: int = _harness_exit_code(write_ok)
+ 		print(
+ 			(
+ 				"ScriptedInput: quit_on_end set; tree quit scheduled at end of frame (exit_code=%d)"
+@@ -760,7 +890,15 @@ func _write_summary_json(final_vehicle_xf: Vector4) -> bool:
+ 			)
+ 		)
+ 		return false
+-	var summary: Dictionary = _build_summary_dict(final_vehicle_xf)
++	# PR3 (ADR-025 A2): a budget-terminated run writes the distinct
++	# `fixture_timeout` envelope (top-level `status`), NOT the normal 259
++	# summary — a reader must never mistake a force-stopped run for a clean
++	# drive-end. The non-budget path is unchanged.
++	var summary: Dictionary = (
++		_build_timeout_envelope(final_vehicle_xf)
++		if _terminated_on_budget
++		else _build_summary_dict(final_vehicle_xf)
++	)
+ 	# JSON.stringify defaults — no forced rounding. Platform-divergence
+ 	# risk flagged in spec §Determinism contract.
+ 	# TODO(mmnto-ai/liquid-city#264): once empirical sim-side fixed-dt
+@@ -860,6 +998,72 @@ func _build_final_vehicle_pose(final_vehicle_xf: Vector4) -> Dictionary:
+ 	return pose
+ 
+ 
++## PR3 (ADR-025 A2): the envelope written when a run terminates on the
++## max_ticks budget. In the family of ADR-025's `fixture_error` shape (a
++## top-level `status` discriminator the verdict reader branches on) —
++## deliberately NOT the 259/265 summary schema (which has no top-level
++## `status`), chosen over bumping 265's schema-version so every existing
++## summary reader is untouched. `status` is "fixture_timeout" for a backstop
++## trip (a DriveScriptEnd/PilotBudget run that FAILED to self-terminate) and
++## "budget_reached" for a TickBudget fixture's PLANNED termination
++## (empty_grid_vehicle_east) — both carry a top-level `status`, so any reader
++## keys on its presence to tell a force-stopped run from a clean drive-end.
++func _build_timeout_envelope(final_vehicle_xf: Vector4) -> Dictionary:
++	var env: Dictionary = {}
++	env["status"] = "budget_reached" if _is_tick_budget_fixture() else "fixture_timeout"
++	env["fixture_name"] = fixture.fixture_name if fixture != null else ""
++	env["termination_kind"] = _termination_kind_name()
++	env["oracle_kind"] = _oracle_kind_name()
++	env["max_ticks"] = _max_ticks
++	env["ticks_elapsed"] = _budget_ticks_elapsed
++	env["godot_version"] = _godot_version_string()
++	env["physics_ticks_per_second"] = _physics_ticks_per_second
++	env["final_vehicle_pose"] = _build_final_vehicle_pose(final_vehicle_xf)
++	return env
++
++
++## PR3 exit-code policy. Write failure dominates (missing artifact = 1,
++## pre-existing PR #314 contract). A budget-terminated run exits 0 when the
++## fixture's declared termination IS the tick budget (reaching the budget is
++## the planned, success-path termination of a no-drive static-state fixture),
++## and EXIT_TICK_BUDGET_EXHAUSTED when the budget was a backstop that tripped
++## on a fixture that should have self-terminated (a DriveScriptEnd/PilotBudget
++## drive overran — a real failure). A normal drive-end run exits 0.
++func _harness_exit_code(write_ok: bool) -> int:
++	if not write_ok:
++		return EXIT_SUMMARY_WRITE_FAILED
++	if _terminated_on_budget and not _is_tick_budget_fixture():
++		return EXIT_TICK_BUDGET_EXHAUSTED
++	return 0
++
++
++func _is_tick_budget_fixture() -> bool:
++	return (
++		fixture != null and fixture.termination_kind == TestMapResource.TerminationKind.TICK_BUDGET
++	)
++
++
++## Enum-variant name for the active fixture's `termination_kind` / `oracle_kind`
++## (diagnostic strings in the timeout envelope). Resolves by VALUE position
++## (`values().find()`, matching `_enum_name_for_cmd`), NOT by treating the raw
++## backing int as a `keys()` index — gap-safe if an enum ever gains a
++## non-sequential value, which `keys()[idx]` would silently mis-name (CR).
++func _termination_kind_name() -> String:
++	if fixture == null:
++		return "UNKNOWN"
++	var names: Array = TestMapResource.TerminationKind.keys()
++	var idx: int = TestMapResource.TerminationKind.values().find(fixture.termination_kind)
++	return String(names[idx]) if idx >= 0 else "UNKNOWN"
++
++
++func _oracle_kind_name() -> String:
++	if fixture == null:
++		return "UNKNOWN"
++	var names: Array = TestMapResource.OracleKind.keys()
++	var idx: int = TestMapResource.OracleKind.values().find(fixture.oracle_kind)
++	return String(names[idx]) if idx >= 0 else "UNKNOWN"
++
++
+ func _build_slot_stuck_histogram() -> Array:
+ 	var arr: Array = []
+ 	for i in range(_slot_total_ticks.size()):
+@@ -915,6 +1119,11 @@ func _enum_name_for_cmd(cmd_int: int) -> String:
+ ##                       harness at scene-load.
+ ##   --quit-on-end       set `quit_on_end = true` so the process exits
+ ##                       after the summary JSON writes.
++##   --manual            opt into manual mode: a Class-B (RunClass.MANUAL)
++##                       fixture is permitted on the live/human path (the
++##                       operator drives; the timer does NOT auto-start).
++##                       Without it the automated path hard-refuses a
++##                       MANUAL fixture (PR3, ADR-025 A2 §6).
+ ##
+ ## Composed example (closed-loop AI playtest invocation):
+ ##   godot --path apps/game-godot -- \
+@@ -975,6 +1184,15 @@ func _apply_cli_overrides() -> void:
+ 					"ScriptedInput CLI: --quit-on-end; process will exit after summary JSON write"
+ 				)
+ 				i += 1
++			"--manual":
++				_manual_mode = true
++				print(
++					(
++						"ScriptedInput CLI: --manual; Class-B (manual) fixture permitted on "
++						+ "the live/human path (the timer will NOT auto-start)"
++					)
++				)
++				i += 1
+ 			_:
+ 				i += 1
+ 
+diff --git a/tools/playtest-fixture.cjs b/tools/playtest-fixture.cjs
+index e43e190..133597a 100644
+--- a/tools/playtest-fixture.cjs
++++ b/tools/playtest-fixture.cjs
+@@ -14,13 +14,20 @@
+ // debugging.
+ //
+ // Usage:
+-//   pnpm playtest:fixture <fixture-path> [--no-quit] [extra-godot-args...]
++//   pnpm playtest:fixture <fixture-path> [--no-quit] [--manual] [extra-godot-args...]
+ //
+ // fixture-path is the path under `apps/game-godot/` (e.g.
+ // `harness/fixtures/wall_stick_diagnostic.tres`).
+ //
+ // Default flags: --auto-start --quit-on-end. Pass --no-quit to drop
+ // --quit-on-end (e.g. for interactive observation).
++//
++// --manual (PR3, ADR-025 A2): drive a Class-B (manual) fixture live. Forwards
++// --manual to Godot — ScriptedInput's explicit live/human opt-in past the
++// Class-B headless hard-refuse — and SUPPRESSES --auto-start / --quit-on-end
++// so the harness timer never engages and the window stays open for the
++// operator. Without it, the automated path hard-refuses a manual fixture
++// (e.g. interior_breach_loop) and exits non-zero immediately.
+ 
+ const { spawnSync } = require("node:child_process");
+ const path = require("node:path");
+@@ -29,7 +36,7 @@ const args = process.argv.slice(2);
+ 
+ if (args.length === 0 || args[0] === "--help") {
+   console.error(
+-    "Usage: pnpm playtest:fixture <fixture-path> [--no-quit] [extra-godot-args...]"
++    "Usage: pnpm playtest:fixture <fixture-path> [--no-quit] [--manual] [extra-godot-args...]"
+   );
+   console.error(
+     "Example: pnpm playtest:fixture harness/fixtures/wall_stick_diagnostic.tres"
+@@ -38,8 +45,11 @@ if (args.length === 0 || args[0] === "--help") {
+ }
+ 
+ const fixturePath = args[0];
++const manual = args.includes("--manual");
+ const noQuit = args.includes("--no-quit");
+-const extraArgs = args.slice(1).filter((a) => a !== "--no-quit");
++const extraArgs = args
++  .slice(1)
++  .filter((a) => a !== "--no-quit" && a !== "--manual");
+ 
+ console.log("[playtest] building both DLLs (debug + release) to prevent stale-binary load");
+ const buildSteps = [
+@@ -61,10 +71,24 @@ const godotArgs = [
+   "--",
+   "--fixture",
+   fixturePath,
+-  "--auto-start",
+ ];
+-if (!noQuit) {
+-  godotArgs.push("--quit-on-end");
++if (manual) {
++  // Manual mode wins: forward --manual and suppress the automated flags so
++  // the harness timer never auto-starts and the window stays open for the
++  // operator to drive the Class-B fixture live. --no-quit is then redundant
++  // (quit-on-end is already suppressed); warn rather than silently swallow it
++  // so the flags stay composable and the behavior is explicit (Greptile P2).
++  if (noQuit) {
++    console.warn(
++      "[playtest] --no-quit is redundant with --manual (--auto-start/--quit-on-end already suppressed); ignoring --no-quit"
++    );
++  }
++  godotArgs.push("--manual");
++} else {
++  godotArgs.push("--auto-start");
++  if (!noQuit) {
++    godotArgs.push("--quit-on-end");
++  }
+ }
+ godotArgs.push(...extraArgs);

@@ -1,0 +1,422 @@
+diff --git a/apps/game-godot/Render3DAdapter.gd b/apps/game-godot/Render3DAdapter.gd
+index 4f7429e..1c4c3ac 100644
+--- a/apps/game-godot/Render3DAdapter.gd
++++ b/apps/game-godot/Render3DAdapter.gd
+@@ -24,17 +24,26 @@ extends RefCounted
+ ## verbatim PR1b extraction (same math, same comments); parity is verified
+ ## through the Godot harness fixtures (the render path has no unit tests).
+ 
+-## Apex-direction offset for VehicleProxy3D's yaw assignment. Couples
+-## DIRECTLY to the +90° X rotation baked into VehicleProxy3D/Mesh.transform
+-## in main.tscn (the bake lives on the child mesh post-#301 RigidBody3D
+-## migration): PrismMesh's local +Y apex maps to body-local +Z post-bake,
+-## and this offset rotates that body-local +Z to world +X (vehicle forward
+-## at sim_yaw=0). The lockstep startup assert that enforces the bake
+-## precondition lives in `sim_driver._ready` (it reads
+-## `_vehicle_3d_mesh.basis.y`). If the bake is ever removed or its sign
+-## flipped, BOTH this constant and that assert must be updated in lockstep —
+-## they encode the same contract from different sides.
+-const APEX_BAKE_OFFSET_Y: float = PI / 2.0
++## Authored-forward yaw offset for the vehicle `.glb` (#567). The Kenney
++## car-kit model (`sedan-sports.glb`) is authored UPRIGHT and lying flat,
++## facing +Z — verified from the glb geometry: the `wheel-front-*` nodes sit
++## at +Z, `wheel-back-*` at -Z. So, unlike the retired PrismMesh wedge, the
++## car needs NO +90° X bake; this offset rotates the model's authored +Z
++## forward to world +X (vehicle forward at sim_yaw=0), so
++## `rotation.y = VEHICLE_BAKE_OFFSET_Y + yaw_world` aligns the car with the
++## sim heading. The value (PI/2) is unchanged from the prism era only by
++## coincidence — the wedge's post-bake forward was also body-local +Z.
++## A MODEL-GEOMETRY constant (the .glb's authored forward), same class as
++## `PLAYER_BAKE_OFFSET_Y` below — NOT an ADR-004 tuning value. If the demo car
++## is swapped for a model with a different authored forward, this is the single
++## place that changes (never ad-hoc signs in the sync loop). Verified on a live
++## drive — the first thing to check if the car faces the wrong way.
++const VEHICLE_BAKE_OFFSET_Y: float = PI / 2.0
++
++## Vehicle render-proxy `.glb` (#567; committed per-pack, see assets/README.md).
++## STATIC mesh (no skeleton/animation) — unlike the player rig, so no headless
++## guard is needed when it instantiates (see `setup_vehicle_proxy`).
++const VEHICLE_GLB_PATH: String = "res://assets/car-kit/sedan-sports.glb"
+ 
+ ## PR1c player-render-proxy `.glb` (committed per-pack, see assets/README.md).
+ const PLAYER_GLB_PATH: String = "res://assets/mini-characters/character-female-a.glb"
+@@ -51,7 +60,7 @@ const PLAYER_GLB_PATH: String = "res://assets/mini-characters/character-female-a
+ 
+ ## Player model authored-forward bake (fold #7, lc-codex) — a MODEL-GEOMETRY
+ ## constant (the `.glb`'s authored forward at yaw 0), NOT a gameplay/feel tunable:
+-## same class as `APEX_BAKE_OFFSET_Y` above (also a named const, unflagged), so it
++## same class as `VEHICLE_BAKE_OFFSET_Y` above (also a named const, unflagged), so it
+ ## stays in code and does NOT belong in the ADR-004 tuning data. Kept as ONE named
+ ## offset so the facing convention lives in a single place, never as ad-hoc signs
+ ## in the sync loop or the aim math. Default 0 assumes Godot's -Z forward;
+@@ -131,6 +140,49 @@ func setup_player_proxy(is_headless: bool) -> void:
+ 	_player_3d_proxy.add_child(visual)
+ 
+ 
++## Populate the VehicleProxy3D body's visual child once (#567). Mirrors
++## `setup_player_proxy` but with NO headless branch: the car `.glb` is a STATIC
++## mesh (no Skeleton3D / AnimationPlayer), so it carries none of the headless
++## anim-clock / black-frame / leak risk that forces the player to stub — loading
++## it headless is safe and keeps frame captures honest. A failed load (e.g.
++## `--import` not run) falls back to a BoxMesh stub with a push_error rather than
++## a null visual. The body (VehicleProxy3D) stays the sim-write transform target;
++## the Visual is a passive child that inherits the body transform, so the
++## `sync_vehicle` path is identical whether the `.glb` or the stub is mounted.
++## Idempotency guard mirrors `setup_player_proxy` (a defensive no-op today —
++## `_ready` does not re-fire — but removes the double-mount class cheaply).
++func setup_vehicle_proxy() -> void:
++	if _vehicle_3d_proxy.get_node_or_null("Visual") != null:
++		return
++	var visual: Node3D = null
++	var packed := load(VEHICLE_GLB_PATH) as PackedScene
++	if packed != null:
++		visual = packed.instantiate() as Node3D
++		if visual == null:
++			push_error(
++				(
++					(
++						"Render3DAdapter: vehicle .glb at %s instantiated a non-Node3D root; "
++						% VEHICLE_GLB_PATH
++					)
++					+ "falling back to the BoxMesh stub."
++				)
++			)
++	else:
++		push_error(
++			(
++				("Render3DAdapter: failed to load vehicle .glb at %s " % VEHICLE_GLB_PATH)
++				+ "(run a Godot --import?); falling back to the BoxMesh stub."
++			)
++		)
++	if visual == null:
++		var stub := MeshInstance3D.new()
++		stub.mesh = BoxMesh.new()
++		visual = stub
++	visual.name = "Visual"
++	_vehicle_3d_proxy.add_child(visual)
++
++
+ ## One-time 3D camera setup (moved from `sim_driver._ready`). Sets the projection
+ ## mode, then defers the pose (incl. FOV) to `_apply_camera_pose`. PR1c flips the
+ ## projection ortho→PERSPECTIVE (ADR-029 §2.8); the pose math (FOV + distance-from-
+@@ -204,22 +256,24 @@ func _apply_camera_pose(
+ ## construction.
+ ##
+ ## Body Y = 0 (ground plane): the RigidBody3D body is the position target and
+-## sits at the ground plane; the wedge half-thickness offset (Y=0.25) lives
+-## in mesh-local space on VehicleProxy3D/Mesh and is set once at .tscn load.
+-## Writes go to `global_position` (not `position`) so the math is robust to a
+-## future non-identity transform on Render3D (kinematic RigidBody3D's
+-## physics-server sync follows global_transform).
++## sits at the ground plane; the car `.glb` is authored to rest on the ground at
++## its own origin (Kenney kit convention), so the Visual child mounts at the body
++## origin with no extra Y offset (#567; the retired PrismMesh's Y=0.25 half-
++## thickness offset is gone with the wedge). Writes go to `global_position` (not
++## `position`) so the math is robust to a future non-identity transform on
++## Render3D (kinematic RigidBody3D's physics-server sync follows global_transform).
+ ##
+ ## Yaw: the basis remap sim(X,Y,Z) -> world(X,Z,Y) is an ODD permutation, so
+ ## it flips handedness — sim's CCW-around-+Z maps to world's CW-around-+Y,
+-## hence the minus sign on `vehicle_xf.w`. `APEX_BAKE_OFFSET_Y` (PI/2)
+-## compensates for the .tscn's +90° X bake on the Mesh child. If the basis
+-## remap is ever made handedness-preserving, drop the negation in `yaw_world`.
++## hence the minus sign on `vehicle_xf.w`. `VEHICLE_BAKE_OFFSET_Y` (PI/2) rotates
++## the car's authored +Z forward to world +X (vehicle forward at sim_yaw=0) — no
++## +90° X bake, the car lies flat. If the basis remap is ever made handedness-
++## preserving, drop the negation in `yaw_world`.
+ func sync_vehicle(vehicle_xf: Vector4) -> void:
+ 	var planar: Vector2 = _planar_from_3d(Vector3(vehicle_xf.x, vehicle_xf.y, vehicle_xf.z))
+ 	_vehicle_3d_proxy.global_position = Vector3(planar.x, 0.0, planar.y)
+ 	var yaw_world: float = -vehicle_xf.w  # handedness flip per sim->world remap
+-	_vehicle_3d_proxy.rotation.y = APEX_BAKE_OFFSET_Y + yaw_world
++	_vehicle_3d_proxy.rotation.y = VEHICLE_BAKE_OFFSET_Y + yaw_world
+ 
+ 
+ ## Per-frame player-proxy transform sync (PR1c; mirrors `sync_vehicle`, also
+diff --git a/apps/game-godot/assets/README.md b/apps/game-godot/assets/README.md
+index b6dc814..3908c3d 100644
+--- a/apps/game-godot/assets/README.md
++++ b/apps/game-godot/assets/README.md
+@@ -47,6 +47,7 @@ assets/
+ | Asset | Source pack | License | Texture (colormap md5) | Used by |
+ |---|---|---|---|---|
+ | `mini-characters/character-female-a.glb` | Kenney — Mini Characters | CC0 | `Textures/colormap.png` (`6113ca7438d6f42a273498b357eb5c01`) | player avatar — ADR-029 P1c+ |
++| `car-kit/sedan-sports.glb` | Kenney — Car Kit | CC0 | `Textures/colormap.png` (`451b163d51d08b73f7d98244fef3f979`) | demo vehicle — mmnto-ai/liquid-city#567 |
+ 
+ > Kenney assets are CC0 (public domain) — attribution is optional but tracked here.
+ > A CC-BY asset entering the tree would make its manifest row's attribution mandatory.
+diff --git a/apps/game-godot/assets/car-kit/Textures/colormap.png b/apps/game-godot/assets/car-kit/Textures/colormap.png
+new file mode 100644
+index 0000000..5c4b185
+Binary files /dev/null and b/apps/game-godot/assets/car-kit/Textures/colormap.png differ
+diff --git a/apps/game-godot/assets/car-kit/Textures/colormap.png.import b/apps/game-godot/assets/car-kit/Textures/colormap.png.import
+new file mode 100644
+index 0000000..cd0e485
+--- /dev/null
++++ b/apps/game-godot/assets/car-kit/Textures/colormap.png.import
+@@ -0,0 +1,40 @@
++[remap]
++
++importer="texture"
++type="CompressedTexture2D"
++uid="uid://ba8n5uae6w7cp"
++path="res://.godot/imported/colormap.png-b86a391478413f24b1c959d4ae0dc3f0.ctex"
++metadata={
++"vram_texture": false
++}
++
++[deps]
++
++source_file="res://assets/car-kit/Textures/colormap.png"
++dest_files=["res://.godot/imported/colormap.png-b86a391478413f24b1c959d4ae0dc3f0.ctex"]
++
++[params]
++
++compress/mode=0
++compress/high_quality=false
++compress/lossy_quality=0.7
++compress/uastc_level=0
++compress/rdo_quality_loss=0.0
++compress/hdr_compression=1
++compress/normal_map=0
++compress/channel_pack=0
++mipmaps/generate=false
++mipmaps/limit=-1
++roughness/mode=0
++roughness/src_normal=""
++process/channel_remap/red=0
++process/channel_remap/green=1
++process/channel_remap/blue=2
++process/channel_remap/alpha=3
++process/fix_alpha_border=true
++process/premult_alpha=false
++process/normal_map_invert_y=false
++process/hdr_as_srgb=false
++process/hdr_clamp_exposure=false
++process/size_limit=0
++detect_3d/compress_to=1
+diff --git a/apps/game-godot/assets/car-kit/sedan-sports.glb b/apps/game-godot/assets/car-kit/sedan-sports.glb
+new file mode 100644
+index 0000000..07442cb
+Binary files /dev/null and b/apps/game-godot/assets/car-kit/sedan-sports.glb differ
+diff --git a/apps/game-godot/assets/car-kit/sedan-sports.glb.import b/apps/game-godot/assets/car-kit/sedan-sports.glb.import
+new file mode 100644
+index 0000000..9064c65
+--- /dev/null
++++ b/apps/game-godot/assets/car-kit/sedan-sports.glb.import
+@@ -0,0 +1,42 @@
++[remap]
++
++importer="scene"
++importer_version=1
++type="PackedScene"
++uid="uid://cyx3racbat8ne"
++path="res://.godot/imported/sedan-sports.glb-4a493c737739738c3f760ec21ffffab3.scn"
++
++[deps]
++
++source_file="res://assets/car-kit/sedan-sports.glb"
++dest_files=["res://.godot/imported/sedan-sports.glb-4a493c737739738c3f760ec21ffffab3.scn"]
++
++[params]
++
++nodes/root_type=""
++nodes/root_name=""
++nodes/root_script=null
++nodes/apply_root_scale=true
++nodes/root_scale=1.0
++nodes/import_as_skeleton_bones=false
++nodes/use_name_suffixes=true
++nodes/use_node_type_suffixes=true
++meshes/ensure_tangents=true
++meshes/generate_lods=true
++meshes/create_shadow_meshes=true
++meshes/light_baking=1
++meshes/lightmap_texel_size=0.2
++meshes/force_disable_compression=false
++skins/use_named_skins=true
++animation/import=true
++animation/fps=30
++animation/trimming=false
++animation/remove_immutable_tracks=true
++animation/import_rest_as_RESET=false
++import_script/path=""
++materials/extract=0
++materials/extract_format=0
++materials/extract_path=""
++_subresources={}
++gltf/naming_version=2
++gltf/embedded_image_handling=1
+diff --git a/apps/game-godot/main.tscn b/apps/game-godot/main.tscn
+index 30ccbb8..d8b9ba1 100644
+--- a/apps/game-godot/main.tscn
++++ b/apps/game-godot/main.tscn
+@@ -20,16 +20,9 @@ buffer = PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+ [sub_resource type="SystemFont" id="SystemFont_mono"]
+ font_names = PackedStringArray("Consolas", "Cascadia Mono", "Courier New", "monospace")
+ 
+-[sub_resource type="PrismMesh" id="PrismMesh_vehicle"]
+-size = Vector3(1.5, 2.5, 0.5)
+-
+ [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+ size = Vector2(500, 500)
+ 
+-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vehicle"]
+-shading_mode = 0
+-albedo_color = Color(1, 0.27, 0.27, 1)
+-
+ [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+ albedo_color = Color(0.29, 0.31, 0.37, 1)
+ 
+@@ -93,11 +86,6 @@ material_override = SubResource("StandardMaterial3D_ground")
+ freeze = true
+ freeze_mode = 1
+ 
+-[node name="Mesh" type="MeshInstance3D" parent="Render3D/VehicleProxy3D" unique_id=301000001]
+-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0.25, 0)
+-mesh = SubResource("PrismMesh_vehicle")
+-material_override = SubResource("StandardMaterial3D_vehicle")
+-
+ [node name="Collision" type="CollisionShape3D" parent="Render3D/VehicleProxy3D" unique_id=301000002]
+ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
+ shape = SubResource("BoxShape3D_vehicle")
+diff --git a/apps/game-godot/sim_driver.gd b/apps/game-godot/sim_driver.gd
+index ce9431f..4a4554a 100644
+--- a/apps/game-godot/sim_driver.gd
++++ b/apps/game-godot/sim_driver.gd
+@@ -472,10 +472,12 @@ const PLAYER_COMMAND_FIRE_PRIMARY: int = 3
+ ## Refs for the parallel 3D substrate; null-guarded in _ready() with the
+ ## same scene-load fail-loud pattern as camera above. Camera3D + Render3D
+ ## are siblings of SimDisplay under Main; VehicleProxy3D is a RigidBody3D
+-## child of Render3D, with its visual mesh as a grandchild. The body is
+-## the position/rotation target for per-frame sim FFI writes; the mesh
+-## carries the +90° X bake (apex-forward) in local space — see the
+-## startup bake-drift guard in _ready() for the invariant lock.
++## child of Render3D. The body is the position/rotation target for per-frame
++## sim FFI writes; its visual is a "Visual" child mounted at runtime by
++## `Render3DAdapter.setup_vehicle_proxy` (the Kenney car `.glb`, or a BoxMesh
++## stub if the load fails) — #567. The car is authored upright and lying flat,
++## so the visual carries no bake; the model's authored-forward yaw lives in the
++## single `Render3DAdapter.VEHICLE_BAKE_OFFSET_Y` constant.
+ ##
+ ## Body freeze contract (load-bearing). VehicleProxy3D ships with
+ ## `freeze = true` + `freeze_mode = FREEZE_MODE_KINEMATIC` in main.tscn.
+@@ -503,19 +505,17 @@ const PLAYER_COMMAND_FIRE_PRIMARY: int = 3
+ ## guard in _ready() enforces disabled=true at scene-load.
+ ##
+ ## Collision envelope dimensions. BoxShape3D_vehicle in main.tscn carries
+-## `size = Vector3(1.5, 0.5, 2.5)`. These track the PrismMesh_vehicle
+-## post-bake silhouette in body-local space: PrismMesh `size = Vector3(1.5,
+-## 2.5, 0.5)` where the +90° X bake on VehicleProxy3D/Mesh.transform maps
+-## local-Y (apex, 2.5) → body-Z and local-Z (extrusion, 0.5) → body-Y.
+-## Body-local envelope after bake: X=1.5 (width), Y=0.5 (height), Z=2.5
+-## (length, apex direction). Audit this size whenever PrismMesh_vehicle's
+-## `size` changes — a mesh resize without a paired collision-envelope
+-## resize produces invisible collision geometry the moment Collision is
+-## enabled by a consumer ticket.
++## `size = Vector3(1.5, 0.5, 2.5)` (width × height × length, body-local) — a
++## coarse box approximating the vehicle silhouette. It originally tracked the
++## retired PrismMesh wedge; the Kenney car `.glb` (#567) has a similar footprint
++## (~1.3 wide × ~2.55 long), so the envelope still bounds it well enough for the
++## future consumer tickets that will enable it. The box is render-independent
++## (physics proxy, #302) — the #567 visual swap deliberately did NOT retune it.
++## Audit this size when a consumer ticket enables Collision, or if the demo car
++## is swapped for a markedly different footprint.
+ @onready var _camera_3d: Camera3D = $Camera3D
+ @onready var _render_3d_root: Node3D = $Render3D
+ @onready var _vehicle_3d_proxy: RigidBody3D = $Render3D/VehicleProxy3D
+-@onready var _vehicle_3d_mesh: MeshInstance3D = $Render3D/VehicleProxy3D/Mesh
+ @onready var _vehicle_3d_collision: CollisionShape3D = $Render3D/VehicleProxy3D/Collision
+ @onready var _render_3d_walls: Node3D = $Render3D/Walls
+ ## ADR-029 PR1c (mmnto-ai/liquid-city#558): the player render-proxy container.
+@@ -981,14 +981,6 @@ func _ready() -> void:
+ 		set_physics_process(false)
+ 		set_process_input(false)
+ 		return
+-	if _vehicle_3d_mesh == null:
+-		push_error(
+-			"sim_driver: Mesh child node missing from VehicleProxy3D (renamed or deleted in main.tscn?)."
+-		)
+-		_init_failed = true
+-		set_physics_process(false)
+-		set_process_input(false)
+-		return
+ 	if _vehicle_3d_collision == null:
+ 		push_error(
+ 			"sim_driver: Collision child node missing from VehicleProxy3D (renamed or deleted in main.tscn?)."
+@@ -1084,57 +1076,15 @@ func _ready() -> void:
+ 		set_physics_process(false)
+ 		set_process_input(false)
+ 		return
+-	# Enforce the +90° X bake on the Mesh child that the per-frame
+-	# `rotation.y = Render3DAdapter.APEX_BAKE_OFFSET_Y - vehicle_xf.w` formula
+-	# (now in Render3DAdapter.sync_vehicle, ADR-029 PR1b) assumes.
+-	# Pre-#301 this bake lived on VehicleProxy3D directly (when that node
+-	# was a MeshInstance3D); the RigidBody3D migration moves the bake to
+-	# the child mesh's local transform so the body itself stays at an
+-	# identity-basis sim-write target. Placed FIRST among 3D-substrate
+-	# uses so no prior code path can mutate basis before the check —
+-	# reads the .tscn-baked transform untouched. If the bake is removed
+-	# or its sign flipped, the wedge silently mis-aims; the bug is
+-	# invisible without a centered-on-vehicle playtest.
++	# (#567) The PrismMesh +90° X bake asserts retired with the wedge: the demo
++	# vehicle visual is now a Kenney car `.glb` mounted at runtime by
++	# `Render3DAdapter.setup_vehicle_proxy` (authored upright + lying flat → no
++	# bake), and its authored-forward yaw is the single `VEHICLE_BAKE_OFFSET_Y`
++	# constant. There is no .tscn-baked mesh transform left to drift, so the
++	# basis.y / origin.y startup guards no longer apply. The car's facing is
++	# verified on a live drive (the named offset is the one place to fix it).
+ 	#
+-	# Uses `push_error + _init_failed` (matches the null-guard idiom above),
+-	# NOT `assert()` — GDScript's `assert()` strips in exported release
+-	# builds, which would fully reinstate the silent-failure mode this
+-	# guard exists to prevent. The cost of coupling-via-comment was already
+-	# paid once (PR #297 R1 yaw-handedness defense was wrong, caught only
+-	# by eyeball at playtest gate); release-safety is load-bearing here.
+-	if not _vehicle_3d_mesh.basis.y.is_equal_approx(Vector3(0, 0, 1)):
+-		push_error(
+-			(
+-				"sim_driver: VehicleProxy3D/Mesh baked basis.y drifted from expected (0,0,1); "
+-				+ "yaw formula at the rotation.y assignment will mis-aim. "
+-				+ "Check main.tscn VehicleProxy3D/Mesh.transform."
+-			)
+-		)
+-		_init_failed = true
+-		set_physics_process(false)
+-		set_process_input(false)
+-		return
+-	# Enforce VehicleProxy3D/Mesh.transform.origin.y bake. The wedge half-
+-	# thickness offset (0.25 = PrismMesh's post-bake Y-extent / 2) lives
+-	# on the mesh-local transform so the body itself sits at the ground
+-	# plane (Y=0) and the per-frame sim write doesn't carry the visual
+-	# offset. If a future .tscn edit zeroes the mesh origin, the wedge
+-	# clips into the ground — visible in playtest but silent in the JSON
+-	# regression diff. Pair with the basis-drift guard above so both
+-	# rotation AND translation invariants of the bake are enforced.
+-	if not is_equal_approx(_vehicle_3d_mesh.transform.origin.y, 0.25):
+-		push_error(
+-			(
+-				"sim_driver: VehicleProxy3D/Mesh.transform.origin.y drifted from expected 0.25; "
+-				+ "wedge will clip into or float above the ground plane. "
+-				+ "Check main.tscn VehicleProxy3D/Mesh.transform."
+-			)
+-		)
+-		_init_failed = true
+-		set_physics_process(false)
+-		set_process_input(false)
+-		return
+-	# ADR-029 PR1b: all 3D-node bake/freeze/disabled contracts validated
++	# Freeze + Collision-disabled contracts (physics proxy, #302) validated
+ 	# above — construct the render adapter with the now-trusted refs. It owns
+ 	# the per-frame 3D writes from here on; sim_driver feeds it unwrapped
+ 	# spatial values.
+@@ -1146,6 +1096,9 @@ func _ready() -> void:
+ 	# frame-capture fixtures stay bit-identical), the rigged `.glb` in an
+ 	# interactive session. Fixed here, never swapped at runtime (fold #6).
+ 	_render_adapter.setup_player_proxy(DisplayServer.get_name() == "headless")
++	# #567: mount the demo vehicle's visual (Kenney car `.glb`, or a BoxMesh stub
++	# on load failure). Static mesh → no headless branch (see setup_vehicle_proxy).
++	_render_adapter.setup_vehicle_proxy()
+ 	# Sync initial 3D-camera state to the Inspector-set use_3d_camera value.
+ 	# The setter that fired during .tscn load was no-op'd by the
+ 	# is_node_ready() gate (@onready refs weren't resolved yet); this is

@@ -1,0 +1,1113 @@
+diff --git a/apps/game-godot/HordeRenderAdapter.gd b/apps/game-godot/HordeRenderAdapter.gd
+index 1ca8856..868fd5b 100644
+--- a/apps/game-godot/HordeRenderAdapter.gd
++++ b/apps/game-godot/HordeRenderAdapter.gd
+@@ -65,9 +65,10 @@ var _mm: MultiMesh
+ var _mat: ShaderMaterial
+ var _meta: Dictionary = {}
+ 
+-# per-slot anim clock (indexed by stable BufferSlot)
+-var _clock := PackedFloat32Array()
+-var _was_live := PackedByteArray()
++# per-slot anim clock — shared across the VAT + skeletal tiers (ADR-029 P2b PR4;
++# PR5 injects ONE SlotClockBook into both adapters so a VAT<->skeletal swap
++# phase-matches). Was a private _clock/_was_live pair through PR3.
++var _clocks: SlotClockBook
+ var _out := PackedFloat32Array()
+ var _scratch := PackedByteArray()  # 4-byte bitcast scratch for the w pack
+ 
+@@ -84,9 +85,12 @@ var last_assembly_usec := 0
+ var last_live := 0
+ 
+ 
+-func _init(render_root: Node3D, headless: bool) -> void:
++func _init(render_root: Node3D, headless: bool, clocks: SlotClockBook = null) -> void:
+ 	_render_root = render_root
+ 	_headless = headless
++	# PR5 injects a shared book; PR3/PR4 in-game default to a private one (no
++	# live skeletal slots sharing it yet).
++	_clocks = clocks if clocks != null else SlotClockBook.new()
+ 	_scratch.resize(4)
+ 
+ 
+@@ -310,11 +314,8 @@ func update(
+ 		var oy := agent_buf[bo + 7]
+ 		# dead slots are zeroed by the snapshot writer -> all-zero basis
+ 		if absf(bxx) < 1e-9 and absf(bxy) < 1e-9 and absf(byx) < 1e-9 and absf(byy) < 1e-9:
+-			_was_live[s] = 0
++			_clocks.mark_dead(s)
+ 			continue
+-		if _was_live[s] == 0:
+-			_clock[s] = 0.0  # (re)born / recycled slot -> fresh clock
+-			_was_live[s] = 1
+ 
+ 		# render-state record (default to live-locomotion full-health if absent)
+ 		var ro := s * RENDER_STATE_STRIDE
+@@ -328,9 +329,9 @@ func update(
+ 			hitstop = render_state[ro + RS_HITSTOP]
+ 			intent = render_state[ro + RS_INTENT]
+ 
+-		# HitStop = freeze this slot's clock; the rest keep advancing.
+-		if hitstop == 0:
+-			_clock[s] += delta
++		# Shared SlotClockBook owns rebirth-reset + HitStop-freeze now (ADR-029 P2b
++		# PR4) so the skeletal tier reads the identical per-slot phase.
++		var clk := _clocks.advance(s, delta, hitstop)
+ 
+ 		# sim heading (sim plane) -> Godot yaw about +Y; sim (X,Y) -> Godot (X,Z)
+ 		var heading := atan2(bxy, bxx)
+@@ -351,7 +352,7 @@ func update(
+ 		_out[po + 10] = b.z.z
+ 		_out[po + 11] = oy
+ 		# CUSTOM_DATA v1: x=clock y=clip z=health_frac w=packed-flags-uint
+-		_out[po + 12] = _clock[s]
++		_out[po + 12] = clk
+ 		_out[po + 13] = float(_intent_clip[clampi(intent, 0, ANIM_INTENT_COUNT - 1)])
+ 		_out[po + 14] = float(health) / 255.0
+ 		_out[po + 15] = _pack_flags(flags)
+@@ -380,10 +381,7 @@ func debug_status() -> String:
+ 
+ 
+ func _ensure_slots(count: int) -> void:
+-	if _clock.size() >= count:
+-		return
+-	_clock.resize(count)
+-	_was_live.resize(count)
++	_clocks.ensure_capacity(count)
+ 
+ 
+ func _load_mesh() -> Mesh:
+diff --git a/apps/game-godot/SkeletalHordeAdapter.gd b/apps/game-godot/SkeletalHordeAdapter.gd
+new file mode 100644
+index 0000000..09ec199
+--- /dev/null
++++ b/apps/game-godot/SkeletalHordeAdapter.gd
+@@ -0,0 +1,421 @@
++class_name SkeletalHordeAdapter
++extends RefCounted
++
++# ADR-029 P2b PR4 — skeletal render-LOD-0 adapter (DARK / bench-only this PR).
++#
++# A pool of up to `cap` skinned character-female-a rigs (Skeleton3D +
++# AnimationPlayer), driven from the SAME render-state ABI the VAT horde consumes:
++#   - get_agent_buffer()             stride-8 Transform2D (position + heading)
++#   - get_agent_render_state_buffer() stride-4 [flags, health, hitstop, AnimIntent]
++# The clip set is the rig's OWN AnimationPlayer library (the full Kenney set),
++# resolved AnimIntent -> clip name by preference at setup. NEVER queries the sim
++# FFI itself — the bench (PR4) / sim_driver (PR5) feeds it both buffers.
++#
++# SCOPE (operator ruling 2026-06-22, dark/bench-only): this PR builds + measures
++# the mechanism. WHICH live agents bind here, and the VAT<->skeletal dedup, are
++# PR5's LODManager3D. In-game stays always-VAT until PR5; the forced-N bench is
++# the only consumer this PR. PR4's job: "can we instantiate, bind, animate, tint,
++# freeze, and MEASURE LOD-0 rigs safely?" -> pick the cap from the bench.
++#
++# Cohort impl-preflight folds (lc-codex / lc-agy / lc-gemini, 2026-06-22):
++#  - Shared per-slot clock via SlotClockBook (phase-matched swaps free in PR5).
++#  - Tint via instance uniform on EVERY skinned MeshInstance3D under the rig
++#    (the mini-rig is body + head — single-mesh tint leaves part untinted),
++#    through ONE shared ShaderMaterial (no per-rig material clone).
++#  - play() ONLY on bind / intent change (re-play every frame restarts the clip +
++#    breaks phase); speed_scale=0 freezes HitStop; seek from the shared clock on
++#    (re)bind so a PR5 VAT->skeletal promotion does not pop to frame 0.
++#  - Unbound pool rigs: visible=false + process_mode=DISABLED (an idle
++#    AnimationPlayer in the tree still burns skinning cycles).
++#  - Missing/short render-state record -> skip the slot (no ghost rig; do NOT
++#    inherit the VAT adapter's live-full-health default for an expensive rig).
++#  - Headless: instantiate ZERO rigs / Skeleton3D / AnimationPlayer; the pool +
++#    cap bookkeeping still run (determinism fixtures stay asset-free, crash-free).
++
++const RIG_GLB_PATH := "res://assets/mini-characters/character-female-a.glb"
++const COLORMAP_PATH := "res://assets/mini-characters/Textures/colormap.png"
++const SHADER_PATH := "res://shaders/skeletal_horde.gdshader"
++const AGENT_STRIDE := 8
++
++# render-state record layout — MIRROR of density_feedback.rs RS_* offsets
++# (same contract HordeRenderAdapter consumes).
++const RENDER_STATE_STRIDE := 4
++const RS_FLAGS := 0
++const RS_HEALTH := 1
++const RS_HITSTOP := 2
++const RS_INTENT := 3
++
++# AnimIntent — MIRROR of density_feedback.rs (locked by tests/anim_intent_parity.rs
++# against HordeRenderAdapter's identical consts; the wire contract).
++const ANIM_IDLE := 0
++const ANIM_LOCOMOTION := 1
++const ANIM_STAGGER := 2
++const ANIM_BALLISTIC := 3
++const ANIM_DEATH := 4
++const ANIM_ATTACK := 5
++const ANIM_INTENT_COUNT := 6
++
++var _render_root: Node3D
++var _headless := false
++var _cap := 0
++var _clocks: SlotClockBook
++var _ready := false
++var _enabled := false
++var _colormap_enabled := true
++var _health_tint_enabled := false
++
++var _mat: ShaderMaterial
++
++# pool (parallel arrays, indexed by pool slot 0.._cap-1)
++var _holders: Array[Node3D] = []  # carry the per-agent sim transform
++var _players: Array[AnimationPlayer] = []
++var _meshes: Array = []  # Array[Array[MeshInstance3D]] — body + head per rig
++var _pool_slot := PackedInt32Array()  # bound BufferSlot, -1 = free
++var _pool_intent := PackedInt32Array()  # cached AnimIntent, -1 = none (force play)
++
++# AnimIntent -> clip NAME resolved from the rig's own AnimationPlayer library.
++var _intent_clip: Array[StringName] = []
++
++# tunables (parity with the VAT horde so a PR5 swap does not jump scale/facing/feet)
++var character_scale := 1.0
++var y_offset := 0.0
++var facing_offset := 0.0
++
++# perf / bench instrumentation
++var last_assembly_usec := 0
++var last_live := 0
++
++
++func _init(render_root: Node3D, headless: bool, cap: int, clocks: SlotClockBook = null) -> void:
++	_render_root = render_root
++	_headless = headless
++	_cap = maxi(cap, 0)
++	# Shared clock: PR5 injects ONE book into both this adapter and the VAT
++	# adapter so swaps phase-match. PR4 defaults to its own (no shared live slots
++	# yet — dark path).
++	_clocks = clocks if clocks != null else SlotClockBook.new()
++
++
++# This is RefCounted but parents up to `cap` holder Node3Ds into the SceneTree
++# (_render_root). Godot nodes are manually managed, so they are NOT freed when
++# this RefCounted's last reference drops — a replaced/reconstructed adapter would
++# orphan its whole pool in the tree. Free the pool on predelete (GCA #600; the
++# .gemini/styleguide.md "nodes are not GC'd — always queue_free()" rule).
++func _notification(what: int) -> void:
++	if what == NOTIFICATION_PREDELETE:
++		for holder in _holders:
++			if holder != null and is_instance_valid(holder):
++				holder.queue_free()
++
++
++# Build the shared material + the rig pool + the intent->clip table. Returns false
++# (no-op) when headless or on a load failure. Idempotent.
++func setup() -> bool:
++	if _ready:
++		return true
++	if _headless:
++		# Headless: no rigs, but size the bookkeeping arrays so update()'s cap math
++		# + slot accounting still run crash-free (no Skeleton3D/AnimationPlayer).
++		_init_pool_state()
++		_ready = true
++		return false
++
++	var shader := load(SHADER_PATH) as Shader
++	if shader == null:
++		push_error("SkeletalHordeAdapter: failed to load shader")
++		return false
++	_mat = ShaderMaterial.new()
++	_mat.shader = shader
++	var cm := load(COLORMAP_PATH) as Texture2D
++	if cm != null:
++		_mat.set_shader_parameter("colormap", cm)
++	else:
++		push_warning("SkeletalHordeAdapter: colormap missing at %s — flat tint" % COLORMAP_PATH)
++	_mat.set_shader_parameter("use_colormap", _colormap_enabled and cm != null)
++	_mat.set_shader_parameter("use_health_tint", _health_tint_enabled)
++
++	# Hoist the rig PackedScene load out of the per-rig loop (CR/Greptile #600):
++	# load() hits the resource cache after the first read, but the cast + dispatch
++	# still run N times. Load once, pass it into every _spawn_rig.
++	var rig_scene := load(RIG_GLB_PATH) as PackedScene
++	if rig_scene == null:
++		push_error("SkeletalHordeAdapter: failed to load rig scene at %s" % RIG_GLB_PATH)
++		return false
++	_init_pool_state()
++	for i in _cap:
++		if not _spawn_rig(i, rig_scene):
++			push_error("SkeletalHordeAdapter: failed to instantiate rig %d" % i)
++			return false
++	_build_intent_clip_table()
++	_ready = true
++	return true
++
++
++func _init_pool_state() -> void:
++	_pool_slot.resize(_cap)
++	_pool_slot.fill(-1)
++	_pool_intent.resize(_cap)
++	_pool_intent.fill(-1)
++	_holders.resize(_cap)
++	_players.resize(_cap)
++	_meshes.resize(_cap)
++
++
++# Instantiate one pooled rig: a holder Node3D (the sim-transform target) parenting
++# the rig .glb instance; cache its AnimationPlayer + every skinned MeshInstance3D;
++# assign the shared tint material to each mesh; start unbound (hidden + disabled).
++func _spawn_rig(i: int, packed: PackedScene) -> bool:
++	var rig := packed.instantiate() as Node3D
++	if rig == null:
++		return false
++	var holder := Node3D.new()
++	holder.name = "SkelRig%d" % i
++	if character_scale != 1.0:
++		rig.scale = Vector3(character_scale, character_scale, character_scale)
++	holder.add_child(rig)
++	_render_root.add_child(holder)
++
++	var player := _find_anim_player(rig)
++	var meshes: Array[MeshInstance3D] = []
++	_collect_meshes(rig, meshes)
++	# Tint every skinned surface (body + head) through the shared material — set on
++	# each mesh so no surface is left untinted (lc-codex). material_override
++	# replaces the GLB StandardMaterial, so the shader supplies the colormap.
++	for m in meshes:
++		m.material_override = _mat
++
++	_holders[i] = holder
++	_players[i] = player
++	_meshes[i] = meshes
++	holder.visible = false
++	holder.process_mode = Node.PROCESS_MODE_DISABLED
++	return true
++
++
++# Resolve each AnimIntent to a clip NAME present in the rig's AnimationPlayer, by
++# preference (first match wins; else the first available clip; else ""). Mirrors
++# HordeRenderAdapter._build_intent_clip_table but resolves against the live
++# AnimationPlayer library (the full Kenney set), not the sparse VAT bake table.
++func _build_intent_clip_table() -> void:
++	_intent_clip.resize(ANIM_INTENT_COUNT)
++	for i in ANIM_INTENT_COUNT:
++		_intent_clip[i] = &""
++	var player: AnimationPlayer = _players[0] if _players.size() > 0 else null
++	if player == null:
++		push_warning("SkeletalHordeAdapter: rig has no AnimationPlayer — clips unavailable")
++		return
++	var names := player.get_animation_list()
++	if names.is_empty():
++		push_warning("SkeletalHordeAdapter: AnimationPlayer has no clips")
++		return
++	var fallback := names[0]
++	_intent_clip[ANIM_IDLE] = _first_clip(names, ["idle", "walk"], fallback)
++	_intent_clip[ANIM_LOCOMOTION] = _first_clip(
++		names, ["walk", "run", "sprint", "locomotion"], fallback
++	)
++	_intent_clip[ANIM_STAGGER] = _first_clip(names, ["hit", "stagger", "walk"], fallback)
++	_intent_clip[ANIM_BALLISTIC] = _first_clip(names, ["fall", "flail", "walk"], fallback)
++	_intent_clip[ANIM_DEATH] = _first_clip(names, ["die", "death", "walk"], fallback)
++	_intent_clip[ANIM_ATTACK] = _first_clip(
++		names, ["attack", "attack-melee-right", "punch", "walk"], fallback
++	)
++
++
++# A clip name may be bare ("walk") or library-qualified ("Library/walk"); match
++# on the unqualified suffix so either import naming resolves.
++func _first_clip(names: PackedStringArray, prefs: Array, fallback: StringName) -> StringName:
++	for pref in prefs:
++		for nm in names:
++			var bare := nm.get_slice("/", nm.get_slice_count("/") - 1)
++			if bare == pref:
++				return nm
++	return fallback
++
++
++func set_active(enabled: bool) -> void:
++	_enabled = enabled
++	# Dark path: visibility of bound rigs is managed per-frame in update(); when
++	# disabled, unbind the whole pool so no rig lingers.
++	if not enabled and _ready and not _headless:
++		for i in _cap:
++			_unbind(i)
++
++
++func is_active() -> bool:
++	return _enabled and _ready and not _headless
++
++
++func set_colormap_enabled(on: bool) -> void:
++	_colormap_enabled = on
++	if _mat != null:
++		_mat.set_shader_parameter("use_colormap", on)
++
++
++func set_health_tint_enabled(on: bool) -> void:
++	_health_tint_enabled = on
++	if _mat != null:
++		_mat.set_shader_parameter("use_health_tint", on)
++
++
++# Per-frame: bind the first up-to-`cap` live agents to pool rigs (PR4's trivial
++# in-order selection — PR5's LODManager3D replaces it with a priority policy +
++# VAT dedup), drive each rig's transform / clip / freeze / tint, unbind the rest.
++func update(
++	agent_buf: PackedFloat32Array, render_state: PackedByteArray, count: int, delta: float
++) -> void:
++	if not _ready:
++		return
++	var t0 := Time.get_ticks_usec()
++	_clocks.ensure_capacity(count)
++	var max_agents := agent_buf.size() / AGENT_STRIDE
++	if count > max_agents:
++		count = max_agents
++	var rs_len := render_state.size()
++
++	var pool_i := 0
++	for s in count:
++		var bo := s * AGENT_STRIDE
++		var bxx := agent_buf[bo + 0]
++		var byx := agent_buf[bo + 1]
++		var ox := agent_buf[bo + 3]
++		var bxy := agent_buf[bo + 4]
++		var byy := agent_buf[bo + 5]
++		var oy := agent_buf[bo + 7]
++		# dead slots are zeroed by the snapshot writer -> all-zero basis
++		if absf(bxx) < 1e-9 and absf(bxy) < 1e-9 and absf(byx) < 1e-9 and absf(byy) < 1e-9:
++			_clocks.mark_dead(s)
++			continue
++		# Missing/short render-state record -> SKIP this slot (no ghost rig). An
++		# expensive skeletal rig must not render on a defaulted record, unlike the
++		# VAT adapter's cheap live-full-health fallback (lc-codex). Plain continue,
++		# NOT mark_dead: the slot is LIVE (it passed the zeroed-transform check),
++		# just record-less, so under a shared book (PR5) mark_dead would reset the
++		# clock that the VAT tier — which renders this slot via its fallback — is
++		# advancing, freezing/restarting its animation (GCA #600).
++		var ro := s * RENDER_STATE_STRIDE
++		if ro + RENDER_STATE_STRIDE > rs_len:
++			continue
++		if pool_i >= _cap:
++			# Over the LOD-0 cap — the VAT tier renders these slots and owns their
++			# clock. Plain continue, NOT advance: under a shared book (PR5) the VAT
++			# tier already advances them, so advancing here too would double-speed
++			# their animation; on a later promotion the skeletal tier seeks from that
++			# shared clock, which VAT has kept current (GCA #600).
++			continue
++
++		var health := render_state[ro + RS_HEALTH]
++		var hitstop := render_state[ro + RS_HITSTOP]
++		var intent := render_state[ro + RS_INTENT]
++		var clk := _clocks.advance(s, delta, hitstop)
++		var heading := atan2(bxy, bxx)
++		_bind(pool_i, s, ox, oy, heading, intent, health, hitstop, clk)
++		pool_i += 1
++
++	# Unbind the unused tail of the pool.
++	for i in range(pool_i, _cap):
++		_unbind(i)
++	last_live = pool_i
++	last_assembly_usec = Time.get_ticks_usec() - t0
++
++
++func _bind(
++	pool_i: int,
++	slot: int,
++	ox: float,
++	oy: float,
++	heading: float,
++	intent: int,
++	health: int,
++	hitstop: int,
++	clk: float
++) -> void:
++	if _headless:
++		# bookkeeping only (no nodes headless)
++		_pool_slot[pool_i] = slot
++		_pool_intent[pool_i] = intent
++		return
++	var holder := _holders[pool_i]
++	if holder == null:
++		return
++	# sim (X,Y) -> Godot (X,Z), Y=0 ground (+ feet offset); yaw about +Y from the
++	# sim heading — IDENTICAL convention to HordeRenderAdapter so VAT/skeletal
++	# facing matches at a PR5 swap.
++	holder.global_position = Vector3(ox, y_offset, oy)
++	holder.rotation.y = -heading + facing_offset
++	if holder.process_mode == Node.PROCESS_MODE_DISABLED:
++		holder.process_mode = Node.PROCESS_MODE_INHERIT
++		holder.visible = true
++
++	var player := _players[pool_i]
++	var clamped := clampi(intent, 0, ANIM_INTENT_COUNT - 1)
++	# play() ONLY on a (re)bind or intent change — never per frame (re-play
++	# restarts the clip). Seek to the shared clock so the clip phase-matches.
++	if player != null and (_pool_slot[pool_i] != slot or _pool_intent[pool_i] != clamped):
++		var clip := _intent_clip[clamped]
++		if clip != &"":
++			player.play(clip)
++			_seek_to_clock(player, clip, clk)
++	# Cache the intent OUTSIDE the player guard (CR/Greptile #600): a rig with no
++	# AnimationPlayer would otherwise never update the cache, keeping bind-state
++	# stale at -1 and re-entering the gate every frame. The clip table is static,
++	# so an unresolved (empty) clip can't appear later — no per-frame retry wanted.
++	_pool_intent[pool_i] = clamped
++	# HitStop = hold the pose (speed_scale 0); the shared clock is already frozen,
++	# so a later rebind seeks to the held phase.
++	if player != null:
++		player.speed_scale = 0.0 if hitstop > 0 else 1.0
++	# Per-instance health tint on EVERY skinned surface (body + head).
++	var h := float(health) / 255.0
++	for m in _meshes[pool_i]:
++		m.set_instance_shader_parameter("health_frac", h)
++	_pool_slot[pool_i] = slot
++
++
++func _unbind(pool_i: int) -> void:
++	if _pool_slot[pool_i] == -1:
++		return
++	_pool_slot[pool_i] = -1
++	_pool_intent[pool_i] = -1
++	if _headless:
++		return
++	var holder := _holders[pool_i]
++	if holder != null:
++		holder.visible = false
++		# DISABLED halts the AnimationPlayer tick + skinning for the idle rig
++		# (an in-tree AnimationPlayer still burns cycles otherwise — lc-agy).
++		holder.process_mode = Node.PROCESS_MODE_DISABLED
++
++
++# Seek a (looping) clip to the shared slot clock so phase is continuous across a
++# (re)bind — non-looping clips clamp at the end (a finished death holds its pose).
++func _seek_to_clock(player: AnimationPlayer, clip: StringName, clk: float) -> void:
++	var anim := player.get_animation(clip)
++	if anim == null or anim.length <= 0.0:
++		return
++	var t := (
++		fmod(clk, anim.length) if anim.loop_mode != Animation.LOOP_NONE else minf(clk, anim.length)
++	)
++	player.seek(t, true)
++
++
++func _find_anim_player(n: Node) -> AnimationPlayer:
++	if n is AnimationPlayer:
++		return n
++	for c in n.get_children():
++		var r := _find_anim_player(c)
++		if r != null:
++			return r
++	return null
++
++
++func _collect_meshes(n: Node, out: Array[MeshInstance3D]) -> void:
++	if n is MeshInstance3D:
++		out.append(n)
++	for c in n.get_children():
++		_collect_meshes(c, out)
++
++
++func debug_status() -> String:
++	if not is_active():
++		return "Skel3D: off"
++	return "Skel3D: %d/%d rigs, asm %.2fms" % [last_live, _cap, last_assembly_usec / 1000.0]
+diff --git a/apps/game-godot/SkeletalHordeAdapter.gd.uid b/apps/game-godot/SkeletalHordeAdapter.gd.uid
+new file mode 100644
+index 0000000..62cd16b
+--- /dev/null
++++ b/apps/game-godot/SkeletalHordeAdapter.gd.uid
+@@ -0,0 +1 @@
++uid://bi85itww72may
+diff --git a/apps/game-godot/SlotClockBook.gd b/apps/game-godot/SlotClockBook.gd
+new file mode 100644
+index 0000000..b3e81cc
+--- /dev/null
++++ b/apps/game-godot/SlotClockBook.gd
+@@ -0,0 +1,70 @@
++class_name SlotClockBook
++extends RefCounted
++
++# ADR-029 P2b PR4 — the shared per-BufferSlot animation clock.
++#
++# Extracted from HordeRenderAdapter's private `_clock`/`_was_live` arrays so the
++# VAT (render-LOD-1) and skeletal (render-LOD-0) tiers read the SAME accumulated
++# time per slot. PR5's phase-matched VAT<->skeletal swap is then automatic: a
++# promoted/demoted agent keeps its gait phase because both adapters seek from
++# clock(slot) at the swap. This class IS the cohort impl-preflight fold #2
++# (lc-codex / lc-agy / lc-gemini, 2026-06-22 — all three: extract now, not PR5).
++#
++# Render-owned phase ONLY — never enters the Rust ABI. The clock is presentation
++# interpolation derived from slot lifetime + HitStop, not deterministic sim
++# state; pushing it into the FFI would couple render interpolation into the
++# deterministic sim surface for no reason (lc-codex guard).
++#
++# Slot lifecycle (the caller drives, once per frame per slot):
++#   ensure_capacity(count)                  # grow backing arrays to >= count
++#   mark_dead(slot)                         # zeroed-transform / absent record
++#   advance(slot, delta, hitstop_remaining) # rebirth-reset + HitStop-freeze + tick
++#   clock(slot) -> float                    # the seconds for CUSTOM_DATA.x / seek
++#
++# Semantics are byte-for-byte the PR3 HordeRenderAdapter behavior (so its
++# frozen-slot bench assertion is the regression guard): a slot that was dead last
++# frame resets to 0 AND advances on the same rebirth frame; HitStop (remaining >
++# 0) skips the advance so the clip holds its current frame.
++
++var _clock := PackedFloat32Array()
++var _was_live := PackedByteArray()
++
++
++func ensure_capacity(count: int) -> void:
++	if _clock.size() >= count:
++		return
++	_clock.resize(count)
++	_was_live.resize(count)
++
++
++# Advance a LIVE slot. On the rebirth frame (was_live edge 0->1) the clock resets
++# to 0 first, THEN advances this frame — matching PR3 exactly (a reborn slot does
++# not skip a frame). HitStop freezes: remaining > 0 -> the clock holds. Returns
++# the post-advance clock for the caller's CUSTOM_DATA.x / AnimationPlayer.seek.
++func advance(slot: int, delta: float, hitstop_remaining: int) -> float:
++	if slot < 0 or slot >= _clock.size():
++		return 0.0
++	if _was_live[slot] == 0:
++		_clock[slot] = 0.0
++		_was_live[slot] = 1
++	if hitstop_remaining == 0:
++		_clock[slot] += delta
++	return _clock[slot]
++
++
++# Mark a slot dead (zeroed transform or absent render-state). The clock is not
++# zeroed here — it resets on the next rebirth via advance()'s was_live edge, so a
++# recycled BufferSlot (PR3 respawn) starts a fresh gait.
++func mark_dead(slot: int) -> void:
++	if slot >= 0 and slot < _was_live.size():
++		_was_live[slot] = 0
++
++
++func clock(slot: int) -> float:
++	if slot < 0 or slot >= _clock.size():
++		return 0.0
++	return _clock[slot]
++
++
++func was_live(slot: int) -> bool:
++	return slot >= 0 and slot < _was_live.size() and _was_live[slot] == 1
+diff --git a/apps/game-godot/SlotClockBook.gd.uid b/apps/game-godot/SlotClockBook.gd.uid
+new file mode 100644
+index 0000000..4d8826e
+--- /dev/null
++++ b/apps/game-godot/SlotClockBook.gd.uid
+@@ -0,0 +1 @@
++uid://id061fl86ugo
+diff --git a/apps/game-godot/shaders/skeletal_horde.gdshader b/apps/game-godot/shaders/skeletal_horde.gdshader
+new file mode 100644
+index 0000000..cda2f69
+--- /dev/null
++++ b/apps/game-godot/shaders/skeletal_horde.gdshader
+@@ -0,0 +1,50 @@
++shader_type spatial;
++render_mode unshaded;
++
++// ADR-029 P2b PR4 — skeletal render-LOD-0 tint shader.
++//
++// The LOD-0 sibling of horde_render.gdshader (the VAT/LOD-1 shader). It does
++// NOT animate vertices — the skinned Skeleton3D + AnimationPlayer pose the mesh
++// (Godot's built-in skinning runs before this vertex(); we never touch the
++// vertex position, so skinning is transparent). This shader exists only to
++// reproduce the VAT tier's FRAGMENT look — Kenney colormap + the squared-curve
++// damage flash — so an agent does not visibly pop colour when PR5 swaps it
++// between the skeletal and VAT tiers.
++//
++// Health is a per-instance `instance uniform`, set via
++// set_instance_shader_parameter() on EVERY skinned MeshInstance3D under the rig
++// (the Kenney mini-rig is body + head — a single-mesh tint would leave part
++// untinted; lc-codex impl-preflight catch). `instance uniform` lets every pooled
++// rig share ONE ShaderMaterial with a distinct per-instance value — no material
++// clone (lc-agy / lc-gemini confirm).
++
++uniform vec3 base_color : source_color = vec3(0.30, 0.55, 0.30);
++uniform vec3 hurt_color : source_color = vec3(1.0, 0.05, 0.05);
++uniform bool use_colormap = true;  // ON by default — match PR3's "real Kenney colors"
++uniform sampler2D colormap : filter_nearest, source_color;  // Kenney palette (UV lookup)
++// OFF by default so the clean Kenney textures show for the artist preview; the
++// canonical sim_driver._apply_health_tint mutator flips it (parity with the VAT).
++uniform bool use_health_tint = false;
++
++// Per-instance health fraction [0,1] — set per pooled rig via
++// set_instance_shader_parameter("health_frac", ...). Default full health so an
++// unbound/uninitialised rig never renders pre-reddened.
++instance uniform float health_frac = 1.0;
++
++varying float v_health;
++
++void vertex() {
++	// No vertex displacement — the engine skins the mesh. Just carry health to
++	// the fragment stage (read the instance uniform once, vertex-rate).
++	v_health = clamp(health_frac, 0.0, 1.0);
++}
++
++void fragment() {
++	vec3 body = use_colormap ? texture(colormap, UV).rgb : base_color;
++	// Squared curve so damage reads EARLY — identical to horde_render.gdshader so
++	// the two tiers match: v_health*v_health maps 0.7 -> 0.49 (~half red).
++	if (use_health_tint) {
++		body = mix(hurt_color, body, v_health * v_health);
++	}
++	ALBEDO = body;
++}
+diff --git a/apps/game-godot/shaders/skeletal_horde.gdshader.uid b/apps/game-godot/shaders/skeletal_horde.gdshader.uid
+new file mode 100644
+index 0000000..d28dac5
+--- /dev/null
++++ b/apps/game-godot/shaders/skeletal_horde.gdshader.uid
+@@ -0,0 +1 @@
++uid://cgg2q1mnw6e31
+diff --git a/apps/game-godot/skeletal_horde_bench.gd b/apps/game-godot/skeletal_horde_bench.gd
+new file mode 100644
+index 0000000..8416f47
+--- /dev/null
++++ b/apps/game-godot/skeletal_horde_bench.gd
+@@ -0,0 +1,429 @@
++extends Node3D
++
++# ADR-029 P2b PR4 — skeletal render-LOD-0 cap-selection bench.
++#
++# Two phases, both on a REAL GPU (skeletal skinning is the GPU cost we are sizing;
++# headless cannot rasterise it):
++#   PHASE A (correctness, gates the exit code) — drives SkeletalHordeAdapter from a
++#     synthetic ABI (stride-8 transform + stride-4 render-state) and asserts the
++#     CPU-side contracts the disposable proof never had: in-order bind count, dead-
++#     slot skip, HitStop clock-freeze + speed_scale=0, intent->clip differentiation,
++#     per-instance tint distinctness, and root-motion drift < epsilon.
++#   PHASE B (cap selection, reports only) — an ISOLATION sweep N in {0,16,32,48,64}
++#     with vsync off, warmup then a sample window, collecting per-frame time;
++#     reports avg / p95 / p99 / max and picks the cap = highest N whose p95 MARGINAL
++#     frame time over the N=0 baseline stays within the budget. Writes a JSON summary
++#     + a PNG per N to user:// so the number is trackable across local setups
++#     (lc-agy fold — the bench can't run in CI).
++#
++# Run (real GPU, self-quits):
++#   <godot> --path apps/game-godot res://skeletal_horde_bench.tscn
++# Prints [skel-bench] PASS/FAIL + a VERDICT + the recommended cap, then quits
++# (0 = correctness clean, 1 = a correctness assertion failed).
++
++const CAP := 64  # pool sized to the max swept N
++const SPACING := 2.0
++const OUT_DIR := "user://skeletal_horde_bench/"
++
++# --- Phase A (correctness) ---
++const NC := 8  # synthetic agent count
++const FRAMES_C := 4  # fixed frames before asserting
++const DELTA_C := 0.1  # fixed delta so clock asserts are deterministic
++const DEAD_SLOT := 0
++const FROZEN_SLOT := 2  # hitstop > 0 -> clock must hold, speed_scale == 0
++const CONTROL_SLOT := 3  # hitstop 0 -> clock advances, speed_scale == 1
++
++# --- Phase B (perf sweep) ---
++const N_SWEEP := [0, 16, 32, 48, 64]
++const WARMUP := 20
++const SAMPLE := 60
++const BUDGET_MARGINAL_MS := 2.0  # cap = highest N with p95 marginal <= this (lc-agy)
++
++# render-state record layout (mirror of the ABI)
++const RENDER_STATE_STRIDE := 4
++const LIVE_BIT := 0x04
++const ANIM_LOCOMOTION := 1
++const ANIM_DEATH := 4
++
++var _adapter: SkeletalHordeAdapter
++var _cam: Camera3D
++var _xf := PackedFloat32Array()
++var _rs := PackedByteArray()
++
++var _phase := 0  # 0 = correctness, 1 = perf sweep, 2 = done
++var _frame := 0
++var _fails := 0
++var _watchdog := 0  # monotonic frame counter (hard anti-hang quit)
++
++# perf sweep state
++var _sweep_i := 0
++var _samples := PackedFloat32Array()
++var _results := []  # [{n, avg, p95, p99, max}]
++var _drift_start := Vector3.ZERO
++var _drift_rig := -1
++
++
++func _ready() -> void:
++	if DisplayServer.get_name() == "headless":
++		# Headless can't rasterise skeletal skinning — verify the adapter no-ops
++		# without instantiating rigs, then quit clean (mirrors horde_render_bench).
++		var a := SkeletalHordeAdapter.new(self, true, CAP)
++		a.setup()
++		a.set_active(true)
++		var ok := not a.is_active() and a.last_live == 0
++		print("[skel-bench] headless — adapter no-op %s; quit 0" % ("OK" if ok else "UNEXPECTED"))
++		get_tree().quit(0)
++		return
++
++	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
++	_cam = Camera3D.new()
++	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
++	_cam.fov = 55.0
++	_cam.current = true
++	add_child(_cam)
++
++	_adapter = SkeletalHordeAdapter.new(self, false, CAP)
++	if not _adapter.setup():
++		print("[skel-bench] FAIL: adapter setup returned false")
++		get_tree().quit(1)
++		return
++	_adapter.set_active(true)
++	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
++	print("[skel-bench] start; cap=%d clips=%s" % [CAP, str(_adapter._intent_clip)])
++	_build_buffers(NC)
++	_frame_camera(NC)
++
++
++func _process(delta: float) -> void:
++	# After _ready's headless quit(0), _process can still fire once before the tree
++	# tears down — _adapter is null on the headless path, so guard it (else a
++	# harmless-but-ugly "update on Nil" SCRIPT ERROR prints).
++	if _adapter == null:
++		return
++	# Hard watchdog: a self-quitting bench must NEVER hang a window on the
++	# operator's screen. Expected total ~404 frames (4 correctness + 5*(20+60)
++	# sweep); force-quit well past that if a phase ever stalls.
++	_watchdog += 1
++	if _watchdog > 1500:
++		push_error("[skel-bench] watchdog tripped at %d frames — force quit" % _watchdog)
++		get_tree().quit(2)
++		return
++	if _phase == 0:
++		_process_correctness()
++	elif _phase == 1:
++		_process_perf(delta)
++
++
++# --- Phase A: correctness ---
++
++
++func _process_correctness() -> void:
++	_adapter.update(_xf, _rs, NC, DELTA_C)
++	_frame += 1
++	if _frame < FRAMES_C:
++		return
++	_verify_correctness()
++	# advance to the perf sweep
++	_phase = 1
++	_frame = 0
++	_sweep_i = 0
++	_samples = PackedFloat32Array()
++	_begin_sweep_n()
++
++
++func _verify_correctness() -> void:
++	var live_expected := NC - 1  # one dead slot
++	_check(
++		_adapter.last_live == live_expected,
++		"bind count == %d live" % live_expected,
++		"bound %d, expected %d" % [_adapter.last_live, live_expected]
++	)
++
++	# HitStop: frozen slot clock held at 0; control advanced FRAMES_C*DELTA_C.
++	var frozen_clk: float = _adapter._clocks.clock(FROZEN_SLOT)
++	var control_clk: float = _adapter._clocks.clock(CONTROL_SLOT)
++	_check(frozen_clk == 0.0, "hitstop clock frozen at 0", "frozen clock = %.3f" % frozen_clk)
++	var expect := float(FRAMES_C) * DELTA_C
++	_check(
++		absf(control_clk - expect) < 1e-4,
++		"control clock advanced to %.3f" % expect,
++		"control clock = %.3f" % control_clk
++	)
++
++	# speed_scale: the frozen rig holds (0), the control runs (1).
++	var fp := _pool_index_of(FROZEN_SLOT)
++	var cp := _pool_index_of(CONTROL_SLOT)
++	if fp >= 0 and cp >= 0:
++		# Guard the player deref (CR #600): a rig that binds without an
++		# AnimationPlayer must record a controlled FAIL, not throw before _verify
++		# finishes.
++		var fp_player: AnimationPlayer = _adapter._players[fp]
++		var cp_player: AnimationPlayer = _adapter._players[cp]
++		if fp_player != null and cp_player != null:
++			var fss := fp_player.speed_scale
++			var css := cp_player.speed_scale
++			_check(fss == 0.0, "frozen rig speed_scale == 0", "speed_scale = %.2f" % fss)
++			_check(css == 1.0, "control rig speed_scale == 1", "speed_scale = %.2f" % css)
++		else:
++			_check(false, "frozen + control rigs have AnimationPlayers", "player missing")
++	else:
++		_check(false, "frozen + control rigs bound", "pool index missing (f=%d c=%d)" % [fp, cp])
++
++	# intent -> clip table: locomotion + death resolved + differentiate.
++	var loco: StringName = _adapter._intent_clip[ANIM_LOCOMOTION]
++	var death: StringName = _adapter._intent_clip[ANIM_DEATH]
++	_check(
++		loco != &"" and death != &"",
++		"locomotion + death clips resolved",
++		"loco='%s' death='%s'" % [loco, death]
++	)
++	_check(
++		loco != death, "intents differentiate (locomotion != death clip)", "both map to '%s'" % loco
++	)
++
++	# per-instance tint distinctness: two bound rigs with different health carry
++	# different instance shader params (catches material aliasing / single-mesh tint).
++	var p0 := _pool_index_of(1)  # first live slot
++	var p1 := _pool_index_of(CONTROL_SLOT)
++	var m0 := _meshes_of(p0)
++	var m1 := _meshes_of(p1)
++	if p0 >= 0 and p1 >= 0 and m0.size() > 0 and m1.size() > 0:
++		# Body + head: the multi-surface tint fold writes health_frac to EVERY
++		# MeshInstance3D under the rig. Assert >= 2 surfaces AND that the LAST
++		# surface carries the same per-instance value as the first — a body-only
++		# regression (the exact failure the fold guards) would slip past a >= 1 /
++		# [0]-only check (CR/Greptile #600).
++		_check(
++			m0.size() >= 2,
++			"rig has >= 2 skinned surfaces (body + head)",
++			"surfaces = %d" % m0.size()
++		)
++		var h0_first: float = m0[0].get_instance_shader_parameter("health_frac")
++		var h0_last: float = m0[m0.size() - 1].get_instance_shader_parameter("health_frac")
++		var h1_first: float = m1[0].get_instance_shader_parameter("health_frac")
++		_check(
++			h0_first == h0_last,
++			"all surfaces of a rig tinted (first == last)",
++			"first=%.3f last=%.3f" % [h0_first, h0_last]
++		)
++		_check(
++			h0_first != h1_first,
++			"per-instance tint distinct across rigs",
++			"both health_frac = %.3f" % h0_first
++		)
++	else:
++		_check(false, "tint-sample rigs bound with meshes", "missing meshes")
++
++	if _fails == 0:
++		print("[skel-bench] PHASE A: PASS (all correctness assertions)")
++	else:
++		print("[skel-bench] PHASE A: FAIL (%d assertion(s))" % _fails)
++
++
++# --- Phase B: perf sweep ---
++
++
++func _begin_sweep_n() -> void:
++	var n: int = N_SWEEP[_sweep_i]
++	_build_buffers(n)
++	_frame_camera(maxi(n, 1))
++	_samples = PackedFloat32Array()
++	_frame = 0
++	_drift_rig = -1
++
++
++func _process_perf(delta: float) -> void:
++	var n: int = N_SWEEP[_sweep_i]
++	_adapter.update(_xf, _rs, n, delta)
++	_frame += 1
++	if _frame <= WARMUP:
++		# capture a drift baseline once warmed (first bound rig's root, walk sample)
++		if _frame == WARMUP and n > 0:
++			_drift_rig = _pool_index_of(0)
++			if _drift_rig >= 0:
++				_drift_start = _rig_root_local(_drift_rig)
++		return
++	_samples.append(delta * 1000.0)  # ms
++	if _frame < WARMUP + SAMPLE:
++		return
++
++	# sample window complete for this N
++	_results.append(_summarise(n, _samples))
++	_capture_png(n)
++	if n > 0 and _drift_rig >= 0:
++		var drift := _rig_root_local(_drift_rig) - _drift_start
++		var horiz := Vector2(drift.x, drift.z).length()
++		_check(
++			horiz < 0.05,
++			"N=%d root drift < 0.05 (in-place clip)" % n,
++			"root drifted %.3f m (root motion present?)" % horiz
++		)
++
++	_sweep_i += 1
++	if _sweep_i < N_SWEEP.size():
++		_begin_sweep_n()
++	else:
++		_finalise()
++
++
++func _finalise() -> void:
++	var baseline: float = _results[0]["p95"]  # N=0
++	var cap := 0
++	print("[skel-bench] PHASE B — isolation sweep (vsync off):")
++	for r in _results:
++		var marginal: float = r["p95"] - baseline
++		var within: bool = r["n"] == 0 or marginal <= BUDGET_MARGINAL_MS
++		if within and r["n"] > cap:
++			cap = r["n"]
++		print(
++			(
++				"[skel-bench]   N=%2d  avg=%.3f  p95=%.3f  p99=%.3f  max=%.3f ms  (marg p95 +%.3f)%s"
++				% [
++					r["n"],
++					r["avg"],
++					r["p95"],
++					r["p99"],
++					r["max"],
++					marginal,
++					"" if within else "  OVER"
++				]
++			)
++		)
++	print(
++		(
++			"[skel-bench] RECOMMENDED CAP = %d (p95 marginal <= %.1f ms over baseline)"
++			% [cap, BUDGET_MARGINAL_MS]
++		)
++	)
++	_write_json(cap, baseline)
++
++	if _fails == 0:
++		print("[skel-bench] VERDICT: GO — mechanism verified; cap=%d" % cap)
++	else:
++		print("[skel-bench] VERDICT: FAIL — %d correctness assertion(s)" % _fails)
++	_phase = 2
++	get_tree().quit(0 if _fails == 0 else 1)
++
++
++# --- helpers ---
++
++
++func _build_buffers(n: int) -> void:
++	_xf = PackedFloat32Array()
++	_rs = PackedByteArray()
++	_xf.resize(maxi(n, 1) * 8)
++	_rs.resize(maxi(n, 1) * RENDER_STATE_STRIDE)
++	var side := maxi(int(ceil(sqrt(float(maxi(n, 1))))), 1)
++	for i in n:
++		var gx := float(i % side) * SPACING
++		var gy := float(i / side) * SPACING
++		var ang := float(i) * 0.7
++		var cs := cos(ang)
++		var sn := sin(ang)
++		var o := i * 8
++		_xf[o + 0] = cs
++		_xf[o + 1] = -sn
++		_xf[o + 2] = 0.0
++		_xf[o + 3] = gx
++		_xf[o + 4] = sn
++		_xf[o + 5] = cs
++		_xf[o + 6] = 0.0
++		_xf[o + 7] = gy
++		var intent := ANIM_LOCOMOTION
++		var health := (i * 37) % 256
++		var hitstop := 0
++		if i == FROZEN_SLOT:
++			hitstop = 6
++		var flags := LIVE_BIT
++		var ro := i * RENDER_STATE_STRIDE
++		_rs[ro + 0] = flags
++		_rs[ro + 1] = health
++		_rs[ro + 2] = hitstop
++		_rs[ro + 3] = intent
++	# correctness phase: make DEAD_SLOT a zeroed transform (skipped, not bound)
++	if n == NC:
++		for k in 8:
++			_xf[DEAD_SLOT * 8 + k] = 0.0
++		# give CONTROL_SLOT a distinct death intent so loco!=death differentiates
++		_rs[CONTROL_SLOT * RENDER_STATE_STRIDE + 3] = ANIM_DEATH
++
++
++func _frame_camera(n: int) -> void:
++	var side := maxi(int(ceil(sqrt(float(n)))), 1)
++	var extent := float(side) * SPACING
++	var c := extent * 0.5
++	_cam.position = Vector3(c, extent * 0.95, extent * 1.45)
++	_cam.look_at(Vector3(c, 0.5, c), Vector3.UP)
++
++
++func _summarise(n: int, s: PackedFloat32Array) -> Dictionary:
++	var arr := s.duplicate()
++	arr.sort()
++	var cnt := arr.size()
++	var sum := 0.0
++	for v in arr:
++		sum += v
++	var avg := sum / maxf(float(cnt), 1.0)
++	return {
++		"n": n,
++		"avg": avg,
++		"p95": arr[mini(int(0.95 * cnt), cnt - 1)] if cnt > 0 else 0.0,
++		"p99": arr[mini(int(0.99 * cnt), cnt - 1)] if cnt > 0 else 0.0,
++		"max": arr[cnt - 1] if cnt > 0 else 0.0,
++	}
++
++
++func _write_json(cap: int, baseline: float) -> void:
++	var doc := {
++		"schema": "skeletal-cap-bench-v1",
++		"recommended_cap": cap,
++		"budget_marginal_ms": BUDGET_MARGINAL_MS,
++		"baseline_p95_ms": baseline,
++		"renderer": RenderingServer.get_video_adapter_name(),
++		"godot": Engine.get_version_info().get("string", "?"),
++		"viewport": [get_viewport().size.x, get_viewport().size.y],
++		"vsync": "disabled",
++		"sweep": _results,
++	}
++	var path := OUT_DIR + "skeletal_cap.json"
++	var f := FileAccess.open(path, FileAccess.WRITE)
++	if f != null:
++		f.store_string(JSON.stringify(doc, "  "))
++		f.close()
++		print("[skel-bench] wrote %s" % path)
++	print("[skel-bench] JSON: %s" % JSON.stringify(doc))
++
++
++func _capture_png(n: int) -> void:
++	var img := get_viewport().get_texture().get_image()
++	if img != null:
++		var path := OUT_DIR + "skel_n%d.png" % n
++		img.save_png(ProjectSettings.globalize_path(path))
++		print("[skel-bench] capture %s" % path)
++
++
++func _check(ok: bool, label: String, fail_detail: String) -> void:
++	if ok:
++		print("[skel-bench] PASS: %s" % label)
++	else:
++		_fails += 1
++		print("[skel-bench] FAIL: %s — %s" % [label, fail_detail])
++
++
++func _pool_index_of(slot: int) -> int:
++	for i in _adapter._pool_slot.size():
++		if _adapter._pool_slot[i] == slot:
++			return i
++	return -1
++
++
++func _meshes_of(pool_i: int) -> Array:
++	return _adapter._meshes[pool_i] if pool_i >= 0 and pool_i < _adapter._meshes.size() else []
++
++
++func _rig_root_local(pool_i: int) -> Vector3:
++	var holder: Node3D = _adapter._holders[pool_i]
++	if holder == null or holder.get_child_count() == 0:
++		return Vector3.ZERO
++	var rig := holder.get_child(0) as Node3D
++	return rig.position if rig != null else Vector3.ZERO
+diff --git a/apps/game-godot/skeletal_horde_bench.gd.uid b/apps/game-godot/skeletal_horde_bench.gd.uid
+new file mode 100644
+index 0000000..f7ab0ae
+--- /dev/null
++++ b/apps/game-godot/skeletal_horde_bench.gd.uid
+@@ -0,0 +1 @@
++uid://dalp5c2hovelp
+diff --git a/apps/game-godot/skeletal_horde_bench.tscn b/apps/game-godot/skeletal_horde_bench.tscn
+new file mode 100644
+index 0000000..1b370a8
+--- /dev/null
++++ b/apps/game-godot/skeletal_horde_bench.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://skeletal_horde_bench.gd" id="1_skb"]
++
++[node name="SkeletalHordeBench" type="Node3D"]
++script = ExtResource("1_skb")

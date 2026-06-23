@@ -1,0 +1,171 @@
+diff --git a/apps/game-godot/harness/fixtures/interior_breach_loop.tres b/apps/game-godot/harness/fixtures/interior_breach_loop.tres
+index 3fd2ec0..0095178 100644
+--- a/apps/game-godot/harness/fixtures/interior_breach_loop.tres
++++ b/apps/game-godot/harness/fixtures/interior_breach_loop.tres
+@@ -69,6 +69,14 @@ initial_active_kind = 0
+ test_goal = "PROVE the combat loop + run the AC5 probe: breach in (camera snaps, fade covers the swap), aim with the cursor (reticule), kill the ~12 pursuing zombies — melee (RMB front-arc) + hitscan pistol (LMB toward the cursor); agents redden via health-tint as they take damage — then return to the green Exit and press F to resume the overworld. PROBE READ (live operator drive, NOT a closed-loop check): the zombie count at which naive flow-field pursuit dogpiles into unreadable combat in the choke is the empirical input to when the slot system (ADR-019) must land."
+ use_procgen_city = false
+ trigger_regions = Array[ExtResource("3_trigger")]([SubResource("Resource_exit")])
++fixture_contract_version = 1
++run_class = 1
++termination_kind = 3
++max_ticks = 0
++oracle_kind = 4
++trace_issue = "mmnto-ai/liquid-city#533 (M2 slice 1 AC5 combat-legibility probe; ADR-025 A2)"
++oracle_description = "Manual observation (ManualObservation -> CONCERNS, never PASS). A live operator reads combat legibility inside the room: the zombie count at which naive flow-field pursuit dogpiles into unreadable combat in the choke — the empirical input to when the slot system (ADR-019) must land. NOT a closed-loop check; there is no machine oracle."
++contract_justification = "Class-B (Manual): live operator drive only — cursor-aim + melee (RMB) / hitscan pistol (LMB) + Interact (F) at the exit, with no bounded drive_script. The AC5 dogpile-legibility read is a human judgment. The headless runner MUST hard-refuse this (PR3); it is the nested interior of the mmnto-ai/liquid-city#533 hang fixture."
+ 
+ [resource]
+ script = ExtResource("1_fixture")
+@@ -110,3 +118,11 @@ trigger_regions = Array[ExtResource("3_trigger")]([SubResource("Resource_breach"
+ transition_fixtures = Dictionary[String, TestMapResource]({
+ "interior_01": SubResource("Resource_interior_01")
+ })
++fixture_contract_version = 1
++run_class = 1
++termination_kind = 3
++max_ticks = 0
++oracle_kind = 4
++trace_issue = "mmnto-ai/liquid-city#533 (M2 slice 1 breach->fight->exit loop; the hang that motivated ADR-025 A2)"
++oracle_description = "Manual observation (ManualObservation -> CONCERNS, never PASS). A live operator drives the full loop: walk north up the open street to the building's south door, press F to breach (street suspends, interior builds, camera snaps, fade covers the swap), fight the interior crowd, press F at the interior exit to resume outside. Visual/behavioral observation only; there is no machine oracle."
++contract_justification = "Class-B (Manual): THIS is the mmnto-ai/liquid-city#533 hang fixture. No drive_script and a live-operator breach/aim/interact loop, so pointing the --quit-on-end runner at it (no bounded drive, no max_ticks) is the exact infinite hang that motivated A2. The headless runner MUST hard-refuse it (PR3); --manual permits the live/human path."
+diff --git a/apps/game-godot/harness/fixtures/wall_stick_diagnostic.tres b/apps/game-godot/harness/fixtures/wall_stick_diagnostic.tres
+index 1260a02..cd7d339 100644
+--- a/apps/game-godot/harness/fixtures/wall_stick_diagnostic.tres
++++ b/apps/game-godot/harness/fixtures/wall_stick_diagnostic.tres
+@@ -77,3 +77,10 @@ Empirical observations from 2026-05-15 closed-loop CLI playtest:
+ 
+ Pipeline status: WIRED. Visual signal works; JSON signal is metric-mismatched (slice 2 work in mmnto-ai/liquid-city#312). Heading hysteresis (mmnto-ai/liquid-city#311 EMA + mmnto-ai/liquid-city#313 basis-hysteresis followup) dampens the agent triangle jitter."
+ use_procgen_city = false
++fixture_contract_version = 1
++run_class = 0
++termination_kind = 0
++max_ticks = 1200
++oracle_kind = 2
++trace_issue = "mmnto-ai/liquid-city#312 (wall-stick stuck-detection diagnostic; ADR-025 A2)"
++oracle_description = "Observation-only (FrameObservation -> CONCERNS, never PASS). The diagnostic signal is VISUAL: yellow wall-violator halos fire on zombies pressed against the wall's north face in F7 burst captures, distinct from cyan agent-heading triangles. No committed golden summary exists, and the JSON slot_stuck_histogram metric is velocity-magnitude-based — wrong-shape for wall-tangential sliding (mmnto-ai/liquid-city#312) — so it cannot back a machine PASS. Per-fixture oracle finalized in PR2."
+diff --git a/apps/game-godot/harness/test_map_resource.gd b/apps/game-godot/harness/test_map_resource.gd
+index 6044471..9cb72a5 100644
+--- a/apps/game-godot/harness/test_map_resource.gd
++++ b/apps/game-godot/harness/test_map_resource.gd
+@@ -26,6 +26,55 @@ const ACTIVE_KIND_VEHICLE: int = 1
+ ## side rejects mismatched versions with `BuildError::SchemaVersion`.
+ const HARNESS_SPEC_VERSION: int = 1
+ 
++## Current fixture-requirements contract version (ADR-025 A2 / spec
++## 576). A migrated `.tres` explicitly serializes
++## `fixture_contract_version = FIXTURE_CONTRACT_VERSION`; the
++## `@export` default stays `0` (see that field's doc for why).
++## DISTINCT from `HARNESS_SPEC_VERSION` — that versions the Rust wire
++## format; this versions the GDScript-side governance contract, which
++## the Rust sim never sees. Bumped when the contract field set changes.
++const FIXTURE_CONTRACT_VERSION: int = 1
++
++## A2 fixture-requirements contract enums (ADR-025 A2 §1–3). Index `0`
++## is the serialized default for an `@export` of each type — see the
++## contract fields at the end of the file for how `validate_fixtures.gd`
++## (PR2) reads them (a bare enum-presence check is vacuous because of
++## the index-0 default; `fixture_contract_version > 0` is the migration
++## proxy, after which the enum values are authoritative).
++
++## Run-class taxonomy — DECLARED, never inferred from the resource
++## graph (A2 §1). `AUTOMATED` is index 0 (the default).
++## APPEND-ONLY — `.tres` serializes members by int index, not name;
++## inserting before an existing member silently reclassifies fixtures.
++enum RunClass {
++	AUTOMATED,  ## headless-verifiable; the automated runner accepts it
++	MANUAL,  ## live-operator-drive; the headless runner HARD-REFUSES it (PR3)
++}
++
++## Declared termination mechanism (A2 §2). `DRIVE_SCRIPT_END` is index 0.
++## APPEND-ONLY — `.tres` serializes members by int index, not name;
++## inserting before an existing member silently reclassifies fixtures.
++enum TerminationKind {
++	DRIVE_SCRIPT_END,  ## a bounded `drive_script` runs to its final entry
++	TICK_BUDGET,  ## no drive; terminates solely on the `max_ticks` backstop
++	PILOT_BUDGET,  ## route-pilot is internally bounded; the harness still stops via `max_ticks`/drive-end (NOT route-completion — that needs a sim signal this slice does not add)
++	MANUAL,  ## a live operator ends the run (Class-B only)
++}
++
++## Declared oracle (A2 §3). `GOLDEN_SUMMARY_HASH` is index 0. Machine-
++## checkable kinds may emit PASS; observation-only kinds MUST emit
++## CONCERNS / OBSERVATION_REQUIRED — that suppression is a verdict-
++## emitter (runtime) invariant, NOT a `validate_fixtures.gd` check.
++## APPEND-ONLY — `.tres` serializes members by int index, not name;
++## inserting before an existing member silently reclassifies fixtures.
++enum OracleKind {
++	GOLDEN_SUMMARY_HASH,  ## PASS-eligible: hash of a named normalized summary subset + schema version
++	JSON_ASSERTIONS,  ## PASS-eligible: explicit assertions over named JSON summary fields
++	FRAME_OBSERVATION,  ## observation-only -> CONCERNS (a human/AI reads the frame captures)
++	LIVENESS_ONLY,  ## observation-only -> CONCERNS ("ran to termination without crashing")
++	MANUAL_OBSERVATION,  ## observation-only -> CONCERNS (a live operator watches the run)
++}
++
+ ## `fixture_name` (not `name`) — Godot's Resource class declares a
+ ## built-in `resource_name` and an Object-level `name`; an @export
+ ## `var name` shadows the Object's slot and can cause Inspector +
+@@ -179,6 +228,64 @@ const HARNESS_SPEC_VERSION: int = 1
+ ## Typically authored on the OVERWORLD (top-level) fixture only.
+ @export var transition_fixtures: Dictionary[String, TestMapResource] = {}
+ 
++## ── ADR-025 A2 fixture-requirements contract (spec 576) ──
++## Governance + runtime metadata, declared per fixture. ALL GDScript-
++## side: none is marshalled into `to_dict` (the Rust sim never consumes
++## them — this slice is zero-FFI / zero wire change). `max_ticks` is
++## enforced by `ScriptedInput` counting `_physics_process` ticks (PR3),
++## also GDScript-side. Presence + cross-field rules are enforced by the
++## fail-closed `validate_fixtures.gd` (PR2, local/pre-push).
++
++## Contract-schema version. **`@export` default MUST be `0`** (NOT
++## `FIXTURE_CONTRACT_VERSION`): Godot reads the SCRIPT default for an
++## old `.tres` that predates this field, so a non-zero default would
++## mark every unmigrated fixture as already-migrated and kill the
++## migration proxy. A migrated `.tres` explicitly serializes `= 1`;
++## the validator treats `> 0` as "intentionally migrated" and rejects
++## `<= 0`.
++@export var fixture_contract_version: int = 0
++
++## Run-class — automated/headless-verifiable vs manual/live-drive.
++## DECLARED, never inferred (A2 §1). The headless runner hard-refuses
++## a `MANUAL` fixture (PR3); the absence of that refusal is what let
++## the `interior_breach_loop` hang happen (mmnto-ai/liquid-city#533).
++@export var run_class: RunClass = RunClass.AUTOMATED
++
++## How this fixture terminates (A2 §2). The validator (PR2) proves the
++## declared mechanism's backing data exists — `DRIVE_SCRIPT_END` ⟹ a
++## non-empty `drive_script`; `PILOT_BUDGET` ⟹ a `pilot_route` +
++## `pilot_timeout_ticks > 0`; `TICK_BUDGET` ⟹ NO drive (it would be a
++## competing drive-end path) — not merely that the enum is set.
++@export var termination_kind: TerminationKind = TerminationKind.DRIVE_SCRIPT_END
++
++## Tick-count backstop (the `max_ticks` invariant). **Required `> 0`
++## for any Class-A** — a drive script CAN loop ("trusted the script to
++## terminate" IS the hang incident), so the backstop is mandatory, not
++## an alternative to the drive. For Class-B, `0` is the canonical
++## "no budget" sentinel (the validator asserts `> 0` only on Class-A).
++@export var max_ticks: int = 0
++
++## Declared oracle (A2 §3). Governs whether a run is PASS-eligible
++## (`GOLDEN_SUMMARY_HASH`/`JSON_ASSERTIONS`) or observation-only
++## (→ CONCERNS). The PASS-suppression itself is a runtime verdict-
++## emitter invariant, not a parse-time check.
++@export var oracle_kind: OracleKind = OracleKind.GOLDEN_SUMMARY_HASH
++
++## Traceability to the issue / acceptance-criterion / ADR this fixture
++## exercises. Required non-empty for ALL fixtures (PR2). Prose; not
++## parsed by the sim.
++@export var trace_issue: String = ""
++
++## What the oracle actually checks / what the operator observes.
++## Required non-empty for ALL fixtures (an `oracle_kind` with no
++## description is just a label). Prose; not parsed by the sim.
++@export_multiline var oracle_description: String = ""
++
++## Why this fixture is the run-class it declares. Required non-empty
++## for **Class-B** (the manual-justification per A2 §1); optional for
++## Class-A. Prose; not parsed by the sim.
++@export_multiline var contract_justification: String = ""
++
+ 
+ ## Marshal to a Godot Dictionary matching the wire format the Rust
+ ## `parse_fixture` expects. The Rust side coerces Godot types

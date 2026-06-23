@@ -1,0 +1,1192 @@
+diff --git a/apps/game-godot/LODManager3D.gd b/apps/game-godot/LODManager3D.gd
+index e49e50f..0ab998e 100644
+--- a/apps/game-godot/LODManager3D.gd
++++ b/apps/game-godot/LODManager3D.gd
+@@ -7,8 +7,11 @@ extends RefCounted
+ # decision 5 — sim_driver must not grow into one script driving two renderers).
+ #
+ # Each frame it partitions the live agent slots into:
+-#   - render-LOD-0 (skeletal rig, SkeletalHordeAdapter) — the close / on-screen /
+-#     high-action agents, where dismemberment is the high-payoff visual (Tenet 8);
++#   - render-LOD-0 (part-segmented articulated rig, PartSegmentedHordeAdapter) —
++#     the close / on-screen / high-action agents, where dismemberment is the
++#     high-payoff visual (Tenet 8). Gore epic mmnto-ai/liquid-city#559 swapped the
++#     LOD-0 mesh from the skinned mini to the part-segmented blocky kit (each limb
++#     a hide-able node for dismemberment); the skinned mini stays for player/Specials;
+ #   - render-LOD-1 (VAT MultiMesh, HordeRenderAdapter) — everything else.
+ # The partition is DISJOINT (every live slot in exactly one tier) and that IS the
+ # VAT<->skeletal dedup: no agent renders twice, and each slot's clock advances
+@@ -46,8 +49,9 @@ const ANIM_BALLISTIC := 3
+ const ANIM_DEATH := 4
+ const ANIM_ATTACK := 5
+ 
+-# Tier ids — the CANONICAL enum; HordeRenderAdapter.TIER_VAT / SkeletalHordeAdapter
+-# .TIER_SKEL mirror these (parity comment in each adapter).
++# Tier ids — the CANONICAL enum; HordeRenderAdapter.TIER_VAT /
++# PartSegmentedHordeAdapter.TIER_SKEL mirror these (parity comment in each adapter).
++# TIER_SKEL = the render-LOD-0 articulated-rig tier (now part-segmented, not skinned).
+ const TIER_DEAD := 0
+ const TIER_VAT := 1
+ const TIER_SKEL := 2
+@@ -58,7 +62,10 @@ const HEAD_Y := 0.9
+ const FRAME_COUNTER_CEIL := 1_000_000  # clamp _tier_frames so it can't overflow
+ 
+ var _vat: HordeRenderAdapter
+-var _skel: SkeletalHordeAdapter
++# _skel = the render-LOD-0 (TIER_SKEL) adapter. As of gore mmnto-ai/liquid-city#559
++# it is a PartSegmentedHordeAdapter (articulated blocky rig, NOT skinned) — the
++# skinned mini retired from the horde path (stays for player/Specials).
++var _skel: PartSegmentedHordeAdapter
+ var _clocks: SlotClockBook
+ var _headless := false
+ var _skeletal_cap := 0
+@@ -105,7 +112,7 @@ func _init(render_root: Node3D, headless: bool, skeletal_cap: int) -> void:
+ 	# phase-match on a swap). The manager is its only writer.
+ 	_clocks = SlotClockBook.new()
+ 	_vat = HordeRenderAdapter.new(render_root, headless, _clocks)
+-	_skel = SkeletalHordeAdapter.new(render_root, headless, _skeletal_cap, _clocks)
++	_skel = PartSegmentedHordeAdapter.new(render_root, headless, _skeletal_cap, _clocks)
+ 	# Hoist the sort comparator to one Callable (created once, reused each frame).
+ 	_score_cmp = _cmp_by_score
+ 
+diff --git a/apps/game-godot/PartSegmentedHordeAdapter.gd b/apps/game-godot/PartSegmentedHordeAdapter.gd
+new file mode 100644
+index 0000000..5e0378e
+--- /dev/null
++++ b/apps/game-godot/PartSegmentedHordeAdapter.gd
+@@ -0,0 +1,499 @@
++class_name PartSegmentedHordeAdapter
++extends RefCounted
++
++# ADR-029 gore epic mmnto-ai/liquid-city#565, PR1 (mmnto-ai/liquid-city#559) —
++# part-segmented render-LOD-0 horde adapter. Sibling of SkeletalHordeAdapter (SAME
++# public interface the LODManager3D LOD-0 tier expects) but a DIFFERENT mechanism:
++# the Kenney blocky kit is 6 rigid mesh parts (head/torso/arm-left/arm-right/leg-
++# left/leg-right) animated by an AnimationPlayer driving each part's TRS — NOT a
++# Skeleton3D+skin (import-proof: 6 meshes / 0 skins / 27 clips). Gore foundation:
++# dismemberment (mmnto-ai/liquid-city#561) hides a part node; gibs
++# (mmnto-ai/liquid-city#560) sample a part's transform+mesh for SEPARATE debris —
++# NOT reparenting the live pooled part (breaks animation paths + pool reuse, lc-codex).
++# Fed the SAME render-state ABI as the VAT/skeletal horde; never queries the FFI.
++#
++# SCOPE (cohort impl-preflight folds, unanimous): single enemy type + a render-local
++# mesh-set seam (MESH_SETS; sim-provided at Phase 3) — NO Rust/ABI/stride change; NEW
++# sibling (not a SkeletalHordeAdapter re-tool) — manager owns clock PHASE, adapter
++# only READS clock(s) (LODManager3D clock-ownership/_tier invariant untouched).
++# Per-limb contract centralized HERE (BIT_TO_PART = ADR-027 Dismembered.parts bits);
++# reset_parts_visible() on recycle is load-bearing (no hidden-limb leak across pooled
++# agents). NON-goals: no gibs/dismember/death/lighting (mmnto-ai/liquid-city#586);
++# Pressure stays VAT (part-meshes LOD-0 ONLY); 2D untouched; mini rig = player/Specials.
++
++# Render-local mesh-set seam (lc-codex/lc-agy/lc-gemini): resolves an id -> asset.
++# Today one id -> one asset; the id becomes sim-provided at Phase 3 enemy variety
++# (mmnto-ai/liquid-city#562 / mmnto-ai/liquid-city#563 / mmnto-ai/liquid-city#564).
++# This is NOT a sim archetype — the sim publishes no archetype yet.
++const DEFAULT_HORDE_MESH_SET := "blocky-character-a"
++const MESH_SETS := {
++	"blocky-character-a": "res://assets/blocky-characters/character-a.glb",
++}
++# The blocky kit uses PER-CHARACTER textures (character-a -> Textures/texture-a.png),
++# NOT a shared colormap palette like the mini pack. Loaded into the shader's
++# `colormap` sampler (UV-mapped the same way). Couples to the mesh set; PR1 resolves
++# the single character-a texture.
++const BASE_TEXTURE_PATH := "res://assets/blocky-characters/Textures/texture-a.png"
++# Reuse the skeletal horde shader (UV base-texture + per-instance health_frac tint) —
++# the parts are MeshInstance3D, identical tint contract, no new shader needed.
++const SHADER_PATH := "res://shaders/skeletal_horde.gdshader"
++const AGENT_STRIDE := 8
++
++# render-state record layout — MIRROR of density_feedback.rs RS_* offsets.
++const RENDER_STATE_STRIDE := 4
++const RS_FLAGS := 0
++const RS_HEALTH := 1
++const RS_HITSTOP := 2
++const RS_INTENT := 3
++
++# LODManager3D tier id (mirror — manager owns the canonical enum, ADR-029 P2b PR5).
++# NOTE: TIER_SKEL means "render-LOD-0 articulated rig", NOT necessarily a
++# Skeleton3D — this adapter is articulated by node-TRS, no skeleton. Same tier id.
++const TIER_SKEL := 2
++
++# AnimIntent — MIRROR of density_feedback.rs (the wire contract).
++const ANIM_IDLE := 0
++const ANIM_LOCOMOTION := 1
++const ANIM_STAGGER := 2
++const ANIM_BALLISTIC := 3
++const ANIM_DEATH := 4
++const ANIM_ATTACK := 5
++const ANIM_INTENT_COUNT := 6
++
++# Per-limb contract (Kenney verbatim names). BIT_TO_PART is ADR-027
++# Dismembered.parts bit order (bit0 head, bit1 arm-left, bit2 arm-right,
++# bit3 leg-left, bit4 leg-right, bit5 torso). mmnto-ai/liquid-city#560 /
++# mmnto-ai/liquid-city#561 read THIS map — do not scatter limb names elsewhere.
++const BIT_TO_PART: Array[StringName] = [
++	&"head", &"arm-left", &"arm-right", &"leg-left", &"leg-right", &"torso"
++]
++const PART_COUNT := 6
++
++var _render_root: Node3D
++var _headless := false
++var _cap := 0
++var _clocks: SlotClockBook
++var _mesh_set_id := DEFAULT_HORDE_MESH_SET
++var _ready := false
++var _enabled := false
++var _colormap_enabled := true
++var _health_tint_enabled := false
++
++var _mat: ShaderMaterial
++
++# pool (parallel arrays, indexed by pool slot 0.._cap-1)
++var _holders: Array[Node3D] = []  # carry the per-agent sim transform
++var _players: Array[AnimationPlayer] = []
++var _meshes: Array = []  # Array[Array[MeshInstance3D]] — ALL parts per rig (tint)
++var _part_by_bit: Array = []  # Array[Array[MeshInstance3D]] — bit-indexed (mask)
++var _pool_slot := PackedInt32Array()  # bound BufferSlot, -1 = free
++var _pool_intent := PackedInt32Array()  # cached AnimIntent, -1 = none (force play)
++
++# AnimIntent -> clip NAME resolved from the rig's own AnimationPlayer library.
++var _intent_clip: Array[StringName] = []
++
++# tunables (parity with the VAT/skeletal horde so a swap does not jump scale/feet)
++var character_scale := 1.0  # baked at spawn — set BEFORE setup() (post-setup no-op)
++var y_offset := 0.0
++var facing_offset := 0.0
++
++# perf / bench instrumentation
++var last_assembly_usec := 0
++var last_live := 0
++
++
++func _init(render_root: Node3D, headless: bool, cap: int, clocks: SlotClockBook = null) -> void:
++	_render_root = render_root
++	_headless = headless
++	_cap = maxi(cap, 0)
++	# Shared clock: the manager injects ONE book so VAT<->LOD0 swaps phase-match.
++	_clocks = clocks if clocks != null else SlotClockBook.new()
++
++
++func set_mesh_set(id: String) -> void:
++	# Forward-compat seam. Call BEFORE setup() — after setup() the pool already holds
++	# rigs built from the old asset, so a change would silently diverge (CR + Greptile).
++	if _ready:
++		push_warning("PartSegmentedHordeAdapter: set_mesh_set() after setup() ignored")
++		return
++	if MESH_SETS.has(id):
++		_mesh_set_id = id
++	else:
++		push_warning("PartSegmentedHordeAdapter: unknown mesh-set '%s' — using default" % id)
++		_mesh_set_id = DEFAULT_HORDE_MESH_SET
++
++
++func rig_glb_path() -> String:
++	return MESH_SETS.get(_mesh_set_id, MESH_SETS[DEFAULT_HORDE_MESH_SET])
++
++
++# RefCounted parenting nodes into the tree are NOT freed when the last ref drops —
++# free the pool on predelete (GCA mmnto-ai/liquid-city#600; styleguide rule).
++func _notification(what: int) -> void:
++	if what == NOTIFICATION_PREDELETE:
++		for holder in _holders:
++			if holder != null and is_instance_valid(holder):
++				holder.queue_free()
++
++
++# Build the shared material + the rig pool + the intent->clip table. Returns false
++# (no-op) when headless or on a load failure. Idempotent.
++func setup() -> bool:
++	if _ready:
++		return true
++	if _headless:
++		# Headless: no rigs, but size the bookkeeping arrays so update()'s cap math
++		# + slot accounting run crash-free (determinism fixtures stay asset-free).
++		_init_pool_state()
++		_ready = true
++		return false
++
++	var shader := load(SHADER_PATH) as Shader
++	if shader == null:
++		push_error("PartSegmentedHordeAdapter: failed to load shader")
++		return false
++	_mat = ShaderMaterial.new()
++	_mat.shader = shader
++	var cm := load(BASE_TEXTURE_PATH) as Texture2D
++	if cm != null:
++		_mat.set_shader_parameter("colormap", cm)
++	else:
++		push_warning(
++			"PartSegmentedHordeAdapter: texture missing at %s — flat tint" % BASE_TEXTURE_PATH
++		)
++	_mat.set_shader_parameter("use_colormap", _colormap_enabled and cm != null)
++	_mat.set_shader_parameter("use_health_tint", _health_tint_enabled)
++
++	var path := rig_glb_path()
++	var rig_scene := load(path) as PackedScene
++	if rig_scene == null:
++		push_error("PartSegmentedHordeAdapter: failed to load rig scene at %s" % path)
++		return false
++	_init_pool_state()
++	for i in _cap:
++		if not _spawn_rig(i, rig_scene):
++			push_error("PartSegmentedHordeAdapter: failed to instantiate rig %d" % i)
++			return false
++	_build_intent_clip_table()
++	_ready = true
++	return true
++
++
++func _init_pool_state() -> void:
++	_pool_slot.resize(_cap)
++	_pool_slot.fill(-1)
++	_pool_intent.resize(_cap)
++	_pool_intent.fill(-1)
++	_holders.resize(_cap)
++	_players.resize(_cap)
++	_meshes.resize(_cap)
++	_part_by_bit.resize(_cap)
++
++
++# Instantiate one pooled rig: a holder Node3D (the sim-transform target) parenting
++# the rig .glb instance; cache its AnimationPlayer + every MeshInstance3D part;
++# resolve the bit->part map by node name; assign the shared tint material to each
++# part; start unbound (hidden + disabled).
++func _spawn_rig(i: int, packed: PackedScene) -> bool:
++	var rig := packed.instantiate() as Node3D
++	if rig == null:
++		return false
++	var holder := Node3D.new()
++	holder.name = "PartRig%d" % i
++	if character_scale != 1.0:
++		rig.scale = Vector3(character_scale, character_scale, character_scale)
++	holder.add_child(rig)
++	_render_root.add_child(holder)
++
++	var player := _find_anim_player(rig)
++	var meshes: Array[MeshInstance3D] = []
++	_collect_meshes(rig, meshes)
++	# Contract: the asset's mesh nodes ARE the 6 maskable limbs. If a future mesh-set
++	# carries accessory meshes they'd be tinted (via _meshes) yet invisible to the
++	# dismember mask (_part_by_bit) — warn so the divergence is loud at import (Greptile).
++	# mmnto-ai/liquid-city#560 / mmnto-ai/liquid-city#561 mask by _part_by_bit only.
++	if meshes.size() != PART_COUNT:
++		push_warning(
++			(
++				"PartSegmentedHordeAdapter: rig has %d meshes, expected %d parts — tint/mask may diverge"
++				% [meshes.size(), PART_COUNT]
++			)
++		)
++	# Tint EVERY part through the shared material (6 parts now, not body+head) —
++	# material_override replaces the GLB material so the shader supplies the colormap.
++	for m in meshes:
++		m.material_override = _mat
++
++	# Resolve the per-limb map by NODE NAME (robust to the import hierarchy — the
++	# runtime contract is scene-tree names, not glTF indices, lc-codex). A missing
++	# part is a hard contract failure surfaced for the import-proof bench.
++	var by_bit: Array[MeshInstance3D] = []
++	by_bit.resize(PART_COUNT)
++	for bit in PART_COUNT:
++		var part := _find_part(meshes, BIT_TO_PART[bit])
++		if part == null:
++			push_error(
++				(
++					"PartSegmentedHordeAdapter: rig missing part '%s' (bit %d)"
++					% [BIT_TO_PART[bit], bit]
++				)
++			)
++			# holder is parented into _render_root but not yet in _holders — free it
++			# here or it orphans/leaks on this abort (GCA; PREDELETE only walks _holders).
++			holder.queue_free()
++			return false
++		by_bit[bit] = part
++
++	_holders[i] = holder
++	_players[i] = player
++	_meshes[i] = meshes
++	_part_by_bit[i] = by_bit
++	holder.visible = false
++	holder.process_mode = Node.PROCESS_MODE_DISABLED
++	return true
++
++
++# Find a part MeshInstance3D by its (case-insensitive) node name among the rig's
++# collected meshes. Godot keeps the glTF mesh-node names on import.
++func _find_part(meshes: Array, part_name: StringName) -> MeshInstance3D:
++	var want := String(part_name).to_lower()
++	for m in meshes:
++		if String(m.name).to_lower() == want:
++			return m
++	return null
++
++
++# Resolve each AnimIntent to a clip NAME present in the rig's AnimationPlayer, by
++# preference. The blocky kit's clips: idle/walk/sprint/die/attack-melee-right/...
++func _build_intent_clip_table() -> void:
++	_intent_clip.resize(ANIM_INTENT_COUNT)
++	for i in ANIM_INTENT_COUNT:
++		_intent_clip[i] = &""
++	var player: AnimationPlayer = _players[0] if _players.size() > 0 else null
++	if player == null:
++		push_warning("PartSegmentedHordeAdapter: rig has no AnimationPlayer — clips unavailable")
++		return
++	var names := player.get_animation_list()
++	if names.is_empty():
++		push_warning("PartSegmentedHordeAdapter: AnimationPlayer has no clips")
++		return
++	var fallback := names[0]
++	_intent_clip[ANIM_IDLE] = _first_clip(names, ["idle", "walk", "static"], fallback)
++	_intent_clip[ANIM_LOCOMOTION] = _first_clip(
++		names, ["walk", "run", "sprint", "locomotion"], fallback
++	)
++	_intent_clip[ANIM_STAGGER] = _first_clip(names, ["hit", "stagger", "walk"], fallback)
++	_intent_clip[ANIM_BALLISTIC] = _first_clip(names, ["fall", "flail", "walk"], fallback)
++	_intent_clip[ANIM_DEATH] = _first_clip(names, ["die", "death", "walk"], fallback)
++	_intent_clip[ANIM_ATTACK] = _first_clip(
++		names, ["attack-melee-right", "attack", "punch", "walk"], fallback
++	)
++
++
++# A clip name may be bare ("walk") or library-qualified ("Library/walk"); match on
++# the unqualified suffix so either import naming resolves.
++func _first_clip(names: PackedStringArray, prefs: Array, fallback: StringName) -> StringName:
++	for pref in prefs:
++		for nm in names:
++			var bare := nm.get_slice("/", nm.get_slice_count("/") - 1)
++			if bare == pref:
++				return nm
++	return fallback
++
++
++func set_active(enabled: bool) -> void:
++	_enabled = enabled
++	if not enabled and _ready and not _headless:
++		for i in _cap:
++			_unbind(i)
++
++
++func is_active() -> bool:
++	return _enabled and _ready and not _headless
++
++
++func set_colormap_enabled(on: bool) -> void:
++	_colormap_enabled = on
++	if _mat != null:
++		_mat.set_shader_parameter("use_colormap", on)
++
++
++func set_health_tint_enabled(on: bool) -> void:
++	_health_tint_enabled = on
++	if _mat != null:
++		_mat.set_shader_parameter("use_health_tint", on)
++
++
++# Make all parts of a pooled rig visible again. LOAD-BEARING: a pooled rig recycled
++# to a new agent must restore every limb before applying the new slot's mask, or a
++# limb hidden by mmnto-ai/liquid-city#561 leaks to the next agent (lc-codex).
++func reset_parts_visible(pool_i: int) -> void:
++	if _headless:
++		return
++	var by_bit: Array = _part_by_bit[pool_i]
++	for m in by_bit:
++		if m != null:
++			m.visible = true
++
++
++# Apply an ADR-027 Dismembered.parts mask: a SET bit hides that limb. PR1 only ever
++# applies mask 0 (all visible) — this establishes the seam + contract that
++# mmnto-ai/liquid-city#561 drives once the sim publishes Dismembered.parts.
++func _apply_part_mask(pool_i: int, parts_mask: int) -> void:
++	if _headless:
++		return
++	var by_bit: Array = _part_by_bit[pool_i]
++	for bit in PART_COUNT:
++		var m: MeshInstance3D = by_bit[bit]
++		if m != null:
++			m.visible = (parts_mask & (1 << bit)) == 0
++
++
++# Per-frame: bind the slots LODManager3D assigned to the render-LOD-0 tier
++# (`tiers[s] == TIER_SKEL`) to pool rigs, drive transform/clip/freeze/tint, unbind
++# the rest. The manager owns selection, the cap, dead-slot masking, the
++# record-less->VAT fallback, and the single shared-clock advance — this adapter is
++# a pure READER (no `delta`, never advances/marks the clock).
++func update(
++	agent_buf: PackedFloat32Array, render_state: PackedByteArray, count: int, tiers: PackedByteArray
++) -> void:
++	if not _ready:
++		return
++	var t0 := Time.get_ticks_usec()
++	var max_agents := agent_buf.size() / AGENT_STRIDE
++	if count > max_agents:
++		count = max_agents
++	var rs_len := render_state.size()
++	var tiers_len := tiers.size()
++
++	var pool_i := 0
++	for s in count:
++		if s >= tiers_len or tiers[s] != TIER_SKEL:
++			continue
++		if pool_i >= _cap:
++			# Defensive: the manager caps |LOD0| at _cap — never overrun the pool.
++			continue
++		var ro := s * RENDER_STATE_STRIDE
++		if ro + RENDER_STATE_STRIDE > rs_len:
++			# Defensive: the manager routes record-less live slots to VAT.
++			continue
++		var bo := s * AGENT_STRIDE
++		var ox := agent_buf[bo + 3]
++		var oy := agent_buf[bo + 7]
++		var bxx := agent_buf[bo + 0]
++		var bxy := agent_buf[bo + 4]
++		var health := render_state[ro + RS_HEALTH]
++		var hitstop := render_state[ro + RS_HITSTOP]
++		var intent := render_state[ro + RS_INTENT]
++		var clk := _clocks.clock(s)
++		var heading := atan2(bxy, bxx)
++		_bind(pool_i, s, ox, oy, heading, intent, health, hitstop, clk)
++		pool_i += 1
++
++	# Unbind the unused tail of the pool.
++	for i in range(pool_i, _cap):
++		_unbind(i)
++	last_live = pool_i
++	last_assembly_usec = Time.get_ticks_usec() - t0
++
++
++func _bind(
++	pool_i: int,
++	slot: int,
++	ox: float,
++	oy: float,
++	heading: float,
++	intent: int,
++	health: int,
++	hitstop: int,
++	clk: float
++) -> void:
++	if _headless:
++		_pool_slot[pool_i] = slot
++		_pool_intent[pool_i] = intent
++		return
++	var holder := _holders[pool_i]
++	if holder == null:
++		return
++	var is_recycle := _pool_slot[pool_i] != slot
++	# sim (X,Y) -> Godot (X,Z), Y=0 ground (+ feet offset); yaw about +Y — IDENTICAL
++	# convention to the VAT/skeletal horde so facing matches at a swap.
++	holder.global_position = Vector3(ox, y_offset, oy)
++	holder.rotation.y = -heading + facing_offset
++	if holder.process_mode == Node.PROCESS_MODE_DISABLED:
++		holder.process_mode = Node.PROCESS_MODE_INHERIT
++		holder.visible = true
++	# Recycle to a new agent -> restore all limbs (clears any prior agent's hidden
++	# state). Phase 3 adds `_apply_part_mask(pool_i, parts_mask)` here once the ABI
++	# carries the mask (it overwrites every part — no separate reset needed then).
++	if is_recycle:
++		reset_parts_visible(pool_i)
++
++	var player := _players[pool_i]
++	var clamped := clampi(intent, 0, ANIM_INTENT_COUNT - 1)
++	# play() ONLY on a (re)bind or intent change — never per frame (re-play restarts
++	# the clip). Seek to the shared clock so the clip phase-matches.
++	if player != null and (is_recycle or _pool_intent[pool_i] != clamped):
++		var clip := _intent_clip[clamped]
++		if clip != &"":
++			player.play(clip)
++			_seek_to_clock(player, clip, clk)
++	# Cache intent OUTSIDE the player guard (a rig with no AnimationPlayer must still
++	# advance the cache, else it re-enters the gate every frame).
++	_pool_intent[pool_i] = clamped
++	# HitStop = hold the pose (speed_scale 0); the shared clock is already frozen.
++	if player != null:
++		player.speed_scale = 0.0 if hitstop > 0 else 1.0
++	# Per-instance health tint on EVERY part.
++	var h := float(health) / 255.0
++	for m in _meshes[pool_i]:
++		m.set_instance_shader_parameter("health_frac", h)
++	_pool_slot[pool_i] = slot
++
++
++func _unbind(pool_i: int) -> void:
++	if _pool_slot[pool_i] == -1:
++		return
++	_pool_slot[pool_i] = -1
++	_pool_intent[pool_i] = -1
++	if _headless:
++		return
++	var holder := _holders[pool_i]
++	if holder != null:
++		holder.visible = false
++		holder.process_mode = Node.PROCESS_MODE_DISABLED
++
++
++# Seek a (looping) clip to the shared slot clock so phase is continuous across a
++# (re)bind — non-looping clips clamp at the end (a finished death holds its pose).
++func _seek_to_clock(player: AnimationPlayer, clip: StringName, clk: float) -> void:
++	var anim := player.get_animation(clip)
++	if anim == null or anim.length <= 0.0:
++		return
++	var t := (
++		fmod(clk, anim.length) if anim.loop_mode != Animation.LOOP_NONE else minf(clk, anim.length)
++	)
++	player.seek(t, true)
++
++
++func _find_anim_player(n: Node) -> AnimationPlayer:
++	if n is AnimationPlayer:
++		return n
++	for c in n.get_children():
++		var r := _find_anim_player(c)
++		if r != null:
++			return r
++	return null
++
++
++func _collect_meshes(n: Node, out: Array[MeshInstance3D]) -> void:
++	if n is MeshInstance3D:
++		out.append(n)
++	for c in n.get_children():
++		_collect_meshes(c, out)
++
++
++func debug_status() -> String:
++	if not is_active():
++		return "Part3D: off"
++	return "Part3D: %d/%d rigs, asm %.2fms" % [last_live, _cap, last_assembly_usec / 1000.0]
+diff --git a/apps/game-godot/PartSegmentedHordeAdapter.gd.uid b/apps/game-godot/PartSegmentedHordeAdapter.gd.uid
+new file mode 100644
+index 0000000..9563b04
+--- /dev/null
++++ b/apps/game-godot/PartSegmentedHordeAdapter.gd.uid
+@@ -0,0 +1 @@
++uid://ceumely5h0snt
+diff --git a/apps/game-godot/assets/README.md b/apps/game-godot/assets/README.md
+index 8957b85..2bd7187 100644
+--- a/apps/game-godot/assets/README.md
++++ b/apps/game-godot/assets/README.md
+@@ -53,6 +53,14 @@ assets/
+ | `car-kit/sedan-sports.glb` | Kenney — Car Kit | CC0 | `Textures/colormap.png` (`451b163d51d08b73f7d98244fef3f979`) | demo vehicle — mmnto-ai/liquid-city#567 |
+ | `mini-characters/character-male-a.glb` | Kenney — Mini Characters | CC0 | `Textures/colormap.png` (`6113ca7438d6f42a273498b357eb5c01`) | player avatar — distinct from the female-a VAT horde (placeholder, ADR-029 P2b PR3) |
+ | `blaster-kit/blaster-a.glb` | Kenney — Blaster Kit | CC0 | `Textures/colormap.png` (`d399396bd54b6d062c41eaf42b99ac44`) | player weapon (placeholder, ADR-029 P2b PR3) |
++| `blocky-characters/character-a.glb` | Kenney — Blocky Characters | CC0 | `Textures/texture-a.png` (`9f05a51eb48d4b836e698e73782d3bfd`) | LOD-0 part-segmented horde — gore foundation, ADR-029 gore mmnto-ai/liquid-city#559 (placeholder, Ruben replaces) |
++
++> **Blocky Characters pack note:** unlike the other Kenney packs, this one ships
++> **per-character** textures (`texture-a.png` … `texture-r.png`), not a single shared
++> `Textures/colormap.png`. `character-a.glb` references `Textures/texture-a.png`; we
++> commit only that texture. The model is **part-segmented** (6 separate body-part
++> mesh nodes: `head/torso/arm-left/arm-right/leg-left/leg-right`) animated by node-TRS
++> tracks (no `Skeleton3D`) — the per-limb hide-able structure the gore epic needs.
+ 
+ > Kenney assets are CC0 (public domain) — attribution is optional but tracked here.
+ > A CC-BY asset entering the tree would make its manifest row's attribution mandatory.
+diff --git a/apps/game-godot/assets/blocky-characters/Textures/texture-a.png b/apps/game-godot/assets/blocky-characters/Textures/texture-a.png
+new file mode 100644
+index 0000000..7c054d8
+Binary files /dev/null and b/apps/game-godot/assets/blocky-characters/Textures/texture-a.png differ
+diff --git a/apps/game-godot/assets/blocky-characters/Textures/texture-a.png.import b/apps/game-godot/assets/blocky-characters/Textures/texture-a.png.import
+new file mode 100644
+index 0000000..a54fb39
+--- /dev/null
++++ b/apps/game-godot/assets/blocky-characters/Textures/texture-a.png.import
+@@ -0,0 +1,40 @@
++[remap]
++
++importer="texture"
++type="CompressedTexture2D"
++uid="uid://dri0j1h2tevdt"
++path="res://.godot/imported/texture-a.png-825961e05d96aa69b7899d9d35d760bb.ctex"
++metadata={
++"vram_texture": false
++}
++
++[deps]
++
++source_file="res://assets/blocky-characters/Textures/texture-a.png"
++dest_files=["res://.godot/imported/texture-a.png-825961e05d96aa69b7899d9d35d760bb.ctex"]
++
++[params]
++
++compress/mode=0
++compress/high_quality=false
++compress/lossy_quality=0.7
++compress/uastc_level=0
++compress/rdo_quality_loss=0.0
++compress/hdr_compression=1
++compress/normal_map=0
++compress/channel_pack=0
++mipmaps/generate=false
++mipmaps/limit=-1
++roughness/mode=0
++roughness/src_normal=""
++process/channel_remap/red=0
++process/channel_remap/green=1
++process/channel_remap/blue=2
++process/channel_remap/alpha=3
++process/fix_alpha_border=true
++process/premult_alpha=false
++process/normal_map_invert_y=false
++process/hdr_as_srgb=false
++process/hdr_clamp_exposure=false
++process/size_limit=0
++detect_3d/compress_to=1
+diff --git a/apps/game-godot/assets/blocky-characters/character-a.glb b/apps/game-godot/assets/blocky-characters/character-a.glb
+new file mode 100644
+index 0000000..2e99b78
+Binary files /dev/null and b/apps/game-godot/assets/blocky-characters/character-a.glb differ
+diff --git a/apps/game-godot/assets/blocky-characters/character-a.glb.import b/apps/game-godot/assets/blocky-characters/character-a.glb.import
+new file mode 100644
+index 0000000..cfc2dac
+--- /dev/null
++++ b/apps/game-godot/assets/blocky-characters/character-a.glb.import
+@@ -0,0 +1,42 @@
++[remap]
++
++importer="scene"
++importer_version=1
++type="PackedScene"
++uid="uid://p2qb2an24r45"
++path="res://.godot/imported/character-a.glb-f35c22cf5af0d74d021b57239bb185ef.scn"
++
++[deps]
++
++source_file="res://assets/blocky-characters/character-a.glb"
++dest_files=["res://.godot/imported/character-a.glb-f35c22cf5af0d74d021b57239bb185ef.scn"]
++
++[params]
++
++nodes/root_type=""
++nodes/root_name=""
++nodes/root_script=null
++nodes/apply_root_scale=true
++nodes/root_scale=1.0
++nodes/import_as_skeleton_bones=false
++nodes/use_name_suffixes=true
++nodes/use_node_type_suffixes=true
++meshes/ensure_tangents=true
++meshes/generate_lods=true
++meshes/create_shadow_meshes=true
++meshes/light_baking=1
++meshes/lightmap_texel_size=0.2
++meshes/force_disable_compression=false
++skins/use_named_skins=true
++animation/import=true
++animation/fps=30
++animation/trimming=false
++animation/remove_immutable_tracks=true
++animation/import_rest_as_RESET=false
++import_script/path=""
++materials/extract=0
++materials/extract_format=0
++materials/extract_path=""
++_subresources={}
++gltf/naming_version=2
++gltf/embedded_image_handling=1
+diff --git a/apps/game-godot/part_segmented_horde_bench.gd b/apps/game-godot/part_segmented_horde_bench.gd
+new file mode 100644
+index 0000000..59a1f32
+--- /dev/null
++++ b/apps/game-godot/part_segmented_horde_bench.gd
+@@ -0,0 +1,483 @@
++extends Node3D
++
++# ADR-029 gore epic mmnto-ai/liquid-city#565, PR1 (mmnto-ai/liquid-city#559) —
++# part-segmented render-LOD-0 horde bench (sibling of skeletal_horde_bench).
++# REAL GPU (headless instantiates zero rigs). PHASE A (gates exit): Godot
++# import-proof (6 parts resolve by NAME — the runtime contract, not glTF indices),
++# dismember hide/reset + pooled-recycle leak guard (lc-codex), bind count, HitStop
++# freeze, intent->clip, tint across all 6 parts, root planar-drift < eps. PHASE B
++# (reports): forced-N sweep {0,16,32,48,64} re-measures the cap (6 nodes/rig != the
++# skinned cost, lc-codex) + JSON + per-N PNG + a gameplay-camera perceptual baseline.
++# Run: <godot> --path apps/game-godot res://part_segmented_horde_bench.tscn
++#   0 = correctness clean, 1 = assertion failed, 2 = watchdog.
++
++const CAP := 64  # pool sized to the max swept N
++const SPACING := 2.0
++const OUT_DIR := "user://part_segmented_horde_bench/"
++
++# Phase A (correctness)
++const NC := 8  # synthetic agent count
++const FRAMES_C := 4  # fixed frames before asserting
++const DELTA_C := 0.1  # fixed delta so clock asserts are deterministic
++const DEAD_SLOT := 0
++const FROZEN_SLOT := 2  # hitstop > 0 -> clock holds, speed_scale == 0
++const CONTROL_SLOT := 3  # hitstop 0 -> clock advances, speed_scale == 1
++
++# Phase B (perf sweep)
++const N_SWEEP := [0, 16, 32, 48, 64]
++const WARMUP := 20
++const SAMPLE := 60
++const BUDGET_MARGINAL_MS := 2.0  # cap = highest N with p95 marginal <= this
++
++# render-state record layout (mirror of the ABI)
++const RENDER_STATE_STRIDE := 4
++const RS_HITSTOP := 2
++const LIVE_BIT := 0x04
++const ANIM_LOCOMOTION := 1
++const ANIM_DEATH := 4
++# tier ids (ADR-029 P2b PR5) — bench plays LODManager3D: live agents SKEL, dead DEAD.
++const TIER_DEAD := 0
++const TIER_SKEL := 2
++const PART_COUNT := 6
++
++var _adapter: PartSegmentedHordeAdapter
++var _cam: Camera3D
++var _xf := PackedFloat32Array()
++var _rs := PackedByteArray()
++# The adapter is a pure clock READER; this bench owns the tier mask + the shared
++# SlotClockBook (injected at construction; never reach into _adapter._clocks).
++var _tiers := PackedByteArray()
++var _book: SlotClockBook
++
++var _phase := 0  # 0 = correctness, 1 = perf sweep, 2 = perceptual, 3 = done
++var _frame := 0
++var _fails := 0
++var _watchdog := 0  # monotonic frame counter (hard anti-hang quit)
++
++# perf sweep state
++var _sweep_i := 0
++var _samples := PackedFloat32Array()
++var _results := []  # [{n, avg, p95, p99, max}]
++var _drift_start := Vector3.ZERO
++var _drift_rig := -1
++
++
++func _ready() -> void:
++	if DisplayServer.get_name() == "headless":
++		# Headless instantiates zero rigs — verify the adapter no-ops, then quit clean.
++		var a := PartSegmentedHordeAdapter.new(self, true, CAP)
++		a.setup()
++		a.set_active(true)
++		var ok := not a.is_active() and a.last_live == 0
++		print("[part-bench] headless — adapter no-op %s; quit 0" % ("OK" if ok else "UNEXPECTED"))
++		get_tree().quit(0)
++		return
++
++	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
++	_cam = Camera3D.new()
++	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
++	_cam.fov = 55.0
++	_cam.current = true
++	add_child(_cam)
++
++	_book = SlotClockBook.new()
++	_adapter = PartSegmentedHordeAdapter.new(self, false, CAP, _book)
++	if not _adapter.setup():
++		# setup() pushes an error naming any unresolved part (the runtime contract).
++		print("[part-bench] FAIL: setup returned false (see part-name push_error)")
++		get_tree().quit(1)
++		return
++	_adapter.set_active(true)
++	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
++	print("[part-bench] start; cap=%d clips=%s" % [CAP, str(_adapter._intent_clip)])
++	_build_buffers(NC)
++	_frame_camera(NC)
++
++
++func _process(delta: float) -> void:
++	if _adapter == null:
++		return
++	# Hard watchdog: a self-quitting bench must never hang a window (~404 frames).
++	_watchdog += 1
++	if _watchdog > 1500:
++		push_error("[part-bench] watchdog tripped at %d frames — force quit" % _watchdog)
++		get_tree().quit(2)
++		return
++	if _phase == 0:
++		_process_correctness()
++	elif _phase == 1:
++		_process_perf(delta)
++	elif _phase == 2:
++		_process_perceptual(delta)
++
++
++func _process_correctness() -> void:
++	_advance_clocks(NC, DELTA_C)
++	_adapter.update(_xf, _rs, NC, _tiers)
++	_frame += 1
++	if _frame < FRAMES_C:
++		return
++	_verify_correctness()
++	_phase = 1
++	_frame = 0
++	_sweep_i = 0
++	_samples = PackedFloat32Array()
++	_begin_sweep_n()
++
++
++func _verify_correctness() -> void:
++	var live_expected := NC - 1  # one dead slot
++	_check(
++		_adapter.last_live == live_expected,
++		"bind count == %d live" % live_expected,
++		"bound %d, expected %d" % [_adapter.last_live, live_expected]
++	)
++
++	var p1 := _pool_index_of(1)
++	_import_proof(p1)
++
++	# HitStop: frozen slot clock held at 0; control advanced FRAMES_C*DELTA_C.
++	var frozen_clk: float = _book.clock(FROZEN_SLOT)
++	var control_clk: float = _book.clock(CONTROL_SLOT)
++	_check(frozen_clk == 0.0, "hitstop clock frozen at 0", "frozen clock = %.3f" % frozen_clk)
++	var expect := float(FRAMES_C) * DELTA_C
++	_check(
++		absf(control_clk - expect) < 1e-4,
++		"control clock advanced to %.3f" % expect,
++		"control clock = %.3f" % control_clk
++	)
++
++	# speed_scale: frozen rig holds (0), control runs (1).
++	var fp := _pool_index_of(FROZEN_SLOT)
++	var cp := _pool_index_of(CONTROL_SLOT)
++	if fp >= 0 and cp >= 0:
++		var fpp: AnimationPlayer = _adapter._players[fp]
++		var cpp: AnimationPlayer = _adapter._players[cp]
++		if fpp != null and cpp != null:
++			_check(fpp.speed_scale == 0.0, "frozen speed_scale == 0", "= %.2f" % fpp.speed_scale)
++			_check(cpp.speed_scale == 1.0, "control speed_scale == 1", "= %.2f" % cpp.speed_scale)
++		else:
++			_check(false, "frozen + control rigs have AnimationPlayers", "player missing")
++	else:
++		_check(false, "frozen + control rigs bound", "pool index missing (f=%d c=%d)" % [fp, cp])
++
++	# intent -> clip table: locomotion + death resolved + differentiate.
++	var loco: StringName = _adapter._intent_clip[ANIM_LOCOMOTION]
++	var death: StringName = _adapter._intent_clip[ANIM_DEATH]
++	_check(
++		loco != &"" and death != &"",
++		"loco + death clips resolved",
++		"loco='%s' death='%s'" % [loco, death]
++	)
++	_check(loco != death, "intents differentiate (loco != death clip)", "both '%s'" % loco)
++
++	# per-instance tint across ALL 6 parts: first == last (none untinted) + distinct.
++	var m0 := _meshes_of(p1)
++	var m1 := _meshes_of(cp)
++	if p1 >= 0 and cp >= 0 and m0.size() > 0 and m1.size() > 0:
++		_check(
++			m0.size() == PART_COUNT, "rig has exactly 6 part surfaces", "surfaces = %d" % m0.size()
++		)
++		var h0_first: float = m0[0].get_instance_shader_parameter("health_frac")
++		var h0_last: float = m0[m0.size() - 1].get_instance_shader_parameter("health_frac")
++		var h1_first: float = m1[0].get_instance_shader_parameter("health_frac")
++		_check(
++			h0_first == h0_last,
++			"all 6 parts tinted (first == last)",
++			"first=%.3f last=%.3f" % [h0_first, h0_last]
++		)
++		_check(h0_first != h1_first, "tint distinct across rigs", "both = %.3f" % h0_first)
++	else:
++		_check(false, "tint-sample rigs bound with meshes", "missing meshes")
++
++	_verify_dismember_contract(p1)
++
++	if _fails == 0:
++		print("[part-bench] PHASE A: PASS (all correctness assertions)")
++	else:
++		print("[part-bench] PHASE A: FAIL (%d assertion(s))" % _fails)
++
++
++func _import_proof(pool_i: int) -> void:
++	if pool_i < 0:
++		_check(false, "import-proof rig bound", "no pool index")
++		return
++	var by_bit: Array = _adapter._part_by_bit[pool_i]
++	var all_live := by_bit.size() == PART_COUNT
++	for m in by_bit:
++		if m == null or not is_instance_valid(m):
++			all_live = false
++	_check(
++		all_live, "import-proof: all 6 bit->part nodes resolved + live", "by_bit=%s" % str(by_bit)
++	)
++	_check(_adapter._players[pool_i] != null, "rig has an AnimationPlayer", "player null")
++
++
++# Hide a subset via the mask, assert visibility; reset, assert all visible; then
++# RECYCLE the pool rig to a new agent slot and assert auto-reset — proving a hidden
++# limb cannot leak across pooled agents (lc-codex, load-bearing).
++func _verify_dismember_contract(pool_i: int) -> void:
++	if pool_i < 0:
++		_check(false, "dismember-contract rig bound", "no pool index")
++		return
++	var by_bit: Array = _adapter._part_by_bit[pool_i]
++	var mask := (1 << 0) | (1 << 1)  # hide head + arm-left
++	_adapter._apply_part_mask(pool_i, mask)
++	var hide_ok := true
++	for bit in PART_COUNT:
++		if by_bit[bit].visible != ((mask & (1 << bit)) == 0):
++			hide_ok = false
++	_check(hide_ok, "dismember: masked limbs hidden, others visible", "mask=%d mismatch" % mask)
++
++	_adapter.reset_parts_visible(pool_i)
++	var reset_ok := true
++	for bit in PART_COUNT:
++		if not by_bit[bit].visible:
++			reset_ok = false
++	_check(reset_ok, "reset_parts_visible restores all limbs", "a part stayed hidden")
++
++	# Re-hide, recycle to a fresh agent slot, assert the bind path restored visibility.
++	_adapter._apply_part_mask(pool_i, mask)
++	var new_slot: int = _adapter._pool_slot[pool_i] + 1000  # fresh id -> is_recycle
++	_adapter._bind(pool_i, new_slot, 5.0, 5.0, 0.0, ANIM_LOCOMOTION, 200, 0, 0.0)
++	var recycle_ok := true
++	for bit in PART_COUNT:
++		if not by_bit[bit].visible:
++			recycle_ok = false
++	_check(recycle_ok, "pooled recycle auto-resets limbs (no leak)", "a hidden limb leaked")
++
++
++func _begin_sweep_n() -> void:
++	var n: int = N_SWEEP[_sweep_i]
++	_build_buffers(n)
++	_frame_camera(maxi(n, 1))
++	_samples = PackedFloat32Array()
++	_frame = 0
++	_drift_rig = -1
++
++
++func _process_perf(delta: float) -> void:
++	var n: int = N_SWEEP[_sweep_i]
++	_advance_clocks(n, delta)
++	_adapter.update(_xf, _rs, n, _tiers)
++	_frame += 1
++	if _frame <= WARMUP:
++		if _frame == WARMUP and n > 0:
++			_drift_rig = _pool_index_of(0)
++			if _drift_rig >= 0:
++				_drift_start = _rig_root_local(_drift_rig)
++		return
++	_samples.append(delta * 1000.0)  # ms
++	if _frame < WARMUP + SAMPLE:
++		return
++
++	_results.append(_summarise(n, _samples))
++	_capture_png(n)
++	if n > 0 and _drift_rig >= 0:
++		var drift := _rig_root_local(_drift_rig) - _drift_start
++		var horiz := Vector2(drift.x, drift.z).length()
++		_check(horiz < 0.05, "N=%d root drift < 0.05 (TRS clip)" % n, "drifted %.3f m" % horiz)
++
++	_sweep_i += 1
++	if _sweep_i < N_SWEEP.size():
++		_begin_sweep_n()
++	else:
++		_enter_perceptual()
++
++
++func _finalise() -> void:
++	var baseline: float = _results[0]["p95"]  # N=0
++	var cap := 0
++	print("[part-bench] PHASE B — isolation sweep (vsync off):")
++	for r in _results:
++		var marginal: float = r["p95"] - baseline
++		var within: bool = r["n"] == 0 or marginal <= BUDGET_MARGINAL_MS
++		if within and r["n"] > cap:
++			cap = r["n"]
++		print(
++			(
++				"[part-bench]   N=%2d  avg=%.3f  p95=%.3f  p99=%.3f  max=%.3f ms  (marg p95 +%.3f)%s"
++				% [
++					r["n"],
++					r["avg"],
++					r["p95"],
++					r["p99"],
++					r["max"],
++					marginal,
++					"" if within else "  OVER"
++				]
++			)
++		)
++	print(
++		(
++			"[part-bench] RECOMMENDED CAP = %d (p95 marginal <= %.1f ms over baseline)"
++			% [cap, BUDGET_MARGINAL_MS]
++		)
++	)
++	_write_json(cap, baseline)
++
++	if _fails == 0:
++		print("[part-bench] VERDICT: GO — mechanism verified; cap=%d" % cap)
++	else:
++		print("[part-bench] VERDICT: FAIL — %d correctness assertion(s)" % _fails)
++	_phase = 3
++	get_tree().quit(0 if _fails == 0 else 1)
++
++
++func _build_buffers(n: int) -> void:
++	_xf = PackedFloat32Array()
++	_rs = PackedByteArray()
++	_xf.resize(maxi(n, 1) * 8)
++	_rs.resize(maxi(n, 1) * RENDER_STATE_STRIDE)
++	var side := maxi(int(ceil(sqrt(float(maxi(n, 1))))), 1)
++	for i in n:
++		var gx := float(i % side) * SPACING
++		var gy := float(i / side) * SPACING
++		var ang := float(i) * 0.7
++		var cs := cos(ang)
++		var sn := sin(ang)
++		var o := i * 8
++		_xf[o + 0] = cs
++		_xf[o + 1] = -sn
++		_xf[o + 2] = 0.0
++		_xf[o + 3] = gx
++		_xf[o + 4] = sn
++		_xf[o + 5] = cs
++		_xf[o + 6] = 0.0
++		_xf[o + 7] = gy
++		var health := (i * 37) % 256
++		var hitstop := 6 if i == FROZEN_SLOT else 0
++		var ro := i * RENDER_STATE_STRIDE
++		_rs[ro + 0] = LIVE_BIT
++		_rs[ro + 1] = health
++		_rs[ro + 2] = hitstop
++		_rs[ro + 3] = ANIM_LOCOMOTION
++	if n == NC:
++		for k in 8:
++			_xf[DEAD_SLOT * 8 + k] = 0.0
++		_rs[CONTROL_SLOT * RENDER_STATE_STRIDE + 3] = ANIM_DEATH
++	_tiers.resize(maxi(n, 1))
++	for i in _tiers.size():
++		_tiers[i] = TIER_SKEL
++	if n == NC:
++		_tiers[DEAD_SLOT] = TIER_DEAD
++
++
++# Advance the shared clock once per slot, exactly as LODManager3D does (the adapter
++# is a pure reader): mark DEAD slots, advance live slots HitStop-frozen.
++func _advance_clocks(n: int, delta: float) -> void:
++	_book.ensure_capacity(n)
++	for s in n:
++		if _tiers[s] == TIER_DEAD:
++			_book.mark_dead(s)
++		else:
++			_book.advance(s, delta, _rs[s * RENDER_STATE_STRIDE + RS_HITSTOP])
++
++
++func _frame_camera(n: int) -> void:
++	var side := maxi(int(ceil(sqrt(float(n)))), 1)
++	var extent := float(side) * SPACING
++	var c := extent * 0.5
++	_cam.position = Vector3(c, extent * 0.95, extent * 1.45)
++	_cam.look_at(Vector3(c, 0.5, c), Vector3.UP)
++
++
++# Perceptual baseline phase: reframe to a low, close, combat-distance camera, let a
++# few real frames render so the move propagates, then capture + finalise — the
++# gameplay-distance legibility frame the cohort asked for. (A force_draw captured the
++# sweep overview as a stale frame; a real rendered frame is correct.)
++func _enter_perceptual() -> void:
++	var n: int = N_SWEEP[N_SWEEP.size() - 1]
++	_build_buffers(n)
++	var c := float(maxi(int(ceil(sqrt(float(n)))), 1)) * SPACING * 0.5
++	_cam.position = Vector3(c, 6.0, c + 9.0)
++	_cam.look_at(Vector3(c, 0.8, c), Vector3.UP)
++	_phase = 2
++	_frame = 0
++
++
++func _process_perceptual(delta: float) -> void:
++	var n: int = N_SWEEP[N_SWEEP.size() - 1]
++	_advance_clocks(n, delta)
++	_adapter.update(_xf, _rs, n, _tiers)
++	_frame += 1
++	if _frame < 4:
++		return
++	var img := get_viewport().get_texture().get_image()
++	if img != null:
++		var path := OUT_DIR + "perceptual_gameplay_cam.png"
++		img.save_png(ProjectSettings.globalize_path(path))
++		print("[part-bench] perceptual baseline capture %s" % path)
++	_finalise()
++
++
++func _summarise(n: int, s: PackedFloat32Array) -> Dictionary:
++	var arr := s.duplicate()
++	arr.sort()
++	var cnt := arr.size()
++	var sum := 0.0
++	for v in arr:
++		sum += v
++	return {
++		"n": n,
++		"avg": sum / maxf(float(cnt), 1.0),
++		"p95": arr[mini(int(0.95 * cnt), cnt - 1)] if cnt > 0 else 0.0,
++		"p99": arr[mini(int(0.99 * cnt), cnt - 1)] if cnt > 0 else 0.0,
++		"max": arr[cnt - 1] if cnt > 0 else 0.0,
++	}
++
++
++func _write_json(cap: int, baseline: float) -> void:
++	var doc := {
++		"schema": "part-segmented-cap-bench-v1",
++		"recommended_cap": cap,
++		"budget_marginal_ms": BUDGET_MARGINAL_MS,
++		"baseline_p95_ms": baseline,
++		"renderer": RenderingServer.get_video_adapter_name(),
++		"godot": Engine.get_version_info().get("string", "?"),
++		"viewport": [get_viewport().size.x, get_viewport().size.y],
++		"vsync": "disabled",
++		"sweep": _results,
++	}
++	var path := OUT_DIR + "part_segmented_cap.json"
++	var f := FileAccess.open(path, FileAccess.WRITE)
++	if f != null:
++		f.store_string(JSON.stringify(doc, "  "))
++		f.close()
++		print("[part-bench] wrote %s" % path)
++	print("[part-bench] JSON: %s" % JSON.stringify(doc))
++
++
++func _capture_png(n: int) -> void:
++	var img := get_viewport().get_texture().get_image()
++	if img != null:
++		var path := OUT_DIR + "part_n%d.png" % n
++		img.save_png(ProjectSettings.globalize_path(path))
++		print("[part-bench] capture %s" % path)
++
++
++func _check(ok: bool, label: String, fail_detail: String) -> void:
++	if ok:
++		print("[part-bench] PASS: %s" % label)
++	else:
++		_fails += 1
++		print("[part-bench] FAIL: %s — %s" % [label, fail_detail])
++
++
++func _pool_index_of(slot: int) -> int:
++	for i in _adapter._pool_slot.size():
++		if _adapter._pool_slot[i] == slot:
++			return i
++	return -1
++
++
++func _meshes_of(pool_i: int) -> Array:
++	return _adapter._meshes[pool_i] if pool_i >= 0 and pool_i < _adapter._meshes.size() else []
++
++
++func _rig_root_local(pool_i: int) -> Vector3:
++	var holder: Node3D = _adapter._holders[pool_i]
++	if holder == null or holder.get_child_count() == 0:
++		return Vector3.ZERO
++	var rig := holder.get_child(0) as Node3D
++	return rig.position if rig != null else Vector3.ZERO
+diff --git a/apps/game-godot/part_segmented_horde_bench.gd.uid b/apps/game-godot/part_segmented_horde_bench.gd.uid
+new file mode 100644
+index 0000000..19757af
+--- /dev/null
++++ b/apps/game-godot/part_segmented_horde_bench.gd.uid
+@@ -0,0 +1 @@
++uid://ckgh0hst7xq3v
+diff --git a/apps/game-godot/part_segmented_horde_bench.tscn b/apps/game-godot/part_segmented_horde_bench.tscn
+new file mode 100644
+index 0000000..d3c6020
+--- /dev/null
++++ b/apps/game-godot/part_segmented_horde_bench.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://part_segmented_horde_bench.gd" id="1_psb"]
++
++[node name="PartSegmentedHordeBench" type="Node3D"]
++script = ExtResource("1_psb")

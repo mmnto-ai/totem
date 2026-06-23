@@ -1,0 +1,1234 @@
+diff --git a/.totem/specs/p2a-vat-spike.md b/.totem/specs/p2a-vat-spike.md
+new file mode 100644
+index 0000000..c1e352d
+--- /dev/null
++++ b/.totem/specs/p2a-vat-spike.md
+@@ -0,0 +1,86 @@
++# P2a — VAT / 3D instance-data proof spike (design + 1-page impl)
++
++**Status:** Drafted (lc-claude). Tracking issue mmnto-ai/liquid-city#588 (epic mmnto-ai/liquid-city#565 / umbrella mmnto-ai/liquid-city#568). Cohort blind design-review **folded** (lc-codex / lc-agy / lc-gemini, all returned 2026-06-21) — this round IS the pre-PR design review; the impl PR gets a normal review.
++**Author:** lc-claude.
++**Context:** ADR-029 phase **P2a**. Gates the gore commitment (mmnto-ai/liquid-city#565) and the 3D horde render (P2b). Proves the `bake → import → runtime` vertex-animation-texture (VAT) path on a `MultiMeshInstance3D` horde **before** any gore work depends on it. All behind `use_3d_camera`; the 2D path and the deterministic sim are untouched.
++
++## Goal — what the spike proves
++
++1. An **offline Blender-Python VAT baker** (`tools/bake_vat.*`) bakes 1–2 clips (walk + die) of the committed **skinned mini-character** into a **float-precision** vertex-animation texture + a metadata sidecar.
++2. A `MultiMeshInstance3D` + spatial VAT shader renders **N instances animating independently** — distinct phase and clip — driven from a **per-instance clock + clip index** carried in `CUSTOM_DATA`, fed Godot-side from the existing 2D agent buffer (no new FFI).
++3. Captured **frame-time** at **64 / 128 / 256** (+ a 512 bench) vs a no-horde baseline, plus the **CPU cost of GDScript buffer assembly**.
++
++The output is a go/no-go on VAT as the LOD-1+ horde technology and a measured CPU/GPU budget that P2b's stable ABI + LODManager build on.
++
++## Non-goals (→ P2b+)
++
++`LODManager3D` / the skeletal LOD-0 path; the **stable** instance-data ABI; HitStop; gore / dismemberment; the part-segmented gore rig (mmnto-ai/liquid-city#559); the Rust-side `get_agent_buffer_3d()` graduation; the flip (P5). The permanent baker-home (Blender vs Godot-native) is **also** deferred to P2b — see § Baker.
++
++## Cohort blind round — folded
++
++**Consensus (all 3 — fold as-is):**
++- **VAT-only spike.** No `LODManager3D` / skeletal LOD-0 in P2a (all 3: scope creep that pollutes the measurement).
++- **Rig = the skinned mini-character.** It exists, it's the hardest pipeline case (smooth skinning is what VAT buys us), and the part-segmented gore rig stays LOD-0/P2b.
++- **4-float `CUSTOM_DATA` as the v0 / proof carrier** — explicitly **not** the stable P2b ABI; no wide per-instance data texture in the spike.
++- **Project Godot-side** from the existing `get_agent_buffer` — **no new FFI** for the spike.
++- **Anim clock from `CUSTOM_DATA.x`, never global `TIME`** — a per-slot CPU clock makes HitStop work day-one (ADR-015 per-instance-clock amendment).
++- **Headless guard** — `DisplayServer.get_name() == "headless"` no-ops the VAT setup; headless proves "doesn't load/instantiate/crash," not visual correctness.
++- **Gore boundary** — VAT = LOD-1+ distant; skeletal part-segmented = LOD-0 tactical; mutually exclusive tiers, zero collision.
++
++**Baker pipeline (cohort split; operator-decided 2026-06-21 "go with my recs"):** **Blender-Python float-bake, treated as disposable spike proof data; the permanent baker-home (Blender vs lc-agy's Godot-native `bake_vat.gd`) is deferred to P2b.** The spike proves the *runtime*, not the tool — codex's own framing ("treat the bake as disposable proof data") dissolves the fork for P2a. Blender gives trivial deformed-vertex readback (skinning is GPU-side in Godot — agy's native path carries a real CPU-readback feasibility risk that a spike shouldn't have to clear) and is 2/3 of the cohort.
++
++**Must-fold hazards (attributed):**
++1. **Float texture precision** (agy + gemini) — 8-bit PNG quantizes vertex offsets → vertex-stepping. Bake **EXR / `RGBAF`/`RGBF` float**.
++2. **Root motion stripped** (codex) — the sim owns translation + heading; a clip with root motion double-applies. The baker **strips** it (anchors the root's horizontal position per-frame so the clip plays in-place) and metadata declares `root_motion: stripped`; it **warns** when a clip's stripped travel exceeds `--root-motion-eps` (a sanity signal for an unintended locomotion clip — a death collapse's small drift is expected and silent).
++3. **MultiMesh3D stride reality** (codex; confirmed by Prop 027) — the 3D buffer is **16 floats** (12 `Transform3D` + 4 `CUSTOM_DATA`), unlike the 2D `Transform2D` buffer (§ Grounded facts). The Rust 2D buffer is **not** directly uploadable; measure the GDScript assembly cost.
++4. **Slot-keyed clocks** (codex) — key the per-instance clock by **stable `BufferSlot`**, not compacted draw index; mask dead slots (§ Grounded facts: dead slots zero out). Slot **recycling on respawn** means clocks must expire/rebind at a recycled slot.
++5. **Vertex addressing** (codex) — the VAT shader must address the position texture by a stable per-vertex index. **Default: bake the vertex index into `UV2`** (version-proof); prove `VERTEX_ID` as an optimization later.
++6. **Frozen-subset proof fixture** (codex) — freeze every Nth live slot's clock while the rest animate → makes any accidental global-`TIME` leak a *visible* artifact the harness can inspect.
++7. (deferred) **P2b graduation to a Rust `get_agent_buffer_3d()`** (agy) for the 400-agent scale, and the **altitude/Z-loft** feed (gemini) — both out of P2a (the spike flattens to Y=0, which is fine).
++
++## Grounded current-state facts (recon, file:line)
++
++- **FFI:** `ZomboidSim.get_agent_buffer()` (`lib.rs:412`) → `PackedFloat32Array`, **stride-8** `Transform2D`: `[bx.x, by.x, 0, originX, bx.y, by.y, 0, originY]`. Health-tint variant `get_agent_health_tint_buffer()` (`lib.rs:1266-1303`) = **stride-12** (8 + `[health_frac, 0, 0, 0]`). Consumed `sim_driver.gd:2847-2906`. Heading is reconstructable from the basis row.
++- **2D horde MultiMesh:** `$SimDisplay` `MultiMeshInstance2D` (`sim_driver.gd:468`), `transform_format = TRANSFORM_2D`; `use_custom_data` toggled for tint. **`instance_count` MUST be set before `multimesh.buffer = …`** (Godot validation contract; `count*stride == buffer.size()`).
++- **Liveness:** no explicit alive-bit. `snapshot.rs:134` `buf.fill(0.0)` then live agents rewrite their slot → **dead slots are zero-transforms (invisible at origin)**. `BufferSlot` (Rust) is the stable slot id; `agent_count = buf.len()/stride`. Phase-3 slot recycling exists → clocks must expire/rebind.
++- **`Render3DAdapter.gd`** (`extends RefCounted`): `_init(camera_3d, render_3d_root, vehicle_proxy, player_proxy)`, `setup_player_proxy(is_headless)`, `setup_vehicle_proxy()`, `setup_camera()/apply_camera()`, `sync_vehicle(Vector4)`, `sync_player(Vector2,Vector2)`, `project_cursor_to_sim(Vector2)→Dictionary`, `set_active(bool)`. Constructed `sim_driver.gd:1094-1096` (`_render_adapter`); the adapter **never queries FFI** (sim_driver feeds it). Headless guard `sim_driver.gd:1101`. Planar convention: **sim (X,Y) → Godot (X,Z), Y=0** (`_planar_from_3d` `:346`, `_sim_from_ground_3d` `:356`, `_assert_chirality` `:364`).
++- **VAT tooling / shaders:** **none** — greenfield. The only custom MultiMesh shader is the 2D `canvas_item` health-tint (`sim_driver.gd:691-722`); the VAT horde needs a **`spatial`** shader on a **`MultiMeshInstance3D`** — a different node + shader domain.
++
++## Implementation design (1 page)
++
++**Adapter:** a new, disposable **`VatHordeAdapter.gd`** (`extends RefCounted`, sibling of `Render3DAdapter`, owned by `sim_driver`) — honors the render-ownership split (ADR-029 fold 5); the adapter owns the `MultiMeshInstance3D` + buffer assembly + per-slot clocks, never touches FFI (sim_driver passes it the agent buffer each frame). Keeping it separate (not bolting onto `Render3DAdapter`) keeps the spike disposable.
++
++1. **Baker — `tools/bake_vat.py` + a `pnpm bake:vat` wrapper.** Blender headless Python: load the mini-character `.glb`, for each clip step frames, write deformed world-space vertex positions (root-motion stripped) into a **float EXR** (width = vertex_count, height = Σframes; clips stacked by row-range). Bake the **vertex index into the mesh `UV2.x`** (= `index / vertex_count`) and export the static bind-pose mesh as `.glb`/`.res`. Emit a JSON metadata sidecar: `vertex_count, frame_count, fps, clip_ranges, bounds, source_hash, coord_basis, scale, texture_format, root_motion: stripped`. Fail loud on root motion or a non-float format. **Disposable proof data** — committed under `apps/game-godot/assets/vat-proof/` for the spike.
++2. **VAT spatial shader** — vertex stage samples the position texture at `(UV2.x, clip_row_start + frac(custom.x / clip_len))` and writes `VERTEX`. Reads `INSTANCE_CUSTOM`: `.x` anim-clock, `.y` clip index → row offset, `.z` phase/speed, `.w` proof variation. **No `TIME`.** (Optional baked normal texture if lighting reads poorly — defer unless needed.)
++3. **`CUSTOM_DATA` v0 layout (proof, NOT the stable ABI):** `.x` = accumulated per-slot anim time (so a freeze = stop accumulating); `.y` = clip index; `.z` = per-slot phase offset / playback speed (kills synchronized marching); `.w` = proof variation / reserved.
++4. **Sim feed + buffer assembly (Godot-side):** each frame, read `get_agent_buffer()` (stride-8); for each **live** slot build a `Transform3D` — origin `(originX, 0, originY)` (sim X→Godot X, sim Y→Godot Z), basis yaw from the `Transform2D` basis (matching `Render3DAdapter` chirality) — append the 4 `CUSTOM_DATA` floats → a **16-float** `PackedFloat32Array`; set `instance_count` **before** `multimesh.buffer`. Mask dead (zero-transform) slots out of the draw set. Measure this assembly cost (hazard 3).
++5. **Per-instance clock:** the adapter accumulates `delta` (or physics-tick count) into a per-`BufferSlot` clock array; HitStop-readiness = the adapter can skip a slot's accumulation while others advance. On slot recycle, reset that slot's clock + phase.
++6. **Frozen-subset proof + debug toggle:** a debug mode (panel/CLI) that freezes every Nth live slot's clock → the frozen agents hold pose while the rest animate (catches any global-`TIME` leak visually). Wire the whole VAT path behind `use_3d_camera` + a `vat_horde_proof` flag; **headless → no-op** the setup.
++
++## Acceptance criteria
++
++- [ ] `tools/bake_vat.*` produces a deterministic **float** VAT + UV2-indexed mesh + metadata (incl. `root_motion: stripped`); re-running on the same input is byte-stable.
++- [ ] `MultiMeshInstance3D` renders **64 / 128 / 256** instances animating **independently** (distinct phase + clip) from `CUSTOM_DATA`, projected from the live agent buffer; dead slots invisible.
++- [ ] **No global `TIME`** in the VAT shader — the frozen-subset fixture shows per-instance freeze (frozen agents hold pose, others animate).
++- [ ] **Headless** run is no-op/stubbed for the VAT path; 2D + `use_3d_camera` paths unaffected; the harness stays crash-free + bit-stable.
++- [ ] Captured **frame-time at 64/128/256 (+512)** vs baseline + the **GDScript assembly cost**, recorded in the journal / on the issue.
++
++## Verification
++
++- **Headless safety:** `--import` registers `class_name`s; a headless fixture smoke must load without instantiating the VAT path (the guard). No CI Godot gate exists — GDScript/shader correctness is verified **locally via the harness**.
++- **Visual oracle:** non-headless harness **burst PNGs** — read the captures to confirm independent animation + the frozen-subset artifact. This is GDScript/GDShader-only → **no `cargo` rebuild** (no sim/FFI change).
++- Bake is offline + reproducible; commit the proof asset + metadata.
++
++## Freeze note
++
++The ADR-015 **"VAT shader anim-clock must bind to per-instance `CUSTOM_DATA`, never global `TIME`"** AST rule is a **Totem rule to author** — which needs `totem lesson compile`, currently **frozen**. P2a enforces the discipline **in code + via the frozen-subset fixture** now; the Totem rule lands when the freeze lifts (same posture as the deferred `.tres` sensor mmnto-ai/liquid-city#583).
++
++## Open risks
++
++- **Skinned-vertex bake** — Blender handles deformed-vertex readback trivially (de-risks the one place agy's Godot-native path was risky).
++- **Stride-assembly cost** is the real measured unknown — if GDScript assembly dominates at 256, it sharpens the P2b case for the Rust `get_agent_buffer_3d()` graduation (a *finding*, not a spike failure).
++- **`VERTEX_ID` reliability** in 4.6.2 is sidestepped by the UV2-index default.
++
++## Boundary to P2b
++
++P2b inherits: the measured budget, the v0 `CUSTOM_DATA` layout (to harden into the stable ABI), the baker (to either keep in Blender or port to Godot-native), and the LOD-0 skeletal path + `LODManager3D` that decides the VAT/skeletal cutoff from these numbers. HitStop + the Totem `TIME`-rule land in P2b/at-freeze-lift.
+diff --git a/apps/game-godot/VatBench.gd b/apps/game-godot/VatBench.gd
+new file mode 100644
+index 0000000..c932519
+--- /dev/null
++++ b/apps/game-godot/VatBench.gd
+@@ -0,0 +1,136 @@
++extends Node3D
++
++# VAT proof BENCH — ADR-029 P2a (.totem/specs/p2a-vat-spike.md).
++#
++# A controlled, disposable benchmark scene (the cohort's "separate synthetic
++# benchmark scene, same camera, same counts" recommendation). Drives the
++# VatHordeAdapter directly with a SYNTHETIC stride-8 agent buffer (a grid of N
++# instances with varied headings) under a fixed overhead camera — decoupled from
++# the gameplay camera so the proof is framed and the counts are exact.
++#
++# Proves, in one run: independent per-instance animation (varied phase/clip),
++# the frozen-subset (a global-TIME leak would make frozen agents animate), and
++# the perf ceiling at 64/128/256/512. Run:
++#   godot --path apps/game-godot res://vat_bench.tscn
++# Captures PNGs to user://vat_bench/ and prints [vat-bench] perf lines.
++
++const SPACING := 2.0
++# phases: each runs ~PHASE_FRAMES then advances. The last repeats 256 frozen.
++const PHASES: Array[Dictionary] = [
++	{"n": 64, "freeze": 0, "tag": "n64"},
++	{"n": 128, "freeze": 0, "tag": "n128"},
++	{"n": 256, "freeze": 0, "tag": "n256"},
++	{"n": 512, "freeze": 0, "tag": "n512"},
++	{"n": 256, "freeze": 3, "tag": "n256_frozen"},
++]
++const PHASE_FRAMES := 150
++
++var _adapter: VatHordeAdapter
++var _cam: Camera3D
++var _phase_idx := 0
++var _frame := 0
++var _accum_fps := 0.0
++var _samples := 0
++var _captured := false
++var _cap_dir := "user://vat_bench/"
++var _buf := PackedFloat32Array()  # reused across frames (no per-frame alloc)
++
++
++func _ready() -> void:
++	_cam = Camera3D.new()
++	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
++	_cam.fov = 55.0
++	_cam.current = true
++	add_child(_cam)
++	_adapter = VatHordeAdapter.new(self, DisplayServer.get_name() == "headless")
++	if not _adapter.setup():
++		print("[vat-bench] adapter setup returned false (headless?) — nothing to render, quitting")
++		get_tree().quit(0)
++		return
++	_adapter.set_active(true)
++	if "--colormap" in OS.get_cmdline_user_args():
++		_adapter.set_colormap_enabled(true)  # `-- --colormap` -> real Kenney colors
++	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_cap_dir))
++	_apply_phase()
++	print("[vat-bench] start; phases=", PHASES.size())
++
++
++func _apply_phase() -> void:
++	var p: Dictionary = PHASES[_phase_idx]
++	_adapter.frozen_stride = int(p.freeze)
++	_frame_camera(int(p.n))
++	_frame = 0
++	_accum_fps = 0.0
++	_samples = 0
++	_captured = false
++
++
++func _frame_camera(n: int) -> void:
++	var side := int(ceil(sqrt(float(n))))
++	var extent := float(side) * SPACING
++	var c := extent * 0.5
++	_cam.position = Vector3(c, extent * 0.95, extent * 1.45)
++	_cam.look_at(Vector3(c, 0.5, c), Vector3.UP)
++
++
++func _build_buffer(n: int) -> PackedFloat32Array:
++	# Fill the reused member array in place (no per-frame alloc -> honest asm timing).
++	if _buf.size() != n * 8:
++		_buf.resize(n * 8)
++	var side := int(ceil(sqrt(float(n))))
++	for i in n:
++		var gx := float(i % side) * SPACING
++		var gy := float(i / side) * SPACING
++		var ang := float(i) * 0.7  # varied heading per instance
++		var cs := cos(ang)
++		var sn := sin(ang)
++		var o := i * 8
++		# Transform2D layout: [bx.x, by.x, 0, ox, bx.y, by.y, 0, oy]
++		_buf[o + 0] = cs
++		_buf[o + 1] = -sn
++		_buf[o + 2] = 0.0
++		_buf[o + 3] = gx
++		_buf[o + 4] = sn
++		_buf[o + 5] = cs
++		_buf[o + 6] = 0.0
++		_buf[o + 7] = gy
++	return _buf
++
++
++func _process(delta: float) -> void:
++	var p: Dictionary = PHASES[_phase_idx]
++	var n: int = int(p.n)
++	_adapter.update(_build_buffer(n), n, delta)
++	_accum_fps += Engine.get_frames_per_second()
++	_samples += 1
++	_frame += 1
++	if _frame == PHASE_FRAMES / 2 and not _captured:
++		_captured = true
++		_capture(str(p.tag))
++	if _frame >= PHASE_FRAMES:
++		var avg := _accum_fps / float(maxi(_samples, 1))
++		print(
++			(
++				"[vat-bench] N=%d freeze=%d avg_fps=%.1f asm=%.3fms"
++				% [n, int(p.freeze), avg, _adapter.last_assembly_usec / 1000.0]
++			)
++		)
++		_phase_idx += 1
++		if _phase_idx >= PHASES.size():
++			if "--loop" in OS.get_cmdline_user_args():
++				_phase_idx = 0  # live-view: cycle the counts forever
++				_apply_phase()
++				return
++			print("[vat-bench] DONE")
++			get_tree().quit(0)
++			return
++		_apply_phase()
++
++
++func _capture(tag: String) -> void:
++	var img := get_viewport().get_texture().get_image()
++	if img == null:
++		return
++	var path := _cap_dir + "vat_%s.png" % tag
++	img.save_png(ProjectSettings.globalize_path(path))
++	print("[vat-bench] shot %s" % path)
+diff --git a/apps/game-godot/VatBench.gd.uid b/apps/game-godot/VatBench.gd.uid
+new file mode 100644
+index 0000000..5a78736
+--- /dev/null
++++ b/apps/game-godot/VatBench.gd.uid
+@@ -0,0 +1 @@
++uid://buhkt2jv8jski
+diff --git a/apps/game-godot/VatHordeAdapter.gd b/apps/game-godot/VatHordeAdapter.gd
+new file mode 100644
+index 0000000..a1598ae
+--- /dev/null
++++ b/apps/game-godot/VatHordeAdapter.gd
+@@ -0,0 +1,303 @@
++class_name VatHordeAdapter
++extends RefCounted
++
++# VAT horde proof adapter — ADR-029 P2a (mmnto-ai/liquid-city#588).
++#
++# DISPOSABLE proof-spike adapter (sibling of Render3DAdapter; owned by sim_driver).
++# Proves the bake -> import -> runtime VAT path: renders N instances of one rig via
++# a MultiMeshInstance3D, each animating INDEPENDENTLY from a per-slot CPU clock +
++# clip index packed into CUSTOM_DATA. The shader samples a baked float position
++# texture (never global TIME), so HitStop = the adapter declining to advance one
++# slot's clock.
++#
++# Boundaries (spec .totem/specs/p2a-vat-spike.md):
++#   - Owns the MultiMesh + buffer assembly + per-slot clocks. NEVER queries the
++#     sim FFI — sim_driver feeds it the stride-8 agent buffer.
++#   - Headless -> no-op (DisplayServer guard); the proof is a non-headless visual.
++#   - Clocks keyed by stable BufferSlot (not compacted draw index); dead slots are
++#     masked out; a recycled slot resets its anim state.
++#   - 4-float CUSTOM_DATA is the v0 / proof carrier, NOT the stable P2b ABI.
++
++const VAT_DIR := "res://assets/vat-proof/"
++const VAT_STEM := "character-female-a"
++const SHADER_PATH := "res://shaders/vat_horde.gdshader"
++const AGENT_STRIDE := 8  # sim get_agent_buffer() Transform2D stride
++const OUT_STRIDE := 16  # MultiMesh3D: 12 Transform3D + 4 CUSTOM_DATA
++const DIE_CLIP := 1.0
++const DIE_EVERY := 7  # 1-in-N slots play the die clip (proves clip selection)
++
++var _render_root: Node3D
++var _headless := false
++var _enabled := false
++var _ready := false
++var _colormap_enabled := false
++
++var _mmi: MultiMeshInstance3D
++var _mm: MultiMesh
++var _mat: ShaderMaterial
++var _meta: Dictionary = {}
++
++# per-slot state (indexed by stable BufferSlot)
++var _clock := PackedFloat32Array()
++var _phase := PackedFloat32Array()
++var _speed := PackedFloat32Array()
++var _clip := PackedFloat32Array()
++var _tint := PackedFloat32Array()
++var _was_live := PackedByteArray()
++var _out := PackedFloat32Array()
++
++# tunables (calibrated from a burst frame)
++var character_scale := 1.0
++var y_offset := 0.19  # lift feet (VAT min y ~= -0.19) to ground
++var facing_offset := 0.0  # radians; correct model-forward vs sim-heading
++var frozen_stride := 0  # 0 = none; freeze every Nth slot's clock (the proof)
++
++# perf instrumentation
++var last_assembly_usec := 0
++var last_live := 0
++
++
++func _init(render_root: Node3D, headless: bool) -> void:
++	_render_root = render_root
++	_headless = headless
++
++
++# Loads the VAT asset + builds the MultiMesh. Returns false (no-op) when headless
++# or on a load failure. Idempotent.
++func setup() -> bool:
++	if _ready:
++		return true
++	if _headless:
++		return false  # headless proves "doesn't crash", not the visual
++	# Runtime-load the source EXR (NOT load()/the imported .ctex) to keep FULL
++	# RGBAF precision: the texture importer VRAM-compresses it (detect_3d) and may
++	# store half-float — both quantize VAT vertex positions into visible stepping.
++	# Caveat (GCA): load_from_file reads the physical FS, so this works in-editor /
++	# the harness (where this spike lives) but NOT a packaged export (assets pack
++	# into the .pck); it fails loud below in that case. Production asset-load is a
++	# P2b decision (e.g. a custom data-texture importer or bundling the loose .exr).
++	var img := Image.load_from_file(ProjectSettings.globalize_path(VAT_DIR + VAT_STEM + ".vat.exr"))
++	if img == null:
++		push_error("VatHordeAdapter: failed to load VAT EXR")
++		return false
++	if img.get_format() != Image.FORMAT_RGBAF:
++		img.convert(Image.FORMAT_RGBAF)  # keep full float precision
++	var tex := ImageTexture.create_from_image(img)
++
++	var meta_str := FileAccess.get_file_as_string(VAT_DIR + VAT_STEM + ".vat.json")
++	_meta = JSON.parse_string(meta_str) if meta_str != "" else {}
++	if _meta.is_empty():
++		push_error("VatHordeAdapter: failed to load VAT metadata")
++		return false
++
++	var mesh := _load_mesh()
++	if mesh == null:
++		push_error("VatHordeAdapter: failed to load VAT mesh")
++		return false
++
++	var shader := load(SHADER_PATH) as Shader
++	if shader == null:
++		push_error("VatHordeAdapter: failed to load shader")
++		return false
++	_mat = ShaderMaterial.new()
++	_mat.shader = shader
++	_mat.set_shader_parameter("vat_tex", tex)
++	# Optional Kenney colormap (off by default — flat tint keeps the perf path clean).
++	# A normal color texture, so the import pipeline (sRGB) is fine here, unlike the
++	# precision-critical VAT data. Sampled via UV (the bake left UV intact).
++	var cm := load(VAT_DIR + VAT_STEM + "_colormap.png") as Texture2D
++	if cm != null:
++		_mat.set_shader_parameter("colormap", cm)
++	_mat.set_shader_parameter("use_colormap", _colormap_enabled)
++	_mat.set_shader_parameter("total_rows", int(_meta.get("total_rows", 1)))
++	_mat.set_shader_parameter("fps", float(_meta.get("fps", 24.0)))
++	var clips: Array = _meta.get("clips", [])
++	_mat.set_shader_parameter("clip_count", mini(clips.size(), 8))  # shader arrays are [8]
++	var starts := PackedFloat32Array()
++	var counts := PackedFloat32Array()
++	starts.resize(8)
++	counts.resize(8)
++	for i in clips.size():
++		if i >= 8:
++			break
++		starts[i] = float(clips[i].get("row_start", 0))
++		counts[i] = float(clips[i].get("frame_count", 1))
++	_mat.set_shader_parameter("clip_row_start", starts)
++	_mat.set_shader_parameter("clip_frame_count", counts)
++
++	_mm = MultiMesh.new()
++	_mm.transform_format = MultiMesh.TRANSFORM_3D
++	_mm.use_custom_data = true
++	_mm.mesh = mesh
++	# the shader displaces VERTEX, so the bind-pose AABB understates extent — give
++	# the mesh a generous custom AABB so instances don't get culled mid-animation.
++	mesh.custom_aabb = AABB(Vector3(-1.5, -1.5, -1.5), Vector3(3.0, 3.0, 3.0))
++
++	_mmi = MultiMeshInstance3D.new()
++	_mmi.name = "VatHordeProof"
++	_mmi.multimesh = _mm
++	_mmi.material_override = _mat
++	_mmi.visible = false
++	# _mmi is owned by the tree (parented to _render_root) -> freed with the scene,
++	# not leaked despite the adapter being RefCounted: it's created once in _ready and
++	# never recreated, so there is no re-instantiation path that could orphan it.
++	_render_root.add_child(_mmi)
++
++	_ready = true
++	return true
++
++
++func set_active(enabled: bool) -> void:
++	_enabled = enabled
++	if _mmi != null:
++		_mmi.visible = enabled and not _headless
++
++
++func is_active() -> bool:
++	return _enabled and _ready and not _headless
++
++
++# Toggle the real Kenney colormap (vs the flat per-instance proof tint).
++func set_colormap_enabled(on: bool) -> void:
++	_colormap_enabled = on
++	if _mat != null:
++		_mat.set_shader_parameter("use_colormap", on)
++
++
++func is_colormap_enabled() -> bool:
++	return _colormap_enabled
++
++
++# Per-frame: assemble the MultiMesh buffer from the stride-8 agent buffer.
++func update(agent_buf: PackedFloat32Array, count: int, delta: float) -> void:
++	if not is_active():
++		return
++	var t0 := Time.get_ticks_usec()
++	_ensure_slots(count)
++	var needed := count * OUT_STRIDE
++	if _out.size() < needed:
++		_out.resize(needed)
++
++	var live := 0
++	for s in count:
++		var bo := s * AGENT_STRIDE
++		var bxx := agent_buf[bo + 0]
++		var byx := agent_buf[bo + 1]
++		var ox := agent_buf[bo + 3]
++		var bxy := agent_buf[bo + 4]
++		var byy := agent_buf[bo + 5]
++		var oy := agent_buf[bo + 7]
++		# dead slots are zeroed by the snapshot writer -> all-zero basis
++		if absf(bxx) < 1e-9 and absf(bxy) < 1e-9 and absf(byx) < 1e-9 and absf(byy) < 1e-9:
++			_was_live[s] = 0
++			continue
++		if _was_live[s] == 0:
++			_init_slot(s)  # (re)born / recycled slot -> fresh anim state
++			_was_live[s] = 1
++		var frozen := frozen_stride > 0 and (s % frozen_stride) == 0
++		if not frozen:
++			_clock[s] += delta * _speed[s]
++
++		# sim heading (sim plane) -> Godot yaw about +Y; sim (X,Y) -> Godot (X,Z)
++		var heading := atan2(bxy, bxx)
++		var b := Basis(Vector3.UP, -heading + facing_offset)
++		if character_scale != 1.0:
++			b = b.scaled(Vector3(character_scale, character_scale, character_scale))
++		var po := live * OUT_STRIDE
++		# MultiMesh TRANSFORM_3D: 3x4 row-major; b.x/b.y/b.z are the basis columns
++		_out[po + 0] = b.x.x
++		_out[po + 1] = b.y.x
++		_out[po + 2] = b.z.x
++		_out[po + 3] = ox
++		_out[po + 4] = b.x.y
++		_out[po + 5] = b.y.y
++		_out[po + 6] = b.z.y
++		_out[po + 7] = y_offset
++		_out[po + 8] = b.x.z
++		_out[po + 9] = b.y.z
++		_out[po + 10] = b.z.z
++		_out[po + 11] = oy
++		# CUSTOM_DATA v0: x=clock y=clip z=phase w=tint
++		_out[po + 12] = _clock[s]
++		_out[po + 13] = _clip[s]
++		_out[po + 14] = _phase[s]
++		_out[po + 15] = _tint[s]
++		live += 1
++
++	_mm.instance_count = live
++	if live > 0:
++		# exact length, no per-frame slice copy (keeps the assembly timing honest)
++		_out.resize(live * OUT_STRIDE)
++		_mm.buffer = _out
++	last_assembly_usec = Time.get_ticks_usec() - t0
++	last_live = live
++
++
++# Toggle / cycle the frozen-subset proof (freezes every Nth slot's clock so a
++# global-TIME leak would be instantly visible: frozen agents must hold pose).
++func cycle_frozen_stride() -> int:
++	match frozen_stride:
++		0:
++			frozen_stride = 2
++		2:
++			frozen_stride = 3
++		_:
++			frozen_stride = 0
++	return frozen_stride
++
++
++func debug_status() -> String:
++	if not is_active():
++		return "VAT: off"
++	return (
++		"VAT: %d inst, asm %.2fms, freeze=%d"
++		% [last_live, last_assembly_usec / 1000.0, frozen_stride]
++	)
++
++
++func _ensure_slots(count: int) -> void:
++	if _clock.size() >= count:
++		return
++	var n := count
++	_clock.resize(n)
++	_phase.resize(n)
++	_speed.resize(n)
++	_clip.resize(n)
++	_tint.resize(n)
++	_was_live.resize(n)
++
++
++func _init_slot(s: int) -> void:
++	var hp := float((s * 2654435761) % 997) / 997.0
++	var hs := float((s * 40503) % 251) / 251.0
++	var ht := float((s * 2246822519) % 211) / 211.0
++	_phase[s] = hp
++	_speed[s] = 0.85 + 0.30 * hs
++	_clip[s] = DIE_CLIP if (s % DIE_EVERY == 0) else 0.0
++	_tint[s] = ht
++	_clock[s] = hp * 2.0  # stagger start so instances don't march in lockstep
++
++
++func _load_mesh() -> Mesh:
++	var scene := load(VAT_DIR + VAT_STEM + ".vat.glb") as PackedScene
++	if scene == null:
++		return null
++	var root := scene.instantiate()
++	if root == null:
++		return null
++	var mi := _find_mesh(root)
++	var mesh: Mesh = null
++	if mi != null:
++		mesh = mi.mesh
++	root.queue_free()
++	return mesh
++
++
++func _find_mesh(n: Node) -> MeshInstance3D:
++	if n is MeshInstance3D:
++		return n
++	for c in n.get_children():
++		var r := _find_mesh(c)
++		if r != null:
++			return r
++	return null
+diff --git a/apps/game-godot/VatHordeAdapter.gd.uid b/apps/game-godot/VatHordeAdapter.gd.uid
+new file mode 100644
+index 0000000..2e6ce72
+--- /dev/null
++++ b/apps/game-godot/VatHordeAdapter.gd.uid
+@@ -0,0 +1 @@
++uid://3h1r636qn8t5
+diff --git a/apps/game-godot/assets/vat-proof/character-female-a.vat.exr b/apps/game-godot/assets/vat-proof/character-female-a.vat.exr
+new file mode 100644
+index 0000000..b05c42f
+Binary files /dev/null and b/apps/game-godot/assets/vat-proof/character-female-a.vat.exr differ
+diff --git a/apps/game-godot/assets/vat-proof/character-female-a.vat.exr.import b/apps/game-godot/assets/vat-proof/character-female-a.vat.exr.import
+new file mode 100644
+index 0000000..d83fb44
+--- /dev/null
++++ b/apps/game-godot/assets/vat-proof/character-female-a.vat.exr.import
+@@ -0,0 +1,40 @@
++[remap]
++
++importer="texture"
++type="CompressedTexture2D"
++uid="uid://4gaooxklst4w"
++path="res://.godot/imported/character-female-a.vat.exr-a9a9899b902cce3554fad0045f99bf6d.ctex"
++metadata={
++"vram_texture": false
++}
++
++[deps]
++
++source_file="res://assets/vat-proof/character-female-a.vat.exr"
++dest_files=["res://.godot/imported/character-female-a.vat.exr-a9a9899b902cce3554fad0045f99bf6d.ctex"]
++
++[params]
++
++compress/mode=0
++compress/high_quality=false
++compress/lossy_quality=0.7
++compress/uastc_level=0
++compress/rdo_quality_loss=0.0
++compress/hdr_compression=1
++compress/normal_map=0
++compress/channel_pack=0
++mipmaps/generate=false
++mipmaps/limit=-1
++roughness/mode=0
++roughness/src_normal=""
++process/channel_remap/red=0
++process/channel_remap/green=1
++process/channel_remap/blue=2
++process/channel_remap/alpha=3
++process/fix_alpha_border=true
++process/premult_alpha=false
++process/normal_map_invert_y=false
++process/hdr_as_srgb=false
++process/hdr_clamp_exposure=false
++process/size_limit=0
++detect_3d/compress_to=0
+diff --git a/apps/game-godot/assets/vat-proof/character-female-a.vat.glb b/apps/game-godot/assets/vat-proof/character-female-a.vat.glb
+new file mode 100644
+index 0000000..7b24ca0
+Binary files /dev/null and b/apps/game-godot/assets/vat-proof/character-female-a.vat.glb differ
+diff --git a/apps/game-godot/assets/vat-proof/character-female-a.vat.glb.import b/apps/game-godot/assets/vat-proof/character-female-a.vat.glb.import
+new file mode 100644
+index 0000000..1d6d89a
+--- /dev/null
++++ b/apps/game-godot/assets/vat-proof/character-female-a.vat.glb.import
+@@ -0,0 +1,42 @@
++[remap]
++
++importer="scene"
++importer_version=1
++type="PackedScene"
++uid="uid://dk2oy2bvtcjgf"
++path="res://.godot/imported/character-female-a.vat.glb-80bdf00bd5cc83157f763d7125315fb1.scn"
++
++[deps]
++
++source_file="res://assets/vat-proof/character-female-a.vat.glb"
++dest_files=["res://.godot/imported/character-female-a.vat.glb-80bdf00bd5cc83157f763d7125315fb1.scn"]
++
++[params]
++
++nodes/root_type=""
++nodes/root_name=""
++nodes/root_script=null
++nodes/apply_root_scale=true
++nodes/root_scale=1.0
++nodes/import_as_skeleton_bones=false
++nodes/use_name_suffixes=true
++nodes/use_node_type_suffixes=true
++meshes/ensure_tangents=true
++meshes/generate_lods=true
++meshes/create_shadow_meshes=true
++meshes/light_baking=1
++meshes/lightmap_texel_size=0.2
++meshes/force_disable_compression=false
++skins/use_named_skins=true
++animation/import=true
++animation/fps=30
++animation/trimming=false
++animation/remove_immutable_tracks=true
++animation/import_rest_as_RESET=false
++import_script/path=""
++materials/extract=0
++materials/extract_format=0
++materials/extract_path=""
++_subresources={}
++gltf/naming_version=2
++gltf/embedded_image_handling=1
+diff --git a/apps/game-godot/assets/vat-proof/character-female-a.vat.json b/apps/game-godot/assets/vat-proof/character-female-a.vat.json
+new file mode 100644
+index 0000000..eba5fdc
+--- /dev/null
++++ b/apps/game-godot/assets/vat-proof/character-female-a.vat.json
+@@ -0,0 +1,38 @@
++{
++  "schema": "vat-proof-v0",
++  "source_glb": "apps/game-godot/assets/mini-characters/character-female-a.glb",
++  "source_md5": "cbdf423848d95a5b4a6cd3a6bddc64c6",
++  "vertex_count": 1576,
++  "total_rows": 26,
++  "fps": 24,
++  "clips": [
++    {
++      "name": "walk",
++      "row_start": 0,
++      "frame_count": 17
++    },
++    {
++      "name": "die",
++      "row_start": 17,
++      "frame_count": 9
++    }
++  ],
++  "bounds": {
++    "min": [
++      -0.5503416041587315,
++      -0.191891610622406,
++      -0.8004964329302311
++    ],
++    "max": [
++      0.5503416677261868,
++      1.0367501974105835,
++      0.2583589553833008
++    ]
++  },
++  "coord_basis": "godot-y-up",
++  "axis_convert": "blender(x,y,z)->godot(x,z,-y)",
++  "root_motion": "stripped (horizontal root anchored per-frame; vertical kept)",
++  "uv2": "(vertex_index+0.5)/vertex_count in TEXCOORD_1",
++  "texture_format": "OPEN_EXR RGBA 32f, Non-Color",
++  "row_origin": "row r at image-y r (bottom-up); shader v=(r+0.5)/total_rows"
++}
+\ No newline at end of file
+diff --git a/apps/game-godot/assets/vat-proof/character-female-a_colormap.png b/apps/game-godot/assets/vat-proof/character-female-a_colormap.png
+new file mode 100644
+index 0000000..166a545
+Binary files /dev/null and b/apps/game-godot/assets/vat-proof/character-female-a_colormap.png differ
+diff --git a/apps/game-godot/assets/vat-proof/character-female-a_colormap.png.import b/apps/game-godot/assets/vat-proof/character-female-a_colormap.png.import
+new file mode 100644
+index 0000000..7cd49cb
+--- /dev/null
++++ b/apps/game-godot/assets/vat-proof/character-female-a_colormap.png.import
+@@ -0,0 +1,43 @@
++[remap]
++
++importer="texture"
++type="CompressedTexture2D"
++uid="uid://cvkoyt26co4qj"
++path="res://.godot/imported/character-female-a_colormap.png-d541cc248d6fdefc58a49c8c40cb8fef.ctex"
++metadata={
++"vram_texture": false
++}
++generator_parameters={
++"md5": "76084aa0c65dc2c593e6532f1f61f968"
++}
++
++[deps]
++
++source_file="res://assets/vat-proof/character-female-a_colormap.png"
++dest_files=["res://.godot/imported/character-female-a_colormap.png-d541cc248d6fdefc58a49c8c40cb8fef.ctex"]
++
++[params]
++
++compress/mode=0
++compress/high_quality=false
++compress/lossy_quality=0.7
++compress/uastc_level=0
++compress/rdo_quality_loss=0.0
++compress/hdr_compression=1
++compress/normal_map=0
++compress/channel_pack=0
++mipmaps/generate=true
++mipmaps/limit=-1
++roughness/mode=0
++roughness/src_normal=""
++process/channel_remap/red=0
++process/channel_remap/green=1
++process/channel_remap/blue=2
++process/channel_remap/alpha=3
++process/fix_alpha_border=true
++process/premult_alpha=false
++process/normal_map_invert_y=false
++process/hdr_as_srgb=false
++process/hdr_clamp_exposure=false
++process/size_limit=0
++detect_3d/compress_to=1
+diff --git a/apps/game-godot/shaders/vat_horde.gdshader b/apps/game-godot/shaders/vat_horde.gdshader
+new file mode 100644
+index 0000000..19c9f72
+--- /dev/null
++++ b/apps/game-godot/shaders/vat_horde.gdshader
+@@ -0,0 +1,55 @@
++shader_type spatial;
++render_mode unshaded;
++
++// VAT proof shader — ADR-029 P2a (mmnto-ai/liquid-city#588).
++//
++// Vertex positions come ENTIRELY from a baked float position texture:
++//   - column = the ORIGINAL vertex index, carried in UV2.x as (index+0.5)/N
++//     (survives Godot vertex-splitting; VERTEX_ID would not).
++//   - row    = the animation frame, derived from a PER-INSTANCE clock in
++//     INSTANCE_CUSTOM.x. There is NO global TIME here, so HitStop is just the
++//     CPU-side adapter declining to advance one slot's clock (the rest animate).
++//
++// Unshaded: the proof measures the instance-data path + perf, not lighting
++// (art-directed lighting is the deferred pass, mmnto-ai/liquid-city#586). Normals
++// stay in bind pose, which unshaded ignores.
++//
++// INSTANCE_CUSTOM layout (v0 / proof carrier, NOT the stable P2b ABI):
++//   x = accumulated anim clock (seconds)   y = clip index
++//   z = phase offset / playback speed       w = per-instance tint variation
++
++uniform sampler2D vat_tex : filter_nearest, repeat_disable;
++uniform int total_rows = 1;
++uniform float fps = 24.0;
++uniform int clip_count = 1;
++uniform float clip_row_start[8];
++uniform float clip_frame_count[8];
++uniform vec3 base_color : source_color = vec3(0.30, 0.55, 0.30);
++uniform vec3 accent_color : source_color = vec3(0.78, 0.72, 0.38);
++uniform bool use_colormap = false; // OFF = flat per-instance tint (clean perf path)
++uniform sampler2D colormap : filter_nearest, source_color; // Kenney palette (UV lookup)
++
++varying float v_tint;
++
++void vertex() {
++	int clip = clamp(int(INSTANCE_CUSTOM.y + 0.5), 0, clip_count - 1);
++	float cstart = clip_row_start[clip];
++	float ccount = max(clip_frame_count[clip], 1.0);
++	float dur = ccount / max(fps, 0.001); // guard div-by-zero on the fps uniform
++	float local = fract(INSTANCE_CUSTOM.x / dur); // [0,1) looped per-instance clock
++	float frame = min(floor(local * ccount), ccount - 1.0);
++	float v = (cstart + frame + 0.5) / float(total_rows);
++	VERTEX = textureLod(vat_tex, vec2(UV2.x, v), 0.0).xyz;
++	v_tint = INSTANCE_CUSTOM.w;
++}
++
++void fragment() {
++	if (use_colormap) {
++		// Real Kenney colormap (palette lookup via UV; UV2 carries the VAT index,
++		// UV is untouched by the bake). Keep a subtle per-instance tint so the
++		// instance-data variation still reads. Unshaded -> no lighting cost.
++		ALBEDO = texture(colormap, UV).rgb * (0.85 + 0.3 * clamp(v_tint, 0.0, 1.0));
++	} else {
++		ALBEDO = mix(base_color, accent_color, clamp(v_tint, 0.0, 1.0));
++	}
++}
+diff --git a/apps/game-godot/shaders/vat_horde.gdshader.uid b/apps/game-godot/shaders/vat_horde.gdshader.uid
+new file mode 100644
+index 0000000..20ddd3c
+--- /dev/null
++++ b/apps/game-godot/shaders/vat_horde.gdshader.uid
+@@ -0,0 +1 @@
++uid://be2sv3q2ine1f
+diff --git a/apps/game-godot/sim_driver.gd b/apps/game-godot/sim_driver.gd
+index 5f2bd99..fd873e7 100644
+--- a/apps/game-godot/sim_driver.gd
++++ b/apps/game-godot/sim_driver.gd
+@@ -539,6 +539,11 @@ const PLAYER_COMMAND_FIRE_PRIMARY: int = 3
+ ## `_ready` failure path is ever added that forgets `set_physics_process(false)`,
+ ## add an explicit null-guard at the `_physics_process` call sites.
+ var _render_adapter: Render3DAdapter = null
++## ADR-029 P2a — disposable VAT horde proof adapter + its panel-toggle state.
++## Null until _ready; no-ops under --headless. See VatHordeAdapter.gd.
++var _vat_adapter: VatHordeAdapter = null
++var _vat_proof_enabled: bool = false
++var _vat_colormap_enabled: bool = false
+ ## Diagnostic HUD reference (#146). Sibling node under root, populated
+ ## via `hud.set_value(key, value)` from `_physics_process` for entries
+ ## that need sim-side data (currently agent count). The HUD itself
+@@ -1102,6 +1107,16 @@ func _ready() -> void:
+ 	# #567: mount the demo vehicle's visual (Kenney car `.glb`, or a BoxMesh stub
+ 	# on load failure). Static mesh → no headless branch (see setup_vehicle_proxy).
+ 	_render_adapter.setup_vehicle_proxy()
++	# ADR-029 P2a — the disposable VAT horde proof adapter. Owns its own
++	# MultiMeshInstance3D under Render3D; no-ops under --headless. Constructed
++	# before _apply_use_3d_camera (below) so it can gate the proof's visibility.
++	# Fed the stride-8 agent buffer each frame from _physics_process when active.
++	# Guard creation so a _ready re-run (node remove/re-add) reuses the adapter
++	# instead of orphaning the old _mmi + resetting the clocks.
++	if _vat_adapter == null:
++		_vat_adapter = VatHordeAdapter.new(_render_3d_root, DisplayServer.get_name() == "headless")
++		if not _vat_adapter.setup() and DisplayServer.get_name() != "headless":
++			push_warning("sim_driver: VatHordeAdapter setup failed — VAT horde unavailable")
+ 	# Sync initial 3D-camera state to the Inspector-set use_3d_camera value.
+ 	# The setter that fired during .tscn load was no-op'd by the
+ 	# is_node_ready() gate (@onready refs weren't resolved yet); this is
+@@ -1570,6 +1585,12 @@ func _ready() -> void:
+ 	if "--health-tint" in OS.get_cmdline_user_args():
+ 		_set_overlay("diag_overlays_mode", false)  # regular mode: bodies ON, overlays OFF
+ 		_set_overlay("health_tint", true)
++	# ADR-029 P2a — `-- --vat-proof` boots straight into the 3D camera with the
++	# VAT horde on, so a harness/fixture run captures the proof without the panel
++	# dance. Unknown to ScriptedInput's parser (silently ignored there).
++	if "--vat-proof" in OS.get_cmdline_user_args():
++		_set_overlay("camera_3d", true)
++		_set_overlay("vat_horde", true)
+ 	_push_initial_overlay_states_to_panel()
+ 
+ 
+@@ -1678,6 +1699,22 @@ func _set_overlay(toggle_id: String, enabled: bool) -> void:
+ 			_diag_overlays.queue_redraw()
+ 		"health_tint":
+ 			_apply_health_tint(enabled)
++		"vat_horde":
++			# ADR-029 P2a — the VAT horde proof. Renders under Render3D, so it
++			# only shows when use_3d_camera is also on (gated in set_active).
++			_vat_proof_enabled = enabled
++			if _vat_adapter != null:
++				_vat_adapter.set_active(enabled and use_3d_camera)
++		"vat_freeze":
++			# Frozen-subset proof: freeze every 3rd slot's anim clock. A global-
++			# TIME leak in the shader would make the frozen agents keep animating.
++			if _vat_adapter != null:
++				_vat_adapter.frozen_stride = 3 if enabled else 0
++		"vat_colormap":
++			# Show the real Kenney colormap instead of the flat proof tint.
++			_vat_colormap_enabled = enabled
++			if _vat_adapter != null:
++				_vat_adapter.set_colormap_enabled(enabled)
+ 		_:
+ 			push_warning("sim_driver._set_overlay: unknown toggle_id '%s'" % toggle_id)
+ 
+@@ -1757,6 +1794,12 @@ func get_overlay_state(toggle_id: String) -> bool:
+ 			return _diag_overlays != null and _diag_overlays.slot_labels_visible
+ 		"health_tint":
+ 			return _health_tint_enabled
++		"vat_horde":
++			return _vat_proof_enabled
++		"vat_freeze":
++			return _vat_adapter != null and _vat_adapter.frozen_stride > 0
++		"vat_colormap":
++			return _vat_colormap_enabled
+ 		_:
+ 			push_warning("sim_driver.get_overlay_state: unknown toggle_id '%s'" % toggle_id)
+ 			return false
+@@ -2651,6 +2694,18 @@ func _physics_process(delta: float) -> void:
+ 	# Rust locks the stride contract.
+ 	@warning_ignore("integer_division")
+ 	var count: int = xf.size() / 8
++	# ADR-029 P2a — feed the VAT horde proof its instance data Godot-side from
++	# the same stride-8 buffer (no new FFI). Active only when the panel "VAT
++	# Horde" toggle is on AND use_3d_camera (it renders under Render3D).
++	if _vat_adapter != null and _vat_adapter.is_active():
++		_vat_adapter.update(xf, count, delta)
++		if Engine.get_physics_frames() % 120 == 0:
++			print(
++				(
++					"[vat-perf] %s fps=%.1f"
++					% [_vat_adapter.debug_status(), Engine.get_frames_per_second()]
++				)
++			)
+ 	# #146 HUD: push sim-side diagnostic values that the HUD itself
+ 	# can't compute (it sees only its own `_process` loop). `agents`
+ 	# is the post-snapshot agent count; `active` is the player/vehicle
+@@ -3063,6 +3118,10 @@ func _apply_use_3d_camera() -> void:
+ 	# guard above silently stopped the 2D-side from updating).
+ 	sim_display.visible = not use_3d_camera
+ 	camera.enabled = not use_3d_camera
++	# ADR-029 P2a — the VAT proof renders under Render3D, so its visibility
++	# follows use_3d_camera too. Independent of _render_adapter, like the 2D side.
++	if _vat_adapter != null:
++		_vat_adapter.set_active(_vat_proof_enabled and use_3d_camera)
+ 	# 3D-side render-path visibility (Render3D.visible + Camera3D.current)
+ 	# lives in the adapter (ADR-029 PR1b); update it only when the adapter
+ 	# is live (null in the degraded-init path that returned before
+diff --git a/apps/game-godot/ui/debug_panel.gd b/apps/game-godot/ui/debug_panel.gd
+index 1999e44..1887ab4 100644
+--- a/apps/game-godot/ui/debug_panel.gd
++++ b/apps/game-godot/ui/debug_panel.gd
+@@ -75,6 +75,9 @@ const OVERLAY_TOGGLES: Array[Dictionary] = [
+ 	{"id": "auto_burst", "label": "Auto-Burst Capture (was F7)"},
+ 	{"id": "slot_labels", "label": "BufferSlot Labels (was F10)"},
+ 	{"id": "health_tint", "label": "Health Tint"},
++	{"id": "vat_horde", "label": "VAT Horde Proof (3D)"},
++	{"id": "vat_freeze", "label": "VAT Freeze-Subset Proof"},
++	{"id": "vat_colormap", "label": "VAT Colormap (real model colors)"},
+ ]
+ 
+ # Inspector-wired (no `preload` default) per spec #361 § Technical Approach
+diff --git a/apps/game-godot/vat_bench.tscn b/apps/game-godot/vat_bench.tscn
+new file mode 100644
+index 0000000..77b11d0
+--- /dev/null
++++ b/apps/game-godot/vat_bench.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://VatBench.gd" id="1_bench"]
++
++[node name="VatBench" type="Node3D"]
++script = ExtResource("1_bench")
+diff --git a/tools/bake_vat.py b/tools/bake_vat.py
+new file mode 100644
+index 0000000..e7af295
+--- /dev/null
++++ b/tools/bake_vat.py
+@@ -0,0 +1,265 @@
++#!/usr/bin/env python
++"""Offline VAT (vertex-animation-texture) baker — Blender headless.
++
++ADR-029 P2a proof spike (mmnto-ai/liquid-city#588). Bakes one or more skeletal
++clips of a skinned glb into a float-precision position texture + a UV2-vertex-
++indexed bind-pose mesh + a JSON metadata sidecar, for a MultiMeshInstance3D VAT
++horde. DISPOSABLE proof data — the permanent baker-home (Blender vs Godot-native)
++is a P2b decision (see .totem/specs/p2a-vat-spike.md).
++
++Run via the pnpm wrapper:  pnpm bake:vat
++or directly:
++  "<blender>" --background --factory-startup --python tools/bake_vat.py -- \
++      --glb apps/game-godot/assets/mini-characters/character-female-a.glb \
++      --out apps/game-godot/assets/vat-proof \
++      --clips walk,die
++
++Output (under --out):
++  <stem>.vat.exr   RGBA float position texture (width=vertex_count, height=Σframes)
++  <stem>.vat.glb   bind-pose mesh; UV2 (TEXCOORD_1) carries (vertex_index+0.5)/N
++  <stem>.vat.json  metadata (vertex/frame counts, fps, clip rows, bounds, hash, axes)
++
++Contracts (cohort folds, mmnto-ai/liquid-city#588):
++  - FLOAT texture (EXR) — no 8-bit quantization → no vertex-stepping.
++  - Root motion: clips are in-place; we bake in object-LOCAL space (excludes the
++    object transform). We DETECT root-bone horizontal travel and FAIL LOUD if a
++    clip exceeds --root-motion-eps (the sim owns translation; a moving root would
++    double-apply).
++  - Axis convert Blender Z-up -> Godot Y-up: (x, y, z) -> (x, z, -y). The texture
++    stores positions already in Godot space (the shader overwrites VERTEX with the
++    sample, so the exported mesh geometry is irrelevant; only UV2 + topology matter).
++  - Vertex addressing via UV2 (survives Godot vertex-splitting — the index travels
++    with the vertex as an attribute, unlike VERTEX_ID which indexes the post-split
++    array).
++"""
++
++import bpy
++import sys
++import os
++import json
++import math
++import hashlib
++
++
++def _argv():
++    return sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
++
++
++def _parse(argv):
++    opts = {
++        "glb": "apps/game-godot/assets/mini-characters/character-female-a.glb",
++        "out": "apps/game-godot/assets/vat-proof",
++        "clips": "walk,die",
++        "root_motion_eps": 0.5,  # WARN threshold for stripped root travel (not fatal)
++    }
++    i = 0
++    while i < len(argv):
++        a = argv[i]
++        if a == "--glb":
++            opts["glb"] = argv[i + 1]; i += 2
++        elif a == "--out":
++            opts["out"] = argv[i + 1]; i += 2
++        elif a == "--clips":
++            opts["clips"] = argv[i + 1]; i += 2
++        elif a == "--root-motion-eps":
++            opts["root_motion_eps"] = float(argv[i + 1]); i += 2
++        else:
++            i += 1
++    return opts
++
++
++def _die(msg):
++    print(f"[bake_vat] ERROR: {msg}")
++    sys.exit(1)
++
++
++def main():
++    opts = _parse(_argv())
++    glb = os.path.abspath(opts["glb"])
++    out_dir = os.path.abspath(opts["out"])
++    clip_names = [c.strip() for c in opts["clips"].split(",") if c.strip()]
++    if not os.path.isfile(glb):
++        _die(f"glb not found: {glb}")
++    os.makedirs(out_dir, exist_ok=True)
++    stem = os.path.splitext(os.path.basename(glb))[0]
++
++    print(f"[bake_vat] importing {glb}")
++    bpy.ops.wm.read_factory_settings(use_empty=True)
++    bpy.ops.import_scene.gltf(filepath=glb)
++    scene = bpy.context.scene
++    fps = scene.render.fps
++
++    # --- collect the skinned meshes (have an ARMATURE modifier); drop junk ---
++    arm = next((o for o in bpy.data.objects if o.type == "ARMATURE"), None)
++    if arm is None:
++        _die("no armature in glb")
++    skinned = [o for o in bpy.data.objects
++               if o.type == "MESH"
++               and any(m.type == "ARMATURE" for m in o.modifiers)]
++    if not skinned:
++        _die("no skinned meshes (armature-modified) found")
++    # deterministic order so the bake is reproducible
++    skinned.sort(key=lambda o: o.name)
++    print(f"[bake_vat] skinned meshes: {[o.name for o in skinned]}")
++
++    # --- join into one mesh (a MultiMesh renders ONE mesh N times) ---
++    bpy.ops.object.select_all(action="DESELECT")
++    for o in skinned:
++        o.select_set(True)
++    joined = skinned[0]
++    bpy.context.view_layer.objects.active = joined
++    if len(skinned) > 1:
++        bpy.ops.object.join()
++    me = joined.data
++    vcount = len(me.vertices)
++    print(f"[bake_vat] joined vertex_count={vcount}")
++
++    # --- UV2 (second layer / TEXCOORD_1) carries the vertex index ---
++    while len(me.uv_layers) < 2:
++        me.uv_layers.new(name="vat_index")
++    uv2 = me.uv_layers[1]
++    for loop in me.loops:
++        u = (loop.vertex_index + 0.5) / vcount
++        uv2.data[loop.index].uv = (u, 0.5)
++    # keep only 2 UV layers (Godot caps at UV/UV2)
++    while len(me.uv_layers) > 2:
++        me.uv_layers.remove(me.uv_layers[2])
++
++    # --- resolve actions + count rows ---
++    clips = []
++    row = 0
++    for name in clip_names:
++        act = bpy.data.actions.get(name)
++        if act is None:
++            _die(f"action {name!r} not found; available: {[a.name for a in bpy.data.actions]}")
++        f0, f1 = int(act.frame_range[0]), int(act.frame_range[1])
++        nframes = f1 - f0 + 1
++        clips.append({"name": name, "f0": f0, "f1": f1, "row_start": row,
++                      "frame_count": nframes, "action": act})
++        row += nframes
++    total_rows = row
++    print(f"[bake_vat] clips={[(c['name'], c['frame_count']) for c in clips]} total_rows={total_rows}")
++
++    arm.animation_data_create()
++    depsgraph = bpy.context.evaluated_depsgraph_get()
++
++    # --- bake: pixels are RGBA, row-major from image BOTTOM (Blender native).
++    # We write frame-row r at image-y r; the shader samples v=(r+0.5)/total_rows.
++    px = [0.0] * (vcount * total_rows * 4)
++    bmin = [1e9, 1e9, 1e9]
++    bmax = [-1e9, -1e9, -1e9]
++    # root = the parentless bone (pose.bones order isn't guaranteed root-first)
++    if not arm.pose.bones:
++        _die("armature has no bones")
++    root_bone = next((b for b in arm.pose.bones if b.parent is None), arm.pose.bones[0])
++
++    # Root motion is STRIPPED: each frame we anchor the root bone's HORIZONTAL
++    # world position (Blender X/Y) at origin, so the clip plays in-place at the
++    # agent's sim position. Vertical (Z, up) is kept (bob, fall, collapse). This
++    # honors "the sim owns translation"; locomotion drift would double-apply.
++    for c in clips:
++        arm.animation_data.action = c["action"]
++        stripped = 0.0  # pre-strip horizontal travel, reported for info
++        rest = None
++        for fi in range(c["frame_count"]):
++            f = c["f0"] + fi
++            scene.frame_set(f)
++            depsgraph = bpy.context.evaluated_depsgraph_get()
++            rb = arm.matrix_world @ root_bone.head  # world-space root head
++            if rest is None:
++                rest = rb.copy()
++            else:
++                stripped = max(stripped, math.hypot(rb.x - rest.x, rb.y - rest.y))
++            obj_eval = joined.evaluated_get(depsgraph)
++            mw = obj_eval.matrix_world
++            mesh_eval = obj_eval.to_mesh()
++            r = c["row_start"] + fi
++            base = r * vcount * 4
++            for i, v in enumerate(mesh_eval.vertices):
++                w = mw @ v.co  # world-space deformed vertex (Blender Z-up)
++                # strip root: re-express horizontal relative to the root each frame
++                bx = w.x - rb.x
++                by = w.y - rb.y
++                bz = w.z
++                # Blender Z-up -> Godot Y-up
++                gx, gy, gz = bx, bz, -by
++                o = base + i * 4
++                px[o + 0] = gx
++                px[o + 1] = gy
++                px[o + 2] = gz
++                px[o + 3] = 1.0
++                if gx < bmin[0]: bmin[0] = gx
++                if gy < bmin[1]: bmin[1] = gy
++                if gz < bmin[2]: bmin[2] = gz
++                if gx > bmax[0]: bmax[0] = gx
++                if gy > bmax[1]: bmax[1] = gy
++                if gz > bmax[2]: bmax[2] = gz
++            obj_eval.to_mesh_clear()
++        print(f"[bake_vat]   {c['name']}: rows [{c['row_start']},{c['row_start']+c['frame_count']}) "
++              f"stripped_root_travel={stripped:.4f}")
++        if stripped > opts["root_motion_eps"]:
++            print(f"[bake_vat]   WARNING: {c['name']} stripped {stripped:.3f} of root travel "
++                  f"(> --root-motion-eps {opts['root_motion_eps']}) — confirm the clip is in-place")
++
++    # --- write the EXR (float) ---
++    exr_path = os.path.join(out_dir, f"{stem}.vat.exr")
++    img = bpy.data.images.new(f"{stem}_vat", width=vcount, height=total_rows,
++                              float_buffer=True, alpha=True)
++    img.colorspace_settings.name = "Non-Color"
++    img.pixels = px
++    img.file_format = "OPEN_EXR"
++    img.filepath_raw = exr_path
++    scene.render.image_settings.file_format = "OPEN_EXR"
++    scene.render.image_settings.color_depth = "32"
++    scene.render.image_settings.exr_codec = "ZIP"
++    img.save()
++    print(f"[bake_vat] wrote {exr_path} ({vcount}x{total_rows} float)")
++
++    # --- export the bind-pose mesh (UV2 = index) ---
++    bpy.ops.object.select_all(action="DESELECT")
++    joined.select_set(True)
++    bpy.context.view_layer.objects.active = joined
++    # neutralize deformation for the exported geometry (positions are overwritten
++    # by the shader anyway; this keeps the bind-pose tidy)
++    scene.frame_set(0)
++    glb_path = os.path.join(out_dir, f"{stem}.vat.glb")
++    bpy.ops.export_scene.gltf(
++        filepath=glb_path,
++        use_selection=True,
++        export_format="GLB",
++        export_yup=True,
++        export_animations=False,
++        export_skins=False,
++        export_apply=False,
++    )
++    print(f"[bake_vat] wrote {glb_path}")
++
++    # --- metadata sidecar ---
++    with open(glb, "rb") as fh:
++        src_hash = hashlib.md5(fh.read()).hexdigest()
++    meta = {
++        "schema": "vat-proof-v0",
++        "source_glb": os.path.relpath(glb, os.getcwd()).replace("\\", "/"),
++        "source_md5": src_hash,
++        "vertex_count": vcount,
++        "total_rows": total_rows,
++        "fps": fps,
++        "clips": [{"name": c["name"], "row_start": c["row_start"],
++                   "frame_count": c["frame_count"]} for c in clips],
++        "bounds": {"min": bmin, "max": bmax},
++        "coord_basis": "godot-y-up",
++        "axis_convert": "blender(x,y,z)->godot(x,z,-y)",
++        "root_motion": "stripped (horizontal root anchored per-frame; vertical kept)",
++        "uv2": "(vertex_index+0.5)/vertex_count in TEXCOORD_1",
++        "texture_format": "OPEN_EXR RGBA 32f, Non-Color",
++        "row_origin": "row r at image-y r (bottom-up); shader v=(r+0.5)/total_rows",
++    }
++    json_path = os.path.join(out_dir, f"{stem}.vat.json")
++    with open(json_path, "w") as fh:
++        json.dump(meta, fh, indent=2)
++    print(f"[bake_vat] wrote {json_path}")
++    print("[bake_vat] DONE")
++
++
++if __name__ == "__main__":
++    main()

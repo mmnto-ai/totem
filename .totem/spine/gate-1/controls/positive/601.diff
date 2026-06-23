@@ -1,0 +1,1339 @@
+diff --git a/.totem/specs/p2b-3d-horde.md b/.totem/specs/p2b-3d-horde.md
+index 3a57673..eef5a22 100644
+--- a/.totem/specs/p2b-3d-horde.md
++++ b/.totem/specs/p2b-3d-horde.md
+@@ -131,3 +131,27 @@ The ADR-015 **"VAT anim-clock binds to per-instance `CUSTOM_DATA`, never global
+ - **Skeletal cap** — the real unknown; the bench is the mitigation (don't pre-commit ~30–50).
+ - **Death rendering** — deferred behind the linger/event contract; the ABI reserves room so it's non-breaking later.
+ - **Mixamo license** — verify before lock-in.
++
++---
++
++## PR5 Implementation Design (built — `feat/592-p2b-pr5-lodmanager`)
++
++PR5 lands `LODManager3D` and closes mmnto-ai/liquid-city#592. Cohort impl-preflight (lc-codex / lc-agy / lc-gemini, 2026-06-22) converged 5/6 forks; the operator ruled the 6th (the combined bench rides in PR5). Built + verified — every bench VERDICT GO on the dev RTX 5070 Ti.
++
++### What it does
++- **`LODManager3D`** (Godot/render-owned `RefCounted`) owns BOTH horde adapters + the ONE shared `SlotClockBook`, and is the single facade `sim_driver` drives (`_lod_manager.update(camera, xf, render_state, count, delta)` — replaces the direct `_horde_adapter`). The render-ownership split holds (`sim_driver` does not grow a second renderer).
++- **Clock ownership is structural** (the heart of PR5): the manager is the SOLE writer to the shared book — one pass per frame, `mark_dead` a zeroed slot else `advance(slot, delta, hitstop)` for EVERY live slot regardless of tier (so an out-of-frustum / over-cap / VAT slot keeps a current gait phase → a promotion resumes continuously). Both adapters became pure clock READERS (`clock(s)`); their `update()` dropped `delta` so adapter-side `advance` cannot be reintroduced. That eliminates the GPU double-advance / reset class (GCA mmnto-ai/liquid-city#600 R3) by construction, not by discipline.
++- **Disjoint partition = the dedup:** a per-slot `_tier` (DEAD/VAT/SKEL) keyed by `BufferSlot`; each adapter renders only its tier. Liveness = nonzero transform, NOT `LIVE_BIT` (the ABI clears LIVE_BIT for `AnimIntent::Death`); death playback stays deferred.
++- **Priority + hysteresis:** out-of-frustum → VAT (instant, no debounce); else score by planar camera distance minus an activity bonus (HitStop / Stagger / Ballistic / Attack / low-health keep skeletal); re-seat existing SKEL within `exit_radius` first, then promote new candidates within `enter_radius` by score, bounded by `skeletal_cap` + a per-frame promote budget; a min-frames debounce gates promotion. Headless / camera-null → all-VAT, zero rigs. `Camera3D.is_position_in_frustum` is the frustum primitive.
++- **`HordeRenderAdapter` PREDELETE** added (parity with PR4's skeletal adapter; frees `_mmi`).
++
++### Resolved forks
++1. Clock ownership = **manager-owned** (structural). 2. Manager **owns both adapters**. 3. Priority = frustum + distance + activity + hysteresis; screen-projected size deferred. 4. Cutoff = **combined bench in PR5**; ships a conservative `@export skeletal_lod_cap = 32` (the combined render bench shows large headroom, below — 32 is conservative-with-room, tuned live vs the full frame). 5. Size = manager + partition + shared-book regression + combined bench + `HordeRenderAdapter` PREDELETE together (one fault surface); multi-fixture visual-parity PNG captures deferred to a fast-follow (they need new course authoring). 6. `HordeRenderAdapter` PREDELETE folded; `Render3DAdapter` / `VatHordeAdapter` left to a chore.
++
++### Verification (all VERDICT GO, exit 0)
++- **`lod_manager_bench`** — Phase A: the shared-clock transition regression (VAT→SKEL continuity, hit-stopped swap, over-cap, missing-record, dead-slot; exact-clock asserts) — runs HEADLESS too (the clock invariant is tier-independent → provable without a GPU). Phase B: combined N×M sweep picks the cap. On the RTX 5070 Ti @ N=256, all M∈{0,16,32,48,64} sit within the 2 ms combined-marginal budget (M=64 p95 +0.53 ms over all-VAT) — render headroom is large.
++- **`horde_render_bench`** / **`skeletal_horde_bench`** — both moved to the caller-owns-clock pattern, both still GO.
++- **Headless fixture smoke** — `sim_driver` boots the manager (dormant headless) without disturbing the determinism harness.
++
++### Deferred (tracked)
++Multi-fixture visual-parity PNG captures (fast-follow); sibling `Render3DAdapter` / `VatHordeAdapter` PREDELETE (chore); the LOD-0 shader **lighting** pass (mmnto-ai/liquid-city#586 — both tiers stay `unshaded`); death playback (the render-death contract, a later PR); export-safe VAT `.res` (mmnto-ai/liquid-city#599).
+diff --git a/apps/game-godot/HordeRenderAdapter.gd b/apps/game-godot/HordeRenderAdapter.gd
+index 868fd5b..609e5ce 100644
+--- a/apps/game-godot/HordeRenderAdapter.gd
++++ b/apps/game-godot/HordeRenderAdapter.gd
+@@ -47,6 +47,12 @@ const RS_HEALTH := 1
+ const RS_HITSTOP := 2
+ const RS_INTENT := 3
+ 
++# LODManager3D tier id (mirror — the manager owns the canonical enum, ADR-029
++# P2b PR5). This adapter renders ONLY slots the manager assigned to the VAT
++# (render-LOD-1) tier; DEAD / SKEL slots are skipped (the manager owns dead-slot
++# masking + the skeletal partition + the single shared-clock advance).
++const TIER_VAT := 1
++
+ var _render_root: Node3D
+ var _headless := false
+ var _enabled := false
+@@ -88,12 +94,26 @@ var last_live := 0
+ func _init(render_root: Node3D, headless: bool, clocks: SlotClockBook = null) -> void:
+ 	_render_root = render_root
+ 	_headless = headless
+-	# PR5 injects a shared book; PR3/PR4 in-game default to a private one (no
+-	# live skeletal slots sharing it yet).
++	# PR5: LODManager3D injects ONE shared book into both the VAT + skeletal
++	# adapters and is the SOLE writer (advance/mark_dead). This adapter only
++	# READS it (clock(s)). A standalone caller (bench) may pass its own book.
+ 	_clocks = clocks if clocks != null else SlotClockBook.new()
+ 	_scratch.resize(4)
+ 
+ 
++# RefCounted, but parents _mmi into _render_root (add_child in setup()). Godot
++# nodes are NOT freed when the last RefCounted ref drops, so a replaced /
++# reconstructed adapter would orphan _mmi in the tree. Free it on predelete —
++# parity with SkeletalHordeAdapter (GCA mmnto-ai/liquid-city#600) + the
++# .gemini/styleguide.md "nodes are not GC'd — always queue_free()" rule. Now
++# load-bearing: PR5 makes adapter ownership move under LODManager3D, so a
++# manager reconstruction must not leak the MultiMeshInstance3D.
++func _notification(what: int) -> void:
++	if what == NOTIFICATION_PREDELETE:
++		if _mmi != null and is_instance_valid(_mmi):
++			_mmi.queue_free()
++
++
+ # Loads the VAT asset + builds the MultiMesh + the intent→clip table. Returns
+ # false (no-op) when headless or on a load failure. Idempotent.
+ func setup() -> bool:
+@@ -276,17 +296,23 @@ func set_health_tint_enabled(on: bool) -> void:
+ 
+ 
+ # Per-frame: assemble the MultiMesh buffer from the stride-8 transform buffer +
+-# the stride-4 render-state buffer. `render_state` may be empty/short (init
++# the stride-4 render-state buffer, for the slots LODManager3D assigned to the
++# VAT tier (`tiers[s] == TIER_VAT`). `render_state` may be empty/short (init
+ # race / lock-poison) — missing records default to live-locomotion full-health.
++#
++# ADR-029 P2b PR5: the manager owns the single shared-clock advance + dead-slot
++# masking + the skeletal partition. This adapter is a pure READER — it never
++# advances/marks the clock (no `delta` param) and renders only its tier; that
++# structurally eliminates the double-advance class (GCA mmnto-ai/liquid-city#600).
+ func update(
+-	agent_buf: PackedFloat32Array, render_state: PackedByteArray, count: int, delta: float
++	agent_buf: PackedFloat32Array, render_state: PackedByteArray, count: int, tiers: PackedByteArray
+ ) -> void:
+ 	if not is_active():
+ 		return
+ 	# Defensive clamp: the loop reads agent_buf[s * AGENT_STRIDE ..]; if a
+ 	# desync ever hands us count > the transform buffer's capacity we'd index
+-	# out of bounds and halt the script. Mirrors the short-render_state defense
+-	# below. Normal path: count == agent_buf.size() / AGENT_STRIDE (no clamp).
++	# out of bounds and halt the script. Normal path: count ==
++	# agent_buf.size() / AGENT_STRIDE (no clamp).
+ 	var max_agents := agent_buf.size() / AGENT_STRIDE
+ 	if count > max_agents:
+ 		push_error(
+@@ -297,14 +323,19 @@ func update(
+ 		)
+ 		count = max_agents
+ 	var t0 := Time.get_ticks_usec()
+-	_ensure_slots(count)
+ 	var needed := count * OUT_STRIDE
+ 	if _out.size() < needed:
+ 		_out.resize(needed)
+ 	var rs_len := render_state.size()
++	var tiers_len := tiers.size()
+ 
+ 	var live := 0
+ 	for s in count:
++		# Render only this tier's slots. The manager already tagged DEAD (zeroed
++		# transform) + SKEL slots and advanced the shared clock for every live
++		# slot this frame, so there is nothing to mark/advance here.
++		if s >= tiers_len or tiers[s] != TIER_VAT:
++			continue
+ 		var bo := s * AGENT_STRIDE
+ 		var bxx := agent_buf[bo + 0]
+ 		var byx := agent_buf[bo + 1]
+@@ -312,26 +343,25 @@ func update(
+ 		var bxy := agent_buf[bo + 4]
+ 		var byy := agent_buf[bo + 5]
+ 		var oy := agent_buf[bo + 7]
+-		# dead slots are zeroed by the snapshot writer -> all-zero basis
++		# Defensive: the manager tags zeroed slots DEAD, never VAT — but never
++		# draw a zero-basis instance even if a desync mis-tags one.
+ 		if absf(bxx) < 1e-9 and absf(bxy) < 1e-9 and absf(byx) < 1e-9 and absf(byy) < 1e-9:
+-			_clocks.mark_dead(s)
+ 			continue
+ 
+ 		# render-state record (default to live-locomotion full-health if absent)
+ 		var ro := s * RENDER_STATE_STRIDE
+ 		var flags := 0
+ 		var health := 255
+-		var hitstop := 0
+ 		var intent := ANIM_LOCOMOTION
+ 		if ro + RENDER_STATE_STRIDE <= rs_len:
+ 			flags = render_state[ro + RS_FLAGS]
+ 			health = render_state[ro + RS_HEALTH]
+-			hitstop = render_state[ro + RS_HITSTOP]
+ 			intent = render_state[ro + RS_INTENT]
+ 
+-		# Shared SlotClockBook owns rebirth-reset + HitStop-freeze now (ADR-029 P2b
+-		# PR4) so the skeletal tier reads the identical per-slot phase.
+-		var clk := _clocks.advance(s, delta, hitstop)
++		# Read-only: the manager advanced this slot's clock (with HitStop freeze)
++		# in its single pass this frame. The shader still samples only
++		# CUSTOM_DATA.x, never global TIME.
++		var clk := _clocks.clock(s)
+ 
+ 		# sim heading (sim plane) -> Godot yaw about +Y; sim (X,Y) -> Godot (X,Z)
+ 		var heading := atan2(bxy, bxx)
+@@ -380,10 +410,6 @@ func debug_status() -> String:
+ 	return "Horde3D: %d inst, asm %.2fms" % [last_live, last_assembly_usec / 1000.0]
+ 
+ 
+-func _ensure_slots(count: int) -> void:
+-	_clocks.ensure_capacity(count)
+-
+-
+ func _load_mesh() -> Mesh:
+ 	var scene := load(VAT_DIR + VAT_STEM + ".vat.glb") as PackedScene
+ 	if scene == null:
+diff --git a/apps/game-godot/LODManager3D.gd b/apps/game-godot/LODManager3D.gd
+new file mode 100644
+index 0000000..e49e50f
+--- /dev/null
++++ b/apps/game-godot/LODManager3D.gd
+@@ -0,0 +1,327 @@
++class_name LODManager3D
++extends RefCounted
++
++# ADR-029 P2b PR5 — render-LOD manager (CLOSES mmnto-ai/liquid-city#592, the last
++# P2b PR). Owns BOTH horde render tiers + the ONE shared per-slot clock, and is
++# the single facade `sim_driver` talks to (Render-ownership split, ADR-029
++# decision 5 — sim_driver must not grow into one script driving two renderers).
++#
++# Each frame it partitions the live agent slots into:
++#   - render-LOD-0 (skeletal rig, SkeletalHordeAdapter) — the close / on-screen /
++#     high-action agents, where dismemberment is the high-payoff visual (Tenet 8);
++#   - render-LOD-1 (VAT MultiMesh, HordeRenderAdapter) — everything else.
++# The partition is DISJOINT (every live slot in exactly one tier) and that IS the
++# VAT<->skeletal dedup: no agent renders twice, and each slot's clock advances
++# exactly once.
++#
++# THE clock-ownership rule (the heart of PR5; folds GCA mmnto-ai/liquid-city#600
++# R3 + the cohort impl-preflight, lc-codex/lc-agy/lc-gemini 2026-06-22):
++#   The MANAGER is the SOLE writer to the shared SlotClockBook. It runs ONE pass
++#   per frame: mark_dead a zeroed slot, else advance(slot, delta, hitstop) — for
++#   EVERY live slot regardless of tier, so an out-of-frustum / over-cap / VAT slot
++#   keeps a current gait phase and a later promotion resumes continuously (lc-agy).
++#   Both adapters are pure READERS (clock(s)); they never advance/mark. With one
++#   shared book that structurally eliminates the double-advance / reset class the
++#   PR4 bench could not reach.
++#
++# Liveness = NONZERO transform in the snapshot, NOT `flags & LIVE_BIT`: the Rust
++# ABI clears LIVE_BIT for AnimIntent::Death while the transform is still nonzero
++# (density_feedback.rs agent_render_state_publish_system), so a dying-but-
++# positioned agent stays live + keeps its clock. Death PLAYBACK stays deferred
++# (lc-codex trap #2; the death-render contract is a later PR).
++#
++# Headless / no-camera: logical all-VAT, zero rigs. The manager still runs the
++# accounting + clock loop so determinism + the no-double-advance invariant are
++# testable without a GPU.
++
++const AGENT_STRIDE := 8
++const RENDER_STATE_STRIDE := 4
++const RS_HEALTH := 1
++const RS_HITSTOP := 2
++const RS_INTENT := 3
++
++# AnimIntent mirror — only the "keep skeletal" activity classes (density_feedback.rs).
++const ANIM_STAGGER := 2
++const ANIM_BALLISTIC := 3
++const ANIM_DEATH := 4
++const ANIM_ATTACK := 5
++
++# Tier ids — the CANONICAL enum; HordeRenderAdapter.TIER_VAT / SkeletalHordeAdapter
++# .TIER_SKEL mirror these (parity comment in each adapter).
++const TIER_DEAD := 0
++const TIER_VAT := 1
++const TIER_SKEL := 2
++
++# Frustum test + planar-distance reference is taken at ~head height so an agent
++# at the screen edge resolves on its body, not its feet (lc-codex).
++const HEAD_Y := 0.9
++const FRAME_COUNTER_CEIL := 1_000_000  # clamp _tier_frames so it can't overflow
++
++var _vat: HordeRenderAdapter
++var _skel: SkeletalHordeAdapter
++var _clocks: SlotClockBook
++var _headless := false
++var _skeletal_cap := 0
++
++# per-slot tier state, keyed by stable BufferSlot. _tier = committed (previous
++# frame at the top of update); _next = this frame's assignment; _tier_frames =
++# frames the slot has held its committed tier (temporal debounce).
++var _tier := PackedByteArray()
++var _next := PackedByteArray()
++var _tier_frames := PackedInt32Array()
++
++# Tunables — live-tunable for the Camera3D-ADR pass. sim_driver exposes
++# skeletal_cap as @export; the radii/debounce defaults are documented here and
++# tuned on a live drive (and overridden by the bench for steady-state sweeps).
++var enter_radius := 18.0  # planar dist to camera below which a NEW agent is skeletal-eligible
++var exit_radius := 26.0  # planar dist above which an EXISTING skeletal agent demotes (dead-zone)
++var min_tier_frames := 8  # temporal debounce: frames in a tier before a distance-driven PROMOTE
++var per_frame_promote_cap := 4  # max promotions/frame — throttles the rig-activation spike
++var low_health_frac := 0.5  # below this health fraction, a small bonus to stay skeletal
++
++# perf instrumentation
++var last_skel := 0
++var last_vat := 0
++var last_select_usec := 0
++
++# per-frame scratch (member-held to limit allocation churn)
++var _cand := PackedInt32Array()  # live skeletal-candidate slots (in frustum)
++var _cdist := PackedFloat32Array()  # parallel: raw planar distance (radius test)
++var _cscore := PackedFloat32Array()  # parallel: dist - activity bonus (priority order)
++
++# selection scratch — member-held + reused via clear() so the per-frame hot path
++# stays allocation-free: Vector2(score, slot) elements are value types (no
++# nested-Array boxing) and the comparator is hoisted to ONE Callable (no per-frame
++# lambda alloc). CR + Greptile, mmnto-ai/liquid-city#601.
++var _keep_pairs: Array[Vector2] = []
++var _promo_pairs: Array[Vector2] = []
++var _score_cmp: Callable
++
++
++func _init(render_root: Node3D, headless: bool, skeletal_cap: int) -> void:
++	_headless = headless
++	_skeletal_cap = maxi(skeletal_cap, 0)
++	# ONE shared book injected into BOTH adapters — the whole point of PR5 (free
++	# phase-match on a swap). The manager is its only writer.
++	_clocks = SlotClockBook.new()
++	_vat = HordeRenderAdapter.new(render_root, headless, _clocks)
++	_skel = SkeletalHordeAdapter.new(render_root, headless, _skeletal_cap, _clocks)
++	# Hoist the sort comparator to one Callable (created once, reused each frame).
++	_score_cmp = _cmp_by_score
++
++
++# Build both adapters. Returns false only when the production VAT tier fails to
++# set up in a non-headless session (sim_driver warns). Skeletal returns false
++# under --headless by design — that is not a manager failure.
++func setup() -> bool:
++	var vat_ok := _vat.setup()
++	_skel.setup()
++	return vat_ok or _headless
++
++
++func set_active(enabled: bool) -> void:
++	_vat.set_active(enabled)
++	_skel.set_active(enabled)
++
++
++func is_active() -> bool:
++	return _vat.is_active()
++
++
++func set_health_tint_enabled(on: bool) -> void:
++	_vat.set_health_tint_enabled(on)
++	_skel.set_health_tint_enabled(on)
++
++
++func set_colormap_enabled(on: bool) -> void:
++	_vat.set_colormap_enabled(on)
++	_skel.set_colormap_enabled(on)
++
++
++# Read-only accessors for the bench / diagnostics (no privacy in GDScript, but
++# these keep the contract stable).
++func tier_of(slot: int) -> int:
++	return _tier[slot] if slot >= 0 and slot < _tier.size() else TIER_DEAD
++
++
++func slot_clock(slot: int) -> float:
++	return _clocks.clock(slot)
++
++
++# Per-frame entry point. `camera` drives frustum + distance (may be null →
++# all-VAT). Feeds both adapters the SAME stride-8 transform buffer + stride-4
++# render-state buffer the production horde consumes; the manager owns the clock.
++func update(
++	camera: Camera3D,
++	agent_buf: PackedFloat32Array,
++	render_state: PackedByteArray,
++	count: int,
++	delta: float
++) -> void:
++	# No is_active() gate here: sim_driver only calls update() when active (its own
++	# guard), and each adapter self-gates rendering (VAT no-ops when inactive,
++	# skeletal does headless bookkeeping only). Running the clock + tier accounting
++	# unconditionally lets the headless bench prove the clock-ownership invariant
++	# without a GPU — the whole point of the tier-independent regression.
++	var max_agents := agent_buf.size() / AGENT_STRIDE
++	if count > max_agents:
++		count = max_agents
++	_clocks.ensure_capacity(count)
++	_ensure_tier_capacity(count)
++	var rs_len := render_state.size()
++	var use_skel := (not _headless) and camera != null and _skeletal_cap > 0
++
++	var t0 := Time.get_ticks_usec()
++	_cand.clear()
++	_cdist.clear()
++	_cscore.clear()
++	var cam_x := camera.global_position.x if use_skel else 0.0
++	var cam_z := camera.global_position.z if use_skel else 0.0
++
++	# PASS 1 — classify dead/live, advance the ONE shared clock per live slot,
++	# gather in-frustum skeletal candidates.
++	for s in count:
++		var bo := s * AGENT_STRIDE
++		var bxx := agent_buf[bo + 0]
++		var byx := agent_buf[bo + 1]
++		var ox := agent_buf[bo + 3]
++		var bxy := agent_buf[bo + 4]
++		var byy := agent_buf[bo + 5]
++		var oy := agent_buf[bo + 7]
++		# Liveness = nonzero transform (NOT LIVE_BIT — see header / lc-codex #2).
++		if absf(bxx) < 1e-9 and absf(bxy) < 1e-9 and absf(byx) < 1e-9 and absf(byy) < 1e-9:
++			_next[s] = TIER_DEAD
++			_clocks.mark_dead(s)
++			continue
++
++		var ro := s * RENDER_STATE_STRIDE
++		var has_record := ro + RENDER_STATE_STRIDE <= rs_len
++		var hitstop := render_state[ro + RS_HITSTOP] if has_record else 0
++		# The single shared-clock advance for this live slot (HitStop-frozen),
++		# regardless of its eventual tier — so a promotion resumes continuously.
++		_clocks.advance(s, delta, hitstop)
++
++		# record-less live slot -> VAT (the cheap live-locomotion fallback; an
++		# expensive skeletal rig must never render a defaulted record, lc-codex #3).
++		if not has_record or not use_skel:
++			_next[s] = TIER_VAT
++			continue
++
++		# Out-of-frustum -> VAT, instant (leaving view is not churn — no debounce).
++		if not camera.is_position_in_frustum(Vector3(ox, HEAD_Y, oy)):
++			_next[s] = TIER_VAT
++			continue
++
++		# Skeletal candidate. Eligibility is RAW planar distance vs the radii; the
++		# activity bonus only reorders priority WITHIN the cap (a far attacker does
++		# not get pulled skeletal — it just wins ties among near agents).
++		var dist := sqrt((ox - cam_x) * (ox - cam_x) + (oy - cam_z) * (oy - cam_z))
++		var intent := render_state[ro + RS_INTENT]
++		var health := render_state[ro + RS_HEALTH]
++		var bonus := 0.0
++		if (
++			hitstop > 0
++			or intent == ANIM_ATTACK
++			or intent == ANIM_STAGGER
++			or intent == ANIM_BALLISTIC
++			or intent == ANIM_DEATH
++		):
++			bonus += exit_radius  # strong: keep close-action agents skeletal
++		if float(health) / 255.0 < low_health_frac:
++			bonus += enter_radius * 0.5
++		_cand.append(s)
++		_cdist.append(dist)
++		_cscore.append(dist - bonus)
++		# tier assigned in PASS 2 (selection); _next[s] is finalized there.
++
++	# PASS 2 — select the skeletal set with hysteresis (re-seat existing SKEL
++	# first, then promote new candidates by score, bounded by cap + flip budget).
++	_select_skeletal()
++
++	# Commit _next -> _tier, maintaining the in-tier frame counter for debounce.
++	for s in count:
++		if _next[s] == _tier[s]:
++			_tier_frames[s] = mini(_tier_frames[s] + 1, FRAME_COUNTER_CEIL)
++		else:
++			_tier_frames[s] = 0
++		_tier[s] = _next[s]
++
++	last_select_usec = Time.get_ticks_usec() - t0
++
++	# Drive both adapters with the committed, disjoint tier mask.
++	_vat.update(agent_buf, render_state, count, _tier)
++	_skel.update(agent_buf, render_state, count, _tier)
++	last_vat = _vat.last_live
++	last_skel = _skel.last_live if use_skel else 0
++
++
++# Select the skeletal occupants from the gathered candidates. Order matters
++# (lc-codex #5): re-seat existing SKEL that still satisfies the exit threshold
++# FIRST (sticky — avoids churn), THEN promote new candidates by score up to the
++# remaining cap and the per-frame promote budget. Everything else -> VAT.
++func _select_skeletal() -> void:
++	_keep_pairs.clear()  # (score, slot) — prev-SKEL still within exit_radius
++	_promo_pairs.clear()  # (score, slot) — new candidates within enter_radius, debounce-ok
++	for ci in _cand.size():
++		var s := _cand[ci]
++		var d := _cdist[ci]
++		var sc := _cscore[ci]
++		if _tier[s] == TIER_SKEL:
++			if d <= exit_radius:
++				_keep_pairs.append(Vector2(sc, float(s)))
++			# else: beyond the exit ring -> demote (falls through to VAT below)
++		elif d <= enter_radius and _tier_frames[s] >= min_tier_frames:
++			_promo_pairs.append(Vector2(sc, float(s)))
++	_keep_pairs.sort_custom(_score_cmp)
++	_promo_pairs.sort_custom(_score_cmp)
++
++	# Default every candidate to VAT; the selections below flip the winners to SKEL
++	# (cap-pressure / debounce / non-promoted candidates stay VAT). Writing _next
++	# directly avoids a per-frame `selected` Dictionary.
++	for ci in _cand.size():
++		_next[_cand[ci]] = TIER_VAT
++	# Re-seat existing SKEL first (sticky), then promote new candidates by score,
++	# bounded by the cap + the per-frame promote budget.
++	var n_skel := 0
++	for pair in _keep_pairs:
++		if n_skel >= _skeletal_cap:
++			break
++		_next[int(pair.y)] = TIER_SKEL
++		n_skel += 1
++	var promotes := 0
++	for pair in _promo_pairs:
++		if n_skel >= _skeletal_cap or promotes >= per_frame_promote_cap:
++			break
++		_next[int(pair.y)] = TIER_SKEL
++		n_skel += 1
++		promotes += 1
++
++
++# Sort comparator (hoisted to _score_cmp in _init): ascending by score (Vector2.x)
++# so the lowest-score = highest-priority candidates come first.
++func _cmp_by_score(a: Vector2, b: Vector2) -> bool:
++	return a.x < b.x
++
++
++func _ensure_tier_capacity(count: int) -> void:
++	# Resize to EXACTLY count every frame (not grow-only): on a count SHRINK the
++	# dropped slots' stale _tier / _tier_frames are discarded, so when count grows
++	# back a re-entered slot re-inits fresh (VAT, debounce 0) and must re-promote
++	# through enter_radius + min_tier_frames — it can never inherit a past life's
++	# SKEL tier or debounce counter and stale-promote without the throttle (GCA +
++	# Greptile, mmnto-ai/liquid-city#601). resize() to the current size is a no-op,
++	# so the steady-state path (count stable) costs nothing; range(old, count) is
++	# empty on a shrink and inits only the genuinely new slots on a grow.
++	var old := _tier.size()
++	_tier.resize(count)
++	_tier_frames.resize(count)
++	_next.resize(count)
++	for i in range(old, count):
++		_tier[i] = TIER_VAT
++		_tier_frames[i] = 0
++
++
++func debug_status() -> String:
++	if not is_active():
++		return "LOD3D: off"
++	return "LOD3D: %d skel / %d vat (sel %.2fms)" % [last_skel, last_vat, last_select_usec / 1000.0]
+diff --git a/apps/game-godot/LODManager3D.gd.uid b/apps/game-godot/LODManager3D.gd.uid
+new file mode 100644
+index 0000000..772bec6
+--- /dev/null
++++ b/apps/game-godot/LODManager3D.gd.uid
+@@ -0,0 +1 @@
++uid://bo33nixvmvhiu
+diff --git a/apps/game-godot/SkeletalHordeAdapter.gd b/apps/game-godot/SkeletalHordeAdapter.gd
+index 09ec199..d2a422e 100644
+--- a/apps/game-godot/SkeletalHordeAdapter.gd
++++ b/apps/game-godot/SkeletalHordeAdapter.gd
+@@ -45,6 +45,12 @@ const RS_HEALTH := 1
+ const RS_HITSTOP := 2
+ const RS_INTENT := 3
+ 
++# LODManager3D tier id (mirror — the manager owns the canonical enum, ADR-029
++# P2b PR5). This adapter renders ONLY slots the manager assigned to the skeletal
++# (render-LOD-0) tier. Liveness, dead-slot masking, the cap, the record-less
++# fallback, and the single shared-clock advance are all the manager's job now.
++const TIER_SKEL := 2
++
+ # AnimIntent — MIRROR of density_feedback.rs (locked by tests/anim_intent_parity.rs
+ # against HordeRenderAdapter's identical consts; the wire contract).
+ const ANIM_IDLE := 0
+@@ -257,56 +263,49 @@ func set_health_tint_enabled(on: bool) -> void:
+ 		_mat.set_shader_parameter("use_health_tint", on)
+ 
+ 
+-# Per-frame: bind the first up-to-`cap` live agents to pool rigs (PR4's trivial
+-# in-order selection — PR5's LODManager3D replaces it with a priority policy +
+-# VAT dedup), drive each rig's transform / clip / freeze / tint, unbind the rest.
++# Per-frame: bind the slots LODManager3D assigned to the skeletal (render-LOD-0)
++# tier (`tiers[s] == TIER_SKEL`) to pool rigs, drive each rig's transform / clip /
++# freeze / tint, unbind the rest. ADR-029 P2b PR5: the manager owns selection,
++# the cap, dead-slot masking, the record-less->VAT fallback, and the single
++# shared-clock advance — this adapter is a pure READER (no `delta`, never
++# advances/marks the clock; that kills the double-advance class, GCA
++# mmnto-ai/liquid-city#600).
+ func update(
+-	agent_buf: PackedFloat32Array, render_state: PackedByteArray, count: int, delta: float
++	agent_buf: PackedFloat32Array, render_state: PackedByteArray, count: int, tiers: PackedByteArray
+ ) -> void:
+ 	if not _ready:
+ 		return
+ 	var t0 := Time.get_ticks_usec()
+-	_clocks.ensure_capacity(count)
+ 	var max_agents := agent_buf.size() / AGENT_STRIDE
+ 	if count > max_agents:
+ 		count = max_agents
+ 	var rs_len := render_state.size()
++	var tiers_len := tiers.size()
+ 
+ 	var pool_i := 0
+ 	for s in count:
+-		var bo := s * AGENT_STRIDE
+-		var bxx := agent_buf[bo + 0]
+-		var byx := agent_buf[bo + 1]
+-		var ox := agent_buf[bo + 3]
+-		var bxy := agent_buf[bo + 4]
+-		var byy := agent_buf[bo + 5]
+-		var oy := agent_buf[bo + 7]
+-		# dead slots are zeroed by the snapshot writer -> all-zero basis
+-		if absf(bxx) < 1e-9 and absf(bxy) < 1e-9 and absf(byx) < 1e-9 and absf(byy) < 1e-9:
+-			_clocks.mark_dead(s)
++		if s >= tiers_len or tiers[s] != TIER_SKEL:
++			continue
++		if pool_i >= _cap:
++			# Defensive: the manager caps |SKEL| at _cap, so this should not fire —
++			# never overrun the rig pool.
+ 			continue
+-		# Missing/short render-state record -> SKIP this slot (no ghost rig). An
+-		# expensive skeletal rig must not render on a defaulted record, unlike the
+-		# VAT adapter's cheap live-full-health fallback (lc-codex). Plain continue,
+-		# NOT mark_dead: the slot is LIVE (it passed the zeroed-transform check),
+-		# just record-less, so under a shared book (PR5) mark_dead would reset the
+-		# clock that the VAT tier — which renders this slot via its fallback — is
+-		# advancing, freezing/restarting its animation (GCA #600).
+ 		var ro := s * RENDER_STATE_STRIDE
+ 		if ro + RENDER_STATE_STRIDE > rs_len:
++			# Defensive: the manager routes record-less live slots to VAT, so a SKEL
++			# slot should always carry a record. Skip rather than render a ghost rig.
+ 			continue
+-		if pool_i >= _cap:
+-			# Over the LOD-0 cap — the VAT tier renders these slots and owns their
+-			# clock. Plain continue, NOT advance: under a shared book (PR5) the VAT
+-			# tier already advances them, so advancing here too would double-speed
+-			# their animation; on a later promotion the skeletal tier seeks from that
+-			# shared clock, which VAT has kept current (GCA #600).
+-			continue
+-
++		var bo := s * AGENT_STRIDE
++		var ox := agent_buf[bo + 3]
++		var oy := agent_buf[bo + 7]
++		var bxx := agent_buf[bo + 0]
++		var bxy := agent_buf[bo + 4]
+ 		var health := render_state[ro + RS_HEALTH]
+ 		var hitstop := render_state[ro + RS_HITSTOP]
+ 		var intent := render_state[ro + RS_INTENT]
+-		var clk := _clocks.advance(s, delta, hitstop)
++		# Read-only: the manager advanced this slot's clock (HitStop-frozen) this
++		# frame. speed_scale=0 in _bind holds the AnimationPlayer pose to match.
++		var clk := _clocks.clock(s)
+ 		var heading := atan2(bxy, bxx)
+ 		_bind(pool_i, s, ox, oy, heading, intent, health, hitstop, clk)
+ 		pool_i += 1
+diff --git a/apps/game-godot/horde_render_bench.gd b/apps/game-godot/horde_render_bench.gd
+index bbd016c..dd0f3c3 100644
+--- a/apps/game-godot/horde_render_bench.gd
++++ b/apps/game-godot/horde_render_bench.gd
+@@ -28,13 +28,21 @@ const ANIM_STAGGER := 2
+ const ANIM_BALLISTIC := 3
+ const ANIM_DEATH := 4
+ const RENDER_STATE_STRIDE := 4
++const RS_HITSTOP := 2
+ const LIVE_BIT := 0x04
+ const BALLISTIC_BIT := 0x10
++# tier ids (ADR-029 P2b PR5) — the bench plays LODManager3D's role here.
++const TIER_DEAD := 0
++const TIER_VAT := 1
+ 
+ var _adapter: HordeRenderAdapter
+ var _cam: Camera3D
+ var _xf := PackedFloat32Array()
+ var _rs := PackedByteArray()
++# PR5: the adapter is a pure clock READER; the caller (manager / this bench) owns
++# the shared SlotClockBook + the tier mask.
++var _book: SlotClockBook
++var _tiers := PackedByteArray()
+ var _frame := 0
+ var _done := false
+ # slots reserved for the hitstop-freeze assertion
+@@ -54,7 +62,8 @@ func _ready() -> void:
+ 	add_child(_cam)
+ 	_frame_camera(N)
+ 
+-	_adapter = HordeRenderAdapter.new(self, false)
++	_book = SlotClockBook.new()
++	_adapter = HordeRenderAdapter.new(self, false, _book)
+ 	if not _adapter.setup():
+ 		print("[horde-bench] FAIL: adapter setup returned false")
+ 		get_tree().quit(1)
+@@ -123,12 +132,31 @@ func _build_buffers() -> void:
+ 	# slot 0 = a dead slot (zeroed transform) → must be masked out of the draw
+ 	for k in 8:
+ 		_xf[k] = 0.0
++	# tier mask (ADR-029 P2b PR5): the manager classifies tiers + owns the clock;
++	# here the bench plays that role — slot 0 is DEAD (zeroed), the rest VAT. The
++	# adapter renders only its VAT-tier slots and READS the shared clock.
++	_tiers.resize(N)
++	_tiers.fill(TIER_VAT)
++	_tiers[0] = TIER_DEAD
++
++
++# Advance the shared clock once per slot, exactly as LODManager3D does: mark the
++# DEAD slot, advance live slots (HitStop-frozen). The adapter no longer touches
++# the clock — it reads clock(s) during update().
++func _advance_clock() -> void:
++	_book.ensure_capacity(N)
++	for s in N:
++		if _tiers[s] == TIER_DEAD:
++			_book.mark_dead(s)
++		else:
++			_book.advance(s, DELTA, _rs[s * RENDER_STATE_STRIDE + RS_HITSTOP])
+ 
+ 
+ func _process(_delta: float) -> void:
+ 	if _done:
+ 		return
+-	_adapter.update(_xf, _rs, N, DELTA)
++	_advance_clock()
++	_adapter.update(_xf, _rs, N, _tiers)
+ 	_frame += 1
+ 	if _frame < FRAMES:
+ 		return
+@@ -166,8 +194,8 @@ func _verify() -> int:
+ 		print("[horde-bench] PASS: intents differentiate (Locomotion ≠ Death clip)")
+ 
+ 	# 2. HitStop clock-freeze: the frozen slot held; the control advanced.
+-	var frozen_clock: float = _adapter._clock[_frozen_slot]
+-	var running_clock: float = _adapter._clock[_running_slot]
++	var frozen_clock: float = _book.clock(_frozen_slot)
++	var running_clock: float = _book.clock(_running_slot)
+ 	if frozen_clock != 0.0:
+ 		fails += 1
+ 		print(
+diff --git a/apps/game-godot/lod_manager_bench.gd b/apps/game-godot/lod_manager_bench.gd
+new file mode 100644
+index 0000000..193c4c1
+--- /dev/null
++++ b/apps/game-godot/lod_manager_bench.gd
+@@ -0,0 +1,411 @@
++extends Node3D
++
++# ADR-029 P2b PR5 — LODManager3D verification + combined-budget cap bench.
++#
++# PHASE A — shared-clock transition regression (the test PR4 could NOT reach,
++#   because it needs BOTH tiers sharing ONE SlotClockBook — folds GCA
++#   mmnto-ai/liquid-city#600 R3 + lc-codex's prescribed scenario). Drives the
++#   real LODManager3D from synthetic buffers at a FIXED delta and asserts EXACT
++#   clocks across a VAT<->skeletal transition, a hit-stopped slot, an over-cap
++#   slot, a missing-record slot, and a dead slot. The clock invariants are
++#   TIER-INDEPENDENT (the manager advances every live slot's clock once,
++#   regardless of tier), so Phase A runs HEADLESS too — the no-double-advance /
++#   no-reset guarantee is provable without a GPU. The SKEL-tier assertions
++#   (which agent renders as a rig) are GPU-only and gated on `not headless`.
++#
++# PHASE B — combined cap sweep (real GPU only). Forces N_TOTAL agents through the
++#   manager with skeletal cap M in {0,16,32,48,64}; the cap picks the M closest
++#   in-frustum agents as rigs, the rest VAT — so each sample measures the TRUE
++#   production cost (VAT assembly + M skeletal rigs + manager scoring over N),
++#   not the PR4 ISOLATION ceiling. Picks the recommended cap from the combined
++#   p95 marginal over the M=0 baseline. JSON + one PNG per M to user://.
++#
++# Run (real GPU, self-quitting):
++#   <godot> --path apps/game-godot res://lod_manager_bench.tscn
++# Exit 0 = all Phase A assertions clean; 1 = a regression assertion failed.
++
++const DELTA := 0.1  # fixed so the Phase A clock asserts are exact
++const OUT_DIR := "user://lod_manager_bench/"
++
++# render-state record layout (mirror of density_feedback.rs)
++const RENDER_STATE_STRIDE := 4
++const RS_FLAGS := 0
++const RS_HEALTH := 1
++const RS_HITSTOP := 2
++const RS_INTENT := 3
++const LIVE_BIT := 0x04
++const ANIM_LOCOMOTION := 1
++
++# tier ids (mirror of LODManager3D)
++const TIER_DEAD := 0
++const TIER_VAT := 1
++const TIER_SKEL := 2
++
++# Phase B combined sweep
++const N_TOTAL := 256  # total agents (upper-mid of the ~192-400 live envelope)
++const M_SWEEP := [0, 16, 32, 48, 64]  # skeletal cap M
++const WARMUP := 30  # frames to ramp the partition + settle a reconstruct teardown
++const SAMPLE := 60
++const SPACING := 1.6
++const BUDGET_MARGINAL_MS := 2.0  # cap = highest M whose p95 marginal <= this
++
++var _headless := false
++var _fails := 0
++var _watchdog := 0
++var _phase := 0  # 0 = regression, 1 = perf sweep, 2 = done
++
++var _cam: Camera3D
++var _xf := PackedFloat32Array()
++var _rs := PackedByteArray()
++
++# Phase B sweep state
++var _manager: LODManager3D
++var _sweep_i := 0
++var _frame := 0
++var _samples := PackedFloat32Array()
++var _results := []  # [{m, avg, p95, p99, max}]
++
++
++func _ready() -> void:
++	_headless = DisplayServer.get_name() == "headless"
++	if not _headless:
++		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
++		_cam = Camera3D.new()
++		_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
++		_cam.fov = 55.0
++		_cam.current = true
++		add_child(_cam)
++	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
++	# Headless: the camera-free clock invariant is fully testable now (all-VAT,
++	# zero rigs) — run the regression immediately + quit (no viewport needed).
++	if _headless:
++		_run_regression()
++		print(
++			"[lod-bench] headless — clock-ownership invariant only; quit %d" % (1 if _fails else 0)
++		)
++		get_tree().quit(1 if _fails > 0 else 0)
++
++
++func _process(delta: float) -> void:
++	if _headless:
++		return
++	_watchdog += 1
++	if _watchdog > 2000:
++		push_error("[lod-bench] watchdog tripped at %d frames — force quit" % _watchdog)
++		get_tree().quit(2)
++		return
++	if _phase == 0:
++		# Let the viewport size before the frustum test runs (frame 0/1 can be 0x0).
++		if _watchdog < 2:
++			return
++		_run_regression()
++		if _fails > 0:
++			print("[lod-bench] PHASE A: FAIL (%d) — skipping perf sweep" % _fails)
++			get_tree().quit(1)
++			return
++		print("[lod-bench] PHASE A: PASS (shared-clock regression)")
++		_phase = 1
++		_sweep_i = 0
++		_begin_sweep_m()
++	elif _phase == 1:
++		_process_perf(delta)
++
++
++# --- Phase A: shared-clock transition regression ---
++
++
++func _run_regression() -> void:
++	# Part 1 — one manager, cap large so cap pressure does not perturb the
++	# transition / hitstop / missing / dead asserts; over-cap gets its own part.
++	var mgr := _new_manager(8)
++	# Immediate, unthrottled transitions so the asserts are deterministic.
++	mgr.min_tier_frames = 0
++	mgr.per_frame_promote_cap = 64
++	mgr.enter_radius = 1.0e9
++	mgr.exit_radius = 1.0e9
++
++	# count=6, render-state covers only 5 records -> slot 5 is record-less.
++	var n := 6
++	_xf = PackedFloat32Array()
++	_xf.resize(n * 8)
++	_rs = PackedByteArray()
++	_rs.resize(5 * RENDER_STATE_STRIDE)
++	# slot 0 dead (zeroed). slots 1-5 live; positions set per frame below.
++	for s in range(1, n):
++		_set_xf(s, 0.0, 0.0)  # placeholder; positions assigned in the loop
++	# records (slot 5 has none)
++	_set_rs(1, 255, 0, ANIM_LOCOMOTION)  # transition slot — control-like clock
++	_set_rs(2, 255, 6, ANIM_LOCOMOTION)  # hitstop slot — clock must freeze
++	_set_rs(3, 255, 0, ANIM_LOCOMOTION)  # near control — clock must advance
++	_set_rs(4, 255, 0, ANIM_LOCOMOTION)  # filler near slot
++
++	# 6 frames; slot 1 starts BEHIND the camera (out of frustum -> VAT), then at
++	# frame 3 moves to the origin (in frustum, near -> SKEL). Every other live
++	# slot sits near the origin throughout.
++	for f in 6:
++		# dead slot 0 stays zeroed.
++		var slot1_behind := f < 3
++		_set_xf(1, 0.0, 25.0 if slot1_behind else 0.5)  # z=25 is behind cam (see _frame_cam)
++		_set_xf(2, 1.0, 0.0)
++		_set_xf(3, -1.0, 0.0)
++		_set_xf(4, 0.0, -1.0)
++		_set_xf(5, 1.5, 1.0)  # record-less live slot
++		if not _headless:
++			_frame_cam_origin()
++		mgr.update(_cam, _xf, _rs, n, DELTA)
++
++	var expect := 6.0 * DELTA  # 0.6
++	# Tier-INDEPENDENT clock invariants (run headless + GPU):
++	_check(mgr.slot_clock(0) == 0.0, "dead slot clock stays 0", "%.3f" % mgr.slot_clock(0))
++	_check(mgr.tier_of(0) == TIER_DEAD, "dead slot tier DEAD", "tier=%d" % mgr.tier_of(0))
++	_check(
++		absf(mgr.slot_clock(1) - expect) < 1e-4,
++		"transition slot clock continuous (%.2f, no reset on promote)" % expect,
++		"%.3f" % mgr.slot_clock(1)
++	)
++	_check(mgr.slot_clock(2) == 0.0, "hitstop slot clock frozen at 0", "%.3f" % mgr.slot_clock(2))
++	_check(
++		absf(mgr.slot_clock(3) - expect) < 1e-4,
++		"control slot clock advanced once/frame (no double)",
++		"%.3f" % mgr.slot_clock(3)
++	)
++	_check(
++		absf(mgr.slot_clock(5) - expect) < 1e-4,
++		"record-less slot clock advanced (VAT fallback, not mark_dead)",
++		"%.3f" % mgr.slot_clock(5)
++	)
++	_check(mgr.tier_of(5) == TIER_VAT, "record-less slot tier VAT", "tier=%d" % mgr.tier_of(5))
++	# SKEL-tier outcomes are GPU-only (headless forces all-VAT).
++	if not _headless:
++		_check(
++			mgr.tier_of(1) == TIER_SKEL,
++			"transition slot promoted to SKEL (near + in frustum)",
++			"tier=%d" % mgr.tier_of(1)
++		)
++		_check(mgr.tier_of(2) == TIER_SKEL, "hitstop slot SKEL", "tier=%d" % mgr.tier_of(2))
++		_check(mgr.tier_of(3) == TIER_SKEL, "control slot SKEL", "tier=%d" % mgr.tier_of(3))
++
++	# Part 2 — over-cap: cap=1, two equally-near live slots -> exactly one SKEL,
++	# one VAT, and BOTH clocks advance once/frame (the over-cap slot's clock is
++	# owned by the manager, not skipped or double-advanced).
++	var mgr2 := _new_manager(1)
++	mgr2.min_tier_frames = 0
++	mgr2.per_frame_promote_cap = 64
++	mgr2.enter_radius = 1.0e9
++	mgr2.exit_radius = 1.0e9
++	_xf = PackedFloat32Array()
++	_xf.resize(2 * 8)
++	_rs = PackedByteArray()
++	_rs.resize(2 * RENDER_STATE_STRIDE)
++	_set_rs(0, 255, 0, ANIM_LOCOMOTION)
++	_set_rs(1, 255, 0, ANIM_LOCOMOTION)
++	for f in 3:
++		_set_xf(0, 0.5, 0.0)
++		_set_xf(1, -0.5, 0.0)
++		if not _headless:
++			_frame_cam_origin()
++		mgr2.update(_cam, _xf, _rs, 2, DELTA)
++	var expect2 := 3.0 * DELTA  # 0.3
++	_check(
++		absf(mgr2.slot_clock(0) - expect2) < 1e-4,
++		"over-cap part: slot 0 clock advanced once/frame",
++		"%.3f" % mgr2.slot_clock(0)
++	)
++	_check(
++		absf(mgr2.slot_clock(1) - expect2) < 1e-4,
++		"over-cap part: slot 1 clock advanced once/frame",
++		"%.3f" % mgr2.slot_clock(1)
++	)
++	if not _headless:
++		var skel := int(mgr2.tier_of(0) == TIER_SKEL) + int(mgr2.tier_of(1) == TIER_SKEL)
++		var vat := int(mgr2.tier_of(0) == TIER_VAT) + int(mgr2.tier_of(1) == TIER_VAT)
++		_check(
++			skel == 1 and vat == 1,
++			"over-cap: exactly 1 SKEL + 1 VAT (cap=1)",
++			"skel=%d vat=%d" % [skel, vat]
++		)
++
++
++# --- Phase B: combined cap sweep ---
++
++
++func _begin_sweep_m() -> void:
++	var m: int = M_SWEEP[_sweep_i]
++	_manager = _new_manager(m)
++	# Steady-state cost at M skeletal: ramp instantly (no debounce / promote cap),
++	# cap is the only gate; radii huge so every in-frustum agent is eligible and
++	# the cap picks the M closest.
++	_manager.min_tier_frames = 0
++	_manager.per_frame_promote_cap = N_TOTAL
++	_manager.enter_radius = 1.0e9
++	_manager.exit_radius = 1.0e9
++	_build_grid(N_TOTAL)
++	_frame_cam_grid(N_TOTAL)
++	_samples = PackedFloat32Array()
++	_frame = 0
++
++
++func _process_perf(delta: float) -> void:
++	var m: int = M_SWEEP[_sweep_i]
++	_manager.update(_cam, _xf, _rs, N_TOTAL, delta)
++	_frame += 1
++	if _frame <= WARMUP:
++		return
++	_samples.append(delta * 1000.0)
++	if _frame < WARMUP + SAMPLE:
++		return
++	_results.append(_summarise(m, _samples))
++	_capture_png(m)
++	_sweep_i += 1
++	if _sweep_i < M_SWEEP.size():
++		_begin_sweep_m()
++	else:
++		_finalise()
++
++
++func _finalise() -> void:
++	var baseline: float = _results[0]["p95"]  # M=0 (all VAT)
++	var cap := 0
++	print("[lod-bench] PHASE B — combined sweep N=%d (vsync off):" % N_TOTAL)
++	for r in _results:
++		var marginal: float = r["p95"] - baseline
++		var within: bool = r["m"] == 0 or marginal <= BUDGET_MARGINAL_MS
++		if within and r["m"] > cap:
++			cap = r["m"]
++		print(
++			(
++				"[lod-bench]   M=%2d  avg=%.3f  p95=%.3f  p99=%.3f  max=%.3f ms  (marg p95 +%.3f)%s"
++				% [
++					r["m"],
++					r["avg"],
++					r["p95"],
++					r["p99"],
++					r["max"],
++					marginal,
++					"" if within else "  OVER"
++				]
++			)
++		)
++	print(
++		(
++			"[lod-bench] RECOMMENDED skeletal_lod_cap = %d (combined p95 marginal <= %.1f ms over all-VAT)"
++			% [cap, BUDGET_MARGINAL_MS]
++		)
++	)
++	_write_json(cap, baseline)
++	print("[lod-bench] VERDICT: GO — manager verified; combined cap=%d" % cap)
++	_phase = 2
++	get_tree().quit(0)
++
++
++# --- buffer / camera helpers ---
++
++
++func _new_manager(cap: int) -> LODManager3D:
++	var m := LODManager3D.new(self, _headless, cap)
++	m.setup()
++	m.set_active(true)
++	return m
++
++
++# Write a stride-8 Transform2D (identity basis + origin) for slot s. Heading is
++# irrelevant to the partition; the manager only reads the basis for liveness.
++func _set_xf(s: int, ox: float, oy: float) -> void:
++	var o := s * 8
++	_xf[o + 0] = 1.0
++	_xf[o + 1] = 0.0
++	_xf[o + 2] = 0.0
++	_xf[o + 3] = ox
++	_xf[o + 4] = 0.0
++	_xf[o + 5] = 1.0
++	_xf[o + 6] = 0.0
++	_xf[o + 7] = oy
++
++
++func _set_rs(s: int, health: int, hitstop: int, intent: int) -> void:
++	var ro := s * RENDER_STATE_STRIDE
++	_rs[ro + RS_FLAGS] = LIVE_BIT
++	_rs[ro + RS_HEALTH] = health
++	_rs[ro + RS_HITSTOP] = hitstop
++	_rs[ro + RS_INTENT] = intent
++
++
++func _build_grid(n: int) -> void:
++	_xf = PackedFloat32Array()
++	_xf.resize(n * 8)
++	_rs = PackedByteArray()
++	_rs.resize(n * RENDER_STATE_STRIDE)
++	var side := maxi(int(ceil(sqrt(float(n)))), 1)
++	for i in n:
++		var gx := (float(i % side) - float(side) * 0.5) * SPACING
++		var gy := (float(i / side) - float(side) * 0.5) * SPACING
++		_set_xf(i, gx, gy)
++		_set_rs(i, (i * 37) % 256, 0, ANIM_LOCOMOTION)
++
++
++func _frame_cam_origin() -> void:
++	# Look at the origin from above/behind on +Z so a slot at z=+25 sits BEHIND
++	# the camera (out of frustum) while the origin cluster is in view.
++	_cam.position = Vector3(0.0, 7.0, 9.0)
++	_cam.look_at(Vector3(0.0, 0.0, 0.0), Vector3.UP)
++
++
++func _frame_cam_grid(n: int) -> void:
++	var side := maxi(int(ceil(sqrt(float(n)))), 1)
++	var extent := float(side) * SPACING
++	_cam.position = Vector3(0.0, extent * 0.95, extent * 1.1)
++	_cam.look_at(Vector3(0.0, 0.0, 0.0), Vector3.UP)
++
++
++func _summarise(m: int, s: PackedFloat32Array) -> Dictionary:
++	var arr := s.duplicate()
++	arr.sort()
++	var cnt := arr.size()
++	var sum := 0.0
++	for v in arr:
++		sum += v
++	return {
++		"m": m,
++		"avg": sum / maxf(float(cnt), 1.0),
++		"p95": arr[mini(int(0.95 * cnt), cnt - 1)] if cnt > 0 else 0.0,
++		"p99": arr[mini(int(0.99 * cnt), cnt - 1)] if cnt > 0 else 0.0,
++		"max": arr[cnt - 1] if cnt > 0 else 0.0,
++	}
++
++
++func _write_json(cap: int, baseline: float) -> void:
++	var doc := {
++		"schema": "lod-combined-cap-bench-v1",
++		"n_total": N_TOTAL,
++		"recommended_cap": cap,
++		"budget_marginal_ms": BUDGET_MARGINAL_MS,
++		"baseline_p95_ms": baseline,
++		"renderer": RenderingServer.get_video_adapter_name(),
++		"godot": Engine.get_version_info().get("string", "?"),
++		"viewport": [get_viewport().size.x, get_viewport().size.y],
++		"vsync": "disabled",
++		"sweep": _results,
++	}
++	var path := OUT_DIR + "lod_combined_cap.json"
++	var f := FileAccess.open(path, FileAccess.WRITE)
++	if f != null:
++		f.store_string(JSON.stringify(doc, "  "))
++		f.close()
++		print("[lod-bench] wrote %s" % path)
++	print("[lod-bench] JSON: %s" % JSON.stringify(doc))
++
++
++func _capture_png(m: int) -> void:
++	var img := get_viewport().get_texture().get_image()
++	if img != null:
++		var path := OUT_DIR + "lod_m%d.png" % m
++		img.save_png(ProjectSettings.globalize_path(path))
++		print("[lod-bench] capture %s" % path)
++
++
++func _check(ok: bool, label: String, fail_detail: String) -> void:
++	if ok:
++		print("[lod-bench] PASS: %s" % label)
++	else:
++		_fails += 1
++		print("[lod-bench] FAIL: %s — %s" % [label, fail_detail])
+diff --git a/apps/game-godot/lod_manager_bench.gd.uid b/apps/game-godot/lod_manager_bench.gd.uid
+new file mode 100644
+index 0000000..a3d6092
+--- /dev/null
++++ b/apps/game-godot/lod_manager_bench.gd.uid
+@@ -0,0 +1 @@
++uid://56kjpavghyh5
+diff --git a/apps/game-godot/lod_manager_bench.tscn b/apps/game-godot/lod_manager_bench.tscn
+new file mode 100644
+index 0000000..ba37542
+--- /dev/null
++++ b/apps/game-godot/lod_manager_bench.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://lod_manager_bench.gd" id="1_lmb"]
++
++[node name="LodManagerBench" type="Node3D"]
++script = ExtResource("1_lmb")
+diff --git a/apps/game-godot/sim_driver.gd b/apps/game-godot/sim_driver.gd
+index 6ba57b3..3a9ba46 100644
+--- a/apps/game-godot/sim_driver.gd
++++ b/apps/game-godot/sim_driver.gd
+@@ -171,6 +171,17 @@ const PLAYER_COMMAND_FIRE_PRIMARY: int = 3
+ ## speed/on-foot/F6 zoom values are all unaffected. Inspector-tunable on a live
+ ## drive; lifts out wholesale at the Camera3D ADR overhaul.
+ @export_range(0.2, 2.0) var camera_3d_distance_scale: float = 0.45  # totem-exception: temp feel-knob until the Camera3D ADR overhaul
++## ADR-029 P2b PR5 — the highest skeletal_lod_cap the combined bench validated
++## (M=64 at +0.53 ms marginal on the dev RTX 5070 Ti). Above this the cap is
++## uncharted; _ready warns rather than clamps so live tuning stays possible.
++const LOD_VALIDATED_CAP_CEILING := 64
++## ADR-029 P2b PR5 — skeletal render-LOD-0 cap: the max close / on-screen / high-
++## action agents rendered as full skinned rigs; the rest render via the VAT
++## MultiMesh. Conservative default chosen from the combined bench (the PR4
++## isolation ceiling was 64; the live cost is combined VAT+skeletal+scoring).
++## Inspector-tunable on a live drive; the manager's enter/exit radii + debounce
++## live on LODManager3D for the Camera3D-ADR tuning pass.
++@export_range(0, 128) var skeletal_lod_cap: int = 32  # totem-exception: perf-cap default until the combined-budget tuning pass
+ ## Vehicle speed (m/s) at which look-ahead and zoom saturate at their
+ ## max-speed values. The `@export_range` default is now overwritten in
+ ## `_ready` from the sim-side `VEHICLE_MAX_SPEED` constant via the
+@@ -550,11 +561,13 @@ var _render_adapter: Render3DAdapter = null
+ var _vat_adapter: VatHordeAdapter = null
+ var _vat_proof_enabled: bool = false
+ var _vat_colormap_enabled: bool = false
+-## ADR-029 P2b PR3 — production 3D horde render adapter (Surface A consumer +
+-## CUSTOM_DATA v1). Null until _ready; no-ops under --headless. Renders the live
+-## horde in 3D whenever use_3d_camera is on (the disposable VAT proof above stays
+-## a separate off-by-default debug toggle). See HordeRenderAdapter.gd.
+-var _horde_adapter: HordeRenderAdapter = null
++## ADR-029 P2b PR5 — render-LOD manager (CLOSES mmnto-ai/liquid-city#592). Owns
++## BOTH horde tiers (skeletal render-LOD-0 + VAT render-LOD-1) and the ONE shared
++## per-slot clock; the single facade sim_driver drives for the 3D horde. Null
++## until _ready; no-ops under --headless. Active whenever use_3d_camera is on (the
++## disposable VAT proof above stays a separate off-by-default debug toggle). See
++## LODManager3D.gd.
++var _lod_manager: LODManager3D = null
+ ## Diagnostic HUD reference (#146). Sibling node under root, populated
+ ## via `hud.set_value(key, value)` from `_physics_process` for entries
+ ## that need sim-side data (currently agent count). The HUD itself
+@@ -1128,15 +1141,27 @@ func _ready() -> void:
+ 		_vat_adapter = VatHordeAdapter.new(_render_3d_root, DisplayServer.get_name() == "headless")
+ 		if not _vat_adapter.setup() and DisplayServer.get_name() != "headless":
+ 			push_warning("sim_driver: VatHordeAdapter setup failed — VAT horde unavailable")
+-	# ADR-029 P2b PR3 — the production 3D horde. Same Render3D parent + headless
+-	# guard + reuse-guard shape as the VAT proof; fed both the stride-8 transform
+-	# buffer and the stride-4 render-state buffer each frame from _physics_process.
+-	if _horde_adapter == null:
+-		_horde_adapter = HordeRenderAdapter.new(
+-			_render_3d_root, DisplayServer.get_name() == "headless"
++	# ADR-029 P2b PR5 — the render-LOD manager owns both horde tiers + the shared
++	# clock. Same Render3D parent + headless guard + reuse-guard shape as the VAT
++	# proof; fed the camera + both the stride-8 transform buffer and the stride-4
++	# render-state buffer each frame from _physics_process.
++	if _lod_manager == null:
++		_lod_manager = LODManager3D.new(
++			_render_3d_root, DisplayServer.get_name() == "headless", skeletal_lod_cap
+ 		)
+-		if not _horde_adapter.setup() and DisplayServer.get_name() != "headless":
+-			push_warning("sim_driver: HordeRenderAdapter setup failed — 3D horde unavailable")
++		if not _lod_manager.setup() and DisplayServer.get_name() != "headless":
++			push_warning("sim_driver: LODManager3D setup failed — 3D horde unavailable")
++		# A skeletal_lod_cap above the combined-bench validated ceiling is uncharted
++		# (the bench swept M<=64; M=64 was +0.53 ms marginal on the dev GPU) and may
++		# blow the combined budget on weaker hardware. Warn rather than clamp so live
++		# tuning stays possible but a risky value is never silent (Greptile).
++		if skeletal_lod_cap > LOD_VALIDATED_CAP_CEILING:
++			push_warning(
++				(
++					"sim_driver: skeletal_lod_cap=%d exceeds the combined-bench validated ceiling (%d); uncharted on weaker GPUs — re-bench before relying on it."
++					% [skeletal_lod_cap, LOD_VALIDATED_CAP_CEILING]
++				)
++			)
+ 	# Sync initial 3D-camera state to the Inspector-set use_3d_camera value.
+ 	# The setter that fired during .tscn load was no-op'd by the
+ 	# is_node_ready() gate (@onready refs weren't resolved yet); this is
+@@ -1772,8 +1797,8 @@ func _apply_health_tint(enabled: bool) -> void:
+ 	# change — boot flag, panel toggle, interior forced-tint — reaches the 3D
+ 	# horde, not just the boot flag (CR #597). Independent of the 2D MultiMesh,
+ 	# so it runs before the _multimesh null-guard.
+-	if _horde_adapter != null:
+-		_horde_adapter.set_health_tint_enabled(enabled)
++	if _lod_manager != null:
++		_lod_manager.set_health_tint_enabled(enabled)
+ 	if _multimesh == null:
+ 		return
+ 	# Godot REQUIRES instance_count == 0 to toggle use_custom_data — it errors
+@@ -2741,10 +2766,13 @@ func _physics_process(delta: float) -> void:
+ 					% [_vat_adapter.debug_status(), Engine.get_frames_per_second()]
+ 				)
+ 			)
+-	# ADR-029 P2b PR3 — feed the production 3D horde both the transform buffer
+-	# and the render-state buffer (Surface A). Active whenever use_3d_camera is on.
+-	if _horde_adapter != null and _horde_adapter.is_active():
+-		_horde_adapter.update(xf, sim.get_agent_render_state_buffer(), count, delta)
++	# ADR-029 P2b PR5 — feed the render-LOD manager the camera (for frustum +
++	# distance) + both the transform buffer and the render-state buffer (Surface
++	# A). The manager owns the shared clock + the disjoint VAT/skeletal partition.
++	# Render3DAdapter.apply_camera already ran earlier this frame (the camera-follow
++	# block above), so the manager's frustum test reads the current camera pose.
++	if _lod_manager != null and _lod_manager.is_active():
++		_lod_manager.update(_camera_3d, xf, sim.get_agent_render_state_buffer(), count, delta)
+ 	# #146 HUD: push sim-side diagnostic values that the HUD itself
+ 	# can't compute (it sees only its own `_process` loop). `agents`
+ 	# is the post-snapshot agent count; `active` is the player/vehicle
+@@ -3163,8 +3191,8 @@ func _apply_use_3d_camera() -> void:
+ 		_vat_adapter.set_active(_vat_proof_enabled and use_3d_camera)
+ 	# ADR-029 P2b PR3 — the production 3D horde renders under Render3D, so its
+ 	# visibility follows use_3d_camera (independent of _render_adapter, like above).
+-	if _horde_adapter != null:
+-		_horde_adapter.set_active(use_3d_camera)
++	if _lod_manager != null:
++		_lod_manager.set_active(use_3d_camera)
+ 	# 3D-side render-path visibility (Render3D.visible + Camera3D.current)
+ 	# lives in the adapter (ADR-029 PR1b); update it only when the adapter
+ 	# is live (null in the degraded-init path that returned before
+diff --git a/apps/game-godot/skeletal_horde_bench.gd b/apps/game-godot/skeletal_horde_bench.gd
+index 8416f47..2e4ce44 100644
+--- a/apps/game-godot/skeletal_horde_bench.gd
++++ b/apps/game-godot/skeletal_horde_bench.gd
+@@ -41,14 +41,24 @@ const BUDGET_MARGINAL_MS := 2.0  # cap = highest N with p95 marginal <= this (lc
+ 
+ # render-state record layout (mirror of the ABI)
+ const RENDER_STATE_STRIDE := 4
++const RS_HITSTOP := 2
+ const LIVE_BIT := 0x04
+ const ANIM_LOCOMOTION := 1
+ const ANIM_DEATH := 4
++# tier ids (ADR-029 P2b PR5) — this isolation bench plays LODManager3D's role:
++# all live agents SKEL, the dead slot DEAD; it owns the clock the adapter reads.
++const TIER_DEAD := 0
++const TIER_SKEL := 2
+ 
+ var _adapter: SkeletalHordeAdapter
+ var _cam: Camera3D
+ var _xf := PackedFloat32Array()
+ var _rs := PackedByteArray()
++# PR5: the adapter is a pure clock READER; this bench owns the tier mask + the
++# shared SlotClockBook (passed into the adapter at construction, like the sibling
++# horde_render_bench — never reach into _adapter._clocks; CR mmnto-ai/liquid-city#601).
++var _tiers := PackedByteArray()
++var _book: SlotClockBook
+ 
+ var _phase := 0  # 0 = correctness, 1 = perf sweep, 2 = done
+ var _frame := 0
+@@ -82,7 +92,8 @@ func _ready() -> void:
+ 	_cam.current = true
+ 	add_child(_cam)
+ 
+-	_adapter = SkeletalHordeAdapter.new(self, false, CAP)
++	_book = SlotClockBook.new()
++	_adapter = SkeletalHordeAdapter.new(self, false, CAP, _book)
+ 	if not _adapter.setup():
+ 		print("[skel-bench] FAIL: adapter setup returned false")
+ 		get_tree().quit(1)
+@@ -118,7 +129,8 @@ func _process(delta: float) -> void:
+ 
+ 
+ func _process_correctness() -> void:
+-	_adapter.update(_xf, _rs, NC, DELTA_C)
++	_advance_clocks(NC, DELTA_C)
++	_adapter.update(_xf, _rs, NC, _tiers)
+ 	_frame += 1
+ 	if _frame < FRAMES_C:
+ 		return
+@@ -140,8 +152,8 @@ func _verify_correctness() -> void:
+ 	)
+ 
+ 	# HitStop: frozen slot clock held at 0; control advanced FRAMES_C*DELTA_C.
+-	var frozen_clk: float = _adapter._clocks.clock(FROZEN_SLOT)
+-	var control_clk: float = _adapter._clocks.clock(CONTROL_SLOT)
++	var frozen_clk: float = _book.clock(FROZEN_SLOT)
++	var control_clk: float = _book.clock(CONTROL_SLOT)
+ 	_check(frozen_clk == 0.0, "hitstop clock frozen at 0", "frozen clock = %.3f" % frozen_clk)
+ 	var expect := float(FRAMES_C) * DELTA_C
+ 	_check(
+@@ -234,7 +246,8 @@ func _begin_sweep_n() -> void:
+ 
+ func _process_perf(delta: float) -> void:
+ 	var n: int = N_SWEEP[_sweep_i]
+-	_adapter.update(_xf, _rs, n, delta)
++	_advance_clocks(n, delta)
++	_adapter.update(_xf, _rs, n, _tiers)
+ 	_frame += 1
+ 	if _frame <= WARMUP:
+ 		# capture a drift baseline once warmed (first bound rig's root, walk sample)
+@@ -346,6 +359,26 @@ func _build_buffers(n: int) -> void:
+ 			_xf[DEAD_SLOT * 8 + k] = 0.0
+ 		# give CONTROL_SLOT a distinct death intent so loco!=death differentiates
+ 		_rs[CONTROL_SLOT * RENDER_STATE_STRIDE + 3] = ANIM_DEATH
++	# tier mask (ADR-029 P2b PR5): all live agents SKEL; the correctness DEAD_SLOT
++	# is DEAD. The adapter renders only SKEL-tier slots + reads the shared clock.
++	_tiers.resize(maxi(n, 1))
++	for i in _tiers.size():
++		_tiers[i] = TIER_SKEL
++	if n == NC:
++		_tiers[DEAD_SLOT] = TIER_DEAD
++
++
++# Advance the shared clock once per slot, exactly as LODManager3D does (the
++# adapter is now a pure reader): mark DEAD slots, advance live slots HitStop-
++# frozen. Drives the bench-owned _book the adapter was constructed with, which
++# the asserts read back.
++func _advance_clocks(n: int, delta: float) -> void:
++	_book.ensure_capacity(n)
++	for s in n:
++		if _tiers[s] == TIER_DEAD:
++			_book.mark_dead(s)
++		else:
++			_book.advance(s, delta, _rs[s * RENDER_STATE_STRIDE + RS_HITSTOP])
+ 
+ 
+ func _frame_camera(n: int) -> void:

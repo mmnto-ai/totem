@@ -1,0 +1,125 @@
+{
+  "kind": "llm-replay.v1",
+  "provenance": {
+    "adapterKind": "extractor+classifier",
+    "keyVersion": "v1",
+    "model": "claude-sonnet-4-6",
+    "orchestratorVersion": "1.73.1",
+    "promptTemplateHash": "dacd8a50ce92735b7b0e0bec77e99e66ed5bf891d7a43164eb1a5fa4a802fc45",
+    "provider": "anthropic",
+    "systemPromptHash": "eecbc7f1272590ee2618db101ead984cfb6faf73323788ccd02a6eff25bf4ced",
+    "temperature": 0,
+    "totemVersion": "1.73.1"
+  },
+  "records": {
+    "classifier": {
+      "0e236bbdc8db7d422e7393b6fe2578942c9d637d6ae043c6d31b3199ebc60884": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "14445648b8eb56e921189304230ad3292717111c823a4e06417d2d19f6b3d338": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "27671c5895f1e046e7cdf3227bea8484921a97bf3a05eb46e9520db06340a670": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "4dbf809c8230e4ce27654689d7c2688e8634e35be270c7f108970714df02855b": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "63316d412f34e0e64c56cff88531b139a904ec88a2e37790cb706a40a87b5cdc": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "7d3f80294fdb2e0df34e5217d75e86a7c75fbc007906c4955ec7ce226598cda7": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "9c07adafd65b2be4bf9efe721b0031f3dc7141b26d34c8a8058a9dfbccf316e8": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "9d4cf94e424df059a0801239104e0ba0fe3ca12a1b447f0e171857a6bfcba9c6": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "a7c99a0ade713b8c6f276f41e55a10ad6b566119b982e555068c6eff1c9eb706": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "a8f050ae0cca84a91878cddf3b607b5ff5e7018fd30cc07f390b053194afe9e4": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "c9ed563da4e6f46c983948d309a05a40df29a43f29896deb377312140a2d83f4": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "cf4d5634a28f3aba48e3c0cb1d7ceb53cb8d00ee03b3de8b8042bb00a9d0d795": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "d0473bd8dbfc2e8d894e7dd86c40bad654f5c10157db684c1191e67f5918fd8d": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "ee0cd1f832d79bf8533d429e11cc53a86ccc388ffd4f012a2f84b277d001d035": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "ffbf86cbfaeb54e5d2cf314e1d11c38ae2c67201413e035ccc3e2f71290a3bf1": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      }
+    },
+    "extractor": {
+      "090195ee6c9c7fd1c0bfb925e961b821402bd96935a385349643b7d37f188df0": [
+        "**Pattern:** func _physics_process.*\\n(?:.*\\n)*?.*_resolve_trigger_overlay\\(\\)\n**Why:** Reviewer required that fixture resolution (e.g. `_resolve_trigger_overlay`) be called once in `_ready()` after overlay instantiation, not lazily polled every frame in `_physics_process`. Per-frame null checks for statically-loaded fixtures are unnecessary lifecycle complexity.",
+        "**Pattern:** for tr in.*trigger_regions:(?:\\s*\\n)+(?!\\s*if tr != null and tr\\.floor)\n**Why:** Tenet 2 (Verticality as First-Class): iterating trigger_regions without filtering by `tr.floor == _active_fixture.geometry_floor` draws regions from other floors onto the active overlay, which is incorrect in a multi-floor environment.",
+        "**Pattern:** (?:^|\\s)([a-z][a-z0-9_]+\\.gd)\n**Why:** GDScript filenames must follow PascalCase.gd (Godot convention). A lowercase or snake_case `.gd` filename violates the repository style guide.",
+        "**Pattern:** for tr in _active_fixture\\.trigger_regions:\n**Why:** Reviewer required a null guard (`if _active_fixture.trigger_regions != null`) before iterating `trigger_regions` to prevent nil-dereference crashes when a fixture has uninitialized properties.",
+        "**Pattern:** _overworld_fixture\\.transition_fixtures\\.has\\(\n**Why:** Reviewer required a null check on `transition_fixtures` before calling `.has()` to avoid a nil-dereference runtime crash when the property is uninitialized."
+      ],
+      "0de27189c8b62e798c14e3b0a8181b77b4459c2224959d403d9f3915c62281ab": [
+        "**Pattern:** (?m)^\\s*const\\s+\\w*(?:OFFSET|SPEED|SCALE|DURATION|RADIUS|WEIGHT|FORCE|RATE|FACTOR|THRESHOLD|DELAY|DISTANCE|HEIGHT|WIDTH|MASS|DAMAGE|HEALTH|RANGE|ANGLE|POWER|ENERGY|TUNING|BAKE)\\w*\\s*[:=]\\s*[-\\d.]+\\n**Why:** Reviewer (citing Style Guide §5, §6, Tenet 3) required that gameplay/presentation tunables live in `.tres` resources or `tuning/*.json` config files rather than being hardcoded as constants in GDScript.",
+        "```yaml\nlanguage: gdscript\nrule:\n  pattern: |\n    func $FUNC($$$ARGS):\n      $$$BODY\n      add_child($NODE)\nconstraints:\n  FUNC:\n    regex: setup_.*\nnot:\n  precedes:\n    pattern: if $_.has_node($$$)\n```\n**Why:** Reviewers flagged that setup functions which unconditionally call `add_child` without first checking for an existing child named the same thing cause duplicate nodes and memory leaks on scene-tree re-entry (`_ready` re-fires after `remove_child`/`add_child` round-trips). An idempotency guard (`has_node` or `get_node_or_null`) must precede any `add_child` in such functions."
+      ],
+      "244ce877d07704411c3b780a3a6a5f5e48a3ab4442aa3c778a1f3cf238ebffc5": [
+        "**Pattern:** `debug_assert!`\n**Why:** In simulation/library code, `debug_assert!` is stripped in release builds, allowing NaN/Inf to propagate silently. Reviewer required `assert!` instead to prevent silent desynchronization between systems in production.",
+        "```yaml\nlanguage: rust\nrule:\n  pattern: debug_assert!($$$)\n```\n**Why:** Simulation and library code must use `assert!` (not `debug_assert!`) to verify floating-point finiteness and other invariants so corrupt data is caught in release builds, not only debug builds.",
+        "```yaml\nlanguage: rust\nrule:\n  pattern: |\n    if let Some($VAR) = $DICT.get($FIELD) {\n      let $ARR = $VAR.try_to::<VarArray>()$$$\n    }\n```\n**Why:** When a Godot dictionary field is present but `Nil`, `try_to::<VarArray>()` fails with a type error instead of treating the field as absent. Optional array fields must check `is_nil()` before attempting conversion, returning an empty collection for `Nil` values and a hard error only for genuinely wrong non-nil types (lesson 65acbca5).",
+        "```yaml\nlanguage: rust\nrule:\n  pattern: |\n    Some($V) => Some($V.try_to::<$T>()$$$)\n```\n**Why:** Optional Godot dictionary fields whose value may be `Nil` must guard with `Some(v) if v.is_nil() => None` before the `try_to` conversion; otherwise a `Nil` variant causes a spurious parse error instead of being treated as absent.",
+        "```yaml\nlanguage: rust\nrule:\n  pattern: .unwrap_or($DEFAULT)\n```\n**Why:** Required fields in parsed data structures must not silently default on parse errors. Reviewer required field-specific error returns (e.g. `BuildError::TriggerRegionInvalid`) instead of `unwrap_or()` sentinel defaults, which can pass downstream validation undetected.",
+        "```yaml\nlanguage: rust\nrule:\n  pattern: |\n    if let Ok(mut $BUF) = $SELF.$BUFFER.write() {\n      $$$\n    } else {\n      $$$\n    }\n```\n**Why:** A poisoned `RwLock` in simulation/library code indicates fatal upstream corruption. Silently no-oping (or only logging) on a poisoned lock causes silent desynchronization. Reviewer required a loud panic/`assert!` instead of a non-fatal fallback path."
+      ],
+      "499a51ae084a1a27a36df4500098e08092b135e0b1203cb92f1bea82ba6bb6c2": [],
+      "64d260fd62dc3815bd2c80c923ed711ee62d7162ae68258c6871259f4f1039af": [
+        "**Pattern:** `debug_assert!\\s*\\(.*\\.is_finite\\(\\)`\n**Why:** In simulation/library code, `debug_assert!` is stripped in release builds, allowing NaN or Inf to silently propagate to FFI buffers and the presentation layer. Use `assert!` instead to catch non-finite floating-point values in all build configurations."
+      ],
+      "6ef71de15aeb46397d90f8ef915f5dc5ad50ef88a65bab2083988a3dceb6a4cb": [],
+      "6fe1d0ac4d77ddd3b85c4670e91333ab740bc99564e8cce5a4af41a475545e53": [],
+      "7b6fc2a2e37addfcaf6f4ba9ec4385d179a08a979ae6f0a78a3b5dafd9fd7733": [],
+      "88a0ffda83d4ec912741a9cd4cc8dc547418e09bfd2222f4e8a6c944b67ed901": [],
+      "a862099b1b748b038ec97fc39958a478b52c8d0fc857b2b9e6a8e7c2e01e166e": [
+        "**Pattern:** (?s)^(?:[^\\n]*\\n){500,}\n**Why:** Repository Style Guide Rule 92 forbids any single source file from exceeding 500 lines; at the cap the file must be decomposed into child modules or separate Resources."
+      ],
+      "b19090dc600f0bdffe87944aa42b86882e6b11080dd9d3503acf6a8215bb7b65": [],
+      "bc09bb6889047d14a8bcd8fa57d566c0bd5a3625c7ce2326b9b35836ca6523d6": [],
+      "d722163712c992d6f343daaf108ddfdd67e05a8dd6c0e41ae305376612f7357a": [
+        "**Pattern:** `assert!`\\s*\\(.*\\.is_finite\\(\\).*\\)` is absent before `as u8` cast following float arithmetic\n**Why:** Reviewer required `assert!(value.is_finite() && value >= 0.0)` before casting intermediate float results to integer types in simulation/library code to prevent silent propagation of corrupt data from NaN/Inf truncation.",
+        "```yaml\nlanguage: rust\nrule:\n  pattern: $X as u8\n  inside:\n    kind: function_item\nnot:\n  any:\n    - has:\n        pattern: assert!($X.is_finite())\n        stopBy: end\n    - has:\n        pattern: assert!($X >= 0.0)\n        stopBy: end\n```\n**Why:** Before casting a float to u8, the intermediate value must be asserted finite and non-negative to prevent undefined truncation of NaN/Inf values.",
+        "**Pattern:** `fn quantize_health_fraction`[\\s\\S]*?`health\\.max`[\\s\\S]*?(?!assert!)\n**Why:** Reviewer required assert! guards on both health.current and health.max (finite + positive) before any arithmetic in quantize_health_fraction to prevent silent corrupt-data propagation.",
+        "**Pattern:** `varying flat `\n**Why:** In Godot 4 Shading Language, interpolation qualifiers like `flat` must precede `varying` (i.e., `flat varying`). Using `varying flat` causes a shader compilation error.",
+        "**Pattern:** `\\.is_nan\\(\\)|if.*\\.is_finite\\(\\).*\\{.*return 0`\n**Why:** Reviewer required runtime assert! instead of silent fallback (returning 0) for non-finite float inputs in simulation library code; silent handling causes system desynchronization."
+      ],
+      "f27a922f04bef75ce41f670548596a2b056bc22a85196d7cc171492ebfa012ae": [
+        "**Pattern:** `debug_assert!`\n**Why:** Reviewer required `assert!` instead of `debug_assert!` in simulation/library code so that non-finite float checks are enforced in release builds, preventing silent propagation of corrupt data and system desynchronization.",
+        "```yaml\nlanguage: rust\nrule:\n  pattern: |\n    $VEL.$COMP *= $MULT;\n  not:\n    follows:\n      pattern: let $OLD = $VEL.$COMP;\n  inside:\n    kind: closure_expression\n```\n**Why:** After scaling a velocity component, a finite-value `assert!` must follow. Reviewer required capturing raw input values in the diagnostic message so accuracy is preserved if integration logic changes.",
+        "```yaml\nlanguage: rust\nrule:\n  pattern: |\n    vel.dx *= $M;\n    vel.dy *= $M;\n  not:\n    follows:\n      pattern: vel.dz *= $M;\n```\n**Why:** Under the Verticality-as-First-Class tenet, all three velocity components (dx, dy, dz) must be scaled together. Scaling only dx/dy silently ignores the vertical component and violates the architectural invariant that world-space velocities reason about Z.",
+        "**Pattern:** `spawn_one_agent`[\\s\\S]*?`speed_multiplier`[^;]*;(?![\\s\\S]*?assert!\\(\\s*speed_multiplier\\.is_finite\\(\\))\n**Why:** Reviewer required a runtime `assert!(speed_multiplier.is_finite() && speed_multiplier > 0.0, …)` guard at the spawn boundary to catch non-finite or non-positive multipliers loudly rather than silently propagating corrupt data."
+      ]
+    }
+  }
+}
