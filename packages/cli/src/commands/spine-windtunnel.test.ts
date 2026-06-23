@@ -20,11 +20,13 @@ import {
 } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
+import { computeArtifactHash, type ReplayArtifact } from './spine-llm-replay.js';
 import {
   assertCorpusCompleteness,
   buildReadStrategy,
   type CertifyingCorpus,
   computeFixtureSha,
+  computeReplaySeal,
   enumeratePrMetas,
   isCommitAncestor,
   runCertifyingEngine,
@@ -654,5 +656,58 @@ describe('runCertifyingEngine (5c-i — certifying real-engine path)', () => {
     const result = await runCertifyingEngine(certLock, fixedRead, () => corpus);
     const negFirings = result.firings.filter((f: RuleFiring) => f.controlKind === 'negative');
     expect(negFirings).toHaveLength(1);
+  });
+});
+
+// ─── computeReplaySeal (#2237 papercut-2 — freeze auto-seals llmReplaySha) ───
+
+describe('computeReplaySeal (#2237 papercut-2 — llm-replay seal hash)', () => {
+  function makeReplayArtifact(): ReplayArtifact {
+    return {
+      kind: 'llm-replay.v1',
+      provenance: {
+        promptTemplateHash: 'p'.repeat(64),
+        systemPromptHash: 's'.repeat(64),
+        provider: 'anthropic',
+        model: 'stub-model-1',
+        temperature: 0,
+        orchestratorVersion: 'stub-orchestrator-0',
+        adapterKind: 'extractor+classifier',
+        keyVersion: 'v1',
+        totemVersion: '0.0.0-test',
+      },
+      records: { classifier: {}, extractor: {} },
+    };
+  }
+
+  it('returns null when the replay fixture is absent (record has not run — cannot seal)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-seal-'));
+    createdDirs.push(dir);
+    expect(await computeReplaySeal(path.join(dir, 'llm-replay.v1.json'))).toBeNull();
+  });
+
+  it('returns the computeArtifactHash of the frozen fixture (the same L2 hash the run re-verifies)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-seal-'));
+    createdDirs.push(dir);
+    const artifact = makeReplayArtifact();
+    const replayPath = path.join(dir, 'llm-replay.v1.json');
+    fs.writeFileSync(replayPath, JSON.stringify(artifact), 'utf-8');
+    expect(await computeReplaySeal(replayPath)).toBe(computeArtifactHash(artifact));
+  });
+
+  it('throws a loud TotemError on invalid JSON (no raw SyntaxError escapes freeze)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-seal-'));
+    createdDirs.push(dir);
+    const replayPath = path.join(dir, 'llm-replay.v1.json');
+    fs.writeFileSync(replayPath, '{ this is not json', 'utf-8');
+    await expect(computeReplaySeal(replayPath)).rejects.toThrow(/not valid JSON/);
+  });
+
+  it('throws a loud TotemError on a schema-invalid fixture (no raw ZodError escapes freeze)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-seal-'));
+    createdDirs.push(dir);
+    const replayPath = path.join(dir, 'llm-replay.v1.json');
+    fs.writeFileSync(replayPath, JSON.stringify({ kind: 'wrong-kind' }), 'utf-8');
+    await expect(computeReplaySeal(replayPath)).rejects.toThrow(/schema validation/);
   });
 });

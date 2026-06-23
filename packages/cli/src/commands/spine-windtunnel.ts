@@ -10,6 +10,7 @@ import {
   buildReplayCorpusProvider,
   GROUND_TRUTH_FILE,
   PR_DIFFS_FILE,
+  REPLAY_FILE,
 } from './spine-cert-run-corpus.js';
 
 // ─── Named constants ─────────────────────────────────
@@ -37,7 +38,7 @@ export interface FreezeOptions {
  * the assertion is skipped with a loud warning.
  */
 export async function freezeCommand(opts: FreezeOptions): Promise<void> {
-  const { WindtunnelLockSchema, safeExec, resolveGitRoot, TotemError } =
+  const { WindtunnelLockSchema, safeExec, resolveGitRoot, TotemError, canonicalStringify } =
     await import('@mmnto/totem');
 
   const cwd = process.cwd();
@@ -224,8 +225,89 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
     );
   }
 
+  // #2237 papercut-2: auto-SEAL controls.integrity.llmReplaySha. The two-phase
+  // lock design (materialize comment: "freeze seals it post-record") makes freeze
+  // the sealer — `record` emits the hash but does NOT stamp the lock, so until now
+  // the operator had to hand-edit it. Compute the hash the SAME way the run verifies
+  // it (`computeArtifactHash` over the parsed `llm-replay.v1.json`, the EXTERNAL L2
+  // expected-hash `buildReplayAdapters` re-checks) and stamp it in. Unlike the other
+  // integrity fields (stamped by their producers — fixtureSha/prDiffsSha by
+  // materialize, corpusDispositionsSha by fetch, groundTruthSha by derive),
+  // llmReplaySha has no producer-side stamp, so freeze owns it.
+  const replayPath = path.join(path.dirname(lockPath), REPLAY_FILE);
+  const computed = await computeReplaySeal(replayPath);
+  if (computed !== null) {
+    const current = lock.controls.integrity.llmReplaySha;
+    if (current === computed) {
+      console.error(`[WindtunnelFreeze] llm-replay.v1.json hash verified + sealed: ${computed}`);
+    } else {
+      // Stamp into the RAW parsed object (not the Zod-parsed `lock`) so every field
+      // — incl. the top-level `schema` key — survives the round-trip; canonicalStringify
+      // sorts keys, so the new llmReplaySha lands in its sorted position (one-line diff)
+      // and the serialization is byte-identical to materialize's writer.
+      (rawObj as { controls: { integrity: Record<string, unknown> } }).controls.integrity[
+        'llmReplaySha'
+      ] = computed;
+      // Atomic write (tmp + rename) — the lock is a critical artifact; a direct
+      // write interrupted mid-flush would corrupt it and break every downstream
+      // cert run (gemini). Mirrors materialize's `writeCanonical`.
+      const tmpLock = `${lockPath}.tmp`;
+      fs.writeFileSync(tmpLock, `${canonicalStringify(rawObj, 2)}\n`, 'utf-8');
+      fs.renameSync(tmpLock, lockPath);
+      console.error(
+        `[WindtunnelFreeze] Sealed controls.integrity.llmReplaySha = ${computed} ` +
+          `(was ${current ?? 'absent'}) — lock updated; re-commit to refresh the freeze proof (C3).`,
+      );
+    }
+  } else if (lock.phase === 'certifying') {
+    // Mirror the prDiffsSha/groundTruthSha absent-on-certifying warnings: the run is
+    // replay-only and hard-requires the fixture + its sealed hash.
+    console.error(
+      `[WindtunnelFreeze] WARNING: ${REPLAY_FILE} is absent — cannot seal llmReplaySha; the certifying run will hard-fail. Run \`spine windtunnel record\` first.`,
+    );
+  }
+
   console.error(`[WindtunnelFreeze] DONE — lock at ${lockPath} is schema-valid.`);
   console.error(`  Commit the lock file to establish the freeze proof (C3).`);
+}
+
+/**
+ * #2237 papercut-2: compute the llm-replay seal hash `freeze` stamps into
+ * `controls.integrity.llmReplaySha`. Returns `computeArtifactHash` over the parsed
+ * `llm-replay.v1.json` at `replayPath` — byte-for-byte the SAME external L2 hash
+ * `buildReplayAdapters` re-verifies at run time — or `null` when the fixture is
+ * absent (record hasn't run yet). Pure: no lock write (freeze owns the stamp), so
+ * the hash derivation is unit-testable without a full lock/commit/clone setup.
+ */
+export async function computeReplaySeal(replayPath: string): Promise<string | null> {
+  if (!fs.existsSync(replayPath)) return null;
+  const { computeArtifactHash, ReplayArtifactSchema } = await import('./spine-llm-replay.js');
+  const { TotemError } = await import('@mmnto/totem');
+  // A malformed/stale fixture must fail loud + actionable, not propagate a raw
+  // SyntaxError/ZodError out of freeze (gemini/greptile). Use the spine family's
+  // TotemError('CONFIG_INVALID') — matching freeze's own lock-read + record's
+  // readJsonFile — not artifact-storage's TotemParseError.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(replayPath, 'utf-8'));
+  } catch (err) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze: ${REPLAY_FILE} at ${replayPath} is unreadable or not valid JSON — cannot compute the llmReplaySha seal.`,
+      'Re-run `spine windtunnel record` to regenerate a valid llm-replay fixture.',
+      err,
+    );
+  }
+  const result = ReplayArtifactSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Wind-tunnel freeze: ${REPLAY_FILE} failed llm-replay schema validation — the seal cannot be computed over a malformed fixture.`,
+      'Re-run `spine windtunnel record` to regenerate a schema-valid llm-replay fixture.',
+      result.error,
+    );
+  }
+  return computeArtifactHash(result.data);
 }
 
 // ─── run command ─────────────────────────────────────
