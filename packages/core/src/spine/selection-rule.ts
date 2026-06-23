@@ -170,6 +170,38 @@ export function isBotIdentity(author: string): boolean {
   return name.endsWith('[bot]') || /\[bot\]@/.test(a);
 }
 
+/**
+ * The ALLOWLIST of recognized review-FINDING bots (strategy#709 yield-fix β). Their
+ * inline review comments are legitimate mining SUBSTRATE for a bot-reviewed cert
+ * corpus — UNLIKE generic `[bot]` automation accounts (renovate / dependabot),
+ * whose PR-level noise must never count as a substantive review comment. Logins are
+ * the GitHub `author.login` form (NO `[bot]` suffix for GCA/CR app comments), so a
+ * `[bot]`-suffixed variant of the same tool is matched too. Lowercased identities.
+ */
+const REVIEW_FINDING_BOT_LOGINS = new Set(['gemini-code-assist', 'coderabbitai', 'coderabbit']);
+
+/**
+ * Recognize an ALLOWLISTED review-finding bot (gemini-code-assist / coderabbitai),
+ * with or without a `[bot]` suffix and with or without a trailing ` <email>`.
+ *
+ * DELIBERATELY SEPARATE from `isBotIdentity` (panel OQ-β1): `isBotIdentity` gates
+ * CORPUS MEMBERSHIP (it excludes `[bot]`-AUTHORED PRs) and stays unchanged —
+ * coupling review-comment substrate to commit-author exclusion would be the wrong
+ * dependency. This predicate is a NEW review-comment classifier used ONLY for
+ * `authorKind` tagging, the substantive-comment count, and chrome normalization.
+ *
+ * ALLOWLIST not denylist (panel OQ-β2): it fails CONSERVATIVE — a not-yet-listed
+ * review tool undercounts (drops to "no substrate") rather than laundering every
+ * future automation account in as a substantive reviewer. `isBotIdentity('gemini-
+ * code-assist')` stays `false` (no `[bot]` suffix); `reviewBotIdentity` returns
+ * `true` for it; `reviewBotIdentity('dependabot[bot]')` returns `false`.
+ */
+export function reviewBotIdentity(author: string): boolean {
+  const a = author.replace(/\r/g, '').trim().toLowerCase();
+  const name = a.replace(/\s*<[^>]*>\s*$/, '').replace(/\[bot\]$/, '');
+  return REVIEW_FINDING_BOT_LOGINS.has(name);
+}
+
 const REVERT_BODY_REGEX = /^This reverts commit ([0-9a-f]{7,40})\b/im;
 
 /** Extract the reverted target SHA from a `This reverts commit <sha>` body line. */

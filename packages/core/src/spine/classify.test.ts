@@ -9,15 +9,23 @@ import {
   runClassifyStage,
 } from './classify.js';
 import type { DraftCandidate, ExtractStageResult } from './extract.js';
-import type { MinerLedgers, SplitLedger } from './ledgers.js';
+import type { DraftSourceKind, MinerLedgers, SplitLedger } from './ledgers.js';
 import { type FmClause, runFalsificationHarness } from './miner-harness.js';
 
 const sha = (n: number): string => String(n).padStart(40, '0');
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function draft(pr: number, dslSource: string): DraftCandidate {
-  return { provenance: { mergedPr: pr, reviewThread: `rt-${pr}`, commitSha: sha(pr) }, dslSource };
+function draft(
+  pr: number,
+  dslSource: string,
+  sourceKind: DraftSourceKind = 'human',
+): DraftCandidate {
+  return {
+    provenance: { mergedPr: pr, reviewThread: `rt-${pr}`, commitSha: sha(pr) },
+    dslSource,
+    sourceKind,
+  };
 }
 
 const STRUCT = '**Pattern:** no-foo'; // marker the dsl-keyed fixture classifier reads as structural
@@ -124,6 +132,7 @@ describe('runClassifyStage — mint + ledgers', () => {
         routing: 'compile',
         classifierLedgerRef: 'clr-1-0',
         unverified: true,
+        sourceKind: 'human', // slice β: carried from the draft (default human here)
       },
     ]);
     expect(r.classifierLedger.entries).toEqual([
@@ -142,6 +151,17 @@ describe('runClassifyStage — mint + ledgers', () => {
     });
     expect(r.candidates[0].classifierDisposition).toBe('behavioral');
     expect(r.emissionLedger.entries[0].routing).toBe('rag-only');
+  });
+
+  it('slice β: the draft sourceKind is serialized onto its emission row (panel OQ-β4)', async () => {
+    const r = await runClassifyStage(
+      extractResult({
+        drafts: [draft(1, STRUCT, 'bot'), draft(2, BEHAVE, 'mixed')],
+      }),
+      splitLedger(),
+      { classifier: always(asStructural) },
+    );
+    expect(r.emissionLedger.entries.map((e) => e.sourceKind)).toEqual(['bot', 'mixed']);
   });
 
   it('join holds: every emission classifierLedgerRef resolves to a classifier entry with the same disposition', async () => {
@@ -287,6 +307,7 @@ describe('runClassifyStage — fail-loud provenance re-check', () => {
     const forged: DraftCandidate = {
       provenance: { mergedPr: 1, reviewThread: 'rt-1', commitSha: sha(99) },
       dslSource: STRUCT,
+      sourceKind: 'human',
     };
     await expect(
       runClassifyStage(extractResult({ drafts: [forged] }), splitLedger(), {

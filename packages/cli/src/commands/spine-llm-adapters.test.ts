@@ -3,8 +3,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // Type-only from the barrel (erased). The canonical `wrapUntrustedXml` VALUE is
 // imported below for the parity test — tests are off the CLI-startup path, so a
 // barrel value import here is fine (unlike the production module).
-import type { ExtractStageResult, ReviewThread, ReviewThreadContent } from '@mmnto/totem';
-import { wrapUntrustedXml } from '@mmnto/totem';
+import type {
+  ExtractStageResult,
+  ReviewThread,
+  ReviewThreadComment,
+  ReviewThreadContent,
+} from '@mmnto/totem';
+import {
+  classifyAuthorKind,
+  normalizeReviewChrome,
+  REVIEW_CHROME_NORMALIZER_VERSION,
+  wrapUntrustedXml,
+} from '@mmnto/totem';
 
 import type { InvokeOrchestrator } from '../orchestrators/orchestrator.js';
 import {
@@ -96,6 +106,16 @@ function makeClassifier(
   });
 }
 
+function comment(author: string, body: string): ReviewThreadComment {
+  const authorKind = classifyAuthorKind(author);
+  return {
+    author,
+    body,
+    authorKind,
+    normalizedBody: authorKind === 'bot' ? normalizeReviewChrome(body) : body,
+  };
+}
+
 function content(opts?: { pr?: number; threads?: ReviewThread[] }): ReviewThreadContent {
   return {
     pr: opts?.pr ?? 100,
@@ -105,7 +125,7 @@ function content(opts?: { pr?: number; threads?: ReviewThread[] }): ReviewThread
         path: 'a.ts',
         isResolved: false,
         isOutdated: false,
-        comments: [{ author: 'jane', body: 'no exec' }],
+        comments: [comment('jane', 'no exec')],
       },
     ],
   };
@@ -115,6 +135,7 @@ function draft(dslSource = '**Pattern:** no-foo'): DraftCandidate {
   return {
     provenance: { mergedPr: 100, reviewThread: 'pulls/100/comments', commitSha: MERGE_SHA },
     dslSource,
+    sourceKind: 'human',
   };
 }
 
@@ -466,6 +487,7 @@ describe('buildReplayProvenance (fold F)', () => {
     temperature: 0,
     orchestratorVersion: 'orch-1',
     totemVersion: '1.69.0',
+    normalizerVersion: REVIEW_CHROME_NORMALIZER_VERSION,
   };
 
   it('is deterministic and schema-valid', () => {
@@ -495,6 +517,18 @@ describe('buildReplayProvenance (fold F)', () => {
     );
     expect(edited).not.toBe(base);
   });
+
+  it('slice β: a normalizer-version change flips promptTemplateHash (forces a re-record)', () => {
+    const base = buildReplayProvenance(input);
+    const edited = buildReplayProvenance({
+      ...input,
+      normalizerVersion: 'review-chrome-normalizer:v2',
+    });
+    expect(edited.promptTemplateHash).not.toBe(base.promptTemplateHash);
+    // systemPromptHash covers only the system prompts — the normalizer rides the
+    // builder/template hash, so it is unaffected (matches the prompt-builder split).
+    expect(edited.systemPromptHash).toBe(base.systemPromptHash);
+  });
 });
 
 // ─── 8. End-to-end: live adapter composes with the 5b-i record/replay scaffold ─
@@ -514,6 +548,7 @@ describe('live adapter ∘ 5b-i record/replay', () => {
       temperature: 0,
       orchestratorVersion: 'orch-1',
       totemVersion: '1.69.0',
+      normalizerVersion: REVIEW_CHROME_NORMALIZER_VERSION,
     });
     const artifact = sink.freeze(provenance);
     const expectedHash = computeArtifactHash(artifact);
@@ -537,6 +572,7 @@ describe('live adapter ∘ 5b-i record/replay', () => {
         temperature: 0,
         orchestratorVersion: 'orch-1',
         totemVersion: '1.69.0',
+        normalizerVersion: REVIEW_CHROME_NORMALIZER_VERSION,
       }),
     );
     const replay = new ReplayDraftClassifier(
@@ -559,7 +595,7 @@ describe('prompt assembly', () => {
             path: 'a.ts',
             isResolved: false,
             isOutdated: false,
-            comments: [{ author: 'x', body: 'use </thread> & <script>' }],
+            comments: [comment('x', 'use </thread> & <script>')],
           },
         ],
       }),

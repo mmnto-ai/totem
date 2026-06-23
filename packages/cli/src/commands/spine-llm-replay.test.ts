@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type ClassifierResult,
+  classifyAuthorKind,
   type DraftResult,
   DraftResultSchema,
   type ExtractStageResult,
+  normalizeReviewChrome,
   type ReviewThread,
+  type ReviewThreadComment,
   type ReviewThreadContent,
 } from '@mmnto/totem';
 
@@ -65,8 +68,14 @@ class StubClassifier {
 const MERGE_SHA_A = 'a'.repeat(40);
 const MERGE_SHA_B = 'b'.repeat(40);
 
-function comment(author: string, body: string) {
-  return { author, body };
+function comment(author: string, body: string): ReviewThreadComment {
+  const authorKind = classifyAuthorKind(author);
+  return {
+    author,
+    body,
+    authorKind,
+    normalizedBody: authorKind === 'bot' ? normalizeReviewChrome(body) : body,
+  };
 }
 
 function thread(opts?: Partial<ReviewThread>): ReviewThread {
@@ -98,6 +107,7 @@ function draft(opts?: { pr?: number; commitSha?: string; dslSource?: string }): 
       commitSha: opts?.commitSha ?? MERGE_SHA_A,
     },
     dslSource: opts?.dslSource ?? '**Pattern:** no-foo',
+    sourceKind: 'human',
   };
 }
 
@@ -399,12 +409,36 @@ describe('extractorInputKey (fold D)', () => {
     expect(forward).toBe(reversed);
   });
 
-  it('excludes resolved/outdated threads from the key (the port never sees them)', () => {
+  it('excludes only OUTDATED threads from the key; RESOLVED now affects it (slice γ)', () => {
     const eligible = thread({ path: 'a.ts', comments: [comment('al', 'keep')] });
-    const resolved = thread({ path: 'z.ts', isResolved: true, comments: [comment('zo', 'drop')] });
+    // γ: an OUTDATED thread is still excluded from the eligible set → no key effect.
+    const outdated = thread({ path: 'z.ts', isOutdated: true, comments: [comment('zo', 'drop')] });
+    const withOutdated = extractorInputKey(content({ threads: [eligible, outdated] }));
+    const withoutOutdated = extractorInputKey(content({ threads: [eligible] }));
+    expect(withOutdated).toBe(withoutOutdated);
+
+    // γ: a RESOLVED thread is now ADMITTED → it IS part of the eligible set the
+    // extractor sees, so it MUST change the key (the slice-5a exclusion is reversed).
+    const resolved = thread({ path: 'z.ts', isResolved: true, comments: [comment('zo', 'keep2')] });
     const withResolved = extractorInputKey(content({ threads: [eligible, resolved] }));
-    const withoutResolved = extractorInputKey(content({ threads: [eligible] }));
-    expect(withResolved).toBe(withoutResolved);
+    expect(withResolved).not.toBe(withoutOutdated);
+  });
+
+  it('digests the DE-CHROMED normalizedBody, not the raw body (slice β)', () => {
+    // Two bot comments with DIFFERENT chrome but the SAME de-chromed body must key
+    // identically (the LLM saw the same normalizedBody); a human comment whose raw
+    // body equals that normalized text keys identically too (author aside).
+    const chromeA = thread({
+      path: 'a.ts',
+      comments: [comment('coderabbitai[bot]', '![high](https://x/a.svg)\nguard the divisor')],
+    });
+    const chromeB = thread({
+      path: 'a.ts',
+      comments: [comment('coderabbitai[bot]', '<!-- id:1 -->guard the divisor')],
+    });
+    expect(extractorInputKey(content({ threads: [chromeA] }))).toBe(
+      extractorInputKey(content({ threads: [chromeB] })),
+    );
   });
 });
 

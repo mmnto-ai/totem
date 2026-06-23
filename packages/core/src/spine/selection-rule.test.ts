@@ -9,6 +9,7 @@ import {
   parseRevertSha,
   prSetsEqual,
   resolveSelectionRule,
+  reviewBotIdentity,
   SelectionRuleParseError,
   selectionRulePredicate,
 } from './selection-rule.js';
@@ -111,6 +112,43 @@ describe('isBotIdentity — [bot] suffix only', () => {
   it('tolerates trailing CR/whitespace', () => {
     expect(isBotIdentity('dependabot[bot]\r')).toBe(true);
     expect(isBotIdentity('  dependabot[bot]  ')).toBe(true);
+  });
+});
+
+// ─── reviewBotIdentity (slice β allowlist) ───────────
+
+describe('reviewBotIdentity — recognized review-finding bots only (allowlist)', () => {
+  it('recognizes gemini-code-assist / coderabbitai with or without a [bot] suffix or email', () => {
+    expect(reviewBotIdentity('gemini-code-assist')).toBe(true); // no [bot] suffix
+    expect(reviewBotIdentity('gemini-code-assist[bot]')).toBe(true);
+    expect(reviewBotIdentity('coderabbitai')).toBe(true);
+    expect(reviewBotIdentity('coderabbitai[bot]')).toBe(true);
+    expect(reviewBotIdentity('coderabbitai[bot] <bot@coderabbit.ai>')).toBe(true);
+    expect(reviewBotIdentity('CodeRabbitAI')).toBe(true); // case-insensitive
+  });
+
+  it('does NOT recognize generic / noise automation accounts (denylist stays separate)', () => {
+    expect(reviewBotIdentity('dependabot[bot]')).toBe(false);
+    expect(reviewBotIdentity('renovate[bot]')).toBe(false);
+    expect(reviewBotIdentity('some-future-bot[bot]')).toBe(false);
+  });
+
+  it('does NOT recognize humans', () => {
+    expect(reviewBotIdentity('Jane Doe')).toBe(false);
+    expect(reviewBotIdentity('Jane Doe <jane@example.com>')).toBe(false);
+    expect(reviewBotIdentity('')).toBe(false);
+  });
+
+  it('is DISJOINT from isBotIdentity for the review bots (the OQ-β1 separation)', () => {
+    // The whole point: GCA/CR carry NO [bot] suffix, so isBotIdentity misses them
+    // (they would have been counted as "human" pre-β) — reviewBotIdentity is the
+    // dedicated classifier that admits them as substrate without coupling to the
+    // commit-author corpus-membership gate.
+    expect(isBotIdentity('gemini-code-assist')).toBe(false);
+    expect(reviewBotIdentity('gemini-code-assist')).toBe(true);
+    // …and a noise [bot] is the inverse: a bot to isBotIdentity, not a review bot.
+    expect(isBotIdentity('dependabot[bot]')).toBe(true);
+    expect(reviewBotIdentity('dependabot[bot]')).toBe(false);
   });
 });
 

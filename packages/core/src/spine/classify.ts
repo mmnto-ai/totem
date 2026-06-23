@@ -222,6 +222,9 @@ export async function runClassifyStage(
       routing,
       classifierLedgerRef,
       unverified: true,
+      // Carry the slice-β substrate provenance from the draft onto its §8 emission
+      // row (panel OQ-β4 — the emission ledger is its persisted home, single hop).
+      sourceKind: draft.sourceKind,
     });
     classifierEntries.push({
       // The classifier entry's own ref = the join key the emission entry points to.

@@ -262,7 +262,7 @@ export async function buildLiveRecordDeps(
   config: LiveRecordConfig,
 ): Promise<RecordDeps> {
   const { createOrchestrator } = await import('../orchestrators/orchestrator.js');
-  const { TotemError } = await import('@mmnto/totem');
+  const { TotemError, REVIEW_CHROME_NORMALIZER_VERSION } = await import('@mmnto/totem');
   const {
     LiveDraftExtractor,
     LiveDraftClassifier,
@@ -329,6 +329,7 @@ export async function buildLiveRecordDeps(
       temperature: 0,
       orchestratorVersion: config.totemVersion,
       totemVersion: config.totemVersion,
+      normalizerVersion: REVIEW_CHROME_NORMALIZER_VERSION,
     }),
   };
 }

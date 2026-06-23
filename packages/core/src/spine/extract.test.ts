@@ -1,20 +1,39 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyAuthorKind,
   type DraftExtractor,
   type DraftResult,
   type ExtractStageResult,
   type FetchResult,
   type ReviewThread,
+  type ReviewThreadComment,
   type ReviewThreadContent,
   type ReviewThreadSource,
   runExtractStage,
 } from './extract.js';
+import { normalizeReviewChrome } from './review-normalize.js';
 import { type SplitArtifact, SplitArtifactSchema } from './split.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 const sha = (n: number): string => String(n).padStart(40, '0');
+
+/**
+ * Build a slice-β-enriched comment exactly as the CLI mapping boundary does:
+ * `authorKind` via core `classifyAuthorKind`, `normalizedBody` = de-chromed for a
+ * recognized review bot, else the raw body. Keeps test comments honest w.r.t. the
+ * shipped classification rather than hand-stamping fields.
+ */
+function comment(author: string, body: string): ReviewThreadComment {
+  const authorKind = classifyAuthorKind(author);
+  return {
+    author,
+    body,
+    authorKind,
+    normalizedBody: authorKind === 'bot' ? normalizeReviewChrome(body) : body,
+  };
+}
 
 function split(overrides?: Partial<SplitArtifact>): SplitArtifact {
   return SplitArtifactSchema.parse({
@@ -54,7 +73,7 @@ function content(pr: number, overrides?: Partial<ReviewThreadContent>): ReviewTh
     threads: [
       {
         path: 'packages/core/src/x.ts',
-        comments: [{ author: 'Jane Doe', body: 'a real review note' }],
+        comments: [comment('Jane Doe', 'a real review note')],
         isResolved: false,
         isOutdated: false,
       },
@@ -71,7 +90,7 @@ function thread(
 ): ReviewThread {
   return {
     path: 'packages/core/src/x.ts',
-    comments: [{ author, body }],
+    comments: [comment(author, body)],
     isResolved: flags?.isResolved ?? false,
     isOutdated: flags?.isOutdated ?? false,
   };
@@ -203,12 +222,14 @@ describe('runExtractStage — drop reason codes', () => {
     expect(dropsFor(r, 1)[0]!.reasonCode).toBe('truncated');
   });
 
-  it('truncated: a bot-only thread does not satisfy ≥1 human comment (fold 5)', async () => {
+  it('truncated: a NOISE-bot-only thread does not satisfy ≥1 substantive comment (slice β denylist)', async () => {
+    // dependabot/renovate are NOT in the review-finding allowlist → still excluded
+    // (unlike gemini/CR, which now count — see the slice-β substrate tests).
     const botThread = content(1, {
       threads: [
         {
           path: 'x.ts',
-          comments: [{ author: 'coderabbitai[bot]', body: 'nit: rename this' }],
+          comments: [comment('dependabot[bot]', 'bump lodash to 4.17.21')],
           isResolved: false,
           isOutdated: false,
         },
@@ -226,7 +247,7 @@ describe('runExtractStage — drop reason codes', () => {
       threads: [
         {
           path: 'x.ts',
-          comments: [{ author: 'Jane Doe', body: '   ' }],
+          comments: [comment('Jane Doe', '   ')],
           isResolved: false,
           isOutdated: false,
         },
@@ -278,17 +299,21 @@ describe('runExtractStage — drop reason codes', () => {
     expect(r.drafts).toEqual([]);
   });
 
-  it('unparseable: the extractor produced no draft from a complete thread — records the NO-DRAFT cause', async () => {
+  it('no-draft: the extractor produced no draft from a complete thread — records cause + sourceKind (slice β)', async () => {
     const r = await runExtractStage(
       solo(),
       deps(spySource([1]), fixtureExtractor(new Map([[1, []]]))),
     );
     const drop = dropsFor(r, 1)[0]!;
-    expect(drop.reasonCode).toBe('unparseable');
+    // Slice β: the zero-draft drop is now its own `no-draft` reason code (was the
+    // misnamed `unparseable`), with the precise sub-cause + the substrate tag.
+    expect(drop.reasonCode).toBe('no-draft');
     // The Tenet-19 diagnostic is carried onto the drop (fixtureExtractor tags an
     // empty list 'all-filtered') — never silently dropped as a bare [].
     expect(drop.noDraftCause).toBe('all-filtered');
     expect(drop.detail).toContain('all-filtered');
+    // The default `content(1)` thread is a single human comment → human substrate.
+    expect(drop.sourceKind).toBe('human');
   });
 
   it('boundary-parse fails loud on a contract-violating DraftResult (empty-without-cause)', async () => {
@@ -429,61 +454,61 @@ function recordingExtractor(byPr?: Map<number, string[]>): DraftExtractor & {
   };
 }
 
-describe('runExtractStage — resolution-eligibility gate (slice 5a)', () => {
-  it('all-resolved-but-had-human-content drops resolved-rejected (not truncated)', async () => {
-    const allResolved = content(1, {
+describe('runExtractStage — eligibility gate (slice γ: RESOLVED admitted, only OUTDATED excluded)', () => {
+  it('a RESOLVED thread is now ADMITTED (drafts; reaches the extractor input)', async () => {
+    const resolved = content(1, {
+      threads: [thread('Jane Doe', 'a real review note', { isResolved: true })],
+    });
+    const extractor = recordingExtractor();
+    const r = await runExtractStage(
+      solo(),
+      deps(spySource([1], new Map([[1, { kind: 'ok', content: resolved }]])), extractor),
+    );
+    expect(r.drafts).toHaveLength(1);
+    expect(dropsFor(r, 1)).toEqual([]);
+    // γ: the resolved thread is no longer pre-filtered — the extractor saw it.
+    expect(extractor.seen[0]!.threads).toHaveLength(1);
+    expect(extractor.seen[0]!.threads[0]!.isResolved).toBe(true);
+  });
+
+  it('all-OUTDATED-but-had-substantive-content drops outdated-rejected (not truncated)', async () => {
+    const allOutdated = content(1, {
       threads: [
-        thread('Jane Doe', 'a real review note', { isResolved: true }),
+        thread('Jane Doe', 'a real review note', { isOutdated: true }),
         thread('John Roe', 'another note', { isOutdated: true }),
       ],
     });
     const r = await runExtractStage(
       solo(),
       deps(
-        spySource([1], new Map([[1, { kind: 'ok', content: allResolved }]])),
+        spySource([1], new Map([[1, { kind: 'ok', content: allOutdated }]])),
         fixtureExtractor(),
       ),
     );
-    expect(dropsFor(r, 1)[0]!.reasonCode).toBe('resolved-rejected');
+    const drop = dropsFor(r, 1)[0]!;
+    expect(drop.reasonCode).toBe('outdated-rejected');
+    expect(drop.detail).toContain('2 of 2 threads outdated');
+    expect(drop.detail).toContain('0 eligible substantive comments remain');
     expect(r.drafts).toEqual([]);
   });
 
-  it('the resolved-rejected drop detail carries concrete resolution evidence', async () => {
-    const allResolved = content(1, {
-      threads: [
-        thread('Jane Doe', 'a real review note', { isResolved: true }),
-        thread('John Roe', 'another note', { isOutdated: true }),
-      ],
+  it('thin-to-begin-with (0 substantive comments before the gate) stays truncated, not outdated-rejected', async () => {
+    // A noise-bot-only outdated thread — the gate is not what emptied it; it was
+    // already thin (dependabot is not a recognized review bot). Keep `truncated`.
+    const botOutdated = content(1, {
+      threads: [thread('dependabot[bot]', 'bump dep', { isOutdated: true })],
     });
     const r = await runExtractStage(
       solo(),
       deps(
-        spySource([1], new Map([[1, { kind: 'ok', content: allResolved }]])),
-        fixtureExtractor(),
-      ),
-    );
-    const detail = dropsFor(r, 1)[0]!.detail ?? '';
-    expect(detail).toContain('2 of 2 threads resolved/outdated');
-    expect(detail).toContain('0 eligible human comments remain');
-  });
-
-  it('thin-to-begin-with (0 human comments before the gate) stays truncated, not resolved-rejected', async () => {
-    // A resolved thread that ALSO had no human comment — the resolution gate is
-    // not what emptied it; it was already thin. Keep the existing truncated path.
-    const botResolved = content(1, {
-      threads: [thread('coderabbitai[bot]', 'nit: rename this', { isResolved: true })],
-    });
-    const r = await runExtractStage(
-      solo(),
-      deps(
-        spySource([1], new Map([[1, { kind: 'ok', content: botResolved }]])),
+        spySource([1], new Map([[1, { kind: 'ok', content: botOutdated }]])),
         fixtureExtractor(),
       ),
     );
     expect(dropsFor(r, 1)[0]!.reasonCode).toBe('truncated');
   });
 
-  it('partial resolution: survivors are processed; resolved threads excluded from the draft input', async () => {
+  it('partial: OUTDATED threads excluded from the draft input; resolved + fresh survive', async () => {
     const mixed = content(1, {
       threads: [
         thread('Jane Doe', 'eligible note A'),
@@ -496,38 +521,71 @@ describe('runExtractStage — resolution-eligibility gate (slice 5a)', () => {
       solo(),
       deps(spySource([1], new Map([[1, { kind: 'ok', content: mixed }]])), extractor),
     );
-    // The PR is processed (a draft, no drop).
     expect(r.drafts).toHaveLength(1);
     expect(dropsFor(r, 1)).toEqual([]);
-    // The extractor only saw the ONE eligible thread — resolved/outdated excluded.
-    expect(extractor.seen).toHaveLength(1);
+    // The extractor saw the two NON-outdated threads (incl. the resolved one); only
+    // the outdated thread was excluded (γ inverts the slice-5a resolved exclusion).
     const seenThreads = extractor.seen[0]!.threads;
-    expect(seenThreads).toHaveLength(1);
-    expect(seenThreads[0]!.comments[0]!.body).toBe('eligible note A');
-    expect(seenThreads.every((t) => !t.isResolved && !t.isOutdated)).toBe(true);
-  });
-
-  it('partial resolution: resolved threads do not count toward the human-comment threshold', async () => {
-    // The single eligible thread is bot-only; the resolved thread is the only one
-    // with a human comment. Survivors have 0 human comments → resolved-rejected.
-    const mixed = content(1, {
-      threads: [
-        thread('coderabbitai[bot]', 'nit: rename', { isResolved: false }),
-        thread('Jane Doe', 'a real human note', { isResolved: true }),
-      ],
-    });
-    const r = await runExtractStage(
-      solo(),
-      deps(spySource([1], new Map([[1, { kind: 'ok', content: mixed }]])), fixtureExtractor()),
-    );
-    expect(dropsFor(r, 1)[0]!.reasonCode).toBe('resolved-rejected');
-    expect(r.drafts).toEqual([]);
+    expect(seenThreads).toHaveLength(2);
+    expect(seenThreads.every((t) => !t.isOutdated)).toBe(true);
+    expect(seenThreads.map((t) => t.comments[0]!.body).sort()).toEqual([
+      'eligible note A',
+      'resolved note B',
+    ]);
   });
 
   it('a fully-eligible thread is unaffected by the gate (no regression)', async () => {
     const r = await runExtractStage(solo(), deps(spySource([1]), fixtureExtractor()));
     expect(r.drafts).toHaveLength(1);
     expect(dropsFor(r, 1)).toEqual([]);
+  });
+});
+
+// ─── Slice β: bot-review substrate + sourceKind diagnostic ────────────────────
+
+describe('runExtractStage — slice β (bot-review substrate + sourceKind)', () => {
+  it('a RECOGNIZED review-bot (coderabbitai) comment now COUNTS as substrate → drafts', async () => {
+    const crOnly = content(1, {
+      threads: [thread('coderabbitai[bot]', 'Potential issue: guard against NaN here')],
+    });
+    const r = await runExtractStage(
+      solo(),
+      deps(spySource([1], new Map([[1, { kind: 'ok', content: crOnly }]])), fixtureExtractor()),
+    );
+    expect(r.drafts).toHaveLength(1);
+    expect(dropsFor(r, 1)).toEqual([]);
+    expect(r.drafts[0]!.sourceKind).toBe('bot');
+  });
+
+  it('gemini-code-assist (no [bot] suffix) counts as substrate', async () => {
+    const gca = content(1, {
+      threads: [thread('gemini-code-assist', 'require is_finite() before the divide')],
+    });
+    const r = await runExtractStage(
+      solo(),
+      deps(spySource([1], new Map([[1, { kind: 'ok', content: gca }]])), fixtureExtractor()),
+    );
+    expect(r.drafts).toHaveLength(1);
+    expect(r.drafts[0]!.sourceKind).toBe('bot');
+  });
+
+  it('sourceKind is human for a human-only thread', async () => {
+    const r = await runExtractStage(solo(), deps(spySource([1]), fixtureExtractor()));
+    expect(r.drafts[0]!.sourceKind).toBe('human');
+  });
+
+  it('sourceKind is mixed when human + review-bot comments both survive', async () => {
+    const mixed = content(1, {
+      threads: [
+        thread('Jane Doe', 'the human rationale'),
+        thread('coderabbitai[bot]', 'the bot finding'),
+      ],
+    });
+    const r = await runExtractStage(
+      solo(),
+      deps(spySource([1], new Map([[1, { kind: 'ok', content: mixed }]])), fixtureExtractor()),
+    );
+    expect(r.drafts[0]!.sourceKind).toBe('mixed');
   });
 });
 
@@ -546,9 +604,9 @@ describe('runExtractStage — determinism', () => {
     expect(await run()).toEqual(await run());
   });
 
-  it('identical inputs are deterministic across the resolution gate (drafts + drops + ledgers)', async () => {
-    // PR 1: a partial-resolution mix (one eligible survivor → a draft).
-    // PR 2: all-resolved-but-had-human-content → a resolved-rejected drop.
+  it('identical inputs are deterministic across the eligibility gate (drafts + drops + ledgers)', async () => {
+    // PR 1: a partial mix (resolved + fresh both survive → a draft).
+    // PR 2: all-outdated-but-had-substantive-content → an outdated-rejected drop.
     const pr1 = content(1, {
       threads: [
         thread('Jane Doe', 'eligible note', { isResolved: false }),
@@ -575,6 +633,6 @@ describe('runExtractStage — determinism', () => {
     const a = await run();
     const b = await run();
     expect(a).toEqual(b);
-    expect(dropsFor(a, 2)[0]!.reasonCode).toBe('resolved-rejected');
+    expect(dropsFor(a, 2)[0]!.reasonCode).toBe('outdated-rejected');
   });
 });

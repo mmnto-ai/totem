@@ -65,6 +65,18 @@ export const Stage4LedgerOutcomeSchema = z.enum([
 ]);
 export type Stage4LedgerOutcome = z.infer<typeof Stage4LedgerOutcomeSchema>;
 
+/**
+ * The SUBSTRATE provenance of a draft / zero-draft drop (slice β, strategy#709,
+ * panel OQ-β4): whether the eligible review threads it derived from carried
+ * `human`, `bot` (recognized review-finding bot — gemini/CR), or `mixed` comments.
+ * `human|bot|mixed` not a binary — a single PR's draft can derive from both. A
+ * non-FM Tenet-19 DIAGNOSTIC (like `dispositionSource` / `noDraftCause`): it makes
+ * the bot-review-substrate share OBSERVABLE on the §8 emission ledger for this
+ * bot-reviewed cert corpus, with NO falsifying-metric weight.
+ */
+export const DraftSourceKindSchema = z.enum(['human', 'bot', 'mixed']);
+export type DraftSourceKind = z.infer<typeof DraftSourceKindSchema>;
+
 // ── 1. Emission ledger ──────────────────────────────────────────────────────
 
 export const EmissionLedgerEntrySchema = z.object({
@@ -74,6 +86,13 @@ export const EmissionLedgerEntrySchema = z.object({
   routing: RoutingSchema,
   classifierLedgerRef: nonEmpty('classifierLedgerRef'),
   unverified: z.literal(true),
+  /**
+   * Substrate provenance of the draft (slice β, panel OQ-β4) — `human|bot|mixed`,
+   * threaded transiently on `DraftCandidate` from the exact extractor input and
+   * serialized HERE (NOT on the reused `ProvenanceRecord`/legitimacy stamp, which a
+   * diagnostic would pollute). Additive-OPTIONAL so pre-β emission ledgers parse.
+   */
+  sourceKind: DraftSourceKindSchema.optional(),
 });
 export type EmissionLedgerEntry = z.infer<typeof EmissionLedgerEntrySchema>;
 
@@ -94,18 +113,27 @@ export const DropReasonCodeSchema = z.enum([
   'truncated',
   'unparseable',
   'incomplete-provenance',
-  // 'resolved-rejected' (slice 5a, mmnto-ai/totem#2201) — an ELIGIBILITY
-  // rejection, semantically distinct from the four above. The content WAS
-  // fetched (not `unreachable`), CAN be complete (not `truncated`), and PARSES
-  // (not `unparseable`); its provenance is intact (not `incomplete-provenance`).
-  // It is dropped because every human comment lived on review threads whose
-  // resolution status (`isResolved || isOutdated`) marks them contamination: a
-  // resolved/outdated thread reflects a discussion the author already closed, so
-  // mining it would launder superseded review noise into a candidate rule. The
-  // §6 resolution gate (in `runExtractStage`) emptied the eligible-human-comment
-  // set — every such rejection is ledgered here (never silently pre-filtered by
-  // the adapter), satisfying §8 "every rejection ledgered" + the FM.
-  'resolved-rejected',
+  // 'outdated-rejected' (slice γ, strategy#709 — renamed from slice-5a's
+  // 'resolved-rejected') — an ELIGIBILITY rejection, semantically distinct from
+  // the four above. The content WAS fetched (not `unreachable`), CAN be complete
+  // (not `truncated`), and PARSES (not `unparseable`); its provenance is intact
+  // (not `incomplete-provenance`). It is dropped because every substantive comment
+  // lived on OUTDATED review threads (`isOutdated`): an outdated thread's diff hunk
+  // no longer matches HEAD, so its invariant may have been refactored away. NOTE
+  // (slice γ): RESOLVED threads are NO LONGER rejected — a resolved thread is the
+  // highest-signal legitimacy marker (the Gate-1 cert finding), so it is now
+  // ADMITTED; only OUTDATED stays excluded. The §6 eligibility gate (in
+  // `runExtractStage`) emptied the eligible-substantive set — every such rejection
+  // is ledgered here (never silently pre-filtered by the adapter), satisfying §8.
+  'outdated-rejected',
+  // 'no-draft' (slice β, strategy β-watch) — the extractor returned ZERO drafts
+  // for an otherwise-complete thread. Slice α reused `unparseable` for this, which
+  // mislabeled a legitimate model decline (`none-sentinel`) as a parse failure;
+  // this code NAMES the no-draft case while the row's `noDraftCause` carries the
+  // precise sub-reason (invoke-error / empty-output / none-sentinel / …). Distinct
+  // from `unparseable`, which now means ONLY a source-fetch or per-body DSL parse
+  // failure.
+  'no-draft',
 ]);
 export type DropReasonCode = z.infer<typeof DropReasonCodeSchema>;
 
@@ -157,11 +185,18 @@ export const DropLedgerEntrySchema = z.object({
   detail: z.string().optional(),
   /**
    * The extract-stage NO-DRAFT diagnostic (Tenet-19). Present ONLY on the
-   * extractor-produced empty-draft drop (`reasonCode: 'unparseable'`, detail
+   * extractor-produced empty-draft drop (`reasonCode: 'no-draft'`, detail
    * "extractor produced no draft…") — absent on every other drop. Additive-
    * optional so older ledgers (no cause recorded) still parse.
    */
   noDraftCause: NoDraftCauseSchema.optional(),
+  /**
+   * Substrate provenance (slice β, panel OQ-β4) of the eligible threads on a
+   * ZERO-DRAFT (`reasonCode: 'no-draft'`) drop — `human|bot|mixed`, so the §8
+   * report can ask "what KIND of substrate did the model decline?". Present only on
+   * the no-draft drop; additive-OPTIONAL so other drops + older ledgers parse.
+   */
+  sourceKind: DraftSourceKindSchema.optional(),
 });
 export type DropLedgerEntry = z.infer<typeof DropLedgerEntrySchema>;
 

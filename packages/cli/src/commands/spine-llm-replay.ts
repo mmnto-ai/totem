@@ -50,7 +50,6 @@ import type {
   DraftResult,
   ExtractStageResult,
   ReviewThread,
-  ReviewThreadComment,
   ReviewThreadContent,
 } from '@mmnto/totem';
 
@@ -183,29 +182,37 @@ function sha256Hex(input: string): string {
 // ─── inputKey derivation (fold D — the `deriveClaimId` pattern) ───────────────
 
 /**
- * Normalize a single review thread to its STABLE identity: sort comments by
- * (body, author) and carry only the resolution flags + path. Provider/array
- * order must not change the key, so comments are sorted by a stable tuple before
- * hashing. Resolved/outdated flags ARE part of the identity (the eligible-thread
- * set the extractor was actually handed depends on them).
+ * Normalize a single review thread to its STABLE identity: project each comment to
+ * `{ author, normalizedBody }`, sort by `(normalizedBody, author)`, and carry the
+ * resolution flags + path. The key digests the DE-CHROMED `normalizedBody` (slice
+ * β) — exactly what the extractor's prompt renders — NOT the raw `body` (chrome the
+ * LLM never saw) nor `authorKind` (a pure function of `author`, so redundant). A
+ * normalizer-version change re-derives `normalizedBody` → the key shifts → a replay
+ * MISS forces a re-record (Tenet-15), the same lever the provenance hash pulls.
+ * Provider/array order must not change the key, so comments are sorted by a stable
+ * tuple before hashing. The resolution flags are carried as thread identity; post-γ
+ * only `isOutdated` gates the eligible set (resolved threads are now admitted), but
+ * both remain stable per-thread facts.
  */
 function normalizeThread(thread: ReviewThread): {
   path: string;
   isResolved: boolean;
   isOutdated: boolean;
-  comments: ReviewThreadComment[];
+  comments: { author: string; normalizedBody: string }[];
 } {
-  const comments = [...thread.comments].sort((a, b) =>
-    a.body !== b.body
-      ? a.body < b.body
-        ? -1
-        : 1
-      : a.author < b.author
-        ? -1
-        : a.author > b.author
-          ? 1
-          : 0,
-  );
+  const comments = thread.comments
+    .map((c) => ({ author: c.author, normalizedBody: c.normalizedBody }))
+    .sort((a, b) =>
+      a.normalizedBody !== b.normalizedBody
+        ? a.normalizedBody < b.normalizedBody
+          ? -1
+          : 1
+        : a.author < b.author
+          ? -1
+          : a.author > b.author
+            ? 1
+            : 0,
+    );
   return {
     path: thread.path,
     isResolved: thread.isResolved,
@@ -235,14 +242,16 @@ function normalizeThreads(threads: readonly ReviewThread[]): ReturnType<typeof n
 }
 
 /**
- * Filter to the EXACT eligible set the extractor is handed: non-resolved,
- * non-outdated threads (mirrors core's `eligibleThreads`). The inputKey is a
+ * Filter to the EXACT eligible set the extractor is handed: non-outdated threads
+ * (slice γ — mirrors core's `eligibleThreads` in LOCKSTEP; RESOLVED threads are now
+ * admitted). Keeping this identical to core is REQUIRED: a divergence would make a
+ * replay miss/false-hit indistinguishable from model drift. The inputKey is a
  * function of what the port ACTUALLY saw, so eligibility must be applied before
- * normalizing — two contents that differ only in resolved/outdated threads
- * (which the extractor never sees) still key identically.
+ * normalizing — two contents that differ only in outdated threads (which the
+ * extractor never sees) still key identically.
  */
 function eligibleThreads(threads: readonly ReviewThread[]): ReviewThread[] {
-  return threads.filter((t) => !t.isResolved && !t.isOutdated);
+  return threads.filter((t) => !t.isOutdated);
 }
 
 /**
