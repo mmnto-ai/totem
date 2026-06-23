@@ -1855,7 +1855,13 @@ windtunnelCmd
         const { WindtunnelLockSchema } = await import('@mmnto/totem');
         const { recordCommand, buildLiveRecordDeps } =
           await import('./commands/spine-cert-record.js');
+        const { loadEnv } = await import('./utils.js');
         const cwd = process.cwd();
+        // #2237 papercut-1: load .env BEFORE buildLiveRecordDeps reads process.env
+        // for the provider credential — the spine commands (unlike ~18 others) did
+        // not loadEnv, so an `.env`-only ANTHROPIC_API_KEY fail-closed as "no
+        // credential resolved" until exported manually.
+        loadEnv(cwd);
         const lockPath = opts.lockPath ?? `${cwd}/.totem/spine/gate-1/windtunnel.lock.json`;
         const lock = WindtunnelLockSchema.parse(JSON.parse(fsm.readFileSync(lockPath, 'utf-8')));
         const deps = await buildLiveRecordDeps(lock, {

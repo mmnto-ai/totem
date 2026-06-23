@@ -26,7 +26,8 @@ import type { CertifyingCorpus, CertifyingCorpusProvider } from './spine-windtun
 // ─── Fixture file names under the gate-1 dir ─────────
 
 const SPLIT_FILE = 'split.json';
-const REPLAY_FILE = 'llm-replay.v1.json';
+/** The frozen llm-replay fixture — produced by `record` (A2), sealed into the lock by `freeze`. */
+export const REPLAY_FILE = 'llm-replay.v1.json';
 const CONTENT_FILE = 'review-content.json';
 export const PR_DIFFS_FILE = 'pr-diffs.json';
 /** The cert-run answer key — produced by `derive-labels` (5d-iii), read by the run. */

@@ -10,6 +10,7 @@ import {
   buildReplayCorpusProvider,
   GROUND_TRUTH_FILE,
   PR_DIFFS_FILE,
+  REPLAY_FILE,
 } from './spine-cert-run-corpus.js';
 
 // ─── Named constants ─────────────────────────────────
@@ -37,7 +38,7 @@ export interface FreezeOptions {
  * the assertion is skipped with a loud warning.
  */
 export async function freezeCommand(opts: FreezeOptions): Promise<void> {
-  const { WindtunnelLockSchema, safeExec, resolveGitRoot, TotemError } =
+  const { WindtunnelLockSchema, safeExec, resolveGitRoot, TotemError, canonicalStringify } =
     await import('@mmnto/totem');
 
   const cwd = process.cwd();
@@ -224,8 +225,60 @@ export async function freezeCommand(opts: FreezeOptions): Promise<void> {
     );
   }
 
+  // #2237 papercut-2: auto-SEAL controls.integrity.llmReplaySha. The two-phase
+  // lock design (materialize comment: "freeze seals it post-record") makes freeze
+  // the sealer — `record` emits the hash but does NOT stamp the lock, so until now
+  // the operator had to hand-edit it. Compute the hash the SAME way the run verifies
+  // it (`computeArtifactHash` over the parsed `llm-replay.v1.json`, the EXTERNAL L2
+  // expected-hash `buildReplayAdapters` re-checks) and stamp it in. Unlike the other
+  // integrity fields (stamped by their producers — fixtureSha/prDiffsSha by
+  // materialize, corpusDispositionsSha by fetch, groundTruthSha by derive),
+  // llmReplaySha has no producer-side stamp, so freeze owns it.
+  const replayPath = path.join(path.dirname(lockPath), REPLAY_FILE);
+  const computed = await computeReplaySeal(replayPath);
+  if (computed !== null) {
+    const current = lock.controls.integrity.llmReplaySha;
+    if (current === computed) {
+      console.error(`[WindtunnelFreeze] llm-replay.v1.json hash verified + sealed: ${computed}`);
+    } else {
+      // Stamp into the RAW parsed object (not the Zod-parsed `lock`) so every field
+      // — incl. the top-level `schema` key — survives the round-trip; canonicalStringify
+      // sorts keys, so the new llmReplaySha lands in its sorted position (one-line diff)
+      // and the serialization is byte-identical to materialize's writer.
+      (rawObj as { controls: { integrity: Record<string, unknown> } }).controls.integrity[
+        'llmReplaySha'
+      ] = computed;
+      fs.writeFileSync(lockPath, `${canonicalStringify(rawObj, 2)}\n`, 'utf-8');
+      console.error(
+        `[WindtunnelFreeze] Sealed controls.integrity.llmReplaySha = ${computed} ` +
+          `(was ${current ?? 'absent'}) — lock updated; re-commit to refresh the freeze proof (C3).`,
+      );
+    }
+  } else if (lock.phase === 'certifying') {
+    // Mirror the prDiffsSha/groundTruthSha absent-on-certifying warnings: the run is
+    // replay-only and hard-requires the fixture + its sealed hash.
+    console.error(
+      `[WindtunnelFreeze] WARNING: ${REPLAY_FILE} is absent — cannot seal llmReplaySha; the certifying run will hard-fail. Run \`spine windtunnel record\` first.`,
+    );
+  }
+
   console.error(`[WindtunnelFreeze] DONE — lock at ${lockPath} is schema-valid.`);
   console.error(`  Commit the lock file to establish the freeze proof (C3).`);
+}
+
+/**
+ * #2237 papercut-2: compute the llm-replay seal hash `freeze` stamps into
+ * `controls.integrity.llmReplaySha`. Returns `computeArtifactHash` over the parsed
+ * `llm-replay.v1.json` at `replayPath` — byte-for-byte the SAME external L2 hash
+ * `buildReplayAdapters` re-verifies at run time — or `null` when the fixture is
+ * absent (record hasn't run yet). Pure: no lock write (freeze owns the stamp), so
+ * the hash derivation is unit-testable without a full lock/commit/clone setup.
+ */
+export async function computeReplaySeal(replayPath: string): Promise<string | null> {
+  if (!fs.existsSync(replayPath)) return null;
+  const { computeArtifactHash, ReplayArtifactSchema } = await import('./spine-llm-replay.js');
+  const artifact = ReplayArtifactSchema.parse(JSON.parse(fs.readFileSync(replayPath, 'utf-8')));
+  return computeArtifactHash(artifact);
 }
 
 // ─── run command ─────────────────────────────────────

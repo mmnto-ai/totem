@@ -127,6 +127,21 @@ describe('persistCertifyingOutcome', () => {
     expect(report.persisted).toBe(false);
     expect(report.verdict.verdict).toBe('HONEST-NEGATIVE');
     expect(report.skips).toContainEqual({ reason: 'verdict-not-pass', verdict: 'HONEST-NEGATIVE' });
+
+    // #2237 papercut-3: firing detail is persisted REGARDLESS of verdict — a non-PASS
+    // run must still carry the (rule, pr, file, matched-line) records for blind-by-pattern
+    // adjudication, not only the needsAdjudication labelId hashes the verdict surfaces.
+    expect(report.firings).toEqual([
+      {
+        labelId: 'label-r1-pos',
+        ruleId: 'r1',
+        pr: 1,
+        filePath: 'src/a.ts',
+        matchedLine: 'debugger;',
+        controlKind: 'positive',
+        targetRuleId: 'r1',
+      },
+    ]);
   });
 
   it('the report filename embeds the injected timestamp slug + a run-identity hash', async () => {

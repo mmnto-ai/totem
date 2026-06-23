@@ -124,6 +124,20 @@ export async function persistCertifyingOutcome(
     stampedRuleIds: projection.stamped.map((r) => r.lessonHash),
     skips: projection.skips,
     firingCount: input.firings.length,
+    // #2237 papercut-3: persist per-firing detail REGARDLESS of verdict. The verdict
+    // surfaces only `needsAdjudication` labelId hashes; a FAIL / honest-negative run
+    // dropped the (rule, pr, file, matched-line) records entirely, blocking
+    // blind-by-pattern adjudication observability (e.g. cert #1's 2 firings could not
+    // be re-surfaced without a re-run). Persist them on every verdict.
+    firings: input.firings.map((f) => ({
+      labelId: f.labelId,
+      ruleId: f.ruleId,
+      pr: f.pr,
+      filePath: f.filePath,
+      matchedLine: f.matchedLine,
+      controlKind: f.controlKind,
+      ...(f.targetRuleId ? { targetRuleId: f.targetRuleId } : {}),
+    })),
   };
   // Content hash over the run identity (NOT the timestamp) so the same run is
   // recognizable across re-runs; the timestamp disambiguates the filename.
