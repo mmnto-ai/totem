@@ -47,6 +47,7 @@ import { z } from 'zod';
 // runtime `ClassifierResultSchema`.
 import type {
   ClassifierResult,
+  DraftResult,
   ExtractStageResult,
   ReviewThread,
   ReviewThreadComment,
@@ -340,9 +341,46 @@ export const ClassifierResultLocalSchema = z
     message: "dispositionSource 'error-default' requires disposition 'behavioral'",
   });
 
+/**
+ * CLI-side validation of a recorded `DraftResult` (GCA #2209 + the panel's "replay
+ * artifact schema is a CLI-layer concern"): a LOCAL Zod schema rather than a static
+ * runtime import of core's `DraftResultSchema` (which would pull the heavy
+ * `@mmnto/totem` barrel onto the CLI-startup path). Mirrors core's shape AND its
+ * "cause iff empty" refinement LOGIC (the `NoDraftCauseSchema` enum, including the
+ * replay-migration-only `legacy-unknown`). Parity is accept/reject EQUIVALENCE,
+ * locked by a test — the local ZodError `message`/`path` stay intentionally concise
+ * (matching the `ClassifierResultLocalSchema` sibling), not byte-identical to core.
+ */
+export const DraftResultLocalSchema = z
+  .object({
+    drafts: z.array(z.string()),
+    noDraftCause: z
+      .enum([
+        'invoke-error',
+        'empty-output',
+        'none-sentinel',
+        'unparseable-shape',
+        'non-array',
+        'all-filtered',
+        'legacy-unknown',
+      ])
+      .optional(),
+  })
+  .refine((r) => (r.drafts.length === 0) === (r.noDraftCause !== undefined), {
+    message: 'noDraftCause must be present iff drafts is empty',
+  });
+
 export const ReplayRecordsSchema = z.object({
-  /** `inputKey → DraftExtractor.draft()` return (a `string[]`; `[]` is a real row). */
-  extractor: z.record(z.array(z.string())),
+  /**
+   * `inputKey → DraftExtractor.draft()` return — a `DraftResult` (`{drafts, noDraftCause?}`);
+   * a recorded `{drafts:[], noDraftCause}` is a real row. BACKWARD-COMPAT (the α
+   * cause-tag migration): a legacy fixture stored a bare `string[]` (pre-cause-tag),
+   * accepted via the union so the committed cert-#1 fixture still parses + hashes
+   * IDENTICALLY (the bare-array branch returns it unchanged). `ReplayDraftExtractor`
+   * normalizes a legacy row to a `DraftResult` on read (empty → `legacy-unknown`);
+   * fresh recordings always write the object form.
+   */
+  extractor: z.record(z.union([z.array(z.string()), DraftResultLocalSchema])),
   /** `inputKey → DraftClassifier.classify()` return (a `ClassifierResult`). */
   classifier: z.record(ClassifierResultLocalSchema),
 });
@@ -413,10 +451,10 @@ function hashParsedArtifact(parsed: ReplayArtifact): string {
  * the recording run must surface, not absorb).
  */
 export class ReplayRecordSink {
-  private readonly extractor = new Map<string, string[]>();
+  private readonly extractor = new Map<string, DraftResult>();
   private readonly classifier = new Map<string, ClassifierResult>();
 
-  recordExtractor(inputKey: string, output: string[]): void {
+  recordExtractor(inputKey: string, output: DraftResult): void {
     if (this.extractor.has(inputKey)) throw new DuplicateRecordError('extractor', inputKey);
     this.extractor.set(inputKey, output);
   }
@@ -447,18 +485,19 @@ export class ReplayRecordSink {
 // ─── Recording decorators (generic over the port) ─────
 
 /**
- * Records every `DraftExtractor.draft()` call's inputKey → raw `string[]` output
- * into the sink, then passes the value THROUGH unchanged. The recorded value is
- * the PORT's return (pre-core-funnel) — a recorded `[]` is a real row. A
- * duplicate inputKey throws (via the sink).
+ * Records every `DraftExtractor.draft()` call's inputKey → raw `DraftResult` output
+ * into the sink, then passes the value THROUGH unchanged. The recorded value is the
+ * PORT's return (pre-core-funnel) — a recorded `{drafts:[], noDraftCause}` is a real
+ * row that freezes the NO-DRAFT cause for the replay. A duplicate inputKey throws
+ * (via the sink).
  */
 export class RecordingDraftExtractor {
   constructor(
-    private readonly wrapped: { draft(content: ReviewThreadContent): Promise<string[]> },
+    private readonly wrapped: { draft(content: ReviewThreadContent): Promise<DraftResult> },
     private readonly sink: ReplayRecordSink,
   ) {}
 
-  async draft(content: ReviewThreadContent): Promise<string[]> {
+  async draft(content: ReviewThreadContent): Promise<DraftResult> {
     const output = await this.wrapped.draft(content);
     this.sink.recordExtractor(extractorInputKey(content), output);
     return output;
@@ -508,8 +547,9 @@ function assertFixtureIntegrity(artifact: ReplayArtifact, expectedHash: string):
 /**
  * PURE replay of `DraftExtractor` — zero live LLM / network calls. Computes the
  * inputKey for the requested content, looks it up in the frozen records:
- *   - HIT  → return the recorded `string[]` (including a recorded `[]` — a real row);
- *   - MISS → throw `ReplayMissError` (NEVER fall back to `[]`).
+ *   - HIT  → return the recorded `DraftResult` (a recorded empty result is a real
+ *            row; a legacy bare-`string[]` row is normalized to a `DraftResult`);
+ *   - MISS → throw `ReplayMissError` (NEVER fall back to an empty result).
  *
  * Integrity (fold B + F): the constructor takes the EXTERNAL expected content-
  * hash, computes the actual WHOLE-ARTIFACT hash (records + provenance), and throws
@@ -526,17 +566,26 @@ export class ReplayDraftExtractor {
   }
 
   // `async` so a MISS surfaces as a REJECTED promise (the port contract is
-  // `Promise<string[]>`; a consumer awaits it). A synchronous `throw` would
+  // `Promise<DraftResult>`; a consumer awaits it). A synchronous `throw` would
   // escape an `await`-less caller's `.catch`, so the rejection path is uniform.
-  async draft(content: ReviewThreadContent): Promise<string[]> {
+  async draft(content: ReviewThreadContent): Promise<DraftResult> {
     const inputKey = extractorInputKey(content);
-    // `Object.prototype.hasOwnProperty`-style presence check, NOT truthiness: a
-    // recorded `[]` is a real HIT (falsy-but-present), distinct from an absent
-    // key (a MISS).
+    // Presence check, NOT truthiness: a recorded empty result is a real HIT,
+    // distinct from an absent key (a MISS).
     if (!Object.prototype.hasOwnProperty.call(this.records, inputKey)) {
       throw new ReplayMissError('extractor', inputKey);
     }
-    return this.records[inputKey];
+    const rec = this.records[inputKey];
+    // Backward-compat (α migration): a legacy fixture row is a bare `string[]`
+    // (pre-cause-tag) → normalize to a `DraftResult`. An EMPTY legacy row gets
+    // `legacy-unknown` — NOT a fabricated real cause; it honestly signals "this
+    // fixture predates cause-tags, re-record before cause-rate reporting." A
+    // non-empty legacy row carries its drafts and no cause. A fresh row is already
+    // a `DraftResult` and passes through unchanged.
+    if (Array.isArray(rec)) {
+      return rec.length === 0 ? { drafts: rec, noDraftCause: 'legacy-unknown' } : { drafts: rec };
+    }
+    return rec;
   }
 }
 

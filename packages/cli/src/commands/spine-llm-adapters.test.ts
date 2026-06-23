@@ -120,35 +120,100 @@ function draft(dslSource = '**Pattern:** no-foo'): DraftCandidate {
 
 // ─── 1. Extractor output parse ────────────────────────
 
-describe('parseExtractorOutput', () => {
-  it('parses a JSON array of DSL bodies', () => {
-    expect(parseExtractorOutput('["**Pattern:** a", "**Pattern:** b"]')).toEqual([
-      '**Pattern:** a',
-      '**Pattern:** b',
-    ]);
-  });
-
-  it('treats the NONE sentinel (any case) as an empty draft', () => {
-    expect(parseExtractorOutput('NONE')).toEqual([]);
-    expect(parseExtractorOutput('  none  ')).toEqual([]);
-  });
-
-  it('returns [] on empty / non-JSON / non-array output (fail-soft, never throws)', () => {
-    expect(parseExtractorOutput('')).toEqual([]);
-    expect(parseExtractorOutput('here are some lessons:')).toEqual([]);
-    expect(parseExtractorOutput('{"disposition":"structural"}')).toEqual([]);
-    expect(parseExtractorOutput('42')).toEqual([]);
+describe('parseExtractorOutput → DraftResult (NoDraftCause taxonomy)', () => {
+  it('parses a JSON array of DSL bodies (drafts, no cause)', () => {
+    expect(parseExtractorOutput('["**Pattern:** a", "**Pattern:** b"]')).toEqual({
+      drafts: ['**Pattern:** a', '**Pattern:** b'],
+    });
   });
 
   it('strips a markdown code fence and parses the inner JSON', () => {
-    expect(parseExtractorOutput('```json\n["**Pattern:** x"]\n```')).toEqual(['**Pattern:** x']);
+    expect(parseExtractorOutput('```json\n["**Pattern:** x"]\n```')).toEqual({
+      drafts: ['**Pattern:** x'],
+    });
   });
 
-  it('filters non-string / empty / whitespace elements and trims', () => {
-    expect(parseExtractorOutput('["**Pattern:** a", 7, "", "   ", "  **Pattern:** b  "]')).toEqual([
-      '**Pattern:** a',
-      '**Pattern:** b',
-    ]);
+  it('filters non-string / empty / whitespace elements and trims (≥1 survivor → no cause)', () => {
+    // A filtered-out sibling element does NOT tag the result — the cause is a
+    // no-draft diagnostic, not a partial-quality ledger (codex).
+    expect(parseExtractorOutput('["**Pattern:** a", 7, "", "   ", "  **Pattern:** b  "]')).toEqual({
+      drafts: ['**Pattern:** a', '**Pattern:** b'],
+    });
+  });
+
+  // One branch per NoDraftCause — the pinned-order, mutually-exclusive partition
+  // (codex/agy panel; the order is the disjointness contract).
+  it('empty raw output → empty-output', () => {
+    expect(parseExtractorOutput('')).toEqual({ drafts: [], noDraftCause: 'empty-output' });
+    expect(parseExtractorOutput('   ')).toEqual({ drafts: [], noDraftCause: 'empty-output' });
+  });
+
+  it('the NONE sentinel (any case) → none-sentinel', () => {
+    expect(parseExtractorOutput('NONE')).toEqual({ drafts: [], noDraftCause: 'none-sentinel' });
+    expect(parseExtractorOutput('  none  ')).toEqual({ drafts: [], noDraftCause: 'none-sentinel' });
+  });
+
+  it('malformed JSON (SyntaxError) → unparseable-shape (fail-soft, never throws)', () => {
+    expect(parseExtractorOutput('here are some lessons:')).toEqual({
+      drafts: [],
+      noDraftCause: 'unparseable-shape',
+    });
+    expect(parseExtractorOutput('[unterminated')).toEqual({
+      drafts: [],
+      noDraftCause: 'unparseable-shape',
+    });
+  });
+
+  it('valid JSON but not an array → non-array', () => {
+    expect(parseExtractorOutput('{"disposition":"structural"}')).toEqual({
+      drafts: [],
+      noDraftCause: 'non-array',
+    });
+    expect(parseExtractorOutput('42')).toEqual({ drafts: [], noDraftCause: 'non-array' });
+  });
+
+  it('an array that filters to empty → all-filtered (NOT empty-output — panel adjudication)', () => {
+    // [""] / arrays-of-blanks parse to an array then filter to [] → all-filtered;
+    // empty-output is reserved for raw-text-empty BEFORE the parse (codex; corrects
+    // the agy panel-reply expectation).
+    expect(parseExtractorOutput('[]')).toEqual({ drafts: [], noDraftCause: 'all-filtered' });
+    expect(parseExtractorOutput('[""]')).toEqual({ drafts: [], noDraftCause: 'all-filtered' });
+    expect(parseExtractorOutput('["   ", 7]')).toEqual({
+      drafts: [],
+      noDraftCause: 'all-filtered',
+    });
+  });
+});
+
+describe('legacy-unknown is replay-migration-only (never emitted by the live path)', () => {
+  // greptile #2240: the "REPLAY-MIGRATION ONLY" invariant on `legacy-unknown` is
+  // doc-only at the shared runExtractStage boundary (which MUST accept it, since the
+  // ReplayDraftExtractor legitimately produces it for a legacy bare-string[] row).
+  // Lock the invariant where it IS enforceable — the LIVE parse/adapter, which mint
+  // it nowhere by construction.
+  it('parseExtractorOutput never returns legacy-unknown for any input class', () => {
+    const inputs = [
+      '',
+      '   ',
+      'NONE',
+      'prose not json',
+      '[unterminated',
+      '{"disposition":"structural"}',
+      '42',
+      '[]',
+      '[""]',
+      '["**Pattern:** a"]',
+    ];
+    for (const raw of inputs) {
+      expect(parseExtractorOutput(raw).noDraftCause).not.toBe('legacy-unknown');
+    }
+  });
+
+  it('LiveDraftExtractor never tags legacy-unknown (invoke-error / decline / drafted)', async () => {
+    for (const inv of [throwingInvoke(), stubInvoke('NONE'), stubInvoke('["**Pattern:** a"]')]) {
+      const ext = makeExtractor(inv);
+      expect((await ext.draft(content())).noDraftCause).not.toBe('legacy-unknown');
+    }
   });
 });
 
@@ -231,21 +296,29 @@ describe('fail-loud on unexpected (non-SyntaxError) parse errors', () => {
 describe('LiveDraftExtractor', () => {
   it('drafts parsed DSL bodies from the LLM and counts a success', async () => {
     const ext = makeExtractor(stubInvoke('["**Pattern:** no-exec"]'));
-    await expect(ext.draft(content())).resolves.toEqual(['**Pattern:** no-exec']);
+    await expect(ext.draft(content())).resolves.toEqual({ drafts: ['**Pattern:** no-exec'] });
     expect(ext.attempts).toBe(1);
     expect(ext.succeeded).toBe(1);
   });
 
-  it('returns [] and counts a failure when the live invoke throws (per-PR fail-soft)', async () => {
+  it('tags invoke-error and counts a failure when the live invoke throws (per-PR fail-soft)', async () => {
     const ext = makeExtractor(throwingInvoke());
-    await expect(ext.draft(content())).resolves.toEqual([]);
+    await expect(ext.draft(content())).resolves.toEqual({
+      drafts: [],
+      noDraftCause: 'invoke-error',
+    });
     expect(ext.attempts).toBe(1);
     expect(ext.succeeded).toBe(0);
   });
 
-  it('a successful-but-empty (NONE) call still counts as succeeded (genuine sparsity ≠ failure)', async () => {
+  it('a successful-but-empty (NONE) call counts as succeeded + tags none-sentinel (sparsity ≠ failure)', async () => {
     const ext = makeExtractor(stubInvoke('NONE'));
-    await expect(ext.draft(content())).resolves.toEqual([]);
+    await expect(ext.draft(content())).resolves.toEqual({
+      drafts: [],
+      noDraftCause: 'none-sentinel',
+    });
+    // A genuine model decline is a SUCCESS (the invoke returned) — only invoke-error
+    // increments the failure counter, so the dead-provider floor stays a true signal.
     expect(ext.succeeded).toBe(1);
   });
 
@@ -259,8 +332,11 @@ describe('LiveDraftExtractor', () => {
           : '["**Pattern:** ok"]',
       ),
     );
-    await expect(ext.draft(content({ pr: 1 }))).resolves.toEqual(['**Pattern:** ok']);
-    await expect(ext.draft(content({ pr: 666 }))).resolves.toEqual([]);
+    await expect(ext.draft(content({ pr: 1 }))).resolves.toEqual({ drafts: ['**Pattern:** ok'] });
+    await expect(ext.draft(content({ pr: 666 }))).resolves.toEqual({
+      drafts: [],
+      noDraftCause: 'invoke-error',
+    });
     expect(ext.attempts).toBe(2);
     expect(ext.succeeded).toBe(1);
   });

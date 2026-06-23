@@ -55,8 +55,8 @@ function fakeSource(): ReviewThreadSource {
 
 function fakeExtractor(dsls: string[]): DraftExtractor {
   return {
-    async draft(): Promise<string[]> {
-      return dsls;
+    async draft() {
+      return dsls.length === 0 ? { drafts: dsls, noDraftCause: 'all-filtered' } : { drafts: dsls };
     },
   };
 }

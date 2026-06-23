@@ -109,6 +109,41 @@ export const DropReasonCodeSchema = z.enum([
 ]);
 export type DropReasonCode = z.infer<typeof DropReasonCodeSchema>;
 
+/**
+ * Why the extractor returned ZERO drafts for an otherwise-complete thread — the
+ * extract-stage twin of the classifier's `dispositionSource` (a non-FM Tenet-19
+ * diagnostic). A bare `[]` from the `DraftExtractor` port conflates ≥6 distinct
+ * causes with opposite fixes; recording WHICH one keeps a parser/format/transient
+ * failure from masquerading as "the model judged nothing mintable" (a legitimate
+ * decline). Set ONLY on the extractor-produced empty-draft `unparseable` drop —
+ * never on a source-`unparseable` fetch failure or a per-body `isUsableDsl` drop.
+ *
+ * PARSE ORDER is the disjointness contract (evaluate in this order — the adapter
+ * sets the first, `parseExtractorOutput` the rest):
+ *   - `invoke-error`       — the live LLM invoke rejected (caught in the adapter).
+ *   - `empty-output`       — the stripped RAW output was empty (pre-parse).
+ *   - `none-sentinel`      — the stripped raw output equals the `NONE` sentinel.
+ *   - `unparseable-shape`  — `JSON.parse` threw a `SyntaxError` (malformed JSON).
+ *   - `non-array`          — JSON parsed, but not to an array.
+ *   - `all-filtered`       — parsed to an array, but zero non-empty string bodies
+ *                            survived (`[]`, blanks, non-strings) — NOT `empty-output`.
+ *   - `legacy-unknown`     — REPLAY-MIGRATION ONLY: a pre-cause-tag fixture stored a
+ *                            bare `string[]` empty row, so the cause was never
+ *                            recorded. Never produced by a live parse; signals
+ *                            "re-record needed before cause-rate reporting."
+ * Not an FM falsifier — a done-criterion diagnostic, like `dispositionSource`.
+ */
+export const NoDraftCauseSchema = z.enum([
+  'invoke-error',
+  'empty-output',
+  'none-sentinel',
+  'unparseable-shape',
+  'non-array',
+  'all-filtered',
+  'legacy-unknown',
+]);
+export type NoDraftCause = z.infer<typeof NoDraftCauseSchema>;
+
 export const DropLedgerEntrySchema = z.object({
   /**
    * Source PR of the dropped candidate. REQUIRED — the funnel always knows which
@@ -120,6 +155,13 @@ export const DropLedgerEntrySchema = z.object({
   sourcePr: PrNumber,
   reasonCode: DropReasonCodeSchema,
   detail: z.string().optional(),
+  /**
+   * The extract-stage NO-DRAFT diagnostic (Tenet-19). Present ONLY on the
+   * extractor-produced empty-draft drop (`reasonCode: 'unparseable'`, detail
+   * "extractor produced no draft…") — absent on every other drop. Additive-
+   * optional so older ledgers (no cause recorded) still parse.
+   */
+  noDraftCause: NoDraftCauseSchema.optional(),
 });
 export type DropLedgerEntry = z.infer<typeof DropLedgerEntrySchema>;
 

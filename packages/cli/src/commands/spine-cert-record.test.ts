@@ -59,8 +59,8 @@ function fakeDeps(): RecordDeps {
       },
     } satisfies ReviewThreadSource,
     liveExtractor: {
-      async draft(): Promise<string[]> {
-        return [REGEX_DSL];
+      async draft() {
+        return { drafts: [REGEX_DSL] };
       },
     } satisfies DraftExtractor,
     liveClassifier: {

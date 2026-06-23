@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type DraftExtractor,
+  type DraftResult,
   type ExtractStageResult,
   type FetchResult,
   type ReviewThread,
@@ -101,11 +102,16 @@ function spySource(
   };
 }
 
-/** Fixture extractor: per-PR draft bodies from a map (default: one usable body). Async. */
+/**
+ * Fixture extractor: per-PR draft bodies from a map (default: one usable body). Async.
+ * Wraps the bare `string[]` into a `DraftResult`, tagging an empty list with a
+ * representative `all-filtered` cause so the "cause iff empty" invariant holds.
+ */
 function fixtureExtractor(byPr?: Map<number, string[]>): DraftExtractor {
   return {
-    async draft(c: ReviewThreadContent): Promise<string[]> {
-      return byPr?.get(c.pr) ?? [USABLE_DSL];
+    async draft(c: ReviewThreadContent): Promise<DraftResult> {
+      const drafts = byPr?.get(c.pr) ?? [USABLE_DSL];
+      return drafts.length === 0 ? { drafts, noDraftCause: 'all-filtered' } : { drafts };
     },
   };
 }
@@ -272,23 +278,46 @@ describe('runExtractStage — drop reason codes', () => {
     expect(r.drafts).toEqual([]);
   });
 
-  it('unparseable: the extractor produced no draft from a complete thread', async () => {
+  it('unparseable: the extractor produced no draft from a complete thread — records the NO-DRAFT cause', async () => {
     const r = await runExtractStage(
       solo(),
       deps(spySource([1]), fixtureExtractor(new Map([[1, []]]))),
     );
-    expect(dropsFor(r, 1)[0]!.reasonCode).toBe('unparseable');
+    const drop = dropsFor(r, 1)[0]!;
+    expect(drop.reasonCode).toBe('unparseable');
+    // The Tenet-19 diagnostic is carried onto the drop (fixtureExtractor tags an
+    // empty list 'all-filtered') — never silently dropped as a bare [].
+    expect(drop.noDraftCause).toBe('all-filtered');
+    expect(drop.detail).toContain('all-filtered');
+  });
+
+  it('boundary-parse fails loud on a contract-violating DraftResult (empty-without-cause)', async () => {
+    // A buggy adapter returning { drafts: [] } with no cause violates the
+    // "cause iff empty" invariant; DraftResultSchema.parse must reject it at the
+    // core boundary (Tenet 4), not silently drop-ledger a causeless empty.
+    const badExtractor: DraftExtractor = {
+      async draft(): Promise<DraftResult> {
+        // Type-VALID (noDraftCause is optional in the static type) but RUNTIME-invalid:
+        // the schema's "cause iff empty" refine requires a cause when drafts is empty,
+        // so the core boundary parse rejects this — exactly the buggy-adapter case.
+        return { drafts: [] };
+      },
+    };
+    await expect(runExtractStage(solo(), deps(spySource([1]), badExtractor))).rejects.toThrow(
+      /noDraftCause must be present iff drafts is empty/,
+    );
   });
 
   it('a contract-violating extractor throw propagates (fail-loud, not swallowed)', async () => {
-    // The port contract is: return [] on a per-PR failure (the CLI adapter catches
-    // its own IO errors). A throw VIOLATES that contract and must NOT be silently
-    // swallowed — it propagates (Tenet 4). Per-PR resilience is the adapter's job;
-    // the []-returns path is covered by "extractor produced no draft" above.
+    // The port contract is: return { drafts: [], noDraftCause } on a per-PR failure
+    // (the CLI adapter catches its own IO errors → 'invoke-error'). A throw VIOLATES
+    // that contract and must NOT be silently swallowed — it propagates (Tenet 4).
+    // Per-PR resilience is the adapter's job; the empty-result path is covered by
+    // "extractor produced no draft" above.
     const throwingExtractor: DraftExtractor = {
       async draft(c) {
         if (c.pr === 1) throw new Error('boom');
-        return [USABLE_DSL];
+        return { drafts: [USABLE_DSL] };
       },
     };
     await expect(
@@ -392,9 +421,10 @@ function recordingExtractor(byPr?: Map<number, string[]>): DraftExtractor & {
   const seen: ReviewThreadContent[] = [];
   return {
     seen,
-    async draft(c: ReviewThreadContent): Promise<string[]> {
+    async draft(c: ReviewThreadContent): Promise<DraftResult> {
       seen.push(c);
-      return byPr?.get(c.pr) ?? [USABLE_DSL];
+      const drafts = byPr?.get(c.pr) ?? [USABLE_DSL];
+      return drafts.length === 0 ? { drafts, noDraftCause: 'all-filtered' } : { drafts };
     },
   };
 }

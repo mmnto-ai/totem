@@ -56,6 +56,7 @@ import { z } from 'zod';
 // Type-only (erased at compile — no runtime barrel load; GCA #2209).
 import type {
   ClassifierResult,
+  DraftResult,
   ExtractStageResult,
   ReviewThread,
   ReviewThreadContent,
@@ -325,16 +326,20 @@ function stripCodeFence(raw: string): string {
 }
 
 /**
- * Parse the extractor's raw LLM text → `string[]` of candidate DSL bodies.
- * Contract: a strict JSON array of non-empty strings, or the `NONE` sentinel.
- * Anything else (prose, invalid JSON, non-array) → `[]` (fail-SOFT: a per-PR
+ * Parse the extractor's raw LLM text → a `DraftResult` (candidate DSL bodies, or
+ * an empty list WITH the NO-DRAFT cause). Contract: a strict JSON array of
+ * non-empty strings, or the `NONE` sentinel. Anything else is fail-SOFT (a per-PR
  * shape failure is a creditable empty draft, never a throw — core then loud-drops
- * each body that is not usable DSL via `isUsableDsl`).
+ * via the cause-tagged ledger). The cause partition is evaluated in the pinned
+ * order (empty → NONE → SyntaxError → non-array → all-filtered) so each `[]` path
+ * is mutually-exclusive (`NoDraftCauseSchema` in core). A parsed array with ≥1
+ * usable body returns drafts and NO cause — the cause is a no-draft diagnostic,
+ * not a partial-quality ledger (a filtered-out sibling element does not tag it).
  */
-export function parseExtractorOutput(raw: string): string[] {
+export function parseExtractorOutput(raw: string): DraftResult {
   const text = stripCodeFence(raw);
-  if (text.length === 0) return [];
-  if (text.toUpperCase() === NONE_SENTINEL) return [];
+  if (text.length === 0) return { drafts: [], noDraftCause: 'empty-output' };
+  if (text.toUpperCase() === NONE_SENTINEL) return { drafts: [], noDraftCause: 'none-sentinel' };
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -344,12 +349,13 @@ export function parseExtractorOutput(raw: string): string[] {
     // a JSON SyntaxError: an unexpected error is a real bug and must fail loud
     // (Tenet 4), mirroring core's `isUsableDsl`.
     if (!(err instanceof SyntaxError)) throw err;
-    return [];
+    return { drafts: [], noDraftCause: 'unparseable-shape' };
   }
-  if (!Array.isArray(parsed)) return [];
-  return parsed
+  if (!Array.isArray(parsed)) return { drafts: [], noDraftCause: 'non-array' };
+  const drafts = parsed
     .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
     .map((s) => s.trim());
+  return drafts.length === 0 ? { drafts, noDraftCause: 'all-filtered' } : { drafts };
 }
 
 /**
@@ -578,14 +584,14 @@ export class LiveDraftExtractor {
     return this._attempts - this._failures;
   }
 
-  async draft(content: ReviewThreadContent): Promise<string[]> {
+  async draft(content: ReviewThreadContent): Promise<DraftResult> {
     this._attempts += 1;
     // Per-PR fail-soft via `.catch` (a call, not a try/catch clause): ANY live-invoke
-    // failure → a creditable empty draft, NEVER a throw (a throw aborts the whole train
-    // sweep). Only a failed INVOKE increments `_failures` — parse failures don't (the
-    // parser is itself fail-soft) — so the assertPipelineProductive floor stays a true
-    // dead-provider signal. GLOBAL failure is caught loudly up front
-    // (verifyLlmAdapterConfig) + by the floor, never here.
+    // failure → a creditable empty draft tagged `invoke-error`, NEVER a throw (a throw
+    // aborts the whole train sweep). Only a failed INVOKE increments `_failures` —
+    // parse failures don't (the parser is itself fail-soft, and names its own cause) —
+    // so the assertPipelineProductive floor stays a true dead-provider signal. GLOBAL
+    // failure is caught loudly up front (verifyLlmAdapterConfig) + by the floor.
     const result = await Promise.resolve()
       .then(() =>
         this.invoke({
@@ -601,7 +607,7 @@ export class LiveDraftExtractor {
       .catch(() => undefined);
     if (result === undefined) {
       this._failures += 1;
-      return [];
+      return { drafts: [], noDraftCause: 'invoke-error' };
     }
     return parseExtractorOutput(result.content);
   }

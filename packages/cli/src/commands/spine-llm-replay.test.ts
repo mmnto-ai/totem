@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type ClassifierResult,
+  type DraftResult,
+  DraftResultSchema,
   type ExtractStageResult,
   type ReviewThread,
   type ReviewThreadContent,
@@ -11,6 +13,7 @@ import {
   classifierInputKey,
   ClassifierResultLocalSchema,
   computeArtifactHash,
+  DraftResultLocalSchema,
   DuplicateRecordError,
   extractorInputKey,
   FixtureIntegrityError,
@@ -33,11 +36,14 @@ type DraftCandidate = ExtractStageResult['drafts'][number];
 
 // ─── Stub ports (in-memory, deterministic — NO network, NO LLM) ──────────────
 
-/** A canned `DraftExtractor`: returns a fixed `string[]` keyed by PR (default to a 1-elem draft). */
+/** A canned `DraftExtractor`: returns a fixed `DraftResult` keyed by PR (default to a 1-elem draft). */
 class StubExtractor {
   constructor(private readonly byPr: Map<number, string[]>) {}
-  draft(content: ReviewThreadContent): Promise<string[]> {
-    return Promise.resolve(this.byPr.get(content.pr) ?? [`draft for PR ${content.pr}`]);
+  draft(content: ReviewThreadContent): Promise<DraftResult> {
+    const drafts = this.byPr.get(content.pr) ?? [`draft for PR ${content.pr}`];
+    return Promise.resolve(
+      drafts.length === 0 ? { drafts, noDraftCause: 'all-filtered' } : { drafts },
+    );
   }
 }
 
@@ -146,7 +152,7 @@ describe('record → replay determinism (FM-a)', () => {
     expect(await replayExtractor.draft(c)).toEqual(recordedDrafts);
     expect(await replayClassifier.classify(d)).toEqual(recordedClass);
     // And the recorded values are exactly what the stub produced.
-    expect(recordedDrafts).toEqual(['draft-A', 'draft-B']);
+    expect(recordedDrafts).toEqual({ drafts: ['draft-A', 'draft-B'] });
     expect(recordedClass).toEqual({ disposition: 'behavioral', dispositionSource: 'classified' });
   });
 
@@ -246,7 +252,7 @@ describe('replay miss red craft', () => {
     // NOT resolve to a safe-default [] (the whole point of the no-fallback rule).
     const missContent = content({ pr: 999 });
     await expect(replay.draft(missContent)).rejects.toBeInstanceOf(ReplayMissError);
-    let resolvedTo: string[] | undefined;
+    let resolvedTo: DraftResult | undefined;
     await replay.draft(missContent).then(
       (v) => {
         resolvedTo = v;
@@ -274,16 +280,20 @@ describe('replay miss red craft', () => {
 // ─── 4. Recorded-empty vs miss ───────────────────────
 
 describe('recorded-empty vs miss (real rows, distinguishable from absence)', () => {
-  it('replays a recorded [] (extractor) as [] — a real row, not a miss', async () => {
+  it('replays a recorded empty DraftResult as that exact value (a real row, not a miss)', async () => {
     const sink = new ReplayRecordSink();
     const rec = new RecordingDraftExtractor(new StubExtractor(new Map([[100, []]])), sink);
     const recorded = await rec.draft(content({ pr: 100 }));
-    expect(recorded).toEqual([]);
+    expect(recorded).toEqual({ drafts: [], noDraftCause: 'all-filtered' });
 
     const artifact = sink.freeze(STUB_PROVENANCE);
     const replay = new ReplayDraftExtractor(artifact, computeArtifactHash(artifact));
-    // HIT on a recorded [] — returns [], does NOT throw ReplayMissError.
-    await expect(replay.draft(content({ pr: 100 }))).resolves.toEqual([]);
+    // HIT on a recorded empty result — returns the cause-tagged DraftResult, does
+    // NOT throw ReplayMissError.
+    await expect(replay.draft(content({ pr: 100 }))).resolves.toEqual({
+      drafts: [],
+      noDraftCause: 'all-filtered',
+    });
   });
 
   it('replays a recorded {behavioral, error-default} (classifier) as that exact value', async () => {
@@ -330,7 +340,7 @@ describe('duplicate (adapterKind, inputKey) → DuplicateRecordError', () => {
   it('does NOT collide two different sections sharing a coincidental key value', () => {
     // extractor + classifier maps are independent; the same string in both is fine.
     const sink = new ReplayRecordSink();
-    sink.recordExtractor('shared-key', ['e']);
+    sink.recordExtractor('shared-key', { drafts: ['e'] });
     expect(() =>
       sink.recordClassifier('shared-key', {
         disposition: 'structural',
@@ -420,6 +430,59 @@ describe('ClassifierResultLocalSchema parity with core (GCA #2209, option a)', (
   });
 });
 
+describe('DraftResultLocalSchema parity with core (α cause-tags; GCA #2209)', () => {
+  it('accepts / rejects EXACTLY what core DraftResultSchema does', () => {
+    const cases: unknown[] = [
+      { drafts: ['a', 'b'] }, // valid (drafts, no cause)
+      { drafts: [] }, // invalid — empty WITHOUT a cause (cause-iff-empty refine)
+      { drafts: [], noDraftCause: 'invoke-error' }, // valid
+      { drafts: [], noDraftCause: 'all-filtered' }, // valid
+      { drafts: [], noDraftCause: 'legacy-unknown' }, // valid (replay-migration cause)
+      { drafts: ['a'], noDraftCause: 'none-sentinel' }, // invalid — cause WITH drafts
+      { drafts: [], noDraftCause: 'bogus' }, // enum → invalid
+      { noDraftCause: 'empty-output' }, // missing drafts → invalid
+    ];
+    for (const c of cases) {
+      expect(DraftResultLocalSchema.safeParse(c).success).toBe(
+        DraftResultSchema.safeParse(c).success,
+      );
+    }
+  });
+});
+
+describe('ReplayDraftExtractor backward-compat (α legacy string[] migration)', () => {
+  // The committed cert-#1 fixture stored BARE string[] extractor rows (pre-cause-tag).
+  // The union schema must still load them (so the fixture parses + hashes identically)
+  // and the replay must normalize them to a DraftResult on read.
+  function legacyArtifact(rows: Record<string, string[]>): ReplayArtifact {
+    return ReplayArtifactSchema.parse({
+      kind: REPLAY_ARTIFACT_KIND,
+      provenance: STUB_PROVENANCE,
+      records: { extractor: rows, classifier: {} },
+    });
+  }
+
+  it('normalizes a legacy non-empty string[] row → { drafts } (no fabricated cause)', async () => {
+    const c = content({ pr: 100 });
+    const artifact = legacyArtifact({ [extractorInputKey(c)]: ['legacy-draft'] });
+    const replay = new ReplayDraftExtractor(artifact, computeArtifactHash(artifact));
+    await expect(replay.draft(c)).resolves.toEqual({ drafts: ['legacy-draft'] });
+  });
+
+  it('normalizes a legacy EMPTY string[] row → legacy-unknown (never a fabricated real cause)', async () => {
+    const c = content({ pr: 100 });
+    const artifact = legacyArtifact({ [extractorInputKey(c)]: [] });
+    const replay = new ReplayDraftExtractor(artifact, computeArtifactHash(artifact));
+    await expect(replay.draft(c)).resolves.toEqual({ drafts: [], noDraftCause: 'legacy-unknown' });
+  });
+
+  it('a legacy bare-array fixture parses + hashes (the union keeps the cert-#1 fixture loadable)', () => {
+    const c = content({ pr: 100 });
+    const artifact = legacyArtifact({ [extractorInputKey(c)]: ['x'] });
+    expect(() => computeArtifactHash(artifact)).not.toThrow();
+  });
+});
+
 describe('classifierInputKey (fold D)', () => {
   it('is stable for the same provenance + dslSource + draftRef', () => {
     const d = draft({ pr: 100, dslSource: 'body' });
@@ -484,7 +547,7 @@ describe('serialization hygiene', () => {
     const parsed = JSON.parse(serialized) as ReplayArtifact;
     // Each record VALUE is strictly the port's output shape — nothing else.
     const extractorVal = Object.values(parsed.records.extractor)[0];
-    expect(extractorVal).toEqual(['only-the-output']);
+    expect(extractorVal).toEqual({ drafts: ['only-the-output'] });
     const classifierVal = Object.values(parsed.records.classifier)[0];
     expect(Object.keys(classifierVal as object).sort()).toEqual([
       'disposition',
