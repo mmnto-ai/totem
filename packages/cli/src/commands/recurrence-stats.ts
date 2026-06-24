@@ -11,6 +11,8 @@
  * No LLM. No GitHub API writes. Stateless per invocation.
  */
 
+import type { RecurrenceSeverityBucket } from '@mmnto/totem';
+
 import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 
 // totem-context: type-only imports above are erased at compile time and don't
@@ -48,8 +50,9 @@ interface AnnotatedFinding {
 // `toSeverityBucket` is the shared core helper (`@mmnto/totem`), imported in
 // `runRecurrenceStats` — single source of truth across the bot-tax cluster so
 // the coderabbit/gca/greptile mappings can't drift (CR on mmnto-ai/totem#2244;
-// retrospect already consumes the same helper).
-type SeverityBucket = 'critical' | 'high' | 'medium' | 'low' | 'nit';
+// retrospect already consumes the same helper). `SeverityBucket` likewise
+// aliases the core `RecurrenceSeverityBucket` so the union isn't duplicated.
+type SeverityBucket = RecurrenceSeverityBucket;
 
 // ─── Main entrypoint ────────────────────────────────
 
