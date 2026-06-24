@@ -10,6 +10,10 @@ pnpm-lock.yaml
 # Compiled rules hash must match compile-manifest.json — prettier would invalidate it
 .totem/compiled-rules.json
 .totem/compile-manifest.json
+# Gate-1 cert corpus carries integrity shas (fixtureSha/prDiffsSha/llmReplaySha/
+# groundTruthSha/corpusDispositionsSha) over exact on-disk bytes — prettier reformat
+# would invalidate them (strategy#709 cert run)
+.totem/spine/
 # Distributed SessionStart hooks are generated verbatim from @mmnto/cli templates;
 # doctor --parity content-hashes them against the canonical — prettier rewrap reads as drift
 .claude/hooks/
