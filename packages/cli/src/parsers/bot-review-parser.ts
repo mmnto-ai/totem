@@ -19,8 +19,9 @@ import { parseCodeRabbitReviewFindings } from '../parse-nits.js';
  * NOTE: `gca` is triage's local id for `gemini-code-assist` — it intentionally
  * diverges from the core actor-id scheme in `@mmnto/totem`'s `resolveActorId`
  * (which uses `gemini-code-assist` and EXACT-login matching for hit-rate
- * attribution). Triage's goal is broad recognition (surface every finding), so
- * it uses substring matching and a compact display id; the two schemes serve
+ * attribution). Triage's goal is broad recognition (surface every finding) with
+ * a compact display id; it matches coderabbit/gca by substring and greptile by
+ * its bot-login shape (see `GREPTILE_BOT_LOGIN`). The two schemes serve
  * different purposes and are deliberately not coupled.
  */
 export type BotTool = 'coderabbit' | 'gca' | 'greptile' | 'unknown';
@@ -56,18 +57,24 @@ export interface CommentThread {
 
 // ─── Bot Detection ──────────────────────────────────
 
-// The three active paid review bots, by the substring that identifies each in a
-// GitHub author login. Canonical exact-login map lives in `@mmnto/totem`'s
-// `review-catch.ts` (`REVIEW_BOT_ACTOR_IDS`); triage matches by substring
-// instead so a future variant (e.g. `greptile-enterprise[bot]`) is still
-// recognized as a bot and surfaced rather than silently dropped — see the
-// {@link BotTool} note on why the two schemes differ.
+// greptile is matched by its bot-login SHAPE — `greptile[bot]`,
+// `greptile-apps[bot]`, `greptile-enterprise[bot]` — rather than a bare
+// `greptile` substring, so a human account like `alice-greptile` is NOT
+// misclassified as a bot (which would hide real human replies in
+// `isThreadResolved` and ingest human comments as bot findings — CR Major on
+// mmnto-ai/totem#2244), while future bot variants are still surfaced. The
+// reviewer's suggested regex carried a trailing `\b` that fails right after the
+// closing `]` (non-word char at end-of-string), so it is dropped here.
+// coderabbit / gca keep their established bare-substring match (canonical
+// exact-login map lives in `@mmnto/totem`'s `review-catch.ts`).
+const GREPTILE_BOT_LOGIN = /\bgreptile(?:-[^[]+)?\[bot\]/i;
+
 export function isBotComment(author: string): boolean {
   const lower = author.toLowerCase();
   return (
     lower.includes('coderabbit') ||
     lower.includes('gemini-code-assist') ||
-    lower.includes('greptile')
+    GREPTILE_BOT_LOGIN.test(author)
   );
 }
 
@@ -75,7 +82,7 @@ export function detectBot(author: string): BotTool {
   const lower = author.toLowerCase();
   if (lower.includes('coderabbit')) return 'coderabbit';
   if (lower.includes('gemini-code-assist')) return 'gca';
-  if (lower.includes('greptile')) return 'greptile';
+  if (GREPTILE_BOT_LOGIN.test(author)) return 'greptile';
   return 'unknown';
 }
 

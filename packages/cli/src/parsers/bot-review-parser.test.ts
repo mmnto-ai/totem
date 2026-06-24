@@ -52,11 +52,14 @@ describe('isBotComment', () => {
     expect(isBotComment('greptile-apps[bot]')).toBe(true);
   });
 
-  it('recognizes a future greptile variant as a bot (substring match — surface, never drop)', () => {
-    // Unlike core review-catch.ts (exact-match for hit-rate attribution), triage matches
-    // by substring so a new variant is still surfaced rather than silently dropped.
+  it('matches greptile bot variants by login shape, not a bare substring (CR Major #2244)', () => {
+    // A future bot variant is still surfaced …
     expect(isBotComment('greptile-enterprise[bot]')).toBe(true);
     expect(detectBot('greptile-enterprise[bot]')).toBe('greptile');
+    // … but a human whose login merely contains 'greptile' is NOT a bot
+    // (a bare-substring match would hide their replies / ingest them as findings).
+    expect(isBotComment('alice-greptile')).toBe(false);
+    expect(detectBot('alice-greptile')).toBe('unknown');
   });
 
   it('returns false for human authors', () => {

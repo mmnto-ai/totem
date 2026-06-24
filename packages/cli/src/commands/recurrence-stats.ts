@@ -45,35 +45,11 @@ interface AnnotatedFinding {
 
 // ─── Severity bucket mapping ────────────────────────
 
+// `toSeverityBucket` is the shared core helper (`@mmnto/totem`), imported in
+// `runRecurrenceStats` — single source of truth across the bot-tax cluster so
+// the coderabbit/gca/greptile mappings can't drift (CR on mmnto-ai/totem#2244;
+// retrospect already consumes the same helper).
 type SeverityBucket = 'critical' | 'high' | 'medium' | 'low' | 'nit';
-
-function toSeverityBucket(
-  tool: NormalizedBotFinding['tool'] | 'override',
-  severity: string,
-): SeverityBucket {
-  const s = severity.toLowerCase();
-  if (tool === 'override') return 'medium';
-  if (tool === 'coderabbit') {
-    if (s === 'critical') return 'critical';
-    if (s === 'major') return 'high';
-    if (s === 'minor') return 'medium';
-    return 'low';
-  }
-  if (tool === 'gca' || tool === 'greptile') {
-    // greptile shares gca's high/medium/low scale; P0 → 'critical' (gca never emits it).
-    if (s === 'critical') return 'critical';
-    if (s === 'high') return 'high';
-    if (s === 'medium') return 'medium';
-    if (s === 'low') return 'low';
-    return 'low';
-  }
-  // unknown tool / synthesized review-body
-  if (s === 'critical') return 'critical';
-  if (s === 'high' || s === 'major') return 'high';
-  if (s === 'medium' || s === 'minor' || s === 'warning') return 'medium';
-  if (s === 'low' || s === 'info') return 'low';
-  return 'nit';
-}
 
 // ─── Main entrypoint ────────────────────────────────
 
@@ -100,6 +76,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
     loadCompiledRules,
     normalizeFindingBody,
     readLedgerEvents,
+    toSeverityBucket,
     tokenizeForJaccard,
   } = await import('@mmnto/totem');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
