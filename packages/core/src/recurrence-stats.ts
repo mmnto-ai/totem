@@ -22,6 +22,7 @@ import { z } from 'zod';
 export const RecurrenceToolSchema = z.enum([
   'coderabbit',
   'gca',
+  'greptile',
   'sarif',
   'override',
   'mixed',
@@ -42,7 +43,7 @@ export type RecurrenceSeverityBucket = z.infer<typeof RecurrenceSeverityBucketSc
  *
  * Tool inputs:
  * - `'coderabbit'`: `critical` / `major` / `minor` / `*` → `critical` / `high` / `medium` / `low`
- * - `'gca'`: `high` / `medium` / `low` → identical buckets; default `low`
+ * - `'gca'` / `'greptile'`: `critical` / `high` / `medium` / `low` → identical buckets; default `low` (greptile P0 → `critical`)
  * - `'sarif'`: SARIF level vocabulary (`error` / `warning` / `note` / `none`) → `high` / `medium` / `low` / `low`
  * - `'override'`: trap-ledger override events surface as `medium`
  * - any other tool (`'unknown'`, `undefined`): keyword-mapped from the raw severity string
@@ -67,7 +68,10 @@ export function toSeverityBucket(
     if (s === 'minor') return 'medium';
     return 'low';
   }
-  if (tool === 'gca') {
+  if (tool === 'gca' || tool === 'greptile') {
+    // greptile shares gca's high/medium/low scale; P0 maps to 'critical' upstream
+    // (parseGreptileSeverity), which gca never emits but greptile can.
+    if (s === 'critical') return 'critical';
     if (s === 'high') return 'high';
     if (s === 'medium') return 'medium';
     if (s === 'low') return 'low';

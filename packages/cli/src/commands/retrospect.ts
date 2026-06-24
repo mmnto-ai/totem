@@ -346,12 +346,16 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     const normalized = normalizeFindingBody(a.finding.body);
     if (normalized.length === 0) continue;
     const signature = computeSignature(normalized);
-    // greptile is recognized + severity-bucketed upstream (parseSeverityForTool), but the
-    // distribution's tool LABEL stays in core's RetrospectReportSchema union — widening that
-    // persisted-artifact enum is out of scope for this CLI fix, so greptile rolls up under
-    // 'unknown' here (mmnto-ai/totem#2192 follow-on).
-    const tool: 'coderabbit' | 'gca' | 'sarif' | 'override' | 'unknown' =
-      a.finding.tool === 'coderabbit' ? 'coderabbit' : a.finding.tool === 'gca' ? 'gca' : 'unknown';
+    // greptile is a first-class tool in the persisted RetrospectFindingToolSchema, so
+    // preserve its attribution (CR Major on mmnto-ai/totem#2244) rather than collapsing it.
+    const tool: 'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'unknown' =
+      a.finding.tool === 'coderabbit'
+        ? 'coderabbit'
+        : a.finding.tool === 'gca'
+          ? 'gca'
+          : a.finding.tool === 'greptile'
+            ? 'greptile'
+            : 'unknown';
     const severityBucket = toSeverityBucket(tool, a.finding.severity);
 
     // Cross-PR recurrence — count of OTHER PRs (target excluded by construction).

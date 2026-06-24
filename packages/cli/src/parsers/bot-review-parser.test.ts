@@ -117,6 +117,10 @@ describe('parseGCASeverity', () => {
 // ─── parseGreptileSeverity (mmnto-ai/totem#2192) ────────
 
 describe('parseGreptileSeverity', () => {
+  it('maps P0 → critical (greptile P0 = blocking; mmnto-ai/totem#2244)', () => {
+    expect(parseGreptileSeverity('**P0** SQL injection')).toBe('critical');
+  });
+
   it('maps P1 → high', () => {
     expect(parseGreptileSeverity('**P1** This dereferences a possibly-null value')).toBe('high');
   });
@@ -151,6 +155,7 @@ describe('parseSeverityForTool', () => {
 
   it('dispatches greptile to the greptile parser', () => {
     expect(parseSeverityForTool('greptile', '**P1** null deref')).toBe('high');
+    expect(parseSeverityForTool('greptile', '**P0** rce')).toBe('critical');
   });
 
   it('returns info for an unknown tool', () => {

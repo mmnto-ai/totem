@@ -127,9 +127,12 @@ export function parseGCASeverity(body: string): string {
  * Best-effort: greptile's inline format is less structured than CR's emoji or
  * GCA's SVG marker, so when no explicit priority token is present this returns
  * `info` and the body-keyword categorizer does the real bucketing. Word-bounded
- * so `P1`/`p1` matches but a mid-token `GP1X` does not.
+ * so `P1`/`p1` matches but a mid-token `GP1X` does not. P0 is greptile's
+ * critical/blocking level (greptile review on mmnto-ai/totem#2244) — without it,
+ * a `P0` finding would silently fall through to `info`, the opposite of safe.
  */
 export function parseGreptileSeverity(body: string): string {
+  if (/\bP0\b/i.test(body)) return 'critical';
   if (/\bP1\b/i.test(body)) return 'high';
   if (/\bP2\b/i.test(body)) return 'medium';
   if (/\bP3\b/i.test(body)) return 'low';

@@ -7,6 +7,7 @@ import {
   RecurrencePatternSchema,
   RecurrenceStatsSchema,
   tokenizeForJaccard,
+  toSeverityBucket,
 } from './recurrence-stats.js';
 
 // ─── RecurrencePatternSchema ───────────────────────────
@@ -67,6 +68,33 @@ describe('RecurrencePatternSchema', () => {
       coveredByRule: false,
     });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts greptile as a first-class tool (mmnto-ai/totem#2244)', () => {
+    const result = RecurrencePatternSchema.safeParse({
+      signature: 'abc123def4567890',
+      tool: 'greptile',
+      severityBucket: 'critical',
+      occurrences: 1,
+      prs: ['101'],
+      sampleBodies: ['possible null dereference'],
+      firstSeen: '2026-01-01T00:00:00.000Z',
+      lastSeen: '2026-01-01T00:00:00.000Z',
+      paths: ['src/a.ts'],
+      coveredByRule: false,
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+// ─── toSeverityBucket (greptile; mmnto-ai/totem#2244) ──
+
+describe('toSeverityBucket — greptile', () => {
+  it('maps greptile P0→critical through high/medium/low like gca', () => {
+    expect(toSeverityBucket('greptile', 'critical')).toBe('critical');
+    expect(toSeverityBucket('greptile', 'high')).toBe('high');
+    expect(toSeverityBucket('greptile', 'medium')).toBe('medium');
+    expect(toSeverityBucket('greptile', 'low')).toBe('low');
   });
 });
 

@@ -60,7 +60,8 @@ function toSeverityBucket(
     return 'low';
   }
   if (tool === 'gca' || tool === 'greptile') {
-    // greptile shares gca's high/medium/low scale (parseGreptileSeverity maps P1/P2/P3).
+    // greptile shares gca's high/medium/low scale; P0 → 'critical' (gca never emits it).
+    if (s === 'critical') return 'critical';
     if (s === 'high') return 'high';
     if (s === 'medium') return 'medium';
     if (s === 'low') return 'low';
