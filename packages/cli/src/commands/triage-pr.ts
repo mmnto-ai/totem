@@ -415,14 +415,15 @@ export async function triagePrCommand(
     log.info(TAG, `Found ${botThreads.length} bot review thread(s)`);
   }
   // Surface bot summaries even when they yielded no parsed findings (e.g. a
-  // greptile summary present but the provisional parser matched nothing) — the
-  // operator must know a bot engaged, never see a bare "nothing".
+  // greptile summary present but the provisional parser matched nothing). This is
+  // a parser-COVERAGE signal, not an all-clear (Tenet 4: fetch>0 + parse==0 is a
+  // possible parser gap, never a clean empty state) — per strategy-claude on #2192.
   if (botIssueComments.length > 0 && issueCommentFindings.length === 0) {
     const tools = [...new Set(botIssueComments.map((c) => detectBot(c.author)))].join(', ');
     log.info(
       TAG,
-      `${botIssueComments.length} bot summary issue-comment(s) present (${tools}) — ` +
-        `no discrete findings parsed; review the PR summary directly.`,
+      `${botIssueComments.length} bot summary issue-comment(s) fetched (${tools}) but 0 parsed — ` +
+        `possible parser gap; review the PR summary directly.`,
     );
   }
 
