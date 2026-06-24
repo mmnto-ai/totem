@@ -29,7 +29,13 @@ import { z } from 'zod';
 // to keep CLI startup fast — the core barrel pulls in heavy deps (LanceDB,
 // apache-arrow). Matches the spine-windtunnel.ts convention. Type-only imports
 // are erased at compile, so they stay static.
-import type { FetchResult, ReviewThread, ReviewThreadSource } from '@mmnto/totem';
+import type {
+  AuthorKind,
+  FetchResult,
+  ReviewThread,
+  ReviewThreadComment,
+  ReviewThreadSource,
+} from '@mmnto/totem';
 
 // ─── Named constants ─────────────────────────────────
 
@@ -148,22 +154,60 @@ async function loadDefaultExec(cwd: string): Promise<GhExec> {
 // ─── Mapping ─────────────────────────────────────────
 
 /**
- * Map a validated GraphQL response to the surviving `ReviewThread[]` with their
- * resolution flags surfaced. Pure — exported for the mapping test. A null author
- * (deleted/ghost) coerces to '' (`isBotIdentity('')` is false, so it stays a
- * human-author '' that core's empty-body / count logic handles correctly; the
- * body still gates inclusion).
+ * The two CORE-homed comment classifiers `mapThreads` stamps onto each comment
+ * (slice β). Injected — the LOGIC + version live in core (`classifyAuthorKind`,
+ * `normalizeReviewChrome`; panel OQ-β1/β3), the adapter is only the mapping-
+ * boundary call site, so the inputKey can never drift from the provenance. The
+ * real `fetch` resolves these by lazy-loading core (the barrel is loaded anyway
+ * for `safeExec`); tests pass the real core fns directly.
  */
-export function mapThreads(nodes: z.infer<typeof GqlReviewThreadSchema>[]): ReviewThread[] {
+export interface CommentEnrichers {
+  classifyAuthorKind: (author: string) => AuthorKind;
+  normalizeReviewChrome: (body: string) => string;
+}
+
+/**
+ * Slice-β comment enrichment (the SHARED single home): stamp `authorKind` (via core
+ * `classifyAuthorKind`) + `normalizedBody` (the de-chromed text the extractor
+ * consumes — `normalizeReviewChrome(body)` for a recognized review bot, else the raw
+ * body verbatim; chrome is stripped ONLY for bot comments so human prose is never
+ * altered). BOTH the live `mapThreads` AND the replay-time `frozenSourceFrom` loader
+ * (`spine-cert-run-corpus`) call THIS, so the de-chromed body they feed the
+ * extractor — hence the `extractorInputKey` — can never diverge between record and
+ * replay (a divergence would be indistinguishable from model drift).
+ */
+export function enrichComment(
+  enrich: CommentEnrichers,
+  author: string,
+  body: string,
+): ReviewThreadComment {
+  const authorKind = enrich.classifyAuthorKind(author);
+  return {
+    author,
+    body,
+    authorKind,
+    normalizedBody: authorKind === 'bot' ? enrich.normalizeReviewChrome(body) : body,
+  };
+}
+
+/**
+ * Map a validated GraphQL response to the surviving `ReviewThread[]` with their
+ * resolution flags surfaced and each comment slice-β-ENRICHED (see `enrichComment`).
+ * Pure given `enrich` — exported for the mapping test. A null author (deleted/ghost)
+ * coerces to '' (`reviewBotIdentity('')` is false → `authorKind: 'human'`, and
+ * `isBotIdentity('')` is false, so core's count keeps it; the body still gates
+ * inclusion).
+ */
+export function mapThreads(
+  nodes: z.infer<typeof GqlReviewThreadSchema>[],
+  enrich: CommentEnrichers,
+): ReviewThread[] {
   return nodes.map((t) => ({
     path: t.path,
     // SURFACE the flags — never filter on them here (core decides).
     isResolved: t.isResolved,
     isOutdated: t.isOutdated,
-    comments: t.comments.nodes.map((c) => ({
-      author: c.author?.login ?? '',
-      body: c.body,
-    })),
+    comments: t.comments.nodes.map((c) => enrichComment(enrich, c.author?.login ?? '', c.body)),
   }));
 }
 
@@ -177,6 +221,12 @@ export interface ReviewThreadSourceAdapterOptions {
   cwd?: string;
   /** Injectable exec seam (tests). Defaults to a `gh`-backed `safeExec`. */
   exec?: GhExec;
+  /**
+   * Injectable slice-β comment enrichers (tests). Defaults to a lazy-load of core's
+   * `classifyAuthorKind` + `normalizeReviewChrome` (the barrel is loaded anyway for
+   * `safeExec`). Tests pass the real core fns so the mapping is exercised end-to-end.
+   */
+  enrich?: CommentEnrichers;
 }
 
 /**
@@ -196,12 +246,17 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
    * guard (CR #2207 — was benign since dynamic import is idempotent, now explicit).
    */
   private execPromise: Promise<GhExec> | undefined;
+  /** Injected slice-β enrichers (tests); when absent the default lazy-loads core once via `enrichPromise`. */
+  private readonly injectedEnrich: CommentEnrichers | undefined;
+  /** Memoized lazy-load of core's `classifyAuthorKind` + `normalizeReviewChrome` (real runs) — see `execPromise`. */
+  private enrichPromise: Promise<CommentEnrichers> | undefined;
 
   constructor(opts: ReviewThreadSourceAdapterOptions) {
     this.owner = opts.owner;
     this.name = opts.name;
     this.cwd = opts.cwd ?? process.cwd();
     this.injectedExec = opts.exec;
+    this.injectedEnrich = opts.enrich;
   }
 
   /** Resolve the exec seam: the injected one (tests), else the memoized lazy-loaded default. */
@@ -209,6 +264,16 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
     if (this.injectedExec) return Promise.resolve(this.injectedExec);
     this.execPromise ??= loadDefaultExec(this.cwd);
     return this.execPromise;
+  }
+
+  /** Resolve the slice-β enrichers: the injected ones (tests), else a memoized lazy-load of core. */
+  private resolveEnrich(): Promise<CommentEnrichers> {
+    if (this.injectedEnrich) return Promise.resolve(this.injectedEnrich);
+    this.enrichPromise ??= (async () => {
+      const { classifyAuthorKind, normalizeReviewChrome } = await import('@mmnto/totem');
+      return { classifyAuthorKind, normalizeReviewChrome };
+    })();
+    return this.enrichPromise;
   }
 
   async fetch(pr: number): Promise<FetchResult> {
@@ -289,7 +354,8 @@ export class ReviewThreadSourceAdapter implements ReviewThreadSource {
       }
     }
 
-    const threads = mapThreads(pull.reviewThreads.nodes);
+    const enrich = await this.resolveEnrich();
+    const threads = mapThreads(pull.reviewThreads.nodes, enrich);
     return {
       kind: 'ok',
       content: { pr, mergeCommitSha, threads },

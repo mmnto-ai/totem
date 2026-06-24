@@ -348,7 +348,11 @@ const asStructural: ClassifierResult = {
 const structuralClassifier: DraftClassifier = { classify: () => Promise.resolve(asStructural) };
 
 function draft(pr: number, dslSource: string): DraftCandidate {
-  return { provenance: { mergedPr: pr, reviewThread: `rt-${pr}`, commitSha: sha(pr) }, dslSource };
+  return {
+    provenance: { mergedPr: pr, reviewThread: `rt-${pr}`, commitSha: sha(pr) },
+    dslSource,
+    sourceKind: 'human',
+  };
 }
 
 function extractResultOf(drafts: DraftCandidate[]): ExtractStageResult {

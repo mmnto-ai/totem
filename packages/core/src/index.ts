@@ -843,6 +843,7 @@ export { deriveLabelsFromDispositions } from './spine/derive-labels.js';
 export type { DispositionClass, DispositionComment } from './spine/disposition-taxonomy.js';
 export { classifyDisposition, dispositionToLabel } from './spine/disposition-taxonomy.js';
 export type {
+  AuthorKind,
   DraftExtractor,
   DraftResult,
   ExtractStageDeps,
@@ -853,7 +854,7 @@ export type {
   ReviewThreadContent,
   ReviewThreadSource,
 } from './spine/extract.js';
-export { DraftResultSchema, runExtractStage } from './spine/extract.js';
+export { classifyAuthorKind, DraftResultSchema, runExtractStage } from './spine/extract.js';
 export type {
   ApiFetchSlice,
   ApiUsageLedger,
@@ -861,6 +862,7 @@ export type {
   ClassifierLedger,
   ClassifierLedgerEntry,
   DispositionSource,
+  DraftSourceKind,
   DropLedger,
   DropLedgerEntry,
   DropReasonCode,
@@ -878,6 +880,7 @@ export {
   ClassifierLedgerEntrySchema,
   ClassifierLedgerSchema,
   DispositionSourceSchema,
+  DraftSourceKindSchema,
   DropLedgerEntrySchema,
   DropLedgerSchema,
   DropReasonCodeSchema,
@@ -896,6 +899,10 @@ export type {
 export { buildCertifiedRulesFile, projectLegitimacy } from './spine/legitimacy-projection.js';
 export type { FalsificationResult, FmClause, FmViolation } from './spine/miner-harness.js';
 export { checkParsedLedgers, runFalsificationHarness } from './spine/miner-harness.js';
+export {
+  normalizeReviewChrome,
+  REVIEW_CHROME_NORMALIZER_VERSION,
+} from './spine/review-normalize.js';
 export type {
   CodePathClassifier,
   PrMeta,
@@ -910,6 +917,7 @@ export {
   parseRevertSha,
   prSetsEqual,
   resolveSelectionRule,
+  reviewBotIdentity,
   SelectionRuleParseError,
   selectionRulePredicate,
 } from './spine/selection-rule.js';

@@ -42,13 +42,14 @@ import { extractManualPattern } from '../lesson-pattern.js';
 import type {
   ApiUsageLedger,
   ApiUsageLedgerEntry,
+  DraftSourceKind,
   DropLedger,
   DropLedgerEntry,
   DropReasonCode,
   NoDraftCause,
 } from './ledgers.js';
 import { NoDraftCauseSchema } from './ledgers.js';
-import { isBotIdentity } from './selection-rule.js';
+import { isBotIdentity, reviewBotIdentity } from './selection-rule.js';
 import type { SplitArtifact } from './split.js';
 
 // ── Parsed review-thread content (the fetch port's payload) ───────────────────
@@ -56,8 +57,31 @@ import type { SplitArtifact } from './split.js';
 /** A single parsed review-thread comment (provider-neutral; mirrors the CLI `groupIntoThreads` shape). */
 export interface ReviewThreadComment {
   author: string;
+  /** The RAW comment body, kept verbatim for audit (slice β: `normalizedBody` is the de-chromed twin). */
   body: string;
+  /**
+   * Author classification (slice β, strategy#709). `'bot'` iff the author is a
+   * recognized review-FINDING bot (`reviewBotIdentity` — gemini-code-assist /
+   * coderabbitai); `'human'` otherwise (a human author OR an unrecognized
+   * automation account — the latter is excluded from the substantive count by the
+   * separate `isBotIdentity` denylist check, and is rare on inline review threads).
+   * Set at the CLI mapping boundary via core's `classifyAuthorKind`; the count +
+   * source-tag READ it (its single classification home).
+   */
+  authorKind: AuthorKind;
+  /**
+   * The de-chromed body the extractor actually consumes (slice β). For a `'bot'`
+   * comment this is `normalizeReviewChrome(body)` (severity badges / `<details>`
+   * collapsibles / footer chrome stripped); for a `'human'` comment it equals the
+   * raw `body` (CRLF→LF + trim only — human prose carries no review-bot chrome).
+   * The extractor prompt renders THIS, and `extractorInputKey` digests THIS (not
+   * the raw body), so the key reflects exactly what the LLM saw (panel OQ-β3).
+   */
+  normalizedBody: string;
 }
+
+/** Recognized-review-bot (`'bot'`) vs human/unrecognized (`'human'`) — see `ReviewThreadComment.authorKind`. */
+export type AuthorKind = 'bot' | 'human';
 
 /**
  * A single review thread on a file path.
@@ -74,7 +98,13 @@ export interface ReviewThreadComment {
 export interface ReviewThread {
   path: string;
   comments: ReviewThreadComment[];
-  /** GitHub `reviewThreads.isResolved` — the author marked this thread resolved. */
+  /**
+   * GitHub `reviewThreads.isResolved` — the author marked this thread resolved.
+   * Slice γ (strategy#709): RESOLVED no longer excludes a thread — a resolved
+   * thread is the highest-signal LEGITIMACY marker (a defect the reviewer raised
+   * AND the author confirmed by fixing). Surfaced for audit/identity; `isOutdated`
+   * is now the SOLE eligibility filter. See `eligibleThreads`.
+   */
   isResolved: boolean;
   /** GitHub `reviewThreads.isOutdated` — the thread's diff hunk no longer matches HEAD. */
   isOutdated: boolean;
@@ -123,6 +153,15 @@ export interface DraftCandidate {
    * `**Pattern:**` / yaml rule by the syntactic preflight.
    */
   dslSource: string;
+  /**
+   * The SUBSTRATE provenance (slice β, strategy#709): whether the eligible threads
+   * this PR drafted from carried `human`, `bot` (recognized review-bot), or `mixed`
+   * comments. A TRANSIENT diagnostic (Tenet-19, not an FM falsifier) carried to
+   * Classify, which serializes it onto the §8 emission ledger (panel OQ-β4 — NOT
+   * the reused `ProvenanceRecord`/legitimacy stamp). PR-level coarse-grained (a
+   * single draft can derive from a mix), so a per-candidate tag mirrors its PR.
+   */
+  sourceKind: DraftSourceKind;
 }
 
 // ── Injected ports (core-defined, CLI-implemented — the Stage4VerifierDeps DI) ─
@@ -210,32 +249,92 @@ export interface ExtractStageResult {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Count HUMAN review comments (fold 5): bot comments (CodeRabbit / Greptile /
- * Renovate / dependabot, via the shared `isBotIdentity`) and empty/whitespace
- * bodies do NOT count toward §6's "≥1 review comment" threshold — a bot-only or
- * empty thread is content-thin and must take the loud-drop path, never seed a
- * hallucinated draft.
+ * Classify a comment author (slice β, strategy#709). `'bot'` iff it is a recognized
+ * review-FINDING bot (`reviewBotIdentity` allowlist — gemini/CR); `'human'`
+ * otherwise. The SINGLE classification home: the CLI mapping boundary stamps each
+ * comment's `authorKind` via this, and the count + source-tag read that field.
  */
-function humanCommentCount(threads: readonly ReviewThread[]): number {
+export function classifyAuthorKind(author: string): AuthorKind {
+  return reviewBotIdentity(author) ? 'bot' : 'human';
+}
+
+/**
+ * Is this comment SUBSTANTIVE mining substrate (slice β)? Counts toward §6's
+ * "≥1 review comment" completeness threshold iff its body is non-empty AND it is
+ * either a recognized review-finding bot (`authorKind === 'bot'`) OR a human.
+ *
+ * The slice-β substrate flip (panel OQ-β2, ALLOWLIST): for this bot-reviewed cert
+ * corpus, gemini/CR review comments ARE legitimate substrate — they count. But an
+ * UNRECOGNIZED `[bot]` automation account (renovate / dependabot) is still excluded
+ * via the `isBotIdentity` denylist, so future automation noise can never launder
+ * itself in as a substantive reviewer. Empty/whitespace bodies never count.
+ */
+function isSubstantiveComment(comment: ReviewThreadComment): boolean {
+  // Gate on what the extractor ACTUALLY consumes (greptile #2242): for a review
+  // bot that is the de-chromed `normalizedBody`, so a badge-ONLY comment (non-empty
+  // raw `body`, but `normalizedBody === ''` after the strip) is correctly thin —
+  // it would otherwise clear the gate yet hand the extractor an empty body and
+  // mislead a `no-draft` drop where `truncated` is the truth. Human bodies are
+  // never chrome-stripped, so `normalizedBody === body` for them.
+  const effectiveBody = comment.authorKind === 'bot' ? comment.normalizedBody : comment.body;
+  if (effectiveBody.trim().length === 0) return false;
+  if (comment.authorKind === 'bot') return true;
+  return !isBotIdentity(comment.author);
+}
+
+/**
+ * Count SUBSTANTIVE review comments across threads (slice β — replaces the old
+ * `humanCommentCount`). A thread set with zero substantive comments is content-thin
+ * and must take the loud-drop path, never seed a hallucinated draft.
+ */
+function substantiveCommentCount(threads: readonly ReviewThread[]): number {
   let count = 0;
   for (const thread of threads) {
     for (const comment of thread.comments) {
-      if (comment.body.trim().length > 0 && !isBotIdentity(comment.author)) count++;
+      if (isSubstantiveComment(comment)) count++;
     }
   }
   return count;
 }
 
 /**
- * The resolution-eligibility gate (slice 5a, mmnto-ai/totem#2201). A thread is
- * INELIGIBLE if the author resolved it OR its diff hunk went outdated — either
- * marks it as superseded review discussion, contamination the miner must not
- * draft from. The adapter SURFACES `isResolved`/`isOutdated` (it never
- * pre-filters); core decides here so the rejection is ledgered (§8). Returns the
+ * The substrate provenance of a thread set (slice β, panel OQ-β4): `human` /
+ * `bot` / `mixed` over its SUBSTANTIVE comments only (recognized review-bot vs
+ * human; unrecognized-bot noise is excluded, exactly as the count excludes it).
+ * Called only when ≥1 substantive comment survives the gate, so at least one axis
+ * is non-zero. A non-FM Tenet-19 diagnostic carried onto each draft + the
+ * zero-draft drop.
+ */
+function computeSourceKind(threads: readonly ReviewThread[]): DraftSourceKind {
+  let human = 0;
+  let bot = 0;
+  for (const thread of threads) {
+    for (const comment of thread.comments) {
+      if (!isSubstantiveComment(comment)) continue;
+      if (comment.authorKind === 'bot') bot++;
+      else human++;
+    }
+  }
+  if (bot > 0 && human > 0) return 'mixed';
+  return bot > 0 ? 'bot' : 'human';
+}
+
+/**
+ * The eligibility gate. Slice γ (strategy#709) NARROWS this from slice-5a's
+ * `!isResolved && !isOutdated` to `!isOutdated` — RESOLVED threads are now ADMITTED.
+ *
+ * The slice-5a rationale (resolved == superseded contamination) was REVERSED by the
+ * Gate-1 cert finding: a RESOLVED thread is the highest-signal LEGITIMACY marker —
+ * a defect a reviewer raised AND the author confirmed real by fixing — so excluding
+ * it discarded the very evidence the miner wants (exhibit: lc#532's fail-open-on-
+ * non-finite, dropped solely for being resolved). Only OUTDATED stays excluded: an
+ * outdated thread's diff hunk no longer matches HEAD, so its invariant may have been
+ * refactored away — that IS stale. The adapter SURFACES both flags (it never
+ * pre-filters); core decides here so every rejection is ledgered (§8). Returns the
  * eligible (surviving) threads only.
  */
 function eligibleThreads(threads: readonly ReviewThread[]): ReviewThread[] {
-  return threads.filter((t) => !t.isResolved && !t.isOutdated);
+  return threads.filter((t) => !t.isOutdated);
 }
 
 /**
@@ -295,13 +394,13 @@ function buildProvenance(
  * CI-locked with a fixture extractor + a strict-spy fetch source.
  *
  * Per train PR (and ONLY train PRs): log the fetch → fetch → on unreachable /
- * unparseable-at-source, loud-drop → resolution-eligibility gate (slice 5a: drop
- * `resolved-rejected` when the resolution gate empties an otherwise-human thread,
- * else `truncated` when thin to begin with) → completeness-check (≥1 human
- * comment on the survivors) → build provenance → draft zero-or-more bodies from
- * the SURVIVING threads only → preflight each → carry a `DraftCandidate` or
- * loud-drop. Every train PR ends with at least one draft or one drop (FM i,
- * slice-2 half).
+ * unparseable-at-source, loud-drop → eligibility gate (slice γ: drop
+ * `outdated-rejected` when the outdated filter empties an otherwise-substantive
+ * thread, else `truncated` when thin to begin with) → completeness-check (≥1
+ * substantive comment on the survivors) → build provenance → draft zero-or-more
+ * bodies from the SURVIVING threads only → preflight each → carry a
+ * `DraftCandidate` or loud-drop. Every train PR ends with at least one draft or
+ * one drop (FM i, slice-2 half).
  */
 export async function runExtractStage(
   split: SplitArtifact,
@@ -317,8 +416,15 @@ export async function runExtractStage(
     reasonCode: DropReasonCode,
     detail: string,
     noDraftCause?: NoDraftCause,
+    sourceKind?: DraftSourceKind,
   ): void => {
-    dropEntries.push({ sourcePr, reasonCode, detail, ...(noDraftCause ? { noDraftCause } : {}) });
+    dropEntries.push({
+      sourcePr,
+      reasonCode,
+      detail,
+      ...(noDraftCause ? { noDraftCause } : {}),
+      ...(sourceKind ? { sourceKind } : {}),
+    });
   };
 
   // Iterate the TRAIN slice ONLY — held-out / control / excluded PRs are never
@@ -354,30 +460,30 @@ export async function runExtractStage(
       continue;
     }
 
-    // Resolution-eligibility gate (slice 5a, mmnto-ai/totem#2201) — BEFORE the
-    // completeness check. The adapter surfaced per-thread `isResolved`/`isOutdated`
-    // (it never pre-filters); core decides + ledgers here so every resolution
-    // rejection is auditable (§8). Filter to eligible (non-resolved, non-outdated)
-    // threads and recount human comments on the SURVIVORS only.
-    const preFilterHumanCount = humanCommentCount(content.threads);
+    // Eligibility gate (slice γ) — BEFORE the completeness check. The adapter
+    // surfaced per-thread `isOutdated` (it never pre-filters); core decides +
+    // ledgers here so every rejection is auditable (§8). Filter to eligible
+    // (non-outdated; RESOLVED is now admitted) threads and recount SUBSTANTIVE
+    // comments (slice β: human + recognized review-bot) on the SURVIVORS only.
+    const preFilterSubstantiveCount = substantiveCommentCount(content.threads);
     const survivingThreads = eligibleThreads(content.threads);
-    const survivorHumanCount = humanCommentCount(survivingThreads);
+    const survivorSubstantiveCount = substantiveCommentCount(survivingThreads);
 
-    if (survivorHumanCount < 1) {
-      if (preFilterHumanCount >= 1) {
-        // The thread carried human content, but the resolution gate is what
-        // emptied it → `resolved-rejected` (an eligibility rejection, not thin
-        // content). Carry the concrete resolution evidence in the detail.
+    if (survivorSubstantiveCount < 1) {
+      if (preFilterSubstantiveCount >= 1) {
+        // The thread carried substantive content, but the OUTDATED filter is what
+        // emptied it → `outdated-rejected` (an eligibility rejection, not thin
+        // content). Carry the concrete outdated evidence in the detail.
         const ineligible = content.threads.length - survivingThreads.length;
         drop(
           pr,
-          'resolved-rejected',
-          `${ineligible} of ${content.threads.length} threads resolved/outdated; ${survivorHumanCount} eligible human comments remain`,
+          'outdated-rejected',
+          `${ineligible} of ${content.threads.length} threads outdated; ${survivorSubstantiveCount} eligible substantive comments remain`,
         );
       } else {
-        // Thin to begin with (0 human comments BEFORE the resolution gate) — the
-        // existing `truncated` path, NOT a resolution rejection.
-        drop(pr, 'truncated', 'no non-empty human review comment after bot filtering');
+        // Thin to begin with (0 substantive comments BEFORE the gate) — the
+        // existing `truncated` path, NOT an eligibility rejection.
+        drop(pr, 'truncated', 'no non-empty substantive review comment after bot filtering');
       }
       continue;
     }
@@ -397,6 +503,9 @@ export async function runExtractStage(
     // catches its own LLM/network errors) — so the core needs no swallowing catch
     // (Tenet 4). An empty list is a loud drop below, not a silent skip.
     const eligibleContent: ReviewThreadContent = { ...content, threads: survivingThreads };
+    // The substrate provenance (slice β, Tenet-19 diagnostic) of THIS PR's eligible
+    // threads — carried onto every draft + the zero-draft drop (panel OQ-β4).
+    const sourceKind = computeSourceKind(survivingThreads);
     // Parse the port result at the boundary (mirrors ClassifierResultSchema.parse in
     // classify.ts): a contract-violating DraftResult (empty-without-cause or
     // cause-without-empty from a buggy adapter) fails loud HERE, before the ledger.
@@ -405,17 +514,21 @@ export async function runExtractStage(
 
     if (draftBodies.length === 0) {
       // A complete thread that yields no draft is a loud drop (keeps the train PR
-      // creditable under FM i), not a silent skip. The NO-DRAFT cause (Tenet-19
-      // diagnostic) is recorded so a parser/format/transient failure is never
-      // conflated with a legitimate model decline.
+      // creditable under FM i), not a silent skip. Reason code `no-draft` (slice β,
+      // strategy β-watch): the slice-α empty-draft drop reused `unparseable`, which
+      // was semantically wrong for a legitimate model decline (`none-sentinel`) —
+      // the coarse code now NAMES the no-draft case while `noDraftCause` (Tenet-19
+      // diagnostic) carries the precise sub-reason, so a parser/format/transient
+      // failure is never conflated with the model judging nothing mintable.
       drop(
         pr,
-        'unparseable',
+        'no-draft',
         // The boundary parse above + the "cause iff empty" refine guarantee
         // `noDraftCause` is present in this empty-drafts branch — assert it rather
         // than defend with a `?? 'unknown'` fallback that can never fire.
         `extractor produced no draft from a complete thread (cause: ${draftResult.noDraftCause!})`,
         draftResult.noDraftCause,
+        sourceKind,
       );
       continue;
     }
@@ -425,7 +538,7 @@ export async function runExtractStage(
         drop(pr, 'unparseable', 'draft is empty or carries no usable **Pattern:**/yaml DSL');
         continue;
       }
-      drafts.push({ provenance: provenance.value, dslSource: body });
+      drafts.push({ provenance: provenance.value, dslSource: body, sourceKind });
     }
   }
 

@@ -303,7 +303,11 @@ function renderThread(thread: ReviewThread): string {
   // mirror extract-pr's flat, single-wrap-per-section convention instead.
   const lines = [`path: ${thread.path}`];
   for (const c of thread.comments) {
-    lines.push(`- ${c.author}: ${c.body}`);
+    // Render the DE-CHROMED body (slice β): severity badges / `<details>`
+    // collapsibles / footer chrome stripped for recognized review bots (human
+    // bodies pass through verbatim). `extractorInputKey` digests the same
+    // `normalizedBody`, so the prompt and the key stay in lockstep.
+    lines.push(`- ${c.author}: ${c.normalizedBody}`);
   }
   return wrapUntrusted('thread', lines.join('\n'));
 }
@@ -470,15 +474,25 @@ export interface ReplayProvenanceInput {
   temperature: number;
   orchestratorVersion: string;
   totemVersion: string;
+  /**
+   * Core's `REVIEW_CHROME_NORMALIZER_VERSION` (slice β). Folded into
+   * `promptTemplateHash` so a normalizer change flips the whole-artifact integrity
+   * hash → re-record forced (Tenet-15) — belt-and-suspenders with the
+   * `extractorInputKey` miss the changed `normalizedBody` already triggers. The
+   * caller (record command) lazy-loads it from core so the version stays
+   * single-homed (no CLI-local re-declaration to drift).
+   */
+  normalizerVersion: string;
 }
 
 /**
  * Fold F: derive the run-level provenance block the 5b-i integrity gate covers.
  * `systemPromptHash` hashes BOTH frozen system prompts; `promptTemplateHash`
- * folds the prompt-BUILDER version in too, so EITHER a prompt edit OR a
- * user-prompt-assembly change flips a hash → the whole-artifact integrity hash
- * changes → the stale fixture is rejected until re-recorded (a prompt change can
- * never silently shift the canonical verdict). Deterministic + git-independent.
+ * folds the prompt-BUILDER version AND the slice-β chrome-normalizer version in
+ * too, so a prompt edit, a user-prompt-assembly change, OR a normalizer change
+ * flips a hash → the whole-artifact integrity hash changes → the stale fixture is
+ * rejected until re-recorded (none of them can silently shift the canonical
+ * verdict). Deterministic + git-independent.
  */
 export function buildReplayProvenance(input: ReplayProvenanceInput): ReplayProvenance {
   const systemPromptHash = sha256Hex(
@@ -487,6 +501,7 @@ export function buildReplayProvenance(input: ReplayProvenanceInput): ReplayProve
   const promptTemplateHash = sha256Hex(
     canonicalJson({
       builder: PROMPT_BUILDER_VERSION,
+      normalizer: input.normalizerVersion,
       extract: input.extractSystemPrompt,
       classify: input.classifySystemPrompt,
     }),

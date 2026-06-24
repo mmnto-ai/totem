@@ -74,7 +74,7 @@ function content(pr: number): ReviewThreadContent {
     threads: [
       {
         path: 'src/a.ts',
-        comments: [{ author: 'Jane', body: 'note' }],
+        comments: [{ author: 'Jane', body: 'note', authorKind: 'human', normalizedBody: 'note' }],
         isResolved: false,
         isOutdated: false,
       },

@@ -96,7 +96,10 @@ export async function loadCertRunFixtures(
     skipGroundTruth?: boolean;
   },
 ): Promise<CertRunFixtureInputs> {
-  const { SplitArtifactSchema, TotemError } = await import('@mmnto/totem');
+  const { SplitArtifactSchema, TotemError, classifyAuthorKind, normalizeReviewChrome } =
+    await import('@mmnto/totem');
+  const { enrichComment } = await import('./spine-review-thread-source.js');
+  const enrich = { classifyAuthorKind, normalizeReviewChrome };
 
   const readRaw = (file: string): string => {
     try {
@@ -126,9 +129,23 @@ export async function loadCertRunFixtures(
 
   const split = SplitArtifactSchema.parse(loadJson(path.join(gate1Dir, SPLIT_FILE)));
   const artifact = ReplayArtifactSchema.parse(loadJson(path.join(gate1Dir, REPLAY_FILE)));
-  const content = z
+  // The committed content.json stores RAW comments (author + body + flags). ENRICH
+  // each comment with `authorKind` + `normalizedBody` (slice β) via the SAME
+  // `enrichComment` the live adapter uses, RE-DERIVED with the CURRENT normalizer —
+  // so the replay-time `extractorInputKey` (keyed on `normalizedBody`) matches what
+  // record stamped, and a normalizer change re-keys → a MISS forces a re-record
+  // (Tenet-15). Any `authorKind`/`normalizedBody` already in the JSON is ignored
+  // (the schema parses the raw shape), so a stale stored value can never be served.
+  const rawContent = z
     .array(ReviewThreadContentSchema)
     .parse(loadJson(path.join(gate1Dir, CONTENT_FILE)));
+  const content: ReviewThreadContent[] = rawContent.map((c) => ({
+    ...c,
+    threads: c.threads.map((t) => ({
+      ...t,
+      comments: t.comments.map((cm) => enrichComment(enrich, cm.author, cm.body)),
+    })),
+  }));
 
   // #2225 (#709 fold-2): verify-then-parse the SCORING source on a SINGLE read — the
   // digest must cover the exact bytes that get parsed + scored, not a separate read

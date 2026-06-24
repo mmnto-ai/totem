@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { classifyAuthorKind, normalizeReviewChrome } from '@mmnto/totem';
+
 import {
   buildReviewThreadsQuery,
+  type CommentEnrichers,
   type GhExec,
   mapThreads,
   ReviewThreadSourceAdapter,
@@ -12,6 +15,9 @@ import {
 const OWNER = 'mmnto-ai';
 const NAME = 'totem';
 const MERGE_OID = 'a'.repeat(40);
+
+/** The real core enrichers (slice β) — tests exercise the shipped classification. */
+const enrich: CommentEnrichers = { classifyAuthorKind, normalizeReviewChrome };
 
 /** A well-formed GraphQL response payload (string, as `gh` returns). */
 function okPayload(opts?: {
@@ -113,26 +119,29 @@ describe('ReviewThreadSourceAdapter — query-spy through fetch', () => {
 
 describe('mapThreads', () => {
   it('surfaces per-thread isResolved/isOutdated flags (does not filter)', () => {
-    const mapped = mapThreads([
-      {
-        isResolved: true,
-        isOutdated: false,
-        path: 'a.ts',
-        comments: {
-          pageInfo: { hasNextPage: false },
-          nodes: [{ author: { login: 'jane' }, body: 'x' }],
+    const mapped = mapThreads(
+      [
+        {
+          isResolved: true,
+          isOutdated: false,
+          path: 'a.ts',
+          comments: {
+            pageInfo: { hasNextPage: false },
+            nodes: [{ author: { login: 'jane' }, body: 'x' }],
+          },
         },
-      },
-      {
-        isResolved: false,
-        isOutdated: true,
-        path: 'b.ts',
-        comments: {
-          pageInfo: { hasNextPage: false },
-          nodes: [{ author: { login: 'john' }, body: 'y' }],
+        {
+          isResolved: false,
+          isOutdated: true,
+          path: 'b.ts',
+          comments: {
+            pageInfo: { hasNextPage: false },
+            nodes: [{ author: { login: 'john' }, body: 'y' }],
+          },
         },
-      },
-    ]);
+      ],
+      enrich,
+    );
     // BOTH threads are present — nothing filtered out (surface, not filter).
     expect(mapped).toHaveLength(2);
     expect(mapped[0]).toMatchObject({ path: 'a.ts', isResolved: true, isOutdated: false });
@@ -140,19 +149,54 @@ describe('mapThreads', () => {
   });
 
   it('coerces a null author (deleted/ghost) to an empty login', () => {
-    const mapped = mapThreads([
-      {
-        isResolved: false,
-        isOutdated: false,
-        path: 'a.ts',
-        comments: {
-          pageInfo: { hasNextPage: false },
-          nodes: [{ author: null, body: 'ghost note' }],
+    const mapped = mapThreads(
+      [
+        {
+          isResolved: false,
+          isOutdated: false,
+          path: 'a.ts',
+          comments: {
+            pageInfo: { hasNextPage: false },
+            nodes: [{ author: null, body: 'ghost note' }],
+          },
         },
-      },
-    ]);
+      ],
+      enrich,
+    );
     expect(mapped[0]!.comments[0]!.author).toBe('');
     expect(mapped[0]!.comments[0]!.body).toBe('ghost note');
+  });
+
+  it('slice β: stamps authorKind + de-chromed normalizedBody (bot stripped, human verbatim)', () => {
+    const mapped = mapThreads(
+      [
+        {
+          isResolved: false,
+          isOutdated: false,
+          path: 'a.ts',
+          comments: {
+            pageInfo: { hasNextPage: false },
+            nodes: [
+              {
+                author: { login: 'coderabbitai[bot]' },
+                body: '![high](https://x/high.svg)\nguard the divisor',
+              },
+              { author: { login: 'jane' }, body: 'the human rationale' },
+            ],
+          },
+        },
+      ],
+      enrich,
+    );
+    const [bot, human] = mapped[0]!.comments;
+    // Recognized review bot → authorKind 'bot' + chrome stripped from normalizedBody
+    // (raw body retained for audit).
+    expect(bot!.authorKind).toBe('bot');
+    expect(bot!.body).toContain('![high]');
+    expect(bot!.normalizedBody).toBe('guard the divisor');
+    // Human → authorKind 'human' + normalizedBody verbatim.
+    expect(human!.authorKind).toBe('human');
+    expect(human!.normalizedBody).toBe('the human rationale');
   });
 });
 
