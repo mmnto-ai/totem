@@ -574,6 +574,19 @@ describe('runExtractStage — slice β (bot-review substrate + sourceKind)', () 
     expect(r.drafts[0]!.sourceKind).toBe('human');
   });
 
+  it('a badge-ONLY review-bot comment is NOT substantive — de-chromed empty → truncated, not no-draft (greptile #2242)', async () => {
+    const badgeOnly = content(1, {
+      threads: [thread('coderabbitai[bot]', '![high](https://x/high.svg)')],
+    });
+    const r = await runExtractStage(
+      solo(),
+      deps(spySource([1], new Map([[1, { kind: 'ok', content: badgeOnly }]])), fixtureExtractor()),
+    );
+    // normalizedBody strips to '' → not substantive → thin from the start.
+    expect(dropsFor(r, 1)[0]!.reasonCode).toBe('truncated');
+    expect(r.drafts).toEqual([]);
+  });
+
   it('sourceKind is mixed when human + review-bot comments both survive', async () => {
     const mixed = content(1, {
       threads: [

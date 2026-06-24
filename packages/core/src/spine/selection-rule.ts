@@ -178,7 +178,7 @@ export function isBotIdentity(author: string): boolean {
  * the GitHub `author.login` form (NO `[bot]` suffix for GCA/CR app comments), so a
  * `[bot]`-suffixed variant of the same tool is matched too. Lowercased identities.
  */
-const REVIEW_FINDING_BOT_LOGINS = new Set(['gemini-code-assist', 'coderabbitai', 'coderabbit']);
+const REVIEW_FINDING_BOT_LOGINS = new Set(['gemini-code-assist', 'coderabbitai']);
 
 /**
  * Recognize an ALLOWLISTED review-finding bot (gemini-code-assist / coderabbitai),
@@ -198,7 +198,13 @@ const REVIEW_FINDING_BOT_LOGINS = new Set(['gemini-code-assist', 'coderabbitai',
  */
 export function reviewBotIdentity(author: string): boolean {
   const a = author.replace(/\r/g, '').trim().toLowerCase();
-  const name = a.replace(/\s*<[^>]*>\s*$/, '').replace(/\[bot\]$/, '');
+  // `.trim()` after the `[bot]` strip mirrors `isBotIdentity`: a `'coderabbitai
+  // [bot]'` form (space before the suffix) would otherwise leave a trailing space
+  // and miss the allowlist (greptile #2242).
+  const name = a
+    .replace(/\s*<[^>]*>\s*$/, '')
+    .replace(/\[bot\]$/, '')
+    .trim();
   return REVIEW_FINDING_BOT_LOGINS.has(name);
 }
 

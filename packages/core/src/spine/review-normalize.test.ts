@@ -51,6 +51,22 @@ describe('normalizeReviewChrome — strips presentational chrome', () => {
     expect(normalizeReviewChrome(body)).toBe(body);
   });
 
+  it('preserves chrome-looking tokens INSIDE a fence; strips them outside (CR #2242)', () => {
+    const body = [
+      '![high](https://x/high.svg)', // chrome OUTSIDE → stripped
+      'Forbid this exact snippet:',
+      '```md',
+      '<!-- keep -->', // chrome INSIDE fence → preserved (the literal invariant)
+      '![inline](img.png)',
+      '```',
+    ].join('\n');
+    const out = normalizeReviewChrome(body);
+    expect(out).not.toContain('![high]'); // outside badge stripped
+    expect(out).toContain('Forbid this exact snippet:');
+    expect(out).toContain('<!-- keep -->'); // inside HTML comment preserved
+    expect(out).toContain('![inline](img.png)'); // inside image preserved
+  });
+
   it('is IDEMPOTENT: normalize(normalize(x)) === normalize(x)', () => {
     const heavy = [
       '![high](https://x/high.svg)',

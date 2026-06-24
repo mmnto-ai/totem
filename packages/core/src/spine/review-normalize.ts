@@ -51,25 +51,49 @@ const DETAILS_RE = /<details\b[\s\S]*?<\/details>/gi;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
 /** 3+ consecutive blank lines → collapsed to a single blank line (stable whitespace). */
 const EXCESS_BLANKS_RE = /\n{3,}/g;
+/**
+ * A triple-backtick fenced code block (non-greedy). Used to PARTITION the body so
+ * the chrome strips run ONLY on the prose BETWEEN fences — a fence body may
+ * legitimately contain chrome-looking tokens (`<!-- -->`, `![…](…)`, `<img>`,
+ * `<details>`) that are the very invariant the extractor mines, so they must
+ * survive verbatim (CR #2242 — the "never touch fenced code blocks" contract).
+ */
+const FENCED_CODE_BLOCK_RE = /```[\s\S]*?```/g;
+
+/** Apply every chrome strip to ONE prose segment (never a fenced-code segment). */
+function stripChrome(segment: string): string {
+  return segment
+    .replace(DETAILS_RE, '')
+    .replace(HTML_COMMENT_RE, '')
+    .replace(MD_IMAGE_RE, '')
+    .replace(HTML_IMG_RE, '');
+}
 
 /**
  * Strip presentational review-bot chrome from a comment body, returning the
  * de-chromed text. DETERMINISTIC + IDEMPOTENT + AUDIT-PRESERVING (the caller
  * retains the raw body). Removes severity badges (markdown + HTML images),
  * `<details>` collapsibles, and HTML comments, then normalizes line endings and
- * collapses runaway blank runs. It deliberately does NOT touch fenced code blocks
- * or the reviewer's prose — over-stripping would drop the very invariant the
- * extractor mines. A body with no chrome (e.g. a human comment) is returned
- * unchanged apart from CRLF→LF + trim.
+ * collapses runaway blank runs.
+ *
+ * FENCED CODE BLOCKS ARE PRESERVED VERBATIM (CR #2242): the body is partitioned on
+ * triple-backtick fences and the strips run ONLY on the prose between them, so a
+ * chrome-looking token INSIDE a code fence (the reviewer's literal example) is
+ * never deleted. It also does not touch the reviewer's prose words — over-stripping
+ * would drop the very invariant the extractor mines. A body with no chrome (e.g. a
+ * human comment) is returned unchanged apart from CRLF→LF + trim.
  */
 export function normalizeReviewChrome(body: string): string {
-  return body
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(DETAILS_RE, '')
-    .replace(HTML_COMMENT_RE, '')
-    .replace(MD_IMAGE_RE, '')
-    .replace(HTML_IMG_RE, '')
-    .replace(EXCESS_BLANKS_RE, '\n\n')
-    .trim();
+  const lf = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  let out = '';
+  let cursor = 0;
+  // Strip chrome from each prose run; copy each fenced block through untouched.
+  for (const match of lf.matchAll(FENCED_CODE_BLOCK_RE)) {
+    const start = match.index ?? 0;
+    out += stripChrome(lf.slice(cursor, start));
+    out += match[0];
+    cursor = start + match[0].length;
+  }
+  out += stripChrome(lf.slice(cursor));
+  return out.replace(EXCESS_BLANKS_RE, '\n\n').trim();
 }

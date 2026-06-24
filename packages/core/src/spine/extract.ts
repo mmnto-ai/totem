@@ -270,7 +270,14 @@ export function classifyAuthorKind(author: string): AuthorKind {
  * itself in as a substantive reviewer. Empty/whitespace bodies never count.
  */
 function isSubstantiveComment(comment: ReviewThreadComment): boolean {
-  if (comment.body.trim().length === 0) return false;
+  // Gate on what the extractor ACTUALLY consumes (greptile #2242): for a review
+  // bot that is the de-chromed `normalizedBody`, so a badge-ONLY comment (non-empty
+  // raw `body`, but `normalizedBody === ''` after the strip) is correctly thin —
+  // it would otherwise clear the gate yet hand the extractor an empty body and
+  // mislead a `no-draft` drop where `truncated` is the truth. Human bodies are
+  // never chrome-stripped, so `normalizedBody === body` for them.
+  const effectiveBody = comment.authorKind === 'bot' ? comment.normalizedBody : comment.body;
+  if (effectiveBody.trim().length === 0) return false;
   if (comment.authorKind === 'bot') return true;
   return !isBotIdentity(comment.author);
 }

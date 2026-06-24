@@ -124,6 +124,7 @@ describe('reviewBotIdentity — recognized review-finding bots only (allowlist)'
     expect(reviewBotIdentity('coderabbitai')).toBe(true);
     expect(reviewBotIdentity('coderabbitai[bot]')).toBe(true);
     expect(reviewBotIdentity('coderabbitai[bot] <bot@coderabbit.ai>')).toBe(true);
+    expect(reviewBotIdentity('coderabbitai [bot]')).toBe(true); // space before suffix → trimmed (greptile #2242)
     expect(reviewBotIdentity('CodeRabbitAI')).toBe(true); // case-insensitive
   });
 
