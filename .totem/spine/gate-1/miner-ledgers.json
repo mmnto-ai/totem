@@ -1,0 +1,805 @@
+{
+  "emission": {
+    "entries": [
+      {
+        "candidateRef": "cand-525-0",
+        "provenance": {
+          "mergedPr": 525,
+          "reviewThread": "pulls/525/comments",
+          "commitSha": "c772db84b5ee9ff7ff3fe74399bf92d43bb00c96"
+        },
+        "classifierDisposition": "behavioral",
+        "routing": "rag-only",
+        "classifierLedgerRef": "clr-525-0",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-525-1",
+        "provenance": {
+          "mergedPr": 525,
+          "reviewThread": "pulls/525/comments",
+          "commitSha": "c772db84b5ee9ff7ff3fe74399bf92d43bb00c96"
+        },
+        "classifierDisposition": "structural",
+        "routing": "compile",
+        "classifierLedgerRef": "clr-525-1",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-525-2",
+        "provenance": {
+          "mergedPr": 525,
+          "reviewThread": "pulls/525/comments",
+          "commitSha": "c772db84b5ee9ff7ff3fe74399bf92d43bb00c96"
+        },
+        "classifierDisposition": "behavioral",
+        "routing": "rag-only",
+        "classifierLedgerRef": "clr-525-2",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-569-0",
+        "provenance": {
+          "mergedPr": 569,
+          "reviewThread": "pulls/569/comments",
+          "commitSha": "7ff0d26db4638a73b7ae96a0e469084700d96db5"
+        },
+        "classifierDisposition": "structural",
+        "routing": "compile",
+        "classifierLedgerRef": "clr-569-0",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-569-1",
+        "provenance": {
+          "mergedPr": 569,
+          "reviewThread": "pulls/569/comments",
+          "commitSha": "7ff0d26db4638a73b7ae96a0e469084700d96db5"
+        },
+        "classifierDisposition": "structural",
+        "routing": "compile",
+        "classifierLedgerRef": "clr-569-1",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-569-2",
+        "provenance": {
+          "mergedPr": 569,
+          "reviewThread": "pulls/569/comments",
+          "commitSha": "7ff0d26db4638a73b7ae96a0e469084700d96db5"
+        },
+        "classifierDisposition": "structural",
+        "routing": "compile",
+        "classifierLedgerRef": "clr-569-2",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-572-0",
+        "provenance": {
+          "mergedPr": 572,
+          "reviewThread": "pulls/572/comments",
+          "commitSha": "abc76c2ab853ede74f8d243814f5c70e9d2cbccc"
+        },
+        "classifierDisposition": "structural",
+        "routing": "compile",
+        "classifierLedgerRef": "clr-572-0",
+        "unverified": true,
+        "sourceKind": "bot"
+      },
+      {
+        "candidateRef": "cand-575-0",
+        "provenance": {
+          "mergedPr": 575,
+          "reviewThread": "pulls/575/comments",
+          "commitSha": "d9e4104233aa87cb3b6ef81eb1e0cc61d0334240"
+        },
+        "classifierDisposition": "behavioral",
+        "routing": "rag-only",
+        "classifierLedgerRef": "clr-575-0",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-575-1",
+        "provenance": {
+          "mergedPr": 575,
+          "reviewThread": "pulls/575/comments",
+          "commitSha": "d9e4104233aa87cb3b6ef81eb1e0cc61d0334240"
+        },
+        "classifierDisposition": "structural",
+        "routing": "compile",
+        "classifierLedgerRef": "clr-575-1",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-575-2",
+        "provenance": {
+          "mergedPr": 575,
+          "reviewThread": "pulls/575/comments",
+          "commitSha": "d9e4104233aa87cb3b6ef81eb1e0cc61d0334240"
+        },
+        "classifierDisposition": "structural",
+        "routing": "compile",
+        "classifierLedgerRef": "clr-575-2",
+        "unverified": true,
+        "sourceKind": "mixed"
+      },
+      {
+        "candidateRef": "cand-580-0",
+        "provenance": {
+          "mergedPr": 580,
+          "reviewThread": "pulls/580/comments",
+          "commitSha": "160f7f1099e808482857c24f5da22fd28643c8a9"
+        },
+        "classifierDisposition": "structural",
+        "routing": "compile",
+        "classifierLedgerRef": "clr-580-0",
+        "unverified": true,
+        "sourceKind": "human"
+      }
+    ],
+    "extractionInputsAttestation": {
+      "seedClassesProvided": false
+    }
+  },
+  "drop": {
+    "entries": [
+      {
+        "sourcePr": 491,
+        "reasonCode": "outdated-rejected",
+        "detail": "2 of 2 threads outdated; 0 eligible substantive comments remain"
+      },
+      {
+        "sourcePr": 503,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "mixed"
+      },
+      {
+        "sourcePr": 508,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "human"
+      },
+      {
+        "sourcePr": 512,
+        "reasonCode": "truncated",
+        "detail": "no non-empty substantive review comment after bot filtering"
+      },
+      {
+        "sourcePr": 514,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "mixed"
+      },
+      {
+        "sourcePr": 516,
+        "reasonCode": "outdated-rejected",
+        "detail": "1 of 1 threads outdated; 0 eligible substantive comments remain"
+      },
+      {
+        "sourcePr": 517,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "bot"
+      },
+      {
+        "sourcePr": 518,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "bot"
+      },
+      {
+        "sourcePr": 519,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "bot"
+      },
+      {
+        "sourcePr": 520,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "mixed"
+      },
+      {
+        "sourcePr": 524,
+        "reasonCode": "outdated-rejected",
+        "detail": "1 of 1 threads outdated; 0 eligible substantive comments remain"
+      },
+      {
+        "sourcePr": 525,
+        "reasonCode": "unparseable",
+        "detail": "draft is empty or carries no usable **Pattern:**/yaml DSL"
+      },
+      {
+        "sourcePr": 532,
+        "reasonCode": "outdated-rejected",
+        "detail": "2 of 2 threads outdated; 0 eligible substantive comments remain"
+      },
+      {
+        "sourcePr": 537,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "bot"
+      },
+      {
+        "sourcePr": 540,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "mixed"
+      },
+      {
+        "sourcePr": 542,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "human"
+      },
+      {
+        "sourcePr": 546,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "mixed"
+      },
+      {
+        "sourcePr": 549,
+        "reasonCode": "truncated",
+        "detail": "no non-empty substantive review comment after bot filtering"
+      },
+      {
+        "sourcePr": 550,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "mixed"
+      },
+      {
+        "sourcePr": 551,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "bot"
+      },
+      {
+        "sourcePr": 553,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "mixed"
+      },
+      {
+        "sourcePr": 569,
+        "reasonCode": "unparseable",
+        "detail": "draft is empty or carries no usable **Pattern:**/yaml DSL"
+      },
+      {
+        "sourcePr": 569,
+        "reasonCode": "unparseable",
+        "detail": "draft is empty or carries no usable **Pattern:**/yaml DSL"
+      },
+      {
+        "sourcePr": 573,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "human"
+      },
+      {
+        "sourcePr": 581,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "bot"
+      },
+      {
+        "sourcePr": 582,
+        "reasonCode": "no-draft",
+        "detail": "extractor produced no draft from a complete thread (cause: none-sentinel)",
+        "noDraftCause": "none-sentinel",
+        "sourceKind": "human"
+      }
+    ]
+  },
+  "classifier": {
+    "entries": [
+      {
+        "candidateRef": "clr-525-0",
+        "disposition": "behavioral",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-525-1",
+        "disposition": "structural",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-525-2",
+        "disposition": "behavioral",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-569-0",
+        "disposition": "structural",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-569-1",
+        "disposition": "structural",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-569-2",
+        "disposition": "structural",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-572-0",
+        "disposition": "structural",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-575-0",
+        "disposition": "behavioral",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-575-1",
+        "disposition": "structural",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-575-2",
+        "disposition": "structural",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      },
+      {
+        "candidateRef": "clr-580-0",
+        "disposition": "structural",
+        "stage4Confirmed": false,
+        "dispositionSource": "classified"
+      }
+    ]
+  },
+  "split": {
+    "split": {
+      "asOfCommit": "09b21bc3bf5c1933d7f2f313659d5d687a01c599",
+      "trainPrs": [
+        491,
+        503,
+        508,
+        512,
+        514,
+        516,
+        517,
+        518,
+        519,
+        520,
+        524,
+        525,
+        532,
+        537,
+        540,
+        542,
+        546,
+        549,
+        550,
+        551,
+        553,
+        569,
+        572,
+        573,
+        575,
+        580,
+        581,
+        582
+      ],
+      "heldOutPrs": [
+        585,
+        587,
+        589,
+        597,
+        600,
+        601,
+        602,
+        605,
+        607,
+        609,
+        610,
+        611
+      ],
+      "excludedPrs": [],
+      "positiveControlPrs": [
+        589,
+        597,
+        605,
+        610
+      ],
+      "negativeControlPrs": [
+        600,
+        601,
+        607,
+        611
+      ],
+      "splitRule": {
+        "predicate": "code-touching merged PRs (.rs/.gd/.gdshader/.tscn) excluding bot authors and revert pairs (ADR-110 §6)",
+        "cutIndex": 28
+      }
+    },
+    "corpus": [
+      491,
+      503,
+      508,
+      512,
+      514,
+      516,
+      517,
+      518,
+      519,
+      520,
+      524,
+      525,
+      532,
+      537,
+      540,
+      542,
+      546,
+      549,
+      550,
+      551,
+      553,
+      569,
+      572,
+      573,
+      575,
+      580,
+      581,
+      582,
+      585,
+      587,
+      589,
+      597,
+      600,
+      601,
+      602,
+      605,
+      607,
+      609,
+      610,
+      611
+    ],
+    "corpusMergeCommits": [
+      {
+        "pr": 491,
+        "mergeCommit": "8564b36957df5595a912009e6d055d0cd57cfd4c"
+      },
+      {
+        "pr": 503,
+        "mergeCommit": "daef9e1df63b9794649f341dfabdc55335041e65"
+      },
+      {
+        "pr": 508,
+        "mergeCommit": "3615576031db344b4b9382ca9cb9833a8b0f31b4"
+      },
+      {
+        "pr": 512,
+        "mergeCommit": "2765ce6f829da27291d9bb323d73fcdd9f76151e"
+      },
+      {
+        "pr": 514,
+        "mergeCommit": "4387e2fd6592de08dc50e561bad07385fbdf112e"
+      },
+      {
+        "pr": 516,
+        "mergeCommit": "23afa9b2b4008ab461a4e2c5233366339f3c1025"
+      },
+      {
+        "pr": 517,
+        "mergeCommit": "f9d60cce97648b6950578b0e46871ba72a224b1c"
+      },
+      {
+        "pr": 518,
+        "mergeCommit": "95f32a59027a1fce0571a1b9b1f5b064dc3eff6a"
+      },
+      {
+        "pr": 519,
+        "mergeCommit": "727a3a390a44604f5288b02bda45af71f837cbf0"
+      },
+      {
+        "pr": 520,
+        "mergeCommit": "730910097cbc70943a4d6ba9883471e268457348"
+      },
+      {
+        "pr": 524,
+        "mergeCommit": "9ccaa6a4eebad73ff346e70d6be8c20704fc3f85"
+      },
+      {
+        "pr": 525,
+        "mergeCommit": "c772db84b5ee9ff7ff3fe74399bf92d43bb00c96"
+      },
+      {
+        "pr": 532,
+        "mergeCommit": "495b0b488b7efc4cdcd61d141ddd01301207fdf6"
+      },
+      {
+        "pr": 537,
+        "mergeCommit": "599b0aa22e261873a7f7ee10980f35be4bf4830f"
+      },
+      {
+        "pr": 540,
+        "mergeCommit": "e775cbe6f86c2f8c789659dd6a06682a9ccf1a72"
+      },
+      {
+        "pr": 542,
+        "mergeCommit": "2d3cbaa20ca4699d0303d68a96f8522b8eaeadaf"
+      },
+      {
+        "pr": 546,
+        "mergeCommit": "c9c92c17097bbac1353334be8392a0b4840a67e8"
+      },
+      {
+        "pr": 549,
+        "mergeCommit": "8c8795b9bfa1873e24d9e594ac17dad95d029439"
+      },
+      {
+        "pr": 550,
+        "mergeCommit": "05a69f2041ac5541fd27f5db4c1a8d54f78b30aa"
+      },
+      {
+        "pr": 551,
+        "mergeCommit": "809d4bcd8c9a3fb1e2ef6e65c1c8efada5ecd833"
+      },
+      {
+        "pr": 553,
+        "mergeCommit": "00b3b0ace261b1ca5fe691326b766490d02691f4"
+      },
+      {
+        "pr": 569,
+        "mergeCommit": "7ff0d26db4638a73b7ae96a0e469084700d96db5"
+      },
+      {
+        "pr": 572,
+        "mergeCommit": "abc76c2ab853ede74f8d243814f5c70e9d2cbccc"
+      },
+      {
+        "pr": 573,
+        "mergeCommit": "9bec51d0d76d0274a5935736ff646a01b2fa6013"
+      },
+      {
+        "pr": 575,
+        "mergeCommit": "d9e4104233aa87cb3b6ef81eb1e0cc61d0334240"
+      },
+      {
+        "pr": 580,
+        "mergeCommit": "160f7f1099e808482857c24f5da22fd28643c8a9"
+      },
+      {
+        "pr": 581,
+        "mergeCommit": "dc22d82487572f5acc03a774a2827f974545666e"
+      },
+      {
+        "pr": 582,
+        "mergeCommit": "b4c057ac27eff5c879c58ab704f6deb4c3c6322f"
+      },
+      {
+        "pr": 585,
+        "mergeCommit": "ddc24d42b2c86d47c5bef7e1462d80ddf852fb82"
+      },
+      {
+        "pr": 587,
+        "mergeCommit": "2b2bdf9bb7daec1acb2ae52f8950454597b81619"
+      },
+      {
+        "pr": 589,
+        "mergeCommit": "e468fa573b44ef3d16b6ef748dbe40fb324ebb7a"
+      },
+      {
+        "pr": 597,
+        "mergeCommit": "6ee0aba95c3093938596e918d681006779d57ee5"
+      },
+      {
+        "pr": 600,
+        "mergeCommit": "01c75fe8ad065383614aabddd92a4e59750d03a7"
+      },
+      {
+        "pr": 601,
+        "mergeCommit": "4b6c08bdd0d99937c44ea12fc9bbe3a6a092c88a"
+      },
+      {
+        "pr": 602,
+        "mergeCommit": "28882cdc9d2e99912370b19d86ccc14b77f461cf"
+      },
+      {
+        "pr": 605,
+        "mergeCommit": "8b9ae663fa8bb437b408dd679c314b95d38c72a7"
+      },
+      {
+        "pr": 607,
+        "mergeCommit": "548d9cd55cbf8ce6a10eba5f370f447d5ab870c8"
+      },
+      {
+        "pr": 609,
+        "mergeCommit": "a4d87082b287b286c775aa4b2b7e9addb7a3c2d8"
+      },
+      {
+        "pr": 610,
+        "mergeCommit": "300f75fa86dd5deb0d664c2b8e001981dc9fa27c"
+      },
+      {
+        "pr": 611,
+        "mergeCommit": "09b21bc3bf5c1933d7f2f313659d5d687a01c599"
+      }
+    ]
+  },
+  "apiUsage": {
+    "entries": [
+      {
+        "targetPr": 491,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 503,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 508,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 512,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 514,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 516,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 517,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 518,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 519,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 520,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 524,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 525,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 532,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 537,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 540,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 542,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 546,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 549,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 550,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 551,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 553,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 569,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 572,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 573,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 575,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 580,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 581,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      },
+      {
+        "targetPr": 582,
+        "slice": "train",
+        "fetchKind": "review-thread"
+      }
+    ],
+    "heldOutFetchCount": 0
+  }
+}
