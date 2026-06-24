@@ -1,0 +1,166 @@
+{
+  "kind": "llm-replay.v1",
+  "provenance": {
+    "adapterKind": "extractor+classifier",
+    "keyVersion": "v1",
+    "model": "claude-sonnet-4-6",
+    "orchestratorVersion": "1.75.0",
+    "promptTemplateHash": "499c5cfc01f40517e6fa193454affb390c11324b10778ec8a7e47dfbafa1e765",
+    "provider": "anthropic",
+    "systemPromptHash": "eecbc7f1272590ee2618db101ead984cfb6faf73323788ccd02a6eff25bf4ced",
+    "temperature": 0,
+    "totemVersion": "1.75.0"
+  },
+  "records": {
+    "classifier": {
+      "064216773ac95c70ac85cff3ea1ddc5f54cec512961ceff0de6a0b99e57a649d": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "0ef8e39865430eff42916aac2c323fb5b3f214b5886835fbda08d4bacaaae4f0": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "391275c01611006d158530c32ea2684848eb4633950513d94e3397ab5add60c2": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "40ff3eb0ef5de6423f1dd7d5bd826ca5468346a6726409310cce95b92b168733": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "4af73c51762d789fa4b960259d9aa6f96493ab78e39b67dcaa8019a5729e8ddf": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "7019a544bde50b34030a6b52b1f6f46bc58fd5f133bc73a9e5e17195cc7e9be3": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "79778035cb52fc8b04ec586ad68b16cc73cbca4df85449be2743a091a70a2c77": {
+        "disposition": "behavioral",
+        "dispositionSource": "classified"
+      },
+      "8add2cb7ca78671be49d31fcc8444b2b1f0c90b2bf3aef0757bb1bca3951d1e3": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "b606ea39c0f807f027fc4751340959f8f90bd3ebad3bdc4b56cac289d8cc8a29": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "e05118585efd738192a6938c7bbcd76d8c9821af37fe9d4c800c1fd41a7bdd10": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      },
+      "f8245666faaaa0c3f9d37a3079e2aa4b46c7a2c19f23dbfc06ef6811b617cab5": {
+        "disposition": "structural",
+        "dispositionSource": "classified"
+      }
+    },
+    "extractor": {
+      "02cc6d97d44b14d8e78f617f276bdd0c7ccd4a3f63de06e99a9b08c299044dfd": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "0901a4012925336f70f2a70a3816f1f9eee87be3ec281eba49e19a19796f52c9": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "0d007031c4d680936c1beb56c05a2a0b72264855d687446ac0862f945635cf97": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "157f5ceaffb3938eb96430fcb6dab44f5487ec735c06fcfbbf2c47e5ae968b67": {
+        "drafts": [
+          "**Pattern:** ^enum\\s+\\w+\\s*\\{[^}]*\\}(?!\\s*##\\s*APPEND ONLY)\n**Why:** Godot serializes @export enum fields as raw integers, not names. Inserting a member before an existing one silently reclassifies all fixtures that serialize higher-index values with no error or warning. Each enum must carry an APPEND ONLY guard comment."
+        ]
+      },
+      "2205c689695dbaf56d02431c651a1185e4ee19b502dab99ae0381b378295fd46": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "2fb23a7ce2155ab31e3066a9946e8cad5a5d4ae406e0fce0c6dd21c0fbb79cde": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "4152a9e773a2cc42cee45690612dc129392e7988e69652f8bbcf49ed76653fbb": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "65cb9bd491cf4769a7fc1cc7cdba9cdbb5766fd5c7621d1e9fb9dd14050daacb": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "67b59c13537255d68fe7d31879ac230c6a66b031b4998a82dd110ec2ba0aefd1": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "6cda1758a40d1238e46d5b9858df69be8e54951e2af558153183532ea28d75c0": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "770575d48bf8e1c95b96b113f9c0513f6073fbf04108b1aa682ee622c9a5b216": {
+        "drafts": [
+          "**Pattern:** `debug_assert!`\n**Why:** Reviewer required `assert!` instead of `debug_assert!` in simulation/library code so that non-finite floating-point values are caught in release builds, preventing silent propagation of corrupt data and system desynchronization.",
+          "```yaml\nlanguage: rust\nrule:\n  pattern: |\n    q.par_iter_mut().for_each(|(mult, mut vel)| {\n      vel.dx *= mult.0;\n      vel.dy *= mult.0;\n    });\n```\n**Why:** Reviewer required that all three velocity components (dx, dy, dz) be scaled by SpeedMultiplier to preserve verticality as a first-class concern (Tenet 2 — Verticality as First-Class). Scaling only dx/dy silently drops vertical velocity.",
+          "```yaml\nlanguage: rust\nrule:\n  pattern: |\n    fn spawn_one_agent($$$, speed_multiplier: f32, $$$) -> Entity {\n      $$$\n    }\n```\n**Why:** Reviewer required a runtime `assert!(speed_multiplier.is_finite() && speed_multiplier > 0.0, ...)` guard at the spawn boundary to catch non-finite or non-positive multiplier values loudly rather than silently propagating corrupt data.",
+          "**Pattern:** `assert_copy::<SpeedMultiplier>`\n**Why:** Reviewer required every new ECS component to be listed in the compile-time DoD invariant block (`assert_copy::<T>()`) in `components.rs` to guarantee all components remain `Copy` and cache-friendly. Absence of the assertion means the invariant is not enforced for the new component.",
+          "**Pattern:** `\\.\\.(=?)SPEED_MULTIPLIER_MAX`\n**Why:** Reviewer noted that `jitter_f32` produces a half-open range `[MIN, MAX)`, so bounds-check assertions must use the exclusive range `..SPEED_MULTIPLIER_MAX` (not `..=SPEED_MULTIPLIER_MAX`). Using the inclusive form makes the upper-bound check vacuously true and the error message misleading."
+        ]
+      },
+      "7824c822c4a2effb0e586412203dc4968713983d4da6cb2e582d4ff6a1d7d23d": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "816f52dd2f6ffbc6af63e958f8dae60cb27baadf6684d03d6d4dc3f1915495c5": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "81bd1564b606b4546c5a1516a1aef9b5b469cfb09bbfc3637b8d705ade6fea0f": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "9869ae6744f5d36844cb9875583383256a6e1bab5378745de0a234b58afd8324": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "a2886143fc5dd873875bc7c23e444bf35329eb14f894b4fb8a0c768954ad0b69": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "ae449b4a956716e4fc26cd11d04309149df586b8449e8e150e9a7b28166dccff": {
+        "drafts": [
+          "**Pattern:** func setup_player_proxy[^:]*:\\s*\\n(?!\\s*(var existing|if _player_3d_proxy\\.has_node))\n**Why:** `setup_player_proxy` must begin with an idempotency guard (check for an existing \"Visual\" child) before adding a new child to `_player_3d_proxy`; on scene-tree re-entry `_ready()` re-fires and unconditionally adding a child stacks duplicate visuals and leaks the previous subtree.",
+          "**Pattern:** packed\\.instantiate\\(\\)\\s+as\\s+Node3D(?![\\s\\S]{0,200}push_error)\n**Why:** If `packed.instantiate() as Node3D` returns null (GLB scene root is not a Node3D subtype), the code silently falls through to the BoxMesh stub with no diagnostic; a `push_error` must be emitted on the null-cast path to mirror the file-not-found handling and keep the fallback observable.",
+          "**Pattern:** (?:const|var)\\s+\\w*(?:OFFSET|SPEED|SCALE|WEIGHT|FORCE|MASS|RADIUS|HEIGHT|DISTANCE|DURATION|RATE|FACTOR|THRESHOLD|LIMIT|RANGE|ANGLE|POWER|ENERGY|HEALTH|DAMAGE|COST|TIME|DELAY|INTERVAL|PERIOD|FREQUENCY|AMPLITUDE|MAGNITUDE|INTENSITY|LEVEL|SCORE|COUNT|SIZE|WIDTH|HEIGHT|DEPTH|LENGTH|VOLUME|AREA|DENSITY|PRESSURE|TEMPERATURE|VELOCITY|ACCELERATION|FRICTION|BOUNCE|GRAVITY|DRAG|LIFT|TORQUE|INERTIA|MOMENTUM|IMPULSE|TENSION|STIFFNESS|DAMPING|RESTITUTION|ELASTICITY|VISCOSITY|CONDUCTIVITY|CAPACITY|EFFICIENCY|RATIO|MULTIPLIER|MODIFIER|BONUS|PENALTY|REWARD|COST|PRICE|VALUE|AMOUNT|QUANTITY|BUDGET|LIMIT|CAP|MAX|MIN|BASE|DEFAULT|INITIAL|FINAL|TARGET|GOAL|THRESHOLD|TOLERANCE|MARGIN|BUFFER|OFFSET|BIAS|GAIN|LOSS|DELTA|STEP|INCREMENT|DECREMENT|RATE|SPEED|VELOCITY|ACCELERATION|JERK|SNAP|CRACKLE|POP)\\w*\\s*(?::|=)\\s*[-+]?[0-9]+(?:\\.[0-9]+)?\\b\n**Why:** Gameplay and presentation tunables (numeric constants such as offsets, speeds, scales, etc.) must not be hardcoded in GDScript files; they must live in `.tres` resources or configuration files per Repository Style Guide §5, §6, and Tenet 3."
+        ]
+      },
+      "b3eb885c5b7e0d8b73bd2212fb9389faa9cc22c26e09e0c22a663751ca206b57": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "bbe9b057a4fed0cab3aee743536b0b81265f5db63234bd205a144d85dbd655d5": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "c84ad5ae8992e0c79e33e1c7a2f6aeb5406da358867c12340ea872ae6bd2c2d4": {
+        "drafts": [],
+        "noDraftCause": "none-sentinel"
+      },
+      "daa78a4b252c121be45312f07776a1cb917024281325d9755dc333aa95b2def0": {
+        "drafts": [
+          "**Pattern:** `assert!\\s*\\(.*\\.is_finite\\(\\)` is ABSENT in functions that cast float to u8/u16/u32 after arithmetic\n**Why:** Reviewer required runtime `assert!` checks for finiteness (NaN/Inf) on floating-point inputs before integer casts to prevent silent propagation of corrupt data and system desynchronization.",
+          "```yaml\nlanguage: rust\nrule:\n  pattern: $X as u8\n  not:\n    precedes:\n      pattern: assert!($X.is_finite())\n```\n**Why:** Any float-to-u8 cast must be preceded by a finiteness assertion; truncation of NaN/Inf produces silent corrupt values.",
+          "**Pattern:** `varying\\s+flat\\b`\n**Why:** In Godot 4 shading language the interpolation qualifier `flat` must precede `varying` (i.e. `flat varying`). The order `varying flat` causes a shader compilation error.",
+          "**Pattern:** `_multimesh\\.instance_count\\s*=\\s*0`\n**Why:** Setting `instance_count = 0` unconditionally before checking current state causes a one-frame blank flash on repeated enable calls. An idempotency guard (early-return when requested state already matches) must precede any MultiMesh reset."
+        ]
+      },
+      "fef3cbbe175e961e5c5acd620a66cb144048dedb5d449635599d3b1ed5ded327": {
+        "drafts": [
+          "**Pattern:** `debug_assert!\\s*\\(.*\\.is_finite\\(\\)`\n**Why:** Reviewer required `assert!` (not `debug_assert!`) for finite-float checks in simulation/library code so that NaN/Inf values are caught in release builds and cannot silently propagate to FFI buffers or the presentation layer."
+        ]
+      }
+    }
+  }
+}

@@ -2,7 +2,10 @@
   "canonicalPath": ".totem/spine/gate-1/windtunnel.lock.json",
   "controls": {
     "integrity": {
+      "corpusDispositionsSha": "00330b5a0ef44baad2053d106098ab0589be80232b328abdc150cbf8acc4a6e6",
       "fixtureSha": "c615dc9c2c80eb037ae921bddf4204c8222e7e9c",
+      "groundTruthSha": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "llmReplaySha": "f2f8d02e958bdf96c93bc76048058bda72d1ae6a81ce7bfd273a98eb0dfdb514",
       "mechanism": "git-hash-object",
       "prDiffsSha": "d6e2d9838a91dba8fe0e1a0e3328fb46fb2fd341c0b13f94bbc90fc17fc94b86"
     },
