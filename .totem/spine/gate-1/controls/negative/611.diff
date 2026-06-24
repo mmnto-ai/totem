@@ -1,0 +1,132 @@
+diff --git a/apps/game-godot/HordeRenderAdapter.gd b/apps/game-godot/HordeRenderAdapter.gd
+index 5d73aaa..6ef6020 100644
+--- a/apps/game-godot/HordeRenderAdapter.gd
++++ b/apps/game-godot/HordeRenderAdapter.gd
+@@ -84,7 +84,8 @@ var _intent_clip := PackedInt32Array()
+ # tunables (calibrated from the proof asset; shared with VatHordeAdapter)
+ var character_scale := 1.0
+ var y_offset := 0.19
+-var facing_offset := 0.0
++# totem-exception: heading-convention constant; .tres/tuning deferred to ADR-004.
++var facing_offset := PI / 2.0  # character-female-a faces +Z; rotate +Z -> +X sim-heading
+ 
+ # perf instrumentation
+ var last_assembly_usec := 0
+@@ -376,7 +377,7 @@ func update(
+ 		_out[po + 4] = b.x.y
+ 		_out[po + 5] = b.y.y
+ 		_out[po + 6] = b.z.y
+-		_out[po + 7] = y_offset
++		_out[po + 7] = y_offset * character_scale  # LOD-swap parity (GCA #611); no-op at 1.0
+ 		_out[po + 8] = b.x.z
+ 		_out[po + 9] = b.y.z
+ 		_out[po + 10] = b.z.z
+diff --git a/apps/game-godot/PartSegmentedHordeAdapter.gd b/apps/game-godot/PartSegmentedHordeAdapter.gd
+index 70f7418..46814e0 100644
+--- a/apps/game-godot/PartSegmentedHordeAdapter.gd
++++ b/apps/game-godot/PartSegmentedHordeAdapter.gd
+@@ -81,7 +81,7 @@ const PART_COUNT := 6
+ # y_offset and assumes it is a small ground/feet offset (≈ 0 today); if a rig type
+ # ever sets a large y_offset, revisit with a clamp (CR/Greptile P2).
+ const CRAWL_LEG_BITS := (1 << 3) | (1 << 4)
+-const CRAWL_GROUND_DROP := 0.9
++const CRAWL_GROUND_DROP := 0.9  # leg height at character_scale 1.0; _bind scales it
+ 
+ var _render_root: Node3D
+ var _headless := false
+@@ -106,10 +106,29 @@ var _pool_intent := PackedInt32Array()  # cached AnimIntent, -1 = none (force pl
+ # AnimIntent -> clip NAME resolved from the rig's own AnimationPlayer library.
+ var _intent_clip: Array[StringName] = []
+ 
+-# tunables (parity with the VAT/skeletal horde so a swap does not jump scale/feet)
+-var character_scale := 1.0  # baked at spawn — set BEFORE setup() (post-setup no-op)
++# tunables (parity with the VAT/skeletal horde so a swap does not jump scale/feet).
++# Blocky-kit calibration (character-a.glb): the raw GLB is 2.72 m tall + faces +Z
++# (headless AABB measurement), so at the inherited 1.0/0.0 defaults the near rig
++# rendered ~3.5x oversized and rotated 90deg off its motion (strafe). 0.285 matches
++# the 0.776 m VAT far-rig at the LOD seam; PI/2 rotates the model's +Z forward onto
++# the +X sim-heading.
++# totem-exception: calibration constants stay in-script until the MESH_SETS seam
++# grows a second kit (-> per-mesh-set config) / the ADR-004 tuning engine lands;
++# styleguide §5/§10 .tres migration deferred there, not in this calibration fix.
++# character_scale is baked at spawn — set BEFORE setup(); a post-setup set warns +
++# no-ops (parity with set_mesh_set()'s guard — CR #611). Explicit backing var +
++# get/set (the Godot-docs form) rather than an inline self-assign setter.
++var _character_scale := 0.285
++var character_scale: float:
++	get:
++		return _character_scale
++	set(value):
++		if _ready:
++			push_warning("PartSegmentedHordeAdapter: character_scale set after setup() ignored")
++			return
++		_character_scale = value
+ var y_offset := 0.0
+-var facing_offset := 0.0
++var facing_offset := PI / 2.0
+ 
+ # perf / bench instrumentation
+ var last_assembly_usec := 0
+@@ -436,9 +455,13 @@ func _bind(
+ 	# convention to the VAT/skeletal horde so facing matches at a swap. A both-legs-
+ 	# severed rig is dropped to the ground (crawl stopgap, see CRAWL_GROUND_DROP) so
+ 	# the legless torso reads as a low crawler, not a levitating one.
+-	var vy := y_offset
++	# y_offset scaled with the rig too (CR #611): a feet-lift authored at scale 1.0
++	# must shrink with character_scale (0.0 today, so a no-op — future-proofed).
++	var vy := y_offset * character_scale
+ 	if (parts & CRAWL_LEG_BITS) == CRAWL_LEG_BITS:
+-		vy -= CRAWL_GROUND_DROP
++		# Scale the drop with the rig — CRAWL_GROUND_DROP is the scale-1.0 leg height,
++		# so a shrunk rig (character_scale 0.285) drops proportionally, not absolutely.
++		vy -= CRAWL_GROUND_DROP * character_scale
+ 	holder.global_position = Vector3(ox, vy, oy)
+ 	holder.rotation.y = -heading + facing_offset
+ 	if holder.process_mode == Node.PROCESS_MODE_DISABLED:
+diff --git a/apps/game-godot/SkeletalHordeAdapter.gd b/apps/game-godot/SkeletalHordeAdapter.gd
+index 5fc5f5f..b55291c 100644
+--- a/apps/game-godot/SkeletalHordeAdapter.gd
++++ b/apps/game-godot/SkeletalHordeAdapter.gd
+@@ -85,7 +85,8 @@ var _intent_clip: Array[StringName] = []
+ # tunables (parity with the VAT horde so a PR5 swap does not jump scale/facing/feet)
+ var character_scale := 1.0
+ var y_offset := 0.0
+-var facing_offset := 0.0
++# totem-exception: heading-convention constant; .tres/tuning deferred to ADR-004.
++var facing_offset := PI / 2.0  # character-female-a faces +Z; rotate +Z -> +X sim-heading
+ 
+ # perf / bench instrumentation
+ var last_assembly_usec := 0
+@@ -339,7 +340,8 @@ func _bind(
+ 	# sim (X,Y) -> Godot (X,Z), Y=0 ground (+ feet offset); yaw about +Y from the
+ 	# sim heading — IDENTICAL convention to HordeRenderAdapter so VAT/skeletal
+ 	# facing matches at a PR5 swap.
+-	holder.global_position = Vector3(ox, y_offset, oy)
++	# y_offset scaled with the rig for LOD-swap parity (GCA #611); no-op at scale 1.0.
++	holder.global_position = Vector3(ox, y_offset * character_scale, oy)
+ 	holder.rotation.y = -heading + facing_offset
+ 	if holder.process_mode == Node.PROCESS_MODE_DISABLED:
+ 		holder.process_mode = Node.PROCESS_MODE_INHERIT
+diff --git a/apps/game-godot/VatHordeAdapter.gd b/apps/game-godot/VatHordeAdapter.gd
+index a1598ae..af44b4c 100644
+--- a/apps/game-godot/VatHordeAdapter.gd
++++ b/apps/game-godot/VatHordeAdapter.gd
+@@ -49,7 +49,8 @@ var _out := PackedFloat32Array()
+ # tunables (calibrated from a burst frame)
+ var character_scale := 1.0
+ var y_offset := 0.19  # lift feet (VAT min y ~= -0.19) to ground
+-var facing_offset := 0.0  # radians; correct model-forward vs sim-heading
++# totem-exception: heading-convention constant; .tres/tuning deferred to ADR-004.
++var facing_offset := PI / 2.0  # character-female-a faces +Z; rotate +Z -> +X sim-heading
+ var frozen_stride := 0  # 0 = none; freeze every Nth slot's clock (the proof)
+ 
+ # perf instrumentation
+@@ -212,7 +213,7 @@ func update(agent_buf: PackedFloat32Array, count: int, delta: float) -> void:
+ 		_out[po + 4] = b.x.y
+ 		_out[po + 5] = b.y.y
+ 		_out[po + 6] = b.z.y
+-		_out[po + 7] = y_offset
++		_out[po + 7] = y_offset * character_scale  # LOD-swap parity (GCA #611); no-op at 1.0
+ 		_out[po + 8] = b.x.z
+ 		_out[po + 9] = b.y.z
+ 		_out[po + 10] = b.z.z

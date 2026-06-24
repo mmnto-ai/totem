@@ -1,0 +1,212 @@
+diff --git a/packages/zomboid-sim/tests/gib_event_parity.rs b/packages/zomboid-sim/tests/gib_event_parity.rs
+new file mode 100644
+index 0000000..6e3e837
+--- /dev/null
++++ b/packages/zomboid-sim/tests/gib_event_parity.rs
+@@ -0,0 +1,206 @@
++//! Cross-language parity for the gib-event FFI ABI (gore PR2, mmnto-ai/liquid-city#560 / mmnto-ai/liquid-city#605).
++//!
++//! The `GibEvent` wire record is canonical in `damage.rs` as `pub const`
++//! `GIB_EVENT_STRIDE` + the `GIB_OFF_*` byte offsets. The Godot renderer
++//! `GibDebrisRenderer.gd` mirrors them as `const GIB_* := N` to decode the
++//! drained FFI buffer. Until now that mirror was a "keep in sync" COMMENT with
++//! no test — exactly the cross-language stride/offset drift class flagged in
++//! the mmnto-ai/totem-strategy#670 round. This test reads the GDScript via
++//! `include_str!` and asserts the mirror matches the Rust canonical values,
++//! catching silent desync if a future change moves only one side — the same
++//! discipline `bit_protocol_parity.rs` / `anim_intent_parity.rs` apply.
++//!
++//! Adding/moving a field:
++//!   1. Edit the `GIB_*` consts in `damage.rs`.
++//!   2. Mirror the `const GIB_* := N` in `GibDebrisRenderer.gd`.
++//!   3. Extend the mirror table below.
++
++use zomboid_sim::damage::{
++    GIB_EVENT_STRIDE, GIB_OFF_POS_X, GIB_OFF_POS_Y, GIB_OFF_POS_Z, GIB_OFF_SEED, GIB_OFF_SLOT,
++    GIB_OFF_TICK, GIB_OFF_VEL_X, GIB_OFF_VEL_Y, GIB_OFF_VEL_Z,
++};
++
++const GIB_DEBRIS_RENDERER_GD: &str = include_str!("../../../apps/game-godot/GibDebrisRenderer.gd");
++
++/// Scan a GDScript file for `const NAME := <decimal>` (or `const NAME: int =
++/// <decimal>`) and return the parsed `usize`. Returns `None` if absent. Matches
++/// at word boundaries so `const GIB_OFF_POS_X` is not matched by a query for a
++/// shorter prefix, and tolerates trailing comments / commas (the value is the
++/// first whitespace-delimited token after `=`). Mirrors the extractor shape in
++/// `anim_intent_parity.rs`, widened to `usize` for byte offsets.
++fn extract_const_usize(content: &str, name: &str) -> Option<usize> {
++    let prefix = format!("const {name}");
++    for line in content.lines() {
++        let trimmed = line.trim_start();
++        if !trimmed.starts_with(&prefix) {
++            continue;
++        }
++        // Word-boundary: the char after the name must not extend an identifier,
++        // so a query for `GIB_OFF_POS_X` does not match `const GIB_OFF_POS_XY`.
++        let after_name = &trimmed[prefix.len()..];
++        match after_name.chars().next() {
++            Some(c) if c.is_ascii_alphanumeric() || c == '_' => continue,
++            _ => {}
++        }
++        // Works for both `:=` (inference) and `: int =` forms — the value token
++        // is the first whitespace-delimited run after the `=`.
++        let Some(eq_pos) = trimmed.find('=') else {
++            continue;
++        };
++        let after_eq = trimmed[eq_pos + 1..].trim_start();
++        let Some(token) = after_eq.split_whitespace().next() else {
++            continue;
++        };
++        let token = token.trim_end_matches(',');
++        if let Ok(val) = token.parse::<usize>() {
++            return Some(val);
++        }
++    }
++    None
++}
++
++struct Mirror {
++    local_name: &'static str,
++    canonical: usize,
++}
++
++#[test]
++fn gib_debris_renderer_gd_abi_mirror_matches_rust() {
++    let mirrors = [
++        Mirror {
++            local_name: "GIB_EVENT_STRIDE",
++            canonical: GIB_EVENT_STRIDE,
++        },
++        Mirror {
++            local_name: "GIB_OFF_SLOT",
++            canonical: GIB_OFF_SLOT,
++        },
++        Mirror {
++            local_name: "GIB_OFF_TICK",
++            canonical: GIB_OFF_TICK,
++        },
++        Mirror {
++            local_name: "GIB_OFF_SEED",
++            canonical: GIB_OFF_SEED,
++        },
++        Mirror {
++            local_name: "GIB_OFF_POS_X",
++            canonical: GIB_OFF_POS_X,
++        },
++        Mirror {
++            local_name: "GIB_OFF_POS_Y",
++            canonical: GIB_OFF_POS_Y,
++        },
++        Mirror {
++            local_name: "GIB_OFF_POS_Z",
++            canonical: GIB_OFF_POS_Z,
++        },
++        Mirror {
++            local_name: "GIB_OFF_VEL_X",
++            canonical: GIB_OFF_VEL_X,
++        },
++        Mirror {
++            local_name: "GIB_OFF_VEL_Y",
++            canonical: GIB_OFF_VEL_Y,
++        },
++        Mirror {
++            local_name: "GIB_OFF_VEL_Z",
++            canonical: GIB_OFF_VEL_Z,
++        },
++    ];
++    let mut failures = Vec::new();
++    for m in &mirrors {
++        match extract_const_usize(GIB_DEBRIS_RENDERER_GD, m.local_name) {
++            Some(v) if v == m.canonical => {}
++            Some(v) => failures.push(format!(
++                "GibDebrisRenderer.gd: `const {}` = {}, expected {} (Rust damage.rs)",
++                m.local_name, v, m.canonical
++            )),
++            None => failures.push(format!(
++                "GibDebrisRenderer.gd: `const {}` not found (expected {})",
++                m.local_name, m.canonical
++            )),
++        }
++    }
++    assert!(
++        failures.is_empty(),
++        "gib-event ABI cross-language parity failures:\n  - {}",
++        failures.join("\n  - ")
++    );
++}
++
++/// The record is 3×u32 (slot/tick/seed) + 6×f32 (pos xyz, vel xyz) — every
++/// field is 4 bytes, so each offset must be exactly 4 past the previous and
++/// `vel.z` must sit flush against the stride. Asserting the FULL sequential
++/// chain (not just the terminal gap) catches an internal offset shift even if
++/// the stride were bumped to compensate — e.g. `POS_X` → 13 with all later
++/// offsets + the stride each +1 would pass a terminal-only check (Greptile,
++/// mmnto-ai/liquid-city#607). Independent of the GDScript mirror.
++#[test]
++fn gib_offsets_tile_the_stride() {
++    assert_eq!(GIB_OFF_SLOT, 0);
++    assert_eq!(GIB_OFF_TICK, GIB_OFF_SLOT + 4);
++    assert_eq!(GIB_OFF_SEED, GIB_OFF_TICK + 4);
++    assert_eq!(GIB_OFF_POS_X, GIB_OFF_SEED + 4);
++    assert_eq!(GIB_OFF_POS_Y, GIB_OFF_POS_X + 4);
++    assert_eq!(GIB_OFF_POS_Z, GIB_OFF_POS_Y + 4);
++    assert_eq!(GIB_OFF_VEL_X, GIB_OFF_POS_Z + 4);
++    assert_eq!(GIB_OFF_VEL_Y, GIB_OFF_VEL_X + 4);
++    assert_eq!(GIB_OFF_VEL_Z, GIB_OFF_VEL_Y + 4);
++    assert_eq!(GIB_OFF_VEL_Z + 4, GIB_EVENT_STRIDE);
++}
++
++// --- extractor self-tests ----------------------------------------------
++
++#[test]
++fn extract_const_usize_handles_inference_form_with_trailing_comment() {
++    assert_eq!(
++        extract_const_usize(
++            "const GIB_OFF_TICK := 4  # u32 — sim tick\n",
++            "GIB_OFF_TICK"
++        ),
++        Some(4)
++    );
++}
++
++#[test]
++fn extract_const_usize_handles_typed_form() {
++    assert_eq!(
++        extract_const_usize("const GIB_EVENT_STRIDE: int = 36\n", "GIB_EVENT_STRIDE"),
++        Some(36)
++    );
++}
++
++#[test]
++fn extract_const_usize_returns_none_when_absent() {
++    assert_eq!(
++        extract_const_usize("const GIB_OFF_SLOT := 0\n", "GIB_OFF_TICK"),
++        None
++    );
++}
++
++#[test]
++fn extract_const_usize_respects_word_boundary_suffix() {
++    // A query for `GIB_OFF_POS_X` must NOT match `const GIB_OFF_POS_XY`.
++    assert_eq!(
++        extract_const_usize("const GIB_OFF_POS_XY := 99\n", "GIB_OFF_POS_X"),
++        None
++    );
++}
++
++#[test]
++fn extract_const_usize_ignores_comment_and_usage_lines() {
++    // A commented-out declaration and a `var ... GIB_OFF_SEED` usage line must
++    // not be mistaken for the `const` declaration.
++    assert_eq!(
++        extract_const_usize("# const GIB_OFF_SEED := 8\n", "GIB_OFF_SEED"),
++        None
++    );
++    assert_eq!(
++        extract_const_usize(
++            "\tvar s := buf.decode_u32(base + GIB_OFF_SEED)\n",
++            "GIB_OFF_SEED"
++        ),
++        None
++    );
++}

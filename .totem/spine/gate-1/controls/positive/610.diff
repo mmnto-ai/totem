@@ -1,0 +1,969 @@
+diff --git a/.totem/specs/561.md b/.totem/specs/561.md
+index 7573a54..0eaef42 100644
+--- a/.totem/specs/561.md
++++ b/.totem/specs/561.md
+@@ -87,4 +87,43 @@ Armless-still-shambles/bites is free (a mask-read in the attack gate). **WILL ve
+ - **GDScript ABI-const centralization** (one consts file vs per-adapter mirrors guarded by the parity scan).
+ 
+ ## PR cut
+-Two PRs: **PR-A** (substrate + ABI-all-consumers + mass-scaled cause-rule + non-torso selection + hide + one-part `SeveredLimb` debris — the visible slice; satisfies *visual* legibility; mirrors the gib PR shape) → **PR-B** (tactical locomotion — the *tactical* layer). Each independently reviewable; PR-A shippable alone.
++Two PRs: **PR-A** (substrate + ABI-all-consumers + mass-scaled cause-rule + non-torso selection + hide + one-part `SeveredLimb` debris — the visible slice; satisfies *visual* legibility; mirrors the gib PR shape) → **PR-B** (tactical locomotion — the *tactical* layer). Each independently reviewable; PR-A shippable alone. **PR-A MERGED** (mmnto-ai/liquid-city#609 → `main` a4d8708).
++
++## Implementation Design — PR-B (tactical locomotion), rev 1 (cohort-folded 2026-06-23)
++**Cohort BLIND impl-preflight folded** — lc-codex (`2210Z`), lc-gemini (`2159Z`), lc-agy (`2200Z`): unanimous on forks 1/2/3/4/5/7 + the arm-mode deferral; 2:1 on fork 6 (render), ruled below. Source-grounded by me (re-verify at impl time).
++
++### Scope
++PR-B makes the sim **read** `Dismembered.parts` to change locomotion: both-legs → crawl, one-leg → hobble, head → blind-wander; armless-still-shambles is free. WILL NOT add the "arm → can't grapple" defang — **no agent→player threat exists** (`combat.rs` is player→agent only; `AnimIntent::Attack` is RESERVED/unused), so the flag would guard a non-existent mechanic (deferred to a future zombie-threat slice). WILL NOT add a new `AnimIntent`, spawn agents, or touch PR-A's substrate/ABI.
++
++### Data model deltas
++- **No new component.** Crawl/hobble read PR-A's `ActiveStatuses.dismembered.parts`; blind is stateless (fork 2a).
++- **New system `dismember_locomotion_system`** (sim, in-checksum): `par_iter_mut` over `(&ActiveStatuses, &mut Velocity), Without<BallisticMode>`; disjoint planar write (`dx/dy`); ordered `.after(speed_variation_system).before(damage_resolution_system)` (codex — both write `Velocity`, don't let Bevy infer). both-legs → ×`CRAWL_SPEED_SCALE`; one-leg → ×`HOBBLE_SPEED_SCALE`; no severed legs → identity fast path (skip the multiplies, like `Vagrant`).
++- **Blind branch in `flow_field_sample_system`**: query gains `Option<&ActiveStatuses>` + `Option<&BufferSlot>` (codex caveat 2 — don't narrow the query; non-agent/test `WorldPosition+Velocity` entities keep flowing). Placed AFTER the existing `flow_fields.field(pos.floor)` read/assert (codex caveat 1 — preserve the floor-invariant fail-loud). If the head bit is set: substitute the seeded wander vector and **gate OUT the close-range direct-pursuit override** (fork 3).
++- **Wander vector = NO trig** (codex+agy convergent — libm cross-platform desync under ADR-013): a fixed precomputed unit-vector **direction table** (8 dirs) indexed by `hash(slot, tick / WANDER_PERIOD)` (SplitMix, `dismember_seed`-style). Bit-exact, no `sin/cos`, no normalize zero-edge.
++- **New tuning consts (`tuning_stub.rs`):** `CRAWL_SPEED_SCALE` (~0.25), `HOBBLE_SPEED_SCALE` (~0.55), `WANDER_PERIOD` (ticks). Compile-time assert `0.0 < CRAWL < HOBBLE < 1.0` (mirrors `WALL_SPEED_SCALE > 0` deadlock guard).
++
++### State lifecycle
++- `dismember_locomotion_system`: per-frame read of `ActiveStatuses`, per-frame `Velocity` write; zero persistent new state.
++- Blind heading: derived per-frame from `(slot, tick-bucket)`; zero persistent state. `WANDER_PERIOD` buckets ticks so the heading changes slowly (shamble, not jitter).
++- Constants: compile-time / server-lifetime.
++
++### Failure modes
++| Failure | Category | Surface | Recovery |
++|---|---|---|---|
++| `CRAWL`/`HOBBLE` misordered or 0 | init/config | compile-time assert | `0 < CRAWL < HOBBLE < 1` blocks the build |
++| Wander vector non-finite | runtime | `debug_assert` (mirror `speed_variation_system`) | finite by construction (table = unit vectors) |
++| Agent with default `ActiveStatuses` | runtime | identity fast path | no-op, velocity untouched |
++| Blind agent on invalid floor | runtime | floor read/assert kept before blind branch (codex) | fails loud as today |
++| Test/non-agent entity w/o `BufferSlot` | runtime | `Option<&BufferSlot>` → normal flow | doesn't drop out of sampling |
++
++### Invariants to lock in via tests (codex's list)
++- both-legs velocity = ×`CRAWL_SPEED_SCALE` (and > 0); one-leg = ×`HOBBLE_SPEED_SCALE` — after the FULL chain (`SpeedMultiplier` + density still stack).
++- no-sever agent velocity unchanged (identity).
++- blind agent near the active entity with LOS does NOT direct-pursue; velocity = the deterministic blind heading (close-range branch gated).
++- modes compose: head + both-legs = blind direction + crawl magnitude in the production schedule.
++- two same-seed worlds → identical `Velocity.to_bits()`/position bits for blind agents across `WANDER_PERIOD` boundaries.
++- crawling publishes `AnimIntent::Locomotion` + nonzero `RS_PARTS` (no new intent).
++- armless agent locomotion unchanged.
++
++### Open questions (ruled)
++- **Fork 6 (render) — RULED: reuse `AnimIntent::Locomotion`** (codex+gemini, over agy's add-`Crawl`). agy's levitation-bug concern (legless rig bobbing on the walk clip) is real, but the fix lives RENDER-SIDE off the parts mask the adapter already reads (PR-A) — when both leg bits are set the adapter can lay-flat / suppress the vertical bob as a cheap stopgap, no new sim intent / FFI surface, until Ruben's crawl clip lands. **VIEW the perceptual capture** to decide whether the stopgap is needed for PR-B or a fast-follow ([[feedback_diagnostic_first_observability]]).
+diff --git a/apps/game-godot/PartSegmentedHordeAdapter.gd b/apps/game-godot/PartSegmentedHordeAdapter.gd
+index 9ee134d..70f7418 100644
+--- a/apps/game-godot/PartSegmentedHordeAdapter.gd
++++ b/apps/game-godot/PartSegmentedHordeAdapter.gd
+@@ -1,3 +1,4 @@
++# gdlint:disable=max-file-lines
+ class_name PartSegmentedHordeAdapter
+ extends RefCounted
+ 
+@@ -70,6 +71,18 @@ const BIT_TO_PART: Array[StringName] = [
+ ]
+ const PART_COUNT := 6
+ 
++# Crawl-render stopgap (mmnto-ai/liquid-city#561 PR-B). Both leg bits set in the
++# parts mask = a crawler with nothing to stand on; the upright Locomotion clip on
++# a legless rig levitates (lc-agy's fork-6 catch — VIEWED). Drop the rig to the
++# ground so the legless torso reads as a low crawler instead of a hovering torso.
++# Render-only, derived from the parts mask the adapter already reads; superseded
++# by the 3D artist's real crawl/prone clip. Bits per BIT_TO_PART order
++# (3 = leg-left, 4 = leg-right). The drop is relative to the rig's standing
++# y_offset and assumes it is a small ground/feet offset (≈ 0 today); if a rig type
++# ever sets a large y_offset, revisit with a clamp (CR/Greptile P2).
++const CRAWL_LEG_BITS := (1 << 3) | (1 << 4)
++const CRAWL_GROUND_DROP := 0.9
++
+ var _render_root: Node3D
+ var _headless := false
+ var _cap := 0
+@@ -420,8 +433,13 @@ func _bind(
+ 		return
+ 	var is_recycle := _pool_slot[pool_i] != slot
+ 	# sim (X,Y) -> Godot (X,Z), Y=0 ground (+ feet offset); yaw about +Y — IDENTICAL
+-	# convention to the VAT/skeletal horde so facing matches at a swap.
+-	holder.global_position = Vector3(ox, y_offset, oy)
++	# convention to the VAT/skeletal horde so facing matches at a swap. A both-legs-
++	# severed rig is dropped to the ground (crawl stopgap, see CRAWL_GROUND_DROP) so
++	# the legless torso reads as a low crawler, not a levitating one.
++	var vy := y_offset
++	if (parts & CRAWL_LEG_BITS) == CRAWL_LEG_BITS:
++		vy -= CRAWL_GROUND_DROP
++	holder.global_position = Vector3(ox, vy, oy)
+ 	holder.rotation.y = -heading + facing_offset
+ 	if holder.process_mode == Node.PROCESS_MODE_DISABLED:
+ 		holder.process_mode = Node.PROCESS_MODE_INHERIT
+diff --git a/apps/game-godot/dismember_locomotion_bench.gd b/apps/game-godot/dismember_locomotion_bench.gd
+new file mode 100644
+index 0000000..e9433e2
+--- /dev/null
++++ b/apps/game-godot/dismember_locomotion_bench.gd
+@@ -0,0 +1,234 @@
++extends Node3D
++
++# ADR-029 gore epic mmnto-ai/liquid-city#565, PR-B (mmnto-ai/liquid-city#561) —
++# tactical-locomotion render bench. The SIM side (crawl/hobble/blind velocity) is
++# proven by the zomboid-sim cargo tests; this bench is the PERCEPTUAL proof that a
++# dismembered rig reads correctly while playing its Locomotion clip — specifically
++# the fork-6 question (lc-agy): does a LEGLESS rig running the upright walk cycle
++# "levitate"/bob? VIEW the PNG to decide whether a render-side lay-flat stopgap is
++# warranted or Locomotion-as-is reads fine. (PR2 caught a 10x head-scale bug only by
++# VIEWING — legibility is evidenced at the player's frame, not theorized.)
++#
++# Three rigs in a row, all Locomotion: intact (baseline) | both-legs-gone (CRAWL) |
++# head-gone (BLIND). PHASE A (gates exit): the production byte[4] path hides exactly
++# the severed limbs. PHASE B: a gameplay-camera PNG.
++# Run: <godot> --path apps/game-godot res://dismember_locomotion_bench.tscn
++#   0 = clean, 1 = assertion failed, 2 = watchdog.
++
++# render-state record layout (mirror of the ABI; render_state_parity.rs locks it).
++const RENDER_STATE_STRIDE := 5
++const RS_FLAGS := 0
++const RS_HEALTH := 1
++const RS_HITSTOP := 2
++const RS_INTENT := 3
++const RS_PARTS := 4
++const LIVE_BIT := 0x04
++const ANIM_LOCOMOTION := 1
++const TIER_SKEL := 2
++const PART_COUNT := 6
++
++# ADR-027 Dismembered.parts bits (mirror of components.rs DISMEMBER_BIT_*).
++const BIT_HEAD := 0
++const BIT_LEG_LEFT := 3
++const BIT_LEG_RIGHT := 4
++const PARTS_CRAWL := (1 << BIT_LEG_LEFT) | (1 << BIT_LEG_RIGHT)
++const PARTS_BLIND := 1 << BIT_HEAD
++
++const OUT_DIR := "user://dismember_locomotion_bench/"
++const NC := 3  # rendered agents
++const A_INTACT := 0
++const A_CRAWL := 1
++const A_BLIND := 2
++const CAP := 4  # adapter pool (>= NC)
++const SPACING := 2.6
++const FRAMES_C := 6  # let the walk clip advance before asserting
++const DELTA_C := 0.1
++const CAPTURE_AT_FRAME := 18  # mid walk-cycle, well under the watchdog
++
++var _adapter: PartSegmentedHordeAdapter
++var _cam: Camera3D
++var _book: SlotClockBook
++var _xf := PackedFloat32Array()
++var _rs := PackedByteArray()
++var _tiers := PackedByteArray()
++
++var _phase := 0  # 0 = correctness, 1 = perceptual
++var _frame := 0
++var _fails := 0
++var _watchdog := 0
++
++
++func _ready() -> void:
++	if DisplayServer.get_name() == "headless":
++		# Headless: the adapter builds no GPU nodes and stays inert.
++		var book := SlotClockBook.new()
++		var a := PartSegmentedHordeAdapter.new(self, true, CAP, book)
++		a.setup()
++		a.set_active(true)
++		var ok := not a.is_active() and a.last_live == 0
++		print("[loco-bench] headless — adapter no-op %s; quit 0" % ("OK" if ok else "UNEXPECTED"))
++		get_tree().quit(0)
++		return
++
++	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
++	Engine.max_fps = 144  # cap fps so the frame-counted capture stays under the watchdog
++	_cam = Camera3D.new()
++	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
++	_cam.fov = 55.0
++	_cam.current = true
++	add_child(_cam)
++	_add_scene()
++
++	_book = SlotClockBook.new()
++	_adapter = PartSegmentedHordeAdapter.new(self, false, CAP, _book)
++	if not _adapter.setup():
++		print("[loco-bench] FAIL: adapter setup returned false (see part-name push_error)")
++		get_tree().quit(1)
++		return
++	_adapter.set_active(true)
++	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
++	_build_buffers()
++	_frame_camera()
++	print("[loco-bench] start; adapter=%s" % _adapter.debug_status())
++
++
++func _process(_delta: float) -> void:
++	if _adapter == null:
++		return
++	# Hard watchdog: a self-quitting bench must never hang a window.
++	_watchdog += 1
++	if _watchdog > 1200:
++		push_error("[loco-bench] watchdog tripped — force quit")
++		get_tree().quit(2)
++		return
++	# Advance the shared clock + run the production update() so the rigs play their
++	# Locomotion clip (the legless bob, if any, shows here).
++	_advance_clocks(DELTA_C)
++	_adapter.update(_xf, _rs, NC, _tiers)
++	_frame += 1
++	if _phase == 0:
++		if _frame >= FRAMES_C:
++			_verify()
++			_phase = 1
++		return
++	if _frame >= CAPTURE_AT_FRAME:
++		_capture()
++		_finalise()
++
++
++func _verify() -> void:
++	# Production hide path: byte[4] applied by update() -> _apply_part_mask hides
++	# EXACTLY the severed limbs on each rendered rig.
++	_check_hide(A_CRAWL, PARTS_CRAWL, "both legs hidden on the crawl rig")
++	_check_hide(A_BLIND, PARTS_BLIND, "head hidden on the blind rig")
++	_check_hide(A_INTACT, 0, "intact rig keeps all parts visible")
++	if _fails == 0:
++		print("[loco-bench] PHASE A: PASS")
++	else:
++		print("[loco-bench] PHASE A: FAIL (%d assertion(s))" % _fails)
++
++
++func _check_hide(slot: int, mask: int, label: String) -> void:
++	var pi := _pool_index_of(slot)
++	if pi < 0:
++		_check(false, label, "no pool index for slot %d" % slot)
++		return
++	var by_bit: Array = _adapter._part_by_bit[pi]
++	var ok := true
++	for bit in PART_COUNT:
++		var should_be_visible := (mask & (1 << bit)) == 0
++		if by_bit[bit].visible != should_be_visible:
++			ok = false
++	_check(ok, label, "mask mismatch")
++
++
++func _capture() -> void:
++	var img := get_viewport().get_texture().get_image()
++	if img != null:
++		var path := OUT_DIR + "perceptual_locomotion.png"
++		img.save_png(ProjectSettings.globalize_path(path))
++		print("[loco-bench] perceptual capture %s" % path)
++
++
++func _finalise() -> void:
++	if _fails == 0:
++		print(
++			"[loco-bench] VERDICT: GO — dismember-locomotion render legible; perceptual PNG captured"
++		)
++	else:
++		print("[loco-bench] VERDICT: FAIL — %d assertion(s)" % _fails)
++	get_tree().quit(0 if _fails == 0 else 1)
++
++
++# NC live agents in a short row along sim-x: intact, both-legs-gone (crawl),
++# head-gone (blind). Each carries its Dismembered.parts mask in byte[4] so the
++# production update() path hides the right limbs; all play Locomotion.
++func _build_buffers() -> void:
++	_xf = PackedFloat32Array()
++	_rs = PackedByteArray()
++	_xf.resize(NC * 8)
++	_rs.resize(NC * RENDER_STATE_STRIDE)
++	var masks := [0, PARTS_CRAWL, PARTS_BLIND]
++	for i in NC:
++		var o := i * 8
++		# AGENT_STRIDE=8 transform pack; the adapter consumes [0]=basis-xx +
++		# [4]=basis-xy (heading via atan2), [3]=ox, [7]=oy. [0]=1 / [4]=0 -> heading 0
++		# (face forward). Indices 1/2/5/6 are inert padding the adapter never reads.
++		_xf[o + 0] = 1.0
++		_xf[o + 3] = float(i) * SPACING  # sim x
++		_xf[o + 7] = 0.0  # sim y
++		var ro := i * RENDER_STATE_STRIDE
++		_rs[ro + RS_FLAGS] = LIVE_BIT
++		_rs[ro + RS_HEALTH] = 220
++		_rs[ro + RS_HITSTOP] = 0
++		_rs[ro + RS_INTENT] = ANIM_LOCOMOTION
++		_rs[ro + RS_PARTS] = masks[i]
++	_tiers.resize(NC)
++	for i in NC:
++		_tiers[i] = TIER_SKEL
++
++
++# Advance the shared clock once per live slot, exactly as LODManager3D does (the
++# adapter is a pure reader).
++func _advance_clocks(delta: float) -> void:
++	_book.ensure_capacity(NC)
++	for s in NC:
++		_book.advance(s, delta, _rs[s * RENDER_STATE_STRIDE + RS_HITSTOP])
++
++
++# Gameplay-distance 3/4 front framing centered on the middle (crawl) rig.
++func _frame_camera() -> void:
++	var mid := float(A_CRAWL) * SPACING
++	_cam.position = Vector3(mid + 0.6, 2.4, 7.0)
++	_cam.look_at(Vector3(mid, 1.0, 0.0), Vector3.UP)
++
++
++# A dim ground plane + a sun so the rigs read against the floor (bench prop, NOT the
++# game's lighting — that is mmnto-ai/liquid-city#586).
++func _add_scene() -> void:
++	var ground := MeshInstance3D.new()
++	var pm := PlaneMesh.new()
++	pm.size = Vector2(40.0, 40.0)
++	ground.mesh = pm
++	var mat := StandardMaterial3D.new()
++	mat.albedo_color = Color(0.16, 0.17, 0.19)
++	ground.material_override = mat
++	add_child(ground)
++	var sun := DirectionalLight3D.new()
++	sun.rotation_degrees = Vector3(-55.0, -35.0, 0.0)
++	add_child(sun)
++
++
++func _check(ok: bool, label: String, detail: String) -> void:
++	if ok:
++		print("[loco-bench] PASS: %s" % label)
++	else:
++		_fails += 1
++		print("[loco-bench] FAIL: %s — %s" % [label, detail])
++
++
++func _pool_index_of(slot: int) -> int:
++	for i in _adapter._pool_slot.size():
++		if _adapter._pool_slot[i] == slot:
++			return i
++	return -1
+diff --git a/apps/game-godot/dismember_locomotion_bench.gd.uid b/apps/game-godot/dismember_locomotion_bench.gd.uid
+new file mode 100644
+index 0000000..655295e
+--- /dev/null
++++ b/apps/game-godot/dismember_locomotion_bench.gd.uid
+@@ -0,0 +1 @@
++uid://cs5rxse2vwq4u
+diff --git a/apps/game-godot/dismember_locomotion_bench.tscn b/apps/game-godot/dismember_locomotion_bench.tscn
+new file mode 100644
+index 0000000..0eca56c
+--- /dev/null
++++ b/apps/game-godot/dismember_locomotion_bench.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://dismember_locomotion_bench.gd" id="1_loco"]
++
++[node name="DismemberLocomotionBench" type="Node3D"]
++script = ExtResource("1_loco")
+diff --git a/packages/zomboid-sim/src/dismember_locomotion.rs b/packages/zomboid-sim/src/dismember_locomotion.rs
+new file mode 100644
+index 0000000..a6ece56
+--- /dev/null
++++ b/packages/zomboid-sim/src/dismember_locomotion.rs
+@@ -0,0 +1,298 @@
++//! Tactical locomotion from survivable dismemberment (mmnto-ai/liquid-city#561
++//! PR-B). The first SIM-side *reader* of `ActiveStatuses.dismembered.parts` —
++//! PR-A (mmnto-ai/liquid-city#609) only *published* it to the render ABI; here
++//! the missing limb changes the threat.
++//!
++//! Two hooks, per the cohort impl-preflight (lc-codex/lc-gemini/lc-agy,
++//! 2026-06-23). Direction and magnitude live at structurally different stages
++//! of the locomotion chain, so they cannot collapse into one system:
++//!
++//! - **Magnitude — here:** [`dismember_locomotion_system`] scales planar
++//!   velocity for missing legs (both → crawl, one → hobble). A post-clamp
++//!   per-agent scalar, the exact shape of [`speed_variation_system`][sv]:
++//!   `par_iter_mut`, disjoint `Velocity` write, `Without<BallisticMode>`,
++//!   slotted `.after(speed_variation_system).before(damage_resolution_system)`.
++//! - **Direction — `systems/flow.rs`:** a headless agent loses the player and
++//!   shambles. [`blind_wander_dir`] supplies a seeded wander heading that
++//!   `flow_field_sample_system` substitutes for the flow gradient + the
++//!   close-range pursuit override.
++//!
++//! All effects are **authoritative / in-checksum** (ADR-013) — they move the
++//! agent. No per-tick RNG, no wall-clock: the wander is a pure SplitMix hash of
++//! `(BufferSlot, coarse tick bucket)`, and the leg scalars are pure functions of
++//! the authoritative `Dismembered.parts`. Reading `parts` directly is sound: PR-A
++//! sets a part bit only alongside `ACTIVE_STATUS_DISMEMBERED_BIT` and never
++//! clears it, so `parts != 0` already implies the status is live.
++//!
++//! [sv]: crate::speed_variation::speed_variation_system
++
++use bevy_ecs::prelude::*;
++
++use crate::components::{
++    ActiveStatuses, BallisticMode, Velocity, DISMEMBER_BIT_HEAD, DISMEMBER_BIT_LEG_LEFT,
++    DISMEMBER_BIT_LEG_RIGHT,
++};
++use crate::tuning_stub::{CRAWL_SPEED_SCALE, HOBBLE_SPEED_SCALE, WANDER_PERIOD};
++
++/// The two leg bits of `Dismembered.parts` (ADR-027 §1 layout: bit3 leg-left,
++/// bit4 leg-right). Shared by the scalar mapping and its boundary tests.
++pub(crate) const LEG_MASK: u8 = (1 << DISMEMBER_BIT_LEG_LEFT) | (1 << DISMEMBER_BIT_LEG_RIGHT);
++
++/// Planar speed multiplier for an agent's *leg*-dismemberment state — pure
++/// classification, unit-testable without an ECS world. `None` = identity (the
++/// common case: both legs intact), so the caller skips the multiplies entirely
++/// (mirrors `horde_speed_modulation_system`'s Vagrant fast path and avoids a
++/// `clippy::float_cmp` against `1.0`). Both legs gone → crawl; exactly one →
++/// hobble. Head/arm/torso bits do not affect speed.
++#[inline]
++pub fn leg_locomotion_scale(parts: u8) -> Option<f32> {
++    match parts & LEG_MASK {
++        0 => None,
++        LEG_MASK => Some(CRAWL_SPEED_SCALE),
++        _ => Some(HOBBLE_SPEED_SCALE),
++    }
++}
++
++/// `true` when the agent has lost its head (`Dismembered.parts` bit0). A blind
++/// agent steers by [`blind_wander_dir`] instead of the player-seeking flow.
++#[inline]
++pub(crate) fn is_blind(parts: u8) -> bool {
++    parts & (1 << DISMEMBER_BIT_HEAD) != 0
++}
++
++/// Eight compass unit vectors — the blind-wander heading table. A fixed
++/// pre-baked table (NOT `angle.sin()/cos()`) because transcendental libm
++/// results differ across platforms and would desync the ADR-013 lockstep
++/// (cohort convergent catch, lc-codex + lc-agy). `R = 1/√2` is the exact f32
++/// std constant, so every entry is bit-identical on every target.
++const R: f32 = std::f32::consts::FRAC_1_SQRT_2;
++const WANDER_DIRS: [(f32, f32); 8] = [
++    (1.0, 0.0),
++    (R, R),
++    (0.0, 1.0),
++    (-R, R),
++    (-1.0, 0.0),
++    (-R, -R),
++    (0.0, -1.0),
++    (R, -R),
++];
++
++/// SplitMix32 finalizer for the blind-wander heading. Same shape as
++/// [`crate::damage::dismember_seed`] / `gib_seed`, domain-separated by a
++/// distinct additive constant so an agent's wander stream never correlates with
++/// its debris-seed stream. Pure `wrapping`/xorshift — bit-identical everywhere.
++#[inline]
++fn wander_hash(slot: u32, bucket: u32) -> u32 {
++    let mut z = (slot ^ bucket.rotate_left(16)).wrapping_add(0xC2B2_AE35);
++    z = (z ^ (z >> 16)).wrapping_mul(0x21F0_AAAD);
++    z = (z ^ (z >> 15)).wrapping_mul(0x735A_2D97);
++    z ^ (z >> 15)
++}
++
++/// Deterministic blind-wander heading (unit vector) for `(slot, tick)`. The
++/// tick is bucketed by `WANDER_PERIOD` so the heading *holds* for that many
++/// ticks — a slow shamble-drift, not a per-tick jitter. Pure: no RNG, no
++/// wall-clock, no trig → bit-exact across the lockstep cohort.
++#[inline]
++pub(crate) fn blind_wander_dir(slot: u32, tick: u32) -> (f32, f32) {
++    let bucket = tick / WANDER_PERIOD;
++    let idx = (wander_hash(slot, bucket) % WANDER_DIRS.len() as u32) as usize;
++    WANDER_DIRS[idx]
++}
++
++/// Scale each non-ballistic agent's planar velocity by its leg-dismemberment
++/// locomotion mode (crawl / hobble). The magnitude tail of the locomotion
++/// chain — slotted `.after(speed_variation_system).before(damage_resolution_system)`
++/// so it composes on top of the `SpeedMultiplier` + density scalers and feeds
++/// the modulated velocity into advection. Ballistic agents are excluded (their
++/// `Velocity` is launch state, not walk locomotion), matching
++/// `speed_variation_system` / `flocking_system`.
++///
++/// Parallel-safe (`systems.rs` rule 1): `par_iter_mut` with a disjoint
++/// per-entity `Velocity` write, no cross-entity reads, no reduction. A release
++/// `assert!` inside a Rayon closure is unreliable across the FFI boundary, so
++/// the finiteness tripwire is a `debug_assert!` — the scale is a finite
++/// positive constant and the incoming velocity is finite (flocking clamp), so
++/// it cannot fire in practice.
++pub fn dismember_locomotion_system(
++    mut q: Query<(&ActiveStatuses, &mut Velocity), Without<BallisticMode>>,
++) {
++    q.par_iter_mut().for_each(|(status, mut vel)| {
++        let Some(scale) = leg_locomotion_scale(status.dismembered.parts) else {
++            return; // identity fast path — no severed legs (the common case)
++        };
++        vel.dx *= scale;
++        vel.dy *= scale;
++        debug_assert!(
++            vel.dx.is_finite() && vel.dy.is_finite(),
++            "dismember_locomotion_system: non-finite velocity after scaling \
++             (scale={}, dx={}, dy={})",
++            scale,
++            vel.dx,
++            vel.dy
++        );
++    });
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn legs(left: bool, right: bool) -> u8 {
++        let mut p = 0;
++        if left {
++            p |= 1 << DISMEMBER_BIT_LEG_LEFT;
++        }
++        if right {
++            p |= 1 << DISMEMBER_BIT_LEG_RIGHT;
++        }
++        p
++    }
++
++    #[test]
++    fn intact_legs_are_identity_none() {
++        assert_eq!(leg_locomotion_scale(0), None);
++        // Head/arm/torso loss alone does not slow locomotion.
++        assert_eq!(leg_locomotion_scale(1 << DISMEMBER_BIT_HEAD), None);
++    }
++
++    #[test]
++    fn both_legs_gone_is_crawl() {
++        assert_eq!(
++            leg_locomotion_scale(legs(true, true)),
++            Some(CRAWL_SPEED_SCALE)
++        );
++        assert_eq!(leg_locomotion_scale(LEG_MASK), Some(CRAWL_SPEED_SCALE));
++    }
++
++    #[test]
++    fn one_leg_gone_is_hobble() {
++        assert_eq!(
++            leg_locomotion_scale(legs(true, false)),
++            Some(HOBBLE_SPEED_SCALE)
++        );
++        assert_eq!(
++            leg_locomotion_scale(legs(false, true)),
++            Some(HOBBLE_SPEED_SCALE)
++        );
++    }
++
++    #[test]
++    fn crawl_is_slower_than_hobble_and_both_positive() {
++        // The deadlock-floor + ordering invariant the tuning asserts at compile
++        // time, restated as a runtime check on the mapping.
++        let crawl = leg_locomotion_scale(LEG_MASK).unwrap();
++        let hobble = leg_locomotion_scale(legs(true, false)).unwrap();
++        assert!(0.0 < crawl && crawl < hobble && hobble < 1.0);
++    }
++
++    #[test]
++    fn is_blind_reads_only_the_head_bit() {
++        assert!(is_blind(1 << DISMEMBER_BIT_HEAD));
++        assert!(!is_blind(0));
++        assert!(!is_blind(LEG_MASK), "leg loss is not blindness");
++    }
++
++    #[test]
++    fn wander_dir_is_unit_length_and_finite() {
++        for slot in 0..64u32 {
++            for tick in (0..600u32).step_by(7) {
++                let (x, y) = blind_wander_dir(slot, tick);
++                assert!(x.is_finite() && y.is_finite());
++                let mag_sq = x * x + y * y;
++                assert!((mag_sq - 1.0).abs() < 1e-6, "non-unit heading: {mag_sq}");
++            }
++        }
++    }
++
++    #[test]
++    fn wander_dir_is_deterministic_and_holds_within_a_period() {
++        // Same (slot, tick) → same heading (lockstep determinism).
++        assert_eq!(blind_wander_dir(5, 90), blind_wander_dir(5, 90));
++        // Ticks inside one WANDER_PERIOD bucket share a heading (shamble, not
++        // jitter); a bucket boundary may change it.
++        let base = (WANDER_PERIOD) * 3;
++        assert_eq!(
++            blind_wander_dir(5, base),
++            blind_wander_dir(5, base + WANDER_PERIOD - 1),
++            "heading must hold across a wander period"
++        );
++    }
++
++    #[test]
++    fn wander_dir_varies_by_slot() {
++        // Not all slots share a heading at a given tick (decorrelated by slot).
++        let t = WANDER_PERIOD * 2;
++        let headings: std::collections::HashSet<_> = (0..32u32)
++            .map(|s| {
++                let (x, y) = blind_wander_dir(s, t);
++                (x.to_bits(), y.to_bits())
++            })
++            .collect();
++        assert!(headings.len() > 1, "all slots wandered identically");
++    }
++
++    fn status_with(parts: u8) -> ActiveStatuses {
++        ActiveStatuses {
++            active_mask: crate::components::ACTIVE_STATUS_DISMEMBERED_BIT,
++            dismembered: crate::components::Dismembered { parts },
++        }
++    }
++
++    #[test]
++    fn system_scales_leg_severed_and_leaves_intact_untouched() {
++        bevy_tasks::ComputeTaskPool::get_or_init(bevy_tasks::TaskPool::default);
++        let mut world = World::new();
++        let v = || Velocity {
++            dx: 1.0,
++            dy: 0.0,
++            dz: 0.0,
++        };
++        let intact = world.spawn((ActiveStatuses::default(), v())).id();
++        let hobble = world.spawn((status_with(legs(true, false)), v())).id();
++        let crawl = world.spawn((status_with(LEG_MASK), v())).id();
++
++        let mut sched = Schedule::default();
++        sched.add_systems(dismember_locomotion_system);
++        sched.run(&mut world);
++
++        assert_eq!(world.get::<Velocity>(intact).unwrap().dx, 1.0);
++        assert_eq!(
++            world.get::<Velocity>(hobble).unwrap().dx,
++            HOBBLE_SPEED_SCALE
++        );
++        assert_eq!(world.get::<Velocity>(crawl).unwrap().dx, CRAWL_SPEED_SCALE);
++    }
++
++    #[test]
++    fn system_skips_ballistic_agents() {
++        // A leg-severed agent that is mid-flight keeps its launch velocity —
++        // `Without<BallisticMode>`, matching `speed_variation_system`.
++        bevy_tasks::ComputeTaskPool::get_or_init(bevy_tasks::TaskPool::default);
++        let mut world = World::new();
++        let e = world
++            .spawn((
++                status_with(LEG_MASK),
++                Velocity {
++                    dx: 1.0,
++                    dy: 0.0,
++                    dz: 0.0,
++                },
++                BallisticMode {
++                    velocity: [5.0, 0.0, 2.0],
++                    spawned_at_tick: 0,
++                },
++            ))
++            .id();
++
++        let mut sched = Schedule::default();
++        sched.add_systems(dismember_locomotion_system);
++        sched.run(&mut world);
++
++        assert_eq!(
++            world.get::<Velocity>(e).unwrap().dx,
++            1.0,
++            "ballistic agents are excluded from leg-locomotion scaling"
++        );
++    }
++}
+diff --git a/packages/zomboid-sim/src/lib.rs b/packages/zomboid-sim/src/lib.rs
+index fdac050..642cd5a 100644
+--- a/packages/zomboid-sim/src/lib.rs
++++ b/packages/zomboid-sim/src/lib.rs
+@@ -23,6 +23,7 @@ pub mod damage;
+ pub mod density;
+ pub mod density_feedback;
+ pub mod director;
++pub mod dismember_locomotion;
+ pub mod fixture;
+ pub mod flocking;
+ pub mod flow_field;
+diff --git a/packages/zomboid-sim/src/systems.rs b/packages/zomboid-sim/src/systems.rs
+index a996b8a..bb3ffb2 100644
+--- a/packages/zomboid-sim/src/systems.rs
++++ b/packages/zomboid-sim/src/systems.rs
+@@ -102,6 +102,7 @@ use crate::density_feedback::{
+ use crate::director::{
+     advance_sim_tick_count, register_director_systems, TacticalDirectorSet, TickAdvanceSet,
+ };
++use crate::dismember_locomotion::dismember_locomotion_system;
+ use crate::flocking::flocking_system;
+ use crate::horde_speed::horde_speed_modulation_system;
+ use crate::player::{
+@@ -366,6 +367,22 @@ fn add_sim_systems(schedule: &mut Schedule) {
+             .in_set(MainSimSet),
+     );
+ 
++    // Survivable-dismemberment tactical locomotion (mmnto-ai/liquid-city#561
++    // PR-B): the *magnitude* half — scale leg-severed agents (crawl / hobble).
++    // Same out-of-chain shape + parallel contract as speed_variation_system
++    // above; ordered explicitly `.after(speed_variation_system)` because both
++    // write `Velocity` and Bevy must not infer the order (lc-codex). The scale
++    // commutes with the speed-multiplier scale, but the edge keeps the
++    // ambiguity detector satisfied and feeds the modulated velocity into
++    // damage-resolution + advection. (The *direction* half — blind-wander —
++    // lives in `flow_field_sample_system`, the sole velocity-direction writer.)
++    schedule.add_systems(
++        dismember_locomotion_system
++            .after(speed_variation_system)
++            .before(damage_resolution_system)
++            .in_set(MainSimSet),
++    );
++
+     // ADR-029 P1: publish the player's locomotion velocity to the FFI for
+     // the 3D render migration. Added OUTSIDE the main chain (which sits at
+     // Bevy's 20-tuple `.chain()` arity ceiling) via an explicit `.after`
+@@ -1841,6 +1858,148 @@ mod tests {
+         assert!(vel.dy.abs() < 1e-4, "expected vel.dy ≈ 0, got {vel:?}");
+     }
+ 
++    #[test]
++    fn blind_agent_wanders_instead_of_pursuing_at_close_range() {
++        // mmnto-ai/liquid-city#561 PR-B (fork 3): a headless agent at close
++        // range with LOS to the active entity must NOT direct-pursue — the
++        // override would steer it -x at MAX_AGENT_SPEED — it takes the
++        // deterministic seeded blind-wander heading instead. Same geometry as
++        // `close_range_override_steers_directly_at_active_entity`, plus a
++        // head-bit `ActiveStatuses` + a `BufferSlot` to seed the wander.
++        use crate::components::{
++            ActiveStatuses, BufferSlot, Dismembered, ACTIVE_STATUS_DISMEMBERED_BIT,
++            DISMEMBER_BIT_HEAD,
++        };
++        use crate::dismember_locomotion::blind_wander_dir;
++
++        // Pick a slot whose tick-0 heading is distinguishable from the pursuit
++        // direction (-x), so the assertion below actually proves the gate.
++        let slot = (0..32u32)
++            .find(|&s| {
++                let (wx, wy) = blind_wander_dir(s, 0);
++                (wx + 1.0).abs() > 1e-3 || wy.abs() > 1e-3
++            })
++            .expect("some slot wanders off the -x axis");
++
++        let mut world = World::new();
++        let mut fields = FlowFields::single_floor(4, 4, 1.0);
++        fields.field_mut(0).rebuild_if_dirty((0, 0));
++        world.insert_resource(fields);
++        world.insert_resource(crate::active_entity::ActiveEntityPosition {
++            x: 0.0,
++            y: 0.0,
++            floor: 0,
++            valid: true,
++        });
++        world.spawn((
++            WorldPosition {
++                x: 2.0,
++                y: 0.0,
++                floor: 0,
++                altitude: 0.0,
++            },
++            Velocity::default(),
++            ActiveStatuses {
++                active_mask: ACTIVE_STATUS_DISMEMBERED_BIT,
++                dismembered: Dismembered {
++                    parts: 1 << DISMEMBER_BIT_HEAD,
++                },
++            },
++            BufferSlot(slot),
++        ));
++        // No SimTickCount inserted → tick_now defaults to 0.
++        let mut sys = IntoSystem::into_system(flow_field_sample_system);
++        sys.initialize(&mut world);
++        let _ = sys.run((), &mut world);
++        sys.apply_deferred(&mut world);
++        let vel = world
++            .query::<&Velocity>()
++            .iter(&world)
++            .next()
++            .copied()
++            .unwrap();
++
++        let (wx, wy) = blind_wander_dir(slot, 0);
++        assert!(
++            (vel.dx - wx * MAX_AGENT_SPEED).abs() < 1e-4
++                && (vel.dy - wy * MAX_AGENT_SPEED).abs() < 1e-4,
++            "blind agent must take the seeded wander heading, not pursuit; got {vel:?}"
++        );
++    }
++
++    #[test]
++    fn blind_crawler_composes_direction_and_magnitude_deterministically() {
++        // mmnto-ai/liquid-city#561 PR-B (fork 4): head + both legs = a blind
++        // crawl. The blind branch (flow sample) sets DIRECTION; the post-clamp
++        // `dismember_locomotion_system` scales MAGNITUDE — the two compose
++        // because they act at different chain stages. Two identical worlds
++        // produce bit-identical velocity (ADR-013 determinism).
++        use crate::components::{
++            ActiveStatuses, BufferSlot, Dismembered, ACTIVE_STATUS_DISMEMBERED_BIT,
++            DISMEMBER_BIT_HEAD, DISMEMBER_BIT_LEG_LEFT, DISMEMBER_BIT_LEG_RIGHT,
++        };
++        use crate::dismember_locomotion::{blind_wander_dir, dismember_locomotion_system};
++        use crate::tuning_stub::CRAWL_SPEED_SCALE;
++
++        bevy_tasks::ComputeTaskPool::get_or_init(bevy_tasks::TaskPool::default);
++        const SLOT: u32 = 11;
++        let parts = (1 << DISMEMBER_BIT_HEAD)
++            | (1 << DISMEMBER_BIT_LEG_LEFT)
++            | (1 << DISMEMBER_BIT_LEG_RIGHT);
++
++        let run = || {
++            let mut world = World::new();
++            let mut fields = FlowFields::single_floor(4, 4, 1.0);
++            fields.field_mut(0).rebuild_if_dirty((0, 0));
++            world.insert_resource(fields);
++            world.insert_resource(crate::active_entity::ActiveEntityPosition {
++                x: 0.0,
++                y: 0.0,
++                floor: 0,
++                valid: true,
++            });
++            world.spawn((
++                WorldPosition {
++                    x: 2.0,
++                    y: 0.0,
++                    floor: 0,
++                    altitude: 0.0,
++                },
++                Velocity::default(),
++                ActiveStatuses {
++                    active_mask: ACTIVE_STATUS_DISMEMBERED_BIT,
++                    dismembered: Dismembered { parts },
++                },
++                BufferSlot(SLOT),
++            ));
++            // Direction (blind) then magnitude (crawl) — production order.
++            let mut sample = IntoSystem::into_system(flow_field_sample_system);
++            sample.initialize(&mut world);
++            let _ = sample.run((), &mut world);
++            sample.apply_deferred(&mut world);
++            let mut loco = IntoSystem::into_system(dismember_locomotion_system);
++            loco.initialize(&mut world);
++            let _ = loco.run((), &mut world);
++            loco.apply_deferred(&mut world);
++            world
++                .query::<&Velocity>()
++                .iter(&world)
++                .next()
++                .copied()
++                .unwrap()
++        };
++
++        let a = run();
++        let b = run();
++        // Determinism: bit-identical across two independent worlds.
++        assert_eq!(a.dx.to_bits(), b.dx.to_bits());
++        assert_eq!(a.dy.to_bits(), b.dy.to_bits());
++        // Composition: blind heading × MAX_AGENT_SPEED × CRAWL_SPEED_SCALE.
++        let (wx, wy) = blind_wander_dir(SLOT, 0);
++        assert!((a.dx - wx * MAX_AGENT_SPEED * CRAWL_SPEED_SCALE).abs() < 1e-4);
++        assert!((a.dy - wy * MAX_AGENT_SPEED * CRAWL_SPEED_SCALE).abs() < 1e-4);
++    }
++
+     #[test]
+     fn close_range_override_does_not_engage_outside_threshold() {
+         // Invariant 2: agent at (3.5, 0.5) inside cell (3, 0), active
+diff --git a/packages/zomboid-sim/src/systems/flow.rs b/packages/zomboid-sim/src/systems/flow.rs
+index ad4b75f..20a1209 100644
+--- a/packages/zomboid-sim/src/systems/flow.rs
++++ b/packages/zomboid-sim/src/systems/flow.rs
+@@ -8,7 +8,11 @@
+ 
+ use bevy_ecs::prelude::*;
+ 
+-use crate::components::{Velocity, WorldPosition};
++use crate::components::{
++    ActiveStatuses, BufferSlot, Velocity, WorldPosition, ACTIVE_STATUS_DISMEMBERED_BIT,
++};
++use crate::director::state::SimTickCount;
++use crate::dismember_locomotion::{blind_wander_dir, is_blind};
+ use crate::flow_field::{FlowField, FlowFields, IMPASSABLE};
+ use crate::navlink::Navigation;
+ use crate::tuning_stub::{
+@@ -169,7 +173,13 @@ pub(crate) fn world_to_grid_cell(
+ pub fn flow_field_sample_system(
+     flow_fields: Res<FlowFields>,
+     active_pos: Res<crate::active_entity::ActiveEntityPosition>,
+-    mut q: Query<(&WorldPosition, &mut Velocity)>,
++    tick: Option<Res<SimTickCount>>,
++    mut q: Query<(
++        &WorldPosition,
++        &mut Velocity,
++        Option<&ActiveStatuses>,
++        Option<&BufferSlot>,
++    )>,
+ ) {
+     // Compute the override threshold once per tick from the live
+     // FlowField cell size, NOT from the CELL_SIZE constant. A future
+@@ -180,8 +190,42 @@ pub fn flow_field_sample_system(
+     let close_range_world = CLOSE_RANGE_CELL_RADIUS * flow_fields.cell_size();
+     let close_range_sq = close_range_world * close_range_world;
+ 
+-    for (pos, mut vel) in q.iter_mut() {
++    // Blind-wander tick source (mmnto-ai/liquid-city#561 PR-B). `Option<Res>`
++    // so partial/test worlds without the director's `SimTickCount` fall back to
++    // tick 0 (still deterministic — a blind agent just holds one seeded
++    // heading); the full schedule always installs it.
++    let tick_now = tick.as_ref().map_or(0, |t| t.0 as u32);
++
++    for (pos, mut vel, statuses, slot) in q.iter_mut() {
+         let flow = flow_fields.field(pos.floor);
++        // Blind-wander (mmnto-ai/liquid-city#561 PR-B): a headless agent loses
++        // the player and shambles — substitute a seeded wander heading and gate
++        // OUT both the close-range pursuit override AND the flow gradient (a
++        // blind zombie can't find the player even point-blank — fork 3). Needs
++        // a `BufferSlot` to seed; agents/test stubs without one (`Option`=None)
++        // fall through to normal flow, so the production query isn't narrowed
++        // and non-slot entities aren't silently dropped from sampling
++        // (lc-codex). Placed AFTER the `flow_fields.field(pos.floor)` read so
++        // the floor-invariant fail-loud is preserved on the blind path
++        // (lc-codex).
++        if let (Some(status), Some(slot)) = (statuses, slot) {
++            // PR-A invariant (a part bit is set only alongside the active bit,
++            // never cleared) makes reading `parts` directly sound. Assert it at
++            // this consumer so a future path that sets a bit without the status
++            // can't silently produce a sighted-but-`is_blind` agent (CR). Dev-
++            // only: sequential loop, finite cost, no Rayon/FFI panic concern.
++            debug_assert!(
++                status.active_mask & ACTIVE_STATUS_DISMEMBERED_BIT != 0
++                    || status.dismembered.parts == 0,
++                "parts set without ACTIVE_STATUS_DISMEMBERED_BIT (PR-A invariant violated)"
++            );
++            if is_blind(status.dismembered.parts) {
++                let (wx, wy) = blind_wander_dir(slot.0, tick_now);
++                vel.dx = wx * MAX_AGENT_SPEED;
++                vel.dy = wy * MAX_AGENT_SPEED;
++                continue;
++            }
++        }
+         // Slice-7 #136 close-range override gate. Only engages when
+         // the active-entity position resolved cleanly this tick;
+         // `valid == false` falls through to pure flow-field, mirroring
+diff --git a/packages/zomboid-sim/src/tuning_stub.rs b/packages/zomboid-sim/src/tuning_stub.rs
+index 3c5d225..4af5ea9 100644
+--- a/packages/zomboid-sim/src/tuning_stub.rs
++++ b/packages/zomboid-sim/src/tuning_stub.rs
+@@ -125,6 +125,36 @@ const _: () = assert!(
+      MAX_AGENT_SPEED stays a hard ceiling (exceeding it risks wall tunnelling)",
+ );
+ 
++/// Tactical-locomotion speed scales for survivable dismemberment
++/// (mmnto-ai/liquid-city#561 PR-B). Planar-velocity multipliers applied by
++/// `dismember_locomotion_system` when an agent has lost legs: both legs →
++/// `CRAWL_SPEED_SCALE` (drag the torso, still ankle-grabs); one leg →
++/// `HOBBLE_SPEED_SCALE` (easy to outrun). A drive-time feel knob, like the
++/// speed-multiplier spread; graduate to the runtime `FlockingTuning` resource
++/// if live tuning is wanted.
++pub const CRAWL_SPEED_SCALE: f32 = 0.25;
++pub const HOBBLE_SPEED_SCALE: f32 = 0.55;
++
++/// Blind-wander heading hold, in ticks, for a headless agent
++/// (mmnto-ai/liquid-city#561 PR-B). `blind_wander_dir` buckets the sim tick by
++/// this period so the seeded heading holds `WANDER_PERIOD × FIXED_DT` ≈ 0.5 s —
++/// a shamble drift, not a per-tick jitter. Must be strictly > 0 (it divides the
++/// tick).
++pub const WANDER_PERIOD: u32 = 30;
++
++// Crawl/hobble deadlock-floor + ordering invariant, mirroring the
++// `WALL_SPEED_SCALE > 0` guard in `horde_speed.rs`: both scales strictly
++// positive (a zeroed crawl freezes the agent into a hidden-death look),
++// crawl strictly slower than hobble, both below 1.0 (dismemberment only
++// slows). `WANDER_PERIOD` strictly positive so the bucket divide is safe.
++const _: () = assert!(
++    0.0 < CRAWL_SPEED_SCALE
++        && CRAWL_SPEED_SCALE < HOBBLE_SPEED_SCALE
++        && HOBBLE_SPEED_SCALE < 1.0
++        && WANDER_PERIOD > 0,
++    "dismember locomotion: 0 < CRAWL < HOBBLE < 1 and WANDER_PERIOD > 0",
++);
++
+ /// Player on-foot movement speed in m/s. 5.0 ≈ jog pace; placeholder for
+ /// the 0.3.5 Driveable Slice on-foot avatar. Replaced by per-vehicle speed
+ /// curves once ADR-017 vehicle physics lands.

@@ -1,0 +1,298 @@
+{
+  "canonicalPath": ".totem/spine/gate-1/windtunnel.lock.json",
+  "controls": {
+    "integrity": {
+      "fixtureSha": "c615dc9c2c80eb037ae921bddf4204c8222e7e9c",
+      "mechanism": "git-hash-object",
+      "prDiffsSha": "d6e2d9838a91dba8fe0e1a0e3328fb46fb2fd341c0b13f94bbc90fc17fc94b86"
+    },
+    "negativeRef": ".totem/spine/gate-1/controls/negative/",
+    "positiveRef": ".totem/spine/gate-1/controls/positive/"
+  },
+  "corpus": {
+    "repo": "mmnto-ai/liquid-city",
+    "resolvedPrs": [
+      {
+        "baseSha": "b7f7b4e60257ef59067942bc6e8274bc780e147f",
+        "headSha": "8564b36957df5595a912009e6d055d0cd57cfd4c",
+        "mergeCommit": "8564b36957df5595a912009e6d055d0cd57cfd4c",
+        "pr": 491
+      },
+      {
+        "baseSha": "b9fe8c4242a1037404851a6642e5fe5c7d4b7ac8",
+        "headSha": "daef9e1df63b9794649f341dfabdc55335041e65",
+        "mergeCommit": "daef9e1df63b9794649f341dfabdc55335041e65",
+        "pr": 503
+      },
+      {
+        "baseSha": "aa0ee32169afecd21283bd0cd232916c31060f48",
+        "headSha": "3615576031db344b4b9382ca9cb9833a8b0f31b4",
+        "mergeCommit": "3615576031db344b4b9382ca9cb9833a8b0f31b4",
+        "pr": 508
+      },
+      {
+        "baseSha": "bb32658f9a8f81145afd39cd79502fd7dc6c21db",
+        "headSha": "2765ce6f829da27291d9bb323d73fcdd9f76151e",
+        "mergeCommit": "2765ce6f829da27291d9bb323d73fcdd9f76151e",
+        "pr": 512
+      },
+      {
+        "baseSha": "5adc6c0b3fe11c346008f3f3c874bfb17b2a3063",
+        "headSha": "4387e2fd6592de08dc50e561bad07385fbdf112e",
+        "mergeCommit": "4387e2fd6592de08dc50e561bad07385fbdf112e",
+        "pr": 514
+      },
+      {
+        "baseSha": "87f2c8197dab91f7b3834bc707adaeefd337073c",
+        "headSha": "23afa9b2b4008ab461a4e2c5233366339f3c1025",
+        "mergeCommit": "23afa9b2b4008ab461a4e2c5233366339f3c1025",
+        "pr": 516
+      },
+      {
+        "baseSha": "23afa9b2b4008ab461a4e2c5233366339f3c1025",
+        "headSha": "f9d60cce97648b6950578b0e46871ba72a224b1c",
+        "mergeCommit": "f9d60cce97648b6950578b0e46871ba72a224b1c",
+        "pr": 517
+      },
+      {
+        "baseSha": "f9d60cce97648b6950578b0e46871ba72a224b1c",
+        "headSha": "95f32a59027a1fce0571a1b9b1f5b064dc3eff6a",
+        "mergeCommit": "95f32a59027a1fce0571a1b9b1f5b064dc3eff6a",
+        "pr": 518
+      },
+      {
+        "baseSha": "95f32a59027a1fce0571a1b9b1f5b064dc3eff6a",
+        "headSha": "727a3a390a44604f5288b02bda45af71f837cbf0",
+        "mergeCommit": "727a3a390a44604f5288b02bda45af71f837cbf0",
+        "pr": 519
+      },
+      {
+        "baseSha": "727a3a390a44604f5288b02bda45af71f837cbf0",
+        "headSha": "730910097cbc70943a4d6ba9883471e268457348",
+        "mergeCommit": "730910097cbc70943a4d6ba9883471e268457348",
+        "pr": 520
+      },
+      {
+        "baseSha": "f7d847fe40b21aedd90f12e818fc57e57fe5a4c2",
+        "headSha": "9ccaa6a4eebad73ff346e70d6be8c20704fc3f85",
+        "mergeCommit": "9ccaa6a4eebad73ff346e70d6be8c20704fc3f85",
+        "pr": 524
+      },
+      {
+        "baseSha": "9ccaa6a4eebad73ff346e70d6be8c20704fc3f85",
+        "headSha": "c772db84b5ee9ff7ff3fe74399bf92d43bb00c96",
+        "mergeCommit": "c772db84b5ee9ff7ff3fe74399bf92d43bb00c96",
+        "pr": 525
+      },
+      {
+        "baseSha": "97c433f4fbc09d5a9aef1358929db4bdee0b45bf",
+        "headSha": "495b0b488b7efc4cdcd61d141ddd01301207fdf6",
+        "mergeCommit": "495b0b488b7efc4cdcd61d141ddd01301207fdf6",
+        "pr": 532
+      },
+      {
+        "baseSha": "a3bdcbe78dc112d2c81d6a7b244767d3ecfa3550",
+        "headSha": "599b0aa22e261873a7f7ee10980f35be4bf4830f",
+        "mergeCommit": "599b0aa22e261873a7f7ee10980f35be4bf4830f",
+        "pr": 537
+      },
+      {
+        "baseSha": "599b0aa22e261873a7f7ee10980f35be4bf4830f",
+        "headSha": "e775cbe6f86c2f8c789659dd6a06682a9ccf1a72",
+        "mergeCommit": "e775cbe6f86c2f8c789659dd6a06682a9ccf1a72",
+        "pr": 540
+      },
+      {
+        "baseSha": "913cbcd760b9d78d328971a9de6c57d861b3b2a2",
+        "headSha": "2d3cbaa20ca4699d0303d68a96f8522b8eaeadaf",
+        "mergeCommit": "2d3cbaa20ca4699d0303d68a96f8522b8eaeadaf",
+        "pr": 542
+      },
+      {
+        "baseSha": "6e75d86b57db8ee9b49393912373226196714f23",
+        "headSha": "c9c92c17097bbac1353334be8392a0b4840a67e8",
+        "mergeCommit": "c9c92c17097bbac1353334be8392a0b4840a67e8",
+        "pr": 546
+      },
+      {
+        "baseSha": "4480772c4f0f5274a79ee9520c4ffae4ede86aec",
+        "headSha": "8c8795b9bfa1873e24d9e594ac17dad95d029439",
+        "mergeCommit": "8c8795b9bfa1873e24d9e594ac17dad95d029439",
+        "pr": 549
+      },
+      {
+        "baseSha": "8c8795b9bfa1873e24d9e594ac17dad95d029439",
+        "headSha": "05a69f2041ac5541fd27f5db4c1a8d54f78b30aa",
+        "mergeCommit": "05a69f2041ac5541fd27f5db4c1a8d54f78b30aa",
+        "pr": 550
+      },
+      {
+        "baseSha": "05a69f2041ac5541fd27f5db4c1a8d54f78b30aa",
+        "headSha": "809d4bcd8c9a3fb1e2ef6e65c1c8efada5ecd833",
+        "mergeCommit": "809d4bcd8c9a3fb1e2ef6e65c1c8efada5ecd833",
+        "pr": 551
+      },
+      {
+        "baseSha": "cb7e240ac0adddd2aeaae6951a22fbc81256e880",
+        "headSha": "00b3b0ace261b1ca5fe691326b766490d02691f4",
+        "mergeCommit": "00b3b0ace261b1ca5fe691326b766490d02691f4",
+        "pr": 553
+      },
+      {
+        "baseSha": "00b3b0ace261b1ca5fe691326b766490d02691f4",
+        "headSha": "7ff0d26db4638a73b7ae96a0e469084700d96db5",
+        "mergeCommit": "7ff0d26db4638a73b7ae96a0e469084700d96db5",
+        "pr": 569
+      },
+      {
+        "baseSha": "887a8cdf4ddcaa631fc033c694677c35b8324bc6",
+        "headSha": "abc76c2ab853ede74f8d243814f5c70e9d2cbccc",
+        "mergeCommit": "abc76c2ab853ede74f8d243814f5c70e9d2cbccc",
+        "pr": 572
+      },
+      {
+        "baseSha": "abc76c2ab853ede74f8d243814f5c70e9d2cbccc",
+        "headSha": "9bec51d0d76d0274a5935736ff646a01b2fa6013",
+        "mergeCommit": "9bec51d0d76d0274a5935736ff646a01b2fa6013",
+        "pr": 573
+      },
+      {
+        "baseSha": "89bb2030a5c57ca2a7e506d810d5d8f117a1a2e2",
+        "headSha": "d9e4104233aa87cb3b6ef81eb1e0cc61d0334240",
+        "mergeCommit": "d9e4104233aa87cb3b6ef81eb1e0cc61d0334240",
+        "pr": 575
+      },
+      {
+        "baseSha": "bb3c179a26ea1062bbefef599f7a841abebdd7b8",
+        "headSha": "160f7f1099e808482857c24f5da22fd28643c8a9",
+        "mergeCommit": "160f7f1099e808482857c24f5da22fd28643c8a9",
+        "pr": 580
+      },
+      {
+        "baseSha": "160f7f1099e808482857c24f5da22fd28643c8a9",
+        "headSha": "dc22d82487572f5acc03a774a2827f974545666e",
+        "mergeCommit": "dc22d82487572f5acc03a774a2827f974545666e",
+        "pr": 581
+      },
+      {
+        "baseSha": "dc22d82487572f5acc03a774a2827f974545666e",
+        "headSha": "b4c057ac27eff5c879c58ab704f6deb4c3c6322f",
+        "mergeCommit": "b4c057ac27eff5c879c58ab704f6deb4c3c6322f",
+        "pr": 582
+      },
+      {
+        "baseSha": "920b0d45b5d776ccdfff5d4e1efba012b0927c61",
+        "headSha": "ddc24d42b2c86d47c5bef7e1462d80ddf852fb82",
+        "mergeCommit": "ddc24d42b2c86d47c5bef7e1462d80ddf852fb82",
+        "pr": 585
+      },
+      {
+        "baseSha": "ddc24d42b2c86d47c5bef7e1462d80ddf852fb82",
+        "headSha": "2b2bdf9bb7daec1acb2ae52f8950454597b81619",
+        "mergeCommit": "2b2bdf9bb7daec1acb2ae52f8950454597b81619",
+        "pr": 587
+      },
+      {
+        "baseSha": "2b2bdf9bb7daec1acb2ae52f8950454597b81619",
+        "headSha": "e468fa573b44ef3d16b6ef748dbe40fb324ebb7a",
+        "mergeCommit": "e468fa573b44ef3d16b6ef748dbe40fb324ebb7a",
+        "pr": 589
+      },
+      {
+        "baseSha": "d048a28a2164036c2af9517f85cb02d635970214",
+        "headSha": "6ee0aba95c3093938596e918d681006779d57ee5",
+        "mergeCommit": "6ee0aba95c3093938596e918d681006779d57ee5",
+        "pr": 597
+      },
+      {
+        "baseSha": "6ee0aba95c3093938596e918d681006779d57ee5",
+        "headSha": "01c75fe8ad065383614aabddd92a4e59750d03a7",
+        "mergeCommit": "01c75fe8ad065383614aabddd92a4e59750d03a7",
+        "pr": 600
+      },
+      {
+        "baseSha": "01c75fe8ad065383614aabddd92a4e59750d03a7",
+        "headSha": "4b6c08bdd0d99937c44ea12fc9bbe3a6a092c88a",
+        "mergeCommit": "4b6c08bdd0d99937c44ea12fc9bbe3a6a092c88a",
+        "pr": 601
+      },
+      {
+        "baseSha": "4b6c08bdd0d99937c44ea12fc9bbe3a6a092c88a",
+        "headSha": "28882cdc9d2e99912370b19d86ccc14b77f461cf",
+        "mergeCommit": "28882cdc9d2e99912370b19d86ccc14b77f461cf",
+        "pr": 602
+      },
+      {
+        "baseSha": "28882cdc9d2e99912370b19d86ccc14b77f461cf",
+        "headSha": "8b9ae663fa8bb437b408dd679c314b95d38c72a7",
+        "mergeCommit": "8b9ae663fa8bb437b408dd679c314b95d38c72a7",
+        "pr": 605
+      },
+      {
+        "baseSha": "8b9ae663fa8bb437b408dd679c314b95d38c72a7",
+        "headSha": "548d9cd55cbf8ce6a10eba5f370f447d5ab870c8",
+        "mergeCommit": "548d9cd55cbf8ce6a10eba5f370f447d5ab870c8",
+        "pr": 607
+      },
+      {
+        "baseSha": "548d9cd55cbf8ce6a10eba5f370f447d5ab870c8",
+        "headSha": "a4d87082b287b286c775aa4b2b7e9addb7a3c2d8",
+        "mergeCommit": "a4d87082b287b286c775aa4b2b7e9addb7a3c2d8",
+        "pr": 609
+      },
+      {
+        "baseSha": "a4d87082b287b286c775aa4b2b7e9addb7a3c2d8",
+        "headSha": "300f75fa86dd5deb0d664c2b8e001981dc9fa27c",
+        "mergeCommit": "300f75fa86dd5deb0d664c2b8e001981dc9fa27c",
+        "pr": 610
+      },
+      {
+        "baseSha": "300f75fa86dd5deb0d664c2b8e001981dc9fa27c",
+        "headSha": "09b21bc3bf5c1933d7f2f313659d5d687a01c599",
+        "mergeCommit": "09b21bc3bf5c1933d7f2f313659d5d687a01c599",
+        "pr": 611
+      }
+    ],
+    "selectionRule": {
+      "asOfCommit": "09b21bc3bf5c1933d7f2f313659d5d687a01c599",
+      "codePathClassifier": {
+        "excludeGlobs": [],
+        "includeGlobs": [
+          "**/*.rs",
+          "**/*.gd",
+          "**/*.gdshader",
+          "**/*.tscn"
+        ]
+      },
+      "excludeBotPrs": true,
+      "excludeRevertPairs": true,
+      "predicate": "code-touching merged PRs (.rs/.gd/.gdshader/.tscn) excluding bot authors and revert pairs (ADR-110 §6)",
+      "state": "merged",
+      "window": {
+        "n": 40,
+        "type": "bounded"
+      }
+    }
+  },
+  "cullRateThreshold": 0.5,
+  "exposureDenominator": {
+    "activeRulesEvaluated": {
+      "floor": 2
+    },
+    "filesTouchedInWindow": {
+      "floor": 1
+    },
+    "positiveControlsExercised": {
+      "floor": 1
+    }
+  },
+  "fpDefinition": {
+    "adjudicator": "disposition-derived (zero-LLM, #697 disposition primitive)",
+    "groundTruthRef": "#709 disposition-derived answer key (ground-truth-labels.json)",
+    "precisionFloor": 1,
+    "rubricRef": "ADR-110 §4 false-positive rubric"
+  },
+  "gate": "gate-1",
+  "phase": "certifying",
+  "schema": "windtunnel.lock.v1"
+}

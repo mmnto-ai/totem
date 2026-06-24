@@ -1,0 +1,45 @@
+{
+  "gate": "gate-1",
+  "canonicalPath": ".totem/spine/gate-1/windtunnel.lock.json",
+  "repo": "mmnto-ai/liquid-city",
+  "phase": "certifying",
+  "selectionRule": {
+    "state": "merged",
+    "predicate": "code-touching merged PRs (.rs/.gd/.gdshader/.tscn) excluding bot authors and revert pairs (ADR-110 §6)",
+    "window": { "type": "bounded", "n": 40 },
+    "asOfCommit": "09b21bc3bf5c1933d7f2f313659d5d687a01c599",
+    "codePathClassifier": {
+      "includeGlobs": ["**/*.rs", "**/*.gd", "**/*.gdshader", "**/*.tscn"],
+      "excludeGlobs": []
+    },
+    "excludeRevertPairs": true,
+    "excludeBotPrs": true
+  },
+  "split": {
+    "cutIndex": 28,
+    "excludedPrs": []
+  },
+  "controls": {
+    "positiveRef": ".totem/spine/gate-1/controls/positive/",
+    "negativeRef": ".totem/spine/gate-1/controls/negative/",
+    "mechanism": "git-hash-object",
+    "positive": [
+      { "pr": 597, "targetRuleId": "sim-float-finite-assert" },
+      { "pr": 605, "targetRuleId": "sim-float-finite-assert" },
+      { "pr": 610, "targetRuleId": "sim-float-finite-assert" },
+      { "pr": 589, "targetRuleId": "guard-divisor-nonpositive" }
+    ],
+    "negative": [607, 600, 601, 611]
+  },
+  "fpDefinition": {
+    "rubricRef": "ADR-110 §4 false-positive rubric",
+    "groundTruthRef": "#709 disposition-derived answer key (ground-truth-labels.json)",
+    "adjudicator": "disposition-derived (zero-LLM, #697 disposition primitive)"
+  },
+  "cullRateThreshold": 0.5,
+  "exposureDenominator": {
+    "activeRulesEvaluated": { "floor": 2 },
+    "filesTouchedInWindow": { "floor": 1 },
+    "positiveControlsExercised": { "floor": 1 }
+  }
+}

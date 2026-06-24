@@ -1,0 +1,64 @@
+{
+  "asOfCommit": "09b21bc3bf5c1933d7f2f313659d5d687a01c599",
+  "excludedPrs": [],
+  "heldOutPrs": [
+    585,
+    587,
+    589,
+    597,
+    600,
+    601,
+    602,
+    605,
+    607,
+    609,
+    610,
+    611
+  ],
+  "negativeControlPrs": [
+    600,
+    601,
+    607,
+    611
+  ],
+  "positiveControlPrs": [
+    589,
+    597,
+    605,
+    610
+  ],
+  "splitRule": {
+    "cutIndex": 28,
+    "predicate": "code-touching merged PRs (.rs/.gd/.gdshader/.tscn) excluding bot authors and revert pairs (ADR-110 §6)"
+  },
+  "trainPrs": [
+    491,
+    503,
+    508,
+    512,
+    514,
+    516,
+    517,
+    518,
+    519,
+    520,
+    524,
+    525,
+    532,
+    537,
+    540,
+    542,
+    546,
+    549,
+    550,
+    551,
+    553,
+    569,
+    572,
+    573,
+    575,
+    580,
+    581,
+    582
+  ]
+}

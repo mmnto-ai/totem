@@ -1,0 +1,1387 @@
+diff --git a/apps/game-godot/GibDebrisRenderer.gd b/apps/game-godot/GibDebrisRenderer.gd
+new file mode 100644
+index 0000000..5297344
+--- /dev/null
++++ b/apps/game-godot/GibDebrisRenderer.gd
+@@ -0,0 +1,467 @@
++class_name GibDebrisRenderer
++extends Node3D
++
++# ADR-029 gore epic mmnto-ai/liquid-city#565, PR2 (mmnto-ai/liquid-city#560) —
++# RENDER-ONLY gib (gore) debris. When the Rust sim resolves a `Gib` kill (a car
++# pulping a zombie at extreme per-kg momentum) it appends a render-only GibEvent
++# to the FFI drain buffer; sim_driver drains it each frame via
++# `sim.get_gib_events()` and feeds the bytes to `ingest()`. This renderer then
++# spawns flying body-part debris + a blood-mist pop at the kill site.
++#
++# NO determinism concerns and NO physics bodies (the cohort decided this): the
++# Gib decision + the despawn already ran authoritatively in the resolver; THIS
++# is a pure one-shot visual feed (ADR-002 visual-physics checksum exclusion /
++# ADR-027 §4). Every chunk is KINEMATIC — a closed-form ballistic arc advanced
++# per-frame (pos += vel*dt; vel.y -= g*dt) with a tumble spin, then it fades +
++# retires. NO RigidBody3D, NO Skeleton3D — chunks are rigid part meshes lifted
++# from the SAME blocky kit the part-segmented horde renders (character-a.glb =
++# 6 separate meshes: head/torso/arm-left/arm-right/leg-left/leg-right).
++#
++# SCOPE: spawn the burst + the mist, advance + retire, draw via 6 MultiMesh (one
++# per part mesh, ~6 draw calls total). Determinism: ALL scatter randomness is
++# derived from the event `seed` (sim-computed, ADR-027 rule-2 — no Godot-side
++# hash drift) through a LOCAL RandomNumberGenerator, NEVER the global randf()/
++# randi(). NON-goals: ground decals (GoreSlick) defer to a later PR; dismember
++# (mmnto-ai/liquid-city#561) is a sibling on the horde adapter, not here.
++
++# MIRROR of damage.rs GIB_* — keep in sync. Each record is GIB_EVENT_STRIDE
++# bytes, little-endian; read with bytes.decode_u32 / bytes.decode_float. The Rust
++# `gib_event_abi_layout_is_stable` test locks the producer side.
++const GIB_EVENT_STRIDE := 36
++const GIB_OFF_SLOT := 0  # u32 — stable replicated BufferSlot (unused here; debug)
++const GIB_OFF_TICK := 4  # u32 — sim tick of the kill (unused here; debug)
++const GIB_OFF_SEED := 8  # u32 — deterministic scatter seed; drives ALL randomness
++const GIB_OFF_POS_X := 12  # f32
++const GIB_OFF_POS_Y := 16  # f32
++const GIB_OFF_POS_Z := 20  # f32 — world height (z = floor*FLOOR_HEIGHT + altitude)
++const GIB_OFF_VEL_X := 24  # f32
++const GIB_OFF_VEL_Y := 28  # f32
++const GIB_OFF_VEL_Z := 32  # f32
++
++# Mesh source: the blocky kit's 6 rigid part meshes (SAME asset as the part-
++# segmented horde). Names match PartSegmentedHordeAdapter.BIT_TO_PART (Kenney
++# verbatim, case-insensitive) — resolved by node name on import, not glTF index.
++const RIG_GLB_PATH := "res://assets/blocky-characters/character-a.glb"
++const PART_NAMES: Array[StringName] = [
++	&"head", &"torso", &"arm-left", &"arm-right", &"leg-left", &"leg-right"
++]
++const PART_COUNT := 6
++
++# A 32-bit odd constant (golden-ratio bits) so per-chunk seed mixing de-
++# correlates the 6 chunks of one event (each part scatters independently from
++# the same event seed). Same magic the part-segment kit uses elsewhere.
++const CHUNK_SEED_MIX := 0x9E3779B9
++
++# Caps + fade. Oldest-first retirement when a new burst would overflow the pool.
++const MAX_ACTIVE_GIB_CHUNKS := 256
++# Blood-mist emitter pool — small; cycle the oldest on overflow (Gib is rare).
++const BLOOD_POOL_SIZE := 12
++# Last fraction of a chunk's TTL spent shrinking toward zero (visual fade-out).
++const FADE_FRACTION := 0.25
++
++# Over-the-top "Carmageddon dial" — crank these for more comically violent gore.
++@export var gib_loft_mult := 1.6  # upward kick added to scatter so limbs sail high
++@export var gib_chunk_ttl := 2.0  # seconds a chunk lives before it shrinks out
++@export var gib_gravity := 14.0  # Godot-Y downward accel on each chunk (m/s^2)
++@export var gib_scatter_speed := 6.0  # base scatter cone speed (m/s)
++@export var gib_blood_enabled := true  # red mist puff on each pulp
++
++var _headless := false
++var _ready_done := false
++
++# Per-part mesh resources (index parallel to PART_NAMES) + their draw nodes.
++var _part_meshes: Array[Mesh] = []
++var _part_scales: Array[Vector3] = []  # GLB import scale per part (lost if only .mesh is kept)
++var _multis: Array[MultiMeshInstance3D] = []
++
++# Chunk pool (parallel arrays — allocation-light per frame; no per-chunk objects).
++# A chunk is active iff `_chunk_age[i] >= 0.0`; -1.0 marks a free slot.
++var _chunk_part := PackedInt32Array()  # which part mesh (0..PART_COUNT-1)
++var _chunk_pos := PackedVector3Array()  # Godot world position
++var _chunk_vel := PackedVector3Array()  # Godot world velocity
++var _chunk_axis := PackedVector3Array()  # unit tumble axis
++var _chunk_spin := PackedFloat32Array()  # tumble rate (rad/s)
++var _chunk_angle := PackedFloat32Array()  # accumulated tumble angle (rad)
++var _chunk_age := PackedFloat32Array()  # seconds alive; -1.0 == free slot
++var _chunk_birth := PackedInt64Array()  # monotonic birth ticket (oldest-first)
++var _active_count := 0
++var _birth_counter := 0
++
++# Blood-mist emitter pool (round-robin; cycle the oldest on overflow).
++var _blood_pool: Array[GPUParticles3D] = []
++var _blood_next := 0
++
++# Scratch transform reused per-instance in _process so the per-frame buffer
++# rebuild stays allocation-light (no per-chunk Transform3D churn).
++var _scratch := Transform3D.IDENTITY
++
++# Per-part instance-transform lists, preallocated once + cleared each frame
++# (CR / Greptile: avoid the per-frame Array[Array] heap churn while active).
++var _per_part_xforms: Array[Array] = []
++
++# Single RNG reused across every burst (GCA): _rng.seed is reset per chunk in
++# _spawn_burst, so reuse is bit-identical to a fresh instance + allocation-free.
++var _rng := RandomNumberGenerator.new()
++
++
++# Build the 6 part meshes + 6 MultiMeshInstance3D children + the blood-mist pool.
++# Idempotent. Headless: no visual nodes, ingest()/_process() become no-ops (the
++# determinism/capture harness runs headless and must never touch the GPU).
++func setup(headless: bool) -> void:
++	if _ready_done:
++		return
++	_headless = headless
++	_init_pool_state()
++	if _headless:
++		_ready_done = true
++		return
++	if not _load_part_meshes():
++		push_error("GibDebrisRenderer: failed to load part meshes — gibs disabled")
++		# Stay un-ready so ingest()/_process() no-op; the kill still despawned sim-side.
++		return
++	_build_multimeshes()
++	if gib_blood_enabled:
++		_build_blood_pool()
++	_ready_done = true
++
++
++func _init_pool_state() -> void:
++	_chunk_part.resize(MAX_ACTIVE_GIB_CHUNKS)
++	_chunk_pos.resize(MAX_ACTIVE_GIB_CHUNKS)
++	_chunk_vel.resize(MAX_ACTIVE_GIB_CHUNKS)
++	_chunk_axis.resize(MAX_ACTIVE_GIB_CHUNKS)
++	_chunk_spin.resize(MAX_ACTIVE_GIB_CHUNKS)
++	_chunk_angle.resize(MAX_ACTIVE_GIB_CHUNKS)
++	_chunk_age.resize(MAX_ACTIVE_GIB_CHUNKS)
++	_chunk_age.fill(-1.0)
++	_chunk_birth.resize(MAX_ACTIVE_GIB_CHUNKS)
++	_active_count = 0
++
++
++# Load the GLB once, recursively collect its MeshInstance3D parts, keep each
++# part's `.mesh` resource by name, then free the temp instance. A missing part is
++# a graceful skip (push_warning) — its slot in _part_meshes stays null so the
++# spawn loop draws no chunk for it (the burst is just smaller).
++func _load_part_meshes() -> bool:
++	var scene := load(RIG_GLB_PATH) as PackedScene
++	if scene == null:
++		push_error("GibDebrisRenderer: failed to load rig scene at %s" % RIG_GLB_PATH)
++		return false
++	var rig := scene.instantiate() as Node3D
++	if rig == null:
++		push_error("GibDebrisRenderer: failed to instantiate rig from %s" % RIG_GLB_PATH)
++		return false
++	var meshes: Array[MeshInstance3D] = []
++	_collect_meshes(rig, meshes)
++	_part_meshes.resize(PART_COUNT)
++	_part_scales.resize(PART_COUNT)
++	_part_scales.fill(Vector3.ONE)
++	var found := 0
++	for p in PART_COUNT:
++		var inst := _find_part(meshes, PART_NAMES[p])
++		if inst == null or inst.mesh == null:
++			push_warning(
++				"GibDebrisRenderer: rig missing part '%s' — gibs skip that limb" % PART_NAMES[p]
++			)
++			_part_meshes[p] = null
++			continue
++		_part_meshes[p] = inst.mesh
++		_part_scales[p] = _cumulative_scale(inst, rig)
++		found += 1
++	# Free the temp rig (its mesh resources stay referenced via _part_meshes).
++	rig.queue_free()
++	return found > 0
++
++
++# Build one MultiMeshInstance3D per part mesh. Each MultiMesh is TRANSFORM_3D and
++# its instance_count + per-instance transforms are rebuilt every _process frame
++# from the active chunks for that part (~6 draw calls total). A null part mesh
++# gets a placeholder MultiMesh that simply never receives instances.
++func _build_multimeshes() -> void:
++	_multis.resize(PART_COUNT)
++	for p in PART_COUNT:
++		var mmi := MultiMeshInstance3D.new()
++		mmi.name = "GibPart%d" % p
++		var mm := MultiMesh.new()
++		mm.transform_format = MultiMesh.TRANSFORM_3D
++		mm.mesh = _part_meshes[p]
++		mm.instance_count = 0
++		mmi.multimesh = mm
++		add_child(mmi)
++		_multis[p] = mmi
++	_per_part_xforms.resize(PART_COUNT)
++	for pi in PART_COUNT:
++		_per_part_xforms[pi] = []
++
++
++# Build the blood-mist emitter pool: BLOOD_POOL_SIZE one-shot GPUParticles3D, each
++# a red expanding puff (initial velocity spread + gravity + short lifetime). On a
++# gib event we grab the next emitter (cycle oldest), move it to the kill pos, and
++# restart() it. Kept deliberately simple + robust.
++func _build_blood_pool() -> void:
++	var process_mat := _make_blood_process_material()
++	var draw_mat := _make_blood_draw_material()
++	var draw_mesh := SphereMesh.new()
++	draw_mesh.radius = 0.08
++	draw_mesh.height = 0.16
++	draw_mesh.radial_segments = 6
++	draw_mesh.rings = 3
++	draw_mesh.material = draw_mat
++	_blood_pool.resize(BLOOD_POOL_SIZE)
++	for i in BLOOD_POOL_SIZE:
++		var em := GPUParticles3D.new()
++		em.name = "GibBlood%d" % i
++		em.emitting = false
++		em.one_shot = true
++		em.amount = 24
++		em.lifetime = 0.6
++		em.explosiveness = 1.0  # all particles fire at once (a puff, not a stream)
++		em.process_material = process_mat
++		em.draw_pass_1 = draw_mesh
++		add_child(em)
++		_blood_pool[i] = em
++
++
++func _make_blood_process_material() -> ParticleProcessMaterial:
++	var mat := ParticleProcessMaterial.new()
++	mat.direction = Vector3(0.0, 1.0, 0.0)
++	mat.spread = 75.0  # wide cone — a splattering puff
++	mat.initial_velocity_min = 1.5
++	mat.initial_velocity_max = 4.5
++	mat.gravity = Vector3(0.0, -9.0, 0.0)
++	mat.scale_min = 0.5
++	mat.scale_max = 1.4
++	return mat
++
++
++func _make_blood_draw_material() -> StandardMaterial3D:
++	var mat := StandardMaterial3D.new()
++	mat.albedo_color = Color(0.55, 0.02, 0.02)  # dark arterial red
++	# Unshaded so the mist reads as a bright pop regardless of scene lighting
++	# (mmnto-ai/liquid-city#586 owns the lighting pass; gibs must not depend on it).
++	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
++	return mat
++
++
++# Decode each 36-byte record + spawn a 6-chunk burst per event. Called each frame
++# by sim_driver with `sim.get_gib_events()`. Guard: not-ready / headless / empty
++# all early-return (the harness must never touch the GPU).
++func ingest(events: PackedByteArray) -> void:
++	if not _ready_done or _headless or events.is_empty():
++		return
++	var n := events.size() / GIB_EVENT_STRIDE
++	for e in n:
++		var base := e * GIB_EVENT_STRIDE
++		var seed := events.decode_u32(base + GIB_OFF_SEED)
++		# sim (x, y) ground plane + separate height z → Godot (x, z, y) with
++		# Godot-Y = UP (IDENTICAL convention to PartSegmentedHordeAdapter._bind).
++		var px := events.decode_float(base + GIB_OFF_POS_X)
++		var py := events.decode_float(base + GIB_OFF_POS_Y)
++		var pz := events.decode_float(base + GIB_OFF_POS_Z)
++		var vx := events.decode_float(base + GIB_OFF_VEL_X)
++		var vy := events.decode_float(base + GIB_OFF_VEL_Y)
++		var vz := events.decode_float(base + GIB_OFF_VEL_Z)
++		var kill_pos := Vector3(px, pz, py)
++		var spray_vel := Vector3(vx, vz, vy)
++		_spawn_burst(seed, kill_pos, spray_vel)
++		if gib_blood_enabled:
++			_pop_blood(kill_pos)
++
++
++# Spawn ONE chunk of each of the 6 parts from the kill position, with a seed-
++# driven scatter cone BIASED toward the (Godot-mapped) spray velocity, plus per-
++# chunk random speed, an upward loft (gib_loft_mult — limbs sail comically high),
++# and a random tumble. ALL randomness comes from a LOCAL RNG seeded off the event
++# seed mixed with the chunk index — reproducible per the event seed, NEVER the
++# global randf()/randi().
++func _spawn_burst(seed: int, kill_pos: Vector3, spray_vel: Vector3) -> void:
++	# Bias direction = the spray velocity (downrange the way the car was going);
++	# fall back to straight up when the kill carried no spray (degenerate impulse).
++	var spray_dir := spray_vel.normalized() if spray_vel.length() > 0.001 else Vector3.UP
++	# Reuse the class-level _rng (CR/GCA) - reset per chunk; determinism is
++	# unchanged since the seed is set fresh each iteration.
++	for chunk_index in PART_COUNT:
++		if _part_meshes[chunk_index] == null:
++			continue
++		# Mix the chunk index so the 6 parts of one kill scatter independently.
++		_rng.seed = seed ^ (chunk_index * CHUNK_SEED_MIX)
++		# Scatter cone: jitter the bias direction, then loft. randf_range draws are
++		# deterministic for a fixed _rng.seed (no global RNG touched).
++		var jitter := Vector3(
++			_rng.randf_range(-1.0, 1.0), _rng.randf_range(-0.2, 1.0), _rng.randf_range(-1.0, 1.0)
++		)
++		var dir := (spray_dir + jitter * 0.6).normalized()
++		var speed := gib_scatter_speed * _rng.randf_range(0.6, 1.4)
++		var loft := Vector3.UP * gib_scatter_speed * gib_loft_mult * _rng.randf_range(0.4, 1.0)
++		var vel := dir * speed + loft
++		var axis := Vector3(
++			_rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.0, 1.0)
++		)
++		axis = axis.normalized() if axis.length() > 0.001 else Vector3.UP
++		var spin := _rng.randf_range(6.0, 18.0)  # rad/s tumble
++		_add_chunk(chunk_index, kill_pos, vel, axis, spin)
++
++
++# Claim a pool slot for a new chunk. Oldest-first retirement when the pool is full
++# (a new burst would exceed MAX_ACTIVE_GIB_CHUNKS — the oldest active chunk is
++# overwritten so the freshest carnage always wins).
++func _add_chunk(part: int, pos: Vector3, vel: Vector3, axis: Vector3, spin: float) -> void:
++	var slot := _find_free_slot()
++	if slot < 0:
++		slot = _oldest_slot()
++	else:
++		_active_count += 1
++	_chunk_part[slot] = part
++	_chunk_pos[slot] = pos
++	_chunk_vel[slot] = vel
++	_chunk_axis[slot] = axis
++	_chunk_spin[slot] = spin
++	_chunk_angle[slot] = 0.0
++	_chunk_age[slot] = 0.0
++	_chunk_birth[slot] = _birth_counter
++	_birth_counter += 1
++
++
++func _find_free_slot() -> int:
++	for i in MAX_ACTIVE_GIB_CHUNKS:
++		if _chunk_age[i] < 0.0:
++			return i
++	return -1
++
++
++# The oldest active chunk by birth ticket (lowest _chunk_birth among active).
++# Only reached when the pool is full, so at least one active chunk exists.
++func _oldest_slot() -> int:
++	var best := -1
++	var best_birth := 0
++	for i in MAX_ACTIVE_GIB_CHUNKS:
++		if _chunk_age[i] >= 0.0 and (best < 0 or _chunk_birth[i] < best_birth):
++			best_birth = _chunk_birth[i]
++			best = i
++	if best < 0:
++		push_error("GibDebrisRenderer: _oldest_slot called with no active chunks")
++		return 0
++	return best
++
++
++# Cycle the next blood emitter (oldest-first round-robin), move it to the kill
++# position, ensure one_shot, and restart() the puff.
++func _pop_blood(kill_pos: Vector3) -> void:
++	if _blood_pool.is_empty():
++		return
++	var em := _blood_pool[_blood_next]
++	_blood_next = (_blood_next + 1) % _blood_pool.size()
++	if em == null:
++		return
++	em.global_position = kill_pos
++	em.one_shot = true
++	em.restart()
++
++
++# Per-frame: advance every active chunk along its closed-form ballistic arc
++# (pos += vel*dt; vel.y -= g*dt) + tumble, fade (shrink) in the last FADE_FRACTION
++# of its TTL, retire at end-of-life, then rebuild the 6 MultiMesh buffers from the
++# survivors. No-op when headless / not ready (the harness never touches the GPU).
++func _process(delta: float) -> void:
++	if not _ready_done or _headless:
++		return
++	if _active_count == 0:
++		return
++	var fade_start := gib_chunk_ttl * (1.0 - FADE_FRACTION)
++	# Per-part instance lists, preallocated at setup + cleared each frame (no
++	# per-frame heap churn while chunks are active - CR / Greptile).
++	for p in PART_COUNT:
++		_per_part_xforms[p].clear()
++
++	for i in MAX_ACTIVE_GIB_CHUNKS:
++		if _chunk_age[i] < 0.0:
++			continue
++		var age := _chunk_age[i] + delta
++		if age >= gib_chunk_ttl:
++			# Retire: free the slot.
++			_chunk_age[i] = -1.0
++			_active_count -= 1
++			continue
++		_chunk_age[i] = age
++		# Closed-form arc + tumble.
++		var vel := _chunk_vel[i]
++		vel.y -= gib_gravity * delta
++		_chunk_vel[i] = vel
++		_chunk_pos[i] += vel * delta
++		_chunk_angle[i] += _chunk_spin[i] * delta
++		# Fade: scale toward zero across the last FADE_FRACTION of the TTL so the
++		# chunk visually shrinks out instead of popping. (`chunk_scale`, not `scale`
++		# — `scale` is the inherited Node3D property; shadowing it trips gdlint.)
++		var chunk_scale := 1.0
++		if age > fade_start:
++			chunk_scale = maxf(0.0, 1.0 - (age - fade_start) / (gib_chunk_ttl - fade_start))
++		# Build the instance transform: tumble basis (scaled) at the world pos.
++		_scratch.basis = Basis(_chunk_axis[i], _chunk_angle[i]).scaled(
++			_part_scales[_chunk_part[i]] * chunk_scale
++		)
++		_scratch.origin = _chunk_pos[i]
++		(_per_part_xforms[_chunk_part[i]] as Array).append(_scratch)
++
++	# Push the rebuilt per-part instance lists into each MultiMesh.
++	for p in PART_COUNT:
++		var mm := _multis[p].multimesh
++		var xforms: Array = _per_part_xforms[p]
++		mm.instance_count = xforms.size()
++		for k in xforms.size():
++			mm.set_instance_transform(k, xforms[k])
++
++
++# Drop all active chunks (scene resets / benches). Leaves the pool + nodes intact;
++# the next frame's rebuild empties every MultiMesh.
++func clear_all() -> void:
++	if not _ready_done:
++		return
++	_chunk_age.fill(-1.0)
++	_active_count = 0
++	if _headless:
++		return
++	for p in PART_COUNT:
++		if p < _multis.size() and _multis[p] != null:
++			_multis[p].multimesh.instance_count = 0
++
++
++func debug_status() -> String:
++	if _headless or not _ready_done:
++		return "Gibs: off"
++	return "Gibs: %d chunks" % _active_count
++
++
++# Find a part MeshInstance3D by its (case-insensitive) node name among the rig's
++# collected meshes (Godot keeps glTF mesh-node names on import). IDENTICAL match
++# rule to PartSegmentedHordeAdapter._find_part so the same kit resolves the same
++# way in both renderers.
++func _find_part(meshes: Array, part_name: StringName) -> MeshInstance3D:
++	var want := String(part_name).to_lower()
++	for m in meshes:
++		if String(m.name).to_lower() == want:
++			return m
++	return null
++
++
++func _collect_meshes(n: Node, out: Array[MeshInstance3D]) -> void:
++	if n is MeshInstance3D:
++		out.append(n)
++	for c in n.get_children():
++		_collect_meshes(c, out)
++
++
++# The cumulative scale from the rig root down to a part node. The blocky kit
++# applies its real size via node transforms in the .glb; keeping only `.mesh`
++# (for the MultiMesh) drops that, so a gib chunk would render at the raw authored
++# size. Bake the scale into each chunk so debris matches the horde limb size.
++func _cumulative_scale(node: Node, root: Node) -> Vector3:
++	var s := Vector3.ONE
++	var n := node
++	while n != null:
++		if n is Node3D:
++			# .scale (not basis.get_scale()) keeps mirror/negative signs + skips the sqrt.
++			s *= (n as Node3D).scale
++		if n == root:
++			break
++		n = n.get_parent()
++	return s
+diff --git a/apps/game-godot/GibDebrisRenderer.gd.uid b/apps/game-godot/GibDebrisRenderer.gd.uid
+new file mode 100644
+index 0000000..b28fc77
+--- /dev/null
++++ b/apps/game-godot/GibDebrisRenderer.gd.uid
+@@ -0,0 +1 @@
++uid://v5oovjdqw6wr
+diff --git a/apps/game-godot/gib_debris_bench.gd b/apps/game-godot/gib_debris_bench.gd
+new file mode 100644
+index 0000000..7b8d42c
+--- /dev/null
++++ b/apps/game-godot/gib_debris_bench.gd
+@@ -0,0 +1,218 @@
++extends Node3D
++
++# ADR-029 gore epic mmnto-ai/liquid-city#565, PR2 (mmnto-ai/liquid-city#560) —
++# gib debris renderer bench. REAL GPU (headless asserts the no-op + quits clean).
++# PHASE A (gates exit): synthetic gib-event bursts spawn chunks, the pool cap holds
++# under a flood, clear_all empties. PHASE B (reports): a gameplay-camera "car-plow
++# line" perceptual capture — read the PNG (the cohort's acceptance gate; gibs are a
++# FEEL claim, evidenced at the player's frame, not theorized).
++#
++# Synthetic events stand in for sim.get_gib_events(): the Gib rung is tuning-
++# unreachable at v0 (operator's GIB_MOMENTUM_RATIO knob — spec mmnto-ai/liquid-city#506),
++# so the RENDER path is proven here from hand-built ABI bytes, and the sim->event
++# path is proven by the damage.rs cargo tests. Same 36-byte ABI as the producer.
++# Run: <godot> --path apps/game-godot res://gib_debris_bench.tscn
++#   0 = correctness clean, 1 = assertion failed, 2 = watchdog.
++
++const GIB_EVENT_STRIDE := 36
++const OUT_DIR := "user://gib_debris_bench/"
++const PLOW_N := 12  # zombies in the car-plow line
++const SPACING := 2.4
++const PART_CHUNKS := 6  # one chunk per body part per kill (head/torso/2 arms/2 legs)
++const CAPTURE_AFTER_S := 0.7  # let debris arc into the air before the photo
++
++var _renderer: GibDebrisRenderer
++var _cam: Camera3D
++var _phase := 0
++var _frame := 0
++var _elapsed := 0.0
++var _fails := 0
++var _watchdog := 0
++
++
++func _ready() -> void:
++	if DisplayServer.get_name() == "headless":
++		# Headless: the renderer builds no GPU nodes and ingest() no-ops.
++		var r := GibDebrisRenderer.new()
++		add_child(r)
++		r.setup(true)
++		r.ingest(_plow_bytes())
++		var ok := r.debug_status() == "Gibs: off"
++		print("[gib-bench] headless — renderer no-op %s; quit 0" % ("OK" if ok else "UNEXPECTED"))
++		get_tree().quit(0)
++		return
++
++	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
++	Engine.max_fps = 144  # cap fps so the time-based capture stays well under the watchdog
++	_cam = Camera3D.new()
++	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
++	_cam.fov = 60.0
++	_cam.current = true
++	add_child(_cam)
++	# Gameplay-distance framing of the plow line (sim x:0..N*SPACING at z=0 maps to
++	# Godot x,0,0 in the renderer): low + close, looking down the line.
++	var mid := float(PLOW_N) * SPACING * 0.5
++	_cam.position = Vector3(mid, 6.5, mid + 15.0)
++	_cam.look_at(Vector3(mid, 2.5, 4.0), Vector3.UP)
++	_add_scene()
++
++	_renderer = GibDebrisRenderer.new()
++	add_child(_renderer)
++	_renderer.setup(false)
++	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
++	print("[gib-bench] start; renderer=%s" % _renderer.debug_status())
++
++
++func _process(delta: float) -> void:
++	if _renderer == null:
++		return
++	# Hard watchdog: a self-quitting bench must never hang a window.
++	_watchdog += 1
++	if _watchdog > 1200:
++		push_error("[gib-bench] watchdog tripped — force quit")
++		get_tree().quit(2)
++		return
++	if _phase == 0:
++		_process_correctness()
++	elif _phase == 1:
++		_process_perceptual(delta)
++
++
++func _process_correctness() -> void:
++	_frame += 1
++	if _frame == 1:
++		# One plow burst: PLOW_N kills x 6 part-chunks each.
++		_renderer.ingest(_plow_bytes())
++		var expect := PLOW_N * PART_CHUNKS
++		_check(
++			_renderer._active_count == expect,
++			"burst spawns %d chunks" % expect,
++			"got %d" % _renderer._active_count
++		)
++		# Cap: a flood far past the cap must clamp (oldest-first retirement).
++		_renderer.ingest(_flood_bytes(200))  # 200 * 6 = 1200 >> 256
++		_check(
++			_renderer._active_count <= GibDebrisRenderer.MAX_ACTIVE_GIB_CHUNKS,
++			"pool cap holds (<= %d)" % GibDebrisRenderer.MAX_ACTIVE_GIB_CHUNKS,
++			"got %d" % _renderer._active_count
++		)
++		return
++	if _frame < 6:
++		return  # let a few frames advance the arcs (proves _process is stable)
++	_renderer.clear_all()
++	_check(
++		_renderer._active_count == 0,
++		"clear_all empties the pool",
++		"got %d" % _renderer._active_count
++	)
++	if _fails == 0:
++		print("[gib-bench] PHASE A: PASS")
++	else:
++		print("[gib-bench] PHASE A: FAIL (%d assertion(s))" % _fails)
++	# Seed the carnage to photograph + reframe to the perceptual phase.
++	_renderer.ingest(_plow_bytes())
++	_phase = 1
++	_elapsed = 0.0
++
++
++func _process_perceptual(delta: float) -> void:
++	# Let the debris arc up for CAPTURE_AFTER_S so the chunks read as airborne
++	# carnage (frame 0 would catch them still at the kill points). Elapsed time,
++	# not a frame count, so it is robust under vsync-off.
++	_elapsed += delta
++	if _elapsed < CAPTURE_AFTER_S:
++		return
++	var img := get_viewport().get_texture().get_image()
++	if img != null:
++		var path := OUT_DIR + "perceptual_carplow_gibs.png"
++		img.save_png(ProjectSettings.globalize_path(path))
++		print(
++			(
++				"[gib-bench] perceptual capture %s (%d chunks airborne)"
++				% [path, _renderer._active_count]
++			)
++		)
++	_finalise()
++
++
++func _finalise() -> void:
++	if _fails == 0:
++		print("[gib-bench] VERDICT: GO — gib render path verified; perceptual PNG captured")
++	else:
++		print("[gib-bench] VERDICT: FAIL — %d assertion(s)" % _fails)
++	get_tree().quit(0 if _fails == 0 else 1)
++
++
++# Synthetic gib-event bytes for a car-plow line: PLOW_N kills along sim-x at z=0,
++# each thrown downrange (+x) + lofted (+ sim-height z). Mirrors the damage.rs ABI.
++func _plow_bytes() -> PackedByteArray:
++	var evs := []
++	for i in PLOW_N:
++		var ev := {
++			"slot": i,
++			"tick": 0,
++			"seed": (0x51ED + i * 0x9E3779B9) & 0xFFFFFFFF,
++			"pos": Vector3(float(i) * SPACING, 0.0, 0.0),  # sim x, y, height z
++			"vel": Vector3(7.0, 0.0, 4.0),  # downrange +x, no lateral, +loft
++		}
++		evs.append(ev)
++	return _encode(evs)
++
++
++func _flood_bytes(n: int) -> PackedByteArray:
++	var evs := []
++	for i in n:
++		var ev := {
++			"slot": 1000 + i,
++			"tick": 0,
++			"seed": (i * 0x9E3779B9) & 0xFFFFFFFF,
++			"pos": Vector3(fmod(float(i), 10.0) * SPACING, 0.0, 0.0),
++			"vel": Vector3(6.0, 0.0, 5.0),
++		}
++		evs.append(ev)
++	return _encode(evs)
++
++
++func _encode(evs: Array) -> PackedByteArray:
++	var b := PackedByteArray()
++	b.resize(evs.size() * GIB_EVENT_STRIDE)
++	for i in evs.size():
++		var e: Dictionary = evs[i]
++		var o := i * GIB_EVENT_STRIDE
++		b.encode_u32(o + 0, int(e["slot"]) & 0xFFFFFFFF)
++		b.encode_u32(o + 4, int(e["tick"]) & 0xFFFFFFFF)
++		b.encode_u32(o + 8, int(e["seed"]) & 0xFFFFFFFF)
++		var p: Vector3 = e["pos"]
++		var v: Vector3 = e["vel"]
++		b.encode_float(o + 12, p.x)
++		b.encode_float(o + 16, p.y)
++		b.encode_float(o + 20, p.z)
++		b.encode_float(o + 24, v.x)
++		b.encode_float(o + 28, v.y)
++		b.encode_float(o + 32, v.z)
++	return b
++
++
++# A dim ground plane + a sun so airborne debris reads against the floor in the
++# perceptual capture (this is a bench prop, NOT the game's lighting — that is
++# mmnto-ai/liquid-city#586).
++func _add_scene() -> void:
++	var ground := MeshInstance3D.new()
++	var pm := PlaneMesh.new()
++	pm.size = Vector2(60.0, 60.0)
++	ground.mesh = pm
++	var mat := StandardMaterial3D.new()
++	mat.albedo_color = Color(0.16, 0.17, 0.19)
++	ground.material_override = mat
++	add_child(ground)
++	var sun := DirectionalLight3D.new()
++	sun.rotation_degrees = Vector3(-55.0, -35.0, 0.0)
++	add_child(sun)
++
++
++func _check(ok: bool, label: String, detail: String) -> void:
++	if ok:
++		print("[gib-bench] PASS: %s" % label)
++	else:
++		_fails += 1
++		print("[gib-bench] FAIL: %s — %s" % [label, detail])
+diff --git a/apps/game-godot/gib_debris_bench.gd.uid b/apps/game-godot/gib_debris_bench.gd.uid
+new file mode 100644
+index 0000000..c0ad926
+--- /dev/null
++++ b/apps/game-godot/gib_debris_bench.gd.uid
+@@ -0,0 +1 @@
++uid://c2mogc5ph180b
+diff --git a/apps/game-godot/gib_debris_bench.tscn b/apps/game-godot/gib_debris_bench.tscn
+new file mode 100644
+index 0000000..2837926
+--- /dev/null
++++ b/apps/game-godot/gib_debris_bench.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://gib_debris_bench.gd" id="1_gib"]
++
++[node name="GibDebrisBench" type="Node3D"]
++script = ExtResource("1_gib")
+diff --git a/apps/game-godot/sim_driver.gd b/apps/game-godot/sim_driver.gd
+index 3a9ba46..7cd9616 100644
+--- a/apps/game-godot/sim_driver.gd
++++ b/apps/game-godot/sim_driver.gd
+@@ -568,6 +568,11 @@ var _vat_colormap_enabled: bool = false
+ ## disposable VAT proof above stays a separate off-by-default debug toggle). See
+ ## LODManager3D.gd.
+ var _lod_manager: LODManager3D = null
++## Gore PR2 (mmnto-ai/liquid-city#560) — render-only gib (gore) debris. Node3D
++## child of Render3D; fed drained gib events each frame from `_physics_process`
++## via `sim.get_gib_events()`. Null until _ready; no-ops under --headless; visible
++## only when use_3d_camera. See GibDebrisRenderer.gd.
++var _gib_renderer: GibDebrisRenderer = null
+ ## Diagnostic HUD reference (#146). Sibling node under root, populated
+ ## via `hud.set_value(key, value)` from `_physics_process` for entries
+ ## that need sim-side data (currently agent count). The HUD itself
+@@ -1162,6 +1167,14 @@ func _ready() -> void:
+ 					% [skeletal_lod_cap, LOD_VALIDATED_CAP_CEILING]
+ 				)
+ 			)
++	# Gore PR2 (mmnto-ai/liquid-city#560) - the gib debris renderer. Node3D
++	# child of Render3D; same headless guard + reuse-guard shape as the LOD
++	# manager. Fed drained gib events each frame from _physics_process;
++	# visibility synced by _apply_use_3d_camera below.
++	if _gib_renderer == null:
++		_gib_renderer = GibDebrisRenderer.new()
++		_render_3d_root.add_child(_gib_renderer)
++		_gib_renderer.setup(DisplayServer.get_name() == "headless")
+ 	# Sync initial 3D-camera state to the Inspector-set use_3d_camera value.
+ 	# The setter that fired during .tscn load was no-op'd by the
+ 	# is_node_ready() gate (@onready refs weren't resolved yet); this is
+@@ -2773,6 +2786,14 @@ func _physics_process(delta: float) -> void:
+ 	# block above), so the manager's frustum test reads the current camera pose.
+ 	if _lod_manager != null and _lod_manager.is_active():
+ 		_lod_manager.update(_camera_3d, xf, sim.get_agent_render_state_buffer(), count, delta)
++	# Gore PR2 (mmnto-ai/liquid-city#560) - drain the gib events emitted this
++	# frame into the render-only debris system. The FFI buffer drains itself;
++	# feed the renderer in 3D, drain-and-discard in 2D so it cannot grow.
++	if _gib_renderer != null:
++		if use_3d_camera:
++			_gib_renderer.ingest(sim.get_gib_events())
++		else:
++			sim.get_gib_events()
+ 	# #146 HUD: push sim-side diagnostic values that the HUD itself
+ 	# can't compute (it sees only its own `_process` loop). `agents`
+ 	# is the post-snapshot agent count; `active` is the player/vehicle
+@@ -3193,6 +3214,11 @@ func _apply_use_3d_camera() -> void:
+ 	# visibility follows use_3d_camera (independent of _render_adapter, like above).
+ 	if _lod_manager != null:
+ 		_lod_manager.set_active(use_3d_camera)
++	# Gore PR2 (mmnto-ai/liquid-city#560) — the gib debris renderer is a Node3D
++	# under Render3D; its visibility follows use_3d_camera (render-only, meaningless
++	# under the 2D scaffold).
++	if _gib_renderer != null:
++		_gib_renderer.visible = use_3d_camera
+ 	# 3D-side render-path visibility (Render3D.visible + Camera3D.current)
+ 	# lives in the adapter (ADR-029 PR1b); update it only when the adapter
+ 	# is live (null in the degraded-init path that returned before
+diff --git a/packages/zomboid-sim/src/damage.rs b/packages/zomboid-sim/src/damage.rs
+index 6a3f945..4373ca0 100644
+--- a/packages/zomboid-sim/src/damage.rs
++++ b/packages/zomboid-sim/src/damage.rs
+@@ -81,11 +81,14 @@
+ //!   hit's longer freeze.
+ 
+ use std::collections::BTreeMap;
++use std::sync::{Arc, RwLock};
+ 
+ use bevy_ecs::batching::BatchingStrategy;
+ use bevy_ecs::prelude::*;
+ 
+-use crate::components::{AgentBodyHandle, BallisticMode, DeadTag, Density, VisualLODMarker};
++use crate::components::{
++    AgentBodyHandle, BallisticMode, BufferSlot, DeadTag, Density, VisualLODMarker,
++};
+ use crate::director::state::SimTickCount;
+ use crate::vehicle::RapierWorld;
+ // Re-export the canonical WorldPosition so existing `use crate::damage::WorldPosition`
+@@ -96,7 +99,7 @@ use crate::systems::PARALLEL_BATCH_SIZE;
+ use crate::tuning_stub::{
+     BALLISTIC_REFERENCE_DELTA_V, BALLISTIC_THRESHOLD, DEFAULT_HIT_STOP_FRAMES,
+     DEFAULT_IMPULSE_HOLD_SECONDS, DEFAULT_STAGGER_DURATION_SECONDS, DENSITY_SQUASH_MIN, FIXED_DT,
+-    GIB_MOMENTUM_RATIO, POISE_DAMAGE_FRACTION, POISE_REGEN_PER_SECOND,
++    FLOOR_HEIGHT, GIB_MOMENTUM_RATIO, POISE_DAMAGE_FRACTION, POISE_REGEN_PER_SECOND,
+ };
+ 
+ // ---------- Types ----------
+@@ -369,10 +372,21 @@ pub fn damage_resolution_system(
+         // lacking the component (test entities, props, future
+         // destructibles). Absent → 0.0 → sparse → Launch (fail-open).
+         Option<&Density>,
++        // Gore PR2 (mmnto-ai/liquid-city#560): the stable replicated slot +
++        // world position for a Gib kill's render event. `Option<&_>` — a
++        // damageable entity lacking them (props / test stubs) emits no gib (the
++        // despawn still runs); never narrows the resolver query.
++        Option<&BufferSlot>,
++        Option<&WorldPosition>,
+     )>,
+     agent_body_handles: Query<&AgentBodyHandle>,
+     mut rapier: Option<ResMut<RapierWorld>>,
+     sim_tick: Res<SimTickCount>,
++    // Gore PR2 (mmnto-ai/liquid-city#560): the render-only gib-event drain
++    // buffer. `Option` (like `RapierWorld`) so bare-World resolver tests
++    // without the resource skip emission; production + the gib cargo tests
++    // install it. Appended here on a `Gib` kill; drained by `get_gib_events`.
++    gib_buffer: Option<Res<GibEventBuffer>>,
+ ) {
+     // Empty-queue early-return. The BTreeMap allocation is cheap but
+     // the resolver runs every tick; skipping the alloc on idle ticks
+@@ -431,6 +445,11 @@ pub fn damage_resolution_system(
+     }
+ 
+     // ----- Pass 2: apply per target -----
++    // Gore PR2 (mmnto-ai/liquid-city#560): collect this tick's Gib pulps here
++    // (in BTreeMap<Entity> order), append to the render buffer after the loop,
++    // and let the FFI drain re-sort by (tick, slot) — so the published order
++    // never depends on incidental Bevy `Entity` bits (lc-codex).
++    let mut gib_events: Vec<GibEvent> = Vec::new();
+     for (target, acc) in by_target {
+         let Ok((
+             mut health,
+@@ -443,6 +462,8 @@ pub fn damage_resolution_system(
+             ballistic,
+             dead,
+             density,
++            buffer_slot,
++            world_pos,
+         )) = targets.get_mut(target)
+         else {
+             // Despawned or non-agent target — skip silently. Tests
+@@ -532,7 +553,7 @@ pub fn damage_resolution_system(
+         // VHI-3a: bind `promoted_to_ballistic` so the death branch below can
+         // route a killed-AND-launched agent to the corpse-arc path instead of
+         // an immediate despawn. Expression form — no dead initial assignment.
+-        let promoted_to_ballistic = if acc.total_impulse_ns != [0.0, 0.0, 0.0] {
++        let (promoted_to_ballistic, gib_selected) = if acc.total_impulse_ns != [0.0, 0.0, 0.0] {
+             let mag_sq = acc.total_impulse_ns[0] * acc.total_impulse_ns[0]
+                 + acc.total_impulse_ns[1] * acc.total_impulse_ns[1]
+                 + acc.total_impulse_ns[2] * acc.total_impulse_ns[2];
+@@ -596,9 +617,12 @@ pub fn damage_resolution_system(
+                     }
+                 }
+             }
+-            promoted
++            // Surface the Gib rung to the death branch below: a Gib kill pulps
++            // (render gib-event + immediate despawn) instead of the corpse-arc.
++            // `rung` is `Copy` and still in scope from the destructure above.
++            (promoted, rung == DispositionRung::Gib)
+         } else {
+-            false
++            (false, false)
+         };
+ 
+         // Death: one despawn per target per tick (no double-despawn
+@@ -614,15 +638,30 @@ pub fn damage_resolution_system(
+         // spawning capsules don't need to install it; production paths
+         // and any test that spawns LOD 1 agents always have it.
+         if health.current <= 0.0 {
+-            // VHI-3a corpse-arc routing. A killed-AND-launched agent (promoted
+-            // this tick OR already ballistic) is kept alive as a ballistic
+-            // corpse so it arcs; `ballistic_integration_system` despawns it
+-            // (and removes its Rapier capsule) at the landing contact.
+-            // Forced-terminal-despawn deaths (kill-plane off-the-map; VHI-4
+-            // wall-splat) are EXCLUDED — no landing branch consumes them, so
+-            // they must despawn here.
+-            let corpse_arc = !acc.forced_terminal_despawn_requested
+-                && (promoted_to_ballistic || ballistic.is_some());
++            // ONE terminal outcome per target per tick (ADR-027 Totem-rule-1:
++            // the resolver is the sole terminal mutator; no second
++            // `health <= 0 → despawn` branch). Precedence:
++            //   1. forced-terminal-despawn (kill-plane / VHI-4 wall-splat) is
++            //      SUPREME — despawn, never gib, never arc.
++            //   2. `Gib` rung (mass-scaled extreme momentum) → pulp at impact:
++            //      emit a render-only gib event + immediate despawn (NO
++            //      `DeadTag`, NO corpse-arc — the body does NOT stay alive to
++            //      feed a tertiary visual; "pulped at impact" is the carnage
++            //      payoff + the semantic difference from `Launch`). Gore PR2
++            //      (mmnto-ai/liquid-city#560) — the deliberate Gib re-route the
++            //      VHI-3b slice (`.totem/specs/500.md`) test-locked for later.
++            //   3. killed-AND-launched (`Launch` / already ballistic) →
++            //      corpse-arc (`DeadTag`; `ballistic_integration_system`
++            //      despawns + removes the capsule at landing).
++            //   4. grounded death → immediate despawn.
++            // Capsule-removal + despawn live in ONE place (the `else`), shared
++            // by 1 / 2 / 4; the gib event is a pre-step that does NOT change the
++            // despawn — so sim state is identical whether or not the render
++            // buffer is installed (the event is checksum-excluded, ADR-027 §4).
++            let forced = acc.forced_terminal_despawn_requested;
++            let emit_gib = !forced && gib_selected;
++            let corpse_arc =
++                !forced && !gib_selected && (promoted_to_ballistic || ballistic.is_some());
+             if corpse_arc {
+                 // Idempotent: a corpse re-hit while already carrying DeadTag
+                 // (still ballistic, so corpse_arc stays true) must not re-queue
+@@ -631,6 +670,50 @@ pub fn damage_resolution_system(
+                     commands.entity(target).insert(DeadTag);
+                 }
+             } else {
++                // Gib pre-step: sample the kill pose + a downrange spray
++                // velocity into a render event BEFORE the despawn. Needs the
++                // stable slot + world position; an entity lacking either emits
++                // no gib but still despawns (so the terminal outcome stays
++                // unconditional). Spray velocity = the seed velocity a `Launch`
++                // would get (total_impulse / mass) so debris flies the way the
++                // car was going, not symmetrically.
++                if emit_gib {
++                    if let (Some(slot), Some(pos)) = (buffer_slot, world_pos) {
++                        let tick = sim_tick.0 as u32;
++                        let world_z = pos.floor as f32 * FLOOR_HEIGHT + pos.altitude;
++                        let inv_mass = 1.0 / mass.kg;
++                        let vel = [
++                            acc.total_impulse_ns[0] * inv_mass,
++                            acc.total_impulse_ns[1] * inv_mass,
++                            acc.total_impulse_ns[2] * inv_mass,
++                        ];
++                        // Defense-in-depth finiteness (GCA), matching the sim
++                        // fail-loud-on-non-finite convention. Inputs are finite by
++                        // construction (Mass::new finite-positive; sanitize_impulse;
++                        // WorldPosition), so this never fires in practice. It self-
++                        // documents the contract + turns a regression into a loud
++                        // crash instead of a NaN debris transform.
++                        assert!(
++                            world_z.is_finite()
++                                && vel[0].is_finite()
++                                && vel[1].is_finite()
++                                && vel[2].is_finite(),
++                            "GibEvent non-finite: world_z={} (floor={}, alt={}), vel={:?}, impulse={:?}",
++                            world_z,
++                            pos.floor,
++                            pos.altitude,
++                            vel,
++                            acc.total_impulse_ns
++                        );
++                        gib_events.push(GibEvent {
++                            slot: slot.0,
++                            tick,
++                            seed: gib_seed(slot.0, tick),
++                            pos: [pos.x, pos.y, world_z],
++                            vel,
++                        });
++                    }
++                }
+                 if let Ok(body_handle) = agent_body_handles.get(target) {
+                     rapier
+                         .as_deref_mut()
+@@ -641,6 +724,19 @@ pub fn damage_resolution_system(
+             }
+         }
+     }
++
++    // Gore PR2 (mmnto-ai/liquid-city#560) gib-event drain: append this tick's
++    // pulps to the render-only buffer in ONE lock acquisition (Gib is rare).
++    // Absent buffer (bare-World resolver tests) = no-op. `get_gib_events`
++    // drains + re-sorts by (tick, slot); render-only, never read by a sim
++    // system, excluded from the ADR-013 region checksum.
++    if !gib_events.is_empty() {
++        if let Some(buffer) = gib_buffer {
++            if let Ok(mut buf) = buffer.0.write() {
++                buf.extend(gib_events);
++            }
++        }
++    }
+ }
+ 
+ /// Scale `impulse_direction` by `magnitude` with non-finite-input
+@@ -797,6 +893,110 @@ pub(crate) fn select_disposition(
+     }
+ }
+ 
++// ---------- Gib events (ADR-029 gore PR2, mmnto-ai/liquid-city#560) ----------
++
++/// Bytes per packed [`GibEvent`] record in the `get_gib_events` FFI buffer.
++/// The GDScript gib renderer MUST mirror this stride + the `GIB_OFF_*`
++/// offsets; `gib_event_abi_layout_is_stable` locks the Rust side and the
++/// GDScript parity test locks the bridge. Layout (little-endian):
++/// `[0]u32 slot · [4]u32 tick · [8]u32 seed · [12]f32 pos_x · [16]f32 pos_y ·
++/// [20]f32 pos_z(world) · [24]f32 vel_x · [28]f32 vel_y · [32]f32 vel_z`.
++pub const GIB_EVENT_STRIDE: usize = 36;
++pub const GIB_OFF_SLOT: usize = 0;
++pub const GIB_OFF_TICK: usize = 4;
++pub const GIB_OFF_SEED: usize = 8;
++pub const GIB_OFF_POS_X: usize = 12;
++pub const GIB_OFF_POS_Y: usize = 16;
++pub const GIB_OFF_POS_Z: usize = 20;
++pub const GIB_OFF_VEL_X: usize = 24;
++pub const GIB_OFF_VEL_Y: usize = 28;
++pub const GIB_OFF_VEL_Z: usize = 32;
++
++/// One `Gib` pulping, emitted by `damage_resolution_system` on the
++/// `DispositionRung::Gib` terminal branch and drained once per Godot frame
++/// via `get_gib_events`. RENDER-ONLY (ADR-002 visual-physics checksum
++/// exclusion / ADR-027 §4): the Gib *decision* + the despawn are authoritative
++/// sim state (in the region checksum); THIS event is a one-shot render feed
++/// that never re-enters a sim system. `slot` + `tick` are exact ints so the
++/// render can reproduce the scatter; `seed` is computed sim-side (no
++/// Godot-side hash drift — lc-agy).
++#[derive(Copy, Clone, Debug, PartialEq)]
++pub struct GibEvent {
++    /// Stable, replicated [`BufferSlot`] of the pulped agent — NEVER recycled
++    /// on despawn, so it's the deterministic key (NOT a Bevy `Entity`, whose
++    /// bits depend on spawn/despawn order — lc-codex).
++    pub slot: u32,
++    /// Sim tick of the kill (truncated from the `SimTickCount` u64 — exact for
++    /// the seed + debugging; a u32 tick is ~2.2 years at 60 Hz).
++    pub tick: u32,
++    /// `gib_seed(slot, tick)` — the deterministic scatter seed (ADR-027 rule-2:
++    /// hashed sim facts, never a per-tick RNG draw).
++    pub seed: u32,
++    /// Absolute world kill position `(x, y, z)`, `z = floor*FLOOR_HEIGHT +
++    /// altitude`.
++    pub pos: [f32; 3],
++    /// Spray-bias velocity = `total_impulse_ns / mass` (the seed velocity a
++    /// `Launch` would get) — orients debris downrange from the car impact
++    /// instead of a symmetric burst.
++    pub vel: [f32; 3],
++}
++
++impl GibEvent {
++    /// Append this record as [`GIB_EVENT_STRIDE`] little-endian bytes at the
++    /// `GIB_OFF_*` offsets. The GDScript renderer reads them back with
++    /// `PackedByteArray.decode_u32` / `decode_float`.
++    pub fn write_bytes(&self, out: &mut Vec<u8>) {
++        out.extend_from_slice(&self.slot.to_le_bytes());
++        out.extend_from_slice(&self.tick.to_le_bytes());
++        out.extend_from_slice(&self.seed.to_le_bytes());
++        out.extend_from_slice(&self.pos[0].to_le_bytes());
++        out.extend_from_slice(&self.pos[1].to_le_bytes());
++        out.extend_from_slice(&self.pos[2].to_le_bytes());
++        out.extend_from_slice(&self.vel[0].to_le_bytes());
++        out.extend_from_slice(&self.vel[1].to_le_bytes());
++        out.extend_from_slice(&self.vel[2].to_le_bytes());
++    }
++}
++
++/// Deterministic per-gib scatter seed from stable sim facts (ADR-027 rule-2):
++/// a fixed integer hash, no RNG, no wall-clock. Two same-seed replays of the
++/// same kill produce the same `seed`, so the render-only debris scatter is
++/// reproducible without entering the ADR-013 region checksum.
++#[inline]
++pub fn gib_seed(slot: u32, tick: u32) -> u32 {
++    // SplitMix-style finalizer over `slot` mixed with a rotated `tick` so
++    // adjacent (slot, tick) pairs decorrelate (neighboring gibs don't scatter
++    // alike). Pure `wrapping`/xorshift — bit-identical on every target.
++    let mut z = (slot ^ tick.rotate_left(16)).wrapping_add(0x9E37_79B9);
++    z = (z ^ (z >> 16)).wrapping_mul(0x21F0_AAAD);
++    z = (z ^ (z >> 15)).wrapping_mul(0x735A_2D97);
++    z ^ (z >> 15)
++}
++
++/// Sort gib events by `(tick, slot)` — stable, keyed on the replicated
++/// `BufferSlot`, NEVER Bevy `Entity` iteration order (lc-codex) — then pack
++/// them into [`GIB_EVENT_STRIDE`]-byte little-endian records. The FFI
++/// `get_gib_events` drain calls this; extracted free so the publish order +
++/// ABI layout are cargo-testable without the gdext singleton.
++pub fn pack_gib_events_sorted(mut events: Vec<GibEvent>) -> Vec<u8> {
++    events.sort_unstable_by_key(|e| (e.tick, e.slot));
++    let mut out = Vec::with_capacity(events.len() * GIB_EVENT_STRIDE);
++    for e in &events {
++        e.write_bytes(&mut out);
++    }
++    out
++}
++
++/// FFI buffer of [`GibEvent`]s (gore PR2). Same shared-`Arc` pattern as
++/// [`AgentRenderStateBuffer`](crate::density_feedback::AgentRenderStateBuffer)
++/// but DRAIN-on-read, not rewrite-per-tick: `damage_resolution_system` APPENDS
++/// on each `Gib` kill (`Option<Res>` — absent in bare-World tests = no-op);
++/// `get_gib_events` takes + clears it once per Godot frame, so a frame with no
++/// kills returns empty and a drained buffer stays empty until the next kill.
++/// Render-only — never read by a sim system, excluded from the region checksum.
++#[derive(Resource, Clone, Default)]
++pub struct GibEventBuffer(pub Arc<RwLock<Vec<GibEvent>>>);
++
+ /// Per ADR-026 Slice D § "Resolver promotion logic." Returns `true`
+ /// if the target was promoted to `BallisticMode` (in which case the
+ /// caller MUST skip the `ImpulseVelocity` path to honor Totem Rule
+@@ -1174,6 +1374,41 @@ mod tests {
+         world
+     }
+ 
++    /// `new_damage_world` + the render-only `GibEventBuffer` resource so the
++    /// resolver's `Option<Res<GibEventBuffer>>` append path is exercised (gore
++    /// PR2). Bare `new_damage_world` omits it → gib emission is a no-op there.
++    fn new_gib_world() -> World {
++        let mut world = new_damage_world();
++        world.init_resource::<GibEventBuffer>();
++        world
++    }
++
++    /// A LOD-1 agent carrying a stable `BufferSlot` (required for a gib event —
++    /// the slot is the deterministic render key) at a distinct world position.
++    fn spawn_lod1_agent_with_slot(world: &mut World, slot: u32) -> Entity {
++        let e = spawn_lod1_agent(world);
++        world.entity_mut(e).insert((
++            BufferSlot(slot),
++            WorldPosition {
++                x: 7.0,
++                y: 11.0,
++                floor: 0,
++                altitude: 0.0,
++            },
++        ));
++        e
++    }
++
++    /// Clone of the gib events the resolver appended this run (does not drain).
++    fn gib_buffer_events(world: &World) -> Vec<GibEvent> {
++        world
++            .resource::<GibEventBuffer>()
++            .0
++            .read()
++            .expect("gib buffer lock")
++            .clone()
++    }
++
+     // ----- sanitize_impulse -----
+ 
+     #[test]
+@@ -2432,14 +2667,15 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn gib_rung_routes_through_corpse_arc_path() {
+-        // Force the (v0-unreachable) Gib rung with a synthetic event and
+-        // prove it takes the SAME route as Launch: alive + BallisticMode
+-        // + DeadTag, no despawn, no separate branch. Test-locks the
+-        // routing — re-routing later must be a deliberate diff
+-        // (spec § Selector contract mapping).
+-        let mut world = new_damage_world();
+-        let agent = spawn_lod1_agent(&mut world);
++    fn lethal_gib_rung_pulps_with_event_and_despawns() {
++        // Gore PR2 (mmnto-ai/liquid-city#560): the DELIBERATE Gib re-route the
++        // VHI-3b slice test-locked ("re-routing later must be a deliberate
++        // diff"). A LETHAL Gib-rung hit now PULPS — emits a render gib event +
++        // immediate despawn, with NO corpse-arc. The despawn (entity gone) is
++        // the proof of no-corpse-arc: the arc path keeps the entity ALIVE with
++        // DeadTag + BallisticMode. ONE terminal action.
++        let mut world = new_gib_world();
++        let agent = spawn_lod1_agent_with_slot(&mut world, 3);
+         let gib_mag = gib_bound_ns(DEFAULT_AGENT_MASS_KG) * 1.1;
+         send_event(
+             &mut world,
+@@ -2447,27 +2683,50 @@ mod tests {
+         );
+         run_resolver(&mut world);
+         assert!(
+-            world.get_entity(agent).is_ok(),
+-            "Gib rung must not despawn at the strike point"
+-        );
+-        assert!(
+-            world.get::<BallisticMode>(agent).is_some(),
+-            "Gib rung must promote (corpse-arc route)"
++            world.get_entity(agent).is_err(),
++            "lethal Gib must pulp + despawn at impact, not corpse-arc"
+         );
+-        assert!(
+-            world.get::<DeadTag>(agent).is_some(),
+-            "lethal Gib-rung hit must carry DeadTag"
++        let events = gib_buffer_events(&world);
++        assert_eq!(events.len(), 1, "exactly one gib event for one Gib kill");
++        assert_eq!(events[0].slot, 3, "event carries the agent BufferSlot");
++    }
++
++    #[test]
++    fn gib_event_is_self_sufficient_slot_pos_and_spray_velocity() {
++        // The render event must spawn debris without reading a live rig
++        // (lc-codex): stable slot, absolute world position, and a downrange
++        // spray velocity (= the seed velocity a Launch would get,
++        // total_impulse / mass) so debris flies the way the car was going.
++        let mut world = new_gib_world();
++        let agent = spawn_lod1_agent_with_slot(&mut world, 9);
++        let gib_mag = gib_bound_ns(DEFAULT_AGENT_MASS_KG) * 1.1;
++        send_event(
++            &mut world,
++            event_with_impulse(agent, 999.0, gib_mag, [1.0, 0.0, 0.0]),
+         );
++        run_resolver(&mut world);
++        let events = gib_buffer_events(&world);
++        assert_eq!(events.len(), 1);
++        let e = events[0];
++        assert_eq!(e.slot, 9);
++        assert_eq!(e.tick, 0);
++        assert_eq!(e.seed, gib_seed(9, 0), "seed = hash(slot, tick)");
++        assert_eq!(e.pos, [7.0, 11.0, 0.0], "absolute world kill position");
++        let expected_vx = gib_mag / DEFAULT_AGENT_MASS_KG;
++        assert!((e.vel[0] - expected_vx).abs() < 1e-3, "downrange spray vx");
++        assert_eq!(e.vel[1], 0.0);
++        assert_eq!(e.vel[2], 0.0);
+     }
+ 
+     #[test]
+     fn same_tick_lethal_gib_and_killplane_yields_one_terminal_action_killplane_wins() {
+-        // The combined regression (spec § Kill-plane guard): same-tick
+-        // lethal Gib-level hit PLUS the kill-plane sentinel must produce
+-        // exactly one terminal action — the hard despawn. The kill-plane
++        // The combined regression (spec § Kill-plane guard): same-tick lethal
++        // Gib-level hit PLUS the kill-plane sentinel must produce exactly one
++        // terminal action — the hard despawn — AND emit NO gib (forced-terminal
++        // despawn is supreme over the pulp re-route, gore PR2). The kill-plane
+         // remains the supreme guard over every lattice rung.
+-        let mut world = new_damage_world();
+-        let agent = spawn_lod1_agent(&mut world);
++        let mut world = new_gib_world();
++        let agent = spawn_lod1_agent_with_slot(&mut world, 1);
+         let gib_mag = gib_bound_ns(DEFAULT_AGENT_MASS_KG) * 1.1;
+         send_event(
+             &mut world,
+@@ -2479,6 +2738,91 @@ mod tests {
+             world.get_entity(agent).is_err(),
+             "kill-plane must win over the Gib rung: hard despawn, no corpse"
+         );
++        assert!(
++            gib_buffer_events(&world).is_empty(),
++            "forced-terminal despawn emits NO gib event"
++        );
++    }
++
++    #[test]
++    fn gib_events_are_bit_deterministic_across_worlds() {
++        // ADR-013 fence at the render-feed level: identical worlds + identical
++        // forced-Gib events ⇒ bit-identical gib records (slot, tick, seed, pos,
++        // spray velocity). Reproducible scatter without entering the sim
++        // checksum (the event is checksum-excluded, ADR-027 §4).
++        let run = || {
++            let mut world = new_gib_world();
++            let agent = spawn_lod1_agent_with_slot(&mut world, 5);
++            let gib_mag = gib_bound_ns(DEFAULT_AGENT_MASS_KG) * 1.2;
++            send_event(
++                &mut world,
++                event_with_impulse(agent, 999.0, gib_mag, [0.6, 0.0, 0.8]),
++            );
++            run_resolver(&mut world);
++            gib_buffer_events(&world)
++                .iter()
++                .map(|e| {
++                    (
++                        e.slot,
++                        e.tick,
++                        e.seed,
++                        e.pos.map(f32::to_bits),
++                        e.vel.map(f32::to_bits),
++                    )
++                })
++                .collect::<Vec<_>>()
++        };
++        assert_eq!(run(), run());
++    }
++
++    #[test]
++    fn gib_events_pack_sorted_by_tick_then_slot() {
++        // Publish order keys on the replicated (tick, slot), never Bevy Entity
++        // order (lc-codex). Pack two out-of-order events; prove the bytes come
++        // out ordered and at the documented `GIB_OFF_*` offsets.
++        let a = GibEvent {
++            slot: 7,
++            tick: 2,
++            seed: 100,
++            pos: [1.0, 2.0, 3.0],
++            vel: [4.0, 5.0, 6.0],
++        };
++        let b = GibEvent {
++            slot: 3,
++            tick: 2,
++            seed: 200,
++            pos: [9.0, 8.0, 7.0],
++            vel: [6.0, 5.0, 4.0],
++        };
++        let bytes = pack_gib_events_sorted(vec![a, b]);
++        assert_eq!(bytes.len(), 2 * GIB_EVENT_STRIDE);
++        let slot0 = u32::from_le_bytes(bytes[GIB_OFF_SLOT..GIB_OFF_SLOT + 4].try_into().unwrap());
++        let slot1 = u32::from_le_bytes(
++            bytes[GIB_EVENT_STRIDE + GIB_OFF_SLOT..GIB_EVENT_STRIDE + GIB_OFF_SLOT + 4]
++                .try_into()
++                .unwrap(),
++        );
++        assert_eq!(
++            (slot0, slot1),
++            (3, 7),
++            "slot 3 sorts before slot 7 at equal tick"
++        );
++        // First record (b) field offsets round-trip.
++        assert_eq!(
++            f32::from_le_bytes(bytes[GIB_OFF_POS_X..GIB_OFF_POS_X + 4].try_into().unwrap()),
++            9.0
++        );
++        assert_eq!(
++            f32::from_le_bytes(bytes[GIB_OFF_VEL_Z..GIB_OFF_VEL_Z + 4].try_into().unwrap()),
++            4.0
++        );
++    }
++
++    #[test]
++    fn gib_seed_is_deterministic_and_varies() {
++        assert_eq!(gib_seed(1, 1), gib_seed(1, 1));
++        assert_ne!(gib_seed(1, 1), gib_seed(2, 1), "varies by slot");
++        assert_ne!(gib_seed(1, 1), gib_seed(1, 2), "varies by tick");
+     }
+ 
+     #[test]
+diff --git a/packages/zomboid-sim/src/lib.rs b/packages/zomboid-sim/src/lib.rs
+index 9d2b920..d942167 100644
+--- a/packages/zomboid-sim/src/lib.rs
++++ b/packages/zomboid-sim/src/lib.rs
+@@ -284,6 +284,13 @@ pub struct ZomboidSim {
+     /// render state the production VAT / render-LOD-0 adapter consumes to
+     /// assemble `CUSTOM_DATA` (NOT a GPU lookup texture).
+     agent_render_state_buffer: Arc<RwLock<Vec<u8>>>,
++    /// Gore PR2 (mmnto-ai/liquid-city#560) gib-event FFI buffer. Same shared-Arc
++    /// pattern as `agent_render_state_buffer`, but DRAIN-on-read: the resolver
++    /// (`damage_resolution_system`) appends a `GibEvent` per `Gib` kill through
++    /// this Arc; `get_gib_events` takes + clears it once per Godot frame. The
++    /// Godot gib renderer spawns kinematic MultiMesh debris from the drained
++    /// records. Render-only — excluded from the ADR-013 region checksum.
++    gib_event_buffer: Arc<RwLock<Vec<crate::damage::GibEvent>>>,
+     /// Diagnostic-vis flow-field boundary-cell cache (#154), partitioned
+     /// per floor for ADR-026 Slice E.A's multi-floor `FlowFields` substrate.
+     /// `flow_boundary_cells[floor]` is the boundary set for that floor's
+@@ -1292,6 +1299,32 @@ impl ZomboidSim {
+         }
+     }
+ 
++    /// Gore PR2 (mmnto-ai/liquid-city#560) gib-event drain. Returns a
++    /// `PackedByteArray` of `GIB_EVENT_STRIDE`-byte records (slot / tick / seed
++    /// / world-pos xyz / spray-vel xyz; see the `crate::damage` `GIB_OFF_*`
++    /// offsets), one per `Gib` kill since the last drain, sorted by
++    /// `(tick, slot)` so the published order never depends on incidental Bevy
++    /// `Entity` bits (lc-codex). DRAIN semantics: this takes + clears the
++    /// buffer, so a second call — or a frame with no kills — returns empty.
++    /// Empty array on lock-contention; the Godot gib renderer skips the frame.
++    /// Render-only — the records carry no sim authority (the Gib decision +
++    /// despawn already ran in the resolver; ADR-002 visual-physics exclusion).
++    #[func]
++    fn get_gib_events(&self) -> PackedByteArray {
++        let events = {
++            let Ok(mut buf) = self.gib_event_buffer.try_write() else {
++                return PackedByteArray::new();
++            };
++            if buf.is_empty() {
++                return PackedByteArray::new();
++            }
++            std::mem::take(&mut *buf)
++        };
++        // Sort (by the replicated BufferSlot, not Bevy Entity order — lc-codex)
++        // + pack via the cargo-tested free fn.
++        PackedByteArray::from(crate::damage::pack_gib_events_sorted(events).as_slice())
++    }
++
+     /// Pre-interleaved stride-12 MultiMesh buffer for the health-tint render
+     /// path (#523): per agent, the `SNAPSHOT_STRIDE` Transform2D floats from
+     /// `snapshot_buffer` followed by a `[health_frac, 0, 0, 0]` custom_data
+@@ -1431,6 +1464,13 @@ impl ZomboidSim {
+         w.insert_resource(AgentRenderStateBuffer(Arc::clone(
+             &self.agent_render_state_buffer,
+         )));
++        // Gore PR2 (mmnto-ai/liquid-city#560) gib-event drain buffer. Same
++        // Arc-clone share — `damage_resolution_system` appends through this Arc
++        // on a `Gib` kill (`Option<Res>`, so non-production worlds without it
++        // just skip emission) and `get_gib_events` drains via `try_write`.
++        w.insert_resource(crate::damage::GibEventBuffer(Arc::clone(
++            &self.gib_event_buffer,
++        )));
+         // Slice-4 walls cache (ticket-010 / ADR-017 + ADR-003).
+         // Read from the `DistrictWallList` resource that
+         // `install_slice_4_block` inserted during `build_world`,
