@@ -11,6 +11,8 @@
  * No LLM. No GitHub API writes. Stateless per invocation.
  */
 
+import type { RecurrenceSeverityBucket } from '@mmnto/totem';
+
 import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 
 // totem-context: type-only imports above are erased at compile time and don't
@@ -45,33 +47,12 @@ interface AnnotatedFinding {
 
 // ─── Severity bucket mapping ────────────────────────
 
-type SeverityBucket = 'critical' | 'high' | 'medium' | 'low' | 'nit';
-
-function toSeverityBucket(
-  tool: NormalizedBotFinding['tool'] | 'override',
-  severity: string,
-): SeverityBucket {
-  const s = severity.toLowerCase();
-  if (tool === 'override') return 'medium';
-  if (tool === 'coderabbit') {
-    if (s === 'critical') return 'critical';
-    if (s === 'major') return 'high';
-    if (s === 'minor') return 'medium';
-    return 'low';
-  }
-  if (tool === 'gca') {
-    if (s === 'high') return 'high';
-    if (s === 'medium') return 'medium';
-    if (s === 'low') return 'low';
-    return 'low';
-  }
-  // unknown tool / synthesized review-body
-  if (s === 'critical') return 'critical';
-  if (s === 'high' || s === 'major') return 'high';
-  if (s === 'medium' || s === 'minor' || s === 'warning') return 'medium';
-  if (s === 'low' || s === 'info') return 'low';
-  return 'nit';
-}
+// `toSeverityBucket` is the shared core helper (`@mmnto/totem`), imported in
+// `runRecurrenceStats` — single source of truth across the bot-tax cluster so
+// the coderabbit/gca/greptile mappings can't drift (CR on mmnto-ai/totem#2244;
+// retrospect already consumes the same helper). `SeverityBucket` likewise
+// aliases the core `RecurrenceSeverityBucket` so the union isn't duplicated.
+type SeverityBucket = RecurrenceSeverityBucket;
 
 // ─── Main entrypoint ────────────────────────────────
 
@@ -87,8 +68,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   const {
     isBotComment,
     detectBot,
-    parseCRSeverity,
-    parseGCASeverity,
+    parseSeverityForTool,
     stripHtmlWrappers,
     extractSuggestion,
     extractReviewBodyFindings,
@@ -99,6 +79,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
     loadCompiledRules,
     normalizeFindingBody,
     readLedgerEvents,
+    toSeverityBucket,
     tokenizeForJaccard,
   } = await import('@mmnto/totem');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
@@ -174,12 +155,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
         const botComment = thread.comments[0];
         if (!botComment) continue;
         const tool = detectBot(botComment.author);
-        const severity =
-          tool === 'coderabbit'
-            ? parseCRSeverity(botComment.body)
-            : tool === 'gca'
-              ? parseGCASeverity(botComment.body)
-              : 'info';
+        const severity = parseSeverityForTool(tool, botComment.body);
 
         const body = stripHtmlWrappers(botComment.body);
         const suggestion = extractSuggestion(botComment.body);
@@ -255,7 +231,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   // 5. Cluster by signature
   interface MutableCluster {
     signature: string;
-    tools: Set<'coderabbit' | 'gca' | 'sarif' | 'override' | 'unknown'>;
+    tools: Set<'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'unknown'>;
     severityBuckets: SeverityBucket[];
     occurrences: number;
     prs: Set<string>;
@@ -327,7 +303,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   // 7. Materialize patterns
   const allPatterns: Array<{
     signature: string;
-    tool: 'coderabbit' | 'gca' | 'sarif' | 'override' | 'mixed' | 'unknown';
+    tool: 'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'mixed' | 'unknown';
     severityBucket: SeverityBucket;
     occurrences: number;
     prs: string[];

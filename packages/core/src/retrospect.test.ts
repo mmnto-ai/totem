@@ -218,6 +218,40 @@ describe('RetrospectReportSchema', () => {
     };
     expect(RetrospectReportSchema.safeParse(bad).success).toBe(false);
   });
+
+  it('accepts a greptile-tool finding (first-class attribution; mmnto-ai/totem#2244)', () => {
+    const report: RetrospectReport = {
+      version: 1,
+      prNumber: '2244',
+      prState: 'open',
+      generatedAt: '2026-06-24T00:00:00.000Z',
+      threshold: 5,
+      substrateAvailable: false,
+      compiledRulesAvailable: false,
+      rounds: [],
+      totalFindings: 1,
+      dedupRate: 0,
+      findingDistribution: { byTool: { greptile: 1 }, bySeverity: {}, byClassification: {} },
+      routeOutCandidates: [],
+      inPrFixes: [
+        {
+          signature: 'abc123def4567890',
+          tool: 'greptile',
+          severityBucket: 'critical',
+          bodyExcerpt: 'possible null dereference',
+          file: 'src/a.ts',
+          roundNumber: 1,
+          crossPrRecurrence: 0,
+          coveredByRule: false,
+          classification: 'in-pr-fix',
+        },
+      ],
+      undetermined: [],
+      stopConditions: [],
+      overrideEventsObserved: 0,
+    };
+    expect(RetrospectReportSchema.safeParse(report).success).toBe(true);
+  });
 });
 
 // ─── toRoundPosition / toCrossPrBucket ─────────────────

@@ -11,8 +11,23 @@ import { parseCodeRabbitReviewFindings } from '../parse-nits.js';
 
 // ─── Types ──────────────────────────────────────────
 
+/**
+ * The review bots whose comment formats triage-pr knows how to parse, plus
+ * `unknown` for an unrecognized author. Adding a bot is a single-place change
+ * here + its severity parser in {@link parseSeverityForTool}.
+ *
+ * NOTE: `gca` is triage's local id for `gemini-code-assist` — it intentionally
+ * diverges from the core actor-id scheme in `@mmnto/totem`'s `resolveActorId`
+ * (which uses `gemini-code-assist` and EXACT-login matching for hit-rate
+ * attribution). Triage's goal is broad recognition (surface every finding) with
+ * a compact display id; it matches coderabbit/gca by substring and greptile by
+ * its bot-login shape (see `GREPTILE_BOT_LOGIN`). The two schemes serve
+ * different purposes and are deliberately not coupled.
+ */
+export type BotTool = 'coderabbit' | 'gca' | 'greptile' | 'unknown';
+
 export interface NormalizedBotFinding {
-  tool: 'coderabbit' | 'gca' | 'unknown';
+  tool: BotTool;
   severity: string;
   file: string;
   line?: number;
@@ -42,15 +57,32 @@ export interface CommentThread {
 
 // ─── Bot Detection ──────────────────────────────────
 
+// greptile is matched by its bot-login SHAPE — `greptile[bot]`,
+// `greptile-apps[bot]`, `greptile-enterprise[bot]` — rather than a bare
+// `greptile` substring, so a human account like `alice-greptile` is NOT
+// misclassified as a bot (which would hide real human replies in
+// `isThreadResolved` and ingest human comments as bot findings — CR Major on
+// mmnto-ai/totem#2244), while future bot variants are still surfaced. The
+// reviewer's suggested regex carried a trailing `\b` that fails right after the
+// closing `]` (non-word char at end-of-string), so it is dropped here.
+// coderabbit / gca keep their established bare-substring match (canonical
+// exact-login map lives in `@mmnto/totem`'s `review-catch.ts`).
+const GREPTILE_BOT_LOGIN = /\bgreptile(?:-[^[]+)?\[bot\]/i;
+
 export function isBotComment(author: string): boolean {
   const lower = author.toLowerCase();
-  return lower.includes('coderabbit') || lower.includes('gemini-code-assist');
+  return (
+    lower.includes('coderabbit') ||
+    lower.includes('gemini-code-assist') ||
+    GREPTILE_BOT_LOGIN.test(author)
+  );
 }
 
-export function detectBot(author: string): 'coderabbit' | 'gca' | 'unknown' {
+export function detectBot(author: string): BotTool {
   const lower = author.toLowerCase();
   if (lower.includes('coderabbit')) return 'coderabbit';
   if (lower.includes('gemini-code-assist')) return 'gca';
+  if (GREPTILE_BOT_LOGIN.test(author)) return 'greptile';
   return 'unknown';
 }
 
@@ -90,6 +122,46 @@ export function parseGCASeverity(body: string): string {
   if (body.includes('medium-priority.svg')) return 'medium';
   if (body.includes('low-priority.svg')) return 'low';
   return 'info';
+}
+
+// ─── Greptile Parser ────────────────────────────────
+
+/**
+ * Extract severity from a greptile inline comment body via its P1/P2/P3
+ * priority label (greptile's severity vocabulary), mapped onto the shared
+ * high/medium/low scale that {@link mapToTriageCategory} consumes.
+ *
+ * Best-effort: greptile's inline format is less structured than CR's emoji or
+ * GCA's SVG marker, so when no explicit priority token is present this returns
+ * `info` and the body-keyword categorizer does the real bucketing. Word-bounded
+ * so `P1`/`p1` matches but a mid-token `GP1X` does not. P0 is greptile's
+ * critical/blocking level (greptile review on mmnto-ai/totem#2244) — without it,
+ * a `P0` finding would silently fall through to `info`, the opposite of safe.
+ */
+export function parseGreptileSeverity(body: string): string {
+  if (/\bP0\b/i.test(body)) return 'critical';
+  if (/\bP1\b/i.test(body)) return 'high';
+  if (/\bP2\b/i.test(body)) return 'medium';
+  if (/\bP3\b/i.test(body)) return 'low';
+  return 'info';
+}
+
+/**
+ * Single source of truth for "which severity parser applies to which bot".
+ * Keeps the per-tool dispatch in one place so adding a bot does not require
+ * touching every finding-normalizer (triage-pr, extractResolved, extractPushback).
+ */
+export function parseSeverityForTool(tool: BotTool, body: string): string {
+  switch (tool) {
+    case 'coderabbit':
+      return parseCRSeverity(body);
+    case 'gca':
+      return parseGCASeverity(body);
+    case 'greptile':
+      return parseGreptileSeverity(body);
+    default:
+      return 'info';
+  }
 }
 
 // ─── Resolution Filter ──────────────────────────────
@@ -216,12 +288,7 @@ export function extractPushbackFindings(threads: CommentThread[]): NormalizedBot
     if (!pushbackReply) continue;
 
     const tool = detectBot(botComment.author);
-    const severity =
-      tool === 'coderabbit'
-        ? parseCRSeverity(botComment.body)
-        : tool === 'gca'
-          ? parseGCASeverity(botComment.body)
-          : 'info';
+    const severity = parseSeverityForTool(tool, botComment.body);
 
     const body = stripHtmlWrappers(botComment.body);
     const hunkMatch = thread.diffHunk.match(/@@ .+?\+(\d+)/);
@@ -252,12 +319,7 @@ export function extractResolvedBotFindings(threads: CommentThread[]): Normalized
 
     const botComment = thread.comments[0]!;
     const tool = detectBot(botComment.author);
-    const severity =
-      tool === 'coderabbit'
-        ? parseCRSeverity(botComment.body)
-        : tool === 'gca'
-          ? parseGCASeverity(botComment.body)
-          : 'info';
+    const severity = parseSeverityForTool(tool, botComment.body);
 
     const body = stripHtmlWrappers(botComment.body);
     const suggestion = extractSuggestion(botComment.body);

@@ -112,6 +112,31 @@ describe('formatTriageOutput', () => {
     expect(output).toContain('GCA/medium');
   });
 
+  it('shows greptile attribution as GT (mmnto-ai/totem#2192)', () => {
+    const findings: CategorizedFinding[] = [
+      makeFinding({
+        triageCategory: 'architecture',
+        tool: 'greptile',
+        severity: 'high',
+        body: 'Possible null dereference',
+        mergedWith: [
+          {
+            tool: 'greptile',
+            severity: 'medium',
+            file: 'src/lock.ts',
+            line: 20,
+            body: 'Possible null dereference',
+          },
+        ],
+      }),
+    ];
+
+    const output = formatTriageOutput(953, findings, 2, noColor);
+
+    expect(output).toContain('GT/high');
+    expect(output).toContain('GT/medium');
+  });
+
   it('handles empty categories', () => {
     // Only convention findings — security/architecture/nit should not appear
     const findings: CategorizedFinding[] = [

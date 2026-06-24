@@ -46,7 +46,14 @@ export const RetrospectClassificationSchema = z.enum(['route-out', 'in-pr-fix', 
 export type RetrospectClassification = z.infer<typeof RetrospectClassificationSchema>;
 
 /** Source classification of a finding (mirror of `RecurrenceTool` minus `'mixed'`). */
-const RetrospectFindingToolSchema = z.enum(['coderabbit', 'gca', 'sarif', 'override', 'unknown']);
+const RetrospectFindingToolSchema = z.enum([
+  'coderabbit',
+  'gca',
+  'greptile',
+  'sarif',
+  'override',
+  'unknown',
+]);
 
 /**
  * Closed catalog of `route-out` reasons. The Zod-side mirror of

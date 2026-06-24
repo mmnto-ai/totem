@@ -83,8 +83,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
   const {
     isBotComment,
     detectBot,
-    parseCRSeverity,
-    parseGCASeverity,
+    parseSeverityForTool,
     stripHtmlWrappers,
     extractReviewBodyFindings,
   } = await import('../parsers/bot-review-parser.js');
@@ -200,12 +199,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
   }> = [];
   for (const c of inlineBotComments) {
     const tool = detectBot(c.author);
-    const severity =
-      tool === 'coderabbit'
-        ? parseCRSeverity(c.body)
-        : tool === 'gca'
-          ? parseGCASeverity(c.body)
-          : 'info';
+    const severity = parseSeverityForTool(tool, c.body);
     const body = stripHtmlWrappers(c.body);
     const hunkMatch = c.diffHunk.match(/@@ .+?\+(\d+)/);
     const line = hunkMatch ? Number.parseInt(hunkMatch[1]!, 10) : undefined;
@@ -352,8 +346,16 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     const normalized = normalizeFindingBody(a.finding.body);
     if (normalized.length === 0) continue;
     const signature = computeSignature(normalized);
-    const tool: 'coderabbit' | 'gca' | 'sarif' | 'override' | 'unknown' =
-      a.finding.tool === 'coderabbit' ? 'coderabbit' : a.finding.tool === 'gca' ? 'gca' : 'unknown';
+    // greptile is a first-class tool in the persisted RetrospectFindingToolSchema, so
+    // preserve its attribution (CR Major on mmnto-ai/totem#2244) rather than collapsing it.
+    const tool: 'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'unknown' =
+      a.finding.tool === 'coderabbit'
+        ? 'coderabbit'
+        : a.finding.tool === 'gca'
+          ? 'gca'
+          : a.finding.tool === 'greptile'
+            ? 'greptile'
+            : 'unknown';
     const severityBucket = toSeverityBucket(tool, a.finding.severity);
 
     // Cross-PR recurrence — count of OTHER PRs (target excluded by construction).
