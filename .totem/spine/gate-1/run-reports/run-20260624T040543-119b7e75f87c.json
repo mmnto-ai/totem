@@ -1,0 +1,87 @@
+{
+  "kind": "windtunnel-cert-run.v1",
+  "generatedAt": "2026-06-24T04:05:43.494Z",
+  "asOfCommit": "09b21bc3bf5c1933d7f2f313659d5d687a01c599",
+  "verdict": {
+    "verdict": "FAIL",
+    "precision": null,
+    "mintedRuleCount": 6,
+    "culledCount": 1,
+    "survivingRuleCount": 5,
+    "exposureTuple": [
+      6,
+      88,
+      4
+    ],
+    "cullLedger": [
+      {
+        "ruleId": "3ed449cacbad0c32",
+        "pr": 600,
+        "filePath": "apps/game-godot/SkeletalHordeAdapter.gd",
+        "matchedLine": "\tvar rig := packed.instantiate() as Node3D",
+        "reason": "negative-control-fired"
+      }
+    ],
+    "nonVacuity": false,
+    "needsAdjudication": [
+      "91b57d1f4ef2b43af9c1e803028d054dfa12c048b382de3170f0c86daaa08ee8",
+      "c6c98a17807bf9d4b10c35359a74dd1e52807341e068826b9486b7de57378c40"
+    ],
+    "diagnostics": {
+      "survivorPrecision": null
+    }
+  },
+  "persisted": false,
+  "stampedRuleIds": [],
+  "skips": [
+    {
+      "reason": "verdict-not-pass",
+      "verdict": "FAIL"
+    }
+  ],
+  "firingCount": 5,
+  "firings": [
+    {
+      "labelId": "b49b355d2aa13a941213c2cae531ddba7160ee019916cf31fb531d2a4c779209",
+      "ruleId": "3ed449cacbad0c32",
+      "pr": 585,
+      "filePath": "apps/game-godot/Render3DAdapter.gd",
+      "matchedLine": "\t\tvisual = packed.instantiate() as Node3D",
+      "controlKind": "corpus"
+    },
+    {
+      "labelId": "91b57d1f4ef2b43af9c1e803028d054dfa12c048b382de3170f0c86daaa08ee8",
+      "ruleId": "dcf049cf59d8ba53",
+      "pr": 597,
+      "filePath": "apps/game-godot/shaders/horde_render.gdshader",
+      "matchedLine": "varying flat float v_ballistic;",
+      "controlKind": "positive",
+      "targetRuleId": "sim-float-finite-assert"
+    },
+    {
+      "labelId": "c6c98a17807bf9d4b10c35359a74dd1e52807341e068826b9486b7de57378c40",
+      "ruleId": "dcf049cf59d8ba53",
+      "pr": 597,
+      "filePath": "apps/game-godot/shaders/vat_bitpack_probe.gdshader",
+      "matchedLine": "varying flat float v_ok;",
+      "controlKind": "positive",
+      "targetRuleId": "sim-float-finite-assert"
+    },
+    {
+      "labelId": "d0d5ff0ae16ddafc2722b9f765bb76488d68604ddcc44c666471b980c26de895",
+      "ruleId": "3ed449cacbad0c32",
+      "pr": 600,
+      "filePath": "apps/game-godot/SkeletalHordeAdapter.gd",
+      "matchedLine": "\tvar rig := packed.instantiate() as Node3D",
+      "controlKind": "negative"
+    },
+    {
+      "labelId": "eb41e76aff0cb44c01c7d7e644410538b775c592c6c062ac712cd2534f881827",
+      "ruleId": "3ed449cacbad0c32",
+      "pr": 602,
+      "filePath": "apps/game-godot/PartSegmentedHordeAdapter.gd",
+      "matchedLine": "\tvar rig := packed.instantiate() as Node3D",
+      "controlKind": "corpus"
+    }
+  ]
+}
