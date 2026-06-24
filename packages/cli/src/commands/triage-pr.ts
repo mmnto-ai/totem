@@ -334,8 +334,14 @@ export async function triagePrCommand(
   const { TotemConfigError } = await import('@mmnto/totem');
   const { GitHubCliPrAdapter } = await import('../adapters/github-cli-pr.js');
   const { log } = await import('../ui.js');
-  const { isBotComment, detectBot, parseSeverityForTool, stripHtmlWrappers, extractSuggestion } =
-    await import('../parsers/bot-review-parser.js');
+  const {
+    isBotComment,
+    detectBot,
+    parseSeverityForTool,
+    stripHtmlWrappers,
+    extractSuggestion,
+    parseGreptileConfidence,
+  } = await import('../parsers/bot-review-parser.js');
   const { deduplicateFindings } = await import('../parsers/triage-dedup.js');
 
   // 1. Parse and validate PR number
@@ -382,6 +388,20 @@ export async function triagePrCommand(
   const bodyFindings = [...reviewBodyFindings, ...issueCommentFindings];
   if (bodyFindings.length > 0) {
     log.info(TAG, `Found ${bodyFindings.length} finding(s) in review/issue-comment bodies`);
+  }
+
+  // Surface greptile's documented merge-readiness Confidence Score (N/5) as a
+  // triage CONTEXT signal — an operator reads it directly (5 = production-ready
+  // … 0–1 = critical). Context, not a finding; it never enters the categorized set.
+  for (const c of botIssueComments) {
+    if (detectBot(c.author) !== 'greptile') continue;
+    const score = parseGreptileConfidence(c.body);
+    if (score !== undefined) {
+      log.info(
+        TAG,
+        `greptile Confidence Score: ${score}/5${score < 5 ? ' (below 5 — unaddressed findings likely)' : ''}`,
+      );
+    }
   }
 
   // 4. Group inline comments into threads

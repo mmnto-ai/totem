@@ -318,47 +318,60 @@ ${SAMPLE_OUTSIDE_DIFF_BLOCK}`;
   });
 });
 
-// ─── Greptile summary parser (PROVISIONAL — mmnto-ai/totem#2192) ──────────
+// ─── Greptile summary parser (marker-anchored — mmnto-ai/totem#2192) ──────────
 //
-// These fixtures model the GitHub `<details><summary>` convention greptile is
-// expected to use for its "Comments Outside Diff" summary block (doctrine
-// pr-review-reply-hygiene). They are NOT a captured live sample — greptile edits
-// its summary in place, so the findings-state structure cannot be recovered from
-// closed PRs. Replace/augment with a real capture from this fix's own PR review
-// before treating the matcher as load-bearing.
+// Anchored on the canonical `<!-- greptile_other_comments_section -->` marker
+// (mmnto-ai/totem-strategy#690), NOT a sampled <details> shape — greptile edits
+// its summary in place, so a closed PR shows the marker with content removed
+// post-resolution. The marker placement (below the flowchart, above the
+// `<sub>Reviews>` footer) mirrors the real strategy#689 structure; the exact
+// rendering of findings UNDER the marker is validated against a live out-of-diff
+// sample (this fix's own PR or the next one).
 
-const PROVISIONAL_GREPTILE_OUTSIDE_DIFF = `<h3>Greptile Summary</h3>
+const GREPTILE_WITH_OUTSIDE_DIFF = `<h3>Greptile Summary</h3>
 
 Some prose summary.
 
-<details>
-<summary>Comments Outside Diff</summary>
+<h3>Flowchart</h3>
+
+\`\`\`mermaid
+flowchart TD
+  A --> B
+\`\`\`
+
+<!-- greptile_other_comments_section -->
 
 \`src/scorer.ts\`: the exposure floor is accepted but never checked in Step 2.
 
-</details>`;
+<sub>Reviews (2): Last reviewed commit … | Re-trigger Greptile</sub>`;
 
-describe('parseGreptileOutsideDiff (provisional)', () => {
-  it('extracts a "Comments Outside Diff" block from a greptile summary body', () => {
-    const results = parseGreptileOutsideDiff(PROVISIONAL_GREPTILE_OUTSIDE_DIFF);
+const GREPTILE_RESOLVED = `<h3>Greptile Summary</h3>
+
+Confidence Score: 5/5 — safe to merge.
+
+<!-- greptile_other_comments_section -->
+
+<sub>Reviews (3): Last reviewed commit … | Re-trigger Greptile</sub>`;
+
+describe('parseGreptileOutsideDiff (marker-anchored)', () => {
+  it('extracts the section under the greptile_other_comments_section marker', () => {
+    const results = parseGreptileOutsideDiff(GREPTILE_WITH_OUTSIDE_DIFF);
     expect(results).toHaveLength(1);
     expect(results[0]).toContain('exposure floor');
-    expect(results[0]).not.toMatch(/<\/?details>/);
   });
 
-  it('matches the "outside the diff" phrasing variant case-insensitively', () => {
-    const body = `<details>
-<summary>Findings OUTSIDE THE DIFF</summary>
-
-An out-of-diff observation.
-
-</details>`;
-    const results = parseGreptileOutsideDiff(body);
-    expect(results).toHaveLength(1);
-    expect(results[0]).toContain('out-of-diff observation');
+  it('drops the trailing <sub>Reviews</sub> footer from the extracted section', () => {
+    const results = parseGreptileOutsideDiff(GREPTILE_WITH_OUTSIDE_DIFF);
+    expect(results[0]).not.toMatch(/Re-trigger Greptile/);
+    expect(results[0]).not.toMatch(/<sub\b/i);
   });
 
-  it('returns empty array for a summary with no outside-diff block', () => {
+  it('returns empty when the marker is present but the section is resolved/empty', () => {
+    // The post-resolution state: marker remains, content edited away.
+    expect(parseGreptileOutsideDiff(GREPTILE_RESOLVED)).toEqual([]);
+  });
+
+  it('returns empty when the marker is absent', () => {
     const body = `<h3>Greptile Summary</h3>\n\nConfidence Score: 5/5\n\nSafe to merge.`;
     expect(parseGreptileOutsideDiff(body)).toEqual([]);
   });
@@ -368,15 +381,15 @@ An out-of-diff observation.
   });
 });
 
-describe('parseGreptileReviewFindings (provisional)', () => {
-  it('types extracted blocks as outside-diff findings', () => {
-    const findings = parseGreptileReviewFindings(PROVISIONAL_GREPTILE_OUTSIDE_DIFF);
+describe('parseGreptileReviewFindings (marker-anchored)', () => {
+  it('types the extracted section as outside-diff findings', () => {
+    const findings = parseGreptileReviewFindings(GREPTILE_WITH_OUTSIDE_DIFF);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.type).toBe('outside-diff');
     expect(findings[0]!.content).toContain('exposure floor');
   });
 
-  it('returns empty array when nothing matches', () => {
+  it('returns empty array when the marker section is absent', () => {
     expect(parseGreptileReviewFindings('## Just a normal summary.')).toEqual([]);
   });
 });

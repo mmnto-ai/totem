@@ -147,6 +147,18 @@ export function parseGreptileSeverity(body: string): string {
 }
 
 /**
+ * Extract greptile's documented merge-readiness Confidence Score (`N/5`, integer
+ * 0–5) from its summary comment — 5 production-ready … 0–1 critical problems
+ * (greptile docs: code-review/first-pr-review). A status signal surfaced as
+ * triage context (NOT a finding); returns `undefined` when no score is present.
+ * Parsed as `N/5`, never a percentage.
+ */
+export function parseGreptileConfidence(body: string): number | undefined {
+  const m = body.match(/Confidence Score:\s*([0-5])\s*\/\s*5/i);
+  return m ? Number(m[1]) : undefined;
+}
+
+/**
  * Single source of truth for "which severity parser applies to which bot".
  * Keeps the per-tool dispatch in one place so adding a bot does not require
  * touching every finding-normalizer (triage-pr, extractResolved, extractPushback).
