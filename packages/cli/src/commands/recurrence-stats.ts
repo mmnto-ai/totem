@@ -59,7 +59,8 @@ function toSeverityBucket(
     if (s === 'minor') return 'medium';
     return 'low';
   }
-  if (tool === 'gca') {
+  if (tool === 'gca' || tool === 'greptile') {
+    // greptile shares gca's high/medium/low scale (parseGreptileSeverity maps P1/P2/P3).
     if (s === 'high') return 'high';
     if (s === 'medium') return 'medium';
     if (s === 'low') return 'low';
@@ -87,8 +88,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   const {
     isBotComment,
     detectBot,
-    parseCRSeverity,
-    parseGCASeverity,
+    parseSeverityForTool,
     stripHtmlWrappers,
     extractSuggestion,
     extractReviewBodyFindings,
@@ -174,12 +174,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
         const botComment = thread.comments[0];
         if (!botComment) continue;
         const tool = detectBot(botComment.author);
-        const severity =
-          tool === 'coderabbit'
-            ? parseCRSeverity(botComment.body)
-            : tool === 'gca'
-              ? parseGCASeverity(botComment.body)
-              : 'info';
+        const severity = parseSeverityForTool(tool, botComment.body);
 
         const body = stripHtmlWrappers(botComment.body);
         const suggestion = extractSuggestion(botComment.body);
@@ -255,7 +250,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   // 5. Cluster by signature
   interface MutableCluster {
     signature: string;
-    tools: Set<'coderabbit' | 'gca' | 'sarif' | 'override' | 'unknown'>;
+    tools: Set<'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'unknown'>;
     severityBuckets: SeverityBucket[];
     occurrences: number;
     prs: Set<string>;
@@ -327,7 +322,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   // 7. Materialize patterns
   const allPatterns: Array<{
     signature: string;
-    tool: 'coderabbit' | 'gca' | 'sarif' | 'override' | 'mixed' | 'unknown';
+    tool: 'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'mixed' | 'unknown';
     severityBucket: SeverityBucket;
     occurrences: number;
     prs: string[];

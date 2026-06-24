@@ -11,6 +11,8 @@ import {
   isThreadResolved,
   parseCRSeverity,
   parseGCASeverity,
+  parseGreptileSeverity,
+  parseSeverityForTool,
   stripHtmlWrappers,
 } from './bot-review-parser.js';
 
@@ -23,6 +25,10 @@ describe('detectBot', () => {
 
   it('identifies gemini-code-assist[bot]', () => {
     expect(detectBot('gemini-code-assist[bot]')).toBe('gca');
+  });
+
+  it('identifies greptile-apps[bot] (mmnto-ai/totem#2192)', () => {
+    expect(detectBot('greptile-apps[bot]')).toBe('greptile');
   });
 
   it('returns unknown for human authors', () => {
@@ -40,6 +46,17 @@ describe('isBotComment', () => {
 
   it('returns true for GCA bot', () => {
     expect(isBotComment('gemini-code-assist[bot]')).toBe(true);
+  });
+
+  it('returns true for greptile bot (mmnto-ai/totem#2192)', () => {
+    expect(isBotComment('greptile-apps[bot]')).toBe(true);
+  });
+
+  it('recognizes a future greptile variant as a bot (substring match — surface, never drop)', () => {
+    // Unlike core review-catch.ts (exact-match for hit-rate attribution), triage matches
+    // by substring so a new variant is still surfaced rather than silently dropped.
+    expect(isBotComment('greptile-enterprise[bot]')).toBe(true);
+    expect(detectBot('greptile-enterprise[bot]')).toBe('greptile');
   });
 
   it('returns false for human authors', () => {
@@ -94,6 +111,50 @@ describe('parseGCASeverity', () => {
 
   it('returns info when no SVG marker present', () => {
     expect(parseGCASeverity('Plain comment without severity')).toBe('info');
+  });
+});
+
+// ─── parseGreptileSeverity (mmnto-ai/totem#2192) ────────
+
+describe('parseGreptileSeverity', () => {
+  it('maps P1 → high', () => {
+    expect(parseGreptileSeverity('**P1** This dereferences a possibly-null value')).toBe('high');
+  });
+
+  it('maps P2 → medium', () => {
+    expect(parseGreptileSeverity('P2: schema gap — missing field')).toBe('medium');
+  });
+
+  it('maps P3 → low', () => {
+    expect(parseGreptileSeverity('p3 nit: rename for clarity')).toBe('low');
+  });
+
+  it('returns info when no priority token is present', () => {
+    expect(parseGreptileSeverity('Consider extracting this into a helper')).toBe('info');
+  });
+
+  it('does not match a priority token embedded mid-identifier', () => {
+    expect(parseGreptileSeverity('the GP1X register is set here')).toBe('info');
+  });
+});
+
+// ─── parseSeverityForTool (single per-tool dispatch) ────
+
+describe('parseSeverityForTool', () => {
+  it('dispatches coderabbit to the CR parser', () => {
+    expect(parseSeverityForTool('coderabbit', '\u{1F534} Critical: overflow')).toBe('critical');
+  });
+
+  it('dispatches gca to the GCA parser', () => {
+    expect(parseSeverityForTool('gca', '![](https://img/medium-priority.svg)')).toBe('medium');
+  });
+
+  it('dispatches greptile to the greptile parser', () => {
+    expect(parseSeverityForTool('greptile', '**P1** null deref')).toBe('high');
+  });
+
+  it('returns info for an unknown tool', () => {
+    expect(parseSeverityForTool('unknown', 'anything')).toBe('info');
   });
 });
 
@@ -304,6 +365,25 @@ describe('extractResolvedBotFindings', () => {
     expect(findings[1]!.severity).toBe('medium');
     expect(findings[1]!.suggestion).toBeUndefined();
   });
+
+  it('normalizes a resolved greptile finding (mmnto-ai/totem#2192)', () => {
+    const threads: CommentThread[] = [
+      {
+        path: 'src/windtunnel-scorer.ts',
+        diffHunk: '@@ -1,3 +1,5 @@',
+        comments: [
+          { author: 'greptile-apps[bot]', body: '**P1** Possible null dereference on `cfg`' },
+          { author: 'dev', body: 'Fixed in abc1234' },
+        ],
+      },
+    ];
+
+    const findings = extractResolvedBotFindings(threads);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.tool).toBe('greptile');
+    expect(findings[0]!.severity).toBe('high');
+    expect(findings[0]!.disposition).toBe('accepted');
+  });
 });
 
 // ─── extractPushbackFindings ──────────────────────────
@@ -421,6 +501,25 @@ describe('extractPushbackFindings', () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]!.tool).toBe('gca');
     expect(findings[0]!.severity).toBe('high');
+  });
+
+  it('handles greptile bot findings (mmnto-ai/totem#2192)', () => {
+    const threads: CommentThread[] = [
+      {
+        path: 'src/windtunnel-lock.ts',
+        diffHunk: '@@ -10,3 +20,5 @@',
+        comments: [
+          { author: 'greptile-apps[bot]', body: '**P2** Schema gap on the lock digest' },
+          { author: 'dev', body: 'Intentional — validated upstream' },
+        ],
+      },
+    ];
+
+    const findings = extractPushbackFindings(threads);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.tool).toBe('greptile');
+    expect(findings[0]!.severity).toBe('medium');
+    expect(findings[0]!.line).toBe(20);
   });
 });
 

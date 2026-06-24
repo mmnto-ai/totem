@@ -8,7 +8,7 @@
  */
 
 import type { StandardReviewComment } from '../adapters/pr-adapter.js';
-import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
+import type { BotTool, NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 import type { CategorizedFinding, TriageCategory } from '../parsers/triage-types.js';
 
 // ─── Constants ───────────────────────────────────────
@@ -63,9 +63,8 @@ function groupIntoThreads(comments: StandardReviewComment[]): CommentThread[] {
 function normalizeBotFindings(
   threads: CommentThread[],
   isBotComment: (author: string) => boolean,
-  detectBot: (author: string) => 'coderabbit' | 'gca' | 'unknown',
-  parseCRSeverity: (body: string) => string,
-  parseGCASeverity: (body: string) => string,
+  detectBot: (author: string) => BotTool,
+  parseSeverityForTool: (tool: BotTool, body: string) => string,
   stripHtmlWrappers: (html: string) => string,
   extractSuggestion: (body: string) => string | undefined,
 ): NormalizedBotFinding[] {
@@ -76,12 +75,7 @@ function normalizeBotFindings(
     if (!botComment || !isBotComment(botComment.author)) continue;
 
     const tool = detectBot(botComment.author);
-    const severity =
-      tool === 'coderabbit'
-        ? parseCRSeverity(botComment.body)
-        : tool === 'gca'
-          ? parseGCASeverity(botComment.body)
-          : 'info';
+    const severity = parseSeverityForTool(tool, botComment.body);
 
     const body = stripHtmlWrappers(botComment.body);
     const suggestion = extractSuggestion(botComment.body);
@@ -127,19 +121,31 @@ const CATEGORY_CONFIG: Record<TriageCategory, CategoryConfig> = {
   nit: { emoji: '\u26AA', label: 'NITS', colorFn: 'gray' },
 };
 
+/** Compact display abbreviation for a bot tool (`??` for an unrecognized one). */
+function toolAbbrev(tool: BotTool): string {
+  switch (tool) {
+    case 'coderabbit':
+      return 'CR';
+    case 'gca':
+      return 'GCA';
+    case 'greptile':
+      return 'GT';
+    default:
+      return '??';
+  }
+}
+
 /** Format bot attribution string like [CR/minor, GCA/medium] */
 function formatBotAttribution(finding: CategorizedFinding): string {
   const entries: string[] = [];
 
   // Primary finding
-  const toolAbbrev = finding.tool === 'coderabbit' ? 'CR' : finding.tool === 'gca' ? 'GCA' : '??';
-  entries.push(`${toolAbbrev}/${finding.severity}`);
+  entries.push(`${toolAbbrev(finding.tool)}/${finding.severity}`);
 
   // Merged findings
   if (finding.mergedWith) {
     for (const m of finding.mergedWith) {
-      const mAbbrev = m.tool === 'coderabbit' ? 'CR' : m.tool === 'gca' ? 'GCA' : '??';
-      entries.push(`${mAbbrev}/${m.severity}`);
+      entries.push(`${toolAbbrev(m.tool)}/${m.severity}`);
     }
   }
 
@@ -275,14 +281,8 @@ export async function triagePrCommand(
   const { TotemConfigError } = await import('@mmnto/totem');
   const { GitHubCliPrAdapter } = await import('../adapters/github-cli-pr.js');
   const { log } = await import('../ui.js');
-  const {
-    isBotComment,
-    detectBot,
-    parseCRSeverity,
-    parseGCASeverity,
-    stripHtmlWrappers,
-    extractSuggestion,
-  } = await import('../parsers/bot-review-parser.js');
+  const { isBotComment, detectBot, parseSeverityForTool, stripHtmlWrappers, extractSuggestion } =
+    await import('../parsers/bot-review-parser.js');
   const { deduplicateFindings } = await import('../parsers/triage-dedup.js');
 
   // 1. Parse and validate PR number
@@ -341,8 +341,7 @@ export async function triagePrCommand(
     botThreads,
     isBotComment,
     detectBot,
-    parseCRSeverity,
-    parseGCASeverity,
+    parseSeverityForTool,
     stripHtmlWrappers,
     extractSuggestion,
   );
@@ -398,7 +397,6 @@ export async function triagePrCommand(
 
   // Build selection options from categorized findings
   const optionsList = categorized.map((f, i) => {
-    const toolAbbrev = f.tool === 'coderabbit' ? 'CR' : f.tool === 'gca' ? 'GCA' : '??';
     const location = f.line != null ? `${f.file}:${f.line}` : f.file;
     const summary =
       f.body
@@ -407,7 +405,7 @@ export async function triagePrCommand(
         ?.slice(0, 60) ?? f.body.slice(0, 60);
     return {
       value: i,
-      label: `[${toolAbbrev}/${f.severity}] ${location}`,
+      label: `[${toolAbbrev(f.tool)}/${f.severity}] ${location}`,
       hint: summary.replace(/\n/g, ' '),
     };
   });
@@ -590,9 +588,17 @@ export async function triagePrCommand(
           const pathMod = await import('node:path');
           const lessonsDir = pathMod.join(cwd, cfg.totemDir, 'lessons');
 
-          const toolAbbrev =
-            finding.tool === 'coderabbit' ? 'CR' : finding.tool === 'gca' ? 'GCA' : finding.tool;
-          const tags = [finding.triageCategory, toolAbbrev.toLowerCase(), 'bot-review'];
+          // Lesson tag wants a readable tool id (unknown → 'unknown', not the
+          // display helper's '??'), so it keeps its own mapping.
+          const toolTag =
+            finding.tool === 'coderabbit'
+              ? 'CR'
+              : finding.tool === 'gca'
+                ? 'GCA'
+                : finding.tool === 'greptile'
+                  ? 'GT'
+                  : finding.tool;
+          const tags = [finding.triageCategory, toolTag.toLowerCase(), 'bot-review'];
           const lessonEntry = `## Lesson — ${
             finding.body
               .split('\n')
