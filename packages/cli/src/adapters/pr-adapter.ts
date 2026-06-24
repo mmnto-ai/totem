@@ -76,6 +76,28 @@ export interface StandardPrReviewSubmission {
   body: string;
 }
 
+/**
+ * A PR-level issue comment (the "conversation" tab), as returned by
+ * `repos/<owner>/<repo>/issues/<N>/comments`. Distinct from inline review
+ * comments and from review submissions: this is where review bots post their
+ * standing **summary** comment (greptile's "Greptile Summary" / "Comments
+ * Outside Diff", CR's walkthrough), which they EDIT IN PLACE across rounds.
+ *
+ * Sourced via `gh api` (NOT `gh pr view --json comments`) on purpose: the REST
+ * route preserves the `[bot]` login suffix and exposes `user.type`, whereas
+ * `gh pr view` strips `[bot]` — which makes the conservative greptile bot-login
+ * regex miss the summary author. See `GitHubCliPrAdapter.fetchIssueComments`.
+ */
+export interface StandardIssueComment {
+  /** Login WITH the `[bot]` suffix preserved (gh api shape), or '' for ghost accounts. */
+  author: string;
+  /** GitHub account type: 'Bot' | 'User' | 'Organization' | '' — a suffix-independent bot signal. */
+  authorType: string;
+  body: string;
+  /** ISO 8601 timestamp. */
+  createdAt?: string;
+}
+
 export interface PrAdapter {
   fetchOpenPRs(): StandardPrListItem[];
   fetchPr(prNumber: number): StandardPr;
@@ -86,6 +108,13 @@ export interface PrAdapter {
    * existing adapters that only consume `fetchPr` need not implement it.
    */
   fetchReviews?(prNumber: number): StandardPrReviewSubmission[];
+  /**
+   * Fetch PR-level issue comments (the conversation tab) via `gh api`, with the
+   * `[bot]` suffix and `user.type` preserved so review-bot summary comments
+   * (greptile "Comments Outside Diff", CR walkthrough) are recognizable.
+   * Optional so existing adapters that only consume `fetchPr` need not implement it.
+   */
+  fetchIssueComments?(prNumber: number): StandardIssueComment[];
   fetchCodeScanningAlerts?(prNumber: number): StandardCodeScanAlert[];
   createIssue(params: {
     title: string;

@@ -4,6 +4,8 @@ import {
   parseCodeRabbitNits,
   parseCodeRabbitOutsideDiff,
   parseCodeRabbitReviewFindings,
+  parseGreptileOutsideDiff,
+  parseGreptileReviewFindings,
 } from './parse-nits.js';
 
 // ─── Sample CodeRabbit nit block ─────────────────────────
@@ -313,5 +315,68 @@ ${SAMPLE_OUTSIDE_DIFF_BLOCK}`;
     const findings = parseCodeRabbitReviewFindings(SAMPLE_OUTSIDE_DIFF_BLOCK);
     expect(findings.every((f) => f.type === 'outside-diff')).toBe(true);
     expect(findings).toHaveLength(1);
+  });
+});
+
+// ─── Greptile summary parser (PROVISIONAL — mmnto-ai/totem#2192) ──────────
+//
+// These fixtures model the GitHub `<details><summary>` convention greptile is
+// expected to use for its "Comments Outside Diff" summary block (doctrine
+// pr-review-reply-hygiene). They are NOT a captured live sample — greptile edits
+// its summary in place, so the findings-state structure cannot be recovered from
+// closed PRs. Replace/augment with a real capture from this fix's own PR review
+// before treating the matcher as load-bearing.
+
+const PROVISIONAL_GREPTILE_OUTSIDE_DIFF = `<h3>Greptile Summary</h3>
+
+Some prose summary.
+
+<details>
+<summary>Comments Outside Diff</summary>
+
+\`src/scorer.ts\`: the exposure floor is accepted but never checked in Step 2.
+
+</details>`;
+
+describe('parseGreptileOutsideDiff (provisional)', () => {
+  it('extracts a "Comments Outside Diff" block from a greptile summary body', () => {
+    const results = parseGreptileOutsideDiff(PROVISIONAL_GREPTILE_OUTSIDE_DIFF);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain('exposure floor');
+    expect(results[0]).not.toMatch(/<\/?details>/);
+  });
+
+  it('matches the "outside the diff" phrasing variant case-insensitively', () => {
+    const body = `<details>
+<summary>Findings OUTSIDE THE DIFF</summary>
+
+An out-of-diff observation.
+
+</details>`;
+    const results = parseGreptileOutsideDiff(body);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain('out-of-diff observation');
+  });
+
+  it('returns empty array for a summary with no outside-diff block', () => {
+    const body = `<h3>Greptile Summary</h3>\n\nConfidence Score: 5/5\n\nSafe to merge.`;
+    expect(parseGreptileOutsideDiff(body)).toEqual([]);
+  });
+
+  it('returns empty array for empty string', () => {
+    expect(parseGreptileOutsideDiff('')).toEqual([]);
+  });
+});
+
+describe('parseGreptileReviewFindings (provisional)', () => {
+  it('types extracted blocks as outside-diff findings', () => {
+    const findings = parseGreptileReviewFindings(PROVISIONAL_GREPTILE_OUTSIDE_DIFF);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.type).toBe('outside-diff');
+    expect(findings[0]!.content).toContain('exposure floor');
+  });
+
+  it('returns empty array when nothing matches', () => {
+    expect(parseGreptileReviewFindings('## Just a normal summary.')).toEqual([]);
   });
 });

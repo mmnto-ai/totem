@@ -123,6 +123,59 @@ export function parseCodeRabbitOutsideDiff(body: string): string[] {
 }
 
 /**
+ * Extract "Comments Outside Diff" findings from a greptile SUMMARY comment body.
+ *
+ * PROVISIONAL — best-effort pending a captured live findings-state sample
+ * (mmnto-ai/totem#2192). Greptile EDITS its standing summary comment in place
+ * across review rounds, so a merged/closed PR shows the post-resolution state
+ * with this block already collapsed/removed — i.e. the structure cannot be
+ * reverse-engineered from closed PRs (GitHub `userContentEdits` exposes edit
+ * metadata, not prior bodies). This matcher is modeled on the GitHub
+ * `<details><summary>` convention greptile shares with CodeRabbit, per doctrine
+ * `pr-review-reply-hygiene` ("greptile 'Comments Outside Diff' (SUMMARY
+ * `<details>`)"). Refine the summary-matcher against a real capture before
+ * treating it as load-bearing. Mirrors {@link parseCodeRabbitOutsideDiff}.
+ */
+export function parseGreptileOutsideDiff(body: string): string[] {
+  if (!body) return [];
+  // Strip fenced code blocks to avoid extracting fake matches from examples
+  const stripped = body.replace(/```[\s\S]*?```/g, '');
+  const results: string[] = [];
+  const outsideDiffRe =
+    /<details>\s*<summary>[^<]*(?:comments?\s+outside\s+(?:the\s+)?diff|outside\s+(?:the\s+)?diff(?:\s+range)?)[^<]*<\/summary>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = outsideDiffRe.exec(stripped)) !== null) {
+    const afterSummary = match.index + match[0].length;
+    const innerContent = extractNestedBlock(stripped, afterSummary);
+    if (innerContent) {
+      const cleaned = stripWrapperTags(innerContent);
+      if (cleaned) {
+        const parts = cleaned
+          .split(/\r?\n---\r?\n/)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        results.push(...parts);
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Combined parser for greptile SUMMARY-comment findings. PROVISIONAL — see
+ * {@link parseGreptileOutsideDiff}. Currently only the outside-diff block is
+ * extracted (greptile's per-line findings post inline, already handled by the
+ * thread path); refine on a captured sample.
+ */
+export function parseGreptileReviewFindings(
+  body: string,
+): Array<{ type: 'outside-diff'; content: string }> {
+  return parseGreptileOutsideDiff(body).map((content) => ({ type: 'outside-diff', content }));
+}
+
+/**
  * Combined parser that extracts both nitpick and outside-diff findings
  * from a CodeRabbit review body, returning typed results.
  */

@@ -7,7 +7,7 @@
  * developer actually fixed.
  */
 
-import { parseCodeRabbitReviewFindings } from '../parse-nits.js';
+import { parseCodeRabbitReviewFindings, parseGreptileReviewFindings } from '../parse-nits.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -232,8 +232,13 @@ export function isThreadResolved(thread: CommentThread): boolean {
  * Only returns findings from threads that were resolved positively.
  */
 /**
- * Extract findings from CodeRabbit review bodies (outside-diff + nits).
- * Shared by triage-pr and review-learn to avoid duplication.
+ * Extract findings from review-bot SUMMARY bodies (CodeRabbit outside-diff + nits,
+ * greptile "Comments Outside Diff"). Surface-agnostic: callers pass review
+ * submission bodies (`fetchReviews`/`pr.reviews`) AND PR issue comments
+ * (`fetchIssueComments`) — bots post these standing summaries on different
+ * surfaces (CR in the review body, greptile in the issue-comment summary) and
+ * edit them in place across rounds. Overlap between surfaces is collapsed
+ * downstream by `deduplicateFindings`. Shared by triage-pr and review-learn.
  */
 export function extractReviewBodyFindings(
   reviews: Array<{ author: string; body: string }>,
@@ -245,9 +250,12 @@ export function extractReviewBodyFindings(
     const tool = detectBot(review.author);
     let parsed: Array<{ type: 'nitpick' | 'outside-diff'; content: string }> = [];
 
-    // Only CodeRabbit parser is implemented for now
     if (tool === 'coderabbit') {
       parsed = parseCodeRabbitReviewFindings(review.body);
+    } else if (tool === 'greptile') {
+      // PROVISIONAL greptile summary parser (mmnto-ai/totem#2192) — see
+      // `parseGreptileOutsideDiff`. Refine against a captured live sample.
+      parsed = parseGreptileReviewFindings(review.body);
     }
 
     for (const finding of parsed) {

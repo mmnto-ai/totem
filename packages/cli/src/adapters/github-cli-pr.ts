@@ -9,6 +9,7 @@ import { ghExec, ghFetchAndParse, handleGhError } from './gh-utils.js';
 import type {
   PrAdapter,
   StandardCodeScanAlert,
+  StandardIssueComment,
   StandardPr,
   StandardPrListItem,
   StandardPrReviewSubmission,
@@ -85,6 +86,17 @@ const GhPrReviewSchema = z.object({
 // concrete adapter implementation. Callers MUST null-guard `user_login` before
 // passing to `isBotComment` (deleted/ghost accounts surface as null per the
 // GitHub API).
+
+// Subset of `repos/<owner>/<repo>/issues/<N>/comments`. Sourced via `gh api`
+// (not `gh pr view`) so `user.login` keeps its `[bot]` suffix and `user.type`
+// is available — both needed to recognize a review bot's summary comment. `user`
+// is nullable for deleted/ghost accounts (mirrors the review schemas).
+const GhIssueCommentSchema = z.object({
+  id: z.number(),
+  user: z.object({ login: z.string(), type: z.string() }).nullable(),
+  body: z.string(),
+  created_at: z.string().optional(),
+});
 
 const GhCodeScanAlertSchema = z
   .object({
@@ -194,6 +206,35 @@ export class GitHubCliPrAdapter implements PrAdapter {
       submitted_at: r.submitted_at ?? undefined,
       state: r.state,
       body: r.body ?? '',
+    }));
+  }
+
+  /**
+   * Fetch PR-level issue comments (the conversation tab) via the paginated
+   * `repos/<owner>/<repo>/issues/<N>/comments` endpoint. Unlike `fetchPr`
+   * (which reads `gh pr view --json comments` and loses the `[bot]` suffix),
+   * this preserves the suffix and surfaces `user.type` so review-bot summary
+   * comments — where greptile posts its "Comments Outside Diff" findings, edited
+   * in place across rounds — are recognizable as bot material.
+   *
+   * Read-only. No GitHub mutation.
+   */
+  fetchIssueComments(prNumber: number): StandardIssueComment[] {
+    const nwo = this.getRepoNwo();
+    const comments = ghFetchAndParse(
+      ['api', `repos/${nwo}/issues/${prNumber}/comments`, '--paginate'],
+      z.array(GhIssueCommentSchema),
+      `issue comments for PR #${prNumber}`,
+      this.cwd,
+    );
+    return comments.map((c) => ({
+      // `user` may be null for deleted/ghost accounts; coerce to '' so the
+      // `StandardIssueComment.author: string` contract holds and `isBotComment('')`
+      // correctly returns false.
+      author: c.user?.login ?? '',
+      authorType: c.user?.type ?? '',
+      body: c.body,
+      createdAt: c.created_at,
     }));
   }
 

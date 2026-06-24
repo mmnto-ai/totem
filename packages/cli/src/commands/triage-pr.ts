@@ -178,6 +178,59 @@ function formatLocation(finding: CategorizedFinding): string {
   return finding.file;
 }
 
+/** Surface counts feeding the empty-state decision. */
+export interface TriageSurfaceCounts {
+  /** Inline comment threads whose root author is a recognized review bot. */
+  botThreads: number;
+  /** Findings parsed from review-bodies + bot issue-comment summaries. */
+  bodyFindings: number;
+  /** Bot-authored issue comments fetched (summaries), regardless of parsed findings. */
+  botIssueComments: number;
+  /** Total inline review comments fetched (any author). */
+  inlineComments: number;
+  /** Total review submissions fetched (any author). */
+  reviews: number;
+  /** Total issue comments fetched (any author). */
+  issueComments: number;
+}
+
+/**
+ * Decide whether there is anything to triage, and — when not — what to report.
+ *
+ * Invariant (mmnto-ai/totem#2192): triage is "empty" ONLY when zero bot material
+ * was found across every surface (inline bot threads + parsed body/summary
+ * findings + bot summary issue-comments). When raw comments WERE fetched but none
+ * came from a recognized bot, the message surfaces the counts rather than a bare
+ * "Nothing to triage", so a stale/incomplete classifier can never masquerade as a
+ * clean PR (the #2190 miss). Pure + exported for testing.
+ */
+export function evaluateTriageEmptyState(counts: TriageSurfaceCounts): {
+  empty: boolean;
+  message?: string;
+  /** True when raw material existed (→ log visibly), false when the PR was truly bare. */
+  surfaced?: boolean;
+} {
+  const botMaterial = counts.botThreads + counts.bodyFindings + counts.botIssueComments;
+  if (botMaterial > 0) return { empty: false };
+
+  const rawFetched = counts.inlineComments + counts.reviews + counts.issueComments;
+  if (rawFetched === 0) {
+    return {
+      empty: true,
+      surfaced: false,
+      message: 'Nothing to triage — no comments, reviews, or issue-comments on this PR.',
+    };
+  }
+  return {
+    empty: true,
+    surfaced: true,
+    message:
+      `Fetched ${counts.inlineComments} inline comment(s), ${counts.reviews} review(s), ` +
+      `${counts.issueComments} issue-comment(s) — none from a recognized review bot. ` +
+      `Nothing to triage (no bot findings).`,
+  };
+}
+
 /**
  * Format the complete triage output. Exported for testing.
  */
@@ -308,19 +361,30 @@ export async function triagePrCommand(
   const reviewComments = adapter.fetchReviewComments(num);
   log.info(TAG, `Found ${reviewComments.length} inline review comments`);
 
-  // 3b. Extract findings from CodeRabbit review bodies (outside-diff + nits)
+  // 3b. Extract findings from review-bot SUMMARY surfaces:
+  //   - review submission bodies (CodeRabbit outside-diff + nits) from `pr.reviews`
+  //   - PR issue comments (greptile "Comments Outside Diff" summary) via `gh api`,
+  //     which preserves the `[bot]` suffix + `user.type` that `gh pr view` strips,
+  //     so the conservative greptile bot-login regex actually matches the summary.
   const { extractReviewBodyFindings } = await import('../parsers/bot-review-parser.js');
   const reviewBodyFindings = extractReviewBodyFindings(pr.reviews);
-  if (reviewBodyFindings.length > 0) {
-    log.info(TAG, `Found ${reviewBodyFindings.length} finding(s) in review bodies`);
+
+  // `fetchIssueComments` is optional on the adapter interface — guard for adapters
+  // and test doubles that don't implement it.
+  const issueComments = adapter.fetchIssueComments?.(num) ?? [];
+  const botIssueComments = issueComments.filter(
+    (c) => c.authorType === 'Bot' || isBotComment(c.author),
+  );
+  const issueCommentFindings = extractReviewBodyFindings(
+    botIssueComments.map((c) => ({ author: c.author, body: c.body })),
+  );
+
+  const bodyFindings = [...reviewBodyFindings, ...issueCommentFindings];
+  if (bodyFindings.length > 0) {
+    log.info(TAG, `Found ${bodyFindings.length} finding(s) in review/issue-comment bodies`);
   }
 
-  if (reviewComments.length === 0 && reviewBodyFindings.length === 0) {
-    log.dim(TAG, 'No review comments found. Nothing to triage.');
-    return;
-  }
-
-  // 4. Group into threads
+  // 4. Group inline comments into threads
   const threads = groupIntoThreads(reviewComments);
 
   // 5. Filter to threads starting with bot comments
@@ -328,12 +392,38 @@ export async function triagePrCommand(
     (t) => t.comments.length > 0 && isBotComment(t.comments[0]!.author),
   );
 
-  if (botThreads.length === 0 && reviewBodyFindings.length === 0) {
-    log.dim(TAG, 'No bot review comments found. Nothing to triage.');
+  // 5b. Empty-state guard (mmnto-ai/totem#2192): NEVER print a bare "Nothing to
+  // triage" when bot material was actually fetched. `triage-pr` runs live
+  // mid-review, when a bot's standing summary is in its findings-rich state;
+  // returning silently would reproduce the exact #2190 miss this command exists
+  // to catch. Bot issue-comments count as material even if the (provisional)
+  // summary parser extracted no discrete findings from them.
+  const emptyState = evaluateTriageEmptyState({
+    botThreads: botThreads.length,
+    bodyFindings: bodyFindings.length,
+    botIssueComments: botIssueComments.length,
+    inlineComments: reviewComments.length,
+    reviews: pr.reviews.length,
+    issueComments: issueComments.length,
+  });
+  if (emptyState.empty) {
+    if (emptyState.surfaced) log.info(TAG, emptyState.message!);
+    else log.dim(TAG, emptyState.message!);
     return;
   }
   if (botThreads.length > 0) {
     log.info(TAG, `Found ${botThreads.length} bot review thread(s)`);
+  }
+  // Surface bot summaries even when they yielded no parsed findings (e.g. a
+  // greptile summary present but the provisional parser matched nothing) — the
+  // operator must know a bot engaged, never see a bare "nothing".
+  if (botIssueComments.length > 0 && issueCommentFindings.length === 0) {
+    const tools = [...new Set(botIssueComments.map((c) => detectBot(c.author)))].join(', ');
+    log.info(
+      TAG,
+      `${botIssueComments.length} bot summary issue-comment(s) present (${tools}) — ` +
+        `no discrete findings parsed; review the PR summary directly.`,
+    );
   }
 
   // 6. Normalize into findings
@@ -346,8 +436,8 @@ export async function triagePrCommand(
     extractSuggestion,
   );
 
-  // Append review body findings
-  findings.push(...reviewBodyFindings);
+  // Append review-body + issue-comment summary findings
+  findings.push(...bodyFindings);
 
   log.info(TAG, `Normalized ${findings.length} bot finding(s)`);
 
@@ -356,10 +446,10 @@ export async function triagePrCommand(
   log.info(TAG, `${categorized.length} distinct finding(s) after dedup`);
 
   // 8. Render output to stdout
-  // Count bot comments (not all review comments) + review bodies with findings
-  const reviewBodiesWithFindings = reviewBodyFindings.length > 0 ? 1 : 0;
+  // Count bot comments (not all review comments) + summary bodies with findings
+  const bodiesWithFindings = bodyFindings.length > 0 ? 1 : 0;
   const botCommentCount =
-    reviewComments.filter((c) => isBotComment(c.author)).length + reviewBodiesWithFindings;
+    reviewComments.filter((c) => isBotComment(c.author)).length + bodiesWithFindings;
   const output = formatTriageOutput(num, categorized, botCommentCount, {
     red: pc.default.red,
     yellow: pc.default.yellow,

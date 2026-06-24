@@ -616,4 +616,30 @@ describe('decline taxonomy (mmnto-ai/totem#2124)', () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]!.disposition).toBeUndefined();
   });
+
+  it('extractReviewBodyFindings: dispatches the greptile branch for a greptile summary (mmnto-ai/totem#2192, provisional)', () => {
+    // Sourced via gh api → author keeps the [bot] suffix the greptile regex needs.
+    const body = [
+      '<h3>Greptile Summary</h3>',
+      '',
+      '<details>',
+      '<summary>Comments Outside Diff</summary>',
+      '',
+      '`src/scorer.ts`: exposure floor accepted but never checked.',
+      '',
+      '</details>',
+    ].join('\n');
+    const findings = extractReviewBodyFindings([{ author: 'greptile-apps[bot]', body }]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.tool).toBe('greptile');
+    expect(findings[0]!.body).toContain('exposure floor');
+    expect(findings[0]!.file).toBe('(review body)');
+  });
+
+  it('extractReviewBodyFindings: ignores a greptile summary with no outside-diff block', () => {
+    const findings = extractReviewBodyFindings([
+      { author: 'greptile-apps[bot]', body: '<h3>Greptile Summary</h3>\n\nConfidence Score: 5/5' },
+    ]);
+    expect(findings).toEqual([]);
+  });
 });
