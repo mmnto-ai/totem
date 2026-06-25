@@ -202,6 +202,70 @@ describe('GitHubCliPrAdapter', () => {
     });
   });
 
+  describe('fetchIssueComments', () => {
+    it('maps gh API output to StandardIssueComment, preserving the [bot] suffix + user.type', () => {
+      // First call: getRepoNwo
+      mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
+      // Second call: paginated issue comments
+      mockedExec.mockReturnValueOnce(
+        JSON.stringify([
+          {
+            id: 200,
+            user: { login: 'greptile-apps[bot]', type: 'Bot' },
+            body: '<h3>Greptile Summary</h3>...',
+            created_at: '2026-06-24T00:18:06Z',
+          },
+          {
+            id: 201,
+            user: { login: 'satur8d', type: 'User' },
+            body: '/gemini review',
+            created_at: '2026-06-24T00:20:00Z',
+          },
+          {
+            id: 202,
+            user: null, // deleted/ghost account — surfaces as '' author
+            body: 'orphaned',
+          },
+        ]),
+      );
+
+      const result = adapter.fetchIssueComments(42);
+      expect(result).toEqual([
+        {
+          author: 'greptile-apps[bot]',
+          authorType: 'Bot',
+          body: '<h3>Greptile Summary</h3>...',
+          createdAt: '2026-06-24T00:18:06Z',
+        },
+        {
+          author: 'satur8d',
+          authorType: 'User',
+          body: '/gemini review',
+          createdAt: '2026-06-24T00:20:00Z',
+        },
+        { author: '', authorType: '', body: 'orphaned', createdAt: undefined },
+      ]);
+    });
+
+    it('uses the paginated issues/{n}/comments endpoint', () => {
+      mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
+      mockedExec.mockReturnValueOnce('[]');
+      adapter.fetchIssueComments(7);
+      // safeExec('gh', args, opts) — args array is the 2nd positional. Last call
+      // is the API fetch. Assert the issues-comments endpoint + --paginate via a
+      // substring (the mocked nwo is untrimmed, unlike the real trimmed safeExec).
+      const lastCallArgs = mockedExec.mock.calls.at(-1)?.[1] as string[];
+      expect(lastCallArgs.some((a) => a.includes('issues/7/comments'))).toBe(true);
+      expect(lastCallArgs).toContain('--paginate');
+    });
+
+    it('returns empty array when no issue comments', () => {
+      mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
+      mockedExec.mockReturnValueOnce('[]');
+      expect(adapter.fetchIssueComments(99)).toEqual([]);
+    });
+  });
+
   describe('fetchCodeScanningAlerts', () => {
     it('maps gh API output to StandardCodeScanAlert format', () => {
       // First call: getRepoNwo

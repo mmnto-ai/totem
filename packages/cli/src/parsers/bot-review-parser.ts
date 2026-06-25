@@ -7,7 +7,7 @@
  * developer actually fixed.
  */
 
-import { parseCodeRabbitReviewFindings } from '../parse-nits.js';
+import { parseCodeRabbitReviewFindings, parseGreptileReviewFindings } from '../parse-nits.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -147,6 +147,20 @@ export function parseGreptileSeverity(body: string): string {
 }
 
 /**
+ * Extract greptile's documented merge-readiness Confidence Score (`N/5`, integer
+ * 0–5) from its summary comment — 5 production-ready … 0–1 critical problems
+ * (greptile docs: code-review/first-pr-review). A status signal surfaced as
+ * triage context (NOT a finding); returns `undefined` when no score is present.
+ * Parsed as `N/5`, never a percentage.
+ */
+export function parseGreptileConfidence(body: string): number | undefined {
+  // `(?!\d)` bounds the denominator so `Confidence Score: 5/50` is not misread
+  // as `5/5` (a false merge-readiness signal) — CR review on #2246.
+  const m = body.match(/Confidence Score:\s*([0-5])\s*\/\s*5(?!\d)/i);
+  return m ? Number(m[1]) : undefined;
+}
+
+/**
  * Single source of truth for "which severity parser applies to which bot".
  * Keeps the per-tool dispatch in one place so adding a bot does not require
  * touching every finding-normalizer (triage-pr, extractResolved, extractPushback).
@@ -232,8 +246,13 @@ export function isThreadResolved(thread: CommentThread): boolean {
  * Only returns findings from threads that were resolved positively.
  */
 /**
- * Extract findings from CodeRabbit review bodies (outside-diff + nits).
- * Shared by triage-pr and review-learn to avoid duplication.
+ * Extract findings from review-bot SUMMARY bodies (CodeRabbit outside-diff + nits,
+ * greptile "Comments Outside Diff"). Surface-agnostic: callers pass review
+ * submission bodies (`fetchReviews`/`pr.reviews`) AND PR issue comments
+ * (`fetchIssueComments`) — bots post these standing summaries on different
+ * surfaces (CR in the review body, greptile in the issue-comment summary) and
+ * edit them in place across rounds. Overlap between surfaces is collapsed
+ * downstream by `deduplicateFindings`. Shared by triage-pr and review-learn.
  */
 export function extractReviewBodyFindings(
   reviews: Array<{ author: string; body: string }>,
@@ -245,9 +264,12 @@ export function extractReviewBodyFindings(
     const tool = detectBot(review.author);
     let parsed: Array<{ type: 'nitpick' | 'outside-diff'; content: string }> = [];
 
-    // Only CodeRabbit parser is implemented for now
     if (tool === 'coderabbit') {
       parsed = parseCodeRabbitReviewFindings(review.body);
+    } else if (tool === 'greptile') {
+      // PROVISIONAL greptile summary parser (mmnto-ai/totem#2192) — see
+      // `parseGreptileOutsideDiff`. Refine against a captured live sample.
+      parsed = parseGreptileReviewFindings(review.body);
     }
 
     for (const finding of parsed) {

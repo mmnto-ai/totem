@@ -122,6 +122,81 @@ export function parseCodeRabbitOutsideDiff(body: string): string[] {
   return results;
 }
 
+/** The HTML-comment marker greptile emits to anchor its out-of-diff section. */
+const GREPTILE_OUTSIDE_DIFF_MARKER = '<!-- greptile_other_comments_section -->';
+/**
+ * The documented greptile summary footer ("Reviews (N): … | Re-trigger
+ * Greptile"). Anchor footer removal to THIS shape, not the first `<sub>`
+ * anywhere — a greptile finding may legitimately contain an HTML subscript, and
+ * truncating at it would drop the rest of the finding (CR review on #2246).
+ */
+const GREPTILE_REVIEWS_FOOTER = /<sub\b[^>]*>\s*Reviews\b/i;
+
+/**
+ * The cleaned content of greptile's out-of-diff section — everything between the
+ * `greptile_other_comments_section` marker and the Reviews footer, HTML wrappers
+ * stripped. Returns '' when the marker is absent or the section is empty
+ * (resolved/clean). Shared by {@link parseGreptileOutsideDiff} and
+ * {@link greptileOutsideDiffSectionHasContent}.
+ */
+function greptileOutsideDiffSection(body: string): string {
+  if (!body) return '';
+  const markerIdx = body.indexOf(GREPTILE_OUTSIDE_DIFF_MARKER);
+  if (markerIdx === -1) return '';
+  let section = body.slice(markerIdx + GREPTILE_OUTSIDE_DIFF_MARKER.length);
+  const footerIdx = section.search(GREPTILE_REVIEWS_FOOTER);
+  if (footerIdx !== -1) section = section.slice(0, footerIdx);
+  return stripWrapperTags(section).trim();
+}
+
+/**
+ * Extract greptile's "Comments Outside Diff" findings from its SUMMARY comment.
+ *
+ * Greptile renders out-of-diff findings in the standing summary comment, BELOW
+ * the flowchart, anchored by the HTML-comment marker
+ * `<!-- greptile_other_comments_section -->` and trailed by a `<sub>Reviews (N):
+ * …</sub>` footer (mmnto-ai/totem-strategy#690; the canonical anchor). We key on
+ * the MARKER — not a sampled `<details>`/header shape — because greptile EDITS
+ * this comment in place: a merged/closed PR shows the marker with the content
+ * already removed post-resolution, so the live findings-state cannot be
+ * reverse-engineered from a closed PR (GitHub `userContentEdits` exposes edit
+ * metadata, not prior bodies). Returns [] when the section is absent or empty
+ * (resolved/none).
+ */
+export function parseGreptileOutsideDiff(body: string): string[] {
+  const cleaned = greptileOutsideDiffSection(body);
+  if (!cleaned) return [];
+
+  // Greptile may render multiple out-of-diff findings separated by `---` rules.
+  // Split on `---` ONLY outside fenced code blocks: greptile findings embed code
+  // examples/suggestions, and stripping or splitting through fences deletes that
+  // content from the surfaced finding (gemini review on #2246). Toggle on ```.
+  const FENCE = '```';
+  const groups: string[][] = [[]];
+  let inFence = false;
+  for (const line of cleaned.split(/\r?\n/)) {
+    if (line.trimStart().startsWith(FENCE)) inFence = !inFence;
+    if (!inFence && line.trim() === '---') {
+      groups.push([]);
+    } else {
+      groups[groups.length - 1]!.push(line);
+    }
+  }
+  const parts = groups.map((g) => g.join('\n').trim()).filter(Boolean);
+  return parts.length ? parts : [cleaned];
+}
+
+/**
+ * Combined parser for greptile SUMMARY-comment findings — the marker-anchored
+ * "Comments Outside Diff" section (greptile's per-line findings post inline and
+ * are handled by the thread path). See {@link parseGreptileOutsideDiff}.
+ */
+export function parseGreptileReviewFindings(
+  body: string,
+): Array<{ type: 'outside-diff'; content: string }> {
+  return parseGreptileOutsideDiff(body).map((content) => ({ type: 'outside-diff', content }));
+}
+
 /**
  * Combined parser that extracts both nitpick and outside-diff findings
  * from a CodeRabbit review body, returning typed results.

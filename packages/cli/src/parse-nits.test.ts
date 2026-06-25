@@ -4,6 +4,8 @@ import {
   parseCodeRabbitNits,
   parseCodeRabbitOutsideDiff,
   parseCodeRabbitReviewFindings,
+  parseGreptileOutsideDiff,
+  parseGreptileReviewFindings,
 } from './parse-nits.js';
 
 // ─── Sample CodeRabbit nit block ─────────────────────────
@@ -313,5 +315,134 @@ ${SAMPLE_OUTSIDE_DIFF_BLOCK}`;
     const findings = parseCodeRabbitReviewFindings(SAMPLE_OUTSIDE_DIFF_BLOCK);
     expect(findings.every((f) => f.type === 'outside-diff')).toBe(true);
     expect(findings).toHaveLength(1);
+  });
+});
+
+// ─── Greptile summary parser (marker-anchored — mmnto-ai/totem#2192) ──────────
+//
+// Anchored on the canonical `<!-- greptile_other_comments_section -->` marker
+// (mmnto-ai/totem-strategy#690), NOT a sampled <details> shape — greptile edits
+// its summary in place, so a closed PR shows the marker with content removed
+// post-resolution. The marker placement (below the flowchart, above the
+// `<sub>Reviews>` footer) mirrors the real strategy#689 structure; the exact
+// rendering of findings UNDER the marker is validated against a live out-of-diff
+// sample (this fix's own PR or the next one).
+
+const GREPTILE_WITH_OUTSIDE_DIFF = `<h3>Greptile Summary</h3>
+
+Some prose summary.
+
+<h3>Flowchart</h3>
+
+\`\`\`mermaid
+flowchart TD
+  A --> B
+\`\`\`
+
+<!-- greptile_other_comments_section -->
+
+\`src/scorer.ts\`: the exposure floor is accepted but never checked in Step 2.
+
+<sub>Reviews (2): Last reviewed commit … | Re-trigger Greptile</sub>`;
+
+const GREPTILE_RESOLVED = `<h3>Greptile Summary</h3>
+
+Confidence Score: 5/5 — safe to merge.
+
+<!-- greptile_other_comments_section -->
+
+<sub>Reviews (3): Last reviewed commit … | Re-trigger Greptile</sub>`;
+
+describe('parseGreptileOutsideDiff (marker-anchored)', () => {
+  it('extracts the section under the greptile_other_comments_section marker', () => {
+    const results = parseGreptileOutsideDiff(GREPTILE_WITH_OUTSIDE_DIFF);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain('exposure floor');
+  });
+
+  it('drops the trailing <sub>Reviews</sub> footer from the extracted section', () => {
+    const results = parseGreptileOutsideDiff(GREPTILE_WITH_OUTSIDE_DIFF);
+    expect(results[0]).not.toMatch(/Re-trigger Greptile/);
+    expect(results[0]).not.toMatch(/<sub\b/i);
+  });
+
+  it('returns empty when the marker is present but the section is resolved/empty', () => {
+    // The post-resolution state: marker remains, content edited away.
+    expect(parseGreptileOutsideDiff(GREPTILE_RESOLVED)).toEqual([]);
+  });
+
+  it('returns empty when the marker is absent', () => {
+    const body = `<h3>Greptile Summary</h3>\n\nConfidence Score: 5/5\n\nSafe to merge.`;
+    expect(parseGreptileOutsideDiff(body)).toEqual([]);
+  });
+
+  it('returns empty array for empty string', () => {
+    expect(parseGreptileOutsideDiff('')).toEqual([]);
+  });
+
+  it('splits multiple findings on `---` rules outside code fences (CR #2246)', () => {
+    const body = [
+      '<!-- greptile_other_comments_section -->',
+      '',
+      '`src/a.ts`: first finding.',
+      '',
+      '---',
+      '',
+      '`src/b.ts`: second finding.',
+      '',
+      '<sub>Reviews (2): Last reviewed commit … | Re-trigger Greptile</sub>',
+    ].join('\n');
+    expect(parseGreptileOutsideDiff(body)).toEqual([
+      '`src/a.ts`: first finding.',
+      '`src/b.ts`: second finding.',
+    ]);
+  });
+
+  it('preserves fenced code blocks and does NOT split on an in-fence `---` (gemini #2246)', () => {
+    const fence = '```';
+    const body = [
+      '<!-- greptile_other_comments_section -->',
+      '',
+      'Suggested fix:',
+      `${fence}ts`,
+      'const x = 1;',
+      '---', // a rule-looking line INSIDE the fence must not split
+      'const y = 2;',
+      fence,
+      '',
+      '<sub>Reviews (1): … | Re-trigger Greptile</sub>',
+    ].join('\n');
+    const results = parseGreptileOutsideDiff(body);
+    expect(results).toHaveLength(1); // not split by the in-fence `---`
+    expect(results[0]).toContain('const x = 1;'); // code preserved, not stripped
+    expect(results[0]).toContain('const y = 2;');
+    expect(results[0]).toContain(fence);
+  });
+
+  it('anchors footer removal to the Reviews footer, preserving an inner <sub> (CR #2246)', () => {
+    const body = [
+      '<!-- greptile_other_comments_section -->',
+      '',
+      'Finding with an inline <sub>subscript</sub> that must survive.',
+      '',
+      '<sub>Reviews (1): … | Re-trigger Greptile</sub>',
+    ].join('\n');
+    const results = parseGreptileOutsideDiff(body);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain('subscript');
+    expect(results[0]).not.toMatch(/Re-trigger Greptile/);
+  });
+});
+
+describe('parseGreptileReviewFindings (marker-anchored)', () => {
+  it('types the extracted section as outside-diff findings', () => {
+    const findings = parseGreptileReviewFindings(GREPTILE_WITH_OUTSIDE_DIFF);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.type).toBe('outside-diff');
+    expect(findings[0]!.content).toContain('exposure floor');
+  });
+
+  it('returns empty array when the marker section is absent', () => {
+    expect(parseGreptileReviewFindings('## Just a normal summary.')).toEqual([]);
   });
 });

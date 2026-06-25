@@ -11,6 +11,7 @@ import {
   isThreadResolved,
   parseCRSeverity,
   parseGCASeverity,
+  parseGreptileConfidence,
   parseGreptileSeverity,
   parseSeverityForTool,
   stripHtmlWrappers,
@@ -615,5 +616,49 @@ describe('decline taxonomy (mmnto-ai/totem#2124)', () => {
     const findings = extractReviewBodyFindings([{ author: 'coderabbitai[bot]', body }]);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.disposition).toBeUndefined();
+  });
+
+  it('extractReviewBodyFindings: dispatches the greptile branch via the outside-diff marker (mmnto-ai/totem#2192)', () => {
+    // Sourced via gh api → author keeps the [bot] suffix the greptile regex needs.
+    // Marker-anchored (strategy#690), mirroring the real greptile summary shape.
+    const body = [
+      '<h3>Greptile Summary</h3>',
+      '',
+      '<!-- greptile_other_comments_section -->',
+      '',
+      '`src/scorer.ts`: exposure floor accepted but never checked.',
+      '',
+      '<sub>Reviews (1): Last reviewed commit … | Re-trigger Greptile</sub>',
+    ].join('\n');
+    const findings = extractReviewBodyFindings([{ author: 'greptile-apps[bot]', body }]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.tool).toBe('greptile');
+    expect(findings[0]!.body).toContain('exposure floor');
+    expect(findings[0]!.file).toBe('(review body)');
+  });
+
+  it('extractReviewBodyFindings: ignores a greptile summary with no outside-diff block', () => {
+    const findings = extractReviewBodyFindings([
+      { author: 'greptile-apps[bot]', body: '<h3>Greptile Summary</h3>\n\nConfidence Score: 5/5' },
+    ]);
+    expect(findings).toEqual([]);
+  });
+
+  it('parseGreptileConfidence: extracts the N/5 score (mmnto-ai/totem#2192)', () => {
+    expect(parseGreptileConfidence('<h3>Confidence Score: 4/5</h3>\n\nMinor polish.')).toBe(4);
+    expect(parseGreptileConfidence('Confidence Score: 5 / 5')).toBe(5);
+    expect(parseGreptileConfidence('Confidence Score: 0/5')).toBe(0);
+  });
+
+  it('parseGreptileConfidence: returns undefined when no score is present', () => {
+    expect(parseGreptileConfidence('<h3>Greptile Summary</h3>\n\nSafe to merge.')).toBeUndefined();
+    // Not a percentage — must be N/5.
+    expect(parseGreptileConfidence('Confidence: 90%')).toBeUndefined();
+  });
+
+  it('parseGreptileConfidence: does not misread `5/50` as `5/5` (CR #2246)', () => {
+    // The `(?!\d)` denominator boundary prevents a false merge-readiness signal.
+    expect(parseGreptileConfidence('Confidence Score: 5/50')).toBeUndefined();
+    expect(parseGreptileConfidence('Confidence Score: 4/55')).toBeUndefined();
   });
 });

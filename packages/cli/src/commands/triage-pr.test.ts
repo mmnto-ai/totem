@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CategorizedFinding } from '../parsers/triage-types.js';
-import { formatTriageOutput } from './triage-pr.js';
+import { evaluateTriageEmptyState, formatTriageOutput } from './triage-pr.js';
 
 // ─── Identity color functions (no ANSI for test assertions) ──
 
@@ -267,5 +267,56 @@ describe('formatTriageOutput', () => {
     expect(output).toContain('(review body)');
     expect(output).toContain('[1]');
     expect(output).toContain('[2]');
+  });
+});
+
+describe('evaluateTriageEmptyState (mmnto-ai/totem#2192)', () => {
+  const zero = {
+    botThreads: 0,
+    bodyFindings: 0,
+    botIssueComments: 0,
+    inlineComments: 0,
+    reviews: 0,
+    issueComments: 0,
+  };
+
+  it('is NOT empty when an inline bot thread exists', () => {
+    expect(evaluateTriageEmptyState({ ...zero, botThreads: 1, inlineComments: 1 }).empty).toBe(
+      false,
+    );
+  });
+
+  it('is NOT empty when only a body/summary finding exists', () => {
+    expect(evaluateTriageEmptyState({ ...zero, bodyFindings: 1, reviews: 1 }).empty).toBe(false);
+  });
+
+  it('is NOT empty when a bot summary issue-comment exists but parsed 0 findings', () => {
+    // The greptile-summary-present-but-unparsed case: must still triage, never
+    // silently return — the #2190 miss this command exists to catch.
+    expect(evaluateTriageEmptyState({ ...zero, botIssueComments: 1, issueComments: 1 }).empty).toBe(
+      false,
+    );
+  });
+
+  it('is empty with a bare message when truly nothing was fetched', () => {
+    const r = evaluateTriageEmptyState(zero);
+    expect(r.empty).toBe(true);
+    expect(r.surfaced).toBe(false);
+    expect(r.message).toContain('no comments');
+  });
+
+  it('surfaces fetched counts (never a bare "Nothing to triage") when raw comments exist but no bot authored them', () => {
+    const r = evaluateTriageEmptyState({
+      ...zero,
+      inlineComments: 2,
+      reviews: 1,
+      issueComments: 3,
+    });
+    expect(r.empty).toBe(true);
+    expect(r.surfaced).toBe(true);
+    // The whole point of #2192: surface WHAT was fetched, not a bare dismissal.
+    expect(r.message).toContain('2 inline comment(s)');
+    expect(r.message).toContain('1 review(s)');
+    expect(r.message).toContain('3 issue-comment(s)');
   });
 });
