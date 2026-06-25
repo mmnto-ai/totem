@@ -1590,17 +1590,27 @@ function navigateConfigPath(
   return { found: true, value: cursor };
 }
 
+/** CRLF/lone-CR → LF + trim — the CRLF-insensitive normalize applied to BOTH compare sides. */
+function normalizeScalarString(s: string): string {
+  return s.replace(/\r\n?/g, '\n').trim();
+}
+
 /**
  * Whether a parsed on-disk value equals the typed expected scalar. Boolean
  * expected ⟹ the actual must be a boolean and strictly equal (YAML `false` the
  * bool matches; the STRING `"false"` does NOT — value-equality must not launder
  * an ambiguous string into a boolean config claim). String expected ⟹ the actual
- * must be a string and exactly equal after a CRLF/trim normalize (win32-checkout
- * safe; these scalar config values carry no meaningful surrounding whitespace).
+ * must be a string and exactly equal after a CRLF/trim normalize applied to BOTH
+ * sides — symmetric so the compare is genuinely CRLF-insensitive (win32-checkout
+ * safe). The YAML parser already LF-normalizes scalar content (spec §5.4) and the
+ * manifest value is single-line, so normalizing `expected` is belt-and-suspenders,
+ * but symmetry removes the half-normalized smell (GCA review on #2249).
  */
 function valueMatchesExpected(actual: unknown, expected: ExpectedScalar): boolean {
   if (typeof expected === 'boolean') return actual === expected;
-  return typeof actual === 'string' && actual.replace(/\r\n?/g, '\n').trim() === expected;
+  return (
+    typeof actual === 'string' && normalizeScalarString(actual) === normalizeScalarString(expected)
+  );
 }
 
 /** Render a parsed value for a verdict message (strings quoted; bool/number/null inline; else JSON). */
