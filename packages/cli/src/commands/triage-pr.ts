@@ -373,8 +373,6 @@ export async function triagePrCommand(
   //     which preserves the `[bot]` suffix + `user.type` that `gh pr view` strips,
   //     so the conservative greptile bot-login regex actually matches the summary.
   const { extractReviewBodyFindings } = await import('../parsers/bot-review-parser.js');
-  const { greptileOutsideDiffSectionHasContent, parseGreptileReviewFindings } =
-    await import('../parse-nits.js');
   const reviewBodyFindings = extractReviewBodyFindings(pr.reviews);
 
   // `fetchIssueComments` is optional on the adapter interface — guard for adapters
@@ -452,26 +450,11 @@ export async function triagePrCommand(
   if (botThreads.length > 0) {
     log.info(TAG, `Found ${botThreads.length} bot review thread(s)`);
   }
-  // Parser-gap signal — narrowed to a GENUINE regression. The
-  // `greptile_other_comments_section` marker is a permanent structural element on
-  // every greptile summary (present even on a clean 5/5), and CR/GCA summaries
-  // are descriptive — so the old "any bot summary + 0 findings" check fired on
-  // virtually every clean PR, training operators to ignore it and masking real
-  // gaps (greptile P1 on #2246). Fire ONLY when greptile's out-of-diff section
-  // has actual content that extraction failed to surface — which can't happen on
-  // a clean/empty summary, only on a real parser regression.
-  const greptileParseGap = botIssueComments.some(
-    (c) =>
-      detectBot(c.author) === 'greptile' &&
-      greptileOutsideDiffSectionHasContent(c.body) &&
-      parseGreptileReviewFindings(c.body).length === 0,
-  );
-  if (greptileParseGap) {
-    log.info(
-      TAG,
-      'greptile posted an out-of-diff section that could not be parsed — read the PR summary directly.',
-    );
-  }
+  // (No "parser gap" warning: the marker-anchored parser always surfaces whatever
+  // sits under the marker — falling back to the whole block — so a content-present
+  // /findings-empty "gap" is logically impossible (gemini High + greptile P1 on
+  // #2246). Anti-glance is carried by the empty-state guard, which counts a bot
+  // summary as material, plus the greptile Confidence line above.)
 
   // 6. Normalize into findings
   const findings = normalizeBotFindings(
@@ -494,12 +477,15 @@ export async function triagePrCommand(
 
   // 8. Render output to stdout
   // Count bot comments (not all review comments) + the review-body and
-  // issue-comment summary surfaces SEPARATELY — folding both into one undercounts
-  // when CR's review body and greptile's summary both carry findings (CR on #2246).
-  const bodiesWithFindings =
-    (reviewBodyFindings.length > 0 ? 1 : 0) + (issueCommentFindings.length > 0 ? 1 : 0);
+  // issue-comment summary surfaces SEPARATELY. The issue-comment surface counts
+  // when a bot summary was PRESENT (botIssueComments), not only when it parsed
+  // findings — otherwise a summary-present-but-0-findings PR renders "0 comments"
+  // right after the empty-state guard (which counts the same surface as material)
+  // intentionally kept it in triage (CR Outside-diff on #2246).
+  const bodySummarySurfaces =
+    (reviewBodyFindings.length > 0 ? 1 : 0) + (botIssueComments.length > 0 ? 1 : 0);
   const botCommentCount =
-    reviewComments.filter((c) => isBotComment(c.author)).length + bodiesWithFindings;
+    reviewComments.filter((c) => isBotComment(c.author)).length + bodySummarySurfaces;
   const output = formatTriageOutput(num, categorized, botCommentCount, {
     red: pc.default.red,
     yellow: pc.default.yellow,

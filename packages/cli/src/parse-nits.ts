@@ -198,18 +198,6 @@ export function parseGreptileReviewFindings(
 }
 
 /**
- * Whether greptile's out-of-diff section has actual content the parser should
- * have extracted. The marker is a PERMANENT structural element on every greptile
- * summary (present even on a clean 5/5), so "a bot summary is present but we
- * parsed 0 findings" cried wolf on every clean PR (greptile P1 on #2246). This
- * narrows a genuine parser gap to: the section has content yet extraction yielded
- * nothing — a real regression, never the routine empty/clean case.
- */
-export function greptileOutsideDiffSectionHasContent(body: string): boolean {
-  return greptileOutsideDiffSection(body).length > 0;
-}
-
-/**
  * Combined parser that extracts both nitpick and outside-diff findings
  * from a CodeRabbit review body, returning typed results.
  */

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  greptileOutsideDiffSectionHasContent,
   parseCodeRabbitNits,
   parseCodeRabbitOutsideDiff,
   parseCodeRabbitReviewFindings,
@@ -432,21 +431,6 @@ describe('parseGreptileOutsideDiff (marker-anchored)', () => {
     expect(results).toHaveLength(1);
     expect(results[0]).toContain('subscript');
     expect(results[0]).not.toMatch(/Re-trigger Greptile/);
-  });
-});
-
-describe('greptileOutsideDiffSectionHasContent (#2192 parser-gap scoping)', () => {
-  it('is true when the marker section has content', () => {
-    expect(greptileOutsideDiffSectionHasContent(GREPTILE_WITH_OUTSIDE_DIFF)).toBe(true);
-  });
-
-  it('is false when the marker is present but the section is empty (clean 5/5)', () => {
-    // The common clean case — must NOT register as a parser gap (greptile P1 #2246).
-    expect(greptileOutsideDiffSectionHasContent(GREPTILE_RESOLVED)).toBe(false);
-  });
-
-  it('is false when the marker is absent', () => {
-    expect(greptileOutsideDiffSectionHasContent('<h3>Greptile Summary</h3>\n\n5/5')).toBe(false);
   });
 });
 
