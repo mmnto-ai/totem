@@ -154,7 +154,9 @@ export function parseGreptileSeverity(body: string): string {
  * Parsed as `N/5`, never a percentage.
  */
 export function parseGreptileConfidence(body: string): number | undefined {
-  const m = body.match(/Confidence Score:\s*([0-5])\s*\/\s*5/i);
+  // `(?!\d)` bounds the denominator so `Confidence Score: 5/50` is not misread
+  // as `5/5` (a false merge-readiness signal) — CR review on #2246.
+  const m = body.match(/Confidence Score:\s*([0-5])\s*\/\s*5(?!\d)/i);
   return m ? Number(m[1]) : undefined;
 }
 

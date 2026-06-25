@@ -373,14 +373,19 @@ export async function triagePrCommand(
   //     which preserves the `[bot]` suffix + `user.type` that `gh pr view` strips,
   //     so the conservative greptile bot-login regex actually matches the summary.
   const { extractReviewBodyFindings } = await import('../parsers/bot-review-parser.js');
+  const { greptileOutsideDiffSectionHasContent, parseGreptileReviewFindings } =
+    await import('../parse-nits.js');
   const reviewBodyFindings = extractReviewBodyFindings(pr.reviews);
 
   // `fetchIssueComments` is optional on the adapter interface — guard for adapters
   // and test doubles that don't implement it.
   const issueComments = adapter.fetchIssueComments?.(num) ?? [];
-  const botIssueComments = issueComments.filter(
-    (c) => c.authorType === 'Bot' || isBotComment(c.author),
-  );
+  // Filter to RECOGNIZED review bots only. The `gh api` route preserves the
+  // `[bot]` suffix, so `isBotComment` matches CR/GCA/greptile reliably — using
+  // the broad `authorType === 'Bot'` would pull in non-review automation
+  // (dependabot/renovate/github-actions), falsely suppressing "Nothing to triage"
+  // and mislabeling them `unknown` (gemini + CR + greptile review on #2246).
+  const botIssueComments = issueComments.filter((c) => isBotComment(c.author));
   const issueCommentFindings = extractReviewBodyFindings(
     botIssueComments.map((c) => ({ author: c.author, body: c.body })),
   );
@@ -434,16 +439,24 @@ export async function triagePrCommand(
   if (botThreads.length > 0) {
     log.info(TAG, `Found ${botThreads.length} bot review thread(s)`);
   }
-  // Surface bot summaries even when they yielded no parsed findings (e.g. a
-  // greptile summary present but the provisional parser matched nothing). This is
-  // a parser-COVERAGE signal, not an all-clear (Tenet 4: fetch>0 + parse==0 is a
-  // possible parser gap, never a clean empty state) — per strategy-claude on #2192.
-  if (botIssueComments.length > 0 && issueCommentFindings.length === 0) {
-    const tools = [...new Set(botIssueComments.map((c) => detectBot(c.author)))].join(', ');
+  // Parser-gap signal — narrowed to a GENUINE regression. The
+  // `greptile_other_comments_section` marker is a permanent structural element on
+  // every greptile summary (present even on a clean 5/5), and CR/GCA summaries
+  // are descriptive — so the old "any bot summary + 0 findings" check fired on
+  // virtually every clean PR, training operators to ignore it and masking real
+  // gaps (greptile P1 on #2246). Fire ONLY when greptile's out-of-diff section
+  // has actual content that extraction failed to surface — which can't happen on
+  // a clean/empty summary, only on a real parser regression.
+  const greptileParseGap = botIssueComments.some(
+    (c) =>
+      detectBot(c.author) === 'greptile' &&
+      greptileOutsideDiffSectionHasContent(c.body) &&
+      parseGreptileReviewFindings(c.body).length === 0,
+  );
+  if (greptileParseGap) {
     log.info(
       TAG,
-      `${botIssueComments.length} bot summary issue-comment(s) fetched (${tools}) but 0 parsed — ` +
-        `possible parser gap; review the PR summary directly.`,
+      'greptile posted an out-of-diff section that could not be parsed — read the PR summary directly.',
     );
   }
 
@@ -467,8 +480,11 @@ export async function triagePrCommand(
   log.info(TAG, `${categorized.length} distinct finding(s) after dedup`);
 
   // 8. Render output to stdout
-  // Count bot comments (not all review comments) + summary bodies with findings
-  const bodiesWithFindings = bodyFindings.length > 0 ? 1 : 0;
+  // Count bot comments (not all review comments) + the review-body and
+  // issue-comment summary surfaces SEPARATELY — folding both into one undercounts
+  // when CR's review body and greptile's summary both carry findings (CR on #2246).
+  const bodiesWithFindings =
+    (reviewBodyFindings.length > 0 ? 1 : 0) + (issueCommentFindings.length > 0 ? 1 : 0);
   const botCommentCount =
     reviewComments.filter((c) => isBotComment(c.author)).length + bodiesWithFindings;
   const output = formatTriageOutput(num, categorized, botCommentCount, {

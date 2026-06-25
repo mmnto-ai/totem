@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  greptileOutsideDiffSectionHasContent,
   parseCodeRabbitNits,
   parseCodeRabbitOutsideDiff,
   parseCodeRabbitReviewFindings,
@@ -378,6 +379,74 @@ describe('parseGreptileOutsideDiff (marker-anchored)', () => {
 
   it('returns empty array for empty string', () => {
     expect(parseGreptileOutsideDiff('')).toEqual([]);
+  });
+
+  it('splits multiple findings on `---` rules outside code fences (CR #2246)', () => {
+    const body = [
+      '<!-- greptile_other_comments_section -->',
+      '',
+      '`src/a.ts`: first finding.',
+      '',
+      '---',
+      '',
+      '`src/b.ts`: second finding.',
+      '',
+      '<sub>Reviews (2): Last reviewed commit … | Re-trigger Greptile</sub>',
+    ].join('\n');
+    expect(parseGreptileOutsideDiff(body)).toEqual([
+      '`src/a.ts`: first finding.',
+      '`src/b.ts`: second finding.',
+    ]);
+  });
+
+  it('preserves fenced code blocks and does NOT split on an in-fence `---` (gemini #2246)', () => {
+    const fence = '```';
+    const body = [
+      '<!-- greptile_other_comments_section -->',
+      '',
+      'Suggested fix:',
+      `${fence}ts`,
+      'const x = 1;',
+      '---', // a rule-looking line INSIDE the fence must not split
+      'const y = 2;',
+      fence,
+      '',
+      '<sub>Reviews (1): … | Re-trigger Greptile</sub>',
+    ].join('\n');
+    const results = parseGreptileOutsideDiff(body);
+    expect(results).toHaveLength(1); // not split by the in-fence `---`
+    expect(results[0]).toContain('const x = 1;'); // code preserved, not stripped
+    expect(results[0]).toContain('const y = 2;');
+    expect(results[0]).toContain(fence);
+  });
+
+  it('anchors footer removal to the Reviews footer, preserving an inner <sub> (CR #2246)', () => {
+    const body = [
+      '<!-- greptile_other_comments_section -->',
+      '',
+      'Finding with an inline <sub>subscript</sub> that must survive.',
+      '',
+      '<sub>Reviews (1): … | Re-trigger Greptile</sub>',
+    ].join('\n');
+    const results = parseGreptileOutsideDiff(body);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain('subscript');
+    expect(results[0]).not.toMatch(/Re-trigger Greptile/);
+  });
+});
+
+describe('greptileOutsideDiffSectionHasContent (#2192 parser-gap scoping)', () => {
+  it('is true when the marker section has content', () => {
+    expect(greptileOutsideDiffSectionHasContent(GREPTILE_WITH_OUTSIDE_DIFF)).toBe(true);
+  });
+
+  it('is false when the marker is present but the section is empty (clean 5/5)', () => {
+    // The common clean case — must NOT register as a parser gap (greptile P1 #2246).
+    expect(greptileOutsideDiffSectionHasContent(GREPTILE_RESOLVED)).toBe(false);
+  });
+
+  it('is false when the marker is absent', () => {
+    expect(greptileOutsideDiffSectionHasContent('<h3>Greptile Summary</h3>\n\n5/5')).toBe(false);
   });
 });
 

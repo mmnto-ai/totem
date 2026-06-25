@@ -124,6 +124,30 @@ export function parseCodeRabbitOutsideDiff(body: string): string[] {
 
 /** The HTML-comment marker greptile emits to anchor its out-of-diff section. */
 const GREPTILE_OUTSIDE_DIFF_MARKER = '<!-- greptile_other_comments_section -->';
+/**
+ * The documented greptile summary footer ("Reviews (N): … | Re-trigger
+ * Greptile"). Anchor footer removal to THIS shape, not the first `<sub>`
+ * anywhere — a greptile finding may legitimately contain an HTML subscript, and
+ * truncating at it would drop the rest of the finding (CR review on #2246).
+ */
+const GREPTILE_REVIEWS_FOOTER = /<sub\b[^>]*>\s*Reviews\b/i;
+
+/**
+ * The cleaned content of greptile's out-of-diff section — everything between the
+ * `greptile_other_comments_section` marker and the Reviews footer, HTML wrappers
+ * stripped. Returns '' when the marker is absent or the section is empty
+ * (resolved/clean). Shared by {@link parseGreptileOutsideDiff} and
+ * {@link greptileOutsideDiffSectionHasContent}.
+ */
+function greptileOutsideDiffSection(body: string): string {
+  if (!body) return '';
+  const markerIdx = body.indexOf(GREPTILE_OUTSIDE_DIFF_MARKER);
+  if (markerIdx === -1) return '';
+  let section = body.slice(markerIdx + GREPTILE_OUTSIDE_DIFF_MARKER.length);
+  const footerIdx = section.search(GREPTILE_REVIEWS_FOOTER);
+  if (footerIdx !== -1) section = section.slice(0, footerIdx);
+  return stripWrapperTags(section).trim();
+}
 
 /**
  * Extract greptile's "Comments Outside Diff" findings from its SUMMARY comment.
@@ -136,32 +160,29 @@ const GREPTILE_OUTSIDE_DIFF_MARKER = '<!-- greptile_other_comments_section -->';
  * this comment in place: a merged/closed PR shows the marker with the content
  * already removed post-resolution, so the live findings-state cannot be
  * reverse-engineered from a closed PR (GitHub `userContentEdits` exposes edit
- * metadata, not prior bodies). The exact rendering of findings UNDER the marker
- * is validated against a live out-of-diff sample; until then we surface the whole
- * block (anti-glance: over-surface beats silently dropping — the failure class
- * this fixes). Returns [] when the section is absent or empty (resolved/none).
+ * metadata, not prior bodies). Returns [] when the section is absent or empty
+ * (resolved/none).
  */
 export function parseGreptileOutsideDiff(body: string): string[] {
-  if (!body) return [];
-  const markerIdx = body.indexOf(GREPTILE_OUTSIDE_DIFF_MARKER);
-  if (markerIdx === -1) return [];
-
-  let section = body.slice(markerIdx + GREPTILE_OUTSIDE_DIFF_MARKER.length);
-  // Drop the trailing "<sub>Reviews (N): … | Re-trigger Greptile</sub>" footer.
-  const footerIdx = section.search(/<sub\b/i);
-  if (footerIdx !== -1) section = section.slice(0, footerIdx);
-
-  // Strip fenced code blocks to avoid splitting on `---` inside examples, then
-  // unwrap the known HTML wrappers.
-  const cleaned = stripWrapperTags(section.replace(/```[\s\S]*?```/g, '')).trim();
+  const cleaned = greptileOutsideDiffSection(body);
   if (!cleaned) return [];
 
-  // Greptile may render multiple out-of-diff findings; split on `---` rules when
-  // present, else surface the whole block as one (refine on a live sample).
-  const parts = cleaned
-    .split(/\r?\n---\r?\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  // Greptile may render multiple out-of-diff findings separated by `---` rules.
+  // Split on `---` ONLY outside fenced code blocks: greptile findings embed code
+  // examples/suggestions, and stripping or splitting through fences deletes that
+  // content from the surfaced finding (gemini review on #2246). Toggle on ```.
+  const FENCE = '```';
+  const groups: string[][] = [[]];
+  let inFence = false;
+  for (const line of cleaned.split(/\r?\n/)) {
+    if (line.trimStart().startsWith(FENCE)) inFence = !inFence;
+    if (!inFence && line.trim() === '---') {
+      groups.push([]);
+    } else {
+      groups[groups.length - 1]!.push(line);
+    }
+  }
+  const parts = groups.map((g) => g.join('\n').trim()).filter(Boolean);
   return parts.length ? parts : [cleaned];
 }
 
@@ -174,6 +195,18 @@ export function parseGreptileReviewFindings(
   body: string,
 ): Array<{ type: 'outside-diff'; content: string }> {
   return parseGreptileOutsideDiff(body).map((content) => ({ type: 'outside-diff', content }));
+}
+
+/**
+ * Whether greptile's out-of-diff section has actual content the parser should
+ * have extracted. The marker is a PERMANENT structural element on every greptile
+ * summary (present even on a clean 5/5), so "a bot summary is present but we
+ * parsed 0 findings" cried wolf on every clean PR (greptile P1 on #2246). This
+ * narrows a genuine parser gap to: the section has content yet extraction yielded
+ * nothing — a real regression, never the routine empty/clean case.
+ */
+export function greptileOutsideDiffSectionHasContent(body: string): boolean {
+  return greptileOutsideDiffSection(body).length > 0;
 }
 
 /**

@@ -655,4 +655,10 @@ describe('decline taxonomy (mmnto-ai/totem#2124)', () => {
     // Not a percentage — must be N/5.
     expect(parseGreptileConfidence('Confidence: 90%')).toBeUndefined();
   });
+
+  it('parseGreptileConfidence: does not misread `5/50` as `5/5` (CR #2246)', () => {
+    // The `(?!\d)` denominator boundary prevents a false merge-readiness signal.
+    expect(parseGreptileConfidence('Confidence Score: 5/50')).toBeUndefined();
+    expect(parseGreptileConfidence('Confidence Score: 4/55')).toBeUndefined();
+  });
 });
