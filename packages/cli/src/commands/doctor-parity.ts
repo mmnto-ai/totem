@@ -40,7 +40,12 @@
 
 import * as path from 'node:path';
 
-import type { ManagedBlockMarkers, ParityContract, ParityContractVerdict } from '@mmnto/totem';
+import type {
+  ManagedBlockMarkers,
+  ParityContract,
+  ParityContractVerdict,
+  ValueEqualityField,
+} from '@mmnto/totem';
 
 // init-templates (large canonical strings) + the node:url / node:module builtins
 // are dynamic-imported inside checkParity per the packages/cli lazy-load
@@ -139,6 +144,74 @@ function mechanicalArtifactsFor(
           markers,
           canonicalBlock: extract(templates.reviewReplyContent, markers),
           lineName: 'Parity: review-reply-skill-content',
+        },
+      ];
+    default:
+      return undefined;
+  }
+}
+
+// ─── Value-equality field registry (CLI-side, mmnto-ai/totem-strategy#738 Slice A) ──
+
+/**
+ * Resolve the on-disk config field(s) a `manifestation: value-equality` contract
+ * checks, or `undefined` when this slice doesn't handle the id (→ a `skip` stub).
+ * Each entry carries WHERE to look (file + dotted-path SEGMENTS + parse format);
+ * the EXPECTED value is read by the detector from the contract's own
+ * `expectedValueOrDerivation` (strategy#738 Q1 — the manifest field is the
+ * canonical, no second source). Paths are pre-verified against the live cohort
+ * config shapes: GCA nests its switches under a top-level `code_review:` block
+ * (`code_review.pull_request_opened.*`), and `gca-on-demand` is split into two
+ * independent rows per the strategy#738 Q3 ruling (each switch drifts on its own).
+ */
+function valueEqualityFieldsFor(
+  contractId: string,
+  gitRoot: string,
+): ValueEqualityField[] | undefined {
+  switch (contractId) {
+    case 'cr-profile':
+      return [
+        {
+          consumerPath: path.join(gitRoot, '.coderabbit.yaml'),
+          pathSegments: ['reviews', 'profile'],
+          format: 'yaml',
+          lineName: 'Parity: cr-profile',
+        },
+      ];
+    case 'cr-on-demand':
+      return [
+        {
+          consumerPath: path.join(gitRoot, '.coderabbit.yaml'),
+          pathSegments: ['reviews', 'auto_review', 'enabled'],
+          format: 'yaml',
+          lineName: 'Parity: cr-on-demand',
+        },
+      ];
+    case 'gca-code-review':
+      return [
+        {
+          consumerPath: path.join(gitRoot, '.gemini', 'config.yaml'),
+          pathSegments: ['code_review', 'pull_request_opened', 'code_review'],
+          format: 'yaml',
+          lineName: 'Parity: gca-code-review',
+        },
+      ];
+    case 'gca-summary':
+      return [
+        {
+          consumerPath: path.join(gitRoot, '.gemini', 'config.yaml'),
+          pathSegments: ['code_review', 'pull_request_opened', 'summary'],
+          format: 'yaml',
+          lineName: 'Parity: gca-summary',
+        },
+      ];
+    case 'greptile-on-demand':
+      return [
+        {
+          consumerPath: path.join(gitRoot, 'greptile.json'),
+          pathSegments: ['skipReview'],
+          format: 'json',
+          lineName: 'Parity: greptile-on-demand',
         },
       ];
     default:
@@ -373,6 +446,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
     detectGeneratedArtifactContract,
     detectManualAttestationContract,
     detectMechanicalContract,
+    detectValueEqualityContract,
     detectVersionPinnedContract,
     extractManagedBlock,
     loadParityManifest,
@@ -607,6 +681,38 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           if (blockingDrift) blockingDriftIds.push(c.id);
           return lines;
         }
+
+        // ── value-equality routing (mmnto-ai/totem-strategy#738 Slice A) ──
+        // Routes on `manifestation` BEFORE the tractability dispatch (same as
+        // capability-probe): these bot-review-config rows are `tractability:
+        // mechanical` but sense a SCALAR at a dotted path, not artifact content-
+        // equality. The expected value is the contract's own
+        // `expectedValueOrDerivation` (the canonical); the registry supplies only
+        // the file + path + format.
+        if (c.manifestation === 'value-equality') {
+          const scopeSkip = consumersSkip(c);
+          if (scopeSkip !== undefined) return scopeSkip;
+          const fields = valueEqualityFieldsFor(c.id, gitRoot);
+          if (fields === undefined) {
+            return [
+              stub(
+                c,
+                `${c.dimension} (value-equality) — drift detection not yet implemented for this row`,
+              ),
+            ];
+          }
+          // A row maps to ≥1 field (the gca two-row split shares one file); tag the
+          // contract id at most ONCE for --strict so the count reflects contracts.
+          let blockingDrift = false;
+          const lines = fields.map((field) => {
+            const verdict = detectValueEqualityContract(c, { repoId, field });
+            if (verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
+            return lineFor(field.lineName, verdict);
+          });
+          if (blockingDrift) blockingDriftIds.push(c.id);
+          return lines;
+        }
+
         if (
           c.manifestation !== undefined &&
           !(PARITY_MANIFESTATIONS as readonly string[]).includes(c.manifestation)

@@ -695,11 +695,14 @@ export type {
   DetectGeneratedArtifactContext,
   DetectManualAttestationContext,
   DetectMechanicalContext,
+  DetectValueEqualityContext,
   DetectVersionPinnedContext,
   ForkMarker,
   ManagedBlockMarkers,
   PackageJsonShape,
   ParityContractVerdict,
+  ValueEqualityField,
+  ValueEqualityFormat,
 } from './parity-detect.js';
 export {
   deriveCohortRepoId,
@@ -707,6 +710,7 @@ export {
   detectGeneratedArtifactContract,
   detectManualAttestationContract,
   detectMechanicalContract,
+  detectValueEqualityContract,
   detectVersionPinnedContract,
   extractManagedBlock,
   hashManagedBlock,

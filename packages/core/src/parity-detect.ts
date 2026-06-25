@@ -38,6 +38,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import semver from 'semver';
+import { parse as parseYaml } from 'yaml';
 
 import { PARITY_SENSES, type ParityContract, type ParitySense } from './parity-manifest.js';
 import { safeExec } from './sys/exec.js';
@@ -1504,6 +1505,227 @@ export function detectCapabilityProbeContract(
     ctx,
     `governance floor not suppressed in ${path.basename(ctx.consumerPath)}`,
   );
+}
+
+// ─── Value-equality detector (mmnto-ai/totem-strategy#738 Slice A, Proposal 296 §13) ──
+
+/**
+ * The parse mode for a value-equality field's on-disk config file. Declared per
+ * row in the CLI registry (`valueEqualityFieldsFor`) — derive-not-guess, so an
+ * unrecognized format yields `unknown`, never a silent mis-parse.
+ */
+export type ValueEqualityFormat = 'yaml' | 'json';
+
+/**
+ * One value-equality field spec, resolved by the CLI registry from a contract id.
+ * The EXPECTED value is deliberately NOT carried here — it is read from the
+ * contract's own `expectedValueOrDerivation` (strategy#738 Q1: the manifest field
+ * is the canonical, derived LOCALLY per Tenet 6). The registry supplies only WHERE
+ * to look, never WHAT to expect (no second source of truth).
+ */
+export interface ValueEqualityField {
+  /** Absolute path to the consumer config file (e.g. `<root>/.coderabbit.yaml`). */
+  consumerPath: string;
+  /**
+   * The dotted config path as discrete SEGMENTS (`['reviews', 'profile']`), NOT a
+   * pre-split string — a literal key containing a `.` would be mis-split otherwise
+   * (totem-codex panel, strategy#738). The CLI registry owns the segments.
+   */
+  pathSegments: string[];
+  /** Parse mode for {@link consumerPath}. */
+  format: ValueEqualityFormat;
+  /** Display name for the verdict line. */
+  lineName: string;
+}
+
+/** Inputs + test seams for {@link detectValueEqualityContract}. */
+export interface DetectValueEqualityContext {
+  /** Current repo's cohort id for `consumers` applicability (verbatim parity with the other detectors). */
+  repoId?: string;
+  /** The field spec (file + path + format) the CLI registry resolved for this contract. */
+  field: ValueEqualityField;
+  /** Test seam — override the consumer file read. Production callers omit it. */
+  readFile?: (absPath: string) => string | undefined;
+}
+
+/**
+ * The typed expected scalar a value-equality row asserts. Only the exact tokens
+ * `true` / `false` become booleans; every other token stays a string (exact,
+ * case-sensitive). Numeric / set-semantic comparison is explicitly OUT of Slice A
+ * — it would be a registry-declared expected-kind, never global coercion (the
+ * `false` vs `"false"`, `0` vs `"0"`, `null` vs `"null"` over-claim class the
+ * totem-codex panel flagged against a blanket `String(value)` compare).
+ */
+type ExpectedScalar = boolean | string;
+
+/** Parse the manifest's `expected-value-or-derivation` token into a typed scalar. */
+function parseExpectedScalar(rawTrimmed: string): ExpectedScalar {
+  if (rawTrimmed === 'true') return true;
+  if (rawTrimmed === 'false') return false;
+  return rawTrimmed;
+}
+
+/**
+ * Navigate discrete path segments through a parsed YAML/JSON document. Returns
+ * `found: false` when any segment is absent OR when traversal hits a non-object
+ * (array / scalar / null) before consuming every segment — both are "the field is
+ * not declared at this path" (a drift `warn` per the totem-codex panel), distinct
+ * from a present-but-mismatched value. Uses `hasOwnProperty` so an inherited
+ * prototype key (e.g. `constructor`) can't masquerade as a declared field.
+ */
+function navigateConfigPath(
+  root: unknown,
+  segments: string[],
+): { found: true; value: unknown } | { found: false } {
+  let cursor: unknown = root;
+  for (const segment of segments) {
+    if (typeof cursor !== 'object' || cursor === null || Array.isArray(cursor)) {
+      return { found: false };
+    }
+    if (!Object.prototype.hasOwnProperty.call(cursor, segment)) {
+      return { found: false };
+    }
+    cursor = (cursor as Record<string, unknown>)[segment];
+  }
+  return { found: true, value: cursor };
+}
+
+/**
+ * Whether a parsed on-disk value equals the typed expected scalar. Boolean
+ * expected ⟹ the actual must be a boolean and strictly equal (YAML `false` the
+ * bool matches; the STRING `"false"` does NOT — value-equality must not launder
+ * an ambiguous string into a boolean config claim). String expected ⟹ the actual
+ * must be a string and exactly equal after a CRLF/trim normalize (win32-checkout
+ * safe; these scalar config values carry no meaningful surrounding whitespace).
+ */
+function valueMatchesExpected(actual: unknown, expected: ExpectedScalar): boolean {
+  if (typeof expected === 'boolean') return actual === expected;
+  return typeof actual === 'string' && actual.replace(/\r\n?/g, '\n').trim() === expected;
+}
+
+/** Render a parsed value for a verdict message (strings quoted; bool/number/null inline; else JSON). */
+function renderConfigValue(value: unknown): string {
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (typeof value === 'boolean' || typeof value === 'number' || value === null) {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+    // totem-context: a value that can't be JSON-stringified (a cycle is impossible from a freshly parsed YAML/JSON doc, but be defensive) degrades to String() for the message only — rendering must never throw inside a verdict.
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Detect drift for ONE `manifestation: value-equality` contract (strategy#738
+ * Slice A, the Proposal 296 §13 promotion of the bot-review-config rows up from
+ * `attestation`). Reads a scalar at a dotted path in the consumer's on-disk
+ * config file and compares it — typed, never blanket-stringified — against the
+ * row's own `expectedValueOrDerivation` (the canonical, read LOCALLY; NEVER
+ * networks). Honors the verdict-state split + the honest-absent taxonomy the
+ * cohort panel settled (strategy#738):
+ *
+ *   - `pass`    — the path resolves and the value equals the expected scalar.
+ *   - `warn`    — present-but-mismatched, OR the path is absent on a present file
+ *                 (incl. traversal through a non-object): applicable drift.
+ *   - `unknown` — the file is present but unparseable: equality is unprovable
+ *                 either way (value-equality is NOT a config-validity detector).
+ *   - `skip`    — not-a-consumer / repo-id-unresolvable-under-scope / the file is
+ *                 wholly absent (applicable-but-missing scaffold hedge, mirroring
+ *                 detectVersionPinnedContract — flips to a drift `warn` once the
+ *                 consumers lists are verified) / no expected declared.
+ *
+ * NEVER emits `fail` (the CLI edge owns `--strict` promotion). NEVER throws
+ * (reads/parses degrade to skip/unknown). NEVER networks. Claim-class bound: a
+ * `pass` asserts ONLY "this dotted path holds this scalar" — never that the bot
+ * is on-demand, that the vendor loads it, or that the surface is enforced (those
+ * are loaded/usable claims outside Slice A).
+ */
+export function detectValueEqualityContract(
+  contract: ParityContract,
+  ctx: DetectValueEqualityContext,
+): ParityContractVerdict {
+  // ── Applicability: consumers scope (verbatim parity with detectVersionPinnedContract) ──
+  if (contract.consumers !== undefined) {
+    if (ctx.repoId === undefined) {
+      return {
+        status: 'skip',
+        message: `cannot determine applicability — repo id unresolvable; contract is scoped to consumers [${contract.consumers.join(', ')}]`,
+      };
+    }
+    if (!contract.consumers.includes(ctx.repoId)) {
+      return {
+        status: 'skip',
+        message: `cohort permits absence here (${ctx.repoId} not in consumers)`,
+      };
+    }
+  }
+
+  const { field } = ctx;
+  const fileLabel = path.basename(field.consumerPath);
+  const pathLabel = field.pathSegments.join('.');
+
+  // ── Expected scalar from the manifest's own field (strategy#738 Q1; zero-network) ──
+  const rawExpected = contract.expectedValueOrDerivation.trim();
+  if (rawExpected.length === 0) {
+    return {
+      status: 'skip',
+      message: `${contract.id}: no expected value declared (expected-value-or-derivation is empty)`,
+    };
+  }
+  const expected = parseExpectedScalar(rawExpected);
+
+  // ── Read the consumer config file ──
+  // Wholly-absent is the applicable-but-missing case: held as a scaffold skip
+  // (mirroring detectVersionPinnedContract) — these rows carry no `consumers`, so
+  // it flips to a drift `warn` once the cohort's per-repo applicability is
+  // verified. Kept DISTINCT from the not-a-consumer skip above.
+  const readFile = ctx.readFile ?? readFileText;
+  const raw = readFile(field.consumerPath);
+  if (raw === undefined) {
+    return {
+      status: 'skip',
+      message: `${fileLabel} not present — applicable-but-missing (scaffold: skip; becomes a drift warn once consumers are verified)`,
+      remediation: `Add ${pathLabel}: ${rawExpected} to ${fileLabel}, or scope this contract's consumers to exclude repos that legitimately omit ${fileLabel}.`,
+    };
+  }
+
+  // ── Parse (unparseable → unknown; do NOT smuggle in a config-validity detector) ──
+  let doc: unknown;
+  try {
+    doc = field.format === 'json' ? JSON.parse(raw) : parseYaml(raw);
+    // totem-context: a malformed consumer config degrades to an honest `unknown` (equality unprovable either way) — never a throw that would sink the doctor pipeline, and never a `warn`/`pass` that would over-claim on unparseable bytes.
+  } catch {
+    return {
+      status: 'unknown',
+      message: `${fileLabel} is unparseable ${field.format.toUpperCase()} — value-equality for ${pathLabel} is unprovable either way`,
+      remediation: `Fix the ${fileLabel} syntax, then re-run totem doctor --parity.`,
+    };
+  }
+
+  // ── Navigate the dotted path (absent / through-non-object → drift warn) ──
+  const nav = navigateConfigPath(doc, field.pathSegments);
+  if (!nav.found) {
+    return {
+      status: 'warn',
+      message: `${pathLabel} not declared in ${fileLabel} — expected ${rawExpected}`,
+      remediation: `Set ${pathLabel}: ${rawExpected} in ${fileLabel}, or update the contract if the cohort canonical changed.`,
+    };
+  }
+
+  // ── Compare (typed; never blanket String()) ──
+  if (valueMatchesExpected(nav.value, expected)) {
+    return {
+      status: 'pass',
+      message: `${pathLabel} = ${renderConfigValue(nav.value)} matches the cohort canonical in ${fileLabel}`,
+    };
+  }
+  return {
+    status: 'warn',
+    message: `${pathLabel} drift in ${fileLabel} — found ${renderConfigValue(nav.value)}, expected ${rawExpected}`,
+    remediation: `Reconcile ${pathLabel} to ${rawExpected} in ${fileLabel}, or update the contract if the cohort canonical changed.`,
+  };
 }
 
 // ─── Shared filesystem helpers ──────────────────────────
