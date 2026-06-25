@@ -410,7 +410,11 @@ describe('checkParity — value-equality wiring (strategy#738 Slice A)', () => {
 
   it('SKIP — not a consumer comes from the core self-guard (no CLI consumersSkip)', async () => {
     writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
-    // Scope the row to a different repo; this tmpDir repo is not in `consumers`.
+    // Pin a resolvable repo id ('consumer-repo' via package.json name) so the skip
+    // provably comes from the consumers branch, NOT from an unresolvable id (CR
+    // review on #2249).
+    writeConsumerDeps({});
+    // Scope the row to a different repo; 'consumer-repo' is not in `consumers`.
     const scoped = VALUE_EQUALITY_MANIFEST_YAML.replace(
       'tracking-issue: mmnto-ai/totem-strategy#501\n',
       'tracking-issue: mmnto-ai/totem-strategy#501\n    consumers:\n      - some-other-repo\n',
@@ -421,7 +425,9 @@ describe('checkParity — value-equality wiring (strategy#738 Slice A)', () => {
     const { results, blockingDriftIds } = await checkParity(tmpDir);
     const line = results.find((r) => r.name === 'Parity: cr-profile')!;
     expect(line.status).toBe('skip');
-    expect(line.message).toMatch(/not in consumers|repo id unresolvable/i);
+    // Specifically the consumers branch — names the resolved id, so an unresolvable
+    // id would fail this assertion rather than pass on a different skip reason.
+    expect(line.message).toMatch(/consumer-repo not in consumers/i);
     expect(blockingDriftIds).toHaveLength(0);
   });
 });
