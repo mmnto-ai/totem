@@ -407,6 +407,23 @@ describe('checkParity — value-equality wiring (strategy#738 Slice A)', () => {
     expect(line.status).toBe('skip');
     expect(line.message).toMatch(/not yet implemented/i);
   });
+
+  it('SKIP — not a consumer comes from the core self-guard (no CLI consumersSkip)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    // Scope the row to a different repo; this tmpDir repo is not in `consumers`.
+    const scoped = VALUE_EQUALITY_MANIFEST_YAML.replace(
+      'tracking-issue: mmnto-ai/totem-strategy#501\n',
+      'tracking-issue: mmnto-ai/totem-strategy#501\n    consumers:\n      - some-other-repo\n',
+    );
+    writeManifest('m.yaml', scoped);
+    writeCoderabbit('chill'); // would be a drift warn if this repo were a consumer
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: cr-profile')!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toMatch(/not in consumers|repo id unresolvable/i);
+    expect(blockingDriftIds).toHaveLength(0);
+  });
 });
 
 // ─── mechanical skills detection wiring (#2073) ─────────

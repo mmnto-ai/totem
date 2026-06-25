@@ -1634,4 +1634,31 @@ describe('detectValueEqualityContract', () => {
     expect(v.status).toBe('pass');
     expect(v.message).not.toMatch(/enforc|on-demand|loaded|disabled/i);
   });
+
+  it('unknown — unsupported format (a JS caller / registry typo, never a silent YAML parse)', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField({ format: 'xml' as unknown as ValueEqualityField['format'] }),
+      readFile: reader({ [CR_YAML]: 'reviews:\n  profile: assertive\n' }),
+    });
+    expect(v.status).toBe('unknown');
+    expect(v.message).toMatch(/unsupported value-equality format/i);
+  });
+
+  it('unknown — the unparseable message carries the parser error detail', () => {
+    const v = detectValueEqualityContract(
+      veContract({ id: 'greptile-on-demand', expectedValueOrDerivation: 'AUTOMATIC' }),
+      {
+        field: veField({
+          consumerPath: GREPTILE_JSON,
+          pathSegments: ['skipReview'],
+          format: 'json',
+          lineName: 'Parity: greptile-on-demand',
+        }),
+        readFile: reader({ [GREPTILE_JSON]: '{ "skipReview": ' }), // truncated JSON
+      },
+    );
+    expect(v.status).toBe('unknown');
+    // The detail suffix (`: <parser first line>`) follows the format label.
+    expect(v.message).toMatch(/unparseable JSON: \S/);
+  });
 });

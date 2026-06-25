@@ -1691,15 +1691,33 @@ export function detectValueEqualityContract(
     };
   }
 
+  // ── Guard the format up front (public-core-surface contract) ──
+  // This detector is exported, so a JS caller (no compile-time check) or a future
+  // registry typo can pass an unsupported format. Enforce the docblock's
+  // unknown-not-mis-parse contract HERE rather than letting a non-`json` value
+  // fall through to the YAML parser (a silent mis-parse that could mint a false
+  // pass/warn) — and it keeps the unparseable label off a maybe-non-string value
+  // (CodeRabbit review on #2249).
+  if (field.format !== 'json' && field.format !== 'yaml') {
+    return {
+      status: 'unknown',
+      message: `${fileLabel}: unsupported value-equality format '${String(field.format)}' — value-equality for ${pathLabel} is unprovable`,
+      remediation: `Declare a supported format (yaml | json) for ${pathLabel} in the value-equality registry.`,
+    };
+  }
+
   // ── Parse (unparseable → unknown; do NOT smuggle in a config-validity detector) ──
   let doc: unknown;
   try {
     doc = field.format === 'json' ? JSON.parse(raw) : parseYaml(raw);
     // totem-context: a malformed consumer config degrades to an honest `unknown` (equality unprovable either way) — never a throw that would sink the doctor pipeline, and never a `warn`/`pass` that would over-claim on unparseable bytes.
-  } catch {
+  } catch (err) {
+    // Surface the parser's OWN first line (split on \n only — a YAML/JSON error can
+    // carry a `.`-laden path) so a syntax issue is locatable (GCA review on #2249).
+    const detail = err instanceof Error ? `: ${err.message.split('\n')[0]}` : '';
     return {
       status: 'unknown',
-      message: `${fileLabel} is unparseable ${field.format.toUpperCase()} — value-equality for ${pathLabel} is unprovable either way`,
+      message: `${fileLabel} is unparseable ${field.format === 'json' ? 'JSON' : 'YAML'}${detail} — value-equality for ${pathLabel} is unprovable either way`,
       remediation: `Fix the ${fileLabel} syntax, then re-run totem doctor --parity.`,
     };
   }

@@ -688,10 +688,12 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         // mechanical` but sense a SCALAR at a dotted path, not artifact content-
         // equality. The expected value is the contract's own
         // `expectedValueOrDerivation` (the canonical); the registry supplies only
-        // the file + path + format.
+        // the file + path + format. No `consumersSkip` here — like
+        // detectVersionPinnedContract, detectValueEqualityContract SELF-guards the
+        // consumers scope in core (greptile review on #2249); a second CLI guard
+        // would be the dead-letter / message-divergence risk consumersSkip is
+        // documented to avoid.
         if (c.manifestation === 'value-equality') {
-          const scopeSkip = consumersSkip(c);
-          if (scopeSkip !== undefined) return scopeSkip;
           const fields = valueEqualityFieldsFor(c.id, gitRoot);
           if (fields === undefined) {
             return [
