@@ -7,7 +7,7 @@
  * and renders a compact inbox to stdout.
  */
 
-import type { StandardReviewComment } from '../adapters/pr-adapter.js';
+import type { StandardIssueComment, StandardReviewComment } from '../adapters/pr-adapter.js';
 import type { BotTool, NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 import type { CategorizedFinding, TriageCategory } from '../parsers/triage-types.js';
 
@@ -378,8 +378,21 @@ export async function triagePrCommand(
   const reviewBodyFindings = extractReviewBodyFindings(pr.reviews);
 
   // `fetchIssueComments` is optional on the adapter interface — guard for adapters
-  // and test doubles that don't implement it.
-  const issueComments = adapter.fetchIssueComments?.(num) ?? [];
+  // and test doubles that don't implement it. Wrap the call so an issue-comment
+  // fetch failure (network / rate-limit / creds) DEGRADES GRACEFULLY — warn and
+  // continue with inline + review-body triage rather than crashing the whole
+  // command (Tenet 4 + the failure-recovery design in .totem/specs/2192.md;
+  // gemini High on #2246).
+  let issueComments: StandardIssueComment[] = [];
+  if (adapter.fetchIssueComments) {
+    try {
+      issueComments = adapter.fetchIssueComments(num);
+      // totem-context: intentional fail-soft-but-named (Tenet 4) — logged loudly via log.warn then continue with inline + review-body triage; never silent. Re-throwing would crash the command on a non-critical surface (gemini High #2246; failure-recovery design in 2192.md).
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(TAG, `Could not fetch issue-comments: ${msg}; triaging inline + review-body only.`);
+    }
+  }
   // Filter to RECOGNIZED review bots only. The `gh api` route preserves the
   // `[bot]` suffix, so `isBotComment` matches CR/GCA/greptile reliably — using
   // the broad `authorType === 'Bot'` would pull in non-review automation
