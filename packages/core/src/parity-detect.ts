@@ -1610,7 +1610,11 @@ function renderConfigValue(value: unknown): string {
     return String(value);
   }
   try {
-    return JSON.stringify(value);
+    // `JSON.stringify` returns `undefined` (not a string) for undefined / function /
+    // symbol inputs — none arise from parsed YAML/JSON at today's call sites, but the
+    // helper takes `unknown`, so coalesce to keep the `: string` contract total (GCA
+    // review on #2249). `??` not `||` (a valid "" / "0" render must survive).
+    return JSON.stringify(value) ?? String(value);
     // totem-context: a value that can't be JSON-stringified (a cycle is impossible from a freshly parsed YAML/JSON doc, but be defensive) degrades to String() for the message only — rendering must never throw inside a verdict.
   } catch {
     return String(value);
