@@ -31,6 +31,7 @@ import {
   detectManualAttestationContract,
   type DetectMechanicalContext,
   detectMechanicalContract,
+  detectValueEqualityContract,
   type DetectVersionPinnedContext,
   detectVersionPinnedContract,
   extractManagedBlock,
@@ -40,6 +41,7 @@ import {
   packageNameForContract,
   parseForkMarker,
   resolveCohortFloor,
+  type ValueEqualityField,
 } from './parity-detect.js';
 import type { ParityContract } from './parity-manifest.js';
 import { cleanTmpDir } from './test-utils.js';
@@ -1404,5 +1406,259 @@ describe('declared-min fallback rendering', () => {
     expect(v.message).toMatch(/declared/i);
     expect(v.message).toContain('^0.98.0');
     expect(v.message).not.toMatch(/installed 0\.98\.0/);
+  });
+});
+
+// ─── detectValueEqualityContract (mmnto-ai/totem-strategy#738 Slice A) ──
+
+describe('detectValueEqualityContract', () => {
+  /** A value-equality bot-review-config contract (defaults to the cr-profile shape). */
+  function veContract(over: Partial<ParityContract> = {}): ParityContract {
+    return {
+      id: 'cr-profile',
+      dimension: 'bot-review-configs',
+      canonicalSource: 'mmnto-ai/totem-strategy:.coderabbit.yaml#reviews.profile',
+      detectionMethod: 'file-value-equality',
+      expectedValueOrDerivation: 'assertive',
+      tractability: 'mechanical',
+      trackingIssue: 'mmnto-ai/totem-strategy#501',
+      manifestation: 'value-equality',
+      senses: 'present',
+      ...over,
+    };
+  }
+
+  function veField(over: Partial<ValueEqualityField> = {}): ValueEqualityField {
+    return {
+      consumerPath: '/repo/.coderabbit.yaml',
+      pathSegments: ['reviews', 'profile'],
+      format: 'yaml',
+      lineName: 'Parity: cr-profile',
+      ...over,
+    };
+  }
+
+  /** An injected read seam backed by a fixed path→content map (undefined = absent). */
+  function reader(map: Record<string, string>): (p: string) => string | undefined {
+    return (p) => map[p];
+  }
+
+  const CR_YAML = '/repo/.coderabbit.yaml';
+  const GCA_YAML = '/repo/.gemini/config.yaml';
+  const GREPTILE_JSON = '/repo/greptile.json';
+
+  it('pass — string scalar matches the expected', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField(),
+      readFile: reader({ [CR_YAML]: 'reviews:\n  profile: assertive\n' }),
+    });
+    expect(v.status).toBe('pass');
+    expect(v.message).toContain('reviews.profile');
+  });
+
+  it('warn — present-but-mismatched string scalar', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField(),
+      readFile: reader({ [CR_YAML]: 'reviews:\n  profile: chill\n' }),
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).toMatch(/found "chill", expected assertive/);
+  });
+
+  it('pass — YAML boolean false matches expected token "false" (typed compare)', () => {
+    const v = detectValueEqualityContract(
+      veContract({ id: 'cr-on-demand', expectedValueOrDerivation: 'false' }),
+      {
+        field: veField({
+          pathSegments: ['reviews', 'auto_review', 'enabled'],
+          lineName: 'Parity: cr-on-demand',
+        }),
+        readFile: reader({ [CR_YAML]: 'reviews:\n  auto_review:\n    enabled: false\n' }),
+      },
+    );
+    expect(v.status).toBe('pass');
+  });
+
+  it('warn — the STRING "false" does not match a boolean expected (no laundering)', () => {
+    const v = detectValueEqualityContract(
+      veContract({ id: 'cr-on-demand', expectedValueOrDerivation: 'false' }),
+      {
+        field: veField({
+          pathSegments: ['reviews', 'auto_review', 'enabled'],
+          lineName: 'Parity: cr-on-demand',
+        }),
+        // Quoted → YAML parses a STRING "false", not the boolean.
+        readFile: reader({ [CR_YAML]: 'reviews:\n  auto_review:\n    enabled: "false"\n' }),
+      },
+    );
+    expect(v.status).toBe('warn');
+  });
+
+  it('skip — file wholly absent is applicable-but-missing (scaffold hedge)', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField(),
+      readFile: reader({}),
+    });
+    expect(v.status).toBe('skip');
+    expect(v.message).toMatch(/not present.*scaffold/i);
+  });
+
+  it('warn — path absent on a present file', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField(),
+      readFile: reader({ [CR_YAML]: 'reviews: {}\n' }),
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).toMatch(/not declared/i);
+  });
+
+  it('warn — traversal through a non-object yields path-absent drift', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField(),
+      // `reviews` is a scalar, so `reviews.profile` cannot resolve.
+      readFile: reader({ [CR_YAML]: 'reviews: assertive\n' }),
+    });
+    expect(v.status).toBe('warn');
+    expect(v.message).toMatch(/not declared/i);
+  });
+
+  it('unknown — present-but-unparseable file (not a config-validity detector)', () => {
+    const v = detectValueEqualityContract(
+      veContract({ id: 'greptile-on-demand', expectedValueOrDerivation: 'AUTOMATIC' }),
+      {
+        field: veField({
+          consumerPath: GREPTILE_JSON,
+          pathSegments: ['skipReview'],
+          format: 'json',
+          lineName: 'Parity: greptile-on-demand',
+        }),
+        readFile: reader({ [GREPTILE_JSON]: '{ "skipReview": ' }), // truncated JSON
+      },
+    );
+    expect(v.status).toBe('unknown');
+    expect(v.message).toMatch(/unparseable JSON/i);
+  });
+
+  it('pass — JSON greptile skipReview string scalar', () => {
+    const v = detectValueEqualityContract(
+      veContract({ id: 'greptile-on-demand', expectedValueOrDerivation: 'AUTOMATIC' }),
+      {
+        field: veField({
+          consumerPath: GREPTILE_JSON,
+          pathSegments: ['skipReview'],
+          format: 'json',
+          lineName: 'Parity: greptile-on-demand',
+        }),
+        readFile: reader({ [GREPTILE_JSON]: '{ "skipReview": "AUTOMATIC" }' }),
+      },
+    );
+    expect(v.status).toBe('pass');
+  });
+
+  it('pass — gca switch nested under the top-level code_review block', () => {
+    const gca =
+      'code_review:\n  pull_request_opened:\n    summary: false\n    code_review: false\n';
+    const v = detectValueEqualityContract(
+      veContract({ id: 'gca-summary', expectedValueOrDerivation: 'false' }),
+      {
+        field: veField({
+          consumerPath: GCA_YAML,
+          pathSegments: ['code_review', 'pull_request_opened', 'summary'],
+          lineName: 'Parity: gca-summary',
+        }),
+        readFile: reader({ [GCA_YAML]: gca }),
+      },
+    );
+    expect(v.status).toBe('pass');
+  });
+
+  it('pass — CRLF in a YAML string value is normalized before compare', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField(),
+      // win32 checkout: CRLF line endings must not change a scalar read.
+      readFile: reader({ [CR_YAML]: 'reviews:\r\n  profile: assertive\r\n' }),
+    });
+    expect(v.status).toBe('pass');
+  });
+
+  it('skip — not a consumer (scoped out)', () => {
+    const v = detectValueEqualityContract(veContract({ consumers: ['totem-status'] }), {
+      repoId: 'liquid-city',
+      field: veField(),
+      readFile: reader({ [CR_YAML]: 'reviews:\n  profile: chill\n' }),
+    });
+    expect(v.status).toBe('skip');
+    expect(v.message).toMatch(/cohort permits absence/i);
+  });
+
+  it('skip — repo id unresolvable under a consumers scope', () => {
+    const v = detectValueEqualityContract(veContract({ consumers: ['totem'] }), {
+      field: veField(),
+      readFile: reader({ [CR_YAML]: 'reviews:\n  profile: chill\n' }),
+    });
+    expect(v.status).toBe('skip');
+    expect(v.message).toMatch(/repo id unresolvable/i);
+  });
+
+  it('skip — no expected value declared', () => {
+    const v = detectValueEqualityContract(veContract({ expectedValueOrDerivation: '   ' }), {
+      field: veField(),
+      readFile: reader({ [CR_YAML]: 'reviews:\n  profile: assertive\n' }),
+    });
+    expect(v.status).toBe('skip');
+    expect(v.message).toMatch(/no expected value/i);
+  });
+
+  it('never emits fail (the CLI edge owns --strict promotion)', () => {
+    const statuses = new Set<string>();
+    for (const content of [
+      'reviews:\n  profile: assertive\n',
+      'reviews:\n  profile: chill\n',
+      'reviews: {}\n',
+    ]) {
+      statuses.add(
+        detectValueEqualityContract(veContract(), {
+          field: veField(),
+          readFile: reader({ [CR_YAML]: content }),
+        }).status,
+      );
+    }
+    expect(statuses.has('fail')).toBe(false);
+  });
+
+  it('claim-class bound — a pass never asserts enforcement/loaded behavior', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField(),
+      readFile: reader({ [CR_YAML]: 'reviews:\n  profile: assertive\n' }),
+    });
+    expect(v.status).toBe('pass');
+    expect(v.message).not.toMatch(/enforc|on-demand|loaded|disabled/i);
+  });
+
+  it('unknown — unsupported format (a JS caller / registry typo, never a silent YAML parse)', () => {
+    const v = detectValueEqualityContract(veContract(), {
+      field: veField({ format: 'xml' as unknown as ValueEqualityField['format'] }),
+      readFile: reader({ [CR_YAML]: 'reviews:\n  profile: assertive\n' }),
+    });
+    expect(v.status).toBe('unknown');
+    expect(v.message).toMatch(/unsupported value-equality format/i);
+  });
+
+  it('unknown — the unparseable message carries the parser error detail', () => {
+    const v = detectValueEqualityContract(
+      veContract({ id: 'greptile-on-demand', expectedValueOrDerivation: 'AUTOMATIC' }),
+      {
+        field: veField({
+          consumerPath: GREPTILE_JSON,
+          pathSegments: ['skipReview'],
+          format: 'json',
+          lineName: 'Parity: greptile-on-demand',
+        }),
+        readFile: reader({ [GREPTILE_JSON]: '{ "skipReview": ' }), // truncated JSON
+      },
+    );
+    expect(v.status).toBe('unknown');
+    // The detail suffix (`: <parser first line>`) follows the format label.
+    expect(v.message).toMatch(/unparseable JSON: \S/);
   });
 });

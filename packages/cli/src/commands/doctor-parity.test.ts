@@ -316,6 +316,122 @@ describe('checkParity — version-pinned wiring', () => {
   });
 });
 
+// ─── value-equality detection wiring (strategy#738 Slice A) ─────────
+
+/** A manifest with the cr-profile value-equality contract (no consumers = applies). */
+const VALUE_EQUALITY_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: cr-profile
+    dimension: bot-review-configs
+    canonical-source: mmnto-ai/totem-strategy:.coderabbit.yaml#reviews.profile
+    detection-method: file-value-equality
+    expected-value-or-derivation: assertive
+    tractability: mechanical
+    manifestation: value-equality
+    tracking-issue: mmnto-ai/totem-strategy#501
+`;
+
+/** Same row marked blocking — exercises the --strict promotion seam through value-equality routing. */
+const BLOCKING_VALUE_EQUALITY_MANIFEST_YAML = VALUE_EQUALITY_MANIFEST_YAML.replace(
+  'tracking-issue: mmnto-ai/totem-strategy#501\n',
+  'tracking-issue: mmnto-ai/totem-strategy#501\n    blocking: true\n',
+);
+
+/** A value-equality manifest naming an id the registry does not handle → routing stub. */
+const UNHANDLED_VALUE_EQUALITY_MANIFEST_YAML = VALUE_EQUALITY_MANIFEST_YAML.replace(
+  'id: cr-profile',
+  'id: not-a-real-bot-row',
+);
+
+/** Write a `.coderabbit.yaml` with a given reviews.profile scalar. */
+function writeCoderabbit(profile: string): void {
+  fs.writeFileSync(
+    path.join(tmpDir, '.coderabbit.yaml'),
+    `reviews:\n  profile: ${profile}\n`,
+    'utf-8',
+  );
+}
+
+describe('checkParity — value-equality wiring (strategy#738 Slice A)', () => {
+  it('PASS — on-disk scalar matches the manifest expected', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', VALUE_EQUALITY_MANIFEST_YAML);
+    writeCoderabbit('assertive');
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: cr-profile')!;
+    expect(line.status).toBe('pass');
+    expect(blockingDriftIds).toHaveLength(0);
+  });
+
+  it('WARN — scalar drift, no blocking promotion on a non-blocking row', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', VALUE_EQUALITY_MANIFEST_YAML);
+    writeCoderabbit('chill');
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: cr-profile')!;
+    expect(line.status).toBe('warn');
+    expect(line.message).toContain('assertive'); // expected surfaced
+    expect(blockingDriftIds).toHaveLength(0);
+  });
+
+  it('a blocking value-equality drift tags blockingDriftIds (the --strict seam)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', BLOCKING_VALUE_EQUALITY_MANIFEST_YAML);
+    writeCoderabbit('chill');
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: cr-profile')!;
+    expect(line.status).toBe('warn'); // the check itself never fails
+    expect(blockingDriftIds).toEqual(['cr-profile']);
+  });
+
+  it('SKIP — file wholly absent is the applicable-but-missing scaffold skip', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', VALUE_EQUALITY_MANIFEST_YAML);
+    // No .coderabbit.yaml written.
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: cr-profile')!;
+    expect(line.status).toBe('skip');
+  });
+
+  it('an unhandled value-equality row id → routing stub, not a crash', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', UNHANDLED_VALUE_EQUALITY_MANIFEST_YAML);
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: not-a-real-bot-row')!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toMatch(/not yet implemented/i);
+  });
+
+  it('SKIP — not a consumer comes from the core self-guard (no CLI consumersSkip)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    // Pin a resolvable repo id ('consumer-repo' via package.json name) so the skip
+    // provably comes from the consumers branch, NOT from an unresolvable id (CR
+    // review on #2249).
+    writeConsumerDeps({});
+    // Scope the row to a different repo; 'consumer-repo' is not in `consumers`.
+    const scoped = VALUE_EQUALITY_MANIFEST_YAML.replace(
+      'tracking-issue: mmnto-ai/totem-strategy#501\n',
+      'tracking-issue: mmnto-ai/totem-strategy#501\n    consumers:\n      - some-other-repo\n',
+    );
+    writeManifest('m.yaml', scoped);
+    writeCoderabbit('chill'); // would be a drift warn if this repo were a consumer
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: cr-profile')!;
+    expect(line.status).toBe('skip');
+    // Specifically the consumers branch — names the resolved id, so an unresolvable
+    // id would fail this assertion rather than pass on a different skip reason.
+    expect(line.message).toMatch(/consumer-repo not in consumers/i);
+    expect(blockingDriftIds).toHaveLength(0);
+  });
+});
+
 // ─── mechanical skills detection wiring (#2073) ─────────
 
 /** A manifest with the claude-skills mechanical contract (all distributed skills). */

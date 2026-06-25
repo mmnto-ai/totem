@@ -75,6 +75,12 @@ export const PARITY_MANIFESTATIONS = [
   'correct-by-construction',
   'managed-block',
   'version-pin',
+  // `value-equality` (strategy#738 Slice A): a present-level mechanical scalar
+  // check — stronger than `attestation`, weaker than the byte-exact managed-block
+  // rung — promoting the bot-review-config rows. Order is cosmetic (routing
+  // narrows on membership, not index), but kept ahead of `attestation` to read as
+  // the promotion target.
+  'value-equality',
   'attestation',
   'capability-probe',
 ] as const;
