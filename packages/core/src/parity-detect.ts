@@ -2146,6 +2146,12 @@ export interface DetectLockContentContext {
   readFile?: (absPath: string) => string | undefined;
   /** Test seam — override the dir-exists probe. Production callers omit it. */
   dirExists?: (absPath: string) => boolean;
+  /**
+   * Test seam — override the real-path resolver for the symlink-escape guard (default
+   * {@link defaultRealpath}). Returns the canonicalized absolute path, or undefined when
+   * the target does not exist / is unresolvable.
+   */
+  realpath?: (absPath: string) => string | undefined;
   /** Test seam — override the strategy-root resolver (default {@link resolveStrategyRoot}). */
   resolveStrategyRootFn?: (cwd: string, options?: StrategyResolverOptions) => StrategyRootStatus;
   /** Test seam — local git-object existence check for the last-published-sha note. */
@@ -2169,14 +2175,48 @@ function parseStrategyCanonicalPath(canonicalSource: string): string | undefined
 }
 
 /**
+ * Real-path resolver for the symlink-escape guard. Returns the canonicalized absolute
+ * path, or undefined when the target does not exist / is unresolvable.
+ */
+function defaultRealpath(p: string): string | undefined {
+  try {
+    return fs.realpathSync(p);
+    // totem-context: a non-existent path (ENOENT) makes realpathSync throw — the honest "no real target to follow" signal; the caller keeps the lexical path and the subsequent read degrades to honest-absent, never a sensor crash.
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Resolve `relPath` under `baseDir`, or undefined if it escapes (path-escape guard —
  * a malformed lock must never read outside the package / sibling root). Also rejects a
  * path that resolves to `baseDir` itself (a dir, not an artifact file).
+ *
+ * The lexical `path.relative` check proves only LEXICAL containment; a symlink INSIDE
+ * `baseDir` can still redirect the real read outside it (CR + greptile security review on
+ * mmnto-ai/totem#2256). So the real paths are re-checked: `realpath(baseDir)` canonicalizes
+ * pnpm's own symlinked `node_modules` (both sides resolve into `.pnpm`, so a legitimate
+ * install stays contained), while a malformed lock pointing THROUGH an escaping symlink
+ * fails the real-path containment. An absent target (`realpath` → undefined) keeps the
+ * lexical path — the subsequent read degrades to honest-absent, never a false escape.
  */
-function resolveWithinDir(baseDir: string, relPath: string): string | undefined {
+function resolveWithinDir(
+  baseDir: string,
+  relPath: string,
+  realpath: (absPath: string) => string | undefined,
+): string | undefined {
   const resolved = path.resolve(baseDir, relPath);
   const rel = path.relative(baseDir, resolved);
   if (rel.length === 0 || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
+
+  // Symlink-escape guard: re-check containment on the REAL paths.
+  const realTarget = realpath(resolved);
+  if (realTarget === undefined) return resolved; // target absent → lexical guard holds; read honest-absents
+  const realBase = realpath(baseDir);
+  if (realBase === undefined) return resolved; // base unresolvable → keep the lexical result
+  const realRel = path.relative(realBase, realTarget);
+  if (realRel.length === 0 || realRel.startsWith('..') || path.isAbsolute(realRel))
+    return undefined;
   return resolved;
 }
 
@@ -2206,12 +2246,13 @@ function selfConsistencyLine(
   artifact: LockArtifact,
   packageDir: string,
   readFile: (absPath: string) => string | undefined,
+  realpath: (absPath: string) => string | undefined,
 ): LockContentLine {
   const lineName = `Parity: ${contract.id} (${artifact.path} · self)`;
   const provenance = ` [last-published-sha ${shortSha(artifact.lastPublishedSha)}, provenance-info]`;
   const pkg = contract.package ?? STRATEGY_DOCTRINE_PACKAGE;
 
-  const filePath = resolveWithinDir(packageDir, artifact.path);
+  const filePath = resolveWithinDir(packageDir, artifact.path, realpath);
   if (filePath === undefined) {
     return {
       lineName,
@@ -2263,6 +2304,7 @@ function vsCanonicalLine(
   artifact: LockArtifact,
   ctx: DetectLockContentContext,
   readFile: (absPath: string) => string | undefined,
+  realpath: (absPath: string) => string | undefined,
   sibling: StrategyRootStatus,
 ): LockContentLine {
   const lineName = `Parity: ${contract.id} (${artifact.path} · vs-canonical)`;
@@ -2288,7 +2330,7 @@ function vsCanonicalLine(
     };
   }
 
-  const canonicalPath = resolveWithinDir(sibling.path, relPath);
+  const canonicalPath = resolveWithinDir(sibling.path, relPath, realpath);
   if (canonicalPath === undefined) {
     return {
       lineName,
@@ -2391,6 +2433,7 @@ export function detectLockContentContract(
   }
 
   const readFile = ctx.readFile ?? readFileText;
+  const realpath = ctx.realpath ?? defaultRealpath;
   const dirExists = ctx.dirExists ?? isDirectory;
   const lockFileName = ctx.lockFileName ?? STRATEGY_DOCTRINE_LOCK_FILENAME;
   const pkg = contract.package ?? STRATEGY_DOCTRINE_PACKAGE;
@@ -2432,6 +2475,17 @@ export function detectLockContentContract(
   }
 
   const { lock } = parsed;
+  // Wrong-package guard (CR review on mmnto-ai/totem#2256): a stale / mispackaged lock from
+  // ANOTHER package could self-consistently `pass` (its hashes match its own bundled files),
+  // masking a packaging defect. The lock declaring a different package than the one it was
+  // loaded under IS the structural inconsistency this sensor exists to catch.
+  if (lock.package !== pkg) {
+    return idLine({
+      status: 'warn',
+      message: `${lockFileName} declares package ${lock.package} but was loaded from ${pkg} — distributed package is structurally inconsistent`,
+      remediation: `Reinstall ${pkg} to restore the correct lock, then re-run totem doctor --parity.`,
+    });
+  }
   if (lock.artifacts.length === 0) {
     return idLine({
       status: 'warn',
@@ -2446,8 +2500,8 @@ export function detectLockContentContract(
   // ── Per artifact × per layer (rendered SEPARATELY — no collapsed verdict) ──
   const lines: LockContentLine[] = [];
   for (const artifact of lock.artifacts) {
-    lines.push(selfConsistencyLine(contract, artifact, ctx.packageDir, readFile));
-    lines.push(vsCanonicalLine(contract, artifact, ctx, readFile, sibling));
+    lines.push(selfConsistencyLine(contract, artifact, ctx.packageDir, readFile, realpath));
+    lines.push(vsCanonicalLine(contract, artifact, ctx, readFile, realpath, sibling));
   }
   return lines;
 }

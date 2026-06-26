@@ -78,6 +78,7 @@ function seamCtx(
     sibling?: StrategyRootStatus;
     repoId?: string;
     gitObjectExists?: boolean;
+    realpath?: (p: string) => string | undefined;
   } = {},
 ): DetectLockContentContext {
   const dirSet = new Set(opts.dirs ?? [PKG_DIR]);
@@ -87,6 +88,9 @@ function seamCtx(
     gitRoot: path.resolve('lock-content-test-root'),
     readFile: (p) => (p in files ? files[p] : undefined),
     dirExists: (p) => dirSet.has(p),
+    // Default identity realpath — no symlink redirection, so the lexical guard governs
+    // (the production default fs.realpathSync would honest-absent on these synthetic paths).
+    realpath: opts.realpath ?? ((p) => p),
     resolveStrategyRootFn: () =>
       opts.sibling ?? { resolved: false, reason: 'no sibling (test default)' },
     gitObjectExists: () => opts.gitObjectExists ?? false,
@@ -392,6 +396,58 @@ describe('detectLockContentContract — self-consistency + vs-canonical layers',
     )!;
     expect(self.verdict.status).toBe('warn');
     expect(self.verdict.message).toContain('escapes the package dir');
+  });
+
+  it('refuses an artifact that symlinks OUTSIDE the package real-root (CR/greptile #2256)', () => {
+    const outside = path.resolve('outside-the-pkg/evil.yaml');
+    const files = {
+      [LOCK_PATH]: buildLockJson([{ path: artifactPath, canonicalSource, contentHash: goodHash }]),
+      [artFile]: goodContent, // lexically inside the pkg dir…
+    };
+    const self = detectLockContentContract(
+      makeContract(),
+      // …but its REAL target resolves outside the package real-root.
+      seamCtx(files, { realpath: (p) => (p === artFile ? outside : p) }),
+    ).find((l) => l.lineName.includes('· self'))!;
+    expect(self.verdict.status).toBe('warn');
+    expect(self.verdict.message).toContain('escapes the package dir');
+  });
+
+  it('allows an inner symlink that stays within the package real-root (pnpm-style)', () => {
+    // pnpm symlinks node_modules/@mmnto/x → .pnpm/…; realpath of BOTH base and target
+    // resolves into the same real root, so a legitimate install stays contained.
+    const realBase = path.resolve('.pnpm-real/pkg');
+    const realArt = path.join(realBase, artifactPath);
+    const files = {
+      [LOCK_PATH]: buildLockJson([{ path: artifactPath, canonicalSource, contentHash: goodHash }]),
+      [artFile]: goodContent,
+    };
+    const self = detectLockContentContract(
+      makeContract(),
+      seamCtx(files, { realpath: (p) => (p === PKG_DIR ? realBase : p === artFile ? realArt : p) }),
+    ).find((l) => l.lineName.includes('· self'))!;
+    expect(self.verdict.status).toBe('pass');
+  });
+
+  it('warns when the lock declares a DIFFERENT package than it was loaded from (CR #2256)', () => {
+    const wrongPkgLock = JSON.stringify({
+      'schema-version': 1,
+      package: '@mmnto/some-other-doctrine',
+      version: '0.1.13',
+      published: '2026-06-25T22:18:55.324Z',
+      artifacts: [
+        {
+          path: artifactPath,
+          'canonical-source': canonicalSource,
+          'content-hash': goodHash,
+          'last-published-sha': '74816d869922d847680dd956896c47388e9833d6',
+        },
+      ],
+    });
+    const lines = detectLockContentContract(makeContract(), seamCtx({ [LOCK_PATH]: wrongPkgLock }));
+    expect(lines).toHaveLength(1); // short-circuits before per-artifact lines
+    expect(lines[0]!.verdict.status).toBe('warn');
+    expect(lines[0]!.verdict.message).toContain('structurally inconsistent');
   });
 });
 
