@@ -25,8 +25,10 @@
  *     verified) so the `consumers` field still catches the missing case. Never a
  *     fabricated verdict.
  *   - **NEVER networks:** the cohort floor is derived LOCALLY — self-in-tree
- *     (the totem monorepo at the current git root) or a `../totem` sibling
- *     checkout. Neither reachable → honest-absent `skip` with a reason.
+ *     (the totem monorepo at the current git root), a `../totem` sibling
+ *     checkout, or — for a package totem doesn't publish — the contract's own
+ *     canonical-source repo (e.g. `../totem-strategy`). None reachable →
+ *     honest-absent `skip` with a reason.
  *   - **Side-effect-free / no caching:** every call reads from scratch. Each
  *     filesystem / git seam is injectable so tests drive synthetic fixtures.
  *   - **Never throws:** every read failure degrades to a `skip`/`warn` verdict;
@@ -41,6 +43,7 @@ import semver from 'semver';
 import { parse as parseYaml } from 'yaml';
 
 import { PARITY_SENSES, type ParityContract, type ParitySense } from './parity-manifest.js';
+import { resolveStrategyRoot } from './strategy-resolver.js';
 import { safeExec } from './sys/exec.js';
 import { resolveGitRoot } from './sys/git.js';
 
@@ -57,6 +60,14 @@ const DEPS_CONTRACT_ID = /^mmnto-(.+)-version$/;
 
 /** Sibling totem-monorepo dirname probed for a cohort floor (mirrors `resolveStrategyRoot` layer 3). */
 const SIBLING_TOTEM_DIRNAME = 'totem';
+
+/**
+ * Canonical-source repo basename for strategy-published packages (e.g.
+ * `@mmnto/strategy-doctrine`). When a contract's `canonicalSource` names this
+ * repo, the cohort floor lives in `../totem-strategy/packages/*`, NOT in totem
+ * — so `resolveCohortFloor` probes it via `resolveStrategyRoot`. mmnto-ai/totem#2108.
+ */
+const SIBLING_STRATEGY_DIRNAME = 'totem-strategy';
 
 /** Bounded git-command timeout for the origin-remote probe (matches `sys/git.ts`). */
 const GIT_REMOTE_TIMEOUT_MS = 15_000;
@@ -273,6 +284,23 @@ function packageNameFromCanonicalSource(
   return readPackageName(path.join(floorRoot, relPath));
 }
 
+/**
+ * The repo basename a `canonicalSource` names — the `<repo>` before the first
+ * `:` (or the whole string when there's no path segment), then its trailing
+ * path component. `mmnto-ai/totem-strategy:packages/strategy-doctrine/package.json`
+ * → `totem-strategy`; `mmnto-ai/totem` → `totem`. Lets `resolveCohortFloor`
+ * route a strategy-published package to the `../totem-strategy` repo instead of
+ * the totem monorepo. mmnto-ai/totem#2108.
+ */
+function canonicalRepoBasename(canonicalSource: string | null | undefined): string | undefined {
+  if (typeof canonicalSource !== 'string') return undefined;
+  const colon = canonicalSource.indexOf(':');
+  const repo = (colon === -1 ? canonicalSource : canonicalSource.slice(0, colon)).trim();
+  if (repo.length === 0) return undefined;
+  const slash = repo.lastIndexOf('/');
+  return slash === -1 ? repo : repo.slice(slash + 1);
+}
+
 // ─── resolveCohortFloor ─────────────────────────────────
 
 /**
@@ -284,7 +312,7 @@ function packageNameFromCanonicalSource(
  *     monorepo as a sibling). The sensor renders this as a `skip`.
  */
 export type CohortFloorStatus =
-  | { resolved: true; version: string; source: 'self-in-tree' | 'sibling' }
+  | { resolved: true; version: string; source: 'self-in-tree' | 'sibling' | 'canonical-source' }
   | { resolved: false; reason: string };
 
 /**
@@ -295,17 +323,29 @@ export type CohortFloorStatus =
  *       the one whose `name === packageName`, read its `version`.
  *   (b) **sibling** — `<gitRoot>/../totem` exists as a directory: glob its
  *       `packages/*​/package.json` the same way.
- *   (c) **honest-absent** — neither reachable → `{ resolved: false, reason }`.
+ *   (c) **canonical-source repo** — when `canonicalSource` names a repo totem
+ *       does NOT publish (e.g. `mmnto-ai/totem-strategy` for
+ *       `@mmnto/strategy-doctrine`), the floor lives in that repo's
+ *       `packages/*`, not totem's. Locate it via `resolveStrategyRoot`
+ *       (env / config / `../totem-strategy` sibling) and glob the same way.
+ *       Without this, strategy-published rows resolve `skip` instead of the
+ *       consumer-side `pass`/`warn` (mmnto-ai/totem#2108).
+ *   (d) **honest-absent** — none reachable → `{ resolved: false, reason }`.
  *
- * NEVER fabricates a floor and NEVER fetches. Anchors at `gitRoot`, not cwd
- * (mirroring `strategy-resolver.ts`). Read failures within the glob are
- * swallowed per-file so one corrupt package.json can't crash the resolver.
+ * NEVER fabricates a floor and NEVER fetches (`resolveStrategyRoot` is local
+ * fs only). Anchors at `gitRoot`, not cwd (mirroring `strategy-resolver.ts`).
+ * Read failures within the glob are swallowed per-file so one corrupt
+ * package.json can't crash the resolver.
  *
  * The floor is keyed structurally on `packageName` (the matching
  * `packages/*​/package.json` `name`), NOT on the consumer's cohort id — a
  * misderived repoId can't mask a genuine in-tree floor.
  */
-export function resolveCohortFloor(packageName: string, gitRoot: string): CohortFloorStatus {
+export function resolveCohortFloor(
+  packageName: string,
+  gitRoot: string,
+  canonicalSource?: string | null,
+): CohortFloorStatus {
   // ── (a) self-in-tree ──
   // The canonical-source repo for every deps contract is the totem monorepo. If
   // the current repo IS that monorepo, its own packages/*/package.json is the
@@ -326,11 +366,32 @@ export function resolveCohortFloor(packageName: string, gitRoot: string): Cohort
     }
   }
 
-  // ── (c) honest-absent ──
-  return {
-    resolved: false,
-    reason: `cohort floor for ${packageName} not locally determinable; clone mmnto-ai/totem as a sibling (../${SIBLING_TOTEM_DIRNAME}) or run from the totem monorepo`,
-  };
+  // ── (c) canonical-source repo (strategy-published packages) ──
+  // A package totem doesn't publish (e.g. @mmnto/strategy-doctrine) has its
+  // floor in its OWN canonical-source repo, not totem's. Today the only such
+  // repo is mmnto-ai/totem-strategy; reuse `resolveStrategyRoot` (env / config /
+  // ../totem-strategy sibling — NEVER networks) rather than duplicating the
+  // sibling probe. Self-in-tree (a) / ../totem sibling (b) match structurally on
+  // `name`, so a strategy package never false-matches them and always falls here.
+  const canonicalRepo = canonicalRepoBasename(canonicalSource);
+  if (canonicalRepo === SIBLING_STRATEGY_DIRNAME) {
+    const strategyRoot = resolveStrategyRoot(gitRoot, { gitRoot });
+    if (strategyRoot.resolved) {
+      const stratVersion = readVersionFromPackagesGlob(strategyRoot.path, packageName);
+      if (stratVersion !== undefined) {
+        return { resolved: true, version: stratVersion, source: 'canonical-source' };
+      }
+    }
+  }
+
+  // ── (d) honest-absent ──
+  // Point the remediation at the package's OWN canonical-source repo — never
+  // recommend ../totem for a package totem doesn't publish (mmnto-ai/totem#2108).
+  const reason =
+    canonicalRepo === SIBLING_STRATEGY_DIRNAME
+      ? `cohort floor for ${packageName} not locally determinable; clone mmnto-ai/${SIBLING_STRATEGY_DIRNAME} as a sibling (../${SIBLING_STRATEGY_DIRNAME}) or set STRATEGY_ROOT`
+      : `cohort floor for ${packageName} not locally determinable; clone mmnto-ai/totem as a sibling (../${SIBLING_TOTEM_DIRNAME}) or run from the totem monorepo`;
+  return { resolved: false, reason };
 }
 
 /**
@@ -495,7 +556,9 @@ export function detectVersionPinnedContract(
   const declaredOnly = resolved.source === 'declared-min';
 
   // ── Resolve the cohort floor (local-only; honest-absent on miss) ──
-  const floor = resolveCohortFloor(packageName, ctx.gitRoot);
+  // Pass canonicalSource so a strategy-published package routes to its own
+  // canonical-source repo (../totem-strategy) for the floor (mmnto-ai/totem#2108).
+  const floor = resolveCohortFloor(packageName, ctx.gitRoot, contract.canonicalSource);
   if (!floor.resolved) {
     return { status: 'skip', message: floor.reason };
   }

@@ -134,6 +134,26 @@ describe('checkParity — configured-but-missing', () => {
     expect(results[0]!.status).toBe('warn');
     expect(results[0]!.message).toContain('not found');
   });
+
+  it('remediation names the install-side cause when the manifest path is under node_modules (#2094)', async () => {
+    // The strategy-doctrine optional-pin shape: configured path under
+    // node_modules/, absent because the optional dep was skipped in an unauthed
+    // install. The hint must name that cause, not just "fix your config".
+    writeConfig(
+      `${BASE_CONFIG}orient:\n  parityManifest: node_modules/@mmnto/strategy-doctrine/parity-manifest.yaml\n`,
+    );
+    const { results } = await checkParity(tmpDir);
+    expect(results[0]!.status).toBe('warn');
+    expect(results[0]!.remediation).toContain('install the pin dependency');
+    expect(results[0]!.remediation).toContain('optional deps are skipped');
+  });
+
+  it('remediation stays config-only when the missing path is NOT under node_modules (#2094)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: doctrine/parity-manifest.yaml\n`);
+    const { results } = await checkParity(tmpDir);
+    expect(results[0]!.remediation).toContain('Fix orient.parityManifest');
+    expect(results[0]!.remediation).not.toContain('install the pin dependency');
+  });
 });
 
 describe('checkParity — unparseable / unsupported-schema', () => {
