@@ -2447,7 +2447,16 @@ export function detectLockContentContract(
   }
 
   // ── Read the consumed lock (package present but lock absent → structurally incomplete) ──
-  const lockPath = path.join(ctx.packageDir, lockFileName);
+  // Route the lock filename through the same containment guard as artifacts/canonical
+  // sources so the exported `lockFileName` seam can't `../`-escape the package dir
+  // (CR review on mmnto-ai/totem#2256 — uniform "no raw path.join in this detector").
+  const lockPath = resolveWithinDir(ctx.packageDir, lockFileName, realpath);
+  if (lockPath === undefined) {
+    return idLine({
+      status: 'warn',
+      message: `${lockFileName} escapes the package dir — refusing to read (lock filename may be malformed)`,
+    });
+  }
   const lockRaw = readFile(lockPath);
   if (lockRaw === undefined) {
     return idLine({

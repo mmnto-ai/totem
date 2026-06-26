@@ -233,6 +233,16 @@ describe('detectLockContentContract — applicability / top-level', () => {
     expect(lines[0]!.verdict.message).toContain('unparseable');
   });
 
+  it('a path-escaping lockFileName seam is refused (CR outside-diff #2256)', () => {
+    const lines = detectLockContentContract(makeContract(), {
+      ...seamCtx({}),
+      lockFileName: '../../evil.lock',
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.verdict.status).toBe('warn');
+    expect(lines[0]!.verdict.message).toContain('escapes the package dir');
+  });
+
   it('lock unsupported-schema → warn', () => {
     const lines = detectLockContentContract(
       makeContract(),
@@ -418,13 +428,19 @@ describe('detectLockContentContract — self-consistency + vs-canonical layers',
     // resolves into the same real root, so a legitimate install stays contained.
     const realBase = path.resolve('.pnpm-real/pkg');
     const realArt = path.join(realBase, artifactPath);
+    const realLock = path.join(realBase, 'strategy-doctrine.lock');
     const files = {
       [LOCK_PATH]: buildLockJson([{ path: artifactPath, canonicalSource, contentHash: goodHash }]),
       [artFile]: goodContent,
     };
+    // A real pnpm install resolves the package dir AND every file within it (lock +
+    // artifacts) into the same .pnpm real root — so the containment guard holds for both.
     const self = detectLockContentContract(
       makeContract(),
-      seamCtx(files, { realpath: (p) => (p === PKG_DIR ? realBase : p === artFile ? realArt : p) }),
+      seamCtx(files, {
+        realpath: (p) =>
+          p === PKG_DIR ? realBase : p === artFile ? realArt : p === LOCK_PATH ? realLock : p,
+      }),
     ).find((l) => l.lineName.includes('· self'))!;
     expect(self.verdict.status).toBe('pass');
   });
