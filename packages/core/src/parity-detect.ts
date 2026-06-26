@@ -374,9 +374,11 @@ export function resolveCohortFloor(
   // sibling probe. Self-in-tree (a) / ../totem sibling (b) match structurally on
   // `name`, so a strategy package never false-matches them and always falls here.
   const canonicalRepo = canonicalRepoBasename(canonicalSource);
+  let strategyRootResolvedAt: string | undefined;
   if (canonicalRepo === SIBLING_STRATEGY_DIRNAME) {
     const strategyRoot = resolveStrategyRoot(gitRoot, { gitRoot });
     if (strategyRoot.resolved) {
+      strategyRootResolvedAt = strategyRoot.path;
       const stratVersion = readVersionFromPackagesGlob(strategyRoot.path, packageName);
       if (stratVersion !== undefined) {
         return { resolved: true, version: stratVersion, source: 'canonical-source' };
@@ -387,10 +389,17 @@ export function resolveCohortFloor(
   // ── (d) honest-absent ──
   // Point the remediation at the package's OWN canonical-source repo — never
   // recommend ../totem for a package totem doesn't publish (mmnto-ai/totem#2108).
-  const reason =
-    canonicalRepo === SIBLING_STRATEGY_DIRNAME
-      ? `cohort floor for ${packageName} not locally determinable; clone mmnto-ai/${SIBLING_STRATEGY_DIRNAME} as a sibling (../${SIBLING_STRATEGY_DIRNAME}) or set STRATEGY_ROOT`
-      : `cohort floor for ${packageName} not locally determinable; clone mmnto-ai/totem as a sibling (../${SIBLING_TOTEM_DIRNAME}) or run from the totem monorepo`;
+  // When the strategy repo DID resolve but the package isn't in it, say exactly
+  // that — don't tell the developer to clone / set what they already have (GCA #2252).
+  let reason: string;
+  if (canonicalRepo === SIBLING_STRATEGY_DIRNAME) {
+    reason =
+      strategyRootResolvedAt !== undefined
+        ? `cohort floor for ${packageName} not found in the resolved ${SIBLING_STRATEGY_DIRNAME} repo at ${strategyRootResolvedAt}`
+        : `cohort floor for ${packageName} not locally determinable; clone mmnto-ai/${SIBLING_STRATEGY_DIRNAME} as a sibling (../${SIBLING_STRATEGY_DIRNAME}) or set STRATEGY_ROOT`;
+  } else {
+    reason = `cohort floor for ${packageName} not locally determinable; clone mmnto-ai/totem as a sibling (../${SIBLING_TOTEM_DIRNAME}) or run from the totem monorepo`;
+  }
   return { resolved: false, reason };
 }
 

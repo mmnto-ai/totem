@@ -520,9 +520,14 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       // unauthed-CI state is "pin not installed" (optional deps skipped without
       // npm read-auth), NOT a misconfigured path. Name the install-side cause so
       // the hint stops misdiagnosing the expected CI condition as a config error.
-      const underNodeModules = /[\\/]node_modules[\\/]/.test(result.path);
+      // Match node_modules as a path segment at the start, middle, or end of the
+      // path — a bare/relative `node_modules` or one with no trailing separator
+      // still counts (greptile #2252). In that state the config is presumed
+      // correct (the pin path is right), so the remediation is install-focused,
+      // not "fix your config" (coderabbit #2252).
+      const underNodeModules = /(?:^|[\\/])node_modules(?:[\\/]|$)/.test(result.path);
       const remediation = underNodeModules
-        ? 'Fix orient.parityManifest in your totem config to point at the manifest, or install the pin dependency (npm read-auth required; optional deps are skipped in unauthed installs).'
+        ? 'Install the pin dependency (npm read-auth required; optional deps are skipped in unauthed installs).'
         : 'Fix orient.parityManifest in your totem config to point at the manifest.';
       return single(
         {

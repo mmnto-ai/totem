@@ -312,13 +312,35 @@ describe('resolveCohortFloor', () => {
   });
 
   it('does NOT probe the strategy repo when canonicalSource names totem (no false cross-repo floor)', () => {
-    // A totem-published package with a strategy sibling present must still
-    // honest-absent — the canonical-source layer is gated on the repo basename.
+    // Seed @mmnto/totem INTO the strategy sibling: were the canonical-source layer
+    // not gated on the repo basename, it would (wrongly) resolve this floor from
+    // ../totem-strategy. The gate must keep it honest-absent (coderabbit #2252 —
+    // the prior fixture only held strategy-doctrine, so this passed trivially).
     const consumer = path.join(tmpRoot, 'consumer');
     fs.mkdirSync(consumer, { recursive: true });
-    writeStrategySibling(tmpRoot, '0.1.13');
+    const stratRoot = path.join(tmpRoot, 'totem-strategy');
+    writePackage(stratRoot, 'totem', '@mmnto/totem', '9.9.9');
     const result = resolveCohortFloor('@mmnto/totem', consumer, 'mmnto-ai/totem');
     expect(result.resolved).toBe(false);
+  });
+
+  it('honest-absent reason says "not found in the resolved repo" when totem-strategy resolves but lacks the package (#2252 GCA)', () => {
+    // The strategy repo resolves, but the package isn't in it — the remediation
+    // must NOT tell the developer to clone / set what they already have.
+    const consumer = path.join(tmpRoot, 'consumer');
+    fs.mkdirSync(consumer, { recursive: true });
+    const stratRoot = path.join(tmpRoot, 'totem-strategy');
+    writePackage(stratRoot, 'other', '@mmnto/something-else', '1.0.0');
+    const result = resolveCohortFloor(
+      '@mmnto/strategy-doctrine',
+      consumer,
+      STRATEGY_DOCTRINE_CANONICAL,
+    );
+    expect(result.resolved).toBe(false);
+    if (!result.resolved) {
+      expect(result.reason).toContain('not found in the resolved');
+      expect(result.reason).not.toMatch(/clone|STRATEGY_ROOT/);
+    }
   });
 
   it('honest-absent reason points at totem-strategy (never ../totem) for a strategy package', () => {

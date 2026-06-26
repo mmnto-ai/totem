@@ -144,15 +144,17 @@ describe('checkParity — configured-but-missing', () => {
     );
     const { results } = await checkParity(tmpDir);
     expect(results[0]!.status).toBe('warn');
-    expect(results[0]!.remediation).toContain('install the pin dependency');
+    expect(results[0]!.remediation).toContain('Install the pin dependency');
     expect(results[0]!.remediation).toContain('optional deps are skipped');
+    // Install-focused: the node_modules branch no longer points at the config (#2252 CR).
+    expect(results[0]!.remediation).not.toContain('Fix orient.parityManifest');
   });
 
   it('remediation stays config-only when the missing path is NOT under node_modules (#2094)', async () => {
     writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: doctrine/parity-manifest.yaml\n`);
     const { results } = await checkParity(tmpDir);
     expect(results[0]!.remediation).toContain('Fix orient.parityManifest');
-    expect(results[0]!.remediation).not.toContain('install the pin dependency');
+    expect(results[0]!.remediation).not.toContain('Install the pin dependency');
   });
 });
 
