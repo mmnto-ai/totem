@@ -642,9 +642,9 @@ interface PackageManagerSpec {
  * Parse a `<name>@<version>(+<hash>)?` corepack spec.
  *
  * Two modes (greptile review mmnto-ai/totem#2254):
- *   - `anchored: false` (default) — match the LEADING token, tolerating trailing
+ *   - `exact: false` (default) — match the LEADING token, tolerating trailing
  *     prose. For the manifest FLOOR, expressed as `pnpm@11.2.2 floor; pin >= floor`.
- *   - `anchored: true` — the WHOLE trimmed value must match. For the consumer's
+ *   - `exact: true` — the WHOLE trimmed value must match. For the consumer's
  *     `packageManager` field: corepack requires the entire value to be a valid
  *     `<name>@<version>[+<hash>]`, so a declaration like `pnpm@11.2.2 garbage`
  *     is MALFORMED — doctor must not report it current off a leading-token match.
@@ -653,13 +653,13 @@ interface PackageManagerSpec {
  */
 function parsePackageManagerSpec(
   raw: string | undefined | null,
-  opts: { anchored?: boolean } = {},
+  opts: { exact?: boolean } = {},
 ): PackageManagerSpec | undefined {
   if (typeof raw !== 'string') return undefined;
   // <name> = a package-manager slug; <version> = a semver core (+ optional
   // prerelease/build that stops at whitespace or the `+hash` delimiter). Under
-  // `anchored`, a trailing `$` rejects anything after the (optional) hash.
-  const pattern = opts.anchored
+  // `exact`, a trailing `$` rejects anything after the (optional) hash.
+  const pattern = opts.exact
     ? /^([a-z][a-z0-9-]*)@(\d+\.\d+\.\d+[^\s+]*)(\+\S+)?$/i
     : /^([a-z][a-z0-9-]*)@(\d+\.\d+\.\d+[^\s+]*)(\+\S+)?/i;
   const m = raw.trim().match(pattern);
@@ -703,10 +703,10 @@ function detectPackageManagerToolchain(
     };
   }
 
-  // Anchored: the WHOLE field must be a valid corepack pin — a malformed
+  // Exact match: the WHOLE field must be a valid corepack pin — a malformed
   // declaration (trailing junk after the version/hash) must not pass off a
   // leading-token match (greptile mmnto-ai/totem#2254).
-  const pin = parsePackageManagerSpec(pmField, { anchored: true });
+  const pin = parsePackageManagerSpec(pmField, { exact: true });
   if (pin === undefined) {
     return {
       status: 'skip',
