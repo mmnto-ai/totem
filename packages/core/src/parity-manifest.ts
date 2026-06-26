@@ -81,6 +81,12 @@ export const PARITY_MANIFESTATIONS = [
   // narrows on membership, not index), but kept ahead of `attestation` to read as
   // the promotion target.
   'value-equality',
+  // `content-hash` (mmnto-ai/totem#2107, strategy#754): byte-for-byte
+  // sha256(normalize(content)) equality of a DISTRIBUTED artifact vs its lock —
+  // stronger than `value-equality` (a single typed scalar) / `attestation`; distinct
+  // from `version-pin` (pin currency, NOT content). The detector is the lock reader
+  // (`detectLockContentContract`). Order is cosmetic (routing narrows on membership).
+  'content-hash',
   'attestation',
   'capability-probe',
 ] as const;
