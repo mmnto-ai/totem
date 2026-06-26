@@ -552,7 +552,7 @@ describe('detectVersionPinnedContract — packageManager toolchain (#2115)', () 
     expect(v.message).not.toContain('hashless');
   });
 
-  it('WARN — packageManager pnpm pin < cohort floor (stale)', () => {
+  it('WARN — packageManager pnpm pin < cohort floor (stale); remediation is EXACT, never a range', () => {
     const v = detectVersionPinnedContract(
       toolchainContract(),
       ctxWithPackageManager('pnpm@11.1.0+sha512abc'),
@@ -560,6 +560,21 @@ describe('detectVersionPinnedContract — packageManager toolchain (#2115)', () 
     expect(v.status).toBe('warn');
     expect(v.message).toContain('stale');
     expect(v.message).toContain('11.1.0');
+    // corepack rejects a range in `packageManager`, so the hint must be exact (GCA #2254).
+    expect(v.remediation).toContain('pnpm@11.2.2');
+    expect(v.remediation).not.toContain('>=');
+  });
+
+  it('SKIP — a malformed packageManager with trailing junk does NOT pass off a leading-token match (greptile #2254)', () => {
+    for (const pm of [
+      'pnpm@11.2.2 trailing-junk',
+      'pnpm@11.2.2+sha512 garbage',
+      'pnpm@11.2.2 ; rm -rf',
+    ]) {
+      const v = detectVersionPinnedContract(toolchainContract(), ctxWithPackageManager(pm));
+      expect(v.status).toBe('skip');
+      expect(v.message).toContain('not a parseable');
+    }
   });
 
   it('surfaces a hashless-pin note (strategy#566 — corepack integrity not pinned)', () => {

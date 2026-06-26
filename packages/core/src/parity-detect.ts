@@ -76,7 +76,7 @@ const SIBLING_STRATEGY_DIRNAME = 'totem-strategy';
  * (mmnto-ai/totem#2115). `mmnto-cli-version` shares this dimension but resolves
  * `@mmnto/cli`, so it stays on the deps path.
  */
-const TOOLCHAIN_DIMENSION = 'toolchain-version';
+export const TOOLCHAIN_DIMENSION = 'toolchain-version';
 
 /** Bounded git-command timeout for the origin-remote probe (matches `sys/git.ts`). */
 const GIT_REMOTE_TIMEOUT_MS = 15_000;
@@ -639,17 +639,30 @@ interface PackageManagerSpec {
 }
 
 /**
- * Parse the LEADING `<name>@<version>(+<hash>)?` token out of a corepack-shaped
- * string. Tolerant of trailing prose so it reads BOTH a `packageManager` field
- * (`pnpm@11.2.2+sha512…`) and a manifest floor expressed as
- * `pnpm@11.2.2 floor; pin >= floor`. Returns undefined when no leading spec
- * token is present. Pure + total — never throws (mmnto-ai/totem#2115).
+ * Parse a `<name>@<version>(+<hash>)?` corepack spec.
+ *
+ * Two modes (greptile review mmnto-ai/totem#2254):
+ *   - `anchored: false` (default) — match the LEADING token, tolerating trailing
+ *     prose. For the manifest FLOOR, expressed as `pnpm@11.2.2 floor; pin >= floor`.
+ *   - `anchored: true` — the WHOLE trimmed value must match. For the consumer's
+ *     `packageManager` field: corepack requires the entire value to be a valid
+ *     `<name>@<version>[+<hash>]`, so a declaration like `pnpm@11.2.2 garbage`
+ *     is MALFORMED — doctor must not report it current off a leading-token match.
+ *
+ * Returns undefined when no spec matches. Pure + total — never throws (mmnto-ai/totem#2115).
  */
-function parsePackageManagerSpec(raw: string | undefined | null): PackageManagerSpec | undefined {
+function parsePackageManagerSpec(
+  raw: string | undefined | null,
+  opts: { anchored?: boolean } = {},
+): PackageManagerSpec | undefined {
   if (typeof raw !== 'string') return undefined;
   // <name> = a package-manager slug; <version> = a semver core (+ optional
-  // prerelease/build that stops at whitespace or the `+hash` delimiter).
-  const m = raw.trim().match(/^([a-z][a-z0-9-]*)@(\d+\.\d+\.\d+[^\s+]*)(\+\S+)?/i);
+  // prerelease/build that stops at whitespace or the `+hash` delimiter). Under
+  // `anchored`, a trailing `$` rejects anything after the (optional) hash.
+  const pattern = opts.anchored
+    ? /^([a-z][a-z0-9-]*)@(\d+\.\d+\.\d+[^\s+]*)(\+\S+)?$/i
+    : /^([a-z][a-z0-9-]*)@(\d+\.\d+\.\d+[^\s+]*)(\+\S+)?/i;
+  const m = raw.trim().match(pattern);
   if (m?.[1] === undefined || m[2] === undefined) return undefined;
   return { name: m[1], version: m[2], hash: m[3] !== undefined ? m[3].slice(1) : undefined };
 }
@@ -690,7 +703,10 @@ function detectPackageManagerToolchain(
     };
   }
 
-  const pin = parsePackageManagerSpec(pmField);
+  // Anchored: the WHOLE field must be a valid corepack pin — a malformed
+  // declaration (trailing junk after the version/hash) must not pass off a
+  // leading-token match (greptile mmnto-ai/totem#2254).
+  const pin = parsePackageManagerSpec(pmField, { anchored: true });
   if (pin === undefined) {
     return {
       status: 'skip',
@@ -726,7 +742,7 @@ function detectPackageManagerToolchain(
   return {
     status: 'warn',
     message: `${pin.name} engine pin stale — packageManager ${pin.version} < cohort floor ${floorSpec.version}${hashNote}`,
-    remediation: `Bump the packageManager field to ${pin.name}@>=${floorSpec.version} (corepack auto-selects per pin), then re-run totem doctor --parity.`,
+    remediation: `Bump the packageManager field to ${pin.name}@${floorSpec.version} (or a newer EXACT version — corepack requires an exact pin, not a range), then re-run totem doctor --parity.`,
   };
 }
 

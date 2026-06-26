@@ -718,6 +718,7 @@ export {
   packageNameForContract,
   parseForkMarker,
   resolveCohortFloor,
+  TOOLCHAIN_DIMENSION,
 } from './parity-detect.js';
 
 // Semgrep adapter (Pipeline 4 — import rules from Semgrep YAML)

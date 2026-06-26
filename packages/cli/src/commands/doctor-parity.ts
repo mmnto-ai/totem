@@ -454,6 +454,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
     PARITY_MANIFESTATIONS,
     resolveGitRoot,
     SUPPORTED_PARITY_SCHEMA_VERSION,
+    TOOLCHAIN_DIMENSION,
   } = await import('@mmnto/totem');
 
   // Read the config best-effort: a missing/corrupt config is the honest-absent
@@ -752,7 +753,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           // consumer's `packageManager` field; detectVersionPinnedContract
           // self-routes those to the toolchain reader (mmnto-ai/totem#2115). Only
           // stub a version-pinned row that's neither a deps package nor a toolchain.
-          if (packageName === undefined && c.dimension !== 'toolchain-version') {
+          if (packageName === undefined && c.dimension !== TOOLCHAIN_DIMENSION) {
             return [
               stub(c, `${c.dimension} (version-pinned) — drift detection not yet implemented`),
             ];
