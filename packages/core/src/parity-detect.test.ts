@@ -524,6 +524,107 @@ describe('detectVersionPinnedContract', () => {
   });
 });
 
+// ─── packageManager toolchain reader (mmnto-ai/totem#2115) ──
+
+describe('detectVersionPinnedContract — packageManager toolchain (#2115)', () => {
+  /** A toolchain-version row that pins via packageManager (no deps package). */
+  function toolchainContract(over: Partial<ParityContract> = {}): ParityContract {
+    return depsContract({
+      id: 'pnpm-engine-version',
+      dimension: 'toolchain-version',
+      canonicalSource: null,
+      expectedValueOrDerivation: 'pnpm@11.2.2 floor; pin >= floor',
+      ...over,
+    });
+  }
+  /** Context whose consumer package.json declares `packageManager: pm` (undefined → no field). */
+  function ctxWithPackageManager(pm: string | undefined): DetectVersionPinnedContext {
+    return baseCtx({ readPackageJson: () => (pm === undefined ? {} : { packageManager: pm }) });
+  }
+
+  it('PASS — packageManager pnpm pin ≥ cohort floor', () => {
+    const v = detectVersionPinnedContract(
+      toolchainContract(),
+      ctxWithPackageManager('pnpm@11.2.2+sha512abc'),
+    );
+    expect(v.status).toBe('pass');
+    expect(v.message).toContain('11.2.2');
+    expect(v.message).not.toContain('hashless');
+  });
+
+  it('WARN — packageManager pnpm pin < cohort floor (stale)', () => {
+    const v = detectVersionPinnedContract(
+      toolchainContract(),
+      ctxWithPackageManager('pnpm@11.1.0+sha512abc'),
+    );
+    expect(v.status).toBe('warn');
+    expect(v.message).toContain('stale');
+    expect(v.message).toContain('11.1.0');
+  });
+
+  it('surfaces a hashless-pin note (strategy#566 — corepack integrity not pinned)', () => {
+    const v = detectVersionPinnedContract(
+      toolchainContract(),
+      ctxWithPackageManager('pnpm@11.2.2'),
+    );
+    expect(v.status).toBe('pass');
+    expect(v.message).toContain('hashless');
+  });
+
+  it('SKIP — no packageManager field (honest-absent)', () => {
+    const v = detectVersionPinnedContract(toolchainContract(), ctxWithPackageManager(undefined));
+    expect(v.status).toBe('skip');
+    expect(v.message).toContain('no packageManager field');
+  });
+
+  it('SKIP — a different engine: the pnpm floor does not apply', () => {
+    const v = detectVersionPinnedContract(toolchainContract(), ctxWithPackageManager('yarn@4.0.0'));
+    expect(v.status).toBe('skip');
+    expect(v.message).toContain('does not apply');
+  });
+
+  it('SKIP — unparseable packageManager pin', () => {
+    const v = detectVersionPinnedContract(
+      toolchainContract(),
+      ctxWithPackageManager('not-a-valid-pin'),
+    );
+    expect(v.status).toBe('skip');
+    expect(v.message).toContain('not a parseable');
+  });
+
+  it('SKIP — floor not derivable from a prose-only expected-value', () => {
+    const v = detectVersionPinnedContract(
+      toolchainContract({ expectedValueOrDerivation: 'see the rider for the floor' }),
+      ctxWithPackageManager('pnpm@11.2.2+sha512abc'),
+    );
+    expect(v.status).toBe('skip');
+    expect(v.message).toContain('floor not derivable');
+  });
+
+  it('never throws on adversarial packageManager input', () => {
+    for (const pm of ['', '@', 'pnpm@', '@1.2.3', 'pnpm@@@', 'pnpm@notsemver']) {
+      expect(() =>
+        detectVersionPinnedContract(toolchainContract(), ctxWithPackageManager(pm)),
+      ).not.toThrow();
+    }
+  });
+
+  it('a toolchain-version row WITH a deps package stays on the deps floor path (mmnto-cli-version)', () => {
+    // dimension is toolchain-version but the id resolves @mmnto/totem → the deps
+    // path owns it; the packageManager reader must NOT intercept it.
+    writeSelfInTree(tmpRoot, '1.50.0');
+    writeConsumerPkg(tmpRoot, { '@mmnto/totem': '^1.50.0' });
+    writeInstalled(tmpRoot, '@mmnto/totem', '1.53.3');
+    const v = detectVersionPinnedContract(
+      depsContract({ dimension: 'toolchain-version' }),
+      baseCtx({ repoId: 'totem' }),
+    );
+    expect(v.status).toBe('pass');
+    expect(v.message).toContain('cohort floor');
+    expect(v.message).not.toContain('engine pin');
+  });
+});
+
 // ─── Mechanical content-equality detector (mmnto-ai/totem#2073) ──
 
 const MARKERS = { start: '<!-- totem:skill-start -->', end: '<!-- totem:skill-end -->' };

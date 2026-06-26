@@ -69,6 +69,15 @@ const SIBLING_TOTEM_DIRNAME = 'totem';
  */
 const SIBLING_STRATEGY_DIRNAME = 'totem-strategy';
 
+/**
+ * Parity dimension for toolchain-version rows. A row in this dimension that
+ * resolves NO deps package (e.g. `pnpm-engine-version`) pins its engine via the
+ * consumer's `packageManager` field instead — the toolchain reader senses it
+ * (mmnto-ai/totem#2115). `mmnto-cli-version` shares this dimension but resolves
+ * `@mmnto/cli`, so it stays on the deps path.
+ */
+const TOOLCHAIN_DIMENSION = 'toolchain-version';
+
 /** Bounded git-command timeout for the origin-remote probe (matches `sys/git.ts`). */
 const GIT_REMOTE_TIMEOUT_MS = 15_000;
 
@@ -468,6 +477,8 @@ export interface PackageJsonShape {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  /** Corepack engine pin (`<name>@<version>(+<hash>)?`) — read by the toolchain reader (mmnto-ai/totem#2115). */
+  packageManager?: string;
 }
 
 /**
@@ -515,6 +526,12 @@ export function detectVersionPinnedContract(
   // standalone callers (tests). gitRoot is the floorRoot for a path locator.
   const packageName = ctx.packageName ?? packageNameForContract(contract, ctx.gitRoot);
   if (packageName === undefined) {
+    // A toolchain-version row with no deps package pins its engine via the
+    // consumer's `packageManager` field (e.g. pnpm-engine-version) — route it to
+    // the packageManager reader rather than skipping (mmnto-ai/totem#2115).
+    if (contract.dimension === TOOLCHAIN_DIMENSION) {
+      return detectPackageManagerToolchain(contract, ctx);
+    }
     return {
       status: 'skip',
       message: `not a deps version-pinned contract this slice handles (${contract.id})`,
@@ -608,6 +625,108 @@ export function detectVersionPinnedContract(
     status: 'warn',
     message: `${packageName} pin stale — declared ${declaredRange}, installed ${installed} < cohort floor ${floor.version} (${floor.source})`,
     remediation: `Bump the ${packageName} dependency to >= ${floor.version} and reinstall, then re-run totem doctor --parity.`,
+  };
+}
+
+// ─── detectPackageManagerToolchain ──────────────────────
+
+/** A parsed corepack `packageManager` spec: `<name>@<version>(+<hash>)?`. */
+interface PackageManagerSpec {
+  name: string;
+  version: string;
+  /** The corepack integrity hash (after `+`), or undefined for a hashless pin. */
+  hash: string | undefined;
+}
+
+/**
+ * Parse the LEADING `<name>@<version>(+<hash>)?` token out of a corepack-shaped
+ * string. Tolerant of trailing prose so it reads BOTH a `packageManager` field
+ * (`pnpm@11.2.2+sha512…`) and a manifest floor expressed as
+ * `pnpm@11.2.2 floor; pin >= floor`. Returns undefined when no leading spec
+ * token is present. Pure + total — never throws (mmnto-ai/totem#2115).
+ */
+function parsePackageManagerSpec(raw: string | undefined | null): PackageManagerSpec | undefined {
+  if (typeof raw !== 'string') return undefined;
+  // <name> = a package-manager slug; <version> = a semver core (+ optional
+  // prerelease/build that stops at whitespace or the `+hash` delimiter).
+  const m = raw.trim().match(/^([a-z][a-z0-9-]*)@(\d+\.\d+\.\d+[^\s+]*)(\+\S+)?/i);
+  if (m?.[1] === undefined || m[2] === undefined) return undefined;
+  return { name: m[1], version: m[2], hash: m[3] !== undefined ? m[3].slice(1) : undefined };
+}
+
+/**
+ * Sense a toolchain-version row that pins its engine via the consumer's
+ * `packageManager` field (e.g. `pnpm-engine-version`). The manifest row carries
+ * the floor in `expected-value-or-derivation` (`<engine>@<floor>` — there is no
+ * `packages/*​/package.json` to glob, `canonical-source` is null). Reads the
+ * DECLARATION only (`senses: declared`) — never probes the installed binary.
+ *
+ * Verdicts (claim-class bound to pin currency, mirroring the deps path):
+ *   - **pass** — consumer's `packageManager` engine matches + version ≥ floor.
+ *   - **warn** — engine matches but version < floor (stale).
+ *   - **skip** — no floor derivable / no `packageManager` field / unparseable pin
+ *     / a DIFFERENT engine (the floor doesn't apply) / invalid versions.
+ * NEVER throws, NEVER networks (mmnto-ai/totem#2115).
+ */
+function detectPackageManagerToolchain(
+  contract: ParityContract,
+  ctx: DetectVersionPinnedContext,
+): ParityContractVerdict {
+  const floorSpec = parsePackageManagerSpec(contract.expectedValueOrDerivation);
+  if (floorSpec === undefined) {
+    return {
+      status: 'skip',
+      message: `${contract.id}: cohort floor not derivable from expected-value "${contract.expectedValueOrDerivation}"`,
+    };
+  }
+
+  const readPkg = ctx.readPackageJson ?? readPackageJson;
+  const consumerPkg = readPkg(path.join(ctx.cwd, 'package.json'));
+  const pmField = consumerPkg?.packageManager;
+  if (typeof pmField !== 'string' || pmField.trim().length === 0) {
+    return {
+      status: 'skip',
+      message: `${contract.id}: no packageManager field declared (honest-absent)`,
+    };
+  }
+
+  const pin = parsePackageManagerSpec(pmField);
+  if (pin === undefined) {
+    return {
+      status: 'skip',
+      message: `${contract.id}: packageManager "${pmField}" is not a parseable <name>@<version> pin`,
+    };
+  }
+
+  // A different engine → this row's floor simply doesn't apply here.
+  if (pin.name !== floorSpec.name) {
+    return {
+      status: 'skip',
+      message: `${contract.id}: consumer pins ${pin.name}@${pin.version}, not ${floorSpec.name} — cohort floor does not apply`,
+    };
+  }
+
+  if (semver.valid(pin.version) === null || semver.valid(floorSpec.version) === null) {
+    return {
+      status: 'skip',
+      message: `${contract.id}: unparseable version (pin "${pin.version}", floor "${floorSpec.version}")`,
+    };
+  }
+
+  // Hashless pins lose corepack integrity verification — surfaced as a note, not
+  // a failure (strategy#566 Greptile P2: hashless pins are a derive-before-authoring smell).
+  const hashNote =
+    pin.hash === undefined ? ' (pin is hashless — corepack integrity not pinned)' : '';
+  if (semver.gte(pin.version, floorSpec.version)) {
+    return {
+      status: 'pass',
+      message: `${pin.name} engine pin current — packageManager ${pin.version} ≥ cohort floor ${floorSpec.version}${hashNote}`,
+    };
+  }
+  return {
+    status: 'warn',
+    message: `${pin.name} engine pin stale — packageManager ${pin.version} < cohort floor ${floorSpec.version}${hashNote}`,
+    remediation: `Bump the packageManager field to ${pin.name}@>=${floorSpec.version} (corepack auto-selects per pin), then re-run totem doctor --parity.`,
   };
 }
 
