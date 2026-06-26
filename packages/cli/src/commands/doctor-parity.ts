@@ -514,16 +514,31 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         configured,
       );
 
-    case 'not-found':
+    case 'not-found': {
+      // mmnto-ai/totem#2094 — when the configured manifest path lives under
+      // node_modules/ (the strategy-doctrine optional-pin shape), the normal
+      // unauthed-CI state is "pin not installed" (optional deps skipped without
+      // npm read-auth), NOT a misconfigured path. Name the install-side cause so
+      // the hint stops misdiagnosing the expected CI condition as a config error.
+      // Match node_modules as a path segment at the start, middle, or end of the
+      // path — a bare/relative `node_modules` or one with no trailing separator
+      // still counts (greptile #2252). In that state the config is presumed
+      // correct (the pin path is right), so the remediation is install-focused,
+      // not "fix your config" (coderabbit #2252).
+      const underNodeModules = /(?:^|[\\/])node_modules(?:[\\/]|$)/.test(result.path);
+      const remediation = underNodeModules
+        ? 'Install the pin dependency (npm read-auth required; optional deps are skipped in unauthed installs).'
+        : 'Fix orient.parityManifest in your totem config to point at the manifest.';
       return single(
         {
           name: CHECK_NAME,
           status: 'warn',
           message: `parity manifest not found at ${rel(cwd, result.path)}`,
-          remediation: 'Fix orient.parityManifest in your totem config to point at the manifest.',
+          remediation,
         },
         configured,
       );
+    }
 
     case 'unparseable':
       return single(

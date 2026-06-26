@@ -48,12 +48,28 @@ import { cleanTmpDir } from './test-utils.js';
 
 let tmpRoot: string;
 
+// Strategy-root env vars resolveCohortFloor's canonical-source probe honors
+// (via resolveStrategyRoot). Neutralized per-test so the floor probe stays
+// fixture-driven and never resolves a real ../totem-strategy on the dev/CI box
+// (mmnto-ai/totem#2108).
+const STRATEGY_ENV_VARS = ['TOTEM_STRATEGY_ROOT', 'STRATEGY_ROOT'] as const;
+let savedStrategyEnv: Record<string, string | undefined>;
+
 beforeEach(() => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-parity-detect-'));
+  savedStrategyEnv = {};
+  for (const key of STRATEGY_ENV_VARS) {
+    savedStrategyEnv[key] = process.env[key];
+    delete process.env[key];
+  }
 });
 
 afterEach(() => {
   cleanTmpDir(tmpRoot);
+  for (const key of STRATEGY_ENV_VARS) {
+    if (savedStrategyEnv[key] === undefined) delete process.env[key];
+    else process.env[key] = savedStrategyEnv[key];
+  }
 });
 
 // ─── Fixture builders ───────────────────────────────────
@@ -91,6 +107,20 @@ function writeSelfInTree(rootDir: string, version: string): void {
   writePackage(rootDir, 'totem', '@mmnto/totem', version);
   writePackage(rootDir, 'cli', '@mmnto/cli', version);
 }
+
+/**
+ * Write a `<parent>/totem-strategy` sibling carrying `@mmnto/strategy-doctrine`
+ * at `version` — the canonical-source repo `resolveCohortFloor` probes for a
+ * strategy-published package (mmnto-ai/totem#2108).
+ */
+function writeStrategySibling(parentDir: string, version: string): void {
+  const stratRoot = path.join(parentDir, 'totem-strategy');
+  writePackage(stratRoot, 'strategy-doctrine', '@mmnto/strategy-doctrine', version);
+}
+
+/** A `canonicalSource` that names the totem-strategy repo + its package.json path. */
+const STRATEGY_DOCTRINE_CANONICAL =
+  'mmnto-ai/totem-strategy:packages/strategy-doctrine/package.json#version';
 
 /** Build a base context with all seams pointed at the temp consumer repo. */
 function baseCtx(over: Partial<DetectVersionPinnedContext> = {}): DetectVersionPinnedContext {
@@ -260,6 +290,80 @@ describe('resolveCohortFloor', () => {
     fs.writeFileSync(path.join(pkgDir, 'package.json'), '{ not valid json', 'utf-8');
     expect(() => resolveCohortFloor('@mmnto/totem', tmpRoot)).not.toThrow();
   });
+
+  // ── (c) canonical-source repo for strategy-published packages (#2108) ──
+
+  it('resolves the floor from the ../totem-strategy canonical-source repo for a strategy-published package', () => {
+    // Consumer is neither self-in-tree nor a ../totem sibling for this package;
+    // the floor lives in the strategy repo named by canonicalSource.
+    const consumer = path.join(tmpRoot, 'consumer');
+    fs.mkdirSync(consumer, { recursive: true });
+    writeStrategySibling(tmpRoot, '0.1.13');
+    const result = resolveCohortFloor(
+      '@mmnto/strategy-doctrine',
+      consumer,
+      STRATEGY_DOCTRINE_CANONICAL,
+    );
+    expect(result.resolved).toBe(true);
+    if (result.resolved) {
+      expect(result.version).toBe('0.1.13');
+      expect(result.source).toBe('canonical-source');
+    }
+  });
+
+  it('does NOT probe the strategy repo when canonicalSource names totem (no false cross-repo floor)', () => {
+    // Seed @mmnto/totem INTO the strategy sibling: were the canonical-source layer
+    // not gated on the repo basename, it would (wrongly) resolve this floor from
+    // ../totem-strategy. The gate must keep it honest-absent (coderabbit #2252 —
+    // the prior fixture only held strategy-doctrine, so this passed trivially).
+    const consumer = path.join(tmpRoot, 'consumer');
+    fs.mkdirSync(consumer, { recursive: true });
+    const stratRoot = path.join(tmpRoot, 'totem-strategy');
+    writePackage(stratRoot, 'totem', '@mmnto/totem', '9.9.9');
+    const result = resolveCohortFloor('@mmnto/totem', consumer, 'mmnto-ai/totem');
+    expect(result.resolved).toBe(false);
+  });
+
+  it('honest-absent reason says "not found in the resolved repo" when totem-strategy resolves but lacks the package (#2252 GCA)', () => {
+    // The strategy repo resolves, but the package isn't in it — the remediation
+    // must NOT tell the developer to clone / set what they already have.
+    const consumer = path.join(tmpRoot, 'consumer');
+    fs.mkdirSync(consumer, { recursive: true });
+    const stratRoot = path.join(tmpRoot, 'totem-strategy');
+    writePackage(stratRoot, 'other', '@mmnto/something-else', '1.0.0');
+    const result = resolveCohortFloor(
+      '@mmnto/strategy-doctrine',
+      consumer,
+      STRATEGY_DOCTRINE_CANONICAL,
+    );
+    expect(result.resolved).toBe(false);
+    if (!result.resolved) {
+      expect(result.reason).toContain('not found in the resolved');
+      expect(result.reason).not.toMatch(/clone|STRATEGY_ROOT/);
+    }
+  });
+
+  it('honest-absent reason points at totem-strategy (never ../totem) for a strategy package', () => {
+    const consumer = path.join(tmpRoot, 'consumer');
+    fs.mkdirSync(consumer, { recursive: true });
+    const result = resolveCohortFloor(
+      '@mmnto/strategy-doctrine',
+      consumer,
+      STRATEGY_DOCTRINE_CANONICAL,
+    );
+    expect(result.resolved).toBe(false);
+    if (!result.resolved) {
+      expect(result.reason).toContain('totem-strategy');
+      expect(result.reason).not.toMatch(/sibling \(\.\.\/totem\)/);
+    }
+  });
+
+  it('remains backward-compatible (self-in-tree) when canonicalSource is omitted', () => {
+    writeSelfInTree(tmpRoot, '1.53.3');
+    const result = resolveCohortFloor('@mmnto/totem', tmpRoot);
+    expect(result.resolved).toBe(true);
+    if (result.resolved) expect(result.source).toBe('self-in-tree');
+  });
 });
 
 // ─── detectVersionPinnedContract ────────────────────────
@@ -281,6 +385,28 @@ describe('detectVersionPinnedContract', () => {
     expect(verdict.status).toBe('warn');
     expect(verdict.message).toContain('1.40.0'); // installed
     expect(verdict.message).toContain('1.53.3'); // floor
+  });
+
+  it('PASS — strategy-published row resolves its floor from ../totem-strategy (was SKIP; #2108)', () => {
+    // The empirical #2108 scenario: a wired consumer pins @mmnto/strategy-doctrine,
+    // has it installed, and the floor lives in the ../totem-strategy sibling — not
+    // totem. Before the canonical-source probe this verdict was a false SKIP.
+    const consumer = path.join(tmpRoot, 'consumer');
+    fs.mkdirSync(consumer, { recursive: true });
+    writeStrategySibling(tmpRoot, '0.1.13');
+    writeConsumerPkg(consumer, { '@mmnto/strategy-doctrine': '^0.1.13' }, 'optionalDependencies');
+    writeInstalled(consumer, '@mmnto/strategy-doctrine', '0.1.13');
+    const contract = depsContract({
+      id: 'parity-manifest-currency',
+      canonicalSource: STRATEGY_DOCTRINE_CANONICAL,
+      package: '@mmnto/strategy-doctrine',
+    });
+    const verdict = detectVersionPinnedContract(
+      contract,
+      baseCtx({ cwd: consumer, gitRoot: consumer, repoId: 'totem-status' }),
+    );
+    expect(verdict.status).toBe('pass');
+    expect(verdict.message).toContain('canonical-source');
   });
 
   it('detector NEVER emits fail — even a blocking contract returns warn (CLI promotes)', () => {
