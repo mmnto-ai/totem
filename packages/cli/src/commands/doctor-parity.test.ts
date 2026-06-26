@@ -20,6 +20,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { hashLockArtifact, normalizeLockArtifact } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import { checkParity, doctorParityCliCommand } from './doctor-parity.js';
 import {
@@ -451,6 +453,161 @@ describe('checkParity — value-equality wiring (strategy#738 Slice A)', () => {
     // id would fail this assertion rather than pass on a different skip reason.
     expect(line.message).toMatch(/consumer-repo not in consumers/i);
     expect(blockingDriftIds).toHaveLength(0);
+  });
+});
+
+// ─── content-hash (lock-content) detection wiring (mmnto-ai/totem#2107) ──
+
+/** The strategy-doctrine-lock-content row (no consumers = applies to this repo). */
+const CONTENT_HASH_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: strategy-doctrine-lock-content
+    dimension: doctrine-distribution
+    canonical-source: mmnto-ai/totem-strategy
+    package: '@mmnto/strategy-doctrine'
+    detection-method: sha256(normalize(content)) == lock content-hash
+    expected-value-or-derivation: every artifact recompute equals its lock content-hash
+    tractability: mechanical
+    manifestation: content-hash
+    tracking-issue: mmnto-ai/totem#2107
+`;
+
+const BLOCKING_CONTENT_HASH_MANIFEST_YAML = CONTENT_HASH_MANIFEST_YAML.replace(
+  'tracking-issue: mmnto-ai/totem#2107\n',
+  'tracking-issue: mmnto-ai/totem#2107\n    blocking: true\n',
+);
+
+const UNHANDLED_CONTENT_HASH_MANIFEST_YAML = CONTENT_HASH_MANIFEST_YAML.replace(
+  'id: strategy-doctrine-lock-content',
+  'id: some-other-lock-row',
+);
+
+/**
+ * Write a synthetic `@mmnto/strategy-doctrine` package into the temp node_modules with
+ * a lock whose content-hashes are the GENUINE normalize+sha256 of the written files
+ * (computed via the shipped core helpers — never arbitrary). `tamper` appends to a
+ * packaged file AFTER the lock is stamped, simulating self-consistency drift.
+ */
+function writeDoctrinePackage(
+  artifacts: Array<{ name: string; content: string }>,
+  opts: { omitLock?: boolean; tamper?: string } = {},
+): void {
+  const pkgDir = path.join(tmpDir, 'node_modules', '@mmnto', 'strategy-doctrine');
+  fs.mkdirSync(pkgDir, { recursive: true });
+  const lockArtifacts = artifacts.map((a) => {
+    fs.writeFileSync(path.join(pkgDir, a.name), a.content, 'utf-8');
+    return {
+      path: a.name,
+      'canonical-source': `mmnto-ai/totem-strategy:doctrine/${a.name}`,
+      'content-hash': hashLockArtifact(normalizeLockArtifact(a.content)),
+      'last-published-sha': '74816d869922d847680dd956896c47388e9833d6',
+    };
+  });
+  if (opts.omitLock !== true) {
+    fs.writeFileSync(
+      path.join(pkgDir, 'strategy-doctrine.lock'),
+      JSON.stringify(
+        {
+          'schema-version': 1,
+          package: '@mmnto/strategy-doctrine',
+          version: '0.1.13',
+          published: '2026-06-25T22:18:55.324Z',
+          artifacts: lockArtifacts,
+        },
+        null,
+        2,
+      ) + '\n',
+      'utf-8',
+    );
+  }
+  if (opts.tamper !== undefined) {
+    fs.appendFileSync(path.join(pkgDir, opts.tamper), 'TAMPER\n', 'utf-8');
+  }
+}
+
+describe('checkParity — content-hash lock-content wiring (mmnto-ai/totem#2107)', () => {
+  const ARTIFACTS = [
+    { name: 'parity-manifest.yaml', content: 'schema-version: 1\ncontracts: []\n' },
+    { name: 'cohort-overlay.md', content: '# Cohort overlay\n\nbody\n' },
+    { name: 'freeze.json', content: '{"frozen":[]}\n' },
+  ];
+
+  it('PASS — every packaged artifact self-consistently matches its lock; one line per artifact × layer', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', CONTENT_HASH_MANIFEST_YAML);
+    writeDoctrinePackage(ARTIFACTS);
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const selfLines = results.filter(
+      (r) => r.name.includes('strategy-doctrine-lock-content (') && r.name.includes('· self'),
+    );
+    expect(selfLines).toHaveLength(3);
+    expect(selfLines.every((l) => l.status === 'pass')).toBe(true);
+    // Two layers per artifact → 6 lines total.
+    const allLines = results.filter((r) =>
+      r.name.startsWith('Parity: strategy-doctrine-lock-content'),
+    );
+    expect(allLines).toHaveLength(6);
+    expect(blockingDriftIds).toHaveLength(0);
+  });
+
+  it('WARN — a tampered packaged artifact self-drifts; no promotion on a non-blocking row', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', CONTENT_HASH_MANIFEST_YAML);
+    writeDoctrinePackage(ARTIFACTS, { tamper: 'freeze.json' });
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const self = results.find(
+      (r) => r.name === 'Parity: strategy-doctrine-lock-content (freeze.json · self)',
+    )!;
+    expect(self.status).toBe('warn');
+    expect(self.message).toContain('integrity drift');
+    expect(blockingDriftIds).toHaveLength(0);
+  });
+
+  it('a blocking content-hash drift tags blockingDriftIds ONCE (the --strict seam)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', BLOCKING_CONTENT_HASH_MANIFEST_YAML);
+    writeDoctrinePackage(ARTIFACTS, { tamper: 'parity-manifest.yaml' });
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    expect(
+      results.some((r) => r.name.includes('strategy-doctrine-lock-content') && r.status === 'warn'),
+    ).toBe(true);
+    expect(blockingDriftIds).toEqual(['strategy-doctrine-lock-content']);
+  });
+
+  it('SKIP — package not installed (the version-pin currency row senses the pin)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', CONTENT_HASH_MANIFEST_YAML);
+    // No node_modules/@mmnto/strategy-doctrine written.
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: strategy-doctrine-lock-content')!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toContain('not installed');
+  });
+
+  it('WARN — package present but the lock is absent (structurally incomplete)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', CONTENT_HASH_MANIFEST_YAML);
+    writeDoctrinePackage(ARTIFACTS, { omitLock: true });
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: strategy-doctrine-lock-content')!;
+    expect(line.status).toBe('warn');
+    expect(line.message).toContain('structurally incomplete');
+  });
+
+  it('an unhandled content-hash row id → routing stub, not a crash', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', UNHANDLED_CONTENT_HASH_MANIFEST_YAML);
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: some-other-lock-row')!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toMatch(/not yet implemented/i);
   });
 });
 

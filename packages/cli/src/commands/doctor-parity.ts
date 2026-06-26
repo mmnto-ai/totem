@@ -219,6 +219,25 @@ function valueEqualityFieldsFor(
   }
 }
 
+// ─── Lock-content package registry (CLI-side, mmnto-ai/totem#2107) ──
+
+/**
+ * Resolve the installed `@mmnto/strategy-doctrine` package dir a
+ * `manifestation: content-hash` contract reads (the lock + its `artifacts[].path`
+ * resolve under it), or `undefined` when this slice doesn't handle the id (→ a `skip`
+ * stub). For these cohort repos node_modules is hoisted to the repo root, so the
+ * package dir is `<gitRoot>/node_modules/@mmnto/strategy-doctrine`; the detector reports
+ * honest-absent when the package / lock is missing under it (it never assumes presence).
+ */
+function lockContentPackageDirFor(contractId: string, gitRoot: string): string | undefined {
+  switch (contractId) {
+    case 'strategy-doctrine-lock-content':
+      return path.join(gitRoot, 'node_modules', '@mmnto', 'strategy-doctrine');
+    default:
+      return undefined;
+  }
+}
+
 // ─── Git-hook artifact registry (CLI-side, mmnto-ai/totem#2073 hooks slice) ──
 
 /**
@@ -444,6 +463,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
     deriveCohortRepoId,
     detectCapabilityProbeContract,
     detectGeneratedArtifactContract,
+    detectLockContentContract,
     detectManualAttestationContract,
     detectMechanicalContract,
     detectValueEqualityContract,
@@ -726,6 +746,33 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
             const verdict = detectValueEqualityContract(c, { repoId, field });
             if (verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
             return lineFor(field.lineName, verdict);
+          });
+          if (blockingDrift) blockingDriftIds.push(c.id);
+          return lines;
+        }
+
+        // ── content-hash routing (mmnto-ai/totem#2107, strategy#754) ──
+        // Routes on `manifestation` BEFORE the tractability dispatch (like value-
+        // equality + capability-probe): the lock-content row is `tractability:
+        // mechanical` but senses normalized-artifact hash equality of a DISTRIBUTED
+        // package, not a managed-block or dotted scalar. The detector SELF-guards the
+        // consumers scope (verbatim with the other detectors); the registry supplies
+        // only the installed package dir. One line per artifact × per layer; tag the
+        // contract id at most ONCE for --strict so the count reflects contracts.
+        if (c.manifestation === 'content-hash') {
+          const packageDir = lockContentPackageDirFor(c.id, gitRoot);
+          if (packageDir === undefined) {
+            return [
+              stub(
+                c,
+                `${c.dimension} (content-hash) — drift detection not yet implemented for this row`,
+              ),
+            ];
+          }
+          let blockingDrift = false;
+          const lines = detectLockContentContract(c, { repoId, packageDir, gitRoot }).map((l) => {
+            if (l.verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
+            return lineFor(l.lineName, l.verdict);
           });
           if (blockingDrift) blockingDriftIds.push(c.id);
           return lines;

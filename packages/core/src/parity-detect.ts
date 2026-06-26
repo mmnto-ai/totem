@@ -41,9 +41,14 @@ import * as path from 'node:path';
 
 import semver from 'semver';
 import { parse as parseYaml } from 'yaml';
+import { z } from 'zod';
 
 import { PARITY_SENSES, type ParityContract, type ParitySense } from './parity-manifest.js';
-import { resolveStrategyRoot } from './strategy-resolver.js';
+import {
+  resolveStrategyRoot,
+  type StrategyResolverOptions,
+  type StrategyRootStatus,
+} from './strategy-resolver.js';
 import { safeExec } from './sys/exec.js';
 import { resolveGitRoot } from './sys/git.js';
 
@@ -1965,6 +1970,486 @@ export function detectValueEqualityContract(
     message: `${pathLabel} drift in ${fileLabel} — found ${renderConfigValue(nav.value)}, expected ${rawExpected}`,
     remediation: `Reconcile ${pathLabel} to ${rawExpected} in ${fileLabel}, or update the contract if the cohort canonical changed.`,
   };
+}
+
+// ─── Lock-content detector (mmnto-ai/totem#2107, strategy#754 content-hash rung) ──
+
+/**
+ * §6 normalize-before-hash for a distributed lock artifact — byte-for-byte the
+ * canonical `tools/build-strategy-doctrine.cjs` `normalize()` the publisher hashes
+ * with (the builder header MANDATES the verifier reconcile with it): CRLF / lone-CR
+ * → LF, strip trailing spaces/tabs per line, pop ALL trailing blank lines, join with
+ * exactly one terminal `\n`. Idempotent — re-normalizing a shipped (already-normalized)
+ * file is a no-op, so `hash(shipped)` holds cross-platform.
+ *
+ * DISTINCT from {@link normalizeManagedBlock} (which ALSO trims LEADING blank lines and
+ * leaves NO terminal newline) — the two must not be conflated; this one mirrors the lock
+ * publisher exactly. A golden test pins the byte-for-byte parity against a precomputed hash.
+ */
+export function normalizeLockArtifact(text: string): string {
+  const lines = text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+$/g, ''));
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * Full sha256 of a normalized lock artifact, `sha256:`-prefixed hex — byte-for-byte
+ * the publisher's `sha256` helper (`'sha256:' + sha256hex(utf8)`). DISTINCT from
+ * {@link hashManagedBlock} (a 12-char SHORT hash for managed-block verdict records);
+ * the lock content-hash is the FULL digest the lock records.
+ */
+export function hashLockArtifact(normalized: string): string {
+  return 'sha256:' + crypto.createHash('sha256').update(normalized, 'utf-8').digest('hex');
+}
+
+/** The single lock schema version this reader understands (mirrors the manifest gate). */
+export const SUPPORTED_LOCK_SCHEMA_VERSION = 1;
+
+/** One parsed `artifacts[]` entry from a strategy-doctrine lock (camelCase). */
+export interface LockArtifact {
+  /** Package-relative path to the distributed snapshot (resolves under the package dir). */
+  path: string;
+  /** `repo:path` strategy-canonical source for the vs-canonical layer. */
+  canonicalSource: string;
+  /** `sha256:`-prefixed hex of the normalized canonical content at publish. */
+  contentHash: string;
+  /** Strategy-canonical commit the snapshot was cut from (provenance-info only). */
+  lastPublishedSha: string;
+}
+
+/** A parsed + validated strategy-doctrine lock (Proposal 292 §10.6). */
+export interface StrategyDoctrineLock {
+  schemaVersion: number;
+  package: string;
+  version: string;
+  published: string;
+  artifacts: LockArtifact[];
+}
+
+const RawLockArtifactSchema = z.object({
+  path: z.string(),
+  'canonical-source': z.string(),
+  'content-hash': z.string(),
+  'last-published-sha': z.string(),
+});
+
+const RawStrategyDoctrineLockSchema = z.object({
+  'schema-version': z.number(),
+  package: z.string(),
+  version: z.string(),
+  published: z.string(),
+  artifacts: z.array(RawLockArtifactSchema),
+});
+
+/**
+ * Honest-absent lock parse outcome (discriminated union, mirroring
+ * {@link parseParityManifest}):
+ *   - `unparseable`        — invalid JSON or schema-validation failure.
+ *   - `unsupported-schema` — `schema-version` ≠ the supported version.
+ *   - `ok`                 — a fully parsed + validated lock.
+ * NEVER throws — every failure is a first-class return value.
+ */
+export type LockParseResult =
+  | { status: 'unparseable'; reason: string }
+  | { status: 'unsupported-schema'; schemaVersion: number }
+  | { status: 'ok'; lock: StrategyDoctrineLock };
+
+/**
+ * Parse raw `strategy-doctrine.lock` JSON into a validated {@link StrategyDoctrineLock}.
+ * The `schema-version` gate runs BEFORE full validation so an incompatible future shape
+ * is rejected with a clear `unsupported-schema` signal rather than a confusing
+ * v1-shaped Zod failure (mirrors {@link parseParityManifest}). NEVER throws.
+ */
+export function parseStrategyDoctrineLock(jsonText: string): LockParseResult {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(jsonText);
+    // totem-context: malformed lock JSON degrades to an `unparseable` signal (the sensor warns) — never a throw that would sink the doctor pipeline.
+  } catch (err) {
+    const reason = err instanceof Error ? err.message.split('\n')[0] : String(err);
+    return { status: 'unparseable', reason: `Invalid JSON: ${reason}` };
+  }
+
+  // schema-version gate BEFORE full validation (a non-mapping / missing version → unparseable).
+  const versionProbe = z.object({ 'schema-version': z.number() }).safeParse(doc);
+  if (!versionProbe.success) {
+    return {
+      status: 'unparseable',
+      reason: 'Lock is not a mapping with a numeric `schema-version`',
+    };
+  }
+  const rawVersion = versionProbe.data['schema-version'];
+  if (rawVersion !== SUPPORTED_LOCK_SCHEMA_VERSION) {
+    return { status: 'unsupported-schema', schemaVersion: rawVersion };
+  }
+
+  const parsed = RawStrategyDoctrineLockSchema.safeParse(doc);
+  if (!parsed.success) {
+    return {
+      status: 'unparseable',
+      reason: `Lock failed schema validation: ${parsed.error.issues
+        .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+        .join('; ')}`,
+    };
+  }
+
+  return {
+    status: 'ok',
+    lock: {
+      schemaVersion: parsed.data['schema-version'],
+      package: parsed.data.package,
+      version: parsed.data.version,
+      published: parsed.data.published,
+      artifacts: parsed.data.artifacts.map((a) => ({
+        path: a.path,
+        canonicalSource: a['canonical-source'],
+        contentHash: a['content-hash'],
+        lastPublishedSha: a['last-published-sha'],
+      })),
+    },
+  };
+}
+
+/** One verdict line from {@link detectLockContentContract} — per artifact × per layer. */
+export interface LockContentLine {
+  lineName: string;
+  verdict: ParityContractVerdict;
+}
+
+/** The canonical-source repo prefix this slice resolves for the vs-canonical layer. */
+const STRATEGY_CANONICAL_PREFIX = 'mmnto-ai/totem-strategy:';
+
+/** Default lock filename inside the `@mmnto/strategy-doctrine` package. */
+const STRATEGY_DOCTRINE_LOCK_FILENAME = 'strategy-doctrine.lock';
+
+/** The package name the lock-content slice senses (for honest-absent messages). */
+const STRATEGY_DOCTRINE_PACKAGE = '@mmnto/strategy-doctrine';
+
+/** Inputs + test seams for {@link detectLockContentContract}. */
+export interface DetectLockContentContext {
+  /** Current repo's cohort id for `consumers` applicability (verbatim parity with the other detectors). */
+  repoId?: string;
+  /**
+   * The installed `@mmnto/strategy-doctrine` package dir (e.g.
+   * `<gitRoot>/node_modules/@mmnto/strategy-doctrine`). The lock + each
+   * `artifacts[].path` resolve under it; the CLI registry constructs it.
+   */
+  packageDir: string;
+  /** Lock filename within {@link packageDir} (default `strategy-doctrine.lock`). */
+  lockFileName?: string;
+  /** Anchor for the vs-canonical sibling resolution (the git root). */
+  gitRoot: string;
+  /** Test seam — override file reads. Production callers omit it (reads UTF-8 on disk). */
+  readFile?: (absPath: string) => string | undefined;
+  /** Test seam — override the dir-exists probe. Production callers omit it. */
+  dirExists?: (absPath: string) => boolean;
+  /** Test seam — override the strategy-root resolver (default {@link resolveStrategyRoot}). */
+  resolveStrategyRootFn?: (cwd: string, options?: StrategyResolverOptions) => StrategyRootStatus;
+  /** Test seam — local git-object existence check for the last-published-sha note. */
+  gitObjectExists?: (sha: string, cwd: string) => boolean;
+}
+
+/** A short, render-only form of a commit sha for provenance evidence. */
+function shortSha(sha: string): string {
+  return /^[0-9a-f]{7,}$/i.test(sha) ? sha.slice(0, 8) : sha;
+}
+
+/**
+ * Parse a lock `canonical-source` into its strategy-repo-relative path, ONLY for the
+ * `mmnto-ai/totem-strategy:<path>` shape this slice resolves. Any other repo / shape →
+ * undefined (the vs-canonical layer skips that artifact rather than over-claiming).
+ */
+function parseStrategyCanonicalPath(canonicalSource: string): string | undefined {
+  if (!canonicalSource.startsWith(STRATEGY_CANONICAL_PREFIX)) return undefined;
+  const rel = canonicalSource.slice(STRATEGY_CANONICAL_PREFIX.length).trim();
+  return rel.length > 0 ? rel : undefined;
+}
+
+/**
+ * Resolve `relPath` under `baseDir`, or undefined if it escapes (path-escape guard —
+ * a malformed lock must never read outside the package / sibling root). Also rejects a
+ * path that resolves to `baseDir` itself (a dir, not an artifact file).
+ */
+function resolveWithinDir(baseDir: string, relPath: string): string | undefined {
+  const resolved = path.resolve(baseDir, relPath);
+  const rel = path.relative(baseDir, resolved);
+  if (rel.length === 0 || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
+  return resolved;
+}
+
+/**
+ * Local git-object existence check (`git cat-file -e <sha>^{commit}`) for the
+ * last-published-sha provenance note — NEVER networks, NEVER gates. A non-existent /
+ * non-commit object exits non-zero (the honest "not a local object" signal).
+ */
+function defaultGitObjectExists(sha: string, cwd: string): boolean {
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) return false;
+  try {
+    safeExec('git', ['cat-file', '-e', `${sha}^{commit}`], { cwd, timeout: GIT_REMOTE_TIMEOUT_MS });
+    return true;
+    // totem-context: a missing / non-commit object makes `git cat-file -e` exit non-zero (safeExec throws) — the honest "not a local object" signal for a provenance-INFO note, never a sensor failure.
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The self-consistency line for ONE artifact: `sha256(normalize(packaged file)) == lock
+ * content-hash`. ALWAYS local — proves the shipped snapshot is internally intact. The
+ * `last-published-sha` rides as provenance-info evidence (never a comparator).
+ */
+function selfConsistencyLine(
+  contract: ParityContract,
+  artifact: LockArtifact,
+  packageDir: string,
+  readFile: (absPath: string) => string | undefined,
+): LockContentLine {
+  const lineName = `Parity: ${contract.id} (${artifact.path} · self)`;
+  const provenance = ` [last-published-sha ${shortSha(artifact.lastPublishedSha)}, provenance-info]`;
+  const pkg = contract.package ?? STRATEGY_DOCTRINE_PACKAGE;
+
+  const filePath = resolveWithinDir(packageDir, artifact.path);
+  if (filePath === undefined) {
+    return {
+      lineName,
+      verdict: {
+        status: 'warn',
+        message: `artifact path '${artifact.path}' escapes the package dir — refusing to read (lock may be malformed)`,
+      },
+    };
+  }
+  const raw = readFile(filePath);
+  if (raw === undefined) {
+    return {
+      lineName,
+      verdict: {
+        status: 'warn',
+        message: `packaged artifact ${artifact.path} absent — expected ${artifact.contentHash}${provenance}`,
+        remediation: `Reinstall ${pkg} to restore the packaged artifact, then re-run totem doctor --parity.`,
+      },
+    };
+  }
+  const actual = hashLockArtifact(normalizeLockArtifact(raw));
+  if (actual === artifact.contentHash) {
+    return {
+      lineName,
+      verdict: {
+        status: 'pass',
+        message: `packaged ${artifact.path} intact — ${artifact.contentHash}${provenance}`,
+      },
+    };
+  }
+  return {
+    lineName,
+    verdict: {
+      status: 'warn',
+      message: `integrity drift — recomputed ${actual} != lock ${artifact.contentHash} at ${artifact.path}${provenance}`,
+      remediation: `The packaged ${artifact.path} does not match its own lock record — reinstall ${pkg}.`,
+    },
+  };
+}
+
+/**
+ * The vs-canonical line for ONE artifact: the same recompute against the artifact's
+ * lock `canonical-source` within a resolved local `../totem-strategy` sibling. Runs ONLY
+ * when a sibling resolves (else SKIP honest-absent) — NEVER a fetch. A mismatch is
+ * currency drift (the pin lags local canonical), not an integrity failure.
+ */
+function vsCanonicalLine(
+  contract: ParityContract,
+  artifact: LockArtifact,
+  ctx: DetectLockContentContext,
+  readFile: (absPath: string) => string | undefined,
+  sibling: StrategyRootStatus,
+): LockContentLine {
+  const lineName = `Parity: ${contract.id} (${artifact.path} · vs-canonical)`;
+
+  if (!sibling.resolved) {
+    return {
+      lineName,
+      verdict: {
+        status: 'skip',
+        message: `no local ../totem-strategy sibling resolvable — vs-canonical honest-absent (never a fetch): ${sibling.reason}`,
+      },
+    };
+  }
+
+  const relPath = parseStrategyCanonicalPath(artifact.canonicalSource);
+  if (relPath === undefined) {
+    return {
+      lineName,
+      verdict: {
+        status: 'skip',
+        message: `canonical-source '${artifact.canonicalSource}' is not a ${STRATEGY_CANONICAL_PREFIX}<path> ref — vs-canonical unprovable this slice`,
+      },
+    };
+  }
+
+  const canonicalPath = resolveWithinDir(sibling.path, relPath);
+  if (canonicalPath === undefined) {
+    return {
+      lineName,
+      verdict: {
+        status: 'warn',
+        message: `canonical-source path '${relPath}' escapes the strategy sibling root — refusing to read`,
+      },
+    };
+  }
+  const raw = readFile(canonicalPath);
+  const lpsNote = lastPublishedNote(artifact.lastPublishedSha, sibling.path, ctx);
+  if (raw === undefined) {
+    return {
+      lineName,
+      verdict: {
+        status: 'warn',
+        message: `canonical source ${relPath} absent under the resolved sibling (${sibling.path}) — vs-canonical drift${lpsNote}`,
+        remediation: `The local ../totem-strategy no longer carries ${relPath}; sync it, or this pin no longer reflects canonical.`,
+      },
+    };
+  }
+  const actual = hashLockArtifact(normalizeLockArtifact(raw));
+  if (actual === artifact.contentHash) {
+    return {
+      lineName,
+      verdict: {
+        status: 'pass',
+        message: `lock matches local strategy-canonical at ${relPath} — ${artifact.contentHash}${lpsNote}`,
+      },
+    };
+  }
+  return {
+    lineName,
+    verdict: {
+      status: 'warn',
+      message: `currency drift — lock ${artifact.contentHash} != current canonical ${actual} at ${relPath}${lpsNote}`,
+      remediation: `The consumed ${contract.package ?? STRATEGY_DOCTRINE_PACKAGE} pin lags the local ../totem-strategy canonical for ${relPath}; bump the pin when a new doctrine bundle publishes (a local sibling ahead of the published pin is expected currency drift, not a defect).`,
+    },
+  };
+}
+
+/** Render the last-published-sha provenance note (+ a local git-object existence check). */
+function lastPublishedNote(
+  sha: string,
+  strategyRoot: string,
+  ctx: DetectLockContentContext,
+): string {
+  const exists = ctx.gitObjectExists ?? defaultGitObjectExists;
+  const resolvable = exists(sha, strategyRoot) ? 'resolvable in sibling' : 'not a local git object';
+  return ` [last-published-sha ${shortSha(sha)} ${resolvable}, provenance-info]`;
+}
+
+/**
+ * Detect drift for the `manifestation: content-hash` strategy-doctrine lock-content
+ * contract (mmnto-ai/totem#2107, strategy#754). Re-derives each distributed artifact's
+ * `content-hash` from the consumed lock via the §6 normalize+sha256 contract and compares
+ * it in TWO honest-absent layers, NEVER a fetch (Tenet 6/13):
+ *
+ *   - **self-consistency** (ALWAYS, local): `sha256(normalize(packaged file at path)) ==
+ *     its lock content-hash` — proves the shipped snapshot is internally intact.
+ *   - **vs-canonical** (ONLY when a local `../totem-strategy` sibling resolves): the same
+ *     recompute against the artifact's lock `canonical-source` within the sibling — proves
+ *     the pin still reflects strategy-canonical. SKIP honest-absent otherwise.
+ *
+ * Returns ONE line per artifact × per layer (the layers render SEPARATELY — a collapsed
+ * "content drift" verdict would over-claim which layer drifted). `last-published-sha` is
+ * provenance-INFO only (a LOCAL git-object existence note when a sibling resolves) — NEVER
+ * a gating comparator, NEVER `sha == HEAD`.
+ *
+ * Top-level honest-absent: not-a-consumer / repo-id-unresolvable → skip; package not
+ * installed → skip (the version-pin currency row senses the pin); lock absent while the
+ * package is present → warn (structurally incomplete); lock unparseable / unsupported-schema
+ * → warn.
+ *
+ * NEVER emits `fail` (the CLI edge owns `--strict` promotion). NEVER throws (reads
+ * degrade). NEVER networks.
+ */
+export function detectLockContentContract(
+  contract: ParityContract,
+  ctx: DetectLockContentContext,
+): LockContentLine[] {
+  const idLine = (verdict: ParityContractVerdict): LockContentLine[] => [
+    { lineName: `Parity: ${contract.id}`, verdict },
+  ];
+
+  // ── Applicability: consumers scope (verbatim parity with the other detectors) ──
+  if (contract.consumers !== undefined) {
+    if (ctx.repoId === undefined) {
+      return idLine({
+        status: 'skip',
+        message: `cannot determine applicability — repo id unresolvable; contract is scoped to consumers [${contract.consumers.join(', ')}]`,
+      });
+    }
+    if (!contract.consumers.includes(ctx.repoId)) {
+      return idLine({
+        status: 'skip',
+        message: `cohort permits absence here (${ctx.repoId} not in consumers)`,
+      });
+    }
+  }
+
+  const readFile = ctx.readFile ?? readFileText;
+  const dirExists = ctx.dirExists ?? isDirectory;
+  const lockFileName = ctx.lockFileName ?? STRATEGY_DOCTRINE_LOCK_FILENAME;
+  const pkg = contract.package ?? STRATEGY_DOCTRINE_PACKAGE;
+
+  // ── Package not installed → honest-absent skip (the currency row senses the pin) ──
+  if (!dirExists(ctx.packageDir)) {
+    return idLine({
+      status: 'skip',
+      message: `${pkg} not installed at ${ctx.packageDir} — lock-content unprovable (the version-pin currency row senses the pin)`,
+    });
+  }
+
+  // ── Read the consumed lock (package present but lock absent → structurally incomplete) ──
+  const lockPath = path.join(ctx.packageDir, lockFileName);
+  const lockRaw = readFile(lockPath);
+  if (lockRaw === undefined) {
+    return idLine({
+      status: 'warn',
+      message: `${pkg} installed but ${lockFileName} is absent — distributed package is structurally incomplete`,
+      remediation: `Reinstall ${pkg} (a publish without its lock is a packaging defect), then re-run totem doctor --parity.`,
+    });
+  }
+
+  // ── Parse (unparseable / unsupported-schema → warn; never throw) ──
+  const parsed = parseStrategyDoctrineLock(lockRaw);
+  if (parsed.status === 'unparseable') {
+    return idLine({
+      status: 'warn',
+      message: `${lockFileName} is unparseable — ${parsed.reason}`,
+      remediation: `Reinstall ${pkg} to restore a valid lock, then re-run totem doctor --parity.`,
+    });
+  }
+  if (parsed.status === 'unsupported-schema') {
+    return idLine({
+      status: 'warn',
+      message: `${lockFileName} schema-version ${parsed.schemaVersion} unsupported (this doctor understands ${SUPPORTED_LOCK_SCHEMA_VERSION}) — content-hash unprovable`,
+      remediation: `Upgrade @mmnto/cli to a build that understands lock schema ${parsed.schemaVersion}, or reinstall a compatible ${pkg}.`,
+    });
+  }
+
+  const { lock } = parsed;
+  if (lock.artifacts.length === 0) {
+    return idLine({
+      status: 'warn',
+      message: `${lockFileName} declares no artifacts[] — nothing to verify (structurally incomplete)`,
+    });
+  }
+
+  // ── Resolve the vs-canonical sibling ONCE (honest-absent; never a fetch) ──
+  const resolveRoot = ctx.resolveStrategyRootFn ?? resolveStrategyRoot;
+  const sibling = resolveRoot(ctx.gitRoot, { gitRoot: ctx.gitRoot });
+
+  // ── Per artifact × per layer (rendered SEPARATELY — no collapsed verdict) ──
+  const lines: LockContentLine[] = [];
+  for (const artifact of lock.artifacts) {
+    lines.push(selfConsistencyLine(contract, artifact, ctx.packageDir, readFile));
+    lines.push(vsCanonicalLine(contract, artifact, ctx, readFile, sibling));
+  }
+  return lines;
 }
 
 // ─── Shared filesystem helpers ──────────────────────────
