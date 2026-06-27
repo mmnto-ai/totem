@@ -816,20 +816,36 @@ export { CandidateRuleRecordSchema, ClassifierDispositionSchema } from './spine/
 export type {
   AuthoredCompileFeed,
   AuthoredOrigin,
+  AuthoredRuleInput,
   AuthoredRuleRecord,
+  AuthoredRulesFile,
   DeclaredEngine,
   StructEligResult,
   WhitelistEntry,
 } from './spine/authored-rule.js';
 export {
   AuthoredOriginSchema,
+  AuthoredRuleInputSchema,
   AuthoredRuleRecordSchema,
+  AuthoredRulesFileSchema,
   DeclaredEngineSchema,
   evaluateStructuralEligibility,
   mintAuthoredRuleId,
   StructEligResultSchema,
   toCompileFeed,
 } from './spine/authored-rule.js';
+// Spine: ADR-112 §8 authoring-ledger (the FM(e) fail-loud attestation artifact)
+export type { AuthoredIdentity, AuthoringLedgerEntry } from './spine/authoring-ledger.js';
+export {
+  appendAuthoringLedgerEntry,
+  AUTHORING_LEDGER_DIR,
+  AUTHORING_LEDGER_FILE,
+  authoringContentHash,
+  AuthoringLedgerEntrySchema,
+  buildAuthoredIdentityIndex,
+  identityKey,
+  readAuthoringLedger,
+} from './spine/authoring-ledger.js';
 export type { ProducerKind, RulePolicy } from './spine/rule-policy.js';
 export { getRulePolicy } from './spine/rule-policy.js';
 // `DraftCandidate` is intentionally NOT re-exported here — it is the transient
