@@ -14,7 +14,7 @@
 
 import { z } from 'zod';
 
-import { ProvenanceRecordSchema } from '../compiler-schema.js';
+import { MinedProvenanceWireSchema } from '../compiler-schema.js';
 
 /**
  * Stage-2 classifier disposition (ADR-091 funnel, the gate). A `structural`
@@ -40,7 +40,7 @@ export const CandidateRuleRecordSchema = z.object({
    * downstream projection — no rename seam. An incomplete tuple is
    * schema-unconstructible (FM(a)).
    */
-  provenance: ProvenanceRecordSchema,
+  provenance: MinedProvenanceWireSchema,
   /** Stage-2 disposition. `behavioral` ⇒ RAG-only, never compiled (FM(c)). */
   classifierDisposition: ClassifierDispositionSchema,
   /**
