@@ -27,6 +27,12 @@ import type { ClassifierLedger } from './ledgers.js';
 export const DeclaredEngineSchema = z.enum(['regex', 'ast', 'ast-grep']);
 export type DeclaredEngine = z.infer<typeof DeclaredEngineSchema>;
 
+// The §3 eligibility-basis forms: `whitelist:<class>` (the cert-#1 deterministic basis,
+// a non-empty class after the colon), or the deferred `capability-check` /
+// `draft-classifier+stage4`. Pins `basis` to the contract so a free-form/typo'd value
+// can't validate (strategy item 2, #2259).
+const ELIGIBILITY_BASIS_RE = /^(?:whitelist:.+|capability-check|draft-classifier\+stage4)$/;
+
 /**
  * ADR-112 §3 — the result of the INDEPENDENT structural-eligibility check.
  * Produced by `evaluateStructuralEligibility` (NOT by the author): only
@@ -43,9 +49,13 @@ export const StructEligResultSchema = z.object({
    * deferred (slice-A uses the deterministic whitelist only). On a `decidable:
    * false` verdict the basis still names the attempted whitelist class — the
    * diagnostic is "no/ambiguous whitelist match", carried in `judgedBy`'s log.
+   * Constrained to the §3 forms (strategy item 2, #2259) so a typo'd/free-form
+   * basis can't validate — non-mutating (no `.trim()`), matching the hash-stability
+   * discipline on the other reference fields.
    */
-  basis: z.string().refine((s) => s.trim().length > 0, {
-    message: 'basis must be a non-empty eligibility basis',
+  basis: z.string().refine((s) => ELIGIBILITY_BASIS_RE.test(s), {
+    message:
+      'basis must be a §3 eligibility basis: whitelist:<class> | capability-check | draft-classifier+stage4',
   }),
   judgedBy: z.string().refine((s) => s.trim().length > 0, {
     message: 'judgedBy must name the check/agent that judged eligibility (never the author)',
@@ -72,7 +82,7 @@ export type AuthoredOrigin = z.infer<typeof AuthoredOriginSchema>;
 // mint-producible (#2259 CR: a looser `-\d+` admitted ids like `…-0`/`…-01` the mint can't
 // make). Pinned as a shared constant binding the SCHEMA boundary to the mint's codomain.
 const AUTHORED_RULE_ID_HEX_LEN = 16;
-const AUTHORED_RULE_ID_RE = /^[0-9a-f]{16}(?:-[1-9]\d*)?$/;
+const AUTHORED_RULE_ID_RE = new RegExp(`^[0-9a-f]{${AUTHORED_RULE_ID_HEX_LEN}}(?:-[1-9]\\d*)?$`);
 
 /**
  * ADR-112 §3 — the authored producer's sole output envelope. Parallel to

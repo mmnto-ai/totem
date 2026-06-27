@@ -160,6 +160,30 @@ describe('AuthoredRuleRecord schema (ADR-112 §3)', () => {
   it('forces unverified:true (zero blast radius — ADR-089/§1)', () => {
     expect(() => AuthoredRuleRecordSchema.parse({ ...base, unverified: false })).toThrow();
   });
+
+  it('constrains structuralEligibility.basis to the §3 forms — not free-form (strategy item 2, #2259)', () => {
+    const withBasis = (basis: string) => ({
+      ...base,
+      structuralEligibility: { ...base.structuralEligibility, basis },
+    });
+    for (const bad of [
+      '',
+      'freeform',
+      'whitelist:',
+      'whitelisted',
+      'stage4',
+      ' capability-check',
+    ]) {
+      expect(() => AuthoredRuleRecordSchema.parse(withBasis(bad))).toThrow();
+    }
+    for (const ok of [
+      'whitelist:float-finite-assert',
+      'capability-check',
+      'draft-classifier+stage4',
+    ]) {
+      expect(() => AuthoredRuleRecordSchema.parse(withBasis(ok))).not.toThrow();
+    }
+  });
 });
 
 describe('mintAuthoredRuleId (ADR-112 §8)', () => {
