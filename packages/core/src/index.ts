@@ -217,11 +217,14 @@ export {
 export type {
   AstContext,
   AstGrepYamlRule,
+  AuthoredFixture,
+  AuthoredProvenanceRecord,
   CompiledRule,
   CompiledRulesFile,
   CompilerOutput,
   DiffAddition,
   Legitimacy,
+  MinedProvenanceRecord,
   NapiConfig,
   NonCompilableEntry,
   NonCompilableReasonCode,
@@ -235,6 +238,8 @@ export {
   applyRules,
   applyRulesToAdditions,
   AstGrepYamlRuleSchema,
+  AuthoredFixtureSchema,
+  AuthoredProvenanceRecordSchema,
   CompiledRuleSchema,
   CompiledRulesFileSchema,
   CompilerOutputSchema,
@@ -245,16 +250,20 @@ export {
   extractJustification,
   fileMatchesGlobs,
   hashLesson,
+  isAuthoredProvenance,
+  isMinedProvenance,
   LEDGER_RETRY_PENDING_CODES,
   LegitimacySchema,
   loadCompiledRules,
   loadCompiledRulesFile,
   matchesGlob,
+  MinedProvenanceWireSchema,
   NapiConfigSchema,
   NonCompilableEntryReadSchema,
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,
   parseCompilerResponse,
+  provenanceKind,
   ProvenanceRecordSchema,
   type RegexValidation,
   type RuleEngineContext,
@@ -797,8 +806,32 @@ export {
 } from './retrospect.js';
 
 // Spine: Gate-1 wind-tunnel evidence harness (mmnto-ai/totem#2188)
-export type { CandidateRuleRecord, ClassifierDisposition } from './spine/candidate-rule.js';
+export type {
+  CandidateRuleRecord,
+  ClassifierDisposition,
+  CompileInputCandidate,
+} from './spine/candidate-rule.js';
 export { CandidateRuleRecordSchema, ClassifierDispositionSchema } from './spine/candidate-rule.js';
+// Spine: Gate-1 AUTHORED producer (ADR-112, mmnto-ai/totem-strategy#591)
+export type {
+  AuthoredCompileFeed,
+  AuthoredOrigin,
+  AuthoredRuleRecord,
+  DeclaredEngine,
+  StructEligResult,
+  WhitelistEntry,
+} from './spine/authored-rule.js';
+export {
+  AuthoredOriginSchema,
+  AuthoredRuleRecordSchema,
+  DeclaredEngineSchema,
+  evaluateStructuralEligibility,
+  mintAuthoredRuleId,
+  StructEligResultSchema,
+  toCompileFeed,
+} from './spine/authored-rule.js';
+export type { ProducerKind, RulePolicy } from './spine/rule-policy.js';
+export { getRulePolicy } from './spine/rule-policy.js';
 // `DraftCandidate` is intentionally NOT re-exported here — it is the transient
 // Extract→Classify intermediate (slice 3 maps it to `CandidateRuleRecord`).
 // Spine-internal consumers import it directly from './spine/extract.js'; keeping
@@ -834,6 +867,7 @@ export type {
   CompiledCandidate,
   CompileOutcome,
   CompileStageDeps,
+  CompileStageInput,
   CompileStageResult,
 } from './spine/compile.js';
 export { compileCandidate, runCompileStage } from './spine/compile.js';

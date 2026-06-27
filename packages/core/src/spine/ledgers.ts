@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 
-import { ProvenanceRecordSchema } from '../compiler-schema.js';
+import { MinedProvenanceWireSchema } from '../compiler-schema.js';
 import { ClassifierDispositionSchema } from './candidate-rule.js';
 import { SplitArtifactSchema } from './split.js';
 
@@ -31,13 +31,21 @@ export type Routing = z.infer<typeof RoutingSchema>;
 /**
  * Provenance of a classifier-ledger disposition: a genuine classifier judgment
  * (`classified`) vs a safe-default forced by classifier failure (`error-default`,
- * always `behavioral`/RAG-only). Reported in the §8 done-criterion so a flaky
- * classifier's error rate is a NAMED third cause of behavioral-heavy output —
- * never conflated with "lc structural signal is sparse" (a valid HONEST-NEGATIVE)
- * or "the classifier mis-routed everything" (Tenet 19). It is NOT a falsifying
- * condition (no FM clause) — a done-criterion diagnostic, like `stage4Confirmed`.
+ * always `behavioral`/RAG-only) vs an authored rule's INDEPENDENT structural
+ * eligibility verdict (`authored-whitelist`, ADR-112 §3 — judged by the static
+ * decidable-class whitelist, NOT an LLM classifier; named distinctly so the
+ * classifier ledger never claims an LLM classified a human-authored rule —
+ * Tenet-20 honesty). Reported in the §8 done-criterion so a flaky classifier's
+ * error rate is a NAMED cause of behavioral-heavy output — never conflated with
+ * "lc structural signal is sparse" (a valid HONEST-NEGATIVE) or "the classifier
+ * mis-routed everything" (Tenet 19). It is NOT a falsifying condition (no FM
+ * clause) — a done-criterion diagnostic, like `stage4Confirmed`.
  */
-export const DispositionSourceSchema = z.enum(['classified', 'error-default']);
+export const DispositionSourceSchema = z.enum([
+  'classified',
+  'error-default',
+  'authored-whitelist',
+]);
 export type DispositionSource = z.infer<typeof DispositionSourceSchema>;
 
 /**
@@ -81,7 +89,7 @@ export type DraftSourceKind = z.infer<typeof DraftSourceKindSchema>;
 
 export const EmissionLedgerEntrySchema = z.object({
   candidateRef: nonEmpty('candidateRef'),
-  provenance: ProvenanceRecordSchema,
+  provenance: MinedProvenanceWireSchema,
   classifierDisposition: ClassifierDispositionSchema,
   routing: RoutingSchema,
   classifierLedgerRef: nonEmpty('classifierLedgerRef'),

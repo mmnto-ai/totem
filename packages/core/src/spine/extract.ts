@@ -36,7 +36,7 @@
 
 import { z } from 'zod';
 
-import { type ProvenanceRecord, ProvenanceRecordSchema } from '../compiler-schema.js';
+import { type MinedProvenanceRecord, MinedProvenanceWireSchema } from '../compiler-schema.js';
 import { TotemParseError } from '../errors.js';
 import { extractManualPattern } from '../lesson-pattern.js';
 import type {
@@ -145,7 +145,7 @@ export type FetchResult =
  * flows Extract → Classify.
  */
 export interface DraftCandidate {
-  provenance: ProvenanceRecord;
+  provenance: MinedProvenanceRecord;
   /**
    * The LLM-drafted lesson-markdown body (ADR-103 compiler input). `unverified`
    * and Stage-4-gated downstream — lesson-markdown is the syntax, not a
@@ -362,15 +362,16 @@ function isUsableDsl(dslSource: string): boolean {
  * Build the candidate's provenance tuple, or report why it is incomplete. `pr`
  * and the review-thread ref are always available (we iterate the train slice and
  * synthesize a canonical per-PR thread ref); the realistic failure is a missing
- * or malformed merge-commit SHA, validated against `ProvenanceRecordSchema`
+ * or malformed merge-commit SHA, validated against `MinedProvenanceWireSchema`
  * (lowercase 40-hex). A candidate that cannot produce a complete tuple is
- * dropped `incomplete-provenance`, never emitted partial (FM a / Tenet 4).
+ * dropped `incomplete-provenance`, never emitted partial (FM a / Tenet 4). The
+ * miner always produces MINED provenance (ADR-112 mining-only boundary).
  */
 function buildProvenance(
   pr: number,
   content: ReviewThreadContent,
-): { ok: true; value: ProvenanceRecord } | { ok: false; reason: string } {
-  const parsed = ProvenanceRecordSchema.safeParse({
+): { ok: true; value: MinedProvenanceRecord } | { ok: false; reason: string } {
+  const parsed = MinedProvenanceWireSchema.safeParse({
     mergedPr: pr,
     reviewThread: `pulls/${pr}/comments`,
     commitSha: content.mergeCommitSha,

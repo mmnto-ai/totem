@@ -155,7 +155,9 @@ describe('5c-ii cert run — replay round-trip + TCP isolation (fold-K)', () => 
 
     expect(corpus.rules).toHaveLength(1);
     const rule = corpus.rules[0]!;
-    expect(corpus.provenanceByRule.get(rule.lessonHash)?.mergedPr).toBe(1);
+    const prov = corpus.provenanceByRule.get(rule.lessonHash);
+    // ADR-112: narrow the mined|authored provenance union to the mined branch.
+    expect(prov && 'mergedPr' in prov && prov.mergedPr).toBe(1);
   });
 
   it('the replay path makes ZERO outgoing network calls (fold-K TCP block)', async () => {

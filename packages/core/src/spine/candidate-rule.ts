@@ -14,7 +14,7 @@
 
 import { z } from 'zod';
 
-import { ProvenanceRecordSchema } from '../compiler-schema.js';
+import { MinedProvenanceWireSchema, type ProvenanceRecord } from '../compiler-schema.js';
 
 /**
  * Stage-2 classifier disposition (ADR-091 funnel, the gate). A `structural`
@@ -25,6 +25,33 @@ import { ProvenanceRecordSchema } from '../compiler-schema.js';
  */
 export const ClassifierDispositionSchema = z.enum(['structural', 'behavioral']);
 export type ClassifierDisposition = z.infer<typeof ClassifierDispositionSchema>;
+
+/**
+ * ADR-112 — the minimal candidate shape the compile actuator (`compileCandidate`
+ * / `runCompileStage`) actually reads. BOTH the mined `CandidateRuleRecord` and an
+ * authored-derived candidate (via `toCompileFeed`) satisfy it: `provenance` is the
+ * `mined | authored` union, so ONE compiler accepts either producer without an
+ * authored rule masquerading as a classify result (ADR-112 §2 — a parallel
+ * front-end to one compiler, never a second compiler). The mined
+ * `CandidateRuleRecord` (whose `provenance` is the narrower `MinedProvenanceRecord`)
+ * is assignable to this shape; so is the authored compile-feed candidate.
+ */
+export interface CompileInputCandidate {
+  provenance: ProvenanceRecord;
+  classifierDisposition: ClassifierDisposition;
+  classifierLedgerRef: string;
+  dslSource: string;
+  /**
+   * ADR-112 §3 (#2259/#7) — the engine the structural-eligibility whitelist judged
+   * this rule for (AUTHORED producer only). When present, `compileCandidate` asserts
+   * the compiled engine MATCHES it: a regex-whitelisted rule whose `dslSource` parses
+   * as ast-grep is a contract violation (the eligibility verdict was engine-specific),
+   * not a silent re-route. The MINED producer omits it — its engine + identity are
+   * `dslSource`-derived, so it carries no independent declaration to bind against.
+   */
+  declaredEngine?: 'regex' | 'ast' | 'ast-grep';
+  unverified: true;
+}
 
 /**
  * ADR-111 §3 — the miner's sole output envelope, minted `unverified`/Yellow
@@ -40,7 +67,7 @@ export const CandidateRuleRecordSchema = z.object({
    * downstream projection — no rename seam. An incomplete tuple is
    * schema-unconstructible (FM(a)).
    */
-  provenance: ProvenanceRecordSchema,
+  provenance: MinedProvenanceWireSchema,
   /** Stage-2 disposition. `behavioral` ⇒ RAG-only, never compiled (FM(c)). */
   classifierDisposition: ClassifierDispositionSchema,
   /**

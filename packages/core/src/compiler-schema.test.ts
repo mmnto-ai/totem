@@ -4,15 +4,20 @@ import { canonicalStringify } from './compile-manifest.js';
 import type { RuleEventCallback } from './compiler-schema.js';
 import {
   AstGrepYamlRuleSchema,
+  AuthoredProvenanceRecordSchema,
   CompiledRuleSchema,
   CompilerOutputSchema,
   deriveRuleClass,
+  isAuthoredProvenance,
+  isMinedProvenance,
   LEDGER_RETRY_PENDING_CODES,
   LegitimacySchema,
+  MinedProvenanceWireSchema,
   NapiConfigSchema,
   NonCompilableEntryReadSchema,
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,
+  provenanceKind,
   ProvenanceRecordSchema,
   shouldWriteToLedger,
 } from './compiler-schema.js';
@@ -959,12 +964,122 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
 
     it('does not mutate a whitespace-padded reviewThread (non-mutating validator, greptile/CR #2186)', () => {
       const padded = '  pr#2183-thread  ';
-      const parsed = ProvenanceRecordSchema.parse({ ...provenance, reviewThread: padded });
+      // `reviewThread` lives on the MINED branch of the ADR-112 union; parse it
+      // through the mined wire schema directly (the union round-trip is covered
+      // by the dedicated ProvenanceRecord-union suite above).
+      const parsed = MinedProvenanceWireSchema.parse({ ...provenance, reviewThread: padded });
       expect(parsed.reviewThread).toBe(padded);
     });
 
     it('requires both controls explicitly (no defaulting) when legitimacy is present', () => {
       expect(() => LegitimacySchema.parse({ provenance, positiveControl: true })).toThrow();
+    });
+  });
+
+  describe('ProvenanceRecord union (ADR-112)', () => {
+    const minedWire = {
+      mergedPr: 2183,
+      reviewThread: 'pulls/2183/comments',
+      commitSha: 'a'.repeat(40),
+    };
+    const authored = {
+      kind: 'authored' as const,
+      author: 'totem-claude',
+      authoredAt: '2026-06-27',
+      targetDefect: 'float equality compared with == instead of a finite-tolerance check',
+      positiveFixtures: [
+        {
+          pr: 100,
+          mergeCommitSha: 'b'.repeat(40),
+          preimageCommitSha: 'c'.repeat(40),
+          filePath: 'src/physics/step.ts',
+          matchedSpan: 'L10-L12',
+          contentHash: 'deadbeefcafe',
+        },
+      ],
+    };
+
+    it('parses a legacy mined record (no kind) BYTE-IDENTICAL — no kind key added (manifest-hash safe)', () => {
+      const before = canonicalStringify(minedWire);
+      const parsed = ProvenanceRecordSchema.parse(minedWire);
+      const after = canonicalStringify(parsed);
+      expect(after).toBe(before);
+      expect(after).not.toContain('kind');
+      expect(provenanceKind(parsed)).toBe('mined');
+    });
+
+    it('reads an absent discriminator as mined; a present one as authored', () => {
+      expect(provenanceKind(ProvenanceRecordSchema.parse(minedWire))).toBe('mined');
+      expect(provenanceKind(ProvenanceRecordSchema.parse(authored))).toBe('authored');
+    });
+
+    it('discriminates the two branches with the type guards', () => {
+      const m = ProvenanceRecordSchema.parse(minedWire);
+      const a = ProvenanceRecordSchema.parse(authored);
+      expect(isMinedProvenance(m)).toBe(true);
+      expect(isAuthoredProvenance(m)).toBe(false);
+      expect(isAuthoredProvenance(a)).toBe(true);
+      expect(isMinedProvenance(a)).toBe(false);
+    });
+
+    it('accepts an explicit kind:mined and still round-trips it', () => {
+      const explicit = { ...minedWire, kind: 'mined' as const };
+      const parsed = MinedProvenanceWireSchema.parse(explicit);
+      expect(parsed.kind).toBe('mined');
+      expect(canonicalStringify(parsed)).toBe(canonicalStringify(explicit));
+    });
+
+    it('rejects an authored record with zero positiveFixtures (ADR-112 §3 ≥1)', () => {
+      expect(() =>
+        AuthoredProvenanceRecordSchema.parse({ ...authored, positiveFixtures: [] }),
+      ).toThrow();
+    });
+
+    it('rejects an authored record with an empty author or targetDefect', () => {
+      expect(() => AuthoredProvenanceRecordSchema.parse({ ...authored, author: '  ' })).toThrow();
+      expect(() =>
+        AuthoredProvenanceRecordSchema.parse({ ...authored, targetDefect: '' }),
+      ).toThrow();
+    });
+
+    it('validates authoredAt as a real ISO-8601 calendar date — rejects free text + impossible dates, accepts real dates/timestamps (#2259)', () => {
+      // '2026-02-31' + non-leap '2026-02-29' are the Date.parse-normalization trap (CR re-review):
+      // Date.parse rolls them into March rather than rejecting, so the calendar round-trip must catch them.
+      for (const bad of [
+        'last tuesday',
+        '2026-13-45',
+        '06/27/2026',
+        '',
+        '2026-02-31',
+        '2026-02-29',
+      ]) {
+        expect(() =>
+          AuthoredProvenanceRecordSchema.parse({ ...authored, authoredAt: bad }),
+        ).toThrow();
+      }
+      for (const ok of ['2026-06-27', '2026-06-27T12:00:00.000Z', '2024-02-29']) {
+        expect(() =>
+          AuthoredProvenanceRecordSchema.parse({ ...authored, authoredAt: ok }),
+        ).not.toThrow();
+      }
+    });
+
+    it('rejects a fixture with a malformed preimage/merge SHA', () => {
+      expect(() =>
+        AuthoredProvenanceRecordSchema.parse({
+          ...authored,
+          positiveFixtures: [{ ...authored.positiveFixtures[0], preimageCommitSha: 'nope' }],
+        }),
+      ).toThrow();
+    });
+
+    it('does not let an authored record masquerade as mined (kind required on authored branch)', () => {
+      // An authored-shaped payload tagged kind:'mined' must validate as NEITHER branch: it lacks
+      // the mined wire's required fields (mergedPr/reviewThread/commitSha) AND fails the authored
+      // discriminator — so the union REJECTS it rather than letting it round-trip as mined (#2259).
+      expect(() => ProvenanceRecordSchema.parse({ ...authored, kind: 'mined' as const })).toThrow();
+      // And a genuine mined record is never read as authored.
+      expect(isAuthoredProvenance(ProvenanceRecordSchema.parse(minedWire))).toBe(false);
     });
   });
 

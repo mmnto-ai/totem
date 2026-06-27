@@ -120,7 +120,9 @@ describe('buildCertifyingCorpus', () => {
     // provenanceByRule maps the survivor to its mining provenance (train PR 1).
     const prov = corpus.provenanceByRule.get(rule.lessonHash);
     expect(prov).toBeDefined();
-    expect(prov!.mergedPr).toBe(1);
+    // ADR-112: provenance is now the mined|authored union — narrow to the mined
+    // branch (this is a mined cert corpus) before reading the mining-only field.
+    expect(prov && 'mergedPr' in prov && prov.mergedPr).toBe(1);
 
     // fold-I: held-out fetch count is 0 (FM-h) + seed-blindness surfaced.
     expect(ledgers.apiUsage.heldOutFetchCount).toBe(0);

@@ -50,6 +50,29 @@ export type AstGrepYamlRule = NapiConfig;
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 
 /**
+ * ISO-8601 shape for an authoring date — a calendar date (`YYYY-MM-DD`) or a full
+ * timestamp with optional fractional seconds + `Z`/offset. Shape only; the calendar
+ * validity is enforced by `isIso8601CalendarDate` (#2259 — GCA-high + CR).
+ */
+const ISO_8601_DATE_RE =
+  /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+/**
+ * True iff `s` is a well-formed ISO-8601 date/timestamp AND a REAL calendar date.
+ * `Date.parse` alone is insufficient: it NORMALIZES day-overflow (`2026-02-31` → Mar 3,
+ * `2026-02-29` non-leap → Mar 1) instead of rejecting it (#2259 CR re-review). The
+ * `Date.UTC` round-trip validates the date HEAD's calendar independently of any timezone
+ * in the time component — a negative offset can legitimately shift the UTC day, so the
+ * head, not the parsed instant, is what must round-trip.
+ */
+function isIso8601CalendarDate(s: string): boolean {
+  if (!ISO_8601_DATE_RE.test(s) || Number.isNaN(Date.parse(s))) return false;
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number) as [number, number, number];
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  return probe.getUTCFullYear() === y && probe.getUTCMonth() + 1 === m && probe.getUTCDate() === d;
+}
+
+/**
  * mmnto-ai/totem#2183 — the §3.1 provenance leg of the ADR-110 Gate-1
  * legitimacy bar: the identity of the merged-PR history a regenerated rule was
  * mined from. Structured and **mechanically validated** (NOT a bare string) so
@@ -58,8 +81,25 @@ const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
  * zero-trust), the single source of truth `deriveRuleClass` reads. Control
  * *evidence* (which PRs/fixtures proved each control) rides the wind-tunnel
  * manifest (ADR-110 §6), not the per-rule marker.
+ *
+ * **ADR-112 — this is the MINED variant of the `ProvenanceRecord` union.** The
+ * wire shape is otherwise UNCHANGED: `kind` is OPTIONAL and absent on every
+ * pre-ADR-112 record, so a legacy mined provenance parses + reserializes
+ * BYTE-IDENTICAL (no added key — `canonicalStringify` omits the undefined
+ * discriminator exactly as it omits an absent `unverified`), preserving the
+ * non-mutating-refine manifest-hash discipline. Absence ⇒ `'mined'` via
+ * `provenanceKind()`; the miner path types its provenance as
+ * `MinedProvenanceRecord` (the documented mining-only boundary), so its readers
+ * of `mergedPr` / `commitSha` stay type-safe without narrowing.
  */
-export const ProvenanceRecordSchema = z.object({
+export const MinedProvenanceWireSchema = z.object({
+  /**
+   * ADR-112 discriminator. OPTIONAL on the mined wire so legacy records (which
+   * have no `kind`) round-trip byte-identical; absence is read as `'mined'` by
+   * `provenanceKind()`. A new mined artifact MAY carry `kind: 'mined'` only
+   * where the resulting hash churn is intentional.
+   */
+  kind: z.literal('mined').optional(),
   /** Merged PR the rule was mined from (positive integer PR number). */
   mergedPr: z.number().int().positive(),
   /**
@@ -77,7 +117,109 @@ export const ProvenanceRecordSchema = z.object({
   commitSha: z.string().regex(COMMIT_SHA_RE),
 });
 
+export type MinedProvenanceRecord = z.infer<typeof MinedProvenanceWireSchema>;
+
+/**
+ * ADR-112 §3 — one real lc instance an authored rule claims to catch. ALL such
+ * fixtures are TRAIN-side (the §5 leakage guard); the preimage-differential
+ * (§4) is evaluated in slice C/D, but the record must CARRY both commits + the
+ * defect locus here so derivation is possible. `matchedSpan` + `contentHash`
+ * are the line-drift-stable locus (cf. `firingLabelId`), not just the file.
+ */
+export const AuthoredFixtureSchema = z.object({
+  /** The PR whose merge introduced the fix (the in-corpus anchor). */
+  pr: z.number().int().positive(),
+  /** The PR's merge/squash commit — the post-fix (defect-absent) anchor. */
+  mergeCommitSha: z.string().regex(COMMIT_SHA_RE),
+  /** The PARENT (pre-fix) commit where the DEFECT is present (ADR-112 §4). */
+  preimageCommitSha: z.string().regex(COMMIT_SHA_RE),
+  /** File the defect locus lives in. */
+  filePath: z.string().refine((s) => s.trim().length > 0, {
+    message: 'filePath must be a non-empty reference',
+  }),
+  /** Line-range or AST-node path — the defect locus, not just the file. */
+  matchedSpan: z.string().refine((s) => s.trim().length > 0, {
+    message: 'matchedSpan must be a non-empty locus',
+  }),
+  /** Span content hash, line-drift-stable (cf. `firingLabelId`). */
+  contentHash: z.string().refine((s) => s.trim().length > 0, {
+    message: 'contentHash must be a non-empty hash',
+  }),
+});
+
+export type AuthoredFixture = z.infer<typeof AuthoredFixtureSchema>;
+
+/**
+ * ADR-112 §3 — the AUTHORED variant of the `ProvenanceRecord` union. A
+ * hand-authored rule is anchored to a real historical DEFECT (the pre-image,
+ * NOT its fix — ADR-110 §4 TP-def) via ≥1 train-side `positiveFixtures` entry.
+ * `kind: 'authored'` is REQUIRED (the discriminator), so this can never be
+ * mistaken for a mined record and an authored record can never round-trip as
+ * mined. Attributable (`author` never anonymous); the embargo/ledger
+ * attestations ride the §8 authoring-ledger, not this marker.
+ */
+export const AuthoredProvenanceRecordSchema = z.object({
+  kind: z.literal('authored'),
+  /** Agent-id or operator handle — attributable, never anonymous. */
+  author: z.string().refine((s) => s.trim().length > 0, {
+    message: 'author must be a non-empty, attributable handle',
+  }),
+  /** ISO-8601 authoring date — a real calendar date (`YYYY-MM-DD`) or a full timestamp. */
+  authoredAt: z.string().refine(isIso8601CalendarDate, {
+    message: 'authoredAt must be a valid ISO-8601 calendar date (YYYY-MM-DD or a full timestamp)',
+  }),
+  /** The declared DEFECT the rule targets — the pre-image, not its fix. */
+  targetDefect: z.string().refine((s) => s.trim().length > 0, {
+    message: 'targetDefect must be a non-empty defect description',
+  }),
+  /** ≥1 real lc instance the rule claims to catch — ALL train-side (§5). */
+  positiveFixtures: z.array(AuthoredFixtureSchema).min(1, {
+    message: 'an authored rule must declare ≥1 positive fixture (ADR-112 §3)',
+  }),
+  /** Declared near-misses the rule must stay silent on (feeds §6 negative controls). */
+  negativeFixtures: z.array(AuthoredFixtureSchema).optional(),
+});
+
+export type AuthoredProvenanceRecord = z.infer<typeof AuthoredProvenanceRecordSchema>;
+
+/**
+ * ADR-112 §3 — `provenance` is a discriminated UNION on `kind`
+ * (`mined | authored`), the first multi-producer attribute on a rule
+ * (Consequence 3). Built as a `z.union` (NOT `z.discriminatedUnion`) on
+ * purpose: the mined wire keeps `kind` OPTIONAL for byte-identical legacy
+ * round-trip, which a required-discriminator schema cannot express. The two
+ * branches are disjoint on their required fields (`authored` requires
+ * `kind:'authored'` + author/targetDefect/fixtures; the mined branch is the
+ * only one a legacy `{mergedPr, reviewThread, commitSha}` record satisfies), so
+ * the union is unambiguous. `Authored` is listed FIRST so a record carrying
+ * `kind:'authored'` never matches the mined branch.
+ */
+export const ProvenanceRecordSchema = z.union([
+  AuthoredProvenanceRecordSchema,
+  MinedProvenanceWireSchema,
+]);
+
 export type ProvenanceRecord = z.infer<typeof ProvenanceRecordSchema>;
+
+/**
+ * ADR-112 — the canonical reader of a provenance record's producer kind. An
+ * absent discriminator (every legacy mined record) reads as `'mined'`. Use this
+ * + the guards below instead of touching `.kind` directly, so the
+ * absent-⇒-mined default lives in exactly one place (Tenet 20).
+ */
+export function provenanceKind(p: ProvenanceRecord): 'mined' | 'authored' {
+  return p.kind ?? 'mined';
+}
+
+/** ADR-112 — type-narrowing guard for the mined branch (mined-only field reads). */
+export function isMinedProvenance(p: ProvenanceRecord): p is MinedProvenanceRecord {
+  return provenanceKind(p) === 'mined';
+}
+
+/** ADR-112 — type-narrowing guard for the authored branch. */
+export function isAuthoredProvenance(p: ProvenanceRecord): p is AuthoredProvenanceRecord {
+  return p.kind === 'authored';
+}
 
 /**
  * mmnto-ai/totem#2183 — the three **peer** legs of the ADR-110 §3 legitimacy

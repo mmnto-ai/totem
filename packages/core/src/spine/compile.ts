@@ -37,8 +37,7 @@ import {
   type Stage4VerifierDeps,
   verifyAgainstCodebase,
 } from '../stage4-verifier.js';
-import type { CandidateRuleRecord } from './candidate-rule.js';
-import type { ClassifyStageResult } from './classify.js';
+import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger, Stage4LedgerOutcome } from './ledgers.js';
 
 /**
@@ -53,6 +52,20 @@ export interface CompiledCandidate {
   classifierLedgerRef: string;
   rule: CompiledRule;
   stage4: Stage4VerificationResult;
+}
+
+/**
+ * ADR-112 §2 — the minimal input `runCompileStage` consumes: the candidates + the
+ * classifier ledger. A miner `ClassifyStageResult` satisfies it structurally (its
+ * extra `emissionLedger` is never read here); the authored producer's
+ * `toCompileFeed` builds it WITHOUT a mining emission ledger (an authored rule has
+ * no review-thread emission to attest, and the classifier ledger carries
+ * `dispositionSource: 'authored-whitelist'`, not a fabricated `'classified'`). One
+ * compiler, two producers — neither masquerading as the other.
+ */
+export interface CompileStageInput {
+  candidates: readonly CompileInputCandidate[];
+  classifierLedger: ClassifierLedger;
 }
 
 /** Pure compile outcome (no IO): a compiled rule, or a loud per-engine validation rejection. */
@@ -75,7 +88,7 @@ export interface CompileStageResult {
 }
 
 /** Stable, deterministic lesson heading for a candidate (unique via its `clr-…` ledger ref). */
-function candidateHeading(candidate: CandidateRuleRecord): string {
+function candidateHeading(candidate: CompileInputCandidate): string {
   return `Gate-1 rule candidate (${candidate.classifierLedgerRef})`;
 }
 
@@ -89,7 +102,7 @@ function candidateHeading(candidate: CandidateRuleRecord): string {
  * safety validation (e.g. ReDoS) — a counted, reported `compile-rejected` state.
  */
 export function compileCandidate(
-  candidate: CandidateRuleRecord,
+  candidate: CompileInputCandidate,
   opts: { now: string },
 ): CompileOutcome {
   if (candidate.classifierDisposition === 'behavioral') {
@@ -138,6 +151,17 @@ export function compileCandidate(
     // claim — codex). `deriveRuleClass` forces 'advisory' on `unverified:true`.
     unverified: true,
   });
+  // §3 engine-binding (#2259/#7): an AUTHORED candidate carries the engine its
+  // structural-eligibility whitelist was judged for. The compiler derives the engine
+  // INDEPENDENTLY from `dslSource`, so a regex-whitelisted rule whose source parses as
+  // ast-grep would otherwise compile + emit as `authored-whitelist` under an engine the
+  // whitelist never cleared. Fail loud — the eligibility verdict was engine-specific.
+  // MINED candidates carry no `declaredEngine` and skip the bind (engine is source-derived).
+  if (candidate.declaredEngine !== undefined && rule.engine !== candidate.declaredEngine) {
+    throw new Error(
+      `[Totem Error] compileCandidate: candidate '${candidate.classifierLedgerRef}' declared engine '${candidate.declaredEngine}' but its dslSource compiled as '${rule.engine}' — the structural-eligibility whitelist was judged for a different engine (ADR-112 §3)`,
+    );
+  }
   return { kind: 'compiled', rule };
 }
 
@@ -211,7 +235,7 @@ function mapStage4Outcome(outcome: Stage4Outcome, now: string): Stage4Mapping {
  * the original reference (a structural copy, not a deep copy).
  */
 export async function runCompileStage(
-  classify: ClassifyStageResult,
+  classify: CompileStageInput,
   deps: CompileStageDeps,
 ): Promise<CompileStageResult> {
   const baseline = deps.baseline ?? getDefaultBaseline();
@@ -232,6 +256,22 @@ export async function runCompileStage(
   >();
 
   const structural = classify.candidates.filter((c) => c.classifierDisposition === 'structural');
+  // Duplicate-candidate-ref guard (#2259, greptile-P1 outside-diff): the per-candidate
+  // ledger join below requires EXACTLY ONE ledger entry, but two CANDIDATES sharing one
+  // `classifierLedgerRef` would BOTH pass that check against a single entry — then the
+  // later Stage-4 update silently overwrites the earlier in `updates`, leaving one compiled
+  // rule bound to the wrong outcome. The widened input accepts either producer, so uniqueness
+  // is no longer guaranteed by a single front-end; assert it here, fail loud before any
+  // compile work (symmetric with `toCompileFeed`'s authored-side dedup).
+  const seenRefs = new Set<string>();
+  for (const candidate of structural) {
+    if (seenRefs.has(candidate.classifierLedgerRef)) {
+      throw new Error(
+        `[Totem Error] runCompileStage: duplicate classifierLedgerRef '${candidate.classifierLedgerRef}' across structural candidates — each compile candidate needs a unique ledger ref for the 1:1 Stage-4 join`,
+      );
+    }
+    seenRefs.add(candidate.classifierLedgerRef);
+  }
   for (const candidate of structural) {
     // Classifier-ledger join: require EXACTLY ONE entry (missing or duplicate fails
     // loud — else the Stage-4 confirmation is lost or applied to the wrong row).
