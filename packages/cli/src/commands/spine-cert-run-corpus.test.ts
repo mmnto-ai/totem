@@ -216,7 +216,9 @@ describe('buildReplayCorpusProvider (run-path)', () => {
     const corpus = await provider(lockWith(hash, prDiffsHash(), groundTruthHash()));
 
     expect(corpus.rules).toHaveLength(1);
-    expect(corpus.provenanceByRule.get(corpus.rules[0]!.lessonHash)?.mergedPr).toBe(1);
+    const prov = corpus.provenanceByRule.get(corpus.rules[0]!.lessonHash);
+    // ADR-112: narrow the mined|authored provenance union to the mined branch.
+    expect(prov && 'mergedPr' in prov && prov.mergedPr).toBe(1);
     // fold-I ledgers emitted via the sink.
     expect(captured?.apiUsage.heldOutFetchCount).toBe(0);
   });
