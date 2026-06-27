@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  type AuthoredRuleRecord,
   AuthoredRuleRecordSchema,
   evaluateStructuralEligibility,
   mintAuthoredRuleId,
+  toCompileFeed,
   type WhitelistEntry,
 } from './authored-rule.js';
 
@@ -148,5 +150,71 @@ describe('mintAuthoredRuleId (ADR-112 §8)', () => {
     const resolved = mintAuthoredRuleId('a', 'd', new Set());
     expect(mintAuthoredRuleId('a', 'd', new Set([resolved]))).toBe(`${resolved}-1`);
     expect(mintAuthoredRuleId('a', 'd', new Set([resolved]))).toBe(`${resolved}-1`);
+  });
+});
+
+describe('toCompileFeed (ADR-112 §2/§8 — authored → compile-stage input)', () => {
+  const decidable = (ref: string): AuthoredRuleRecord => ({
+    provenance: {
+      kind: 'authored',
+      author: 'totem-claude',
+      authoredAt: '2026-06-27',
+      targetDefect: 'float equality compared with == instead of a finite check',
+      positiveFixtures: [
+        {
+          pr: 1,
+          mergeCommitSha: 'a'.repeat(40),
+          preimageCommitSha: 'b'.repeat(40),
+          filePath: 'src/a.ts',
+          matchedSpan: 'L1',
+          contentHash: 'h1',
+        },
+      ],
+    },
+    structuralEligibility: {
+      decidable: true,
+      basis: 'whitelist:float-finite-assert',
+      judgedBy: 's',
+    },
+    origin: { kind: 'from-scratch' },
+    declaredEngine: 'regex',
+    authoringLedgerRef: ref,
+    dslSource: '**Pattern:** `== *\\d`',
+    unverified: true,
+  });
+
+  it('emits one structural candidate + a 1:1 authored-whitelist ledger entry per decidable rule', () => {
+    const feed = toCompileFeed([decidable('alr-1'), decidable('alr-2')]);
+    expect(feed.candidates).toHaveLength(2);
+    // the adapter — not the author — sets the disposition to structural.
+    expect(feed.candidates.every((c) => c.classifierDisposition === 'structural')).toBe(true);
+    // authored provenance is carried through, not flattened to a mined shape.
+    expect(feed.candidates[0]!.provenance.kind).toBe('authored');
+    expect(feed.candidates.map((c) => c.classifierLedgerRef)).toEqual([
+      'authored:alr-1',
+      'authored:alr-2',
+    ]);
+    // the classifier ledger NEVER claims an LLM judged a human rule (Tenet-20).
+    expect(
+      feed.classifierLedger.entries.every((e) => e.dispositionSource === 'authored-whitelist'),
+    ).toBe(true);
+    // the join key is 1:1 between candidate and ledger entry (runCompileStage requires it).
+    expect(feed.classifierLedger.entries.map((e) => e.candidateRef)).toEqual(
+      feed.candidates.map((c) => c.classifierLedgerRef),
+    );
+  });
+
+  it('FAILS LOUD on a non-decidable record (FM(d) — never reaches the compiler)', () => {
+    const nd: AuthoredRuleRecord = {
+      ...decidable('alr-x'),
+      structuralEligibility: { decidable: false, basis: 'whitelist:foo', judgedBy: 's' },
+    };
+    expect(() => toCompileFeed([nd])).toThrow(/not structurally decidable/);
+  });
+
+  it('FAILS LOUD on a duplicate authoringLedgerRef (protects the 1:1 compile join)', () => {
+    expect(() => toCompileFeed([decidable('dup'), decidable('dup')])).toThrow(
+      /duplicate authoringLedgerRef/,
+    );
   });
 });

@@ -37,8 +37,7 @@ import {
   type Stage4VerifierDeps,
   verifyAgainstCodebase,
 } from '../stage4-verifier.js';
-import type { CandidateRuleRecord } from './candidate-rule.js';
-import type { ClassifyStageResult } from './classify.js';
+import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger, Stage4LedgerOutcome } from './ledgers.js';
 
 /**
@@ -53,6 +52,20 @@ export interface CompiledCandidate {
   classifierLedgerRef: string;
   rule: CompiledRule;
   stage4: Stage4VerificationResult;
+}
+
+/**
+ * ADR-112 §2 — the minimal input `runCompileStage` consumes: the candidates + the
+ * classifier ledger. A miner `ClassifyStageResult` satisfies it structurally (its
+ * extra `emissionLedger` is never read here); the authored producer's
+ * `toCompileFeed` builds it WITHOUT a mining emission ledger (an authored rule has
+ * no review-thread emission to attest, and the classifier ledger carries
+ * `dispositionSource: 'authored-whitelist'`, not a fabricated `'classified'`). One
+ * compiler, two producers — neither masquerading as the other.
+ */
+export interface CompileStageInput {
+  candidates: readonly CompileInputCandidate[];
+  classifierLedger: ClassifierLedger;
 }
 
 /** Pure compile outcome (no IO): a compiled rule, or a loud per-engine validation rejection. */
@@ -75,7 +88,7 @@ export interface CompileStageResult {
 }
 
 /** Stable, deterministic lesson heading for a candidate (unique via its `clr-…` ledger ref). */
-function candidateHeading(candidate: CandidateRuleRecord): string {
+function candidateHeading(candidate: CompileInputCandidate): string {
   return `Gate-1 rule candidate (${candidate.classifierLedgerRef})`;
 }
 
@@ -89,7 +102,7 @@ function candidateHeading(candidate: CandidateRuleRecord): string {
  * safety validation (e.g. ReDoS) — a counted, reported `compile-rejected` state.
  */
 export function compileCandidate(
-  candidate: CandidateRuleRecord,
+  candidate: CompileInputCandidate,
   opts: { now: string },
 ): CompileOutcome {
   if (candidate.classifierDisposition === 'behavioral') {
@@ -211,7 +224,7 @@ function mapStage4Outcome(outcome: Stage4Outcome, now: string): Stage4Mapping {
  * the original reference (a structural copy, not a deep copy).
  */
 export async function runCompileStage(
-  classify: ClassifyStageResult,
+  classify: CompileStageInput,
   deps: CompileStageDeps,
 ): Promise<CompileStageResult> {
   const baseline = deps.baseline ?? getDefaultBaseline();

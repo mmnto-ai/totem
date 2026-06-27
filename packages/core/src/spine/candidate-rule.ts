@@ -14,7 +14,7 @@
 
 import { z } from 'zod';
 
-import { MinedProvenanceWireSchema } from '../compiler-schema.js';
+import { MinedProvenanceWireSchema, type ProvenanceRecord } from '../compiler-schema.js';
 
 /**
  * Stage-2 classifier disposition (ADR-091 funnel, the gate). A `structural`
@@ -25,6 +25,24 @@ import { MinedProvenanceWireSchema } from '../compiler-schema.js';
  */
 export const ClassifierDispositionSchema = z.enum(['structural', 'behavioral']);
 export type ClassifierDisposition = z.infer<typeof ClassifierDispositionSchema>;
+
+/**
+ * ADR-112 — the minimal candidate shape the compile actuator (`compileCandidate`
+ * / `runCompileStage`) actually reads. BOTH the mined `CandidateRuleRecord` and an
+ * authored-derived candidate (via `toCompileFeed`) satisfy it: `provenance` is the
+ * `mined | authored` union, so ONE compiler accepts either producer without an
+ * authored rule masquerading as a classify result (ADR-112 §2 — a parallel
+ * front-end to one compiler, never a second compiler). The mined
+ * `CandidateRuleRecord` (whose `provenance` is the narrower `MinedProvenanceRecord`)
+ * is assignable to this shape; so is the authored compile-feed candidate.
+ */
+export interface CompileInputCandidate {
+  provenance: ProvenanceRecord;
+  classifierDisposition: ClassifierDisposition;
+  classifierLedgerRef: string;
+  dslSource: string;
+  unverified: true;
+}
 
 /**
  * ADR-111 §3 — the miner's sole output envelope, minted `unverified`/Yellow

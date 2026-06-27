@@ -20,6 +20,8 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 import { AuthoredProvenanceRecordSchema } from '../compiler-schema.js';
+import type { CompileInputCandidate } from './candidate-rule.js';
+import type { ClassifierLedger } from './ledgers.js';
 
 /** The matcher engines an authored rule may declare (mirrors `CompiledRule.engine`). */
 export const DeclaredEngineSchema = z.enum(['regex', 'ast', 'ast-grep']);
@@ -151,4 +153,61 @@ export function mintAuthoredRuleId(
     const candidate = `${seed}-${n}`;
     if (!existingIds.has(candidate)) return candidate;
   }
+}
+
+// ── Compile-feed adapter (ADR-112 §2/§8) ──────────────────────────────────────
+
+/**
+ * The authored producer's compile-stage input — what `toCompileFeed` builds for
+ * `runCompileStage`. Deliberately NOT a `ClassifyStageResult`: an authored rule
+ * has no mining emission ledger, so faking one would be a provenance lie. The
+ * classifier ledger it carries records `dispositionSource: 'authored-whitelist'`.
+ */
+export interface AuthoredCompileFeed {
+  candidates: CompileInputCandidate[];
+  classifierLedger: ClassifierLedger;
+}
+
+/**
+ * ADR-112 §2/§8 — turn structurally-DECIDABLE authored rules into the input
+ * `runCompileStage` consumes, reusing the ONE G-series compiler (never a second).
+ * The disposition is set HERE to `'structural'` from the INDEPENDENT eligibility
+ * verdict (§3) — the author never sets it. A NON-decidable record is a contract
+ * violation → FAIL LOUD (the FM(d) backstop in code), never a silent skip.
+ * `classifierLedgerRef = authored:<authoringLedgerRef>` is unique per rule (the
+ * authoring ledger is 1:1 with the rule); a duplicate fails loud so the downstream
+ * 1:1 classifier-ledger join can't silently collapse.
+ */
+export function toCompileFeed(records: readonly AuthoredRuleRecord[]): AuthoredCompileFeed {
+  const candidates: CompileInputCandidate[] = [];
+  const entries: ClassifierLedger['entries'] = [];
+  const seen = new Set<string>();
+  for (const record of records) {
+    if (!record.structuralEligibility.decidable) {
+      throw new Error(
+        `[Totem Error] toCompileFeed: authored rule '${record.authoringLedgerRef}' is not structurally decidable — a non-decidable rule must never reach the compiler (ADR-112 §3 / FM(d))`,
+      );
+    }
+    const classifierLedgerRef = `authored:${record.authoringLedgerRef}`;
+    if (seen.has(classifierLedgerRef)) {
+      throw new Error(
+        `[Totem Error] toCompileFeed: duplicate authoringLedgerRef '${record.authoringLedgerRef}' — each authored rule needs a unique ledger ref for the 1:1 compile join`,
+      );
+    }
+    seen.add(classifierLedgerRef);
+    candidates.push({
+      provenance: record.provenance,
+      classifierDisposition: 'structural',
+      classifierLedgerRef,
+      dslSource: record.dslSource,
+      unverified: true,
+    });
+    entries.push({
+      candidateRef: classifierLedgerRef,
+      disposition: 'structural',
+      stage4Confirmed: false,
+      dispositionSource: 'authored-whitelist',
+    });
+  }
+  return { candidates, classifierLedger: { entries } };
 }

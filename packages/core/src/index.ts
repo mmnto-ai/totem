@@ -806,10 +806,15 @@ export {
 } from './retrospect.js';
 
 // Spine: Gate-1 wind-tunnel evidence harness (mmnto-ai/totem#2188)
-export type { CandidateRuleRecord, ClassifierDisposition } from './spine/candidate-rule.js';
+export type {
+  CandidateRuleRecord,
+  ClassifierDisposition,
+  CompileInputCandidate,
+} from './spine/candidate-rule.js';
 export { CandidateRuleRecordSchema, ClassifierDispositionSchema } from './spine/candidate-rule.js';
 // Spine: Gate-1 AUTHORED producer (ADR-112, mmnto-ai/totem-strategy#591)
 export type {
+  AuthoredCompileFeed,
   AuthoredOrigin,
   AuthoredRuleRecord,
   DeclaredEngine,
@@ -823,6 +828,7 @@ export {
   evaluateStructuralEligibility,
   mintAuthoredRuleId,
   StructEligResultSchema,
+  toCompileFeed,
 } from './spine/authored-rule.js';
 export type { ProducerKind, RulePolicy } from './spine/rule-policy.js';
 export { getRulePolicy } from './spine/rule-policy.js';
@@ -861,6 +867,7 @@ export type {
   CompiledCandidate,
   CompileOutcome,
   CompileStageDeps,
+  CompileStageInput,
   CompileStageResult,
 } from './spine/compile.js';
 export { compileCandidate, runCompileStage } from './spine/compile.js';

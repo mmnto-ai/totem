@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { type AuthoredRuleRecord, toCompileFeed } from './authored-rule.js';
 import type { CandidateRuleRecord } from './candidate-rule.js';
 import {
   type ClassifierResult,
@@ -434,5 +435,60 @@ describe('runCompileStage — end-to-end §8 harness lock', () => {
     };
     const clauses = runFalsificationHarness(ledgers).violations.map((v) => v.clause);
     expect(clauses).toContain('stage4-consistency');
+  });
+});
+
+// ── runCompileStage — ADR-112 authored compile-feed (one compiler, two producers) ──
+describe('runCompileStage — ADR-112 authored compile-feed', () => {
+  const authored = (ref: string, dsl: string): AuthoredRuleRecord => ({
+    provenance: {
+      kind: 'authored',
+      author: 'totem-claude',
+      authoredAt: '2026-06-27',
+      targetDefect: 'calls forbiddenCall()',
+      positiveFixtures: [
+        {
+          pr: 1,
+          mergeCommitSha: sha(1),
+          preimageCommitSha: sha(2),
+          filePath: 'src/a.ts',
+          matchedSpan: 'L1',
+          contentHash: 'h1',
+        },
+      ],
+    },
+    structuralEligibility: {
+      decidable: true,
+      basis: 'whitelist:forbidden-call',
+      judgedBy: 'static-whitelist@cert-1',
+    },
+    origin: { kind: 'from-scratch' },
+    declaredEngine: 'regex',
+    authoringLedgerRef: ref,
+    dslSource: dsl,
+    unverified: true,
+  });
+
+  it('compiles an authored rule through the SAME runCompileStage — authored provenance + Stage-4 preserved', async () => {
+    const feed = toCompileFeed([authored('alr-1', REGEX_DSL)]);
+    const r = await runCompileStage(feed, compileDeps({ 'src/a.ts': 'forbiddenCall()' }));
+    expect(r.compiled).toHaveLength(1);
+    const c = r.compiled[0]!;
+    // authored provenance survives the compiler untouched (the union, not a mined shape).
+    expect(c.provenance.kind).toBe('authored');
+    expect(c.classifierLedgerRef).toBe('authored:alr-1');
+    // Stage-4 actually ran on the authored rule's matcher (real codebase evidence).
+    expect(c.stage4.outcome).toBe('in-scope-bad-example');
+    // the ledger records the authored-whitelist source + the Stage-4 confirmation.
+    expect(r.classifierLedger.entries[0]!.dispositionSource).toBe('authored-whitelist');
+    expect(r.classifierLedger.entries[0]!.stage4Confirmed).toBe(true);
+  });
+
+  it('never reaches the compiler for a non-decidable authored rule (toCompileFeed throws first)', () => {
+    const nd: AuthoredRuleRecord = {
+      ...authored('alr-x', REGEX_DSL),
+      structuralEligibility: { decidable: false, basis: 'whitelist:x', judgedBy: 's' },
+    };
+    expect(() => toCompileFeed([nd])).toThrow(/not structurally decidable/);
   });
 });
