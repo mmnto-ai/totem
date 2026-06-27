@@ -67,11 +67,12 @@ export const AuthoredOriginSchema = z.union([
 export type AuthoredOrigin = z.infer<typeof AuthoredOriginSchema>;
 
 // The persisted minted-rule-id shape (ADR-112 §8): a 16-char lowercase-hex base from
-// `mintAuthoredRuleId`, with an optional `-<n>` collision-counter suffix. Pinned as a
-// shared constant so the SCHEMA boundary rejects exactly the shapes the MINT never emits
-// (#2259 CR-major: a non-blank-only check let arbitrary strings into the label/ledger join).
+// `mintAuthoredRuleId`, with an optional collision suffix. The suffix is EXACTLY what the
+// mint emits — `-<n>` for n≥1, never `-0` and never zero-padded — so schema-valid ≡
+// mint-producible (#2259 CR: a looser `-\d+` admitted ids like `…-0`/`…-01` the mint can't
+// make). Pinned as a shared constant binding the SCHEMA boundary to the mint's codomain.
 const AUTHORED_RULE_ID_HEX_LEN = 16;
-const AUTHORED_RULE_ID_RE = /^[0-9a-f]{16}(?:-\d+)?$/;
+const AUTHORED_RULE_ID_RE = /^[0-9a-f]{16}(?:-[1-9]\d*)?$/;
 
 /**
  * ADR-112 §3 — the authored producer's sole output envelope. Parallel to

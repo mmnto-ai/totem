@@ -139,6 +139,9 @@ describe('AuthoredRuleRecord schema (ADR-112 §3)', () => {
       '0f1e2d3c4b5a6978abcd',
       '0F1E2D3C4B5A6978',
       'rid-alr-1',
+      // non-canonical suffixes the mint never emits (n≥1, no zero-pad) — #2259 CR
+      '0f1e2d3c4b5a6978-0',
+      '0f1e2d3c4b5a6978-01',
     ]) {
       expect(() => AuthoredRuleRecordSchema.parse({ ...base, ruleId: bad })).toThrow();
     }
