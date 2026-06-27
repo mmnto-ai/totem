@@ -50,6 +50,15 @@ export type AstGrepYamlRule = NapiConfig;
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 
 /**
+ * ISO-8601 shape for an authoring date — a calendar date (`YYYY-MM-DD`) or a full
+ * timestamp with optional fractional seconds + `Z`/offset. Shape only; pair with a
+ * `Date.parse` sanity check so impossible dates (`2026-13-45`) are also rejected
+ * (#2259 — GCA-high + CR: the field is documented ISO-8601 but only checked non-empty).
+ */
+const ISO_8601_DATE_RE =
+  /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+/**
  * mmnto-ai/totem#2183 — the §3.1 provenance leg of the ADR-110 Gate-1
  * legitimacy bar: the identity of the merged-PR history a regenerated rule was
  * mined from. Structured and **mechanically validated** (NOT a bare string) so
@@ -141,9 +150,9 @@ export const AuthoredProvenanceRecordSchema = z.object({
   author: z.string().refine((s) => s.trim().length > 0, {
     message: 'author must be a non-empty, attributable handle',
   }),
-  /** ISO-8601 authoring date. */
-  authoredAt: z.string().refine((s) => s.trim().length > 0, {
-    message: 'authoredAt must be a non-empty ISO-8601 date',
+  /** ISO-8601 authoring date — a calendar date (`YYYY-MM-DD`) or a full timestamp. */
+  authoredAt: z.string().refine((s) => ISO_8601_DATE_RE.test(s) && !Number.isNaN(Date.parse(s)), {
+    message: 'authoredAt must be a valid ISO-8601 date (YYYY-MM-DD or a full timestamp)',
   }),
   /** The declared DEFECT the rule targets — the pre-image, not its fix. */
   targetDefect: z.string().refine((s) => s.trim().length > 0, {

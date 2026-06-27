@@ -1042,6 +1042,19 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       ).toThrow();
     });
 
+    it('validates authoredAt as ISO-8601 — rejects free text + impossible dates, accepts date/timestamp (#2259)', () => {
+      for (const bad of ['last tuesday', '2026-13-45', '06/27/2026', '']) {
+        expect(() =>
+          AuthoredProvenanceRecordSchema.parse({ ...authored, authoredAt: bad }),
+        ).toThrow();
+      }
+      for (const ok of ['2026-06-27', '2026-06-27T12:00:00.000Z']) {
+        expect(() =>
+          AuthoredProvenanceRecordSchema.parse({ ...authored, authoredAt: ok }),
+        ).not.toThrow();
+      }
+    });
+
     it('rejects a fixture with a malformed preimage/merge SHA', () => {
       expect(() =>
         AuthoredProvenanceRecordSchema.parse({
@@ -1052,7 +1065,11 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
     });
 
     it('does not let an authored record masquerade as mined (kind required on authored branch)', () => {
-      // A record carrying authored fields but kind:'mined' must not validate as authored.
+      // An authored-shaped payload tagged kind:'mined' must validate as NEITHER branch: it lacks
+      // the mined wire's required fields (mergedPr/reviewThread/commitSha) AND fails the authored
+      // discriminator — so the union REJECTS it rather than letting it round-trip as mined (#2259).
+      expect(() => ProvenanceRecordSchema.parse({ ...authored, kind: 'mined' as const })).toThrow();
+      // And a genuine mined record is never read as authored.
       expect(isAuthoredProvenance(ProvenanceRecordSchema.parse(minedWire))).toBe(false);
     });
   });

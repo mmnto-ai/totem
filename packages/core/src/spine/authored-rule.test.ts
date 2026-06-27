@@ -81,6 +81,7 @@ describe('evaluateStructuralEligibility (ADR-112 §3 — closed predicate)', () 
 
 describe('AuthoredRuleRecord schema (ADR-112 §3)', () => {
   const base = {
+    ruleId: '0f1e2d3c4b5a6978',
     provenance: {
       kind: 'authored' as const,
       author: 'totem-claude',
@@ -124,6 +125,13 @@ describe('AuthoredRuleRecord schema (ADR-112 §3)', () => {
     expect(() => AuthoredRuleRecordSchema.parse(without)).toThrow();
   });
 
+  it('reserves the minted ruleId on the record (ADR-112 §3/§8 — persisted, never re-derived)', () => {
+    const { ruleId: _omit, ...without } = base;
+    expect(() => AuthoredRuleRecordSchema.parse(without)).toThrow();
+    expect(() => AuthoredRuleRecordSchema.parse({ ...base, ruleId: '  ' })).toThrow();
+    expect(AuthoredRuleRecordSchema.parse(base).ruleId).toBe('0f1e2d3c4b5a6978');
+  });
+
   it('forces unverified:true (zero blast radius — ADR-089/§1)', () => {
     expect(() => AuthoredRuleRecordSchema.parse({ ...base, unverified: false })).toThrow();
   });
@@ -135,6 +143,13 @@ describe('mintAuthoredRuleId (ADR-112 §8)', () => {
     const b = mintAuthoredRuleId('totem-claude', 'float-finite-assert', new Set());
     expect(a).toBe(b);
     expect(a).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('encodes (author,targetDefect) injectively — delimiter-aliased tuples do NOT collide (#2259)', () => {
+    // A bare `author·targetDefect` seed would alias these two distinct tuples onto one id.
+    const a = mintAuthoredRuleId('a·b', 'c', new Set());
+    const b = mintAuthoredRuleId('a', 'b·c', new Set());
+    expect(a).not.toBe(b);
   });
 
   it('appends a stable counter on collision and yields distinct persisted ids', () => {
@@ -155,6 +170,7 @@ describe('mintAuthoredRuleId (ADR-112 §8)', () => {
 
 describe('toCompileFeed (ADR-112 §2/§8 — authored → compile-stage input)', () => {
   const decidable = (ref: string): AuthoredRuleRecord => ({
+    ruleId: `rid-${ref}`,
     provenance: {
       kind: 'authored',
       author: 'totem-claude',

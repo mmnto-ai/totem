@@ -151,6 +151,17 @@ export function compileCandidate(
     // claim — codex). `deriveRuleClass` forces 'advisory' on `unverified:true`.
     unverified: true,
   });
+  // §3 engine-binding (#2259/#7): an AUTHORED candidate carries the engine its
+  // structural-eligibility whitelist was judged for. The compiler derives the engine
+  // INDEPENDENTLY from `dslSource`, so a regex-whitelisted rule whose source parses as
+  // ast-grep would otherwise compile + emit as `authored-whitelist` under an engine the
+  // whitelist never cleared. Fail loud — the eligibility verdict was engine-specific.
+  // MINED candidates carry no `declaredEngine` and skip the bind (engine is source-derived).
+  if (candidate.declaredEngine !== undefined && rule.engine !== candidate.declaredEngine) {
+    throw new Error(
+      `[Totem Error] compileCandidate: candidate '${candidate.classifierLedgerRef}' declared engine '${candidate.declaredEngine}' but its dslSource compiled as '${rule.engine}' — the structural-eligibility whitelist was judged for a different engine (ADR-112 §3)`,
+    );
+  }
   return { kind: 'compiled', rule };
 }
 
@@ -245,6 +256,22 @@ export async function runCompileStage(
   >();
 
   const structural = classify.candidates.filter((c) => c.classifierDisposition === 'structural');
+  // Duplicate-candidate-ref guard (#2259, greptile-P1 outside-diff): the per-candidate
+  // ledger join below requires EXACTLY ONE ledger entry, but two CANDIDATES sharing one
+  // `classifierLedgerRef` would BOTH pass that check against a single entry — then the
+  // later Stage-4 update silently overwrites the earlier in `updates`, leaving one compiled
+  // rule bound to the wrong outcome. The widened input accepts either producer, so uniqueness
+  // is no longer guaranteed by a single front-end; assert it here, fail loud before any
+  // compile work (symmetric with `toCompileFeed`'s authored-side dedup).
+  const seenRefs = new Set<string>();
+  for (const candidate of structural) {
+    if (seenRefs.has(candidate.classifierLedgerRef)) {
+      throw new Error(
+        `[Totem Error] runCompileStage: duplicate classifierLedgerRef '${candidate.classifierLedgerRef}' across structural candidates — each compile candidate needs a unique ledger ref for the 1:1 Stage-4 join`,
+      );
+    }
+    seenRefs.add(candidate.classifierLedgerRef);
+  }
   for (const candidate of structural) {
     // Classifier-ledger join: require EXACTLY ONE entry (missing or duplicate fails
     // loud — else the Stage-4 confirmation is lost or applied to the wrong row).

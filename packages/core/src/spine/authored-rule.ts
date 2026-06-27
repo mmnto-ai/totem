@@ -73,6 +73,20 @@ export type AuthoredOrigin = z.infer<typeof AuthoredOriginSchema>;
  * Minted `unverified: true` (ADR-089) — zero enforcement blast radius.
  */
 export const AuthoredRuleRecordSchema = z.object({
+  /**
+   * ADR-112 §3/§8 — the stable, minted rule identity (`mintAuthoredRuleId`),
+   * assigned ONCE at authoring time and PERSISTED on the record; NEVER re-derived
+   * from content at read time. `firingLabelId` + the §5.3
+   * `controls.positive[].targetRuleId` ground-truth labels embed it, so a
+   * content-re-derived id would orphan them (§8). Slice A reserves the field (this
+   * IS the schema spine); the authoring flow (slice B) mints it, and threading it
+   * into the compiled artifact's identity (`firingLabelId ← ruleId`, replacing the
+   * `dslSource`-derived `lessonHash`) is slice C/D. The RESOLVED id (with any `-N`
+   * collision suffix) is what is stored.
+   */
+  ruleId: z.string().refine((s) => s.trim().length > 0, {
+    message: 'ruleId must be the non-empty minted authored rule id (ADR-112 §3/§8)',
+  }),
   provenance: AuthoredProvenanceRecordSchema,
   /** INDEPENDENTLY established (§3) — the author never sets this; the check does. */
   structuralEligibility: StructEligResultSchema,
@@ -133,9 +147,9 @@ export function evaluateStructuralEligibility(
 
 /**
  * ADR-112 §8 — mint a stable, deterministic authored rule-id. The seed is
- * `sha256(author · targetDefect)[:16]` — `dslSource` is DELIBERATELY EXCLUDED so
- * an author can tighten/refactor the matcher without orphaning the rule's ledger
- * history. On collision with an already-resolved id (two rules sharing the same
+ * `sha256(JSON.stringify([author, targetDefect]))[:16]` (an INJECTIVE encoding —
+ * see the inline note) — `dslSource` is DELIBERATELY EXCLUDED so an author can
+ * tighten/refactor the matcher without orphaning the rule's ledger history. On collision with an already-resolved id (two rules sharing the same
  * `(author, targetDefect)`), a stable `-N` counter is appended. The RESOLVED id
  * is what callers persist — never recompute the raw seed at read time, or a
  * later sibling could shift the suffix (the gemini/agy break). The
@@ -147,7 +161,14 @@ export function mintAuthoredRuleId(
   targetDefect: string,
   existingIds: ReadonlySet<string>,
 ): string {
-  const seed = createHash('sha256').update(`${author}·${targetDefect}`).digest('hex').slice(0, 16);
+  // Unambiguous seed encoding (GCA-high + CR-major, #2259): a bare `author·targetDefect`
+  // ALIASES distinct tuples — ('a·b','c') and ('a','b·c') collapse onto one seed. A JSON
+  // array of the two inputs is injective: distinct (author, targetDefect) pairs can never
+  // serialize to the same string, so a persisted id can't collide by encoding.
+  const seed = createHash('sha256')
+    .update(JSON.stringify([author, targetDefect]))
+    .digest('hex')
+    .slice(0, 16);
   if (!existingIds.has(seed)) return seed;
   for (let n = 1; ; n += 1) {
     const candidate = `${seed}-${n}`;
@@ -200,6 +221,10 @@ export function toCompileFeed(records: readonly AuthoredRuleRecord[]): AuthoredC
       classifierDisposition: 'structural',
       classifierLedgerRef,
       dslSource: record.dslSource,
+      // §3 (#7): carry the whitelist-judged engine so the compiler can assert it
+      // compiled under THAT engine — a regex-whitelisted rule whose dslSource parses
+      // as ast-grep must fail loud, not silently re-route to a different engine.
+      declaredEngine: record.declaredEngine,
       unverified: true,
     });
     entries.push({

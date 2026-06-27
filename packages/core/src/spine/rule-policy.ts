@@ -31,22 +31,25 @@ export type ProducerKind = 'mined' | 'authored';
  *                              counts. Mirrors `positiveControlSide`.
  */
 export interface RulePolicy {
-  labelScope: 'held-out-only' | 'whole-window';
-  positiveControlSide: 'held-out' | 'train';
-  exposureControlSide: 'held-out' | 'train';
+  // `readonly` + `Object.freeze` (#2259): `getRulePolicy` hands these singletons out
+  // by reference, so a single caller mutation would change policy resolution
+  // process-wide. The fields are immutable by contract and frozen at runtime.
+  readonly labelScope: 'held-out-only' | 'whole-window';
+  readonly positiveControlSide: 'held-out' | 'train';
+  readonly exposureControlSide: 'held-out' | 'train';
 }
 
-const MINED_POLICY: RulePolicy = {
+const MINED_POLICY: RulePolicy = Object.freeze({
   labelScope: 'held-out-only',
   positiveControlSide: 'held-out',
   exposureControlSide: 'held-out',
-};
+});
 
-const AUTHORED_POLICY: RulePolicy = {
+const AUTHORED_POLICY: RulePolicy = Object.freeze({
   labelScope: 'whole-window',
   positiveControlSide: 'train',
   exposureControlSide: 'train',
-};
+});
 
 /**
  * ADR-112 §9 — resolve the override config for a producer kind. Pure +

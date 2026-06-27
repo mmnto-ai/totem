@@ -41,6 +41,15 @@ export interface CompileInputCandidate {
   classifierDisposition: ClassifierDisposition;
   classifierLedgerRef: string;
   dslSource: string;
+  /**
+   * ADR-112 §3 (#2259/#7) — the engine the structural-eligibility whitelist judged
+   * this rule for (AUTHORED producer only). When present, `compileCandidate` asserts
+   * the compiled engine MATCHES it: a regex-whitelisted rule whose `dslSource` parses
+   * as ast-grep is a contract violation (the eligibility verdict was engine-specific),
+   * not a silent re-route. The MINED producer omits it — its engine + identity are
+   * `dslSource`-derived, so it carries no independent declaration to bind against.
+   */
+  declaredEngine?: 'regex' | 'ast' | 'ast-grep';
   unverified: true;
 }
 
