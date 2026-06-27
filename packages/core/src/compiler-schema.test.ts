@@ -1042,13 +1042,22 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       ).toThrow();
     });
 
-    it('validates authoredAt as ISO-8601 — rejects free text + impossible dates, accepts date/timestamp (#2259)', () => {
-      for (const bad of ['last tuesday', '2026-13-45', '06/27/2026', '']) {
+    it('validates authoredAt as a real ISO-8601 calendar date — rejects free text + impossible dates, accepts real dates/timestamps (#2259)', () => {
+      // '2026-02-31' + non-leap '2026-02-29' are the Date.parse-normalization trap (CR re-review):
+      // Date.parse rolls them into March rather than rejecting, so the calendar round-trip must catch them.
+      for (const bad of [
+        'last tuesday',
+        '2026-13-45',
+        '06/27/2026',
+        '',
+        '2026-02-31',
+        '2026-02-29',
+      ]) {
         expect(() =>
           AuthoredProvenanceRecordSchema.parse({ ...authored, authoredAt: bad }),
         ).toThrow();
       }
-      for (const ok of ['2026-06-27', '2026-06-27T12:00:00.000Z']) {
+      for (const ok of ['2026-06-27', '2026-06-27T12:00:00.000Z', '2024-02-29']) {
         expect(() =>
           AuthoredProvenanceRecordSchema.parse({ ...authored, authoredAt: ok }),
         ).not.toThrow();

@@ -66,6 +66,13 @@ export const AuthoredOriginSchema = z.union([
 ]);
 export type AuthoredOrigin = z.infer<typeof AuthoredOriginSchema>;
 
+// The persisted minted-rule-id shape (ADR-112 §8): a 16-char lowercase-hex base from
+// `mintAuthoredRuleId`, with an optional `-<n>` collision-counter suffix. Pinned as a
+// shared constant so the SCHEMA boundary rejects exactly the shapes the MINT never emits
+// (#2259 CR-major: a non-blank-only check let arbitrary strings into the label/ledger join).
+const AUTHORED_RULE_ID_HEX_LEN = 16;
+const AUTHORED_RULE_ID_RE = /^[0-9a-f]{16}(?:-\d+)?$/;
+
 /**
  * ADR-112 §3 — the authored producer's sole output envelope. Parallel to
  * ADR-111's `CandidateRuleRecord` but carrying the AUTHORED provenance variant,
@@ -84,8 +91,9 @@ export const AuthoredRuleRecordSchema = z.object({
    * `dslSource`-derived `lessonHash`) is slice C/D. The RESOLVED id (with any `-N`
    * collision suffix) is what is stored.
    */
-  ruleId: z.string().refine((s) => s.trim().length > 0, {
-    message: 'ruleId must be the non-empty minted authored rule id (ADR-112 §3/§8)',
+  ruleId: z.string().regex(AUTHORED_RULE_ID_RE, {
+    message:
+      'ruleId must be a minted authored rule id — 16 hex chars + optional -<n> suffix (ADR-112 §3/§8)',
   }),
   provenance: AuthoredProvenanceRecordSchema,
   /** INDEPENDENTLY established (§3) — the author never sets this; the check does. */
@@ -168,7 +176,7 @@ export function mintAuthoredRuleId(
   const seed = createHash('sha256')
     .update(JSON.stringify([author, targetDefect]))
     .digest('hex')
-    .slice(0, 16);
+    .slice(0, AUTHORED_RULE_ID_HEX_LEN);
   if (!existingIds.has(seed)) return seed;
   for (let n = 1; ; n += 1) {
     const candidate = `${seed}-${n}`;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { type AuthoredRuleRecord, toCompileFeed } from './authored-rule.js';
+import { type AuthoredRuleRecord, mintAuthoredRuleId, toCompileFeed } from './authored-rule.js';
 import type { CandidateRuleRecord, CompileInputCandidate } from './candidate-rule.js';
 import {
   type ClassifierResult,
@@ -441,7 +441,7 @@ describe('runCompileStage — end-to-end §8 harness lock', () => {
 // ── runCompileStage — ADR-112 authored compile-feed (one compiler, two producers) ──
 describe('runCompileStage — ADR-112 authored compile-feed', () => {
   const authored = (ref: string, dsl: string): AuthoredRuleRecord => ({
-    ruleId: `rid-${ref}`,
+    ruleId: mintAuthoredRuleId('totem-claude', ref, new Set()),
     provenance: {
       kind: 'authored',
       author: 'totem-claude',

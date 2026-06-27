@@ -132,6 +132,28 @@ describe('AuthoredRuleRecord schema (ADR-112 §3)', () => {
     expect(AuthoredRuleRecordSchema.parse(base).ruleId).toBe('0f1e2d3c4b5a6978');
   });
 
+  it('enforces the minted ruleId SHAPE at the boundary — 16 hex + optional -<n> (#2259 CR-major)', () => {
+    for (const bad of [
+      'NOTHEXNOTHEXNOTH',
+      '0f1e2d3c',
+      '0f1e2d3c4b5a6978abcd',
+      '0F1E2D3C4B5A6978',
+      'rid-alr-1',
+    ]) {
+      expect(() => AuthoredRuleRecordSchema.parse({ ...base, ruleId: bad })).toThrow();
+    }
+    for (const ok of ['0f1e2d3c4b5a6978', '0f1e2d3c4b5a6978-1', 'abcdef0123456789-42']) {
+      expect(() => AuthoredRuleRecordSchema.parse({ ...base, ruleId: ok })).not.toThrow();
+    }
+    // the mint always produces a schema-valid id (the shared shape constant binds both).
+    expect(() =>
+      AuthoredRuleRecordSchema.parse({
+        ...base,
+        ruleId: mintAuthoredRuleId('totem-claude', 'float-finite-assert', new Set()),
+      }),
+    ).not.toThrow();
+  });
+
   it('forces unverified:true (zero blast radius — ADR-089/§1)', () => {
     expect(() => AuthoredRuleRecordSchema.parse({ ...base, unverified: false })).toThrow();
   });
@@ -170,7 +192,7 @@ describe('mintAuthoredRuleId (ADR-112 §8)', () => {
 
 describe('toCompileFeed (ADR-112 §2/§8 — authored → compile-stage input)', () => {
   const decidable = (ref: string): AuthoredRuleRecord => ({
-    ruleId: `rid-${ref}`,
+    ruleId: mintAuthoredRuleId('totem-claude', ref, new Set()),
     provenance: {
       kind: 'authored',
       author: 'totem-claude',

@@ -51,12 +51,26 @@ const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 
 /**
  * ISO-8601 shape for an authoring date — a calendar date (`YYYY-MM-DD`) or a full
- * timestamp with optional fractional seconds + `Z`/offset. Shape only; pair with a
- * `Date.parse` sanity check so impossible dates (`2026-13-45`) are also rejected
- * (#2259 — GCA-high + CR: the field is documented ISO-8601 but only checked non-empty).
+ * timestamp with optional fractional seconds + `Z`/offset. Shape only; the calendar
+ * validity is enforced by `isIso8601CalendarDate` (#2259 — GCA-high + CR).
  */
 const ISO_8601_DATE_RE =
   /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+/**
+ * True iff `s` is a well-formed ISO-8601 date/timestamp AND a REAL calendar date.
+ * `Date.parse` alone is insufficient: it NORMALIZES day-overflow (`2026-02-31` → Mar 3,
+ * `2026-02-29` non-leap → Mar 1) instead of rejecting it (#2259 CR re-review). The
+ * `Date.UTC` round-trip validates the date HEAD's calendar independently of any timezone
+ * in the time component — a negative offset can legitimately shift the UTC day, so the
+ * head, not the parsed instant, is what must round-trip.
+ */
+function isIso8601CalendarDate(s: string): boolean {
+  if (!ISO_8601_DATE_RE.test(s) || Number.isNaN(Date.parse(s))) return false;
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number) as [number, number, number];
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  return probe.getUTCFullYear() === y && probe.getUTCMonth() + 1 === m && probe.getUTCDate() === d;
+}
 
 /**
  * mmnto-ai/totem#2183 — the §3.1 provenance leg of the ADR-110 Gate-1
@@ -150,9 +164,9 @@ export const AuthoredProvenanceRecordSchema = z.object({
   author: z.string().refine((s) => s.trim().length > 0, {
     message: 'author must be a non-empty, attributable handle',
   }),
-  /** ISO-8601 authoring date — a calendar date (`YYYY-MM-DD`) or a full timestamp. */
-  authoredAt: z.string().refine((s) => ISO_8601_DATE_RE.test(s) && !Number.isNaN(Date.parse(s)), {
-    message: 'authoredAt must be a valid ISO-8601 date (YYYY-MM-DD or a full timestamp)',
+  /** ISO-8601 authoring date — a real calendar date (`YYYY-MM-DD`) or a full timestamp. */
+  authoredAt: z.string().refine(isIso8601CalendarDate, {
+    message: 'authoredAt must be a valid ISO-8601 calendar date (YYYY-MM-DD or a full timestamp)',
   }),
   /** The declared DEFECT the rule targets — the pre-image, not its fix. */
   targetDefect: z.string().refine((s) => s.trim().length > 0, {
