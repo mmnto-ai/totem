@@ -224,7 +224,35 @@ export const AuthoredFixtureSchema = z
   // `.strict()` (CR outside-diff): the outer fixture closes too, not just the union branches —
   // a partially-migrated fixture carrying `preimageSource` AND a leftover flat `mergeCommitSha`/
   // `preimageCommitSha` must fail LOUD, never validate-and-silently-strip the stale key (FM(d)).
-  .strict();
+  .strict()
+  // ANTI-VACUITY FAST-FAIL (GCA finding; strategy#767-blessed defense-in-depth). This is NOT the
+  // §4 preimage-differential — that is the load-bearing C/D materializer (fire-on-preimage /
+  // silent-on-postimage). This only rejects the DEGENERATE case where the two sides are IDENTICAL:
+  // an identical preimage/postimage is an UNCONDITIONALLY vacuous control (a matcher cannot fire on
+  // one and stay silent on the other), so it is zero-false-positive to reject at intake — distinct
+  // from "does the differential hold", which two *different* sides still must prove in C/D.
+  // Non-mutating (compares trimmed, never transforms) — manifest-hash stability. A `superRefine` on
+  // the OUTER fixture (not a branch `.refine`, which would wrap a `discriminatedUnion` member in a
+  // ZodEffects and break discriminator extraction).
+  .superRefine((fixture, ctx) => {
+    const src = fixture.preimageSource;
+    if (src.kind === 'lesson' && src.badExample.trim() === src.goodExample.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'badExample and goodExample must differ — identical sides are a vacuous preimage-differential control (ADR-112 §4)',
+        path: ['preimageSource', 'goodExample'],
+      });
+    }
+    if (src.kind === 'commit' && src.preimageCommitSha === src.mergeCommitSha) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'preimageCommitSha and mergeCommitSha must differ — an identical pre/post commit is a vacuous preimage-differential control (ADR-112 §4)',
+        path: ['preimageSource', 'mergeCommitSha'],
+      });
+    }
+  });
 
 export type AuthoredFixture = z.infer<typeof AuthoredFixtureSchema>;
 

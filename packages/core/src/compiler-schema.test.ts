@@ -1144,6 +1144,36 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       ).toThrow();
     });
 
+    // ANTI-VACUITY fast-fail (GCA finding; strategy#767-blessed). Identical preimage/postimage sides
+    // are an UNCONDITIONALLY vacuous control — rejected at intake. This is NOT the §4 differential
+    // (that's C/D); it only catches the degenerate identical-sides case (zero-false-positive).
+    it('rejects a lesson fixture whose badExample equals its goodExample (vacuous — identical sides)', () => {
+      expect(() =>
+        AuthoredFixtureSchema.parse({
+          ...authoredLesson.positiveFixtures[0],
+          preimageSource: {
+            kind: 'lesson',
+            lessonRef: 'a1b2c3d4e5f60718',
+            badExample: 'if (a == b) {}',
+            goodExample: '  if (a == b) {}  ', // trim-equal → still vacuous (non-mutating compare)
+          },
+        }),
+      ).toThrow(/identical sides|must differ/i);
+    });
+
+    it('rejects a commit fixture whose preimageCommitSha equals its mergeCommitSha (vacuous — identical sides)', () => {
+      expect(() =>
+        AuthoredFixtureSchema.parse({
+          ...authored.positiveFixtures[0],
+          preimageSource: {
+            kind: 'commit',
+            preimageCommitSha: 'a'.repeat(40),
+            mergeCommitSha: 'a'.repeat(40),
+          },
+        }),
+      ).toThrow(/identical pre\/post commit|must differ/i);
+    });
+
     it('rejects a lesson preimageSource whose lessonRef is a path or mutable alias (immutable 16-hex id only)', () => {
       for (const badRef of [
         'docs/lessons/foo.md',
