@@ -119,6 +119,11 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
     splitRef: 'split-2026-06-27',
     authoredAfterSplit: true as const,
     heldOutNonInspectionAttestation: true as const,
+    structuralEligibility: {
+      decidable: true,
+      basis: 'whitelist:forbidden-literal-token',
+      judgedBy: 'static-whitelist@cert-1',
+    },
   };
   it('is deterministic for identical material', () => {
     expect(authoringContentHash(material)).toBe(authoringContentHash({ ...material }));
@@ -131,6 +136,14 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
   it('changes when an attestation changes (splitRef) — greptile-P1/CR diff-review', () => {
     expect(authoringContentHash(material)).not.toBe(
       authoringContentHash({ ...material, splitRef: 'split-other' }),
+    );
+  });
+  it('changes when the producer verdict changes (judgedBy) — CR outside-diff', () => {
+    expect(authoringContentHash(material)).not.toBe(
+      authoringContentHash({
+        ...material,
+        structuralEligibility: { ...material.structuralEligibility, judgedBy: 'other-check' },
+      }),
     );
   });
   it('is CRLF-invariant — self-normalizes newlines regardless of the caller (Tenet-20 single-home)', () => {

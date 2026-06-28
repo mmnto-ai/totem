@@ -217,4 +217,26 @@ describe('runRuleAuthor — codex/agy diff-review folds', () => {
     expect(ledger).toHaveLength(2);
     expect(ledger[1]?.splitRef).toBe('split-2026-07-01'); // the new row records the new split (no longer stale)
   });
+  it('rejects judgedBy equal to a rule author CASE-INSENSITIVELY (GCA re-review)', () => {
+    writeYaml([decidableRule({ author: 'Alice' })]);
+    expect(() => runRuleAuthor(totemDir, { judgedBy: 'alice' })).toThrow(/never be the author/i);
+  });
+  it('trims splitRef so a whitespace variant is NOT a spurious revision (GCA re-review)', () => {
+    writeYaml([decidableRule()], { splitRef: 'split-x' });
+    run();
+    writeYaml([decidableRule()], { splitRef: '  split-x  ' });
+    const res = run();
+    expect(res.unchanged).toBe(1);
+    expect(res.revised).toBe(0);
+    expect(readAuthoringLedger(totemDir)).toHaveLength(1);
+  });
+  it('a producer-verdict change (judgedBy) triggers a revision (CR outside-diff)', () => {
+    writeYaml([decidableRule()]);
+    runRuleAuthor(totemDir, { judgedBy: 'check-a' });
+    const res = runRuleAuthor(totemDir, { judgedBy: 'check-b' });
+    expect(res.revised).toBe(1);
+    const ledger = readAuthoringLedger(totemDir);
+    expect(ledger).toHaveLength(2);
+    expect(ledger[1]?.structuralEligibility.judgedBy).toBe('check-b');
+  });
 });

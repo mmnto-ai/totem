@@ -123,6 +123,8 @@ export function authoringContentHash(material: {
   splitRef: string;
   authoredAfterSplit: boolean;
   heldOutNonInspectionAttestation: boolean;
+  /** The producer VERDICT (CR diff-review) — incl. `judgedBy`/`basis`; a verdict change must revise. */
+  structuralEligibility: unknown;
 }): string {
   return createHash('sha256')
     .update(canonicalStringify(lfDeepNormalize(material)))

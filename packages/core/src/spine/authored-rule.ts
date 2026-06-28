@@ -228,10 +228,13 @@ export type AuthoredRuleInput = z.infer<typeof AuthoredRuleInputSchema>;
  */
 export const AuthoredRulesFileSchema = z
   .object({
-    /** The frozen split (ADR-110 §6) the rules were authored under (recorded; verified in C). */
-    splitRef: z.string().refine((s) => s.trim().length > 0, {
-      message: 'splitRef must name the frozen split the rules were authored under (ADR-112 §5.1)',
-    }),
+    /** The frozen split (ADR-110 §6) the rules were authored under (recorded; verified in C). Trimmed (GCA) so stray whitespace can't bypass the non-empty check or perturb the revision fingerprint. */
+    splitRef: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, {
+        message: 'splitRef must name the frozen split the rules were authored under (ADR-112 §5.1)',
+      }),
     /** §1(g) embargo attestation — authored AFTER the split was frozen. Always `true`; verified in C. */
     authoredAfterSplit: z.literal(true),
     /** §5 attestation — the author did not inspect the held-out slice. Always `true`; sandboxed in C. */

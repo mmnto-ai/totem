@@ -165,10 +165,13 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
   // (codex diff-review — `--judged-by` is user-settable, so guard it at the boundary).
   const seenInFile = new Set<string>();
   for (const r of fileDoc.rules) {
-    if (r.author === opts.judgedBy) {
+    // Case-INSENSITIVE (GCA diff-review): `author: Alice` + `--judged-by alice` is the same
+    // human self-judging — a case variant must not slip past the §3 independence guard. Both
+    // sides are already trimmed (author at intake, judgedBy in the command).
+    if (r.author.toLowerCase() === opts.judgedBy.toLowerCase()) {
       throw new TotemError(
         'CONFIG_INVALID',
-        `judgedBy '${opts.judgedBy}' is also rule author '${r.author}' — the independent structural-eligibility check must never be the author (ADR-112 §3)`,
+        `judgedBy '${opts.judgedBy}' is the rule author '${r.author}' (case-insensitive) — the independent structural-eligibility check must never be the author (ADR-112 §3)`,
         'Pass a --judged-by that names the CHECK (e.g. static-whitelist@cert-1), distinct from any rule author.',
       );
     }
@@ -222,6 +225,10 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
       splitRef: fileDoc.splitRef,
       authoredAfterSplit: fileDoc.authoredAfterSplit,
       heldOutNonInspectionAttestation: fileDoc.heldOutNonInspectionAttestation,
+      // The producer VERDICT is part of the fingerprint too (CR outside-diff): a verdict change
+      // (e.g. a different `judgedBy`, or a whitelist update altering the basis) must append a fresh
+      // row, not read `unchanged` and keep the stale `structuralEligibility` on the effective entry.
+      structuralEligibility,
     });
 
     const key = identityKey(r.author, r.targetDefect);
