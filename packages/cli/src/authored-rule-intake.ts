@@ -120,6 +120,10 @@ interface PendingRule {
  * recorded on every eligibility verdict. Pure + deterministic except the ledger IO.
  */
 export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): RuleAuthorResult {
+  // Normalize at the PRODUCER boundary (CR re-review): the command trims `--judged-by`, but this
+  // function is exported + callable directly, so an untrimmed `' Alice '` must not bypass the
+  // §3 independence guard against `author: 'Alice'`. Trim once, use everywhere downstream.
+  const judgedBy = opts.judgedBy.trim();
   const file = path.join(totemDir, AUTHORED_RULES_REL);
 
   let text: string;
@@ -168,10 +172,10 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
     // Case-INSENSITIVE (GCA diff-review): `author: Alice` + `--judged-by alice` is the same
     // human self-judging — a case variant must not slip past the §3 independence guard. Both
     // sides are already trimmed (author at intake, judgedBy in the command).
-    if (r.author.toLowerCase() === opts.judgedBy.toLowerCase()) {
+    if (r.author.toLowerCase() === judgedBy.toLowerCase()) {
       throw new TotemError(
         'CONFIG_INVALID',
-        `judgedBy '${opts.judgedBy}' is the rule author '${r.author}' (case-insensitive) — the independent structural-eligibility check must never be the author (ADR-112 §3)`,
+        `judgedBy '${judgedBy}' is the rule author '${r.author}' (case-insensitive) — the independent structural-eligibility check must never be the author (ADR-112 §3)`,
         'Pass a --judged-by that names the CHECK (e.g. static-whitelist@cert-1), distinct from any rule author.',
       );
     }
@@ -198,7 +202,7 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
     const structuralEligibility = evaluateStructuralEligibility(
       { declaredEngine: r.declaredEngine, structuralClass: r.structuralClass },
       authoredWhitelist(),
-      opts.judgedBy,
+      judgedBy,
     );
     if (!structuralEligibility.decidable) {
       rejected.push({

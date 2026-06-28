@@ -207,8 +207,12 @@ export function appendAuthoringLedgerEntry(totemDir: string, entry: AuthoringLed
   // `runRuleAuthor` could append a row between our `appendFileSync` and this read, so a
   // `back[back.length-1]` check would false-throw on a SUCCESSFUL append. `appendFileSync`
   // writes a complete line atomically, so our line is intact in the file even if not last.
-  const back = readAuthoringLedger(totemDir);
-  if (!back.some((e) => canonicalStringify(e) === line)) {
+  // A raw substring check on the appended `${line}\n` (GCA diff-review) preserves that
+  // present-not-last semantics WITHOUT re-parsing + Zod-validating the whole ledger on every
+  // append — the read-back was O(N²) across the append loop. The trailing newline pins the
+  // match to a complete line (canonical entries are single-line, so it can't match mid-row).
+  const rawContent = fs.readFileSync(file, 'utf-8');
+  if (!rawContent.includes(`${line}\n`)) {
     throw new TotemError(
       'GATE_INVALID',
       `authoring-ledger read-back could not confirm the row for ruleId '${entry.ruleId}'`,

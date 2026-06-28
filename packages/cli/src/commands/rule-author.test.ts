@@ -221,6 +221,12 @@ describe('runRuleAuthor — codex/agy diff-review folds', () => {
     writeYaml([decidableRule({ author: 'Alice' })]);
     expect(() => runRuleAuthor(totemDir, { judgedBy: 'alice' })).toThrow(/never be the author/i);
   });
+  it('normalizes judgedBy (trim) at the producer boundary so " alice " cannot bypass (CR re-review)', () => {
+    writeYaml([decidableRule({ author: 'Alice' })]);
+    expect(() => runRuleAuthor(totemDir, { judgedBy: '  alice  ' })).toThrow(
+      /never be the author/i,
+    );
+  });
   it('trims splitRef so a whitespace variant is NOT a spurious revision (GCA re-review)', () => {
     writeYaml([decidableRule()], { splitRef: 'split-x' });
     run();
