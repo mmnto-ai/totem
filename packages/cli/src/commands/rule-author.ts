@@ -235,3 +235,41 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
 
   return { records, minted, revised, unchanged, rejected };
 }
+
+/**
+ * CLI entry for `totem rule author`. Resolves the `.totem` dir, ingests
+ * `authored-rules.yaml`, and reports. A non-decidable rule is surfaced LOUDLY —
+ * a warning + a non-zero exit signal — so it is NEVER a silent omission
+ * (ADR-112 §3 / the strategy seam-review (f) ask). SLICE B: from-YAML only
+ * (interactive authoring is a later upgrade, §8); the records are produced +
+ * ledgered but not yet fed to the certifying corpus (B2 / C/D).
+ */
+export async function ruleAuthorCommand(opts: { judgedBy?: string }): Promise<void> {
+  const { loadConfig, resolveConfigPath } = await import('../utils.js');
+  const cwd = process.cwd();
+  const config = await loadConfig(resolveConfigPath(cwd));
+  const totemDir = path.join(cwd, config.totemDir);
+
+  const judgedBy = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
+  const result = runRuleAuthor(totemDir, { judgedBy });
+
+  console.log(
+    `[RuleAuthor] ${result.records.length} authored rule(s): ` +
+      `${result.minted} minted, ${result.revised} revised, ${result.unchanged} unchanged.`,
+  );
+  for (const rec of result.records) {
+    console.log(`  + ${rec.ruleId}  ${rec.provenance.author} :: ${rec.provenance.targetDefect}`);
+  }
+
+  if (result.rejected.length > 0) {
+    console.warn(
+      `\n[RuleAuthor] WARNING: ${result.rejected.length} rule(s) REJECTED — not structurally ` +
+        `decidable, excluded from the producer output:`,
+    );
+    for (const r of result.rejected) {
+      console.warn(`  x ${r.author} :: ${r.targetDefect}: ${r.reason}`);
+    }
+    // Non-zero signal (strategy seam-review (f)) — a rejected rule is never a silent omission.
+    process.exitCode = 1;
+  }
+}
