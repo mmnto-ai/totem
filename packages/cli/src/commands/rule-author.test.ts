@@ -227,6 +227,10 @@ describe('runRuleAuthor — codex/agy diff-review folds', () => {
       /never be the author/i,
     );
   });
+  it('rejects a blank judgedBy at the producer boundary (CR re-review)', () => {
+    writeYaml([decidableRule()]);
+    expect(() => runRuleAuthor(totemDir, { judgedBy: '   ' })).toThrow(/cannot be blank/i);
+  });
   it('trims splitRef so a whitespace variant is NOT a spurious revision (GCA re-review)', () => {
     writeYaml([decidableRule()], { splitRef: 'split-x' });
     run();

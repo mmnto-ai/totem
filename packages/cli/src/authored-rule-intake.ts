@@ -122,8 +122,16 @@ interface PendingRule {
 export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): RuleAuthorResult {
   // Normalize at the PRODUCER boundary (CR re-review): the command trims `--judged-by`, but this
   // function is exported + callable directly, so an untrimmed `' Alice '` must not bypass the
-  // §3 independence guard against `author: 'Alice'`. Trim once, use everywhere downstream.
+  // §3 independence guard against `author: 'Alice'`. Trim once, use everywhere downstream; a blank
+  // judgedBy is rejected here, not deferred to the downstream `StructEligResult` non-empty refine.
   const judgedBy = opts.judgedBy.trim();
+  if (judgedBy.length === 0) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      'judgedBy must name the independent eligibility check — it cannot be blank (ADR-112 §3)',
+      'Pass a non-empty --judged-by (e.g. static-whitelist@cert-1).',
+    );
+  }
   const file = path.join(totemDir, AUTHORED_RULES_REL);
 
   let text: string;
