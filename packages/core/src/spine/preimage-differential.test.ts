@@ -240,6 +240,32 @@ describe('evaluatePreimageDifferential — needs-adjudication on engine refusal'
     expect(result.outcome).toBe('needs-adjudication');
     expect(result.reason).toBeDefined();
   });
+
+  it('a whitespace-only badExample → needs-adjudication, not a silent vacuous result', async () => {
+    // Direct (unparsed) construction can bypass the schema's non-empty refine; a
+    // whitespace preimage carries no evaluable code, so the preimage leg is null.
+    const result = await evaluatePreimageDifferential(
+      regexRule(),
+      lessonFixture('   \n  ', 'logger.info("ok")'),
+    );
+    expect(result.outcome).toBe('needs-adjudication');
+    expect(result.firesOnPreimage).toBeNull();
+    expect(result.reason).toContain('badExample');
+  });
+
+  it('a whitespace-only goodExample → needs-adjudication, NOT a false differential-holds (Greptile #2264)', async () => {
+    // The cert-critical case: the rule fires on the defect, and the postimage is
+    // whitespace. Pre-fix this read as differential-holds (silentOnPostimage true
+    // because there was nothing to match) — masking an unevaluable fixed side.
+    const result = await evaluatePreimageDifferential(
+      regexRule(),
+      lessonFixture('console.log("bad")', '   \n  '),
+    );
+    expect(result.outcome).toBe('needs-adjudication');
+    expect(result.outcome).not.toBe('differential-holds');
+    expect(result.silentOnPostimage).toBeNull();
+    expect(result.reason).toContain('goodExample');
+  });
 });
 
 // ─── commit-source deferral (typed non-pass, slice C2) ─

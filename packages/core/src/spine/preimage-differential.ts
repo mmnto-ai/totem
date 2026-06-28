@@ -124,20 +124,35 @@ function evaluateLessonDifferential(
   const pre = runSmokeGate(rule, source.badExample);
   const post = runSmokeGate(rule, source.goodExample);
 
-  // `reason` is present only when the engine REFUSED to execute (invalid regex,
-  // ast-grep throw, unparseable exemplar, uncovered engine) — never when it ran
-  // and simply didn't match. A refusal on either side means the differential
-  // cannot be established → fail-loud to adjudication, not a silent clean result.
-  const engineReason = pre.reason ?? post.reason;
-  if (engineReason !== undefined) {
+  // An exemplar with no evaluable code cannot establish a differential. Two
+  // ways that happens: (1) the engine REFUSES to run — invalid regex, ast-grep
+  // throw, uncovered engine — which `runSmokeGate` reports via `reason`; (2) the
+  // exemplar is empty/whitespace-only, which `runSmokeGate` instead reports as a
+  // CLEAN no-match (no `reason`) — and that would vacuously read as
+  // silent-on-postimage / fires-on-neither, masking that one side had nothing to
+  // evaluate (an empty postimage falsely reading as `differential-holds` is the
+  // dishonest control this primitive exists to catch). The schema enforces
+  // non-empty exemplars, but this is a public primitive reachable by direct
+  // (unparsed) construction, so it defends its own contract: either condition on
+  // either side → `needs-adjudication`, fail-loud, never a silent clean result.
+  const preUnevaluable = source.badExample.trim().length === 0 || pre.reason !== undefined;
+  const postUnevaluable = source.goodExample.trim().length === 0 || post.reason !== undefined;
+  if (preUnevaluable || postUnevaluable) {
+    const reason =
+      (source.badExample.trim().length === 0
+        ? 'badExample (the defect preimage) is empty or whitespace-only — no evaluable code to establish the differential'
+        : pre.reason) ??
+      (source.goodExample.trim().length === 0
+        ? 'goodExample (the fixed postimage) is empty or whitespace-only — no evaluable code to establish the differential'
+        : post.reason);
     return {
       outcome: 'needs-adjudication',
       sourceKind: 'lesson',
-      firesOnPreimage: pre.reason !== undefined ? null : pre.matched,
-      silentOnPostimage: post.reason !== undefined ? null : !post.matched,
-      preimageMatchCount: pre.reason !== undefined ? null : pre.matchCount,
-      postimageMatchCount: post.reason !== undefined ? null : post.matchCount,
-      reason: engineReason,
+      firesOnPreimage: preUnevaluable ? null : pre.matched,
+      silentOnPostimage: postUnevaluable ? null : !post.matched,
+      preimageMatchCount: preUnevaluable ? null : pre.matchCount,
+      postimageMatchCount: postUnevaluable ? null : post.matchCount,
+      reason,
     };
   }
 
