@@ -181,9 +181,13 @@ export const PreimageSourceSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('commit'),
       /** The PARENT (pre-fix) commit where the DEFECT is present — the matcher must FIRE on this (ADR-112 §4). */
-      preimageCommitSha: z.string().regex(COMMIT_SHA_RE),
+      preimageCommitSha: z.string().regex(COMMIT_SHA_RE, {
+        message: 'preimageCommitSha must be a 40-character lowercase hex commit SHA',
+      }),
       /** The PR's merge/squash commit — the post-fix (defect-absent) anchor; the matcher must stay SILENT on this. */
-      mergeCommitSha: z.string().regex(COMMIT_SHA_RE),
+      mergeCommitSha: z.string().regex(COMMIT_SHA_RE, {
+        message: 'mergeCommitSha must be a 40-character lowercase hex commit SHA',
+      }),
     })
     .strict(),
 ]);
@@ -198,24 +202,29 @@ export type PreimageSource = z.infer<typeof PreimageSourceSchema>;
  * possible. `matchedSpan` + `contentHash` are the line-drift-stable locus
  * (cf. `firingLabelId`), not just the file.
  */
-export const AuthoredFixtureSchema = z.object({
-  /** The PR where the defect was caught/introduced (the in-corpus anchor). */
-  pr: z.number().int().positive(),
-  /** The §4 preimage-differential source — lesson-anchored (PRIMARY) or commit-pair (FALLBACK). */
-  preimageSource: PreimageSourceSchema,
-  /** File the defect locus lives in. */
-  filePath: z.string().refine((s) => s.trim().length > 0, {
-    message: 'filePath must be a non-empty reference',
-  }),
-  /** Line-range or AST-node path — the defect locus, not just the file. */
-  matchedSpan: z.string().refine((s) => s.trim().length > 0, {
-    message: 'matchedSpan must be a non-empty locus',
-  }),
-  /** Span content hash, line-drift-stable (cf. `firingLabelId`). */
-  contentHash: z.string().refine((s) => s.trim().length > 0, {
-    message: 'contentHash must be a non-empty hash',
-  }),
-});
+export const AuthoredFixtureSchema = z
+  .object({
+    /** The PR where the defect was caught/introduced (the in-corpus anchor). */
+    pr: z.number().int().positive(),
+    /** The §4 preimage-differential source — lesson-anchored (PRIMARY) or commit-pair (FALLBACK). */
+    preimageSource: PreimageSourceSchema,
+    /** File the defect locus lives in. */
+    filePath: z.string().refine((s) => s.trim().length > 0, {
+      message: 'filePath must be a non-empty reference',
+    }),
+    /** Line-range or AST-node path — the defect locus, not just the file. */
+    matchedSpan: z.string().refine((s) => s.trim().length > 0, {
+      message: 'matchedSpan must be a non-empty locus',
+    }),
+    /** Span content hash, line-drift-stable (cf. `firingLabelId`). */
+    contentHash: z.string().refine((s) => s.trim().length > 0, {
+      message: 'contentHash must be a non-empty hash',
+    }),
+  })
+  // `.strict()` (CR outside-diff): the outer fixture closes too, not just the union branches —
+  // a partially-migrated fixture carrying `preimageSource` AND a leftover flat `mergeCommitSha`/
+  // `preimageCommitSha` must fail LOUD, never validate-and-silently-strip the stale key (FM(d)).
+  .strict();
 
 export type AuthoredFixture = z.infer<typeof AuthoredFixtureSchema>;
 

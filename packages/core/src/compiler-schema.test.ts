@@ -1104,8 +1104,9 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
 
     // The §4 commit branch carries TWO SHAs; the old flat test only guarded preimageCommitSha.
     // Each malformed-SHA case keeps the OTHER SHA valid so the rejection can ONLY be the regex
-    // under test — not a missing-field throw (the rewrap landmine: a top-level preimageCommitSha
-    // override would be STRIPPED by the non-strict outer object and the test would silently pass).
+    // under test — not a missing-field throw (the rewrap landmine: a bad value must live INSIDE
+    // preimageSource; a top-level leftover SHA is now rejected by the strict outer object too).
+    // The asserted message text is the GCA-requested regression guard (the message is wired).
     it('rejects a commit preimageSource with a malformed preimageCommitSha (other SHA valid)', () => {
       expect(() =>
         AuthoredFixtureSchema.parse({
@@ -1116,7 +1117,7 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
             mergeCommitSha: 'b'.repeat(40),
           },
         }),
-      ).toThrow();
+      ).toThrow(/preimageCommitSha must be a 40-character lowercase hex commit SHA/);
     });
 
     it('rejects a commit preimageSource with a malformed mergeCommitSha (other SHA valid)', () => {
@@ -1128,6 +1129,17 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
             preimageCommitSha: 'c'.repeat(40),
             mergeCommitSha: 'nope',
           },
+        }),
+      ).toThrow(/mergeCommitSha must be a 40-character lowercase hex commit SHA/);
+    });
+
+    it('rejects a fixture carrying a leftover flat SHA alongside preimageSource (strict outer — CR outside-diff)', () => {
+      // A partial migration (preimageSource added but a stale flat mergeCommitSha left behind) must
+      // fail LOUD under `.strict()`, never validate-and-silently-strip the leftover key (FM(d)).
+      expect(() =>
+        AuthoredFixtureSchema.parse({
+          ...authored.positiveFixtures[0],
+          mergeCommitSha: 'b'.repeat(40), // leftover flat field — unknown to the strict fixture
         }),
       ).toThrow();
     });
