@@ -72,10 +72,31 @@ export const AuthoringLedgerEntrySchema = z
 export type AuthoringLedgerEntry = z.infer<typeof AuthoringLedgerEntrySchema>;
 
 /**
- * Deterministic fingerprint of the MATERIAL author fields (§8 idempotency). The
- * reader CRLF-normalizes author strings before this, so a Windows-authored and an
- * LF-authored identical rule hash identically. Identity + `authoredAt` are NOT
- * part of the material (see `AuthoringLedgerEntrySchema.contentHash`).
+/**
+ * Recursively LF-normalize every string in a value. Keeps the material-hash
+ * determinism SINGLE-HOMED in the hash (Tenet-20, gemini diff-review): the hash
+ * is CRLF-invariant regardless of whether the caller pre-normalized, so a future
+ * caller of `authoringContentHash` can't silently produce a divergent hash by
+ * passing un-normalized CRLF input.
+ */
+function lfDeepNormalize(value: unknown): unknown {
+  if (typeof value === 'string') return value.replace(/\r\n/g, '\n');
+  if (Array.isArray(value)) return value.map(lfDeepNormalize);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, lfDeepNormalize(v)]),
+    );
+  }
+  return value;
+}
+
+/**
+ * Deterministic fingerprint of the MATERIAL author fields (§8 idempotency).
+ * SELF-normalizes newlines (CRLF→LF) on every string it hashes, so a Windows-
+ * authored and an LF-authored identical rule hash identically REGARDLESS of the
+ * caller — the determinism is single-homed in the hash, not the reader (Tenet-20,
+ * gemini diff-review). Identity + `authoredAt` are NOT part of the material (see
+ * `AuthoringLedgerEntrySchema.contentHash`).
  */
 export function authoringContentHash(material: {
   declaredEngine: string;
@@ -85,7 +106,10 @@ export function authoringContentHash(material: {
   negativeFixtures?: unknown;
   origin: unknown;
 }): string {
-  return createHash('sha256').update(canonicalStringify(material)).digest('hex').slice(0, 32);
+  return createHash('sha256')
+    .update(canonicalStringify(lfDeepNormalize(material)))
+    .digest('hex')
+    .slice(0, 32);
 }
 
 function ledgerPath(totemDir: string): string {

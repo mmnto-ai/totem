@@ -117,4 +117,17 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
       authoringContentHash({ ...material, dslSource: 'FIXME' }),
     );
   });
+  it('is CRLF-invariant — self-normalizes newlines regardless of the caller (Tenet-20 single-home)', () => {
+    // a CRLF-authored multi-line matcher and its LF twin must hash identically even if the
+    // CALLER never normalized — the determinism lives in the hash, not the reader (gemini).
+    expect(authoringContentHash({ ...material, dslSource: 'line-a\r\nline-b' })).toBe(
+      authoringContentHash({ ...material, dslSource: 'line-a\nline-b' }),
+    );
+    // and a nested fixture string (not just dslSource) is normalized too.
+    expect(
+      authoringContentHash({ ...material, positiveFixtures: [{ pr: 1, matchedSpan: 'a\r\nb' }] }),
+    ).toBe(
+      authoringContentHash({ ...material, positiveFixtures: [{ pr: 1, matchedSpan: 'a\nb' }] }),
+    );
+  });
 });
