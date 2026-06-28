@@ -1,5 +1,36 @@
 # @mmnto/cli
 
+## 1.80.0
+
+### Minor Changes
+
+- 367c05e: feat(spine): ADR-112 Slice B — authored-rule producer surface (`totem rule author`)
+
+  Adds the human-authoring front door for the Gate-1 authored-rule producer (strategy#591, ADR-112 §3/§8):
+  - **`totem rule author`** ingests `.totem/spine/authored-rules.yaml` into authored rules + a fail-loud §8 authoring-ledger (`.totem/spine/authoring-ledger.ndjson`).
+  - The reader re-runs the **independent** structural-eligibility check and **overwrites** any author-supplied verdict — the strict `AuthoredRuleInput` schema makes producer-owned fields (`structuralEligibility`/`decidable`/`ruleId`/`disposition`/…) inexpressible in the hand-editable YAML (FM(d) trust boundary).
+  - Stable identity via **upsert on `(author, targetDefect)`** — idempotent re-reads (no duplicate ledger rows), a `dslSource` edit revises in place, a `targetDefect` edit re-identifies.
+  - The fail-loud authoring-ledger is read-back-verified on every append (FM(e)); a non-decidable rule is surfaced loudly and excluded, never silently dropped.
+  - The decidable-class whitelist ships **inert/pluggable** (mechanism only; the cert-#1 class set is delivered as data later).
+
+  Inert producer: records + ledger are written but not yet consumed by the compiler or scorer (Slices B2/C/D). Mined behaviour is unchanged.
+
+### Patch Changes
+
+- 87512fd: feat(spine): ADR-112 §4 — preimage-differential source-pluggable (`preimageSource` union)
+
+  Reframes the authored-rule fixture's preimage anchor from a fixed commit-pair to a per-fixture **`preimageSource` discriminated union** (strategy#591 / ADR-112 §4, coupling mmnto-ai/totem-strategy#767):
+  - **`{ kind: 'lesson', lessonRef, badExample, goodExample }` (PRIMARY)** — for **review-caught** repos that fold the fix into the introducing commit, so the defect structurally almost never lands on `main` (lc: 18 `fix(` of 433). The positive control fires on the lesson `badExample` and stays silent on `goodExample`. `lessonRef` is bound to the immutable 16-hex `hashLesson` codomain (never a path or mutable alias — §8 identity discipline).
+  - **`{ kind: 'commit', preimageCommitSha, mergeCommitSha }` (FALLBACK)** — the prior commit-pair binding, now scoped to **land-then-fix** repos.
+
+  `AuthoredFixtureSchema` is the single home (auto-threads to `AuthoredProvenanceRecordSchema` + the YAML-input `AuthoredRuleInput`); the new `PreimageSourceSchema` / `PreimageSource` are exported. Built as `z.discriminatedUnion` with each branch `.strict()`, so a cross-branch key fails loud (FM(d)). The `totem rule author` YAML input contract changes accordingly (authors declare a `preimageSource` instead of flat commit fields); the recursive producer-key scan walks the new union depth.
+
+  No data migration is owed — there is no persisted authored-rule set, and the flat schema was never released (it ships first in this same union'd version). The §4 preimage-differential itself (fire-on-preimage / silent-on-postimage) materializes in Slices C/D; this slice is the schema + producer + tests.
+
+- Updated dependencies [87512fd]
+- Updated dependencies [367c05e]
+  - @mmnto/totem@1.80.0
+
 ## 1.79.0
 
 ### Patch Changes
