@@ -68,6 +68,8 @@ export {
   NonCompilableEntryReadSchema,
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,
+  type PreimageSource,
+  PreimageSourceSchema,
   provenanceKind,
   ProvenanceRecordSchema,
   shouldWriteToLedger,

@@ -38,8 +38,11 @@ afterEach(() => {
 
 const fixture = (pr: number) => ({
   pr,
-  mergeCommitSha: 'a'.repeat(40),
-  preimageCommitSha: 'b'.repeat(40),
+  preimageSource: {
+    kind: 'commit',
+    preimageCommitSha: 'b'.repeat(40),
+    mergeCommitSha: 'a'.repeat(40),
+  },
   filePath: 'src/x.ts',
   matchedSpan: 'L1',
   contentHash: 'h'.repeat(8),

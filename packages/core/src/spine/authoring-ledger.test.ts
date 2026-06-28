@@ -158,5 +158,21 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
     ).toBe(
       authoringContentHash({ ...material, positiveFixtures: [{ pr: 1, matchedSpan: 'a\nb' }] }),
     );
+    // and a string nested INSIDE the §4 preimageSource union (deeper than matchedSpan) is
+    // normalized too — the deep-normalize must reach the new union depth, not just the fixture top.
+    const lessonFix = (badExample: string) => [
+      {
+        pr: 1,
+        preimageSource: {
+          kind: 'lesson',
+          lessonRef: 'a1b2c3d4e5f60718',
+          badExample,
+          goodExample: 'ok',
+        },
+      },
+    ];
+    expect(
+      authoringContentHash({ ...material, positiveFixtures: lessonFix('bad-a\r\nbad-b') }),
+    ).toBe(authoringContentHash({ ...material, positiveFixtures: lessonFix('bad-a\nbad-b') }));
   });
 });
