@@ -11,6 +11,15 @@
 // NOT the blessed cert-#1 set. The whole table is handed to the core predicate so
 // "exactly one (engine, structuralClass) match across the registry" holds (a
 // class present under two engines is AMBIGUOUS ⇒ non-decidable, never structural).
+//
+// ENGINE-TYPING IS LOAD-BEARING (strategy ruling 2026-06-28): a forbidden-token
+// class whose token can also appear in PROSE / doc-comments (e.g. `determinism`,
+// `unwrap`) MUST be whitelisted for `ast-grep` (matches import/call NODES), never
+// `regex` — a regex would fire on a doc-comment occurrence, and one corpus false
+// positive fails the cert. The registry carries this as DATA: such a class is
+// listed only under `ast-grep`, so the predicate (which matches on BOTH engine and
+// class) REJECTS a `regex` declaration of it — the FP-prevention is mechanical, not
+// a reviewer's vigilance. Classes whose tokens never appear in prose may be regex.
 
 import type { WhitelistEntry } from '@mmnto/totem';
 
