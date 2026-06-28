@@ -27,9 +27,12 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * The decidable-class data-table. Mechanism-validating exemplars ONLY — replace
  * with strategy's cert-#1 set (as data) when it lands; the predicate is unchanged.
  */
+// Each ROW is frozen too, not just the array (CR diff-review): `authoredWhitelist()` hands
+// these references out, so a shallow `Object.freeze([...])` would still let another module
+// rewrite `engine`/`structuralClass` after `assertNoDuplicateEntries()` has passed.
 const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
-  { engine: 'regex', structuralClass: 'forbidden-literal-token' },
-  { engine: 'ast-grep', structuralClass: 'node-shape-presence' },
+  Object.freeze({ engine: 'regex', structuralClass: 'forbidden-literal-token' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'node-shape-presence' }),
 ]);
 
 /**

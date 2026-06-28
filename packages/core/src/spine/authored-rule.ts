@@ -19,7 +19,11 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
-import { AuthoredFixtureSchema, AuthoredProvenanceRecordSchema } from '../compiler-schema.js';
+import {
+  AuthoredFixtureSchema,
+  AuthoredProvenanceRecordSchema,
+  isIso8601CalendarDate,
+} from '../compiler-schema.js';
 import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger } from './ledgers.js';
 
@@ -140,25 +144,39 @@ export type AuthoredRuleRecord = z.infer<typeof AuthoredRuleRecordSchema>;
 // the greptile-#3 trust boundary). A file that already looks like an
 // `AuthoredRuleRecord[]` (carrying `structuralEligibility`/`ruleId`/…) therefore
 // fails the read as the WRONG SHAPE — it is never accepted as an "advanced" form.
+//
+// Identity/metadata strings are `.transform(trim)` BEFORE the refine (GCA-high
+// diff-review): a non-mutating `.refine` would let `"alice "` (trailing space)
+// bypass the `judgedBy !== author` independence check and mint a DIFFERENT ruleId
+// for a semantically-identical input. `dslSource` is the one string NOT trimmed —
+// trimming a matcher could change its meaning (leading/trailing pattern chars).
 export const AuthoredRuleInputSchema = z
   .object({
-    /** Agent-id or operator handle — attributable (mirrors the provenance field). */
-    author: z.string().refine((s) => s.trim().length > 0, {
-      message: 'author must be a non-empty, attributable handle',
-    }),
+    /** Agent-id or operator handle — attributable (mirrors the provenance field). Trimmed. */
+    author: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, { message: 'author must be a non-empty, attributable handle' }),
     /**
-     * ISO-8601 authoring date. Non-empty here; the REAL calendar-validity check
-     * (`YYYY-MM-DD` or a full timestamp, no Feb-31) is enforced when the reader
-     * constructs the `AuthoredProvenanceRecord` (its `authoredAt` refine), so the
-     * one calendar authority is not duplicated.
+     * ISO-8601 authoring date — trimmed + calendar-validated at the INTAKE boundary
+     * (CR diff-review): the same `isIso8601CalendarDate` the record provenance uses,
+     * so a malformed `not-a-date` fails here with a clean `CONFIG_INVALID` instead of
+     * escaping to a raw ZodError at record construction (pass 1).
      */
-    authoredAt: z.string().refine((s) => s.trim().length > 0, {
-      message: 'authoredAt must be a non-empty ISO-8601 date',
-    }),
-    /** The declared DEFECT the rule targets — the pre-image, not its fix (ADR-110 §4 TP-def). */
-    targetDefect: z.string().refine((s) => s.trim().length > 0, {
-      message: 'targetDefect must be a non-empty defect description',
-    }),
+    authoredAt: z
+      .string()
+      .transform((s) => s.trim())
+      .refine(isIso8601CalendarDate, {
+        message:
+          'authoredAt must be a valid ISO-8601 calendar date (YYYY-MM-DD or a full timestamp)',
+      }),
+    /** The declared DEFECT the rule targets — the pre-image, not its fix (ADR-110 §4 TP-def). Trimmed. */
+    targetDefect: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, {
+        message: 'targetDefect must be a non-empty defect description',
+      }),
     /** The matcher engine the author declares; the eligibility check confirms it can represent the class. */
     declaredEngine: DeclaredEngineSchema,
     /**
@@ -166,11 +184,15 @@ export const AuthoredRuleInputSchema = z
      * `evaluateStructuralEligibility` against the DI whitelist; it is NOT stored
      * verbatim on the record — the *verdict* (`structuralEligibility`, basis
      * `whitelist:<class>`) is. Naming a class is a claim the check adjudicates,
-     * never a self-certification of `decidable`.
+     * never a self-certification of `decidable`. Trimmed so a stray space can't
+     * cause an exact-match miss against the registry.
      */
-    structuralClass: z.string().refine((s) => s.trim().length > 0, {
-      message: 'structuralClass must be a non-empty rule-class for the whitelist to decide',
-    }),
+    structuralClass: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, {
+        message: 'structuralClass must be a non-empty rule-class for the whitelist to decide',
+      }),
     /** The human-written matcher (same DSL the compiler accepts from the miner). */
     dslSource: z.string().refine((s) => s.trim().length > 0, {
       message: 'dslSource must be non-empty',

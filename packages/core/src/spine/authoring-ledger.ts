@@ -81,7 +81,6 @@ export const AuthoringLedgerEntrySchema = z
 export type AuthoringLedgerEntry = z.infer<typeof AuthoringLedgerEntrySchema>;
 
 /**
-/**
  * Recursively LF-normalize every string in a value. Keeps the material-hash
  * determinism SINGLE-HOMED in the hash (Tenet-20, gemini diff-review): the hash
  * is CRLF-invariant regardless of whether the caller pre-normalized, so a future
@@ -106,6 +105,13 @@ function lfDeepNormalize(value: unknown): unknown {
  * caller — the determinism is single-homed in the hash, not the reader (Tenet-20,
  * gemini diff-review). Identity + `authoredAt` are NOT part of the material (see
  * `AuthoringLedgerEntrySchema.contentHash`).
+ *
+ * The file-level ATTESTATIONS (`splitRef` + the booleans) ARE part of the material
+ * (greptile-P1 + CR diff-review): they are what this command records, so an
+ * attestation-only change (e.g. the split was re-frozen) must trigger a revision
+ * row — otherwise the rule reads `unchanged`, no row is appended, and the ledger
+ * keeps the STALE split. `authoredAt` stays excluded (a timestamp refresh is a
+ * no-op, §8); every OTHER ledger-attested mutable field is covered here.
  */
 export function authoringContentHash(material: {
   declaredEngine: string;
@@ -114,6 +120,9 @@ export function authoringContentHash(material: {
   positiveFixtures: unknown;
   negativeFixtures?: unknown;
   origin: unknown;
+  splitRef: string;
+  authoredAfterSplit: boolean;
+  heldOutNonInspectionAttestation: boolean;
 }): string {
   return createHash('sha256')
     .update(canonicalStringify(lfDeepNormalize(material)))
@@ -192,12 +201,15 @@ export function appendAuthoringLedgerEntry(totemDir: string, entry: AuthoringLed
   const line = canonicalStringify(validated);
   fs.mkdirSync(dir, { recursive: true });
   fs.appendFileSync(file, `${line}\n`, 'utf-8');
+  // Verify the row is PRESENT, not necessarily LAST (CR diff-review): a concurrent
+  // `runRuleAuthor` could append a row between our `appendFileSync` and this read, so a
+  // `back[back.length-1]` check would false-throw on a SUCCESSFUL append. `appendFileSync`
+  // writes a complete line atomically, so our line is intact in the file even if not last.
   const back = readAuthoringLedger(totemDir);
-  const last = back[back.length - 1];
-  if (!last || canonicalStringify(last) !== line) {
+  if (!back.some((e) => canonicalStringify(e) === line)) {
     throw new TotemError(
       'GATE_INVALID',
-      `authoring-ledger read-back mismatch for ruleId '${entry.ruleId}'`,
+      `authoring-ledger read-back could not confirm the row for ruleId '${entry.ruleId}'`,
       'The ledger write did not persist verbatim; the rule is withheld from compile feed (FM(e)).',
     );
   }

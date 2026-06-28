@@ -7,7 +7,7 @@ import { stringify as yamlStringify } from 'yaml';
 
 import { readAuthoringLedger } from '@mmnto/totem';
 
-import { runRuleAuthor } from './rule-author.js';
+import { runRuleAuthor } from '../authored-rule-intake.js';
 
 let totemDir: string;
 let yamlPath: string;
@@ -204,5 +204,17 @@ describe('runRuleAuthor — codex/agy diff-review folds', () => {
   it('rejects judgedBy equal to a rule author (§3 independence — codex)', () => {
     writeYaml([decidableRule({ author: 'mallory' })]);
     expect(() => runRuleAuthor(totemDir, { judgedBy: 'mallory' })).toThrow(/never be the author/i);
+  });
+  it('an attestation-only edit (splitRef change) triggers a revision, not unchanged (greptile-P1/CR)', () => {
+    writeYaml([decidableRule()]); // splitRef default 'split-2026-06-27'
+    run();
+    // same rule material, only the file-level split attestation changes:
+    writeYaml([decidableRule()], { splitRef: 'split-2026-07-01' });
+    const res = run();
+    expect(res.revised).toBe(1);
+    expect(res.unchanged).toBe(0);
+    const ledger = readAuthoringLedger(totemDir);
+    expect(ledger).toHaveLength(2);
+    expect(ledger[1]?.splitRef).toBe('split-2026-07-01'); // the new row records the new split (no longer stale)
   });
 });

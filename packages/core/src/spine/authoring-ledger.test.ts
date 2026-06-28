@@ -116,6 +116,9 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
     dslSource: 'TODO',
     positiveFixtures: [{ pr: 1 }],
     origin: { kind: 'from-scratch' as const },
+    splitRef: 'split-2026-06-27',
+    authoredAfterSplit: true as const,
+    heldOutNonInspectionAttestation: true as const,
   };
   it('is deterministic for identical material', () => {
     expect(authoringContentHash(material)).toBe(authoringContentHash({ ...material }));
@@ -123,6 +126,11 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
   it('changes when the matcher changes (a revision)', () => {
     expect(authoringContentHash(material)).not.toBe(
       authoringContentHash({ ...material, dslSource: 'FIXME' }),
+    );
+  });
+  it('changes when an attestation changes (splitRef) — greptile-P1/CR diff-review', () => {
+    expect(authoringContentHash(material)).not.toBe(
+      authoringContentHash({ ...material, splitRef: 'split-other' }),
     );
   });
   it('is CRLF-invariant — self-normalizes newlines regardless of the caller (Tenet-20 single-home)', () => {
