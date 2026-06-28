@@ -1671,6 +1671,27 @@ ruleCmd
     }
   });
 
+ruleCmd
+  .command('author')
+  .description(
+    'Ingest .totem/spine/authored-rules.yaml into authored rules + the §8 authoring-ledger (ADR-112, strategy#591)',
+  )
+  .option(
+    '--judged-by <id>',
+    'Identity of the independent eligibility check recorded on each verdict',
+  )
+  .action(async (opts: { judgedBy?: string }) => {
+    try {
+      const { ruleAuthorCommand } = await import('./commands/rule-author.js');
+      await ruleAuthorCommand(opts);
+    } catch (err) {
+      handleError(err);
+      // handleError is `: never` (process.exit); the throw satisfies the Tenet-4
+      // catch-body fail-loud ast-grep rule (see `rule promote` above).
+      throw err;
+    }
+  });
+
 // ─── Proposal noun-verb subcommands ─────────────────────
 // mmnto/totem#1288: scaffold NNN-prefixed proposals in <strategy>/proposals/active/.
 const proposalCmd = program.command('proposal').description('Manage governance proposals');

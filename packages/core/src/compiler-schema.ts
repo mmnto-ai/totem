@@ -65,7 +65,7 @@ const ISO_8601_DATE_RE =
  * in the time component — a negative offset can legitimately shift the UTC day, so the
  * head, not the parsed instant, is what must round-trip.
  */
-function isIso8601CalendarDate(s: string): boolean {
+export function isIso8601CalendarDate(s: string): boolean {
   if (!ISO_8601_DATE_RE.test(s) || Number.isNaN(Date.parse(s))) return false;
   const [y, m, d] = s.slice(0, 10).split('-').map(Number) as [number, number, number];
   const probe = new Date(Date.UTC(y, m - 1, d));

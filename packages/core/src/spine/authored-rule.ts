@@ -19,7 +19,11 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
-import { AuthoredProvenanceRecordSchema } from '../compiler-schema.js';
+import {
+  AuthoredFixtureSchema,
+  AuthoredProvenanceRecordSchema,
+  isIso8601CalendarDate,
+} from '../compiler-schema.js';
 import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger } from './ledgers.js';
 
@@ -123,6 +127,125 @@ export const AuthoredRuleRecordSchema = z.object({
   unverified: z.literal(true),
 });
 export type AuthoredRuleRecord = z.infer<typeof AuthoredRuleRecordSchema>;
+
+// ── SLICE B — the authoring INTAKE schema (ADR-112 §3/§8, FM(d)) ──────────────
+//
+// `AuthoredRuleInput` is the STRICT shape a human may supply in
+// `.totem/spine/authored-rules.yaml`. It is DELIBERATELY distinct from
+// `AuthoredRuleRecord`: the author sets ONLY the fields they legitimately own —
+// the matcher, the declared engine + claimed structural class, the defect
+// anchor, the fixtures, the accelerant origin. Every PRODUCER-owned field is
+// REJECTED at parse (`.strict()` ⇒ unknown keys fail), so an author cannot
+// hand-edit the YAML to inject a `structuralEligibility` / `decidable` / `ruleId`
+// / `disposition` / `judgedBy` verdict — those keys are simply not expressible.
+// The reader (slice B, CLI) re-runs `evaluateStructuralEligibility` over the DI
+// whitelist and mints/upserts the id ITSELF; the author's `structuralClass` is a
+// CLAIM that the independent check decides, never a self-certification (FM(d) /
+// the greptile-#3 trust boundary). A file that already looks like an
+// `AuthoredRuleRecord[]` (carrying `structuralEligibility`/`ruleId`/…) therefore
+// fails the read as the WRONG SHAPE — it is never accepted as an "advanced" form.
+//
+// Identity/metadata strings are `.transform(trim)` BEFORE the refine (GCA-high
+// diff-review): a non-mutating `.refine` would let `"alice "` (trailing space)
+// bypass the `judgedBy !== author` independence check and mint a DIFFERENT ruleId
+// for a semantically-identical input. `dslSource` is the one string NOT trimmed —
+// trimming a matcher could change its meaning (leading/trailing pattern chars).
+export const AuthoredRuleInputSchema = z
+  .object({
+    /** Agent-id or operator handle — attributable (mirrors the provenance field). Trimmed. */
+    author: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, { message: 'author must be a non-empty, attributable handle' }),
+    /**
+     * ISO-8601 authoring date — trimmed + calendar-validated at the INTAKE boundary
+     * (CR diff-review): the same `isIso8601CalendarDate` the record provenance uses,
+     * so a malformed `not-a-date` fails here with a clean `CONFIG_INVALID` instead of
+     * escaping to a raw ZodError at record construction (pass 1).
+     */
+    authoredAt: z
+      .string()
+      .transform((s) => s.trim())
+      .refine(isIso8601CalendarDate, {
+        message:
+          'authoredAt must be a valid ISO-8601 calendar date (YYYY-MM-DD or a full timestamp)',
+      }),
+    /** The declared DEFECT the rule targets — the pre-image, not its fix (ADR-110 §4 TP-def). Trimmed. */
+    targetDefect: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, {
+        message: 'targetDefect must be a non-empty defect description',
+      }),
+    /** The matcher engine the author declares; the eligibility check confirms it can represent the class. */
+    declaredEngine: DeclaredEngineSchema,
+    /**
+     * The structural rule-CLASS the author CLAIMS. Fed to the INDEPENDENT
+     * `evaluateStructuralEligibility` against the DI whitelist; it is NOT stored
+     * verbatim on the record — the *verdict* (`structuralEligibility`, basis
+     * `whitelist:<class>`) is. Naming a class is a claim the check adjudicates,
+     * never a self-certification of `decidable`. Trimmed so a stray space can't
+     * cause an exact-match miss against the registry.
+     */
+    structuralClass: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, {
+        message: 'structuralClass must be a non-empty rule-class for the whitelist to decide',
+      }),
+    /** The human-written matcher (same DSL the compiler accepts from the miner). */
+    dslSource: z.string().refine((s) => s.trim().length > 0, {
+      message: 'dslSource must be non-empty',
+    }),
+    /** ≥1 real lc instance the rule claims to catch — ALL train-side (§5). */
+    positiveFixtures: z.array(AuthoredFixtureSchema).min(1, {
+      message: 'an authored rule must declare ≥1 positive fixture (ADR-112 §3)',
+    }),
+    /** Declared near-misses the rule must stay silent on (feeds §6 negative controls). */
+    negativeFixtures: z.array(AuthoredFixtureSchema).optional(),
+    /**
+     * Accelerant lineage (§7). Optional in the YAML; the reader defaults an
+     * absent value to `{ kind: 'from-scratch' }` when constructing the record, so
+     * the persisted `origin` is always explicit (§7 lineage is never erased).
+     */
+    origin: AuthoredOriginSchema.optional(),
+  })
+  .strict();
+export type AuthoredRuleInput = z.infer<typeof AuthoredRuleInputSchema>;
+
+/**
+ * SLICE B — the on-disk shape of `.totem/spine/authored-rules.yaml`. A file-level
+ * authoring header carries the §5/§8 leakage-guard ATTESTATIONS once for the
+ * session (not per-rule, since all rules in one file are authored under one
+ * frozen split), followed by the rules. Slice B RECORDS these faithfully into the
+ * authoring-ledger (strategy's boundary confirm: B records `splitRef` /
+ * `authoredAfterSplit` / `fixturePrs`); the MECHANICAL verification — the split
+ * was frozen BEFORE authoring (§5.1/FM(g)), fixtures resolve train-side (§5.2),
+ * the harness is sandboxed (§5.4) — is the cert-run harness in SLICE C. The
+ * attestations are `literal(true)`: an author who cannot attest them is not
+ * authoring legitimately, so a `false` fails the read rather than recording a
+ * self-defeating attestation. `.strict()` rejects unknown header keys.
+ */
+export const AuthoredRulesFileSchema = z
+  .object({
+    /** The frozen split (ADR-110 §6) the rules were authored under (recorded; verified in C). Trimmed (GCA) so stray whitespace can't bypass the non-empty check or perturb the revision fingerprint. */
+    splitRef: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, {
+        message: 'splitRef must name the frozen split the rules were authored under (ADR-112 §5.1)',
+      }),
+    /** §1(g) embargo attestation — authored AFTER the split was frozen. Always `true`; verified in C. */
+    authoredAfterSplit: z.literal(true),
+    /** §5 attestation — the author did not inspect the held-out slice. Always `true`; sandboxed in C. */
+    heldOutNonInspectionAttestation: z.literal(true),
+    /** The authored rules (≥1). */
+    rules: z.array(AuthoredRuleInputSchema).min(1, {
+      message: 'authored-rules.yaml must declare ≥1 rule',
+    }),
+  })
+  .strict();
+export type AuthoredRulesFile = z.infer<typeof AuthoredRulesFileSchema>;
 
 // ── The independent structural-eligibility check (ADR-112 §3) ─────────────────
 
