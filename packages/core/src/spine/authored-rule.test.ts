@@ -90,8 +90,11 @@ describe('AuthoredRuleRecord schema (ADR-112 §3)', () => {
       positiveFixtures: [
         {
           pr: 100,
-          mergeCommitSha: 'b'.repeat(40),
-          preimageCommitSha: 'c'.repeat(40),
+          preimageSource: {
+            kind: 'commit' as const,
+            preimageCommitSha: 'c'.repeat(40),
+            mergeCommitSha: 'b'.repeat(40),
+          },
           filePath: 'src/physics/step.ts',
           matchedSpan: 'L10-L12',
           contentHash: 'deadbeefcafe',
@@ -228,8 +231,11 @@ describe('toCompileFeed (ADR-112 §2/§8 — authored → compile-stage input)',
       positiveFixtures: [
         {
           pr: 1,
-          mergeCommitSha: 'a'.repeat(40),
-          preimageCommitSha: 'b'.repeat(40),
+          preimageSource: {
+            kind: 'commit' as const,
+            preimageCommitSha: 'b'.repeat(40),
+            mergeCommitSha: 'a'.repeat(40),
+          },
           filePath: 'src/a.ts',
           matchedSpan: 'L1',
           contentHash: 'h1',

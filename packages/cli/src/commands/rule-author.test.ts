@@ -23,10 +23,23 @@ afterEach(() => {
 
 const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
+// §4 FALLBACK: a commit-pair preimageSource (land-then-fix).
 const fixture = (pr: number) => ({
   pr,
-  mergeCommitSha: SHA_A,
-  preimageCommitSha: SHA_B,
+  preimageSource: { kind: 'commit', preimageCommitSha: SHA_B, mergeCommitSha: SHA_A },
+  filePath: 'src/x.ts',
+  matchedSpan: 'L1-L2',
+  contentHash: 'h'.repeat(8),
+});
+// §4 PRIMARY: a lesson-anchored preimageSource (review-caught) — the cert-#1 path.
+const lessonFixture = (pr: number) => ({
+  pr,
+  preimageSource: {
+    kind: 'lesson',
+    lessonRef: 'a1b2c3d4e5f60718',
+    badExample: 'console.log("dbg")',
+    goodExample: 'logger.debug("dbg")',
+  },
   filePath: 'src/x.ts',
   matchedSpan: 'L1-L2',
   contentHash: 'h'.repeat(8),
@@ -87,6 +100,19 @@ describe('runRuleAuthor — FM(d) reject-loud at the reader (the trust boundary)
   });
   it('rejects a producer-owned key nested inside origin', () => {
     writeYaml([decidableRule({ origin: { kind: 'from-scratch', ruleId: 'x'.repeat(16) } })]);
+    expect(() => run()).toThrow(/producer-owned key/i);
+  });
+  it('rejects a producer-owned key nested inside preimageSource (recursive scan walks the §4 union — FM(d))', () => {
+    writeYaml([
+      decidableRule({
+        positiveFixtures: [
+          {
+            ...fixture(101),
+            preimageSource: { ...fixture(101).preimageSource, ruleId: 'x'.repeat(16) },
+          },
+        ],
+      }),
+    ]);
     expect(() => run()).toThrow(/producer-owned key/i);
   });
 });
@@ -173,11 +199,21 @@ describe('runRuleAuthor — fail-loud IO', () => {
 
 describe('runRuleAuthor — codex/agy diff-review folds', () => {
   it('the ledger binds BOTH positive AND negative fixture PRs (codex)', () => {
-    writeYaml([decidableRule({ negativeFixtures: [fixture(202)] })]);
+    // Mixed §4 sources: a commit-pair positive + a lesson-anchored negative — the reader
+    // accepts both kinds and binds their PRs (the §4 union threads through the whole intake).
+    writeYaml([decidableRule({ negativeFixtures: [lessonFixture(202)] })]);
     run();
     const ledger = readAuthoringLedger(totemDir);
     expect(ledger[0]?.positiveFixturePrs).toEqual([101]);
     expect(ledger[0]?.negativeFixturePrs).toEqual([202]);
+  });
+  it('authors a lesson-anchored (PRIMARY, review-caught) positive fixture end-to-end (§4 cert-#1 path)', () => {
+    writeYaml([decidableRule({ positiveFixtures: [lessonFixture(101)] })]);
+    const res = run();
+    expect(res.minted).toBe(1);
+    const src = res.records[0]?.provenance.positiveFixtures[0]?.preimageSource;
+    expect(src?.kind).toBe('lesson');
+    if (src?.kind === 'lesson') expect(src.lessonRef).toBe('a1b2c3d4e5f60718');
   });
   it('a revision appends a row carrying the NEW contentHash under the SAME ruleId (agy)', () => {
     writeYaml([decidableRule()]);

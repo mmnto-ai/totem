@@ -263,6 +263,8 @@ export {
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,
   parseCompilerResponse,
+  type PreimageSource,
+  PreimageSourceSchema,
   provenanceKind,
   ProvenanceRecordSchema,
   type RegexValidation,

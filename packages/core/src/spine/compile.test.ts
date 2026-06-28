@@ -450,8 +450,11 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
       positiveFixtures: [
         {
           pr: 1,
-          mergeCommitSha: sha(1),
-          preimageCommitSha: sha(2),
+          preimageSource: {
+            kind: 'commit' as const,
+            preimageCommitSha: sha(2),
+            mergeCommitSha: sha(1),
+          },
           filePath: 'src/a.ts',
           matchedSpan: 'L1',
           contentHash: 'h1',

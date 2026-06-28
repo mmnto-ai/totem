@@ -50,6 +50,17 @@ export type AstGrepYamlRule = NapiConfig;
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 
 /**
+ * ADR-112 §4/§8 — the codomain of an IMMUTABLE lesson reference: the 16-hex
+ * `hashLesson` id (`compile-lesson.ts`). A `lessonRef` MUST be this immutable id,
+ * never a path (`docs/lessons/foo.md`) or a mutable alias (`latest`) — a drifting
+ * anchor would break the §4 preimage-differential's identity discipline. Pinned
+ * to the codomain so a path/alias fails LOUD at the schema boundary. NOTE
+ * (couple-on-merge, strategy#767): bound to the current 16-hex `hashLesson` form;
+ * widen here if the lesson-id codomain ever changes.
+ */
+const LESSON_REF_RE = /^[0-9a-f]{16}$/;
+
+/**
  * ISO-8601 shape for an authoring date — a calendar date (`YYYY-MM-DD`) or a full
  * timestamp with optional fractional seconds + `Z`/offset. Shape only; the calendar
  * validity is enforced by `isIso8601CalendarDate` (#2259 — GCA-high + CR).
@@ -120,32 +131,128 @@ export const MinedProvenanceWireSchema = z.object({
 export type MinedProvenanceRecord = z.infer<typeof MinedProvenanceWireSchema>;
 
 /**
+ * ADR-112 §4 — the preimage-differential SOURCE for one fixture, a discriminated
+ * union on `kind` (declared PER FIXTURE; not a fixed binding to landed commits).
+ * The materializer (slice C/D) fires the matcher on the preimage and asserts it
+ * is SILENT on the postimage — a matcher that fires only on the fixed form is
+ * fix-shaped and is NOT a legitimate positive control (FM(i)):
+ *   - `lesson` (PRIMARY, review-caught repos): the lesson corpus' `badExample`
+ *     (preimage — fire) / `goodExample` (postimage — silent). `lessonRef` is an
+ *     IMMUTABLE lesson id/hash (the `hashLesson` codomain, `LESSON_REF_RE`),
+ *     never a path/mutable alias (§8 identity discipline).
+ *   - `commit` (FALLBACK, land-then-fix repos): the pre-fix parent
+ *     (`preimageCommitSha` — fire) / post-fix merge (`mergeCommitSha` — silent).
+ *
+ * `z.discriminatedUnion` (not `z.union`): both branches carry a REQUIRED literal
+ * `kind`, so Zod routes a parse error to the matched branch instead of emitting
+ * "no union member matched" noise (cf. `cert-corpus-seed.ts`'s `window`). The
+ * OPTIONAL-discriminator round-trip reason `ProvenanceRecordSchema` documents for
+ * its `z.union` does NOT apply — `preimageSource` is a new field with no persisted
+ * authored set. Each branch is `.strict()` so a cross-branch key (e.g. a
+ * `badExample` under `kind:'commit'`) fails LOUD (FM(d) posture) rather than being
+ * silently stripped. All refines are NON-mutating (no `.trim()`) to preserve the
+ * manifest-hash stability discipline.
+ */
+export const PreimageSourceSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('lesson'),
+      /** IMMUTABLE lesson id/hash (the 16-hex `hashLesson` codomain) — never a path/mutable alias (§4/§8). */
+      lessonRef: z.string().regex(LESSON_REF_RE, {
+        message:
+          'lessonRef must be an immutable lesson id (16-hex hashLesson codomain), not a path or mutable alias',
+      }),
+      /**
+       * The defect PREIMAGE exemplar the matcher must FIRE on (§4). This is a lesson
+       * corpus `badExample` — distinct from `CompiledRuleBaseSchema.badExample` (an
+       * optional human-readable code snippet on a compiled rule); here it is the
+       * load-bearing positive-control preimage, so non-empty is required.
+       */
+      badExample: z.string().refine((s) => s.trim().length > 0, {
+        message: 'badExample (the defect preimage the matcher must fire on) must be non-empty',
+      }),
+      /** The fixed POSTIMAGE exemplar the matcher must stay SILENT on (§4) — a lesson `goodExample`. */
+      goodExample: z.string().refine((s) => s.trim().length > 0, {
+        message: 'goodExample (the fixed form the matcher must stay silent on) must be non-empty',
+      }),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('commit'),
+      /** The PARENT (pre-fix) commit where the DEFECT is present — the matcher must FIRE on this (ADR-112 §4). */
+      preimageCommitSha: z.string().regex(COMMIT_SHA_RE, {
+        message: 'preimageCommitSha must be a 40-character lowercase hex commit SHA',
+      }),
+      /** The PR's merge/squash commit — the post-fix (defect-absent) anchor; the matcher must stay SILENT on this. */
+      mergeCommitSha: z.string().regex(COMMIT_SHA_RE, {
+        message: 'mergeCommitSha must be a 40-character lowercase hex commit SHA',
+      }),
+    })
+    .strict(),
+]);
+
+export type PreimageSource = z.infer<typeof PreimageSourceSchema>;
+
+/**
  * ADR-112 §3 — one real lc instance an authored rule claims to catch. ALL such
  * fixtures are TRAIN-side (the §5 leakage guard); the preimage-differential
- * (§4) is evaluated in slice C/D, but the record must CARRY both commits + the
- * defect locus here so derivation is possible. `matchedSpan` + `contentHash`
- * are the line-drift-stable locus (cf. `firingLabelId`), not just the file.
+ * (§4) is evaluated in slice C/D, but the record CARRIES the declared
+ * `preimageSource` (lesson | commit) + the defect locus here so derivation is
+ * possible. `matchedSpan` + `contentHash` are the line-drift-stable locus
+ * (cf. `firingLabelId`), not just the file.
  */
-export const AuthoredFixtureSchema = z.object({
-  /** The PR whose merge introduced the fix (the in-corpus anchor). */
-  pr: z.number().int().positive(),
-  /** The PR's merge/squash commit — the post-fix (defect-absent) anchor. */
-  mergeCommitSha: z.string().regex(COMMIT_SHA_RE),
-  /** The PARENT (pre-fix) commit where the DEFECT is present (ADR-112 §4). */
-  preimageCommitSha: z.string().regex(COMMIT_SHA_RE),
-  /** File the defect locus lives in. */
-  filePath: z.string().refine((s) => s.trim().length > 0, {
-    message: 'filePath must be a non-empty reference',
-  }),
-  /** Line-range or AST-node path — the defect locus, not just the file. */
-  matchedSpan: z.string().refine((s) => s.trim().length > 0, {
-    message: 'matchedSpan must be a non-empty locus',
-  }),
-  /** Span content hash, line-drift-stable (cf. `firingLabelId`). */
-  contentHash: z.string().refine((s) => s.trim().length > 0, {
-    message: 'contentHash must be a non-empty hash',
-  }),
-});
+export const AuthoredFixtureSchema = z
+  .object({
+    /** The PR where the defect was caught/introduced (the in-corpus anchor). */
+    pr: z.number().int().positive(),
+    /** The §4 preimage-differential source — lesson-anchored (PRIMARY) or commit-pair (FALLBACK). */
+    preimageSource: PreimageSourceSchema,
+    /** File the defect locus lives in. */
+    filePath: z.string().refine((s) => s.trim().length > 0, {
+      message: 'filePath must be a non-empty reference',
+    }),
+    /** Line-range or AST-node path — the defect locus, not just the file. */
+    matchedSpan: z.string().refine((s) => s.trim().length > 0, {
+      message: 'matchedSpan must be a non-empty locus',
+    }),
+    /** Span content hash, line-drift-stable (cf. `firingLabelId`). */
+    contentHash: z.string().refine((s) => s.trim().length > 0, {
+      message: 'contentHash must be a non-empty hash',
+    }),
+  })
+  // `.strict()` (CR outside-diff): the outer fixture closes too, not just the union branches —
+  // a partially-migrated fixture carrying `preimageSource` AND a leftover flat `mergeCommitSha`/
+  // `preimageCommitSha` must fail LOUD, never validate-and-silently-strip the stale key (FM(d)).
+  .strict()
+  // ANTI-VACUITY FAST-FAIL (GCA finding; strategy#767-blessed defense-in-depth). This is NOT the
+  // §4 preimage-differential — that is the load-bearing C/D materializer (fire-on-preimage /
+  // silent-on-postimage). This only rejects the DEGENERATE case where the two sides are IDENTICAL:
+  // an identical preimage/postimage is an UNCONDITIONALLY vacuous control (a matcher cannot fire on
+  // one and stay silent on the other), so it is zero-false-positive to reject at intake — distinct
+  // from "does the differential hold", which two *different* sides still must prove in C/D.
+  // Non-mutating (compares trimmed, never transforms) — manifest-hash stability. A `superRefine` on
+  // the OUTER fixture (not a branch `.refine`, which would wrap a `discriminatedUnion` member in a
+  // ZodEffects and break discriminator extraction).
+  .superRefine((fixture, ctx) => {
+    const src = fixture.preimageSource;
+    if (src.kind === 'lesson' && src.badExample.trim() === src.goodExample.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'badExample and goodExample must differ — identical sides are a vacuous preimage-differential control (ADR-112 §4)',
+        path: ['preimageSource', 'goodExample'],
+      });
+    }
+    if (src.kind === 'commit' && src.preimageCommitSha === src.mergeCommitSha) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'preimageCommitSha and mergeCommitSha must differ — an identical pre/post commit is a vacuous preimage-differential control (ADR-112 §4)',
+        path: ['preimageSource', 'mergeCommitSha'],
+      });
+    }
+  });
 
 export type AuthoredFixture = z.infer<typeof AuthoredFixtureSchema>;
 

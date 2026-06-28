@@ -4,6 +4,7 @@ import { canonicalStringify } from './compile-manifest.js';
 import type { RuleEventCallback } from './compiler-schema.js';
 import {
   AstGrepYamlRuleSchema,
+  AuthoredFixtureSchema,
   AuthoredProvenanceRecordSchema,
   CompiledRuleSchema,
   CompilerOutputSchema,
@@ -17,6 +18,7 @@ import {
   NonCompilableEntryReadSchema,
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,
+  PreimageSourceSchema,
   provenanceKind,
   ProvenanceRecordSchema,
   shouldWriteToLedger,
@@ -990,8 +992,30 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       positiveFixtures: [
         {
           pr: 100,
-          mergeCommitSha: 'b'.repeat(40),
-          preimageCommitSha: 'c'.repeat(40),
+          // §4 FALLBACK source — commit-pair (land-then-fix).
+          preimageSource: {
+            kind: 'commit' as const,
+            preimageCommitSha: 'c'.repeat(40),
+            mergeCommitSha: 'b'.repeat(40),
+          },
+          filePath: 'src/physics/step.ts',
+          matchedSpan: 'L10-L12',
+          contentHash: 'deadbeefcafe',
+        },
+      ],
+    };
+    // §4 PRIMARY source — lesson-anchored (review-caught); same fixture, lesson preimageSource.
+    const authoredLesson = {
+      ...authored,
+      positiveFixtures: [
+        {
+          pr: 100,
+          preimageSource: {
+            kind: 'lesson' as const,
+            lessonRef: 'a1b2c3d4e5f60718', // 16-hex hashLesson codomain
+            badExample: 'if (a == b) { applyImpulse(); }',
+            goodExample: 'if (Math.abs(a - b) < EPS) { applyImpulse(); }',
+          },
           filePath: 'src/physics/step.ts',
           matchedSpan: 'L10-L12',
           contentHash: 'deadbeefcafe',
@@ -1064,13 +1088,176 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       }
     });
 
-    it('rejects a fixture with a malformed preimage/merge SHA', () => {
+    it('accepts both §4 preimageSource kinds and preserves the discriminator + branch fields', () => {
+      const commit = AuthoredProvenanceRecordSchema.parse(authored);
+      const lesson = AuthoredProvenanceRecordSchema.parse(authoredLesson);
+      const cSrc = commit.positiveFixtures[0].preimageSource;
+      const lSrc = lesson.positiveFixtures[0].preimageSource;
+      expect(cSrc.kind).toBe('commit');
+      if (cSrc.kind === 'commit') expect(cSrc.preimageCommitSha).toBe('c'.repeat(40));
+      expect(lSrc.kind).toBe('lesson');
+      if (lSrc.kind === 'lesson') {
+        expect(lSrc.lessonRef).toBe('a1b2c3d4e5f60718');
+        expect(lSrc.badExample).toBe('if (a == b) { applyImpulse(); }');
+      }
+    });
+
+    // The §4 commit branch carries TWO SHAs; the old flat test only guarded preimageCommitSha.
+    // Each malformed-SHA case keeps the OTHER SHA valid so the rejection can ONLY be the regex
+    // under test — not a missing-field throw (the rewrap landmine: a bad value must live INSIDE
+    // preimageSource; a top-level leftover SHA is now rejected by the strict outer object too).
+    // The asserted message text is the GCA-requested regression guard (the message is wired).
+    it('rejects a commit preimageSource with a malformed preimageCommitSha (other SHA valid)', () => {
       expect(() =>
-        AuthoredProvenanceRecordSchema.parse({
-          ...authored,
-          positiveFixtures: [{ ...authored.positiveFixtures[0], preimageCommitSha: 'nope' }],
+        AuthoredFixtureSchema.parse({
+          ...authored.positiveFixtures[0],
+          preimageSource: {
+            kind: 'commit',
+            preimageCommitSha: 'nope',
+            mergeCommitSha: 'b'.repeat(40),
+          },
+        }),
+      ).toThrow(/preimageCommitSha must be a 40-character lowercase hex commit SHA/);
+    });
+
+    it('rejects a commit preimageSource with a malformed mergeCommitSha (other SHA valid)', () => {
+      expect(() =>
+        AuthoredFixtureSchema.parse({
+          ...authored.positiveFixtures[0],
+          preimageSource: {
+            kind: 'commit',
+            preimageCommitSha: 'c'.repeat(40),
+            mergeCommitSha: 'nope',
+          },
+        }),
+      ).toThrow(/mergeCommitSha must be a 40-character lowercase hex commit SHA/);
+    });
+
+    it('rejects a fixture carrying a leftover flat SHA alongside preimageSource (strict outer — CR outside-diff)', () => {
+      // A partial migration (preimageSource added but a stale flat mergeCommitSha left behind) must
+      // fail LOUD under `.strict()`, never validate-and-silently-strip the leftover key (FM(d)).
+      expect(() =>
+        AuthoredFixtureSchema.parse({
+          ...authored.positiveFixtures[0],
+          mergeCommitSha: 'b'.repeat(40), // leftover flat field — unknown to the strict fixture
         }),
       ).toThrow();
+    });
+
+    // ANTI-VACUITY fast-fail (GCA finding; strategy#767-blessed). Identical preimage/postimage sides
+    // are an UNCONDITIONALLY vacuous control — rejected at intake. This is NOT the §4 differential
+    // (that's C/D); it only catches the degenerate identical-sides case (zero-false-positive).
+    it('rejects a lesson fixture whose badExample equals its goodExample (vacuous — identical sides)', () => {
+      expect(() =>
+        AuthoredFixtureSchema.parse({
+          ...authoredLesson.positiveFixtures[0],
+          preimageSource: {
+            kind: 'lesson',
+            lessonRef: 'a1b2c3d4e5f60718',
+            badExample: 'if (a == b) {}',
+            goodExample: '  if (a == b) {}  ', // trim-equal → still vacuous (non-mutating compare)
+          },
+        }),
+      ).toThrow(/identical sides|must differ/i);
+    });
+
+    it('rejects a commit fixture whose preimageCommitSha equals its mergeCommitSha (vacuous — identical sides)', () => {
+      expect(() =>
+        AuthoredFixtureSchema.parse({
+          ...authored.positiveFixtures[0],
+          preimageSource: {
+            kind: 'commit',
+            preimageCommitSha: 'a'.repeat(40),
+            mergeCommitSha: 'a'.repeat(40),
+          },
+        }),
+      ).toThrow(/identical pre\/post commit|must differ/i);
+    });
+
+    it('rejects a lesson preimageSource whose lessonRef is a path or mutable alias (immutable 16-hex id only)', () => {
+      for (const badRef of [
+        'docs/lessons/foo.md',
+        'latest',
+        'a1b2c3d4e5f60718x',
+        'A1B2C3D4E5F60718',
+      ]) {
+        expect(() =>
+          PreimageSourceSchema.parse({
+            kind: 'lesson',
+            lessonRef: badRef,
+            badExample: 'x == y',
+            goodExample: 'abs(x - y) < EPS',
+          }),
+        ).toThrow();
+      }
+    });
+
+    it('rejects a lesson preimageSource with a whitespace-only badExample or goodExample (vacuous control)', () => {
+      const base = { kind: 'lesson' as const, lessonRef: 'a1b2c3d4e5f60718' };
+      expect(() =>
+        PreimageSourceSchema.parse({ ...base, badExample: '   ', goodExample: 'ok' }),
+      ).toThrow();
+      expect(() =>
+        PreimageSourceSchema.parse({ ...base, badExample: 'bad', goodExample: '  ' }),
+      ).toThrow();
+    });
+
+    it('rejects a fixture missing preimageSource entirely (§4 source is required)', () => {
+      const { preimageSource: _omit, ...noSource } = authored.positiveFixtures[0];
+      void _omit;
+      expect(() => AuthoredFixtureSchema.parse(noSource)).toThrow();
+    });
+
+    it('rejects a preimageSource with a missing or unknown kind (discriminated union)', () => {
+      const validLessonBody = {
+        lessonRef: 'a1b2c3d4e5f60718',
+        badExample: 'x == y',
+        goodExample: 'abs(x - y) < EPS',
+      };
+      // No kind at all, and a bogus kind on an otherwise-valid lesson body — both fail the discriminator.
+      expect(() => PreimageSourceSchema.parse(validLessonBody)).toThrow();
+      expect(() => PreimageSourceSchema.parse({ kind: 'bogus', ...validLessonBody })).toThrow();
+    });
+
+    it('rejects a cross-branch leak — a lesson key under kind:commit (strict branch, FM(d))', () => {
+      expect(() =>
+        PreimageSourceSchema.parse({
+          kind: 'commit',
+          preimageCommitSha: 'c'.repeat(40),
+          mergeCommitSha: 'b'.repeat(40),
+          badExample: 'x == y', // foreign key — strict branch fails LOUD, never silently stripped
+        }),
+      ).toThrow();
+    });
+
+    it('does not mutate whitespace-padded (but non-empty) lesson exemplars (non-mutating validator)', () => {
+      const padded = '  if (a == b) {}  ';
+      const parsed = PreimageSourceSchema.parse({
+        kind: 'lesson',
+        lessonRef: 'a1b2c3d4e5f60718',
+        badExample: padded,
+        goodExample: padded,
+      });
+      if (parsed.kind === 'lesson') {
+        expect(parsed.badExample).toBe(padded);
+        expect(parsed.goodExample).toBe(padded);
+      }
+    });
+
+    it('threads the union through negativeFixtures (same shape, lesson kind)', () => {
+      const withNeg = AuthoredProvenanceRecordSchema.parse({
+        ...authored,
+        negativeFixtures: authoredLesson.positiveFixtures,
+      });
+      expect(withNeg.negativeFixtures?.[0].preimageSource.kind).toBe('lesson');
+    });
+
+    it('round-trips a fixture-bearing authored record byte-identically (manifest-hash safe)', () => {
+      for (const rec of [authored, authoredLesson]) {
+        const before = canonicalStringify(rec);
+        const after = canonicalStringify(AuthoredProvenanceRecordSchema.parse(rec));
+        expect(after).toBe(before);
+      }
     });
 
     it('does not let an authored record masquerade as mined (kind required on authored branch)', () => {
