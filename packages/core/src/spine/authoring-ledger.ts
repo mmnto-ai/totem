@@ -57,7 +57,16 @@ export const AuthoringLedgerEntrySchema = z
     heldOutNonInspectionAttestation: z.literal(true),
     structuralEligibility: StructEligResultSchema,
     origin: AuthoredOriginSchema,
-    fixturePrs: z.array(z.number().int().positive()),
+    /**
+     * The fixture PRs bound by this rule, split by control role (codex diff-review):
+     * positive fixtures the matcher must CATCH (§4 preimage-differential) and negative
+     * near-misses it must STAY SILENT on (§6). BOTH are part of the legitimacy surface C
+     * must resolve to the train slice, so the ledger — the CI-observable FM(e) attestation
+     * artifact — must enumerate BOTH, not positives only (a C that trusted a single list
+     * would miss the negatives). `negativeFixturePrs` is `[]` when none were declared.
+     */
+    positiveFixturePrs: z.array(z.number().int().positive()),
+    negativeFixturePrs: z.array(z.number().int().positive()),
     /**
      * Fingerprint of the MATERIAL author input (engine / class / matcher /
      * fixtures / origin) — identity (`author`/`targetDefect`/`ruleId`) AND
@@ -168,6 +177,13 @@ export function readAuthoringLedger(totemDir: string): AuthoringLedgerEntry[] {
  * ledger and asserts the last row round-trips byte-identically. Any failure
  * THROWS so the caller never lets the rule reach compile feed on an unpersisted
  * attestation. (Distinct from `appendLedgerEvent`'s warn-and-continue.)
+ *
+ * Semantics are APPEND-ONLY, not transactional (codex diff-review): a read-back
+ * mismatch on a row that did persist correctly is a report/state mismatch, not a
+ * corrupt record — the next run reads the (valid) row as effective state. The
+ * throw is the honest signal that THIS write could not be confirmed; it is never
+ * a path to an invalid record (an actually-wrong row fails the schema re-read). A
+ * heavier temp-file/lock/transaction story is deferred unless the cert demands it.
  */
 export function appendAuthoringLedgerEntry(totemDir: string, entry: AuthoringLedgerEntry): void {
   const validated = AuthoringLedgerEntrySchema.parse(entry);
@@ -215,9 +231,11 @@ export function identityKey(author: string, targetDefect: string): string {
  * Fold the ledger into the upsert index: `(author,targetDefect)` → the effective
  * `{ruleId, contentHash}` (append order means the LAST row per identity wins —
  * the latest revision). Also returns every persisted `ruleId` so a genuinely NEW
- * identity mints against the full set. FAIL-LOUD if the substrate maps one
- * identity to more than one `ruleId` (corruption that would make the upsert
- * ambiguous — codex).
+ * identity mints against the full set. FAIL-LOUD on BOTH uniqueness violations
+ * (codex diff-review): one `(author,targetDefect)` mapping to two `ruleId`s, AND
+ * one `ruleId` shared by two distinct identities — the reverse would let one
+ * authoring run materialize two records sharing an authored identity (both with
+ * `authoringLedgerRef = ruleId`), which the fail-loud reader must reject too.
  */
 export function buildAuthoredIdentityIndex(entries: readonly AuthoringLedgerEntry[]): {
   byIdentity: Map<string, AuthoredIdentity>;
@@ -225,6 +243,7 @@ export function buildAuthoredIdentityIndex(entries: readonly AuthoringLedgerEntr
 } {
   const byIdentity = new Map<string, AuthoredIdentity>();
   const allRuleIds = new Set<string>();
+  const identityOfRuleId = new Map<string, string>();
   for (const e of entries) {
     const key = identityKey(e.author, e.targetDefect);
     const existing = byIdentity.get(key);
@@ -235,6 +254,15 @@ export function buildAuthoredIdentityIndex(entries: readonly AuthoringLedgerEntr
         'A single (author,targetDefect) must own exactly one ruleId; the ledger is corrupt.',
       );
     }
+    const priorIdentity = identityOfRuleId.get(e.ruleId);
+    if (priorIdentity !== undefined && priorIdentity !== key) {
+      throw new TotemError(
+        'GATE_INVALID',
+        `authoring-ledger maps ruleId '${e.ruleId}' to two distinct identities`,
+        'A single ruleId must own exactly one (author,targetDefect); the ledger is corrupt.',
+      );
+    }
+    identityOfRuleId.set(e.ruleId, key);
     byIdentity.set(key, { ruleId: e.ruleId, contentHash: e.contentHash });
     allRuleIds.add(e.ruleId);
   }

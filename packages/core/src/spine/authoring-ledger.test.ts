@@ -38,7 +38,8 @@ const baseEntry = (over: Partial<AuthoringLedgerEntry> = {}): AuthoringLedgerEnt
     judgedBy: 'static-whitelist@cert-1',
   },
   origin: { kind: 'from-scratch' },
-  fixturePrs: [101],
+  positiveFixturePrs: [101],
+  negativeFixturePrs: [],
   contentHash: 'deadbeef',
   ...over,
 });
@@ -75,6 +76,13 @@ describe('buildAuthoredIdentityIndex', () => {
   it('fail-loud when one identity maps to two ruleIds (ledger corruption)', () => {
     const entries = [baseEntry({ ruleId: 'a'.repeat(16) }), baseEntry({ ruleId: 'c'.repeat(16) })];
     expect(() => buildAuthoredIdentityIndex(entries)).toThrow(/two ruleIds/i);
+  });
+  it('fail-loud when one ruleId maps to two distinct identities (the reverse — codex diff-review)', () => {
+    const entries = [
+      baseEntry({ author: 'alice', targetDefect: 'defect-x', ruleId: 'a'.repeat(16) }),
+      baseEntry({ author: 'bob', targetDefect: 'defect-y', ruleId: 'a'.repeat(16) }),
+    ];
+    expect(() => buildAuthoredIdentityIndex(entries)).toThrow(/two distinct identities/i);
   });
 });
 

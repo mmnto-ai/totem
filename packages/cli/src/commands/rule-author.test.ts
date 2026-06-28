@@ -64,7 +64,7 @@ describe('runRuleAuthor — FM(d) reject-loud at the reader (the trust boundary)
         structuralEligibility: { decidable: true, basis: 'whitelist:x', judgedBy: 'self' },
       }),
     ]);
-    expect(() => run()).toThrow(/invalid/i);
+    expect(() => run()).toThrow(/producer-owned|invalid/i);
   });
   it('rejects each producer-owned field (decidable / ruleId / disposition / judgedBy)', () => {
     for (const bad of [
@@ -76,6 +76,18 @@ describe('runRuleAuthor — FM(d) reject-loud at the reader (the trust boundary)
       writeYaml([decidableRule(bad)]);
       expect(() => run()).toThrow();
     }
+  });
+  it('rejects a producer-owned key NESTED inside a fixture (FM(d) at any depth — codex)', () => {
+    writeYaml([
+      decidableRule({
+        positiveFixtures: [{ ...fixture(101), structuralEligibility: { decidable: true } }],
+      }),
+    ]);
+    expect(() => run()).toThrow(/producer-owned key/i);
+  });
+  it('rejects a producer-owned key nested inside origin', () => {
+    writeYaml([decidableRule({ origin: { kind: 'from-scratch', ruleId: 'x'.repeat(16) } })]);
+    expect(() => run()).toThrow(/producer-owned key/i);
   });
 });
 
@@ -153,8 +165,44 @@ describe('runRuleAuthor — fail-loud IO', () => {
   it('missing authored-rules.yaml throws (not found)', () => {
     expect(() => run()).toThrow(/not found/i);
   });
-  it('invalid YAML throws', () => {
+  it('invalid YAML throws on the YAML-parse path (not a coincidental throw)', () => {
     fs.writeFileSync(yamlPath, 'splitRef: [unclosed\n', 'utf-8');
-    expect(() => run()).toThrow();
+    expect(() => run()).toThrow(/not valid YAML/i);
+  });
+});
+
+describe('runRuleAuthor — codex/agy diff-review folds', () => {
+  it('the ledger binds BOTH positive AND negative fixture PRs (codex)', () => {
+    writeYaml([decidableRule({ negativeFixtures: [fixture(202)] })]);
+    run();
+    const ledger = readAuthoringLedger(totemDir);
+    expect(ledger[0]?.positiveFixturePrs).toEqual([101]);
+    expect(ledger[0]?.negativeFixturePrs).toEqual([202]);
+  });
+  it('a revision appends a row carrying the NEW contentHash under the SAME ruleId (agy)', () => {
+    writeYaml([decidableRule()]);
+    run();
+    const before = readAuthoringLedger(totemDir)[0]?.contentHash;
+    writeYaml([decidableRule({ dslSource: 'console\\.error' })]);
+    run();
+    const ledger = readAuthoringLedger(totemDir);
+    expect(ledger).toHaveLength(2);
+    expect(ledger[1]?.contentHash).not.toBe(before);
+    expect(ledger[1]?.ruleId).toBe(ledger[0]?.ruleId);
+  });
+  it('two distinct decidable rules in one file → 2 records, 2 rows, distinct ids', () => {
+    writeYaml([
+      decidableRule(),
+      decidableRule({ targetDefect: 'another defect', dslSource: 'TODO' }),
+    ]);
+    const res = run();
+    expect(res.minted).toBe(2);
+    expect(res.records).toHaveLength(2);
+    expect(new Set(res.records.map((r) => r.ruleId)).size).toBe(2);
+    expect(readAuthoringLedger(totemDir)).toHaveLength(2);
+  });
+  it('rejects judgedBy equal to a rule author (§3 independence — codex)', () => {
+    writeYaml([decidableRule({ author: 'mallory' })]);
+    expect(() => runRuleAuthor(totemDir, { judgedBy: 'mallory' })).toThrow(/never be the author/i);
   });
 });

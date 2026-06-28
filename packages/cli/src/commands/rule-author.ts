@@ -45,6 +45,42 @@ const lf = (s: string): string => s.replace(/\r\n/g, '\n');
 
 const FROM_SCRATCH: AuthoredOrigin = { kind: 'from-scratch' };
 
+// FM(d) defense-in-depth (codex diff-review): the top-level `.strict()` rejects producer-owned
+// keys at the rule/file level, but Zod `.strict()` is NOT recursive — a reserved key NESTED inside
+// a fixture or origin object would be STRIPPED, not rejected. This scan makes the contract promise
+// ("producer fields are inexpressible ANYWHERE in authored-rules.yaml") literally true: the
+// eligibility verdict, identity, and disposition are minted by the producer at every depth.
+const RESERVED_PRODUCER_KEYS: ReadonlySet<string> = new Set([
+  'structuralEligibility',
+  'decidable',
+  'judgedBy',
+  'basis',
+  'ruleId',
+  'authoringLedgerRef',
+  'classifierDisposition',
+  'disposition',
+  'routing',
+  'unverified',
+]);
+
+function assertNoReservedProducerKeys(value: unknown, at = '<root>'): void {
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => assertNoReservedProducerKeys(v, `${at}[${i}]`));
+    return;
+  }
+  if (value === null || typeof value !== 'object') return;
+  for (const [k, v] of Object.entries(value)) {
+    if (RESERVED_PRODUCER_KEYS.has(k)) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `authored-rules.yaml carries a producer-owned key '${k}' at ${at} — the producer establishes it, not the author (ADR-112 §3 / FM(d))`,
+        'Remove the field; the structural-eligibility verdict, rule id, and disposition are minted by the producer.',
+      );
+    }
+    assertNoReservedProducerKeys(v, `${at}.${k}`);
+  }
+}
+
 /** A rule the whitelist could not decide — recorded, not minted, not ledgered (no record reaches compile). */
 export interface RejectedAuthoredRule {
   author: string;
@@ -107,8 +143,9 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
     );
   }
 
-  // FM(d): strict parse — any producer-owned field (structuralEligibility / ruleId /
-  // decidable / disposition / …) is an unknown key and fails here, never silently stripped.
+  // FM(d): reject reserved producer keys at ANY depth (codex — `.strict()` is not recursive),
+  // THEN strict-parse the top level (any unknown top-level/rule key also fails, never stripped).
+  assertNoReservedProducerKeys(doc);
   const parsed = AuthoredRulesFileSchema.safeParse(doc);
   if (!parsed.success) {
     throw new TotemError(
@@ -120,9 +157,18 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
   }
   const fileDoc = parsed.data;
 
-  // Reject a duplicate identity WITHIN the file (codex — ambiguous which rule owns the id).
+  // Reject a duplicate identity WITHIN the file (codex — ambiguous which rule owns the id) +
+  // enforce §3 independence: the eligibility check's `judgedBy` must never be a rule's own author
+  // (codex diff-review — `--judged-by` is user-settable, so guard it at the boundary).
   const seenInFile = new Set<string>();
   for (const r of fileDoc.rules) {
+    if (r.author === opts.judgedBy) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `judgedBy '${opts.judgedBy}' is also rule author '${r.author}' — the independent structural-eligibility check must never be the author (ADR-112 §3)`,
+        'Pass a --judged-by that names the CHECK (e.g. static-whitelist@cert-1), distinct from any rule author.',
+      );
+    }
     const key = identityKey(r.author, r.targetDefect);
     if (seenInFile.has(key)) {
       throw new TotemError(
@@ -213,7 +259,8 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
       heldOutNonInspectionAttestation: fileDoc.heldOutNonInspectionAttestation,
       structuralEligibility,
       origin,
-      fixturePrs: r.positiveFixtures.map((f) => f.pr),
+      positiveFixturePrs: r.positiveFixtures.map((f) => f.pr),
+      negativeFixturePrs: (r.negativeFixtures ?? []).map((f) => f.pr),
       contentHash,
     };
 
