@@ -519,4 +519,99 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
       ),
     ).rejects.toThrow(/duplicate classifierLedgerRef/);
   });
+
+  // ── ADR-112 §8/§9 id-unification: firingLabelId ← ruleId (slice C2a) ──
+  it('threads the persisted ruleId onto the compiled identity (lessonHash ← ruleId), not the dslSource hash', async () => {
+    const rec = authored('alr-id', REGEX_DSL);
+    const r = await runCompileStage(
+      toCompileFeed([rec]),
+      compileDeps({ 'src/a.ts': 'forbiddenCall()' }),
+    );
+    // The compiled rule's identity IS the minted ruleId — the wind-tunnel firingLabelId
+    // embeds it, and controls.positive[].targetRuleId joins on it (§6/§8).
+    expect(r.compiled[0]!.rule.lessonHash).toBe(rec.ruleId);
+  });
+
+  it('keeps the authored identity STABLE across a dslSource (matcher) edit — §8 no-orphan', () => {
+    // Same author + targetDefect → same minted ruleId; only the matcher changes.
+    const REGEX_DSL_EDITED = REGEX_DSL.replace('forbiddenCall\\(', 'forbiddenCall2\\(');
+    const before = authored('alr-stable', REGEX_DSL);
+    const after = authored('alr-stable', REGEX_DSL_EDITED);
+    expect(after.ruleId).toBe(before.ruleId); // the id does NOT derive from dslSource
+    const compiledBefore = compileCandidate(toCompileFeed([before]).candidates[0]!, { now: NOW });
+    const compiledAfter = compileCandidate(toCompileFeed([after]).candidates[0]!, { now: NOW });
+    expect(compiledBefore.kind).toBe('compiled');
+    expect(compiledAfter.kind).toBe('compiled');
+    if (compiledBefore.kind === 'compiled' && compiledAfter.kind === 'compiled') {
+      // A tightened matcher never orphans the rule's ground-truth labels / controls —
+      // the §8 reason dslSource is excluded from identity.
+      expect(compiledBefore.rule.lessonHash).toBe(before.ruleId);
+      expect(compiledAfter.rule.lessonHash).toBe(before.ruleId);
+    }
+  });
+
+  it('round-trips a collision-suffixed ruleId (-N) onto the identity verbatim', () => {
+    // A second rule by one author on one targetDefect mints `<seed>-1` (§8 disambiguation);
+    // the suffix must survive onto lessonHash so distinct matchers never share a firing key.
+    const rec: AuthoredRuleRecord = {
+      ...authored('alr-collide', REGEX_DSL),
+      ruleId: '0123456789abcdef-1',
+    };
+    const out = compileCandidate(toCompileFeed([rec]).candidates[0]!, { now: NOW });
+    expect(out.kind).toBe('compiled');
+    if (out.kind === 'compiled') expect(out.rule.lessonHash).toBe('0123456789abcdef-1');
+  });
+
+  it('leaves a MINED rule keyed on the content hash (no ruleId → dslSource-derived), unchanged', () => {
+    // The unification is authored-only: a mined candidate carries no ruleId, so its identity
+    // stays the content hash — byte-identical to pre-C2a, and never the authored ruleId.
+    const out = compileCandidate(candidateRule(1, REGEX_DSL), { now: NOW });
+    expect(out.kind).toBe('compiled');
+    if (out.kind === 'compiled') {
+      expect(out.rule.lessonHash).toMatch(/^[0-9a-f]{16}$/); // bare content hash, no -N suffix
+      expect(out.rule.lessonHash).not.toBe(authored('alr-id', REGEX_DSL).ruleId);
+    }
+  });
+
+  it('fails loud if an authored candidate reaches the compiler without its persisted ruleId (threading regression)', () => {
+    // toCompileFeed always threads it; a hand-built authored candidate missing it would
+    // silently re-derive a dslSource-keyed identity and orphan its controls — reject up front.
+    const candidate: CompileInputCandidate = {
+      provenance: authored('alr-missing', REGEX_DSL).provenance,
+      classifierDisposition: 'structural',
+      classifierLedgerRef: 'authored:alr-missing',
+      dslSource: REGEX_DSL,
+      declaredEngine: 'regex',
+      unverified: true,
+      // ruleId intentionally omitted
+    };
+    expect(() => compileCandidate(candidate, { now: NOW })).toThrow(/missing its persisted ruleId/);
+  });
+
+  it('fails loud if a MINED candidate carries a ruleId — the authored-only contract is enforced, not assumed', () => {
+    // A mined candidate's identity stays the dslSource-derived hash; a stray ruleId
+    // (well-formed or not) must NOT silently re-key it. Gated on isAuthoredProvenance,
+    // not the permissive `?? hashLesson` (bot-round: gemini/greptile-P1/CR).
+    const candidate: CompileInputCandidate = {
+      ...candidateRule(7, REGEX_DSL),
+      ruleId: '0123456789abcdef', // well-formed, yet still rejected for a mined candidate
+    };
+    expect(() => compileCandidate(candidate, { now: NOW })).toThrow(/must not carry a ruleId/);
+  });
+
+  it('fails loud if an authored candidate carries a malformed ruleId — id-shape precondition (greptile-P2)', () => {
+    // The seam enthrones the ruleId as the firingLabelId basis, so a malformed id
+    // (would orphan controls.positive[].targetRuleId) is rejected at the use site,
+    // not just at the schema parse boundary.
+    const candidate: CompileInputCandidate = {
+      provenance: authored('alr-bad', REGEX_DSL).provenance,
+      classifierDisposition: 'structural',
+      classifierLedgerRef: 'authored:alr-bad',
+      dslSource: REGEX_DSL,
+      declaredEngine: 'regex',
+      ruleId: 'not-a-valid-rule-id',
+      unverified: true,
+    };
+    expect(() => compileCandidate(candidate, { now: NOW })).toThrow(/malformed ruleId/);
+  });
 });

@@ -50,6 +50,17 @@ export interface CompileInputCandidate {
    * `dslSource`-derived, so it carries no independent declaration to bind against.
    */
   declaredEngine?: 'regex' | 'ast' | 'ast-grep';
+  /**
+   * ADR-112 §8 — the persisted, minted rule identity (AUTHORED producer only;
+   * `mintAuthoredRuleId`, threaded from the record via `toCompileFeed`). When present,
+   * `compileCandidate` makes it the compiled rule's `lessonHash` so the wind-tunnel
+   * `firingLabelId` (and the §6 `controls.positive[].targetRuleId` it must match)
+   * embed it — the §8/§9 id-unification (`firingLabelId ← ruleId`, replacing the
+   * `dslSource`-derived hash). Stable across a matcher edit by construction, so
+   * tightening `dslSource` never orphans the rule's ground-truth labels. The MINED
+   * producer omits it — its identity is the `dslSource`-derived content hash.
+   */
+  ruleId?: string;
   unverified: true;
 }
 
