@@ -1,7 +1,0 @@
----
-'@mmnto/totem': minor
----
-
-ADR-112 §6/§9 Slice C2b — the authored-controls EMISSION builder (inert-until-D, strategy#591/#777).
-
-New core module `deriveAuthoredControls` turns a set of compiled AUTHORED rules + the frozen split into the §6 control lists: a TRAIN-side positive fixture becomes a positive control ONLY when its §4 preimage-differential HOLDS (keyed on the fixture LOCUS `{ pr, targetRuleId, filePath, matchedSpan }` per strategy#777 §6 — symmetric with negatives and aligned to §8 `firingLabelId`; admits the legitimate two-loci-one-PR rule even on byte-identical content, while `contentHash` stays a fixture field); a declared near-miss becomes a DECLARATIVE silence-only negative control (no differential, no `pr`); every non-holding positive fixture is kept as a classed non-emission (`illegitimate`/`undecidable`/`deferred`). The §4 differential is injected (default = the real `evaluatePreimageDifferential`) so the builder stays pure + git-free; output arrays are byte-identical across re-runs (positional ordering via `Promise.all`). Held-out positive fixtures and producer/policy mismatches fail loud. Adds a frozen-enum `positiveControlGate` (`none` | `preimage-differential`) to `RulePolicy` (the §9 single-home the builder reads). New export surface: `deriveAuthoredControls`, `AuthoredControls`/`AuthoredPositiveControl`/`AuthoredNegativeControl`/`AuthoredNonEmission`(+`Class`)/`AuthoredControlsDeps` and their Zod schemas. Inert: wired into no cert run; slice D consumes the emission lists + joins the loci back.
