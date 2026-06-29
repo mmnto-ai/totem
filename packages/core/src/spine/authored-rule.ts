@@ -86,7 +86,12 @@ export type AuthoredOrigin = z.infer<typeof AuthoredOriginSchema>;
 // mint-producible (#2259 CR: a looser `-\d+` admitted ids like `…-0`/`…-01` the mint can't
 // make). Pinned as a shared constant binding the SCHEMA boundary to the mint's codomain.
 const AUTHORED_RULE_ID_HEX_LEN = 16;
-const AUTHORED_RULE_ID_RE = new RegExp(`^[0-9a-f]{${AUTHORED_RULE_ID_HEX_LEN}}(?:-[1-9]\\d*)?$`);
+// Exported so the compile seam (the §8 identity selector) can assert an authored
+// candidate's ruleId is well-formed BEFORE enthroning it as the rule's identity —
+// the same shared boundary↔codomain constant, one home (Tenet 20).
+export const AUTHORED_RULE_ID_RE = new RegExp(
+  `^[0-9a-f]{${AUTHORED_RULE_ID_HEX_LEN}}(?:-[1-9]\\d*)?$`,
+);
 
 /**
  * ADR-112 §3 — the authored producer's sole output envelope. Parallel to

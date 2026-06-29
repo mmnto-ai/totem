@@ -26,6 +26,7 @@ import { engineFields, hashLesson, sanitizeFileGlobs, validateRegex } from '../c
 import {
   type CompiledRule,
   CompiledRuleSchema,
+  isAuthoredProvenance,
   type ProvenanceRecord,
 } from '../compiler-schema.js';
 import { extractManualPattern, type ManualPattern } from '../lesson-pattern.js';
@@ -37,6 +38,7 @@ import {
   type Stage4VerifierDeps,
   verifyAgainstCodebase,
 } from '../stage4-verifier.js';
+import { AUTHORED_RULE_ID_RE } from './authored-rule.js';
 import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger, Stage4LedgerOutcome } from './ledgers.js';
 
@@ -140,17 +142,37 @@ export function compileCandidate(
   // `dslSource`-derived `hashLesson`. The hash is the FORBIDDEN authored-identity
   // basis (§8): it drifts on a matcher edit, and because `firingLabelId` embeds the
   // id, any drift orphans the rule's ground-truth labels + `controls.positive[].
-  // targetRuleId`. Carrying the persisted `ruleId` here keeps every downstream join
+  // targetRuleId`. Carrying the persisted `ruleId` keeps every downstream join
   // (firing key, `mintedRuleIds`, legitimacy-projection, cert-corpus) consistent off
   // one field, and lets an author tighten `dslSource` without orphaning the rule.
-  // MINED candidates carry no `ruleId` → the content hash stands, byte-identical.
-  if (candidate.provenance.kind === 'authored' && candidate.ruleId === undefined) {
-    throw new Error(
-      `[Totem Error] compileCandidate: authored candidate '${candidate.classifierLedgerRef}' is missing its persisted ruleId — the ADR-112 §8 firingLabelId←ruleId unification requires it threaded through toCompileFeed (a threading regression would silently re-derive a dslSource-keyed identity and orphan its controls)`,
-    );
+  // This seam OWNS identity selection, so it fail-loud asserts its preconditions
+  // (Tenet 4): the authored-only `ruleId` is PRESENT + WELL-FORMED for an authored
+  // candidate, and ABSENT for a mined one (mined stay content-keyed, byte-identical).
+  // `isAuthoredProvenance` is the canonical discriminator (Tenet-20 single-home —
+  // absence ⇒ mined via `provenanceKind`), not a raw `.kind` read.
+  let lessonHash: string;
+  if (isAuthoredProvenance(candidate.provenance)) {
+    if (candidate.ruleId === undefined) {
+      throw new Error(
+        `[Totem Error] compileCandidate: authored candidate '${candidate.classifierLedgerRef}' is missing its persisted ruleId — the ADR-112 §8 firingLabelId←ruleId unification requires it threaded through toCompileFeed (a threading regression would silently re-derive a dslSource-keyed identity and orphan its controls)`,
+      );
+    }
+    if (!AUTHORED_RULE_ID_RE.test(candidate.ruleId)) {
+      throw new Error(
+        `[Totem Error] compileCandidate: authored candidate '${candidate.classifierLedgerRef}' has a malformed ruleId '${candidate.ruleId}' — must be a minted authored rule id (16 hex + optional -<n> suffix, ADR-112 §3/§8); a malformed id becomes the firingLabelId basis and would orphan its controls.positive[].targetRuleId`,
+      );
+    }
+    lessonHash = candidate.ruleId;
+  } else {
+    if (candidate.ruleId !== undefined) {
+      throw new Error(
+        `[Totem Error] compileCandidate: non-authored candidate '${candidate.classifierLedgerRef}' must not carry a ruleId — mined identities stay dslSource-derived (ADR-112 §8 authored-only contract)`,
+      );
+    }
+    lessonHash = hashLesson(heading, candidate.dslSource);
   }
   const rule = CompiledRuleSchema.parse({
-    lessonHash: candidate.ruleId ?? hashLesson(heading, candidate.dslSource),
+    lessonHash,
     lessonHeading: heading,
     message: mp.message ?? heading,
     engine: mp.engine,

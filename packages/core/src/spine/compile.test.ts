@@ -587,4 +587,31 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     };
     expect(() => compileCandidate(candidate, { now: NOW })).toThrow(/missing its persisted ruleId/);
   });
+
+  it('fails loud if a MINED candidate carries a ruleId — the authored-only contract is enforced, not assumed', () => {
+    // A mined candidate's identity stays the dslSource-derived hash; a stray ruleId
+    // (well-formed or not) must NOT silently re-key it. Gated on isAuthoredProvenance,
+    // not the permissive `?? hashLesson` (bot-round: gemini/greptile-P1/CR).
+    const candidate: CompileInputCandidate = {
+      ...candidateRule(7, REGEX_DSL),
+      ruleId: '0123456789abcdef', // well-formed, yet still rejected for a mined candidate
+    };
+    expect(() => compileCandidate(candidate, { now: NOW })).toThrow(/must not carry a ruleId/);
+  });
+
+  it('fails loud if an authored candidate carries a malformed ruleId — id-shape precondition (greptile-P2)', () => {
+    // The seam enthrones the ruleId as the firingLabelId basis, so a malformed id
+    // (would orphan controls.positive[].targetRuleId) is rejected at the use site,
+    // not just at the schema parse boundary.
+    const candidate: CompileInputCandidate = {
+      provenance: authored('alr-bad', REGEX_DSL).provenance,
+      classifierDisposition: 'structural',
+      classifierLedgerRef: 'authored:alr-bad',
+      dslSource: REGEX_DSL,
+      declaredEngine: 'regex',
+      ruleId: 'not-a-valid-rule-id',
+      unverified: true,
+    };
+    expect(() => compileCandidate(candidate, { now: NOW })).toThrow(/malformed ruleId/);
+  });
 });
