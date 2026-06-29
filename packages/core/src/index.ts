@@ -848,6 +848,12 @@ export {
   identityKey,
   readAuthoringLedger,
 } from './spine/authoring-ledger.js';
+export type {
+  PreimageDifferentialDeps,
+  PreimageDifferentialOutcome,
+  PreimageDifferentialResult,
+} from './spine/preimage-differential.js';
+export { evaluatePreimageDifferential } from './spine/preimage-differential.js';
 export type { ProducerKind, RulePolicy } from './spine/rule-policy.js';
 export { getRulePolicy } from './spine/rule-policy.js';
 // `DraftCandidate` is intentionally NOT re-exported here — it is the transient
