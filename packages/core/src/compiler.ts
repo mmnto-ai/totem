@@ -54,6 +54,7 @@ export type {
 export {
   AstGrepYamlRuleSchema,
   AuthoredFixtureSchema,
+  AuthoredNegativeFixtureSchema,
   AuthoredProvenanceRecordSchema,
   CompiledRuleSchema,
   CompiledRulesFileSchema,
@@ -65,6 +66,7 @@ export {
   LegitimacySchema,
   MinedProvenanceWireSchema,
   NapiConfigSchema,
+  NearMissSourceSchema,
   NonCompilableEntryReadSchema,
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,

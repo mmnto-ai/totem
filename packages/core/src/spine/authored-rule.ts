@@ -21,6 +21,7 @@ import { z } from 'zod';
 
 import {
   AuthoredFixtureSchema,
+  AuthoredNegativeFixtureSchema,
   AuthoredProvenanceRecordSchema,
   isIso8601CalendarDate,
 } from '../compiler-schema.js';
@@ -206,8 +207,12 @@ export const AuthoredRuleInputSchema = z
     positiveFixtures: z.array(AuthoredFixtureSchema).min(1, {
       message: 'an authored rule must declare ≥1 positive fixture (ADR-112 §3)',
     }),
-    /** Declared near-misses the rule must stay silent on (feeds §6 negative controls). */
-    negativeFixtures: z.array(AuthoredFixtureSchema).optional(),
+    /**
+     * Declared SILENCE-ONLY near-misses the rule must stay silent on (feeds §6
+     * `controls.negative[]`). The `nearMissSource` shape (strategy#770) — one side,
+     * no bad/good pair, no `pr` — NOT the positiveFixtures fixture shape.
+     */
+    negativeFixtures: z.array(AuthoredNegativeFixtureSchema).optional(),
     /**
      * Accelerant lineage (§7). Optional in the YAML; the reader defaults an
      * absent value to `{ kind: 'from-scratch' }` when constructing the record, so

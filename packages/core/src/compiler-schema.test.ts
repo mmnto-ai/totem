@@ -1244,12 +1244,59 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       }
     });
 
-    it('threads the union through negativeFixtures (same shape, lesson kind)', () => {
+    it('accepts a SILENCE-ONLY nearMissSource negative fixture (lesson + commit kinds) — strategy#770', () => {
       const withNeg = AuthoredProvenanceRecordSchema.parse({
         ...authored,
-        negativeFixtures: authoredLesson.positiveFixtures,
+        negativeFixtures: [
+          {
+            filePath: 'src/x.ts',
+            matchedSpan: 'L9',
+            nearMissSource: { kind: 'lesson', example: 'logger.debug("ok")' },
+          },
+          {
+            filePath: 'src/y.ts',
+            matchedSpan: 'L3',
+            nearMissSource: { kind: 'commit', commitSha: 'c'.repeat(40) },
+          },
+        ],
       });
-      expect(withNeg.negativeFixtures?.[0].preimageSource.kind).toBe('lesson');
+      expect(withNeg.negativeFixtures?.[0].nearMissSource.kind).toBe('lesson');
+      expect(withNeg.negativeFixtures?.[1].nearMissSource.kind).toBe('commit');
+    });
+
+    it('rejects the OLD positiveFixtures bad/good-pair shape as a negative (wrong arity, strict — strategy#770)', () => {
+      // The migration's whole point: a §6 negative is one-leg silence-only, not the
+      // two-leg preimageSource pair. A leftover positiveFixtures-shaped negative (carrying
+      // `pr`/`preimageSource`/`contentHash`) must fail LOUD, never validate-and-strip (FM(d)).
+      expect(() =>
+        AuthoredProvenanceRecordSchema.parse({
+          ...authored,
+          negativeFixtures: authoredLesson.positiveFixtures,
+        }),
+      ).toThrow();
+    });
+
+    it('rejects a near-miss carrying a stray pr or a cross-branch source key (strict, FM(d))', () => {
+      const base = { filePath: 'src/x.ts', matchedSpan: 'L9' };
+      // a leftover `pr` (positiveFixtures key) — strict object rejects it
+      expect(() =>
+        AuthoredProvenanceRecordSchema.parse({
+          ...authored,
+          negativeFixtures: [{ ...base, pr: 7, nearMissSource: { kind: 'lesson', example: 'ok' } }],
+        }),
+      ).toThrow();
+      // a commit key under kind:lesson — strict branch fails loud
+      expect(() =>
+        AuthoredProvenanceRecordSchema.parse({
+          ...authored,
+          negativeFixtures: [
+            {
+              ...base,
+              nearMissSource: { kind: 'lesson', example: 'ok', commitSha: 'c'.repeat(40) },
+            },
+          ],
+        }),
+      ).toThrow();
     });
 
     it('round-trips a fixture-bearing authored record byte-identically (manifest-hash safe)', () => {

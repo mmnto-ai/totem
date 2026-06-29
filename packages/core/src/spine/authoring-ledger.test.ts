@@ -39,7 +39,6 @@ const baseEntry = (over: Partial<AuthoringLedgerEntry> = {}): AuthoringLedgerEnt
   },
   origin: { kind: 'from-scratch' },
   positiveFixturePrs: [101],
-  negativeFixturePrs: [],
   contentHash: 'deadbeef',
   ...over,
 });

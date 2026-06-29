@@ -58,15 +58,21 @@ export const AuthoringLedgerEntrySchema = z
     structuralEligibility: StructEligResultSchema,
     origin: AuthoredOriginSchema,
     /**
-     * The fixture PRs bound by this rule, split by control role (codex diff-review):
-     * positive fixtures the matcher must CATCH (§4 preimage-differential) and negative
-     * near-misses it must STAY SILENT on (§6). BOTH are part of the legitimacy surface C
-     * must resolve to the train slice, so the ledger — the CI-observable FM(e) attestation
-     * artifact — must enumerate BOTH, not positives only (a C that trusted a single list
-     * would miss the negatives). `negativeFixturePrs` is `[]` when none were declared.
+     * The train-side `positiveFixtures` PRs bound by this rule — the §5(2) leakage-guard
+     * attestation. Every positive fixture must resolve to the train slice (the matcher was
+     * authored against it); the ledger is the CI-observable FM(e) artifact that enumerates
+     * them so C can verify train-side membership.
+     *
+     * NO `negativeFixturePrs` (strategy#770 + the Q-C ruling): a §6 negative control is a
+     * SILENCE-ONLY near-miss that carries no `pr`. A synthetic `kind:'lesson'` exemplar has
+     * no corpus position, so there is nothing to train-side-leak-check — §5(2)'s guard
+     * targets *corpus-drawn* fixtures, and only `positiveFixtures` are mandated train-side.
+     * Enumerating negative PRs was an impl-extra beyond the contract; dropping it is
+     * alignment, not a weakening. (A future `kind:'commit'` near-miss DOES have a corpus
+     * position; its train-side `commitSha` attestation returns WITH the deferred
+     * commit-source fallback — parallel to the commit-pair preimage deferral.)
      */
     positiveFixturePrs: z.array(z.number().int().positive()),
-    negativeFixturePrs: z.array(z.number().int().positive()),
     /**
      * Fingerprint of the MATERIAL author input (engine / class / matcher /
      * fixtures / origin) — identity (`author`/`targetDefect`/`ruleId`) AND
