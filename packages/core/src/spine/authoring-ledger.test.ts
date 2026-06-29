@@ -39,7 +39,6 @@ const baseEntry = (over: Partial<AuthoringLedgerEntry> = {}): AuthoringLedgerEnt
   },
   origin: { kind: 'from-scratch' },
   positiveFixturePrs: [101],
-  negativeFixturePrs: [],
   contentHash: 'deadbeef',
   ...over,
 });
@@ -92,6 +91,19 @@ describe('authoring-ledger fail-loud round-trip (FM(e))', () => {
     const back = readAuthoringLedger(dir);
     expect(back).toHaveLength(1);
     expect(back[0]?.ruleId).toBe('a'.repeat(16));
+  });
+  it('READS a legacy row carrying negativeFixturePrs (pre-#770) without throwing — tolerated, never written (greptile-P1/CR)', () => {
+    // `totem rule author` <=1.81.1 persisted negativeFixturePrs on every row; runRuleAuthor
+    // re-reads the full ledger before writing, so the strict reader must parse those rows on
+    // upgrade rather than throw. The field is read-tolerated (optional), never re-written.
+    const file = path.join(dir, AUTHORING_LEDGER_DIR, AUTHORING_LEDGER_FILE);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const legacyRow = { ...baseEntry(), negativeFixturePrs: [202] };
+    fs.writeFileSync(file, JSON.stringify(legacyRow) + '\n', 'utf-8');
+    const back = readAuthoringLedger(dir);
+    expect(back).toHaveLength(1);
+    expect(back[0]?.ruleId).toBe('a'.repeat(16));
+    expect(back[0]?.negativeFixturePrs).toEqual([202]);
   });
   it('returns [] when the ledger does not exist yet', () => {
     expect(readAuthoringLedger(dir)).toEqual([]);

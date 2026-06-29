@@ -257,6 +257,80 @@ export const AuthoredFixtureSchema = z
 export type AuthoredFixture = z.infer<typeof AuthoredFixtureSchema>;
 
 /**
+ * ADR-112 §3/§6 (strategy#770) — the source of a SILENCE-ONLY near-miss: the one
+ * exemplar a negative control's matcher must stay SILENT on. Source-pluggable per §4
+ * (a synthetic lesson `example` PRIMARY / a `commitSha` state FALLBACK) but ONE side
+ * only — a near-miss has NO must-fire leg, so this is NOT the positiveFixtures
+ * bad/good `preimageSource` pair (a negative control is a one-leg silence assertion,
+ * a positive control a two-leg differential — §6 L142 arity). `z.discriminatedUnion`
+ * + `.strict()` branches mirror `PreimageSourceSchema` (cross-branch key fails LOUD,
+ * FM(d)); refines are NON-mutating for manifest-hash stability.
+ */
+export const NearMissSourceSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('lesson'),
+      /** The synthetic near-miss exemplar the matcher must stay SILENT on (§6). */
+      example: z.string().refine((s) => s.trim().length > 0, {
+        message:
+          'nearMissSource.example (the near-miss the matcher must stay silent on) must be non-empty',
+      }),
+      /**
+       * OPTIONAL immutable lesson id — a synthetic near-miss may have no lesson origin,
+       * so unlike the positiveFixtures `lessonRef` it is optional; but WHEN present it
+       * carries the same §8 discipline (the 16-hex `hashLesson` codomain, never a
+       * path/mutable alias), so it can't be a free-form mutable alias.
+       */
+      lessonRef: z
+        .string()
+        .regex(LESSON_REF_RE, {
+          message:
+            'lessonRef must be an immutable lesson id (16-hex hashLesson codomain), not a path or mutable alias',
+        })
+        .optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('commit'),
+      /** The commit whose state the matcher must stay SILENT on (§6, land-then-fix fallback). */
+      commitSha: z.string().regex(COMMIT_SHA_RE, {
+        message: 'commitSha must be a 40-character lowercase hex commit SHA',
+      }),
+    })
+    .strict(),
+]);
+
+export type NearMissSource = z.infer<typeof NearMissSourceSchema>;
+
+/**
+ * ADR-112 §3/§6 (strategy#770) — a declared near-miss the rule must stay SILENT on,
+ * feeding §6 `controls.negative[]` (a fire on it is a §3.3 cull, never a corpus FP).
+ * SILENCE-ONLY: a locus (`filePath` + `matchedSpan`) + the one-side `nearMissSource`.
+ * It deliberately carries NO `pr` (a synthetic near-miss has no corpus position — the
+ * §5 leakage guard targets corpus-drawn fixtures, so there is nothing to train-side-
+ * attest), NO `contentHash`, and NO bad/good pair / anti-vacuity `superRefine` (there
+ * is no pair to be vacuously identical). `.strict()` so a leftover positiveFixtures
+ * key (e.g. `preimageSource`/`pr`) from a mis-migrated fixture fails LOUD (FM(d)).
+ */
+export const AuthoredNegativeFixtureSchema = z
+  .object({
+    /** File the near-miss locus lives in. */
+    filePath: z.string().refine((s) => s.trim().length > 0, {
+      message: 'filePath must be a non-empty reference',
+    }),
+    /** Line-range or AST-node path — the near-miss locus, not just the file. */
+    matchedSpan: z.string().refine((s) => s.trim().length > 0, {
+      message: 'matchedSpan must be a non-empty locus',
+    }),
+    /** The §4-pluggable silence target — ONE side (the matcher must not fire on it). */
+    nearMissSource: NearMissSourceSchema,
+  })
+  .strict();
+
+export type AuthoredNegativeFixture = z.infer<typeof AuthoredNegativeFixtureSchema>;
+
+/**
  * ADR-112 §3 — the AUTHORED variant of the `ProvenanceRecord` union. A
  * hand-authored rule is anchored to a real historical DEFECT (the pre-image,
  * NOT its fix — ADR-110 §4 TP-def) via ≥1 train-side `positiveFixtures` entry.
@@ -283,8 +357,12 @@ export const AuthoredProvenanceRecordSchema = z.object({
   positiveFixtures: z.array(AuthoredFixtureSchema).min(1, {
     message: 'an authored rule must declare ≥1 positive fixture (ADR-112 §3)',
   }),
-  /** Declared near-misses the rule must stay silent on (feeds §6 negative controls). */
-  negativeFixtures: z.array(AuthoredFixtureSchema).optional(),
+  /**
+   * Declared SILENCE-ONLY near-misses the rule must stay silent on (feeds §6
+   * `controls.negative[]`). The silence-only `nearMissSource` shape, NOT the
+   * positiveFixtures bad/good pair (strategy#770 — different arity, §6 L142).
+   */
+  negativeFixtures: z.array(AuthoredNegativeFixtureSchema).optional(),
 });
 
 export type AuthoredProvenanceRecord = z.infer<typeof AuthoredProvenanceRecordSchema>;

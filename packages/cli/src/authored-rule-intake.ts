@@ -300,7 +300,8 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
       structuralEligibility,
       origin,
       positiveFixturePrs: r.positiveFixtures.map((f) => f.pr),
-      negativeFixturePrs: (r.negativeFixtures ?? []).map((f) => f.pr),
+      // No negativeFixturePrs: §6 near-misses are silence-only with no `pr` (strategy#770 +
+      // Q-C ruling); only positiveFixtures are train-side-attested (§5(2)).
       contentHash,
     };
 

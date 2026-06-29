@@ -44,6 +44,12 @@ const lessonFixture = (pr: number) => ({
   matchedSpan: 'L1-L2',
   contentHash: 'h'.repeat(8),
 });
+// §6 SILENCE-ONLY near-miss (strategy#770): one side, NO `pr`, no bad/good pair.
+const nearMissFixture = () => ({
+  filePath: 'src/x.ts',
+  matchedSpan: 'L9',
+  nearMissSource: { kind: 'lesson', example: 'logger.debug("ok")' },
+});
 
 // A rule the inert exemplar whitelist (regex, forbidden-literal-token) decides true.
 const decidableRule = (over: Record<string, unknown> = {}) => ({
@@ -198,14 +204,15 @@ describe('runRuleAuthor — fail-loud IO', () => {
 });
 
 describe('runRuleAuthor — codex/agy diff-review folds', () => {
-  it('the ledger binds BOTH positive AND negative fixture PRs (codex)', () => {
-    // Mixed §4 sources: a commit-pair positive + a lesson-anchored negative — the reader
-    // accepts both kinds and binds their PRs (the §4 union threads through the whole intake).
-    writeYaml([decidableRule({ negativeFixtures: [lessonFixture(202)] })]);
+  it('the ledger binds positive fixture PRs only; a silence-only negative near-miss carries no PR (strategy#770)', () => {
+    // §6 negatives are SILENCE-ONLY with no `pr` — a synthetic near-miss has no corpus
+    // position, so the §5(2) train-side PR attestation enumerates positives only (Q-C ruling).
+    // The reader still ACCEPTS the declared near-miss (it feeds §6 controls.negative[] in C2b).
+    writeYaml([decidableRule({ negativeFixtures: [nearMissFixture()] })]);
     run();
     const ledger = readAuthoringLedger(totemDir);
     expect(ledger[0]?.positiveFixturePrs).toEqual([101]);
-    expect(ledger[0]?.negativeFixturePrs).toEqual([202]);
+    expect(ledger[0]).not.toHaveProperty('negativeFixturePrs');
   });
   it('authors a lesson-anchored (PRIMARY, review-caught) positive fixture end-to-end (§4 cert-#1 path)', () => {
     writeYaml([decidableRule({ positiveFixtures: [lessonFixture(101)] })]);
