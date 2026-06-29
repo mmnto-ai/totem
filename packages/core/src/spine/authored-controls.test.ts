@@ -184,10 +184,10 @@ describe('deriveAuthoredControls — per-outcome matrix', () => {
       deps,
     });
 
-    // Exactly ONE positive — the holds fixture, carrying ITS contentHash. This kills
+    // Exactly ONE positive — the holds fixture, carrying ITS locus. This kills
     // the `outcome !== 'fix-shaped'` mutant (which would emit 5 positives).
     expect(result.positive).toEqual([
-      { pr: 1, targetRuleId: 'rule-auth-1', contentHash: 'ch-holds' },
+      { pr: 1, targetRuleId: 'rule-auth-1', filePath: 'src/a.ts', matchedSpan: 'L1-L2' },
     ]);
 
     // The other five are KEPT (never silently dropped) with the exact source outcome
@@ -229,14 +229,14 @@ describe('deriveAuthoredControls — per-outcome matrix', () => {
 
     // Exact-equality, the OTHER direction: NONE of the 5 non-holds outcomes leaked
     // into positives (the holds one is the sole positive).
-    expect(result.positive.map((p) => p.contentHash)).toEqual(['ch-holds']);
+    expect(result.positive.map((p) => p.pr)).toEqual([1]);
   });
 });
 
 // ─── 2. Two-loci-one-PR disambiguation (strategy#777 Q1(a)) ──────────────────
 
 describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
-  it('a PR contributing two fixtures emits ONLY the holding one, carrying ITS own contentHash', async () => {
+  it('a PR contributing two distinct-locus fixtures emits ONLY the holding one, carrying ITS locus', async () => {
     const rule = authoredRule('rule-2loci', [
       posFixture(7, 'ch-A', 'src/a.ts'),
       posFixture(7, 'ch-B', 'src/b.ts'),
@@ -252,27 +252,52 @@ describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
       deps,
     });
 
-    // The positive carries ch-A (the holding fixture's hash) — NOT ch-B; the
-    // disambiguator prevents the wrong-exemplar miscert under a shared pr.
-    expect(result.positive).toEqual([{ pr: 7, targetRuleId: 'rule-2loci', contentHash: 'ch-A' }]);
+    // The positive carries the src/a.ts locus (the holding fixture) — NOT src/b.ts; the
+    // locus disambiguator prevents the wrong-exemplar miscert under a shared pr.
+    expect(result.positive).toEqual([
+      { pr: 7, targetRuleId: 'rule-2loci', filePath: 'src/a.ts', matchedSpan: 'L1-L2' },
+    ]);
     expect(result.nonEmissions).toEqual([
       { targetRuleId: 'rule-2loci', pr: 7, outcome: 'fix-shaped', class: 'illegitimate' },
     ]);
   });
 
-  // The residual edge the contentHash disambiguator does NOT close: two fixtures
-  // sharing pr AND contentHash (byte-identical span content) emit the SAME minimal
-  // key. The answer key must stay unambiguous, so this fails loud (not a silent dup).
-  it('throws when two HOLDING fixtures share pr AND contentHash (indistinguishable positive key)', async () => {
+  // strategy#777 §6: the LOCUS (filePath, matchedSpan) is the disambiguator, so two
+  // HOLDING fixtures in one PR at DISTINCT loci both emit — even with byte-identical
+  // span content (same contentHash). This is the legitimate two-loci-one-PR rule the
+  // old contentHash key wrongly FORBADE; emitting two is the whole point of the fix.
+  it('emits TWO positives for two HOLDING fixtures sharing a PR at distinct loci (even identical content)', async () => {
+    const rule = authoredRule('rule-2loci-hold', [
+      posFixture(7, 'ch-same', 'src/a.ts'),
+      posFixture(7, 'ch-same', 'src/b.ts'),
+    ]);
+    const result = await deriveAuthoredControls({
+      rules: [rule],
+      split: splitWithTrain([7]),
+      deps: scriptedDeps({ 'ch-same': makeResult('differential-holds') }),
+    });
+    expect(result.positive).toEqual([
+      { pr: 7, targetRuleId: 'rule-2loci-hold', filePath: 'src/a.ts', matchedSpan: 'L1-L2' },
+      { pr: 7, targetRuleId: 'rule-2loci-hold', filePath: 'src/b.ts', matchedSpan: 'L1-L2' },
+    ]);
+  });
+
+  // A TRUE duplicate — same pr + filePath + matchedSpan — IS an indistinguishable §6
+  // answer-key entry (a real authoring error, not the two-loci rule): fail loud,
+  // regardless of content hash (here the two fixtures even differ in contentHash).
+  it('throws when two HOLDING fixtures share pr AND filePath AND matchedSpan (same locus)', async () => {
     const rule = authoredRule('rule-dup-pos', [
-      posFixture(7, 'ch-dup', 'src/a.ts'),
-      posFixture(7, 'ch-dup', 'src/b.ts'),
+      posFixture(7, 'ch-x', 'src/a.ts'),
+      posFixture(7, 'ch-y', 'src/a.ts'),
     ]);
     await expect(
       deriveAuthoredControls({
         rules: [rule],
         split: splitWithTrain([7]),
-        deps: scriptedDeps({ 'ch-dup': makeResult('differential-holds') }),
+        deps: scriptedDeps({
+          'ch-x': makeResult('differential-holds'),
+          'ch-y': makeResult('differential-holds'),
+        }),
       }),
     ).rejects.toThrow(/duplicate positive control/);
   });
@@ -339,8 +364,8 @@ describe('deriveAuthoredControls — determinism', () => {
 
     expect(runA).toEqual(runB);
     // Declared order preserved — a push-on-settle impl with slow-first delays would
-    // invert this to ['ch-3','ch-2','ch-1','ch-0'].
-    expect(runA.positive.map((p) => p.contentHash)).toEqual(contentHashes);
+    // invert this to [4, 3, 2, 1].
+    expect(runA.positive.map((p) => p.pr)).toEqual([1, 2, 3, 4]);
   });
 });
 
@@ -467,7 +492,9 @@ describe('deriveAuthoredControls — declarative negatives', () => {
       split: splitWithTrain([1]),
       deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
     });
-    expect(result.positive).toEqual([{ pr: 1, targetRuleId: 'rule-mixed', contentHash: 'ch-1' }]);
+    expect(result.positive).toEqual([
+      { pr: 1, targetRuleId: 'rule-mixed', filePath: 'src/a.ts', matchedSpan: 'L1-L2' },
+    ]);
     expect(result.negative).toEqual([
       { targetRuleId: 'rule-mixed', filePath: 'src/n.ts', matchedSpan: 'L1' },
     ]);

@@ -90,15 +90,24 @@ const PreimageDifferentialOutcomeSchema = z.enum([
   'unsupported-source',
 ]);
 
-/** A legitimate, differential-gated positive control. */
+/**
+ * A legitimate, differential-gated positive control, keyed on the fixture LOCUS
+ * (strategy#777 §6, `aa2a501`/`614dfdf`) — symmetric with the negative control and
+ * aligned to §8 `firingLabelId(ruleId, pr, filePath, matchedLine)`. `contentHash` is
+ * span-content-only, so it is NOT locus-unique (two distinct loci in one PR with
+ * byte-identical span content collide) and is deliberately NOT carried here — the
+ * locus is the disambiguator. `contentHash` stays a fixture FIELD (ADR §3), unchanged.
+ */
 export const AuthoredPositiveControlSchema = z
   .object({
     /** The in-corpus PR the fixture anchors to (train-side; §5). */
     pr: z.number().int().positive(),
     /** The authored rule's stable id — its `lessonHash` (the C2a `firingLabelId ← ruleId` unification). */
     targetRuleId: nonBlank(),
-    /** Per-fixture, line-drift-stable content hash — the two-loci-one-PR disambiguator (strategy#777 Q1(a)). */
-    contentHash: nonBlank(),
+    /** Defect locus file — half of the (filePath, matchedSpan) per-fixture disambiguator. */
+    filePath: nonBlank(),
+    /** Line-range or AST-node path — the defect locus, not just the file (admits two-loci-one-PR). */
+    matchedSpan: nonBlank(),
   })
   .strict();
 export type AuthoredPositiveControl = z.infer<typeof AuthoredPositiveControlSchema>;
@@ -334,23 +343,29 @@ export async function deriveAuthoredControls(params: {
   const nonEmissions: AuthoredNonEmission[] = [];
   for (const { task, result } of evaluated) {
     if (result.outcome === EMITTING_OUTCOME) {
-      // contentHash is the per-fixture disambiguator (strategy#777 Q1(a)) — it is
-      // ITS OWN fixture's hash, so two loci sharing one PR never cross-certify. The
-      // residual edge (two fixtures sharing pr AND contentHash — byte-identical span
-      // content) would still collide, so the emitted key must be unique: fail loud.
-      const positiveKey = controlKey(task.targetRuleId, task.fixture.pr, task.fixture.contentHash);
+      // The fixture LOCUS (filePath, matchedSpan) is the per-entry disambiguator
+      // (strategy#777 §6) — unique by construction, so two DISTINCT loci sharing one PR
+      // (even byte-identical span content) emit two distinct controls. Only a TRUE
+      // duplicate (same pr + filePath + matchedSpan) is an answer-key clash: fail loud.
+      const positiveKey = controlKey(
+        task.targetRuleId,
+        task.fixture.pr,
+        task.fixture.filePath,
+        task.fixture.matchedSpan,
+      );
       if (positiveKeys.has(positiveKey)) {
         throw new Error(
           `[Totem Error] deriveAuthoredControls: duplicate positive control (rule '${task.targetRuleId}', ` +
-            `pr #${task.fixture.pr}, contentHash '${task.fixture.contentHash}') — two fixtures emit an ` +
-            `indistinguishable §6 answer-key entry; differentiate the fixtures or drop one`,
+            `pr #${task.fixture.pr}, filePath '${task.fixture.filePath}', matchedSpan '${task.fixture.matchedSpan}') — ` +
+            `two fixtures emit an indistinguishable §6 answer-key entry; differentiate the loci or drop one`,
         );
       }
       positiveKeys.add(positiveKey);
       positive.push({
         pr: task.fixture.pr,
         targetRuleId: task.targetRuleId,
-        contentHash: task.fixture.contentHash,
+        filePath: task.fixture.filePath,
+        matchedSpan: task.fixture.matchedSpan,
       });
     } else {
       nonEmissions.push({
