@@ -45,6 +45,15 @@ import type { SplitArtifact } from './split.js';
 /** Non-blank string field (trim-then-min — the house convention, cf. cert-corpus-seed.ts). */
 const nonBlank = (msg?: string): z.ZodString => z.string().trim().min(1, msg);
 
+/**
+ * Encode a §6 emission join-key from its parts. `JSON.stringify` (NOT a `\0`-joined
+ * template) so the key is delimiter-injection-proof: distinct part-tuples ALWAYS map
+ * to distinct keys regardless of part content (greptile P2 — an embedded delimiter
+ * could otherwise collide two distinct loci on a load-bearing D-join key). Single-home
+ * so positive + negative key encoding can never drift apart (Tenet-21).
+ */
+const controlKey = (...parts: (string | number)[]): string => JSON.stringify(parts);
+
 // ─── Named constants (the §9 producer contract this builder asserts) ─────────
 
 /** §6: an authored positive control is TRAIN-side (the rule is authored against the train slice). */
@@ -276,7 +285,7 @@ export async function deriveAuthoredControls(params: {
     // position; the (filePath, matchedSpan) locus is the disambiguator. We do NOT
     // inline `nearMissSource` — it is resolved at D (Tenet-20 join-back).
     for (const nf of provenance.negativeFixtures ?? []) {
-      const negativeKey = `${targetRuleId}\0${nf.filePath}\0${nf.matchedSpan}`;
+      const negativeKey = controlKey(targetRuleId, nf.filePath, nf.matchedSpan);
       if (negativeKeys.has(negativeKey)) {
         throw new Error(
           `[Totem Error] deriveAuthoredControls: duplicate negative control (rule '${targetRuleId}', ` +
@@ -306,7 +315,7 @@ export async function deriveAuthoredControls(params: {
       // ITS OWN fixture's hash, so two loci sharing one PR never cross-certify. The
       // residual edge (two fixtures sharing pr AND contentHash — byte-identical span
       // content) would still collide, so the emitted key must be unique: fail loud.
-      const positiveKey = `${task.targetRuleId}\0${task.fixture.pr}\0${task.fixture.contentHash}`;
+      const positiveKey = controlKey(task.targetRuleId, task.fixture.pr, task.fixture.contentHash);
       if (positiveKeys.has(positiveKey)) {
         throw new Error(
           `[Totem Error] deriveAuthoredControls: duplicate positive control (rule '${task.targetRuleId}', ` +

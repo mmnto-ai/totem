@@ -287,6 +287,28 @@ describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
       }),
     ).rejects.toThrow(/duplicate negative control/);
   });
+
+  // greptile P2 regression guard: the join-key is `JSON.stringify([...])`, NOT a
+  // `\0`-joined template — so two DISTINCT loci that merely shift the delimiter
+  // boundary (filePath 'a.ts' + span 'L1\0L2'  vs  filePath 'a.ts\0L1' + span 'L2')
+  // no longer collide into ONE key. Both emit; the old delimited key falsely threw
+  // "duplicate" on a load-bearing D-join target.
+  it('distinct negative loci with an embedded delimiter do NOT collide (injection-proof key)', async () => {
+    const rule = authoredRule(
+      'rule-delim-neg',
+      [posFixture(1, 'ch-1')],
+      [negFixture('a.ts', 'L1\0L2'), negFixture('a.ts\0L1', 'L2')],
+    );
+    const result = await deriveAuthoredControls({
+      rules: [rule],
+      split: splitWithTrain([1]),
+      deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
+    });
+    expect(result.negative).toEqual([
+      { targetRuleId: 'rule-delim-neg', filePath: 'a.ts', matchedSpan: 'L1\0L2' },
+      { targetRuleId: 'rule-delim-neg', filePath: 'a.ts\0L1', matchedSpan: 'L2' },
+    ]);
+  });
 });
 
 // ─── 3. Determinism (Tenet-15; slow-first must NOT reorder) ──────────────────
