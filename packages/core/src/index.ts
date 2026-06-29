@@ -860,6 +860,22 @@ export type {
 export { evaluatePreimageDifferential } from './spine/preimage-differential.js';
 export type { ProducerKind, RulePolicy } from './spine/rule-policy.js';
 export { getRulePolicy } from './spine/rule-policy.js';
+// Spine: ADR-112 §6/§9 Slice C2b — authored-controls EMISSION builder (inert-until-D)
+export type {
+  AuthoredControls,
+  AuthoredControlsDeps,
+  AuthoredNegativeControl,
+  AuthoredNonEmission,
+  AuthoredNonEmissionClass,
+  AuthoredPositiveControl,
+} from './spine/authored-controls.js';
+export {
+  AuthoredControlsSchema,
+  AuthoredNegativeControlSchema,
+  AuthoredNonEmissionSchema,
+  AuthoredPositiveControlSchema,
+  deriveAuthoredControls,
+} from './spine/authored-controls.js';
 // `DraftCandidate` is intentionally NOT re-exported here — it is the transient
 // Extract→Classify intermediate (slice 3 maps it to `CandidateRuleRecord`).
 // Spine-internal consumers import it directly from './spine/extract.js'; keeping
