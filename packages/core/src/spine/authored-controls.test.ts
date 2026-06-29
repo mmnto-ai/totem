@@ -6,7 +6,11 @@ import {
   type AuthoredProvenanceRecord,
   type CompiledRule,
 } from '../compiler-schema.js';
-import { type AuthoredControlsDeps, deriveAuthoredControls } from './authored-controls.js';
+import {
+  type AuthoredControlsDeps,
+  AuthoredNonEmissionSchema,
+  deriveAuthoredControls,
+} from './authored-controls.js';
 import type {
   PreimageDifferentialOutcome,
   PreimageDifferentialResult,
@@ -492,5 +496,33 @@ describe('positiveControlGate — present + frozen (§4 / strategy#777 Q3(ii))',
       deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
     });
     expect(result.positive).toHaveLength(1);
+  });
+});
+
+// ─── Exported boundary guard (CR outside-diff): the schema must reject what the
+// trichotomy makes structurally impossible, not merely admit any enum member. ──
+
+describe('AuthoredNonEmissionSchema — outcome/class boundary guard', () => {
+  const base = { targetRuleId: 'rule-x', pr: 1, outcome: 'fix-shaped', class: 'illegitimate' };
+
+  it('accepts a well-formed non-emission (outcome → its classOf class)', () => {
+    expect(AuthoredNonEmissionSchema.safeParse(base).success).toBe(true);
+  });
+
+  it('rejects the EMITTING outcome — a non-emission can never carry differential-holds', () => {
+    expect(
+      AuthoredNonEmissionSchema.safeParse({ ...base, outcome: 'differential-holds' }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a class that contradicts its outcome (classOf mismatch)', () => {
+    // needs-adjudication is `undecidable`, never `illegitimate`.
+    expect(
+      AuthoredNonEmissionSchema.safeParse({
+        ...base,
+        outcome: 'needs-adjudication',
+        class: 'illegitimate',
+      }).success,
+    ).toBe(false);
   });
 });

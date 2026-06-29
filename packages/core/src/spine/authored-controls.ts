@@ -116,6 +116,27 @@ export const AuthoredNegativeControlSchema = z
   .strict();
 export type AuthoredNegativeControl = z.infer<typeof AuthoredNegativeControlSchema>;
 
+// ─── Classification (strategy#777 classOf; doubles as the build-time exhaustiveness guard) ─
+
+/**
+ * Maps every NON-emitting differential outcome to its emission class. A `Record`
+ * over `Exclude<…, 'differential-holds'>`, so it is exhaustive by construction: a
+ * new primitive outcome breaks this build (missing key) instead of slipping through
+ * unclassed. `fix-shaped | over-match | vacuous-silent` are all illegitimate (the
+ * matcher is not a legitimate control); `needs-adjudication` is undecidable;
+ * `unsupported-source` is deferred.
+ */
+const NON_EMISSION_CLASS_BY_OUTCOME: Record<
+  Exclude<PreimageDifferentialOutcome, typeof EMITTING_OUTCOME>,
+  AuthoredNonEmissionClass
+> = {
+  'fix-shaped': 'illegitimate',
+  'over-match': 'illegitimate',
+  'vacuous-silent': 'illegitimate',
+  'needs-adjudication': 'undecidable',
+  'unsupported-source': 'deferred',
+};
+
 /** A positive fixture that did NOT clear the §4 gate — kept (never silently dropped) with its differential outcome + class. */
 export const AuthoredNonEmissionSchema = z
   .object({
@@ -130,7 +151,30 @@ export const AuthoredNonEmissionSchema = z
     /** First-line differential reason — present for `needs-adjudication` / `unsupported-source`. */
     reason: z.string().optional(),
   })
-  .strict();
+  .strict()
+  // Exported-boundary guard: a non-emission is structurally impossible for the EMITTING
+  // outcome, and `class` is DERIVED from `outcome` (classOf, strategy#777) — so the schema
+  // must reject `differential-holds` and any mismatched (outcome, class) pair, not just any
+  // enum members. superRefine (parse-time, non-mutating) per #2263 — an OUTER refine on the
+  // object, never a branch `.refine` on a union (which throws at construction in Zod 3.25).
+  .superRefine((v, ctx) => {
+    if (v.outcome === EMITTING_OUTCOME) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['outcome'],
+        message: `a non-emission cannot carry the emitting outcome '${EMITTING_OUTCOME}'`,
+      });
+      return;
+    }
+    const expectedClass = NON_EMISSION_CLASS_BY_OUTCOME[v.outcome];
+    if (v.class !== expectedClass) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['class'],
+        message: `class '${v.class}' contradicts outcome '${v.outcome}' (classOf expects '${expectedClass}')`,
+      });
+    }
+  });
 export type AuthoredNonEmission = z.infer<typeof AuthoredNonEmissionSchema>;
 
 /** The three emission lists this builder produces (the §6 controls surface, inert-until-D). */
@@ -157,27 +201,6 @@ export type AuthoredControls = z.infer<typeof AuthoredControlsSchema>;
 export interface AuthoredControlsDeps {
   evaluate: (rule: CompiledRule, fixture: AuthoredFixture) => Promise<PreimageDifferentialResult>;
 }
-
-// ─── Classification (strategy#777 classOf; doubles as the build-time exhaustiveness guard) ─
-
-/**
- * Maps every NON-emitting differential outcome to its emission class. A `Record`
- * over `Exclude<…, 'differential-holds'>`, so it is exhaustive by construction: a
- * new primitive outcome breaks this build (missing key) instead of slipping through
- * unclassed. `fix-shaped | over-match | vacuous-silent` are all illegitimate (the
- * matcher is not a legitimate control); `needs-adjudication` is undecidable;
- * `unsupported-source` is deferred.
- */
-const NON_EMISSION_CLASS_BY_OUTCOME: Record<
-  Exclude<PreimageDifferentialOutcome, typeof EMITTING_OUTCOME>,
-  AuthoredNonEmissionClass
-> = {
-  'fix-shaped': 'illegitimate',
-  'over-match': 'illegitimate',
-  'vacuous-silent': 'illegitimate',
-  'needs-adjudication': 'undecidable',
-  'unsupported-source': 'deferred',
-};
 
 // ─── Internals ──────────────────────────────────────
 
