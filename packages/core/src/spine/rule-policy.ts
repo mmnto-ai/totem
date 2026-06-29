@@ -29,6 +29,13 @@ export type ProducerKind = 'mined' | 'authored';
  *                              authored against the train slice).
  *   - `exposureControlSide`  — §5.3: which slice `positiveControlsExercised`
  *                              counts. Mirrors `positiveControlSide`.
+ *   - `positiveControlGate`  — §4 (strategy#777 Q3(ii)): how a positive control is
+ *                              admitted. Mined controls are corpus-firing evidence
+ *                              (`none`); authored controls must clear the
+ *                              preimage-differential gate (fire-on-preimage /
+ *                              silent-on-postimage). FROZEN-ENUM DATA only — no
+ *                              consumer branches on the table itself (Tenet 9); the
+ *                              authored-controls builder READS it as the §9 home.
  */
 export interface RulePolicy {
   // `readonly` + `Object.freeze` (#2259): `getRulePolicy` hands these singletons out
@@ -37,18 +44,21 @@ export interface RulePolicy {
   readonly labelScope: 'held-out-only' | 'whole-window';
   readonly positiveControlSide: 'held-out' | 'train';
   readonly exposureControlSide: 'held-out' | 'train';
+  readonly positiveControlGate: 'none' | 'preimage-differential';
 }
 
 const MINED_POLICY: RulePolicy = Object.freeze({
   labelScope: 'held-out-only',
   positiveControlSide: 'held-out',
   exposureControlSide: 'held-out',
+  positiveControlGate: 'none',
 });
 
 const AUTHORED_POLICY: RulePolicy = Object.freeze({
   labelScope: 'whole-window',
   positiveControlSide: 'train',
   exposureControlSide: 'train',
+  positiveControlGate: 'preimage-differential',
 });
 
 /**
