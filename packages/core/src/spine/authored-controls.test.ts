@@ -255,6 +255,38 @@ describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
       { targetRuleId: 'rule-2loci', pr: 7, outcome: 'fix-shaped', class: 'illegitimate' },
     ]);
   });
+
+  // The residual edge the contentHash disambiguator does NOT close: two fixtures
+  // sharing pr AND contentHash (byte-identical span content) emit the SAME minimal
+  // key. The answer key must stay unambiguous, so this fails loud (not a silent dup).
+  it('throws when two HOLDING fixtures share pr AND contentHash (indistinguishable positive key)', async () => {
+    const rule = authoredRule('rule-dup-pos', [
+      posFixture(7, 'ch-dup', 'src/a.ts'),
+      posFixture(7, 'ch-dup', 'src/b.ts'),
+    ]);
+    await expect(
+      deriveAuthoredControls({
+        rules: [rule],
+        split: splitWithTrain([7]),
+        deps: scriptedDeps({ 'ch-dup': makeResult('differential-holds') }),
+      }),
+    ).rejects.toThrow(/duplicate positive control/);
+  });
+
+  it('throws when two near-misses share filePath AND matchedSpan (indistinguishable negative key)', async () => {
+    const rule = authoredRule(
+      'rule-dup-neg',
+      [posFixture(1, 'ch-1')],
+      [negFixture('src/a.ts', 'L1-L2'), negFixture('src/a.ts', 'L1-L2')],
+    );
+    await expect(
+      deriveAuthoredControls({
+        rules: [rule],
+        split: splitWithTrain([1]),
+        deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
+      }),
+    ).rejects.toThrow(/duplicate negative control/);
+  });
 });
 
 // ─── 3. Determinism (Tenet-15; slow-first must NOT reorder) ──────────────────

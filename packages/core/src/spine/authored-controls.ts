@@ -42,6 +42,9 @@ import {
 import { getRulePolicy } from './rule-policy.js';
 import type { SplitArtifact } from './split.js';
 
+/** Non-blank string field (trim-then-min — the house convention, cf. cert-corpus-seed.ts). */
+const nonBlank = (msg?: string): z.ZodString => z.string().trim().min(1, msg);
+
 // ─── Named constants (the §9 producer contract this builder asserts) ─────────
 
 /** §6: an authored positive control is TRAIN-side (the rule is authored against the train slice). */
@@ -84,9 +87,9 @@ export const AuthoredPositiveControlSchema = z
     /** The in-corpus PR the fixture anchors to (train-side; §5). */
     pr: z.number().int().positive(),
     /** The authored rule's stable id — its `lessonHash` (the C2a `firingLabelId ← ruleId` unification). */
-    targetRuleId: z.string().min(1),
+    targetRuleId: nonBlank(),
     /** Per-fixture, line-drift-stable content hash — the two-loci-one-PR disambiguator (strategy#777 Q1(a)). */
-    contentHash: z.string().min(1),
+    contentHash: nonBlank(),
   })
   .strict();
 export type AuthoredPositiveControl = z.infer<typeof AuthoredPositiveControlSchema>;
@@ -95,11 +98,11 @@ export type AuthoredPositiveControl = z.infer<typeof AuthoredPositiveControlSche
 export const AuthoredNegativeControlSchema = z
   .object({
     /** The authored rule's stable id (its `lessonHash`). */
-    targetRuleId: z.string().min(1),
+    targetRuleId: nonBlank(),
     /** Near-miss locus file — half of the (filePath, matchedSpan) disambiguator. */
-    filePath: z.string().min(1),
+    filePath: nonBlank(),
     /** Line-range or AST-node path — the near-miss locus, not just the file. */
-    matchedSpan: z.string().min(1),
+    matchedSpan: nonBlank(),
   })
   .strict();
 export type AuthoredNegativeControl = z.infer<typeof AuthoredNegativeControlSchema>;
@@ -108,7 +111,7 @@ export type AuthoredNegativeControl = z.infer<typeof AuthoredNegativeControlSche
 export const AuthoredNonEmissionSchema = z
   .object({
     /** The authored rule's stable id (its `lessonHash`). */
-    targetRuleId: z.string().min(1),
+    targetRuleId: nonBlank(),
     /** The train-side PR the non-emitting fixture anchored to. */
     pr: z.number().int().positive(),
     /** The source differential outcome (exact, never derived from a negation). */
@@ -245,6 +248,11 @@ export async function deriveAuthoredControls(params: {
   // ── First pass: collect positional positive tasks + the declarative negatives.
   const positiveTasks: PositiveTask[] = [];
   const negative: AuthoredNegativeControl[] = [];
+  // The §6 controls are an ANSWER KEY — each emitted control must be a unique join
+  // target for slice D. Two fixtures emitting the same key would resolve ambiguously
+  // (the minimal #777 shape drops the locus/source that would tell them apart), so a
+  // duplicate is a fail-loud contract fault, never a silent double-entry.
+  const negativeKeys = new Set<string>();
 
   for (const rule of rules) {
     const provenance = readAuthoredProvenance(rule);
@@ -268,6 +276,15 @@ export async function deriveAuthoredControls(params: {
     // position; the (filePath, matchedSpan) locus is the disambiguator. We do NOT
     // inline `nearMissSource` — it is resolved at D (Tenet-20 join-back).
     for (const nf of provenance.negativeFixtures ?? []) {
+      const negativeKey = `${targetRuleId}\0${nf.filePath}\0${nf.matchedSpan}`;
+      if (negativeKeys.has(negativeKey)) {
+        throw new Error(
+          `[Totem Error] deriveAuthoredControls: duplicate negative control (rule '${targetRuleId}', ` +
+            `filePath '${nf.filePath}', matchedSpan '${nf.matchedSpan}') — two near-misses emit an ` +
+            `indistinguishable §6 silence-control key; differentiate the loci or drop one`,
+        );
+      }
+      negativeKeys.add(negativeKey);
       negative.push({ targetRuleId, filePath: nf.filePath, matchedSpan: nf.matchedSpan });
     }
   }
@@ -281,11 +298,23 @@ export async function deriveAuthoredControls(params: {
 
   // ── Second pass: split into emitted positives vs kept non-emissions.
   const positive: AuthoredPositiveControl[] = [];
+  const positiveKeys = new Set<string>();
   const nonEmissions: AuthoredNonEmission[] = [];
   for (const { task, result } of evaluated) {
     if (result.outcome === EMITTING_OUTCOME) {
       // contentHash is the per-fixture disambiguator (strategy#777 Q1(a)) — it is
-      // ITS OWN fixture's hash, so two loci sharing one PR never cross-certify.
+      // ITS OWN fixture's hash, so two loci sharing one PR never cross-certify. The
+      // residual edge (two fixtures sharing pr AND contentHash — byte-identical span
+      // content) would still collide, so the emitted key must be unique: fail loud.
+      const positiveKey = `${task.targetRuleId}\0${task.fixture.pr}\0${task.fixture.contentHash}`;
+      if (positiveKeys.has(positiveKey)) {
+        throw new Error(
+          `[Totem Error] deriveAuthoredControls: duplicate positive control (rule '${task.targetRuleId}', ` +
+            `pr #${task.fixture.pr}, contentHash '${task.fixture.contentHash}') — two fixtures emit an ` +
+            `indistinguishable §6 answer-key entry; differentiate the fixtures or drop one`,
+        );
+      }
+      positiveKeys.add(positiveKey);
       positive.push({
         pr: task.fixture.pr,
         targetRuleId: task.targetRuleId,
