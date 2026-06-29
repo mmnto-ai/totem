@@ -63,16 +63,25 @@ export const AuthoringLedgerEntrySchema = z
      * authored against it); the ledger is the CI-observable FM(e) artifact that enumerates
      * them so C can verify train-side membership.
      *
-     * NO `negativeFixturePrs` (strategy#770 + the Q-C ruling): a §6 negative control is a
-     * SILENCE-ONLY near-miss that carries no `pr`. A synthetic `kind:'lesson'` exemplar has
-     * no corpus position, so there is nothing to train-side-leak-check — §5(2)'s guard
+     * The §5(2) attestation is POSITIVES-ONLY (strategy#770 + the Q-C ruling): a §6 negative
+     * control is a SILENCE-ONLY near-miss with no `pr`. A synthetic `kind:'lesson'` exemplar
+     * has no corpus position, so there is nothing to train-side-leak-check — §5(2)'s guard
      * targets *corpus-drawn* fixtures, and only `positiveFixtures` are mandated train-side.
-     * Enumerating negative PRs was an impl-extra beyond the contract; dropping it is
-     * alignment, not a weakening. (A future `kind:'commit'` near-miss DOES have a corpus
-     * position; its train-side `commitSha` attestation returns WITH the deferred
-     * commit-source fallback — parallel to the commit-pair preimage deferral.)
+     * Enumerating negative PRs was an impl-extra beyond the contract; the attestation drops it.
+     * (A future `kind:'commit'` near-miss DOES have a corpus position; its train-side
+     * `commitSha` attestation returns WITH the deferred commit-source fallback — parallel to
+     * the commit-pair preimage deferral.)
      */
     positiveFixturePrs: z.array(z.number().int().positive()),
+    /**
+     * LEGACY READ-COMPAT ONLY (pre-#770) — NOT an attestation. `totem rule author` ≤1.81.1
+     * wrote `negativeFixturePrs: []` on every row, and `runRuleAuthor` re-reads the FULL
+     * existing ledger before writing, so this `.strict()` reader must still PARSE those rows
+     * rather than throw on upgrade (greptile-P1 / CR). It is NEVER written by the current
+     * intake (the attestation is positives-only, above), so the ledger self-heals to the new
+     * shape on the next revision write. Optional + tolerated, never read for leakage-checking.
+     */
+    negativeFixturePrs: z.array(z.number().int().positive()).optional(),
     /**
      * Fingerprint of the MATERIAL author input (engine / class / matcher /
      * fixtures / origin) — identity (`author`/`targetDefect`/`ruleId`) AND
