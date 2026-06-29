@@ -348,7 +348,18 @@ export type Legitimacy = z.infer<typeof LegitimacySchema>;
 // ─── Compiled rule schemas ──────────────────────────
 
 const CompiledRuleBaseSchema = z.object({
-  /** SHA-256 hash (first 16 hex chars) of heading + body — detects edits */
+  /**
+   * The rule's stable identity + wind-tunnel firing key.
+   * - MINED / lesson-compiled rules: SHA-256 (first 16 hex chars) of heading + body —
+   *   content-derived, detects edits.
+   * - AUTHORED rules (ADR-112 §8/§9): carries the PERSISTED, minted `ruleId` (set at
+   *   the compile seam from `CompileInputCandidate.ruleId`), NOT a content hash — the
+   *   `firingLabelId ← ruleId` id-unification, so a matcher (`dslSource`) edit never
+   *   orphans the rule's ground-truth labels / `controls.positive[].targetRuleId`. For
+   *   authored rules this is identity, NOT an edit-detector; it may carry a `-N`
+   *   collision suffix. (Authored rules are Gate-1 advisory and live only in the cert
+   *   corpus, never the product enforcement path that reads this as a content hash.)
+   */
   lessonHash: z.string(),
   /** Human-readable heading from the lesson (for diagnostics) */
   lessonHeading: z.string(),

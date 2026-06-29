@@ -135,8 +135,22 @@ export function compileCandidate(
 
   const heading = candidateHeading(candidate);
   const ef = engineFields(mp.engine, mp.astGrepYamlRule ?? mp.pattern);
+  // ADR-112 §8/§9 id-unification (AUTHORED producer): an authored rule's compiled
+  // identity IS its persisted, minted `ruleId` (`firingLabelId ← ruleId`), NOT the
+  // `dslSource`-derived `hashLesson`. The hash is the FORBIDDEN authored-identity
+  // basis (§8): it drifts on a matcher edit, and because `firingLabelId` embeds the
+  // id, any drift orphans the rule's ground-truth labels + `controls.positive[].
+  // targetRuleId`. Carrying the persisted `ruleId` here keeps every downstream join
+  // (firing key, `mintedRuleIds`, legitimacy-projection, cert-corpus) consistent off
+  // one field, and lets an author tighten `dslSource` without orphaning the rule.
+  // MINED candidates carry no `ruleId` → the content hash stands, byte-identical.
+  if (candidate.provenance.kind === 'authored' && candidate.ruleId === undefined) {
+    throw new Error(
+      `[Totem Error] compileCandidate: authored candidate '${candidate.classifierLedgerRef}' is missing its persisted ruleId — the ADR-112 §8 firingLabelId←ruleId unification requires it threaded through toCompileFeed (a threading regression would silently re-derive a dslSource-keyed identity and orphan its controls)`,
+    );
+  }
   const rule = CompiledRuleSchema.parse({
-    lessonHash: hashLesson(heading, candidate.dslSource),
+    lessonHash: candidate.ruleId ?? hashLesson(heading, candidate.dslSource),
     lessonHeading: heading,
     message: mp.message ?? heading,
     engine: mp.engine,

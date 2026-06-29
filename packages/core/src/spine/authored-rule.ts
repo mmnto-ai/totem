@@ -367,6 +367,11 @@ export function toCompileFeed(records: readonly AuthoredRuleRecord[]): AuthoredC
       // compiled under THAT engine — a regex-whitelisted rule whose dslSource parses
       // as ast-grep must fail loud, not silently re-route to a different engine.
       declaredEngine: record.declaredEngine,
+      // §8 id-unification: carry the persisted, minted ruleId so the compiler makes it
+      // the compiled rule's identity (`firingLabelId ← ruleId`) instead of the
+      // dslSource-derived hash — stable across a matcher edit, never orphaning the
+      // rule's wind-tunnel controls. Slice C2a.
+      ruleId: record.ruleId,
       unverified: true,
     });
     entries.push({
