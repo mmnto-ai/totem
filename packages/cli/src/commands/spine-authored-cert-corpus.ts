@@ -77,9 +77,17 @@ export async function buildAuthoredCertifyingCorpus(
     isAuthoredProvenance,
     provenanceKind,
     readAuthoringLedger,
+    sanitizeForTerminal,
     TotemError,
   } = await import('@mmnto/totem');
   const { runRuleAuthor } = await import('../authored-rule-intake.js');
+
+  // Escape every authored/ledger-derived value before it lands in CLI-facing TotemError
+  // text: authored fields (author / targetDefect / reason / splitRef) are free-text from
+  // the authored YAML and could carry ANSI/control bytes (terminal injection — CR outside-
+  // diff). Applied uniformly via `safe` so all error strings are consistently escaped (a
+  // no-op on the minted-hex ids, but it keeps the "all CLI error text sanitized" invariant).
+  const safe = sanitizeForTerminal;
 
   // 1. Produce the authored records (the producer establishes eligibility/identity/
   //    ledger; NEVER construct AuthoredRuleRecord[] ad hoc or read YAML→record here).
@@ -89,7 +97,7 @@ export async function buildAuthoredCertifyingCorpus(
   //    cert input — never certify the eligible subset (fail loud, not a partial corpus).
   if (authorResult.rejected.length > 0) {
     const summary = authorResult.rejected
-      .map((r) => `(${r.author} · ${r.targetDefect}: ${r.reason})`)
+      .map((r) => `(${safe(r.author)} · ${safe(r.targetDefect)}: ${safe(r.reason)})`)
       .join('; ');
     throw new TotemError(
       'GATE_INVALID',
@@ -125,7 +133,7 @@ export async function buildAuthoredCertifyingCorpus(
     if (entry === undefined) {
       throw new TotemError(
         'GATE_INVALID',
-        `Authored cert corpus: no authoring-ledger entry for rule '${record.ruleId}' — the §8 ` +
+        `Authored cert corpus: no authoring-ledger entry for rule '${safe(record.ruleId)}' — the §8 ` +
           'attestation chain is missing its split-binding.',
         'Re-author the rule so the ledger records its splitRef + attestations (ADR-112 §8).',
       );
@@ -133,8 +141,8 @@ export async function buildAuthoredCertifyingCorpus(
     if (entry.splitRef !== deps.expectedSplitRef) {
       throw new TotemError(
         'GATE_INVALID',
-        `Authored cert corpus: rule '${record.ruleId}' was authored under split '${entry.splitRef}', but ` +
-          `this cert run is bound to split '${deps.expectedSplitRef}' — the rules were authored under a ` +
+        `Authored cert corpus: rule '${safe(record.ruleId)}' was authored under split '${safe(entry.splitRef)}', but ` +
+          `this cert run is bound to split '${safe(deps.expectedSplitRef)}' — the rules were authored under a ` +
           'different split (ADR-112 §5 leakage guard).',
         'Re-author against the current frozen split, or run the cert against the split the rules were authored under.',
       );
@@ -159,7 +167,7 @@ export async function buildAuthoredCertifyingCorpus(
     throw new TotemError(
       'GATE_INVALID',
       `Authored cert corpus: ${rejectedRefs.length} authored candidate(s) were rejected at compile ` +
-        `(${rejectedRefs.join(', ')}) — an authored record must compile cleanly (ADR-112 §2).`,
+        `(${safe(rejectedRefs.join(', '))}) — an authored record must compile cleanly (ADR-112 §2).`,
       "Fix the authored rule's dslSource so it compiles under its declared engine.",
     );
   }
@@ -189,7 +197,7 @@ export async function buildAuthoredCertifyingCorpus(
     if (!isAuthoredProvenance(c.provenance)) {
       throw new TotemError(
         'GATE_INVALID',
-        `Authored cert corpus: rule '${c.rule.lessonHash}' carries '${provenanceKind(c.provenance)}' ` +
+        `Authored cert corpus: rule '${safe(c.rule.lessonHash)}' carries '${provenanceKind(c.provenance)}' ` +
           'provenance — an authored corpus must be wholly authored (ADR-112 §7 single-provenance).',
         'Do not mix mined and authored rules in one cert run; author them as separate runs.',
       );
@@ -197,7 +205,7 @@ export async function buildAuthoredCertifyingCorpus(
     if (provenanceByRule.has(c.rule.lessonHash)) {
       throw new TotemError(
         'GATE_INVALID',
-        `Authored cert corpus: duplicate rule identity '${c.rule.lessonHash}' across scored authored ` +
+        `Authored cert corpus: duplicate rule identity '${safe(c.rule.lessonHash)}' across scored authored ` +
           'rules — the §6 control join key would resolve ambiguously.',
         'Each authored rule needs a unique minted ruleId (ADR-112 §8); de-duplicate the authored set.',
       );
