@@ -20,7 +20,11 @@ import type {
 } from '@mmnto/totem';
 
 import { recordReplayFixture } from './spine-cert-record.js';
-import { buildReplayCorpusProvider } from './spine-cert-run-corpus.js';
+import {
+  buildReplayCorpusProvider,
+  loadAuthoredCertRunFixtures,
+  loadCertRunFixtures,
+} from './spine-cert-run-corpus.js';
 import { type ReplayProvenance, serializeReplayArtifact } from './spine-llm-replay.js';
 
 // ─── Fixtures ────────────────────────────────────────
@@ -304,5 +308,66 @@ describe('buildReplayCorpusProvider (run-path)', () => {
       now: NOW,
     });
     await expect(provider(lock)).rejects.toThrow(/ground-truth-labels\.json integrity/);
+  });
+
+  it('a mined corpus has NO authoredControls channel (mined/authored isolation — agy D2 regression guard)', async () => {
+    const hash = await fixtureHash();
+    const provider = buildReplayCorpusProvider({
+      gate1Dir,
+      stage4: stage4({ 'src/a.ts': 'forbiddenCall()' }),
+      now: NOW,
+    });
+    const corpus = await provider(lockWith(hash, prDiffsHash(), groundTruthHash()));
+    expect(corpus.authoredControls).toBeUndefined();
+  });
+});
+
+// ─── D2: the authored scoring-substrate loader (sibling of loadCertRunFixtures) ──
+
+describe('loadAuthoredCertRunFixtures (D2 authored scoring substrate)', () => {
+  it('loads split + pr-diffs + ground-truth, NOT the mining-only llm-replay / content', async () => {
+    const substrate = await loadAuthoredCertRunFixtures(gate1Dir, {
+      expectedPrDiffsSha: prDiffsHash(),
+      expectedGroundTruthSha: groundTruthHash(),
+    });
+    expect(substrate.split.asOfCommit).toBe(SPLIT.asOfCommit);
+    expect(substrate.prDiffs).toEqual([]);
+    expect(substrate.groundTruth.size).toBe(0);
+    // Substrate-only shape — no `artifact` / `content` (the mining-only legs).
+    expect(Object.keys(substrate).sort()).toEqual(['groundTruth', 'prDiffs', 'split']);
+  });
+
+  it('does NOT require the mining fixtures — llm-replay / review-content absent → still loads', async () => {
+    fs.rmSync(path.join(gate1Dir, 'llm-replay.v1.json'));
+    fs.rmSync(path.join(gate1Dir, 'review-content.json'));
+    const substrate = await loadAuthoredCertRunFixtures(gate1Dir, {
+      expectedPrDiffsSha: prDiffsHash(),
+      expectedGroundTruthSha: groundTruthHash(),
+    });
+    expect(substrate.prDiffs).toEqual([]);
+  });
+
+  it('shares the gate-critical integrity discipline — a tampered pr-diffs.json fails loud', async () => {
+    const expected = prDiffsHash(); // captured over the pristine bytes, before the tamper
+    fs.writeFileSync(
+      path.join(gate1Dir, 'pr-diffs.json'),
+      JSON.stringify([{ pr: 1, diff: 'tampered', controlKind: 'corpus' }]),
+      'utf-8',
+    );
+    await expect(
+      loadAuthoredCertRunFixtures(gate1Dir, {
+        expectedPrDiffsSha: expected,
+        expectedGroundTruthSha: groundTruthHash(),
+      }),
+    ).rejects.toThrow(/pr-diffs\.json integrity/);
+  });
+
+  it('parity with the mined loader for split/prDiffs/groundTruth (the shared substrate cannot drift)', async () => {
+    const opts = { expectedPrDiffsSha: prDiffsHash(), expectedGroundTruthSha: groundTruthHash() };
+    const authored = await loadAuthoredCertRunFixtures(gate1Dir, opts);
+    const mined = await loadCertRunFixtures(gate1Dir, opts);
+    expect(authored.split).toEqual(mined.split);
+    expect(authored.prDiffs).toEqual(mined.prDiffs);
+    expect([...authored.groundTruth]).toEqual([...mined.groundTruth]);
   });
 });

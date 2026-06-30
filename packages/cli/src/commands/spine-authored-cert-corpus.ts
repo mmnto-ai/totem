@@ -126,6 +126,9 @@ export async function buildAuthoredCertifyingCorpus(
   //    BEFORE this point — a runtime re-check would be an unreachable branch (CR; bot-
   //    finding reachability). The ledger entry only exists because the file already passed.
   const ledger = readAuthoringLedger(deps.totemDir);
+  // runRuleAuthor trimmed `judgedBy` before recording the eligibility verdict, so compare
+  // the ledger evidence against the trimmed run input (codex consistency fold, below).
+  const expectedJudgedBy = deps.judgedBy.trim();
   const effectiveByRuleId = new Map<string, (typeof ledger)[number]>();
   for (const entry of ledger) effectiveByRuleId.set(entry.ruleId, entry);
   for (const record of records) {
@@ -145,6 +148,22 @@ export async function buildAuthoredCertifyingCorpus(
           `this cert run is bound to split '${safe(deps.expectedSplitRef)}' — the rules were authored under a ` +
           'different split (ADR-112 §5 leakage guard).',
         'Re-author against the current frozen split, or run the cert against the split the rules were authored under.',
+      );
+    }
+    // judgedBy consistency (codex contract fold 2026-06-30): the lock's run-level `judgedBy`
+    // is the INPUT that selected this run's §3 eligibility check; the ledger row is the
+    // EVIDENCE of the verdict that check produced. They MUST agree — a row carrying a
+    // different `judgedBy` (a stale verdict from an earlier revision judged by another check,
+    // or a lock/ledger mismatch) must never reach the cert corpus under the current run's
+    // judgedBy. This couples the lock input to the ledger evidence (a backstop: runRuleAuthor
+    // appends a fresh effective row under this judgedBy, so a mismatch is a regression signal).
+    if (entry.structuralEligibility.judgedBy !== expectedJudgedBy) {
+      throw new TotemError(
+        'GATE_INVALID',
+        `Authored cert corpus: rule '${safe(record.ruleId)}' was judged eligible by ` +
+          `'${safe(entry.structuralEligibility.judgedBy)}', but this cert run binds judgedBy ` +
+          `'${safe(expectedJudgedBy)}' — the eligibility verdict does not match the run's check (ADR-112 §3/§8).`,
+        "Re-author the rule under the run's judgedBy, or run the cert under the judgedBy the rule was judged by.",
       );
     }
   }
