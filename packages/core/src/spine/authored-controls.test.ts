@@ -587,6 +587,24 @@ describe('deriveAuthoredControls — sidecar provenance (D1 fold #1)', () => {
       }),
     ).rejects.toThrow(/is not authored/);
   });
+
+  it('emits from a rule with NO legitimacy — the REAL assembly-seam shape (provenance only from the map)', async () => {
+    // The cert-assembly seam passes compiled rules that carry no `legitimacy` (stamped
+    // post-scoring); provenance rides the `c.provenance` sidecar. Drop legitimacy here so
+    // the happy path runs against that exact shape — proving the builder needs only the map.
+    // `ruleNoLegit` is typed `Omit<CompiledRule, 'legitimacy'>` — the field is gone at the
+    // type level (and at runtime), exactly the compiled-rule shape at the assembly seam.
+    const { legitimacy, ...ruleNoLegit } = authoredRule('rule-no-legit', [posFixture(1, 'ch-1')]);
+    const result = await deriveAuthoredControls({
+      rules: [ruleNoLegit],
+      split: splitWithTrain([1]),
+      provenanceByRule: new Map([[ruleNoLegit.lessonHash, legitimacy!.provenance]]),
+      deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
+    });
+    expect(result.positive).toEqual([
+      { pr: 1, targetRuleId: 'rule-no-legit', filePath: 'src/a.ts', matchedSpan: 'L1-L2' },
+    ]);
+  });
 });
 
 // ─── Exported boundary guard (CR outside-diff): the schema must reject what the

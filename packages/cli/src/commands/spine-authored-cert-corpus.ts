@@ -108,12 +108,15 @@ export async function buildAuthoredCertifyingCorpus(
     );
   }
 
-  // 3. Verify the file/ledger SPLIT-BINDING before compile. Fold the authoring-ledger
-  //    to the effective entry per ruleId (append order ⇒ last wins) and prove every
-  //    materialized record was authored under THIS cert run's split AND carries the §5
-  //    embargo + held-out-non-inspection attestations. (`splitRef` is part of the
-  //    authoring contentHash, so an `unchanged` record provably shares the current
-  //    file header's splitRef — the ledger fold therefore covers every record.)
+  // 3. Verify the file/ledger SPLIT-BINDING before compile: every materialized record
+  //    MUST have been authored under THIS cert run's split. This is the §5 leakage guard
+  //    `deriveAuthoredControls`'s train-side fixture check alone cannot cover (codex
+  //    finding-4) — `splitRef` is the run-binding the FILE does not self-enforce.
+  //    The §5 embargo attestations themselves (`authoredAfterSplit`,
+  //    `heldOutNonInspectionAttestation`) are NOT re-checked here: `AuthoredRulesFileSchema`
+  //    types them as `z.literal(true)`, so `runRuleAuthor` rejects any file lacking them
+  //    BEFORE this point — a runtime re-check would be an unreachable branch (CR; bot-
+  //    finding reachability). The ledger entry only exists because the file already passed.
   const ledger = readAuthoringLedger(deps.totemDir);
   const effectiveByRuleId = new Map<string, (typeof ledger)[number]>();
   for (const entry of ledger) effectiveByRuleId.set(entry.ruleId, entry);
@@ -134,14 +137,6 @@ export async function buildAuthoredCertifyingCorpus(
           `this cert run is bound to split '${deps.expectedSplitRef}' — the rules were authored under a ` +
           'different split (ADR-112 §5 leakage guard).',
         'Re-author against the current frozen split, or run the cert against the split the rules were authored under.',
-      );
-    }
-    if (entry.authoredAfterSplit !== true || entry.heldOutNonInspectionAttestation !== true) {
-      throw new TotemError(
-        'GATE_INVALID',
-        `Authored cert corpus: rule '${record.ruleId}' is missing a §5 leakage attestation ` +
-          '(authoredAfterSplit / heldOutNonInspectionAttestation).',
-        'Re-author with both attestations set (ADR-112 §5.1).',
       );
     }
   }
@@ -188,12 +183,14 @@ export async function buildAuthoredCertifyingCorpus(
   const rules: CompiledRule[] = [];
   const provenanceByRule = new Map<string, ProvenanceRecord>();
   for (const c of scored) {
-    const kind = provenanceKind(c.provenance);
-    if (kind !== 'authored' || !isAuthoredProvenance(c.provenance)) {
+    // `isAuthoredProvenance` is the single runtime+type-narrowing check (greptile: the
+    // earlier `provenanceKind(...) !== 'authored'` leg was redundant — both derive from
+    // `p.kind === 'authored'`). Compute the kind only for the fail-loud message.
+    if (!isAuthoredProvenance(c.provenance)) {
       throw new TotemError(
         'GATE_INVALID',
-        `Authored cert corpus: rule '${c.rule.lessonHash}' carries '${kind}' provenance — an authored ` +
-          'corpus must be wholly authored (ADR-112 §7 single-provenance).',
+        `Authored cert corpus: rule '${c.rule.lessonHash}' carries '${provenanceKind(c.provenance)}' ` +
+          'provenance — an authored corpus must be wholly authored (ADR-112 §7 single-provenance).',
         'Do not mix mined and authored rules in one cert run; author them as separate runs.',
       );
     }

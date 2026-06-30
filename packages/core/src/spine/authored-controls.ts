@@ -265,6 +265,13 @@ function readAuthoredProvenance(
  * for a set of compiled AUTHORED rules, gating positives on the §4 preimage-
  * differential. Inert: emits nothing into a cert run.
  *
+ * Provenance contract (D1 fold #1): the caller MUST supply `provenanceByRule`
+ * (`lessonHash → provenance`); this function reads provenance ONLY from that sidecar
+ * map and NEVER from `rule.legitimacy` (absent at the cert-assembly seam — stamped
+ * post-scoring, survivors-only). Fail-loud (Tenet-4): a rule missing from the map, a
+ * non-authored (mined) provenance entry, a held-out positive fixture (§5 leakage), a
+ * producer/policy mismatch, or a duplicate locus key all THROW — never a silent skip.
+ *
  * Determinism (Tenet-15): the output arrays are byte-identical across re-runs for
  * identical inputs. Positives/non-emissions follow input order (rule order ×
  * declared `positiveFixtures` order); negatives follow rule order × declared

@@ -242,15 +242,10 @@ describe('buildAuthoredCertifyingCorpus — fail-loud guards', () => {
     ).rejects.toThrow(/different split/);
   });
 
-  it('a missing §5 attestation source (zero eligible records) fails loud', async () => {
-    // Only a non-decidable rule → rejected.length > 0 fires first.
-    writeAuthoredYaml(totemDir, {
-      rules: [authoredRuleInput({ structuralClass: 'not-in-whitelist' })],
-    });
-    await expect(buildAuthoredCertifyingCorpus(baseDeps(totemDir))).rejects.toThrow(
-      /rejected by the structural-eligibility check/,
-    );
-  });
+  // (The §5 embargo attestations `authoredAfterSplit` / `heldOutNonInspectionAttestation`
+  // are `z.literal(true)` in AuthoredRulesFileSchema, so runRuleAuthor rejects any file
+  // lacking them before the assembler runs — there is no reachable assembler branch to
+  // test. The reachable §5 guard is the splitRef binding, covered above.)
 });
 
 // ─── 3. Channel 3-state matrix (authored side; mined→undefined lives in cert-corpus.test) ─
