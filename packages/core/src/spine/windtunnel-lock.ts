@@ -44,28 +44,26 @@ export const WindtunnelLockSchema = z
     // BYTE-UNCHANGED. INERT in D1: no production authored lock exists yet, and the authored
     // cert-run INPUT wiring (judgedBy / splitRef / fixture-substrate sourcing) lands in D2.
     producerKind: z.enum(['mined', 'authored']).optional(),
-    // ADR-112 §5/§8 Slice D2 — the authored cert-run INPUT bindings. Present ONLY on an
+    // ADR-112 §5/§8 Slice D2 — the authored cert-run INPUT binding. Present ONLY on an
     // authored lock (producerKind:'authored'); the superRefine below rejects a stray
     // `authored` block on a mined lock. Additive-optional, no `.default()` → every mined
     // lock parses/serializes BYTE-UNCHANGED. The resolver REQUIRES this block when an
     // authored cert run resolves (the require-when-authored direction is phase-aware, so it
     // lives at cert-run resolution, not the schema — a producerKind:'authored' lock may
-    // exist before its run inputs are wired). Two run knobs the producer needs:
-    //   • judgedBy — the §3 independent structural-eligibility check id this run recomputes
-    //     eligibility under. It is the cert-run INPUT (→ the authoring-ledger records the
-    //     resulting verdict), NOT a mirror of the ledger (codex contract ruling 2026-06-30:
-    //     deriving it from the append-only ledger is the wrong direction — runRuleAuthor is
-    //     the writer). Re-verified against the ledger POST-run (every effective row's
-    //     structuralEligibility.judgedBy must equal this) so a stale/mismatched eligibility
-    //     verdict cannot reach the cert corpus.
+    // exist before its run inputs are wired). ONE run knob:
     //   • expectedSplitRef — the §5 split this cert run binds to; every authored record's
     //     authoring split must equal it or the run is voided before compile (leakage guard).
     //     A lock-level binding because SplitArtifactSchema carries no canonical split id yet.
+    // There is deliberately NO `judgedBy` here: the §3 eligibility-check id is the §8 single
+    // source recorded PER-RULE in the authoring-ledger, derived from it at run time — a
+    // run-level lock judgedBy would be a second source for a fact §8 owns = the Tenet-20
+    // mirror (strategy couple-on-D ruling 2026-06-30 (iii), #787). `.strict()` so a stray
+    // `judgedBy` (or any other key) on the block FAILS LOUD rather than being silently dropped.
     authored: z
       .object({
-        judgedBy: z.string().min(1, 'authored.judgedBy must name the §3 eligibility check'),
         expectedSplitRef: z.string().min(1, 'authored.expectedSplitRef must name the frozen split'),
       })
+      .strict()
       .optional(),
     corpus: z.object({
       repo: z.string(),

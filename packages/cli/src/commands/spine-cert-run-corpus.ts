@@ -521,8 +521,9 @@ export interface ResolveCorpusProviderInputs {
  *   SAME hard integrity preconditions as mined (`prDiffsSha` + `groundTruthSha` MUST be
  *   present on a certifying run — a tampered/stale scoring source or answer key must fail
  *   loud), load the authored scoring substrate via `loadAuthoredCertRunFixtures`, and
- *   assemble `BuildAuthoredCertifyingCorpusDeps` (lock-sourced `judgedBy`/`expectedSplitRef`
- *   + the loaded split/prDiffs/groundTruth + totemDir/stage4/now). Async because the
+ *   assemble `BuildAuthoredCertifyingCorpusDeps` (lock-sourced `expectedSplitRef`; `judgedBy`
+ *   is the §8 single source derived from the ledger INSIDE the assembler, never the lock —
+ *   strategy (iii)) + the loaded split/prDiffs/groundTruth + totemDir/stage4/now). Async because the
  *   authored substrate load is IO — the dispatch stays single-homed by owning that load
  *   here rather than pushing a kind-branch up to the caller.
  *
@@ -550,8 +551,8 @@ export async function resolveCertifyingCorpusProvider(
       throw new TotemError(
         'CONFIG_INVALID',
         "Certifying run: lock declares producerKind 'authored' but has no `authored` run-input block " +
-          '(judgedBy + expectedSplitRef) — the authored cert-run inputs are unbound (ADR-112 §8/D2).',
-        'Add the `authored: { judgedBy, expectedSplitRef }` block to the lock, or run a mined lock.',
+          '(expectedSplitRef) — the authored cert-run split binding is unbound (ADR-112 §8/D2).',
+        'Add the `authored: { expectedSplitRef }` block to the lock, or run a mined lock.',
       );
     }
 
@@ -584,7 +585,8 @@ export async function resolveCertifyingCorpusProvider(
 
     return buildAuthoredCorpusProvider({
       totemDir: inputs.totemDir,
-      judgedBy: lock.authored.judgedBy,
+      // NO judgedBy — it is the §8 single source in the authoring-ledger, derived inside
+      // buildAuthoredCertifyingCorpus (strategy (iii)); the lock must not be a second source.
       expectedSplitRef: lock.authored.expectedSplitRef,
       split,
       prDiffs,

@@ -15,6 +15,7 @@ import type {
   WindtunnelLock,
 } from '@mmnto/totem';
 
+import { runRuleAuthor } from '../authored-rule-intake.js';
 import {
   buildAuthoredCertifyingCorpus,
   type BuildAuthoredCertifyingCorpusDeps,
@@ -111,6 +112,11 @@ function writeAuthoredYaml(
   const dir = path.join(totemDir, 'spine');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'authored-rules.yaml'), stringify(fileDoc), 'utf-8');
+  // Author-first (strategy (iii)): seed the authoring-ledger via runRuleAuthor, mirroring the
+  // production order (`totem rule author` runs BEFORE a cert run). buildAuthoredCertifyingCorpus
+  // now sources judgedBy from the pre-existing ledger (no lock/deps judgedBy), so the ledger
+  // must exist before the build. JUDGED_BY is the §3 check id the ledger records per-rule.
+  runRuleAuthor(totemDir, { judgedBy: JUDGED_BY });
 }
 
 /**
@@ -181,7 +187,6 @@ function baseDeps(
 ): BuildAuthoredCertifyingCorpusDeps {
   return {
     totemDir,
-    judgedBy: JUDGED_BY,
     expectedSplitRef: SPLIT_REF,
     split: SPLIT,
     prDiffs: [],
@@ -342,7 +347,7 @@ describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async si
   });
 
   it('an authored lock missing prDiffsSha / groundTruthSha fails loud (same hard preconditions as mined)', async () => {
-    const authored = { judgedBy: JUDGED_BY, expectedSplitRef: SPLIT_REF };
+    const authored = { expectedSplitRef: SPLIT_REF };
     await expect(
       resolveCertifyingCorpusProvider(
         lock({
@@ -366,7 +371,7 @@ describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async si
     const { prDiffsSha, groundTruthSha } = writeSubstrate(gate1Dir);
     const authoredLock = lock({
       producerKind: 'authored',
-      authored: { judgedBy: JUDGED_BY, expectedSplitRef: SPLIT_REF },
+      authored: { expectedSplitRef: SPLIT_REF },
       controls: { integrity: { prDiffsSha, groundTruthSha } },
     });
     const provider = await resolveCertifyingCorpusProvider(
@@ -387,7 +392,7 @@ describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async si
     const { groundTruthSha } = writeSubstrate(gate1Dir);
     const authoredLock = lock({
       producerKind: 'authored',
-      authored: { judgedBy: JUDGED_BY, expectedSplitRef: SPLIT_REF },
+      authored: { expectedSplitRef: SPLIT_REF },
       controls: { integrity: { prDiffsSha: 'f'.repeat(64), groundTruthSha } },
     });
     await expect(resolveCertifyingCorpusProvider(authoredLock, inputs())).rejects.toThrow(

@@ -102,9 +102,9 @@ describe('WindtunnelLockSchema acceptance', () => {
 // ─── ADR-112 §8 Slice D2 — the authored run-input block ──────────────────────
 
 describe('WindtunnelLockSchema — authored run-input block (D2)', () => {
-  const authored = { judgedBy: 'static-whitelist@cert-1', expectedSplitRef: 'split-cert-1' };
+  const authored = { expectedSplitRef: 'split-cert-1' };
 
-  it('accepts producerKind:authored with a complete authored block', () => {
+  it('accepts producerKind:authored with an expectedSplitRef-only authored block', () => {
     const result = WindtunnelLockSchema.safeParse(
       validLock({ phase: 'certifying', producerKind: 'authored', authored }),
     );
@@ -124,20 +124,24 @@ describe('WindtunnelLockSchema — authored run-input block (D2)', () => {
     ).toBe(false);
   });
 
-  it('rejects an authored block missing judgedBy / expectedSplitRef (or blank)', () => {
+  it('rejects an authored block missing expectedSplitRef (or blank)', () => {
     expect(
-      WindtunnelLockSchema.safeParse(
-        validLock({ producerKind: 'authored', authored: { expectedSplitRef: 'split-cert-1' } }),
-      ).success,
+      WindtunnelLockSchema.safeParse(validLock({ producerKind: 'authored', authored: {} })).success,
     ).toBe(false);
     expect(
       WindtunnelLockSchema.safeParse(
-        validLock({ producerKind: 'authored', authored: { judgedBy: 'x' } }),
+        validLock({ producerKind: 'authored', authored: { expectedSplitRef: '' } }),
       ).success,
     ).toBe(false);
+  });
+
+  it('rejects a stray judgedBy on the block (.strict — the lock must NOT be a second source for §8 judgedBy)', () => {
     expect(
       WindtunnelLockSchema.safeParse(
-        validLock({ producerKind: 'authored', authored: { judgedBy: '', expectedSplitRef: '' } }),
+        validLock({
+          producerKind: 'authored',
+          authored: { expectedSplitRef: 'split-cert-1', judgedBy: 'static-whitelist@cert-1' },
+        }),
       ).success,
     ).toBe(false);
   });
