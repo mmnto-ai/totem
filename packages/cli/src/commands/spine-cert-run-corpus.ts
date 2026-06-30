@@ -18,6 +18,10 @@ import type {
 /** Local alias for the core git exec port (mirrors spine-windtunnel.ts / spine-cert-materialize.ts). */
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;
 
+import {
+  buildAuthoredCertifyingCorpus,
+  type BuildAuthoredCertifyingCorpusDeps,
+} from './spine-authored-cert-corpus.js';
 import { buildCertifyingCorpus } from './spine-cert-corpus.js';
 import { buildReplayAdapters } from './spine-cert-record.js';
 import { type ReplayArtifact, ReplayArtifactSchema } from './spine-llm-replay.js';
@@ -384,4 +388,53 @@ export function buildReplayCorpusProvider(
 
     return corpus;
   };
+}
+
+/**
+ * ADR-112 §6/§9 Slice D1 — the AUTHORED `CertifyingCorpusProvider`, the sibling of
+ * `buildReplayCorpusProvider`. A thin adapter over `buildAuthoredCertifyingCorpus`
+ * (authored records → compile → §6 controls). It ignores the `lock` in D1: the
+ * authored corpus is PRODUCER-driven, and the producer-independent scoring substrate
+ * (split / prDiffs / groundTruth) is supplied explicitly via `deps`. Sourcing that
+ * substrate from the gate-1 fixtures with a lock-driven AUTHORED loader is D2 — the
+ * mined `loadCertRunFixtures` bundles the mining `llm-replay` artifact, which is
+ * absent on an authored run. INERT: no production lock selects this provider yet.
+ */
+export function buildAuthoredCorpusProvider(
+  deps: BuildAuthoredCertifyingCorpusDeps,
+): CertifyingCorpusProvider {
+  return async (_lock: WindtunnelLock): Promise<CertifyingCorpus> =>
+    buildAuthoredCertifyingCorpus(deps);
+}
+
+/**
+ * ADR-112 §8 Slice D1 — the SINGLE dispatch home: resolve the right
+ * `CertifyingCorpusProvider` from the lock's `producerKind` (absent ⇒ 'mined', the
+ * canonical default mirroring `provenanceKind`). The generic provider is passed
+ * downstream; NO `if (kind==='authored')` is scattered into the engine/persist path.
+ *
+ * The mined branch is BYTE-UNCHANGED (returns `buildReplayCorpusProvider`). The
+ * authored branch needs inputs the lock does NOT yet declare (`judgedBy` /
+ * `splitRef` + an authored fixture-substrate loader) — that runCommand→authored
+ * input wiring is ADR-112 Slice D2. Until then the resolver fails LOUD when a lock
+ * declares `producerKind: 'authored'` but no authored deps are supplied (rather than
+ * inventing a large new lock field now). Pass `authored` deps directly to exercise
+ * the dispatch (tests / D2).
+ */
+export function resolveCertifyingCorpusProvider(
+  lock: WindtunnelLock,
+  opts: { replay: ReplayCorpusProviderOptions; authored?: BuildAuthoredCertifyingCorpusDeps },
+): CertifyingCorpusProvider {
+  const producerKind = lock.producerKind ?? 'mined';
+  if (producerKind === 'authored') {
+    if (!opts.authored) {
+      throw new Error(
+        "[Totem Error] resolveCertifyingCorpusProvider: lock declares producerKind 'authored' but no " +
+          'authored corpus deps were supplied — the authored cert-run input wiring (judgedBy + splitRef + ' +
+          'fixture-substrate sourcing) lands in ADR-112 Slice D2.',
+      );
+    }
+    return buildAuthoredCorpusProvider(opts.authored);
+  }
+  return buildReplayCorpusProvider(opts.replay);
 }

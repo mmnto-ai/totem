@@ -7,10 +7,10 @@ import type { PrMeta, SelectionRuleConfig, WindtunnelLock } from '@mmnto/totem';
 import { persistCertifyingOutcome } from './spine-cert-persist.js';
 import {
   buildGate1Stage4Deps,
-  buildReplayCorpusProvider,
   GROUND_TRUTH_FILE,
   PR_DIFFS_FILE,
   REPLAY_FILE,
+  resolveCertifyingCorpusProvider,
 } from './spine-cert-run-corpus.js';
 
 // ─── Named constants ─────────────────────────────────
@@ -349,6 +349,17 @@ export interface CertifyingCorpus {
    * fabricated.
    */
   provenanceByRule: Map<string, import('@mmnto/totem').ProvenanceRecord>;
+  /**
+   * ADR-112 §6/§9 Slice D1 — the authored §6 emission controls (positive /
+   * negative / nonEmissions). Present IFF this corpus is authored-provenance
+   * (single-provenance §7): `buildAuthoredCertifyingCorpus` derives it from the
+   * sidecar provenance; the mined `buildCertifyingCorpus` never sets it, so a mined
+   * corpus has `authoredControls === undefined` (the miner path is byte-unchanged).
+   * Defined-with-EMPTY-arrays for an authored corpus that emitted no fixtures, never
+   * undefined-for-authored. INERT in D1: assembled here, scored by nobody (D3/D4
+   * consume it — the engine reads only rules/prDiffs/groundTruth/provenanceByRule).
+   */
+  authoredControls?: import('@mmnto/totem').AuthoredControls;
 }
 
 /** Internal shape the run command's scorer + persist step consume (engine-agnostic). */
@@ -487,10 +498,12 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     const asOf = lock.corpus.selectionRule.asOfCommit;
     // Shared Stage-4 constructor (the deriver builds it the same way — no drift).
     const stage4 = buildGate1Stage4Deps(lcDir, asOf, safeExec);
-    corpusProvider = buildReplayCorpusProvider({
-      gate1Dir,
-      stage4,
-      now: runNowIso,
+    // Single dispatch home (D1): resolve mined-vs-authored off the lock's producerKind.
+    // Mined (absent ⇒ mined) returns the replay provider — byte-unchanged. The authored
+    // input wiring (judgedBy/splitRef + an authored fixture-substrate loader) is D2, so
+    // only the replay deps are supplied here; an authored lock fails loud in the resolver.
+    corpusProvider = resolveCertifyingCorpusProvider(lock, {
+      replay: { gate1Dir, stage4, now: runNowIso },
     });
   }
 
