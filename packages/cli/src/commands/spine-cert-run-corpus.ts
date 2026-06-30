@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import type {
+  AuthoredControlsDeps,
   GroundTruthLabel,
   MinerLedgers,
   ResolvedPrDiff,
@@ -87,10 +88,121 @@ export interface CertRunFixtureInputs {
 }
 
 /**
- * Load + validate the committed cert-run fixture inputs from the gate-1 dir.
- * Async so the `@mmnto/totem` runtime values (schema + error class) are
- * dynamically imported per the CLI lazy-import convention, not pulled in at
- * module load.
+ * The producer-independent **scoring substrate** read by BOTH the mined and authored
+ * cert-run loaders: the frozen split + pr-diffs + ground-truth answer key, each carrying
+ * the verify-then-parse-on-a-SINGLE-read integrity discipline (#2225/#709 fold-2). The
+ * gate-critical SHA checks live here ONCE so the mined and authored paths cannot drift
+ * (gemini Tenet-9 ruling 2026-06-30: this is a singular, cohesive job — shared, not a
+ * forced merge of disjoint jobs; duplicating the SHA/CRLF integrity invites the drift
+ * that is a worse failure mode than a shared helper). Mining-only fixtures (`llm-replay`,
+ * `review-content`) are NOT read here — they belong to `loadCertRunFixtures` alone.
+ */
+export interface ScoringSubstrate {
+  split: import('@mmnto/totem').SplitArtifact;
+  prDiffs: ResolvedPrDiff[];
+  groundTruth: Map<string, GroundTruthLabel>;
+}
+
+export async function readAndVerifyScoringSubstrate(
+  gate1Dir: string,
+  opts?: {
+    expectedPrDiffsSha?: string;
+    expectedGroundTruthSha?: string;
+    skipGroundTruth?: boolean;
+  },
+): Promise<ScoringSubstrate> {
+  const { SplitArtifactSchema, TotemError } = await import('@mmnto/totem');
+
+  const readRaw = (file: string): string => {
+    try {
+      return fs.readFileSync(file, 'utf-8');
+    } catch (err) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Cert-run fixture missing: ${file}`,
+        'Ensure the gate-1 fixture set exists and is readable.',
+        err,
+      );
+    }
+  };
+  const parseJson = (raw: string, file: string): unknown => {
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Cert-run fixture is not valid JSON (${file})`,
+        'Re-freeze the gate-1 fixtures with `spine windtunnel record`.',
+        err,
+      );
+    }
+  };
+  const loadJson = (file: string): unknown => parseJson(readRaw(file), file);
+
+  const split = SplitArtifactSchema.parse(loadJson(path.join(gate1Dir, SPLIT_FILE)));
+
+  // #2225 (#709 fold-2): verify-then-parse the SCORING source on a SINGLE read — the
+  // digest must cover the exact bytes that get parsed + scored, not a separate read
+  // (CR: no check/use split). CRLF→LF normalized to match the producer's LF-stamped
+  // digest. The absent-from-lock case is the caller's precondition (it omits the sha).
+  const prDiffsFile = path.join(gate1Dir, PR_DIFFS_FILE);
+  const prDiffsRaw = readRaw(prDiffsFile);
+  if (opts?.expectedPrDiffsSha !== undefined) {
+    const actual = createHash('sha256')
+      .update(prDiffsRaw.replace(/\r\n/g, '\n'), 'utf-8')
+      .digest('hex');
+    if (actual !== opts.expectedPrDiffsSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Certifying run: pr-diffs.json integrity FAILED — expected ${opts.expectedPrDiffsSha}, got ` +
+          `${actual} (the frozen scoring corpus was tampered or re-serialized).`,
+        'Restore the frozen pr-diffs.json or re-materialize the cert corpus.',
+      );
+    }
+  }
+  const prDiffs = z.array(ResolvedPrDiffSchema).parse(parseJson(prDiffsRaw, prDiffsFile));
+
+  // 5d-iii circularity guard: the label-deriver reuses this substrate to enumerate
+  // firings byte-identically to the run, but it PRODUCES ground-truth-labels.json
+  // — so it must NOT read it (the file may not yet exist on a first derive, and
+  // reading it would make the deriver depend on its own output). `skipGroundTruth`
+  // returns an empty map; the run omits the flag and loads the frozen answer key.
+  if (opts?.skipGroundTruth) {
+    return { split, prDiffs, groundTruth: new Map<string, GroundTruthLabel>() };
+  }
+
+  // #709 5d-iii-ii: verify-then-parse the ANSWER KEY on a SINGLE read — the run grades
+  // firings against the frozen ground-truth-labels.json, so the digest must cover the
+  // exact bytes parsed + scored, not a separate read (mirror prDiffsSha — no check/use
+  // split). CRLF→LF normalized to match the deriver's LF-stamped digest. The absent-from-
+  // lock case is the caller's precondition (it omits the sha). The deriver never reaches
+  // here — `skipGroundTruth` returns above, because it PRODUCES this file (circularity).
+  const groundTruthFile = path.join(gate1Dir, GROUND_TRUTH_FILE);
+  const groundTruthRaw = readRaw(groundTruthFile);
+  if (opts?.expectedGroundTruthSha !== undefined) {
+    const actual = createHash('sha256')
+      .update(groundTruthRaw.replace(/\r\n/g, '\n'), 'utf-8')
+      .digest('hex');
+    if (actual !== opts.expectedGroundTruthSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Certifying run: ground-truth-labels.json integrity FAILED — expected ${opts.expectedGroundTruthSha}, got ` +
+          `${actual} (the frozen answer key was tampered or re-serialized).`,
+        'Re-derive the answer key with `spine windtunnel derive-labels` or re-materialize the cert corpus.',
+      );
+    }
+  }
+  const gtRecord = GroundTruthSchema.parse(parseJson(groundTruthRaw, groundTruthFile));
+  const groundTruth = new Map<string, GroundTruthLabel>(Object.entries(gtRecord));
+  return { split, prDiffs, groundTruth };
+}
+
+/**
+ * Load + validate the committed MINED cert-run fixture inputs from the gate-1 dir: the
+ * shared scoring substrate (`readAndVerifyScoringSubstrate`) PLUS the mining-only
+ * `llm-replay` artifact + raw `review-content`. Async so the `@mmnto/totem` runtime
+ * values (schema + error class) are dynamically imported per the CLI lazy-import
+ * convention, not pulled in at module load.
  */
 export async function loadCertRunFixtures(
   gate1Dir: string,
@@ -100,8 +212,7 @@ export async function loadCertRunFixtures(
     skipGroundTruth?: boolean;
   },
 ): Promise<CertRunFixtureInputs> {
-  const { SplitArtifactSchema, TotemError, classifyAuthorKind, normalizeReviewChrome } =
-    await import('@mmnto/totem');
+  const { TotemError, classifyAuthorKind, normalizeReviewChrome } = await import('@mmnto/totem');
   const { enrichComment } = await import('./spine-review-thread-source.js');
   const enrich = { classifyAuthorKind, normalizeReviewChrome };
 
@@ -131,7 +242,6 @@ export async function loadCertRunFixtures(
   };
   const loadJson = (file: string): unknown => parseJson(readRaw(file), file);
 
-  const split = SplitArtifactSchema.parse(loadJson(path.join(gate1Dir, SPLIT_FILE)));
   const artifact = ReplayArtifactSchema.parse(loadJson(path.join(gate1Dir, REPLAY_FILE)));
   // The committed content.json stores RAW comments (author + body + flags). ENRICH
   // each comment with `authorKind` + `normalizedBody` (slice β) via the SAME
@@ -151,60 +261,28 @@ export async function loadCertRunFixtures(
     })),
   }));
 
-  // #2225 (#709 fold-2): verify-then-parse the SCORING source on a SINGLE read — the
-  // digest must cover the exact bytes that get parsed + scored, not a separate read
-  // (CR: no check/use split). CRLF→LF normalized to match the producer's LF-stamped
-  // digest. The absent-from-lock case is the caller's precondition (it omits the sha).
-  const prDiffsFile = path.join(gate1Dir, PR_DIFFS_FILE);
-  const prDiffsRaw = readRaw(prDiffsFile);
-  if (opts?.expectedPrDiffsSha !== undefined) {
-    const actual = createHash('sha256')
-      .update(prDiffsRaw.replace(/\r\n/g, '\n'), 'utf-8')
-      .digest('hex');
-    if (actual !== opts.expectedPrDiffsSha) {
-      throw new TotemError(
-        'CONFIG_INVALID',
-        `Certifying run: pr-diffs.json integrity FAILED — expected ${opts.expectedPrDiffsSha}, got ` +
-          `${actual} (the frozen scoring corpus was tampered or re-serialized).`,
-        'Restore the frozen pr-diffs.json or re-materialize the cert corpus.',
-      );
-    }
-  }
-  const prDiffs = z.array(ResolvedPrDiffSchema).parse(parseJson(prDiffsRaw, prDiffsFile));
-
-  // 5d-iii circularity guard: the label-deriver reuses this loader to enumerate
-  // firings byte-identically to the run, but it PRODUCES ground-truth-labels.json
-  // — so it must NOT read it (the file may not yet exist on a first derive, and
-  // reading it would make the deriver depend on its own output). `skipGroundTruth`
-  // returns an empty map; the run omits the flag and loads the frozen answer key.
-  if (opts?.skipGroundTruth) {
-    return { split, artifact, content, prDiffs, groundTruth: new Map<string, GroundTruthLabel>() };
-  }
-
-  // #709 5d-iii-ii: verify-then-parse the ANSWER KEY on a SINGLE read — the run grades
-  // firings against the frozen ground-truth-labels.json, so the digest must cover the
-  // exact bytes parsed + scored, not a separate read (mirror prDiffsSha — no check/use
-  // split). CRLF→LF normalized to match the deriver's LF-stamped digest. The absent-from-
-  // lock case is the caller's precondition (it omits the sha). The deriver never reaches
-  // here — `skipGroundTruth` returns above, because it PRODUCES this file (circularity).
-  const groundTruthFile = path.join(gate1Dir, GROUND_TRUTH_FILE);
-  const groundTruthRaw = readRaw(groundTruthFile);
-  if (opts?.expectedGroundTruthSha !== undefined) {
-    const actual = createHash('sha256')
-      .update(groundTruthRaw.replace(/\r\n/g, '\n'), 'utf-8')
-      .digest('hex');
-    if (actual !== opts.expectedGroundTruthSha) {
-      throw new TotemError(
-        'CONFIG_INVALID',
-        `Certifying run: ground-truth-labels.json integrity FAILED — expected ${opts.expectedGroundTruthSha}, got ` +
-          `${actual} (the frozen answer key was tampered or re-serialized).`,
-        'Re-derive the answer key with `spine windtunnel derive-labels` or re-materialize the cert corpus.',
-      );
-    }
-  }
-  const gtRecord = GroundTruthSchema.parse(parseJson(groundTruthRaw, groundTruthFile));
-  const groundTruth = new Map<string, GroundTruthLabel>(Object.entries(gtRecord));
+  // The shared scoring substrate carries the gate-critical integrity checks (single-homed).
+  const { split, prDiffs, groundTruth } = await readAndVerifyScoringSubstrate(gate1Dir, opts);
   return { split, artifact, content, prDiffs, groundTruth };
+}
+
+/**
+ * ADR-112 §5/§6 Slice D2 — load the AUTHORED cert-run scoring substrate from the gate-1
+ * dir: the SIBLING of `loadCertRunFixtures` minus the mining-only `llm-replay` +
+ * `review-content` legs (an authored run has neither). Delegates to the shared
+ * `readAndVerifyScoringSubstrate` so the split/pr-diffs/ground-truth integrity discipline
+ * is byte-identical to the mined path (gemini Tenet-9 ruling: shared helper, not a
+ * duplicated SHA check). The authored producer supplies the rules; this supplies the
+ * producer-independent scoring substrate (split for the §5 leakage gate, prDiffs as the
+ * scoring corpus, groundTruth as the frozen answer key). The same hard preconditions as
+ * mined apply at the caller (prDiffsSha/groundTruthSha MUST be present on a certifying
+ * run); `skipGroundTruth` is intentionally NOT exposed — D2's run wiring never derives.
+ */
+export async function loadAuthoredCertRunFixtures(
+  gate1Dir: string,
+  opts?: { expectedPrDiffsSha?: string; expectedGroundTruthSha?: string },
+): Promise<ScoringSubstrate> {
+  return readAndVerifyScoringSubstrate(gate1Dir, opts);
 }
 
 /**
@@ -393,12 +471,11 @@ export function buildReplayCorpusProvider(
 /**
  * ADR-112 §6/§9 Slice D1 — the AUTHORED `CertifyingCorpusProvider`, the sibling of
  * `buildReplayCorpusProvider`. A thin adapter over `buildAuthoredCertifyingCorpus`
- * (authored records → compile → §6 controls). It ignores the `lock` in D1: the
- * authored corpus is PRODUCER-driven, and the producer-independent scoring substrate
- * (split / prDiffs / groundTruth) is supplied explicitly via `deps`. Sourcing that
- * substrate from the gate-1 fixtures with a lock-driven AUTHORED loader is D2 — the
- * mined `loadCertRunFixtures` bundles the mining `llm-replay` artifact, which is
- * absent on an authored run. INERT: no production lock selects this provider yet.
+ * (authored records → compile → §6 controls). It ignores the `lock`: the authored
+ * corpus is PRODUCER-driven, and the producer-independent scoring substrate
+ * (split / prDiffs / groundTruth) is supplied explicitly via `deps`. The lock-driven
+ * sourcing of that substrate (D2) lives in `resolveCertifyingCorpusProvider`, which
+ * builds these `deps` from `loadAuthoredCertRunFixtures` + the lock's `authored` block.
  */
 export function buildAuthoredCorpusProvider(
   deps: BuildAuthoredCertifyingCorpusDeps,
@@ -407,34 +484,126 @@ export function buildAuthoredCorpusProvider(
     buildAuthoredCertifyingCorpus(deps);
 }
 
+/** The raw run-context the SINGLE dispatch home consumes to assemble EITHER provider —
+ *  kind-agnostic, so the caller never branches on `producerKind` (gemini §8 single-home
+ *  ruling 2026-06-30: a caller `if (producerKind)` would leak the dispatch out of the
+ *  resolver). The resolver alone reads `lock.producerKind` and uses the inputs each
+ *  branch needs (mined: gate1Dir/stage4/now/ledger sink; authored: + totemDir + the
+ *  lock's `authored` block + the authored substrate it loads). */
+export interface ResolveCorpusProviderInputs {
+  /** The `.totem/spine/gate-1` dir holding the committed cert-run fixtures (mined replay OR authored substrate). */
+  gate1Dir: string;
+  /** Stage-4 verifier deps (listFiles/readFile) — shared by both producers. */
+  stage4: Stage4VerifierDeps;
+  /** Injected run timestamp (Tenet 15 determinism). */
+  now: string;
+  /** The `.totem` dir holding the authored producer's `spine/authored-rules.yaml` + ledger (authored path only). */
+  totemDir: string;
+  /** fold-I seed-blindness attestation (mined replay path; §7). */
+  seedClassesProvided?: boolean;
+  /** Optional sink for the fold-I miner ledgers (mined replay path; defaults to gate1Dir/miner-ledgers.json). */
+  onLedgers?: (ledgers: MinerLedgers) => void;
+  /** Optional §4 differential-evaluator injection for the authored controls (authored path; defaults to the real one). */
+  authoredControlsDeps?: AuthoredControlsDeps;
+}
+
 /**
- * ADR-112 §8 Slice D1 — the SINGLE dispatch home: resolve the right
+ * ADR-112 §8 Slice D1/D2 — the SINGLE dispatch home: resolve the right
  * `CertifyingCorpusProvider` from the lock's `producerKind` (absent ⇒ 'mined', the
  * canonical default mirroring `provenanceKind`). The generic provider is passed
- * downstream; NO `if (kind==='authored')` is scattered into the engine/persist path.
+ * downstream; NO `if (kind==='authored')` is scattered into the caller, engine, or
+ * persist path — the caller passes raw `inputs` unconditionally and this is the ONE
+ * place that reads the kind (gemini §8 single-home ruling).
  *
- * The mined branch is BYTE-UNCHANGED (returns `buildReplayCorpusProvider`). The
- * authored branch needs inputs the lock does NOT yet declare (`judgedBy` /
- * `splitRef` + an authored fixture-substrate loader) — that runCommand→authored
- * input wiring is ADR-112 Slice D2. Until then the resolver fails LOUD when a lock
- * declares `producerKind: 'authored'` but no authored deps are supplied (rather than
- * inventing a large new lock field now). Pass `authored` deps directly to exercise
- * the dispatch (tests / D2).
+ * - **Mined** (absent ⇒ mined): byte-unchanged behavior — returns `buildReplayCorpusProvider`.
+ * - **Authored** (D2): require the lock's `authored` run-input block (codex require-when-
+ *   authored ruling — the schema only enforces the *reject-unless* direction), apply the
+ *   SAME hard integrity preconditions as mined (`prDiffsSha` + `groundTruthSha` MUST be
+ *   present on a certifying run — a tampered/stale scoring source or answer key must fail
+ *   loud), load the authored scoring substrate via `loadAuthoredCertRunFixtures`, and
+ *   assemble `BuildAuthoredCertifyingCorpusDeps` (lock-sourced `expectedSplitRef`; `judgedBy`
+ *   is the §8 single source derived from the ledger INSIDE the assembler, never the lock —
+ *   strategy (iii)) + the loaded split/prDiffs/groundTruth + totemDir/stage4/now). Async because the
+ *   authored substrate load is IO — the dispatch stays single-homed by owning that load
+ *   here rather than pushing a kind-branch up to the caller.
+ *
+ * NOTE (D2.5, ADR-112 §6): under `producerKind:'authored'` the answer key
+ * (`ground-truth-labels.json`) MUST be derived WINDOW-WIDE (train + held-out), not
+ * held-out-only. Authored positive controls are train-side, so a held-out-only answer
+ * key leaves their firings unlabeled → `needsAdjudication` → a run that can never PASS
+ * (permanent HONEST-NEGATIVE; totem-agy's D2 mechanical proof). D2 wires the input path
+ * (test-lock-only — no production authored lock exists yet) and tracks the window-wide
+ * deriver as a follow-on; a production authored run is NOT ready until D2.5 lands.
  */
-export function resolveCertifyingCorpusProvider(
+export async function resolveCertifyingCorpusProvider(
   lock: WindtunnelLock,
-  opts: { replay: ReplayCorpusProviderOptions; authored?: BuildAuthoredCertifyingCorpusDeps },
-): CertifyingCorpusProvider {
+  inputs: ResolveCorpusProviderInputs,
+): Promise<CertifyingCorpusProvider> {
   const producerKind = lock.producerKind ?? 'mined';
   if (producerKind === 'authored') {
-    if (!opts.authored) {
-      throw new Error(
-        "[Totem Error] resolveCertifyingCorpusProvider: lock declares producerKind 'authored' but no " +
-          'authored corpus deps were supplied — the authored cert-run input wiring (judgedBy + splitRef + ' +
-          'fixture-substrate sourcing) lands in ADR-112 Slice D2.',
+    const { TotemError } = await import('@mmnto/totem');
+
+    // require-when-authored (codex): the lock's `authored` run-input block is mandatory at
+    // cert resolve. The schema enforces only the reject-unless direction (a stray block on a
+    // mined lock) — a producerKind:'authored' lock can predate its inputs, so the *require*
+    // is phase-aware and lives here, with a caller-specific message (the resolver has the lock).
+    if (!lock.authored) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        "Certifying run: lock declares producerKind 'authored' but has no `authored` run-input block " +
+          '(expectedSplitRef) — the authored cert-run split binding is unbound (ADR-112 §8/D2).',
+        'Add the `authored: { expectedSplitRef }` block to the lock, or run a mined lock.',
       );
     }
-    return buildAuthoredCorpusProvider(opts.authored);
+
+    // Same hard integrity preconditions as the mined path (assembleCertifyingCorpus): the
+    // scoring source + answer key MUST be hash-bound on a certifying run, else a tampered/
+    // stale fixture would grade silently. The authored path has NO `llmReplaySha` (no mining
+    // replay artifact) — only prDiffsSha + groundTruthSha apply.
+    const { prDiffsSha, groundTruthSha } = lock.controls.integrity;
+    if (!prDiffsSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        'Certifying run (authored): lock is missing controls.integrity.prDiffsSha — the pr-diffs.json ' +
+          'scoring source cannot be integrity-checked.',
+        'Re-materialize the cert corpus with `spine windtunnel materialize`.',
+      );
+    }
+    if (!groundTruthSha) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        'Certifying run (authored): lock is missing controls.integrity.groundTruthSha — the ' +
+          'ground-truth-labels.json answer key cannot be integrity-checked.',
+        'Re-derive the answer key with `spine windtunnel derive-labels` (it stamps groundTruthSha) and re-freeze.',
+      );
+    }
+
+    const { split, prDiffs, groundTruth } = await loadAuthoredCertRunFixtures(inputs.gate1Dir, {
+      expectedPrDiffsSha: prDiffsSha,
+      expectedGroundTruthSha: groundTruthSha,
+    });
+
+    return buildAuthoredCorpusProvider({
+      totemDir: inputs.totemDir,
+      // NO judgedBy — it is the §8 single source in the authoring-ledger, derived inside
+      // buildAuthoredCertifyingCorpus (strategy (iii)); the lock must not be a second source.
+      expectedSplitRef: lock.authored.expectedSplitRef,
+      split,
+      prDiffs,
+      groundTruth,
+      stage4: inputs.stage4,
+      now: inputs.now,
+      ...(inputs.authoredControlsDeps ? { authoredControlsDeps: inputs.authoredControlsDeps } : {}),
+    });
   }
-  return buildReplayCorpusProvider(opts.replay);
+
+  return buildReplayCorpusProvider({
+    gate1Dir: inputs.gate1Dir,
+    stage4: inputs.stage4,
+    now: inputs.now,
+    ...(inputs.seedClassesProvided !== undefined
+      ? { seedClassesProvided: inputs.seedClassesProvided }
+      : {}),
+    ...(inputs.onLedgers ? { onLedgers: inputs.onLedgers } : {}),
+  });
 }

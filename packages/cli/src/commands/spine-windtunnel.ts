@@ -498,12 +498,17 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     const asOf = lock.corpus.selectionRule.asOfCommit;
     // Shared Stage-4 constructor (the deriver builds it the same way — no drift).
     const stage4 = buildGate1Stage4Deps(lcDir, asOf, safeExec);
-    // Single dispatch home (D1): resolve mined-vs-authored off the lock's producerKind.
-    // Mined (absent ⇒ mined) returns the replay provider — byte-unchanged. The authored
-    // input wiring (judgedBy/splitRef + an authored fixture-substrate loader) is D2, so
-    // only the replay deps are supplied here; an authored lock fails loud in the resolver.
-    corpusProvider = resolveCertifyingCorpusProvider(lock, {
-      replay: { gate1Dir, stage4, now: runNowIso },
+    // Single dispatch home (D1/D2): resolve mined-vs-authored off the lock's producerKind.
+    // The caller passes raw run-context UNCONDITIONALLY (no `if (producerKind)` branch here —
+    // that would leak the dispatch, gemini §8 single-home ruling); the resolver alone reads
+    // the kind. Mined (absent ⇒ mined) is byte-unchanged. Authored (D2) loads its scoring
+    // substrate + reads the lock's `authored` block inside the (now async) resolver. totemDir
+    // is the authored producer's `.totem` (authored path only; ignored on the mined path).
+    corpusProvider = await resolveCertifyingCorpusProvider(lock, {
+      gate1Dir,
+      stage4,
+      now: runNowIso,
+      totemDir: path.join(repoRoot, '.totem'),
     });
   }
 

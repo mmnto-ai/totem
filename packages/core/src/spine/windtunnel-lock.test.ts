@@ -99,6 +99,59 @@ describe('WindtunnelLockSchema acceptance', () => {
   });
 });
 
+// ─── ADR-112 §8 Slice D2 — the authored run-input block ──────────────────────
+
+describe('WindtunnelLockSchema — authored run-input block (D2)', () => {
+  const authored = { expectedSplitRef: 'split-cert-1' };
+
+  it('accepts producerKind:authored with an expectedSplitRef-only authored block', () => {
+    const result = WindtunnelLockSchema.safeParse(
+      validLock({ phase: 'certifying', producerKind: 'authored', authored }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('a mined lock omitting producerKind + authored parses byte-unchanged (additive-optional, no default)', () => {
+    const parsed = WindtunnelLockSchema.parse(validLock());
+    expect('producerKind' in parsed).toBe(false);
+    expect('authored' in parsed).toBe(false);
+  });
+
+  it('rejects an authored block on a non-authored (mined or absent) lock — reject-unless-authored', () => {
+    expect(WindtunnelLockSchema.safeParse(validLock({ authored })).success).toBe(false);
+    expect(
+      WindtunnelLockSchema.safeParse(validLock({ producerKind: 'mined', authored })).success,
+    ).toBe(false);
+  });
+
+  it('rejects an authored block missing expectedSplitRef (or blank)', () => {
+    expect(
+      WindtunnelLockSchema.safeParse(validLock({ producerKind: 'authored', authored: {} })).success,
+    ).toBe(false);
+    expect(
+      WindtunnelLockSchema.safeParse(
+        validLock({ producerKind: 'authored', authored: { expectedSplitRef: '' } }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('rejects a stray judgedBy on the block (.strict — the lock must NOT be a second source for §8 judgedBy)', () => {
+    expect(
+      WindtunnelLockSchema.safeParse(
+        validLock({
+          producerKind: 'authored',
+          authored: { expectedSplitRef: 'split-cert-1', judgedBy: 'static-whitelist@cert-1' },
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('a producerKind:authored lock WITHOUT an authored block is schema-valid (require-when-authored is enforced at RESOLVE, not parse)', () => {
+    const result = WindtunnelLockSchema.safeParse(validLock({ producerKind: 'authored' }));
+    expect(result.success).toBe(true);
+  });
+});
+
 // ─── Schema rejection invariants ─────────────────────
 
 describe('WindtunnelLockSchema rejection', () => {

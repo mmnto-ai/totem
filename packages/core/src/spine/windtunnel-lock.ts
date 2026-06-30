@@ -44,6 +44,27 @@ export const WindtunnelLockSchema = z
     // BYTE-UNCHANGED. INERT in D1: no production authored lock exists yet, and the authored
     // cert-run INPUT wiring (judgedBy / splitRef / fixture-substrate sourcing) lands in D2.
     producerKind: z.enum(['mined', 'authored']).optional(),
+    // ADR-112 §5/§8 Slice D2 — the authored cert-run INPUT binding. Present ONLY on an
+    // authored lock (producerKind:'authored'); the superRefine below rejects a stray
+    // `authored` block on a mined lock. Additive-optional, no `.default()` → every mined
+    // lock parses/serializes BYTE-UNCHANGED. The resolver REQUIRES this block when an
+    // authored cert run resolves (the require-when-authored direction is phase-aware, so it
+    // lives at cert-run resolution, not the schema — a producerKind:'authored' lock may
+    // exist before its run inputs are wired). ONE run knob:
+    //   • expectedSplitRef — the §5 split this cert run binds to; every authored record's
+    //     authoring split must equal it or the run is voided before compile (leakage guard).
+    //     A lock-level binding because SplitArtifactSchema carries no canonical split id yet.
+    // There is deliberately NO `judgedBy` here: the §3 eligibility-check id is the §8 single
+    // source recorded PER-RULE in the authoring-ledger, derived from it at run time — a
+    // run-level lock judgedBy would be a second source for a fact §8 owns = the Tenet-20
+    // mirror (strategy couple-on-D ruling 2026-06-30 (iii), #787). `.strict()` so a stray
+    // `judgedBy` (or any other key) on the block FAILS LOUD rather than being silently dropped.
+    authored: z
+      .object({
+        expectedSplitRef: z.string().min(1, 'authored.expectedSplitRef must name the frozen split'),
+      })
+      .strict()
+      .optional(),
     corpus: z.object({
       repo: z.string(),
       selectionRule: z.object({
@@ -176,6 +197,20 @@ export const WindtunnelLockSchema = z
     }),
   })
   .superRefine((data, ctx) => {
+    // ADR-112 §8 Slice D2: the `authored` run-input block is authored-only. A mined lock
+    // carrying it is a config-coherence error (it would be silently ignored on the mined
+    // path). The REQUIRE-when-authored direction is enforced at cert-run resolution
+    // (phase-aware), not here — a producerKind:'authored' lock can predate its run inputs.
+    if (data.authored !== undefined && data.producerKind !== 'authored') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "lock.authored is set but producerKind is not 'authored' — the authored run-input " +
+          'block is only valid on an authored lock (ADR-112 §8).',
+        path: ['authored'],
+      });
+    }
+
     const prs = data.corpus.resolvedPrs;
     const prNums = prs.map((p) => p.pr);
 

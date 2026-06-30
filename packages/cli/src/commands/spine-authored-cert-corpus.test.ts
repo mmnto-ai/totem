@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -14,14 +15,12 @@ import type {
   WindtunnelLock,
 } from '@mmnto/totem';
 
+import { runRuleAuthor } from '../authored-rule-intake.js';
 import {
   buildAuthoredCertifyingCorpus,
   type BuildAuthoredCertifyingCorpusDeps,
 } from './spine-authored-cert-corpus.js';
-import {
-  type ReplayCorpusProviderOptions,
-  resolveCertifyingCorpusProvider,
-} from './spine-cert-run-corpus.js';
+import { resolveCertifyingCorpusProvider } from './spine-cert-run-corpus.js';
 
 // ─── Fixtures (mirror the slice-2/3/4 + authored-controls tests) ──────────────
 
@@ -113,6 +112,37 @@ function writeAuthoredYaml(
   const dir = path.join(totemDir, 'spine');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'authored-rules.yaml'), stringify(fileDoc), 'utf-8');
+  // Author-first (strategy (iii)): seed the authoring-ledger via runRuleAuthor, mirroring the
+  // production order (`totem rule author` runs BEFORE a cert run). buildAuthoredCertifyingCorpus
+  // now sources judgedBy from the pre-existing ledger (no lock/deps judgedBy), so the ledger
+  // must exist before the build. JUDGED_BY is the §3 check id the ledger records per-rule.
+  runRuleAuthor(totemDir, { judgedBy: JUDGED_BY });
+}
+
+/**
+ * Write the AUTHORED scoring substrate (split + pr-diffs + ground-truth) into a gate-1
+ * dir and return the integrity shas the lock must carry — the LF-normalized sha256 the
+ * loader (`readAndVerifyScoringSubstrate`) re-derives on its single read. The split is
+ * NOT hash-gated (no integrity sha in the loader); pr-diffs + ground-truth are.
+ */
+function writeSubstrate(
+  gate1Dir: string,
+  opts: {
+    split?: SplitArtifact;
+    prDiffs?: unknown[];
+    groundTruth?: Record<string, 'TP' | 'FP'>;
+  } = {},
+): { prDiffsSha: string; groundTruthSha: string } {
+  fs.mkdirSync(gate1Dir, { recursive: true });
+  const splitJson = JSON.stringify(opts.split ?? SPLIT);
+  const prDiffsJson = JSON.stringify(opts.prDiffs ?? []);
+  const gtJson = JSON.stringify(opts.groundTruth ?? {});
+  fs.writeFileSync(path.join(gate1Dir, 'split.json'), splitJson, 'utf-8');
+  fs.writeFileSync(path.join(gate1Dir, 'pr-diffs.json'), prDiffsJson, 'utf-8');
+  fs.writeFileSync(path.join(gate1Dir, 'ground-truth-labels.json'), gtJson, 'utf-8');
+  const sha = (s: string): string =>
+    createHash('sha256').update(s.replace(/\r\n/g, '\n'), 'utf-8').digest('hex');
+  return { prDiffsSha: sha(prDiffsJson), groundTruthSha: sha(gtJson) };
 }
 
 /** Fake Stage-4 deps — `forbiddenCall()` present in a non-test file ⇒ active (scored). */
@@ -157,7 +187,6 @@ function baseDeps(
 ): BuildAuthoredCertifyingCorpusDeps {
   return {
     totemDir,
-    judgedBy: JUDGED_BY,
     expectedSplitRef: SPLIT_REF,
     split: SPLIT,
     prDiffs: [],
@@ -276,40 +305,98 @@ describe('buildAuthoredCertifyingCorpus — authoredControls channel', () => {
   });
 });
 
-// ─── 4. Single-home dispatch (provider resolution off lock.producerKind) ──────
+// ─── 4. Single-home dispatch (provider resolution off lock.producerKind) — D2 ──
 
-describe('resolveCertifyingCorpusProvider — producerKind dispatch', () => {
-  const lockWith = (producerKind?: 'mined' | 'authored'): WindtunnelLock =>
-    ({ producerKind }) as unknown as WindtunnelLock;
-  const replayOpts: ReplayCorpusProviderOptions = {
-    gate1Dir: 'unused',
+describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async single-home)', () => {
+  let gate1Dir: string;
+  beforeEach(() => {
+    gate1Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-d2-gate1-'));
+  });
+  afterEach(() => {
+    fs.rmSync(gate1Dir, { recursive: true, force: true });
+  });
+
+  /** Kind-agnostic raw run-context the caller passes unconditionally (no producerKind branch). */
+  const inputs = (
+    extra: Partial<{ authoredControlsDeps: AuthoredControlsDeps }> = {},
+  ): Parameters<typeof resolveCertifyingCorpusProvider>[1] => ({
+    gate1Dir,
     stage4: stage4(),
     now: NOW,
-  };
-
-  it('a mined lock (explicit or absent) resolves WITHOUT authored deps', () => {
-    expect(() =>
-      resolveCertifyingCorpusProvider(lockWith('mined'), { replay: replayOpts }),
-    ).not.toThrow();
-    expect(() =>
-      resolveCertifyingCorpusProvider(lockWith(undefined), { replay: replayOpts }),
-    ).not.toThrow();
+    totemDir,
+    ...extra,
   });
 
-  it('an authored lock without authored deps fails loud (the D2 boundary)', () => {
-    expect(() =>
-      resolveCertifyingCorpusProvider(lockWith('authored'), { replay: replayOpts }),
-    ).toThrow(/Slice D2/);
+  /** A minimal lock cast — the resolver only reads producerKind / authored / integrity shas. */
+  const lock = (overrides: Record<string, unknown>): WindtunnelLock =>
+    ({ controls: { integrity: {} }, ...overrides }) as unknown as WindtunnelLock;
+
+  it('a mined lock (explicit or absent) resolves to a provider with no authored block', async () => {
+    await expect(
+      resolveCertifyingCorpusProvider(lock({ producerKind: 'mined' }), inputs()),
+    ).resolves.toBeTypeOf('function');
+    await expect(resolveCertifyingCorpusProvider(lock({}), inputs())).resolves.toBeTypeOf(
+      'function',
+    );
   });
 
-  it('an authored lock + authored deps selects the authored provider (yields an authored corpus)', async () => {
+  it('an authored lock WITHOUT an `authored` block fails loud (require-when-authored)', async () => {
+    await expect(
+      resolveCertifyingCorpusProvider(lock({ producerKind: 'authored' }), inputs()),
+    ).rejects.toThrow(/run-input block/);
+  });
+
+  it('an authored lock missing prDiffsSha / groundTruthSha fails loud (same hard preconditions as mined)', async () => {
+    const authored = { expectedSplitRef: SPLIT_REF };
+    await expect(
+      resolveCertifyingCorpusProvider(
+        lock({
+          producerKind: 'authored',
+          authored,
+          controls: { integrity: { groundTruthSha: 'x' } },
+        }),
+        inputs(),
+      ),
+    ).rejects.toThrow(/prDiffsSha/);
+    await expect(
+      resolveCertifyingCorpusProvider(
+        lock({ producerKind: 'authored', authored, controls: { integrity: { prDiffsSha: 'x' } } }),
+        inputs(),
+      ),
+    ).rejects.toThrow(/groundTruthSha/);
+  });
+
+  it('an authored lock + substrate + authored YAML → authored provider yields an authored corpus (e2e input path)', async () => {
     writeAuthoredYaml(totemDir);
-    const provider = resolveCertifyingCorpusProvider(lockWith('authored'), {
-      replay: replayOpts,
-      authored: baseDeps(totemDir),
+    const { prDiffsSha, groundTruthSha } = writeSubstrate(gate1Dir);
+    const authoredLock = lock({
+      producerKind: 'authored',
+      authored: { expectedSplitRef: SPLIT_REF },
+      controls: { integrity: { prDiffsSha, groundTruthSha } },
     });
-    const corpus = await provider(lockWith('authored'));
+    const provider = await resolveCertifyingCorpusProvider(
+      authoredLock,
+      inputs({ authoredControlsDeps: diffDeps('differential-holds') }),
+    );
+    const corpus = await provider(authoredLock);
     expect(corpus.authoredControls).toBeDefined();
     expect(corpus.authoredControls!.positive).toHaveLength(1);
+    // The scoring substrate (prDiffs/groundTruth) came from the loaded fixtures, proving
+    // the lock-driven AUTHORED loader wired through (D2) — empty here, but loaded not faked.
+    expect(corpus.prDiffs).toEqual([]);
+    expect(corpus.groundTruth.size).toBe(0);
+  });
+
+  it('an authored lock whose substrate fails integrity (tampered pr-diffs) fails loud', async () => {
+    writeAuthoredYaml(totemDir);
+    const { groundTruthSha } = writeSubstrate(gate1Dir);
+    const authoredLock = lock({
+      producerKind: 'authored',
+      authored: { expectedSplitRef: SPLIT_REF },
+      controls: { integrity: { prDiffsSha: 'f'.repeat(64), groundTruthSha } },
+    });
+    await expect(resolveCertifyingCorpusProvider(authoredLock, inputs())).rejects.toThrow(
+      /pr-diffs\.json integrity FAILED/,
+    );
   });
 });

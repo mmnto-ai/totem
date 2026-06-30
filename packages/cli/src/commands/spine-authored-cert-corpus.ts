@@ -27,8 +27,10 @@ import type { CertifyingCorpus } from './spine-windtunnel.js';
 export interface BuildAuthoredCertifyingCorpusDeps {
   /** `.totem` dir holding `spine/authored-rules.yaml` + the authoring-ledger. */
   totemDir: string;
-  /** The INDEPENDENT structural-eligibility check id (ADR-112 §3) — never a rule author. */
-  judgedBy: string;
+  // NOTE: there is NO `judgedBy` here — the §3 eligibility-check id is the §8 single source
+  // recorded in the authoring-ledger (per-rule), and is DERIVED from it at run time, not
+  // supplied. A run-level judgedBy (e.g. on the lock) would be a second source for a fact
+  // §8 already owns = the Tenet-20 mirror (strategy couple-on-D ruling 2026-06-30 (iii), #787).
   /**
    * The splitRef THIS cert run is bound to (ADR-110 §6). Every authored record's
    * authoring split (file header → authoring-ledger entry) MUST equal this, or the
@@ -89,9 +91,43 @@ export async function buildAuthoredCertifyingCorpus(
   // no-op on the minted-hex ids, but it keeps the "all CLI error text sanitized" invariant).
   const safe = sanitizeForTerminal;
 
-  // 1. Produce the authored records (the producer establishes eligibility/identity/
-  //    ledger; NEVER construct AuthoredRuleRecord[] ad hoc or read YAML→record here).
-  const authorResult = runRuleAuthor(deps.totemDir, { judgedBy: deps.judgedBy });
+  // 0. Derive the §8 single-source `judgedBy` from the authoring-ledger (NOT the lock —
+  //    strategy couple-on-D ruling 2026-06-30 (iii): a run-level judgedBy on the lock is a
+  //    second source for a fact §8 already owns per-rule = the Tenet-20 mirror, #787). The
+  //    ledger MUST pre-exist — authoring (`totem rule author`) records each rule's §3 judgedBy
+  //    before a cert run reads it; a cert run is NOT the first author. For cert 1 the §3 check
+  //    is one static whitelist, so judgedBy is uniform across the set; a mixed-check ledger is
+  //    ambiguous ("which is THE run's check?") → fail loud (single-check cert; multi-check is
+  //    an ADR-112 Deferred Decision). This is the source the step-1 re-run + the step-3 per-
+  //    record assert-equal both bind to (never a freshly-substituted value — strategy's drift guard).
+  const priorLedger = readAuthoringLedger(deps.totemDir);
+  if (priorLedger.length === 0) {
+    throw new TotemError(
+      'GATE_INVALID',
+      'Authored cert corpus: the authoring-ledger is empty — there are no authored rules to certify.',
+      'Run `totem rule author` to author + record rules (with their §3 judgedBy) before the cert run.',
+    );
+  }
+  const priorEffective = new Map<string, (typeof priorLedger)[number]>();
+  for (const entry of priorLedger) priorEffective.set(entry.ruleId, entry);
+  const judgedBys = new Set(
+    [...priorEffective.values()].map((e) => e.structuralEligibility.judgedBy),
+  );
+  if (judgedBys.size !== 1) {
+    throw new TotemError(
+      'GATE_INVALID',
+      `Authored cert corpus: the authoring-ledger records ${judgedBys.size} distinct judgedBy values ` +
+        `(${safe([...judgedBys].join(', '))}) — a single cert run binds ONE §3 eligibility check.`,
+      'Certify a single-check authored set (multi-check corpora are out of scope for cert 1, ADR-112 Deferred Decisions).',
+    );
+  }
+  const judgedBy = [...judgedBys][0]!;
+
+  // 1. Produce the authored records under the LEDGER-SOURCED judgedBy (idempotent re-derive —
+  //    the ledger already records this verdict, so an equal contentHash ⇒ no new row). The
+  //    producer establishes eligibility/identity/ledger; NEVER construct AuthoredRuleRecord[]
+  //    ad hoc or read YAML→record here.
+  const authorResult = runRuleAuthor(deps.totemDir, { judgedBy });
 
   // 2. rejected.length === 0 precondition: a partially-invalid authored file is broken
   //    cert input — never certify the eligible subset (fail loud, not a partial corpus).
@@ -145,6 +181,20 @@ export async function buildAuthoredCertifyingCorpus(
           `this cert run is bound to split '${safe(deps.expectedSplitRef)}' — the rules were authored under a ` +
           'different split (ADR-112 §5 leakage guard).',
         'Re-author against the current frozen split, or run the cert against the split the rules were authored under.',
+      );
+    }
+    // judgedBy assert-equal (strategy ruling 2026-06-30 (iii)): `judgedBy` was DERIVED from the
+    // ledger's §8 record (step 0), and the step-1 re-run carried it — so this asserts the
+    // post-re-run effective row STILL carries that single §8 value, never a silently-substituted
+    // one. It backstops the §8 single-source invariant: a divergent verdict reaching the cert
+    // corpus (e.g. a re-run that appended a row under a different check) fails loud, Tenet 4.
+    if (entry.structuralEligibility.judgedBy !== judgedBy) {
+      throw new TotemError(
+        'GATE_INVALID',
+        `Authored cert corpus: rule '${safe(record.ruleId)}' carries judgedBy ` +
+          `'${safe(entry.structuralEligibility.judgedBy)}', but this cert run binds the ledger-sourced ` +
+          `judgedBy '${safe(judgedBy)}' — the §8 eligibility verdict diverged (ADR-112 §3/§8).`,
+        'Re-author the set under one §3 eligibility check; a cert run binds a single judgedBy.',
       );
     }
   }
