@@ -123,11 +123,15 @@ export async function buildAuthoredCertifyingCorpus(
   }
   const judgedBy = [...judgedBys][0]!;
 
-  // 1. Produce the authored records under the LEDGER-SOURCED judgedBy (idempotent re-derive —
-  //    the ledger already records this verdict, so an equal contentHash ⇒ no new row). The
-  //    producer establishes eligibility/identity/ledger; NEVER construct AuthoredRuleRecord[]
-  //    ad hoc or read YAML→record here.
-  const authorResult = runRuleAuthor(deps.totemDir, { judgedBy });
+  // 1. Re-derive the authored records under the LEDGER-SOURCED judgedBy in verifyOnly mode
+  //    (ADR-112 §8 no-mint precondition — strategy ruling 2026-06-30, Q4 cert-path-only). The
+  //    re-derive is read-only against the authoring-ledger: it asserts every current rule already
+  //    has an `unchanged` recorded entry and fails loud (zero writes) if any would be minted/revised
+  //    — a cert run is NOT the first author. This is the gate the empty-ledger step-0 above does not
+  //    cover (non-empty-but-stale): step-0 empty → no-mint stale → step-3 verdict/binding (Q3 layered).
+  //    The producer establishes eligibility/identity; NEVER construct AuthoredRuleRecord[] ad hoc or
+  //    read YAML→record here.
+  const authorResult = runRuleAuthor(deps.totemDir, { judgedBy, verifyOnly: true });
 
   // 2. rejected.length === 0 precondition: a partially-invalid authored file is broken
   //    cert input — never certify the eligible subset (fail loud, not a partial corpus).

@@ -119,7 +119,10 @@ interface PendingRule {
  * the authoring-ledger. `judgedBy` names the independent check (NEVER the author)
  * recorded on every eligibility verdict. Pure + deterministic except the ledger IO.
  */
-export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): RuleAuthorResult {
+export function runRuleAuthor(
+  totemDir: string,
+  opts: { judgedBy: string; verifyOnly?: boolean },
+): RuleAuthorResult {
   // Normalize at the PRODUCER boundary (CR re-review): the command trims `--judged-by`, but this
   // function is exported + callable directly, so an untrimmed `' Alice '` must not bypass the
   // §3 independence guard against `author: 'Alice'`. Trim once, use everywhere downstream; a blank
@@ -308,7 +311,35 @@ export function runRuleAuthor(totemDir: string, opts: { judgedBy: string }): Rul
     pending.push({ record, entry, write: action !== 'unchanged', action });
   }
 
-  // ── Pass 2 (IO): append ledger rows fail-loud (pass 1 already proved every record valid) ──
+  // ── verifyOnly (ADR-112 §8 no-mint precondition — strategy ruling 2026-06-30, Q1–Q4) ──
+  // A cert-run re-derive (`buildAuthoredCertifyingCorpus`, always verifyOnly) is side-effect-free
+  // against the authoring-ledger and asserts every current rule already has an `unchanged` recorded
+  // entry: any `minted`/`revised` action fails loud BEFORE a single append (a cert run is NOT the
+  // first author — Q2: revise is forbidden identically to mint; only `unchanged` passes). This is
+  // the read-side sibling of D2's §8 source-flip (line 167): the cert-run re-read writes nothing.
+  // Tenet-13 sensor-not-actuator ⊕ Tenet-4 fail-loud-no-drift. Gate placement = the writer itself
+  // (Q1: single source of the mint/revise decision; a separate pre-check would be a second source,
+  // the Tenet-20 mirror strategy#787 closed). Composes with — never replaces — the producer's step-0
+  // empty-ledger and step-3 judgedBy/split gates (Q3). The authoring path leaves verifyOnly unset
+  // and still mints/revises below (Q4: cert-path-only).
+  if (opts.verifyOnly) {
+    const wouldAuthor = pending.filter((p) => p.write);
+    if (wouldAuthor.length > 0) {
+      const summary = wouldAuthor.map((p) => `${p.record.ruleId} (${p.action})`).join(', ');
+      throw new TotemError(
+        'GATE_INVALID',
+        `Authored cert corpus: ${wouldAuthor.length} authored rule(s) would be authored ` +
+          `(minted/revised) during cert-run assembly — ${summary}. A cert run consumes only ` +
+          `already-recorded, unchanged ledger entries; it is NOT the first author (ADR-112 §8).`,
+        'Run `totem rule author` to record/revise the rule(s) into the ledger BEFORE the cert run, ' +
+          'then re-run the cert. The ledger entry must pre-exist and match the current authored YAML.',
+      );
+    }
+  }
+
+  // ── Pass 2 (IO): append ledger rows fail-loud (pass 1 already proved every record valid).
+  //    Under verifyOnly the gate above already threw on any `p.write`, so every append here is a
+  //    no-op (all `unchanged`) — the cert path writes zero rows. ──
   let minted = 0;
   let revised = 0;
   let unchanged = 0;
