@@ -5,6 +5,7 @@ import {
   type AuthoredNegativeFixture,
   type AuthoredProvenanceRecord,
   type CompiledRule,
+  type ProvenanceRecord,
 } from '../compiler-schema.js';
 import {
   type AuthoredControlsDeps,
@@ -89,6 +90,37 @@ function authoredRule(
     compiledAt: '2026-06-01T00:00:00Z',
     legitimacy: { provenance, positiveControl: true, negativeControl: true },
   };
+}
+
+/**
+ * Build the SIDECAR `provenanceByRule` map the reshaped builder reads (D1 fold #1):
+ * `lessonHash → provenance`. `authoredRule` still stamps `legitimacy.provenance` (a
+ * convenient carrier for the test's intent), but the FUNCTION reads only this map —
+ * never `rule.legitimacy` — so routing the same provenance through the map keeps the
+ * tests faithful to the real assembly seam (compiled rules carry no legitimacy there).
+ */
+function provBy(rules: CompiledRule[]): Map<string, ProvenanceRecord> {
+  return new Map(rules.map((r) => [r.lessonHash, r.legitimacy!.provenance]));
+}
+
+/**
+ * Test driver: invoke the reshaped builder with the SIDECAR provenance map (D1 fold #1)
+ * derived from each rule's stamped provenance. The builder reads ONLY the map; this keeps
+ * every existing case faithful to the assembly seam (where compiled rules carry no
+ * legitimacy) without threading the map by hand. Cases that need a DIVERGENT map (missing /
+ * mined provenance) call `deriveAuthoredControls` directly instead.
+ */
+function derive(args: {
+  rules: CompiledRule[];
+  split: SplitArtifact;
+  deps?: AuthoredControlsDeps;
+}): ReturnType<typeof deriveAuthoredControls> {
+  return deriveAuthoredControls({
+    rules: args.rules,
+    split: args.split,
+    provenanceByRule: provBy(args.rules),
+    ...(args.deps ? { deps: args.deps } : {}),
+  });
 }
 
 /** A minimal valid SplitArtifact — only `trainPrs` is read by the builder. */
@@ -178,7 +210,7 @@ describe('deriveAuthoredControls — per-outcome matrix', () => {
       'ch-unsup': makeResult('unsupported-source', 'commit-pair source deferred to a later slice'),
     });
 
-    const result = await deriveAuthoredControls({
+    const result = await derive({
       rules: [rule],
       split: splitWithTrain([1, 2, 3, 4, 5, 6]),
       deps,
@@ -246,7 +278,7 @@ describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
       'ch-B': makeResult('fix-shaped'),
     });
 
-    const result = await deriveAuthoredControls({
+    const result = await derive({
       rules: [rule],
       split: splitWithTrain([7]),
       deps,
@@ -271,7 +303,7 @@ describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
       posFixture(7, 'ch-same', 'src/a.ts'),
       posFixture(7, 'ch-same', 'src/b.ts'),
     ]);
-    const result = await deriveAuthoredControls({
+    const result = await derive({
       rules: [rule],
       split: splitWithTrain([7]),
       deps: scriptedDeps({ 'ch-same': makeResult('differential-holds') }),
@@ -291,7 +323,7 @@ describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
       posFixture(7, 'ch-y', 'src/a.ts'),
     ]);
     await expect(
-      deriveAuthoredControls({
+      derive({
         rules: [rule],
         split: splitWithTrain([7]),
         deps: scriptedDeps({
@@ -309,7 +341,7 @@ describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
       [negFixture('src/a.ts', 'L1-L2'), negFixture('src/a.ts', 'L1-L2')],
     );
     await expect(
-      deriveAuthoredControls({
+      derive({
         rules: [rule],
         split: splitWithTrain([1]),
         deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
@@ -328,7 +360,7 @@ describe('deriveAuthoredControls — two-loci-one-PR disambiguation', () => {
       [posFixture(1, 'ch-1')],
       [negFixture('a.ts', 'L1\0L2'), negFixture('a.ts\0L1', 'L2')],
     );
-    const result = await deriveAuthoredControls({
+    const result = await derive({
       rules: [rule],
       split: splitWithTrain([1]),
       deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
@@ -351,12 +383,12 @@ describe('deriveAuthoredControls — determinism', () => {
     );
     const split = splitWithTrain([1, 2, 3, 4]);
 
-    const runA = await deriveAuthoredControls({
+    const runA = await derive({
       rules: [rule],
       split,
       deps: slowFirstDeps(contentHashes.length),
     });
-    const runB = await deriveAuthoredControls({
+    const runB = await derive({
       rules: [rule],
       split,
       deps: slowFirstDeps(contentHashes.length),
@@ -376,7 +408,7 @@ describe('deriveAuthoredControls — boundary vs resolveSplit', () => {
     vi.mocked(resolveSplit).mockClear();
     const rule = authoredRule('rule-bnd', [posFixture(1, 'ch-1')]);
 
-    await deriveAuthoredControls({
+    await derive({
       rules: [rule],
       split: splitWithTrain([1]),
       deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
@@ -412,7 +444,7 @@ describe('deriveAuthoredControls — fail-loud guards', () => {
   it('throws when a positive fixture pr is held-out (∉ trainPrs) — an ADR-112 §5 leakage violation', async () => {
     const rule = authoredRule('rule-leak', [posFixture(99, 'ch-leak')]);
     await expect(
-      deriveAuthoredControls({
+      derive({
         rules: [rule],
         split: splitWithTrain([1, 2], [99]), // 99 is held-out, not train
         deps: scriptedDeps({ 'ch-leak': makeResult('differential-holds') }),
@@ -429,7 +461,7 @@ describe('deriveAuthoredControls — fail-loud guards', () => {
     });
     const rule = authoredRule('rule-pol', [posFixture(1, 'ch-1')]);
     await expect(
-      deriveAuthoredControls({
+      derive({
         rules: [rule],
         split: splitWithTrain([1]),
         deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
@@ -446,7 +478,7 @@ describe('deriveAuthoredControls — fail-loud guards', () => {
     });
     const rule = authoredRule('rule-pol2', [posFixture(1, 'ch-1')]);
     await expect(
-      deriveAuthoredControls({
+      derive({
         rules: [rule],
         split: splitWithTrain([1]),
         deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
@@ -467,7 +499,7 @@ describe('deriveAuthoredControls — declarative negatives', () => {
 
     // A throwing evaluator proves the §4 differential/smoke-gate is NOT invoked for
     // negatives — a near-miss is emitted even though no evaluator runs on it.
-    const result = await deriveAuthoredControls({
+    const result = await derive({
       rules: [rule],
       split: splitWithTrain([1]),
       deps: throwingDeps,
@@ -487,7 +519,7 @@ describe('deriveAuthoredControls — declarative negatives', () => {
       [posFixture(1, 'ch-1')],
       [negFixture('src/n.ts', 'L1')],
     );
-    const result = await deriveAuthoredControls({
+    const result = await derive({
       rules: [rule],
       split: splitWithTrain([1]),
       deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
@@ -517,12 +549,61 @@ describe('positiveControlGate — present + frozen (§4 / strategy#777 Q3(ii))',
 
   it('deriveAuthoredControls reads the (real) authored policy and completes on valid input', async () => {
     const rule = authoredRule('rule-ok', [posFixture(1, 'ch-1')]);
-    const result = await deriveAuthoredControls({
+    const result = await derive({
       rules: [rule],
       split: splitWithTrain([1]),
       deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
     });
     expect(result.positive).toHaveLength(1);
+  });
+});
+
+// ─── 8. Sidecar provenance (D1 fold #1): the builder reads ONLY provenanceByRule ──
+
+describe('deriveAuthoredControls — sidecar provenance (D1 fold #1)', () => {
+  it('throws when a rule has no provenance in provenanceByRule (sidecar miss)', async () => {
+    const rule = authoredRule('rule-sidecar-miss', [posFixture(1, 'ch-1')]);
+    await expect(
+      deriveAuthoredControls({
+        rules: [rule],
+        split: splitWithTrain([1]),
+        provenanceByRule: new Map(), // empty: the rule's lessonHash is absent
+        deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
+      }),
+    ).rejects.toThrow(/no provenance in provenanceByRule/);
+  });
+
+  it('throws when the sidecar provenance is MINED, never reading rule.legitimacy', async () => {
+    const rule = authoredRule('rule-sidecar-mined', [posFixture(1, 'ch-1')]);
+    // The sidecar entry is MINED even though the rule's (now-ignored) legitimacy is
+    // authored — proving the function reads the MAP, not rule.legitimacy.
+    const minedProv: ProvenanceRecord = { mergedPr: 1, reviewThread: 'pr#1', commitSha: sha(1) };
+    await expect(
+      deriveAuthoredControls({
+        rules: [rule],
+        split: splitWithTrain([1]),
+        provenanceByRule: new Map([[rule.lessonHash, minedProv]]),
+        deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
+      }),
+    ).rejects.toThrow(/is not authored/);
+  });
+
+  it('emits from a rule with NO legitimacy — the REAL assembly-seam shape (provenance only from the map)', async () => {
+    // The cert-assembly seam passes compiled rules that carry no `legitimacy` (stamped
+    // post-scoring); provenance rides the `c.provenance` sidecar. Drop legitimacy here so
+    // the happy path runs against that exact shape — proving the builder needs only the map.
+    // `ruleNoLegit` is typed `Omit<CompiledRule, 'legitimacy'>` — the field is gone at the
+    // type level (and at runtime), exactly the compiled-rule shape at the assembly seam.
+    const { legitimacy, ...ruleNoLegit } = authoredRule('rule-no-legit', [posFixture(1, 'ch-1')]);
+    const result = await deriveAuthoredControls({
+      rules: [ruleNoLegit],
+      split: splitWithTrain([1]),
+      provenanceByRule: new Map([[ruleNoLegit.lessonHash, legitimacy!.provenance]]),
+      deps: scriptedDeps({ 'ch-1': makeResult('differential-holds') }),
+    });
+    expect(result.positive).toEqual([
+      { pr: 1, targetRuleId: 'rule-no-legit', filePath: 'src/a.ts', matchedSpan: 'L1-L2' },
+    ]);
   });
 });
 

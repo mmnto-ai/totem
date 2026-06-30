@@ -14,9 +14,13 @@
 // back (Tenet-20) to the run vocabulary.
 //
 // Two strategy-ratified asymmetries (strategy#777) are load-bearing here:
-//   - POSITIVE controls are GATED on the §4 differential and carry the per-fixture
-//     `contentHash` — the two-loci-one-PR disambiguator that prevents a wrong-
-//     exemplar miscert when one PR contributes two fixtures (Q1 ruling (a)).
+//   - POSITIVE controls are GATED on the §4 differential and keyed on the fixture
+//     LOCUS (`filePath`, `matchedSpan`) — the two-loci-one-PR disambiguator that
+//     prevents a wrong-exemplar miscert when one PR contributes two fixtures (Q1
+//     ruling (a)). `contentHash` is span-content-only (NOT locus-unique: two distinct
+//     loci with byte-identical span content collide), so it is deliberately NOT
+//     carried on the emitted control — the locus is. The shipped positive emission is
+//     `{ pr, targetRuleId, filePath, matchedSpan }`, no `contentHash`.
 //   - NEGATIVE controls are DECLARATIVE — no differential, no silence gate, no
 //     train-side check: a synthetic near-miss carries no `pr` and no corpus
 //     position, so its (filePath, matchedSpan) locus is the disambiguator (Q2).
@@ -33,6 +37,7 @@ import {
   type CompiledRule,
   isAuthoredProvenance,
   provenanceKind,
+  type ProvenanceRecord,
 } from '../compiler-schema.js';
 import {
   evaluatePreimageDifferential,
@@ -221,18 +226,27 @@ interface PositiveTask {
 }
 
 /**
- * Read a rule's AUTHORED provenance, fail-loud if it is missing or mined. The id
- * the controls join on is the rule's `lessonHash` — for an authored rule that IS
- * its persisted, minted `ruleId` (the C2a `firingLabelId ← ruleId` unification),
- * NOT a content hash. We gate on `isAuthoredProvenance` so a mined rule (whose
- * `lessonHash` is a content hash) can never be read as a control target.
+ * Read a rule's AUTHORED provenance from the SIDECAR map, fail-loud if it is missing
+ * or mined. The id the controls join on is the rule's `lessonHash` — for an authored
+ * rule that IS its persisted, minted `ruleId` (the C2a `firingLabelId ← ruleId`
+ * unification), NOT a content hash. We gate on `isAuthoredProvenance` so a mined rule
+ * (whose `lessonHash` is a content hash) can never be read as a control target.
+ *
+ * D1 fold #1 (codex): the source of truth is `provenanceByRule`, NEVER `rule.legitimacy`.
+ * At the real assembly seam a compiled rule carries no `legitimacy` — it is stamped only
+ * POST-scoring (survivors-only). `legitimacy` also carries control booleans intentionally
+ * absent pre-verdict, so reading it here would be doubly wrong. Provenance lives in the
+ * `c.provenance` sidecar the seam folds into this map.
  */
-function readAuthoredProvenance(rule: CompiledRule): AuthoredProvenanceRecord {
-  const provenance = rule.legitimacy?.provenance;
+function readAuthoredProvenance(
+  rule: CompiledRule,
+  provenanceByRule: Map<string, ProvenanceRecord>,
+): AuthoredProvenanceRecord {
+  const provenance = provenanceByRule.get(rule.lessonHash);
   if (provenance === undefined) {
     throw new Error(
-      `[Totem Error] deriveAuthoredControls: rule '${rule.lessonHash}' has no legitimacy.provenance — ` +
-        `deriveAuthoredControls requires compiled AUTHORED rules (ADR-112 §3)`,
+      `[Totem Error] deriveAuthoredControls: rule '${rule.lessonHash}' has no provenance in ` +
+        `provenanceByRule — deriveAuthoredControls requires the sidecar provenance for every rule (ADR-112 §3)`,
     );
   }
   if (!isAuthoredProvenance(provenance)) {
@@ -251,6 +265,13 @@ function readAuthoredProvenance(rule: CompiledRule): AuthoredProvenanceRecord {
  * for a set of compiled AUTHORED rules, gating positives on the §4 preimage-
  * differential. Inert: emits nothing into a cert run.
  *
+ * Provenance contract (D1 fold #1): the caller MUST supply `provenanceByRule`
+ * (`lessonHash → provenance`); this function reads provenance ONLY from that sidecar
+ * map and NEVER from `rule.legitimacy` (absent at the cert-assembly seam — stamped
+ * post-scoring, survivors-only). Fail-loud (Tenet-4): a rule missing from the map, a
+ * non-authored (mined) provenance entry, a held-out positive fixture (§5 leakage), a
+ * producer/policy mismatch, or a duplicate locus key all THROW — never a silent skip.
+ *
  * Determinism (Tenet-15): the output arrays are byte-identical across re-runs for
  * identical inputs. Positives/non-emissions follow input order (rule order ×
  * declared `positiveFixtures` order); negatives follow rule order × declared
@@ -261,9 +282,16 @@ function readAuthoredProvenance(rule: CompiledRule): AuthoredProvenanceRecord {
 export async function deriveAuthoredControls(params: {
   rules: CompiledRule[];
   split: SplitArtifact;
+  /**
+   * SIDECAR provenance per rule (`lessonHash → provenance`) — the D1 fold-#1 reshape.
+   * The function reads ONLY this map for provenance; it never touches `rule.legitimacy`
+   * (absent at the assembly seam, stamped post-scoring). The assembler builds it from
+   * each `CompiledCandidate.provenance`.
+   */
+  provenanceByRule: Map<string, ProvenanceRecord>;
   deps?: AuthoredControlsDeps;
 }): Promise<AuthoredControls> {
-  const { rules, split } = params;
+  const { rules, split, provenanceByRule } = params;
   const evaluate = params.deps?.evaluate ?? evaluatePreimageDifferential;
 
   // §9 single-home: READ the authored policy (do NOT hard-code "train"), then
@@ -296,7 +324,7 @@ export async function deriveAuthoredControls(params: {
   const negativeKeys = new Set<string>();
 
   for (const rule of rules) {
-    const provenance = readAuthoredProvenance(rule);
+    const provenance = readAuthoredProvenance(rule, provenanceByRule);
     const targetRuleId = rule.lessonHash;
 
     // POSITIVE: build a positional task per declared fixture (input order). A

@@ -36,6 +36,14 @@ export const WindtunnelLockSchema = z
       })
       .optional(),
     phase: z.enum(['harness', 'certifying']),
+    // ADR-112 §7/§8 Slice D1 — the PRODUCER the cert corpus is assembled from. Absent ⇒
+    // 'mined' (the canonical absent-⇒-mined default mirroring `provenanceKind`). Read at
+    // provider RESOLUTION (the single dispatch home, spine-cert-run-corpus.ts) to select the
+    // mined replay provider vs the authored sibling — no `kind` branch is scattered downstream.
+    // Additive-optional, no `.default()`: every existing (mined) lock parses + serializes
+    // BYTE-UNCHANGED. INERT in D1: no production authored lock exists yet, and the authored
+    // cert-run INPUT wiring (judgedBy / splitRef / fixture-substrate sourcing) lands in D2.
+    producerKind: z.enum(['mined', 'authored']).optional(),
     corpus: z.object({
       repo: z.string(),
       selectionRule: z.object({

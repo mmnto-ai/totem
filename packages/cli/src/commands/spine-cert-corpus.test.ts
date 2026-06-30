@@ -127,6 +127,10 @@ describe('buildCertifyingCorpus', () => {
     // fold-I: held-out fetch count is 0 (FM-h) + seed-blindness surfaced.
     expect(ledgers.apiUsage.heldOutFetchCount).toBe(0);
     expect(ledgers.emission.extractionInputsAttestation.seedClassesProvided).toBe(false);
+
+    // ADR-112 §6 Slice D1: a MINED corpus carries NO authored controls channel — the
+    // miner path is byte-unchanged (the channel is present-iff authored-provenance).
+    expect(corpus.authoredControls).toBeUndefined();
   });
 
   it('binding-2: a Stage-4 out-of-scope (archived) rule is EXCLUDED from the scored set', async () => {
