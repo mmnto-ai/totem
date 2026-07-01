@@ -143,11 +143,20 @@ const cutoff = cutoffKey(args.days);
 
 let kept = 0;
 const pruned = [];
-const skipped = []; // not a regular .md dispatch, or no derivable age — never touched
+const skipped = []; // not a regular file, or no derivable age from filename — never touched
 const failed = []; // unlink errors — surfaced, never abort signoff
 
 if (existsSync(outbox)) {
-  for (const dirent of readdirSync(outbox, { withFileTypes: true })) {
+  // Fail-soft read (Tenet 4): a raced removal or EACCES between existsSync and
+  // the read must not throw uncaught — that would skip the whole report, the
+  // opposite of the per-item fail-soft the unlinkSync path guarantees below.
+  let dirents = [];
+  try {
+    dirents = readdirSync(outbox, { withFileTypes: true });
+  } catch (err) {
+    process.stderr.write(`prune: failed to read outbox ${outbox}: ${err.message}\n`);
+  }
+  for (const dirent of dirents) {
     const f = dirent.name;
     // Only ever delete regular files. A timestamp-named subdir or other non-file
     // entry must not reach unlinkSync — it would throw mid-loop and block signoff.
