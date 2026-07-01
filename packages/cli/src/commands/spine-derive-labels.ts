@@ -38,12 +38,31 @@ export interface DeriveLabelsOptions {
   outputDir?: string;
   /**
    * The `.totem` dir holding the authored producer's `spine/authored-rules.yaml` + ledger
-   * (authored producer only). Defaults to the convention `<gate1Dir>/../..` (gate-1 lives at
-   * `.totem/spine/gate-1`). Injected explicitly for tests + non-conventional layouts (D2.6).
+   * (authored producer only). Defaults to the lock-anchored `.totem` (see
+   * `resolveAuthoredTotemDir` — stable under `--output-dir`). Injected explicitly for tests +
+   * fully-decoupled layouts (D2.6).
    */
   totemDir?: string;
   /** Working dir (default `process.cwd()`; injected for tests). */
   cwd?: string;
+}
+
+/**
+ * The authored producer's `.totem` dir (holds `spine/authored-rules.yaml` + the authoring
+ * ledger). Anchored to the LOCK's location — the lock sits at
+ * `.totem/spine/gate-1/windtunnel.lock.json`, so `.totem` is three dirs up — NOT to `gate1Dir`,
+ * which `--output-dir` can repoint at a custom artifact sink (greptile: deriving it from a
+ * custom output dir would look for the authored rules under the wrong parent). Overridable via
+ * `opts.totemDir` for fully-decoupled layouts.
+ */
+export function resolveAuthoredTotemDir(
+  lockPath: string,
+  cwd: string,
+  totemDirOpt?: string,
+): string {
+  return totemDirOpt
+    ? path.resolve(cwd, totemDirOpt)
+    : path.dirname(path.dirname(path.dirname(lockPath)));
 }
 
 export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<void> {
@@ -166,11 +185,7 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
       ? await assembleAuthoredCertifyingCorpus(
           {
             gate1Dir,
-            // gate-1 lives at `.totem/spine/gate-1` → `.totem` is two dirs up (convention),
-            // overridable for tests / non-standard layouts.
-            totemDir: opts.totemDir
-              ? path.resolve(cwd, opts.totemDir)
-              : path.dirname(path.dirname(gate1Dir)),
+            totemDir: resolveAuthoredTotemDir(lockPath, cwd, opts.totemDir),
             stage4,
             now,
           },

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { type CompiledRule, deriveLabelsFromDispositions, type ResolvedPrDiff } from '@mmnto/totem';
 
-import { deriveLabelsCommand } from './spine-derive-labels.js';
+import { deriveLabelsCommand, resolveAuthoredTotemDir } from './spine-derive-labels.js';
 import { buildCertifyingFirings } from './spine-windtunnel.js';
 
 const SHA40 = (n: number): string => n.toString(16).padStart(40, '0');
@@ -175,5 +175,22 @@ describe('deriveLabelsCommand — integrity gates', () => {
         cwd: dir,
       }),
     ).rejects.toThrow(/integrity FAILED/i);
+  });
+});
+
+describe('resolveAuthoredTotemDir (D2.6 authoring-ledger anchor)', () => {
+  const cwd = path.resolve('/proj');
+
+  it('anchors to the lock’s `.totem`, independent of a custom output dir (greptile fix)', () => {
+    // gate1Dir may be repointed by --output-dir, but the authoring-ledger stays under the
+    // lock’s `.totem` — three dirs up from `.totem/spine/gate-1/windtunnel.lock.json`.
+    const lockPath = path.join(cwd, '.totem', 'spine', 'gate-1', 'windtunnel.lock.json');
+    expect(resolveAuthoredTotemDir(lockPath, cwd)).toBe(path.join(cwd, '.totem'));
+  });
+
+  it('honors an explicit totemDir override, resolved against cwd', () => {
+    expect(resolveAuthoredTotemDir(path.join('/anywhere', 'lock.json'), cwd, 'custom/.totem')).toBe(
+      path.resolve(cwd, 'custom/.totem'),
+    );
   });
 });
