@@ -20,7 +20,10 @@ import {
   buildAuthoredCertifyingCorpus,
   type BuildAuthoredCertifyingCorpusDeps,
 } from './spine-authored-cert-corpus.js';
-import { resolveCertifyingCorpusProvider } from './spine-cert-run-corpus.js';
+import {
+  assembleAuthoredCertifyingCorpus,
+  resolveCertifyingCorpusProvider,
+} from './spine-cert-run-corpus.js';
 
 // ─── Fixtures (mirror the slice-2/3/4 + authored-controls tests) ──────────────
 
@@ -397,6 +400,90 @@ describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async si
     });
     await expect(resolveCertifyingCorpusProvider(authoredLock, inputs())).rejects.toThrow(
       /pr-diffs\.json integrity FAILED/,
+    );
+  });
+});
+
+// ─── 5. Slice D2.6 — the window-wide answer-key DERIVER's authored assembler ───
+//
+// `assembleAuthoredCertifyingCorpus` is the derive-path sibling of `assembleCertifyingCorpus`:
+// `derive-labels` calls it directly (NOT `resolveCertifyingCorpusProvider` — the §8 RUN-path
+// single home is untouched). It ALWAYS skips ground-truth (the deriver PRODUCES the key) yet
+// still hash-binds the scoring source (`prDiffsSha`).
+
+describe('assembleAuthoredCertifyingCorpus (D2.6 derive-path sibling)', () => {
+  let gate1Dir: string;
+  beforeEach(() => {
+    gate1Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-d26-gate1-'));
+  });
+  afterEach(() => {
+    fs.rmSync(gate1Dir, { recursive: true, force: true });
+  });
+
+  const lock = (overrides: Record<string, unknown>): WindtunnelLock =>
+    ({ controls: { integrity: {} }, ...overrides }) as unknown as WindtunnelLock;
+
+  const opts = (
+    extra: Partial<{ authoredControlsDeps: AuthoredControlsDeps }> = {},
+  ): Parameters<typeof assembleAuthoredCertifyingCorpus>[0] => ({
+    gate1Dir,
+    totemDir,
+    stage4: stage4(),
+    now: NOW,
+    ...extra,
+  });
+
+  it('fails loud when the authored lock has no `authored` block (require-when-authored)', async () => {
+    await expect(
+      assembleAuthoredCertifyingCorpus(opts(), lock({ producerKind: 'authored' })),
+    ).rejects.toThrow(/run-input block/);
+  });
+
+  it('fails loud when the lock is missing prDiffsSha (scoring source un-gated)', async () => {
+    await expect(
+      assembleAuthoredCertifyingCorpus(
+        opts(),
+        lock({ producerKind: 'authored', authored: { expectedSplitRef: SPLIT_REF } }),
+      ),
+    ).rejects.toThrow(/prDiffsSha/);
+  });
+
+  it('derives WITHOUT groundTruthSha and never reads the answer key (circularity guard)', async () => {
+    writeAuthoredYaml(totemDir);
+    // A NON-EMPTY ground-truth file on disk + NO groundTruthSha on the lock: the deriver must
+    // still succeed (it PRODUCES this key) and must NOT read it — skip ⇒ empty groundTruth.
+    const { prDiffsSha } = writeSubstrate(gate1Dir, { groundTruth: { 'stale:id': 'TP' } });
+    const authoredLock = lock({
+      producerKind: 'authored',
+      authored: { expectedSplitRef: SPLIT_REF },
+      controls: { integrity: { prDiffsSha } },
+    });
+    const { corpus } = await assembleAuthoredCertifyingCorpus(
+      opts({ authoredControlsDeps: diffDeps('differential-holds') }),
+      authoredLock,
+    );
+    // The authored pipeline ran (rules + §6 controls assembled from the substrate)…
+    expect(corpus.authoredControls).toBeDefined();
+    expect(corpus.authoredControls!.positive).toHaveLength(1);
+    // …and ground-truth was SKIPPED — the on-disk 'stale:id' entry was never read.
+    expect(corpus.groundTruth.size).toBe(0);
+  });
+
+  it('still hash-binds the SCORING source — a tampered pr-diffs.json fails loud', async () => {
+    writeAuthoredYaml(totemDir);
+    const { prDiffsSha } = writeSubstrate(gate1Dir); // sha over the pristine bytes
+    fs.writeFileSync(
+      path.join(gate1Dir, 'pr-diffs.json'),
+      JSON.stringify([{ pr: 1, diff: 'tampered', controlKind: 'corpus' }]),
+      'utf-8',
+    );
+    const authoredLock = lock({
+      producerKind: 'authored',
+      authored: { expectedSplitRef: SPLIT_REF },
+      controls: { integrity: { prDiffsSha } },
+    });
+    await expect(assembleAuthoredCertifyingCorpus(opts(), authoredLock)).rejects.toThrow(
+      /pr-diffs\.json integrity/,
     );
   });
 });

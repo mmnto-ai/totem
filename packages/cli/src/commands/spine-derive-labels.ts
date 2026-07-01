@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
+  assembleAuthoredCertifyingCorpus,
   assembleCertifyingCorpus,
   buildGate1Stage4Deps,
   CORPUS_DISPOSITIONS_FILE,
@@ -35,8 +36,33 @@ export interface DeriveLabelsOptions {
   lcDir?: string;
   /** Gate-1 output dir (default: the lock's dir). */
   outputDir?: string;
+  /**
+   * The `.totem` dir holding the authored producer's `spine/authored-rules.yaml` + ledger
+   * (authored producer only). Defaults to the lock-anchored `.totem` (see
+   * `resolveAuthoredTotemDir` — stable under `--output-dir`). Injected explicitly for tests +
+   * fully-decoupled layouts (D2.6).
+   */
+  totemDir?: string;
   /** Working dir (default `process.cwd()`; injected for tests). */
   cwd?: string;
+}
+
+/**
+ * The authored producer's `.totem` dir (holds `spine/authored-rules.yaml` + the authoring
+ * ledger). Anchored to the LOCK's location — the lock sits at
+ * `.totem/spine/gate-1/windtunnel.lock.json`, so `.totem` is three dirs up — NOT to `gate1Dir`,
+ * which `--output-dir` can repoint at a custom artifact sink (greptile: deriving it from a
+ * custom output dir would look for the authored rules under the wrong parent). Overridable via
+ * `opts.totemDir` for fully-decoupled layouts.
+ */
+export function resolveAuthoredTotemDir(
+  lockPath: string,
+  cwd: string,
+  totemDirOpt?: string,
+): string {
+  return totemDirOpt
+    ? path.resolve(cwd, totemDirOpt)
+    : path.dirname(path.dirname(path.dirname(lockPath)));
 }
 
 export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<void> {
@@ -148,10 +174,24 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
   // — it does not enter rule compilation or the content-based labelId — so it cannot break
   // the byte-identical guarantee even if a future run set it. Thread it through both the
   // run and the deriver together if it ever becomes a real RunOption.
-  const { corpus } = await assembleCertifyingCorpus(
-    { gate1Dir, stage4, now, skipGroundTruth: true },
-    lock,
-  );
+  // ADR-112 §6 D2.6: an AUTHORED lock assembles the corpus from the authored substrate
+  // (window-wide, via the derive-path sibling); a MINED lock keeps the byte-unchanged replay
+  // assembly. Both skip ground-truth (the deriver PRODUCES it). The producerKind read lives
+  // here in the producer command — the RUN-path §8 single home (resolveCertifyingCorpusProvider)
+  // is untouched (gemini single-home ruling); the mined deriver already bypasses it likewise.
+  const producerKind = lock.producerKind ?? 'mined';
+  const { corpus } =
+    producerKind === 'authored'
+      ? await assembleAuthoredCertifyingCorpus(
+          {
+            gate1Dir,
+            totemDir: resolveAuthoredTotemDir(lockPath, cwd, opts.totemDir),
+            stage4,
+            now,
+          },
+          lock,
+        )
+      : await assembleCertifyingCorpus({ gate1Dir, stage4, now, skipGroundTruth: true }, lock);
   const built = await buildCertifyingFirings({
     rules: corpus.rules,
     prDiffs: corpus.prDiffs,
