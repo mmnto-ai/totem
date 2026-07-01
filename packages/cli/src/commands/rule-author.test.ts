@@ -293,3 +293,57 @@ describe('runRuleAuthor — codex/agy diff-review folds', () => {
     expect(ledger[1]?.structuralEligibility.judgedBy).toBe('check-b');
   });
 });
+
+describe('runRuleAuthor — verifyOnly no-mint precondition (ADR-112 §8, strategy ruling Q1–Q4)', () => {
+  const JUDGED_BY = 'static-whitelist@test';
+  const verify = () => runRuleAuthor(totemDir, { judgedBy: JUDGED_BY, verifyOnly: true });
+  const snapshot = () => JSON.stringify(readAuthoringLedger(totemDir));
+
+  it('a re-derive of an UNCHANGED ledger passes read-only: records returned, ZERO rows appended', () => {
+    writeYaml([decidableRule()]);
+    const id = run().records[0]?.ruleId; // author first (cert run is NOT the first author)
+    const before = snapshot();
+    const res = verify();
+    expect(res.unchanged).toBe(1);
+    expect(res.minted).toBe(0);
+    expect(res.revised).toBe(0);
+    expect(res.records[0]?.ruleId).toBe(id);
+    expect(snapshot()).toBe(before); // side-effect-free against the authoring-ledger (Tenet-13)
+  });
+
+  it('a would-MINT rule (no prior ledger entry) fails loud BEFORE any write; ledger stays empty (Q2 minted)', () => {
+    writeYaml([decidableRule()]);
+    expect(readAuthoringLedger(totemDir)).toHaveLength(0); // nothing authored yet
+    expect(verify).toThrow(/NOT the first author/i);
+    expect(verify).toThrow(/\(minted\)/); // the action is named explicitly
+    expect(readAuthoringLedger(totemDir)).toHaveLength(0); // zero writes on the throw (no drift, Tenet-4)
+  });
+
+  it('a would-REVISE rule (dslSource edit since authoring) fails loud identically to mint; ledger unmutated (Q2 revised)', () => {
+    writeYaml([decidableRule()]);
+    run(); // author the original
+    const before = snapshot();
+    writeYaml([decidableRule({ dslSource: 'console\\.error' })]); // YAML diverged from the recorded entry
+    expect(verify).toThrow(/\(revised\)/); // revise is forbidden identically to mint (Q2)
+    expect(snapshot()).toBe(before); // no revision row appended (read-only)
+  });
+
+  it('a mixed run (one unchanged + one new) fails loud on the new rule and writes NOTHING (no partial append)', () => {
+    writeYaml([decidableRule()]);
+    run(); // author rule #1
+    const before = snapshot();
+    writeYaml([
+      decidableRule(),
+      decidableRule({ targetDefect: 'another defect', dslSource: 'TODO' }),
+    ]);
+    expect(verify).toThrow(/NOT the first author/i);
+    expect(snapshot()).toBe(before); // the unchanged rule did not mask the new one; zero writes overall
+  });
+
+  it('verifyOnly defaults off — the authoring path (totem rule author) still mints (Q4: cert-path-only)', () => {
+    writeYaml([decidableRule()]);
+    const res = runRuleAuthor(totemDir, { judgedBy: JUDGED_BY }); // no verifyOnly → writer
+    expect(res.minted).toBe(1);
+    expect(readAuthoringLedger(totemDir)).toHaveLength(1);
+  });
+});
