@@ -144,17 +144,21 @@ const cutoff = cutoffKey(args.days);
 let kept = 0;
 const pruned = [];
 const skipped = []; // not a regular file, or no derivable age from filename — never touched
-const failed = []; // unlink errors — surfaced, never abort signoff
+const failed = []; // unlink + non-ENOENT readdir errors — surfaced, drive the honest exit-1
 
 if (existsSync(outbox)) {
-  // Fail-soft read (Tenet 4): a raced removal or EACCES between existsSync and
-  // the read must not throw uncaught — that would skip the whole report, the
-  // opposite of the per-item fail-soft the unlinkSync path guarantees below.
+  // Fail-soft read: a read failure must not throw uncaught — that would skip the
+  // whole report. But stay HONEST (Tenet 4): a raced removal (ENOENT — the outbox
+  // vanished between the existsSync check and the read) is benign (nothing to
+  // prune → exit 0); any other failure (EACCES / permission drift) is pushed to
+  // `failed` so the honest exit surfaces it with code 1 — symmetric with the
+  // unlinkSync path below. Either way the report still emits (GCA, mmnto-ai/totem-strategy#794).
   let dirents = [];
   try {
     dirents = readdirSync(outbox, { withFileTypes: true });
   } catch (err) {
-    process.stderr.write(`prune: failed to read outbox ${outbox}: ${err.message}\n`);
+    process.stderr.write(`prune: failed to read outbox ${outbox}: ${err?.message ?? err}\n`);
+    if (err?.code !== 'ENOENT') failed.push(`readdir:${err?.code || 'UNKNOWN'}`);
   }
   for (const dirent of dirents) {
     const f = dirent.name;
