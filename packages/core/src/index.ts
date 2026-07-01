@@ -1050,6 +1050,13 @@ export type {
   WindtunnelVerdictKind,
 } from './spine/windtunnel-scorer.js';
 export { scoreWindtunnel } from './spine/windtunnel-scorer.js';
+export type {
+  AuthoredControlGate,
+  AuthoredControlGateEffect,
+  AuthoredScorerInput,
+  AuthoredWindtunnelVerdict,
+} from './spine/windtunnel-scorer-authored.js';
+export { scoreAuthoredWindtunnel } from './spine/windtunnel-scorer-authored.js';
 
 // ─── Layer-B cohort-capability ledger (totem-strategy#697) ───────────────────
 export type {
