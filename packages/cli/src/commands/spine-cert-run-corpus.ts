@@ -276,11 +276,17 @@ export async function loadCertRunFixtures(
  * producer-independent scoring substrate (split for the §5 leakage gate, prDiffs as the
  * scoring corpus, groundTruth as the frozen answer key). The same hard preconditions as
  * mined apply at the caller (prDiffsSha/groundTruthSha MUST be present on a certifying
- * run); `skipGroundTruth` is intentionally NOT exposed — D2's run wiring never derives.
+ * run). The DERIVER passes `skipGroundTruth` (D2.6) — see the opts note below.
  */
 export async function loadAuthoredCertRunFixtures(
   gate1Dir: string,
-  opts?: { expectedPrDiffsSha?: string; expectedGroundTruthSha?: string },
+  opts?: {
+    expectedPrDiffsSha?: string;
+    expectedGroundTruthSha?: string;
+    // Slice D2.6: the window-wide DERIVER passes this — it PRODUCES ground-truth-labels.json
+    // so it must not require/read it (circularity), exactly as the mined `loadCertRunFixtures`.
+    skipGroundTruth?: boolean;
+  },
 ): Promise<ScoringSubstrate> {
   return readAndVerifyScoringSubstrate(gate1Dir, opts);
 }
@@ -482,6 +488,83 @@ export function buildAuthoredCorpusProvider(
 ): CertifyingCorpusProvider {
   return async (_lock: WindtunnelLock): Promise<CertifyingCorpus> =>
     buildAuthoredCertifyingCorpus(deps);
+}
+
+/** Injected inputs for the AUTHORED window-wide answer-key deriver's assembly (D2.6). */
+export interface AuthoredCorpusAssemblyOptions {
+  /** The `.totem/spine/gate-1` dir holding the committed authored scoring substrate. */
+  gate1Dir: string;
+  /** The `.totem` dir holding the authored producer's `spine/authored-rules.yaml` + ledger. */
+  totemDir: string;
+  /** Stage-4 verifier deps (listFiles/readFile) for the compile stage. */
+  stage4: Stage4VerifierDeps;
+  /** Injected timestamp (Tenet 15 determinism). */
+  now: string;
+  /** Optional §4 differential-evaluator injection (defaults to the real one). */
+  authoredControlsDeps?: AuthoredControlsDeps;
+}
+
+/**
+ * ADR-112 §6/§5.3 Slice D2.6 — assemble the AUTHORED `CertifyingCorpus` for the
+ * window-wide answer-key DERIVER: the authored sibling of `assembleCertifyingCorpus`'s
+ * skip-ground-truth path. `derive-labels` calls this directly — NOT
+ * `resolveCertifyingCorpusProvider` (the RUN-path §8 single home; gemini's single-home
+ * ruling is untouched). The deriver is a by-hand producer step that enumerates firings
+ * over the authored substrate, not a run resolving a provider, so it mirrors the mined
+ * deriver's direct `assembleCertifyingCorpus` call rather than re-homing onto the resolver.
+ *
+ * Ground-truth is ALWAYS skipped: the deriver PRODUCES `ground-truth-labels.json`, so it
+ * must not require/read it (circularity). The SCORING source is still hash-bound
+ * (`prDiffsSha`) — a tampered pr-diffs.json would corrupt every derived label. The §8
+ * ledger-sourced `judgedBy` stays owned by `buildAuthoredCertifyingCorpus` (strategy (iii)).
+ * Returns only `{ corpus }` — an authored run mints no miner ledgers.
+ */
+export async function assembleAuthoredCertifyingCorpus(
+  opts: AuthoredCorpusAssemblyOptions,
+  lock: WindtunnelLock,
+): Promise<{ corpus: CertifyingCorpus }> {
+  const { TotemError } = await import('@mmnto/totem');
+
+  // require-when-authored (mirrors resolveCertifyingCorpusProvider): the lock's `authored`
+  // block (expectedSplitRef) is the split-binding every derived label is bound to.
+  if (!lock.authored) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      "derive-labels (authored): lock declares producerKind 'authored' but has no `authored` " +
+        'run-input block (expectedSplitRef) — the authored split binding is unbound (ADR-112 §8/D2).',
+      'Add the `authored: { expectedSplitRef }` block to the lock, or derive against a mined lock.',
+    );
+  }
+
+  const { prDiffsSha } = lock.controls.integrity;
+  if (!prDiffsSha) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      'derive-labels (authored): lock is missing controls.integrity.prDiffsSha — the pr-diffs.json ' +
+        'scoring source cannot be integrity-checked.',
+      'Re-materialize the cert corpus with `spine windtunnel materialize`.',
+    );
+  }
+
+  const { split, prDiffs, groundTruth } = await loadAuthoredCertRunFixtures(opts.gate1Dir, {
+    expectedPrDiffsSha: prDiffsSha,
+    skipGroundTruth: true,
+  });
+
+  const corpus = await buildAuthoredCertifyingCorpus({
+    totemDir: opts.totemDir,
+    // NO judgedBy — the §8 single source is derived from the authoring-ledger INSIDE
+    // buildAuthoredCertifyingCorpus (strategy (iii)); the lock must not be a second source.
+    expectedSplitRef: lock.authored.expectedSplitRef,
+    split,
+    prDiffs,
+    groundTruth,
+    stage4: opts.stage4,
+    now: opts.now,
+    ...(opts.authoredControlsDeps ? { authoredControlsDeps: opts.authoredControlsDeps } : {}),
+  });
+
+  return { corpus };
 }
 
 /** The raw run-context the SINGLE dispatch home consumes to assemble EITHER provider —

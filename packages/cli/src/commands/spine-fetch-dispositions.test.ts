@@ -10,6 +10,7 @@ import type { CorpusDisposition } from '@mmnto/totem';
 import {
   type CorpusDispositionSource,
   corpusHeldOutPrs,
+  corpusWindowPrs,
   fetchDispositionsCommand,
 } from './spine-fetch-dispositions.js';
 
@@ -28,6 +29,41 @@ describe('corpusHeldOutPrs', () => {
     expect(
       corpusHeldOutPrs({ heldOutPrs: [7, 11], positiveControlPrs: [7], negativeControlPrs: [11] }),
     ).toEqual([]);
+  });
+});
+
+describe('corpusWindowPrs (D2.6 authored window)', () => {
+  it('is (train ∪ heldOut) minus controls, deduped + ascending', () => {
+    expect(
+      corpusWindowPrs({
+        trainPrs: [3, 5],
+        heldOutPrs: [3, 7, 9, 11], // 3 also in train → deduped
+        positiveControlPrs: [7],
+        negativeControlPrs: [11],
+      }),
+    ).toEqual([3, 5, 9]);
+  });
+
+  it('keeps a TRAIN-side non-control PR that corpusHeldOutPrs drops (the D2.6 reason)', () => {
+    const split = {
+      trainPrs: [3],
+      heldOutPrs: [5, 7, 9],
+      positiveControlPrs: [7],
+      negativeControlPrs: [9],
+    };
+    expect(corpusWindowPrs(split)).toEqual([3, 5]); // window keeps the train-side 3
+    expect(corpusHeldOutPrs(split)).toEqual([5]); // held-out-only drops it
+  });
+
+  it('excludes a train PR that is itself a control', () => {
+    expect(
+      corpusWindowPrs({
+        trainPrs: [7],
+        heldOutPrs: [5],
+        positiveControlPrs: [7],
+        negativeControlPrs: [],
+      }),
+    ).toEqual([5]);
   });
 });
 
@@ -129,6 +165,24 @@ describe('fetchDispositionsCommand', () => {
     // heldOut [5,7,9], controls {7,9} → only PR 5 is a corpus disposition.
     expect(written.map((d: CorpusDisposition) => d.pr)).toEqual([5]);
     expect(written[0].threads[0].diffHunk).toBe('@@ pr5 @@\n+line');
+  });
+
+  it('an AUTHORED lock freezes WINDOW-WIDE dispositions (train ∪ held-out non-control: 3 and 5)', async () => {
+    // Flip the fixture lock to producerKind:authored (fetch-dispositions reads only the kind).
+    const lock = JSON.parse(fs.readFileSync(path.join(dir, 'windtunnel.lock.json'), 'utf-8'));
+    lock.producerKind = 'authored';
+    lock.authored = { expectedSplitRef: 'split-cert-1' };
+    fs.writeFileSync(path.join(dir, 'windtunnel.lock.json'), JSON.stringify(lock, null, 2));
+    await fetchDispositionsCommand({
+      lockPath: path.join(dir, 'windtunnel.lock.json'),
+      cwd: dir,
+      source: fakeSource,
+    });
+    const written = JSON.parse(
+      fs.readFileSync(path.join(dir, 'corpus-dispositions.json'), 'utf-8'),
+    );
+    // split train [3] ∪ heldOut [5,7,9] minus controls {7,9} → [3,5] (mined would be [5]).
+    expect(written.map((d: CorpusDisposition) => d.pr)).toEqual([3, 5]);
   });
 
   it('stamps corpusDispositionsSha = sha256 of the exact on-disk bytes', async () => {

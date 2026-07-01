@@ -49,6 +49,27 @@ export function corpusHeldOutPrs(split: {
   return split.heldOutPrs.filter((pr) => !controls.has(pr)).sort((a, b) => a - b);
 }
 
+/**
+ * ADR-112 §6/§5.3 Slice D2.6 — the WINDOW-WIDE corpus PRs for an AUTHORED producer:
+ * `(trainPrs ∪ heldOutPrs)` minus the positive/negative controls, deduped + ascending.
+ * The authored analogue of `corpusHeldOutPrs`: authored positive controls are TRAIN-side,
+ * so a held-out-only answer key leaves their corpus firings unlabeled → permanent
+ * HONEST-NEGATIVE (a run that can never PASS; totem-agy's D2 mechanical proof). The window
+ * spans train + held-out so those train-side firings get a disposition to label against.
+ * Pure split-math (no `producerKind` read here — the command picks the selector).
+ */
+export function corpusWindowPrs(split: {
+  trainPrs: number[];
+  heldOutPrs: number[];
+  positiveControlPrs: number[];
+  negativeControlPrs: number[];
+}): number[] {
+  const controls = new Set([...split.positiveControlPrs, ...split.negativeControlPrs]);
+  return [...new Set([...split.trainPrs, ...split.heldOutPrs])]
+    .filter((pr) => !controls.has(pr))
+    .sort((a, b) => a - b);
+}
+
 export async function fetchDispositionsCommand(opts: FetchDispositionsOptions): Promise<void> {
   const {
     WindtunnelLockSchema,
@@ -91,12 +112,19 @@ export async function fetchDispositionsCommand(opts: FetchDispositionsOptions): 
   const lock = WindtunnelLockSchema.parse(readJsonFile(lockPath));
   const split = SplitArtifactSchema.parse(readJsonFile(path.join(gate1Dir, 'split.json')));
 
-  const prs = corpusHeldOutPrs(split);
+  // ADR-112 §6 D2.6: an AUTHORED producer needs a WINDOW-WIDE disposition set (train +
+  // held-out non-control) so its train-side positive controls get labeled; a MINED
+  // producer keeps the held-out-only scope (byte-unchanged). The kind-read lives here at
+  // the command layer, not in the pure selector (mirrors corpusHeldOutPrs/corpusWindowPrs).
+  const producerKind = lock.producerKind ?? 'mined';
+  const prs = producerKind === 'authored' ? corpusWindowPrs(split) : corpusHeldOutPrs(split);
   if (prs.length === 0) {
     throw new TotemError(
       'CONFIG_INVALID',
-      'fetch-dispositions: the split has no held-out CORPUS PRs (all held-out PRs are controls).',
-      'A cert corpus needs ≥1 non-control held-out PR for the answer key to label.',
+      producerKind === 'authored'
+        ? 'fetch-dispositions: the split has no non-control window PRs (every train ∪ held-out PR is a control).'
+        : 'fetch-dispositions: the split has no held-out CORPUS PRs (all held-out PRs are controls).',
+      'A cert corpus needs ≥1 non-control PR for the answer key to label.',
     );
   }
 
@@ -156,7 +184,9 @@ export async function fetchDispositionsCommand(opts: FetchDispositionsOptions): 
 
   const threadCount = validated.reduce((n, d) => n + d.threads.length, 0);
   console.error(`[FetchDispositions] gate1Dir: ${gate1Dir}`);
-  console.error(`  held-out corpus PRs: ${prs.length} · review threads: ${threadCount}`);
+  console.error(
+    `  ${producerKind === 'authored' ? 'window' : 'held-out'} corpus PRs: ${prs.length} · review threads: ${threadCount}`,
+  );
   console.error(
     `  corpusDispositionsSha: ${corpusDispositionsSha} (stamped into ${path.basename(lockPath)})`,
   );

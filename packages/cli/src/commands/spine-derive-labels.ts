@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
+  assembleAuthoredCertifyingCorpus,
   assembleCertifyingCorpus,
   buildGate1Stage4Deps,
   CORPUS_DISPOSITIONS_FILE,
@@ -35,6 +36,12 @@ export interface DeriveLabelsOptions {
   lcDir?: string;
   /** Gate-1 output dir (default: the lock's dir). */
   outputDir?: string;
+  /**
+   * The `.totem` dir holding the authored producer's `spine/authored-rules.yaml` + ledger
+   * (authored producer only). Defaults to the convention `<gate1Dir>/../..` (gate-1 lives at
+   * `.totem/spine/gate-1`). Injected explicitly for tests + non-conventional layouts (D2.6).
+   */
+  totemDir?: string;
   /** Working dir (default `process.cwd()`; injected for tests). */
   cwd?: string;
 }
@@ -148,10 +155,28 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
   // — it does not enter rule compilation or the content-based labelId — so it cannot break
   // the byte-identical guarantee even if a future run set it. Thread it through both the
   // run and the deriver together if it ever becomes a real RunOption.
-  const { corpus } = await assembleCertifyingCorpus(
-    { gate1Dir, stage4, now, skipGroundTruth: true },
-    lock,
-  );
+  // ADR-112 §6 D2.6: an AUTHORED lock assembles the corpus from the authored substrate
+  // (window-wide, via the derive-path sibling); a MINED lock keeps the byte-unchanged replay
+  // assembly. Both skip ground-truth (the deriver PRODUCES it). The producerKind read lives
+  // here in the producer command — the RUN-path §8 single home (resolveCertifyingCorpusProvider)
+  // is untouched (gemini single-home ruling); the mined deriver already bypasses it likewise.
+  const producerKind = lock.producerKind ?? 'mined';
+  const { corpus } =
+    producerKind === 'authored'
+      ? await assembleAuthoredCertifyingCorpus(
+          {
+            gate1Dir,
+            // gate-1 lives at `.totem/spine/gate-1` → `.totem` is two dirs up (convention),
+            // overridable for tests / non-standard layouts.
+            totemDir: opts.totemDir
+              ? path.resolve(cwd, opts.totemDir)
+              : path.dirname(path.dirname(gate1Dir)),
+            stage4,
+            now,
+          },
+          lock,
+        )
+      : await assembleCertifyingCorpus({ gate1Dir, stage4, now, skipGroundTruth: true }, lock);
   const built = await buildCertifyingFirings({
     rules: corpus.rules,
     prDiffs: corpus.prDiffs,

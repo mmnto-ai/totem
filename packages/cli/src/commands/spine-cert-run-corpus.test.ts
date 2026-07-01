@@ -370,4 +370,24 @@ describe('loadAuthoredCertRunFixtures (D2 authored scoring substrate)', () => {
     expect(authored.prDiffs).toEqual(mined.prDiffs);
     expect([...authored.groundTruth]).toEqual([...mined.groundTruth]);
   });
+
+  it('skipGroundTruth (D2.6): returns an empty answer key + needs no groundTruthSha', async () => {
+    // The window-wide DERIVER PRODUCES ground-truth-labels.json, so it passes skipGroundTruth
+    // and supplies no expectedGroundTruthSha; the scoring source (prDiffs) is still hash-bound.
+    const substrate = await loadAuthoredCertRunFixtures(gate1Dir, {
+      expectedPrDiffsSha: prDiffsHash(),
+      skipGroundTruth: true,
+    });
+    expect(substrate.groundTruth.size).toBe(0);
+    expect(substrate.prDiffs).toEqual([]);
+  });
+
+  it('skipGroundTruth loads even when ground-truth-labels.json is ABSENT (first derive)', async () => {
+    fs.rmSync(path.join(gate1Dir, 'ground-truth-labels.json')); // key does not exist yet
+    const substrate = await loadAuthoredCertRunFixtures(gate1Dir, {
+      expectedPrDiffsSha: prDiffsHash(),
+      skipGroundTruth: true,
+    });
+    expect(substrate.groundTruth.size).toBe(0);
+  });
 });
