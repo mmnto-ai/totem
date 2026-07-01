@@ -140,9 +140,28 @@ export function scoreAuthoredWindtunnel(input: AuthoredScorerInput): AuthoredWin
   let undecidable = 0;
   let deferred = 0;
   for (const ne of authoredControls.nonEmissions) {
-    if (ne.class === 'illegitimate') illegitimate += 1;
-    else if (ne.class === 'undecidable') undecidable += 1;
-    else deferred += 1; // 'deferred' — the enum is closed (illegitimate|undecidable|deferred)
+    switch (ne.class) {
+      case 'illegitimate':
+        illegitimate += 1;
+        break;
+      case 'undecidable':
+        undecidable += 1;
+        break;
+      case 'deferred':
+        deferred += 1;
+        break;
+      default: {
+        // Exhaustiveness guard (Tenet-4; mirrors authored-controls.ts's
+        // NON_EMISSION_CLASS_BY_OUTCOME Record-over-Exclude). A future 4th class
+        // breaks THIS build instead of silently laundering into `deferred` → a
+        // spurious HONEST-NEGATIVE. The Zod boundary rejects it at runtime; the
+        // `never` binding makes a schema addition a COMPILE error here.
+        const _exhaustive: never = ne.class;
+        throw new Error(
+          `[Totem Error] scoreAuthoredWindtunnel: unhandled non-emission class '${String(_exhaustive)}'`,
+        );
+      }
+    }
   }
 
   // The gate's implied verdict: an illegitimate control is a Gate-1 FAIL-equivalent

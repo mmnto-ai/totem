@@ -164,6 +164,10 @@ describe('(c) O3 excludes a rule’s own control firing from the held-out count'
         heldOutPrs: new Set([20]),
       }),
     );
+    // The unlabeled own-control firing on the held-out PR routes to needsAdjudication,
+    // so the run is HONEST-NEGATIVE — asserted explicitly so this O3-exclusion scenario's
+    // verdict is not silently assumed to PASS (greptile #2283).
+    expect(result.verdict).toBe('HONEST-NEGATIVE');
     // The held-out control-kind firing is NOT counted; only the corpus one is.
     expect(result.heldOutActivationsByRule).toEqual({ 'rule-a': 1 });
   });
@@ -389,5 +393,38 @@ describe('the non-emission gate is demote-only (mirrors the mined FAIL-tier orde
     expect(result.verdict).toBe('FAIL');
     // FP measurement survives the structural gate (the chosen precedence).
     expect(result.precision).not.toBeNull();
+  });
+});
+
+// ─── multi-rule window: gate is window-level + O3 keys isolated per rule ──────
+
+describe('multi-rule window (gate is window-level, O3 keys isolated per rule)', () => {
+  it('an illegitimate control on rule-b FAILs the window even though rule-a is clean, and O3 keys only rule-a', () => {
+    // rule-a: a clean, holding positive control that fires + generalizes on a held-out PR.
+    // rule-b: NO positive control (all fixtures illegitimate) — it must poison the WINDOW
+    // (not just its own rule) and must NOT leak into the O3 keys (join-back is from positive[]).
+    const ctrlA = makeFiring('rule-a', 10, 'positive');
+    const heldA = makeFiring('rule-a', 20, 'corpus', 'gen-a();');
+    const heldB = makeFiring('rule-b', 20, 'corpus', 'gen-b();');
+    const result = scoreAuthoredWindtunnel(
+      baseInput({
+        authoredControls: {
+          positive: [posControl('rule-a', 10)],
+          nonEmissions: [nonEmission('rule-b', 12, 'fix-shaped', 'illegitimate')],
+        },
+        firings: [ctrlA, heldA, heldB],
+        groundTruth: labelAll([ctrlA, heldA, heldB], 'TP'),
+        heldOutPrs: new Set([20]),
+        mintedRuleIds: ['rule-a', 'rule-b'],
+      }),
+    );
+    // (1) window-level: rule-a's control is clean, yet rule-b's illegitimate non-emission
+    // FAILs the whole window (the gate is not scoped to rules lacking a positive control).
+    expect(result.verdict).toBe('FAIL');
+    expect(result.authoredControlGate.effect).toBe('fail-illegitimate');
+    expect(result.authoredControlGate.illegitimate).toBe(1);
+    // (2) O3 key isolation: rule-a is keyed (from positive[]) and counts its 1 held-out
+    // firing; rule-b fired on a held-out PR but has NO positive control → NOT a key.
+    expect(result.heldOutActivationsByRule).toEqual({ 'rule-a': 1 });
   });
 });
