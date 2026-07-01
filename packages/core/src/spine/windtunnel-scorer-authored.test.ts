@@ -393,6 +393,12 @@ describe('the non-emission gate is demote-only (mirrors the mined FAIL-tier orde
     expect(result.verdict).toBe('FAIL');
     // FP measurement survives the structural gate (the chosen precedence).
     expect(result.precision).not.toBeNull();
+    // The COUNT is the presence signal, NOT `effect`: the illegitimate non-emission is
+    // recorded even though the demote-only combine left the already-FAIL verdict unchanged
+    // (effect stays 'none'). Strategy's couple-on-merge ask + CR — this freezes the
+    // "a D4 consumer reads authoredControlGate.illegitimate, never `effect`" contract.
+    expect(result.authoredControlGate.illegitimate).toBe(1);
+    expect(result.authoredControlGate.effect).toBe('none');
   });
 });
 
