@@ -334,13 +334,12 @@ describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async si
   const lock = (overrides: Record<string, unknown>): WindtunnelLock =>
     ({ controls: { integrity: {} }, ...overrides }) as unknown as WindtunnelLock;
 
-  it('a mined lock (explicit or absent) resolves to a provider with no authored block', async () => {
-    await expect(
-      resolveCertifyingCorpusProvider(lock({ producerKind: 'mined' }), inputs()),
-    ).resolves.toBeTypeOf('function');
-    await expect(resolveCertifyingCorpusProvider(lock({}), inputs())).resolves.toBeTypeOf(
-      'function',
-    );
+  it('a mined lock (explicit or absent) resolves to a { provider, score } bundle', async () => {
+    for (const overrides of [{ producerKind: 'mined' }, {}]) {
+      const resolved = await resolveCertifyingCorpusProvider(lock(overrides), inputs());
+      expect(resolved.provider).toBeTypeOf('function');
+      expect(resolved.score).toBeTypeOf('function');
+    }
   });
 
   it('an authored lock WITHOUT an `authored` block fails loud (require-when-authored)', async () => {
@@ -377,10 +376,12 @@ describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async si
       authored: { expectedSplitRef: SPLIT_REF },
       controls: { integrity: { prDiffsSha, groundTruthSha } },
     });
-    const provider = await resolveCertifyingCorpusProvider(
+    const { provider, score } = await resolveCertifyingCorpusProvider(
       authoredLock,
       inputs({ authoredControlsDeps: diffDeps('differential-holds') }),
     );
+    // D4: the §8 single home also binds the producer-kind scorer alongside the provider.
+    expect(score).toBeTypeOf('function');
     const corpus = await provider(authoredLock);
     expect(corpus.authoredControls).toBeDefined();
     expect(corpus.authoredControls!.positive).toHaveLength(1);

@@ -362,6 +362,34 @@ export interface CertifyingCorpus {
   authoredControls?: import('@mmnto/totem').AuthoredControls;
 }
 
+/**
+ * ADR-112 §5.3/§8 Slice D4 — the scored run, discriminated by producer kind. The
+ * `kind` is a lineage marker (gemini Q3): it is DERIVED once at the §8 single home
+ * (`resolveCertifyingCorpusProvider`) and carried on the result — never re-read from
+ * the lock downstream (Tenet-20 derive-not-mirror). The authored arm carries the
+ * verdict-inert Gate-2 eligibility emission (§5.3, §1(k)-guarded).
+ */
+export type ScoredRun =
+  | { kind: 'mined'; verdict: import('@mmnto/totem').WindtunnelVerdict }
+  | {
+      kind: 'authored';
+      verdict: import('@mmnto/totem').AuthoredWindtunnelVerdict;
+      gate2: import('@mmnto/totem').Gate2Eligibility;
+    };
+
+/**
+ * ADR-112 §8 Slice D4 — what the §8 single dispatch home resolves: the corpus
+ * provider PLUS the producer-kind-bound scorer. Binding the scorer at the resolver
+ * (not branching at the score step) keeps `producerKind` read in ONE place — a
+ * second read at the score step could drift to the mined scorer over an authored
+ * corpus, silently PASSing a culled differential (strategy Q1 ruling 2026-07-01).
+ */
+export interface ResolvedCertifyingRun {
+  provider: CertifyingCorpusProvider;
+  /** Bound to this run's producer kind (+ authored substrate). `score(base)` is unconditional at the score step. */
+  score: (base: import('@mmnto/totem').ScorerInput) => ScoredRun;
+}
+
 /** Internal shape the run command's scorer + persist step consume (engine-agnostic). */
 interface EngineResult {
   mintedRuleIds: string[];
@@ -492,24 +520,33 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   const runNowIso = new Date().toISOString();
   // Certifying phase: use the injected corpus (tests) or build the REPLAY-mode
   // provider from the committed cert-run fixtures under the gate-1 dir (5c-ii).
+  // The scorer defaults to MINED (the harness mock + the injected 5c-i corpus seam, which is
+  // mined-only). The §8 single home (`resolveCertifyingCorpusProvider`) is the ONLY place that
+  // may bind the AUTHORED scorer — so authored-vs-mined is selected in exactly one location, and
+  // the score step below never re-reads `producerKind` (strategy D4 Q1: a second read could drift
+  // an authored corpus onto the mined scorer, silently PASSing a culled differential).
   let corpusProvider = opts.certifyingCorpus;
+  let score: ResolvedCertifyingRun['score'] = (base) => ({
+    kind: 'mined',
+    verdict: scoreWindtunnel(base),
+  });
   if (lock.phase === 'certifying' && !corpusProvider) {
     const gate1Dir = path.dirname(lockPath);
     const asOf = lock.corpus.selectionRule.asOfCommit;
     // Shared Stage-4 constructor (the deriver builds it the same way — no drift).
     const stage4 = buildGate1Stage4Deps(lcDir, asOf, safeExec);
-    // Single dispatch home (D1/D2): resolve mined-vs-authored off the lock's producerKind.
+    // Single dispatch home (D1/D2/D4): resolve mined-vs-authored off the lock's producerKind.
     // The caller passes raw run-context UNCONDITIONALLY (no `if (producerKind)` branch here —
     // that would leak the dispatch, gemini §8 single-home ruling); the resolver alone reads
-    // the kind. Mined (absent ⇒ mined) is byte-unchanged. Authored (D2) loads its scoring
-    // substrate + reads the lock's `authored` block inside the (now async) resolver. totemDir
-    // is the authored producer's `.totem` (authored path only; ignored on the mined path).
-    corpusProvider = await resolveCertifyingCorpusProvider(lock, {
+    // the kind, and returns BOTH the corpus provider AND the producer-kind-bound scorer (D4).
+    const resolved = await resolveCertifyingCorpusProvider(lock, {
       gate1Dir,
       stage4,
       now: runNowIso,
       totemDir: path.join(repoRoot, '.totem'),
     });
+    corpusProvider = resolved.provider;
+    score = resolved.score;
   }
 
   const engineResult =
@@ -520,8 +557,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   const { mintedRuleIds, firings, groundTruth, positiveControlTargets, filesTouchedInWindow } =
     engineResult;
 
-  // Score
-  const verdict = scoreWindtunnel({
+  // Score — `score(base)` is UNCONDITIONAL (§8 single home): the producer-kind branch already
+  // happened at the resolver, never here. `scored.kind` is the derived lineage marker (gemini Q3).
+  const scored = score({
     firings,
     groundTruth,
     positiveControlTargets,
@@ -538,6 +576,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       positiveControlsExercised: positiveControlTargets.length,
     },
   });
+  const verdict = scored.verdict;
 
   // Print verdict — exposure tuple never collapsed
   console.log(`WindtunnelVerdict: ${verdict.verdict}`);
@@ -572,6 +611,27 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     for (const id of verdict.needsAdjudication) {
       console.log(`    • ${id}`);
     }
+  }
+
+  // ADR-112 §5.3 Slice D4 — the authored emissions (verdict-inert): the O3 held-out
+  // activation metric + the Gate-2-eligible set. Emitted, not hidden (Tenet-4; the §1(k)
+  // exclusions are legible), never consulted by the Gate-1 verdict printed above.
+  if (scored.kind === 'authored') {
+    const { verdict: authoredVerdict, gate2 } = scored;
+    const gate = authoredVerdict.authoredControlGate;
+    console.log(
+      `  authoredControlGate:  illegitimate=${gate.illegitimate} undecidable=${gate.undecidable} ` +
+        `deferred=${gate.deferred} effect=${gate.effect}`,
+    );
+    console.log(
+      `  heldOutActivations:   ${JSON.stringify(authoredVerdict.heldOutActivationsByRule)}`,
+    );
+    const gate2Summary = gate2.windowDisqualified
+      ? '(none — WINDOW DISQUALIFIED: illegitimate > 0)'
+      : gate2.eligibleRuleIds.length > 0
+        ? gate2.eligibleRuleIds.join(', ')
+        : '(none — no survivor had held-out activations)';
+    console.log(`  gate2Eligible (${gate2.eligibleRuleIds.length}): ${gate2Summary}`);
   }
 
   // 5c-ii: certifying-phase persistence — fold-B project → fold-C parse-before-write

@@ -948,6 +948,8 @@ export type {
   ReviewThreadSource,
 } from './spine/extract.js';
 export { classifyAuthorKind, DraftResultSchema, runExtractStage } from './spine/extract.js';
+export type { Gate2Eligibility, Gate2SurvivorRecord } from './spine/gate2-eligibility.js';
+export { deriveGate2Eligibility } from './spine/gate2-eligibility.js';
 export type {
   ApiFetchSlice,
   ApiUsageLedger,
