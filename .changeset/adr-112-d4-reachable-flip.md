@@ -1,5 +1,0 @@
----
-'@mmnto/totem': minor
----
-
-feat(spine): ADR-112 §5.3/§6/§8 Slice D4 — the inert→ENFORCED reachable flip. The authored certifying path now executes end-to-end. `resolveCertifyingCorpusProvider` binds the producer-kind scorer at the §8 single dispatch home (an unconditional `score(base)` at the score step; the mined branch stays byte-unchanged), so no `producerKind` branch is scattered downstream. On an authored run the D2.5 no-mint `verifyOnly` gate now fires reachably (fail-loud `GATE_INVALID` before any scorer call or ledger write — never falls back to the mined scorer), `scoreAuthoredWindtunnel` scores the authored corpus with positives derived internally (the D3 reduction's threading guard), and the verdict-inert Gate-2-eligible set (`survivors ∩ {rule : heldOutActivationsByRule[rule] > 0}`, §1(k)-guarded + the illegitimate-window disqualifier keyed on the COUNT never `.effect`) is derived downstream of the scorer and persisted as a top-level report field sibling to the verdict. The dead `buildAuthoredCorpusProvider` is removed (the resolver eager-builds the authored corpus at resolution).
