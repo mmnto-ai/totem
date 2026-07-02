@@ -54,6 +54,16 @@ export const SplitArtifactSchema = z
        */
       cutIndex: z.number().int().nonnegative(),
     }),
+    /**
+     * ADR-112 §5.1 Slice D5 — the mechanical FREEZE INSTANT, stamped by the authored
+     * producer at materialize. Full ISO-8601 (offset-bearing); the Q3 temporal gate
+     * (`assertAuthoredFreezePreconditions`) asserts this precedes every effective
+     * authoring-ledger `authoredAt` — §5.1's "frozen BEFORE authoring" embargo made
+     * MECHANICAL, not attestational. Dereferenced from the split artifact (Tenet-20),
+     * never recomputed. Additive-optional, no `.default()`: a mined/legacy split omits
+     * it and parses/serializes BYTE-UNCHANGED.
+     */
+    frozenAt: z.string().datetime({ offset: true }).optional(),
   })
   .superRefine((s, ctx) => {
     // Disjoint cover is a BAG/ROW property, but the cover/overlap checks dedupe via
@@ -224,6 +234,8 @@ export function resolveSplit(params: {
   negativeControlPrs?: number[];
   predicate: string;
   mergeCommitByPr: ReadonlyMap<number, string>;
+  /** ADR-112 §5.1 D5 — the mechanical freeze instant (full ISO-8601), stamped by the authored producer. Omitted ⇒ mined/legacy split (byte-unchanged). */
+  frozenAt?: string;
 }): SplitArtifact {
   const corpusSet = new Set(params.corpus);
   const excludedSet = new Set(params.excludedPrs);
@@ -284,6 +296,9 @@ export function resolveSplit(params: {
     positiveControlPrs: uniqueSorted(params.positiveControlPrs ?? []),
     negativeControlPrs: uniqueSorted(params.negativeControlPrs ?? []),
     splitRule: { predicate: params.predicate, cutIndex: params.cutIndex },
+    // Conditional-spread (not `key: undefined`): a mined split omits `frozenAt` entirely,
+    // so `canonicalStringify` emits BYTE-IDENTICAL output to the pre-D5 shape.
+    ...(params.frozenAt !== undefined ? { frozenAt: params.frozenAt } : {}),
   });
 
   const validation = validateSplitCover(split, params.corpus, params.mergeCommitByPr);
