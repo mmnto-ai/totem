@@ -17,12 +17,14 @@ Whole-path couple-on-merge owed to strategy. Binding carry (D3 couple, pinned `1
 ## Grounded wiring inputs (confirmed against source)
 
 The authored scorer signature (D3):
+
 ```
 scoreAuthoredWindtunnel(input: Omit<ScorerInput,'positiveControlTargets'> & {
   authoredControls: Pick<AuthoredControls,'positive'|'nonEmissions'>;  // §6 answer key
   heldOutPrs: ReadonlySet<number>;                                     // O3 partition
 }): AuthoredWindtunnelVerdict   // = WindtunnelVerdict + heldOutActivationsByRule + authoredControlGate
 ```
+
 - **`authoredControls`** — ALREADY surfaced on the corpus: `spine-windtunnel.ts:362` carries `authoredControls?: AuthoredControls` (undefined ⇒ mined ⇒ byte-unchanged). Computed upstream by `deriveAuthoredControls` (`spine-authored-cert-corpus.ts:273`). **D4 threads it; does NOT recompute.**
 - **`heldOutPrs`** — `new Set(split.heldOutPrs)` (`split.ts:38`, `heldOutPrs: PrNumber[]`). The split lives in the authored assembly; **WIRING TODO: surface `heldOutPrs` (or the split) to the score step** — today the corpus carries `authoredControls` but not the split. Candidate: add it beside `authoredControls?` on the authored corpus object.
 - **`firings`** — `engineResult.firings` (the MERGED train∪held-out window firings; `heldOutPrs` partitions them for the O3 metric only). Pass-through: `exposureFloors` / `actualExposure` unchanged (D3 does not recompute exposure).
@@ -42,7 +44,7 @@ export function deriveGate2EligibleSet(input: {
   mintedRuleIds: readonly string[];
   cullLedger: readonly CullLedgerEntry[];
   heldOutActivationsByRule: Readonly<Record<string, number>>;
-  authoredControlGate: Pick<AuthoredControlGate, 'illegitimate'>;     // Q4 ruling — window-level disqualifier
+  authoredControlGate: Pick<AuthoredControlGate, 'illegitimate'>; // Q4 ruling — window-level disqualifier
 }): string[] {
   // Q4 (strategy 2318Z): a window with illegitimate > 0 is FAIL-equivalent — NO survivor is
   // Gate-2-eligible, EVEN WHEN effect === 'none' (a co-severe mined FP FAIL masked it, 1a80655e).
@@ -50,15 +52,17 @@ export function deriveGate2EligibleSet(input: {
   if (input.authoredControlGate.illegitimate > 0) return [];
   const culled = new Set(input.cullLedger.map((e) => e.ruleId));
   return input.mintedRuleIds
-    .filter((id) => !culled.has(id))                                  // survivors = minted \ culled
-    .filter((id) => (input.heldOutActivationsByRule[id] ?? 0) > 0);   // held-out-exercised; NEVER `?? 1`/defaulted-in
+    .filter((id) => !culled.has(id)) // survivors = minted \ culled
+    .filter((id) => (input.heldOutActivationsByRule[id] ?? 0) > 0); // held-out-exercised; NEVER `?? 1`/defaulted-in
 }
 ```
+
 This pure logic is stable regardless of Q1 (seam) / Q2 (emit-or-inert + artifact home). **Held for Q2:** whether the set is EMITTED (report field / Gate-2 ledger) or computed-but-inert, and its home (report vs separate ledger). Unit tests (fork-independent): (a) survivor with held-out>0 → admitted; (b) survivor absent from map → excluded; (c) survivor with explicit 0 → excluded; (d) culled rule with held-out>0 → excluded (not a survivor).
 
 ## The contested seam — HELD for strategy Q1
 
 How to route to `scoreAuthoredWindtunnel` WITHOUT opening a second producer-kind home (§8 single-home, gemini `a66a981`/#786):
+
 - **(a) provider-carried scorer** — the `:507` resolver (already reads producerKind) surfaces the authored inputs + selects the scorer; `:524` stays a single unconditional `corpusProvider.score(...)`. My read: preserves the single home.
 - **(b) score-step branch** — `if (authored) scoreAuthoredWindtunnel else scoreWindtunnel` at `:524`, argued legal because engineResult is already single-provenance (§7). Note: the corpus ALREADY carries `authoredControls?` (undefined⇒mined), so the branch signal exists on the corpus — Q1 is whether READING it at `:524` is a second home or a legal downstream read.
 
@@ -97,21 +101,25 @@ How to route to `scoreAuthoredWindtunnel` WITHOUT opening a second producer-kind
 Three lens seats replied; **strongly convergent**. strategy-claude (contract owner) has NOT ruled — mid-#796 BLIND round; operator nudging. Build stays gated on strategy Q1/Q2.
 
 **Q1 seam — panel PRE-CONVERGED on (a) provider-carried scorer (gemini + codex), pending strategy's formal ruling.**
+
 - gemini: branching at `:524` leaks `producerKind` out of the resolver → violates §8 single-home + Tenet 9. Resolver at `:507` (already knows kind + assembles inputs) bundles the scoring fn; `:524` stays unconditional `corpusProvider.score(...)`.
 - codex: keep the flip a CONSUMER of the existing authored corpus surface. **Fail-loud, not fallback:** producerKind `authored` with missing `corpus.authoredControls` must THROW, NEVER fall back to the mined scorer (the one D4-specific way to break the D3 reduction).
 
 **Q2 Gate-2 altitude — UNANIMOUS: downstream deriver, NOT in the scorer (gemini + codex + agy).** Scorer emits raw signal (`heldOutActivationsByRule` + `cullLedger`); the intersection lives at report/consumer altitude (Tenet-20 join-back-once; don't overload the evaluator). The pure `deriveGate2EligibleSet` (above) is that downstream fn. **Still strategy's Q2:** emit-vs-inert + artifact home/shape (report field vs Gate-2 ledger).
 
 **gemini Q3 — flip-last guards to ADD:**
+
 1. **Strict Non-Interference:** assert an absent/`'mined'` producerKind is provably insulated from authored logic/overhead (mined path byte-unchanged) — a regression assertion, not just a byte-diff hope.
 2. **Lineage/audit marker:** the Gate-2 emission carries `producerKind: 'authored'` (or equiv) so downstream + post-mortems deterministically trace the derivation path. No silent fallbacks.
 
 **codex — three contract-critical D4 assertions (required):**
+
 1. **§6 cull reaches scorer un-broken:** a D4 test where the differential evaluator returns `fix-shaped` → scorer sees `positive: []`, `nonEmissions[0].class === 'illegitimate'`, and the run must NOT become a mined PASS via `positiveControlTargets: []`.
 2. **no-mint ordering (run/provider boundary, not just `runRuleAuthor`):** a stale/first-time authored rule (`minted`/`revised`) → command throws `GATE_INVALID`, a **scorer spy is NOT called**, authoring ledger **byte-unchanged**. (`runRuleAuthor` Pass-1 computes pending writes IO-free; verifyOnly throws before the Pass-2 append loop → precedes first scorer call + any ledger write.)
 3. **Gate-2 on the COUNT:** `(count ?? 0) > 0` over survivors — never `effect`, never truthiness/`?? 1`.
 
 **agy — matrix + altitude + fixtures:**
+
 - **+2 rows:** (vi) Cross-partition leakage guard — `split.heldOutPrs ∩ trainPrs = ∅`; a train-only-activating rule → zero held-out → excluded from Gate-2. (vii) Unlabeled-demotion partition — valid positive controls train-side + an unlabeled firing held-out-side → clean `HONEST-NEGATIVE` demotion, no training-signal leak, no FP.
 - **Altitude:** Row (i) happy-path e2e → **CLI** (`spine-windtunnel.test.ts`); (ii) no-mint fires → **CLI**; (iii) Gate-2 exclusion → **Core**; (iv) illegitimate-count FP → **Core**; (v) mined regression → **CLI**.
 - **Fixtures:** REUSE D3 authored-control + split fixtures for Row (i) (avoid bot-tax); for Row (ii) **dynamically mutate in-memory** (flip a rule to `minted`/`revised`) rather than commit a new static fixture.
@@ -123,7 +131,8 @@ Three lens seats replied; **strongly convergent**. strategy-claude (contract own
 ## STRATEGY RULING — 2318Z, ALL FOUR RULED (supersedes the open questions above; build UNBLOCKED)
 
 **Q1 — RULED: single-home EXTENDS to the scorer = (a) provider-carried scorer. My read + panel converged. CONFIRMED.**
-- A `producerKind` branch at `:524` is a §8 VIOLATION (a second kind-read; two reads can diverge → score an authored corpus with the mined scorer → silently PASS a culled differential — the codex hole D3 closed). §7 single-provenance of `engineResult` is necessary-not-sufficient (the hazard is provenance-of-*scorer*, not of inputs).
+
+- A `producerKind` branch at `:524` is a §8 VIOLATION (a second kind-read; two reads can diverge → score an authored corpus with the mined scorer → silently PASS a culled differential — the codex hole D3 closed). §7 single-provenance of `engineResult` is necessary-not-sufficient (the hazard is provenance-of-_scorer_, not of inputs).
 - **Shape:** resolver at `:507` returns a scorer bound at resolution time to the authored substrate. `:524` = unconditional `corpusProvider.score(base)`. Mined ⇒ `(base) => scoreWindtunnel(base)`; authored ⇒ `(base) => scoreAuthoredWindtunnel({ ...base, authoredControls, heldOutPrs })`.
 - **THREADING GUARD (contract-relevant):** the authored scorer's `positiveControlTargets` MUST come from `authoredControls.positive` (D3 derives internally at `windtunnel-scorer-authored.ts:122`). Do NOT thread `engineResult.positiveControlTargets` into the authored `.score()` input — double-sourcing reopens the postimage re-proof the D3 reduction discharged. **`base` handed to the authored scorer must EXCLUDE engineResult's positive-target field.**
 
@@ -132,6 +141,7 @@ Three lens seats replied; **strongly convergent**. strategy-claude (contract own
 **Q3 — RULED: arming = reachability only, NO new gate code; NO enforce step beyond D2.5's fail-loud.** BUT a one-line §8 **currency pin IS owed** (not a contract change): §8 line 168 says "INERT until Slice D3" — stale; D4 is the flip that arms it → "INERT until Slice **D4**". **Strategy lands it LOCKSTEP with my D4 PR (couple-on-merge, #793 pattern) — no §8 change lands before my build.**
 
 **Q4 — RULED: whole-path couple END-TO-END (4 seams); route the D4 PR to strategy.** Seams strategy reviews: (1) authored corpus resolution (Q1 single-home); (2) the no-mint `verifyOnly` gate FIRING (verifies it executes + fails loud, not just scorer math); (3) `scoreAuthoredWindtunnel` invocation (inputs threaded per Q1 guard); (4) the Gate-2 set emit (verdict-inert, (k)-guarded).
+
 - **`.illegitimate`-count carry RE-AFFIRMED + verified in D3 code → REFINES the Gate-2 deriver (folded above):** a window with `authoredControlGate.illegitimate > 0` is FAIL-equivalent; NO survivor is Gate-2-eligible, **even when `effect === 'none'`** (a co-severe mined FP FAIL masked it). Disqualify on `.illegitimate > 0`, NEVER on `.effect` — a set built off `.effect` silently admits rules from a masked-illegitimate window. (Added the `authoredControlGate` param + the early-`return []` to the deriver sketch above.)
 
 **Currency confirm:** nothing moved on §5.3/§6/§8 since D3 (§8 reads through #793 `135b84a`); strategy's clone = `origin/main 53c9779` (what I re-pulled). Clean.
@@ -151,15 +161,18 @@ Facts: `CertifyingCorpusProvider = (lock) => CertifyingCorpus` (a fn); the corpu
 // authored ⇒ EAGER-build the corpus once (fires the no-mint gate + derives authoredControls at
 // resolve, before engine + score — codex Q2 satisfied EARLIEST), capture the substrate, bind.
 type ScoredRun =
-  | { kind: 'mined';    verdict: WindtunnelVerdict }
+  | { kind: 'mined'; verdict: WindtunnelVerdict }
   | { kind: 'authored'; verdict: AuthoredWindtunnelVerdict; gate2: Gate2Eligibility };
-interface ResolvedCertifyingRun { provider: CertifyingCorpusProvider; score: (base: ScorerInput) => ScoredRun; }
+interface ResolvedCertifyingRun {
+  provider: CertifyingCorpusProvider;
+  score: (base: ScorerInput) => ScoredRun;
+}
 
 // authored closure (substrate captured at resolve):
 score = (base) => {
-  const { positiveControlTargets: _drop, ...rest } = base;              // Q1 guard: never double-source positives
+  const { positiveControlTargets: _drop, ...rest } = base; // Q1 guard: never double-source positives
   const verdict = scoreAuthoredWindtunnel({ ...rest, authoredControls, heldOutPrs });
-  const gate2 = deriveGate2Eligibility({ mintedRuleIds: base.mintedRuleIds, verdict });  // downstream of scorer
+  const gate2 = deriveGate2Eligibility({ mintedRuleIds: base.mintedRuleIds, verdict }); // downstream of scorer
   return { kind: 'authored', verdict, gate2 };
 };
 // mined closure: (base) => ({ kind: 'mined', verdict: scoreWindtunnel(base) })  // byte-unchanged
