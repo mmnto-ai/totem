@@ -194,6 +194,7 @@ Strategy's independent-source-read couple verdict on #2285: **4 seams CONFORM** 
 - **Row (viii) — §6 cull-unbroken (codex assertion #1; greptile P2 @ `:492`):** ADDED. A `fix-shaped` differential ⇒ `authoredControls.positive: []` + an `illegitimate` non-emission ⇒ the run FAILs (precision null), `authoredControlGate.illegitimate === 1` / `effect === 'fail-illegitimate'`, `gate2.windowDisqualified`, and CRUCIALLY it does **not** degenerate to a mined PASS via `positiveControlTargets: []`. Core-altitude sibling: `windtunnel-scorer-authored.test.ts` codex-1.
 
 **Bot findings (strategy: my lane, behavior correct, style/perf) — FIXED, not declined (convention-consistency, kills re-review churn):**
+
 - **CR Major (`:19` static import):** the scorers are now dynamic-`import('@mmnto/totem')`ed at the resolver top (the file's own convention; the sync `score` closure closes over the captured refs). Static value import removed.
 - **greptile P2 (`:691` dropped lock param):** the authored provider's `_lock: WindtunnelLock` param restored (CertifyingCorpusProvider signature parity + self-documented intentional ignore).
 
