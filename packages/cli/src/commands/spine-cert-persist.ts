@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import type {
   CompiledRule,
+  Gate2Eligibility,
   LegitimacyProjectionSkip,
   ProvenanceRecord,
   RuleFiring,
@@ -38,6 +39,14 @@ export interface CertPersistInput {
   nowIso: string;
   /** Corpus identity for the report (the lock's asOfCommit). */
   asOfCommit: string;
+  /**
+   * ADR-112 §5.3 Slice D4 (strategy Q2) — the downstream, VERDICT-INERT Gate-2-eligible
+   * set for an authored run (`survivors ∩ {heldOut>0}`, §1(k)-guarded + illegitimate-window
+   * disqualifier). Absent on mined runs. Persisted as a top-level report field (a sibling of
+   * `verdict`, NOT folded into it): it is DERIVED from the verdict, never part of it, so the
+   * durable artifact keeps the two altitudes legibly separate.
+   */
+  gate2?: Gate2Eligibility;
 }
 
 export interface CertPersistResult {
@@ -120,6 +129,9 @@ export async function persistCertifyingOutcome(
     generatedAt: input.nowIso,
     asOfCommit: input.asOfCommit,
     verdict: input.verdict,
+    // D4 (strategy Q2): verdict-inert Gate-2 eligibility, authored runs only. Top-level
+    // sibling of `verdict` — derived from it, never part of it (mined runs omit the key).
+    ...(input.gate2 ? { gate2: input.gate2 } : {}),
     persisted,
     stampedRuleIds: projection.stamped.map((r) => r.lessonHash),
     skips: projection.skips,

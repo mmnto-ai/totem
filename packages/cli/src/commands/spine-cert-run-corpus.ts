@@ -11,6 +11,7 @@ import type {
   ResolvedPrDiff,
   ReviewThreadContent,
   ReviewThreadSource,
+  ScorerInput,
   SplitLedger,
   Stage4VerifierDeps,
   WindtunnelLock,
@@ -19,14 +20,16 @@ import type {
 /** Local alias for the core git exec port (mirrors spine-windtunnel.ts / spine-cert-materialize.ts). */
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;
 
-import {
-  buildAuthoredCertifyingCorpus,
-  type BuildAuthoredCertifyingCorpusDeps,
-} from './spine-authored-cert-corpus.js';
+import { buildAuthoredCertifyingCorpus } from './spine-authored-cert-corpus.js';
 import { buildCertifyingCorpus } from './spine-cert-corpus.js';
 import { buildReplayAdapters } from './spine-cert-record.js';
 import { type ReplayArtifact, ReplayArtifactSchema } from './spine-llm-replay.js';
-import type { CertifyingCorpus, CertifyingCorpusProvider } from './spine-windtunnel.js';
+import type {
+  CertifyingCorpus,
+  CertifyingCorpusProvider,
+  ResolvedCertifyingRun,
+  ScoredRun,
+} from './spine-windtunnel.js';
 
 // ─── Fixture file names under the gate-1 dir ─────────
 
@@ -474,22 +477,6 @@ export function buildReplayCorpusProvider(
   };
 }
 
-/**
- * ADR-112 §6/§9 Slice D1 — the AUTHORED `CertifyingCorpusProvider`, the sibling of
- * `buildReplayCorpusProvider`. A thin adapter over `buildAuthoredCertifyingCorpus`
- * (authored records → compile → §6 controls). It ignores the `lock`: the authored
- * corpus is PRODUCER-driven, and the producer-independent scoring substrate
- * (split / prDiffs / groundTruth) is supplied explicitly via `deps`. The lock-driven
- * sourcing of that substrate (D2) lives in `resolveCertifyingCorpusProvider`, which
- * builds these `deps` from `loadAuthoredCertRunFixtures` + the lock's `authored` block.
- */
-export function buildAuthoredCorpusProvider(
-  deps: BuildAuthoredCertifyingCorpusDeps,
-): CertifyingCorpusProvider {
-  return async (_lock: WindtunnelLock): Promise<CertifyingCorpus> =>
-    buildAuthoredCertifyingCorpus(deps);
-}
-
 /** Injected inputs for the AUTHORED window-wide answer-key deriver's assembly (D2.6). */
 export interface AuthoredCorpusAssemblyOptions {
   /** The `.totem/spine/gate-1` dir holding the committed authored scoring substrate. */
@@ -621,11 +608,13 @@ export interface ResolveCorpusProviderInputs {
 export async function resolveCertifyingCorpusProvider(
   lock: WindtunnelLock,
   inputs: ResolveCorpusProviderInputs,
-): Promise<CertifyingCorpusProvider> {
+): Promise<ResolvedCertifyingRun> {
+  // Dynamic import (CLI lazy-load convention — CR #2285): @mmnto/totem is heavy; the scorers
+  // are captured here (the resolver is async) and closed over by the sync `score` bundle below.
+  const { TotemError, scoreWindtunnel, scoreAuthoredWindtunnel, deriveGate2Eligibility } =
+    await import('@mmnto/totem');
   const producerKind = lock.producerKind ?? 'mined';
   if (producerKind === 'authored') {
-    const { TotemError } = await import('@mmnto/totem');
-
     // require-when-authored (codex): the lock's `authored` run-input block is mandatory at
     // cert resolve. The schema enforces only the reject-unless direction (a stray block on a
     // mined lock) — a producerKind:'authored' lock can predate its inputs, so the *require*
@@ -666,7 +655,12 @@ export async function resolveCertifyingCorpusProvider(
       expectedGroundTruthSha: groundTruthSha,
     });
 
-    return buildAuthoredCorpusProvider({
+    // §8 single home (D4 reachable flip): EAGER-build the authored corpus HERE so the scorer
+    // binds to THIS run's authored substrate (authoredControls + heldOutPrs) at resolution
+    // time. This also runs the D2.5 no-mint `verifyOnly` gate at the EARLIEST point — before
+    // the engine, before any scorer call or ledger write (codex Q2). Built once; the provider
+    // hands the SAME corpus to the engine, so the firings score the corpus that was built.
+    const authoredCorpus = await buildAuthoredCertifyingCorpus({
       totemDir: inputs.totemDir,
       // NO judgedBy — it is the §8 single source in the authoring-ledger, derived inside
       // buildAuthoredCertifyingCorpus (strategy (iii)); the lock must not be a second source.
@@ -678,15 +672,53 @@ export async function resolveCertifyingCorpusProvider(
       now: inputs.now,
       ...(inputs.authoredControlsDeps ? { authoredControlsDeps: inputs.authoredControlsDeps } : {}),
     });
+
+    // Fail-loud, NEVER fall back to the mined scorer (codex Q1): an authored corpus MUST carry
+    // its §6 controls (defined-with-empty-arrays for a no-fixture author, never undefined). A
+    // missing substrate scored by the mined scorer would silently PASS a culled differential.
+    if (!authoredCorpus.authoredControls) {
+      throw new TotemError(
+        'GATE_INVALID',
+        'Certifying run (authored): the authored corpus produced no `authoredControls` — the §6 ' +
+          'emission substrate is unbound. Refusing to score an authored corpus with the mined scorer ' +
+          '(ADR-112 §5.3 D4 — that would silently PASS a culled differential).',
+        'Re-derive the authored controls (`spine windtunnel derive-labels`) and re-freeze the cert corpus.',
+      );
+    }
+    const authoredControls = authoredCorpus.authoredControls;
+    const heldOutPrs: ReadonlySet<number> = new Set(split.heldOutPrs);
+
+    return {
+      // The lock is accepted (CertifyingCorpusProvider contract) but intentionally ignored:
+      // the corpus is eager-built + captured at resolve, so provider-call time needs nothing
+      // from it (greptile #2285 P2 — signature parity + self-documented intentional ignore).
+      provider: async (_lock: WindtunnelLock): Promise<CertifyingCorpus> => authoredCorpus,
+      score: (base: ScorerInput): ScoredRun => {
+        // Q1 threading guard: positives are derived INSIDE scoreAuthoredWindtunnel from
+        // `authoredControls.positive` — never double-source `engineResult.positiveControlTargets`
+        // (that reopens the postimage re-proof the D3 reduction discharged).
+        const { positiveControlTargets: _minedPositives, ...rest } = base;
+        const verdict = scoreAuthoredWindtunnel({ ...rest, authoredControls, heldOutPrs });
+        // Gate-2 eligibility is DOWNSTREAM of the scorer (Q2): the scorer emits raw
+        // heldOutActivationsByRule; the intersection (+ §1(k) + the Q4 illegitimate-window
+        // disqualifier) is derived here, verdict-inert.
+        const gate2 = deriveGate2Eligibility({ mintedRuleIds: base.mintedRuleIds, verdict });
+        return { kind: 'authored', verdict, gate2 };
+      },
+    };
   }
 
-  return buildReplayCorpusProvider({
-    gate1Dir: inputs.gate1Dir,
-    stage4: inputs.stage4,
-    now: inputs.now,
-    ...(inputs.seedClassesProvided !== undefined
-      ? { seedClassesProvided: inputs.seedClassesProvided }
-      : {}),
-    ...(inputs.onLedgers ? { onLedgers: inputs.onLedgers } : {}),
-  });
+  return {
+    provider: buildReplayCorpusProvider({
+      gate1Dir: inputs.gate1Dir,
+      stage4: inputs.stage4,
+      now: inputs.now,
+      ...(inputs.seedClassesProvided !== undefined
+        ? { seedClassesProvided: inputs.seedClassesProvided }
+        : {}),
+      ...(inputs.onLedgers ? { onLedgers: inputs.onLedgers } : {}),
+    }),
+    // Mined path byte-unchanged: the mined scorer, no authored overhead (gemini Q3 non-interference).
+    score: (base: ScorerInput): ScoredRun => ({ kind: 'mined', verdict: scoreWindtunnel(base) }),
+  };
 }

@@ -8,12 +8,16 @@ import { stringify } from 'yaml';
 
 import type {
   AuthoredControlsDeps,
+  GroundTruthLabel,
   PreimageDifferentialOutcome,
   PreimageDifferentialResult,
+  RuleFiring,
+  ScorerInput,
   SplitArtifact,
   Stage4VerifierDeps,
   WindtunnelLock,
 } from '@mmnto/totem';
+import { firingLabelId, scoreWindtunnel } from '@mmnto/totem';
 
 import { runRuleAuthor } from '../authored-rule-intake.js';
 import {
@@ -334,13 +338,12 @@ describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async si
   const lock = (overrides: Record<string, unknown>): WindtunnelLock =>
     ({ controls: { integrity: {} }, ...overrides }) as unknown as WindtunnelLock;
 
-  it('a mined lock (explicit or absent) resolves to a provider with no authored block', async () => {
-    await expect(
-      resolveCertifyingCorpusProvider(lock({ producerKind: 'mined' }), inputs()),
-    ).resolves.toBeTypeOf('function');
-    await expect(resolveCertifyingCorpusProvider(lock({}), inputs())).resolves.toBeTypeOf(
-      'function',
-    );
+  it('a mined lock (explicit or absent) resolves to a { provider, score } bundle', async () => {
+    for (const overrides of [{ producerKind: 'mined' }, {}]) {
+      const resolved = await resolveCertifyingCorpusProvider(lock(overrides), inputs());
+      expect(resolved.provider).toBeTypeOf('function');
+      expect(resolved.score).toBeTypeOf('function');
+    }
   });
 
   it('an authored lock WITHOUT an `authored` block fails loud (require-when-authored)', async () => {
@@ -377,10 +380,12 @@ describe('resolveCertifyingCorpusProvider — producerKind dispatch (D2 async si
       authored: { expectedSplitRef: SPLIT_REF },
       controls: { integrity: { prDiffsSha, groundTruthSha } },
     });
-    const provider = await resolveCertifyingCorpusProvider(
+    const { provider, score } = await resolveCertifyingCorpusProvider(
       authoredLock,
       inputs({ authoredControlsDeps: diffDeps('differential-holds') }),
     );
+    // D4: the §8 single home also binds the producer-kind scorer alongside the provider.
+    expect(score).toBeTypeOf('function');
     const corpus = await provider(authoredLock);
     expect(corpus.authoredControls).toBeDefined();
     expect(corpus.authoredControls!.positive).toHaveLength(1);
@@ -485,5 +490,278 @@ describe('assembleAuthoredCertifyingCorpus (D2.6 derive-path sibling)', () => {
     await expect(assembleAuthoredCertifyingCorpus(opts(), authoredLock)).rejects.toThrow(
       /pr-diffs\.json integrity/,
     );
+  });
+});
+
+// ─── 6. Slice D4 — the reachable flip: resolved.score(base) end-to-end ─────────
+//
+// The whole-path couple strategy reviews (ruling 2318Z, Q4 — 4 seams): (1) authored
+// corpus resolution (§8 single-home), (2) the no-mint verifyOnly gate FIRING, (3)
+// scoreAuthoredWindtunnel invocation (Q1 threading guard), (4) the Gate-2 emit
+// (verdict-inert, §1(k)-guarded). These rows drive a REAL resolve → real scorer
+// (never a mock) → real deriveGate2Eligibility, reusing the D1–D3 fixtures.
+
+describe('ADR-112 D4 — reachable flip: resolved.score(base) end-to-end', () => {
+  let gate1Dir: string;
+  beforeEach(() => {
+    gate1Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-d4-gate1-'));
+  });
+  afterEach(() => {
+    fs.rmSync(gate1Dir, { recursive: true, force: true });
+  });
+
+  const inputs = (
+    extra: Partial<{ authoredControlsDeps: AuthoredControlsDeps }> = {},
+  ): Parameters<typeof resolveCertifyingCorpusProvider>[1] => ({
+    gate1Dir,
+    stage4: stage4(),
+    now: NOW,
+    totemDir,
+    ...extra,
+  });
+
+  const lock = (overrides: Record<string, unknown>): WindtunnelLock =>
+    ({ controls: { integrity: {} }, ...overrides }) as unknown as WindtunnelLock;
+
+  /** An authored lock bound to a substrate's integrity shas. */
+  const authoredLock = (prDiffsSha: string, groundTruthSha: string): WindtunnelLock =>
+    lock({
+      producerKind: 'authored',
+      authored: { expectedSplitRef: SPLIT_REF },
+      controls: { integrity: { prDiffsSha, groundTruthSha } },
+    });
+
+  /** A ScorerInput `base` (exposure floors 0 so a clean run reaches PASS). The authored
+   *  closure strips `positiveControlTargets` (Q1 guard); the mined closure keeps it. */
+  const baseScorerInput = (over: Partial<ScorerInput>): ScorerInput => ({
+    firings: [],
+    groundTruth: new Map(),
+    positiveControlTargets: [],
+    mintedRuleIds: [],
+    cullRateThreshold: 0.5,
+    exposureFloors: {
+      activeRulesEvaluated: 0,
+      filesTouchedInWindow: 0,
+      positiveControlsExercised: 0,
+    },
+    actualExposure: {
+      activeRulesEvaluated: 1,
+      filesTouchedInWindow: 5,
+      positiveControlsExercised: 1,
+    },
+    ...over,
+  });
+
+  const firing = (
+    ruleId: string,
+    pr: number,
+    controlKind: RuleFiring['controlKind'],
+    matchedLine = 'gen();',
+    filePath = 'src/a.ts',
+  ): RuleFiring => ({
+    ruleId,
+    pr,
+    filePath,
+    matchedLine,
+    controlKind,
+    labelId: firingLabelId(ruleId, pr, filePath, matchedLine),
+  });
+
+  /** Resolve an authored run over a split with held-out prs, then read the minted ruleId
+   *  the real corpus derived (the Gate-2 join-back key). */
+  const resolveAuthored = async (
+    split: SplitArtifact,
+  ): Promise<{
+    resolved: Awaited<ReturnType<typeof resolveCertifyingCorpusProvider>>;
+    ruleId: string;
+  }> => {
+    writeAuthoredYaml(totemDir);
+    const { prDiffsSha, groundTruthSha } = writeSubstrate(gate1Dir, { split });
+    const alock = authoredLock(prDiffsSha, groundTruthSha);
+    const resolved = await resolveCertifyingCorpusProvider(
+      alock,
+      inputs({ authoredControlsDeps: diffDeps('differential-holds') }),
+    );
+    const corpus = await resolved.provider(alock);
+    const ruleId = corpus.authoredControls!.positive[0]!.targetRuleId;
+    return { resolved, ruleId };
+  };
+
+  it('(i) authored happy path: resolve → real scoreAuthoredWindtunnel → PASS + Gate-2 eligible', async () => {
+    const split: SplitArtifact = { ...SPLIT, trainPrs: [1], heldOutPrs: [2] };
+    const { resolved, ruleId } = await resolveAuthored(split);
+
+    const ctrl = firing(ruleId, 1, 'positive', 'ctrl();'); // train-side positive control
+    const heldCorpus = firing(ruleId, 2, 'corpus', 'gen();'); // held-out generalization
+    const scored = resolved.score(
+      baseScorerInput({
+        firings: [ctrl, heldCorpus],
+        groundTruth: new Map<string, GroundTruthLabel>([
+          [ctrl.labelId, 'TP'],
+          [heldCorpus.labelId, 'TP'],
+        ]),
+        mintedRuleIds: [ruleId],
+        positiveControlTargets: [{ pr: 1, targetRuleId: ruleId }],
+      }),
+    );
+
+    expect(scored.kind).toBe('authored');
+    if (scored.kind !== 'authored') throw new Error('unreachable');
+    expect(scored.verdict.verdict).toBe('PASS');
+    // O3 metric: the held-out corpus firing counts; the train-side control does not.
+    expect(scored.verdict.heldOutActivationsByRule).toEqual({ [ruleId]: 1 });
+    // Gate-2: a non-disqualified window's survivor with heldOut>0 is eligible (§1(k) satisfied).
+    expect(scored.gate2.windowDisqualified).toBe(false);
+    expect(scored.gate2.eligibleRuleIds).toEqual([ruleId]);
+  });
+
+  it('(ii) no-mint gate FIRES: a would-be-minted rule ⇒ GATE_INVALID at resolve, scorer unreachable, ledger byte-unchanged', async () => {
+    writeAuthoredYaml(totemDir); // seeds YAML + ledger (rule → `unchanged` on re-read)
+    const { prDiffsSha, groundTruthSha } = writeSubstrate(gate1Dir);
+    const ledgerPath = path.join(totemDir, 'spine', 'authoring-ledger.ndjson');
+    const ledgerBefore = fs.readFileSync(ledgerPath, 'utf-8');
+
+    // agy's dynamic in-memory mutate: rewrite ONLY the YAML to add a SECOND (unledgered)
+    // rule — the cert re-derive would MINT it. Do NOT re-seed the ledger (no runRuleAuthor).
+    fs.writeFileSync(
+      path.join(totemDir, 'spine', 'authored-rules.yaml'),
+      stringify({
+        splitRef: SPLIT_REF,
+        authoredAfterSplit: true,
+        heldOutNonInspectionAttestation: true,
+        rules: [
+          authoredRuleInput(),
+          authoredRuleInput({ targetDefect: 'a SECOND distinct defect' }),
+        ],
+      }),
+      'utf-8',
+    );
+
+    // The gate throws during the resolver's EAGER build — before `score` is returned (a
+    // stronger guarantee than a scorer spy: the closure never exists to be called).
+    await expect(
+      resolveCertifyingCorpusProvider(
+        authoredLock(prDiffsSha, groundTruthSha),
+        inputs({ authoredControlsDeps: diffDeps('differential-holds') }),
+      ),
+    ).rejects.toThrow(/would be authored \(minted\/revised\)/);
+
+    // §8 no-mint: the cert re-derive is read-only — the gate fired before Pass-2 append.
+    expect(fs.readFileSync(ledgerPath, 'utf-8')).toBe(ledgerBefore);
+  });
+
+  it('(v) mined path regression: producerKind absent ⇒ kind mined, NO gate2 key, verdict byte-identical to scoreWindtunnel', async () => {
+    const resolved = await resolveCertifyingCorpusProvider(lock({}), inputs());
+
+    const ctrl = firing('mined-rule', 1, 'positive', 'ctrl();');
+    const base = baseScorerInput({
+      firings: [ctrl],
+      groundTruth: new Map<string, GroundTruthLabel>([[ctrl.labelId, 'TP']]),
+      mintedRuleIds: ['mined-rule'],
+      positiveControlTargets: [{ pr: 1, targetRuleId: 'mined-rule' }],
+    });
+    const scored = resolved.score(base);
+
+    expect(scored.kind).toBe('mined');
+    // The mined bundle carries NO Gate-2 surface at all (not an empty one).
+    expect('gate2' in scored).toBe(false);
+    // Byte-identity: the mined closure is a pass-through to the real scoreWindtunnel.
+    expect(scored.verdict).toEqual(scoreWindtunnel(base));
+  });
+
+  it('(vi) cross-partition leakage guard: a train-only-activating rule → zero held-out → excluded from Gate-2 despite PASS', async () => {
+    const split: SplitArtifact = { ...SPLIT, trainPrs: [1], heldOutPrs: [2] };
+    // Structural guard: the partitions the metric keys off are disjoint (heldOut ∩ train = ∅).
+    expect(split.heldOutPrs.some((pr) => split.trainPrs.includes(pr))).toBe(false);
+    const { resolved, ruleId } = await resolveAuthored(split);
+
+    const ctrl = firing(ruleId, 1, 'positive', 'ctrl();'); // train-side ONLY — no held-out corpus firing
+    const scored = resolved.score(
+      baseScorerInput({
+        firings: [ctrl],
+        groundTruth: new Map<string, GroundTruthLabel>([[ctrl.labelId, 'TP']]),
+        mintedRuleIds: [ruleId],
+        positiveControlTargets: [{ pr: 1, targetRuleId: ruleId }],
+      }),
+    );
+
+    expect(scored.kind).toBe('authored');
+    if (scored.kind !== 'authored') throw new Error('unreachable');
+    // Clean rare-defect window: the verdict PASSES…
+    expect(scored.verdict.verdict).toBe('PASS');
+    expect(scored.verdict.heldOutActivationsByRule).toEqual({ [ruleId]: 0 });
+    // …yet Gate-2 excludes the rule (survivor recorded, ineligible at zero held-out).
+    expect(scored.gate2.survivors).toEqual([
+      { ruleId, heldOutActivations: 0, gate2Eligible: false },
+    ]);
+    expect(scored.gate2.eligibleRuleIds).toEqual([]);
+  });
+
+  it('(vii) unlabeled-demotion partition: held-out UNLABELED corpus firing ⇒ HONEST-NEGATIVE, no FP, metric verdict-inert', async () => {
+    const split: SplitArtifact = { ...SPLIT, trainPrs: [1], heldOutPrs: [2] };
+    const { resolved, ruleId } = await resolveAuthored(split);
+
+    const ctrl = firing(ruleId, 1, 'positive', 'ctrl();'); // train-side, TP-labeled
+    const unlabeled = firing(ruleId, 2, 'corpus', 'gen();'); // held-out, NO ground-truth entry
+    const scored = resolved.score(
+      baseScorerInput({
+        firings: [ctrl, unlabeled],
+        groundTruth: new Map<string, GroundTruthLabel>([[ctrl.labelId, 'TP']]),
+        mintedRuleIds: [ruleId],
+        positiveControlTargets: [{ pr: 1, targetRuleId: ruleId }],
+      }),
+    );
+
+    expect(scored.kind).toBe('authored');
+    if (scored.kind !== 'authored') throw new Error('unreachable');
+    // Clean demotion — needs adjudication, NOT a FAIL/FP.
+    expect(scored.verdict.verdict).toBe('HONEST-NEGATIVE');
+    expect(scored.verdict.needsAdjudication).toContain(unlabeled.labelId);
+    expect(scored.gate2.windowDisqualified).toBe(false);
+    // The O3 metric is label-independent (verdict-inert): the unlabeled held-out firing still counts.
+    expect(scored.verdict.heldOutActivationsByRule).toEqual({ [ruleId]: 1 });
+  });
+
+  it('(viii) §6 cull-unbroken: a fix-shaped differential ⇒ positive:[] + illegitimate non-emission ⇒ FAIL, never a mined PASS via empty positives (codex assertion #1)', async () => {
+    writeAuthoredYaml(totemDir);
+    const split: SplitArtifact = { ...SPLIT, trainPrs: [1], heldOutPrs: [2] };
+    const { prDiffsSha, groundTruthSha } = writeSubstrate(gate1Dir, { split });
+    const alock = authoredLock(prDiffsSha, groundTruthSha);
+    // fix-shaped: the §4 differential culls every fixture to an illegitimate non-emission —
+    // NOTHING reaches positive[]. resolveAuthored is not reusable here (it reads positive[0]).
+    const resolved = await resolveCertifyingCorpusProvider(
+      alock,
+      inputs({ authoredControlsDeps: diffDeps('fix-shaped') }),
+    );
+    const corpus = await resolved.provider(alock);
+
+    // The §6 cull holds end-to-end: a fix-shaped fixture lands in nonEmissions, never positive[].
+    expect(corpus.authoredControls!.positive).toEqual([]);
+    expect(corpus.authoredControls!.nonEmissions).toHaveLength(1);
+    expect(corpus.authoredControls!.nonEmissions[0]!.class).toBe('illegitimate');
+
+    const ruleId = corpus.rules[0]!.lessonHash;
+    // The hazard codex assertion #1 guards: an empty positive control MUST NOT let the run
+    // degenerate to a mined PASS via positiveControlTargets:[] — the illegitimate non-emission
+    // FAILs the whole window. (Core-altitude sibling: windtunnel-scorer-authored.test.ts codex-1.)
+    const scored = resolved.score(
+      baseScorerInput({
+        firings: [],
+        groundTruth: new Map(),
+        mintedRuleIds: [ruleId],
+        positiveControlTargets: [],
+      }),
+    );
+
+    expect(scored.kind).toBe('authored');
+    if (scored.kind !== 'authored') throw new Error('unreachable');
+    // NOT a silent mined PASS — a structural, no-claim FAIL (precision null, never 0).
+    expect(scored.verdict.verdict).toBe('FAIL');
+    expect(scored.verdict.precision).toBeNull();
+    expect(scored.verdict.authoredControlGate.illegitimate).toBe(1);
+    expect(scored.verdict.authoredControlGate.effect).toBe('fail-illegitimate');
+    // Gate-2: illegitimate > 0 ⇒ window disqualified ⇒ no survivor eligible (Q4).
+    expect(scored.gate2.windowDisqualified).toBe(true);
+    expect(scored.gate2.eligibleRuleIds).toEqual([]);
   });
 });
