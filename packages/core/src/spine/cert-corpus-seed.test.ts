@@ -135,6 +135,22 @@ describe('CertCorpusSeedSchema (strict write-side, fold-1 / fold-4)', () => {
       }),
     ).toThrow(/BOTH positive and negative/);
   });
+
+  it('rejects an authored seed missing split.frozenAt (presence owned at parse — strategy#804)', () => {
+    expect(() => seed({ producerKind: 'authored' })).toThrow(/split\.frozenAt/);
+  });
+
+  it('accepts an authored seed carrying split.frozenAt', () => {
+    const parsed = seed({
+      producerKind: 'authored',
+      split: { ...seed().split, frozenAt: '2026-06-01T00:00:00.000Z' },
+    });
+    expect(parsed.split.frozenAt).toBe('2026-06-01T00:00:00.000Z');
+  });
+
+  it("accepts an explicit 'mined' seed without split.frozenAt (additive posture)", () => {
+    expect(seed({ producerKind: 'mined' }).split.frozenAt).toBeUndefined();
+  });
 });
 
 describe('buildWindtunnelLock', () => {

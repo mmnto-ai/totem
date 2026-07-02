@@ -951,7 +951,13 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
     writeAuthoredYaml(totemDir, {
       rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
     });
-    const noFreezeSeed = authoredSeed({ split: { cutIndex: 1, excludedPrs: [] } });
+    // Hand-built (not schema-parsed): the parse-time presence guard (strategy#804
+    // layered clauses) now rejects this shape at parse, so the materialize-time
+    // defense must be proven on its own for programmatic callers.
+    const noFreezeSeed = {
+      ...authoredSeed(),
+      split: { cutIndex: 1, excludedPrs: [] },
+    } as CertCorpusSeed;
     await expect(materializeAuthored(ctx(noFreezeSeed), gitDeps())).rejects.toThrow(
       /frozen BEFORE authoring/,
     );
