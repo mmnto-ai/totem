@@ -721,4 +721,47 @@ describe('ADR-112 D4 — reachable flip: resolved.score(base) end-to-end', () =>
     // The O3 metric is label-independent (verdict-inert): the unlabeled held-out firing still counts.
     expect(scored.verdict.heldOutActivationsByRule).toEqual({ [ruleId]: 1 });
   });
+
+  it('(viii) §6 cull-unbroken: a fix-shaped differential ⇒ positive:[] + illegitimate non-emission ⇒ FAIL, never a mined PASS via empty positives (codex assertion #1)', async () => {
+    writeAuthoredYaml(totemDir);
+    const split: SplitArtifact = { ...SPLIT, trainPrs: [1], heldOutPrs: [2] };
+    const { prDiffsSha, groundTruthSha } = writeSubstrate(gate1Dir, { split });
+    const alock = authoredLock(prDiffsSha, groundTruthSha);
+    // fix-shaped: the §4 differential culls every fixture to an illegitimate non-emission —
+    // NOTHING reaches positive[]. resolveAuthored is not reusable here (it reads positive[0]).
+    const resolved = await resolveCertifyingCorpusProvider(
+      alock,
+      inputs({ authoredControlsDeps: diffDeps('fix-shaped') }),
+    );
+    const corpus = await resolved.provider(alock);
+
+    // The §6 cull holds end-to-end: a fix-shaped fixture lands in nonEmissions, never positive[].
+    expect(corpus.authoredControls!.positive).toEqual([]);
+    expect(corpus.authoredControls!.nonEmissions).toHaveLength(1);
+    expect(corpus.authoredControls!.nonEmissions[0]!.class).toBe('illegitimate');
+
+    const ruleId = corpus.rules[0]!.lessonHash;
+    // The hazard codex assertion #1 guards: an empty positive control MUST NOT let the run
+    // degenerate to a mined PASS via positiveControlTargets:[] — the illegitimate non-emission
+    // FAILs the whole window. (Core-altitude sibling: windtunnel-scorer-authored.test.ts codex-1.)
+    const scored = resolved.score(
+      baseScorerInput({
+        firings: [],
+        groundTruth: new Map(),
+        mintedRuleIds: [ruleId],
+        positiveControlTargets: [],
+      }),
+    );
+
+    expect(scored.kind).toBe('authored');
+    if (scored.kind !== 'authored') throw new Error('unreachable');
+    // NOT a silent mined PASS — a structural, no-claim FAIL (precision null, never 0).
+    expect(scored.verdict.verdict).toBe('FAIL');
+    expect(scored.verdict.precision).toBeNull();
+    expect(scored.verdict.authoredControlGate.illegitimate).toBe(1);
+    expect(scored.verdict.authoredControlGate.effect).toBe('fail-illegitimate');
+    // Gate-2: illegitimate > 0 ⇒ window disqualified ⇒ no survivor eligible (Q4).
+    expect(scored.gate2.windowDisqualified).toBe(true);
+    expect(scored.gate2.eligibleRuleIds).toEqual([]);
+  });
 });

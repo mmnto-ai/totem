@@ -184,3 +184,19 @@ score = (base) => {
 - **`heldOutPrs`:** `new Set(split.heldOutPrs)`, captured in the authored closure at resolve (split already loaded there).
 - **Caller change (`:507`):** `const { provider, score } = await resolveCertifyingCorpusProvider(...)`; pass `provider` to the engine; use `score` at `:524`. Contained — the resolver has one real run-path caller.
 - **Couple flag for strategy:** the authored path EAGER-builds the corpus at resolve (vs lazy at engine-call). Behavior-equivalent for a single run (built once, cached, reused by the engine); moves the no-mint gate firing earlier (still before score + ledger write). Flag in the PR for seam-1/2 review.
+
+---
+
+## D4 COUPLE RESOLUTION — strategy CONDITIONAL PASS (0102Z) → clean bless owed on one row
+
+Strategy's independent-source-read couple verdict on #2285: **4 seams CONFORM** (Q1 single-home, Q3 no-mint firing, Q1 threading guard, Q2/Q4 Gate-2 emit); both build-altitude flags **APPROVED** (eager-build called "better, not just equivalent"). One row OWED before clean bless:
+
+- **Row (viii) — §6 cull-unbroken (codex assertion #1; greptile P2 @ `:492`):** ADDED. A `fix-shaped` differential ⇒ `authoredControls.positive: []` + an `illegitimate` non-emission ⇒ the run FAILs (precision null), `authoredControlGate.illegitimate === 1` / `effect === 'fail-illegitimate'`, `gate2.windowDisqualified`, and CRUCIALLY it does **not** degenerate to a mined PASS via `positiveControlTargets: []`. Core-altitude sibling: `windtunnel-scorer-authored.test.ts` codex-1.
+
+**Bot findings (strategy: my lane, behavior correct, style/perf) — FIXED, not declined (convention-consistency, kills re-review churn):**
+- **CR Major (`:19` static import):** the scorers are now dynamic-`import('@mmnto/totem')`ed at the resolver top (the file's own convention; the sync `score` closure closes over the captured refs). Static value import removed.
+- **greptile P2 (`:691` dropped lock param):** the authored provider's `_lock: WindtunnelLock` param restored (CertifyingCorpusProvider signature parity + self-documented intentional ignore).
+
+**Build-altitude (b) hardening (strategy non-blocking note) — DEFERRED-WITH-RATIONALE (noted here, not guarded):** an assert that an injected `certifyingCorpus` carries no `authoredControls` would make the mined-only invariant structural vs by-convention. NOT added: the path is production-unreachable (authored flows only through the resolver's eager build), and adding a check to the mined `score` branch would risk the mined-byte-unchanged property this slice guarantees. The by-construction invariant holds; a structural guard is a future defense-in-depth item, not a D4 blocker.
+
+**§8 D3→D4 currency pin:** strategy lands it LOCKSTEP on the operator's named `merge #2285` (#793 pattern, grep-sweeping the whole ADR). Merge is operator-gated.

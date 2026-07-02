@@ -16,7 +16,6 @@ import type {
   Stage4VerifierDeps,
   WindtunnelLock,
 } from '@mmnto/totem';
-import { deriveGate2Eligibility, scoreAuthoredWindtunnel, scoreWindtunnel } from '@mmnto/totem';
 
 /** Local alias for the core git exec port (mirrors spine-windtunnel.ts / spine-cert-materialize.ts). */
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;
@@ -610,10 +609,12 @@ export async function resolveCertifyingCorpusProvider(
   lock: WindtunnelLock,
   inputs: ResolveCorpusProviderInputs,
 ): Promise<ResolvedCertifyingRun> {
+  // Dynamic import (CLI lazy-load convention — CR #2285): @mmnto/totem is heavy; the scorers
+  // are captured here (the resolver is async) and closed over by the sync `score` bundle below.
+  const { TotemError, scoreWindtunnel, scoreAuthoredWindtunnel, deriveGate2Eligibility } =
+    await import('@mmnto/totem');
   const producerKind = lock.producerKind ?? 'mined';
   if (producerKind === 'authored') {
-    const { TotemError } = await import('@mmnto/totem');
-
     // require-when-authored (codex): the lock's `authored` run-input block is mandatory at
     // cert resolve. The schema enforces only the reject-unless direction (a stray block on a
     // mined lock) — a producerKind:'authored' lock can predate its inputs, so the *require*
@@ -688,7 +689,10 @@ export async function resolveCertifyingCorpusProvider(
     const heldOutPrs: ReadonlySet<number> = new Set(split.heldOutPrs);
 
     return {
-      provider: async (): Promise<CertifyingCorpus> => authoredCorpus,
+      // The lock is accepted (CertifyingCorpusProvider contract) but intentionally ignored:
+      // the corpus is eager-built + captured at resolve, so provider-call time needs nothing
+      // from it (greptile #2285 P2 — signature parity + self-documented intentional ignore).
+      provider: async (_lock: WindtunnelLock): Promise<CertifyingCorpus> => authoredCorpus,
       score: (base: ScorerInput): ScoredRun => {
         // Q1 threading guard: positives are derived INSIDE scoreAuthoredWindtunnel from
         // `authoredControls.positive` — never double-source `engineResult.positiveControlTargets`
