@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 1.89.0
+
+### Patch Changes
+
+- Updated dependencies [317b1a9]
+- Updated dependencies [5a310ec]
+  - @mmnto/totem@1.89.0
+
 ## 1.88.0
 
 ### Patch Changes
