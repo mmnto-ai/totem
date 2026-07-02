@@ -849,9 +849,17 @@ export {
   authoringContentHash,
   AuthoringLedgerEntrySchema,
   buildAuthoredIdentityIndex,
+  foldEffectiveLedgerEntries,
   identityKey,
   readAuthoringLedger,
 } from './spine/authoring-ledger.js';
+// Spine: ADR-112 §5.1/§5.3 Slice D5 — the authored freeze-time preconditions (Q2 floor + Q3 temporal/membership)
+export {
+  assertAuthoredFreezePreconditions,
+  checkFrozenBeforeAuthoring,
+  checkHeldOutFloor,
+  checkPositiveFixturesTrainSide,
+} from './spine/authored-freeze-gates.js';
 export type {
   PreimageDifferentialDeps,
   PreimageDifferentialOutcome,

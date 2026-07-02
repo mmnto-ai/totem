@@ -159,6 +159,24 @@ export async function materializeCommand(opts: MaterializeOptions): Promise<void
   }
   const seed = seedParse.data;
 
+  // ADR-112 §7/§8 D5 — single kind-resolution: read the producer ONCE and dispatch the whole
+  // materializer here. Authored runs the window-wide sibling (freeze gates + train-side controls
+  // + `frozenAt`); mined falls through BYTE-UNCHANGED below. No producerKind branch downstream.
+  if ((seed.producerKind ?? 'mined') === 'authored') {
+    const { materializeAuthored } = await import('./spine-authored-materialize.js');
+    await materializeAuthored({
+      seed,
+      lcDir,
+      repoRoot,
+      cwd,
+      totemDir: path.join(repoRoot, '.totem'),
+      outDir: opts.outDir,
+      resolveWithinRepo,
+      safeExec,
+    });
+    return;
+  }
+
   // 2. Enumerate PRs off the clone, then derive (pure) — corpus + split + roles.
   let metas;
   try {

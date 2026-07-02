@@ -237,6 +237,20 @@ export function appendAuthoringLedgerEntry(totemDir: string, entry: AuthoringLed
 }
 
 /**
+ * Fold the ledger to its EFFECTIVE state: the LAST entry per `ruleId` (append
+ * order = revision order, so a later revision supersedes). Returned in each
+ * ruleId's FIRST-appearance order (Map insertion order, stable). The D5 authored
+ * freeze/cert gates read these — a superseded revision must never gate the run.
+ */
+export function foldEffectiveLedgerEntries(
+  entries: readonly AuthoringLedgerEntry[],
+): AuthoringLedgerEntry[] {
+  const byRuleId = new Map<string, AuthoringLedgerEntry>();
+  for (const e of entries) byRuleId.set(e.ruleId, e);
+  return [...byRuleId.values()];
+}
+
+/**
  * The effective state of one authored rule, folded from its ledger lineage: the
  * persisted `ruleId` + the latest material `contentHash`. Keyed by the identity
  * pair so the reader can upsert a re-read `(author,targetDefect)` onto its

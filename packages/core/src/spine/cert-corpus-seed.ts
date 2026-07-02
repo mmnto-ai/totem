@@ -47,6 +47,11 @@ const PositiveControlSeedSchema = z.object({
 
 export const CertCorpusSeedSchema = z
   .object({
+    // ADR-112 §7/§8 Slice D5 — the PRODUCER this seed materializes. Absent ⇒ 'mined' (the
+    // canonical absent-⇒-mined default). Read ONCE at the materialize entry (single
+    // kind-resolution) to dispatch the mined path vs the authored sibling; never a
+    // downstream branch. Additive-optional: every existing mined seed parses unchanged.
+    producerKind: z.enum(['mined', 'authored']).optional(),
     gate: nonBlank(),
     canonicalPath: nonBlank(),
     repo: nonBlank(),
@@ -72,6 +77,13 @@ export const CertCorpusSeedSchema = z
       // The atomic revert pairs to drop from train/held-out (kept in the cover).
       // Usually empty when `excludeRevertPairs` already culls reverts at selection.
       excludedPrs: z.array(z.number().int().positive()).default([]),
+      // ADR-112 §5.1 D5 — the REAL pre-authoring freeze instant (full ISO-8601). The authored
+      // producer BINDS `split.frozenAt` to this (loaded, NEVER re-stamped at materialize) so the
+      // Q3 temporal gate checks the actual freeze-before-authoring chronology. Required for an
+      // authored run — materialize fails loud if absent (a materialize-`now()` freeze is
+      // necessarily AFTER authoring ⇒ the gate would always throw, #2287 couple HOLD). A mined
+      // seed omits it (byte-unchanged).
+      frozenAt: z.string().datetime({ offset: true }).optional(),
     }),
     controls: z.object({
       positiveRef: nonBlank(),
@@ -253,8 +265,17 @@ export function buildWindtunnelLock(params: {
   seed: CertCorpusSeed;
   resolvedPrs: ResolvedPrInput[];
   integrity: LockIntegrityInput;
+  /**
+   * ADR-112 §8 Slice D5 — the authored producer stamps `producerKind:'authored'` so the
+   * resolver selects the authored sibling. Absent ⇒ mined (the canonical absent-⇒-mined
+   * default). Additive-optional: the mined producer never passes it, so the emitted lock is
+   * BYTE-IDENTICAL to the pre-D5 shape (conditional-spread below, no `key:undefined`).
+   */
+  producerKind?: 'authored';
+  /** ADR-112 §8 D5 — the authored cert-run input binding (present ONLY with `producerKind:'authored'`). */
+  authored?: { expectedSplitRef: string };
 }): WindtunnelLock {
-  const { seed, resolvedPrs, integrity } = params;
+  const { seed, resolvedPrs, integrity, producerKind, authored } = params;
   const sortedPrs = [...resolvedPrs].sort((a, b) => a.pr - b.pr);
 
   const lock = {
@@ -262,6 +283,11 @@ export function buildWindtunnelLock(params: {
     canonicalPath: seed.canonicalPath,
     gate: seed.gate,
     phase: seed.phase,
+    // D5 authored producer fields — conditional-spread so a mined lock omits them entirely
+    // and serializes byte-identically (the §7 no-blast-radius guard; schema `.superRefine`
+    // rejects a stray `authored` block on a non-authored lock).
+    ...(producerKind !== undefined ? { producerKind } : {}),
+    ...(authored !== undefined ? { authored } : {}),
     corpus: {
       repo: seed.repo,
       selectionRule: {

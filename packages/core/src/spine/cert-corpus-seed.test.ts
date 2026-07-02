@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { canonicalStringify } from '../compile-manifest.js';
 import {
   buildWindtunnelLock,
   type CertCorpusSeed,
@@ -172,6 +173,50 @@ describe('buildWindtunnelLock', () => {
         seed: seed(),
         resolvedPrs,
         integrity: { fixtureSha: 'not-a-sha', prDiffsSha: sha256('abc') },
+      }),
+    ).toThrow();
+  });
+
+  // ─── D5 §7 no-blast-radius: additive-optional producerKind/authored ─────────
+  it('D5: a mined lock is BYTE-IDENTICAL with the new params absent or explicitly undefined', () => {
+    const base = {
+      seed: seed(),
+      resolvedPrs,
+      integrity: { fixtureSha: sha(7), prDiffsSha: sha256('abc') },
+    };
+    const minedAbsent = canonicalStringify(buildWindtunnelLock(base), 2);
+    const minedUndefined = canonicalStringify(
+      buildWindtunnelLock({ ...base, producerKind: undefined, authored: undefined }),
+      2,
+    );
+    // Conditional-spread ⇒ no `key: undefined` survives ⇒ byte-identical to the pre-D5 shape.
+    expect(minedUndefined).toBe(minedAbsent);
+    expect(minedAbsent).not.toContain('"producerKind"');
+    expect(minedAbsent).not.toContain('"authored"');
+  });
+
+  it('D5: an authored lock carries producerKind + authored.expectedSplitRef (params take effect)', () => {
+    const lock = buildWindtunnelLock({
+      seed: seed(),
+      resolvedPrs,
+      integrity: { fixtureSha: sha(7), prDiffsSha: sha256('abc') },
+      producerKind: 'authored',
+      authored: { expectedSplitRef: 'split-cert-1' },
+    });
+    expect(lock.producerKind).toBe('authored');
+    expect(lock.authored).toEqual({ expectedSplitRef: 'split-cert-1' });
+    const authoredStr = canonicalStringify(lock, 2);
+    expect(authoredStr).toContain('"producerKind"');
+    expect(authoredStr).toContain('"expectedSplitRef"');
+  });
+
+  it('D5: an `authored` block without producerKind:authored fails the schema (superRefine guard)', () => {
+    expect(() =>
+      buildWindtunnelLock({
+        seed: seed(),
+        resolvedPrs,
+        integrity: { fixtureSha: sha(7), prDiffsSha: sha256('abc') },
+        authored: { expectedSplitRef: 'split-cert-1' },
       }),
     ).toThrow();
   });

@@ -8,22 +8,30 @@ import { stringify } from 'yaml';
 
 import type {
   AuthoredControlsDeps,
+  CertCorpusSeed,
   GroundTruthLabel,
   PreimageDifferentialOutcome,
   PreimageDifferentialResult,
+  PrMeta,
   RuleFiring,
   ScorerInput,
   SplitArtifact,
   Stage4VerifierDeps,
   WindtunnelLock,
 } from '@mmnto/totem';
-import { firingLabelId, scoreWindtunnel } from '@mmnto/totem';
+import {
+  CertCorpusSeedSchema,
+  firingLabelId,
+  scoreWindtunnel,
+  WindtunnelLockSchema,
+} from '@mmnto/totem';
 
 import { runRuleAuthor } from '../authored-rule-intake.js';
 import {
   buildAuthoredCertifyingCorpus,
   type BuildAuthoredCertifyingCorpusDeps,
 } from './spine-authored-cert-corpus.js';
+import { materializeAuthored } from './spine-authored-materialize.js';
 import {
   assembleAuthoredCertifyingCorpus,
   resolveCertifyingCorpusProvider,
@@ -763,5 +771,256 @@ describe('ADR-112 D4 — reachable flip: resolved.score(base) end-to-end', () =>
     // Gate-2: illegitimate > 0 ⇒ window disqualified ⇒ no survivor eligible (Q4).
     expect(scored.gate2.windowDisqualified).toBe(true);
     expect(scored.gate2.eligibleRuleIds).toEqual([]);
+  });
+});
+
+// ─── 7. Slice D5 — the authored materialize/freeze seam (producer → consumer) ──
+//
+// `materializeAuthored` is the sibling authored producer: it FREEZES the window-wide
+// substrate + a `frozenAt` split + the `producerKind:'authored'` lock, gated by the
+// §5.1/§5.3 freeze preconditions. Git is injected so the producer is exercised without
+// a real clone (the mined materializer has no unit test at all). Row (i) closes the
+// producer→consumer loop: the PRODUCED lock+substrate drives a real authored resolve.
+
+describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
+  const AUTHORED_AT = '2026-06-15T12:00:00.000Z';
+  const FROZEN_AT = '2026-06-01T00:00:00.000Z'; // strictly BEFORE authoring (Q3 temporal)
+
+  let repoRoot: string;
+  let gate1Dir: string;
+  beforeEach(() => {
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-d5-repo-'));
+    gate1Dir = path.join(repoRoot, 'gate-1');
+  });
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  /** Newest-first metas for PRs 2,1 → corpus [1,2] (all code-touching non-bot). */
+  const metas = (): PrMeta[] =>
+    [2, 1].map((pr) => ({
+      pr,
+      mergeCommit: sha(pr),
+      author: 'Dev <dev@example.com>',
+      isBotAuthor: false,
+      changedFiles: ['src/a.ts'],
+    }));
+
+  /** An authored seed: producerKind authored, cutIndex 1 ⇒ train [1] / held-out [2] (floor 0.5). */
+  const authoredSeed = (over: Partial<CertCorpusSeed> = {}): CertCorpusSeed =>
+    CertCorpusSeedSchema.parse({
+      producerKind: 'authored',
+      gate: 'gate-1',
+      canonicalPath: 'gate-1/windtunnel.lock.json',
+      repo: 'mmnto-ai/liquid-city',
+      phase: 'certifying',
+      selectionRule: {
+        state: 'merged',
+        predicate: 'code-touching non-bot',
+        window: { type: 'all' },
+        asOfCommit: sha(999),
+        codePathClassifier: { includeGlobs: ['**'], excludeGlobs: [] },
+      },
+      split: { cutIndex: 1, excludedPrs: [], frozenAt: FROZEN_AT },
+      controls: {
+        positiveRef: 'gate-1/controls/positive',
+        negativeRef: 'gate-1/controls/negative',
+        mechanism: 'git-hash-object',
+        positive: [], // authored controls are train-side (derived at run), NOT seed-designated
+        negative: [],
+      },
+      fpDefinition: { rubricRef: 'r', groundTruthRef: 'g', adjudicator: 'disposition-derived' },
+      cullRateThreshold: 0.1,
+      exposureDenominator: {
+        activeRulesEvaluated: { floor: 2 },
+        filesTouchedInWindow: { floor: 0 },
+        positiveControlsExercised: { floor: 0 },
+      },
+      ...over,
+    });
+
+  const ctx = (seed: CertCorpusSeed) => ({
+    seed,
+    lcDir: '/unused-git-injected',
+    repoRoot,
+    cwd: repoRoot,
+    totemDir,
+    outDir: gate1Dir,
+    resolveWithinRepo: (input: string) => path.resolve(repoRoot, input),
+    safeExec: (() => {
+      throw new Error('git must be injected');
+    }) as never,
+  });
+
+  /** Injected git: canned metas + non-empty diffs + a fixed fixtureSha. No `now` — `frozenAt` is
+   *  the seed's recorded pre-authoring instant (real chronology), never a materialize clock. */
+  const gitDeps = (over: Partial<Parameters<typeof materializeAuthored>[1]> = {}) => ({
+    enumerateMetas: () => metas(),
+    resolvePrDiff: (mergeCommit: string) => ({
+      baseSha: sha(500),
+      headSha: sha(600),
+      diff: `diff ${mergeCommit}\n+forbiddenCall()\n`,
+    }),
+    computeControlFixtureSha: () => sha(7),
+    ...over,
+  });
+
+  it('(i) produces a valid authored lock + window-wide substrate + frozenAt split', async () => {
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
+    });
+    await materializeAuthored(ctx(authoredSeed()), gitDeps());
+
+    // Lock: parses, producerKind authored, expectedSplitRef = the ledger's splitRef, no groundTruthSha.
+    const lockRaw = JSON.parse(
+      fs.readFileSync(path.join(gate1Dir, 'windtunnel.lock.json'), 'utf-8'),
+    );
+    const lock = WindtunnelLockSchema.parse(lockRaw);
+    expect(lock.producerKind).toBe('authored');
+    expect(lock.authored).toEqual({ expectedSplitRef: SPLIT_REF });
+    expect(lock.controls.integrity.groundTruthSha).toBeUndefined(); // derive-labels stamps it
+
+    // Split: carries the mechanical frozenAt; train [1] / held-out [2].
+    const split = JSON.parse(fs.readFileSync(path.join(gate1Dir, 'split.json'), 'utf-8'));
+    expect(split.frozenAt).toBe(FROZEN_AT);
+    expect(split.trainPrs).toEqual([1]);
+    expect(split.heldOutPrs).toEqual([2]);
+
+    // pr-diffs: WINDOW-WIDE (train ∪ held-out = [1,2]), not held-out-only.
+    const prDiffs = JSON.parse(fs.readFileSync(path.join(gate1Dir, 'pr-diffs.json'), 'utf-8'));
+    expect(prDiffs.map((d: { pr: number }) => d.pr)).toEqual([1, 2]);
+
+    // The train-side positive-control fixture diff was written for the integrity gate.
+    expect(fs.existsSync(path.join(repoRoot, 'gate-1/controls/positive/1.diff'))).toBe(true);
+  });
+
+  it('(i-consumer) the PRODUCED lock+substrate drives a real authored resolve (producer→consumer)', async () => {
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
+    });
+    await materializeAuthored(ctx(authoredSeed()), gitDeps());
+
+    // Simulate the `derive-labels` seal: write the answer key + stamp groundTruthSha onto the lock.
+    const gtJson = JSON.stringify({});
+    fs.writeFileSync(path.join(gate1Dir, 'ground-truth-labels.json'), gtJson, 'utf-8');
+    const groundTruthSha = createHash('sha256')
+      .update(gtJson.replace(/\r\n/g, '\n'), 'utf-8')
+      .digest('hex');
+    const lock = WindtunnelLockSchema.parse(
+      JSON.parse(fs.readFileSync(path.join(gate1Dir, 'windtunnel.lock.json'), 'utf-8')),
+    );
+    const sealedLock = {
+      ...lock,
+      controls: {
+        ...lock.controls,
+        integrity: { ...lock.controls.integrity, groundTruthSha },
+      },
+    } as WindtunnelLock;
+
+    const { provider, score } = await resolveCertifyingCorpusProvider(sealedLock, {
+      gate1Dir,
+      stage4: stage4(),
+      now: NOW,
+      totemDir,
+      authoredControlsDeps: diffDeps('differential-holds'),
+    });
+    const corpus = await provider(sealedLock);
+    // The authored channel resolved from the PRODUCED substrate (fixture #1 is train-side positive).
+    expect(corpus.authoredControls).toBeDefined();
+    expect(corpus.authoredControls!.positive).toHaveLength(1);
+    expect(score).toBeTypeOf('function');
+  });
+
+  it('(ii) temporal violation: seed frozenAt AFTER authoring ⇒ GATE_INVALID, nothing written', async () => {
+    // A real (undoctored) run: the seed's recorded frozenAt post-dates the rule's authoredAt, so
+    // the split was NOT frozen before authoring — a §5.1 leakage event the gate must reject.
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
+    });
+    const lateSeed = authoredSeed({
+      split: { cutIndex: 1, excludedPrs: [], frozenAt: '2026-06-20T00:00:00.000Z' },
+    });
+    await expect(materializeAuthored(ctx(lateSeed), gitDeps())).rejects.toThrow(/Q3 temporal/);
+    // Nothing written: the freeze gate throws BEFORE gate1Dir is created (CR — no partial write).
+    expect(fs.existsSync(gate1Dir)).toBe(false);
+  });
+
+  it('(vii) absent seed frozenAt ⇒ fail-loud (materialize never stamps its own clock)', async () => {
+    // The production-honesty guard (#2287 couple HOLD): with no recorded pre-authoring freeze
+    // instant, materialize MUST fail loud — never fall back to a materialize-`now()` freeze.
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
+    });
+    const noFreezeSeed = authoredSeed({ split: { cutIndex: 1, excludedPrs: [] } });
+    await expect(materializeAuthored(ctx(noFreezeSeed), gitDeps())).rejects.toThrow(
+      /frozen BEFORE authoring/,
+    );
+    expect(fs.existsSync(gate1Dir)).toBe(false);
+  });
+
+  it('(v) Q2 floor violation: held-out < 50% of the window ⇒ GATE_INVALID', async () => {
+    // corpus [1,2,3], cutIndex 2 ⇒ train [1,2] / held-out [3] ⇒ 1/3 < 0.5.
+    const threeMetas: PrMeta[] = [3, 2, 1].map((pr) => ({
+      pr,
+      mergeCommit: sha(pr),
+      author: 'Dev <dev@example.com>',
+      isBotAuthor: false,
+      changedFiles: ['src/a.ts'],
+    }));
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
+    });
+    await expect(
+      materializeAuthored(
+        ctx(authoredSeed({ split: { cutIndex: 2, excludedPrs: [], frozenAt: FROZEN_AT } })),
+        gitDeps({ enumerateMetas: () => threeMetas }),
+      ),
+    ).rejects.toThrow(/Q2 held-out floor/);
+    expect(fs.existsSync(gate1Dir)).toBe(false);
+  });
+
+  it('(iii) membership violation: a held-out positive fixture ⇒ GATE_INVALID naming the PR', async () => {
+    // fixture pr=2 is the HELD-OUT slice ⇒ §5(2) leakage.
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(2)] })],
+    });
+    await expect(materializeAuthored(ctx(authoredSeed()), gitDeps())).rejects.toThrow(
+      /Q3 membership.*#2/s,
+    );
+    expect(fs.existsSync(gate1Dir)).toBe(false);
+  });
+
+  it('(iv) vacuous effective ledger: zero positive-fixture PRs ⇒ GATE_INVALID before any git work', async () => {
+    // `runRuleAuthor` intake enforces ≥1 positive fixture per rule, but the ledger reader
+    // (`.strict()`, no `.min`) still parses a legacy/hand-edited row with `positiveFixturePrs: []`
+    // — the ndjson file IS the boundary the materializer trusts. Degrade the row to that shape.
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
+    });
+    const ledgerFile = path.join(totemDir, 'spine', 'authoring-ledger.ndjson');
+    const degraded = fs
+      .readFileSync(ledgerFile, 'utf-8')
+      .trim()
+      .split('\n')
+      .map((row) => JSON.stringify({ ...JSON.parse(row), positiveFixturePrs: [] }))
+      .join('\n');
+    fs.writeFileSync(ledgerFile, `${degraded}\n`, 'utf-8');
+
+    // The non-vacuity gate precedes ALL per-PR git resolution (CR round-2 hoist): a vacuous
+    // ledger must cost zero `resolvePrDiff` shell-outs — and, as ever, zero bytes on disk.
+    let gitCalls = 0;
+    await expect(
+      materializeAuthored(
+        ctx(authoredSeed()),
+        gitDeps({
+          resolvePrDiff: (mergeCommit: string) => {
+            gitCalls += 1;
+            return { baseSha: sha(500), headSha: sha(600), diff: `diff ${mergeCommit}\n` };
+          },
+        }),
+      ),
+    ).rejects.toThrow(/no positive-control fixture PRs in the effective authoring-ledger/);
+    expect(gitCalls).toBe(0);
+    expect(fs.existsSync(gate1Dir)).toBe(false);
   });
 });
