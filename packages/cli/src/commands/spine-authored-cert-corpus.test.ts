@@ -989,4 +989,38 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
     );
     expect(fs.existsSync(gate1Dir)).toBe(false);
   });
+
+  it('(iv) vacuous effective ledger: zero positive-fixture PRs ⇒ GATE_INVALID before any git work', async () => {
+    // `runRuleAuthor` intake enforces ≥1 positive fixture per rule, but the ledger reader
+    // (`.strict()`, no `.min`) still parses a legacy/hand-edited row with `positiveFixturePrs: []`
+    // — the ndjson file IS the boundary the materializer trusts. Degrade the row to that shape.
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
+    });
+    const ledgerFile = path.join(totemDir, 'spine', 'authoring-ledger.ndjson');
+    const degraded = fs
+      .readFileSync(ledgerFile, 'utf-8')
+      .trim()
+      .split('\n')
+      .map((row) => JSON.stringify({ ...JSON.parse(row), positiveFixturePrs: [] }))
+      .join('\n');
+    fs.writeFileSync(ledgerFile, `${degraded}\n`, 'utf-8');
+
+    // The non-vacuity gate precedes ALL per-PR git resolution (CR round-2 hoist): a vacuous
+    // ledger must cost zero `resolvePrDiff` shell-outs — and, as ever, zero bytes on disk.
+    let gitCalls = 0;
+    await expect(
+      materializeAuthored(
+        ctx(authoredSeed()),
+        gitDeps({
+          resolvePrDiff: (mergeCommit: string) => {
+            gitCalls += 1;
+            return { baseSha: sha(500), headSha: sha(600), diff: `diff ${mergeCommit}\n` };
+          },
+        }),
+      ),
+    ).rejects.toThrow(/no positive-control fixture PRs in the effective authoring-ledger/);
+    expect(gitCalls).toBe(0);
+    expect(fs.existsSync(gate1Dir)).toBe(false);
+  });
 });

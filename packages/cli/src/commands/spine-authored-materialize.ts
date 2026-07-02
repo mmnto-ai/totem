@@ -186,6 +186,21 @@ export async function materializeAuthored(
   //    compose-never-replace, BEFORE any write (detect-never-repair, sensor-not-actuator).
   assertAuthoredFreezePreconditions(split, effective);
 
+  // Non-vacuity gate BEFORE any write AND any per-PR git work (greptile P2; hoisted above the
+  // step-5 resolution loop per CR round-2): if no rule declares a train-side positive fixture,
+  // the §5 integrity gate (fixtureSha) has nothing to hash — fail loud HERE, knowable from the
+  // effective ledger alone, so a vacuous ledger costs zero `resolvePrDiff` shell-outs and keeps
+  // the "no bytes written on gate failure" invariant the Q2/Q3 freeze gates uphold.
+  const posFixturePrs = uniqueSorted(effective.flatMap((e) => e.positiveFixturePrs));
+  if (posFixturePrs.length === 0) {
+    throw new TotemError(
+      'GATE_INVALID',
+      'authored materialize: no positive-control fixture PRs in the effective authoring-ledger — the ' +
+        '§5 integrity gate (fixtureSha) has nothing to hash.',
+      'Author at least one rule with a train-side positiveFixture (non-vacuity, ADR-112 §6).',
+    );
+  }
+
   // 5. Resolve git base/head/diff for EVERY corpus PR (fail-loud, non-empty per resolvePrGit).
   const mergeByPr = new Map(metas.map((m) => [m.pr, m.mergeCommit]));
   const gitByPr = new Map<number, PrGitResolution>();
@@ -206,18 +221,19 @@ export async function materializeAuthored(
     return { pr, mergeCommit: mergeByPr.get(pr)!, baseSha: g.baseSha, headSha: g.headSha };
   });
 
-  // Non-vacuity gate BEFORE any write (greptile P2): if no rule declares a train-side positive
-  // fixture, the §5 integrity gate (fixtureSha) has nothing to hash — fail loud HERE, keeping the
-  // "no bytes written on gate failure" invariant the Q2/Q3 freeze gates uphold (never a partial
-  // split.json/pr-diffs.json). Knowable from the effective ledger alone, so it precedes the writes.
-  const posFixturePrs = uniqueSorted(effective.flatMap((e) => e.positiveFixturePrs));
-  if (posFixturePrs.length === 0) {
-    throw new TotemError(
-      'GATE_INVALID',
-      'authored materialize: no positive-control fixture PRs in the effective authoring-ledger — the ' +
-        '§5 integrity gate (fixtureSha) has nothing to hash.',
-      'Author at least one rule with a train-side positiveFixture (non-vacuity, ADR-112 §6).',
-    );
+  // Fixture-membership guard BEFORE any write (CR round-2, outside-diff): unreachable by
+  // construction TODAY (Q3 membership asserts fixtures ⊆ train, and resolveSplit derives
+  // train ⊆ corpus = gitByPr's keys), but if a future regression ever broke that chain, the
+  // throw must leave ZERO bytes — the same "no bytes on gate failure" invariant every other
+  // gate in this function upholds. Defense-in-depth stays consistent with the invariant.
+  for (const pr of posFixturePrs) {
+    if (!gitByPr.has(pr)) {
+      throw new TotemError(
+        'GATE_INVALID',
+        `authored materialize: positive-control fixture PR #${pr} is not in the resolved corpus.`,
+        'Every positive fixture must be a train-slice corpus member (ADR-112 §5).',
+      );
+    }
   }
 
   // 6. WINDOW-WIDE substrate (codex #1/#2): pr-diffs.json over `train ∪ heldOut` (NOT the mined
@@ -258,18 +274,15 @@ export async function materializeAuthored(
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
   }
-  // `posFixturePrs` (train-side positive fixtures) was computed + non-vacuity-checked before the writes.
+  // `posFixturePrs` was non-vacuity-checked AND membership-checked against `gitByPr` before any
+  // write, so every fixture PR resolves here (the `!` is upheld by the pre-write guard above).
   for (const pr of posFixturePrs) {
-    const g = gitByPr.get(pr);
-    if (g === undefined) {
-      throw new TotemError(
-        'GATE_INVALID',
-        `authored materialize: positive-control fixture PR #${pr} is not in the resolved corpus.`,
-        'Every positive fixture must be a train-slice corpus member (ADR-112 §5).',
-      );
-    }
-    fs.writeFileSync(path.join(posDir, `${pr}.diff`), g.diff, 'utf-8');
+    fs.writeFileSync(path.join(posDir, `${pr}.diff`), gitByPr.get(pr)!.diff, 'utf-8');
   }
+  // POST-write integrity SENSOR (not a precondition gate): it hashes the control dirs it just
+  // wrote, so it cannot precede its own write (CR round-2 asked; declined for this half). With
+  // non-vacuity + membership both pre-write, a null here means `computeControlFixtureSha` itself
+  // misbehaved — fail loud; a re-run is safe (control dirs are rm+recreated, writes atomic).
   const fixtureSha = deps.computeControlFixtureSha([posDir, negDir]);
   if (!fixtureSha) {
     throw new TotemError(
