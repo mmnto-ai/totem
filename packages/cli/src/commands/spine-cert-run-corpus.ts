@@ -21,10 +21,7 @@ import { deriveGate2Eligibility, scoreAuthoredWindtunnel, scoreWindtunnel } from
 /** Local alias for the core git exec port (mirrors spine-windtunnel.ts / spine-cert-materialize.ts). */
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;
 
-import {
-  buildAuthoredCertifyingCorpus,
-  type BuildAuthoredCertifyingCorpusDeps,
-} from './spine-authored-cert-corpus.js';
+import { buildAuthoredCertifyingCorpus } from './spine-authored-cert-corpus.js';
 import { buildCertifyingCorpus } from './spine-cert-corpus.js';
 import { buildReplayAdapters } from './spine-cert-record.js';
 import { type ReplayArtifact, ReplayArtifactSchema } from './spine-llm-replay.js';
@@ -479,22 +476,6 @@ export function buildReplayCorpusProvider(
 
     return corpus;
   };
-}
-
-/**
- * ADR-112 §6/§9 Slice D1 — the AUTHORED `CertifyingCorpusProvider`, the sibling of
- * `buildReplayCorpusProvider`. A thin adapter over `buildAuthoredCertifyingCorpus`
- * (authored records → compile → §6 controls). It ignores the `lock`: the authored
- * corpus is PRODUCER-driven, and the producer-independent scoring substrate
- * (split / prDiffs / groundTruth) is supplied explicitly via `deps`. The lock-driven
- * sourcing of that substrate (D2) lives in `resolveCertifyingCorpusProvider`, which
- * builds these `deps` from `loadAuthoredCertRunFixtures` + the lock's `authored` block.
- */
-export function buildAuthoredCorpusProvider(
-  deps: BuildAuthoredCertifyingCorpusDeps,
-): CertifyingCorpusProvider {
-  return async (_lock: WindtunnelLock): Promise<CertifyingCorpus> =>
-    buildAuthoredCertifyingCorpus(deps);
 }
 
 /** Injected inputs for the AUTHORED window-wide answer-key deriver's assembly (D2.6). */

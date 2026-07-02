@@ -653,6 +653,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       reportDir: path.join(gate1Dir, 'run-reports'),
       nowIso: runNowIso,
       asOfCommit: lock.corpus.selectionRule.asOfCommit,
+      // D4 (strategy Q2): persist the verdict-inert Gate-2 set into the durable report,
+      // authored runs only (mined runs carry no gate2). Console emit above stays.
+      ...(scored.kind === 'authored' ? { gate2: scored.gate2 } : {}),
     });
     console.error(
       `[WindtunnelRun] Cert-run report: ${persistResult.reportPath}` +

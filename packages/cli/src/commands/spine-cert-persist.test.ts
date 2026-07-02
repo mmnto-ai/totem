@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
   CompiledRule,
+  Gate2Eligibility,
   ProvenanceRecord,
   RuleFiring,
   WindtunnelVerdict,
@@ -147,5 +148,30 @@ describe('persistCertifyingOutcome', () => {
   it('the report filename embeds the injected timestamp slug + a run-identity hash', async () => {
     const result = await persistCertifyingOutcome(baseInput(makeVerdict('PASS')));
     expect(path.basename(result.reportPath)).toMatch(/^run-20260620T235959-[0-9a-f]{12}\.json$/);
+  });
+
+  it('authored run ⟹ the verdict-inert gate2 set persists as a TOP-LEVEL report field, not folded into verdict (D4 Q2)', async () => {
+    const gate2: Gate2Eligibility = {
+      eligibleRuleIds: ['r1'],
+      survivors: [
+        { ruleId: 'r1', heldOutActivations: 3, gate2Eligible: true },
+        { ruleId: 'r2', heldOutActivations: 0, gate2Eligible: false },
+      ],
+      windowDisqualified: false,
+    };
+    const result = await persistCertifyingOutcome({ ...baseInput(makeVerdict('PASS')), gate2 });
+
+    const report = JSON.parse(fs.readFileSync(result.reportPath, 'utf-8'));
+    // Serialized in full (shape, not just presence) as a top-level sibling of `verdict`.
+    expect(report.gate2).toEqual(gate2);
+    // Altitude separation: gate2 is DERIVED from the verdict, never part of it.
+    expect('gate2' in report.verdict).toBe(false);
+  });
+
+  it('mined/default run ⟹ the report OMITS the gate2 key entirely (not null)', async () => {
+    const result = await persistCertifyingOutcome(baseInput(makeVerdict('PASS')));
+    const report = JSON.parse(fs.readFileSync(result.reportPath, 'utf-8'));
+    // Key is absent, not serialized-as-null — a mined run has no Gate-2 emission.
+    expect('gate2' in report).toBe(false);
   });
 });
