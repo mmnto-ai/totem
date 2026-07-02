@@ -52,13 +52,14 @@ export interface AuthoredMaterializeContext {
 /**
  * Injectable I/O seams — real git by default; tests inject fakes so the producer is
  * exercisable WITHOUT a real lc clone (the mined materializer is not, so it has no
- * unit test). `now` is the `frozenAt` source (Tenet-15: injected for determinism).
+ * unit test). There is deliberately NO `now` seam: `frozenAt` is the seed's recorded
+ * pre-authoring freeze instant (never a materialize clock — #2287 couple HOLD), so the
+ * producer is fully deterministic from its inputs.
  */
 export interface AuthoredMaterializeDeps {
   enumerateMetas: (asOfCommit: string) => PrMeta[];
   resolvePrDiff: (mergeCommit: string) => PrGitResolution;
   computeControlFixtureSha: (controlDirs: string[]) => string | null;
-  now: () => string;
 }
 
 function uniqueSorted(xs: number[]): number[] {
@@ -103,7 +104,6 @@ export async function materializeAuthored(
     computeControlFixtureSha:
       depsOverride.computeControlFixtureSha ??
       ((dirs) => computeFixtureSha(dirs, repoRoot, safeExec)),
-    now: depsOverride.now ?? (() => new Date().toISOString()),
   };
 
   // 1. Enumerate + resolve the corpus (pure).
@@ -122,10 +122,27 @@ export async function materializeAuthored(
     );
   }
 
-  // 2. Resolve + FREEZE the split, stamping the mechanical `frozenAt`. Authored controls
-  //    are train-side (derived at RUN from the rules), so the split carries NO held-out
-  //    control tags — positive/negative control PRs are [] (the mined notion is inapplicable).
-  const frozenAt = deps.now();
+  // 2. Bind the split's `frozenAt` to the REAL pre-authoring freeze instant recorded in the
+  //    seed (§5.1 "frozen before authoring"), then resolve + freeze. NEVER a materialize-`now()`
+  //    stamp: materialize necessarily runs AFTER authoring (it requires a non-empty ledger below),
+  //    so a `now()` frozenAt is after every `authoredAt` ⇒ the Q3 temporal gate would ALWAYS throw
+  //    (#2287 couple HOLD). Fail loud if the seed carries no freeze instant — the split must be
+  //    frozen (and its instant recorded) before authoring; materialize must not invent one. The
+  //    full pre-authoring freeze orchestration (a mechanical freeze-split step + `rule author`
+  //    binding) is the real-set follow-on; D5 loads the operator-recorded instant.
+  const frozenAt = seed.split.frozenAt;
+  if (frozenAt === undefined) {
+    throw new TotemError(
+      'GATE_INVALID',
+      'authored materialize: seed.split.frozenAt is absent — the split must be frozen BEFORE ' +
+        'authoring (ADR-112 §5.1) and its freeze instant recorded; materialize must not stamp its ' +
+        'own clock (a materialize-now freeze is necessarily after authoring ⇒ the Q3 temporal gate ' +
+        'would always fail).',
+      'Freeze the split before authoring and record its freeze instant as seed.split.frozenAt (full ISO-8601).',
+    );
+  }
+  // Authored controls are train-side (derived at RUN from the rules), so the split carries NO
+  // held-out control tags — positive/negative control PRs are [] (the mined notion is inapplicable).
   const split = resolveSplit({
     asOfCommit: seed.selectionRule.asOfCommit,
     corpus,

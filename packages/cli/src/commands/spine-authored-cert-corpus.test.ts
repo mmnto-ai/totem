@@ -821,7 +821,7 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
         asOfCommit: sha(999),
         codePathClassifier: { includeGlobs: ['**'], excludeGlobs: [] },
       },
-      split: { cutIndex: 1, excludedPrs: [] },
+      split: { cutIndex: 1, excludedPrs: [], frozenAt: FROZEN_AT },
       controls: {
         positiveRef: 'gate-1/controls/positive',
         negativeRef: 'gate-1/controls/negative',
@@ -852,7 +852,8 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
     }) as never,
   });
 
-  /** Injected git: canned metas + non-empty diffs + a fixed fixtureSha + a fixed frozen instant. */
+  /** Injected git: canned metas + non-empty diffs + a fixed fixtureSha. No `now` — `frozenAt` is
+   *  the seed's recorded pre-authoring instant (real chronology), never a materialize clock. */
   const gitDeps = (over: Partial<Parameters<typeof materializeAuthored>[1]> = {}) => ({
     enumerateMetas: () => metas(),
     resolvePrDiff: (mergeCommit: string) => ({
@@ -861,7 +862,6 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
       diff: `diff ${mergeCommit}\n+forbiddenCall()\n`,
     }),
     computeControlFixtureSha: () => sha(7),
-    now: () => FROZEN_AT,
     ...over,
   });
 
@@ -931,13 +931,29 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
     expect(score).toBeTypeOf('function');
   });
 
-  it('(ii) temporal violation: frozenAt AFTER authoring ⇒ GATE_INVALID, nothing written', async () => {
+  it('(ii) temporal violation: seed frozenAt AFTER authoring ⇒ GATE_INVALID, nothing written', async () => {
+    // A real (undoctored) run: the seed's recorded frozenAt post-dates the rule's authoredAt, so
+    // the split was NOT frozen before authoring — a §5.1 leakage event the gate must reject.
     writeAuthoredYaml(totemDir, {
       rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
     });
-    await expect(
-      materializeAuthored(ctx(authoredSeed()), gitDeps({ now: () => '2026-06-20T00:00:00.000Z' })),
-    ).rejects.toThrow(/Q3 temporal/);
+    const lateSeed = authoredSeed({
+      split: { cutIndex: 1, excludedPrs: [], frozenAt: '2026-06-20T00:00:00.000Z' },
+    });
+    await expect(materializeAuthored(ctx(lateSeed), gitDeps())).rejects.toThrow(/Q3 temporal/);
+    expect(fs.existsSync(path.join(gate1Dir, 'windtunnel.lock.json'))).toBe(false);
+  });
+
+  it('(vii) absent seed frozenAt ⇒ fail-loud (materialize never stamps its own clock)', async () => {
+    // The production-honesty guard (#2287 couple HOLD): with no recorded pre-authoring freeze
+    // instant, materialize MUST fail loud — never fall back to a materialize-`now()` freeze.
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ authoredAt: AUTHORED_AT, positiveFixtures: [posFixture(1)] })],
+    });
+    const noFreezeSeed = authoredSeed({ split: { cutIndex: 1, excludedPrs: [] } });
+    await expect(materializeAuthored(ctx(noFreezeSeed), gitDeps())).rejects.toThrow(
+      /frozen BEFORE authoring/,
+    );
     expect(fs.existsSync(path.join(gate1Dir, 'windtunnel.lock.json'))).toBe(false);
   });
 
@@ -955,7 +971,7 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
     });
     await expect(
       materializeAuthored(
-        ctx(authoredSeed({ split: { cutIndex: 2, excludedPrs: [] } })),
+        ctx(authoredSeed({ split: { cutIndex: 2, excludedPrs: [], frozenAt: FROZEN_AT } })),
         gitDeps({ enumerateMetas: () => threeMetas }),
       ),
     ).rejects.toThrow(/Q2 held-out floor/);

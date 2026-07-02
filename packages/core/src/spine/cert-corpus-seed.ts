@@ -77,6 +77,13 @@ export const CertCorpusSeedSchema = z
       // The atomic revert pairs to drop from train/held-out (kept in the cover).
       // Usually empty when `excludeRevertPairs` already culls reverts at selection.
       excludedPrs: z.array(z.number().int().positive()).default([]),
+      // ADR-112 §5.1 D5 — the REAL pre-authoring freeze instant (full ISO-8601). The authored
+      // producer BINDS `split.frozenAt` to this (loaded, NEVER re-stamped at materialize) so the
+      // Q3 temporal gate checks the actual freeze-before-authoring chronology. Required for an
+      // authored run — materialize fails loud if absent (a materialize-`now()` freeze is
+      // necessarily AFTER authoring ⇒ the gate would always throw, #2287 couple HOLD). A mined
+      // seed omits it (byte-unchanged).
+      frozenAt: z.string().datetime({ offset: true }).optional(),
     }),
     controls: z.object({
       positiveRef: nonBlank(),
