@@ -15,13 +15,15 @@
 // the effective authoring-ledger for the split-binding + the train-side control
 // fixture PRs, runs the §5.1/§5.3 freeze gates, and pins the substrate.
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { CertCorpusSeed, PrMeta, ResolvedPrInput } from '@mmnto/totem';
 
-import { resolvePrGit } from './spine-cert-materialize.js';
-import { computeFixtureSha, enumeratePrMetas } from './spine-windtunnel.js';
+// The two sibling CLI command modules are lazy-loaded INSIDE `materializeAuthored` (this file is
+// itself dynamic-imported by `materializeCommand`), per the `packages/cli/**` lazy-load convention
+// (CR Major, matching the D4 precedent). `node:*` builtins stay static (lightweight, codebase norm).
 
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;
 
@@ -92,6 +94,9 @@ export async function materializeAuthored(
     parseRevertSha,
     isBotIdentity,
   } = await import('@mmnto/totem');
+  // Lazy-load the sibling CLI command modules (packages/cli/** convention — CR Major).
+  const { resolvePrGit } = await import('./spine-cert-materialize.js');
+  const { computeFixtureSha, enumeratePrMetas } = await import('./spine-windtunnel.js');
 
   const { seed, lcDir, repoRoot, cwd, totemDir, resolveWithinRepo, safeExec } = ctx;
 
@@ -201,6 +206,20 @@ export async function materializeAuthored(
     return { pr, mergeCommit: mergeByPr.get(pr)!, baseSha: g.baseSha, headSha: g.headSha };
   });
 
+  // Non-vacuity gate BEFORE any write (greptile P2): if no rule declares a train-side positive
+  // fixture, the §5 integrity gate (fixtureSha) has nothing to hash — fail loud HERE, keeping the
+  // "no bytes written on gate failure" invariant the Q2/Q3 freeze gates uphold (never a partial
+  // split.json/pr-diffs.json). Knowable from the effective ledger alone, so it precedes the writes.
+  const posFixturePrs = uniqueSorted(effective.flatMap((e) => e.positiveFixturePrs));
+  if (posFixturePrs.length === 0) {
+    throw new TotemError(
+      'GATE_INVALID',
+      'authored materialize: no positive-control fixture PRs in the effective authoring-ledger — the ' +
+        '§5 integrity gate (fixtureSha) has nothing to hash.',
+      'Author at least one rule with a train-side positiveFixture (non-vacuity, ADR-112 §6).',
+    );
+  }
+
   // 6. WINDOW-WIDE substrate (codex #1/#2): pr-diffs.json over `train ∪ heldOut` (NOT the mined
   //    held-out-only shape), so train-side controls + window-wide FP scoring (§5.3/§9) have their
   //    firing substrate. Control ROLES are the run-derived §6 channel, so every window PR is a
@@ -226,7 +245,6 @@ export async function materializeAuthored(
   };
   writeCanonical(path.join(gate1Dir, 'split.json'), split);
   const prDiffsText = writeCanonical(path.join(gate1Dir, 'pr-diffs.json'), prDiffs);
-  const { createHash } = await import('node:crypto');
   const prDiffsSha = createHash('sha256')
     .update(prDiffsText.replace(/\r\n/g, '\n'), 'utf-8')
     .digest('hex');
@@ -240,7 +258,7 @@ export async function materializeAuthored(
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
   }
-  const posFixturePrs = uniqueSorted(effective.flatMap((e) => e.positiveFixturePrs));
+  // `posFixturePrs` (train-side positive fixtures) was computed + non-vacuity-checked before the writes.
   for (const pr of posFixturePrs) {
     const g = gitByPr.get(pr);
     if (g === undefined) {

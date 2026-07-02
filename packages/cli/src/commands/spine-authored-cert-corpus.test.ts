@@ -941,7 +941,8 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
       split: { cutIndex: 1, excludedPrs: [], frozenAt: '2026-06-20T00:00:00.000Z' },
     });
     await expect(materializeAuthored(ctx(lateSeed), gitDeps())).rejects.toThrow(/Q3 temporal/);
-    expect(fs.existsSync(path.join(gate1Dir, 'windtunnel.lock.json'))).toBe(false);
+    // Nothing written: the freeze gate throws BEFORE gate1Dir is created (CR — no partial write).
+    expect(fs.existsSync(gate1Dir)).toBe(false);
   });
 
   it('(vii) absent seed frozenAt ⇒ fail-loud (materialize never stamps its own clock)', async () => {
@@ -954,7 +955,7 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
     await expect(materializeAuthored(ctx(noFreezeSeed), gitDeps())).rejects.toThrow(
       /frozen BEFORE authoring/,
     );
-    expect(fs.existsSync(path.join(gate1Dir, 'windtunnel.lock.json'))).toBe(false);
+    expect(fs.existsSync(gate1Dir)).toBe(false);
   });
 
   it('(v) Q2 floor violation: held-out < 50% of the window ⇒ GATE_INVALID', async () => {
@@ -975,6 +976,7 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
         gitDeps({ enumerateMetas: () => threeMetas }),
       ),
     ).rejects.toThrow(/Q2 held-out floor/);
+    expect(fs.existsSync(gate1Dir)).toBe(false);
   });
 
   it('(iii) membership violation: a held-out positive fixture ⇒ GATE_INVALID naming the PR', async () => {
@@ -985,5 +987,6 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
     await expect(materializeAuthored(ctx(authoredSeed()), gitDeps())).rejects.toThrow(
       /Q3 membership.*#2/s,
     );
+    expect(fs.existsSync(gate1Dir)).toBe(false);
   });
 });

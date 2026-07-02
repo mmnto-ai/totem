@@ -23,11 +23,13 @@ import type { SplitArtifact } from './split.js';
 
 /**
  * A certifiable row's timestamp MUST be a full ISO-8601 instant with a time
- * component — a date-only string (`2026-07-01`) makes "frozen BEFORE authored"
- * ambiguous within the day (codex Q3 + agy row-vii). Reject anything without a
- * `T<hh>:<mm>` so the temporal proof is unambiguous.
+ * component AND an explicit timezone — a date-only string (`2026-07-01`) makes
+ * "frozen BEFORE authored" ambiguous within the day (codex Q3 + agy row-vii), and a
+ * zone-less `2026-07-01T12:00:00` would be parsed by `Date.parse` as LOCAL time,
+ * making the comparison timezone-nondeterministic across machines/CI (CR Minor).
+ * Require `Z` or a numeric `±hh:mm` offset so the temporal proof is deterministic.
  */
-const FULL_INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+const FULL_INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 /** A parsed certifiable instant, or a fail-loud reason (never an exception — the pure gates aggregate, they do not throw for control flow). */
 type InstantParse = { ok: true; ms: number } | { ok: false; message: string };
