@@ -953,11 +953,13 @@ describe('ADR-112 D5 — materializeAuthored (authored producer)', () => {
     });
     // Hand-built (not schema-parsed): the parse-time presence guard (strategy#804
     // layered clauses) now rejects this shape at parse, so the materialize-time
-    // defense must be proven on its own for programmatic callers.
-    const noFreezeSeed = {
+    // defense must be proven on its own for programmatic callers. No cast: the
+    // absence is refinement-invalid but structurally legal (`frozenAt` is
+    // optional), so the fixture keeps full compile-time property checking.
+    const noFreezeSeed: CertCorpusSeed = {
       ...authoredSeed(),
       split: { cutIndex: 1, excludedPrs: [] },
-    } as CertCorpusSeed;
+    };
     await expect(materializeAuthored(ctx(noFreezeSeed), gitDeps())).rejects.toThrow(
       /frozen BEFORE authoring/,
     );
