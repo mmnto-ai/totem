@@ -47,11 +47,11 @@ const fixture = (pr: number) => ({
   matchedSpan: 'L1',
   contentHash: 'h'.repeat(8),
 });
-const writeYaml = (rules: unknown[]) => {
+const writeYaml = (rules: unknown[], splitRef = 's') => {
   fs.writeFileSync(
     path.join(root, '.totem', 'spine', 'authored-rules.yaml'),
     yamlStringify({
-      splitRef: 's',
+      splitRef,
       authoredAfterSplit: true,
       heldOutNonInspectionAttestation: true,
       rules,
@@ -79,6 +79,32 @@ describe('ruleAuthorCommand (CLI entry — rejected-loud + non-zero exit, strate
   });
   it('leaves process.exitCode untouched and does not warn on an all-decidable run', async () => {
     writeYaml([decidable()]);
+    await ruleAuthorCommand({});
+    expect(process.exitCode).toBeUndefined();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  // §5.4 is NON-OPTIONAL under a content-addressed binding (#2294 couple): the
+  // gate fires at binding-engagement, BEFORE the proof machinery loads, so no
+  // artifact/git fixture is needed to exercise it.
+  it('throws GATE_INVALID naming §5.4 when a content-addressed splitRef engages without --lc-dir', async () => {
+    writeYaml([decidable()], `split:${'f'.repeat(64)}`);
+    await expect(ruleAuthorCommand({})).rejects.toMatchObject({
+      name: 'TotemError',
+      code: 'GATE_INVALID',
+    });
+    await expect(ruleAuthorCommand({})).rejects.toThrow(/§5\.4 author sandbox is NON-OPTIONAL/);
+  });
+
+  it('treats a whitespace-only --lc-dir as missing under a content-addressed splitRef', async () => {
+    writeYaml([decidable()], `split:${'f'.repeat(64)}`);
+    await expect(ruleAuthorCommand({ lcDir: '   ' })).rejects.toMatchObject({
+      code: 'GATE_INVALID',
+    });
+  });
+
+  it('legacy free-text splitRef stays lcDir-free (binds nothing, no §5.4 gate)', async () => {
+    writeYaml([decidable()]); // splitRef 's' — the pre-R1 adherence-class shape
     await ruleAuthorCommand({});
     expect(process.exitCode).toBeUndefined();
     expect(warnSpy).not.toHaveBeenCalled();
