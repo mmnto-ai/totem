@@ -84,16 +84,22 @@ export function removeAuthorSandbox(args: {
   safeExec: SafeExecFn;
 }): void {
   const { lcDir, root, safeExec } = args;
-  // totem-context: intentional cleanup — teardown is best-effort by design; the failure
-  // is surfaced on stderr and the rm+prune fallback completes the removal.
-  try {
-    safeExec('git', ['-C', lcDir, 'worktree', 'remove', '--force', root], {});
-  } catch (err) {
-    // Not a live worktree (already removed, or a bare leftover dir) — fall through to rm.
-    // Surfaced (never swallowed silently): teardown proceeds, the cause stays visible.
-    console.error(
-      `[AuthorSandbox] worktree remove fell back to rm for ${root}: ${(err as Error).message}`,
+  // Check-first (no fail-open catch): ask git whether the root is a LIVE worktree,
+  // then take exactly one removal path — a live worktree is removed via git (a
+  // failure there throws loudly), anything else (already-removed, bare leftover
+  // dir) is a plain rm + registry prune.
+  const worktrees = safeExec('git', ['-C', lcDir, 'worktree', 'list', '--porcelain'], {});
+  const normalizedRoot = path.resolve(root);
+  const isLive = worktrees
+    .split('\n')
+    .some(
+      (line) =>
+        line.startsWith('worktree ') &&
+        path.resolve(line.slice('worktree '.length)) === normalizedRoot,
     );
+  if (isLive) {
+    safeExec('git', ['-C', lcDir, 'worktree', 'remove', '--force', root], {});
+  } else {
     fs.rmSync(root, { recursive: true, force: true });
     safeExec('git', ['-C', lcDir, 'worktree', 'prune'], {});
   }
