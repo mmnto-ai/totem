@@ -219,10 +219,11 @@ export async function materializeAuthored(
     if (seedFrozenAt === undefined) {
       throw new TotemError(
         'GATE_INVALID',
-        'authored materialize: the seed binds no freeze — neither split.frozenSplitRef (frozen ' +
-          'artifact) nor split.frozenAt (legacy recorded instant) is present (ADR-112 §5.1); ' +
-          'materialize must not stamp its own clock (a materialize-now freeze is necessarily ' +
-          'after authoring ⇒ the Q3 temporal gate would always fail).',
+        'authored materialize: the seed binds no freeze — the split must be frozen BEFORE ' +
+          'authoring (ADR-112 §5.1) and bound via split.frozenSplitRef (frozen artifact) or ' +
+          'split.frozenAt (legacy recorded instant); materialize must not stamp its own clock ' +
+          '(a materialize-now freeze is necessarily after authoring ⇒ the Q3 temporal gate ' +
+          'would always fail).',
         'Freeze the split BEFORE authoring (`totem spine freeze-split`) and name it via split.frozenSplitRef.',
       );
     }
