@@ -13,6 +13,7 @@
 ## New artifact — the frozen split (`.totem/spine/<gate>/frozen-split.json`, TRACKED-PUBLIC home)
 
 `packages/core/src/spine/frozen-split.ts` — `FrozenSplitArtifactSchema`:
+
 - Derivation pins (Tenet 20 — derive from primitives, pin the result): `repo`, `asOfCommit` (the ACTUAL lc HEAD SHA at freeze — derived, not declared), the selectionRule snapshot used, `excludedPrs`.
 - The split: `corpus` (PR list), `trainPrs`/`heldOutPrs` (cutIndex under the held-out ≥ 0.5 inclusive floor — freeze-side gate, hoisting D5's Q2 check), `cutBoundarySha` (the last train PR's mergeCommit — the §5.4 sandbox root derives from THIS, fold-sandbox below).
 - `frozenAt`: full-ISO instant stamped AT freeze (the one legitimate clock — the freeze IS the event).
@@ -27,6 +28,7 @@ Enumerates off the lc clone (reuse `enumeratePrMetas`/`resolvePrGit`), derives a
 ## Shared-history proof (codex fold-1 — topology IS the proof)
 
 CLI-side git plumbing (new `packages/cli/src/spine-freeze-proof.ts`), consumed by the binding + materialize:
+
 - `findIntroducingCommit(path)` — from `origin/main` (or configured shared default ref), NEVER HEAD/local refs.
 - Blob equality: current artifact bytes == blob at the shared introducing commit.
 - Ledger ordering: every effective entry's introducing commit **strictly later by ancestry** than the freeze artifact's — ancestry, not timestamps.
