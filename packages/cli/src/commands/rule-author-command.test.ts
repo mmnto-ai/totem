@@ -89,11 +89,12 @@ describe('ruleAuthorCommand (CLI entry — rejected-loud + non-zero exit, strate
   // artifact/git fixture is needed to exercise it.
   it('throws GATE_INVALID naming §5.4 when a content-addressed splitRef engages without --lc-dir', async () => {
     writeYaml([decidable()], `split:${'f'.repeat(64)}`);
+    // Single invocation, all three facets on the one rejection (greptile #2295).
     await expect(ruleAuthorCommand({})).rejects.toMatchObject({
       name: 'TotemError',
       code: 'GATE_INVALID',
+      message: expect.stringContaining('§5.4 author sandbox is NON-OPTIONAL'),
     });
-    await expect(ruleAuthorCommand({})).rejects.toThrow(/§5\.4 author sandbox is NON-OPTIONAL/);
   });
 
   it('treats a whitespace-only --lc-dir as missing under a content-addressed splitRef', async () => {
@@ -106,6 +107,9 @@ describe('ruleAuthorCommand (CLI entry — rejected-loud + non-zero exit, strate
   it('legacy free-text splitRef stays lcDir-free (binds nothing, no §5.4 gate)', async () => {
     writeYaml([decidable()]); // splitRef 's' — the pre-R1 adherence-class shape
     await ruleAuthorCommand({});
+    // What distinguishes this from the all-decidable test above (greptile #2295):
+    // the partition itself — the run completed WITHOUT engaging the freeze binding.
+    expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('freeze binding verified'));
     expect(process.exitCode).toBeUndefined();
     expect(warnSpy).not.toHaveBeenCalled();
   });
