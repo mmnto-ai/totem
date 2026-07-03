@@ -17,6 +17,7 @@
 
 import { z } from 'zod';
 
+import { SPLIT_REF_RE } from './frozen-split.js';
 import { type PrMeta, resolveSelectionRule, type SelectionRuleConfig } from './selection-rule.js';
 import { mergeCommitMap, resolveSplit, type SplitArtifact } from './split.js';
 import { type WindtunnelLock, WindtunnelLockSchema } from './windtunnel-lock.js';
@@ -82,8 +83,16 @@ export const CertCorpusSeedSchema = z
       // Q3 temporal gate checks the actual freeze-before-authoring chronology. Required for an
       // authored run — materialize fails loud if absent (a materialize-`now()` freeze is
       // necessarily AFTER authoring ⇒ the gate would always throw, #2287 couple HOLD). A mined
-      // seed omits it (byte-unchanged).
+      // seed omits it (byte-unchanged). LEGACY-SHAPED authored seeds only, post-R1: a real-set
+      // seed names the frozen artifact via `frozenSplitRef` instead (the artifact owns the
+      // instant — one home, Tenet-20), and the superRefine below enforces exactly-one-of.
       frozenAt: z.string().datetime({ offset: true }).optional(),
+      // ADR-112 §5.1/§8 R1 — the content-addressed reference (`split:<sha256>`) to the
+      // pre-authoring FROZEN SPLIT artifact (frozen-split.ts). When present, materialize
+      // LOADS the artifact as the single source for membership + `frozenAt`, verifies the
+      // shared-history proof + freeze commitment, and re-derives only to ASSERT (codex
+      // fold-5). Additive-optional: mined and legacy-authored seeds omit it, byte-unchanged.
+      frozenSplitRef: z.string().regex(SPLIT_REF_RE).optional(),
     }),
     controls: z.object({
       positiveRef: nonBlank(),
@@ -133,18 +142,32 @@ export const CertCorpusSeedSchema = z
         path: ['controls'],
       });
     }
-    // ADR-112 D5 couple ruling (strategy#804): parse-time owns PRESENCE — an authored
-    // seed without the pre-authoring freeze instant is invalid-by-construction (the
-    // materialize Q3 gate is production-unsatisfiable without it, #2287 couple HOLD).
-    // Temporal SEMANTICS (ordering vs authoredAt, loaded-not-stamped sourcing) stay
-    // enforced at materialize — layered clauses, not a second home for one fact.
-    if (seed.producerKind === 'authored' && seed.split.frozenAt === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "producerKind 'authored' requires split.frozenAt (the pre-authoring freeze instant)",
-        path: ['split', 'frozenAt'],
-      });
+    // ADR-112 D5 couple ruling (strategy#804) + R1 evolution: parse-time owns PRESENCE —
+    // an authored seed must bind its freeze at parse, as EXACTLY ONE of:
+    //   `split.frozenSplitRef` (R1 — the frozen artifact owns the instant), or
+    //   `split.frozenAt`       (legacy D5 shape — the seed carries the instant).
+    // Neither ⇒ the materialize gates are production-unsatisfiable (#2287 couple HOLD);
+    // both ⇒ two homes for one fact (the Tenet-20 dual-home shape). Temporal SEMANTICS
+    // (ordering vs authoredAt, loaded-not-stamped sourcing) stay enforced at materialize.
+    if (seed.producerKind === 'authored') {
+      const hasRef = seed.split.frozenSplitRef !== undefined;
+      const hasInstant = seed.split.frozenAt !== undefined;
+      if (!hasRef && !hasInstant) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "producerKind 'authored' requires a freeze binding: split.frozenSplitRef (frozen artifact) or split.frozenAt (legacy pre-authoring instant)",
+          path: ['split', 'frozenAt'],
+        });
+      }
+      if (hasRef && hasInstant) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'split.frozenSplitRef and split.frozenAt are mutually exclusive — the frozen artifact owns the instant (one home, Tenet-20)',
+          path: ['split', 'frozenAt'],
+        });
+      }
     }
   });
 

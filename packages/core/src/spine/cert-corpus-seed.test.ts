@@ -151,6 +151,39 @@ describe('CertCorpusSeedSchema (strict write-side, fold-1 / fold-4)', () => {
   it("accepts an explicit 'mined' seed without split.frozenAt (additive posture)", () => {
     expect(seed({ producerKind: 'mined' }).split.frozenAt).toBeUndefined();
   });
+
+  it('R1: accepts an authored seed binding its freeze via split.frozenSplitRef alone', () => {
+    const ref = `split:${'a'.repeat(64)}`;
+    const parsed = seed({
+      producerKind: 'authored',
+      split: { cutIndex: 2, excludedPrs: [], frozenSplitRef: ref },
+    });
+    expect(parsed.split.frozenSplitRef).toBe(ref);
+    expect(parsed.split.frozenAt).toBeUndefined();
+  });
+
+  it('R1: rejects an authored seed carrying BOTH frozenSplitRef and frozenAt (one home)', () => {
+    expect(() =>
+      seed({
+        producerKind: 'authored',
+        split: {
+          cutIndex: 2,
+          excludedPrs: [],
+          frozenSplitRef: `split:${'a'.repeat(64)}`,
+          frozenAt: '2026-06-01T00:00:00.000Z',
+        },
+      }),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  it('R1: rejects a malformed frozenSplitRef (must be the content-addressed split:<sha256> form)', () => {
+    expect(() =>
+      seed({
+        producerKind: 'authored',
+        split: { cutIndex: 2, excludedPrs: [], frozenSplitRef: 'split-2026-06-27' },
+      }),
+    ).toThrow();
+  });
 });
 
 describe('buildWindtunnelLock', () => {
