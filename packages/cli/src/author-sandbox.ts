@@ -114,13 +114,18 @@ export function removeAuthorSandbox(args: {
   // failure there throws loudly), anything else (already-removed, bare leftover
   // dir) is a plain rm + registry prune.
   const worktrees = safeExec('git', ['-C', lcDir, 'worktree', 'list', '--porcelain'], {});
-  const normalizedRoot = path.resolve(root);
+  // Windows: git may print a different drive-letter case than Node resolves
+  // (GCA #2293 round 2) — a casing miss would misread a LIVE worktree as stale
+  // and rmSync it, stranding git metadata. Case-fold ONLY on win32 (POSIX
+  // filesystems are case-sensitive; folding there would conflate real paths).
+  const foldCase = (p: string): string => (process.platform === 'win32' ? p.toLowerCase() : p);
+  const normalizedRoot = foldCase(path.resolve(root));
   const isLive = worktrees
     .split('\n')
     .some(
       (line) =>
         line.startsWith('worktree ') &&
-        path.resolve(line.slice('worktree '.length)) === normalizedRoot,
+        foldCase(path.resolve(line.slice('worktree '.length).trim())) === normalizedRoot,
     );
   if (isLive) {
     safeExec('git', ['-C', lcDir, 'worktree', 'remove', '--force', root], {});

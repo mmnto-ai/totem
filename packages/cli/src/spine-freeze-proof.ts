@@ -36,6 +36,26 @@ export const DEFAULT_SHARED_REF = 'origin/main';
 /** LF-normalize for blob comparison (the same normalization `generateInputHash` applies). */
 const lf = (s: string): string => s.replace(/\r\n/g, '\n');
 
+/**
+ * Optional-read `git show <commit>:<path>` — returns `undefined` where the blob
+ * cannot be rendered (a deletion commit in the path's rev-list is the legitimate
+ * case). The optionality is this helper's CONTRACT, not a swallowed failure: the
+ * one caller treats `undefined` as skip-this-commit and keeps its own fail-loud
+ * for the no-commit-matches outcome.
+ */
+function tryGitShow(
+  commit: string,
+  relPath: string,
+  cwd: string,
+  safeExec: SafeExecFn,
+): string | undefined {
+  try {
+    return safeExec('git', ['show', `${commit}:${relPath}`], { cwd }).replace(/\r\n/g, '\n');
+  } catch {
+    return undefined;
+  }
+}
+
 /** One fail-loud row of the freeze-proof failure partition — distinct, never aliasing. */
 export function freezeProofFailure(
   row: string,
@@ -205,13 +225,13 @@ export function verifySharedFrozenSplit(args: {
   const currentBytes = lf(fs.readFileSync(absPath, 'utf-8')).trim();
   let introducing: string | undefined;
   for (const commit of pathCommits) {
-    const blob = gitText(
-      ['show', `${commit}:${relPath}`],
-      repoRoot,
-      safeExec,
-      `show ${commit}:${relPath}`,
-    );
-    if (lf(blob).trim() === currentBytes) {
+    // Optional read by CONTRACT: `rev-list -- <path>` includes commits that DELETE
+    // the path, and `git show` legitimately cannot render the blob there (GCA #2293
+    // round 2). An unreadable commit simply cannot be the introducing match — skipping
+    // is the detector's correct read, and a fully-unmatched artifact still fail-louds
+    // as artifact-blob-differs below (the conservative direction is preserved).
+    const blob = tryGitShow(commit, relPath, repoRoot, safeExec);
+    if (blob !== undefined && lf(blob).trim() === currentBytes) {
       introducing = commit;
       break;
     }
