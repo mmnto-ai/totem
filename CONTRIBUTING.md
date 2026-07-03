@@ -26,6 +26,12 @@ Thanks for your interest in contributing to Totem! This guide covers everything 
 - No empty catch blocks
 - Extract magic numbers into named constants
 
+## Repo Tooling Policy (`scripts/` and `tools/`)
+
+- `tools/` holds automation wired into the build/release pipeline (referenced from `package.json` or CI).
+- `scripts/` holds standing developer tooling only (benchmarks, repo maintenance). Everything here should be documented — in this file or in a header comment explaining when to run it.
+- **One-off scripts are run-and-delete:** a script written for a single migration, curation pass, or repair lands and is removed in the same PR that executes it (or the immediate follow-up). Git history is the archive; HEAD contains only living tooling. In particular, never leave behind a script that hand-mutates attested artifacts (`.totem/compiled-rules.json`, manifests, locks) — a stale copy of one is a trap for the next person who runs it.
+
 ## Package Structure
 
 ```

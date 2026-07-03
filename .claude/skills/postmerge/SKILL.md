@@ -95,8 +95,10 @@ manifest, but that no-op path only detected input-hash drift — not
 output-hash drift from inline mutations (the exact gap
 mmnto-ai/totem#1587 closed). `totem lesson archive` replaces them
 with one atomic call that handles the mutation + manifest refresh +
-export regeneration in a single step. Existing scripts stay in
-history for audit but should not be invoked in new postmerge cycles.
+export regeneration in a single step. The scripts were deleted from
+HEAD in the 2026-07 repo-surface cleanup (run-and-delete policy,
+CONTRIBUTING § Repo Tooling Policy); recover them from git history
+via the PR anchors above if audit archaeology ever needs them.
 
 For an output-hash-only refresh without archiving (e.g., after
 manual edits to compiled-rules.json for other lifecycle reasons),
