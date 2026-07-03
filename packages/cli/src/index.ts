@@ -1682,7 +1682,7 @@ ruleCmd
   )
   .option(
     '--lc-dir <path>',
-    'lc clone for §5.4 sandbox verification when the splitRef is a frozen artifact (env: TOTEM_LC_DIR)',
+    'lc clone for the §5.4 author sandbox — REQUIRED when the splitRef names a frozen artifact (env: TOTEM_LC_DIR)',
     process.env['TOTEM_LC_DIR'],
   )
   .action(async (opts: { judgedBy?: string; lcDir?: string }) => {

@@ -16,7 +16,7 @@ export async function ruleAuthorCommand(opts: {
   const path = await import('node:path');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
   const { AUTHORED_RULES_REL, runRuleAuthor } = await import('../authored-rule-intake.js');
-  const { resolveGitRoot, safeExec, SPLIT_REF_RE } = await import('@mmnto/totem');
+  const { resolveGitRoot, safeExec, SPLIT_REF_RE, TotemError } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
   const config = await loadConfig(resolveConfigPath(cwd));
@@ -36,7 +36,21 @@ export async function ruleAuthorCommand(opts: {
     const m = /^splitRef:\s*["']?(\S+?)["']?\s*$/m.exec(fs.readFileSync(yamlPath, 'utf-8'));
     declaredSplitRef = m?.[1];
   }
+  const judgedBy = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
   if (declaredSplitRef !== undefined && SPLIT_REF_RE.test(declaredSplitRef)) {
+    // The §5.4 sandbox is NON-OPTIONAL under a content-addressed binding (#2294
+    // couple): a flag whose omission skips the guard is an author-owned knob,
+    // which the independence axiom forbids. Gate BEFORE the proof machinery
+    // loads — nothing is verified or partially engaged on failure. The legacy
+    // free-text lane below binds nothing and is byte-unaffected.
+    const lcDir = opts.lcDir?.trim();
+    if (lcDir === undefined || lcDir === '') {
+      throw new TotemError(
+        'GATE_INVALID',
+        'rule author: the authoring header names a frozen split artifact (content-addressed splitRef), so the §5.4 author sandbox is NON-OPTIONAL — --lc-dir is missing.',
+        'Pass --lc-dir <path-to-lc-clone> (env: TOTEM_LC_DIR); the sandbox root derives from the frozen artifact alone and its reachability proof must run before intake.',
+      );
+    }
     const { resolveFrozenSplitByRef, verifySharedFrozenSplit } =
       await import('../spine-freeze-proof.js');
     const repoRoot = resolveGitRoot(cwd) ?? cwd;
@@ -47,46 +61,42 @@ export async function ruleAuthorCommand(opts: {
       `[RuleAuthor] freeze binding verified: ${resolved.artifact.splitRef} ` +
         `(commitment ${resolved.artifact.freezeCommitment.slice(0, 12)}…, shared-history proof passed)`,
     );
-    if (opts.lcDir) {
-      // §5.4: materialize + tear down the derived sandbox to PROVE the boundary sha
-      // is reachable from this clone. The root derives from the artifact alone —
-      // no author-supplied root/allowlist exists on this surface (independence axiom).
-      const { prepareAuthorSandbox, removeAuthorSandbox } = await import('../author-sandbox.js');
-      const sandbox = prepareAuthorSandbox({
-        lcDir: opts.lcDir,
-        totemDir,
-        artifact: resolved.artifact,
-        safeExec,
-      });
-      console.log(
-        `[RuleAuthor] §5.4 author sandbox verified: train tree as of ${sandbox.cutBoundarySha.slice(0, 12)} (derived root, torn down after intake)`,
-      );
-      let primaryErr: unknown;
+    // §5.4: materialize + tear down the derived sandbox to PROVE the boundary sha
+    // is reachable from this clone. The root derives from the artifact alone —
+    // no author-supplied root/allowlist exists on this surface (independence axiom).
+    const { prepareAuthorSandbox, removeAuthorSandbox } = await import('../author-sandbox.js');
+    const sandbox = prepareAuthorSandbox({
+      lcDir,
+      totemDir,
+      artifact: resolved.artifact,
+      safeExec,
+    });
+    console.log(
+      `[RuleAuthor] §5.4 author sandbox verified: train tree as of ${sandbox.cutBoundarySha.slice(0, 12)} (derived root, torn down after intake)`,
+    );
+    let primaryErr: unknown;
+    try {
+      const result = runRuleAuthor(totemDir, { judgedBy, freezeBinding });
+      reportRuleAuthor(result);
+      return;
+    } catch (err) {
+      primaryErr = err;
+      throw err;
+    } finally {
       try {
-        const judgedByEarly = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
-        const result = runRuleAuthor(totemDir, { judgedBy: judgedByEarly, freezeBinding });
-        reportRuleAuthor(result);
-        return;
-      } catch (err) {
-        primaryErr = err;
-        throw err;
-      } finally {
-        try {
-          removeAuthorSandbox({ lcDir: opts.lcDir, root: sandbox.root, safeExec });
-        } catch (teardownErr) {
-          // A throw in `finally` SHADOWS the in-flight error (GCA #2293 round 4):
-          // with no primary in flight the teardown failure IS the error (throw);
-          // with one, surface the teardown loudly beside it — never replace it.
-          if (primaryErr === undefined) throw teardownErr;
-          console.warn(
-            `[RuleAuthor] WARNING: sandbox teardown failed after a primary error (root kept at ${sandbox.root}): ${teardownErr instanceof Error ? teardownErr.message : String(teardownErr)}`,
-          );
-        }
+        removeAuthorSandbox({ lcDir, root: sandbox.root, safeExec });
+      } catch (teardownErr) {
+        // A throw in `finally` SHADOWS the in-flight error (GCA #2293 round 4):
+        // with no primary in flight the teardown failure IS the error (throw);
+        // with one, surface the teardown loudly beside it — never replace it.
+        if (primaryErr === undefined) throw teardownErr;
+        console.warn(
+          `[RuleAuthor] WARNING: sandbox teardown failed after a primary error (root kept at ${sandbox.root}): ${teardownErr instanceof Error ? teardownErr.message : String(teardownErr)}`,
+        );
       }
     }
   }
 
-  const judgedBy = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
   const result = runRuleAuthor(totemDir, { judgedBy, freezeBinding });
   reportRuleAuthor(result);
 }
