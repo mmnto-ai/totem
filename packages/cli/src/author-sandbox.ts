@@ -14,7 +14,6 @@
 // recorded by the (c) non-inspection attestation.
 
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { type FrozenSplitArtifact, TotemError } from '@mmnto/totem';
@@ -26,24 +25,28 @@ export interface AuthorSandbox {
   /** The worktree root — lc at the frozen split's cutBoundarySha. */
   root: string;
   cutBoundarySha: string;
-  /** Read a file INSIDE the sandbox; any escape (absolute, `..`, symlink-free lexical check) fail-louds (t6). */
+  /** Read a file INSIDE the sandbox; any escape (absolute, `..`, or a symlink whose real path leaves the root) fail-louds (t6). */
   readFile: (relPath: string) => string;
 }
 
 /**
  * Materialize the sandbox: `git worktree add --detach <root> <cutBoundarySha>`
- * off the lc clone. The root is DERIVED (tmpdir + the boundary sha) — no caller
- * influence. Fail-loud if the clone does not contain the boundary sha (a wrong
- * or shallow clone must never silently sandbox a different tree).
+ * off the lc clone. The root is DERIVED (`<totemDir>/temp/` + the boundary sha —
+ * workspace-rooted, gitignored; never `os.tmpdir()` per the house temp-file
+ * guideline) — no caller influence. Fail-loud if the clone does not contain the
+ * boundary sha (a wrong or shallow clone must never silently sandbox a
+ * different tree).
  */
 export function prepareAuthorSandbox(args: {
   lcDir: string;
+  totemDir: string;
   artifact: FrozenSplitArtifact;
   safeExec: SafeExecFn;
 }): AuthorSandbox {
-  const { lcDir, artifact, safeExec } = args;
+  const { lcDir, totemDir, artifact, safeExec } = args;
   const sha = artifact.cutBoundarySha;
-  const root = path.join(os.tmpdir(), `totem-author-sandbox-${sha.slice(0, 12)}`);
+  const root = path.join(totemDir, 'temp', `author-sandbox-${sha.slice(0, 12)}`);
+  fs.mkdirSync(path.dirname(root), { recursive: true });
 
   if (fs.existsSync(root)) {
     // A stale sandbox at the derived root is torn down and re-materialized —
@@ -61,17 +64,39 @@ export function prepareAuthorSandbox(args: {
     );
   }
 
+  const escapeFailure = (relPath: string): TotemError =>
+    new TotemError(
+      'GATE_INVALID',
+      `author-sandbox[escape]: read of "${relPath}" resolves outside the sandbox root — the authoring harness sees ONLY the train tree as of the cut (ADR-112 §5.4, t6)`,
+      'Author against the sandboxed train tree; held-out code is embargoed until the cert run.',
+    );
+  // Containment is enforced on the REAL path, not the lexical one: a train-era
+  // committed symlink pointing outside the root would pass a lexical check while
+  // `readFileSync` follows it out (greptile/CR #2293 round 1 — the n1 residue,
+  // closed at read instead of deferred to R2).
+  const realRoot = fs.realpathSync(root);
   const readFile = (relPath: string): string => {
     const abs = path.resolve(root, relPath);
     const rel = path.relative(root, abs);
     if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw escapeFailure(relPath);
+    }
+    let real: string;
+    try {
+      real = fs.realpathSync(abs);
+    } catch (err) {
       throw new TotemError(
         'GATE_INVALID',
-        `author-sandbox[escape]: read of "${relPath}" resolves outside the sandbox root — the authoring harness sees ONLY the train tree as of the cut (ADR-112 §5.4, t6)`,
-        'Author against the sandboxed train tree; held-out code is embargoed until the cert run.',
+        `author-sandbox: cannot resolve "${relPath}" inside the sandbox (missing or unreadable)`,
+        'Author against files that exist in the train tree as of the cut.',
+        err,
       );
     }
-    return fs.readFileSync(abs, 'utf-8');
+    const realRel = path.relative(realRoot, real);
+    if (realRel === '' || realRel.startsWith('..') || path.isAbsolute(realRel)) {
+      throw escapeFailure(relPath);
+    }
+    return fs.readFileSync(real, 'utf-8');
   };
 
   return { root, cutBoundarySha: sha, readFile };

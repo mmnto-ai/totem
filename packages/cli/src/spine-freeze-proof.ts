@@ -23,6 +23,7 @@ import {
   FROZEN_SPLIT_FILE,
   type FrozenSplitArtifact,
   FrozenSplitArtifactSchema,
+  SPLIT_REF_RE,
   TotemError,
   verifyFreezeIntegrity,
 } from '@mmnto/totem';
@@ -36,16 +37,36 @@ export const DEFAULT_SHARED_REF = 'origin/main';
 const lf = (s: string): string => s.replace(/\r\n/g, '\n');
 
 /** One fail-loud row of the freeze-proof failure partition — distinct, never aliasing. */
-export function freezeProofFailure(row: string, detail: string, fix: string): TotemError {
-  return new TotemError('GATE_INVALID', `freeze-proof[${row}]: ${detail}`, fix);
+export function freezeProofFailure(
+  row: string,
+  detail: string,
+  fix: string,
+  cause?: unknown,
+): TotemError {
+  return new TotemError('GATE_INVALID', `freeze-proof[${row}]: ${detail}`, fix, cause);
 }
 
 function gitText(args: string[], cwd: string, safeExec: SafeExecFn, what: string): string {
   try {
     return safeExec('git', args, { cwd }).replace(/\r\n/g, '\n');
   } catch (err) {
-    throw new Error(`freeze-proof: git ${what} failed in ${cwd}`, { cause: err });
+    throw new TotemError(
+      'GIT_FAILED',
+      `freeze-proof: git ${what} failed in ${cwd}`,
+      'Verify git is installed and the repository/ref is valid.',
+      err,
+    );
   }
+}
+
+/** A PROVEN freeze binding — the artifact behind a content-addressed splitRef,
+ *  integrity-checked AND shared-history-proven. The ONLY sanctioned constructor is
+ *  `resolveProvenFreezeBinding` below: every consumer that threads a binding into
+ *  `runRuleAuthor` goes through resolve+prove, so no caller can introduce an
+ *  unverified binding (the never-unverified-binding invariant — strategy #2293
+ *  round-1 couple read). */
+export interface FreezeBinding {
+  artifact: FrozenSplitArtifact;
 }
 
 /** A resolved frozen-split artifact + where it lives (repo-relative, forward-slash for git). */
@@ -85,11 +106,11 @@ export function resolveFrozenSplitByRef(
     try {
       parsed = FrozenSplitArtifactSchema.parse(JSON.parse(fs.readFileSync(absPath, 'utf-8')));
     } catch (err) {
-      const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
       throw freezeProofFailure(
         'artifact-integrity',
-        `frozen split at ${absPath} is malformed or violates the artifact schema (${detail})`,
+        `frozen split at ${absPath} is malformed or violates the artifact schema`,
         'A frozen artifact is never hand-edited; restore it from shared history.',
+        err,
       );
     }
     if (parsed.splitRef !== splitRef) continue;
@@ -152,11 +173,12 @@ export function verifySharedFrozenSplit(args: {
 
   try {
     safeExec('git', ['ls-files', '--error-unmatch', '--', relPath], { cwd: repoRoot });
-  } catch {
+  } catch (err) {
     throw freezeProofFailure(
       'artifact-uncommitted',
       `frozen split ${relPath} is not tracked — it exists in the working tree only, so the commit-anchor has nothing to anchor to (t5)`,
       'Commit the frozen artifact and land it on the shared ref via the freeze PR before authoring.',
+      err,
     );
   }
 
@@ -208,7 +230,17 @@ export function verifySharedFrozenSplit(args: {
     safeExec,
     `show -s ${introducing}`,
   ).trim();
-  const frozenAt = artifact.split.frozenAt ?? '';
+  // Schema construction enforces presence, but a schema-bypassed artifact must
+  // fail LOUD here — `Date.parse('')` is NaN and every NaN comparison is false,
+  // which would silently no-op the consistency row (greptile #2293 round 1).
+  const frozenAt = artifact.split.frozenAt;
+  if (frozenAt === undefined) {
+    throw freezeProofFailure(
+      'artifact-integrity',
+      `frozen split ${relPath} carries no split.frozenAt — the temporal-consistency check cannot run on a stampless artifact`,
+      'A frozen artifact always carries its freeze instant; restore it from shared history.',
+    );
+  }
   // Git committer dates are SECOND-granular while frozenAt carries milliseconds —
   // a freeze committed within the same second must not false-positive. The row
   // fires only when frozenAt exceeds the committer date's whole second.
@@ -222,6 +254,32 @@ export function verifySharedFrozenSplit(args: {
   }
 
   return { introducingCommit: introducing, committerDate };
+}
+
+/**
+ * Resolve + PROVE the freeze binding for a splitRef, in one home. Returns
+ * `undefined` for a legacy free-text ref (no artifact exists to bind — the
+ * pre-R1 adherence-class shape); for a content-addressed ref it resolves the
+ * artifact (integrity-checked) AND runs the shared-history proof, so a binding
+ * NEVER enters a consumer unproven regardless of which boundary constructs it
+ * (authoring intake, cert-run resolve, or the labels deriver).
+ */
+export function resolveProvenFreezeBinding(args: {
+  totemDir: string;
+  repoRoot: string;
+  splitRef: string;
+  safeExec: SafeExecFn;
+  sharedRef?: string;
+}): FreezeBinding | undefined {
+  if (!SPLIT_REF_RE.test(args.splitRef)) return undefined;
+  const resolved = resolveFrozenSplitByRef(args.totemDir, args.repoRoot, args.splitRef);
+  verifySharedFrozenSplit({
+    repoRoot: args.repoRoot,
+    resolved,
+    safeExec: args.safeExec,
+    ...(args.sharedRef !== undefined ? { sharedRef: args.sharedRef } : {}),
+  });
+  return { artifact: resolved.artifact };
 }
 
 /**
@@ -273,13 +331,14 @@ export function assertLedgerEntriesAfterFreeze(args: {
       safeExec('git', ['merge-base', '--is-ancestor', freezeIntroducingCommit, introducing], {
         cwd: repoRoot,
       });
-    } catch {
+    } catch (err) {
       // Non-zero exit = not-an-ancestor (or a git fault) — both honestly fail the row
       // (conservative: an unprovable ordering never passes).
       throw freezeProofFailure(
         'entry-not-after-freeze',
         `authoring-ledger entry for '${ruleId}' (introduced ${introducing.slice(0, 12)}) does not descend from the freeze artifact's introducing commit ${freezeIntroducingCommit.slice(0, 12)} — not strictly later by ancestry (t3; timestamps are not consulted)`,
         'The entry predates the freeze or lives on a divergent line; re-author under the frozen split.',
+        err,
       );
     }
   }

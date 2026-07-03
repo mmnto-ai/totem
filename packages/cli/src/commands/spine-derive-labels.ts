@@ -188,6 +188,9 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
             totemDir: resolveAuthoredTotemDir(lockPath, cwd, opts.totemDir),
             stage4,
             now,
+            // R1: a content-addressed lock ref requires the freeze proof at this boundary.
+            repoRoot: cwd,
+            safeExec,
           },
           lock,
         )

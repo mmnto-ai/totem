@@ -489,6 +489,11 @@ export interface AuthoredCorpusAssemblyOptions {
   now: string;
   /** Optional §4 differential-evaluator injection (defaults to the real one). */
   authoredControlsDeps?: AuthoredControlsDeps;
+  /** Repo root + exec for the R1 freeze-binding resolve+prove (REQUIRED when the lock's
+   *  expectedSplitRef is content-addressed; a content-addressed run without them fails loud —
+   *  the proof is never skipped). */
+  repoRoot?: string;
+  safeExec?: SafeExecFn;
 }
 
 /**
@@ -506,6 +511,37 @@ export interface AuthoredCorpusAssemblyOptions {
  * ledger-sourced `judgedBy` stays owned by `buildAuthoredCertifyingCorpus` (strategy (iii)).
  * Returns only `{ corpus }` — an authored run mints no miner ledgers.
  */
+/**
+ * R1: resolve + PROVE the freeze binding at a cert-run boundary. Free-text refs
+ * return `undefined` (legacy adherence shape). A content-addressed ref REQUIRES
+ * the proof deps — refusing beats silently skipping the shared-history proof
+ * (the never-unverified-binding invariant; strategy #2293 round-1 couple read).
+ */
+async function resolveRunFreezeBinding(args: {
+  expectedSplitRef: string;
+  totemDir: string;
+  repoRoot?: string;
+  safeExec?: SafeExecFn;
+  boundary: string;
+}): Promise<import('../spine-freeze-proof.js').FreezeBinding | undefined> {
+  const { SPLIT_REF_RE, TotemError } = await import('@mmnto/totem');
+  if (!SPLIT_REF_RE.test(args.expectedSplitRef)) return undefined;
+  if (args.repoRoot === undefined || args.safeExec === undefined) {
+    throw new TotemError(
+      'GATE_INVALID',
+      `${args.boundary}: the lock's expectedSplitRef is content-addressed (${args.expectedSplitRef.slice(0, 20)}…) but no repoRoot/safeExec were provided for the freeze proof — a frozen-artifact run never skips resolve+prove (ADR-112 §5.1 R1).`,
+      'Thread repoRoot + safeExec into the run inputs so the freeze binding can be proven.',
+    );
+  }
+  const { resolveProvenFreezeBinding } = await import('../spine-freeze-proof.js');
+  return resolveProvenFreezeBinding({
+    totemDir: args.totemDir,
+    repoRoot: args.repoRoot,
+    splitRef: args.expectedSplitRef,
+    safeExec: args.safeExec,
+  });
+}
+
 export async function assembleAuthoredCertifyingCorpus(
   opts: AuthoredCorpusAssemblyOptions,
   lock: WindtunnelLock,
@@ -538,6 +574,14 @@ export async function assembleAuthoredCertifyingCorpus(
     skipGroundTruth: true,
   });
 
+  const freezeBinding = await resolveRunFreezeBinding({
+    expectedSplitRef: lock.authored.expectedSplitRef,
+    totemDir: opts.totemDir,
+    repoRoot: opts.repoRoot,
+    safeExec: opts.safeExec,
+    boundary: 'derive-labels (authored)',
+  });
+
   const corpus = await buildAuthoredCertifyingCorpus({
     totemDir: opts.totemDir,
     // NO judgedBy — the §8 single source is derived from the authoring-ledger INSIDE
@@ -549,6 +593,7 @@ export async function assembleAuthoredCertifyingCorpus(
     stage4: opts.stage4,
     now: opts.now,
     ...(opts.authoredControlsDeps ? { authoredControlsDeps: opts.authoredControlsDeps } : {}),
+    ...(freezeBinding !== undefined ? { freezeBinding } : {}),
   });
 
   return { corpus };
@@ -575,6 +620,11 @@ export interface ResolveCorpusProviderInputs {
   onLedgers?: (ledgers: MinerLedgers) => void;
   /** Optional §4 differential-evaluator injection for the authored controls (authored path; defaults to the real one). */
   authoredControlsDeps?: AuthoredControlsDeps;
+  /** Repo root + exec for the R1 freeze-binding resolve+prove (REQUIRED when the lock's
+   *  expectedSplitRef is content-addressed; a content-addressed run without them fails loud —
+   *  the proof is never skipped). */
+  repoRoot?: string;
+  safeExec?: SafeExecFn;
 }
 
 /**
@@ -660,6 +710,14 @@ export async function resolveCertifyingCorpusProvider(
     // time. This also runs the D2.5 no-mint `verifyOnly` gate at the EARLIEST point — before
     // the engine, before any scorer call or ledger write (codex Q2). Built once; the provider
     // hands the SAME corpus to the engine, so the firings score the corpus that was built.
+    const freezeBinding = await resolveRunFreezeBinding({
+      expectedSplitRef: lock.authored.expectedSplitRef,
+      totemDir: inputs.totemDir,
+      repoRoot: inputs.repoRoot,
+      safeExec: inputs.safeExec,
+      boundary: 'Certifying run (authored)',
+    });
+
     const authoredCorpus = await buildAuthoredCertifyingCorpus({
       totemDir: inputs.totemDir,
       // NO judgedBy — it is the §8 single source in the authoring-ledger, derived inside
@@ -671,6 +729,7 @@ export async function resolveCertifyingCorpusProvider(
       stage4: inputs.stage4,
       now: inputs.now,
       ...(inputs.authoredControlsDeps ? { authoredControlsDeps: inputs.authoredControlsDeps } : {}),
+      ...(freezeBinding !== undefined ? { freezeBinding } : {}),
     });
 
     // Fail-loud, NEVER fall back to the mined scorer (codex Q1): an authored corpus MUST carry

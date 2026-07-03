@@ -54,6 +54,7 @@ export async function ruleAuthorCommand(opts: {
       const { prepareAuthorSandbox, removeAuthorSandbox } = await import('../author-sandbox.js');
       const sandbox = prepareAuthorSandbox({
         lcDir: opts.lcDir,
+        totemDir,
         artifact: resolved.artifact,
         safeExec,
       });

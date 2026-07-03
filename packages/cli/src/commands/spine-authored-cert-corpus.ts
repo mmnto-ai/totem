@@ -22,6 +22,7 @@ import type {
   Stage4VerifierDeps,
 } from '@mmnto/totem';
 
+import type { FreezeBinding } from '../spine-freeze-proof.js';
 import type { CertifyingCorpus } from './spine-windtunnel.js';
 
 export interface BuildAuthoredCertifyingCorpusDeps {
@@ -51,6 +52,13 @@ export interface BuildAuthoredCertifyingCorpusDeps {
   now: string;
   /** Optional §4 differential-evaluator injection for `deriveAuthoredControls` (defaults to the real one). */
   authoredControlsDeps?: AuthoredControlsDeps;
+  /**
+   * R1: the PROVEN freeze binding for a content-addressed `expectedSplitRef`
+   * (constructed ONLY by `resolveProvenFreezeBinding` at the cert-run boundary —
+   * this builder is git-free and never proves). Absent on a legacy free-text run;
+   * absent on a content-addressed run ⇒ the intake's total partition fails loud.
+   */
+  freezeBinding?: FreezeBinding;
 }
 
 /**
@@ -131,7 +139,17 @@ export async function buildAuthoredCertifyingCorpus(
   //    cover (non-empty-but-stale): step-0 empty → no-mint stale → step-3 verdict/binding (Q3 layered).
   //    The producer establishes eligibility/identity; NEVER construct AuthoredRuleRecord[] ad hoc or
   //    read YAML→record here.
-  const authorResult = runRuleAuthor(deps.totemDir, { judgedBy, verifyOnly: true });
+  //    R1: a content-addressed expectedSplitRef binds the run to a FROZEN artifact — the caller
+  //    resolves + PROVES the binding at the cert-run boundary (`resolveProvenFreezeBinding`) and
+  //    threads it here, or the intake's own content-ref gate voids the verifyOnly re-derive
+  //    (CR #2293 round 1: the cert re-derive ran bindingless). This builder stays git-free:
+  //    it CONSUMES a proven binding, never constructs one (the never-unverified-binding
+  //    invariant — proof lives with the boundary that has git).
+  const authorResult = runRuleAuthor(deps.totemDir, {
+    judgedBy,
+    verifyOnly: true,
+    ...(deps.freezeBinding !== undefined ? { freezeBinding: deps.freezeBinding } : {}),
+  });
 
   // 2. rejected.length === 0 precondition: a partially-invalid authored file is broken
   //    cert input — never certify the eligible subset (fail loud, not a partial corpus).

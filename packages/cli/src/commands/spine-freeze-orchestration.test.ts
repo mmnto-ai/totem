@@ -22,12 +22,17 @@ import {
   FrozenSplitArtifactSchema,
   readAuthoringLedger,
   safeExec,
+  type Stage4VerifierDeps,
 } from '@mmnto/totem';
 
 import { prepareAuthorSandbox, removeAuthorSandbox } from '../author-sandbox.js';
 import { runRuleAuthor } from '../authored-rule-intake.js';
 import { resolveFrozenSplitByRef, verifySharedFrozenSplit } from '../spine-freeze-proof.js';
 import { materializeAuthored } from './spine-authored-materialize.js';
+import {
+  assembleAuthoredCertifyingCorpus,
+  loadAuthoredCertRunFixtures,
+} from './spine-cert-run-corpus.js';
 import { freezeSplitCommand } from './spine-freeze-split.js';
 
 const SHARED_REF = 'origin/main';
@@ -139,7 +144,12 @@ function authoredAtAfterFreeze(w: World): string {
 
 function writeAuthoredYaml(
   w: World,
-  over: { splitRef?: string; freezeCommitment?: string | null; fixturePr?: number } = {},
+  over: {
+    splitRef?: string;
+    freezeCommitment?: string | null;
+    fixturePr?: number;
+    dslSource?: string;
+  } = {},
 ): void {
   // `freezeCommitment: null` ⇒ OMIT the header field (the absence row); undefined ⇒ the real one.
   const commitment =
@@ -158,7 +168,7 @@ function writeAuthoredYaml(
         targetDefect: 'forbidden console.log in prod',
         declaredEngine: 'regex',
         structuralClass: 'forbidden-literal-token',
-        dslSource: 'console\\.log',
+        dslSource: over.dslSource ?? 'console\\.log',
         positiveFixtures: [
           {
             pr: over.fixturePr ?? 1,
@@ -269,6 +279,71 @@ describe('R1 freeze-orchestration (real-git end-to-end)', () => {
     expect(fs.readFileSync(path.join(gate1, 'split.json'), 'utf-8')).toBe(
       `${canonicalStringify(w.artifact.split, 2)}\n`,
     );
+  });
+
+  it('cert re-derive threads a PROVEN freeze binding for a content-addressed run (CR round 1)', async () => {
+    // The seam CR caught: the cert-run boundary re-invokes intake on authored-rules.yaml,
+    // so a content-addressed run must resolve + PROVE the binding there or the intake's
+    // total partition voids the verifyOnly re-derive with GATE_INVALID.
+    const w = await buildSharedWorld();
+    // A COMPILE-USABLE dsl (the D5 assembler fixture shape) — this row runs the full
+    // assembly, so the rule must survive runCompileStage, not just intake.
+    const compilableDsl = [
+      '**Pattern:** `console\\.log\\(`',
+      '**Engine:** regex',
+      '**Severity:** warning',
+      '',
+      '### Bad Example',
+      '```ts',
+      'console.log("dbg")',
+      '```',
+    ].join('\n');
+    writeAuthoredYaml(w, { dslSource: compilableDsl });
+    authorUnderFreeze(w);
+    commitAll(w.repoRoot, 'author: rule under gate-1 freeze');
+    pushMain(w.repoRoot);
+    await materialize(w);
+
+    const gate1Dir = path.join(w.totemDir, 'spine', 'gate-1');
+    const lock = JSON.parse(
+      fs.readFileSync(path.join(gate1Dir, 'windtunnel.lock.json'), 'utf-8'),
+    ) as {
+      authored: { expectedSplitRef: string };
+      controls: { integrity: { prDiffsSha: string } };
+    };
+    const { split, prDiffs, groundTruth } = await loadAuthoredCertRunFixtures(gate1Dir, {
+      expectedPrDiffsSha: lock.controls.integrity.prDiffsSha,
+      skipGroundTruth: true,
+    });
+
+    const stage4: Stage4VerifierDeps = {
+      listFiles: () => Promise.resolve(['src-f1.rs']),
+      readFile: () => Promise.resolve('logger.debug("dbg")'),
+    };
+    // Without the proof deps a content-addressed run REFUSES (never skips the proof)…
+    await expect(
+      assembleAuthoredCertifyingCorpus(
+        { gate1Dir, totemDir: w.totemDir, stage4, now: authoredAtAfterFreeze(w) },
+        lock as never,
+      ),
+    ).rejects.toThrow(/never skips resolve\+prove|repoRoot/);
+    // …and WITH them the binding resolves, proves, and threads: the verifyOnly
+    // re-derive passes the intake's content-ref gate and the corpus assembles.
+    const { corpus } = await assembleAuthoredCertifyingCorpus(
+      {
+        gate1Dir,
+        totemDir: w.totemDir,
+        stage4,
+        now: authoredAtAfterFreeze(w),
+        repoRoot: w.repoRoot,
+        safeExec,
+      },
+      lock as never,
+    );
+    expect(corpus.rules.length).toBeGreaterThan(0);
+    // The §6 controls channel is bound — the assembly ran end-to-end, which is only
+    // reachable when the proven binding satisfied the intake's content-ref gate.
+    expect(corpus.authoredControls).toBeDefined();
   });
 
   it('refuses to overwrite an existing freeze without --refreeze', async () => {
@@ -404,8 +479,15 @@ describe('R1 freeze-orchestration (real-git end-to-end)', () => {
 
   it('t6: the author sandbox denies reads outside the derived train-tree root', async () => {
     const w = await buildSharedWorld();
-    const sandbox = prepareAuthorSandbox({ lcDir: w.lcDir, artifact: w.artifact, safeExec });
+    const sandbox = prepareAuthorSandbox({
+      lcDir: w.lcDir,
+      totemDir: w.totemDir,
+      artifact: w.artifact,
+      safeExec,
+    });
     try {
+      // The root is workspace-derived (`<totemDir>/temp/`), never os.tmpdir().
+      expect(path.relative(w.totemDir, sandbox.root).startsWith('..')).toBe(false);
       // The boundary tree is lc AT THE CUT: train PRs (#1, #2) are present…
       expect(sandbox.readFile('src-f2.rs')).toContain('fn f2');
       // …and the held-out era simply does not exist in this tree.
@@ -413,6 +495,22 @@ describe('R1 freeze-orchestration (real-git end-to-end)', () => {
       // Escapes fail loud (t6), absolute or relative.
       expect(() => sandbox.readFile('../outside.txt')).toThrow(/§5.4|escape/);
       expect(() => sandbox.readFile(path.join(w.repoRoot, 'README.md'))).toThrow(/§5.4|escape/);
+      // Symlink escape: a link INSIDE the root pointing outside must be caught by
+      // the realpath containment check, not followed (greptile/CR round 1).
+      const outside = path.join(w.repoRoot, 'held-out-secret.txt');
+      fs.writeFileSync(outside, 'embargoed', 'utf-8');
+      const linkPath = path.join(sandbox.root, 'sneaky-link.txt');
+      let linkable = true;
+      try {
+        fs.symlinkSync(outside, linkPath);
+      } catch {
+        // Windows without Developer Mode cannot create symlinks — the guard is
+        // still exercised on POSIX CI; skip only the symlink leg here.
+        linkable = false;
+      }
+      if (linkable) {
+        expect(() => sandbox.readFile('sneaky-link.txt')).toThrow(/§5.4|escape/);
+      }
     } finally {
       removeAuthorSandbox({ lcDir: w.lcDir, root: sandbox.root, safeExec });
     }
@@ -451,14 +549,26 @@ describe('R1 freeze-orchestration (real-git end-to-end)', () => {
     ).toThrow(/NOT in the frozen train slice/);
   });
 
-  it('#2289 must-not-widen: no R1 module consults the doctrine pin', () => {
+  it('#2289 must-not-widen: no R1-participating module consults the doctrine pin', () => {
+    // EVERY module in the freeze-binding flow, cli AND core (CR #2293 round 1:
+    // a pin reference in an unscanned participant would pass silently).
+    const coreSpine = path.join(__dirname, '..', '..', '..', 'core', 'src', 'spine');
     const sources = [
       path.join(__dirname, 'spine-freeze-split.ts'),
       path.join(__dirname, '..', 'spine-freeze-proof.ts'),
       path.join(__dirname, '..', 'author-sandbox.ts'),
       path.join(__dirname, 'spine-authored-materialize.ts'),
+      path.join(__dirname, '..', 'authored-rule-intake.ts'),
+      path.join(__dirname, 'rule-author.ts'),
+      path.join(__dirname, 'spine-authored-cert-corpus.ts'),
+      path.join(__dirname, 'spine-cert-run-corpus.ts'),
+      path.join(coreSpine, 'frozen-split.ts'),
+      path.join(coreSpine, 'authored-rule.ts'),
+      path.join(coreSpine, 'authoring-ledger.ts'),
+      path.join(coreSpine, 'cert-corpus-seed.ts'),
     ];
     for (const src of sources) {
+      expect(fs.existsSync(src), `scan-list path missing: ${src}`).toBe(true);
       expect(fs.readFileSync(src, 'utf-8')).not.toMatch(/strategy-doctrine/);
     }
   });
