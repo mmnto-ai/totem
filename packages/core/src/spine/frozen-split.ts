@@ -68,6 +68,29 @@ export const SelectionPinsSchema = z
 export type SelectionPins = z.infer<typeof SelectionPinsSchema>;
 
 /**
+ * The `totem spine freeze-split` INPUT (the curated freeze decisions). Everything
+ * else — `asOfCommit` (lc HEAD at freeze, Q3 derived-at-freeze), the corpus, the
+ * split membership, `frozenAt`, the stamps — is DERIVED at freeze and pinned in
+ * the artifact. `cutIndex` is the recorded build-choice under the held-out ≥ 0.5
+ * floor (#804).
+ */
+export const FreezeSplitParamsSchema = z
+  .object({
+    gate: nonBlank('gate').refine((s) => /^[a-z0-9-]+$/.test(s), {
+      message: 'gate must be a kebab slug — it names the tracked freeze home directory',
+    }),
+    repo: nonBlank('repo'),
+    selectionRule: SelectionPinsSchema,
+    split: z.object({
+      cutIndex: z.number().int().nonnegative(),
+      excludedPrs: z.array(z.number().int().positive()).default([]),
+    }),
+    label: z.string().optional(),
+  })
+  .strict();
+export type FreezeSplitParams = z.infer<typeof FreezeSplitParamsSchema>;
+
+/**
  * The frozen split artifact. `.strict()` — an unknown field is tamper/corruption,
  * never silently carried. `split.frozenAt` is REQUIRED here (the freeze IS the
  * event that mints it) even though `SplitArtifactSchema` keeps it optional for

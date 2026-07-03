@@ -85,9 +85,10 @@ export function resolveFrozenSplitByRef(
     try {
       parsed = FrozenSplitArtifactSchema.parse(JSON.parse(fs.readFileSync(absPath, 'utf-8')));
     } catch (err) {
+      const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
       throw freezeProofFailure(
         'artifact-integrity',
-        `frozen split at ${absPath} is malformed or violates the artifact schema`,
+        `frozen split at ${absPath} is malformed or violates the artifact schema (${detail})`,
         'A frozen artifact is never hand-edited; restore it from shared history.',
       );
     }

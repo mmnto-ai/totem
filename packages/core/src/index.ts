@@ -958,6 +958,7 @@ export type {
 export { classifyAuthorKind, DraftResultSchema, runExtractStage } from './spine/extract.js';
 export type {
   FreezeIntegrityCheck,
+  FreezeSplitParams,
   FrozenSplitArtifact,
   FrozenSplitAssembly,
   SelectionPins,
@@ -967,6 +968,7 @@ export {
   computeCorpusIntegrity,
   computeFreezeCommitment,
   computeFrozenSplitRef,
+  FreezeSplitParamsSchema,
   FROZEN_SPLIT_FILE,
   FrozenSplitArtifactSchema,
   SelectionPinsSchema,
