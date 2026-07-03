@@ -269,15 +269,13 @@ export function assertLedgerEntriesAfterFreeze(args: {
         'Freeze first (one PR), author after (a later PR); never combine them in one commit.',
       );
     }
-    let isAncestor = true;
     try {
       safeExec('git', ['merge-base', '--is-ancestor', freezeIntroducingCommit, introducing], {
         cwd: repoRoot,
       });
     } catch {
-      isAncestor = false;
-    }
-    if (!isAncestor) {
+      // Non-zero exit = not-an-ancestor (or a git fault) — both honestly fail the row
+      // (conservative: an unprovable ordering never passes).
       throw freezeProofFailure(
         'entry-not-after-freeze',
         `authoring-ledger entry for '${ruleId}' (introduced ${introducing.slice(0, 12)}) does not descend from the freeze artifact's introducing commit ${freezeIntroducingCommit.slice(0, 12)} — not strictly later by ancestry (t3; timestamps are not consulted)`,

@@ -84,6 +84,8 @@ export function removeAuthorSandbox(args: {
   safeExec: SafeExecFn;
 }): void {
   const { lcDir, root, safeExec } = args;
+  // totem-context: intentional cleanup — teardown is best-effort by design; the failure
+  // is surfaced on stderr and the rm+prune fallback completes the removal.
   try {
     safeExec('git', ['-C', lcDir, 'worktree', 'remove', '--force', root], {});
   } catch (err) {
