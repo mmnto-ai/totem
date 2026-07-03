@@ -50,7 +50,13 @@ function tryGitShow(
   safeExec: SafeExecFn,
 ): string | undefined {
   try {
-    return safeExec('git', ['show', `${commit}:${relPath}`], { cwd }).replace(/\r\n/g, '\n');
+    // LC_ALL=C pins git's stderr prose — the family regex below parses it, and a
+    // localized message would misclassify blob-absence as a real fault (CR #2293
+    // round 3), resurfacing the deletion-commit crash on non-C locales.
+    return safeExec('git', ['show', `${commit}:${relPath}`], {
+      cwd,
+      env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+    }).replace(/\r\n/g, '\n');
   } catch (err) {
     // ONLY the blob-absent family degrades to undefined (the optional-read
     // contract); any other git fault propagates — fail loud, never drift.
@@ -273,7 +279,19 @@ export function verifySharedFrozenSplit(args: {
   // a freeze committed within the same second must not false-positive. The row
   // fires only when frozenAt exceeds the committer date's whole second.
   const GIT_TIMESTAMP_GRANULARITY_MS = 1000;
-  if (Date.parse(frozenAt) >= Date.parse(committerDate) + GIT_TIMESTAMP_GRANULARITY_MS) {
+  const frozenAtMs = Date.parse(frozenAt);
+  const committerDateMs = Date.parse(committerDate);
+  // An unparseable instant on EITHER side would make every comparison false and
+  // silently no-op the row (GCA #2293 round 3 — the same NaN class as the
+  // stampless case above, on the parse leg).
+  if (Number.isNaN(frozenAtMs) || Number.isNaN(committerDateMs)) {
+    throw freezeProofFailure(
+      'temporal-consistency',
+      `temporal-consistency inputs unparseable: frozenAt "${frozenAt}" / committerDate "${committerDate}" (${introducing.slice(0, 12)}) — the row cannot run on malformed instants`,
+      'Both the artifact frozenAt and the commit date must be valid ISO-8601 instants; restore the artifact from shared history.',
+    );
+  }
+  if (frozenAtMs >= committerDateMs + GIT_TIMESTAMP_GRANULARITY_MS) {
     throw freezeProofFailure(
       'temporal-consistency',
       `temporal regression: frozenAt ${frozenAt} postdates the introducing commit's committer date ${committerDate} (${introducing.slice(0, 12)}) — the stamp claims a freeze AFTER the commit that carries it. Topology remains the proof; this consistency check names clock skew or a doctored stamp (t2/t8)`,
