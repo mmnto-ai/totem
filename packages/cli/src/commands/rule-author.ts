@@ -61,13 +61,27 @@ export async function ruleAuthorCommand(opts: {
       console.log(
         `[RuleAuthor] §5.4 author sandbox verified: train tree as of ${sandbox.cutBoundarySha.slice(0, 12)} (derived root, torn down after intake)`,
       );
+      let primaryErr: unknown;
       try {
         const judgedByEarly = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
         const result = runRuleAuthor(totemDir, { judgedBy: judgedByEarly, freezeBinding });
         reportRuleAuthor(result);
         return;
+      } catch (err) {
+        primaryErr = err;
+        throw err;
       } finally {
-        removeAuthorSandbox({ lcDir: opts.lcDir, root: sandbox.root, safeExec });
+        try {
+          removeAuthorSandbox({ lcDir: opts.lcDir, root: sandbox.root, safeExec });
+        } catch (teardownErr) {
+          // A throw in `finally` SHADOWS the in-flight error (GCA #2293 round 4):
+          // with no primary in flight the teardown failure IS the error (throw);
+          // with one, surface the teardown loudly beside it — never replace it.
+          if (primaryErr === undefined) throw teardownErr;
+          console.warn(
+            `[RuleAuthor] WARNING: sandbox teardown failed after a primary error (root kept at ${sandbox.root}): ${teardownErr instanceof Error ? teardownErr.message : String(teardownErr)}`,
+          );
+        }
       }
     }
   }
