@@ -10,6 +10,9 @@ pnpm-lock.yaml
 # Compiled rules hash must match compile-manifest.json — prettier would invalidate it
 .totem/compiled-rules.json
 .totem/compile-manifest.json
+# Spine artifacts are canonicalStringify-emitted; the freeze proof compares raw file
+# bytes to the committed blob (spine-freeze-proof.ts) — prettier rewrap reads as tamper
+.totem/spine/
 # Distributed SessionStart hooks are generated verbatim from @mmnto/cli templates;
 # doctor --parity content-hashes them against the canonical — prettier rewrap reads as drift
 .claude/hooks/
