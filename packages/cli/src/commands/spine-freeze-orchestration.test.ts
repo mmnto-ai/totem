@@ -29,10 +29,7 @@ import { prepareAuthorSandbox, removeAuthorSandbox } from '../author-sandbox.js'
 import { runRuleAuthor } from '../authored-rule-intake.js';
 import { resolveFrozenSplitByRef, verifySharedFrozenSplit } from '../spine-freeze-proof.js';
 import { materializeAuthored } from './spine-authored-materialize.js';
-import {
-  assembleAuthoredCertifyingCorpus,
-  loadAuthoredCertRunFixtures,
-} from './spine-cert-run-corpus.js';
+import { assembleAuthoredCertifyingCorpus } from './spine-cert-run-corpus.js';
 import { freezeSplitCommand } from './spine-freeze-split.js';
 
 const SHARED_REF = 'origin/main';
@@ -311,11 +308,6 @@ describe('R1 freeze-orchestration (real-git end-to-end)', () => {
       authored: { expectedSplitRef: string };
       controls: { integrity: { prDiffsSha: string } };
     };
-    const { split, prDiffs, groundTruth } = await loadAuthoredCertRunFixtures(gate1Dir, {
-      expectedPrDiffsSha: lock.controls.integrity.prDiffsSha,
-      skipGroundTruth: true,
-    });
-
     const stage4: Stage4VerifierDeps = {
       listFiles: () => Promise.resolve(['src-f1.rs']),
       readFile: () => Promise.resolve('logger.debug("dbg")'),
