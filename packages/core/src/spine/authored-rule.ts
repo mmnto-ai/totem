@@ -249,6 +249,17 @@ export const AuthoredRulesFileSchema = z
     authoredAfterSplit: z.literal(true),
     /** §5 attestation — the author did not inspect the held-out slice. Always `true`; sandboxed in C. */
     heldOutNonInspectionAttestation: z.literal(true),
+    /**
+     * ADR-112 §5.1/§8 R1 — the frozen split's `freezeCommitment`, REQUIRED when
+     * `splitRef` is a content-addressed frozen-artifact reference (`split:<sha256>`):
+     * the intake binding verifies it against the resolved artifact and chains it
+     * into every ledger entry's material (the (b) tamper-evidence leg). A legacy
+     * free-text `splitRef` omits it (pre-R1 adherence-class shape, byte-unchanged).
+     */
+    freezeCommitment: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/, 'freezeCommitment must be the frozen split artifact sha256 hex')
+      .optional(),
     /** The authored rules (≥1). */
     rules: z.array(AuthoredRuleInputSchema).min(1, {
       message: 'authored-rules.yaml must declare ≥1 rule',

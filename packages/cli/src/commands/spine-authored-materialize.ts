@@ -49,6 +49,12 @@ export interface AuthoredMaterializeContext {
   outDir?: string;
   resolveWithinRepo: (input: string, field: string) => string;
   safeExec: SafeExecFn;
+  /**
+   * ADR-112 R1 — the shared ref the freeze proof derives from (default
+   * `origin/main`). Tests point it at a real fixture remote; it is NEVER an
+   * author-facing knob (the proof's whole point is that the ref is shared).
+   */
+  sharedRef?: string;
 }
 
 /**
@@ -127,39 +133,116 @@ export async function materializeAuthored(
     );
   }
 
-  // 2. Bind the split's `frozenAt` to the REAL pre-authoring freeze instant recorded in the
-  //    seed (§5.1 "frozen before authoring"), then resolve + freeze. NEVER a materialize-`now()`
-  //    stamp: materialize necessarily runs AFTER authoring (it requires a non-empty ledger below),
-  //    so a `now()` frozenAt is after every `authoredAt` ⇒ the Q3 temporal gate would ALWAYS throw
-  //    (#2287 couple HOLD). Fail loud if the seed carries no freeze instant — the split must be
-  //    frozen (and its instant recorded) before authoring; materialize must not invent one. The
-  //    full pre-authoring freeze orchestration (a mechanical freeze-split step + `rule author`
-  //    binding) is the real-set follow-on; D5 loads the operator-recorded instant.
-  const frozenAt = seed.split.frozenAt;
-  if (frozenAt === undefined) {
-    throw new TotemError(
-      'GATE_INVALID',
-      'authored materialize: seed.split.frozenAt is absent — the split must be frozen BEFORE ' +
-        'authoring (ADR-112 §5.1) and its freeze instant recorded; materialize must not stamp its ' +
-        'own clock (a materialize-now freeze is necessarily after authoring ⇒ the Q3 temporal gate ' +
-        'would always fail).',
-      'Freeze the split before authoring and record its freeze instant as seed.split.frozenAt (full ISO-8601).',
-    );
+  // 2. Bind the freeze. TWO shapes (the seed schema enforces exactly-one-of):
+  //    R1 (frozenSplitRef): the FROZEN ARTIFACT is the single source (codex fold-5) —
+  //      load it, prove it on the shared ref (topology-first), re-derive the split from
+  //      the pinned inputs ONLY to assert byte-equality (a detector, never a repair),
+  //      and consume artifact.split verbatim (split.json below is its byte-identical copy).
+  //    Legacy D5 (frozenAt): the seed carries the recorded pre-authoring instant and the
+  //      split resolves from seed params — NEVER a materialize-`now()` stamp (#2287
+  //      couple HOLD); byte-unchanged for existing fixtures.
+  let split;
+  let frozenAt: string;
+  let frozenArtifactBinding:
+    | {
+        artifact: import('@mmnto/totem').FrozenSplitArtifact;
+        introducingCommit: string;
+      }
+    | undefined;
+  if (seed.split.frozenSplitRef !== undefined) {
+    const { resolveFrozenSplitByRef, verifySharedFrozenSplit, freezeProofFailure } =
+      await import('../spine-freeze-proof.js');
+    const { computeCorpusIntegrity } = await import('@mmnto/totem');
+    const resolved = resolveFrozenSplitByRef(totemDir, repoRoot, seed.split.frozenSplitRef);
+    const proof = verifySharedFrozenSplit({
+      repoRoot,
+      resolved,
+      safeExec,
+      sharedRef: ctx.sharedRef,
+    });
+    const artifact = resolved.artifact;
+
+    // Seed↔artifact consistency (a divergence is two homes drifting — fail loud, Tenet-20).
+    const divergences: string[] = [];
+    if (seed.selectionRule.asOfCommit !== artifact.split.asOfCommit) {
+      divergences.push(
+        `asOfCommit: seed ${seed.selectionRule.asOfCommit} vs artifact ${artifact.split.asOfCommit}`,
+      );
+    }
+    if (seed.split.cutIndex !== artifact.split.splitRule.cutIndex) {
+      divergences.push(
+        `cutIndex: seed ${seed.split.cutIndex} vs artifact ${artifact.split.splitRule.cutIndex}`,
+      );
+    }
+    if (seed.selectionRule.predicate !== artifact.selectionPins.predicate) {
+      divergences.push('selectionRule.predicate differs from the artifact selectionPins');
+    }
+    if (divergences.length > 0) {
+      throw freezeProofFailure(
+        'seed-artifact-divergence',
+        `the seed diverges from the frozen split it names (${artifact.splitRef}): ${divergences.join('; ')}`,
+        'Update the seed to match the frozen artifact (the artifact is the source; the seed only names it).',
+      );
+    }
+
+    // Re-derive from the pinned inputs and ASSERT — corpus integrity first, then the
+    // full split byte-compare (detect-never-repair; a mismatch writes nothing).
+    const rederivedIntegrity = computeCorpusIntegrity(corpus, mergeCommitMap(metas));
+    const rederived = resolveSplit({
+      asOfCommit: artifact.split.asOfCommit,
+      corpus,
+      orderedNewestFirst: metas.map((m) => m.pr),
+      excludedPrs: artifact.split.excludedPrs,
+      cutIndex: artifact.split.splitRule.cutIndex,
+      positiveControlPrs: [],
+      negativeControlPrs: [],
+      predicate: artifact.selectionPins.predicate,
+      mergeCommitByPr: mergeCommitMap(metas),
+      frozenAt: artifact.split.frozenAt,
+    });
+    if (
+      rederivedIntegrity !== artifact.corpusIntegrity ||
+      canonicalStringify(rederived) !== canonicalStringify(artifact.split)
+    ) {
+      throw freezeProofFailure(
+        'rederive-mismatch',
+        `re-deriving the split from the artifact's pinned inputs does not reproduce the frozen split ${artifact.splitRef} — the lc history at ${artifact.split.asOfCommit.slice(0, 12)} no longer yields the frozen membership (history rewrite, or a tampered artifact the integrity check could not see)`,
+        'Never repair: investigate the lc clone/history; a legitimate window change is a NEW freeze via a new PR.',
+      );
+    }
+
+    split = artifact.split;
+    frozenAt = artifact.split.frozenAt!; // schema-required on a frozen artifact
+    frozenArtifactBinding = { artifact, introducingCommit: proof.introducingCommit };
+  } else {
+    const seedFrozenAt = seed.split.frozenAt;
+    if (seedFrozenAt === undefined) {
+      throw new TotemError(
+        'GATE_INVALID',
+        'authored materialize: the seed binds no freeze — the split must be frozen BEFORE ' +
+          'authoring (ADR-112 §5.1) and bound via split.frozenSplitRef (frozen artifact) or ' +
+          'split.frozenAt (legacy recorded instant); materialize must not stamp its own clock ' +
+          '(a materialize-now freeze is necessarily after authoring ⇒ the Q3 temporal gate ' +
+          'would always fail).',
+        'Freeze the split BEFORE authoring (`totem spine freeze-split`) and name it via split.frozenSplitRef.',
+      );
+    }
+    frozenAt = seedFrozenAt;
+    // Authored controls are train-side (derived at RUN from the rules), so the split carries NO
+    // held-out control tags — positive/negative control PRs are [] (the mined notion is inapplicable).
+    split = resolveSplit({
+      asOfCommit: seed.selectionRule.asOfCommit,
+      corpus,
+      orderedNewestFirst: metas.map((m) => m.pr),
+      excludedPrs: seed.split.excludedPrs,
+      cutIndex: seed.split.cutIndex,
+      positiveControlPrs: [],
+      negativeControlPrs: [],
+      predicate: seed.selectionRule.predicate,
+      mergeCommitByPr: mergeCommitMap(metas),
+      frozenAt,
+    });
   }
-  // Authored controls are train-side (derived at RUN from the rules), so the split carries NO
-  // held-out control tags — positive/negative control PRs are [] (the mined notion is inapplicable).
-  const split = resolveSplit({
-    asOfCommit: seed.selectionRule.asOfCommit,
-    corpus,
-    orderedNewestFirst: metas.map((m) => m.pr),
-    excludedPrs: seed.split.excludedPrs,
-    cutIndex: seed.split.cutIndex,
-    positiveControlPrs: [],
-    negativeControlPrs: [],
-    predicate: seed.selectionRule.predicate,
-    mergeCommitByPr: mergeCommitMap(metas),
-    frozenAt,
-  });
 
   // 3. Effective authoring-ledger → the single split-binding + the train-side control PRs.
   const ledger = readAuthoringLedger(totemDir);
@@ -181,6 +264,51 @@ export async function materializeAuthored(
     );
   }
   const expectedSplitRef = [...splitRefs][0]!;
+
+  // 3.5 R1 — the frozen-artifact ledger chain (compose-never-replace with the Q gates below):
+  //     the ledger must bind THIS artifact ((b) leg: per-entry freezeCommitment — a re-frozen
+  //     split orphans every stale entry loudly, t1) and every effective entry must have entered
+  //     shared history STRICTLY LATER than the freeze by ancestry ((a) leg, t3).
+  if (frozenArtifactBinding !== undefined) {
+    const { assertLedgerEntriesAfterFreeze, freezeProofFailure } =
+      await import('../spine-freeze-proof.js');
+    const { AUTHORING_LEDGER_DIR, AUTHORING_LEDGER_FILE } = await import('@mmnto/totem');
+    const artifact = frozenArtifactBinding.artifact;
+    if (expectedSplitRef !== artifact.splitRef) {
+      throw freezeProofFailure(
+        'ledger-ref-mismatch',
+        `the effective authoring-ledger binds splitRef ${expectedSplitRef}, but the seed names the frozen artifact ${artifact.splitRef} — the rules were authored under a different (or re-frozen) split`,
+        'Re-author the set under the current frozen artifact, or materialize against the split the ledger binds.',
+      );
+    }
+    for (const e of effective) {
+      if (e.freezeCommitment === undefined) {
+        throw freezeProofFailure(
+          'entry-commitment-absent',
+          `authoring-ledger entry for '${e.ruleId}' carries no freezeCommitment — it was authored without the R1 binding, so the (b) chain cannot anchor it to ${artifact.splitRef}`,
+          'Re-run `totem rule author` under the frozen artifact so every effective entry chains the commitment.',
+        );
+      }
+      if (e.freezeCommitment !== artifact.freezeCommitment) {
+        throw freezeProofFailure(
+          'entry-commitment-mismatch',
+          `authoring-ledger entry for '${e.ruleId}' chains freezeCommitment ${e.freezeCommitment.slice(0, 12)}… but the frozen artifact carries ${artifact.freezeCommitment.slice(0, 12)}… — the split was re-frozen after this entry (t1: the entry is orphaned)`,
+          'Re-author the orphaned rule(s) under the current freeze; a re-freeze deliberately invalidates the prior chain.',
+        );
+      }
+    }
+    const ledgerRelPath = path
+      .relative(repoRoot, path.join(totemDir, AUTHORING_LEDGER_DIR, AUTHORING_LEDGER_FILE))
+      .replace(/\\/g, '/');
+    assertLedgerEntriesAfterFreeze({
+      repoRoot,
+      ledgerRelPath,
+      entries: effective.map((e) => ({ ruleId: e.ruleId, entry: e })),
+      freezeIntroducingCommit: frozenArtifactBinding.introducingCommit,
+      safeExec,
+      sharedRef: ctx.sharedRef,
+    });
+  }
 
   // 4. §5.1/§5.3 freeze gates (Q2 held-out floor + Q3 temporal + Q3 membership) — fail-loud,
   //    compose-never-replace, BEFORE any write (detect-never-repair, sensor-not-actuator).

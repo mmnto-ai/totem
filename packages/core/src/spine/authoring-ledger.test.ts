@@ -158,6 +158,18 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
       }),
     );
   });
+  it('R1: an ABSENT freezeCommitment hashes byte-identically to the pre-R1 material (additive)', () => {
+    expect(authoringContentHash({ ...material, freezeCommitment: undefined })).toBe(
+      authoringContentHash(material),
+    );
+  });
+  it('R1: the freezeCommitment is INSIDE the material — a re-freeze flips the hash (codex fold-2)', () => {
+    const withCommitment = authoringContentHash({ ...material, freezeCommitment: 'a'.repeat(64) });
+    expect(withCommitment).not.toBe(authoringContentHash(material));
+    expect(withCommitment).not.toBe(
+      authoringContentHash({ ...material, freezeCommitment: 'b'.repeat(64) }),
+    );
+  });
   it('is CRLF-invariant — self-normalizes newlines regardless of the caller (Tenet-20 single-home)', () => {
     // a CRLF-authored multi-line matcher and its LF twin must hash identically even if the
     // CALLER never normalized — the determinism lives in the hash, not the reader (gemini).

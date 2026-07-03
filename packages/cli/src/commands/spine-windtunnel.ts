@@ -544,6 +544,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       stage4,
       now: runNowIso,
       totemDir: path.join(repoRoot, '.totem'),
+      // R1: a content-addressed lock ref requires the freeze proof at this boundary.
+      repoRoot,
+      safeExec,
     });
     corpusProvider = resolved.provider;
     score = resolved.score;

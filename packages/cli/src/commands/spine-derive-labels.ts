@@ -71,11 +71,15 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
     CorpusDispositionsSchema,
     deriveLabelsFromDispositions,
     canonicalStringify,
+    resolveGitRoot,
     safeExec,
     TotemError,
   } = await import('@mmnto/totem');
 
   const cwd = opts.cwd ?? process.cwd();
+  // The freeze proof's git invocations are repo-root-relative — a subdirectory cwd
+  // would break `git show <commit>:<path>` (CR #2293 round 2; matches spine-windtunnel).
+  const repoRoot = resolveGitRoot(cwd) ?? cwd;
   const lockPath = opts.lockPath
     ? path.resolve(cwd, opts.lockPath)
     : path.resolve(cwd, '.totem/spine/gate-1/windtunnel.lock.json');
@@ -188,6 +192,9 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
             totemDir: resolveAuthoredTotemDir(lockPath, cwd, opts.totemDir),
             stage4,
             now,
+            // R1: a content-addressed lock ref requires the freeze proof at this boundary.
+            repoRoot,
+            safeExec,
           },
           lock,
         )

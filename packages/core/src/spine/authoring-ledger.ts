@@ -83,6 +83,21 @@ export const AuthoringLedgerEntrySchema = z
      */
     negativeFixturePrs: z.array(z.number().int().positive()).optional(),
     /**
+     * ADR-112 §5.1/§8 R1 — the frozen split's `freezeCommitment`
+     * (`sha256(splitRef · frozenAt · corpusIntegrity)`), chained from the frozen
+     * artifact into every entry authored under it (the (b) tamper-evidence leg:
+     * a re-freeze changes the commitment, the commitment is INSIDE the
+     * `authoringContentHash` material, so every downstream entry reads
+     * would-revise — orphaned loudly, never silently current). Optional: rows
+     * authored before R1 (or under a legacy free-text splitRef) omit it; the R1
+     * materialize path fail-louds when a frozen-artifact run meets an
+     * uncommitted entry.
+     */
+    freezeCommitment: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
+    /**
      * Fingerprint of the MATERIAL author input (engine / class / matcher /
      * fixtures / origin) — identity (`author`/`targetDefect`/`ruleId`) AND
      * `authoredAt` EXCLUDED, so a pure timestamp refresh is a no-op (§8: a
@@ -140,6 +155,13 @@ export function authoringContentHash(material: {
   heldOutNonInspectionAttestation: boolean;
   /** The producer VERDICT (CR diff-review) — incl. `judgedBy`/`basis`; a verdict change must revise. */
   structuralEligibility: unknown;
+  /**
+   * ADR-112 R1 — the frozen split's freeze commitment, INSIDE the material
+   * (codex fold-2: adjacent-to-the-hash would let a re-frozen split read
+   * `unchanged`). Absent (legacy / free-text splitRef) ⇒ the key is dropped by
+   * canonicalStringify, so every pre-R1 hash is byte-identical — additive.
+   */
+  freezeCommitment?: string;
 }): string {
   return createHash('sha256')
     .update(canonicalStringify(lfDeepNormalize(material)))

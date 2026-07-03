@@ -32,9 +32,11 @@ import {
   type AuthoringLedgerEntry,
   buildAuthoredIdentityIndex,
   evaluateStructuralEligibility,
+  type FrozenSplitArtifact,
   identityKey,
   mintAuthoredRuleId,
   readAuthoringLedger,
+  SPLIT_REF_RE,
   TotemError,
 } from '@mmnto/totem';
 
@@ -121,7 +123,19 @@ interface PendingRule {
  */
 export function runRuleAuthor(
   totemDir: string,
-  opts: { judgedBy: string; verifyOnly?: boolean },
+  opts: {
+    judgedBy: string;
+    verifyOnly?: boolean;
+    /**
+     * ADR-112 §5.1/§8 R1 — the VERIFIED frozen split this authoring run binds to.
+     * The caller (the command layer) resolves the artifact by the file's
+     * content-addressed splitRef AND proves it on the shared ref
+     * (spine-freeze-proof.ts) BEFORE handing it here — this git-free library
+     * only enforces the binding facts. REQUIRED whenever the file's splitRef is
+     * content-addressed (`split:<sha256>`); forbidden otherwise.
+     */
+    freezeBinding?: { artifact: FrozenSplitArtifact };
+  },
 ): RuleAuthorResult {
   // Normalize at the PRODUCER boundary (CR re-review): the command trims `--judged-by`, but this
   // function is exported + callable directly, so an untrimmed `' Alice '` must not bypass the
@@ -174,6 +188,67 @@ export function runRuleAuthor(
     );
   }
   const fileDoc = parsed.data;
+
+  // ── R1 freeze binding (ADR-112 §5.1/§8): a content-addressed splitRef engages the
+  //    mechanical chain; a legacy free-text splitRef stays the pre-R1 adherence-class
+  //    shape (recorded, verified at materialize). The partition is total: content-
+  //    addressed WITHOUT a verified artifact fails, and a commitment on a free-text
+  //    ref fails (it would be an unanchored claim). ──
+  const refIsContentAddressed = SPLIT_REF_RE.test(fileDoc.splitRef);
+  const binding = opts.freezeBinding;
+  if (refIsContentAddressed && binding === undefined) {
+    throw new TotemError(
+      'GATE_INVALID',
+      `authored-rules.yaml declares the content-addressed splitRef ${fileDoc.splitRef} but no verified frozen split was bound — the caller must resolve + prove the artifact on the shared ref first (freeze-proof)`,
+      'Run `totem rule author` (the command performs the shared-history proof), or pass a verified freezeBinding when calling runRuleAuthor programmatically.',
+    );
+  }
+  if (!refIsContentAddressed && fileDoc.freezeCommitment !== undefined) {
+    throw new TotemError(
+      'GATE_INVALID',
+      'authored-rules.yaml carries a freezeCommitment on a legacy free-text splitRef — a commitment binds only a content-addressed frozen artifact (ADR-112 §5.1 R1)',
+      'Use the frozen artifact splitRef (`split:<sha256>`) from `totem spine freeze-split`, or drop the freezeCommitment.',
+    );
+  }
+  if (binding !== undefined) {
+    const artifact = binding.artifact;
+    if (fileDoc.splitRef !== artifact.splitRef) {
+      throw new TotemError(
+        'GATE_INVALID',
+        `authored-rules.yaml splitRef ${fileDoc.splitRef} does not match the bound frozen artifact's splitRef ${artifact.splitRef}`,
+        'Author against the artifact the freeze PR landed; the ref is its content address.',
+      );
+    }
+    if (fileDoc.freezeCommitment === undefined) {
+      throw new TotemError(
+        'GATE_INVALID',
+        `authored-rules.yaml omits freezeCommitment — a content-addressed authoring session must declare the frozen artifact's commitment (${artifact.freezeCommitment})`,
+        'Copy freezeCommitment from the frozen split artifact into the authored-rules.yaml header.',
+      );
+    }
+    if (fileDoc.freezeCommitment !== artifact.freezeCommitment) {
+      throw new TotemError(
+        'GATE_INVALID',
+        `authored-rules.yaml freezeCommitment ${fileDoc.freezeCommitment} does not match the frozen artifact's ${artifact.freezeCommitment} — the split was re-frozen after this header was written (t1)`,
+        'Re-author under the current freeze: update the header from the live artifact and re-verify every rule.',
+      );
+    }
+    // §5(2) flips mechanical at intake: every positive fixture must be a member of
+    // the FROZEN train slice (previously first checked at materialize — compose,
+    // never replace; the materialize gate stays).
+    const train = new Set(artifact.split.trainPrs);
+    for (const r of fileDoc.rules) {
+      for (const f of r.positiveFixtures) {
+        if (!train.has(f.pr)) {
+          throw new TotemError(
+            'GATE_INVALID',
+            `authored rule (${r.author} · ${r.targetDefect}) declares positive fixture PR #${f.pr} which is NOT in the frozen train slice — fixtures must be train-side of the frozen split (ADR-112 §5.2)`,
+            `Train slice of ${artifact.splitRef}: [${artifact.split.trainPrs.join(', ')}].`,
+          );
+        }
+      }
+    }
+  }
 
   // Reject a duplicate identity WITHIN the file (codex — ambiguous which rule owns the id) +
   // enforce §3 independence: the eligibility check's `judgedBy` must never be a rule's own author
@@ -244,6 +319,10 @@ export function runRuleAuthor(
       // (e.g. a different `judgedBy`, or a whitelist update altering the basis) must append a fresh
       // row, not read `unchanged` and keep the stale `structuralEligibility` on the effective entry.
       structuralEligibility,
+      // R1 (codex fold-2): the freeze commitment lives INSIDE the material, so a re-freeze
+      // flips every downstream entry to would-revise — the (b)-leg orphaning property.
+      // Absent (legacy free-text splitRef) ⇒ dropped by canonicalStringify, hash unchanged.
+      ...(binding !== undefined ? { freezeCommitment: binding.artifact.freezeCommitment } : {}),
     });
 
     const key = identityKey(r.author, r.targetDefect);
@@ -305,6 +384,10 @@ export function runRuleAuthor(
       positiveFixturePrs: r.positiveFixtures.map((f) => f.pr),
       // No negativeFixturePrs: §6 near-misses are silence-only with no `pr` (strategy#770 +
       // Q-C ruling); only positiveFixtures are train-side-attested (§5(2)).
+      // R1: the entry CARRIES the commitment it was hashed under, so the chain is
+      // readable from the ledger alone (and a frozen-artifact materialize can
+      // fail-loud on an absent/mismatched entry commitment).
+      ...(binding !== undefined ? { freezeCommitment: binding.artifact.freezeCommitment } : {}),
       contentHash,
     };
 
