@@ -51,7 +51,15 @@ function tryGitShow(
 ): string | undefined {
   try {
     return safeExec('git', ['show', `${commit}:${relPath}`], { cwd }).replace(/\r\n/g, '\n');
-  } catch {
+  } catch (err) {
+    // ONLY the blob-absent family degrades to undefined (the optional-read
+    // contract); any other git fault propagates — fail loud, never drift.
+    const message = err instanceof Error ? err.message : String(err);
+    if (
+      !/does not exist|exists on disk, but not in|invalid object name|bad revision/i.test(message)
+    ) {
+      throw err;
+    }
     return undefined;
   }
 }
