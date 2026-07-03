@@ -8,18 +8,75 @@
 // strategy seam-review (f)). SLICE B: from-YAML only (interactive is a later
 // upgrade, §8); records are produced + ledgered, not yet fed to the certifying corpus.
 
-export async function ruleAuthorCommand(opts: { judgedBy?: string }): Promise<void> {
+export async function ruleAuthorCommand(opts: {
+  judgedBy?: string;
+  lcDir?: string;
+}): Promise<void> {
+  const fs = await import('node:fs');
   const path = await import('node:path');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
-  const { runRuleAuthor } = await import('../authored-rule-intake.js');
+  const { AUTHORED_RULES_REL, runRuleAuthor } = await import('../authored-rule-intake.js');
+  const { resolveGitRoot, safeExec, SPLIT_REF_RE } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
   const config = await loadConfig(resolveConfigPath(cwd));
   const totemDir = path.join(cwd, config.totemDir);
 
-  const judgedBy = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
-  const result = runRuleAuthor(totemDir, { judgedBy });
+  // ── R1 freeze binding (ADR-112 §5.1/§8): a content-addressed splitRef in the
+  //    authoring header engages the shared-history proof BEFORE intake — resolve
+  //    the frozen artifact by ref, prove it on the shared ref (topology-first),
+  //    and hand the VERIFIED artifact to the git-free intake. A legacy free-text
+  //    splitRef binds nothing (pre-R1 shape; intake enforces the partition). ──
+  let freezeBinding: { artifact: import('@mmnto/totem').FrozenSplitArtifact } | undefined;
+  const yamlPath = path.join(totemDir, AUTHORED_RULES_REL);
+  let declaredSplitRef: string | undefined;
+  if (fs.existsSync(yamlPath)) {
+    // Cheap header peek (full validation stays in runRuleAuthor): the splitRef line
+    // decides whether the proof machinery loads at all (lazy-load discipline).
+    const m = /^splitRef:\s*["']?(\S+?)["']?\s*$/m.exec(fs.readFileSync(yamlPath, 'utf-8'));
+    declaredSplitRef = m?.[1];
+  }
+  if (declaredSplitRef !== undefined && SPLIT_REF_RE.test(declaredSplitRef)) {
+    const { resolveFrozenSplitByRef, verifySharedFrozenSplit } =
+      await import('../spine-freeze-proof.js');
+    const repoRoot = resolveGitRoot(cwd) ?? cwd;
+    const resolved = resolveFrozenSplitByRef(totemDir, repoRoot, declaredSplitRef);
+    verifySharedFrozenSplit({ repoRoot, resolved, safeExec });
+    freezeBinding = { artifact: resolved.artifact };
+    console.log(
+      `[RuleAuthor] freeze binding verified: ${resolved.artifact.splitRef} ` +
+        `(commitment ${resolved.artifact.freezeCommitment.slice(0, 12)}…, shared-history proof passed)`,
+    );
+    if (opts.lcDir) {
+      // §5.4: materialize + tear down the derived sandbox to PROVE the boundary sha
+      // is reachable from this clone. The root derives from the artifact alone —
+      // no author-supplied root/allowlist exists on this surface (independence axiom).
+      const { prepareAuthorSandbox, removeAuthorSandbox } = await import('../author-sandbox.js');
+      const sandbox = prepareAuthorSandbox({
+        lcDir: opts.lcDir,
+        artifact: resolved.artifact,
+        safeExec,
+      });
+      console.log(
+        `[RuleAuthor] §5.4 author sandbox verified: train tree as of ${sandbox.cutBoundarySha.slice(0, 12)} (derived root, torn down after intake)`,
+      );
+      try {
+        const judgedByEarly = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
+        const result = runRuleAuthor(totemDir, { judgedBy: judgedByEarly, freezeBinding });
+        reportRuleAuthor(result);
+        return;
+      } finally {
+        removeAuthorSandbox({ lcDir: opts.lcDir, root: sandbox.root, safeExec });
+      }
+    }
+  }
 
+  const judgedBy = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
+  const result = runRuleAuthor(totemDir, { judgedBy, freezeBinding });
+  reportRuleAuthor(result);
+}
+
+function reportRuleAuthor(result: import('../authored-rule-intake.js').RuleAuthorResult): void {
   console.log(
     `[RuleAuthor] ${result.records.length} authored rule(s): ` +
       `${result.minted} minted, ${result.revised} revised, ${result.unchanged} unchanged.`,

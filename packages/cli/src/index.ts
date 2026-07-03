@@ -1680,7 +1680,12 @@ ruleCmd
     '--judged-by <id>',
     'Identity of the independent eligibility check recorded on each verdict',
   )
-  .action(async (opts: { judgedBy?: string }) => {
+  .option(
+    '--lc-dir <path>',
+    'lc clone for §5.4 sandbox verification when the splitRef is a frozen artifact (env: TOTEM_LC_DIR)',
+    process.env['TOTEM_LC_DIR'],
+  )
+  .action(async (opts: { judgedBy?: string; lcDir?: string }) => {
     try {
       const { ruleAuthorCommand } = await import('./commands/rule-author.js');
       await ruleAuthorCommand(opts);
@@ -1925,6 +1930,38 @@ windtunnelCmd
         manifestPath: opts.manifest,
         lcDir: opts.lcDir,
         outDir: opts.out,
+      });
+    } catch (err) {
+      handleError(err);
+      throw err;
+    }
+  });
+
+spineCmd
+  .command('freeze-split')
+  .description(
+    'Freeze the pre-authoring split: derive the window from lc HEAD, stamp frozenAt, write the tamper-evident tracked artifact (ADR-112 §5.1/§8 R1)',
+  )
+  .requiredOption(
+    '--params <path>',
+    'Path to the curated freeze params (JSON, FreezeSplitParamsSchema)',
+  )
+  .option(
+    '--lc-dir <path>',
+    'Path to the lc clone (env: TOTEM_LC_DIR)',
+    process.env['TOTEM_LC_DIR'],
+  )
+  .option(
+    '--refreeze',
+    'Explicitly authorize overwriting an existing frozen split (a re-freeze orphans every ledger entry chained to the old commitment)',
+  )
+  .action(async (opts: { params: string; lcDir?: string; refreeze?: boolean }) => {
+    try {
+      const { freezeSplitCommand } = await import('./commands/spine-freeze-split.js');
+      await freezeSplitCommand({
+        paramsPath: opts.params,
+        lcDir: opts.lcDir,
+        refreeze: opts.refreeze,
       });
     } catch (err) {
       handleError(err);
