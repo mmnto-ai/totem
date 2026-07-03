@@ -133,6 +133,19 @@ export const CertCorpusSeedSchema = z
         path: ['controls'],
       });
     }
+    // ADR-112 D5 couple ruling (strategy#804): parse-time owns PRESENCE — an authored
+    // seed without the pre-authoring freeze instant is invalid-by-construction (the
+    // materialize Q3 gate is production-unsatisfiable without it, #2287 couple HOLD).
+    // Temporal SEMANTICS (ordering vs authoredAt, loaded-not-stamped sourcing) stay
+    // enforced at materialize — layered clauses, not a second home for one fact.
+    if (seed.producerKind === 'authored' && seed.split.frozenAt === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "producerKind 'authored' requires split.frozenAt (the pre-authoring freeze instant)",
+        path: ['split', 'frozenAt'],
+      });
+    }
   });
 
 export type CertCorpusSeed = z.infer<typeof CertCorpusSeedSchema>;
