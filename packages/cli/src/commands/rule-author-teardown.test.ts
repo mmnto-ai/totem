@@ -17,7 +17,12 @@ vi.mock('../utils.js', () => ({
 }));
 vi.mock('../spine-freeze-proof.js', () => ({
   resolveFrozenSplitByRef: vi.fn(() => ({
-    artifact: { splitRef: `split:${'a'.repeat(64)}`, freezeCommitment: 'c'.repeat(64) },
+    artifact: {
+      splitRef: `split:${'a'.repeat(64)}`,
+      freezeCommitment: 'c'.repeat(64),
+      cutBoundarySha: 'd'.repeat(40),
+      split: { asOfCommit: 'e'.repeat(40), trainPrs: [], heldOutPrs: [] },
+    },
   })),
   verifySharedFrozenSplit: vi.fn(),
 }));

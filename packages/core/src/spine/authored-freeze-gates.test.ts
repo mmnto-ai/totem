@@ -113,37 +113,79 @@ describe('checkFrozenBeforeAuthoring (Q3 temporal)', () => {
   });
 });
 
-describe('checkPositiveFixturesTrainSide (Q3 membership)', () => {
+describe('checkPositiveFixturesTrainSide (Q3 membership — §5.2 leakage semantics)', () => {
+  const none: ReadonlySet<number> = new Set<number>();
+
   it('all positive fixtures train-side → PASS', () => {
     expect(
-      checkPositiveFixturesTrainSide(split({ trainPrs: [1, 2], heldOutPrs: [3, 4] }), [
-        entry({ positiveFixturePrs: [1, 2] }),
-      ]),
+      checkPositiveFixturesTrainSide(
+        split({ trainPrs: [1, 2], heldOutPrs: [3, 4] }),
+        [entry({ positiveFixturePrs: [1, 2] })],
+        none,
+      ),
     ).toEqual([]);
   });
 
-  it('(iii) a held-out positive fixture → violation naming rule + PR + slice', () => {
-    const issues = checkPositiveFixturesTrainSide(split({ trainPrs: [1], heldOutPrs: [3, 4] }), [
-      entry({ ruleId: 'rule-leak', positiveFixturePrs: [3] }),
-    ]);
+  it('(iii) a held-out positive fixture → violation naming rule + PR + HELD-OUT', () => {
+    const issues = checkPositiveFixturesTrainSide(
+      split({ trainPrs: [1], heldOutPrs: [3, 4] }),
+      [entry({ ruleId: 'rule-leak', positiveFixturePrs: [3] })],
+      none,
+    );
     expect(issues).toHaveLength(1);
     expect(issues[0]).toContain('rule-leak');
     expect(issues[0]).toContain('#3');
-    expect(issues[0]).toContain('held-out');
+    expect(issues[0]).toContain('HELD-OUT');
   });
 
-  it('a fixture outside the split entirely → violation ("outside the split")', () => {
-    const issues = checkPositiveFixturesTrainSide(split({ trainPrs: [1], heldOutPrs: [3] }), [
-      entry({ positiveFixturePrs: [99] }),
-    ]);
-    expect(issues[0]).toContain('outside the split');
+  it('a fixture outside the window, UNVERIFIED → violation ("NOT proven strictly pre-window")', () => {
+    const issues = checkPositiveFixturesTrainSide(
+      split({ trainPrs: [1], heldOutPrs: [3] }),
+      [entry({ positiveFixturePrs: [99] })],
+      none,
+    );
+    expect(issues[0]).toContain('NOT proven strictly pre-window');
+  });
+
+  it('a fixture outside the window, PROVEN pre-window → PASS (the #2294-couple option (a))', () => {
+    expect(
+      checkPositiveFixturesTrainSide(
+        split({ trainPrs: [447, 601], heldOutPrs: [602, 697] }),
+        [entry({ positiveFixturePrs: [422, 447] })],
+        new Set([422]),
+      ),
+    ).toEqual([]);
+  });
+
+  it('the verified set can NEVER override held-out membership (FM (c) defense-in-depth)', () => {
+    const issues = checkPositiveFixturesTrainSide(
+      split({ trainPrs: [1], heldOutPrs: [3] }),
+      [entry({ positiveFixturePrs: [3] })],
+      new Set([3]), // a caller-fault set naming a held-out member — the gate must not honor it
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('HELD-OUT');
+  });
+
+  it('a post-window fixture (not in the verified set) → violation, the door stays shut', () => {
+    // PR 999 merged after asOfCommit: the ancestry derivation cannot resolve or prove
+    // it, so it is absent from the verified set and must reject.
+    const issues = checkPositiveFixturesTrainSide(
+      split({ trainPrs: [1], heldOutPrs: [3] }),
+      [entry({ positiveFixturePrs: [999] })],
+      new Set([422]),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('#999');
   });
 });
 
 describe('assertAuthoredFreezePreconditions (composed, compose-never-replace)', () => {
+  const none: ReadonlySet<number> = new Set<number>();
+
   it('(i) clean split + train-side fixtures + frozen-before → no throw', () => {
     expect(() =>
-      assertAuthoredFreezePreconditions(split(), [entry({ positiveFixturePrs: [1, 2] })]),
+      assertAuthoredFreezePreconditions(split(), [entry({ positiveFixturePrs: [1, 2] })], none),
     ).not.toThrow();
   });
 
@@ -154,6 +196,7 @@ describe('assertAuthoredFreezePreconditions (composed, compose-never-replace)', 
       assertAuthoredFreezePreconditions(
         split({ trainPrs: [1, 2, 3], heldOutPrs: [4], frozenAt: '2026-06-20T00:00:00.000Z' }),
         [entry({ ruleId: 'rx', authoredAt: '2026-06-15T00:00:00.000Z', positiveFixturePrs: [4] })],
+        none,
       );
     } catch (e) {
       caught = e as Error;
@@ -166,10 +209,20 @@ describe('assertAuthoredFreezePreconditions (composed, compose-never-replace)', 
     expect(msg).toContain('rx');
   });
 
+  it('a proven pre-window fixture passes the composed gate (§5.2 leakage semantics)', () => {
+    expect(() =>
+      assertAuthoredFreezePreconditions(
+        split(),
+        [entry({ positiveFixturePrs: [5] })], // pr 5: outside train [1,2] ∪ heldOut [3,4]
+        new Set([5]),
+      ),
+    ).not.toThrow();
+  });
+
   it('surfaces a GATE_INVALID TotemError code', () => {
     let code: string | undefined;
     try {
-      assertAuthoredFreezePreconditions(split({ frozenAt: undefined }), [entry()]);
+      assertAuthoredFreezePreconditions(split({ frozenAt: undefined }), [entry()], none);
     } catch (e) {
       code = (e as { code?: string }).code;
     }

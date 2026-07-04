@@ -30,10 +30,12 @@ export async function ruleAuthorCommand(opts: {
   let freezeBinding: { artifact: import('@mmnto/totem').FrozenSplitArtifact } | undefined;
   const yamlPath = path.join(totemDir, AUTHORED_RULES_REL);
   let declaredSplitRef: string | undefined;
+  let yamlText: string | undefined;
   if (fs.existsSync(yamlPath)) {
     // Cheap header peek (full validation stays in runRuleAuthor): the splitRef line
     // decides whether the proof machinery loads at all (lazy-load discipline).
-    const m = /^splitRef:\s*["']?(\S+?)["']?\s*$/m.exec(fs.readFileSync(yamlPath, 'utf-8'));
+    yamlText = fs.readFileSync(yamlPath, 'utf-8');
+    const m = /^splitRef:\s*["']?(\S+?)["']?\s*$/m.exec(yamlText);
     declaredSplitRef = m?.[1];
   }
   const judgedBy = opts.judgedBy?.trim() || 'static-whitelist@cert-1';
@@ -61,6 +63,43 @@ export async function ruleAuthorCommand(opts: {
       `[RuleAuthor] freeze binding verified: ${resolved.artifact.splitRef} ` +
         `(commitment ${resolved.artifact.freezeCommitment.slice(0, 12)}…, shared-history proof passed)`,
     );
+    // §5.2 leakage semantics (#2294 couple, operator option (a)): prove any
+    // OUT-OF-WINDOW fixture PR strictly pre-window by ANCESTRY to the artifact's
+    // cutBoundarySha — this command is the git-holding boundary; intake consumes
+    // the verified set and never proves (the freezeBinding seam). The candidate
+    // collection is a best-effort structural walk: a malformed YAML yields no
+    // candidates here and intake's own strict parse rejects the file properly.
+    let verifiedPreWindowFixturePrs: ReadonlySet<number> = new Set<number>();
+    const { parse: parseYaml } = await import('yaml');
+    const declaredFixturePrs = collectDeclaredFixturePrs(yamlText ?? '', parseYaml);
+    const inWindow = new Set([
+      ...resolved.artifact.split.trainPrs,
+      ...resolved.artifact.split.heldOutPrs,
+    ]);
+    const outOfWindow = declaredFixturePrs.filter((pr) => !inWindow.has(pr));
+    if (outOfWindow.length > 0) {
+      const { verifyPreWindowFixturePrs } = await import('../spine-fixture-ancestry.js');
+      const { isAncestor } = await import('../git.js');
+      const { mergeCommitMap, parsePrNumber, parseRevertSha, isBotIdentity } =
+        await import('@mmnto/totem');
+      const { enumeratePrMetas } = await import('./spine-windtunnel.js');
+      const metas = enumeratePrMetas(resolved.artifact.split.asOfCommit, lcDir, safeExec, {
+        parsePrNumber,
+        parseRevertSha,
+        isBotIdentity,
+      });
+      verifiedPreWindowFixturePrs = verifyPreWindowFixturePrs({
+        fixturePrs: outOfWindow,
+        trainPrs: resolved.artifact.split.trainPrs,
+        heldOutPrs: resolved.artifact.split.heldOutPrs,
+        mergeCommitByPr: mergeCommitMap(metas),
+        isAncestorOfCutBoundary: (mc) => isAncestor(lcDir, mc, resolved.artifact.cutBoundarySha),
+      });
+      console.log(
+        `[RuleAuthor] §5.2 pre-window ancestry: ${verifiedPreWindowFixturePrs.size}/${outOfWindow.length} ` +
+          `out-of-window fixture PR(s) proven pre-window (cut boundary ${resolved.artifact.cutBoundarySha.slice(0, 12)}…)`,
+      );
+    }
     // §5.4: materialize + tear down the derived sandbox to PROVE the boundary sha
     // is reachable from this clone. The root derives from the artifact alone —
     // no author-supplied root/allowlist exists on this surface (independence axiom).
@@ -76,7 +115,11 @@ export async function ruleAuthorCommand(opts: {
     );
     let primaryErr: unknown;
     try {
-      const result = runRuleAuthor(totemDir, { judgedBy, freezeBinding });
+      const result = runRuleAuthor(totemDir, {
+        judgedBy,
+        freezeBinding,
+        verifiedPreWindowFixturePrs,
+      });
       reportRuleAuthor(result);
       return;
     } catch (err) {
@@ -99,6 +142,33 @@ export async function ruleAuthorCommand(opts: {
 
   const result = runRuleAuthor(totemDir, { judgedBy, freezeBinding });
   reportRuleAuthor(result);
+}
+
+/**
+ * Best-effort structural walk of the authored YAML for `rules[].positiveFixtures[].pr`
+ * — ONLY to decide which PRs need the §5.2 ancestry proof. Anything malformed yields
+ * no candidates; `runRuleAuthor`'s strict schema parse remains the real validator.
+ */
+function collectDeclaredFixturePrs(yamlText: string, parse: (s: string) => unknown): number[] {
+  let doc: unknown;
+  try {
+    doc = parse(yamlText.replace(/\r\n/g, '\n'));
+    // totem-context: intentional best-effort — runRuleAuthor re-parses the identical input strictly and fails loud; this pre-pass only picks ancestry-proof candidates
+  } catch {
+    return [];
+  }
+  const rules = (doc as { rules?: unknown } | null)?.rules;
+  if (!Array.isArray(rules)) return [];
+  const prs: number[] = [];
+  for (const r of rules) {
+    const fixtures = (r as { positiveFixtures?: unknown } | null)?.positiveFixtures;
+    if (!Array.isArray(fixtures)) continue;
+    for (const f of fixtures) {
+      const pr = (f as { pr?: unknown } | null)?.pr;
+      if (typeof pr === 'number' && Number.isInteger(pr) && pr > 0) prs.push(pr);
+    }
+  }
+  return prs;
 }
 
 function reportRuleAuthor(result: import('../authored-rule-intake.js').RuleAuthorResult): void {

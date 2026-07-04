@@ -114,12 +114,16 @@ function derive(args: {
   rules: CompiledRule[];
   split: SplitArtifact;
   deps?: AuthoredControlsDeps;
+  verifiedPreWindowFixturePrs?: ReadonlySet<number>;
 }): ReturnType<typeof deriveAuthoredControls> {
   return deriveAuthoredControls({
     rules: args.rules,
     split: args.split,
     provenanceByRule: provBy(args.rules),
     ...(args.deps ? { deps: args.deps } : {}),
+    ...(args.verifiedPreWindowFixturePrs
+      ? { verifiedPreWindowFixturePrs: args.verifiedPreWindowFixturePrs }
+      : {}),
   });
 }
 
@@ -450,6 +454,41 @@ describe('deriveAuthoredControls — fail-loud guards', () => {
         deps: scriptedDeps({ 'ch-leak': makeResult('differential-holds') }),
       }),
     ).rejects.toThrow(/leakage/i);
+  });
+
+  it('throws on an out-of-window fixture pr that is NOT proven pre-window (§5.2 leakage semantics)', async () => {
+    const rule = authoredRule('rule-post', [posFixture(50, 'ch-post')]);
+    await expect(
+      derive({
+        rules: [rule],
+        split: splitWithTrain([1, 2], [3]), // 50 is neither train nor held-out
+        deps: scriptedDeps({ 'ch-post': makeResult('differential-holds') }),
+      }),
+    ).rejects.toThrow(/NOT proven strictly pre-window/);
+  });
+
+  it('accepts an out-of-window fixture pr proven pre-window (#2294 couple, option (a))', async () => {
+    const rule = authoredRule('rule-pre', [posFixture(50, 'ch-pre')]);
+    const controls = await derive({
+      rules: [rule],
+      split: splitWithTrain([1, 2], [3]),
+      deps: scriptedDeps({ 'ch-pre': makeResult('differential-holds') }),
+      verifiedPreWindowFixturePrs: new Set([50]),
+    });
+    expect(controls.positive).toHaveLength(1);
+    expect(controls.positive[0]!.pr).toBe(50);
+  });
+
+  it('the verified set can NEVER override a held-out fixture (FM (c) defense-in-depth)', async () => {
+    const rule = authoredRule('rule-ho', [posFixture(99, 'ch-ho')]);
+    await expect(
+      derive({
+        rules: [rule],
+        split: splitWithTrain([1, 2], [99]),
+        deps: scriptedDeps({ 'ch-ho': makeResult('differential-holds') }),
+        verifiedPreWindowFixturePrs: new Set([99]), // caller-fault set — must not be honored
+      }),
+    ).rejects.toThrow(/HELD-OUT/);
   });
 
   it('throws when authored policy.positiveControlSide is not train (§6 producer mismatch)', async () => {

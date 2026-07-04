@@ -529,7 +529,7 @@ describe('R1 freeze-orchestration (real-git end-to-end)', () => {
     expect(() => runRuleAuthor(w.totemDir, { judgedBy: JUDGED_BY })).toThrow(/free-text splitRef/);
   });
 
-  it('intake: a positive fixture outside the frozen train slice fails at author time (§5.2 mechanical)', async () => {
+  it('intake: a HELD-OUT positive fixture fails at author time (§5.2 leakage semantics, FM (c))', async () => {
     const w = await buildSharedWorld();
     const resolved = resolveFrozenSplitByRef(w.totemDir, w.repoRoot, w.artifact.splitRef);
     writeAuthoredYaml(w, { fixturePr: 3 }); // #3 is held-out
@@ -538,7 +538,25 @@ describe('R1 freeze-orchestration (real-git end-to-end)', () => {
         judgedBy: JUDGED_BY,
         freezeBinding: { artifact: resolved.artifact },
       }),
-    ).toThrow(/NOT in the frozen train slice/);
+    ).toThrow(/HELD-OUT slice/);
+  });
+
+  it('intake: an out-of-window fixture is unproven WITHOUT the ancestry set and accepted WITH it (§5.2 option (a))', async () => {
+    const w = await buildSharedWorld();
+    const resolved = resolveFrozenSplitByRef(w.totemDir, w.repoRoot, w.artifact.splitRef);
+    writeAuthoredYaml(w, { fixturePr: 999 }); // outside train ∪ heldOut
+    expect(() =>
+      runRuleAuthor(w.totemDir, {
+        judgedBy: JUDGED_BY,
+        freezeBinding: { artifact: resolved.artifact },
+      }),
+    ).toThrow(/NOT proven strictly pre-window/);
+    const result = runRuleAuthor(w.totemDir, {
+      judgedBy: JUDGED_BY,
+      freezeBinding: { artifact: resolved.artifact },
+      verifiedPreWindowFixturePrs: new Set([999]),
+    });
+    expect(result.records).toHaveLength(1);
   });
 
   it('#2289 must-not-widen: no R1-participating module consults the doctrine pin', () => {

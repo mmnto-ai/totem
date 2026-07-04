@@ -290,8 +290,17 @@ export async function deriveAuthoredControls(params: {
    */
   provenanceByRule: Map<string, ProvenanceRecord>;
   deps?: AuthoredControlsDeps;
+  /**
+   * Fixture PRs proven STRICTLY PRE-WINDOW by ancestry (`is-ancestor(mergeCommit(pr),
+   * cutBoundarySha)`) at the git-holding command boundary — the #2294-couple leakage-
+   * semantics ruling (operator option (a), strategy#810): legal iff `∉ heldOut` ∧
+   * (`∈ train` ∨ strictly pre-window). Absent/empty reproduces the strict pre-ruling
+   * behavior byte-for-byte.
+   */
+  verifiedPreWindowFixturePrs?: ReadonlySet<number>;
 }): Promise<AuthoredControls> {
   const { rules, split, provenanceByRule } = params;
+  const verifiedPreWindow = params.verifiedPreWindowFixturePrs ?? new Set<number>();
   const evaluate = params.deps?.evaluate ?? evaluatePreimageDifferential;
 
   // §9 single-home: READ the authored policy (do NOT hard-code "train"), then
@@ -313,6 +322,7 @@ export async function deriveAuthoredControls(params: {
   }
 
   const trainSet = new Set(split.trainPrs);
+  const heldOutSet = new Set(split.heldOutPrs);
 
   // ── First pass: collect positional positive tasks + the declarative negatives.
   const positiveTasks: PositiveTask[] = [];
@@ -327,14 +337,24 @@ export async function deriveAuthoredControls(params: {
     const provenance = readAuthoredProvenance(rule, provenanceByRule);
     const targetRuleId = rule.lessonHash;
 
-    // POSITIVE: build a positional task per declared fixture (input order). A
-    // held-out fixture.pr is a §5 leakage violation — fail loud, NEVER a silent
-    // skip (a silent skip would let a leaked exemplar weaken the train/test bar).
+    // POSITIVE: build a positional task per declared fixture (input order). The
+    // §5.2 leakage semantics (#2294 couple, option (a)): held-out is ALWAYS a
+    // violation (FM (c)) — never overridable by the verified set; outside the
+    // window is legal ONLY when proven strictly pre-window by ancestry. Fail
+    // loud, NEVER a silent skip (a silent skip would let a leaked exemplar
+    // weaken the train/test bar).
     for (const fixture of provenance.positiveFixtures) {
-      if (!trainSet.has(fixture.pr)) {
+      if (heldOutSet.has(fixture.pr)) {
         throw new Error(
           `[Totem Error] deriveAuthoredControls: positive fixture pr #${fixture.pr} (rule '${targetRuleId}') ` +
-            `is not in the train slice — a held-out positive fixture is an ADR-112 §5 leakage violation`,
+            `is in the HELD-OUT slice — a held-out positive fixture is the ADR-112 §5(2)/FM(c) leakage violation`,
+        );
+      }
+      if (!trainSet.has(fixture.pr) && !verifiedPreWindow.has(fixture.pr)) {
+        throw new Error(
+          `[Totem Error] deriveAuthoredControls: positive fixture pr #${fixture.pr} (rule '${targetRuleId}') ` +
+            `is outside the window and NOT proven strictly pre-window (ancestry to the cut boundary) — ` +
+            `post-window or unverifiable anchors are illegal (ADR-112 §5.2 leakage semantics)`,
         );
       }
       positiveTasks.push({ rule, targetRuleId, fixture });

@@ -5,12 +5,12 @@
 // panel (gemini), this is a DATA-TABLE + a generic predicate, NOT a hardcoded
 // switch: the MECHANISM (the closed predicate `evaluateStructuralEligibility`)
 // lives in core; the cert-#1 CLASS SET is strategy-owned (the answer-key half on
-// the strategy⇄cert critical path) and is delivered as data after their scoping
-// pass. Until then this ships INERT with two shape-validating exemplars only —
-// they prove the predicate works (engine-representable, Tenet-15-clean), they are
-// NOT the blessed cert-#1 set. The whole table is handed to the core predicate so
-// "exactly one (engine, structuralClass) match across the registry" holds (a
-// class present under two engines is AMBIGUOUS ⇒ non-decidable, never structural).
+// the strategy⇄cert critical path) and DELIVERED as data (their 2026-07-04 0013Z
+// lockstep dispatch, coupled to lc's drafted rules — #2297). The two original
+// shape-validating exemplars are retained as predicate proofs. The whole table is
+// handed to the core predicate so "exactly one (engine, structuralClass) match
+// across the registry" holds (a class present under two engines is AMBIGUOUS ⇒
+// non-decidable, never structural).
 //
 // ENGINE-TYPING IS LOAD-BEARING (strategy ruling 2026-06-28): a forbidden-token
 // class whose token can also appear in PROSE / doc-comments (e.g. `determinism`,
@@ -24,13 +24,24 @@
 import type { WhitelistEntry } from '@mmnto/totem';
 
 /**
- * The decidable-class data-table. Mechanism-validating exemplars ONLY — replace
- * with strategy's cert-#1 set (as data) when it lands; the predicate is unchanged.
+ * The decidable-class data-table: the strategy-delivered cert-#1 set (the 0013Z
+ * lockstep dispatch — exact-match strings coupled to lc's drafted
+ * `structuralClass@engine`) plus the two original mechanism-validating exemplars
+ * (retained as predicate proofs; they are decidable classes in their own right).
+ * The engine typing follows the 2026-06-28 ruling above: `is_finite` and
+ * `procgen-entropy-clock-source` tokens can appear in prose/doc-comments ⇒
+ * ast-grep only; `debug-assert-len-mismatch` matches a code-only construct ⇒
+ * regex is safe.
  */
 // Each ROW is frozen too, not just the array (CR diff-review): `authoredWhitelist()` hands
 // these references out, so a shallow `Object.freeze([...])` would still let another module
 // rewrite `engine`/`structuralClass` after `assertNoDuplicateEntries()` has passed.
 const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
+  // ── The cert-#1 set (strategy-owned data; ADR-112 §3 / #2291) ──
+  Object.freeze({ engine: 'regex', structuralClass: 'debug-assert-len-mismatch' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'procgen-entropy-clock-source' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'is_finite' }),
+  // ── Mechanism-validating exemplars (the original predicate proofs) ──
   Object.freeze({ engine: 'regex', structuralClass: 'forbidden-literal-token' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'node-shape-presence' }),
 ]);
