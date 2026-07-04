@@ -73,12 +73,25 @@ jobs:
           node packages/cli/dist/index.js lint --format sarif --out totem-lint.sarif || true
 
       - name: Upload SARIF to GitHub Security
+        id: upload-sarif
         if: always() && hashFiles('totem-lint.sarif') != ''
         continue-on-error: true # #1226: SARIF serialization bugs shouldn't block PRs
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: totem-lint.sarif
           category: totem-lint
+
+      # #2296: continue-on-error keeps a rejected upload from blocking the PR,
+      # but it also hid three months of silent code-scanning darkness.
+      # upload-sarif already waits for GitHub ingestion by default
+      # (wait-for-processing defaults to true), so a processing rejection lands
+      # here as outcome == 'failure' — surface it as a non-blocking warning
+      # annotation so it can't go dark unnoticed again (the audit-trail category
+      # is kept ON deliberately, #474).
+      - name: Surface SARIF processing failures (non-blocking, #2296)
+        if: always() && steps.upload-sarif.outcome == 'failure'
+        run: |
+          echo "::warning title=Totem SARIF upload rejected::GitHub rejected the totem-lint SARIF analysis (upload step outcome=failure); code-scanning is dark for this run. See the 'Upload SARIF to GitHub Security' step log. Refs: mmnto-ai/totem#2296."
 
       - name: Run drift check
         run: node packages/cli/dist/index.js drift

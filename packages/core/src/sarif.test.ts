@@ -1,7 +1,29 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CompiledRule, Violation } from './compiler.js';
-import { buildSarifLog, ruleId } from './sarif.js';
+import { buildSarifLog, ruleId, wellFormedUnicode } from './sarif.js';
+
+// ─── Surrogate helpers (mmnto-ai/totem#2296) ─────────
+// Built via String.fromCharCode so the source file never carries a raw lone
+// surrogate (which would be invisible/unmatchable in the editor).
+const LONE_HIGH = String.fromCharCode(0xd83c); // unpaired high surrogate
+const LONE_LOW = String.fromCharCode(0xdfff); // unpaired low surrogate
+const REPLACEMENT = String.fromCharCode(0xfffd); // U+FFFD �
+
+/** True if `s` contains any unpaired UTF-16 surrogate code unit. */
+function hasLoneSurrogate(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = s.charCodeAt(i + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+      i++;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // ─── Fixtures ────────────────────────────────────────
 
@@ -122,5 +144,88 @@ describe('buildSarifLog', () => {
     const sarif = buildSarifLog([VIOLATION_A], [RULE_A, RULE_B], { version: '0.31.0' });
     const props = sarif.runs[0]!.invocations[0]!.properties;
     expect(props).toEqual({ rules_enforced: 2, violations_found: 1 });
+  });
+});
+
+describe('wellFormedUnicode', () => {
+  it('replaces a lone high surrogate with U+FFFD', () => {
+    expect(wellFormedUnicode(`a${LONE_HIGH}b`)).toBe(`a${REPLACEMENT}b`);
+  });
+
+  it('replaces a lone low surrogate with U+FFFD', () => {
+    expect(wellFormedUnicode(`a${LONE_LOW}b`)).toBe(`a${REPLACEMENT}b`);
+  });
+
+  it('replaces a trailing lone high surrogate at end-of-string', () => {
+    expect(wellFormedUnicode(`ab${LONE_HIGH}`)).toBe(`ab${REPLACEMENT}`);
+  });
+
+  it('preserves a valid surrogate pair (a real astral-plane glyph)', () => {
+    const emoji = '🎯'; // U+1F3AF — a proper high+low surrogate pair
+    expect(wellFormedUnicode(`x${emoji}y`)).toBe(`x${emoji}y`);
+    expect(hasLoneSurrogate(wellFormedUnicode(`x${emoji}y`))).toBe(false);
+  });
+
+  it('leaves surrogate-free text unchanged', () => {
+    expect(wellFormedUnicode('password\\s*=')).toBe('password\\s*=');
+  });
+
+  it('is idempotent', () => {
+    const once = wellFormedUnicode(`${LONE_HIGH}-${LONE_LOW}`);
+    expect(wellFormedUnicode(once)).toBe(once);
+    expect(hasLoneSurrogate(once)).toBe(false);
+  });
+});
+
+describe('buildSarifLog surrogate safety (mmnto-ai/totem#2296)', () => {
+  // A frozen emoji-range pattern encodes astral ranges as surrogate-pair ranges,
+  // leaving lone surrogates in `pattern` (e.g. `[<high>-<low>]`). The SARIF we
+  // emit is valid JSON, but upload-sarif re-serializes it and GitHub's ingestion
+  // parser rejects the lone-surrogate escapes, silently dropping the analysis.
+  const SURROGATE_RULE: CompiledRule = {
+    lessonHash: 'emoji5afaf8d0',
+    lessonHeading: `No ${LONE_HIGH} emoji in markdown`,
+    pattern: `[${LONE_HIGH}-${LONE_LOW}]`,
+    message: `Avoid emoji ${LONE_HIGH} in docs`,
+    engine: 'regex',
+    compiledAt: '2026-04-06T00:00:00Z',
+    fileGlobs: ['**/*.md'],
+  };
+
+  const SURROGATE_VIOLATION: Violation = {
+    rule: SURROGATE_RULE,
+    file: 'README.md',
+    line: `# Title ${LONE_HIGH}`,
+    lineNumber: 1,
+  };
+
+  it('well-forms rule pattern / descriptions / message so no built field carries a lone surrogate', () => {
+    const sarif = buildSarifLog([SURROGATE_VIOLATION], [SURROGATE_RULE], { version: '0.31.0' });
+    const rule = sarif.runs[0]!.tool.driver.rules[0]!;
+
+    expect(hasLoneSurrogate(rule.properties!.pattern as string)).toBe(false);
+    expect(hasLoneSurrogate(rule.shortDescription.text)).toBe(false);
+    expect(hasLoneSurrogate(rule.fullDescription!.text)).toBe(false);
+    expect(hasLoneSurrogate(sarif.runs[0]!.results[0]!.message.text)).toBe(false);
+    // The lossy replacement char is present where the surrogate was.
+    expect(rule.properties!.pattern).toContain(REPLACEMENT);
+  });
+
+  it('survives the upload-sarif re-serialize/parse round-trip with no lone surrogates', () => {
+    const sarif = buildSarifLog([SURROGATE_VIOLATION], [SURROGATE_RULE], { version: '0.31.0' });
+    // Models what github/codeql-action/upload-sarif does: JSON.stringify then
+    // GitHub re-parses. Without well-forming, the reparsed pattern carries a
+    // lone surrogate and GitHub's parser rejects the document.
+    const roundTripped = JSON.parse(JSON.stringify(sarif)) as typeof sarif;
+    const rule = roundTripped.runs[0]!.tool.driver.rules[0]!;
+    expect(hasLoneSurrogate(rule.properties!.pattern as string)).toBe(false);
+    expect(hasLoneSurrogate(JSON.stringify(roundTripped))).toBe(false);
+  });
+
+  it('still enumerates fileGlobs (well-forming maps over the array without dropping it)', () => {
+    const sarif = buildSarifLog([], [SURROGATE_RULE], { version: '0.31.0' });
+    expect(sarif.runs[0]!.tool.driver.rules[0]!.properties).toHaveProperty('fileGlobs', [
+      '**/*.md',
+    ]);
   });
 });
