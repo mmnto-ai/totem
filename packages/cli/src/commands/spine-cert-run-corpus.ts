@@ -12,6 +12,7 @@ import type {
   ReviewThreadContent,
   ReviewThreadSource,
   ScorerInput,
+  SplitArtifact,
   SplitLedger,
   Stage4VerifierDeps,
   WindtunnelLock,
@@ -20,6 +21,7 @@ import type {
 /** Local alias for the core git exec port (mirrors spine-windtunnel.ts / spine-cert-materialize.ts). */
 type SafeExecFn = typeof import('@mmnto/totem').safeExec;
 
+import type { FreezeBinding } from '../spine-freeze-proof.js';
 import { buildAuthoredCertifyingCorpus } from './spine-authored-cert-corpus.js';
 import { buildCertifyingCorpus } from './spine-cert-corpus.js';
 import { buildReplayAdapters } from './spine-cert-record.js';
@@ -494,6 +496,59 @@ export interface AuthoredCorpusAssemblyOptions {
    *  the proof is never skipped). */
   repoRoot?: string;
   safeExec?: SafeExecFn;
+  /** The lc clone — needed for the §5.2 pre-window ancestry proof when a fixture PR is
+   *  out-of-window; without it such a fixture stays unproven and the intake gate fails loud. */
+  lcDir?: string;
+}
+
+/**
+ * §5.2 leakage semantics (#2294 couple, operator option (a)): derive the verified
+ * pre-window fixture set at a GIT-HOLDING run boundary. Candidates come from the
+ * effective authoring-ledger (the run's fixture source of record); the ancestry
+ * proof runs against the lc clone. Returns empty — reproducing strict train-only
+ * semantics — when there is no frozen binding (legacy lane), no lc clone, no
+ * ledger, or no out-of-window fixture (the common case costs zero git work).
+ */
+async function deriveVerifiedPreWindowSet(args: {
+  totemDir: string;
+  split: SplitArtifact;
+  freezeBinding?: FreezeBinding;
+  lcDir?: string;
+  safeExec?: SafeExecFn;
+}): Promise<ReadonlySet<number>> {
+  const empty: ReadonlySet<number> = new Set<number>();
+  if (!args.freezeBinding || !args.lcDir || !args.safeExec) return empty;
+  const {
+    foldEffectiveLedgerEntries,
+    isBotIdentity,
+    mergeCommitMap,
+    parsePrNumber,
+    parseRevertSha,
+    readAuthoringLedger,
+  } = await import('@mmnto/totem');
+  const ledger = readAuthoringLedger(args.totemDir);
+  if (ledger.length === 0) return empty;
+  const fixturePrs = foldEffectiveLedgerEntries(ledger).flatMap((e) => e.positiveFixturePrs);
+  const inWindow = new Set([...args.split.trainPrs, ...args.split.heldOutPrs]);
+  if (!fixturePrs.some((pr) => !inWindow.has(pr))) return empty;
+  const { enumeratePrMetas } = await import('./spine-windtunnel.js');
+  const { isAncestor } = await import('../git.js');
+  const { verifyPreWindowFixturePrs } = await import('../spine-fixture-ancestry.js');
+  const lcDir = args.lcDir;
+  const safeExec = args.safeExec;
+  const boundary = args.freezeBinding.artifact.cutBoundarySha;
+  const metas = enumeratePrMetas(args.split.asOfCommit, lcDir, safeExec, {
+    parsePrNumber,
+    parseRevertSha,
+    isBotIdentity,
+  });
+  return verifyPreWindowFixturePrs({
+    fixturePrs,
+    trainPrs: args.split.trainPrs,
+    heldOutPrs: args.split.heldOutPrs,
+    mergeCommitByPr: mergeCommitMap(metas),
+    isAncestorOfCutBoundary: (mc) => isAncestor(lcDir, mc, boundary),
+  });
 }
 
 /**
@@ -582,6 +637,14 @@ export async function assembleAuthoredCertifyingCorpus(
     boundary: 'derive-labels (authored)',
   });
 
+  const verifiedPreWindowFixturePrs = await deriveVerifiedPreWindowSet({
+    totemDir: opts.totemDir,
+    split,
+    ...(freezeBinding !== undefined ? { freezeBinding } : {}),
+    ...(opts.lcDir !== undefined ? { lcDir: opts.lcDir } : {}),
+    ...(opts.safeExec !== undefined ? { safeExec: opts.safeExec } : {}),
+  });
+
   const corpus = await buildAuthoredCertifyingCorpus({
     totemDir: opts.totemDir,
     // NO judgedBy — the §8 single source is derived from the authoring-ledger INSIDE
@@ -592,6 +655,7 @@ export async function assembleAuthoredCertifyingCorpus(
     groundTruth,
     stage4: opts.stage4,
     now: opts.now,
+    verifiedPreWindowFixturePrs,
     ...(opts.authoredControlsDeps ? { authoredControlsDeps: opts.authoredControlsDeps } : {}),
     ...(freezeBinding !== undefined ? { freezeBinding } : {}),
   });
@@ -625,6 +689,9 @@ export interface ResolveCorpusProviderInputs {
    *  the proof is never skipped). */
   repoRoot?: string;
   safeExec?: SafeExecFn;
+  /** The lc clone — needed for the §5.2 pre-window ancestry proof when a fixture PR is
+   *  out-of-window; without it such a fixture stays unproven and the intake gate fails loud. */
+  lcDir?: string;
 }
 
 /**
@@ -718,6 +785,14 @@ export async function resolveCertifyingCorpusProvider(
       boundary: 'Certifying run (authored)',
     });
 
+    const verifiedPreWindowFixturePrs = await deriveVerifiedPreWindowSet({
+      totemDir: inputs.totemDir,
+      split,
+      ...(freezeBinding !== undefined ? { freezeBinding } : {}),
+      ...(inputs.lcDir !== undefined ? { lcDir: inputs.lcDir } : {}),
+      ...(inputs.safeExec !== undefined ? { safeExec: inputs.safeExec } : {}),
+    });
+
     const authoredCorpus = await buildAuthoredCertifyingCorpus({
       totemDir: inputs.totemDir,
       // NO judgedBy — it is the §8 single source in the authoring-ledger, derived inside
@@ -728,6 +803,7 @@ export async function resolveCertifyingCorpusProvider(
       groundTruth,
       stage4: inputs.stage4,
       now: inputs.now,
+      verifiedPreWindowFixturePrs,
       ...(inputs.authoredControlsDeps ? { authoredControlsDeps: inputs.authoredControlsDeps } : {}),
       ...(freezeBinding !== undefined ? { freezeBinding } : {}),
     });

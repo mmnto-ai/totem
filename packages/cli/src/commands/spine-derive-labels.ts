@@ -195,6 +195,8 @@ export async function deriveLabelsCommand(opts: DeriveLabelsOptions): Promise<vo
             // R1: a content-addressed lock ref requires the freeze proof at this boundary.
             repoRoot,
             safeExec,
+            // §5.2: the pre-window fixture ancestry proof runs against the lc clone.
+            lcDir,
           },
           lock,
         )

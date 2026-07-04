@@ -121,26 +121,47 @@ export function checkFrozenBeforeAuthoring(
 }
 
 /**
- * Q3.2 (strategy membership): every effective rule's `positiveFixturePrs` must
- * land in the split's TRAIN slice — a held-out positive fixture is §5(2)/falsifier
- * §1(c) leakage. Returns per-(rule,pr) violation messages ([] if clean).
+ * Q3.2 (strategy membership) — LEAKAGE SEMANTICS (the #2294-couple ruling,
+ * operator option (a) recorded on strategy#810): a positive fixture PR is legal
+ * iff `∉ heldOutPrs` AND (`∈ trainPrs` OR strictly pre-window). Falsifying
+ * Metric (c)'s condition is HELD-OUT membership — a pre-window anchor cannot
+ * leak code that post-dates it, so the Q4-ruled cert-1 anchor set (all pre-
+ * window) stays legal without re-anchoring.
+ *
+ * This gate stays PURE (no git): "strictly pre-window" is proven by ANCESTRY
+ * (`is-ancestor(mergeCommit(pr), cutBoundarySha)` — never PR-number order,
+ * which is not merge-ordered) at the command layer that has git, and handed in
+ * as `verifiedPreWindowPrs`. An empty set reproduces the strict pre-ruling
+ * behavior byte-for-byte (the legacy lane passes empty). Returns per-(rule,pr)
+ * violation messages ([] if clean).
  */
 export function checkPositiveFixturesTrainSide(
   split: SplitArtifact,
   effectiveEntries: readonly AuthoringLedgerEntry[],
+  verifiedPreWindowPrs: ReadonlySet<number>,
 ): string[] {
   const trainSet = new Set(split.trainPrs);
   const heldOutSet = new Set(split.heldOutPrs);
   const issues: string[] = [];
   for (const entry of effectiveEntries) {
     for (const pr of entry.positiveFixturePrs) {
-      if (!trainSet.has(pr)) {
-        const slice = heldOutSet.has(pr) ? 'held-out' : 'outside the split';
+      // Held-out membership is checked FIRST and is never overridable by the
+      // verified set — held-out members descend from the cut boundary, so a
+      // correct ancestry proof cannot contain them; a set that does is a caller
+      // fault the gate must not honor (FM (c) is the load-bearing condition).
+      if (heldOutSet.has(pr)) {
         issues.push(
-          `Q3 membership: rule '${entry.ruleId}' positive fixture PR #${pr} is in ${slice}, not the ` +
-            `train slice — a non-train positive fixture is an ADR-112 §5(2) leakage violation`,
+          `Q3 membership: rule '${entry.ruleId}' positive fixture PR #${pr} is in the HELD-OUT ` +
+            `slice — a held-out positive fixture is the ADR-112 §5(2)/FM(c) leakage violation`,
         );
+        continue;
       }
+      if (trainSet.has(pr) || verifiedPreWindowPrs.has(pr)) continue;
+      issues.push(
+        `Q3 membership: rule '${entry.ruleId}' positive fixture PR #${pr} is outside the window ` +
+          `and NOT proven strictly pre-window (ancestry to the cut boundary) — post-window or ` +
+          `unverifiable anchors are illegal (ADR-112 §5.2 leakage semantics)`,
+      );
     }
   }
   return issues;
@@ -156,19 +177,22 @@ export function checkPositiveFixturesTrainSide(
 export function assertAuthoredFreezePreconditions(
   split: SplitArtifact,
   effectiveEntries: readonly AuthoringLedgerEntry[],
+  /** Fixture PRs proven strictly pre-window by ancestry at the git-holding boundary (empty ⇒ strict). */
+  verifiedPreWindowPrs: ReadonlySet<number>,
 ): void {
   const issues = [
     ...checkHeldOutFloor(split),
     ...checkFrozenBeforeAuthoring(split, effectiveEntries),
-    ...checkPositiveFixturesTrainSide(split, effectiveEntries),
+    ...checkPositiveFixturesTrainSide(split, effectiveEntries, verifiedPreWindowPrs),
   ];
   if (issues.length > 0) {
     throw new TotemError(
       'GATE_INVALID',
       `authored cert freeze rejected — ${issues.length} precondition violation(s):\n` +
         issues.map((i) => `  • ${i}`).join('\n'),
-      'Re-freeze a split BEFORE authoring, keep every positive fixture train-side, and hold out ' +
-        '≥ half the window; the materializer never auto-repairs a leakage event (ADR-112 §5.1/§5.3).',
+      'Re-freeze a split BEFORE authoring, keep every positive fixture out of held-out (train or ' +
+        'proven pre-window), and hold out ≥ half the window; the materializer never auto-repairs ' +
+        'a leakage event (ADR-112 §5.1/§5.3).',
     );
   }
 }

@@ -59,6 +59,13 @@ export interface BuildAuthoredCertifyingCorpusDeps {
    * absent on a content-addressed run ⇒ the intake's total partition fails loud.
    */
   freezeBinding?: FreezeBinding;
+  /**
+   * §5.2 leakage semantics (#2294 couple, option (a)): fixture PRs the git-holding
+   * run boundary PROVED strictly pre-window by ancestry to the artifact's
+   * cutBoundarySha (`verifyPreWindowFixturePrs`). Threaded to the intake gate and
+   * the §6 deriver; absent/empty ⇒ strict train-only, byte-unchanged.
+   */
+  verifiedPreWindowFixturePrs?: ReadonlySet<number>;
 }
 
 /**
@@ -149,6 +156,9 @@ export async function buildAuthoredCertifyingCorpus(
     judgedBy,
     verifyOnly: true,
     ...(deps.freezeBinding !== undefined ? { freezeBinding: deps.freezeBinding } : {}),
+    ...(deps.verifiedPreWindowFixturePrs !== undefined
+      ? { verifiedPreWindowFixturePrs: deps.verifiedPreWindowFixturePrs }
+      : {}),
   });
 
   // 2. rejected.length === 0 precondition: a partially-invalid authored file is broken
@@ -293,6 +303,9 @@ export async function buildAuthoredCertifyingCorpus(
     split: deps.split,
     provenanceByRule,
     ...(deps.authoredControlsDeps ? { deps: deps.authoredControlsDeps } : {}),
+    ...(deps.verifiedPreWindowFixturePrs !== undefined
+      ? { verifiedPreWindowFixturePrs: deps.verifiedPreWindowFixturePrs }
+      : {}),
   });
 
   return {

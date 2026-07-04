@@ -68,6 +68,8 @@ export interface AuthoredMaterializeDeps {
   enumerateMetas: (asOfCommit: string) => PrMeta[];
   resolvePrDiff: (mergeCommit: string) => PrGitResolution;
   computeControlFixtureSha: (controlDirs: string[]) => string | null;
+  /** `true` iff `commit` is an ancestor of `ancestorOf` in the lc clone (§5.2 pre-window proof). */
+  isAncestor: (commit: string, ancestorOf: string) => boolean;
 }
 
 function uniqueSorted(xs: number[]): number[] {
@@ -103,6 +105,7 @@ export async function materializeAuthored(
   // Lazy-load the sibling CLI command modules (packages/cli/** convention — CR Major).
   const { resolvePrGit } = await import('./spine-cert-materialize.js');
   const { computeFixtureSha, enumeratePrMetas } = await import('./spine-windtunnel.js');
+  const { isAncestor } = await import('../git.js');
 
   const { seed, lcDir, repoRoot, cwd, totemDir, resolveWithinRepo, safeExec } = ctx;
 
@@ -115,6 +118,7 @@ export async function materializeAuthored(
     computeControlFixtureSha:
       depsOverride.computeControlFixtureSha ??
       ((dirs) => computeFixtureSha(dirs, repoRoot, safeExec)),
+    isAncestor: depsOverride.isAncestor ?? ((commit, of) => isAncestor(lcDir, commit, of)),
   };
 
   // 1. Enumerate + resolve the corpus (pure).
@@ -310,16 +314,34 @@ export async function materializeAuthored(
     });
   }
 
+  // 3.7 §5.2 pre-window ancestry (the #2294-couple leakage ruling, option (a)): prove any
+  //     out-of-window fixture PR strictly pre-window against the frozen artifact's
+  //     cutBoundarySha — the materializer is a git-holding boundary, so it RE-DERIVES the
+  //     proof itself (detect-never-repair; never trusts an upstream claim). Legacy path
+  //     (no frozen artifact ⇒ no cut boundary) keeps the strict semantics byte-unchanged.
+  const posFixturePrs = uniqueSorted(effective.flatMap((e) => e.positiveFixturePrs));
+  let verifiedPreWindow: ReadonlySet<number> = new Set<number>();
+  if (frozenArtifactBinding !== undefined) {
+    const { verifyPreWindowFixturePrs } = await import('../spine-fixture-ancestry.js');
+    const boundary = frozenArtifactBinding.artifact.cutBoundarySha;
+    verifiedPreWindow = verifyPreWindowFixturePrs({
+      fixturePrs: posFixturePrs,
+      trainPrs: split.trainPrs,
+      heldOutPrs: split.heldOutPrs,
+      mergeCommitByPr: mergeCommitMap(metas),
+      isAncestorOfCutBoundary: (mc) => deps.isAncestor(mc, boundary),
+    });
+  }
+
   // 4. §5.1/§5.3 freeze gates (Q2 held-out floor + Q3 temporal + Q3 membership) — fail-loud,
   //    compose-never-replace, BEFORE any write (detect-never-repair, sensor-not-actuator).
-  assertAuthoredFreezePreconditions(split, effective);
+  assertAuthoredFreezePreconditions(split, effective, verifiedPreWindow);
 
   // Non-vacuity gate BEFORE any write AND any per-PR git work (greptile P2; hoisted above the
   // step-5 resolution loop per CR round-2): if no rule declares a train-side positive fixture,
   // the §5 integrity gate (fixtureSha) has nothing to hash — fail loud HERE, knowable from the
   // effective ledger alone, so a vacuous ledger costs zero `resolvePrDiff` shell-outs and keeps
   // the "no bytes written on gate failure" invariant the Q2/Q3 freeze gates uphold.
-  const posFixturePrs = uniqueSorted(effective.flatMap((e) => e.positiveFixturePrs));
   if (posFixturePrs.length === 0) {
     throw new TotemError(
       'GATE_INVALID',
@@ -349,17 +371,26 @@ export async function materializeAuthored(
     return { pr, mergeCommit: mergeByPr.get(pr)!, baseSha: g.baseSha, headSha: g.headSha };
   });
 
+  // 5.5 §5.2 pre-window fixtures are NOT corpus members, but their diffs feed the control
+  //     dirs + fixtureSha (step 8) — resolve them here from the same full enumeration
+  //     (`resolvePrGit` is history-position-independent). A verified PR always has a merge
+  //     commit (the ancestry derivation only admits resolvable PRs), so the loop is total.
+  for (const pr of posFixturePrs) {
+    if (gitByPr.has(pr) || !verifiedPreWindow.has(pr)) continue;
+    gitByPr.set(pr, deps.resolvePrDiff(mergeByPr.get(pr)!));
+  }
+
   // Fixture-membership guard BEFORE any write (CR round-2, outside-diff): unreachable by
-  // construction TODAY (Q3 membership asserts fixtures ⊆ train, and resolveSplit derives
-  // train ⊆ corpus = gitByPr's keys), but if a future regression ever broke that chain, the
+  // construction TODAY (Q3 membership asserts fixtures ⊆ train ∪ verified-pre-window, and
+  // both legs land in gitByPr above), but if a future regression ever broke that chain, the
   // throw must leave ZERO bytes — the same "no bytes on gate failure" invariant every other
   // gate in this function upholds. Defense-in-depth stays consistent with the invariant.
   for (const pr of posFixturePrs) {
     if (!gitByPr.has(pr)) {
       throw new TotemError(
         'GATE_INVALID',
-        `authored materialize: positive-control fixture PR #${pr} is not in the resolved corpus.`,
-        'Every positive fixture must be a train-slice corpus member (ADR-112 §5).',
+        `authored materialize: positive-control fixture PR #${pr} is neither in the resolved corpus nor a proven pre-window fixture.`,
+        'Every positive fixture must be a train-slice corpus member or strictly pre-window by ancestry (ADR-112 §5.2).',
       );
     }
   }
@@ -393,9 +424,10 @@ export async function materializeAuthored(
     .update(prDiffsText.replace(/\r\n/g, '\n'), 'utf-8')
     .digest('hex');
 
-  // 8. Control dirs — the train-side positive-control fixture PRs (from the ledger; the freeze gate
-  //    already asserted they are ⊆ train). Negatives are synthetic near-misses (no corpus PR), so
-  //    the negative dir is empty. The `<pr>.diff` is the SAME resolved diff (single-source).
+  // 8. Control dirs — the positive-control fixture PRs (from the ledger; the freeze gate
+  //    already asserted each is ⊆ train ∪ verified-pre-window). Negatives are synthetic
+  //    near-misses (no corpus PR), so the negative dir is empty. The `<pr>.diff` is the
+  //    SAME resolved diff (single-source).
   const posDir = resolveWithinRepo(seed.controls.positiveRef, 'seed.controls.positiveRef');
   const negDir = resolveWithinRepo(seed.controls.negativeRef, 'seed.controls.negativeRef');
   for (const dir of [posDir, negDir]) {

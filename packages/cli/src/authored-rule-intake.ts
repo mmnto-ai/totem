@@ -135,6 +135,15 @@ export function runRuleAuthor(
      * content-addressed (`split:<sha256>`); forbidden otherwise.
      */
     freezeBinding?: { artifact: FrozenSplitArtifact };
+    /**
+     * ADR-112 §5.2 leakage semantics (#2294 couple, operator option (a)): fixture
+     * PRs the caller PROVED strictly pre-window by ancestry against the artifact's
+     * `cutBoundarySha` (`verifyPreWindowFixturePrs`, spine-fixture-ancestry.ts —
+     * the command layer owns the git; this library stays git-free and consumes
+     * the verified result, the same seam as `freezeBinding`). Absent/empty ⇒ the
+     * strict train-only behavior, byte-unchanged.
+     */
+    verifiedPreWindowFixturePrs?: ReadonlySet<number>;
   },
 ): RuleAuthorResult {
   // Normalize at the PRODUCER boundary (CR re-review): the command trims `--judged-by`, but this
@@ -233,17 +242,29 @@ export function runRuleAuthor(
         'Re-author under the current freeze: update the header from the live artifact and re-verify every rule.',
       );
     }
-    // §5(2) flips mechanical at intake: every positive fixture must be a member of
-    // the FROZEN train slice (previously first checked at materialize — compose,
-    // never replace; the materialize gate stays).
+    // §5(2) flips mechanical at intake — LEAKAGE SEMANTICS (#2294 couple, operator
+    // option (a) on strategy#810): a fixture PR is legal iff ∉ heldOut AND
+    // (∈ train OR proven strictly pre-window by the caller's ancestry proof).
+    // Held-out is checked FIRST and never overridable by the verified set (FM (c)
+    // is the load-bearing condition). Previously first checked at materialize —
+    // compose, never replace; the materialize gate stays.
     const train = new Set(artifact.split.trainPrs);
+    const heldOut = new Set(artifact.split.heldOutPrs);
+    const verifiedPreWindow = opts.verifiedPreWindowFixturePrs ?? new Set<number>();
     for (const r of fileDoc.rules) {
       for (const f of r.positiveFixtures) {
-        if (!train.has(f.pr)) {
+        if (heldOut.has(f.pr)) {
           throw new TotemError(
             'GATE_INVALID',
-            `authored rule (${r.author} · ${r.targetDefect}) declares positive fixture PR #${f.pr} which is NOT in the frozen train slice — fixtures must be train-side of the frozen split (ADR-112 §5.2)`,
-            `Train slice of ${artifact.splitRef}: [${artifact.split.trainPrs.join(', ')}].`,
+            `authored rule (${r.author} · ${r.targetDefect}) declares positive fixture PR #${f.pr} which is in the HELD-OUT slice — a held-out positive fixture is the ADR-112 §5(2)/FM(c) leakage violation`,
+            'Anchor the fixture to a train-slice or strictly pre-window PR; held-out code is never an authoring exemplar.',
+          );
+        }
+        if (!train.has(f.pr) && !verifiedPreWindow.has(f.pr)) {
+          throw new TotemError(
+            'GATE_INVALID',
+            `authored rule (${r.author} · ${r.targetDefect}) declares positive fixture PR #${f.pr} which is outside the window and NOT proven strictly pre-window — fixtures must be ∉ heldOut ∧ (∈ train ∨ pre-window by ancestry) (ADR-112 §5.2 leakage semantics)`,
+            `Train slice of ${artifact.splitRef}: [${artifact.split.trainPrs.join(', ')}]. A pre-window anchor needs the lc clone at the command boundary (--lc-dir) so its ancestry to the cut boundary can be proven.`,
           );
         }
       }
