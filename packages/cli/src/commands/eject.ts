@@ -1,12 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import {
-  DISTRIBUTED_CLAUDE_SKILLS,
-  SKILL_MARKER_END,
-  SKILL_MARKER_START,
-} from './init-templates.js';
-
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Eject';
@@ -15,14 +9,6 @@ const TOTEM_HOOK_END = '[totem] end post-merge';
 const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
 const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 const TOTEM_FILE_MARKER = '// [totem] auto-generated';
-
-/**
- * Skill names distributed by Phase C slice 3 (mmnto-ai/totem#1890), derived
- * from the canonical `DISTRIBUTED_CLAUDE_SKILLS` source-of-truth so eject stays
- * in lockstep with `totem init` — a new distributed skill can never orphan on
- * eject because this list drifted.
- */
-const DISTRIBUTED_CLAUDE_SKILL_NAMES = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
 
 /** Files that may have AI reflex blocks appended by `totem init`. */
 const REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
@@ -356,10 +342,19 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
  * empty `.claude/skills/<name>/` and `.claude/skills/` get unlinked so the
  * filesystem state is clean.
  */
-function scrubClaudeSkills(cwd: string, summary: EjectSummary): void {
+async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<void> {
+  // Lazy-load init-templates (CLI command files defer heavy imports to keep
+  // startup fast, mmnto-ai/totem#2299 review). Derive the scrub list from the
+  // canonical DISTRIBUTED_CLAUDE_SKILLS so eject stays in lockstep with
+  // `totem init` — a new distributed skill can never orphan on eject because a
+  // hand-mirrored list drifted.
+  const { DISTRIBUTED_CLAUDE_SKILLS, SKILL_MARKER_START, SKILL_MARKER_END } =
+    await import('./init-templates.js');
+  const distributedSkillNames = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
+
   const skillsRoot = path.join(cwd, '.claude', 'skills');
 
-  for (const name of DISTRIBUTED_CLAUDE_SKILL_NAMES) {
+  for (const name of distributedSkillNames) {
     const rel = `.claude/skills/${name}/SKILL.md`;
     const filePath = path.join(skillsRoot, name, 'SKILL.md');
     if (!fs.existsSync(filePath)) {
@@ -512,7 +507,7 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   scrubCommittedClaudeSettings(cwd, summary);
 
   // 5. Scrub distributed Claude session-utility skills (Phase C slice 3)
-  scrubClaudeSkills(cwd, summary);
+  await scrubClaudeSkills(cwd, summary);
 
   // 6. Scrub AI reflex blocks from markdown files
   scrubReflexFiles(cwd, summary);
