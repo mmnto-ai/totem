@@ -566,10 +566,14 @@ describe('eject — distributed Claude skills (mmnto-ai/totem#1890 Phase C slice
     return filePath;
   }
 
-  it('removes signoff + review-reply SKILL.md files when markers are present', async () => {
+  it('removes signoff, signon, and review-reply SKILL.md files when markers are present', async () => {
     const signoffPath = writeSkill(
       'signoff',
       `---\nname: signoff\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
+    );
+    const signonPath = writeSkill(
+      'signon',
+      `---\nname: signon\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
     );
     const reviewReplyPath = writeSkill(
       'review-reply',
@@ -579,6 +583,7 @@ describe('eject — distributed Claude skills (mmnto-ai/totem#1890 Phase C slice
     await ejectCommand({ force: true });
 
     expect(fs.existsSync(signoffPath)).toBe(false);
+    expect(fs.existsSync(signonPath)).toBe(false);
     expect(fs.existsSync(reviewReplyPath)).toBe(false);
   });
 
@@ -588,6 +593,10 @@ describe('eject — distributed Claude skills (mmnto-ai/totem#1890 Phase C slice
       `---\nname: signoff\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
     );
     writeSkill(
+      'signon',
+      `---\nname: signon\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
+    );
+    writeSkill(
       'review-reply',
       `---\nname: review-reply\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
     );
@@ -595,6 +604,7 @@ describe('eject — distributed Claude skills (mmnto-ai/totem#1890 Phase C slice
     await ejectCommand({ force: true });
 
     expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'signoff'))).toBe(false);
+    expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'signon'))).toBe(false);
     expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'review-reply'))).toBe(false);
     expect(fs.existsSync(path.join(cwd, '.claude', 'skills'))).toBe(false);
   });

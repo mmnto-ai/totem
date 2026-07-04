@@ -44,6 +44,7 @@ import {
   generateConfigForFormat,
   REVIEW_REPLY_SKILL_CONTENT,
   SIGNOFF_SKILL_CONTENT,
+  SIGNON_SKILL_CONTENT,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
 } from './init-templates.js';
@@ -1775,11 +1776,12 @@ LC-specific: run \`pnpm docs:inject\` before journal write.
     expect(fs.readFileSync(filePath, 'utf-8')).toBe(malformed);
   });
 
-  it('DISTRIBUTED_CLAUDE_SKILLS lists signoff and review-reply with their canonical content', () => {
+  it('DISTRIBUTED_CLAUDE_SKILLS lists signoff, signon, and review-reply with their canonical content', () => {
     const names = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
-    expect(names).toEqual(['signoff', 'review-reply']);
+    expect(names).toEqual(['signoff', 'signon', 'review-reply']);
     const lookup = Object.fromEntries(DISTRIBUTED_CLAUDE_SKILLS.map((s) => [s.name, s.content]));
     expect(lookup.signoff).toBe(SIGNOFF_SKILL_CONTENT);
+    expect(lookup.signon).toBe(SIGNON_SKILL_CONTENT);
     expect(lookup['review-reply']).toBe(REVIEW_REPLY_SKILL_CONTENT);
   });
 });
@@ -1952,6 +1954,14 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
       'utf-8',
     );
     expect(SIGNOFF_SKILL_CONTENT).toBe(source);
+  });
+
+  it('SIGNON_SKILL_CONTENT matches .claude/skills/signon/SKILL.md', () => {
+    const source = fs.readFileSync(
+      path.join(repoRoot, '.claude', 'skills', 'signon', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(SIGNON_SKILL_CONTENT).toBe(source);
   });
 
   it('REVIEW_REPLY_SKILL_CONTENT matches .claude/skills/review-reply/SKILL.md', () => {
