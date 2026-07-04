@@ -145,6 +145,14 @@ export async function persistCertifyingOutcome(
     // D4 (strategy Q2): verdict-inert Gate-2 eligibility, authored runs only. Top-level
     // sibling of `verdict` — derived from it, never part of it (mined runs omit the key).
     ...(input.gate2 ? { gate2: input.gate2 } : {}),
+    // #2298 (greptile outside-diff): the C1 per-rule control results, BOTH lanes —
+    // for an authored run this is the ONLY durable record of WHY a rule read
+    // positiveControl:true (the `§6-emission:` evidence never appears in `firings`);
+    // for a mined run it is derivable from `firings` but persisted for symmetry.
+    // Sorted by ruleId so the report is byte-stable across runs.
+    perRuleControls: Object.fromEntries(
+      [...perRuleControls.entries()].sort(([a], [b]) => a.localeCompare(b)),
+    ),
     persisted,
     stampedRuleIds: projection.stamped.map((r) => r.lessonHash),
     skips: projection.skips,

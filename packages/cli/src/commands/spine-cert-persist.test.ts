@@ -174,4 +174,44 @@ describe('persistCertifyingOutcome', () => {
     // Key is absent, not serialized-as-null — a mined run has no Gate-2 emission.
     expect('gate2' in report).toBe(false);
   });
+
+  it('option (i): a handed-in authored C1 map REPLACES the mined derivation and persists in the report', async () => {
+    // Authored shape: ZERO positive firings (pre-window anchors have no window
+    // substrate) — the emission-proven map alone must stamp the survivor AND
+    // survive into the durable report (greptile #2298 outside-diff: without it,
+    // an auditor cannot see WHY positiveControl read true without a re-run).
+    const perRuleControls = new Map([
+      [
+        'r1',
+        {
+          positiveControl: true,
+          negativeControl: true,
+          evidenceRefs: ['§6-emission:422:src/foo.rs:L10-L12'],
+        },
+      ],
+    ]);
+    const result = await persistCertifyingOutcome({
+      ...baseInput(makeVerdict('PASS')),
+      firings: [],
+      positiveControlTargets: [],
+      perRuleControls,
+    });
+    expect(result.persisted).toBe(true);
+    expect(result.stampedCount).toBe(1);
+    const report = JSON.parse(fs.readFileSync(result.reportPath, 'utf-8'));
+    expect(report.perRuleControls).toEqual({
+      r1: {
+        positiveControl: true,
+        negativeControl: true,
+        evidenceRefs: ['§6-emission:422:src/foo.rs:L10-L12'],
+      },
+    });
+  });
+
+  it('the mined lane also persists its (fire-on-target-derived) C1 map in the report', async () => {
+    const result = await persistCertifyingOutcome(baseInput(makeVerdict('PASS')));
+    const report = JSON.parse(fs.readFileSync(result.reportPath, 'utf-8'));
+    expect(report.perRuleControls.r1.positiveControl).toBe(true);
+    expect(report.perRuleControls.r1.evidenceRefs).toEqual(['label-r1-pos']);
+  });
 });
