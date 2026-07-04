@@ -107,6 +107,19 @@ const UNICODE_REPLACEMENT_CHAR = '�';
  * 20) because the workspace targets the ES2022 lib, which does not type it.
  */
 export function wellFormedUnicode(value: string): string {
+  // Fast path: the overwhelming majority of strings carry no surrogate code
+  // units at all — scan once and return the original (no reallocation) when
+  // there is nothing to well-form (mmnto-ai/totem#2300 review).
+  let needsWork = false;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= HIGH_SURROGATE_MIN && code <= LOW_SURROGATE_MAX) {
+      needsWork = true;
+      break;
+    }
+  }
+  if (!needsWork) return value;
+
   let out = '';
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
@@ -154,7 +167,7 @@ export function buildSarifLog(
       shortDescription: { text: wellFormedUnicode(rule.message) },
       fullDescription: {
         text: wellFormedUnicode(
-          `Lesson: "${rule.lessonHeading}"\nPattern: /${rule.pattern}/\nEngine: ${rule.engine ?? 'regex'}`,
+          `Lesson: "${rule.lessonHeading}"\nPattern: /${rule.pattern}/\nEngine: ${rule.engine}`,
         ),
       },
       helpUri: `https://github.com/mmnto-ai/totem/wiki/rules#${rule.lessonHash}`,

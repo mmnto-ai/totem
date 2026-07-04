@@ -80,14 +80,14 @@ jobs:
         with:
           sarif_file: totem-lint.sarif
           category: totem-lint
-          # #2296: block until GitHub finishes ingestion so a processing
-          # rejection is detectable here instead of failing silently in async.
-          wait-for-processing: true
 
       # #2296: continue-on-error keeps a rejected upload from blocking the PR,
-      # but it also hid three months of silent code-scanning darkness. Surface
-      # the rejection as a non-blocking warning annotation so it can't go dark
-      # unnoticed again (the audit-trail category is kept ON deliberately, #474).
+      # but it also hid three months of silent code-scanning darkness.
+      # upload-sarif already waits for GitHub ingestion by default
+      # (wait-for-processing defaults to true), so a processing rejection lands
+      # here as outcome == 'failure' — surface it as a non-blocking warning
+      # annotation so it can't go dark unnoticed again (the audit-trail category
+      # is kept ON deliberately, #474).
       - name: Surface SARIF processing failures (non-blocking, #2296)
         if: always() && steps.upload-sarif.outcome == 'failure'
         run: |
