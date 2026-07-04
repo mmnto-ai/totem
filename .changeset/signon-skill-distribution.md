@@ -1,5 +1,0 @@
----
-'@mmnto/cli': minor
----
-
-Promote `/signon` to a distributed Claude Code skill (mmnto-ai/totem-strategy#536, Proposal 295 d2). `totem init` now installs `.claude/skills/signon/SKILL.md` — the session-start read-twin of `/signoff` (consume/derive orientation, poll mail since last signoff, re-derive carryforward gates, present next-steps for operator ruling) — via the same mmnto-ai/totem#1890 marker-based distribution as `signoff` and `review-reply`. Two pilot amendments are folded into the canonical content before freeze: the frozen cohort-shorthand→repo-slug roster (`totem` / `strategy` / `status` / `lc`, mmnto-ai/totem-strategy#611) for cross-repo gate re-derivation, and a mail-poll cutoff that derives from the newest journal's content date (filename stamp / frontmatter), never file mtime (mmnto-ai/totem-strategy#813 — mtime lies on fresh clones/worktrees and silently reports "inbox clean" over waiting mail). `totem eject` now derives its scrub list from the canonical `DISTRIBUTED_CLAUDE_SKILLS` so a newly distributed skill can never orphan on eject.

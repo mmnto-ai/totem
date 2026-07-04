@@ -1,5 +1,0 @@
----
-'@mmnto/totem': patch
----
-
-Fix silently-rejected `totem lint --format sarif` uploads (mmnto-ai/totem#2296). A frozen compiled rule (`totem/5afaf8d03f059a41`, the emoji-in-markdown detector) encodes astral ranges as UTF-16 surrogate-pair ranges, leaving **unpaired surrogates** in its `pattern`. The emitted SARIF was valid JSON, but `github/codeql-action/upload-sarif` re-serializes the document and GitHub's ingestion parser rejected the resulting lone-surrogate escapes (`unexpected end of hex escape`), silently dropping every `totem-lint` analysis since 2026-04-06 (the failure was hidden by `continue-on-error`). The SARIF builder now well-forms rule-authored free-text (`pattern`, descriptions, result messages, fileGlobs) to valid Unicode — replacing unpaired surrogates with U+FFFD — before embedding. This is serialization-side only: the compiled rules are never touched (compile freeze unaffected) and enforcement is unchanged, since the SARIF `pattern` field is documentation, not executable.
