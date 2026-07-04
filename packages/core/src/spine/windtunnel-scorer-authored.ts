@@ -16,10 +16,18 @@
 //
 // The three reduction moves (converged 4-seat panel, design in
 // `.totem/specs/d3-authored-scorer.md`):
-//   1. Positive-target projection: `positiveControlTargets` is DERIVED from
-//      `authoredControls.positive[]` — only `differential-holds` fixtures reach
-//      that list (discharged at emission in authored-controls.ts), so the mined
-//      scorer never re-proves the postimage leg.
+//   1. [REVISED by the option-(i) ruling, operator 2026-07-04 (#2291) — the D3
+//      projection was structurally unsatisfiable]: the §4 preimage-differential
+//      recorded AT EMISSION is the authored exercise + non-vacuity proof — only
+//      `differential-holds` fixtures reach `positive[]` (discharged in
+//      authored-controls.ts). The mined target-must-FIRE machinery is the MINED
+//      sibling's proof and is never consulted here: authored anchors may be
+//      strictly pre-window (§5.2), whose diffs are not window substrate BY
+//      DESIGN, so a projected target could never fire (every authored run would
+//      vacuous-FAIL). `positiveControlsExercised` := |authoredControls.positive|
+//      (the §6 emission channel); `positiveControlTargets` passed to the mined
+//      cascade is [] — its Step-3 check is vacuously true, and the authored
+//      vacuity guard is Move 2 below plus the exercised floor.
 //   2. Non-emission gate (codex's load-bearing fold): a culled differential (empty
 //      `positive[]` + a recorded `nonEmissions[]`) must NOT reach the mined scorer
 //      as `positiveControlTargets: []` and silently PASS. An `illegitimate` class
@@ -36,7 +44,13 @@
 //      is DEFERRED to D4 (D3 emits only the raw metric).
 
 import type { AuthoredControls } from './authored-controls.js';
-import type { ScorerInput, WindtunnelVerdict, WindtunnelVerdictKind } from './windtunnel-scorer.js';
+import type { PerRuleControlResult } from './windtunnel-firing.js';
+import type {
+  RuleFiring,
+  ScorerInput,
+  WindtunnelVerdict,
+  WindtunnelVerdictKind,
+} from './windtunnel-scorer.js';
 import { scoreWindtunnel } from './windtunnel-scorer.js';
 
 // ─── Types ──────────────────────────────────────────
@@ -48,9 +62,11 @@ import { scoreWindtunnel } from './windtunnel-scorer.js';
  *
  * `firings` carries the MERGED train + held-out firings — a train-side FP fails the
  * whole window (a window-wide verdict), and `heldOutPrs` partitions them for the O3
- * metric only. `exposureFloors` / `actualExposure` pass straight through to the
- * mined scorer: D3 does not recompute exposure (the third leg counts train-side
- * positive controls only — held-out activations never inflate it).
+ * metric only. `exposureFloors` and the first two `actualExposure` legs pass straight
+ * through to the mined scorer; the THIRD leg (`positiveControlsExercised`) is
+ * OVERRIDDEN with |authoredControls.positive| (the option-(i) ruling — the §4
+ * differential at emission is the exercise proof; held-out activations never
+ * inflate it because they are not emissions).
  */
 export interface AuthoredScorerInput extends Omit<ScorerInput, 'positiveControlTargets'> {
   /** The §6 answer key from `deriveAuthoredControls` — the emitted positives + the kept non-emissions. */
@@ -116,22 +132,26 @@ export function scoreAuthoredWindtunnel(input: AuthoredScorerInput): AuthoredWin
     heldOutPrs,
   } = input;
 
-  // Move 1 — project the emitted positives into the mined scorer's target shape.
-  // Only `differential-holds` fixtures are in `positive[]`; the mined scorer takes
-  // the (pr, targetRuleId) pair and proves non-vacuity by the target firing.
-  const positiveControlTargets = authoredControls.positive.map((c) => ({
-    pr: c.pr,
-    targetRuleId: c.targetRuleId,
-  }));
-
+  // Move 1 (option-(i) ruling) — the §6 emission channel IS the exercise proof:
+  // `positiveControlsExercised` = |positive[]| (each entry is differential-held
+  // by construction). The input's exercised leg is a mined-lane artifact of the
+  // shared `ScorerInput` shape and is OVERRIDDEN here — the authored scorer owns
+  // this leg (Tenet-20 single source; a caller-supplied count would be a second
+  // home). No targets go to the mined cascade: its fire-on-window-diff proof is
+  // unsatisfiable for pre-window anchors (§5.2) — the run-level `nonVacuity`
+  // field therefore reads vacuously true on an authored verdict; the authored
+  // vacuity guards are the Move-2 non-emission gate + the exercised floor.
   const mined = scoreWindtunnel({
     firings,
     groundTruth,
-    positiveControlTargets,
+    positiveControlTargets: [],
     mintedRuleIds,
     cullRateThreshold,
     exposureFloors,
-    actualExposure,
+    actualExposure: {
+      ...actualExposure,
+      positiveControlsExercised: authoredControls.positive.length,
+    },
   });
 
   // Move 2 — the non-emission gate. Tally the classes, then combine the gate's
@@ -215,4 +235,49 @@ export function scoreAuthoredWindtunnel(input: AuthoredScorerInput): AuthoredWin
     heldOutActivationsByRule,
     authoredControlGate: { illegitimate, undecidable, deferred, effect },
   };
+}
+
+/**
+ * The AUTHORED sibling of `computePerRuleControlResults` (option-(i) ruling,
+ * operator 2026-07-04 / #2291): a rule's per-rule positive-control verdict is
+ * the §4 preimage-differential HELD AT EMISSION — the rule has ≥1 entry in
+ * `authoredControls.positive[]` (only `differential-holds` fixtures reach it) —
+ * never fire-on-window-diff (pre-window anchors have no window substrate by
+ * §5.2 design). The negative leg and the cull axis are IDENTICAL to the mined
+ * sibling: a rule firing on any negative control is culled (not a survivor,
+ * never stamped); survivors fired on none, so `negativeControl` is invariantly
+ * true. `evidenceRefs` carry §6-emission locus refs (`§6-emission:` prefixed) —
+ * record-only, deliberately NOT shaped like 64-hex firing labelIds so they can
+ * never be mistaken for (or joined against) the ground-truth key space.
+ */
+export function computeAuthoredPerRuleControlResults(input: {
+  firings: RuleFiring[];
+  mintedRuleIds: string[];
+  authoredControls: Pick<AuthoredControls, 'positive'>;
+}): Map<string, PerRuleControlResult> {
+  const { firings, mintedRuleIds, authoredControls } = input;
+
+  const culled = new Set<string>();
+  for (const f of firings) {
+    if (f.controlKind === 'negative') culled.add(f.ruleId);
+  }
+
+  const emissionRefsByRule = new Map<string, string[]>();
+  for (const c of authoredControls.positive) {
+    const refs = emissionRefsByRule.get(c.targetRuleId) ?? [];
+    refs.push(`§6-emission:${c.pr}:${c.filePath}:${c.matchedSpan}`);
+    emissionRefsByRule.set(c.targetRuleId, refs);
+  }
+
+  const result = new Map<string, PerRuleControlResult>();
+  for (const ruleId of mintedRuleIds) {
+    if (culled.has(ruleId)) continue; // not a survivor — never stamped (mined parity)
+    const refs = emissionRefsByRule.get(ruleId) ?? [];
+    result.set(ruleId, {
+      positiveControl: refs.length > 0,
+      negativeControl: true,
+      evidenceRefs: refs,
+    });
+  }
+  return result;
 }

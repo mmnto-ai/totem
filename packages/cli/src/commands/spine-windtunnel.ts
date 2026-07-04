@@ -375,6 +375,14 @@ export type ScoredRun =
       kind: 'authored';
       verdict: import('@mmnto/totem').AuthoredWindtunnelVerdict;
       gate2: import('@mmnto/totem').Gate2Eligibility;
+      /**
+       * The AUTHORED C1 map (option-(i) ruling, #2291): per-rule positive-control
+       * verdicts proven by the §4 differential AT EMISSION, computed in the
+       * resolver's score closure (the §8 single home). Persist consumes this
+       * INSTEAD of the mined fire-on-target derivation — data-driven, so no
+       * producer-kind branch ever reaches the persist path.
+       */
+      perRuleControls: Map<string, import('@mmnto/totem').PerRuleControlResult>;
     };
 
 /**
@@ -660,7 +668,12 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       asOfCommit: lock.corpus.selectionRule.asOfCommit,
       // D4 (strategy Q2): persist the verdict-inert Gate-2 set into the durable report,
       // authored runs only (mined runs carry no gate2). Console emit above stays.
-      ...(scored.kind === 'authored' ? { gate2: scored.gate2 } : {}),
+      // Option-(i) ruling (#2291): the authored arm also carries the C1 map proven by
+      // the §4 differential at emission — persist consumes it instead of deriving
+      // fire-on-target results (unsatisfiable for pre-window anchors, §5.2).
+      ...(scored.kind === 'authored'
+        ? { gate2: scored.gate2, perRuleControls: scored.perRuleControls }
+        : {}),
     });
     console.error(
       `[WindtunnelRun] Cert-run report: ${persistResult.reportPath}` +

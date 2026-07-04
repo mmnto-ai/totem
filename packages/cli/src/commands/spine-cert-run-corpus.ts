@@ -743,8 +743,13 @@ export async function resolveCertifyingCorpusProvider(
 ): Promise<ResolvedCertifyingRun> {
   // Dynamic import (CLI lazy-load convention — CR #2285): @mmnto/totem is heavy; the scorers
   // are captured here (the resolver is async) and closed over by the sync `score` bundle below.
-  const { TotemError, scoreWindtunnel, scoreAuthoredWindtunnel, deriveGate2Eligibility } =
-    await import('@mmnto/totem');
+  const {
+    TotemError,
+    scoreWindtunnel,
+    scoreAuthoredWindtunnel,
+    computeAuthoredPerRuleControlResults,
+    deriveGate2Eligibility,
+  } = await import('@mmnto/totem');
   const producerKind = lock.producerKind ?? 'mined';
   if (producerKind === 'authored') {
     // require-when-authored (codex): the lock's `authored` run-input block is mandatory at
@@ -853,7 +858,16 @@ export async function resolveCertifyingCorpusProvider(
         // heldOutActivationsByRule; the intersection (+ §1(k) + the Q4 illegitimate-window
         // disqualifier) is derived here, verdict-inert.
         const gate2 = deriveGate2Eligibility({ mintedRuleIds: base.mintedRuleIds, verdict });
-        return { kind: 'authored', verdict, gate2 };
+        // Option-(i) ruling (#2291): the C1 per-rule positive-control verdict is the §4
+        // differential HELD AT EMISSION — computed HERE (the §8 single home) so persist
+        // stays kind-blind and the mined fire-on-target derivation is never consulted
+        // for an authored run (pre-window anchors have no window substrate, §5.2).
+        const perRuleControls = computeAuthoredPerRuleControlResults({
+          firings: base.firings,
+          mintedRuleIds: base.mintedRuleIds,
+          authoredControls,
+        });
+        return { kind: 'authored', verdict, gate2, perRuleControls };
       },
     };
   }

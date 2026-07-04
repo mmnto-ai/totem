@@ -6,6 +6,7 @@ import type {
   CompiledRule,
   Gate2Eligibility,
   LegitimacyProjectionSkip,
+  PerRuleControlResult,
   ProvenanceRecord,
   RuleFiring,
   WindtunnelVerdict,
@@ -47,6 +48,14 @@ export interface CertPersistInput {
    * durable artifact keeps the two altitudes legibly separate.
    */
   gate2?: Gate2Eligibility;
+  /**
+   * Option-(i) ruling (#2291, operator 2026-07-04) — the AUTHORED C1 map, computed
+   * at the §8 single home from the §4 differential HELD AT EMISSION. When present
+   * it REPLACES the mined fire-on-target derivation below (which is structurally
+   * unsatisfiable for pre-window anchors, §5.2). Absent on mined runs — the mined
+   * derivation stays byte-unchanged.
+   */
+  perRuleControls?: Map<string, PerRuleControlResult>;
 }
 
 export interface CertPersistResult {
@@ -98,11 +107,15 @@ export async function persistCertifyingOutcome(
     saveCompiledRulesFile,
   } = await import('@mmnto/totem');
 
-  const perRuleControls = computePerRuleControlResults({
-    firings: input.firings,
-    mintedRuleIds: input.mintedRuleIds,
-    positiveControlTargets: input.positiveControlTargets,
-  });
+  // Sibling-selection, data-driven (option (i)): an authored caller hands in the
+  // emission-proven C1 map; the mined derivation runs only when none was handed.
+  const perRuleControls =
+    input.perRuleControls ??
+    computePerRuleControlResults({
+      firings: input.firings,
+      mintedRuleIds: input.mintedRuleIds,
+      positiveControlTargets: input.positiveControlTargets,
+    });
 
   // fold-B — survivor-only, PASS-only legitimacy projection.
   const projection = projectLegitimacy({

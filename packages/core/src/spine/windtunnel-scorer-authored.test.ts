@@ -4,7 +4,10 @@ import type { AuthoredNonEmission, AuthoredPositiveControl } from './authored-co
 import { firingLabelId } from './windtunnel-lock.js';
 import type { GroundTruthLabel, RuleFiring } from './windtunnel-scorer.js';
 import type { AuthoredScorerInput } from './windtunnel-scorer-authored.js';
-import { scoreAuthoredWindtunnel } from './windtunnel-scorer-authored.js';
+import {
+  computeAuthoredPerRuleControlResults,
+  scoreAuthoredWindtunnel,
+} from './windtunnel-scorer-authored.js';
 
 // ─── Helpers ─────────────────────────────────────────
 
@@ -432,5 +435,121 @@ describe('multi-rule window (gate is window-level, O3 keys isolated per rule)', 
     // (2) O3 key isolation: rule-a is keyed (from positive[]) and counts its 1 held-out
     // firing; rule-b fired on a held-out PR but has NO positive control → NOT a key.
     expect(result.heldOutActivationsByRule).toEqual({ 'rule-a': 1 });
+  });
+});
+
+// ─── Option-(i) exercised + non-vacuity semantics (#2291 ruling, 2026-07-04) ──
+
+describe('option-(i): the §6 emission channel is the exercise proof', () => {
+  const CERT1_CONTROLS = {
+    positive: [posControl('rule-a', 422), posControl('rule-b', 130), posControl('rule-c', 415)],
+    nonEmissions: [],
+  };
+
+  it('positiveControlsExercised = |emissions|, OVERRIDING the (mined-channel) input leg', () => {
+    // The named D4 masking regression: floors are REAL here (ratified floor 2, not 0).
+    // The input leg says 0 — the mined-substrate artifact — but 3 emissions clear it.
+    const result = scoreAuthoredWindtunnel(
+      baseInput({
+        mintedRuleIds: ['rule-a', 'rule-b', 'rule-c'],
+        authoredControls: CERT1_CONTROLS,
+        actualExposure: {
+          activeRulesEvaluated: 3,
+          filesTouchedInWindow: 5,
+          positiveControlsExercised: 0, // mined channel: structurally 0 on authored substrate
+        },
+        exposureFloors: {
+          activeRulesEvaluated: 2,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 2, // the ratified floor
+        },
+      }),
+    );
+    expect(result.exposureTuple[2]).toBe(3);
+    expect(result.verdict).toBe('PASS');
+  });
+
+  it('zero positive FIRINGS is NOT a vacuous-FAIL — pre-window anchors have no window substrate', () => {
+    // The cert-1 shape: every anchor strictly pre-window ⇒ no controlKind:'positive'
+    // firing can ever exist. Under the pre-ruling wiring this was FAIL (vacuous);
+    // under option (i) the differential at emission IS the proof.
+    const result = scoreAuthoredWindtunnel(
+      baseInput({
+        mintedRuleIds: ['rule-a', 'rule-b', 'rule-c'],
+        authoredControls: CERT1_CONTROLS,
+        firings: [], // nothing fired anywhere in the window
+        exposureFloors: {
+          activeRulesEvaluated: 2,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 2,
+        },
+        actualExposure: {
+          activeRulesEvaluated: 3,
+          filesTouchedInWindow: 5,
+          positiveControlsExercised: 0,
+        },
+      }),
+    );
+    expect(result.verdict).toBe('PASS');
+    expect(result.nonVacuity).toBe(true); // vacuously true — the authored guard is Move 2 + the floor
+  });
+
+  it('godot-builtin shape: no admissible fixture ⇒ exercised 0 ⇒ the floor demotes HONEST-NEGATIVE, never FAIL', () => {
+    const result = scoreAuthoredWindtunnel(
+      baseInput({
+        authoredControls: { positive: [], nonEmissions: [] },
+        exposureFloors: {
+          activeRulesEvaluated: 0,
+          filesTouchedInWindow: 0,
+          positiveControlsExercised: 2,
+        },
+      }),
+    );
+    expect(result.exposureTuple[2]).toBe(0);
+    expect(result.verdict).toBe('HONEST-NEGATIVE');
+    expect(result.precision).toBeNull();
+  });
+});
+
+describe('computeAuthoredPerRuleControlResults (the option-(i) C1 sibling)', () => {
+  it('positiveControl := differential-held at emission; evidence refs are §6-emission-shaped', () => {
+    const map = computeAuthoredPerRuleControlResults({
+      firings: [],
+      mintedRuleIds: ['rule-a', 'rule-b'],
+      authoredControls: { positive: [posControl('rule-a', 422)] },
+    });
+    expect(map.get('rule-a')).toEqual({
+      positiveControl: true,
+      negativeControl: true,
+      evidenceRefs: ['§6-emission:422:src/foo.ts:L1-L1'],
+    });
+    // A survivor with NO emission reads false — never inherited from a sibling.
+    expect(map.get('rule-b')).toEqual({
+      positiveControl: false,
+      negativeControl: true,
+      evidenceRefs: [],
+    });
+  });
+
+  it('a rule culled by a negative-control firing is not a survivor — never stamped (mined parity)', () => {
+    const map = computeAuthoredPerRuleControlResults({
+      firings: [makeFiring('rule-a', 10, 'negative')],
+      mintedRuleIds: ['rule-a', 'rule-b'],
+      authoredControls: { positive: [posControl('rule-a', 422)] },
+    });
+    expect(map.has('rule-a')).toBe(false);
+    expect(map.get('rule-b')?.negativeControl).toBe(true);
+  });
+
+  it('evidence refs never collide with the 64-hex firing labelId key space', () => {
+    const map = computeAuthoredPerRuleControlResults({
+      firings: [],
+      mintedRuleIds: ['rule-a'],
+      authoredControls: { positive: [posControl('rule-a', 422)] },
+    });
+    for (const ref of map.get('rule-a')!.evidenceRefs) {
+      expect(ref.startsWith('§6-emission:')).toBe(true);
+      expect(/^[0-9a-f]{64}$/.test(ref)).toBe(false);
+    }
   });
 });
