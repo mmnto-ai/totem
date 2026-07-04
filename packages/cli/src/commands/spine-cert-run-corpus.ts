@@ -517,7 +517,19 @@ async function deriveVerifiedPreWindowSet(args: {
   safeExec?: SafeExecFn;
 }): Promise<ReadonlySet<number>> {
   const empty: ReadonlySet<number> = new Set<number>();
-  if (!args.freezeBinding || !args.lcDir || !args.safeExec) return empty;
+  // No binding ⇒ the legacy free-text lane, where §5.2 pre-window semantics do not
+  // apply — silently strict is CORRECT there (no diagnostic; nothing was skipped).
+  if (!args.freezeBinding) return empty;
+  if (!args.lcDir || !args.safeExec) {
+    // Binding present but no lc clone/exec: the proof is genuinely SKIPPED — say so
+    // (CR #2297), or the later "not proven" gate rejection reads as inexplicable.
+    console.error(
+      '[VerifiedPreWindow] skipped — the freeze binding is engaged but --lc-dir/safeExec ' +
+        'is missing; strict train-only fixture gating is in effect (an out-of-window ' +
+        'fixture will fail as unproven).',
+    );
+    return empty;
+  }
   const {
     foldEffectiveLedgerEntries,
     isBotIdentity,
@@ -530,7 +542,10 @@ async function deriveVerifiedPreWindowSet(args: {
   if (ledger.length === 0) return empty;
   const fixturePrs = foldEffectiveLedgerEntries(ledger).flatMap((e) => e.positiveFixturePrs);
   const inWindow = new Set([...args.split.trainPrs, ...args.split.heldOutPrs]);
-  if (!fixturePrs.some((pr) => !inWindow.has(pr))) return empty;
+  // Only out-of-window PRs are proof candidates (symmetry with rule-author.ts —
+  // greptile #2297; the helper would skip in-window members anyway).
+  const outOfWindow = fixturePrs.filter((pr) => !inWindow.has(pr));
+  if (outOfWindow.length === 0) return empty;
   const { enumeratePrMetas } = await import('./spine-windtunnel.js');
   const { isAncestor } = await import('../git.js');
   const { verifyPreWindowFixturePrs } = await import('../spine-fixture-ancestry.js');
@@ -543,7 +558,7 @@ async function deriveVerifiedPreWindowSet(args: {
     isBotIdentity,
   });
   return verifyPreWindowFixturePrs({
-    fixturePrs,
+    fixturePrs: outOfWindow,
     trainPrs: args.split.trainPrs,
     heldOutPrs: args.split.heldOutPrs,
     mergeCommitByPr: mergeCommitMap(metas),

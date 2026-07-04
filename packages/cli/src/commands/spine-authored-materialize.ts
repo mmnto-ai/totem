@@ -347,7 +347,7 @@ export async function materializeAuthored(
       'GATE_INVALID',
       'authored materialize: no positive-control fixture PRs in the effective authoring-ledger — the ' +
         '§5 integrity gate (fixtureSha) has nothing to hash.',
-      'Author at least one rule with a train-side positiveFixture (non-vacuity, ADR-112 §6).',
+      'Author at least one rule with a positiveFixture anchored train-slice or strictly pre-window (non-vacuity, ADR-112 §5.2/§6).',
     );
   }
 
@@ -449,7 +449,7 @@ export async function materializeAuthored(
       'GATE_INVALID',
       'authored materialize: no positive-control fixture diffs were written — the §5 integrity gate ' +
         '(fixtureSha) has nothing to hash.',
-      'Author at least one rule with a train-side positiveFixture (non-vacuity, ADR-112 §6).',
+      'Author at least one rule with a positiveFixture anchored train-slice or strictly pre-window (non-vacuity, ADR-112 §5.2/§6).',
     );
   }
 

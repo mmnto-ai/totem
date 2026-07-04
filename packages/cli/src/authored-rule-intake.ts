@@ -36,6 +36,7 @@ import {
   identityKey,
   mintAuthoredRuleId,
   readAuthoringLedger,
+  sanitizeForTerminal,
   SPLIT_REF_RE,
   TotemError,
 } from '@mmnto/totem';
@@ -252,18 +253,21 @@ export function runRuleAuthor(
     const heldOut = new Set(artifact.split.heldOutPrs);
     const verifiedPreWindow = opts.verifiedPreWindowFixturePrs ?? new Set<number>();
     for (const r of fileDoc.rules) {
+      // `author`/`targetDefect` are author-controlled YAML text landing in CLI-facing
+      // error output — escape before interpolation (terminal injection, CR #2297).
+      const who = `${sanitizeForTerminal(r.author)} · ${sanitizeForTerminal(r.targetDefect)}`;
       for (const f of r.positiveFixtures) {
         if (heldOut.has(f.pr)) {
           throw new TotemError(
             'GATE_INVALID',
-            `authored rule (${r.author} · ${r.targetDefect}) declares positive fixture PR #${f.pr} which is in the HELD-OUT slice — a held-out positive fixture is the ADR-112 §5(2)/FM(c) leakage violation`,
+            `authored rule (${who}) declares positive fixture PR #${f.pr} which is in the HELD-OUT slice — a held-out positive fixture is the ADR-112 §5(2)/FM(c) leakage violation`,
             'Anchor the fixture to a train-slice or strictly pre-window PR; held-out code is never an authoring exemplar.',
           );
         }
         if (!train.has(f.pr) && !verifiedPreWindow.has(f.pr)) {
           throw new TotemError(
             'GATE_INVALID',
-            `authored rule (${r.author} · ${r.targetDefect}) declares positive fixture PR #${f.pr} which is outside the window and NOT proven strictly pre-window — fixtures must be ∉ heldOut ∧ (∈ train ∨ pre-window by ancestry) (ADR-112 §5.2 leakage semantics)`,
+            `authored rule (${who}) declares positive fixture PR #${f.pr} which is outside the window and NOT proven strictly pre-window — fixtures must be ∉ heldOut ∧ (∈ train ∨ pre-window by ancestry) (ADR-112 §5.2 leakage semantics)`,
             `Train slice of ${artifact.splitRef}: [${artifact.split.trainPrs.join(', ')}]. A pre-window anchor needs the lc clone at the command boundary (--lc-dir) so its ancestry to the cut boundary can be proven.`,
           );
         }
