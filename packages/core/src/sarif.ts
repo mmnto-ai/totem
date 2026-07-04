@@ -77,6 +77,59 @@ export function ruleId(rule: CompiledRule): string {
   return `totem/${rule.lessonHash}`;
 }
 
+// ─── Unicode well-forming (mmnto-ai/totem#2296) ─────────
+
+const HIGH_SURROGATE_MIN = 0xd800;
+const HIGH_SURROGATE_MAX = 0xdbff;
+const LOW_SURROGATE_MIN = 0xdc00;
+const LOW_SURROGATE_MAX = 0xdfff;
+// U+FFFD REPLACEMENT CHARACTER, written as a literal rather than
+// String.fromCharCode(0xfffd) so production source stays free of the
+// agent-security "obfuscated string assembly" primitive (rule
+// dd24f87f46e65812). The test twin builds lone surrogates via fromCharCode,
+// which is legal there — that rule excludes `**/*.test.*`.
+const UNICODE_REPLACEMENT_CHAR = '�';
+
+/**
+ * Replace unpaired UTF-16 surrogate code units with U+FFFD so a string is
+ * well-formed Unicode. Lone surrogates are legal in JS strings and the SARIF
+ * file we emit parses fine, but `github/codeql-action/upload-sarif` re-serializes
+ * the document (fingerprint injection) with JSON.stringify and GitHub's SARIF
+ * ingestion parser rejects the resulting bare `\ud83c`-style escapes ("unexpected
+ * end of hex escape"), silently dropping the entire analysis under
+ * continue-on-error (mmnto-ai/totem#2296). Frozen rule patterns encode astral
+ * ranges as surrogate-pair ranges (e.g. the emoji-in-markdown detector), which
+ * leaves lone surrogates in `pattern`. Well-forming is lossless for enforcement —
+ * the SARIF pattern/description fields are documentation, not executable, and the
+ * compiled rules themselves are never touched (compile freeze unaffected).
+ *
+ * Implemented by hand rather than via `String.prototype.toWellFormed()` (Node ≥
+ * 20) because the workspace targets the ES2022 lib, which does not type it.
+ */
+export function wellFormedUnicode(value: string): string {
+  let out = '';
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= HIGH_SURROGATE_MIN && code <= HIGH_SURROGATE_MAX) {
+      const next = value.charCodeAt(i + 1);
+      if (next >= LOW_SURROGATE_MIN && next <= LOW_SURROGATE_MAX) {
+        // Valid surrogate pair — keep both code units.
+        out += value.charAt(i) + value.charAt(i + 1);
+        i++;
+      } else {
+        // High surrogate with no following low surrogate (includes end-of-string).
+        out += UNICODE_REPLACEMENT_CHAR;
+      }
+    } else if (code >= LOW_SURROGATE_MIN && code <= LOW_SURROGATE_MAX) {
+      // Low surrogate with no preceding high surrogate.
+      out += UNICODE_REPLACEMENT_CHAR;
+    } else {
+      out += value.charAt(i);
+    }
+  }
+  return out;
+}
+
 /**
  * Convert Totem violations + rules into a SARIF 2.1.0 log.
  * Produces output compatible with `github/codeql-action/upload-sarif`.
@@ -98,16 +151,18 @@ export function buildSarifLog(
     ruleIndexMap.set(rule.lessonHash, i);
     return {
       id: ruleId(rule),
-      shortDescription: { text: rule.message },
+      shortDescription: { text: wellFormedUnicode(rule.message) },
       fullDescription: {
-        text: `Lesson: "${rule.lessonHeading}"\nPattern: /${rule.pattern}/\nEngine: ${rule.engine ?? 'regex'}`,
+        text: wellFormedUnicode(
+          `Lesson: "${rule.lessonHeading}"\nPattern: /${rule.pattern}/\nEngine: ${rule.engine ?? 'regex'}`,
+        ),
       },
       helpUri: `https://github.com/mmnto-ai/totem/wiki/rules#${rule.lessonHash}`,
       properties: {
         engine: rule.engine,
-        pattern: rule.pattern,
+        pattern: wellFormedUnicode(rule.pattern),
         category: rule.category ?? DEFAULT_RULE_CATEGORY,
-        ...(rule.fileGlobs ? { fileGlobs: rule.fileGlobs } : {}),
+        ...(rule.fileGlobs ? { fileGlobs: rule.fileGlobs.map(wellFormedUnicode) } : {}),
       },
     };
   });
@@ -125,7 +180,9 @@ export function buildSarifLog(
       ruleIndex: idx,
       level: v.rule.severity ?? 'error',
       message: {
-        text: `${v.rule.message}\n\nMatched: \`${v.line.trim()}\`\nLesson: "${v.rule.lessonHeading}"\nRule: \`totem/${v.rule.lessonHash}\``,
+        text: wellFormedUnicode(
+          `${v.rule.message}\n\nMatched: \`${v.line.trim()}\`\nLesson: "${v.rule.lessonHeading}"\nRule: \`totem/${v.rule.lessonHash}\``,
+        ),
       },
       locations: [
         {
