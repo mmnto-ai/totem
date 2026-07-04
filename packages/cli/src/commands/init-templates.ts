@@ -711,9 +711,11 @@ export const CLAUDE_GATE_WRAPPER_ENTRY = {
 // content with the current canonical; content AFTER the end marker is
 // user-customization territory and survives across refreshes.
 //
-// v0.1 ships two skills: signoff and review-reply. Both passed the
+// Ships signoff, signon, and review-reply. Each passed the
 // canonical/customization audit (universal across consumer repos,
 // idempotent on refresh, no `totem <name>` subcommand collision).
+// signon is the session-start read-twin of signoff, promoted from the
+// strategy-local pilot per mmnto-ai/totem-strategy#536 (Proposal 295 d2).
 //
 // Source-of-truth is `mmnto-ai/totem:.claude/skills/<name>/SKILL.md`. The
 // `installed-skills-match-source.test.ts` invariant locks these constants
@@ -773,6 +775,28 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
 **Cross-repo handoffs** (when you need to dispatch a message to another agent) write to your own \`<repoRoot>/.totem/orchestration/<agent-id>/outbox/<YYYY-MM-DDTHHMMZ>-<your-agent-id>.md\` with \`to: <recipient-agent-id>\` in the frontmatter. Recipients discover inbound handoffs by polling the single-level glob \`<workspace>/*/.totem/orchestration/*/outbox/*.md\` filtered by their own \`to:\` frontmatter match.
 
 **Substrate (legacy) is read-only.** Do NOT write new content to \`mmnto-ai/totem-substrate:.handoff/\` or \`:.journal/\`. The substrate stays mounted as a frozen archive accessible via \`resolveSubstratePaths(cwd)\` for forensic reads; the cutover broadcast (when it lands) will confirm the final substrate-write cutoff.
+
+${SKILL_MARKER_END}
+`;
+
+export const SIGNON_SKILL_CONTENT = `---
+name: signon
+description: Session-start — consume/derive orientation, poll mail since last signoff, re-derive carryforward gates, present next-steps for operator ruling
+---
+
+${SKILL_MARKER_START}
+
+Session-start bring-up. **Read-only** — no mutations, no dispatches, no board edits until the operator rules on next steps (Proposal 295 d2: read-only orient + grounded next-work). Solo — no agent fleet (\`feedback_session_start_derive_cheaply\`: cheap derivation IS the validation dogfood).
+
+1. **Consume the injected orientation.** On Claude Code seats the SessionStart hook already injects AGENTS.md, design-tenets, the GH-board in-flight set, freeze state, the latest journal + carryforward, corpus freshness, and strategy-doctrine currency — do not re-run what it injected. On a hook-less seat (other vendors, cold starts), derive it: \`pnpm orient\`.
+
+2. **Poll mail since last signoff.** \`node scripts/poll-cohort-mail.mjs --to <my-agent-id> --since <Z-stamp>\` — stamp format \`YYYY-MM-DDTHHMMZ\`; derive \`<Z-stamp>\` from the newest journal's CONTENT date in your own \`.totem/orchestration/<my-agent-id>/journal/\` — the filename stamp or frontmatter date, **never file mtime** (git resets mtimes on clone/worktree, so mtime silently reports "inbox clean" over waiting mail; mmnto-ai/totem-strategy#813). Unread = inbound − handled (\`feedback_check_outbox_before_replying\`); read every hit before proceeding — new mail can reprioritize everything below.
+
+3. **Re-derive the carryforward gates — don't trust the journal's framing** (Tenet 20 read-side twin). For each carryforward item in the latest journal, freshly derive its gate state (the PR it waits on, the issue, the date, the release train) via \`gh\` / \`git\` reads. Cross-repo gates resolve through the frozen cohort roster — \`totem\` / \`strategy\` / \`status\` / \`lc\` → \`mmnto-ai/{totem, totem-strategy, totem-status, liquid-city}\` (mmnto-ai/totem-strategy#611 gates any change). An item whose gate fired leads the next-steps list; an item still gated is reported as waiting, not worked.
+
+4. **Surface owed-now sensors.** Anything the injected/derived orientation flags as owed (corpus \`⚠ stale\`, strategy-doctrine \`⚠ publish owed\`, board drift) goes on the list as a candidate — sensors report, they don't gate (Tenet 13).
+
+5. **Present and stop.** One message: state summary (inbox, gate states, owed-now items) + ranked next-steps with a recommendation. Then wait for the operator's ruling — signon ends at the judgment handoff; mutations belong to the ruled work, not the bring-up.
 
 ${SKILL_MARKER_END}
 `;
@@ -843,6 +867,7 @@ ${SKILL_MARKER_END}
 
 export const DISTRIBUTED_CLAUDE_SKILLS = [
   { name: 'signoff', content: SIGNOFF_SKILL_CONTENT },
+  { name: 'signon', content: SIGNON_SKILL_CONTENT },
   { name: 'review-reply', content: REVIEW_REPLY_SKILL_CONTENT },
 ] as const;
 

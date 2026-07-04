@@ -1,7 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { SKILL_MARKER_END, SKILL_MARKER_START } from './init-templates.js';
+import {
+  DISTRIBUTED_CLAUDE_SKILLS,
+  SKILL_MARKER_END,
+  SKILL_MARKER_START,
+} from './init-templates.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -12,8 +16,13 @@ const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
 const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 const TOTEM_FILE_MARKER = '// [totem] auto-generated';
 
-/** Skill names distributed by Phase C slice 3 (mmnto-ai/totem#1890). */
-const DISTRIBUTED_CLAUDE_SKILL_NAMES = ['signoff', 'review-reply'];
+/**
+ * Skill names distributed by Phase C slice 3 (mmnto-ai/totem#1890), derived
+ * from the canonical `DISTRIBUTED_CLAUDE_SKILLS` source-of-truth so eject stays
+ * in lockstep with `totem init` — a new distributed skill can never orphan on
+ * eject because this list drifted.
+ */
+const DISTRIBUTED_CLAUDE_SKILL_NAMES = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
 
 /** Files that may have AI reflex blocks appended by `totem init`. */
 const REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
