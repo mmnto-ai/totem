@@ -37,11 +37,15 @@ export interface ResolvedPrDiff {
  * to stamp legitimacy per-rule, survivor-only.
  */
 export interface PerRuleControlResult {
-  /** True iff this rule fired its positive-control target (per-rule, not global). */
+  /** True iff this rule's positive control is proven (per-rule, not global): a target firing (mined) or a §4 differential held at emission (authored). */
   positiveControl: boolean;
   /** True iff this rule did NOT fire on any negative control (clean = passed). */
   negativeControl: boolean;
-  /** Evidence: the firingLabelIds that establish each control result. */
+  /**
+   * Evidence for the positive result: MINED — the establishing firingLabelIds;
+   * AUTHORED — `§6-emission:`-prefixed locus refs (option (i), #2291; see
+   * `computeAuthoredPerRuleControlResults`). Never both shapes in one map.
+   */
   evidenceRefs: string[];
 }
 

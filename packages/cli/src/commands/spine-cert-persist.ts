@@ -6,6 +6,7 @@ import type {
   CompiledRule,
   Gate2Eligibility,
   LegitimacyProjectionSkip,
+  PerRuleControlResult,
   ProvenanceRecord,
   RuleFiring,
   WindtunnelVerdict,
@@ -47,6 +48,14 @@ export interface CertPersistInput {
    * durable artifact keeps the two altitudes legibly separate.
    */
   gate2?: Gate2Eligibility;
+  /**
+   * Option-(i) ruling (#2291, operator 2026-07-04) — the AUTHORED C1 map, computed
+   * at the §8 single home from the §4 differential HELD AT EMISSION. When present
+   * it REPLACES the mined fire-on-target derivation below (which is structurally
+   * unsatisfiable for pre-window anchors, §5.2). Absent on mined runs — the mined
+   * derivation stays byte-unchanged.
+   */
+  perRuleControls?: Map<string, PerRuleControlResult>;
 }
 
 export interface CertPersistResult {
@@ -98,11 +107,15 @@ export async function persistCertifyingOutcome(
     saveCompiledRulesFile,
   } = await import('@mmnto/totem');
 
-  const perRuleControls = computePerRuleControlResults({
-    firings: input.firings,
-    mintedRuleIds: input.mintedRuleIds,
-    positiveControlTargets: input.positiveControlTargets,
-  });
+  // Sibling-selection, data-driven (option (i)): an authored caller hands in the
+  // emission-proven C1 map; the mined derivation runs only when none was handed.
+  const perRuleControls =
+    input.perRuleControls ??
+    computePerRuleControlResults({
+      firings: input.firings,
+      mintedRuleIds: input.mintedRuleIds,
+      positiveControlTargets: input.positiveControlTargets,
+    });
 
   // fold-B — survivor-only, PASS-only legitimacy projection.
   const projection = projectLegitimacy({
@@ -132,6 +145,14 @@ export async function persistCertifyingOutcome(
     // D4 (strategy Q2): verdict-inert Gate-2 eligibility, authored runs only. Top-level
     // sibling of `verdict` — derived from it, never part of it (mined runs omit the key).
     ...(input.gate2 ? { gate2: input.gate2 } : {}),
+    // #2298 (greptile outside-diff): the C1 per-rule control results, BOTH lanes —
+    // for an authored run this is the ONLY durable record of WHY a rule read
+    // positiveControl:true (the `§6-emission:` evidence never appears in `firings`);
+    // for a mined run it is derivable from `firings` but persisted for symmetry.
+    // Sorted by ruleId so the report is byte-stable across runs.
+    perRuleControls: Object.fromEntries(
+      [...perRuleControls.entries()].sort(([a], [b]) => a.localeCompare(b)),
+    ),
     persisted,
     stampedRuleIds: projection.stamped.map((r) => r.lessonHash),
     skips: projection.skips,

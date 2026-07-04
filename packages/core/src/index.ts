@@ -1085,7 +1085,10 @@ export type {
   AuthoredScorerInput,
   AuthoredWindtunnelVerdict,
 } from './spine/windtunnel-scorer-authored.js';
-export { scoreAuthoredWindtunnel } from './spine/windtunnel-scorer-authored.js';
+export {
+  computeAuthoredPerRuleControlResults,
+  scoreAuthoredWindtunnel,
+} from './spine/windtunnel-scorer-authored.js';
 
 // ─── Layer-B cohort-capability ledger (totem-strategy#697) ───────────────────
 export type {
