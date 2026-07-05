@@ -56,16 +56,17 @@ async function tryBuildEmbedder(config: EmbeddingProvider): Promise<Embedder> {
   }
   if (config.provider === 'gemini') {
     const { GeminiEmbedder, importGeminiSdk } = await import('./gemini-embedder.js');
-    const embedder = new GeminiEmbedder(config.model, config.dimensions);
-    // mmnto-ai/totem#1859: verify the @google/genai SDK resolves at construction —
-    // the explicit analog of openai-embedder.ts's top-level `import OpenAI`, whose
-    // resolution failure already makes tryBuildEmbedder throw (and LazyEmbedder fall
-    // back to Ollama) when that SDK is absent. GeminiEmbedder loads SDK-free by design
+    // mmnto-ai/totem#1859: resolve the @google/genai SDK BEFORE constructing — the
+    // explicit analog of openai-embedder.ts's top-level `import OpenAI`, which resolves
+    // the SDK before its constructor runs. GeminiEmbedder loads SDK-free by design
     // (dynamic import inside embed()), so without this probe a missing SDK slips past
-    // construction and hard-errors at embed() time — past the fallback boundary. This
-    // restores provider symmetry (the Tenet-16 asymmetry #1859 reported).
+    // construction and hard-errors at embed() time — past the fallback boundary, so
+    // LazyEmbedder never gets to fall back to Ollama. Probing first (ahead of the
+    // constructor's API-key check) gives full parity with openai: when both the SDK and
+    // the key are absent, the SDK-missing error surfaces first, exactly as openai's
+    // static import fails ahead of its own key check.
     await importGeminiSdk();
-    return embedder;
+    return new GeminiEmbedder(config.model, config.dimensions);
   }
   throw new TotemConfigError(
     `Unknown embedding provider: ${config.provider}`,

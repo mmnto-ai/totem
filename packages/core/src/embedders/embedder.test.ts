@@ -228,6 +228,12 @@ describe('LazyEmbedder fallback chain — regression contract (mmnto-ai/totem#18
     const err = caught as TotemConfigError;
     expect(err.code).toBe('CONFIG_MISSING');
     expect(err.message).toContain('No embedding provider available');
+    // Full contract parity with the missing-key test above: the terminal error must
+    // carry the documented 3-step remediation, so a refactor can't silently strip the
+    // user-facing guidance while this test still passes (greptile P2, #2302).
+    expect(err.recoveryHint).toContain('(1) Install the SDK');
+    expect(err.recoveryHint).toContain('(2) Install and start Ollama');
+    expect(err.recoveryHint).toContain("(3) Set provider: 'ollama'");
 
     // The fallback was attempted (breadcrumb) rather than the raw SDK error escaping.
     const allWarns = warns.join('\n');
