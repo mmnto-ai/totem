@@ -17,7 +17,7 @@ The compilation step is not a creative task; it is a translation task. The goal 
 
 ## 2. Extraction: The Analytical Path
 
-**Target Command:** `totem extract`
+**Target Command:** `totem lesson extract`
 **Ideal Temperature:** `0.4`
 
 Extraction requires the model to read a sprawling, messy GitHub Pull Request thread and synthesize it into a cohesive, single-sentence lesson.

@@ -1,12 +1,14 @@
-## Why Totem
+# Why Totem
+
+AI coding agents lose context between sessions and repeat architectural mistakes. Most checks that would catch those mistakes put an LLM in the review path: slow, networked, non-deterministic. Totem splits the problem — LLMs help author rules and lessons, and enforcement runs as compiled rules with no LLM in the loop.
 
 - **Zero-LLM enforcement.** Compiled rules run in your git hooks with no API keys, no network, no AI in the loop. Works in air-gapped CI and locked-down enterprise environments.
-- **Shared memory across repos.** `totem link` connects repos to a shared knowledge index. A lesson learned in your API repo automatically protects your frontend repo. One memory across your whole stack.
-- **Works with any AI agent.** Claude, Gemini, Cursor, Copilot, Codex — Totem doesn't care who writes the code. It just gates the push.
+- **Shared memory across repos.** `totem link` connects repos to a shared knowledge index. A lesson recorded in your API repo is queryable from your frontend repo.
+- **Agent-agnostic.** Claude, Gemini, Cursor, Copilot, Codex — Totem doesn't care who writes the code. It gates the push.
 
-## How It Works — Sensors, Not Actuators
+## Sensors, Not Actuators
 
-Totem provides the **sensors** — your codebase's immune system. You wire the **actuators**.
+Totem provides the **sensors**. You wire the **actuators**.
 
 | What Totem Provides (Sensor)      | What You Wire (Actuator)     |
 | --------------------------------- | ---------------------------- |
@@ -31,18 +33,18 @@ Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no 
 | `totem review` (AI review)              |   Yes (LLM)    |
 | `totem spec` (planning)                 |   Yes (LLM)    |
 
-The AI helps you **write** rules. The rules enforce themselves.
+LLMs are used at rule-authoring time; enforcement runs without them.
 
 ## Totem Mesh — Shared Memory Across Repos
 
-Most governance tools are per-repo. Totem lets you connect repos into a shared knowledge mesh:
+Repos can be linked into a shared knowledge index:
 
 ```bash
 # In your frontend repo
 totem link ../api-server
 ```
 
-Now `totem spec` and `totem review` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others.
+Now `totem spec` and `totem review` in your frontend repo can query lessons from your API repo.
 
 Configure cross-repo queries in `totem.config.ts`:
 
@@ -52,7 +54,7 @@ linkedIndexes: ['../api-server', '../shared-design-system'],
 
 ## Context Isolation — Scoped Search per Architecture Layer
 
-When multiple AI agents (or one agent across packages) share a knowledge index, you can restrict search results to specific boundaries. This prevents a frontend agent from hallucinating based on backend database schemas.
+When multiple AI agents (or one agent across packages) share a knowledge index, you can restrict search results to specific boundaries. This keeps backend context out of a frontend agent's search results.
 
 ```typescript
 // totem.config.ts
@@ -73,7 +75,7 @@ Results are restricted to `packages/mcp/` files. Unknown boundary names fall bac
 
 ## Performance
 
-`totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
+Benchmark, measured when the compiled set held 147 rules: `totem lint` ran all of them in under 2 seconds on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
 
 | Metric         | Value                        |
 | -------------- | ---------------------------- |
@@ -83,13 +85,15 @@ Results are restricted to `packages/mcp/` files. Unknown boundary names fall bac
 | Execution time | **1.75s**                    |
 | LLM calls      | **0**                        |
 
-This runs inside a `pre-push` git hook. Your AI agent's push is blocked until every violation is resolved — with the exact file, line, and fix guidance needed to self-correct in one cycle.
+The rule set grows as lessons are compiled; as of 1.89.0 this repo carries 485 compiled rules, 394 of them non-archived.
+
+This runs inside a `pre-push` git hook. The push is blocked until every violation is resolved; each finding reports the file, line, and fix guidance.
 
 ## Try It
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mmnto-ai/totem-playground)
 
-The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with several common architectural violations. Open it in Codespaces, run `totem lint --staged`, and watch Totem catch every one.
+The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with several common architectural violations. Open it in Codespaces, run `totem lint --staged`, and read what it reports.
 
 Or run locally:
 

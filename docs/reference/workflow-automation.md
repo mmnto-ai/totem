@@ -57,7 +57,7 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 **What should happen:** Verify tickets are closed, extract from all PRs since last release, version bump, then docs.
 **Order matters:** extract → changeset → `pnpm run version` → `totem docs` (docs must run _after_ version bump so the LLM sees the correct version in git tags)
-**Commands:** `totem extract`, `pnpm run version`, `totem docs`
+**Commands:** `totem lesson extract`, `pnpm run version`, `totem docs`
 **Skill:** `/release-prep`
 
 ### Phase 8: End of Session
@@ -82,9 +82,9 @@ Exempt branches (commit gate only): `main`, `master`, `hotfix/*`, `docs/*`, deta
 | -------------------- | ------------------------ | --------------------------------------------------------------- |
 | `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                               |
 | `/prepush`           | Before pushing code      | `format` → `totem lint` → `totem review`                        |
-| `/postmerge <prs>`   | After merging PRs        | `totem extract` → `totem sync` → `totem compile --export`       |
+| `/postmerge <prs>`   | After merging PRs        | `totem lesson extract` → `totem sync` → `totem lesson compile --export` |
 | `/triage`            | Pick next work           | `totem triage --fresh`                                          |
-| `/release-prep`      | Before cutting a release | `totem extract` → changeset → `pnpm run version` → `totem docs` |
+| `/release-prep`      | Before cutting a release | `totem lesson extract` → changeset → `pnpm run version` → `totem docs` |
 | `/signoff`           | End of session           | update memory → journal                                         |
 
 ## Agent Delegation (Subagent Patterns)

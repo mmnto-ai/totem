@@ -10,7 +10,7 @@ config paths, and strategies for keeping everything current.
 
 ## Orchestrator Models (LLM Calls)
 
-Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
+Used by `totem review`, `totem spec`, `totem triage`, `totem lesson extract`, etc.
 
 ### Google Gemini
 
@@ -37,7 +37,7 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 | ----------------- | ------------------- | ---------------------------- | ---------------------------------------------- |
 | Flagship          | `claude-opus-4-7`   | (undated alias)              | 1M context, Jan 2026 cutoff, adaptive thinking |
 | Previous Opus     | `claude-opus-4-6`   | (undated alias)              | 1M context, May 2025 cutoff, still available   |
-| Fast/balanced     | `claude-sonnet-4-6` | (undated alias)              | Default for `totem compile` routing            |
+| Fast/balanced     | `claude-sonnet-4-6` | (undated alias)              | Default for `totem lesson compile` routing     |
 | Cheapest          | `claude-haiku-4-5`  | `claude-haiku-4-5-20251001`  |                                                |
 | Legacy Opus       | `claude-opus-4-5`   | Still available              |                                                |
 | Legacy Sonnet 4.5 | `claude-sonnet-4-5` | `claude-sonnet-4-5-20250929` |                                                |
@@ -143,7 +143,7 @@ When a provider releases new stable models, update these locations:
 
 ## AI Coding Tools (Export Targets)
 
-Totem exports compiled lessons to AI coding tool config files via `totem compile --export`. Each tool reads its own file on startup.
+Totem exports compiled lessons to AI coding tool config files via `totem lesson compile --export`. Each tool reads its own file on startup.
 
 | Tool                   | Config File                       | Export Key | Totem Support           |
 | ---------------------- | --------------------------------- | ---------- | ----------------------- |
