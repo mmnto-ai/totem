@@ -51,8 +51,8 @@ Download `totem-lite-win32-x64.exe` from the Releases page and add the containin
 
 The Lite tier excludes the heavy C++ native bindings for the Vector Database and the LLM SDKs.
 
-- **Fully Supported:** `totem init`, `totem lint`, `totem hooks`, `totem compile`, `totem doctor`, `totem status`, `totem rule` commands.
-- **Excluded:** `totem review`, `totem extract`, `totem sync`, `totem spec`, `totem triage` (These will exit with code `78` and prompt you to use the full `npx @mmnto/cli` version).
+- **Fully Supported:** `totem init`, `totem lint`, `totem hooks`, `totem lesson compile`, `totem doctor`, `totem status`, `totem rule` commands.
+- **Excluded:** `totem review`, `totem lesson extract`, `totem sync`, `totem spec`, `totem triage` (These will exit with code `78` and prompt you to use the full `npx @mmnto/cli` version).
 
 ## 3. Installing Packs
 
