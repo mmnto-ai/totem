@@ -30,7 +30,7 @@ Rule abc123 — "No hardcoded secrets" — 85% non-code matches
 When doctor flags a rule, you can re-run the compiler on just that rule with a precision-targeted prompt:
 
 ```bash
-totem compile --upgrade <hash>
+totem lesson compile --upgrade <hash>
 ```
 
 The compiler takes the original lesson, adds the telemetry context ("this rule is matching too many strings/comments"), and generates a more precise AST pattern that targets actual code rather than string content.

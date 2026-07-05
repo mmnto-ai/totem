@@ -11,7 +11,7 @@ Totem breaks this cycle with a three-step loop: **Extract → Compile → Enforc
 When a PR review identifies a recurring issue, extract the underlying principle. The fix alone won't close the loop.
 
 ```bash
-totem extract <PR_NUMBER>
+totem lesson extract <PR_NUMBER>
 ```
 
 Totem reads the review comments, identifies the architectural pattern, and writes a plain-English Markdown lesson to `.totem/lessons/`.
@@ -30,7 +30,7 @@ Never use static imports (e.g., `import fs from 'fs'`) at the top level of CLI c
 Markdown is readable by humans but not enforceable by machines.
 
 ```bash
-totem compile
+totem lesson compile
 ```
 
 Totem's compiler reads the lesson and generates a deterministic AST or regex rule tailored to your codebase. The rule is saved to `.totem/compiled-rules.json`.
