@@ -40,7 +40,11 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
    done
    ```
 
-5. **Report:** what shipped, what's pending, what's next.
+5. **Prune your own outbox (ECL retention).** Delete your own `outbox/` dispatches older than the retention window (**N = 14 days**) per ECL outbox-retention doctrine (`mmnto-ai/totem-strategy:doctrine/ecl-discipline.md` § 4.4). The outbox is transport, not archive — a dispatch's durable content already lives in its home (rulings → ADRs / issues, work-state → the GH board, session history → `journal/`), so the aged courier file is disposable (gitignored + local). The operator should never have to janitor the mail substrate.
+
+   **Mechanism:** `totem ecl-gc --apply` — self-resolves your agent-id (same precedence as step 2a: `TOTEM_SELF_AGENT` env > `config.json` `host_agents` > seat-dir ∪ basename map) and prunes only `<repoRoot>/.totem/orchestration/<your-agent-id>/outbox/`, so a self-resolving binary structurally cannot prune a peer. Dry-run by default; `--apply` deletes. It **never** touches `journal/` or `processed/`. Report the pruned count in the Report step. A non-zero exit means some deletes failed (or the agent could not be resolved) — report the count but **do not block the seal**: the prune is a janitorial sensor, not a gate (Tenet 13).
+
+6. **Report:** what shipped, what's pending, what's next.
 
 **Cross-repo handoffs** (when you need to dispatch a message to another agent) write to your own `<repoRoot>/.totem/orchestration/<agent-id>/outbox/<YYYY-MM-DDTHHMMZ>-<your-agent-id>.md` with `to: <recipient-agent-id>` in the frontmatter. Recipients discover inbound handoffs by polling the single-level glob `<workspace>/*/.totem/orchestration/*/outbox/*.md` filtered by their own `to:` frontmatter match.
 

@@ -1956,6 +1956,24 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(SIGNOFF_SKILL_CONTENT).toBe(source);
   });
 
+  // ECL outbox-prune step (mmnto-ai/totem#2279): a new step 5 (prune) inserted
+  // after branch-cleanup, with the old Report step renumbered to 6.
+  it('SIGNOFF_SKILL_CONTENT carries the ecl-gc prune step and renumbers Report to 6', () => {
+    // The prune step names the self-resolving mechanism.
+    expect(SIGNOFF_SKILL_CONTENT).toContain('totem ecl-gc --apply');
+    // It is step 5 (inserted after branch-cleanup).
+    expect(SIGNOFF_SKILL_CONTENT).toContain('5. **Prune your own outbox (ECL retention).**');
+    // The prune step must promise it never touches the non-outbox trees.
+    expect(SIGNOFF_SKILL_CONTENT).toContain('**never** touches `journal/` or `processed/`');
+    // The Report step is now step 6, and step 5 is no longer Report.
+    expect(SIGNOFF_SKILL_CONTENT).toContain('6. **Report:**');
+    expect(SIGNOFF_SKILL_CONTENT).not.toContain('5. **Report:**');
+    // Ordering invariant: the prune step precedes the (renumbered) Report step.
+    expect(SIGNOFF_SKILL_CONTENT.indexOf('5. **Prune your own outbox')).toBeLessThan(
+      SIGNOFF_SKILL_CONTENT.indexOf('6. **Report:**'),
+    );
+  });
+
   it('SIGNON_SKILL_CONTENT matches .claude/skills/signon/SKILL.md', () => {
     const source = fs.readFileSync(
       path.join(repoRoot, '.claude', 'skills', 'signon', 'SKILL.md'),
