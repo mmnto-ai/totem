@@ -78,14 +78,14 @@ Exempt branches (commit gate only): `main`, `master`, `hotfix/*`, `docs/*`, deta
 
 ## Skills (User-Invoked)
 
-| Skill                | Usage                    | Steps                                                           |
-| -------------------- | ------------------------ | --------------------------------------------------------------- |
-| `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                               |
-| `/prepush`           | Before pushing code      | `format` → `totem lint` → `totem review`                        |
+| Skill                | Usage                    | Steps                                                                   |
+| -------------------- | ------------------------ | ----------------------------------------------------------------------- |
+| `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                                       |
+| `/prepush`           | Before pushing code      | `format` → `totem lint` → `totem review`                                |
 | `/postmerge <prs>`   | After merging PRs        | `totem lesson extract` → `totem sync` → `totem lesson compile --export` |
-| `/triage`            | Pick next work           | `totem triage --fresh`                                          |
-| `/release-prep`      | Before cutting a release | `totem lesson extract` → changeset → `pnpm run version` → `totem docs` |
-| `/signoff`           | End of session           | update memory → journal                                         |
+| `/triage`            | Pick next work           | `totem triage --fresh`                                                  |
+| `/release-prep`      | Before cutting a release | `totem lesson extract` → changeset → `pnpm run version` → `totem docs`  |
+| `/signoff`           | End of session           | update memory → journal                                                 |
 
 ## Agent Delegation (Subagent Patterns)
 

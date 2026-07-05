@@ -26,7 +26,7 @@ Requires Node >= 24 and a Totem-initialized project (`totem init` from [`@mmnto/
 | Tool               | What it does                                                                                              |
 | ------------------ | --------------------------------------------------------------------------------------------------------- |
 | `search_knowledge` | Semantic search over the project's knowledge index (code, lessons, specs, session logs)                   |
-| `add_lesson`       | Persist a lesson to `.totem/lessons/`; an incremental re-index runs automatically                          |
+| `add_lesson`       | Persist a lesson to `.totem/lessons/`; an incremental re-index runs automatically                         |
 | `describe_project` | Structured JSON summary of project governance scope (rules, lessons, config tier, targets, hooks); no LLM |
 | `verify_execution` | Run deterministic lint checks against current changes; returns PASS or FAIL with violations; zero LLM     |
 

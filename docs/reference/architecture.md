@@ -365,10 +365,10 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 Totem supports three explicit capability tiers, auto-detected from the environment during `totem init`. The available command list is audited to prune stale commands:
 
-| Tier         | Requirements                               | Available Commands                                                                                                                                     |
-| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tier         | Requirements                               | Available Commands                                                                                                                                            |
+| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `install`, `rule promote`, `eject`, `lint`, `lesson compile`, `test`, `explain`, `handoff --lite`, `sync --packs-only` |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `sync --index-only`, `search`, `stats`, `doctor`                                                                                        |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `sync --index-only`, `search`, `stats`, `doctor`                                                                                               |
 | **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `handoff`, `lesson extract`, `docs`, `proposal new`, `adr new`)                                                     |
 
 A lite-tier standalone WASM binary provides core CLI functions with zero native dependencies. The embedding field in configuration files is optional; when omitted, operations default to the Lite tier boundary constraints.
