@@ -19,6 +19,16 @@ vi.mock('./openai-embedder.js', () => ({
   },
 }));
 
+// ─── Mock the @google/genai SDK as ABSENT ──────────
+// mmnto-ai/totem#1859: simulate the optional peer dep being uninstalled so the
+// gemini construction path (importGeminiSdk) rejects — the SDK-missing trigger
+// for the Ollama fallback, distinct from the missing-API-key trigger the other
+// gemini tests exercise. Inert for those key-missing tests: they throw at the
+// constructor's key check, before tryBuildEmbedder reaches importGeminiSdk.
+vi.mock('@google/genai', () => {
+  throw new Error("Cannot find package '@google/genai'");
+});
+
 // ─── Tests ─────────────────────────────────────────
 
 describe('createEmbedder', () => {
@@ -94,8 +104,9 @@ describe('LazyEmbedder concurrency', () => {
 // is also unreachable, callers MUST get the documented 3-step
 // `TotemConfigError`. Regressing this contract pushes consumers back toward
 // vendor-coupling workarounds (mmnto-ai/totem-status#8 → upstream-feedback/064 →
-// mmnto-ai/totem#1851). The Gemini SDK-missing path is asymmetric and tracked
-// separately as mmnto-ai/totem#1859.
+// mmnto-ai/totem#1851). Both fallback triggers are covered below: a missing API
+// key (constructor throw) and a missing provider SDK (construction-time probe,
+// mmnto-ai/totem#1859).
 describe('LazyEmbedder fallback chain — regression contract (mmnto-ai/totem#1851)', () => {
   let originalGeminiKey: string | undefined;
   let originalGoogleKey: string | undefined;
@@ -186,5 +197,47 @@ describe('LazyEmbedder fallback chain — regression contract (mmnto-ai/totem#18
     const allWarns = warns.join('\n');
     expect(allWarns).toContain('Falling back to Ollama');
     expect(allWarns).toContain('Using Ollama fallback embedder');
+  });
+
+  // mmnto-ai/totem#1859: the SDK-missing trigger (distinct from missing-key above).
+  // The API key IS present, so GeminiEmbedder constructs cleanly; only the mocked-
+  // absent @google/genai SDK is missing. This asserts the construction-time SDK
+  // probe: without it, importGeminiSdk() would throw inside embed() — PAST the
+  // fallback boundary — surfacing the raw "Gemini SDK is not installed" error with
+  // no fallback attempt (empty warns, no "No embedding provider available"). Both
+  // discriminating assertions below fail on the pre-fix code, so this is non-vacuous.
+  it('falls back to Ollama when the Gemini SDK is missing but the API key is present (mmnto-ai/totem#1859)', async () => {
+    process.env['GEMINI_API_KEY'] = 'test-gemini-key';
+    // Force isOllamaAvailable() → false so the fallback terminates at CONFIG_MISSING.
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
+
+    const warns: string[] = [];
+    const config: EmbeddingProvider = { provider: 'gemini', model: 'gemini-embedding-2-preview' };
+    const embedder = createEmbedder(config, (msg) => warns.push(msg));
+
+    let caught: unknown;
+    try {
+      await embedder.embed(['x']);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(TotemConfigError);
+    const err = caught as TotemConfigError;
+    expect(err.code).toBe('CONFIG_MISSING');
+    expect(err.message).toContain('No embedding provider available');
+    // Full contract parity with the missing-key test above: the terminal error must
+    // carry the documented 3-step remediation, so a refactor can't silently strip the
+    // user-facing guidance while this test still passes (greptile P2, #2302).
+    expect(err.recoveryHint).toContain('(1) Install the SDK');
+    expect(err.recoveryHint).toContain('(2) Install and start Ollama');
+    expect(err.recoveryHint).toContain("(3) Set provider: 'ollama'");
+
+    // The fallback was attempted (breadcrumb) rather than the raw SDK error escaping.
+    const allWarns = warns.join('\n');
+    expect(allWarns).toContain('unavailable');
+    expect(allWarns).toContain('Falling back to Ollama');
   });
 });

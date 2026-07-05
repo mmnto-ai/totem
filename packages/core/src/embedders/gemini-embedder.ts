@@ -45,7 +45,7 @@ interface GeminiAI {
  * Dynamically import the @google/genai SDK.
  * It's an optional peer dep in @mmnto/totem — only required when provider is 'gemini'.
  */
-async function importGeminiSdk(): Promise<{
+export async function importGeminiSdk(): Promise<{
   GoogleGenAI: new (opts: { apiKey: string }) => GeminiAI;
 }> {
   try {
