@@ -19,9 +19,12 @@ import { cleanTmpDir } from '../test-utils.js';
 import {
   classifyEntry,
   cutoffKey,
+  eclCompact,
+  type EclCompactOptions,
   eclGc,
   type EclGcOptions,
   planPrune,
+  resolveEclGcExitCode,
   toStampKey,
 } from './ecl-gc.js';
 
@@ -355,5 +358,413 @@ describe('behavior', () => {
     const result = run({ apply: true, retainDays: 0, env: { TOTEM_SELF_AGENT: 'seat-a' } });
     expect(result.cutoffKey).toBe('20260705120000');
     expect(result.pruned).toEqual([FRESH_4]);
+  });
+});
+
+// ─── Compaction (ADR-106 § A2 / ecl-discipline § 4.5; mmnto-ai/totem#2307) ───
+//
+// Compaction runs across a WORKSPACE (not a single repo): `tmpRoot` IS the
+// workspace, the compacting seat lives in `<tmpRoot>/totem`, and peer outboxes
+// (the raw addressed-inbound) live in `<tmpRoot>/<peerRepo>/…`. The A2.2 gate
+// checks that every `expectedRepos` entry is a present directory in the
+// workspace, so tests inject an explicit roster and create (or omit) repo dirs
+// to drive the abort arms.
+
+const CS = 'totem-agy'; // the compacting seat
+const CROSTER = ['totem', 'totem-strategy']; // injected expected roster
+
+// Live/swept dispatch basenames (stamp-shaped so pollMail's self-priority
+// bucketing sees them the same way production names are seen).
+const DIRECT_LIVE = '2026-07-01T1000Z-totem-agy-alive.md';
+const DIRECT_SWEPT = '2026-06-01T0900Z-totem-agy-swept.md';
+const BCAST_LIVE = '2026-07-01T1001Z-broadcast-alive.md';
+const BCAST_SWEPT = '2026-06-01T0800Z-broadcast-swept.md';
+
+function compactRoot(): string {
+  return path.join(tmpRoot, 'totem');
+}
+
+function processedPath(agent: string, name: string, broadcast = false): string {
+  const dir = broadcast
+    ? path.join(compactRoot(), '.totem', 'orchestration', agent, 'processed', '_broadcast')
+    : path.join(compactRoot(), '.totem', 'orchestration', agent, 'processed');
+  return path.join(dir, name);
+}
+
+/** Write a processed MARK for `agent` (direct or broadcast store). */
+function writeMark(agent: string, name: string, broadcast = false): void {
+  const p = processedPath(agent, name, broadcast);
+  mkDir(path.dirname(p));
+  fs.writeFileSync(p, 'x', 'utf-8');
+}
+
+function markExists(agent: string, name: string, broadcast = false): boolean {
+  return fs.existsSync(processedPath(agent, name, broadcast));
+}
+
+/** Write an INBOUND dispatch (raw addressed-inbound) in a peer repo's outbox. */
+function writeInbound(repo: string, sender: string, name: string, to: string): void {
+  const dir = path.join(tmpRoot, repo, '.totem', 'orchestration', sender, 'outbox');
+  mkDir(dir);
+  fs.writeFileSync(path.join(dir, name), `---\nto: ${to}\nfrom: ${sender}\n---\n\nbody\n`, 'utf-8');
+}
+
+/** Ensure each expected roster repo exists as a directory in the workspace. */
+function ensureRepos(repos: string[]): void {
+  for (const r of repos) mkDir(path.join(tmpRoot, r));
+}
+
+function runCompact(opts: Partial<EclCompactOptions> = {}): ReturnType<typeof eclCompact> {
+  return eclCompact({
+    repoRoot: compactRoot(),
+    workspace: tmpRoot,
+    env: { TOTEM_SELF_AGENT: CS },
+    expectedRepos: CROSTER,
+    ...opts,
+  });
+}
+
+describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
+  it('C1 — canonical fixture: swept marks collected, live marks retained (direct + broadcast)', () => {
+    ensureRepos(CROSTER);
+    // Live dispatches still present in a peer outbox (their marks are load-bearing).
+    writeInbound('totem-strategy', 'strategy-claude', DIRECT_LIVE, CS);
+    writeInbound('totem-strategy', 'strategy-claude', BCAST_LIVE, 'broadcast');
+    // Four marks: two live (retain), two swept (collect).
+    writeMark(CS, DIRECT_LIVE);
+    writeMark(CS, DIRECT_SWEPT);
+    writeMark(CS, BCAST_LIVE, true);
+    writeMark(CS, BCAST_SWEPT, true);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected.sort()).toEqual([BCAST_SWEPT, DIRECT_SWEPT].sort());
+    // Live marks survive; swept marks gone.
+    expect(markExists(CS, DIRECT_LIVE)).toBe(true);
+    expect(markExists(CS, BCAST_LIVE, true)).toBe(true);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(false);
+    expect(markExists(CS, BCAST_SWEPT, true)).toBe(false);
+    // A2.4: nothing previously-handled re-surfaces.
+    expect(r.resurfaced).toEqual([]);
+  });
+
+  it('C2 — A2.1 inversion RED test: a live mark is RETAINED (naive pollMail().mail would delete it)', () => {
+    ensureRepos(CROSTER);
+    // The dispatch is present AND marked handled — so `pollMail().mail` (which
+    // subtracts processed) reports it ABSENT. A naive impl keyed on that list
+    // would collect the mark and the dispatch would re-surface on re-poll. The
+    // raw-addressed-inbound scan (includeProcessed) keeps it in view.
+    writeInbound('totem-strategy', 'strategy-claude', DIRECT_LIVE, CS);
+    writeMark(CS, DIRECT_LIVE);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([]); // NON-VACUITY: naive impl deletes this mark
+    expect(markExists(CS, DIRECT_LIVE)).toBe(true);
+    expect(r.resurfaced).toEqual([]); // naive impl trips this
+  });
+
+  it('C3 — abort arm: a missing expected repo blocks all deletes (N < M)', () => {
+    // Only `totem` present; `totem-strategy` (in the roster) is absent.
+    ensureRepos(['totem']);
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /missing.*totem-strategy/.test(x))).toBe(true);
+    expect(r.collected).toEqual([]);
+    // NON-VACUITY: uncertain ⇒ retain — the swept mark survives an incomplete poll.
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C4 — abort arm: any scan/parse warning blocks all deletes', () => {
+    ensureRepos(CROSTER);
+    // A mail-shaped dispatch with no closing delimiter → pollMail parse warning.
+    const dir = path.join(
+      tmpRoot,
+      'totem-strategy',
+      '.totem',
+      'orchestration',
+      'strategy-claude',
+      'outbox',
+    );
+    mkDir(dir);
+    fs.writeFileSync(
+      path.join(dir, '2026-07-01T1200Z-totem-agy-malformed.md'),
+      '---\nto: totem-agy\nno closing',
+      'utf-8',
+    );
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(false);
+    expect(r.warnings.length).toBeGreaterThan(0);
+    expect(r.collected).toEqual([]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C5 — abort arm: scan truncation blocks all deletes', () => {
+    ensureRepos(CROSTER);
+    // 3 addressed dispatches, maxScan 2 → pollMail truncates → gate red.
+    writeInbound('totem-strategy', 'strategy-claude', DIRECT_LIVE, CS);
+    writeInbound('totem-strategy', 'strategy-claude', '2026-07-01T1002Z-totem-agy-b.md', CS);
+    writeInbound('totem-strategy', 'strategy-claude', '2026-07-01T1003Z-totem-agy-c.md', CS);
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true, maxScan: 2 });
+
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /truncat/i.test(x))).toBe(true);
+    expect(r.collected).toEqual([]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C6 — self-seat ambiguity THROWS before any scan/delete (usage, exit-2 class)', () => {
+    ensureRepos(CROSTER);
+    // Two seat dirs registered, no TOTEM_SELF_AGENT, no --agent-id → ambiguous.
+    writeMark('totem-agy', DIRECT_SWEPT);
+    writeMark('totem-claude', DIRECT_SWEPT);
+
+    expect(() =>
+      eclCompact({ repoRoot: compactRoot(), workspace: tmpRoot, env: {}, expectedRepos: CROSTER }),
+    ).toThrow(/cannot resolve a single agent/i);
+
+    // NON-VACUITY: nothing deleted on the throwing path.
+    expect(markExists('totem-agy', DIRECT_SWEPT)).toBe(true);
+    expect(markExists('totem-claude', DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C7 — multi-seat isolation: compacting seat S never touches a peer seat’s processed/', () => {
+    ensureRepos(CROSTER);
+    // Same swept basename marked by BOTH seats; only S=totem-agy is targeted.
+    writeMark('totem-agy', DIRECT_SWEPT);
+    writeMark('totem-claude', DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([DIRECT_SWEPT]);
+    expect(markExists('totem-agy', DIRECT_SWEPT)).toBe(false);
+    // NON-VACUITY: a coordinator-union target would delete the peer's mark too.
+    expect(markExists('totem-claude', DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C8 — dry-run lists would-collect but deletes nothing', () => {
+    ensureRepos(CROSTER);
+    writeInbound('totem-strategy', 'strategy-claude', DIRECT_LIVE, CS);
+    writeMark(CS, DIRECT_LIVE);
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact(); // dry-run (no --apply)
+
+    expect(r.dryRun).toBe(true);
+    expect(r.gateComplete).toBe(true);
+    expect(r.collectable).toEqual([DIRECT_SWEPT]);
+    expect(r.collected).toEqual([]);
+    // `retained` reflects the WOULD-survive count in dry-run (marks − collectable),
+    // consistent with the display + apply semantics (greptile).
+    expect(r.marks).toBe(2);
+    expect(r.retained).toBe(1);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true); // nothing deleted
+  });
+
+  it('C9 — union retention: a direct mark is retained by a live BROADCAST of the same basename', () => {
+    ensureRepos(CROSTER);
+    // Only a broadcast dispatch exists for this basename; the mark sits in the
+    // DIRECT store. pollMail's processed filter is recipient-class-blind, so the
+    // mark shadows the live broadcast dispatch — union retention keeps it.
+    writeInbound('totem-strategy', 'strategy-claude', BCAST_LIVE, 'broadcast');
+    writeMark(CS, BCAST_LIVE); // DIRECT store, matched by broadcast inbound
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([]);
+    expect(markExists(CS, BCAST_LIVE)).toBe(true);
+  });
+
+  it('C10 — other-recipient same basename does NOT retain a self mark (filter is parsed to:, not basename)', () => {
+    ensureRepos(CROSTER);
+    // A dispatch of this basename exists but is addressed to a DIFFERENT seat, so
+    // it is not part of S's addressed-inbound; the mark is inert → collected.
+    writeInbound('totem-strategy', 'strategy-claude', DIRECT_SWEPT, 'totem-gemini');
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([DIRECT_SWEPT]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(false);
+  });
+
+  it('C11 — a partial mark-delete failure is captured; other marks still collected', () => {
+    ensureRepos(CROSTER);
+    writeMark(CS, DIRECT_SWEPT);
+    writeMark(CS, BCAST_SWEPT, true);
+    // Mock unlinkSync to fail the direct swept mark, pass the broadcast one.
+    fsMockState.failFor.add(DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([BCAST_SWEPT]);
+    expect(r.failed).toHaveLength(1);
+    expect(r.failed[0]!.error).toMatch(/EPERM/);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true); // failed delete → mark remains
+    expect(markExists(CS, BCAST_SWEPT, true)).toBe(false);
+  });
+
+  it('C12 — undeclared (empty) roster HARD-ABORTS (exit 3), never "assume complete" (strategy#828)', () => {
+    ensureRepos(CROSTER);
+    writeMark(CS, DIRECT_SWEPT); // a genuinely inert mark that WOULD be collectable
+
+    const r = runCompact({ apply: true, expectedRepos: [] });
+
+    expect(r.rosterDeclared).toBe(false);
+    // Folded into the A2.2 gate: no declared roster => gate red => hard-abort (exit 3),
+    // fail-loud (never a silent no-op) per the strategy#828 no-roster corollary.
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /no cohort roster declared/.test(x))).toBe(true);
+    expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(3);
+    expect(r.collected).toEqual([]);
+    // NON-VACUITY: with no declared roster, completeness is unprovable, so even a
+    // truly-inert mark is retained rather than deleted on an assumed-complete scan.
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+    expect(r.marks).toBe(1); // still reports the seat's mark count
+  });
+
+  it('C13 — --force-incomplete waives the missing-repo abort; deletes proceed', () => {
+    // Only `totem` present; `totem-strategy` (in the roster) absent → normally aborts.
+    ensureRepos(['totem']);
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true, forceIncomplete: true });
+
+    // Roster arm waived → gate green; the missing repo is still surfaced (loud).
+    expect(r.gateComplete).toBe(true);
+    expect(r.gateReasons.some((x) => /missing.*totem-strategy/.test(x))).toBe(true);
+    expect(r.collected).toEqual([DIRECT_SWEPT]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(false);
+  });
+
+  it('C13b — --force-incomplete does NOT waive a scan warning (broken read still aborts)', () => {
+    ensureRepos(CROSTER);
+    const dir = path.join(
+      tmpRoot,
+      'totem-strategy',
+      '.totem',
+      'orchestration',
+      'strategy-claude',
+      'outbox',
+    );
+    mkDir(dir);
+    fs.writeFileSync(
+      path.join(dir, '2026-07-01T1200Z-totem-agy-malformed.md'),
+      '---\nto: totem-agy\nno closing',
+      'utf-8',
+    );
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true, forceIncomplete: true });
+
+    // Force waives roster presence only — a parse warning is still a hard abort.
+    expect(r.gateComplete).toBe(false);
+    expect(r.collected).toEqual([]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C14 — dual-store same basename, one arm fails: not collected (no collected/failed overlap), retained accurate', () => {
+    ensureRepos(CROSTER);
+    const DUAL = DIRECT_SWEPT; // same basename inert in BOTH stores
+    writeMark(CS, DUAL); // direct
+    writeMark(CS, DUAL, true); // broadcast
+    // Fail ONLY the broadcast arm's unlink (platform-safe path suffix match).
+    fsMockState.failFor.add(path.join('_broadcast', DUAL));
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    // Direct arm deleted but broadcast arm failed → NOT fully collected; the
+    // basename lands in `failed`, never in `collected` (no overlap — greptile).
+    expect(r.collected).toEqual([]);
+    expect(r.failed).toHaveLength(1);
+    expect(r.failed[0]!.file).toBe(`_broadcast/${DUAL}`);
+    // `retained` counts the still-on-disk broadcast mark (marks=1 basename, collected=0).
+    expect(r.marks).toBe(1);
+    expect(r.retained).toBe(1);
+    expect(markExists(CS, DUAL)).toBe(false); // direct arm gone
+    expect(markExists(CS, DUAL, true)).toBe(true); // broadcast arm remains
+  });
+
+  it('C15 — an unscannable roster name (dot/node_modules) hard-aborts, NOT waivable by --force-incomplete', () => {
+    ensureRepos(['totem', 'totem-strategy']);
+    writeMark(CS, DIRECT_SWEPT);
+    // A declared roster entry the workspace scan would filter out (starts with
+    // '.') — the gate must abort even under --force-incomplete: it is a config
+    // error (unscannable), not a known-absent repo (CodeRabbit).
+    const r = runCompact({
+      apply: true,
+      expectedRepos: ['totem', 'totem-strategy', '.evil'],
+      forceIncomplete: true,
+    });
+
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /unscannable/.test(x))).toBe(true);
+    expect(r.collected).toEqual([]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+});
+
+// ─── Combined exit-code precedence (codex panel) ────────
+
+describe('resolveEclGcExitCode — combined prune+compact precedence', () => {
+  const clean = { failed: [] };
+  const partial = { failed: [{ file: 'x', error: 'EPERM' }] };
+  const base = {
+    rosterDeclared: true,
+    gateComplete: true,
+    resurfaced: [] as string[],
+    verifyComplete: true,
+  };
+  const gateGreen = { ...base, failed: [] };
+  const gateRed = { ...base, gateComplete: false, failed: [] };
+  const noRoster = { ...base, rosterDeclared: false, gateComplete: false, failed: [] };
+  const resurfaced = { ...base, resurfaced: ['x.md'], failed: [] };
+  const verifyUntrusted = { ...base, verifyComplete: false, failed: [] };
+  const compactPartial = { ...base, failed: [{ file: 'm', error: 'EPERM' }] };
+
+  it('0 — clean prune, no compaction', () => {
+    expect(resolveEclGcExitCode(clean)).toBe(0);
+  });
+  it('0 — clean prune + green compaction', () => {
+    expect(resolveEclGcExitCode(clean, gateGreen)).toBe(0);
+  });
+  it('3 — undeclared roster HARD-ABORTS (fail-loud, not a silent no-op) — strategy#828', () => {
+    expect(resolveEclGcExitCode(clean, noRoster)).toBe(3);
+  });
+  it('1 — prune partial delete failure, no compaction', () => {
+    expect(resolveEclGcExitCode(partial)).toBe(1);
+  });
+  it('1 — prune clean + compaction partial delete failure', () => {
+    expect(resolveEclGcExitCode(clean, compactPartial)).toBe(1);
+  });
+  it('3 — undeclared-roster hard-abort outranks a prune partial failure (3 > 1)', () => {
+    expect(resolveEclGcExitCode(partial, noRoster)).toBe(3);
+  });
+  it('3 — compaction gate red (declared roster incomplete) outranks a clean prune', () => {
+    expect(resolveEclGcExitCode(clean, gateRed)).toBe(3);
+  });
+  it('3 — compaction A2.4 falsifier tripped', () => {
+    expect(resolveEclGcExitCode(clean, resurfaced)).toBe(3);
+  });
+  it('3 — compaction A2.4 re-poll untrustworthy (truncated/warned verify)', () => {
+    expect(resolveEclGcExitCode(clean, verifyUntrusted)).toBe(3);
+  });
+  it('3 — prune partial + compaction abort: 3 outranks 1', () => {
+    expect(resolveEclGcExitCode(partial, gateRed)).toBe(3);
   });
 });

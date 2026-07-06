@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  cohortRepos,
   isPathSafeAgentId,
   knownCohortAgents,
   type OrchestrationPaths,
@@ -544,6 +545,17 @@ describe('knownCohortAgents — single-source recipient set', () => {
     for (const id of agents) {
       expect(isPathSafeAgentId(id)).toBe(true);
     }
+  });
+});
+
+describe('cohortRepos — declared roster for the ecl-gc A2.2 gate', () => {
+  it('is the strategy#611 frozen active set (interim; excludes arhgap11, not map-derived)', () => {
+    // The completeness gate's declared expectation (mmnto-ai/totem#2307). This is
+    // OUR config value pending config-ification (mmnto-ai/totem#2310), authority
+    // strategy#611 — deliberately NOT the COHORT_AGENT_MAP keys (which include
+    // arhgap11 / totem-playground). Lock the exact set so a drift is caught here.
+    expect(cohortRepos()).toEqual(['liquid-city', 'totem', 'totem-status', 'totem-strategy']);
+    expect(cohortRepos()).not.toContain('arhgap11');
   });
 });
 

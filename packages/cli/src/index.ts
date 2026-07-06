@@ -866,7 +866,9 @@ mailCmd
 // peer's, never journal/ or processed/. Dry-run by default; --apply deletes.
 program
   .command('ecl-gc')
-  .description('Prune your own aged ECL outbox dispatches (self-resolving; dry-run unless --apply)')
+  .description(
+    'Prune your own aged ECL outbox dispatches; with --compact, also compact your processed-mark cursor (self-resolving; dry-run unless --apply)',
+  )
   .option('--apply', 'Actually delete aged dispatches (default: dry-run — list only)')
   .option(
     '--retain-days <n>',
@@ -874,38 +876,82 @@ program
   )
   .option(
     '--agent-id <id>',
-    'Override the self-resolved agent whose outbox to prune (visiting/orchestrator case)',
+    'Override the self-resolved agent whose outbox/cursor to gc (visiting/orchestrator case)',
+  )
+  .option(
+    '--compact',
+    'Also compact your processed-mark cursor (ADR-106 § A2 / ecl-discipline § 4.5): delete marks whose inbound dispatch its sender already swept — runs AFTER the prune',
+  )
+  .option(
+    '--force-incomplete',
+    'UNSAFE: proceed with compaction even when a declared cohort repo is absent from the workspace (waives only the roster-presence gate; scan warnings/truncation still abort)',
   )
   .option('--json', 'Emit the structured result as JSON to stdout instead of human text')
   .action(
     async (
-      _opts: { apply?: boolean; retainDays?: string; agentId?: string; json?: boolean },
+      _opts: {
+        apply?: boolean;
+        retainDays?: string;
+        agentId?: string;
+        compact?: boolean;
+        forceIncomplete?: boolean;
+        json?: boolean;
+      },
       cmd: Command,
     ) => {
       // optsWithGlobals() merges the program-level `--json` (top of file) with the
       // subcommand scope, same collision fix as `mail` (mmnto-ai/totem#2097).
-      const { apply, retainDays, agentId, json } = cmd.optsWithGlobals<{
+      const { apply, retainDays, agentId, compact, forceIncomplete, json } = cmd.optsWithGlobals<{
         apply?: boolean;
         retainDays?: string;
         agentId?: string;
+        compact?: boolean;
+        forceIncomplete?: boolean;
         json?: boolean;
       }>();
       // Custom exit-code contract (AGENTS.md: throw in lib, wrapper decides exit).
-      // eclGc throws ONLY on usage errors (self-resolution failure, invalid
-      // --retain-days); fs failures land in result.failed, never thrown. So:
-      // 0 = clean, 1 = partial delete failure (sensor), 2 = usage error. We do
-      // NOT call handleError here — it exits 1, which would collide with the
-      // partial-failure code. (Custom-exit precedent: index-lite.ts uses 78.)
+      // eclGc/eclCompact throw ONLY on usage errors (self-resolution failure,
+      // invalid --retain-days); fs failures land in structured results, never
+      // thrown. Combined precedence (codex panel, mmnto-ai/totem#2307):
+      //   2 = usage error (thrown; before any mutation)
+      //   3 = compaction ABORT — A2.2 gate red OR A2.4 falsifier tripped
+      //   1 = partial janitorial delete failure (prune or compact)
+      //   0 = clean.
+      // 3 outranks 1: a prune-partial + compact-abort exits 3, prune count still
+      // reported in the structured result. We do NOT call handleError (it exits
+      // 1, colliding with the sensor codes). (Custom-exit precedent: index-lite.ts 78.)
       try {
-        const { eclGc, eclGcCommand } = await import('./commands/ecl-gc.js');
-        const result = eclGc({
+        const { eclGc, eclGcCommand, eclCompact, eclCompactCommand, resolveEclGcExitCode } =
+          await import('./commands/ecl-gc.js');
+        const pruneResult = eclGc({
           apply,
           retainDays: retainDays !== undefined ? Number(retainDays) : undefined,
           agentId,
         });
-        await eclGcCommand(result, json === true);
-        if (result.failed.length > 0) process.exitCode = 1;
-        // totem-context: the catch below is the deliberate CLI exit-code boundary, not a silent swallow — eclGc throws ONLY usage errors, which are printed LOUDLY via log.error and mapped to exit 2 (handleError is intentionally NOT used here: it exits 1, colliding with the partial-delete-failure sensor code).
+        // Compaction runs AFTER the prune (ecl-discipline § 4.5). A seat's own
+        // prune shrinks PEERS' inbound, not its own marks, so ordering is
+        // independent — but the doctrine sequences them within /signoff.
+        let compactResult: ReturnType<typeof eclCompact> | undefined;
+        if (compact === true) {
+          compactResult = eclCompact({ apply, agentId, forceIncomplete });
+        }
+        if (json === true && compactResult !== undefined) {
+          // Single combined document so a --json consumer parses one object
+          // rather than two concatenated JSON blobs. NOTE (greptile): under
+          // --json the human-readable A2.4/failure alerts (normally logged to
+          // stderr by eclCompactCommand) are intentionally omitted — the data is
+          // in the payload (`resurfaced`/`failed`/`verifyComplete`) and the exit
+          // code still fires, matching the prune-only --json path's contract.
+          process.stdout.write(
+            JSON.stringify({ prune: pruneResult, compact: compactResult }, null, 2) + '\n',
+          );
+        } else {
+          await eclGcCommand(pruneResult, json === true);
+          if (compactResult !== undefined) await eclCompactCommand(compactResult, false);
+        }
+        const code = resolveEclGcExitCode(pruneResult, compactResult);
+        if (code !== 0) process.exitCode = code;
+        // totem-context: the catch below is the deliberate CLI exit-code boundary, not a silent swallow — eclGc/eclCompact throw ONLY usage errors, printed LOUDLY via log.error and mapped to exit 2 (handleError is intentionally NOT used here: it exits 1, colliding with the janitorial sensor code).
       } catch (err) {
         const { log } = await import('./ui.js');
         log.error('Totem Error', err instanceof Error ? err.message : String(err));

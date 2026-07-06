@@ -673,6 +673,7 @@ export { resolveSubstratePaths } from './substrate-resolver.js';
 // frozen-archive read path while orchestration is the active read+write surface.
 export type { OrchestrationPaths, SelfAgentResolution } from './orchestration-resolver.js';
 export {
+  cohortRepos,
   isPathSafeAgentId,
   knownCohortAgents,
   resolveOrchestrationPaths,

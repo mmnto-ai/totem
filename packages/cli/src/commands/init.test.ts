@@ -1958,18 +1958,23 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
 
   // ECL outbox-prune step (mmnto-ai/totem#2279): a new step 5 (prune) inserted
   // after branch-cleanup, with the old Report step renumbered to 6.
-  it('SIGNOFF_SKILL_CONTENT carries the ecl-gc prune step and renumbers Report to 6', () => {
-    // The prune step names the self-resolving mechanism.
-    expect(SIGNOFF_SKILL_CONTENT).toContain('totem ecl-gc --apply');
-    // It is step 5 (inserted after branch-cleanup).
-    expect(SIGNOFF_SKILL_CONTENT).toContain('5. **Prune your own outbox (ECL retention).**');
-    // The prune step must promise it never touches the non-outbox trees.
-    expect(SIGNOFF_SKILL_CONTENT).toContain('**never** touches `journal/` or `processed/`');
+  it('SIGNOFF_SKILL_CONTENT carries the ecl-gc prune+compact step and renumbers Report to 6', () => {
+    // The step names the self-resolving mechanism with compaction (mmnto-ai/totem#2307).
+    expect(SIGNOFF_SKILL_CONTENT).toContain('totem ecl-gc --apply --compact');
+    // It is step 5 (inserted after branch-cleanup), now covering prune + compaction.
+    expect(SIGNOFF_SKILL_CONTENT).toContain(
+      '5. **Prune + compact your own ECL cursor (retention + processed-mark GC).**',
+    );
+    // Compaction DOES touch processed/ (by design) — the retained promise is
+    // journal/-only, not the old "never touches processed/" claim.
+    expect(SIGNOFF_SKILL_CONTENT).toContain('Neither phase touches `journal/`');
+    // The exit-code contract must be documented so a 1/3 exit does not block the seal.
+    expect(SIGNOFF_SKILL_CONTENT).toContain('Do not block the seal on `1` or `3`');
     // The Report step is now step 6, and step 5 is no longer Report.
     expect(SIGNOFF_SKILL_CONTENT).toContain('6. **Report:**');
     expect(SIGNOFF_SKILL_CONTENT).not.toContain('5. **Report:**');
-    // Ordering invariant: the prune step precedes the (renumbered) Report step.
-    expect(SIGNOFF_SKILL_CONTENT.indexOf('5. **Prune your own outbox')).toBeLessThan(
+    // Ordering invariant: the gc step precedes the (renumbered) Report step.
+    expect(SIGNOFF_SKILL_CONTENT.indexOf('5. **Prune + compact your own ECL cursor')).toBeLessThan(
       SIGNOFF_SKILL_CONTENT.indexOf('6. **Report:**'),
     );
   });

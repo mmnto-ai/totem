@@ -240,6 +240,40 @@ export function knownCohortAgents(workspace?: string): string[] {
 }
 
 /**
+ * ⚠ INTERIM CONSTANT — product-lock: config-ify before any non-cohort consumer.
+ *
+ * The declared cohort REPO roster the ADR-106 § A2.2 compaction completeness
+ * gate checks a workspace glob against: cursor-GC may delete a `processed/`
+ * mark only against a PROVABLY-complete poll, and "complete" requires every
+ * expected outbox-holding repo present + scanned (a silently-absent repo makes
+ * a live mark look inert — the false-unread class). The glob (present dirs, the
+ * mmnto-ai/totem#2141 dirs-are-state mechanism) is the discovery; this roster is
+ * the yardstick that makes "incomplete scan" detectable.
+ *
+ * This value is the mmnto-ai/totem-strategy#611 frozen active set — OUR cohort's
+ * config value — and its change-authority stays strategy#611 (skynet's return
+ * flips it there; this follows in lockstep, no core edit). It deliberately
+ * EXCLUDES `arhgap11` (not in the #611 active set) and is NOT derived from
+ * `COHORT_AGENT_MAP` — reading the seat map as the roster would re-elevate it
+ * from "bootstrap fallback" to "authority," contradicting the mmnto-ai/totem#2141
+ * dirs-are-state ruling (contract-owner ruling, strategy-claude 2026-07-06).
+ *
+ * WHY A CONSTANT IS ONLY INTERIM (Tenet 16): `totem ecl-gc` is a SHIPPING core
+ * command; an external consumer's cohort is THEIR repos, not ours. A hardcoded
+ * roster is the product-vs-cohort lock Tenet 16 guards against — it would abort
+ * compaction for every consumer whose workspace isn't our four repos. The
+ * honest target is a CONSUMER-CONFIG-declared roster; this constant stands in
+ * only because ECL has no external consumers yet. Config-ify tracked in
+ * mmnto-ai/totem#2310. Until then the compaction gate's own safety corollary
+ * holds the line: an empty/undeclared roster makes compaction HARD-ABORT
+ * (fail-loud, non-zero exit), never a silent no-op and never "assume complete"
+ * (codified strategy#828 / eb9ff5b).
+ */
+export function cohortRepos(): string[] {
+  return ['liquid-city', 'totem', 'totem-status', 'totem-strategy'];
+}
+
+/**
  * True iff `id` is safe to use as a `.totem/orchestration/<id>/…` path segment
  * (or any filename token): a non-empty string with no path separators, null
  * byte, or `..` traversal, and no control/whitespace/win32-reserved characters
