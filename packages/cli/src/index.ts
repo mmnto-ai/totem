@@ -30,6 +30,11 @@ if (reexecStatus !== undefined) {
 const RETROSPECT_DEFAULT_THRESHOLD = 5;
 const RETROSPECT_MIN_THRESHOLD = 1;
 
+// ECL outbox retention default (doctrine/ecl-discipline.md § 4.4) — help-text
+// mirror only; the authoritative default lives in `commands/ecl-gc.ts`
+// (lazy-loaded), so passing `retainDays: undefined` still resolves to it.
+const DEFAULT_ECL_RETAIN_DAYS = 14;
+
 function requireGhCli(): void {
   try {
     execSync('gh --version', { stdio: 'ignore', timeout: 3000 });
@@ -850,6 +855,61 @@ mailCmd
         // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
       } catch (err) {
         handleError(err);
+      }
+    },
+  );
+
+// ECL outbox retention prune (mmnto-ai/totem#2279; parent mmnto-ai/totem-strategy#700;
+// doctrine/ecl-discipline.md § 4.4). The binary-guaranteed cohort-wide replacement
+// for `scripts/prune-outbox.mjs` — self-resolves the caller's agent so a seat can
+// only ever prune its OWN `<repoRoot>/.totem/orchestration/<agent>/outbox/`, never a
+// peer's, never journal/ or processed/. Dry-run by default; --apply deletes.
+program
+  .command('ecl-gc')
+  .description('Prune your own aged ECL outbox dispatches (self-resolving; dry-run unless --apply)')
+  .option('--apply', 'Actually delete aged dispatches (default: dry-run — list only)')
+  .option(
+    '--retain-days <n>',
+    `Retention window in days (default ${DEFAULT_ECL_RETAIN_DAYS}; doctrine § 4.4)`,
+  )
+  .option(
+    '--agent-id <id>',
+    'Override the self-resolved agent whose outbox to prune (visiting/orchestrator case)',
+  )
+  .option('--json', 'Emit the structured result as JSON to stdout instead of human text')
+  .action(
+    async (
+      _opts: { apply?: boolean; retainDays?: string; agentId?: string; json?: boolean },
+      cmd: Command,
+    ) => {
+      // optsWithGlobals() merges the program-level `--json` (top of file) with the
+      // subcommand scope, same collision fix as `mail` (mmnto-ai/totem#2097).
+      const { apply, retainDays, agentId, json } = cmd.optsWithGlobals<{
+        apply?: boolean;
+        retainDays?: string;
+        agentId?: string;
+        json?: boolean;
+      }>();
+      // Custom exit-code contract (AGENTS.md: throw in lib, wrapper decides exit).
+      // eclGc throws ONLY on usage errors (self-resolution failure, invalid
+      // --retain-days); fs failures land in result.failed, never thrown. So:
+      // 0 = clean, 1 = partial delete failure (sensor), 2 = usage error. We do
+      // NOT call handleError here — it exits 1, which would collide with the
+      // partial-failure code. (Custom-exit precedent: index-lite.ts uses 78.)
+      try {
+        const { eclGc, eclGcCommand } = await import('./commands/ecl-gc.js');
+        const result = eclGc({
+          apply,
+          retainDays: retainDays !== undefined ? Number(retainDays) : undefined,
+          agentId,
+        });
+        await eclGcCommand(result, json === true);
+        if (result.failed.length > 0) process.exitCode = 1;
+        // totem-context: the catch below is the deliberate CLI exit-code boundary, not a silent swallow — eclGc throws ONLY usage errors, which are printed LOUDLY via log.error and mapped to exit 2 (handleError is intentionally NOT used here: it exits 1, colliding with the partial-delete-failure sensor code).
+      } catch (err) {
+        const { log } = await import('./ui.js');
+        log.error('Totem Error', err instanceof Error ? err.message : String(err));
+        process.exitCode = 2;
       }
     },
   );
