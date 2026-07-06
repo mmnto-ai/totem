@@ -902,14 +902,13 @@ program
           apply,
           retainDays: retainDays !== undefined ? Number(retainDays) : undefined,
           agentId,
-          json,
         });
         await eclGcCommand(result, json === true);
         if (result.failed.length > 0) process.exitCode = 1;
         // totem-context: the catch below is the deliberate CLI exit-code boundary, not a silent swallow — eclGc throws ONLY usage errors, which are printed LOUDLY via log.error and mapped to exit 2 (handleError is intentionally NOT used here: it exits 1, colliding with the partial-delete-failure sensor code).
       } catch (err) {
         const { log } = await import('./ui.js');
-        log.error('EclGc', err instanceof Error ? err.message : String(err));
+        log.error('Totem Error', err instanceof Error ? err.message : String(err));
         process.exitCode = 2;
       }
     },

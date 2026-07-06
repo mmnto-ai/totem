@@ -201,6 +201,18 @@ describe('safety invariants (load-bearing)', () => {
     expect(exists('seat-b', 'outbox', AGED_2)).toBe(true);
   });
 
+  it('row 3b — an unsafe resolved agent-id is rejected BEFORE any deletion', () => {
+    // resolveSelfSender returns an explicit --agent-id verbatim, so a caller
+    // could hand in an id that escapes the `<orchestration>/<agent>/outbox`
+    // segment. The isPathSafeAgentId guard must reject it before any scan/delete.
+    writeFiles('seat-a', 'outbox', [AGED_4]);
+
+    expect(() => run({ apply: true, agentId: '../seat-a' })).toThrow(/invalid agent-id/i);
+
+    // NON-VACUITY: nothing may be deleted on the guard-throw path.
+    expect(exists('seat-a', 'outbox', AGED_4)).toBe(true);
+  });
+
   it('row 4 — exact boundary retained; 1s older pruned', () => {
     writeFiles('seat-a', 'outbox', [BOUNDARY_KEEP, BOUNDARY_PRUNE]);
 

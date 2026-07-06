@@ -65,8 +65,6 @@ export interface EclGcOptions {
    * NOT used by the signoff step — that path self-resolves.
    */
   agentId?: string;
-  /** Emit the structured result as JSON to stdout instead of human text. */
-  json?: boolean;
   /** Repo root override (default: `process.cwd()`). Test injection point. */
   repoRoot?: string;
   /** Env override (default: `process.env`). Test injection point. */
@@ -337,9 +335,9 @@ export async function eclGcCommand(result: EclGcResult, json: boolean): Promise<
     }
   }
   if (result.failed.length > 0) {
-    log.error(TAG, `FAILED ${result.failed.length} delete(s) — surfaced, non-blocking:`);
+    log.error('Totem Error', `FAILED ${result.failed.length} delete(s) — surfaced, non-blocking:`);
     for (const f of result.failed) {
-      log.error(TAG, `  - ${f.file}: ${f.error}`);
+      log.error('Totem Error', `  - ${f.file}: ${f.error}`);
     }
   }
   for (const w of result.warnings) {
