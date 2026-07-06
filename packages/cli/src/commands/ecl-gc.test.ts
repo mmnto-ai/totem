@@ -565,6 +565,10 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(r.gateComplete).toBe(true);
     expect(r.collectable).toEqual([DIRECT_SWEPT]);
     expect(r.collected).toEqual([]);
+    // `retained` reflects the WOULD-survive count in dry-run (marks − collectable),
+    // consistent with the display + apply semantics (greptile).
+    expect(r.marks).toBe(2);
+    expect(r.retained).toBe(1);
     expect(markExists(CS, DIRECT_SWEPT)).toBe(true); // nothing deleted
   });
 
@@ -668,6 +672,47 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(r.collected).toEqual([]);
     expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
   });
+
+  it('C14 — dual-store same basename, one arm fails: not collected (no collected/failed overlap), retained accurate', () => {
+    ensureRepos(CROSTER);
+    const DUAL = DIRECT_SWEPT; // same basename inert in BOTH stores
+    writeMark(CS, DUAL); // direct
+    writeMark(CS, DUAL, true); // broadcast
+    // Fail ONLY the broadcast arm's unlink (platform-safe path suffix match).
+    fsMockState.failFor.add(path.join('_broadcast', DUAL));
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    // Direct arm deleted but broadcast arm failed → NOT fully collected; the
+    // basename lands in `failed`, never in `collected` (no overlap — greptile).
+    expect(r.collected).toEqual([]);
+    expect(r.failed).toHaveLength(1);
+    expect(r.failed[0]!.file).toBe(`_broadcast/${DUAL}`);
+    // `retained` counts the still-on-disk broadcast mark (marks=1 basename, collected=0).
+    expect(r.marks).toBe(1);
+    expect(r.retained).toBe(1);
+    expect(markExists(CS, DUAL)).toBe(false); // direct arm gone
+    expect(markExists(CS, DUAL, true)).toBe(true); // broadcast arm remains
+  });
+
+  it('C15 — an unscannable roster name (dot/node_modules) hard-aborts, NOT waivable by --force-incomplete', () => {
+    ensureRepos(['totem', 'totem-strategy']);
+    writeMark(CS, DIRECT_SWEPT);
+    // A declared roster entry the workspace scan would filter out (starts with
+    // '.') — the gate must abort even under --force-incomplete: it is a config
+    // error (unscannable), not a known-absent repo (CodeRabbit).
+    const r = runCompact({
+      apply: true,
+      expectedRepos: ['totem', 'totem-strategy', '.evil'],
+      forceIncomplete: true,
+    });
+
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /unscannable/.test(x))).toBe(true);
+    expect(r.collected).toEqual([]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
 });
 
 // ─── Combined exit-code precedence (codex panel) ────────
@@ -675,31 +720,18 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
 describe('resolveEclGcExitCode — combined prune+compact precedence', () => {
   const clean = { failed: [] };
   const partial = { failed: [{ file: 'x', error: 'EPERM' }] };
-  const gateGreen = {
+  const base = {
     rosterDeclared: true,
     gateComplete: true,
     resurfaced: [] as string[],
-    failed: [],
+    verifyComplete: true,
   };
-  const gateRed = {
-    rosterDeclared: true,
-    gateComplete: false,
-    resurfaced: [] as string[],
-    failed: [],
-  };
-  const noRoster = {
-    rosterDeclared: false,
-    gateComplete: false,
-    resurfaced: [] as string[],
-    failed: [],
-  };
-  const resurfaced = { rosterDeclared: true, gateComplete: true, resurfaced: ['x.md'], failed: [] };
-  const compactPartial = {
-    rosterDeclared: true,
-    gateComplete: true,
-    resurfaced: [] as string[],
-    failed: [{ file: 'm', error: 'EPERM' }],
-  };
+  const gateGreen = { ...base, failed: [] };
+  const gateRed = { ...base, gateComplete: false, failed: [] };
+  const noRoster = { ...base, rosterDeclared: false, gateComplete: false, failed: [] };
+  const resurfaced = { ...base, resurfaced: ['x.md'], failed: [] };
+  const verifyUntrusted = { ...base, verifyComplete: false, failed: [] };
+  const compactPartial = { ...base, failed: [{ file: 'm', error: 'EPERM' }] };
 
   it('0 — clean prune, no compaction', () => {
     expect(resolveEclGcExitCode(clean)).toBe(0);
@@ -724,6 +756,9 @@ describe('resolveEclGcExitCode — combined prune+compact precedence', () => {
   });
   it('3 — compaction A2.4 falsifier tripped', () => {
     expect(resolveEclGcExitCode(clean, resurfaced)).toBe(3);
+  });
+  it('3 — compaction A2.4 re-poll untrustworthy (truncated/warned verify)', () => {
+    expect(resolveEclGcExitCode(clean, verifyUntrusted)).toBe(3);
   });
   it('3 — prune partial + compaction abort: 3 outranks 1', () => {
     expect(resolveEclGcExitCode(partial, gateRed)).toBe(3);

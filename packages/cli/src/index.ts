@@ -937,7 +937,11 @@ program
         }
         if (json === true && compactResult !== undefined) {
           // Single combined document so a --json consumer parses one object
-          // rather than two concatenated JSON blobs.
+          // rather than two concatenated JSON blobs. NOTE (greptile): under
+          // --json the human-readable A2.4/failure alerts (normally logged to
+          // stderr by eclCompactCommand) are intentionally omitted — the data is
+          // in the payload (`resurfaced`/`failed`/`verifyComplete`) and the exit
+          // code still fires, matching the prune-only --json path's contract.
           process.stdout.write(
             JSON.stringify({ prune: pruneResult, compact: compactResult }, null, 2) + '\n',
           );

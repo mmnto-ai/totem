@@ -458,6 +458,13 @@ export interface EclCompactResult {
   failed: { file: string; error: string }[];
   /** A2.4 falsifier: previously-handled dispatches that re-surfaced as unread post-compact (MUST be []). */
   resurfaced: string[];
+  /**
+   * A2.4 self-check trustworthiness: `false` iff the post-compact re-poll was
+   * itself truncated or warned, so a resurfaced dispatch beyond its horizon
+   * could read as clean. An untrustworthy verify is a hard failure (we deleted
+   * marks and cannot confirm no resurface) — maps to the abort exit code.
+   */
+  verifyComplete: boolean;
   warnings: string[];
 }
 
@@ -541,16 +548,30 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
       retained: allMarks.size,
       failed: [],
       resurfaced: [],
+      verifyComplete: true,
       warnings,
     };
   }
 
-  // A2.2 gate part 1 — full expected repo roster present. A silently-absent
-  // cohort repo is the false-unread leak (a live mark in its unscanned outbox
-  // looks inert): N < M is a hard block, never a silent skip (Tenet 4). The
-  // `--force-incomplete` operator escape waives ONLY this presence arm.
-  const missingRepos = expectedRepos.filter((repo) => !isDir(path.join(workspace, repo)));
+  // A2.2 gate part 1 — every declared roster repo must be present AND actually
+  // SCANNED. A silently-absent cohort repo is the false-unread leak (a live mark
+  // in its unscanned outbox looks inert): N < M is a hard block, never a silent
+  // skip (Tenet 4). Coverage is checked against `pollMail`'s OWN scan predicate
+  // (mail.ts `enumerateOutboxes` visits a workspace child only if it is a
+  // directory whose name does not start with '.' and is not `node_modules`) — a
+  // roster entry the gate accepts but the scan would skip leaves its outbox
+  // unscanned, re-opening the leak (CodeRabbit). `--force-incomplete` waives a
+  // genuinely ABSENT repo, but never an unscannable-name declaration (that is a
+  // config error, not a known gap). Unreachable with the clean #611 roster
+  // today; hardens the config-declared future (mmnto-ai/totem#2310).
   const forced = opts.forceIncomplete === true;
+  const missingRepos = expectedRepos.filter(
+    (repo) =>
+      !repo.startsWith('.') && repo !== 'node_modules' && !isDir(path.join(workspace, repo)),
+  );
+  const unscannableRepos = expectedRepos.filter(
+    (repo) => repo.startsWith('.') || repo === 'node_modules',
+  );
 
   // A2.1 — raw addressed-inbound: the SAME mail scan the reader runs, halted at
   // the pre-dedupe stage (`includeProcessed`), bound to EXACTLY this seat via a
@@ -566,16 +587,23 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   warnings.push(...poll.warnings);
   const rawBasenames = new Set(poll.mail.map((m) => m.file));
 
-  // A2.2 gate: roster present (or forced) AND zero scan/read warnings AND not
-  // truncated. `--force-incomplete` waives the roster arm only — scan warnings
-  // and truncation stay hard aborts (a broken read is not a known-absent repo).
-  // A forced-past missing repo is still surfaced (loud), just not blocking.
+  // A2.2 gate: roster present (or forced) AND every roster name scannable AND
+  // zero scan/read warnings AND not truncated. `--force-incomplete` waives the
+  // absent-repo arm only — an unscannable-name declaration, scan warnings, and
+  // truncation stay hard aborts (a config error / broken read is not a
+  // known-absent repo). A forced-past missing repo is still surfaced (loud).
   const gateComplete =
-    (missingRepos.length === 0 || forced) && warnings.length === 0 && !poll.truncated;
+    (missingRepos.length === 0 || forced) &&
+    unscannableRepos.length === 0 &&
+    warnings.length === 0 &&
+    !poll.truncated;
   const gateReasons = [
     ...missingRepos.map(
       (r) =>
         `expected cohort repo missing from workspace: ${r}${forced ? ' (proceeding — --force-incomplete)' : ''}`,
+    ),
+    ...unscannableRepos.map(
+      (r) => `declared cohort repo is unscannable (name filtered by the workspace scan): ${r}`,
     ),
     ...warnings,
     ...(poll.truncated ? [`scan truncated at ${poll.scanned} files (MAX_SCAN)`] : []),
@@ -603,6 +631,7 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
     retained: allMarks.size,
     failed: [],
     resurfaced: [],
+    verifyComplete: true,
     warnings,
   };
 
@@ -610,7 +639,14 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   // from an INCOMPLETE poll is unreliable by construction (the A2.2 point), so a
   // gate-red run does not even surface it as would-collect (uncertain ⇒ retain).
   if (dryRun || !gateComplete) {
-    if (!gateComplete) result.collectable = [];
+    if (!gateComplete) {
+      result.collectable = [];
+    } else {
+      // Dry-run + gate green: `retained` reflects the WOULD-survive count so the
+      // JSON payload matches the human display and the apply-path semantics —
+      // never reads as "total marks" in dry-run (greptile).
+      result.retained = allMarks.size - result.collectable.length;
+    }
     return result;
   }
 
@@ -619,26 +655,33 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   // safe) — captured with per-item accounting, non-fatal (janitorial exit-1
   // class), never a throw.
   for (const name of collectable) {
-    let deletedAny = false;
+    let anyDeleted = false;
+    let anyFailed = false;
     if (directSet.has(name)) {
       try {
         fs.unlinkSync(path.join(processedBase, name));
-        deletedAny = true;
+        anyDeleted = true;
         // totem-context: intentional cleanup — a per-mark unlink failure is captured into result.failed and the loop continues; the wrapper maps a non-empty failed[] to the janitorial exit code, never a throw.
       } catch (err) {
         result.failed.push({ file: name, error: getErrorMessage(err) });
+        anyFailed = true;
       }
     }
     if (broadcastSet.has(name)) {
       try {
         fs.unlinkSync(path.join(broadcastDir, name));
-        deletedAny = true;
+        anyDeleted = true;
         // totem-context: intentional cleanup — see the direct-store unlink above; dual placement so the rule fires on either catch line.
       } catch (err) {
         result.failed.push({ file: `_broadcast/${name}`, error: getErrorMessage(err) });
+        anyFailed = true;
       }
     }
-    if (deletedAny) result.collected.push(name);
+    // Count as collected ONLY when fully removed from every store it was in. A
+    // dual-store mark whose one arm failed still persists on disk (kept in
+    // `failed`, out of `collected`) — so `collected` and `failed` never overlap
+    // and `retained` stays an accurate on-disk count (greptile).
+    if (anyDeleted && !anyFailed) result.collected.push(name);
   }
   result.retained = allMarks.size - result.collected.length;
 
@@ -646,11 +689,23 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   // previously-handled dispatch re-surfaces as unread. A resurfaced basename ∈
   // the pre-compaction mark set means a LIVE mark was collected — the gate was
   // too weak; the caller maps a non-empty `resurfaced` to the abort exit code.
-  const verify = pollMail({ repoRoot, workspace, env: { ...env, TOTEM_SELF_AGENT: agent } });
+  // The re-poll inherits `maxScan` so it can never be MORE truncated than the
+  // discovery poll that passed the gate (CodeRabbit).
+  const verify = pollMail({
+    repoRoot,
+    workspace,
+    maxScan: opts.maxScan,
+    env: { ...env, TOTEM_SELF_AGENT: agent },
+  });
   result.resurfaced = verify.mail
     .map((m) => m.file)
     .filter((f) => allMarks.has(f))
     .sort();
+  // The A2.4 verdict is trustworthy only if the re-poll itself was complete: a
+  // truncated or warned verify could miss a resurfaced dispatch beyond its
+  // horizon and read as clean. An untrustworthy verify is a hard failure — we
+  // deleted marks and cannot confirm no resurface (CodeRabbit).
+  result.verifyComplete = !verify.truncated && verify.warnings.length === 0;
 
   return result;
 }
@@ -701,10 +756,11 @@ export async function eclCompactCommand(
   }
   const verb = result.dryRun ? 'would collect' : 'collected';
   const collectN = result.dryRun ? result.collectable.length : result.collected.length;
-  const retainedN = result.dryRun ? result.marks - result.collectable.length : result.retained;
+  // `result.retained` is now accurate in every path (dry-run reflects would-
+  // survive; apply reflects on-disk after partial-failure accounting).
   log.info(
     COMPACT_TAG,
-    `${verb} ${collectN} inert mark(s); retained ${retainedN} of ${result.marks}; raw addressed-inbound ${result.rawInbound}`,
+    `${verb} ${collectN} inert mark(s); retained ${result.retained} of ${result.marks}; raw addressed-inbound ${result.rawInbound}`,
   );
   if (result.failed.length > 0) {
     log.error(
@@ -719,6 +775,12 @@ export async function eclCompactCommand(
       `A2.4 FALSIFIER TRIPPED — ${result.resurfaced.length} handled dispatch(es) re-surfaced as unread (a live mark was collected):`,
     );
     for (const f of result.resurfaced) log.error('Totem Error', `  - ${f}`);
+  }
+  if (!result.verifyComplete) {
+    log.error(
+      'Totem Error',
+      'A2.4 self-check UNTRUSTWORTHY — the post-compact re-poll was truncated or warned; a resurfaced dispatch beyond its horizon cannot be ruled out.',
+    );
   }
   for (const w of result.warnings) log.warn(COMPACT_TAG, w);
   return result;
@@ -735,11 +797,15 @@ export async function eclCompactCommand(
  */
 export function resolveEclGcExitCode(
   prune: Pick<EclGcResult, 'failed'>,
-  compact?: Pick<EclCompactResult, 'rosterDeclared' | 'gateComplete' | 'resurfaced' | 'failed'>,
+  compact?: Pick<
+    EclCompactResult,
+    'rosterDeclared' | 'gateComplete' | 'resurfaced' | 'verifyComplete' | 'failed'
+  >,
 ): 0 | 1 | 3 {
   if (compact !== undefined) {
-    // A2.4 falsifier tripped is always a hard failure.
-    if (compact.resurfaced.length > 0) return 3;
+    // A2.4 falsifier tripped — OR an untrustworthy (truncated/warned) re-poll
+    // that cannot confirm no resurface — is always a hard failure.
+    if (compact.resurfaced.length > 0 || !compact.verifyComplete) return 3;
     // A gate red because a DECLARED roster is incomplete (or a scan warning /
     // truncation) is an abort (3). A gate "red" ONLY because no roster is
     // declared is a benign opt-in skip (contract corollary), not an abort (0).
