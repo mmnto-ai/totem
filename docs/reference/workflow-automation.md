@@ -49,7 +49,7 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 ### Phase 6: After PR Merge
 
 **What should happen:** Extract lessons from the merged PR(s), re-sync the index, compile new rules locally, review the resulting rules by hand.
-**Commands:** `totem lesson extract <prs> --yes`, `totem sync`, `totem lesson compile --export`, `git checkout HEAD -- .totem/compiled-rules.json`
+**Commands:** `totem lesson extract <prs> --yes`, `totem sync`, `totem lesson compile --export`
 **Skill:** `/postmerge <pr-numbers>`
 **Note:** `totem wrap` is retired pending [mmnto-ai/totem#1361](https://github.com/mmnto-ai/totem/issues/1361) because its `totem docs` step silently overwrote hand-crafted committed documentation. Run the individual commands directly.
 
@@ -78,14 +78,14 @@ Exempt branches (commit gate only): `main`, `master`, `hotfix/*`, `docs/*`, deta
 
 ## Skills (User-Invoked)
 
-| Skill                | Usage                    | Steps                                                                   |
-| -------------------- | ------------------------ | ----------------------------------------------------------------------- |
-| `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                                       |
-| `/prepush`           | Before pushing code      | `format` → `totem lint` → `totem review`                                |
-| `/postmerge <prs>`   | After merging PRs        | `totem lesson extract` → `totem sync` → `totem lesson compile --export` |
-| `/triage`            | Pick next work           | `totem triage --fresh`                                                  |
-| `/release-prep`      | Before cutting a release | `totem lesson extract` → changeset → `pnpm run version` → `totem docs`  |
-| `/signoff`           | End of session           | update memory → journal                                                 |
+| Skill                | Usage                    | Steps                                                                               |
+| -------------------- | ------------------------ | ----------------------------------------------------------------------------------- |
+| `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                                                   |
+| `/prepush`           | Before pushing code      | `format` → `totem lint` → `totem review`                                            |
+| `/postmerge <prs>`   | After merging PRs        | `totem lesson extract <prs> --yes` → `totem sync` → `totem lesson compile --export` |
+| `/triage`            | Pick next work           | `totem triage --fresh`                                                              |
+| `/release-prep`      | Before cutting a release | `totem lesson extract` → changeset → `pnpm run version` → `totem docs`              |
+| `/signoff`           | End of session           | update memory → journal                                                             |
 
 ## Agent Delegation (Subagent Patterns)
 

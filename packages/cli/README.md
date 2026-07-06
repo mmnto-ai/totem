@@ -23,7 +23,7 @@ totem sync             # rebuild the semantic index (needs an embedding key)
 totem --help           # full command list
 ```
 
-`totem init`, `totem lint`, and the git hooks run with no API keys. LLM-backed commands (`lesson compile`, `review`, `spec`) use the orchestrator configured in `totem.config.ts`; the Anthropic, OpenAI, and Google SDKs are optional peer dependencies loaded only when configured.
+`totem init`, `totem lint`, and the git hooks run with no API keys. LLM-backed commands (`lesson compile`, `lesson extract`, `review`, `spec`) use the orchestrator configured in `totem.config.ts`; the Anthropic, OpenAI, and Google SDKs are optional peer dependencies loaded only when configured.
 
 ## Docs
 

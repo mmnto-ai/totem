@@ -367,7 +367,7 @@ Totem supports three explicit capability tiers, auto-detected from the environme
 
 | Tier         | Requirements                               | Available Commands                                                                                                                                            |
 | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `install`, `rule promote`, `eject`, `lint`, `lesson compile`, `test`, `explain`, `handoff --lite`, `sync --packs-only` |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `lesson add`, `link`, `install`, `rule promote`, `eject`, `lint`, `lesson compile`, `test`, `explain`, `handoff --lite`, `sync --packs-only` |
 | **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `sync --index-only`, `search`, `stats`, `doctor`                                                                                               |
 | **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `handoff`, `lesson extract`, `docs`, `proposal new`, `adr new`)                                                     |
 
