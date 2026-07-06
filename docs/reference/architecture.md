@@ -2,7 +2,7 @@
 
 Totem is a local-first CLI and MCP server that compiles project knowledge into deterministic enforcement rules. By default it operates entirely within the consuming project with no outbound network calls or telemetry. Cloud embedding and orchestrator providers make outbound API calls only when explicitly configured. Licensed under Apache 2.0.
 
-It is designed as an "Invisible Exoskeleton" for development teams and AI agents — not a static tool, but a continuous, self-healing loop that converts institutional knowledge into deterministic physical constraints. The diagrams below present several views of that architecture, from the high-level workflow loop down to the structural layer separation in the codebase itself.
+It runs as a loop: code-review findings become markdown lessons (`totem lesson extract`), lessons compile into regex/AST rules (`totem lesson compile`), and `totem lint` enforces those rules in git hooks and CI. Bypasses land in a trap ledger that `totem doctor --pr` reads to retune rules. The diagrams below present several views of that architecture, from the workflow loop down to the layer separation in the codebase itself.
 
 ---
 
@@ -10,7 +10,7 @@ It is designed as an "Invisible Exoskeleton" for development teams and AI agents
 
 ### 1. The Flywheel (Observe → Learn → Enforce)
 
-The core functional loop. Friction identified during code review is systematically converted into a fast, local guardrail.
+The core functional loop. Friction identified during code review is converted into a fast, local guardrail.
 
 ```mermaid
 graph TD
@@ -27,7 +27,7 @@ graph TD
     end
 
     subgraph "2. The Brain (Learn)"
-        Extract[totem extract<br/>Capture Markdown Lesson]:::learn
+        Extract[totem lesson extract<br/>Capture Markdown Lesson]:::learn
         Compile[totem lesson compile<br/>Generate Regex/AST]:::learn
     end
 
@@ -50,7 +50,7 @@ graph TD
 
 ### 2. The Agent Governance Pipeline
 
-How Totem "weaponizes" project management to govern autonomous AI agents (like Claude Code or Gemini CLI), preventing them from reinventing wheels or suffering from "Session Start Amnesia."
+How Totem uses project-management artifacts (ADRs, proposals, compiled rules) to govern autonomous AI agents like Claude Code or Gemini CLI. Goal: agents stop reinventing existing helpers and start each session with project context already loaded.
 
 ```mermaid
 sequenceDiagram
@@ -81,7 +81,7 @@ sequenceDiagram
 
 ### 3. The Self-Healing Engine
 
-Totem assumes LLMs will hallucinate and developers will get frustrated. The Trap Ledger turns a developer bypassing a guardrail into actionable telemetry that automatically tunes the system.
+Totem assumes LLMs will hallucinate and developers will get frustrated. Each bypass is logged to the Trap Ledger; `totem doctor --pr` reads that telemetry, downgrades rules that exceed the bypass-rate threshold from error to warning, and surfaces upgrade candidates.
 
 ```mermaid
 graph LR
@@ -256,12 +256,12 @@ flowchart TD
     - _Embeddings:_ Utilizes Gemini as the primary embedder. It features hybrid search combining Full-Text Search and vector similarity.
     - _Resilience:_ Auto-detects and falls back to Ollama if the primary provider fails. Automatic syncs trigger on configuration changes, while filesystem locks prevent race conditions.
 - **Security & Maintenance:**
-  - **Filtering:** Includes adversarial content scrubbing and DLP secret masking at every LLM boundary. A dedicated lesson ContentType ensures precise vector retrieval.
-  - **Drift Detection:** A self-cleaning sync engine purges orphaned vectors when source files are deleted. Path containment checks and ingestion hardening establish firm trust boundaries.
+  - **Filtering:** Includes adversarial content scrubbing and DLP secret masking at every LLM boundary. A dedicated lesson ContentType provides scoped retrieval primitives; recall is the caller's responsibility.
+  - **Drift Detection:** A self-cleaning sync engine purges orphaned vectors when source files are deleted. Path containment checks and ingestion hardening establish trust boundaries.
 
 ### 2. The CLI (`@mmnto/cli`)
 
-All commands feature proper `--help` output documentation.
+All commands document their flags via `--help`.
 
 - **Setup & Infrastructure:**
   - **Initialization:** Scaffolds configs, hooks, and tools with an onboarding workflow. It supports a bare flag, ordered provider detection, and local configuration ingestion.
@@ -275,13 +275,13 @@ All commands feature proper `--help` output documentation.
   - **Planning & Orchestration:**
     - _Workflows:_ Orchestrates tasks with human approval gates. It supports configurable issue sources and mandatory execution verification.
     - _Automation:_ Structures capabilities using directory-based skill files to scope execution context. Automation removes stale commands for a leaner toolset.
-    - _Hooks:_ Enforces lifecycle events via verification hooks. Phase-gate enforcement actively blocks commits lacking proper preflight checks.
+    - _Hooks:_ Enforces lifecycle events via verification hooks. Phase-gate enforcement blocks commits lacking preflight checks.
   - **Review & Quality:**
-    - **`totem lint`**: Runs compiled rules against diffs. Zero LLM, fast, and recommended for pre-push hooks and CI organically supporting SARIF outputs.
+    - **`totem lint`**: Runs compiled rules against diffs. Zero LLM; recommended for pre-push hooks and CI. Supports SARIF output.
     - **`totem review`**: Conducts AI-powered code review using LanceDB context before PRs. It enriches context with full file contents for small files and supports audited bypass flags.
     - **`totem explain`**: Looks up the specific lesson behind a rule violation to provide immediate developer context.
-  - **Documentation:** Automates transactional document syncs using a validator to prevent partial updates. It actively strips known-not-shipped references from generated content.
-  - **Telemetry & Triage:** A categorized triage inbox maps finding severities directly. The trap ledger maintains append-only telemetry locally, allowing the system to automatically downgrade noisy rules and archive stale data.
+  - **Documentation:** Automates transactional document syncs using a validator to prevent partial updates. It strips known-not-shipped references from generated content.
+  - **Telemetry & Triage:** A categorized triage inbox maps finding severities directly. The trap ledger maintains append-only telemetry locally, allowing `totem doctor --pr` to downgrade noisy rules and archive stale data.
 - **Rule Testing & Extraction:**
   - **Capture & Extraction:** Enables inline capture and batch lesson extraction strictly validated before disk writes. A retirement ledger tracks intentionally removed lessons to prevent re-extraction.
   - **Harness Verification:** Serves as a compiled rule testing harness to measure regex false positives. It includes inline hit/miss verification examples for rule unit testing.
@@ -289,7 +289,7 @@ All commands feature proper `--help` output documentation.
 
 ### 3. Deterministic Compiler & Zero-LLM Lint
 
-`totem lesson compile` translates structural constraints into rules. It incorporates a strict lesson file linter acting as a pre-compilation gate to ensure structural integrity. A self-suppression guard actively rejects patterns that match engine suppression directives. The compilation process integrates manifest signing to establish a secure provenance chain.
+`totem lesson compile` translates structural constraints into rules. It incorporates a strict lesson file linter acting as a pre-compilation gate to ensure structural integrity. A self-suppression guard rejects patterns that match engine suppression directives. The compilation process integrates manifest signing to establish a secure provenance chain.
 
 **Compound ast-grep rules.** Beyond flat single-pattern matchers, compiled rules can carry full `NapiConfig`-shape structural rules in an `astGrepYamlRule` field. Compound rules express containment relationships using `inside`, `has`, and `not` combinators, eliminating the structural false positives that flat patterns produce when they cannot encode "inside a loop", "empty catch", or "outside an import statement". The schema enforces mutual exclusion between flat (`astGrepPattern`) and compound (`astGrepYamlRule`) shapes, and the manifest hash uses a canonical key-sorted serialisation so semantically-identical compound rules produce byte-identical hashes regardless of LLM key order.
 
@@ -297,7 +297,7 @@ All commands feature proper `--help` output documentation.
 
 The compiler supports manual pattern definitions and reverse-compiles curated rules. It includes a backfill of body text for 938 core architectural lessons to enrich rule context. An integrated WASM ast-grep engine targets complex imports and restricted properties alongside regex capabilities. These AST query engines implement graceful degradation and strictly manage process exits. Rules are stored in `.totem/compiled-rules.json`, extended with advanced telemetry fields.
 
-The compilation process reads files directly from disk instead of parsing staged diffs to prevent false positives. It also supports an `--upgrade <hash>` flow path that targets a specific rule, evicts it from the cache, and recompiles it through Sonnet using telemetry-driven directives. Developers can bypass false positives using audited inline suppression directives. Rules are scoped using directory-rooted glob matching to prevent leaks outside specified directories. The system relies on a curated 455-rule set for baseline enforcement.
+The compilation process reads files directly from disk instead of parsing staged diffs to prevent false positives. It also supports an `--upgrade <hash>` flow path that targets a specific rule, evicts it from the cache, and recompiles it through Sonnet using telemetry-driven directives. Developers can bypass false positives using audited inline suppression directives. Rules are scoped using directory-rooted glob matching to prevent leaks outside specified directories. As of 1.89.0, this repo's `.totem/compiled-rules.json` holds 485 compiled rules, of which 394 are non-archived (`totem lint` skips archived rules).
 
 `totem lint` applies these compiled rules against additions with zero LLM calls. It shares a core execution engine with review commands for execution consistency. This process supports importing external configurations natively, translating flat configuration structures into deterministic rules without LLM usage. It also permits direct cross-repository rule sharing.
 
@@ -349,27 +349,27 @@ Packs distribute compiled rules and extension surfaces across the Totem ecosyste
 A stdio-based server for LLM integration providing primary tools and strict access boundaries:
 
 - **Core Tools:**
-  - **Search:** Semantic retrieval of codebase context scoped via boundary parameters. Telemetry actively measures agent retrieval behaviors.
+  - **Search:** Semantic retrieval of codebase context scoped via boundary parameters. Telemetry records agent retrieval behavior.
   - **Knowledge:** Appends lessons with descriptive headings. Employs a sync-pending debounce mechanism and filesystem locks to prevent write race conditions.
-  - **Enforcement:** Direct check tools empower agents to self-validate deterministic rules. This includes execution verification capabilities to test generated code against invariants.
+  - **Enforcement:** Direct check tools let agents self-validate against deterministic rules. This includes execution verification capabilities to test generated code against invariants.
 - **Security & Permissions:**
   - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content. It strips quotes from loaded environment variables.
   - **Access Control:** Implements an authentication model with strict trust boundaries and explicit payload capacity caps. This prevents unbounded memory consumption.
-  - **Context Limits:** Agent instruction files are structurally governed using a recency sandwich pattern. Strict length limits and a lean root router pattern maintain context focus.
+  - **Context Limits:** Agent instruction files are structurally governed using a recency sandwich pattern. Strict length limits and a lean root router pattern keep instruction files short.
 - **Integrations & Lifecycle:**
-  - **IDE Hooks:** Agent hooks exist for Claude Code, Gemini CLI, and Junie. Integrates deep workflow automation.
+  - **IDE Hooks:** Agent hooks exist for Claude Code, Gemini CLI, and Junie.
   - **Session Management:** Utilizes a health check first-query gate to prevent silent search failures at startup. It advises users to rebuild when indexes are broken.
   - **Stability:** Reaps zombie MCP processes via heartbeat timeouts to resolve connection failures. Handles dimension mismatches dynamically during retrieval queries.
 
 ## Configuration Tiers
 
-Totem supports three explicit capability tiers, auto-detected from the environment during `totem init`. The available command list is audited to prune stale tasks and preserve a streamlined interface:
+Totem supports three explicit capability tiers, auto-detected from the environment during `totem init`. The available command list is audited to prune stale commands:
 
-| Tier         | Requirements                               | Available Commands                                                                                                                                     |
-| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `install`, `rule promote`, `eject`, `lint`, `compile`, `test`, `explain`, `handoff --lite`, `sync --packs-only` |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `sync --index-only`, `search`, `stats`, `doctor`                                                                                        |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `handoff`, `extract`, `docs`, `proposal new`, `adr new`)                                                     |
+| Tier         | Requirements                               | Available Commands                                                                                                                                            |
+| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `lesson add`, `link`, `install`, `rule promote`, `eject`, `lint`, `lesson compile`, `test`, `explain`, `handoff --lite`, `sync --packs-only` |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `sync --index-only`, `search`, `stats`, `doctor`                                                                                               |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `handoff`, `lesson extract`, `docs`, `proposal new`, `adr new`)                                                     |
 
 A lite-tier standalone WASM binary provides core CLI functions with zero native dependencies. The embedding field in configuration files is optional; when omitted, operations default to the Lite tier boundary constraints.
 
@@ -381,7 +381,7 @@ The CLI orchestrator supports multiple provider types via a discriminated union 
 
 ### Shell Provider (default)
 
-Pipes prompts to any CLI tool via placeholders. Handled timeouts and strict taskkill mitigations ensure processes do not cause memory leaks:
+Pipes prompts to any CLI tool via placeholders. Timeout handling and taskkill mitigations guard against leaked processes:
 
 ```typescript
 orchestrator: {
@@ -442,7 +442,7 @@ orchestrator: {
 
 ### Shared Configuration
 
-All orchestrator providers support standardizing complex configurations via centralized logic:
+All orchestrator providers share centralized configuration handling:
 
 - **Routing & Resolution:** Centralized provider routing prioritizes explicit model flags over overrides and defaults. Supports cross-provider fallback configurations.
 - **Customization:** Supports system prompts for per-command instructions and cache TTLs for performance tuning.
@@ -450,9 +450,9 @@ All orchestrator providers support standardizing complex configurations via cent
 
 ## The `.totem/` Directory
 
-The `.totem/lessons/` directory acts as an explicit version-controlled ledger of architectural decisions. Extracted lessons are safely strictly validated, auto-committed, and automatically re-indexed during syncs.
+The `.totem/lessons/` directory acts as an explicit version-controlled ledger of architectural decisions. Extracted lessons are validated before disk writes, auto-committed, and re-indexed during syncs.
 
-Users are offered an optional Universal Baseline during initialization. These foundational lessons feature audience tags and include fix guidance to resolve architectural violations. Language packs proactively provide baseline lessons tailored for specific programming environments. This solves the cold-start problem where a fresh install has no initial knowledge to retrieve.
+Users are offered an optional Universal Baseline during initialization. These foundational lessons feature audience tags and include fix guidance to resolve architectural violations. Language packs provide baseline lessons tailored for specific programming environments. This solves the cold-start problem where a fresh install has no initial knowledge to retrieve.
 
 ## The Strategy Repo (Configurable Root)
 
