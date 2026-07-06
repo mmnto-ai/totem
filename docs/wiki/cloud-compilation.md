@@ -12,7 +12,7 @@ totem lesson compile
 
 All users get local compilation by default. It uses the configured LLM orchestrator (Anthropic, Gemini, or others) to compile lessons one at a time. With the [Context Caching](context-caching.md) layer enabled on an Anthropic provider, bulk recompiles stay cache-warm end to end.
 
-Reference benchmarks from Strategy #73 (438-lesson sample): Sonnet 4.6 produced 90% structurally-correct rules at 2.4 seconds per lesson; Gemini Pro produced 73% at 19.6 seconds per lesson. The local-Sonnet path is the basis for the curated 455-rule set the project ships today.
+Reference benchmarks from Strategy #73 (438-lesson sample): Sonnet 4.6 produced 90% structurally-correct rules at 2.4 seconds per lesson; Gemini Pro produced 73% at 19.6 seconds per lesson. The local-Sonnet path is the basis for the curated rule set the project ships today (485 compiled rules, 394 non-archived, as of 1.89.0).
 
 ## Cloud Compilation (Self-Hosted, Off-Path)
 

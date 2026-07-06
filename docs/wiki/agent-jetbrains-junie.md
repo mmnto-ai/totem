@@ -20,7 +20,7 @@ For compiled rules (which can be large), use a Junie **skill** instead of stuffi
 
 - **Guidelines:** `.junie/guidelines.md` contains the `search_knowledge` instruction (same content as CLAUDE.md/GEMINI.md)
 - **MCP:** `.junie/mcp/mcp.json` wires the Totem MCP server for `search_knowledge` and `add_lesson`
-- **Compiled Rules Export:** `totem compile --export` writes to `.junie/skills/totem-rules/rules.md` (configured in `totem.config.ts` exports)
+- **Compiled Rules Export:** `totem lesson compile --export` writes to `.junie/skills/totem-rules/rules.md` (configured in `totem.config.ts` exports)
 
 ## 4. Common Pitfalls
 

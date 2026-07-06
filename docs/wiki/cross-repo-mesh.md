@@ -91,7 +91,7 @@ The Context Mesh is designed to degrade gracefully but loudly.
 Failures are handled **per-query**, not session-global. If a linked store experiences a transient failure (e.g., its database is temporarily locked by a concurrent `totem sync`), the MCP server will:
 
 1.  Attempt the search.
-2.  On failure, attempt to seamlessly reconnect to the store and retry the search.
+2.  On failure, attempt to reconnect to the store and retry the search.
 3.  On a second failure, append a `[SYSTEM WARNING]` to the query results notifying the agent that the specific linked store was unreachable for that turn, and continue serving the partial results from the healthy stores.
 
 If the primary store AND every single linked store fail, the response is an explicit `isError: true` tool failure, preventing the agent from mistaking an outage for "no results found."

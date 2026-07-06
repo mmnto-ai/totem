@@ -6,7 +6,7 @@ This guide details how to integrate Totem into your automated pipelines, ensurin
 
 The most common integration is running `totem lint` on pull requests. Because it uses the `compiled-rules.json` file, this check requires **zero API keys**, runs entirely locally, and executes in milliseconds.
 
-Totem natively outputs in SARIF 2.1.0 format, which integrates seamlessly into the GitHub Advanced Security tab, annotating the exact lines of code where a rule was violated.
+Totem natively outputs in SARIF 2.1.0 format, which integrates into the GitHub Advanced Security tab, annotating the exact lines of code where a rule was violated.
 
 ### Example Workflow (`.github/workflows/shield.yml`)
 
