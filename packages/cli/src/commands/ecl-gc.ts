@@ -407,8 +407,10 @@ export interface EclCompactOptions {
    * Declared expected cohort repo roster for the A2.2 completeness gate — the
    * yardstick the workspace glob is checked against (default: `cohortRepos()`,
    * the strategy#611 interim constant pending config-ification, mmnto-ai/totem#2310).
-   * An EMPTY roster is the "undeclared" case: compaction no-ops (opt-in), never
-   * "assume complete" (contract-owner safety corollary). Tests inject explicitly.
+   * An EMPTY roster is the "undeclared" case: compaction HARD-ABORTS (fail-loud,
+   * exit 3), never "assume complete" and never a silent no-op — completeness is
+   * unprovable without a declared expectation (strategy#828 no-roster corollary).
+   * Tests inject explicitly.
    */
   expectedRepos?: string[];
   /**
@@ -417,7 +419,8 @@ export interface EclCompactOptions {
    * is absent). UNSAFE — a live mark in an unscanned repo can be collected as a
    * false-unread; use only when you know the absent repo holds no inbound for
    * this seat. Bypasses ONLY the roster-presence check; scan warnings and
-   * truncation remain hard aborts, and an undeclared (empty) roster still no-ops.
+   * truncation remain hard aborts, and an undeclared (empty) roster still
+   * hard-aborts (there is no presence to force when nothing was declared).
    */
   forceIncomplete?: boolean;
 }
@@ -435,9 +438,11 @@ export interface EclCompactResult {
   workspace: string;
   expectedRepos: string[];
   /**
-   * Whether a non-empty roster was declared. `false` = the undeclared case:
-   * compaction no-ops (opt-in) because completeness cannot be proven without an
-   * expectation — a benign skip (exit 0), NOT a gate abort (contract corollary).
+   * Whether a non-empty roster was declared. `false` = the undeclared case,
+   * folded INTO the A2.2 gate: `gateComplete` is also false and compaction
+   * HARD-ABORTS (exit 3), because completeness cannot be proven without a
+   * declared expectation (strategy#828). Retained only to frame the specific
+   * operator message ("no cohort roster declared" vs a missing/unscannable repo).
    */
   rosterDeclared: boolean;
   /** A2.2 gate: true iff full roster present (or forced) AND zero scan warnings AND not truncated. */
@@ -514,7 +519,7 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
 
   // Own processed marks (single-writer: this seat's OWN cursor only, in this
   // repo). `processed/` (direct) ∪ `processed/_broadcast/` (broadcast). Read
-  // first so the undeclared-roster no-op below can still report the mark count.
+  // first so the undeclared-roster hard-abort below can still report the count.
   const processedBase = path.join(repoRoot, '.totem', 'orchestration', agent, 'processed');
   const broadcastDir = path.join(processedBase, '_broadcast');
   const directMarks = readMarkDir(processedBase, warnings);
@@ -523,13 +528,15 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   const broadcastSet = new Set(broadcastMarks);
   const allMarks = new Set([...directMarks, ...broadcastMarks]);
 
-  // Safety corollary (contract-owner ruling, strategy-claude 2026-07-06): an
+  // Safety corollary (codified contract strategy#828 / eb9ff5b — A2.2): an
   // UNDECLARED (empty) roster gives the completeness gate nothing to assert
-  // against, so completeness cannot be proven — compaction NO-OPS (opt-in),
-  // never "assume complete." A benign skip (the caller maps rosterDeclared=false
-  // to exit 0), distinct from a gate abort. The interim `cohortRepos()` default
-  // is non-empty for our cohort; this guards the config-declared undeclared-
-  // consumer case (mmnto-ai/totem#2310).
+  // against, so completeness cannot be proven. This is a HARD ABORT (fail-loud,
+  // non-zero exit — the caller maps `gateComplete=false` to exit 3), NOT a silent
+  // no-op that would let `processed/` accumulate unsignalled (Tenet 4). A genuine
+  // single-repo consumer opts into completeness-1 by DECLARING a 1-repo roster;
+  // the interim `cohortRepos()` default is non-empty for our cohort, so this
+  // guards the config-declared undeclared-consumer case (mmnto-ai/totem#2310).
+  // `rosterDeclared=false` is retained only to frame the operator message.
   if (expectedRepos.length === 0) {
     return {
       agent,
@@ -539,7 +546,7 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
       rosterDeclared: false,
       gateComplete: false,
       gateReasons: [
-        'no cohort roster declared — compaction is opt-in (declare cohort repos to enable it)',
+        'no cohort roster declared — compaction HARD-ABORTS (declare cohort repos, or a single-repo roster to opt into completeness-1)',
       ],
       rawInbound: 0,
       marks: allMarks.size,
@@ -730,16 +737,11 @@ export async function eclCompactCommand(
     COMPACT_TAG,
     `agent: ${result.agent} · roster ${result.expectedRepos.length} repo(s) · mode: ${mode}`,
   );
-  if (!result.rosterDeclared) {
-    // Benign opt-in skip, NOT an abort — completeness is unprovable with no
-    // declared expectation, so we retain (contract corollary; exit 0).
-    log.info(
-      COMPACT_TAG,
-      `compaction skipped (opt-in): no cohort roster declared — retained all ${result.marks} mark(s).`,
-    );
-    return result;
-  }
   if (!result.gateComplete) {
+    // HARD ABORT (fail-loud, exit 3), never a silent skip — covers a declared
+    // roster that is incomplete AND the no-declared-roster case alike; the
+    // specific reason ("no cohort roster declared" vs a missing/unscannable
+    // repo, warning, or truncation) is carried in `gateReasons` (strategy#828).
     log.warn(
       COMPACT_TAG,
       `A2.2 completeness gate NOT met — retained all ${result.marks} mark(s), deleted 0:`,
@@ -797,19 +799,19 @@ export async function eclCompactCommand(
  */
 export function resolveEclGcExitCode(
   prune: Pick<EclGcResult, 'failed'>,
-  compact?: Pick<
-    EclCompactResult,
-    'rosterDeclared' | 'gateComplete' | 'resurfaced' | 'verifyComplete' | 'failed'
-  >,
+  compact?: Pick<EclCompactResult, 'gateComplete' | 'resurfaced' | 'verifyComplete' | 'failed'>,
 ): 0 | 1 | 3 {
   if (compact !== undefined) {
     // A2.4 falsifier tripped — OR an untrustworthy (truncated/warned) re-poll
     // that cannot confirm no resurface — is always a hard failure.
     if (compact.resurfaced.length > 0 || !compact.verifyComplete) return 3;
-    // A gate red because a DECLARED roster is incomplete (or a scan warning /
-    // truncation) is an abort (3). A gate "red" ONLY because no roster is
-    // declared is a benign opt-in skip (contract corollary), not an abort (0).
-    if (compact.rosterDeclared && !compact.gateComplete) return 3;
+    // Any incomplete gate is a HARD ABORT (non-zero) — a declared roster that is
+    // incomplete (missing/unscannable repo, scan warning, truncation) AND the
+    // no-declared-roster case alike: absent a completeness expectation there is
+    // nothing to prove against, so the contract fails LOUD, never a silent no-op
+    // that lets `processed/` accumulate unsignalled (strategy#828 / eb9ff5b —
+    // A2.2 no-roster hard-abort corollary; Tenet 4).
+    if (!compact.gateComplete) return 3;
   }
   if (prune.failed.length > 0 || (compact?.failed.length ?? 0) > 0) {
     return 1;

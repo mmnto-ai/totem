@@ -265,8 +265,9 @@ export function knownCohortAgents(workspace?: string): string[] {
  * honest target is a CONSUMER-CONFIG-declared roster; this constant stands in
  * only because ECL has no external consumers yet. Config-ify tracked in
  * mmnto-ai/totem#2310. Until then the compaction gate's own safety corollary
- * holds the line: an empty/undeclared roster makes compaction a no-op (opt-in),
- * never "assume complete."
+ * holds the line: an empty/undeclared roster makes compaction HARD-ABORT
+ * (fail-loud, non-zero exit), never a silent no-op and never "assume complete"
+ * (codified strategy#828 / eb9ff5b).
  */
 export function cohortRepos(): string[] {
   return ['liquid-city', 'totem', 'totem-status', 'totem-strategy'];

@@ -618,14 +618,18 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(markExists(CS, BCAST_SWEPT, true)).toBe(false);
   });
 
-  it('C12 — undeclared (empty) roster NO-OPS: opt-in, never "assume complete" (contract corollary)', () => {
+  it('C12 — undeclared (empty) roster HARD-ABORTS (exit 3), never "assume complete" (strategy#828)', () => {
     ensureRepos(CROSTER);
     writeMark(CS, DIRECT_SWEPT); // a genuinely inert mark that WOULD be collectable
 
     const r = runCompact({ apply: true, expectedRepos: [] });
 
     expect(r.rosterDeclared).toBe(false);
-    expect(r.gateComplete).toBe(false); // not a gate abort — a skip
+    // Folded into the A2.2 gate: no declared roster => gate red => hard-abort (exit 3),
+    // fail-loud (never a silent no-op) per the strategy#828 no-roster corollary.
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /no cohort roster declared/.test(x))).toBe(true);
+    expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(3);
     expect(r.collected).toEqual([]);
     // NON-VACUITY: with no declared roster, completeness is unprovable, so even a
     // truly-inert mark is retained rather than deleted on an assumed-complete scan.
@@ -739,8 +743,8 @@ describe('resolveEclGcExitCode — combined prune+compact precedence', () => {
   it('0 — clean prune + green compaction', () => {
     expect(resolveEclGcExitCode(clean, gateGreen)).toBe(0);
   });
-  it('0 — undeclared roster is a benign skip, NOT an abort (contract corollary)', () => {
-    expect(resolveEclGcExitCode(clean, noRoster)).toBe(0);
+  it('3 — undeclared roster HARD-ABORTS (fail-loud, not a silent no-op) — strategy#828', () => {
+    expect(resolveEclGcExitCode(clean, noRoster)).toBe(3);
   });
   it('1 — prune partial delete failure, no compaction', () => {
     expect(resolveEclGcExitCode(partial)).toBe(1);
@@ -748,8 +752,8 @@ describe('resolveEclGcExitCode — combined prune+compact precedence', () => {
   it('1 — prune clean + compaction partial delete failure', () => {
     expect(resolveEclGcExitCode(clean, compactPartial)).toBe(1);
   });
-  it('1 — undeclared-roster skip + a prune partial failure is still 1 (skip ≠ abort)', () => {
-    expect(resolveEclGcExitCode(partial, noRoster)).toBe(1);
+  it('3 — undeclared-roster hard-abort outranks a prune partial failure (3 > 1)', () => {
+    expect(resolveEclGcExitCode(partial, noRoster)).toBe(3);
   });
   it('3 — compaction gate red (declared roster incomplete) outranks a clean prune', () => {
     expect(resolveEclGcExitCode(clean, gateRed)).toBe(3);
