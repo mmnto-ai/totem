@@ -238,6 +238,26 @@ describe('pollMail — processed/ exclusion', () => {
     const result = poll();
     expect(result.mail).toEqual([]);
   });
+
+  it('includeProcessed returns the RAW addressed-inbound set (does NOT subtract processed) — ADR-106 § A2.1', () => {
+    // The pre-dedupe discovery `ecl-gc` compaction consumes: an already-handled
+    // dispatch stays VISIBLE so its mark reads as load-bearing, not inert.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-05-18T1734Z.md', to: 'totem-claude', subject: 'already actioned' },
+      { name: '2026-05-18T1918Z.md', to: 'totem-claude', subject: 'still unread' },
+    ]);
+    writeProcessed('totem', 'totem-claude', ['2026-05-18T1734Z.md']);
+    // Default (reader) view subtracts the mark → 1 unread.
+    expect(poll().mail).toHaveLength(1);
+    // Pre-dedupe view keeps BOTH → the raw addressed-inbound set. NON-VACUITY:
+    // feeding the default 1-item list back to compaction would delete the
+    // handled mark (the A2.1 false-unread bomb).
+    const raw = poll({ includeProcessed: true });
+    expect(raw.mail.map((m) => m.file).sort()).toEqual([
+      '2026-05-18T1734Z.md',
+      '2026-05-18T1918Z.md',
+    ]);
+  });
 });
 
 // ─── Sort + metadata ────────────────────────────────────

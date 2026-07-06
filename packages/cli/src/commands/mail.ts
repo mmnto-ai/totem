@@ -102,6 +102,17 @@ export interface MailCommandOptions {
   /** Scan cap override (default: `MAX_SCAN`). Test injection point — cap
    * MECHANICS are exercised with small fixtures instead of 5000-file trees. */
   maxScan?: number;
+  /**
+   * Return the RAW addressed-inbound set — every dispatch addressed to a
+   * SELF_AGENT or `broadcast`, WITHOUT subtracting `processed/` marks. The
+   * pre-dedupe discovery `ecl-gc` compaction consumes (ADR-106 § A2.1): the
+   * cursor-GC key is `processed ∩ raw-addressed-inbound`, and feeding back the
+   * default `inbound − processed` list would read every handled dispatch as
+   * absent and delete the marks it must retain (the false-unread bomb A2.1
+   * names). Default `false` preserves the reader's `unread = inbound −
+   * processed` contract; the two callers stay single-homed on one scan.
+   */
+  includeProcessed?: boolean;
 }
 
 // ─── Frontmatter parsing ────────────────────────────────
@@ -463,8 +474,12 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     );
   }
 
+  // `includeProcessed` (ADR-106 § A2.1) yields the RAW addressed-inbound set:
+  // an empty processed set makes the `processedNames.has(file)` filter below a
+  // no-op, so nothing is subtracted. The reader default stays `inbound −
+  // processed`; the compaction path opts in to the pre-dedupe view.
   const processedNames =
-    selfResolution.agents.length > 0
+    opts.includeProcessed !== true && selfResolution.agents.length > 0
       ? buildProcessedSet(repoRoot, selfResolution.agents, warnings)
       : new Set<string>();
 

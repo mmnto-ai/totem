@@ -240,6 +240,35 @@ export function knownCohortAgents(workspace?: string): string[] {
 }
 
 /**
+ * The declared cohort REPO roster — the repo-root basenames the cohort expects
+ * to be present in a workspace, DERIVED from `COHORT_AGENT_MAP` keys with a
+ * non-empty agent list (an agent-less orphan repo like `totem-playground` holds
+ * no outboxes, so it cannot strand a live inbound and is excluded). Sorted.
+ *
+ * This is the `COHORT_REPOS` surface ADR-106 § A2.2 names for the compaction
+ * completeness gate: cursor-GC may delete a `processed/` mark only against a
+ * PROVABLY-complete poll, and "complete" requires every expected outbox-holding
+ * repo present + scanned (a silently-absent repo makes a live mark look inert —
+ * the false-unread class). Deriving from the SAME map the seat-resolver uses
+ * (rather than a hand-maintained parallel list) keeps it single-homed and
+ * drift-free (Tenet 20 / Tenet 21).
+ *
+ * NOTE (mmnto-ai/totem#2307): whether the gate's declared roster is this
+ * map-derived set or the narrower frozen active roster (strategy#611:
+ * totem/totem-strategy/totem-status/liquid-city, excluding `arhgap11`) is the
+ * one open fork routed to the contract owner (strategy-claude). This accessor
+ * is the map-derived default; the narrower set is a one-line change here if
+ * ruled. The direction is safe either way — a broader roster only makes the
+ * gate MORE conservative (abort/retain), never less.
+ */
+export function cohortRepos(): string[] {
+  return Object.entries(COHORT_AGENT_MAP)
+    .filter(([, agents]) => agents.length > 0)
+    .map(([repo]) => repo)
+    .sort();
+}
+
+/**
  * True iff `id` is safe to use as a `.totem/orchestration/<id>/…` path segment
  * (or any filename token): a non-empty string with no path separators, null
  * byte, or `..` traversal, and no control/whitespace/win32-reserved characters
