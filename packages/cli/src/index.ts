@@ -882,6 +882,10 @@ program
     '--compact',
     'Also compact your processed-mark cursor (ADR-106 § A2 / ecl-discipline § 4.5): delete marks whose inbound dispatch its sender already swept — runs AFTER the prune',
   )
+  .option(
+    '--force-incomplete',
+    'UNSAFE: proceed with compaction even when a declared cohort repo is absent from the workspace (waives only the roster-presence gate; scan warnings/truncation still abort)',
+  )
   .option('--json', 'Emit the structured result as JSON to stdout instead of human text')
   .action(
     async (
@@ -890,17 +894,19 @@ program
         retainDays?: string;
         agentId?: string;
         compact?: boolean;
+        forceIncomplete?: boolean;
         json?: boolean;
       },
       cmd: Command,
     ) => {
       // optsWithGlobals() merges the program-level `--json` (top of file) with the
       // subcommand scope, same collision fix as `mail` (mmnto-ai/totem#2097).
-      const { apply, retainDays, agentId, compact, json } = cmd.optsWithGlobals<{
+      const { apply, retainDays, agentId, compact, forceIncomplete, json } = cmd.optsWithGlobals<{
         apply?: boolean;
         retainDays?: string;
         agentId?: string;
         compact?: boolean;
+        forceIncomplete?: boolean;
         json?: boolean;
       }>();
       // Custom exit-code contract (AGENTS.md: throw in lib, wrapper decides exit).
@@ -927,7 +933,7 @@ program
         // independent — but the doctrine sequences them within /signoff.
         let compactResult: ReturnType<typeof eclCompact> | undefined;
         if (compact === true) {
-          compactResult = eclCompact({ apply, agentId });
+          compactResult = eclCompact({ apply, agentId, forceIncomplete });
         }
         if (json === true && compactResult !== undefined) {
           // Single combined document so a --json consumer parses one object

@@ -240,32 +240,36 @@ export function knownCohortAgents(workspace?: string): string[] {
 }
 
 /**
- * The declared cohort REPO roster — the repo-root basenames the cohort expects
- * to be present in a workspace, DERIVED from `COHORT_AGENT_MAP` keys with a
- * non-empty agent list (an agent-less orphan repo like `totem-playground` holds
- * no outboxes, so it cannot strand a live inbound and is excluded). Sorted.
+ * ⚠ INTERIM CONSTANT — product-lock: config-ify before any non-cohort consumer.
  *
- * This is the `COHORT_REPOS` surface ADR-106 § A2.2 names for the compaction
- * completeness gate: cursor-GC may delete a `processed/` mark only against a
- * PROVABLY-complete poll, and "complete" requires every expected outbox-holding
- * repo present + scanned (a silently-absent repo makes a live mark look inert —
- * the false-unread class). Deriving from the SAME map the seat-resolver uses
- * (rather than a hand-maintained parallel list) keeps it single-homed and
- * drift-free (Tenet 20 / Tenet 21).
+ * The declared cohort REPO roster the ADR-106 § A2.2 compaction completeness
+ * gate checks a workspace glob against: cursor-GC may delete a `processed/`
+ * mark only against a PROVABLY-complete poll, and "complete" requires every
+ * expected outbox-holding repo present + scanned (a silently-absent repo makes
+ * a live mark look inert — the false-unread class). The glob (present dirs, the
+ * mmnto-ai/totem#2141 dirs-are-state mechanism) is the discovery; this roster is
+ * the yardstick that makes "incomplete scan" detectable.
  *
- * NOTE (mmnto-ai/totem#2307): whether the gate's declared roster is this
- * map-derived set or the narrower frozen active roster (strategy#611:
- * totem/totem-strategy/totem-status/liquid-city, excluding `arhgap11`) is the
- * one open fork routed to the contract owner (strategy-claude). This accessor
- * is the map-derived default; the narrower set is a one-line change here if
- * ruled. The direction is safe either way — a broader roster only makes the
- * gate MORE conservative (abort/retain), never less.
+ * This value is the mmnto-ai/totem-strategy#611 frozen active set — OUR cohort's
+ * config value — and its change-authority stays strategy#611 (skynet's return
+ * flips it there; this follows in lockstep, no core edit). It deliberately
+ * EXCLUDES `arhgap11` (not in the #611 active set) and is NOT derived from
+ * `COHORT_AGENT_MAP` — reading the seat map as the roster would re-elevate it
+ * from "bootstrap fallback" to "authority," contradicting the mmnto-ai/totem#2141
+ * dirs-are-state ruling (contract-owner ruling, strategy-claude 2026-07-06).
+ *
+ * WHY A CONSTANT IS ONLY INTERIM (Tenet 16): `totem ecl-gc` is a SHIPPING core
+ * command; an external consumer's cohort is THEIR repos, not ours. A hardcoded
+ * roster is the product-vs-cohort lock Tenet 16 guards against — it would abort
+ * compaction for every consumer whose workspace isn't our four repos. The
+ * honest target is a CONSUMER-CONFIG-declared roster; this constant stands in
+ * only because ECL has no external consumers yet. Config-ify tracked in
+ * mmnto-ai/totem#2310. Until then the compaction gate's own safety corollary
+ * holds the line: an empty/undeclared roster makes compaction a no-op (opt-in),
+ * never "assume complete."
  */
 export function cohortRepos(): string[] {
-  return Object.entries(COHORT_AGENT_MAP)
-    .filter(([, agents]) => agents.length > 0)
-    .map(([repo]) => repo)
-    .sort();
+  return ['liquid-city', 'totem', 'totem-status', 'totem-strategy'];
 }
 
 /**

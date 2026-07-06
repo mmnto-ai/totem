@@ -613,6 +613,61 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(markExists(CS, DIRECT_SWEPT)).toBe(true); // failed delete → mark remains
     expect(markExists(CS, BCAST_SWEPT, true)).toBe(false);
   });
+
+  it('C12 — undeclared (empty) roster NO-OPS: opt-in, never "assume complete" (contract corollary)', () => {
+    ensureRepos(CROSTER);
+    writeMark(CS, DIRECT_SWEPT); // a genuinely inert mark that WOULD be collectable
+
+    const r = runCompact({ apply: true, expectedRepos: [] });
+
+    expect(r.rosterDeclared).toBe(false);
+    expect(r.gateComplete).toBe(false); // not a gate abort — a skip
+    expect(r.collected).toEqual([]);
+    // NON-VACUITY: with no declared roster, completeness is unprovable, so even a
+    // truly-inert mark is retained rather than deleted on an assumed-complete scan.
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+    expect(r.marks).toBe(1); // still reports the seat's mark count
+  });
+
+  it('C13 — --force-incomplete waives the missing-repo abort; deletes proceed', () => {
+    // Only `totem` present; `totem-strategy` (in the roster) absent → normally aborts.
+    ensureRepos(['totem']);
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true, forceIncomplete: true });
+
+    // Roster arm waived → gate green; the missing repo is still surfaced (loud).
+    expect(r.gateComplete).toBe(true);
+    expect(r.gateReasons.some((x) => /missing.*totem-strategy/.test(x))).toBe(true);
+    expect(r.collected).toEqual([DIRECT_SWEPT]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(false);
+  });
+
+  it('C13b — --force-incomplete does NOT waive a scan warning (broken read still aborts)', () => {
+    ensureRepos(CROSTER);
+    const dir = path.join(
+      tmpRoot,
+      'totem-strategy',
+      '.totem',
+      'orchestration',
+      'strategy-claude',
+      'outbox',
+    );
+    mkDir(dir);
+    fs.writeFileSync(
+      path.join(dir, '2026-07-01T1200Z-totem-agy-malformed.md'),
+      '---\nto: totem-agy\nno closing',
+      'utf-8',
+    );
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true, forceIncomplete: true });
+
+    // Force waives roster presence only — a parse warning is still a hard abort.
+    expect(r.gateComplete).toBe(false);
+    expect(r.collected).toEqual([]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
 });
 
 // ─── Combined exit-code precedence (codex panel) ────────
@@ -620,10 +675,27 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
 describe('resolveEclGcExitCode — combined prune+compact precedence', () => {
   const clean = { failed: [] };
   const partial = { failed: [{ file: 'x', error: 'EPERM' }] };
-  const gateGreen = { gateComplete: true, resurfaced: [] as string[], failed: [] };
-  const gateRed = { gateComplete: false, resurfaced: [] as string[], failed: [] };
-  const resurfaced = { gateComplete: true, resurfaced: ['x.md'], failed: [] };
+  const gateGreen = {
+    rosterDeclared: true,
+    gateComplete: true,
+    resurfaced: [] as string[],
+    failed: [],
+  };
+  const gateRed = {
+    rosterDeclared: true,
+    gateComplete: false,
+    resurfaced: [] as string[],
+    failed: [],
+  };
+  const noRoster = {
+    rosterDeclared: false,
+    gateComplete: false,
+    resurfaced: [] as string[],
+    failed: [],
+  };
+  const resurfaced = { rosterDeclared: true, gateComplete: true, resurfaced: ['x.md'], failed: [] };
   const compactPartial = {
+    rosterDeclared: true,
     gateComplete: true,
     resurfaced: [] as string[],
     failed: [{ file: 'm', error: 'EPERM' }],
@@ -635,13 +707,19 @@ describe('resolveEclGcExitCode — combined prune+compact precedence', () => {
   it('0 — clean prune + green compaction', () => {
     expect(resolveEclGcExitCode(clean, gateGreen)).toBe(0);
   });
+  it('0 — undeclared roster is a benign skip, NOT an abort (contract corollary)', () => {
+    expect(resolveEclGcExitCode(clean, noRoster)).toBe(0);
+  });
   it('1 — prune partial delete failure, no compaction', () => {
     expect(resolveEclGcExitCode(partial)).toBe(1);
   });
   it('1 — prune clean + compaction partial delete failure', () => {
     expect(resolveEclGcExitCode(clean, compactPartial)).toBe(1);
   });
-  it('3 — compaction gate red outranks a clean prune', () => {
+  it('1 — undeclared-roster skip + a prune partial failure is still 1 (skip ≠ abort)', () => {
+    expect(resolveEclGcExitCode(partial, noRoster)).toBe(1);
+  });
+  it('3 — compaction gate red (declared roster incomplete) outranks a clean prune', () => {
     expect(resolveEclGcExitCode(clean, gateRed)).toBe(3);
   });
   it('3 — compaction A2.4 falsifier tripped', () => {
