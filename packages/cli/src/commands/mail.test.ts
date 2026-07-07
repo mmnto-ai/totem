@@ -1136,7 +1136,9 @@ describe('resolveMailExitCode (unit)', () => {
 
 describe('mailCommand — exit contract + NOT-DERIVED verdict (mmnto-ai/totem#2312)', () => {
   function unknownRepo(): string {
-    return mkDir(path.join(workspace, 'unknown-repo'));
+    // Marker-bearing so the #2312 walk-up anchors here (basename `unknown-repo`
+    // ⇒ self unresolved) instead of climbing to a host-level ancestor marker.
+    return markedRepoRoot('unknown-repo');
   }
 
   it('unresolved self ⇒ NOT-DERIVED text (never the clean line) and exit 2', async () => {
