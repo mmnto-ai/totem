@@ -177,6 +177,61 @@ describe('TotemConfigSchema', () => {
     });
     expect(whitespace.success).toBe(false);
   });
+
+  // ─── ecl.cohortRepos (mmnto-ai/totem#2310) ─────────────
+
+  it('accepts a declared ecl.cohortRepos roster (mmnto-ai/totem#2310)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      ecl: { cohortRepos: ['totem', 'totem-strategy'] },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ecl?.cohortRepos).toEqual(['totem', 'totem-strategy']);
+    }
+  });
+
+  it('accepts a single-repo roster (completeness-1, the A2.2 line)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      ecl: { cohortRepos: ['solo-repo'] },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('treats ecl as undefined when omitted (the honest undeclared state)', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ecl).toBeUndefined();
+    }
+  });
+
+  it('treats an ecl block without cohortRepos as undeclared (key optional)', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, ecl: {} });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ecl?.cohortRepos).toBeUndefined();
+    }
+  });
+
+  it('rejects an EMPTY ecl.cohortRepos array (config bug, not undeclared — Zod .min(1))', () => {
+    // An empty roster must fail LOUD at load, never alias into the undeclared
+    // gate-red arm (mmnto-ai/totem#2310; strategy#828 Tenet-4 distinction).
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      ecl: { cohortRepos: [] },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a blank/empty repo name inside ecl.cohortRepos (element .min(1))', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      ecl: { cohortRepos: ['totem', ''] },
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ─── Orchestrator schema ─────────────────────────────

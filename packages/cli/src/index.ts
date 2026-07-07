@@ -926,8 +926,14 @@ program
       // reported in the structured result. We do NOT call handleError (it exits
       // 1, colliding with the sensor codes). (Custom-exit precedent: index-lite.ts 78.)
       try {
-        const { eclGc, eclGcCommand, eclCompact, eclCompactCommand, resolveEclGcExitCode } =
-          await import('./commands/ecl-gc.js');
+        const {
+          eclGc,
+          eclGcCommand,
+          eclCompact,
+          eclCompactCommand,
+          loadEclConfig,
+          resolveEclGcExitCode,
+        } = await import('./commands/ecl-gc.js');
         const pruneResult = eclGc({
           apply,
           retainDays: retainDays !== undefined ? Number(retainDays) : undefined,
@@ -938,7 +944,14 @@ program
         // independent — but the doctrine sequences them within /signoff.
         let compactResult: ReturnType<typeof eclCompact> | undefined;
         if (compact === true) {
-          compactResult = eclCompact({ apply, agentId, forceIncomplete });
+          // Resolve the A2.2 completeness roster from consumer config
+          // (`ecl.cohortRepos`, mmnto-ai/totem#2310) at this process boundary and
+          // inject it. A MISSING config ⇒ undefined ⇒ the gate's undeclared
+          // hard-abort (exit 3). A PRESENT-but-INVALID config (e.g. an empty
+          // roster) throws here and is caught below as a usage error (exit 2,
+          // loud) — never silently degraded into the undeclared arm.
+          const config = await loadEclConfig(process.cwd());
+          compactResult = eclCompact({ apply, agentId, forceIncomplete, config });
         }
         if (json === true && compactResult !== undefined) {
           // Single combined document so a --json consumer parses one object

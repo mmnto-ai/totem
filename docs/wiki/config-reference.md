@@ -63,6 +63,19 @@ export default {
     },
   },
 
+  // ECL cohort completeness roster (mmnto-ai/totem#2310). Read only by
+  // `totem ecl-gc --compact`: the declared set of cohort repos whose ECL
+  // outboxes a "provably complete" poll must scan before a processed-mark is
+  // collected. Values are bare workspace DIRECTORY names (siblings of the
+  // workspace root), NOT `owner/repo` slugs. Omit the whole `ecl` block to
+  // leave the roster UNDECLARED — compaction then hard-aborts (exit 3,
+  // fail-loud), never a silent no-op. An EMPTY `cohortRepos: []` is a config
+  // ERROR (rejected at load), not a synonym for undeclared; a single-repo
+  // consumer declares a roster of one.
+  ecl: {
+    cohortRepos: ['totem', 'totem-strategy', 'totem-status', 'liquid-city'],
+  },
+
   // The `.totemignore` file at the repo root supports a parallel directive
   // syntax: lines of the form `# stage4-baseline: <glob>` are appended to
   // the resolved Stage 4 baseline at compile time. Use this for globs
