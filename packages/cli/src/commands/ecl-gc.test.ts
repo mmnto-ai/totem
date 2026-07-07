@@ -34,11 +34,14 @@ import {
 
 /** Build a real (schema-validated) `TotemConfig` for roster-resolution tests —
  *  optionally with an `ecl.cohortRepos` roster. No casts: exercises the actual
- *  schema so the fixture can never drift from the shipped shape. */
-function cfg(cohortRepos?: string[]): TotemConfig {
+ *  schema so the fixture can never drift from the shipped shape.
+ *  `emptyEclBlock` yields the DISTINCT block-present-key-omitted state
+ *  (`ecl: {}`) — schema-valid, still undeclared (greptile on PR #2315: the
+ *  no-ecl-key and empty-ecl-block states must each be exercised as named). */
+function cfg(cohortRepos?: string[], opts?: { emptyEclBlock?: boolean }): TotemConfig {
   return TotemConfigSchema.parse({
     targets: [{ glob: '**/*.md', type: 'spec' as const, strategy: 'markdown-heading' as const }],
-    ...(cohortRepos ? { ecl: { cohortRepos } } : {}),
+    ...(cohortRepos ? { ecl: { cohortRepos } } : opts?.emptyEclBlock === true ? { ecl: {} } : {}),
   });
 }
 
@@ -827,12 +830,14 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     ensureRepos(CROSTER);
     writeMark(CS, DIRECT_SWEPT);
 
-    // `cfg()` yields a valid config with NO `ecl` key → undeclared → hard-abort.
+    // The NAMED state: a schema-valid `ecl: {}` block with `cohortRepos`
+    // omitted → still undeclared → hard-abort. (The no-`ecl`-key-at-all state
+    // is a resolveExpectedRoster unit row; C18 covers no config object.)
     const r = eclCompact({
       repoRoot: compactRoot(),
       workspace: tmpRoot,
       env: { TOTEM_SELF_AGENT: CS },
-      config: cfg(),
+      config: cfg(undefined, { emptyEclBlock: true }),
       apply: true,
     });
 
@@ -853,6 +858,11 @@ describe('resolveExpectedRoster — explicit > config > undefined', () => {
   });
   it('undefined when a config has no ecl block', () => {
     expect(resolveExpectedRoster(undefined, cfg())).toBeUndefined();
+  });
+  it('undefined when the ecl block is present but cohortRepos is omitted', () => {
+    expect(
+      resolveExpectedRoster(undefined, cfg(undefined, { emptyEclBlock: true })),
+    ).toBeUndefined();
   });
   it('undefined when neither source is present', () => {
     expect(resolveExpectedRoster(undefined, undefined)).toBeUndefined();
