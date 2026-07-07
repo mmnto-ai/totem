@@ -335,19 +335,6 @@ export function listTrackedFilesUnder(repoCwd: string, dirAbs: string): Set<stri
  * confuse "not a repo" with "git broke" (mmnto/totem#1440).
  */
 /**
- * Resolve the git repository root via a JS-side walk-up looking for `.git/`,
- * rather than shelling out to `git rev-parse --show-toplevel`. Sibling to
- * {@link resolveGitRoot}; prefer this variant when the caller will combine
- * the returned root with paths derived from `process.cwd()` — git's output
- * normalizes case + may resolve Windows 8.3 short names (`RUNNER~1`) to long
- * names (`runneradmin`), and the divergence breaks `path.relative` even when
- * both paths point at the same directory. A JS-side walk returns a path in
- * cwd's own form, so downstream `path.relative` works portably.
- *
- * Returns `null` when `start` is not inside a git repository (or any parent
- * is not). Never throws — best-effort by contract. No subprocess overhead.
- */
-/**
  * Bound the ancestor walk at a generous depth to defuse hypothetical symlink
  * loops — `path.dirname` already terminates at filesystem roots via the
  * `parent === current` check, but layered defense doesn't cost anything.
@@ -371,6 +358,19 @@ function walkUpToMarker(start: string, hasMarker: (dir: string) => boolean): str
   return null;
 }
 
+/**
+ * Resolve the git repository root via a JS-side walk-up looking for `.git/`,
+ * rather than shelling out to `git rev-parse --show-toplevel`. Sibling to
+ * {@link resolveGitRoot}; prefer this variant when the caller will combine
+ * the returned root with paths derived from `process.cwd()` — git's output
+ * normalizes case + may resolve Windows 8.3 short names (`RUNNER~1`) to long
+ * names (`runneradmin`), and the divergence breaks `path.relative` even when
+ * both paths point at the same directory. A JS-side walk returns a path in
+ * cwd's own form, so downstream `path.relative` works portably.
+ *
+ * Returns `null` when `start` is not inside a git repository (or any parent
+ * is not). Never throws — best-effort by contract. No subprocess overhead.
+ */
 export function findRepoRootSync(start: string): string | null {
   return walkUpToMarker(start, (dir) => fs.existsSync(path.join(dir, '.git')));
 }
