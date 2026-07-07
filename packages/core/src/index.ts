@@ -538,6 +538,7 @@ export {
   extractChangedFiles,
   filterDiffByPatterns,
   findRepoRootSync,
+  findTotemRepoRootSync,
   getDefaultBranch,
   getGitBranch,
   getGitBranchDiff,
@@ -551,6 +552,7 @@ export {
   inferScopeFromFiles,
   isFileDirty,
   resolveGitRoot,
+  resolveTotemRepoRootSync,
 } from './sys/git.js';
 
 // Filesystem helpers

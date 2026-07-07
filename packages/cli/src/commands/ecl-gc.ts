@@ -35,7 +35,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { cohortRepos, getErrorMessage, isPathSafeAgentId, TotemError } from '@mmnto/totem';
+import {
+  cohortRepos,
+  getErrorMessage,
+  isPathSafeAgentId,
+  resolveTotemRepoRootSync,
+  TotemError,
+} from '@mmnto/totem';
 
 import { pollMail, resolveSelfSender } from './mail.js';
 
@@ -74,7 +80,12 @@ export interface EclGcOptions {
    * NOT used by the signoff step — that path self-resolves.
    */
   agentId?: string;
-  /** Repo root override (default: `process.cwd()`). Test injection point. */
+  /**
+   * Walk-START directory (default: `process.cwd()`), not the definitive root:
+   * the effective repo root is derived by walking up to the nearest
+   * `.totem`/`.git` marker (mmnto-ai/totem#2312); a marker-less start is used
+   * as-is. Test injection point.
+   */
   repoRoot?: string;
   /** Env override (default: `process.env`). Test injection point. */
   env?: Record<string, string | undefined>;
@@ -214,7 +225,11 @@ export function planPrune(entries: DirEntryLike[], cutoff: string): PrunePlan {
  */
 export function eclGc(opts: EclGcOptions = {}): EclGcResult {
   const env = opts.env ?? process.env;
-  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  // Walk-start, not definitive root (contract in `resolveTotemRepoRootSync` —
+  // same seam as `pollMail`, mmnto-ai/totem#2312): from a subdir the bare
+  // `path.resolve(cwd)` made `<repoRoot>/.totem/orchestration/<agent>/outbox`
+  // garbage and self-resolution would throw.
+  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
   const now = (opts.now ?? (() => new Date()))();
 
   // Retain-days validation (usage error) — evaluated before any scan.
@@ -394,7 +409,12 @@ export interface EclCompactOptions {
    * single-writer compaction target; NOT used by the signoff step (self-resolves).
    */
   agentId?: string;
-  /** Repo root override (default: `process.cwd()`). Test injection point. */
+  /**
+   * Walk-START directory (default: `process.cwd()`), not the definitive root:
+   * the effective repo root is derived by walking up to the nearest
+   * `.totem`/`.git` marker (mmnto-ai/totem#2312); a marker-less start is used
+   * as-is. Test injection point.
+   */
   repoRoot?: string;
   /** Env override (default: `process.env`). Test injection point. */
   env?: Record<string, string | undefined>;
@@ -487,7 +507,12 @@ export interface EclCompactResult {
  */
 export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   const env = opts.env ?? process.env;
-  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  // Walk-start, not definitive root (contract in `resolveTotemRepoRootSync` —
+  // same seam as `pollMail`, mmnto-ai/totem#2312) so the derived `workspace =
+  // parent-of-root` and the A2.2 completeness gate see the real cohort tree,
+  // not a subdir's `dirname`. Explicit `--workspace` / `TOTEM_WORKSPACE`
+  // overrides are untouched.
+  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
   const workspace = path.resolve(
     opts.workspace ?? env['TOTEM_WORKSPACE'] ?? path.dirname(repoRoot),
   );

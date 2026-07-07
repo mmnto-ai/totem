@@ -14,7 +14,10 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { findTotemRepoRootSync } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
+import { log } from '../ui.js';
 import {
   composeDispatch,
   type DispatchHeader,
@@ -23,6 +26,7 @@ import {
   mailReply,
   mailSend,
   pollMail,
+  resolveMailExitCode,
   resolveSelfSender,
   validateDispatchContent,
 } from './mail.js';
@@ -105,7 +109,25 @@ function writeBroadcastProcessed(repo: string, recipientAgent: string, names: st
  * map without needing a config.json or env override for every test.
  */
 function selfRepoRoot(): string {
-  return mkDir(path.join(workspace, 'totem'));
+  const root = mkDir(path.join(workspace, 'totem'));
+  // A real repo root carries a `.totem` marker (`totem init`). Since mmnto-ai/totem#2312
+  // the poll derives the repo root by walking UP to the nearest `.totem`/`.git`
+  // marker, so the fixture must present one — else the walk climbs past this
+  // marker-less dir to a host-level ancestor marker (e.g. `~/.totem`) and
+  // self-resolution reads the wrong basename.
+  mkDir(path.join(root, '.totem'));
+  return root;
+}
+
+/**
+ * Build a marker-bearing repo root at `<workspace>/<basename>` with no outbox of
+ * its own (a recipient repo). Same rationale as `selfRepoRoot` — the #2312
+ * walk-up needs a marker to anchor on.
+ */
+function markedRepoRoot(basename: string): string {
+  const root = mkDir(path.join(workspace, basename));
+  mkDir(path.join(root, '.totem'));
+  return root;
 }
 
 /**
@@ -402,6 +424,9 @@ describe('pollMail — SELF_AGENT resolution', () => {
 
   it('warns when SELF_AGENT cannot be resolved', () => {
     const unknownRoot = mkDir(path.join(tmpRoot, 'workspace', 'unknown-repo'));
+    // Marker so the #2312 walk-up anchors here (basename `unknown-repo` ⇒ self
+    // unresolved) instead of climbing to a host-level ancestor marker.
+    mkDir(path.join(unknownRoot, '.totem'));
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: 'x.md', to: 'something', subject: 'orphan' },
     ]);
@@ -415,6 +440,9 @@ describe('pollMail — SELF_AGENT resolution', () => {
 
   it('still surfaces broadcast mail when SELF_AGENT cannot be resolved', () => {
     const unknownRoot = mkDir(path.join(tmpRoot, 'workspace', 'unknown-repo'));
+    // Marker so the #2312 walk-up anchors here (basename `unknown-repo` ⇒ self
+    // unresolved) instead of climbing to a host-level ancestor marker.
+    mkDir(path.join(unknownRoot, '.totem'));
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: 'b.md', to: 'broadcast', subject: 'cohort' },
     ]);
@@ -532,6 +560,78 @@ describe('pollMail — workspace', () => {
     );
     const result = poll({ recursive: true });
     expect(result.mail).toEqual([]);
+  });
+});
+
+// ─── Subdirectory workspace derivation (mmnto-ai/totem#2312) ───────────────
+// Run from a SUBDIRECTORY, the old `path.resolve(cwd)` made repoRoot the subdir
+// and `workspace = dirname(subdir)` garbage — nothing scanned, a false-clean
+// verdict at exit 0. The walk-up derives the real root, so workspace resolves
+// to its parent and directed mail is found. `workspace` is intentionally NOT
+// passed here so the derivation (not the injection) is under test.
+
+describe('pollMail — subdirectory workspace derivation (mmnto-ai/totem#2312)', () => {
+  it('walks up from a deep .totem subdir to the real root; workspace = parent-of-root and mail is found', () => {
+    // `<workspace>/totem/.totem/...` makes `totem` the marked repo root; the
+    // walk must anchor there from a nested processed/ subdir.
+    const repoRoot = selfRepoRoot();
+    const subdir = mkDir(
+      path.join(repoRoot, '.totem', 'orchestration', 'totem-claude', 'processed'),
+    );
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-05-18T1734Z-totem-claude.md', to: 'totem-claude', subject: 'from a subdir' },
+    ]);
+    // No `workspace` override — derivation must find `<workspace>` (parent of
+    // the resolved root `<workspace>/totem`).
+    const result = pollMail({ repoRoot: subdir, env: {} });
+    expect(result.workspace).toBe(path.resolve(workspace));
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.to).toBe('totem-claude');
+    expect(result.mail[0]!.subject).toBe('from a subdir');
+  });
+
+  it('also anchors on a `.git` marker (dir) with no `.totem` at the root', () => {
+    // `.git` created as a plain directory via fs — never a git spawn (Windows
+    // leaves a temp-cwd git process undeletable). Root has ONLY `.git` (no
+    // `.totem`), so this isolates the `.git`-marker arm; basename `totem`
+    // resolves self via the cohort map even without a `.totem/orchestration` tree.
+    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    fs.mkdirSync(path.join(repoRoot, '.git'));
+    const subdir = mkDir(path.join(repoRoot, 'src', 'deep'));
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-05-18T1800Z-totem-claude.md', to: 'totem-claude', subject: 'git-marked' },
+    ]);
+    const result = pollMail({ repoRoot: subdir, env: {} });
+    expect(result.workspace).toBe(path.resolve(workspace));
+    expect(result.selfAgents.agents).toContain('totem-claude');
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('git-marked');
+  });
+
+  it('a marker-less start dir resolves to its nearest marked ancestor (no garbage; deterministic)', () => {
+    // A bare start dir with no marker of its own must not yield garbage: the walk
+    // climbs to the nearest real root and derives workspace as that root's parent.
+    // A controlled ancestor marker fixes the stop point regardless of host tmp
+    // ancestry (the literal null→given-dir fallback is unit-tested on the helper).
+    const anchor = mkDir(path.join(tmpRoot, 'anchor-repo'));
+    mkDir(path.join(anchor, '.totem'));
+    const bare = mkDir(path.join(anchor, 'nested', 'start'));
+    const result = pollMail({ repoRoot: bare, env: {} });
+    expect(result.workspace).toBe(path.resolve(tmpRoot)); // parent of anchor-repo
+  });
+
+  it('a marker-less start dir falls back to the given dir when the ancestry is marker-free', () => {
+    // The literal pre-#2312 behavior: `findTotemRepoRootSync` returns null ⇒
+    // repoRoot stays the given dir ⇒ workspace = its parent. Guarded like
+    // findRepoRootSync's own null-case test — some dev hosts nest tmp under a
+    // marker (e.g. `~/.totem`), where the walk anchors upward instead.
+    const bare = mkDir(path.join(tmpRoot, 'bare-parent', 'bare-repo'));
+    const result = pollMail({ repoRoot: bare, env: {} });
+    if (findTotemRepoRootSync(bare) === null) {
+      expect(result.workspace).toBe(path.resolve(path.join(tmpRoot, 'bare-parent')));
+    } else {
+      expect(path.isAbsolute(result.workspace)).toBe(true);
+    }
   });
 });
 
@@ -1022,6 +1122,111 @@ describe('mailCommand — --json output', () => {
   });
 });
 
+// ─── Exit contract + NOT-DERIVED verdict (mmnto-ai/totem#2312) ─────────────
+
+describe('resolveMailExitCode (unit)', () => {
+  function result(selfAgents: MailPollResult['selfAgents']): MailPollResult {
+    return { selfAgents, mail: [], scanned: 0, truncated: false, workspace: '/w', warnings: [] };
+  }
+  it('is 2 when self is unresolved (source none), 0 when resolved', () => {
+    expect(resolveMailExitCode(result({ agents: [], source: 'none' }))).toBe(2);
+    expect(resolveMailExitCode(result({ agents: ['totem-claude'], source: 'map' }))).toBe(0);
+  });
+});
+
+describe('mailCommand — exit contract + NOT-DERIVED verdict (mmnto-ai/totem#2312)', () => {
+  function unknownRepo(): string {
+    // Marker-bearing so the #2312 walk-up anchors here (basename `unknown-repo`
+    // ⇒ self unresolved) instead of climbing to a host-level ancestor marker.
+    return markedRepoRoot('unknown-repo');
+  }
+
+  it('unresolved self ⇒ NOT-DERIVED text (never the clean line) and exit 2', async () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(log, 'info').mockImplementation((_tag: string, msg: string) => {
+      lines.push(msg);
+    });
+    let exitCode: number;
+    try {
+      ({ exitCode } = await mailCommand({ repoRoot: unknownRepo(), workspace, env: {} }));
+    } finally {
+      spy.mockRestore();
+    }
+    const text = lines.join('\n');
+    expect(exitCode).toBe(2);
+    expect(text).toContain('NOT DERIVED');
+    expect(text).not.toContain('No unread mail');
+  });
+
+  it('unresolved self + waiting broadcast ⇒ NOT-DERIVED carries a broadcast-count hint, exit 2', async () => {
+    // Broadcasts pass the self-filter even with an empty self-set — the verdict
+    // stays withheld, but waiting mail must not be invisible (greptile P2 on
+    // mmnto-ai/totem#2313): the hint counts it and points at --json.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-05-18T1900Z-broadcast.md', to: 'broadcast', subject: 'cohort-wide' },
+    ]);
+    const lines: string[] = [];
+    const spy = vi.spyOn(log, 'info').mockImplementation((_tag: string, msg: string) => {
+      lines.push(msg);
+    });
+    let exitCode: number;
+    try {
+      ({ exitCode } = await mailCommand({ repoRoot: unknownRepo(), workspace, env: {} }));
+    } finally {
+      spy.mockRestore();
+    }
+    const text = lines.join('\n');
+    expect(exitCode).toBe(2);
+    expect(text).toContain('NOT DERIVED');
+    expect(text).toContain('1 broadcast dispatch(es) present');
+    expect(text).not.toContain('No unread mail');
+    expect(text).not.toContain('unread:');
+  });
+
+  it('resolved self + genuinely empty inbox ⇒ clean line and exit 0', async () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(log, 'info').mockImplementation((_tag: string, msg: string) => {
+      lines.push(msg);
+    });
+    let exitCode: number;
+    try {
+      ({ exitCode } = await mailCommand({ repoRoot: selfRepoRoot(), workspace, env: {} }));
+    } finally {
+      spy.mockRestore();
+    }
+    const text = lines.join('\n');
+    expect(exitCode).toBe(0);
+    expect(text).toContain('No unread mail');
+    expect(text).not.toContain('NOT DERIVED');
+  });
+
+  it('--json on the unresolved arm still emits the JSON result AND exits 2', async () => {
+    const writes: string[] = [];
+    const spy = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
+        return true;
+      });
+    let exitCode: number;
+    try {
+      ({ exitCode } = await mailCommand({
+        json: true,
+        repoRoot: unknownRepo(),
+        workspace,
+        env: {},
+      }));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(exitCode).toBe(2);
+    expect(writes).toHaveLength(1);
+    const parsed = JSON.parse(writes[0]!) as MailPollResult;
+    expect(parsed.selfAgents.source).toBe('none');
+    expect(parsed.warnings.some((w) => w.includes('no SELF_AGENT resolved'))).toBe(true);
+  });
+});
+
 // ─── Structured warnings on FS failures ─────────────────
 
 describe('pollMail — structured warnings on FS failures', () => {
@@ -1119,7 +1324,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
     expect(res.warnings).toEqual([]);
 
     // The poller (sensor) surfaces exactly what the actuator emitted.
-    const recipientRepo = mkDir(path.join(workspace, 'totem-strategy'));
+    const recipientRepo = markedRepoRoot('totem-strategy');
     const inbox = pollMail({ repoRoot: recipientRepo, workspace, env: {} });
     expect(inbox.mail).toHaveLength(1);
     expect(inbox.mail[0]!.to).toBe('strategy-claude');
