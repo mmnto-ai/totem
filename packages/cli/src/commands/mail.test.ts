@@ -1158,6 +1158,31 @@ describe('mailCommand — exit contract + NOT-DERIVED verdict (mmnto-ai/totem#23
     expect(text).not.toContain('No unread mail');
   });
 
+  it('unresolved self + waiting broadcast ⇒ NOT-DERIVED carries a broadcast-count hint, exit 2', async () => {
+    // Broadcasts pass the self-filter even with an empty self-set — the verdict
+    // stays withheld, but waiting mail must not be invisible (greptile P2 on
+    // mmnto-ai/totem#2313): the hint counts it and points at --json.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-05-18T1900Z-broadcast.md', to: 'broadcast', subject: 'cohort-wide' },
+    ]);
+    const lines: string[] = [];
+    const spy = vi.spyOn(log, 'info').mockImplementation((_tag: string, msg: string) => {
+      lines.push(msg);
+    });
+    let exitCode: number;
+    try {
+      ({ exitCode } = await mailCommand({ repoRoot: unknownRepo(), workspace, env: {} }));
+    } finally {
+      spy.mockRestore();
+    }
+    const text = lines.join('\n');
+    expect(exitCode).toBe(2);
+    expect(text).toContain('NOT DERIVED');
+    expect(text).toContain('1 broadcast dispatch(es) present');
+    expect(text).not.toContain('No unread mail');
+    expect(text).not.toContain('unread:');
+  });
+
   it('resolved self + genuinely empty inbox ⇒ clean line and exit 0', async () => {
     const lines: string[] = [];
     const spy = vi.spyOn(log, 'info').mockImplementation((_tag: string, msg: string) => {

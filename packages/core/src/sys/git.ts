@@ -347,18 +347,32 @@ export function listTrackedFilesUnder(repoCwd: string, dirAbs: string): Set<stri
  * Returns `null` when `start` is not inside a git repository (or any parent
  * is not). Never throws — best-effort by contract. No subprocess overhead.
  */
-export function findRepoRootSync(start: string): string | null {
+/**
+ * Bound the ancestor walk at a generous depth to defuse hypothetical symlink
+ * loops — `path.dirname` already terminates at filesystem roots via the
+ * `parent === current` check, but layered defense doesn't cost anything.
+ */
+const MAX_WALK_DEPTH = 64;
+
+/**
+ * Shared bounded ancestor walk: return the nearest ancestor of `start`
+ * (including `start` itself) satisfying `hasMarker`, else `null`. Single home
+ * for the depth bound + termination logic — it feeds destructive paths
+ * (`eclGc`'s outbox unlink), so the marker variants must not drift apart.
+ */
+function walkUpToMarker(start: string, hasMarker: (dir: string) => boolean): string | null {
   let current = path.resolve(start);
-  // Bound the walk at a generous depth to defuse hypothetical symlink loops
-  // — `path.dirname` already terminates at filesystem roots via the
-  // `parent === current` check, but layered defense doesn't cost anything.
-  for (let i = 0; i < 64; i++) {
-    if (fs.existsSync(path.join(current, '.git'))) return current;
+  for (let i = 0; i < MAX_WALK_DEPTH; i++) {
+    if (hasMarker(current)) return current;
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;
   }
   return null;
+}
+
+export function findRepoRootSync(start: string): string | null {
+  return walkUpToMarker(start, (dir) => fs.existsSync(path.join(dir, '.git')));
 }
 
 /**
@@ -378,16 +392,23 @@ export function findRepoRootSync(start: string): string | null {
  * worktree file the caller might not expect.
  */
 export function findTotemRepoRootSync(start: string): string | null {
-  let current = path.resolve(start);
-  for (let i = 0; i < 64; i++) {
-    if (fs.existsSync(path.join(current, '.totem')) || fs.existsSync(path.join(current, '.git'))) {
-      return current;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
-  return null;
+  return walkUpToMarker(
+    start,
+    (dir) => fs.existsSync(path.join(dir, '.totem')) || fs.existsSync(path.join(dir, '.git')),
+  );
+}
+
+/**
+ * Resolve the effective Totem repo root for a command invoked with an optional
+ * `repoRoot` override: treat `repoRoot ?? cwd` as the WALK START and derive
+ * the root via {@link findTotemRepoRootSync}; a marker-less start (bare test
+ * fixture) is used as-is. Single home for the walk-start-not-definitive-root
+ * contract shared by `pollMail`, `eclGc`, and `eclCompact`
+ * (mmnto-ai/totem#2312).
+ */
+export function resolveTotemRepoRootSync(repoRootOpt: string | undefined, cwd: string): string {
+  const start = path.resolve(repoRootOpt ?? cwd);
+  return findTotemRepoRootSync(start) ?? start;
 }
 
 export function resolveGitRoot(cwd: string): string | null {

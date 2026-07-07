@@ -552,6 +552,7 @@ export {
   inferScopeFromFiles,
   isFileDirty,
   resolveGitRoot,
+  resolveTotemRepoRootSync,
 } from './sys/git.js';
 
 // Filesystem helpers

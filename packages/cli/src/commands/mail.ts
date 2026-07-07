@@ -23,10 +23,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
-  findTotemRepoRootSync,
   isPathSafeAgentId,
   knownCohortAgents,
   resolveSelfAgents,
+  resolveTotemRepoRootSync,
   type SelfAgentResolution,
   TotemError,
 } from '@mmnto/totem';
@@ -96,7 +96,12 @@ export interface MailCommandOptions {
   recursive?: boolean;
   /** Workspace override (default: `TOTEM_WORKSPACE` env, else parent-of-cwd). */
   workspace?: string;
-  /** Repo root override (default: `process.cwd()`). Test injection point. */
+  /**
+   * Walk-START directory (default: `process.cwd()`), not the definitive root:
+   * the effective repo root is derived by walking up to the nearest
+   * `.totem`/`.git` marker (mmnto-ai/totem#2312); a marker-less start is used
+   * as-is. Test injection point.
+   */
   repoRoot?: string;
   /** Env override (default: `process.env`). Test injection point. */
   env?: Record<string, string | undefined>;
@@ -455,16 +460,13 @@ function enumerateOutboxes(
  */
 export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   const env = opts.env ?? process.env;
-  // Treat the caller's dir (or cwd) as the WALK START, not the repo root:
-  // derive the root by walking up to the nearest `.totem`/`.git` marker. Run
+  // Walk-start, not definitive root (contract in `resolveTotemRepoRootSync`):
   // from a SUBDIRECTORY (e.g. `.totem/orchestration/<seat>/processed/`), the
   // old `path.resolve(cwd)` made `repoRoot` the subdir and `workspace =
   // dirname(subdir)` garbage — `enumerateOutboxes` scanned nothing real and the
-  // poll rendered a false-clean inbox (mmnto-ai/totem#2312). A marker-less start
-  // dir (bare test fixture) falls back to the given dir, preserving behavior;
-  // explicit `--workspace` / `TOTEM_WORKSPACE` overrides are untouched below.
-  const start = path.resolve(opts.repoRoot ?? process.cwd());
-  const repoRoot = findTotemRepoRootSync(start) ?? start;
+  // poll rendered a false-clean inbox (mmnto-ai/totem#2312). Explicit
+  // `--workspace` / `TOTEM_WORKSPACE` overrides are untouched below.
+  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
 
   const workspaceRaw = opts.workspace ?? env['TOTEM_WORKSPACE'] ?? path.dirname(repoRoot);
   const workspace = path.resolve(workspaceRaw);
@@ -652,10 +654,15 @@ function formatTextResult(result: MailPollResult): string {
     // mmnto-ai/totem#2312). A clean/unread line here is a FALSE-CLEAN: with an
     // empty self-set every directed dispatch is filtered out, so an empty inbox
     // asserts nothing. Broadcast matches survive the filter but still cannot
-    // certify directed-mail absence — the raw broadcast set stays in `--json`
-    // and the warnings; the human verdict is withheld.
+    // certify directed-mail absence — they are COUNTED in the hint (so waiting
+    // mail is not invisible) and inspectable via `--json`; the verdict itself
+    // stays withheld.
+    const broadcastHint =
+      result.mail.length > 0
+        ? ` ${result.mail.length} broadcast dispatch(es) present — inspect via --json.`
+        : '';
     lines.push(
-      'Inbox state NOT DERIVED — no self agent resolved; cannot assert an empty inbox. Set TOTEM_SELF_AGENT or declare host_agents in .totem/orchestration/config.json.',
+      `Inbox state NOT DERIVED — no self agent resolved; cannot assert an empty inbox.${broadcastHint} Set TOTEM_SELF_AGENT or declare host_agents in .totem/orchestration/config.json.`,
     );
   } else if (result.mail.length === 0) {
     lines.push(`No unread mail addressed to ${selfList} or broadcast.`);

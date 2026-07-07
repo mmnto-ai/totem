@@ -24,6 +24,7 @@ import {
   inferScopeFromFiles,
   isFileDirty,
   resolveGitRoot,
+  resolveTotemRepoRootSync,
 } from './git.js';
 
 describe('getLatestTag', () => {
@@ -530,6 +531,44 @@ describe('findTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
       expect(result).toBeNull();
     } else {
       expect(path.isAbsolute(result)).toBe(true);
+    }
+  });
+});
+
+describe('resolveTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-resolveroot-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('derives the marked root from an explicit repoRoot pointing at a subdir', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const sub = path.join(tmpDir, '.totem', 'orchestration', 'seat', 'processed');
+    fs.mkdirSync(sub, { recursive: true });
+    expect(resolveTotemRepoRootSync(sub, '/elsewhere')).toBe(path.resolve(tmpDir));
+  });
+
+  it('falls back to cwd as the walk start when repoRoot is undefined', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const sub = path.join(tmpDir, 'nested');
+    fs.mkdirSync(sub);
+    expect(resolveTotemRepoRootSync(undefined, sub)).toBe(path.resolve(tmpDir));
+  });
+
+  it('uses a marker-less start as-is (bare-fixture contract)', () => {
+    const bare = path.join(tmpDir, 'bare');
+    fs.mkdirSync(bare);
+    // Same best-effort guard as the finder's null case: only assert identity
+    // when the host ancestry is genuinely marker-free.
+    if (findTotemRepoRootSync(bare) === null) {
+      expect(resolveTotemRepoRootSync(bare, '/elsewhere')).toBe(path.resolve(bare));
+    } else {
+      expect(path.isAbsolute(resolveTotemRepoRootSync(bare, '/elsewhere'))).toBe(true);
     }
   });
 });
