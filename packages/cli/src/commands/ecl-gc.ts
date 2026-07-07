@@ -35,7 +35,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { cohortRepos, getErrorMessage, isPathSafeAgentId, TotemError } from '@mmnto/totem';
+import {
+  cohortRepos,
+  findTotemRepoRootSync,
+  getErrorMessage,
+  isPathSafeAgentId,
+  TotemError,
+} from '@mmnto/totem';
 
 import { pollMail, resolveSelfSender } from './mail.js';
 
@@ -214,7 +220,13 @@ export function planPrune(entries: DirEntryLike[], cutoff: string): PrunePlan {
  */
 export function eclGc(opts: EclGcOptions = {}): EclGcResult {
   const env = opts.env ?? process.env;
-  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  // Walk up to the repo root from a possible SUBDIRECTORY start (same seam and
+  // helper as `pollMail`, mmnto-ai/totem#2312): from a subdir the bare
+  // `path.resolve(cwd)` made `<repoRoot>/.totem/orchestration/<agent>/outbox`
+  // garbage and self-resolution would throw — the wrong-root class the mail
+  // false-clean shares. Marker-less start falls back to the given dir.
+  const start = path.resolve(opts.repoRoot ?? process.cwd());
+  const repoRoot = findTotemRepoRootSync(start) ?? start;
   const now = (opts.now ?? (() => new Date()))();
 
   // Retain-days validation (usage error) — evaluated before any scan.
@@ -487,7 +499,13 @@ export interface EclCompactResult {
  */
 export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   const env = opts.env ?? process.env;
-  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  // Walk up to the repo root from a possible SUBDIRECTORY start (same seam and
+  // helper as `pollMail`, mmnto-ai/totem#2312) so the derived `workspace =
+  // parent-of-root` and the A2.2 completeness gate see the real cohort tree, not
+  // a subdir's `dirname`. Marker-less start falls back to the given dir; explicit
+  // `--workspace` / `TOTEM_WORKSPACE` overrides are untouched.
+  const start = path.resolve(opts.repoRoot ?? process.cwd());
+  const repoRoot = findTotemRepoRootSync(start) ?? start;
   const workspace = path.resolve(
     opts.workspace ?? env['TOTEM_WORKSPACE'] ?? path.dirname(repoRoot),
   );

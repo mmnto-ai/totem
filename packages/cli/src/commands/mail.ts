@@ -23,6 +23,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
+  findTotemRepoRootSync,
   isPathSafeAgentId,
   knownCohortAgents,
   resolveSelfAgents,
@@ -454,7 +455,16 @@ function enumerateOutboxes(
  */
 export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   const env = opts.env ?? process.env;
-  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  // Treat the caller's dir (or cwd) as the WALK START, not the repo root:
+  // derive the root by walking up to the nearest `.totem`/`.git` marker. Run
+  // from a SUBDIRECTORY (e.g. `.totem/orchestration/<seat>/processed/`), the
+  // old `path.resolve(cwd)` made `repoRoot` the subdir and `workspace =
+  // dirname(subdir)` garbage — `enumerateOutboxes` scanned nothing real and the
+  // poll rendered a false-clean inbox (mmnto-ai/totem#2312). A marker-less start
+  // dir (bare test fixture) falls back to the given dir, preserving behavior;
+  // explicit `--workspace` / `TOTEM_WORKSPACE` overrides are untouched below.
+  const start = path.resolve(opts.repoRoot ?? process.cwd());
+  const repoRoot = findTotemRepoRootSync(start) ?? start;
 
   const workspaceRaw = opts.workspace ?? env['TOTEM_WORKSPACE'] ?? path.dirname(repoRoot);
   const workspace = path.resolve(workspaceRaw);
@@ -614,6 +624,20 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
 
 // ─── Output formatting ──────────────────────────────────
 
+/**
+ * Exit-code contract for `totem mail` (mmnto-ai/totem#2312). Pure so the class
+ * is unit-testable independent of the CLI wrapper, mirroring
+ * `resolveEclGcExitCode`. An UNRESOLVED self (`source: 'none'`, agents `[]`) is
+ * a NOT-DERIVED verdict, never a clean inbox: every directed dispatch is
+ * filtered out so "no unread" asserts nothing (the false-clean class). The
+ * plain poll must not be softer than its `totem ecl-gc` sibling, whose
+ * unresolvable-self is exit 2 — so this arm is exit 2 too. A resolved self
+ * (genuine clean inbox OR a real unread list) is exit 0.
+ */
+export function resolveMailExitCode(result: MailPollResult): 0 | 2 {
+  return result.selfAgents.source === 'none' ? 2 : 0;
+}
+
 function formatTextResult(result: MailPollResult): string {
   const lines: string[] = [];
   const selfList =
@@ -623,7 +647,17 @@ function formatTextResult(result: MailPollResult): string {
   if (result.warnings.length > 0) {
     for (const w of result.warnings) lines.push(`Warning: ${w}`);
   }
-  if (result.mail.length === 0) {
+  if (result.selfAgents.source === 'none') {
+    // Unresolved self ⇒ refuse to render ANY inbox verdict (Tenet 4 fail-loud,
+    // mmnto-ai/totem#2312). A clean/unread line here is a FALSE-CLEAN: with an
+    // empty self-set every directed dispatch is filtered out, so an empty inbox
+    // asserts nothing. Broadcast matches survive the filter but still cannot
+    // certify directed-mail absence — the raw broadcast set stays in `--json`
+    // and the warnings; the human verdict is withheld.
+    lines.push(
+      'Inbox state NOT DERIVED — no self agent resolved; cannot assert an empty inbox. Set TOTEM_SELF_AGENT or declare host_agents in .totem/orchestration/config.json.',
+    );
+  } else if (result.mail.length === 0) {
     lines.push(`No unread mail addressed to ${selfList} or broadcast.`);
   } else {
     lines.push(`${result.mail.length} unread:`);
@@ -640,14 +674,23 @@ function formatTextResult(result: MailPollResult): string {
 
 // ─── CLI entry ──────────────────────────────────────────
 
-export async function mailCommand(opts: MailCommandOptions = {}): Promise<MailPollResult> {
+export async function mailCommand(
+  opts: MailCommandOptions = {},
+): Promise<{ result: MailPollResult; exitCode: 0 | 2 }> {
   const result = pollMail(opts);
+  // The wrapper decides the exit (AGENTS.md: lib returns data, wrapper maps to a
+  // code — `pollMail` never throws). The `mail` action sets `process.exitCode`
+  // from this (mmnto-ai/totem#2312).
+  const exitCode = resolveMailExitCode(result);
 
   if (opts.json === true) {
     // JSON output goes to stdout (hook-friendly); structured logger goes to stderr
     // via the standard CLI path. Using process.stdout keeps the JSON stream clean.
+    // Emit the FULL result even on the exit-2 unresolved arm — it already exposes
+    // `source: 'none'` + warnings, so a --json consumer parses one object AND
+    // reads the exit code (mmnto-ai/totem#2312).
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-    return result;
+    return { result, exitCode };
   }
 
   const { log } = await import('../ui.js');
@@ -659,7 +702,7 @@ export async function mailCommand(opts: MailCommandOptions = {}): Promise<MailPo
     log.info(TAG, line);
   }
 
-  return result;
+  return { result, exitCode };
 }
 
 // ─── Outbound: send / reply (mmnto-ai/totem#2042) ───────

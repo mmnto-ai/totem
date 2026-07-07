@@ -96,6 +96,13 @@ const BOUNDARY_PRUNE = '2026-06-21T115959Z-totem-gemini.md'; // 1s older → pru
 
 beforeEach(() => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-eclgc-'));
+  // Since mmnto-ai/totem#2312 `eclGc`/`eclCompact` derive the repo root by
+  // walking UP to the nearest `.totem`/`.git` marker. Plant markers at the two
+  // fixture roots (`tmpRoot` for the prune, `<tmpRoot>/totem` for the compact)
+  // so the walk anchors there instead of climbing to a host-level ancestor
+  // marker (e.g. `~/.totem`) — the same fixture requirement `selfRepoRoot` gained.
+  mkDir(path.join(tmpRoot, '.totem'));
+  mkDir(path.join(tmpRoot, 'totem', '.totem'));
 });
 
 afterEach(() => {

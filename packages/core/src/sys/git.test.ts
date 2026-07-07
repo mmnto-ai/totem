@@ -15,6 +15,7 @@ import {
   extractChangedFiles,
   filterDiffByPatterns,
   findRepoRootSync,
+  findTotemRepoRootSync,
   getGitBranchDiff,
   getGitDiffRange,
   getGitLogSince,
@@ -479,5 +480,56 @@ describe('findRepoRootSync', () => {
     // should still find linked-worktree roots.
     fs.writeFileSync(path.join(tmpDir, '.git'), 'gitdir: /path/to/main.git\n');
     expect(findRepoRootSync(tmpDir)).toBe(path.resolve(tmpDir));
+  });
+});
+
+describe('findTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-findroot-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns the directory containing a .totem dir when called on the root', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    expect(findTotemRepoRootSync(tmpDir)).toBe(path.resolve(tmpDir));
+  });
+
+  it('walks up to the .totem-marked root from a deep subdirectory', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const sub = path.join(tmpDir, '.totem', 'orchestration', 'totem-claude', 'processed');
+    fs.mkdirSync(sub, { recursive: true });
+    expect(findTotemRepoRootSync(sub)).toBe(path.resolve(tmpDir));
+  });
+
+  it('also stops at a .git DIRECTORY marker (no .totem present)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const nested = path.join(tmpDir, 'src', 'deep');
+    fs.mkdirSync(nested, { recursive: true });
+    expect(findTotemRepoRootSync(nested)).toBe(path.resolve(tmpDir));
+  });
+
+  it('also stops at a .git FILE marker (linked-worktree case)', () => {
+    fs.writeFileSync(path.join(tmpDir, '.git'), 'gitdir: /path/to/main.git\n');
+    const nested = path.join(tmpDir, 'a', 'b');
+    fs.mkdirSync(nested, { recursive: true });
+    expect(findTotemRepoRootSync(nested)).toBe(path.resolve(tmpDir));
+  });
+
+  it('returns null when neither marker is found up the ancestry', () => {
+    const sub = path.join(tmpDir, 'inner');
+    fs.mkdirSync(sub);
+    // Best-effort like findRepoRootSync's null case: a dev box whose temp dir is
+    // nested under a checkout could find a marker upward — assert the shape then.
+    const result = findTotemRepoRootSync(sub);
+    if (result === null) {
+      expect(result).toBeNull();
+    } else {
+      expect(path.isAbsolute(result)).toBe(true);
+    }
   });
 });

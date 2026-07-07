@@ -538,6 +538,7 @@ export {
   extractChangedFiles,
   filterDiffByPatterns,
   findRepoRootSync,
+  findTotemRepoRootSync,
   getDefaultBranch,
   getGitBranch,
   getGitBranchDiff,

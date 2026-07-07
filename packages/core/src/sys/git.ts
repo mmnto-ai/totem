@@ -361,6 +361,35 @@ export function findRepoRootSync(start: string): string | null {
   return null;
 }
 
+/**
+ * Walk up from `start` to the nearest ancestor that is a Totem repo root: a
+ * directory containing a `.totem/` marker OR a `.git` entry (a directory in a
+ * normal clone, a FILE in a linked worktree — `existsSync` matches both).
+ * Returns that ancestor's absolute path, or `null` when neither marker appears
+ * up to the filesystem root. Never throws — best-effort, pure fs, no git spawn.
+ *
+ * Sibling to {@link findRepoRootSync} (which keys on `.git` alone); this
+ * variant also stops at `.totem/` so a consumer invoked from a SUBDIRECTORY of
+ * a repo — e.g. `.totem/orchestration/<seat>/processed/` — resolves the true
+ * root instead of the subdir. Without it, a cwd-fragile derivation
+ * (`process.cwd()` + `path.dirname`) reads the wrong workspace and can render a
+ * false-clean verdict (mmnto-ai/totem#2312). The `.totem` marker is checked
+ * first so an orchestration-only tree still anchors even where `.git` is a
+ * worktree file the caller might not expect.
+ */
+export function findTotemRepoRootSync(start: string): string | null {
+  let current = path.resolve(start);
+  for (let i = 0; i < 64; i++) {
+    if (fs.existsSync(path.join(current, '.totem')) || fs.existsSync(path.join(current, '.git'))) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  return null;
+}
+
 export function resolveGitRoot(cwd: string): string | null {
   try {
     const root = safeExec('git', ['rev-parse', '--show-toplevel'], {

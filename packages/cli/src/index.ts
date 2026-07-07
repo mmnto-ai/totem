@@ -769,7 +769,12 @@ const mailCmd = program
           recursive?: boolean;
           workspace?: string;
         }>();
-        await mailCommand({ json, recursive, workspace });
+        // Custom exit-code contract (mmnto-ai/totem#2312): pollMail never throws,
+        // so the wrapper returns the code and we set process.exitCode (never
+        // process.exit mid-flow — same pattern as the ecl-gc action). Exit 2 when
+        // no self agent resolves: the verdict is NOT DERIVED, not a clean inbox.
+        const { exitCode } = await mailCommand({ json, recursive, workspace });
+        if (exitCode !== 0) process.exitCode = exitCode;
       } catch (err) {
         handleError(err);
         // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the verify-badges pattern above.
