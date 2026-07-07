@@ -80,6 +80,17 @@ const config: TotemConfig = {
     parityManifest: 'node_modules/@mmnto/strategy-doctrine/parity-manifest.yaml',
   },
 
+  // mmnto-ai/totem#2310: the `totem ecl-gc --compact` A2.2 completeness roster —
+  // the cohort repos whose ECL outboxes a provably-complete poll must scan before
+  // a processed-mark may be collected. Bare workspace directory names (not
+  // owner/repo slugs). This is OUR cohort's frozen active set; its VALUE
+  // change-authority is mmnto-ai/totem-strategy#611 (skynet's return flips it
+  // there; configs follow in lockstep). Omitting this key would gate-red the
+  // /signoff compaction step (exit 3, fail-loud) — declared here so it stays green.
+  ecl: {
+    cohortRepos: ['liquid-city', 'totem', 'totem-status', 'totem-strategy'],
+  },
+
   // mmnto-ai/totem#1710: the strategy linkedIndex is auto-injected by the
   // MCP context init via `resolveStrategyRoot`. Listing it here is no
   // longer required — the resolver handles env / config / sibling /

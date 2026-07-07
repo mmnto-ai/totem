@@ -15,6 +15,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { type TotemConfig, TotemConfigError, TotemConfigSchema } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import {
   classifyEntry,
@@ -23,10 +25,25 @@ import {
   type EclCompactOptions,
   eclGc,
   type EclGcOptions,
+  loadEclConfig,
   planPrune,
   resolveEclGcExitCode,
+  resolveExpectedRoster,
   toStampKey,
 } from './ecl-gc.js';
+
+/** Build a real (schema-validated) `TotemConfig` for roster-resolution tests —
+ *  optionally with an `ecl.cohortRepos` roster. No casts: exercises the actual
+ *  schema so the fixture can never drift from the shipped shape.
+ *  `emptyEclBlock` yields the DISTINCT block-present-key-omitted state
+ *  (`ecl: {}`) — schema-valid, still undeclared (greptile on PR #2315: the
+ *  no-ecl-key and empty-ecl-block states must each be exercised as named). */
+function cfg(cohortRepos?: string[], opts?: { emptyEclBlock?: boolean }): TotemConfig {
+  return TotemConfigSchema.parse({
+    targets: [{ glob: '**/*.md', type: 'spec' as const, strategy: 'markdown-heading' as const }],
+    ...(cohortRepos ? { ecl: { cohortRepos } } : opts?.emptyEclBlock === true ? { ecl: {} } : {}),
+  });
+}
 
 // `vi.spyOn` cannot rebind a frozen ESM module-namespace export (node:fs), so
 // the partial-delete-failure row drives a module mock instead: a hoisted
@@ -47,6 +64,23 @@ vi.mock('node:fs', async (importOriginal) => {
       }
       return (actual.unlinkSync as (target: fs.PathLike, ...r: unknown[]) => void)(p, ...rest);
     },
+  };
+});
+
+// `loadEclConfig` (the config-read seam) is the only path touching `../utils.js`;
+// override just its two functions (spread-actual passthrough keeps every other
+// utils export real, so the fs-driven prune/compact tests are unaffected). Lets
+// the missing-vs-invalid distinction be tested without a real config on disk.
+const utilsMock = vi.hoisted(() => ({
+  resolveConfigPath: vi.fn(),
+  loadConfig: vi.fn(),
+}));
+vi.mock('../utils.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils.js')>();
+  return {
+    ...actual,
+    resolveConfigPath: utilsMock.resolveConfigPath,
+    loadConfig: utilsMock.loadConfig,
   };
 });
 
@@ -107,6 +141,8 @@ beforeEach(() => {
 
 afterEach(() => {
   fsMockState.failFor.clear();
+  utilsMock.resolveConfigPath.mockReset();
+  utilsMock.loadConfig.mockReset();
   vi.restoreAllMocks();
   cleanTmpDir(tmpRoot);
 });
@@ -723,6 +759,157 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(r.gateReasons.some((x) => /unscannable/.test(x))).toBe(true);
     expect(r.collected).toEqual([]);
     expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C16 — config.ecl.cohortRepos drives the roster when expectedRepos is absent (mmnto-ai/totem#2310)', () => {
+    ensureRepos(CROSTER);
+    writeInbound('totem-strategy', 'strategy-claude', DIRECT_LIVE, CS);
+    writeMark(CS, DIRECT_LIVE);
+    writeMark(CS, DIRECT_SWEPT);
+
+    // No `expectedRepos` → the injected config roster reaches the A2.2 gate.
+    const r = eclCompact({
+      repoRoot: compactRoot(),
+      workspace: tmpRoot,
+      env: { TOTEM_SELF_AGENT: CS },
+      config: cfg(CROSTER),
+      apply: true,
+    });
+
+    expect(r.expectedRepos).toEqual([...CROSTER].sort());
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([DIRECT_SWEPT]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(false);
+    expect(markExists(CS, DIRECT_LIVE)).toBe(true);
+  });
+
+  it('C17 — explicit expectedRepos WINS over config.ecl.cohortRepos (precedence)', () => {
+    ensureRepos(CROSTER); // only the explicit roster's repos are present
+    writeMark(CS, DIRECT_SWEPT);
+
+    // Config declares an EXTRA repo that is absent from the workspace — if config
+    // won, the gate would go RED (missing repo). Explicit CROSTER (all present)
+    // must win → gate green.
+    const r = eclCompact({
+      repoRoot: compactRoot(),
+      workspace: tmpRoot,
+      env: { TOTEM_SELF_AGENT: CS },
+      expectedRepos: CROSTER,
+      config: cfg([...CROSTER, 'totem-absent']),
+      apply: true,
+    });
+
+    expect(r.expectedRepos).toEqual([...CROSTER].sort());
+    // NON-VACUITY: had the config roster been used, `totem-absent` would gate-red.
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([DIRECT_SWEPT]);
+  });
+
+  it('C18 — no expectedRepos AND no config ⇒ undeclared hard-abort (exit-3 arm)', () => {
+    ensureRepos(CROSTER);
+    writeMark(CS, DIRECT_SWEPT);
+
+    // Neither source declared → the `?? []` fallback lands in the undeclared
+    // gate-red arm (parity with C12's explicit `expectedRepos: []`).
+    const r = eclCompact({
+      repoRoot: compactRoot(),
+      workspace: tmpRoot,
+      env: { TOTEM_SELF_AGENT: CS },
+      apply: true,
+    });
+
+    expect(r.expectedRepos).toEqual([]);
+    expect(r.rosterDeclared).toBe(false);
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /no cohort roster declared/.test(x))).toBe(true);
+    expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(3);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C19 — an ecl block without cohortRepos is undeclared (config present, key omitted)', () => {
+    ensureRepos(CROSTER);
+    writeMark(CS, DIRECT_SWEPT);
+
+    // The NAMED state: a schema-valid `ecl: {}` block with `cohortRepos`
+    // omitted → still undeclared → hard-abort. (The no-`ecl`-key-at-all state
+    // is a resolveExpectedRoster unit row; C18 covers no config object.)
+    const r = eclCompact({
+      repoRoot: compactRoot(),
+      workspace: tmpRoot,
+      env: { TOTEM_SELF_AGENT: CS },
+      config: cfg(undefined, { emptyEclBlock: true }),
+      apply: true,
+    });
+
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /no cohort roster declared/.test(x))).toBe(true);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+});
+
+// ─── Roster resolution precedence (mmnto-ai/totem#2310) ──
+
+describe('resolveExpectedRoster — explicit > config > undefined', () => {
+  it('explicit expectedRepos wins over config', () => {
+    expect(resolveExpectedRoster(['a', 'b'], cfg(['c', 'd']))).toEqual(['a', 'b']);
+  });
+  it('config.ecl.cohortRepos is used when explicit is absent', () => {
+    expect(resolveExpectedRoster(undefined, cfg(['c', 'd']))).toEqual(['c', 'd']);
+  });
+  it('undefined when a config has no ecl block', () => {
+    expect(resolveExpectedRoster(undefined, cfg())).toBeUndefined();
+  });
+  it('undefined when the ecl block is present but cohortRepos is omitted', () => {
+    expect(
+      resolveExpectedRoster(undefined, cfg(undefined, { emptyEclBlock: true })),
+    ).toBeUndefined();
+  });
+  it('undefined when neither source is present', () => {
+    expect(resolveExpectedRoster(undefined, undefined)).toBeUndefined();
+  });
+  it('explicit wins even over an undefined-roster config', () => {
+    expect(resolveExpectedRoster(['a'], cfg())).toEqual(['a']);
+  });
+});
+
+// ─── Config-read seam: loadEclConfig (mmnto-ai/totem#2310) ──
+
+describe('loadEclConfig — missing ⇒ undeclared, invalid ⇒ loud', () => {
+  it('returns undefined when NO config file exists (honest undeclared → gate-red)', async () => {
+    utilsMock.resolveConfigPath.mockImplementation(() => {
+      throw new TotemConfigError(
+        'No Totem configuration found.',
+        'run totem init',
+        'CONFIG_MISSING',
+      );
+    });
+
+    await expect(loadEclConfig('/nowhere')).resolves.toBeUndefined();
+    expect(utilsMock.loadConfig).not.toHaveBeenCalled();
+  });
+
+  it('RETHROWS a present-but-invalid config LOUD (never degraded to undeclared)', async () => {
+    // The empty-roster / any Zod failure path: loadConfig throws CONFIG_INVALID.
+    utilsMock.resolveConfigPath.mockReturnValue('/repo/totem.config.ts');
+    utilsMock.loadConfig.mockRejectedValue(
+      new TotemConfigError(
+        'Invalid configuration:\n  ecl.cohortRepos: Array must contain at least 1 element(s)',
+        'fix the fields listed above',
+        'CONFIG_INVALID',
+      ),
+    );
+
+    // NON-VACUITY: a catch-and-degrade (orient's pattern) would resolve undefined
+    // here, aliasing a config bug into the undeclared arm — this asserts it does NOT.
+    await expect(loadEclConfig('/repo')).rejects.toThrow(/Invalid configuration/);
+  });
+
+  it('returns the loaded config when present and valid', async () => {
+    const loaded = cfg(CROSTER);
+    utilsMock.resolveConfigPath.mockReturnValue('/repo/totem.config.ts');
+    utilsMock.loadConfig.mockResolvedValue(loaded);
+
+    await expect(loadEclConfig('/repo')).resolves.toBe(loaded);
   });
 });
 

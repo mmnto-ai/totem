@@ -62,6 +62,7 @@ export type {
   ContentType,
   DocTarget,
   DoctorConfig,
+  EclConfig,
   EmbeddingProvider,
   GarbageCollectionConfig,
   IngestTarget,
@@ -79,6 +80,7 @@ export {
   DEFAULT_REVIEW_SOURCE_EXTENSIONS,
   DocTargetSchema,
   DoctorConfigSchema,
+  EclConfigSchema,
   EmbeddingProviderSchema,
   GarbageCollectionSchema,
   GeminiOrchestratorSchema,
@@ -675,7 +677,6 @@ export { resolveSubstratePaths } from './substrate-resolver.js';
 // frozen-archive read path while orchestration is the active read+write surface.
 export type { OrchestrationPaths, SelfAgentResolution } from './orchestration-resolver.js';
 export {
-  cohortRepos,
   isPathSafeAgentId,
   knownCohortAgents,
   resolveOrchestrationPaths,

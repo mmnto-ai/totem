@@ -277,6 +277,39 @@ export const OrientConfigSchema = z.object({
 });
 
 /**
+ * `totem ecl-gc --compact` cohort completeness roster (mmnto-ai/totem#2310;
+ * ADR-106 § A2.2 + ecl-discipline § 4.5).
+ *
+ * `cohortRepos` is the declared expected-repo yardstick the compaction
+ * completeness gate checks the live workspace glob against: a `processed/` mark
+ * may be collected only against a PROVABLY-complete poll, and "complete"
+ * requires every expected outbox-holding repo present + scanned. A silently-
+ * absent cohort repo makes a live mark in its unscanned outbox look inert (the
+ * false-unread class), so the roster is the yardstick that makes an incomplete
+ * scan detectable.
+ *
+ * Values are bare workspace DIRECTORY names (e.g. `totem`, `totem-strategy`),
+ * matched against the sibling directories of the workspace root — NOT
+ * `owner/repo` slugs. This is CONSUMER-DECLARED config, not a baked product
+ * identity (Tenet 16 / the A2.2 contract): an external consumer's cohort is
+ * THEIR repos, so the roster cannot ship as a core constant. It replaces the
+ * interim `cohortRepos()` core constant (shipped 1.90.0, product-locked). The
+ * change-authority for OUR cohort's value stays mmnto-ai/totem-strategy#611.
+ *
+ * `.min(1)`: an EMPTY `cohortRepos: []` is a config BUG (loud Zod failure at
+ * load), NEVER a synonym for "undeclared". Omitting the `ecl` block (or the
+ * `cohortRepos` key) is the honest undeclared state → the compaction gate
+ * hard-aborts (exit 3, non-`--force-incomplete`-waivable). A genuine single-
+ * repo consumer declares a roster of one (completeness-1, the A2.2 line).
+ */
+export const EclConfigSchema = z.object({
+  /** Declared cohort repo roster (bare workspace dir names) for the `totem
+   *  ecl-gc --compact` A2.2 completeness gate. Optional: absent ⇒ undeclared ⇒
+   *  the gate hard-aborts. `.min(1)`: an empty array is a loud config error. */
+  cohortRepos: z.array(z.string().min(1)).min(1).optional(),
+});
+
+/**
  * Default source extensions used when computing the review content hash.
  * Historical hardcoded set, preserved for backward compatibility with
  * pre-#1527 consumers. Polyglot repos override via `review.sourceExtensions`.
@@ -490,6 +523,10 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: `totem orient` settings (e.g. `{ projectNumber: 1 }` for the GH Project board). */
   orient: OrientConfigSchema.optional(),
+
+  /** Optional: `totem ecl-gc --compact` settings — the consumer-declared cohort
+   *  completeness roster (`{ cohortRepos: ['totem', ...] }`, mmnto-ai/totem#2310). */
+  ecl: EclConfigSchema.optional(),
 });
 
 /**
@@ -509,6 +546,7 @@ export type GarbageCollectionConfig = z.infer<typeof GarbageCollectionSchema>;
 export type DoctorConfig = z.infer<typeof DoctorConfigSchema>;
 export type DocTarget = z.infer<typeof DocTargetSchema>;
 export type OrientConfig = z.infer<typeof OrientConfigSchema>;
+export type EclConfig = z.infer<typeof EclConfigSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
 
 /**

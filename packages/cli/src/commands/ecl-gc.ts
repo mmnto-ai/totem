@@ -36,10 +36,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
-  cohortRepos,
   getErrorMessage,
   isPathSafeAgentId,
   resolveTotemRepoRootSync,
+  type TotemConfig,
+  TotemConfigError,
   TotemError,
 } from '@mmnto/totem';
 
@@ -425,14 +426,25 @@ export interface EclCompactOptions {
   maxScan?: number;
   /**
    * Declared expected cohort repo roster for the A2.2 completeness gate — the
-   * yardstick the workspace glob is checked against (default: `cohortRepos()`,
-   * the strategy#611 interim constant pending config-ification, mmnto-ai/totem#2310).
-   * An EMPTY roster is the "undeclared" case: compaction HARD-ABORTS (fail-loud,
-   * exit 3), never "assume complete" and never a silent no-op — completeness is
-   * unprovable without a declared expectation (strategy#828 no-roster corollary).
-   * Tests inject explicitly.
+   * yardstick the workspace glob is checked against. Highest-precedence source
+   * (mmnto-ai/totem#2310): an explicit value here (programmatic callers / tests)
+   * WINS over `config.ecl.cohortRepos`. When BOTH are absent the roster is
+   * undeclared: compaction HARD-ABORTS (fail-loud, exit 3), never "assume
+   * complete" and never a silent no-op — completeness is unprovable without a
+   * declared expectation (strategy#828 no-roster corollary). Tests inject
+   * explicitly; the CLI action injects `config` (below) instead.
    */
   expectedRepos?: string[];
+  /**
+   * Loaded consumer config, the roster's second-precedence source
+   * (mmnto-ai/totem#2310): when `expectedRepos` is absent the gate reads
+   * `config.ecl.cohortRepos`. Injected by the CLI action (which loads config at
+   * the process boundary) so `eclCompact` stays a pure, synchronously-testable
+   * function — most tests inject `expectedRepos` directly and never touch this.
+   * A declared-but-EMPTY `cohortRepos` never reaches here: it is a Zod `.min(1)`
+   * violation caught loud at config load (a config bug ≠ an undeclared roster).
+   */
+  config?: TotemConfig;
   /**
    * Operator escape (`--force-incomplete`): proceed with compaction even when
    * the workspace glob is a strict subset of the declared roster (a cohort repo
@@ -494,6 +506,47 @@ export interface EclCompactResult {
 }
 
 /**
+ * Resolve the A2.2 completeness roster by precedence (mmnto-ai/totem#2310):
+ * explicit `expectedRepos` (programmatic callers / tests) → `config.ecl.cohortRepos`
+ * (consumer-declared) → `undefined` (the honest UNDECLARED state, which the gate
+ * maps to a hard-abort). Pure so the precedence is unit-testable in isolation.
+ * A declared-but-EMPTY array never reaches here: it is a Zod `.min(1)` violation
+ * caught loud at config load (`loadEclConfig`), so a config bug is never aliased
+ * into an undeclared roster.
+ */
+export function resolveExpectedRoster(
+  explicit: string[] | undefined,
+  config: TotemConfig | undefined,
+): string[] | undefined {
+  return explicit ?? config?.ecl?.cohortRepos;
+}
+
+/**
+ * Load the consumer's Totem config for the compaction roster read
+ * (mmnto-ai/totem#2310). A MISSING config file is the honest "undeclared" state —
+ * returns `undefined`, and the gate hard-aborts (exit 3) downstream. A
+ * PRESENT-but-INVALID config (e.g. `ecl.cohortRepos: []` → Zod `.min(1)`, or any
+ * other schema/parse error) throws LOUD: it is a config BUG and must NOT be
+ * caught into honest-absent, which would mask the bug as a normal undeclared
+ * roster (Tenet 4). Mirrors `orient`'s config read (`resolveProjectNumber`) but
+ * DELIBERATELY narrows the swallow to `CONFIG_MISSING` only — orient's catch-all
+ * would degrade an invalid config into "no board", the exact aliasing this gate
+ * must avoid.
+ */
+export async function loadEclConfig(cwd: string): Promise<TotemConfig | undefined> {
+  const { loadConfig, resolveConfigPath } = await import('../utils.js');
+  let configPath: string;
+  try {
+    configPath = resolveConfigPath(cwd);
+    // totem-context: a MISSING config file is honest-absent (undeclared roster → gate-red), NOT a failure; any OTHER error — and the present-but-invalid config surfaced by loadConfig below — propagates LOUD so a config bug never aliases into the undeclared arm.
+  } catch (err) {
+    if (err instanceof TotemConfigError && err.code === 'CONFIG_MISSING') return undefined;
+    throw err;
+  }
+  return loadConfig(configPath);
+}
+
+/**
  * Programmatic entry point for cursor-coupled processed-mark compaction. For a
  * single resolved seat, deletes `processed/` marks whose inbound dispatch is
  * absent from the RAW addressed-inbound set (A2.1) — but ONLY when discovery is
@@ -516,7 +569,7 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   const workspace = path.resolve(
     opts.workspace ?? env['TOTEM_WORKSPACE'] ?? path.dirname(repoRoot),
   );
-  const expectedRepos = [...(opts.expectedRepos ?? cohortRepos())].sort();
+  const expectedRepos = [...(resolveExpectedRoster(opts.expectedRepos, opts.config) ?? [])].sort();
 
   // Single-writer target (A2.3): resolve EXACTLY one seat. Ambiguous/zero self
   // is a usage error (parity with `eclGc`), thrown before any scan or delete.
@@ -554,14 +607,17 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   const allMarks = new Set([...directMarks, ...broadcastMarks]);
 
   // Safety corollary (codified contract strategy#828 / eb9ff5b — A2.2): an
-  // UNDECLARED (empty) roster gives the completeness gate nothing to assert
-  // against, so completeness cannot be proven. This is a HARD ABORT (fail-loud,
-  // non-zero exit — the caller maps `gateComplete=false` to exit 3), NOT a silent
-  // no-op that would let `processed/` accumulate unsignalled (Tenet 4). A genuine
-  // single-repo consumer opts into completeness-1 by DECLARING a 1-repo roster;
-  // the interim `cohortRepos()` default is non-empty for our cohort, so this
-  // guards the config-declared undeclared-consumer case (mmnto-ai/totem#2310).
-  // `rosterDeclared=false` is retained only to frame the operator message.
+  // UNDECLARED roster gives the completeness gate nothing to assert against, so
+  // completeness cannot be proven. This is a HARD ABORT (fail-loud, non-zero
+  // exit — the caller maps `gateComplete=false` to exit 3), NOT a silent no-op
+  // that would let `processed/` accumulate unsignalled (Tenet 4). The roster is
+  // resolved from consumer config (`ecl.cohortRepos`, mmnto-ai/totem#2310):
+  // omitting the key is the undeclared state that lands here (empty array after
+  // the `?? []` fallback). A declared-but-EMPTY `cohortRepos: []` never reaches
+  // this branch — it is a loud Zod `.min(1)` failure at config load, never
+  // aliased into undeclared. A genuine single-repo consumer opts into
+  // completeness-1 by DECLARING a 1-repo roster. `rosterDeclared=false` is
+  // retained only to frame the operator message.
   if (expectedRepos.length === 0) {
     return {
       agent,
@@ -594,8 +650,8 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   // roster entry the gate accepts but the scan would skip leaves its outbox
   // unscanned, re-opening the leak (CodeRabbit). `--force-incomplete` waives a
   // genuinely ABSENT repo, but never an unscannable-name declaration (that is a
-  // config error, not a known gap). Unreachable with the clean #611 roster
-  // today; hardens the config-declared future (mmnto-ai/totem#2310).
+  // config error, not a known gap). Unreachable with our own clean config-
+  // declared roster today; hardens the arbitrary-consumer case (mmnto-ai/totem#2310).
   const forced = opts.forceIncomplete === true;
   const missingRepos = expectedRepos.filter(
     (repo) =>
