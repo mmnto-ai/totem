@@ -1,5 +1,27 @@
 # @mmnto/cli
 
+## 1.90.0
+
+### Minor Changes
+
+- cad2f30: Add `totem ecl-gc --compact` — cursor-coupled processed-mark compaction, the read-side sibling of the outbox prune (mmnto-ai/totem#2307; parent mmnto-ai/totem-strategy#700; contract ADR-106 § A2 + `ecl-discipline` § 4.5, ratified strategy#826).
+
+  Compaction deletes an agent's OWN `processed/` marks that shadow nothing — a mark whose inbound dispatch its sender already swept per § 4.4. The retained cursor is `processed ∩ raw-addressed-inbound`, where the raw set is the **pre-dedupe** discovery (a new `includeProcessed` option on `pollMail`), never `pollMail`'s `inbound − processed` list — feeding that back would delete every retained mark (the § A2.1 false-unread bomb). Deletion is licensed ONLY against a **provably-complete** poll (§ A2.2: full expected cohort roster present, zero scan warnings, not truncated — else zero deletes, uncertain ⇒ retain), binds to **exactly one seat** (§ A2.3), and **self-verifies** via an immediate re-poll (§ A2.4).
+
+  Per the contract-owner roster ruling (strategy-claude), the completeness gate's declared roster is a **consumer-config-declared** expectation, not a core constant — `totem ecl-gc` ships, so a hardcoded cohort roster is a Tenet-16 product-vs-cohort lock. `@mmnto/totem` gains `cohortRepos()` as the **explicitly-marked interim** value (the strategy#611 frozen active set; authority stays strategy#611; config-ify tracked in #2310). The **safety corollary** (codified strategy#828 / eb9ff5b): an undeclared (empty) roster makes compaction **hard-abort** — fail-loud, non-zero exit, never a silent no-op and never "assume complete." An operator `--force-incomplete` escape waives only the roster-presence arm (scan warnings / truncation still abort; an undeclared roster still hard-aborts).
+
+  Runs after the prune inside `/signoff` (`totem ecl-gc --apply --compact`). Combined exit contract: `0` clean · `1` partial janitorial delete failure (prune or compact) · `2` usage/agent-unresolvable · `3` compaction abort (A2.2 gate red — a DECLARED roster incomplete OR no roster declared at all — or A2.4 falsifier tripped) — `3` outranks `1`. Prune behavior (`totem ecl-gc` with no `--compact`) is unchanged.
+
+- c66256d: Add `totem ecl-gc` — the binary-guaranteed, cohort-wide replacement for the interim `scripts/prune-outbox.mjs` (mmnto-ai/totem#2279; parent mmnto-ai/totem-strategy#700; doctrine/ecl-discipline.md § 4.4). It prunes the calling agent's OWN aged ECL outbox dispatches: `totem ecl-gc` self-resolves the single self-agent (reusing `resolveSelfSender`'s explicit > unambiguous-self > throw precedence) and prunes only `<repoRoot>/.totem/orchestration/<agent>/outbox/`, so a self-resolving binary structurally cannot prune a peer, `journal/`, or `processed/`.
+
+  Dry-run by default (lists would-prune, deletes nothing); `--apply` deletes. Flags: `--retain-days <n>` (default 14), `--agent-id <id>` (visiting/orchestrator override), `--json` (structured stdout). Only `.md` dispatches with a parseable dual-form stamp (`YYYY-MM-DDTHHMMZ` or `…HHMMSSZ`) are eligible; the exact retention boundary is retained; non-file / non-`.md` / unparseable entries are surfaced and never deleted. Exit codes: 0 clean, 1 partial delete failure (janitorial sensor, non-blocking — Tenet 13), 2 usage error. The distributed `signoff` skill gains a prune step (step 5) wiring `totem ecl-gc --apply` into end-of-session cleanup. This train ships prune only; processed-mark compaction is a deferred follow-on, and `scripts/prune-outbox.mjs` is intentionally left in place.
+
+### Patch Changes
+
+- Updated dependencies [cad2f30]
+- Updated dependencies [2530a3b]
+  - @mmnto/totem@1.90.0
+
 ## 1.89.0
 
 ### Minor Changes
