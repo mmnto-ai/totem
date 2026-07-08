@@ -33,7 +33,9 @@ jobs:
       - run: pnpm build
 
       - name: Run integration smoke tests + adversarial eval harness
-        run: pnpm --filter @mmnto/cli vitest run --config vitest.integration.config.ts
+        # pnpm 10+ removed the implicit exec fallback for filtered runs — bare
+        # `vitest` resolves as a (nonexistent) package script, so exec explicitly.
+        run: pnpm --filter @mmnto/cli exec vitest run --config vitest.integration.config.ts
         env:
           CI_INTEGRATION: 'true'
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
