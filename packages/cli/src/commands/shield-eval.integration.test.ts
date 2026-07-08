@@ -284,6 +284,7 @@ describe('Adversarial Eval — Deterministic', () => {
 // ─── LLM evaluation (nightly, requires API keys) ────
 
 const EVAL_TIMEOUT_MS = 120_000; // 2 min — LLM can be slow
+const LINT_TIMEOUT_MS = 30_000; // deterministic lint is local-only (~1.5s typical) — fail fast on hangs
 
 describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
   'Adversarial Eval — LLM Model Drift',
@@ -307,6 +308,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
     function runCli(
       args: string[],
       env: Record<string, string> = {},
+      timeoutMs: number = EVAL_TIMEOUT_MS,
     ): { stdout: string; stderr: string; exitCode: number } {
       const cliEntry = path.resolve('dist/index.js');
       const cmd = `node ${cliEntry} ${args.join(' ')}`;
@@ -315,7 +317,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
         const stdout = execSync(cmd, {
           cwd: tmpDir,
           encoding: 'utf-8',
-          timeout: EVAL_TIMEOUT_MS,
+          timeout: timeoutMs,
           env: {
             ...process.env,
             ...env,
@@ -349,7 +351,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
         `;
         fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), config);
 
-        const { exitCode, stdout, stderr } = runCli(['lint', '--staged']);
+        const { exitCode, stdout, stderr } = runCli(['lint', '--staged'], {}, LINT_TIMEOUT_MS);
         const output = stdout + stderr;
 
         // Output assertions first: a config-resolution failure also exits 1,
@@ -362,7 +364,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
         expect(output).toContain('TRAP-004');
         expect(exitCode).toBe(1);
       },
-      EVAL_TIMEOUT_MS,
+      LINT_TIMEOUT_MS,
     );
 
     // Gemini model drift test
