@@ -845,6 +845,29 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(r.gateReasons.some((x) => /no cohort roster declared/.test(x))).toBe(true);
     expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
   });
+
+  it('C20 — a cross-sender basename collision reds the gate and blocks all deletes (mmnto-ai/totem#2311)', () => {
+    ensureRepos(CROSTER);
+    // Two DISTINCT seats converge on one addressed-inbound basename; one side
+    // is already marked. The mark shadows both in the reader view, but the
+    // `includeProcessed` discovery poll sees both, the #2311 sensor warns, and
+    // the existing warnings arm (C4 class) holds compaction shut during
+    // exactly the window a compact could strand the unshadowed dispatch.
+    const COLLIDING = '2026-07-06T1717Z-totem-agy-blind-reply.md';
+    writeInbound('totem-strategy', 'strategy-gemini', COLLIDING, CS);
+    writeInbound('totem-strategy', 'strategy-agy', COLLIDING, CS);
+    writeMark(CS, COLLIDING);
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(false);
+    expect(r.gateReasons.some((x) => /cross-sender basename collision/.test(x))).toBe(true);
+    expect(r.collected).toEqual([]);
+    // NON-VACUITY: the genuinely-swept mark ALSO survives — uncertain ⇒ retain.
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+    expect(markExists(CS, COLLIDING)).toBe(true);
+  });
 });
 
 // ─── Roster resolution precedence (mmnto-ai/totem#2310) ──
