@@ -2,8 +2,9 @@
  * Adversarial Evaluation Harness — Model Drift Detection
  *
  * Sets up a real git repository with planted architectural violations
- * and corresponding Totem lessons, then runs `totem shield` to verify
- * that both deterministic and LLM modes catch the planted traps.
+ * and corresponding Totem lessons, then runs the CLI (`totem lint` for
+ * the deterministic leg, `totem shield` for LLM modes) to verify that
+ * both catch the planted traps.
  *
  * Deterministic tests run on every CI run (no API keys needed).
  * LLM tests are gated behind CI_INTEGRATION=true (nightly only).
@@ -41,6 +42,26 @@ import { parseVerdict } from './shield.js';
 
 // ─── Adversarial Fixtures ────────────────────────────
 
+/**
+ * Synthetic legitimacy stamp for the trap rules. mmnto-ai/totem#2181 demoted
+ * un-stamped regex rules to advisory (printed, excluded from exit 1), so a
+ * BLOCKING regex rule must carry the ADR-110 §3 stamp: `legitimacy` with both
+ * controls passed plus the derived `ruleClass: 'hard'` — the pair is
+ * parse-enforced by the #2183 superRefine, which this fixture exercises via
+ * subprocess. Provenance values are schema-valid placeholders; the fixture is
+ * synthetic by design.
+ */
+const FIXTURE_LEGITIMACY = {
+  provenance: {
+    mergedPr: 196,
+    reviewThread:
+      'synthetic adversarial fixture — mmnto-ai/totem#196 harness, re-authored in #2320',
+    commitSha: '0000000000000000000000000000000000000000',
+  },
+  positiveControl: true,
+  negativeControl: true,
+};
+
 /** Planted trap rules that map to specific violations in the bad code. */
 const TRAP_RULES: CompiledRule[] = [
   {
@@ -50,6 +71,8 @@ const TRAP_RULES: CompiledRule[] = [
     message: 'TRAP-001: Never import fs directly — use fs/promises for async safety',
     engine: 'regex' as const,
     compiledAt: new Date().toISOString(),
+    legitimacy: FIXTURE_LEGITIMACY,
+    ruleClass: 'hard' as const,
   },
   {
     lessonHash: hashLesson('No console.log in library code', 'TRAP-002'),
@@ -58,6 +81,8 @@ const TRAP_RULES: CompiledRule[] = [
     message: 'TRAP-002: Use structured logger, not console.log, in library code',
     engine: 'regex' as const,
     compiledAt: new Date().toISOString(),
+    legitimacy: FIXTURE_LEGITIMACY,
+    ruleClass: 'hard' as const,
   },
   {
     lessonHash: hashLesson('Catch blocks use err not error', 'TRAP-003'),
@@ -66,6 +91,8 @@ const TRAP_RULES: CompiledRule[] = [
     message: 'TRAP-003: Use err (not error) in catch blocks — project convention',
     engine: 'regex' as const,
     compiledAt: new Date().toISOString(),
+    legitimacy: FIXTURE_LEGITIMACY,
+    ruleClass: 'hard' as const,
   },
   {
     lessonHash: hashLesson('No sync file reads', 'TRAP-004'),
@@ -74,6 +101,8 @@ const TRAP_RULES: CompiledRule[] = [
     message: 'TRAP-004: Use async readFile, not readFileSync, in request handlers',
     engine: 'regex' as const,
     compiledAt: new Date().toISOString(),
+    legitimacy: FIXTURE_LEGITIMACY,
+    ruleClass: 'hard' as const,
   },
 ];
 
@@ -255,6 +284,7 @@ describe('Adversarial Eval — Deterministic', () => {
 // ─── LLM evaluation (nightly, requires API keys) ────
 
 const EVAL_TIMEOUT_MS = 120_000; // 2 min — LLM can be slow
+const LINT_TIMEOUT_MS = 30_000; // deterministic lint is local-only (~1.5s typical) — fail fast on hangs
 
 describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
   'Adversarial Eval — LLM Model Drift',
@@ -271,21 +301,23 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
     });
 
     /**
-     * Run shield as a subprocess against the adversarial repo.
+     * Run the CLI as a subprocess against the adversarial repo. Args
+     * include the subcommand (e.g. `['lint', '--staged']`).
      * Returns stdout, stderr, and exit code.
      */
-    function runShield(
+    function runCli(
       args: string[],
       env: Record<string, string> = {},
+      timeoutMs: number = EVAL_TIMEOUT_MS,
     ): { stdout: string; stderr: string; exitCode: number } {
       const cliEntry = path.resolve('dist/index.js');
-      const cmd = `node ${cliEntry} shield ${args.join(' ')}`;
+      const cmd = `node ${cliEntry} ${args.join(' ')}`;
 
       try {
         const stdout = execSync(cmd, {
           cwd: tmpDir,
           encoding: 'utf-8',
-          timeout: EVAL_TIMEOUT_MS,
+          timeout: timeoutMs,
           env: {
             ...process.env,
             ...env,
@@ -305,18 +337,34 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
     }
 
     it(
-      'deterministic shield exits 1 and catches planted traps via subprocess',
+      'deterministic lint exits 1 and catches planted traps via subprocess',
       () => {
-        const { exitCode, stdout, stderr } = runShield(['--deterministic', '--staged']);
+        // `totem lint` hard-requires a config before scanning
+        // (mmnto-ai/totem#2320) — same shape as the LLM tests below, minus
+        // the orchestrator (optional; deterministic lint never invokes an LLM).
+        const config = `
+          export default {
+            targets: [{ glob: 'src/**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+            totemDir: '.totem',
+            lanceDir: '.lancedb',
+          };
+        `;
+        fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), config);
+
+        const { exitCode, stdout, stderr } = runCli(['lint', '--staged'], {}, LINT_TIMEOUT_MS);
         const output = stdout + stderr;
 
-        expect(exitCode).toBe(1);
+        // Output assertions first: a config-resolution failure also exits 1,
+        // so the exit code alone cannot prove the traps were scanned
+        // (mmnto-ai/totem#2320).
+        expect(output).not.toContain('No Totem configuration found');
         expect(output).toContain('TRAP-001');
         expect(output).toContain('TRAP-002');
         expect(output).toContain('TRAP-003');
         expect(output).toContain('TRAP-004');
+        expect(exitCode).toBe(1);
       },
-      EVAL_TIMEOUT_MS,
+      LINT_TIMEOUT_MS,
     );
 
     // Gemini model drift test
@@ -334,7 +382,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
         `;
         fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), config);
 
-        const { exitCode, stdout, stderr } = runShield(['--staged', '--mode=structural'], {
+        const { exitCode, stdout, stderr } = runCli(['shield', '--staged', '--mode=structural'], {
           GEMINI_API_KEY: process.env['GEMINI_API_KEY']!,
         });
         const output = stdout + stderr;
@@ -363,7 +411,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
         `;
         fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), config);
 
-        const { exitCode, stdout, stderr } = runShield(['--staged', '--mode=structural'], {
+        const { exitCode, stdout, stderr } = runCli(['shield', '--staged', '--mode=structural'], {
           ANTHROPIC_API_KEY: process.env['ANTHROPIC_API_KEY']!,
         });
         const output = stdout + stderr;
@@ -391,7 +439,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
         `;
         fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), config);
 
-        const { exitCode, stdout, stderr } = runShield(['--staged', '--mode=structural'], {
+        const { exitCode, stdout, stderr } = runCli(['shield', '--staged', '--mode=structural'], {
           OPENAI_API_KEY: process.env['OPENAI_API_KEY']!,
         });
         const output = stdout + stderr;
