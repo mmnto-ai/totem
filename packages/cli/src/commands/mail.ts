@@ -573,6 +573,15 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   }
 
   const mail: MailEntry[] = [];
+  // Cross-sender basename-collision sensor (mmnto-ai/totem#2311, read-side
+  // half of mmnto-ai/totem-strategy#827): dispatch filenames don't encode the
+  // sender and `processed/` dedupe is basename-only, so two seats converging
+  // on one addressed-inbound basename means a single mark silently shadows
+  // BOTH dispatches. Keyed on the OUTBOX-OWNER seat (`slot.agent` —
+  // single-writer filesystem truth), never the forgeable `from:` header, so
+  // one seat's broadcast fan-out copies across repos can never fire it.
+  // basename → (owner-seat lowercased → `repo/agent` display path).
+  const collisionsByBasename = new Map<string, Map<string, string>>();
   const inScope = ordered.length > maxScan ? ordered.slice(0, maxScan) : ordered;
   for (const { slot, file } of inScope) {
     scanned += 1;
@@ -598,6 +607,13 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     const header = parsed.header;
     const toLower = header.to.toLowerCase();
     if (toLower !== 'broadcast' && !selfLower.has(toLower)) continue;
+    const senderSeat = slot.agent.toLowerCase();
+    let seats = collisionsByBasename.get(file);
+    if (seats === undefined) {
+      seats = new Map();
+      collisionsByBasename.set(file, seats);
+    }
+    if (!seats.has(senderSeat)) seats.set(senderSeat, `${slot.repo}/${slot.agent}`);
     mail.push({
       file,
       repo: slot.repo,
@@ -607,6 +623,27 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       subject: header.subject ?? '(no subject)',
       filePath: path.join(slot.outbox, file),
     });
+  }
+
+  // Warn once per colliding basename, naming every seat path. Sensor, not
+  // actuator (Tenet 13): both dispatches still surface as mail above. Riding
+  // the `warnings` channel is load-bearing — `ecl-gc --compact` arms its A2.2
+  // completeness gate on `warnings.length === 0` (mmnto-ai/totem#2309), so a
+  // live collision blocks mark-compaction during exactly the coexistence
+  // window in which one mark could strand the other dispatch, with zero new
+  // gate plumbing. (Its `includeProcessed` discovery poll sees through marks,
+  // so a half-marked collision still reds the gate.) Detection is bounded by
+  // the scan window: a colliding file beyond the maxScan horizon is never
+  // parsed, so this sensor is reliable only within the scanned set — not an
+  // absolute guarantee. Truncation itself warns above and independently reds
+  // the compaction gate, so the bounded view never silently green-lights a
+  // compact.
+  for (const [name, seats] of collisionsByBasename) {
+    if (seats.size < 2) continue;
+    const paths = [...seats.values()];
+    warnings.push(
+      `cross-sender basename collision: ${name} from ${paths.join(' and ')} — a single processed/ mark would shadow ${seats.size === 2 ? 'both' : `all ${seats.size}`}`,
+    );
   }
 
   // Re-sort the surviving mail by frontmatter date when available (filename

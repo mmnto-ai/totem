@@ -282,6 +282,103 @@ describe('pollMail — processed/ exclusion', () => {
   });
 });
 
+// ─── Cross-sender basename-collision sensor ─────────────
+
+describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#2311)', () => {
+  const NAME = '2026-07-06T1717Z-totem-claude-blind-reply.md';
+
+  it('warns once when two distinct senders converge on one addressed-inbound basename', () => {
+    writeOutbox('totem-strategy', 'strategy-gemini', [{ name: NAME, to: 'totem-claude' }]);
+    writeOutbox('totem-strategy', 'strategy-agy', [{ name: NAME, to: 'totem-claude' }]);
+    const result = poll();
+    const collisionWarnings = result.warnings.filter((w) =>
+      w.startsWith('cross-sender basename collision'),
+    );
+    expect(collisionWarnings).toHaveLength(1);
+    expect(collisionWarnings[0]).toContain(NAME);
+    expect(collisionWarnings[0]).toContain('totem-strategy/strategy-gemini');
+    expect(collisionWarnings[0]).toContain('totem-strategy/strategy-agy');
+    // Sensor, not actuator (Tenet 13): both dispatches still surface as mail.
+    expect(result.mail).toHaveLength(2);
+  });
+
+  it('fires on a broadcast + directed mix (both are addressed-inbound for this seat)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [{ name: NAME, to: 'broadcast' }]);
+    writeOutbox('liquid-city', 'lc-claude', [{ name: NAME, to: 'totem-claude' }]);
+    const result = poll();
+    expect(
+      result.warnings.filter((w) => w.startsWith('cross-sender basename collision')),
+    ).toHaveLength(1);
+  });
+
+  it('does NOT fire on same-sender copies across repos (broadcast fan-out reads)', () => {
+    // One dispatch, fanned out by the SAME seat into two repos: a single mark
+    // shadowing all copies is correct handled-semantics, not a drop hazard.
+    writeOutbox('totem-strategy', 'strategy-claude', [{ name: NAME, to: 'broadcast' }]);
+    writeOutbox('liquid-city', 'strategy-claude', [{ name: NAME, to: 'broadcast' }]);
+    const result = poll();
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('keys the sender on the outbox-owner seat, not the forgeable from: field', () => {
+    // Same outbox owner, divergent from: headers — still ONE writer (single-
+    // writer discipline), so no collision. The inverse (distinct owners with
+    // an identical forged from:) must still fire.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: NAME, to: 'totem-claude', from: 'someone-else' },
+    ]);
+    writeOutbox('liquid-city', 'strategy-claude', [{ name: NAME, to: 'totem-claude' }]);
+    expect(poll().warnings).toEqual([]);
+
+    writeOutbox('totem-status', 'status-claude', [
+      { name: NAME, to: 'totem-claude', from: 'strategy-claude' },
+    ]);
+    writeOutbox('skynet-sports', 'skynet-claude', [
+      { name: NAME, to: 'totem-claude', from: 'strategy-claude' },
+    ]);
+    expect(
+      poll().warnings.filter((w) => w.startsWith('cross-sender basename collision')),
+    ).toHaveLength(1);
+  });
+
+  it('does NOT fire when neither same-basename dispatch is addressed to this seat', () => {
+    writeOutbox('totem-strategy', 'strategy-gemini', [{ name: NAME, to: 'lc-claude' }]);
+    writeOutbox('totem-strategy', 'strategy-agy', [{ name: NAME, to: 'lc-claude' }]);
+    const result = poll();
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('emits ONE warning naming all sender paths when three seats collide', () => {
+    writeOutbox('totem-strategy', 'strategy-gemini', [{ name: NAME, to: 'totem-claude' }]);
+    writeOutbox('totem-strategy', 'strategy-agy', [{ name: NAME, to: 'totem-claude' }]);
+    writeOutbox('liquid-city', 'lc-claude', [{ name: NAME, to: 'totem-claude' }]);
+    const result = poll();
+    const collisionWarnings = result.warnings.filter((w) =>
+      w.startsWith('cross-sender basename collision'),
+    );
+    expect(collisionWarnings).toHaveLength(1);
+    expect(collisionWarnings[0]).toContain('totem-strategy/strategy-gemini');
+    expect(collisionWarnings[0]).toContain('totem-strategy/strategy-agy');
+    expect(collisionWarnings[0]).toContain('liquid-city/lc-claude');
+  });
+
+  it('a processed/ mark hides the coexistence window from the READER poll but not from the compaction view', () => {
+    // The reader poll filters BOTH files by basename at pass 1 — the exact
+    // shadow this sensor exists to catch, detectable only while both are
+    // unread. The compaction discovery poll (`includeProcessed`, ADR-106
+    // § A2.1) sees through marks, so the warning fires there and reds the
+    // A2.2 gate via the existing `warnings.length === 0` arm (#2309).
+    writeOutbox('totem-strategy', 'strategy-gemini', [{ name: NAME, to: 'totem-claude' }]);
+    writeOutbox('totem-strategy', 'strategy-agy', [{ name: NAME, to: 'totem-claude' }]);
+    writeProcessed('totem', 'totem-claude', [NAME]);
+    expect(poll().warnings).toEqual([]);
+    const raw = poll({ includeProcessed: true });
+    expect(
+      raw.warnings.filter((w) => w.startsWith('cross-sender basename collision')),
+    ).toHaveLength(1);
+  });
+});
+
 // ─── Sort + metadata ────────────────────────────────────
 
 describe('pollMail — sort + metadata', () => {
