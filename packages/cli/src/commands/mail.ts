@@ -632,7 +632,12 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // live collision blocks mark-compaction during exactly the coexistence
   // window in which one mark could strand the other dispatch, with zero new
   // gate plumbing. (Its `includeProcessed` discovery poll sees through marks,
-  // so a half-marked collision still reds the gate.)
+  // so a half-marked collision still reds the gate.) Detection is bounded by
+  // the scan window: a colliding file beyond the maxScan horizon is never
+  // parsed, so this sensor is reliable only within the scanned set — not an
+  // absolute guarantee. Truncation itself warns above and independently reds
+  // the compaction gate, so the bounded view never silently green-lights a
+  // compact.
   for (const [name, seats] of collisionsByBasename) {
     if (seats.size < 2) continue;
     const paths = [...seats.values()];
