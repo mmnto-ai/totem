@@ -1,0 +1,39 @@
+# VP-PR cut sensor (mmnto-ai/totem#2325) — the release-planning doctrine's
+# totem-lane tooling (mmnto-ai/totem-strategy#839, packaging-conventions.md
+# § "Release planning — the meaningful-cut discipline").
+#
+# Fires ONLY on the changesets Version-Packages PR and posts/updates one
+# sticky comment classifying the pending cut (internal-only vs
+# contract-bearing + choreography template). Advisory, never a required
+# check — the operator's cut word on the VP-PR merge remains the gate
+# (Tenet 13). The feature-PR path is untouched.
+name: VP-PR Cut Sensor
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  cut-sensor:
+    name: Classify the pending cut
+    if: github.event.pull_request.head.ref == 'changeset-release/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Dependency-free script (global fetch) — no pnpm install needed.
+      - name: Scan changesets + classify entry paths + upsert the comment
+        run: node tools/vp-pr-cut-sensor.mjs --pr "$PR_NUMBER"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
