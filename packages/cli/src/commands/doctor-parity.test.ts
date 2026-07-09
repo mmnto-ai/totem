@@ -1492,6 +1492,19 @@ describe('buildParityReadout (#2327)', () => {
 });
 
 describe('doctorParityCliCommand — --json verdict artifact (#2327 R4)', () => {
+  /** Structural shape of the R4 artifact for typed assertion access (kebab-case keys per spec). */
+  interface JsonArtifact {
+    'readout-schema-version': number;
+    manifest: Record<string, unknown>;
+    rollup: {
+      global: Record<string, number>;
+      'per-seat': Record<string, Record<string, number>>;
+    };
+    denominator: Record<string, unknown>;
+    strict: Record<string, unknown>;
+    rows: Array<Record<string, unknown>>;
+  }
+
   function captureStdout(): { writes: string[]; restore: () => void } {
     const writes: string[] = [];
     const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
@@ -1509,10 +1522,10 @@ describe('doctorParityCliCommand — --json verdict artifact (#2327 R4)', () => 
     } finally {
       cap.restore();
     }
-    const artifact = JSON.parse(cap.writes.join('')) as Record<string, any>;
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
     expect(artifact['readout-schema-version']).toBe(1);
-    expect(artifact['manifest']).toEqual({ 'schema-version': 1, status: 'scaffold' });
-    expect(artifact['rollup']['global']).toEqual({
+    expect(artifact.manifest).toEqual({ 'schema-version': 1, status: 'scaffold' });
+    expect(artifact.rollup.global).toEqual({
       pass: 0,
       warn: 0,
       info: 1,
@@ -1520,21 +1533,19 @@ describe('doctorParityCliCommand — --json verdict artifact (#2327 R4)', () => 
       skip: 3,
       fail: 0,
     });
-    expect(artifact['rollup']['per-seat']['claude']).toBeDefined();
-    expect(artifact['denominator']).toEqual({
+    expect(artifact.rollup['per-seat']['claude']).toBeDefined();
+    expect(artifact.denominator).toEqual({
       mechanical: 1,
       'attestation-only': 1,
       'honest-absent': 2,
       'claim-boundary': expect.stringContaining('manifest-declared contract set'),
     });
-    expect(artifact['strict']).toEqual({
+    expect(artifact.strict).toEqual({
       armed: false,
       'blocking-ids': ['gate-config'],
       'gates-anything': true,
     });
-    const attested = (artifact['rows'] as Array<Record<string, unknown>>).find(
-      (r) => r['id'] === 'doctrine-currency',
-    )!;
+    const attested = artifact.rows.find((r) => r['id'] === 'doctrine-currency')!;
     expect(attested['verdict']).toBe('info');
     expect(attested['reason-class']).toBe('attestation');
     expect(attested['last-attested']).toBe('2026-07-01');
@@ -1550,10 +1561,10 @@ describe('doctorParityCliCommand — --json verdict artifact (#2327 R4)', () => 
     } finally {
       cap.restore();
     }
-    const artifact = JSON.parse(cap.writes.join('')) as Record<string, any>;
-    expect(artifact['manifest']).toEqual({ status: 'not-configured' });
-    expect(artifact['rows']).toEqual([]);
-    expect(artifact['strict']).toEqual({
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    expect(artifact.manifest).toEqual({ status: 'not-configured' });
+    expect(artifact.rows).toEqual([]);
+    expect(artifact.strict).toEqual({
       armed: false,
       'blocking-ids': [],
       'gates-anything': false,
@@ -1579,11 +1590,9 @@ describe('doctorParityCliCommand — --json verdict artifact (#2327 R4)', () => 
     } finally {
       cap.restore();
     }
-    const artifact = JSON.parse(cap.writes.join('')) as Record<string, any>;
-    expect(artifact['rollup']['global']['fail']).toBe(1);
-    const row = (artifact['rows'] as Array<Record<string, unknown>>).find(
-      (r) => r['id'] === 'cr-profile',
-    )!;
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    expect(artifact.rollup.global['fail']).toBe(1);
+    const row = artifact.rows.find((r) => r['id'] === 'cr-profile')!;
     expect(row['verdict']).toBe('fail');
   });
 });
