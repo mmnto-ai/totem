@@ -23,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashLockArtifact, normalizeLockArtifact } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
-import { checkParity, doctorParityCliCommand } from './doctor-parity.js';
+import { buildParityReadout, checkParity, doctorParityCliCommand } from './doctor-parity.js';
 import {
   CLAUDE_SESSION_START,
   DISTRIBUTED_CLAUDE_SKILLS,
@@ -1290,5 +1290,343 @@ describe('checkParity - capability-probe routing (mmnto-ai/totem#2140)', () => {
     const line = results.find((r) => r.name.includes('knowledge-search-access'))!;
     expect(line.status).toBe('skip');
     expect(line.message).toMatch(/permits absence|not in consumers/i);
+  });
+});
+
+// ─── Trust-readout (mmnto-ai/totem#2327, Prop 303 §5(a)) ──────────
+
+// Four deterministic-in-a-tmpdir rows covering every coverage class + the
+// deltas raised against the spec (info in the vocabulary, rollup counts
+// verdict lines, `attestation` reason class):
+//   - doctrine-currency: manual-attestation, no package ⇒ always `info`
+//     (attestation-only coverage; carries last-attested for the age render).
+//   - cr-profile: value-equality, .coderabbit.yaml absent ⇒ deterministic
+//     scaffold `skip` (mechanical coverage, senses 'declared').
+//   - gate-config: consumers-scoped out of the tmpdir + blocking: true +
+//     unimplemented detector ⇒ scope skip, honest-absent coverage,
+//     skipped-not-gated (R5).
+//   - mcp-corpus-indexing: mechanical with no registered artifacts ⇒
+//     "not yet implemented" stub (honest-absent).
+const READOUT_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: doctrine-currency
+    dimension: doctrine
+    canonical-source: mmnto-ai/totem-strategy
+    detection-method: human attestation
+    expected-value-or-derivation: doctrine current per last attestation
+    tractability: manual-attestation
+    tracking-issue: mmnto-ai/totem-strategy#482
+    last-attested: 2026-07-01
+  - id: cr-profile
+    dimension: bot-review-configs
+    canonical-source: mmnto-ai/totem-strategy
+    detection-method: .coderabbit.yaml reviews.profile equality
+    expected-value-or-derivation: assertive
+    tractability: mechanical
+    manifestation: value-equality
+    tracking-issue: mmnto-ai/totem-strategy#738
+    vendor-adapter: [claude]
+  - id: gate-config
+    dimension: enforcement
+    canonical-source: mmnto-ai/totem
+    detection-method: installed gates vs canonical gate set
+    expected-value-or-derivation: consumer installed gates == canonical
+    tractability: mechanical
+    tracking-issue: mmnto-ai/totem-strategy#482
+    blocking: true
+    consumers:
+      - mmnto-ai/totem
+  - id: mcp-corpus-indexing
+    dimension: knowledge-index
+    canonical-source: null
+    source-note: consumer-local capability
+    detection-method: .lancedb index present
+    expected-value-or-derivation: index present + fresh
+    tractability: mechanical
+    tracking-issue: mmnto-ai/totem#2018
+`;
+
+function writeReadoutFixture(manifestYaml: string = READOUT_MANIFEST_YAML): void {
+  writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+  writeManifest('parity-manifest.yaml', manifestYaml);
+}
+
+describe('checkParity — trust-readout inputs (#2327)', () => {
+  it('carries readout inputs + loadStatus ok on the manifest ok path', async () => {
+    writeReadoutFixture();
+    const { loadStatus, readout } = await checkParity(tmpDir);
+    expect(loadStatus).toBe('ok');
+    expect(readout).toBeDefined();
+    expect(readout!.manifest).toEqual({ schemaVersion: 1, status: 'scaffold' });
+    expect(readout!.contracts).toHaveLength(4);
+  });
+
+  it('classifies coverage per contract at the routing branch (R2: registry ∩ manifest)', async () => {
+    writeReadoutFixture();
+    const { readout } = await checkParity(tmpDir);
+    const meta = readout!.meta;
+    expect(meta['doctrine-currency']!.coverage).toBe('attestation-only');
+    expect(meta['cr-profile']).toEqual({ coverage: 'mechanical', sensesProbed: 'declared' });
+    // Scoped-out AND unimplemented: the registry has no gate detector, so the
+    // class is honest-absent regardless of the scope skip.
+    expect(meta['gate-config']!.coverage).toBe('honest-absent');
+    expect(meta['mcp-corpus-indexing']!.coverage).toBe('honest-absent');
+  });
+
+  it('degenerate load states carry loadStatus and no readout inputs', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: doctrine/missing.yaml\n`);
+    const missing = await checkParity(tmpDir);
+    expect(missing.loadStatus).toBe('not-found');
+    expect(missing.readout).toBeUndefined();
+
+    writeConfig(BASE_CONFIG);
+    const unconfigured = await checkParity(tmpDir);
+    expect(unconfigured.loadStatus).toBe('not-configured');
+    expect(unconfigured.readout).toBeUndefined();
+  });
+});
+
+describe('buildParityReadout (#2327)', () => {
+  it('R1: rollup counts rendered verdict lines in the full six-state vocabulary (info included — raised delta)', async () => {
+    writeReadoutFixture();
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    expect(built.rollup.global).toEqual({
+      pass: 0,
+      warn: 0,
+      info: 1,
+      unknown: 0,
+      skip: 3,
+      fail: 0,
+    });
+    // The section summary line is not a contract row.
+    expect(built.rows).toHaveLength(4);
+  });
+
+  it('R1: per-seat rollup — vendor-neutral rows count toward every declared seat', async () => {
+    writeReadoutFixture();
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    expect(Object.keys(built.rollup.perSeat)).toEqual(['claude']);
+    // All four rows land on the claude seat: cr-profile declares it, the rest
+    // are vendor-neutral (they manifest on every seat).
+    expect(built.rollup.perSeat['claude']).toEqual({
+      pass: 0,
+      warn: 0,
+      info: 1,
+      unknown: 0,
+      skip: 3,
+      fail: 0,
+    });
+  });
+
+  it('R1: an EMPTY vendor-adapter list counts as vendor-neutral, never dropped from every seat (spec-owner review on #2328)', async () => {
+    writeReadoutFixture(
+      READOUT_MANIFEST_YAML.replace(
+        '    tractability: manual-attestation\n',
+        '    tractability: manual-attestation\n    vendor-adapter: []\n',
+      ),
+    );
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    // The [] row (doctrine-currency, info) still lands on the claude seat —
+    // excluded-from-every-seat-but-counted-globally is the R1 honesty hole.
+    expect(built.rollup.perSeat['claude']).toEqual({
+      pass: 0,
+      warn: 0,
+      info: 1,
+      unknown: 0,
+      skip: 3,
+      fail: 0,
+    });
+  });
+
+  it('R2: the denominator counts CONTRACTS by coverage class, never one collapsed number', async () => {
+    writeReadoutFixture();
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    expect(built.denominator).toEqual({ mechanical: 1, attestationOnly: 1, honestAbsent: 2 });
+  });
+
+  it('R3: reason classes — attestation / scoping-skip / honest-absent land per row; pass omits', async () => {
+    writeReadoutFixture();
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    const byId = new Map(built.rows.map((r) => [r.id, r]));
+    expect(byId.get('doctrine-currency')!.verdict).toBe('info');
+    expect(byId.get('doctrine-currency')!.reasonClass).toBe('attestation');
+    expect(byId.get('doctrine-currency')!.lastAttested).toBe('2026-07-01');
+    expect(byId.get('cr-profile')!.reasonClass).toBe('scoping-skip');
+    expect(byId.get('cr-profile')!.sensesProbed).toBe('declared');
+    // Unimplemented detector dominates the scope skip for the class.
+    expect(byId.get('gate-config')!.reasonClass).toBe('honest-absent');
+    expect(byId.get('mcp-corpus-indexing')!.reasonClass).toBe('honest-absent');
+  });
+
+  it('R3: an unparseable consumer file yields unknown → detector-error (CR #2328 round 1)', async () => {
+    writeReadoutFixture();
+    // Unterminated flow mapping — the value-equality detector degrades to an
+    // honest `unknown` (equality unprovable either way), never a throw.
+    fs.writeFileSync(path.join(tmpDir, '.coderabbit.yaml'), 'reviews: {\n', 'utf-8');
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    const row = built.rows.find((r) => r.id === 'cr-profile')!;
+    expect(row.verdict).toBe('unknown');
+    expect(row.reasonClass).toBe('detector-error');
+    expect(built.rollup.global.unknown).toBe(1);
+  });
+
+  it('R5: a blocking contract skipped by scoping renders skipped-not-gated, and the declared blocking set drives gates-anything', async () => {
+    writeReadoutFixture();
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, true);
+    const gateRow = built.rows.find((r) => r.id === 'gate-config')!;
+    expect(gateRow.verdict).toBe('skip');
+    expect(gateRow.skippedNotGated).toBe(true);
+    expect(built.strict).toEqual({
+      armed: true,
+      blockingIds: ['gate-config'],
+      gatesAnything: true,
+    });
+  });
+
+  it('R5: gates-anything is false when the manifest declares no blocking contracts', async () => {
+    writeReadoutFixture(READOUT_MANIFEST_YAML.replace('    blocking: true\n', ''));
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    expect(built.strict).toEqual({ armed: false, blockingIds: [], gatesAnything: false });
+  });
+
+  it('R1/R4: a strict-promoted blocking drift counts as fail in the rollup and the row verdict', async () => {
+    // A blocking value-equality row with a real drifted value on disk — the
+    // deterministic warn → fail promotion path.
+    const drifted = READOUT_MANIFEST_YAML.replace(
+      '    tracking-issue: mmnto-ai/totem-strategy#738\n    vendor-adapter: [claude]',
+      '    tracking-issue: mmnto-ai/totem-strategy#738\n    vendor-adapter: [claude]\n    blocking: true',
+    );
+    writeReadoutFixture(drifted);
+    fs.writeFileSync(
+      path.join(tmpDir, '.coderabbit.yaml'),
+      'reviews:\n  profile: chill\n',
+      'utf-8',
+    );
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    expect(blockingDriftIds).toContain('cr-profile');
+    const built = buildParityReadout(readout!, results, blockingDriftIds, true);
+    const row = built.rows.find((r) => r.id === 'cr-profile')!;
+    expect(row.verdict).toBe('fail');
+    expect(row.reasonClass).toBe('drift');
+    expect(built.rollup.global.fail).toBe(1);
+    // Without strict the same drift stays a warn (sensor-not-gate).
+    const unarmed = buildParityReadout(readout!, results, blockingDriftIds, false);
+    expect(unarmed.rows.find((r) => r.id === 'cr-profile')!.verdict).toBe('warn');
+    expect(unarmed.rollup.global.warn).toBe(1);
+  });
+});
+
+describe('doctorParityCliCommand — --json verdict artifact (#2327 R4)', () => {
+  /** Structural shape of the R4 artifact for typed assertion access (kebab-case keys per spec). */
+  interface JsonArtifact {
+    'readout-schema-version': number;
+    manifest: Record<string, unknown>;
+    rollup: {
+      global: Record<string, number>;
+      'per-seat': Record<string, Record<string, number>>;
+    };
+    denominator: Record<string, unknown>;
+    strict: Record<string, unknown>;
+    rows: Array<Record<string, unknown>>;
+  }
+
+  function captureStdout(): { writes: string[]; restore: () => void } {
+    const writes: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    return { writes, restore: () => spy.mockRestore() };
+  }
+
+  it('emits the spec-fixed kebab-case shape on the ok path', async () => {
+    writeReadoutFixture();
+    const cap = captureStdout();
+    try {
+      await doctorParityCliCommand({ json: true, cwdForTest: tmpDir });
+    } finally {
+      cap.restore();
+    }
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    expect(artifact['readout-schema-version']).toBe(1);
+    expect(artifact.manifest).toEqual({ 'schema-version': 1, status: 'scaffold' });
+    expect(artifact.rollup.global).toEqual({
+      pass: 0,
+      warn: 0,
+      info: 1,
+      unknown: 0,
+      skip: 3,
+      fail: 0,
+    });
+    expect(artifact.rollup['per-seat']['claude']).toBeDefined();
+    expect(artifact.denominator).toEqual({
+      mechanical: 1,
+      'attestation-only': 1,
+      'honest-absent': 2,
+      'claim-boundary': expect.stringContaining('manifest-declared contract set'),
+    });
+    expect(artifact.strict).toEqual({
+      armed: false,
+      'blocking-ids': ['gate-config'],
+      'gates-anything': true,
+    });
+    const attested = artifact.rows.find((r) => r['id'] === 'doctrine-currency')!;
+    expect(attested['verdict']).toBe('info');
+    expect(attested['reason-class']).toBe('attestation');
+    expect(attested['last-attested']).toBe('2026-07-01');
+    // R4 field names are fixed — internal render fields must not leak.
+    expect(attested['lineName']).toBeUndefined();
+  });
+
+  it('degenerate load states emit an honest empty artifact carrying the load status', async () => {
+    writeConfig(BASE_CONFIG);
+    const cap = captureStdout();
+    try {
+      await doctorParityCliCommand({ json: true, cwdForTest: tmpDir });
+    } finally {
+      cap.restore();
+    }
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    expect(artifact.manifest).toEqual({ status: 'not-configured' });
+    expect(artifact.rows).toEqual([]);
+    expect(artifact.strict).toEqual({
+      armed: false,
+      'blocking-ids': [],
+      'gates-anything': false,
+    });
+  });
+
+  it('still throws PARITY_DRIFT_DETECTED under --strict after emitting the artifact (R5 exit contract)', async () => {
+    const drifted = READOUT_MANIFEST_YAML.replace(
+      '    tracking-issue: mmnto-ai/totem-strategy#738\n    vendor-adapter: [claude]',
+      '    tracking-issue: mmnto-ai/totem-strategy#738\n    vendor-adapter: [claude]\n    blocking: true',
+    );
+    writeReadoutFixture(drifted);
+    fs.writeFileSync(
+      path.join(tmpDir, '.coderabbit.yaml'),
+      'reviews:\n  profile: chill\n',
+      'utf-8',
+    );
+    const cap = captureStdout();
+    try {
+      await expect(
+        doctorParityCliCommand({ json: true, strict: true, cwdForTest: tmpDir }),
+      ).rejects.toThrow(/blocking drift/);
+    } finally {
+      cap.restore();
+    }
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    expect(artifact.rollup.global['fail']).toBe(1);
+    const row = artifact.rows.find((r) => r['id'] === 'cr-profile')!;
+    expect(row['verdict']).toBe('fail');
   });
 });

@@ -1359,20 +1359,41 @@ program
     '--parity',
     'Run only the parity-drift sensor against the cohort parity manifest (mmnto-ai/totem-strategy#448)',
   )
+  .option(
+    '--json',
+    'With --parity: emit the trust-readout as a diffable JSON verdict artifact on stdout (mmnto-ai/totem#2327)',
+  )
   .action(
-    async (opts: {
-      pr?: boolean;
-      strict?: boolean;
-      claimDiscipline?: boolean;
-      scopeToDiff?: boolean;
-      parity?: boolean;
-    }) => {
+    async (
+      opts: {
+        pr?: boolean;
+        strict?: boolean;
+        claimDiscipline?: boolean;
+        scopeToDiff?: boolean;
+        parity?: boolean;
+        json?: boolean;
+      },
+      cmd: Command,
+    ) => {
       try {
+        // The program-level `--json` (top of file) swallows the flag when it
+        // appears after the subcommand (commander parent/child option collision,
+        // mmnto-ai/totem#2097, same fix as `totem mail --json`): merge both
+        // scopes so `totem doctor --parity --json` and `totem --json doctor
+        // --parity` agree.
+        opts.json = cmd.optsWithGlobals<{ json?: boolean }>().json;
         if (opts.claimDiscipline && opts.parity) {
           const { TotemConfigError } = await import('@mmnto/totem');
           throw new TotemConfigError(
             'Cannot combine --claim-discipline with --parity.',
             'Choose exactly one specialized doctor mode.',
+          );
+        }
+        if (opts.json && !opts.parity) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            '--json is the --parity trust-readout artifact (mmnto-ai/totem#2327).',
+            'Run totem doctor --parity --json.',
           );
         }
         if (opts.claimDiscipline) {
@@ -1386,7 +1407,7 @@ program
         }
         if (opts.parity) {
           const { doctorParityCliCommand } = await import('./commands/doctor-parity.js');
-          await doctorParityCliCommand({ strict: opts.strict });
+          await doctorParityCliCommand({ strict: opts.strict, json: opts.json });
           return;
         }
         const { doctorCommand } = await import('./commands/doctor.js');

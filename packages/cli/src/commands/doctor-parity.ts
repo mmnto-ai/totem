@@ -36,6 +36,15 @@
  * unconfigured → exactly one `skip` line; configured-but-missing / unparseable /
  * unsupported-schema → `warn`, never a crash. Dynamic-import `@mmnto/totem` to
  * keep core off the CLI cold-start graph, matching the other doctor checks.
+ *
+ * The **trust-readout** (mmnto-ai/totem#2327, Prop 303 §5(a)) post-processes
+ * the flat per-line dump into the doctor's aggregate output contract: verdict
+ * rollup (per-seat + global, R1), the run-time coverage denominator (R2),
+ * why-not per non-pass row at the level probed (R3), the `--json` verdict
+ * artifact (R4), and the `--strict` declaredly-toothless honesty line (R5).
+ * Spec: mmnto-ai/totem-strategy:doctrine/parity-manifest.md § "The
+ * trust-readout — the doctor's output contract"; deltas raise there, never
+ * silently diverge. Pure post-processing — zero probes added.
  */
 
 import * as path from 'node:path';
@@ -64,6 +73,53 @@ export interface ParityLine extends ParityContractVerdict {
   name: string;
 }
 
+// ─── Trust-readout types (mmnto-ai/totem#2327, Prop 303 §5(a)) ──────────
+// The spec half lives at mmnto-ai/totem-strategy:doctrine/parity-manifest.md
+// § "The trust-readout — the doctor's output contract" (R1–R5); build deltas
+// are raised against that section, never silently diverged. Three raised
+// deltas ride the 2026-07-09T2256Z totem-claude→strategy-claude dispatch:
+// `info` joins the R1/R4 vocabulary (the shipped manual-attestation state),
+// the rollup counts rendered verdict LINES while the R2 denominator counts
+// CONTRACTS, and `attestation` joins the R3 reason classes.
+
+/** Prop 296 §6(a)2 senses-ladder rung a detector actually probed. */
+export type SensesLevel = 'declared' | 'present' | 'loaded' | 'usable';
+
+/**
+ * R2 coverage class for one contract — derived per run from the detector
+ * registry ∩ the manifest (the yaml deliberately carries no per-row sensed
+ * flag; Tenet 20). A contract whose detector exists but was scope-skipped this
+ * run still classifies `mechanical` — the registry implements it; the skip is
+ * a run-time verdict the rollup + why-not carry separately.
+ */
+export type ReadoutCoverageClass = 'mechanical' | 'attestation-only' | 'honest-absent';
+
+/** R3 reason class for one verdict line (`pass` lines omit theirs; `attestation` is raised Delta 3). */
+export type ReadoutReasonClass =
+  | 'drift'
+  | 'scoping-skip'
+  | 'honest-absent'
+  | 'detector-error'
+  | 'attestation';
+
+/**
+ * Per-contract readout metadata, tagged at the routing branch that senses the
+ * contract (single source — never re-derived from a mirrored registry, which
+ * would be the Tenet 20 drift hazard).
+ */
+export interface ContractReadoutMeta {
+  coverage: ReadoutCoverageClass;
+  /** Absent when nothing was probed (attestation rows, honest-absent stubs). */
+  sensesProbed?: SensesLevel;
+}
+
+/** The trust-readout raw materials `checkParity` carries out of the manifest `ok` path. */
+export interface ParityReadoutInputs {
+  manifest: { schemaVersion: number; status: string };
+  contracts: ParityContract[];
+  meta: Record<string, ContractReadoutMeta>;
+}
+
 /**
  * Result of a parity check: the rendered `ParityLine`s plus the set of contract
  * ids that produced a drift `warn` AND are `blocking: true`. The command
@@ -83,6 +139,19 @@ export interface ParityCheckResult {
    * (mmnto-ai/totem#2085, mmnto-ai/totem-strategy#545 Half 2).
    */
   configured: boolean;
+  /**
+   * Manifest load status — the `--json` artifact's `manifest.status` on the
+   * degenerate paths, where there is no manifest-declared status to carry
+   * (mmnto-ai/totem#2327 R4).
+   */
+  loadStatus: 'ok' | 'not-configured' | 'not-found' | 'unparseable' | 'unsupported-schema';
+  /**
+   * Trust-readout raw materials (mmnto-ai/totem#2327) — present only on the
+   * manifest `ok` path. The CLI edge assembles the rollup / denominator /
+   * why-not via `buildParityReadout`; degenerate load states render no rollup
+   * (nothing to roll up) and `--json` carries `loadStatus` instead.
+   */
+  readout?: ParityReadoutInputs;
 }
 
 // ─── Mechanical artifact registry (CLI-side) ────────────
@@ -533,6 +602,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           message: 'no parity manifest configured',
         },
         configured,
+        'not-configured',
       );
 
     case 'not-found': {
@@ -558,6 +628,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           remediation,
         },
         configured,
+        'not-found',
       );
     }
 
@@ -570,6 +641,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           remediation: 'Fix the manifest YAML / schema, then re-run totem doctor --parity.',
         },
         configured,
+        'unparseable',
       );
 
     case 'unsupported-schema':
@@ -581,6 +653,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           remediation: 'Upgrade @mmnto/cli or align the manifest schema-version.',
         },
         configured,
+        'unsupported-schema',
       );
 
     case 'ok': {
@@ -659,6 +732,10 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const fallbackCmd = getFallbackCommand(gitRoot);
 
       const blockingDriftIds: string[] = [];
+      // Trust-readout per-contract metadata (mmnto-ai/totem#2327), tagged at the
+      // routing branch that owns each contract so the R2 coverage split derives
+      // from the run itself — never from a mirrored registry (Tenet 20).
+      const readoutMeta: Record<string, ContractReadoutMeta> = {};
       // The consumers-scope guard shared by the routing branches that don't
       // self-guard in core (mechanical + capability-probe): a scoped contract
       // must not emit drift in a repo that is not an intended consumer.
@@ -694,9 +771,19 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         // NON-probe rungs (managed-block, version-pin, …) are informational —
         // they fall through to the existing tractability routing unchanged.
         if (c.manifestation === 'capability-probe') {
+          // Probe resolution BEFORE the scope guard is meta-only (pure switch, no
+          // probe executes): a scoped-out row still classifies by whether the
+          // registry implements it (#2327 R2).
+          const probes = capabilityProbesFor(c.id, gitRoot);
+          readoutMeta[c.id] =
+            probes === undefined
+              ? { coverage: 'honest-absent' }
+              : {
+                  coverage: 'mechanical',
+                  ...(probes[0] !== undefined ? { sensesProbed: probes[0].probedLevel } : {}),
+                };
           const scopeSkip = consumersSkip(c);
           if (scopeSkip !== undefined) return scopeSkip;
-          const probes = capabilityProbesFor(c.id, gitRoot);
           if (probes === undefined) {
             return [
               stub(c, `${c.dimension} (capability-probe) — probe not yet implemented for this row`),
@@ -731,6 +818,11 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         // documented to avoid.
         if (c.manifestation === 'value-equality') {
           const fields = valueEqualityFieldsFor(c.id, gitRoot);
+          // The scalar read is a config-declaration probe (#2327 R3): 'declared'.
+          readoutMeta[c.id] =
+            fields === undefined
+              ? { coverage: 'honest-absent' }
+              : { coverage: 'mechanical', sensesProbed: 'declared' };
           if (fields === undefined) {
             return [
               stub(
@@ -761,6 +853,11 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         // contract id at most ONCE for --strict so the count reflects contracts.
         if (c.manifestation === 'content-hash') {
           const packageDir = lockContentPackageDirFor(c.id, gitRoot);
+          // Installed-artifact hash equality probes on-disk content (#2327 R3): 'present'.
+          readoutMeta[c.id] =
+            packageDir === undefined
+              ? { coverage: 'honest-absent' }
+              : { coverage: 'mechanical', sensesProbed: 'present' };
           if (packageDir === undefined) {
             return [
               stub(
@@ -785,6 +882,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           // Fail-loud PER ROW, never per manifest (the total-outage guard): an
           // unrecognized rung value surfaces verbatim instead of darking the
           // sensor or silently mis-routing.
+          readoutMeta[c.id] = { coverage: 'honest-absent' };
           return [
             stub(
               c,
@@ -801,10 +899,13 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           // self-routes those to the toolchain reader (mmnto-ai/totem#2115). Only
           // stub a version-pinned row that's neither a deps package nor a toolchain.
           if (packageName === undefined && c.dimension !== TOOLCHAIN_DIMENSION) {
+            readoutMeta[c.id] = { coverage: 'honest-absent' };
             return [
               stub(c, `${c.dimension} (version-pinned) — drift detection not yet implemented`),
             ];
           }
+          // Pin-currency reads the consumer's dependency declaration (#2327 R3): 'declared'.
+          readoutMeta[c.id] = { coverage: 'mechanical', sensesProbed: 'declared' };
           const verdict = detectVersionPinnedContract(c, { cwd, gitRoot, repoId, packageName });
           if (verdict.status === 'warn' && c.blocking === true) blockingDriftIds.push(c.id);
           return [verdictToLine(c, verdict)];
@@ -812,6 +913,24 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
 
         // ── mechanical content-equality (mmnto-ai/totem#2073) ──
         if (c.tractability === 'mechanical') {
+          // Skills resolution is pure (no probe executes) — resolved BEFORE the
+          // scope guard so a scoped-out row still classifies by whether the
+          // registry implements it (#2327 R2); reused as `artifacts` below.
+          const skillArtifacts = mechanicalArtifactsFor(
+            c.id,
+            gitRoot,
+            extractManagedBlock,
+            skillTemplates,
+          );
+          const mechanicalImplemented =
+            c.id === 'git-hooks' ||
+            c.id === 'session-start-orientation' ||
+            skillArtifacts !== undefined;
+          // Content-equality probes on-disk artifacts (#2327 R3): 'present'.
+          readoutMeta[c.id] = mechanicalImplemented
+            ? { coverage: 'mechanical', sensesProbed: 'present' }
+            : { coverage: 'honest-absent' };
+
           // Honor the contract's `consumers` scope before sensing drift (mirrors
           // detectVersionPinnedContract, which self-guards). A scoped mechanical
           // contract must not emit drift — or, under --strict, fail — in a repo that
@@ -861,13 +980,9 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
             return lines;
           }
 
-          // skills: managed-block content equality against the in-process template.
-          const artifacts = mechanicalArtifactsFor(
-            c.id,
-            gitRoot,
-            extractManagedBlock,
-            skillTemplates,
-          );
+          // skills: managed-block content equality against the in-process template
+          // (resolved above, pre-scope-guard, for the readout classification).
+          const artifacts = skillArtifacts;
           if (artifacts === undefined) {
             return [
               stub(
@@ -901,6 +1016,9 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         // `info` can't enter blockingDriftIds, so these contracts cannot fail even
         // under --strict (the manifest's "never fails" contract).
         if (c.tractability === 'manual-attestation') {
+          // Declared-covered but mechanically uncovered (#2327 R2 — human-asserted
+          // judgment is not code-verified truth); nothing is probed.
+          readoutMeta[c.id] = { coverage: 'attestation-only' };
           // The detector reads the sub-class discriminant (`c.package`) + the
           // canonical source directly off the contract. `package:` set ⇒ vendor-SDK
           // pin read; unset ⇒ doctrine-row pure-info surface. `attested` carries the
@@ -915,19 +1033,37 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         }
 
         // ── anything else (a future tractability) → skip stub; the slice boundary stays observable ──
+        readoutMeta[c.id] = { coverage: 'honest-absent' };
         return [
           stub(c, `${c.dimension} (${c.tractability}) — drift detection not yet implemented`),
         ];
       });
 
-      return { results: [summary, ...perContract], blockingDriftIds, configured };
+      return {
+        results: [summary, ...perContract],
+        blockingDriftIds,
+        configured,
+        loadStatus: 'ok',
+        readout: {
+          manifest: {
+            schemaVersion: result.manifest.schemaVersion,
+            status: result.manifest.status,
+          },
+          contracts,
+          meta: readoutMeta,
+        },
+      };
     }
   }
 }
 
-/** Wrap a single summary line in the `ParityCheckResult` shape (no blocking ids). */
-function single(result: ParityLine, configured: boolean): ParityCheckResult {
-  return { results: [result], blockingDriftIds: [], configured };
+/** Wrap a single summary line in the `ParityCheckResult` shape (no blocking ids, no readout). */
+function single(
+  result: ParityLine,
+  configured: boolean,
+  loadStatus: ParityCheckResult['loadStatus'],
+): ParityCheckResult {
+  return { results: [result], blockingDriftIds: [], configured, loadStatus };
 }
 
 /** Map a core `ParityContractVerdict` to a `ParityLine` keyed by the contract id. */
@@ -970,6 +1106,280 @@ function rel(cwd: string, target: string): string {
   return r.length > 0 ? r : target;
 }
 
+// ─── Trust-readout assembly (mmnto-ai/totem#2327) ────────
+
+/** The `--json` artifact's own version stamp (`readout-schema-version`). */
+const READOUT_SCHEMA_VERSION = 1;
+
+/**
+ * R2 claim-boundary sentence — the readout states its own scope in its own
+ * output: an active-but-unmanifested surface (an undeclared MCP server, a
+ * user-global plugin) is outside the claim, stated not implied.
+ */
+const CLAIM_BOUNDARY =
+  'covers the manifest-declared contract set only; active-but-unmanifested surfaces are outside this claim';
+
+/** Counts over rendered verdict lines — the R1 rollup unit (raised Delta 2). */
+export type ReadoutCounts = Record<ParityLine['status'], number>;
+
+/** One `--json` `rows[]` entry — 1:1 with a rendered verdict line (ids repeat for multi-artifact contracts). */
+export interface ReadoutRow {
+  id: string;
+  /** Line verdict AFTER the strict blocking promotion, so the artifact matches the rendered output. */
+  verdict: ParityLine['status'];
+  sensesProbed?: SensesLevel;
+  reasonClass?: ReadoutReasonClass;
+  message: string;
+  lastAttested?: string;
+  /** Display name of the underlying verdict line (human render only — not a `--json` field; R4 names are fixed). */
+  lineName: string;
+  /** R5: a `blocking: true` contract's line skipped by scoping — rendered skipped-not-gated, never a silent pass. */
+  skippedNotGated: boolean;
+}
+
+/** The assembled trust-readout — everything R1–R5 render from. */
+export interface ParityReadout {
+  manifest: { schemaVersion: number; status: string };
+  rollup: { global: ReadoutCounts; perSeat: Record<string, ReadoutCounts> };
+  denominator: { mechanical: number; attestationOnly: number; honestAbsent: number };
+  strict: { armed: boolean; blockingIds: string[]; gatesAnything: boolean };
+  rows: ReadoutRow[];
+}
+
+/**
+ * Whether a verdict line belongs to a `--strict`-promotable contract. A
+ * contract's drift can render across MULTIPLE artifact lines (e.g.
+ * `Parity: claude-skills (signoff)`), so a line is promotable when its name is
+ * the `Parity: <id>` summary OR a `Parity: <id> (…)` artifact line — an
+ * exact-name Set would leave the artifact lines rendered as WARN while the
+ * command still exits non-zero (GCA review). The trailing space guards against
+ * a contract id that is a prefix of another. Shared by the CLI render and the
+ * readout builder so the two can't disagree on what promoted.
+ */
+function isPromotableLineName(name: string, blockingDriftIds: string[]): boolean {
+  return blockingDriftIds.some(
+    (id) => name === `Parity: ${id}` || name.startsWith(`Parity: ${id} `),
+  );
+}
+
+/** Resolve the contract a verdict line belongs to (same prefix rule as promotion). */
+function contractForLineName(
+  name: string,
+  contracts: ParityContract[],
+): ParityContract | undefined {
+  return contracts.find((c) => name === `Parity: ${c.id}` || name.startsWith(`Parity: ${c.id} `));
+}
+
+// The CLI-side stubs' "not yet implemented" message shape — the one code-owned
+// string the classifier keys on. A future optional reasonClass on the core
+// verdict type retires this coupling (flagged to strategy in the
+// 2026-07-09T2256Z deltas dispatch as an observation).
+const HONEST_ABSENT_RE = /not yet implemented/;
+
+/**
+ * R3 reason class for one verdict line. `pass` omits its class. A `skip` is
+ * `honest-absent` when the stub message or the contract's coverage class says
+ * the detector is unbuilt; every other skip — scope-guard skips and
+ * scope-indeterminate skips (e.g. applicable-but-missing scaffolds) alike —
+ * classifies `scoping-skip`, never silently `honest-absent`, which would
+ * understate what the registry implements.
+ */
+function reasonClassFor(
+  verdict: ParityLine['status'],
+  message: string,
+  coverage: ReadoutCoverageClass | undefined,
+): ReadoutReasonClass | undefined {
+  switch (verdict) {
+    case 'pass':
+      return undefined;
+    case 'warn':
+    case 'fail':
+      return 'drift';
+    case 'info':
+      return 'attestation';
+    case 'unknown':
+      return 'detector-error';
+    case 'skip':
+      if (HONEST_ABSENT_RE.test(message) || coverage === 'honest-absent') return 'honest-absent';
+      return 'scoping-skip';
+  }
+}
+
+/**
+ * Assemble the trust-readout from `checkParity`'s raw materials — pure
+ * post-processing over the existing detector output (Prop 303 non-goal 2:
+ * zero probes added here).
+ */
+export function buildParityReadout(
+  inputs: ParityReadoutInputs,
+  results: ParityLine[],
+  blockingDriftIds: string[],
+  strict: boolean,
+): ParityReadout {
+  const { contracts, meta } = inputs;
+
+  const rows: ReadoutRow[] = [];
+  for (const line of results) {
+    const contract = contractForLineName(line.name, contracts);
+    // The section summary line (`Parity`) is not a contract row.
+    if (contract === undefined) continue;
+    const promoted =
+      strict && line.status === 'warn' && isPromotableLineName(line.name, blockingDriftIds);
+    const verdict: ParityLine['status'] = promoted ? 'fail' : line.status;
+    const m = meta[contract.id];
+    const reasonClass = reasonClassFor(verdict, line.message, m?.coverage);
+    rows.push({
+      id: contract.id,
+      verdict,
+      ...(m?.sensesProbed !== undefined ? { sensesProbed: m.sensesProbed } : {}),
+      ...(reasonClass !== undefined ? { reasonClass } : {}),
+      message: line.message,
+      ...(contract.lastAttested !== undefined ? { lastAttested: contract.lastAttested } : {}),
+      lineName: line.name,
+      skippedNotGated: verdict === 'skip' && contract.blocking === true,
+    });
+  }
+
+  const zero = (): ReadoutCounts => ({ pass: 0, warn: 0, info: 0, unknown: 0, skip: 0, fail: 0 });
+  const global = zero();
+  for (const r of rows) global[r.verdict] += 1;
+
+  // Seats = the sorted union of declared vendor-adapter values. A line counts
+  // toward seat S when its contract is vendor-neutral (no vendor-adapter — it
+  // manifests on every seat) or declares S. An EMPTY vendor-adapter list is
+  // treated as vendor-neutral too: the schema admits `[]`, and excluding such
+  // a row from every seat while counting it globally would reopen the exact
+  // per-seat honesty hole R1 exists to close (spec-owner review on #2328).
+  // Per-seat exists precisely so a seat-scoped skip cannot hide inside the
+  // global number (R1).
+  const seats = [...new Set(contracts.flatMap((c) => c.vendorAdapter ?? []))].sort();
+  const perSeat: Record<string, ReadoutCounts> = {};
+  for (const seat of seats) perSeat[seat] = zero();
+  const adapterById = new Map(contracts.map((c) => [c.id, c.vendorAdapter]));
+  for (const r of rows) {
+    const adapter = adapterById.get(r.id);
+    for (const seat of seats) {
+      if (adapter === undefined || adapter.length === 0 || adapter.includes(seat)) {
+        perSeat[seat]![r.verdict] += 1;
+      }
+    }
+  }
+
+  // R2: the denominator counts CONTRACTS (registry ∩ manifest is contract-
+  // granular), while the rollup above counts rendered verdict LINES — two
+  // populations, named apart in the render (raised Delta 2).
+  const denominator = { mechanical: 0, attestationOnly: 0, honestAbsent: 0 };
+  for (const c of contracts) {
+    const cls = meta[c.id]?.coverage ?? 'honest-absent';
+    if (cls === 'mechanical') denominator.mechanical += 1;
+    else if (cls === 'attestation-only') denominator.attestationOnly += 1;
+    else denominator.honestAbsent += 1;
+  }
+
+  // R5: blocking-ids = the manifest's DECLARED `blocking: true` set, derived
+  // from the yaml at run time (never from prose — Tenet 20); gates-anything =
+  // that set is non-empty. Which blocking contracts actually drifted is
+  // visible as `fail` rows (strict) / promotable warns (default).
+  const blockingIds = contracts.filter((c) => c.blocking === true).map((c) => c.id);
+
+  return {
+    manifest: inputs.manifest,
+    rollup: { global, perSeat },
+    denominator,
+    strict: { armed: strict, blockingIds, gatesAnything: blockingIds.length > 0 },
+    rows,
+  };
+}
+
+/** One-line count rendering shared by the global + per-seat rollup lines. */
+function renderCounts(c: ReadoutCounts): string {
+  return `${c.pass} pass · ${c.warn} warn · ${c.info} info · ${c.unknown} unknown · ${c.skip} skip · ${c.fail} fail`;
+}
+
+/**
+ * R3 attestation-age fragment: days since `last-attested:` ("not recorded"
+ * when absent). Staleness refines the message, never the status (the existing
+ * manifest constraint, unchanged).
+ */
+function attestationAge(lastAttested: string | undefined): string {
+  if (lastAttested === undefined) return 'last attested: not recorded';
+  const t = Date.parse(lastAttested);
+  if (Number.isNaN(t)) return `last attested: ${lastAttested} (unparseable date)`;
+  const days = Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+  return `last attested ${days} day(s) ago`;
+}
+
+/**
+ * The `--json` verdict artifact (R4) — field names fixed by the spec section
+ * (kebab-case, no local envelope: the spec's top-level shape overrides the
+ * `json-output.ts` success/error wrapper). Emitted bare on stdout so the
+ * artifact is diffable (Prop 302 verdict-artifact discipline). On degenerate
+ * manifest-load states the artifact carries the load status and empty
+ * rollup/rows — the honest "nothing to roll up" shape.
+ */
+function readoutJsonArtifact(
+  readout: ParityReadout | undefined,
+  loadStatus: ParityCheckResult['loadStatus'],
+  strict: boolean,
+): Record<string, unknown> {
+  const countsJson = (c: ReadoutCounts): Record<string, number> => ({
+    pass: c.pass,
+    warn: c.warn,
+    info: c.info,
+    unknown: c.unknown,
+    skip: c.skip,
+    fail: c.fail,
+  });
+  if (readout === undefined) {
+    const zero: ReadoutCounts = { pass: 0, warn: 0, info: 0, unknown: 0, skip: 0, fail: 0 };
+    return {
+      'readout-schema-version': READOUT_SCHEMA_VERSION,
+      manifest: { status: loadStatus },
+      rollup: { global: countsJson(zero), 'per-seat': {} },
+      denominator: {
+        mechanical: 0,
+        'attestation-only': 0,
+        'honest-absent': 0,
+        'claim-boundary': CLAIM_BOUNDARY,
+      },
+      strict: { armed: strict, 'blocking-ids': [], 'gates-anything': false },
+      rows: [],
+    };
+  }
+  return {
+    'readout-schema-version': READOUT_SCHEMA_VERSION,
+    manifest: {
+      'schema-version': readout.manifest.schemaVersion,
+      status: readout.manifest.status,
+    },
+    rollup: {
+      global: countsJson(readout.rollup.global),
+      'per-seat': Object.fromEntries(
+        Object.entries(readout.rollup.perSeat).map(([seat, c]) => [seat, countsJson(c)]),
+      ),
+    },
+    denominator: {
+      mechanical: readout.denominator.mechanical,
+      'attestation-only': readout.denominator.attestationOnly,
+      'honest-absent': readout.denominator.honestAbsent,
+      'claim-boundary': CLAIM_BOUNDARY,
+    },
+    strict: {
+      armed: readout.strict.armed,
+      'blocking-ids': readout.strict.blockingIds,
+      'gates-anything': readout.strict.gatesAnything,
+    },
+    rows: readout.rows.map((r) => ({
+      id: r.id,
+      verdict: r.verdict,
+      ...(r.sensesProbed !== undefined ? { 'senses-probed': r.sensesProbed } : {}),
+      ...(r.reasonClass !== undefined ? { 'reason-class': r.reasonClass } : {}),
+      message: r.message,
+      ...(r.lastAttested !== undefined ? { 'last-attested': r.lastAttested } : {}),
+    })),
+  };
+}
+
 // ─── CLI entry ──────────────────────────────────────────
 
 // Same value as CHECK_NAME — aliased (not re-literal'd) so the two can't drift.
@@ -997,6 +1407,13 @@ export interface ParityCliOptions {
    * `doctor --parity` behavior, which still renders the honest-absent SKIP line.
    */
   onlyWhenConfigured?: boolean;
+  /**
+   * Emit the trust-readout as the schema'd `--json` verdict artifact
+   * (mmnto-ai/totem#2327 R4) on stdout INSTEAD of the human render — the
+   * artifact is diffable, so nothing else may share stdout. The `--strict`
+   * exit-code semantics are unchanged (artifact + non-zero exit both happen).
+   */
+  json?: boolean;
   /** Test seam — production callers omit and the command uses `process.cwd()`. */
   cwdForTest?: string;
 }
@@ -1028,7 +1445,13 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
       .trim();
 
   const cwd = options.cwdForTest ?? process.cwd();
-  const { results, blockingDriftIds, configured } = await checkParity(cwd);
+  const {
+    results,
+    blockingDriftIds,
+    configured,
+    loadStatus,
+    readout: readoutInputs,
+  } = await checkParity(cwd);
 
   // Folded-into-`--strict` no-op: when this run is the strict fold (not an explicit
   // `doctor --parity`) and no repo-local manifest is configured, render and gate
@@ -1036,19 +1459,75 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
   // fold. Explicit `--parity` (onlyWhenConfigured omitted) still shows the SKIP.
   if (options.onlyWhenConfigured && !configured) return;
 
-  // Under --strict, a blocking contract's drift `warn` is rendered + gated as a
-  // FAIL. A contract's drift can render across MULTIPLE artifact lines
-  // (e.g. `Parity: claude-skills (signoff)`), so a line is promotable when its
-  // name is the `Parity: <id>` summary OR a `Parity: <id> (…)` artifact line —
-  // an exact-name Set would leave the artifact lines rendered as WARN while the
-  // command still exits non-zero (GCA review on the PR). The trailing space
-  // guards against a contract id that is a prefix of another.
-  const isPromotable = (name: string): boolean =>
-    blockingDriftIds.some((id) => name === `Parity: ${id}` || name.startsWith(`Parity: ${id} `));
+  const strict = options.strict === true;
+  const readout =
+    readoutInputs !== undefined
+      ? buildParityReadout(readoutInputs, results, blockingDriftIds, strict)
+      : undefined;
+
+  // `--json` replaces the human render wholesale: the artifact owns stdout so
+  // it stays diffable (R4). The strict throw below still applies — artifact
+  // AND exit code, matching R5's "exits non-zero iff ≥1 fail".
+  if (options.json) {
+    process.stdout.write(
+      JSON.stringify(readoutJsonArtifact(readout, loadStatus, strict), null, 2) + '\n',
+    );
+  } else {
+    renderParityHuman(
+      results,
+      blockingDriftIds,
+      strict,
+      { log, bold, errorColor, successColor, warnColor },
+      render,
+    );
+    if (readout !== undefined) {
+      renderTrustReadout(readout, { log, bold }, render);
+    }
+  }
+
+  // Sensor-not-gate: drift is report-only by default (exit 0). Only `--strict`
+  // promotes a `blocking: true` contract's drift to a non-zero exit; non-blocking
+  // drift never gates, and `info`/`unknown` are never promoted. The detectors
+  // emit no raw `fail` status, so the gate is purely the strict+blocking
+  // promotion — the gating model for a future slice that DOES emit a `fail` is
+  // settled when that slice lands (CR review mmnto-ai/totem#2071: keep the gate from
+  // suggesting a non-strict path that would break sensor-not-gate).
+  if (options.strict && blockingDriftIds.length > 0) {
+    throw new TotemError(
+      'PARITY_DRIFT_DETECTED',
+      `${blockingDriftIds.length} parity contract(s) reported blocking drift under --strict.`,
+      'Reconcile each blocking contract against its canonical source, then re-run totem doctor --parity --strict.',
+    );
+  }
+}
+
+/** The ui.js pieces the human renderers borrow from the command scope. */
+interface ParityUi {
+  log: typeof import('../ui.js').log;
+  bold: (s: string) => string;
+  errorColor?: (s: string) => string;
+  successColor?: (s: string) => string;
+  warnColor?: (s: string) => string;
+}
+
+/** The pre-readout flat per-line render (unchanged output, extracted for the `--json` split). */
+function renderParityHuman(
+  results: ParityLine[],
+  blockingDriftIds: string[],
+  strict: boolean,
+  ui: ParityUi,
+  render: (text: string) => string,
+): void {
+  const { log, bold } = ui;
+  const errorColor = ui.errorColor ?? ((s: string) => s);
+  const successColor = ui.successColor ?? ((s: string) => s);
+  const warnColor = ui.warnColor ?? ((s: string) => s);
 
   for (const r of results) {
     const status =
-      options.strict && r.status === 'warn' && isPromotable(r.name) ? 'fail' : r.status;
+      strict && r.status === 'warn' && isPromotableLineName(r.name, blockingDriftIds)
+        ? 'fail'
+        : r.status;
     switch (status) {
       case 'pass':
         log.success(TAG, `${successColor(bold('PASS'))} — ${render(r.message)}`);
@@ -1080,19 +1559,81 @@ export async function doctorParityCliCommand(options: ParityCliOptions = {}): Pr
         break;
     }
   }
+}
 
-  // Sensor-not-gate: drift is report-only by default (exit 0). Only `--strict`
-  // promotes a `blocking: true` contract's drift to a non-zero exit; non-blocking
-  // drift never gates, and `info`/`unknown` are never promoted. The detectors
-  // emit no raw `fail` status, so the gate is purely the strict+blocking
-  // promotion — the gating model for a future slice that DOES emit a `fail` is
-  // settled when that slice lands (CR review mmnto-ai/totem#2071: keep the gate from
-  // suggesting a non-strict path that would break sensor-not-gate).
-  if (options.strict && blockingDriftIds.length > 0) {
-    throw new TotemError(
-      'PARITY_DRIFT_DETECTED',
-      `${blockingDriftIds.length} parity contract(s) reported blocking drift under --strict.`,
-      'Reconcile each blocking contract against its canonical source, then re-run totem doctor --parity --strict.',
+/**
+ * The trust-readout tail render (mmnto-ai/totem#2327 R1–R3, R5) — replaces the
+ * bare "N loaded" ending with the rollup, coverage denominator, why-not lines,
+ * and the `--strict` honesty statement. Verdict lines above stay untouched.
+ */
+function renderTrustReadout(
+  readout: ParityReadout,
+  ui: Pick<ParityUi, 'log' | 'bold'>,
+  render: (text: string) => string,
+): void {
+  const { log, bold } = ui;
+
+  log.info(TAG, bold('── trust-readout ──'));
+
+  // R1 — one vocabulary, two scopes. Units named (verdict lines ≠ contracts).
+  log.info(TAG, `rollup (verdict lines) — global: ${renderCounts(readout.rollup.global)}`);
+  const seats = Object.keys(readout.rollup.perSeat);
+  if (seats.length === 0) {
+    log.dim(TAG, 'rollup — no seat-scoped rows declared (per-seat = global)');
+  } else {
+    for (const seat of seats) {
+      log.info(
+        TAG,
+        `rollup — seat ${render(seat)}: ${renderCounts(readout.rollup.perSeat[seat]!)}`,
+      );
+    }
+  }
+
+  // R2 — three counts on their own line, never one "covered" number; the
+  // claim boundary stated in the readout's own words.
+  const d = readout.denominator;
+  log.info(
+    TAG,
+    `coverage (contracts) — ${d.mechanical} mechanically sensed · ${d.attestationOnly} attestation-only · ${d.honestAbsent} honest-absent`,
+  );
+  log.dim(TAG, `claim boundary: ${CLAIM_BOUNDARY}`);
+
+  // R3 — one why-not line per non-pass row, at the level actually probed
+  // (green-halo cap: nothing renders above what was probed).
+  const whyNot = readout.rows.filter((r) => r.verdict !== 'pass');
+  if (whyNot.length > 0) {
+    log.info(TAG, 'why-not (per non-pass row):');
+    for (const r of whyNot) {
+      const level = r.sensesProbed !== undefined ? ` at ${r.sensesProbed}` : '';
+      const reason = r.reasonClass !== undefined ? ` [${r.reasonClass}]` : '';
+      // R3 age-in-days for attestation rows. The detector message already
+      // carries the raw date / "not recorded" text — append the derived age
+      // only when a date exists to derive it from (no duplicate "not recorded").
+      const age =
+        r.reasonClass === 'attestation' && r.lastAttested !== undefined
+          ? ` · ${attestationAge(r.lastAttested)}`
+          : '';
+      const gate = r.skippedNotGated ? ' · blocking — skipped-not-gated, never a silent pass' : '';
+      log.dim(
+        TAG,
+        `  ${render(r.lineName)}: ${r.verdict.toUpperCase()}${level}${reason} — ${render(r.message)}${age}${gate}`,
+      );
+    }
+  }
+
+  // R5 — declaredly-toothless in the readout's own words; derived from the
+  // manifest's blocking set at run time, never from prose.
+  const s = readout.strict;
+  const armed = s.armed ? 'armed' : 'not armed';
+  if (!s.gatesAnything) {
+    log.info(
+      TAG,
+      `--strict (${armed}): currently gates nothing — the manifest declares no blocking: true contracts`,
+    );
+  } else {
+    log.info(
+      TAG,
+      `--strict (${armed}): gates ${s.blockingIds.length} blocking contract(s): ${s.blockingIds.map(render).join(', ')}`,
     );
   }
 }
