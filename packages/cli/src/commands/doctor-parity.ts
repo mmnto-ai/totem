@@ -1170,20 +1170,19 @@ function contractForLineName(
   return contracts.find((c) => name === `Parity: ${c.id}` || name.startsWith(`Parity: ${c.id} `));
 }
 
-// The core detectors' scope-guard message shapes (consumers scope self-guards +
-// seat scoping). Code-owned strings, pinned by test; a future optional
-// reasonClass on the core verdict type retires this coupling (flagged to
-// strategy in the 2026-07-09T2256Z deltas dispatch as an observation).
-const SCOPE_SKIP_RE = /cohort permits absence|cannot determine applicability|unavailable-for-seat/;
+// The CLI-side stubs' "not yet implemented" message shape — the one code-owned
+// string the classifier keys on. A future optional reasonClass on the core
+// verdict type retires this coupling (flagged to strategy in the
+// 2026-07-09T2256Z deltas dispatch as an observation).
 const HONEST_ABSENT_RE = /not yet implemented/;
 
 /**
- * R3 reason class for one verdict line. `pass` omits its class; `skip` splits
- * on the message shape (scope-guard strings vs "not yet implemented" stubs),
- * with the contract's coverage class as the tiebreak and scope-indeterminate
- * skips (e.g. applicable-but-missing scaffold skips) defaulting to
- * `scoping-skip` — never silently to `honest-absent`, which would understate
- * what the registry implements.
+ * R3 reason class for one verdict line. `pass` omits its class. A `skip` is
+ * `honest-absent` when the stub message or the contract's coverage class says
+ * the detector is unbuilt; every other skip — scope-guard skips and
+ * scope-indeterminate skips (e.g. applicable-but-missing scaffolds) alike —
+ * classifies `scoping-skip`, never silently `honest-absent`, which would
+ * understate what the registry implements.
  */
 function reasonClassFor(
   verdict: ParityLine['status'],
@@ -1202,7 +1201,6 @@ function reasonClassFor(
       return 'detector-error';
     case 'skip':
       if (HONEST_ABSENT_RE.test(message) || coverage === 'honest-absent') return 'honest-absent';
-      if (SCOPE_SKIP_RE.test(message)) return 'scoping-skip';
       return 'scoping-skip';
   }
 }

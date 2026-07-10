@@ -1443,6 +1443,19 @@ describe('buildParityReadout (#2327)', () => {
     expect(byId.get('mcp-corpus-indexing')!.reasonClass).toBe('honest-absent');
   });
 
+  it('R3: an unparseable consumer file yields unknown → detector-error (CR #2328 round 1)', async () => {
+    writeReadoutFixture();
+    // Unterminated flow mapping — the value-equality detector degrades to an
+    // honest `unknown` (equality unprovable either way), never a throw.
+    fs.writeFileSync(path.join(tmpDir, '.coderabbit.yaml'), 'reviews: {\n', 'utf-8');
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    const row = built.rows.find((r) => r.id === 'cr-profile')!;
+    expect(row.verdict).toBe('unknown');
+    expect(row.reasonClass).toBe('detector-error');
+    expect(built.rollup.global.unknown).toBe(1);
+  });
+
   it('R5: a blocking contract skipped by scoping renders skipped-not-gated, and the declared blocking set drives gates-anything', async () => {
     writeReadoutFixture();
     const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
