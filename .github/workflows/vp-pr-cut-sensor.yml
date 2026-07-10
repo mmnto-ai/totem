@@ -1,0 +1,52 @@
+# VP-PR cut sensor (mmnto-ai/totem#2325) — the release-planning doctrine's
+# totem-lane tooling (mmnto-ai/totem-strategy#839, packaging-conventions.md
+# § "Release planning — the meaningful-cut discipline").
+#
+# Fires ONLY on the changesets Version-Packages PR and posts/updates one
+# sticky comment classifying the pending cut (internal-only vs
+# contract-bearing + choreography template). Advisory, never a required
+# check — the operator's cut word on the VP-PR merge remains the gate
+# (Tenet 13). The feature-PR path is untouched.
+name: VP-PR Cut Sensor
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Serialize per PR: overlapping synchronize runs could both miss the sticky
+# marker in the list-then-upsert flow and post duplicates (CR round 1).
+concurrency:
+  group: vp-pr-cut-sensor-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cut-sensor:
+    name: Classify the pending cut
+    # Branch name AND same-repo origin: a fork can name its branch
+    # changeset-release/main, and on pull_request the job would check out the
+    # merge commit's (attacker-editable) tools script (CR round 1). Fork-PR
+    # tokens are read-only regardless — this guard is defense-in-depth.
+    if: |
+      github.event.pull_request.head.ref == 'changeset-release/main' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Dependency-free script (global fetch) — no pnpm install needed.
+      - name: Scan changesets + classify entry paths + upsert the comment
+        run: node tools/vp-pr-cut-sensor.mjs --pr "$PR_NUMBER"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}

@@ -17,7 +17,8 @@
     "release": "pnpm build && node tools/publish-oidc.mjs",
     "docs:inject": "node tools/docs-inject.cjs",
     "test:docs": "node tools/docs-transforms.test.cjs",
-    "test:augment-headers": "node tools/augment-cohort-changelog-headers.test.mjs"
+    "test:augment-headers": "node tools/augment-cohort-changelog-headers.test.mjs",
+    "test:cut-sensor": "node --test tools/vp-pr-cut-sensor.test.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
