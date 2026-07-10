@@ -1246,8 +1246,12 @@ export function buildParityReadout(
 
   // Seats = the sorted union of declared vendor-adapter values. A line counts
   // toward seat S when its contract is vendor-neutral (no vendor-adapter — it
-  // manifests on every seat) or declares S. Per-seat exists precisely so a
-  // seat-scoped skip cannot hide inside the global number (R1).
+  // manifests on every seat) or declares S. An EMPTY vendor-adapter list is
+  // treated as vendor-neutral too: the schema admits `[]`, and excluding such
+  // a row from every seat while counting it globally would reopen the exact
+  // per-seat honesty hole R1 exists to close (spec-owner review on #2328).
+  // Per-seat exists precisely so a seat-scoped skip cannot hide inside the
+  // global number (R1).
   const seats = [...new Set(contracts.flatMap((c) => c.vendorAdapter ?? []))].sort();
   const perSeat: Record<string, ReadoutCounts> = {};
   for (const seat of seats) perSeat[seat] = zero();
@@ -1255,7 +1259,9 @@ export function buildParityReadout(
   for (const r of rows) {
     const adapter = adapterById.get(r.id);
     for (const seat of seats) {
-      if (adapter === undefined || adapter.includes(seat)) perSeat[seat]![r.verdict] += 1;
+      if (adapter === undefined || adapter.length === 0 || adapter.includes(seat)) {
+        perSeat[seat]![r.verdict] += 1;
+      }
     }
   }
 

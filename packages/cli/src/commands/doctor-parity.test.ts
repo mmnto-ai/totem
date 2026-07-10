@@ -1421,6 +1421,27 @@ describe('buildParityReadout (#2327)', () => {
     });
   });
 
+  it('R1: an EMPTY vendor-adapter list counts as vendor-neutral, never dropped from every seat (spec-owner review on #2328)', async () => {
+    writeReadoutFixture(
+      READOUT_MANIFEST_YAML.replace(
+        '    tractability: manual-attestation\n',
+        '    tractability: manual-attestation\n    vendor-adapter: []\n',
+      ),
+    );
+    const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
+    const built = buildParityReadout(readout!, results, blockingDriftIds, false);
+    // The [] row (doctrine-currency, info) still lands on the claude seat —
+    // excluded-from-every-seat-but-counted-globally is the R1 honesty hole.
+    expect(built.rollup.perSeat['claude']).toEqual({
+      pass: 0,
+      warn: 0,
+      info: 1,
+      unknown: 0,
+      skip: 3,
+      fail: 0,
+    });
+  });
+
   it('R2: the denominator counts CONTRACTS by coverage class, never one collapsed number', async () => {
     writeReadoutFixture();
     const { results, blockingDriftIds, readout } = await checkParity(tmpDir);
