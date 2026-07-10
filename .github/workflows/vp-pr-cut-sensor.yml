@@ -18,11 +18,24 @@ permissions:
   contents: read
   pull-requests: write
 
+# Serialize per PR: overlapping synchronize runs could both miss the sticky
+# marker in the list-then-upsert flow and post duplicates (CR round 1).
+concurrency:
+  group: vp-pr-cut-sensor-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   cut-sensor:
     name: Classify the pending cut
-    if: github.event.pull_request.head.ref == 'changeset-release/main'
+    # Branch name AND same-repo origin: a fork can name its branch
+    # changeset-release/main, and on pull_request the job would check out the
+    # merge commit's (attacker-editable) tools script (CR round 1). Fork-PR
+    # tokens are read-only regardless — this guard is defense-in-depth.
+    if: |
+      github.event.pull_request.head.ref == 'changeset-release/main' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
 

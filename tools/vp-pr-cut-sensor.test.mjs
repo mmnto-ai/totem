@@ -85,6 +85,26 @@ test('composeComment: internal-only shape when nothing declared or flagged', () 
   assert.doesNotMatch(body, /Choreography/);
 });
 
+test('composeComment: unresolved entries render in the comment and qualify a clean verdict as partial', () => {
+  const clean = composeComment({
+    declared: [],
+    flagged: [],
+    scannedEntryCount: 2,
+    unresolved: ['dead1234'],
+  });
+  assert.match(clean, /internal-only: cut freely/);
+  assert.match(clean, /Partial verdict/);
+  assert.match(clean, /Unscanned entries.*`dead1234`/);
+
+  const bearing = composeComment({
+    declared: [{ hash: 'abc1234', tag: 'CLI surface' }],
+    flagged: [],
+    scannedEntryCount: 2,
+    unresolved: ['dead1234'],
+  });
+  assert.match(bearing, /Unscanned entries.*`dead1234`/);
+});
+
 test('composeComment: contract-bearing shape carries declared tags, untagged flags, and the choreography template', () => {
   const body = composeComment({
     declared: [{ hash: 'abc1234', tag: 'CLI surface — new flag' }],

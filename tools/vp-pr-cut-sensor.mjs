@@ -126,15 +126,23 @@ export function parseChangelogAdditions(addedLines) {
  *
  * @param {{ declared: Array<{ hash: string, tag: string }>,
  *           flagged: Array<{ hash: string, classes: Map<string, string[]> }>,
- *           scannedEntryCount: number }} input
+ *           scannedEntryCount: number,
+ *           unresolved?: string[] }} input
  */
-export function composeComment({ declared, flagged, scannedEntryCount }) {
+export function composeComment({ declared, flagged, scannedEntryCount, unresolved = [] }) {
   const lines = [COMMENT_MARKER, '## Release-cut sensor (mmnto-ai/totem#2325)', ''];
 
   if (declared.length === 0 && flagged.length === 0) {
+    // An unscanned entry means the clean verdict is PARTIAL — say so rather
+    // than let "cut freely" overclaim (no silent coverage caps; CR round 1).
+    const qualifier =
+      unresolved.length > 0
+        ? ` **Partial verdict:** ${unresolved.length} entr${unresolved.length === 1 ? 'y' : 'ies'} could not be scanned (see below).`
+        : '';
     lines.push(
       '**Verdict: `internal-only: cut freely`** — no `Consumer-impact:` tags declared and no contract-shaped paths flagged across ' +
-        `${scannedEntryCount} changelog entr${scannedEntryCount === 1 ? 'y' : 'ies'}.`,
+        `${scannedEntryCount} changelog entr${scannedEntryCount === 1 ? 'y' : 'ies'}.` +
+        qualifier,
       '',
     );
   } else {
@@ -173,6 +181,15 @@ export function composeComment({ declared, flagged, scannedEntryCount }) {
     );
   }
 
+  // Unscanned entries render in EVERY verdict shape — a coverage gap the
+  // reader can see beats a clean-looking comment that quietly skipped work.
+  if (unresolved.length > 0) {
+    lines.push(
+      `**⚠ Unscanned entries** (commit unresolvable — classify by hand before trusting the verdict): ${unresolved.map((h) => `\`${h}\``).join(', ')}`,
+      '',
+    );
+  }
+
   lines.push(
     '---',
     "_Advisory only (Tenet 13) — the cut gate is unchanged: the operator's merge word on this VP-PR remains the gate. " +
@@ -184,13 +201,21 @@ export function composeComment({ declared, flagged, scannedEntryCount }) {
 
 // ─── GitHub API (dependency-free) ────────────────────────
 
+/** Per-request cap — a hung fetch fails fast instead of eating the job timeout. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 async function gh(token, url, init = {}) {
   const res = await fetch(`https://api.github.com${url}`, {
     ...init,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: {
       authorization: `Bearer ${token}`,
       accept: 'application/vnd.github+json',
       'x-github-api-version': '2022-11-28',
+      // The REST contract wants an explicit JSON content-type on bodied
+      // requests; Node fetch would otherwise default a string body to
+      // text/plain (GCA + greptile round 1).
+      ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...(init.headers ?? {}),
     },
   });
@@ -245,23 +270,27 @@ async function main() {
 
   const declared = [];
   const flagged = [];
+  const unresolved = [];
   for (const [hash, entry] of entries) {
     for (const tag of entry.tags) declared.push({ hash, tag });
     if (entry.tags.length > 0) continue; // declaration carries intent; no double-flag
     // Path classification via the entry's squash commit (best-effort: a
-    // garbage-collected or ambiguous shorthash degrades to unclassified —
-    // the sensor reports what it could scan, never crashes the job).
+    // garbage-collected or ambiguous shorthash degrades to UNSCANNED — carried
+    // into the comment so the coverage gap is visible, never a silent drop).
     try {
       const commit = await gh(token, `/repos/${repo}/commits/${hash}`);
       const paths = (commit.files ?? []).map((f) => f.filename);
       const classes = classifyPaths(paths);
       if (classes.size > 0) flagged.push({ hash, classes });
     } catch (err) {
-      console.error(`[cut-sensor] commit ${hash} unresolvable — skipped: ${String(err)}`);
+      console.error(
+        `[cut-sensor] commit ${hash} unresolvable — reported unscanned: ${String(err)}`,
+      );
+      unresolved.push(hash);
     }
   }
 
-  const body = composeComment({ declared, flagged, scannedEntryCount: entries.size });
+  const body = composeComment({ declared, flagged, scannedEntryCount: entries.size, unresolved });
 
   if (dryRun) {
     console.log(body);
