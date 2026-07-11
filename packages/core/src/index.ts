@@ -671,6 +671,7 @@ export type {
   VerdictLaneSummary,
   VerdictPredicateInput,
   VerdictRound,
+  VerdictWithAddress,
 } from './artifacts/verdict.js';
 export {
   computeLineageKey,

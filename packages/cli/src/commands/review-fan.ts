@@ -342,6 +342,9 @@ export async function runLane(
         status: 'failed',
         laneId: laneId(index, laneModel),
         typedReason: 'missing-artifact-emission',
+        // rev-6 item 3: persist the configured lane the id suffix binds to (no backend
+        // resolved, so the suffix has nothing else to ground against).
+        configuredLane: laneModel,
       },
       filteredFindings: [],
     };
@@ -408,7 +411,14 @@ export async function classifyRejectedLane(
 ): Promise<LaneRunResult> {
   const typedReason = await classifyInvokeFailure(reason);
   return {
-    lane: { status: 'failed', laneId: laneId(index, laneModel), typedReason },
+    // rev-6 item 3: a rejected lane resolved no backend — the laneId suffix binds to the
+    // configured lane, persisted here so the schema can validate that binding.
+    lane: {
+      status: 'failed',
+      laneId: laneId(index, laneModel),
+      typedReason,
+      configuredLane: laneModel,
+    },
     filteredFindings: [],
   };
 }
@@ -627,21 +637,23 @@ export async function resolveRound(
   lineageKey: string,
   continuesHash: string | undefined,
 ): Promise<RoundResolution> {
-  const { findLatestVerdictForLineage, loadVerdictArtifact, computeVerdictArtifactContentHash } =
-    await import('@mmnto/totem');
+  const { findLatestVerdictForLineage, loadVerdictArtifact } = await import('@mmnto/totem');
   const warnings: string[] = [];
 
   if (continuesHash !== undefined) {
-    // Explicit override — an honest load failure is loud (the user named it).
+    // Explicit override — an honest load failure is loud (the user named it). The
+    // loader returns the artifact WITH its verified address; the user-supplied
+    // `continuesHash` IS that verified stored address (load verified it), so the link
+    // uses it directly.
     const prior = loadVerdictArtifact(totemDirAbs, continuesHash);
-    if (prior.round.lineageKey !== lineageKey) {
+    if (prior.artifact.round.lineageKey !== lineageKey) {
       warnings.push(
         `--continues ${continuesHash.slice(0, 8)} links a verdict from a DIFFERENT lineage; honoring the explicit intent and recording the current lineage key (branch/base/source moved).`,
       );
     }
     return {
       round: {
-        index: prior.round.index + 1,
+        index: prior.artifact.round.index + 1,
         priorVerdictHash: continuesHash,
         lineageKey,
       },
@@ -660,10 +672,13 @@ export async function resolveRound(
   if (prior === undefined) {
     return { round: { index: 0, lineageKey }, warnings };
   }
+  // Link to the prior's STORED, verified content address (rev-6 item 1) — never a
+  // recompute over the Zod-stripped shape, which would diverge for a forward-minor prior
+  // and point `priorVerdictHash` at a nonexistent file.
   return {
     round: {
-      index: prior.round.index + 1,
-      priorVerdictHash: computeVerdictArtifactContentHash(prior),
+      index: prior.artifact.round.index + 1,
+      priorVerdictHash: prior.contentHash,
       lineageKey,
     },
     warnings,
@@ -1013,6 +1028,7 @@ function renderFanFindingsToStderr(findings: readonly AttributedFinding[]): void
 function renderFanReport(
   laneResults: readonly LaneRunResult[],
   verdict: VerdictArtifact,
+  verdictHash: string,
   findings: readonly AttributedFinding[],
   cacheEligible: boolean,
 ): string {
@@ -1040,7 +1056,9 @@ function renderFanReport(
   if (findings.length === 0) lines.push('  (none)');
   else for (const af of findings) lines.push(formatFanFinding(af));
   lines.push('');
-  lines.push(renderCovariateLine(verdict));
+  // Pair the artifact with its STORED address (rev-6 item 1) so the rendered hash8 is the
+  // on-disk file address, not a recompute over the normalized shape.
+  lines.push(renderCovariateLine({ artifact: verdict, contentHash: verdictHash }));
   lines.push(
     `settled=${verdict.settled} cache-eligible=${cacheEligible} reviewedState=${verdict.reviewedState}`,
   );
@@ -1267,12 +1285,17 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   renderFanFindingsToStderr(fanFindings);
 
   // ── The core-owned, grep-able covariate line (contract v1; finding 14) ──
-  log.info(DISPLAY_TAG, renderCovariateLine(verdict));
+  // Pair the freshly-saved verdict with the address `saveVerdictArtifact` returned
+  // (its verified on-disk address) so the rendered hash8 always names the stored file.
+  log.info(DISPLAY_TAG, renderCovariateLine({ artifact: verdict, contentHash: verdictHash }));
 
   // ── --out: write the human-readable fan report (findings + lanes + summary) ──
   if (ctx.options.out) {
     const { writeOutput } = await import('../utils.js');
-    writeOutput(renderFanReport(laneResults, verdict, fanFindings, cacheEligible), ctx.options.out);
+    writeOutput(
+      renderFanReport(laneResults, verdict, verdictHash, fanFindings, cacheEligible),
+      ctx.options.out,
+    );
     log.success(DISPLAY_TAG, `Fan report written to ${ctx.options.out}`);
   }
 
@@ -1368,7 +1391,9 @@ export async function printCovariateLine(query: CovariateQuery): Promise<void> {
     );
     return;
   }
-  // STDOUT, not the stderr log: this line IS the transport payload (format v1).
+  // STDOUT, not the stderr log: this line IS the transport payload (format v1). The
+  // loader returns the artifact WITH its verified stored address (rev-6 item 1), so a
+  // forward-minor verdict advertises its RAW file address — byte-equal to the filename.
   console.log(renderCovariateLine(verdict));
 }
 

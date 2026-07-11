@@ -2068,4 +2068,22 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
       'covariate line format v1 — do not alter without a spec amendment',
     );
   });
+
+  // rev-6 item 4: the consolidated round-disposition comment is a CONCRETE, executable
+  // step — it EXECUTES `totem review --covariate` inside the comment-assembly flow, so the
+  // covariate line no longer rides a conditional aside that never runs. Lock the executable
+  // invocation (a fenced command, not merely a mention) into the disposition step.
+  it('REVIEW_REPLY_SKILL_CONTENT wires `totem review --covariate` into the consolidated disposition step (rev-6 item 4)', () => {
+    const parts = REVIEW_REPLY_SKILL_CONTENT.split('## Consolidated round-disposition comment');
+    expect(parts.length).toBe(2);
+    const section = parts[1]!;
+    // Executable (a fenced bash command), not merely mentioned in prose.
+    expect(section).toContain('```bash\ntotem review --covariate\n```');
+    // The step carries the non-empty local-lane line into the comment body.
+    expect(section).toMatch(/local-lane:/);
+    // It is a step of the disposition flow the operator gates (single-comment ownership).
+    expect(section).toMatch(/operator-gated/);
+    // The `done` action reaches this step (wired into the flow, not orphaned).
+    expect(REVIEW_REPLY_SKILL_CONTENT).toMatch(/EXECUTES `totem review --covariate`/);
+  });
 });

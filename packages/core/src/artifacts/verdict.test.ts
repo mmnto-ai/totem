@@ -82,6 +82,8 @@ function failedLane(index: number, configured = 'openai:gpt-model'): VerdictLane
     status: 'failed',
     laneId: `lane-${index}:${configured}`,
     typedReason: 'quota-exhausted',
+    // rev-6 item 3: the configured lane the id suffix binds to (present even pre-resolution).
+    configuredLane: configured,
   };
 }
 
@@ -292,26 +294,34 @@ describe('structural laneId validation (rev-5 item 6)', () => {
     expect(VerdictArtifactSchema.safeParse(bad).success).toBe(false);
   });
 
-  it('a failed lane with a RESOLVED backend must carry it as the suffix; without one, the configured lane suffices', () => {
-    // resolvedBackend present but suffix is the configured lane string ⇒ rejected.
-    const resolvedMismatch = verdict({
-      lanes: [{ ...failedLane(0), resolvedBackend: 'openai:resolved-model' }],
+  it('a failed lane binds its laneId suffix to configuredLane; resolvedBackend may differ (quota-fallback) (rev-6 item 3)', () => {
+    // suffix (failedLane fixture: openai:gpt-model) === configuredLane ⇒ accepted.
+    expect(VerdictArtifactSchema.safeParse(verdict({ lanes: [failedLane(0)] })).success).toBe(true);
+    // A resolvedBackend that DIFFERS from configuredLane is a legitimate quota-fallback
+    // record — the suffix still binds to configuredLane, so this is ACCEPTED.
+    const quotaFallback = verdict({
+      lanes: [{ ...failedLane(0), resolvedBackend: 'openai:fallback-model' }],
     });
-    expect(VerdictArtifactSchema.safeParse(resolvedMismatch).success).toBe(false);
-    // resolvedBackend present AND equal to the suffix ⇒ accepted.
-    const resolvedMatch = verdict({
+    expect(VerdictArtifactSchema.safeParse(quotaFallback).success).toBe(true);
+    // codex's tautology: an INVENTED suffix that disagrees with the declared
+    // configuredLane ⇒ rejected (the suffix is no longer free-floating).
+    const suffixMismatch = verdict({
       lanes: [
         {
           status: 'failed',
-          laneId: 'lane-0:openai:gpt-model',
-          typedReason: 'quota-exhausted',
-          resolvedBackend: 'openai:gpt-model',
+          laneId: 'lane-0:gemini:completely-invented',
+          typedReason: 'config-error',
+          configuredLane: 'openai:gpt-model',
         },
       ],
     });
-    expect(VerdictArtifactSchema.safeParse(resolvedMatch).success).toBe(true);
-    // No resolvedBackend ⇒ the configured-lane suffix stands (the failedLane fixture).
-    expect(VerdictArtifactSchema.safeParse(verdict({ lanes: [failedLane(0)] })).success).toBe(true);
+    const parsed = VerdictArtifactSchema.safeParse(suffixMismatch);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.some((i) => /must equal configuredLane/.test(i.message))).toBe(
+        true,
+      );
+    }
   });
 
   it('conforming artifacts pass (mixed statuses, indexes in order)', () => {
@@ -341,6 +351,37 @@ describe('diversity summary re-derived from completed lanes (rev-5 item 7)', () 
       expect(
         parsed.error.issues.some((i) => /derived from the completed lanes/.test(i.message)),
       ).toBe(true);
+    }
+  });
+
+  it("rejects codex's forged diversity: distinctProviders/unrecognized/confidence fabricated over same-vendor lanes (rev-6 item 2)", () => {
+    // Two anthropic lanes should derive providers ['anthropic','anthropic'], distinct 1,
+    // same-vendor-isolated, [] unrecognized, verified. This hand-forged diversity lies on
+    // EVERY field — it even collapses the multiset to one entry — yet passes the field
+    // types (PanelDiversitySchema has no re-derivation of its own). The verdict boundary
+    // must reject it via the FULL re-derivation (not just the provider set + class).
+    const twoAnthropic = verdict({
+      lanes: [completedLane(0, 'anthropic'), completedLane(1, 'anthropic')],
+    });
+    const forged = {
+      ...twoAnthropic,
+      panelArtifactHash: 'e'.repeat(64),
+      diversity: {
+        providers: ['anthropic'],
+        distinctProviders: 99,
+        class: 'cross-vendor' as const,
+        unrecognizedProviders: ['totally-made-up'],
+        diversityConfidence: 'coarse' as const,
+      },
+    };
+    const parsed = VerdictArtifactSchema.safeParse(forged);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      const msgs = parsed.error.issues.map((i) => i.message).join('\n');
+      // The full re-derivation fires on the multiset, distinctProviders, and confidence.
+      expect(msgs).toMatch(/multiset/);
+      expect(msgs).toMatch(/distinctProviders/);
+      expect(msgs).toMatch(/diversityConfidence/);
     }
   });
 
@@ -585,14 +626,18 @@ describe('all-lanes-failed verdict is legal (gate G3)', () => {
 describe('renderCovariateLine (gate G4, format v1)', () => {
   it('emits exactly `local-lane: <hash8> round=<n> settled=<bool> lanes=<c>/<a>`', () => {
     const v = verdict(); // 1/1 completed, round 0, dry ⇒ settled true
-    const hash8 = computeVerdictArtifactContentHash(v).slice(0, 8);
-    expect(renderCovariateLine(v)).toBe(`local-lane: ${hash8} round=0 settled=true lanes=1/1`);
+    const contentHash = computeVerdictArtifactContentHash(v);
+    expect(renderCovariateLine({ artifact: v, contentHash })).toBe(
+      `local-lane: ${contentHash.slice(0, 8)} round=0 settled=true lanes=1/1`,
+    );
   });
 
   it('reflects a degraded, unsettled round (completed < attempted)', () => {
     const v = verdict({ lanes: [completedLane(0), failedLane(1)] });
-    const hash8 = computeVerdictArtifactContentHash(v).slice(0, 8);
-    expect(renderCovariateLine(v)).toBe(`local-lane: ${hash8} round=0 settled=false lanes=1/2`);
+    const contentHash = computeVerdictArtifactContentHash(v);
+    expect(renderCovariateLine({ artifact: v, contentHash })).toBe(
+      `local-lane: ${contentHash.slice(0, 8)} round=0 settled=false lanes=1/2`,
+    );
   });
 });
 
@@ -650,7 +695,7 @@ describe('lane-blindness: no runner/lane-mode discriminator (Prop 302)', () => {
       'runArtifactHash',
       'status',
     ]);
-    expect(byStatus.failed).toEqual(['laneId', 'status', 'typedReason']);
+    expect(byStatus.failed).toEqual(['configuredLane', 'laneId', 'status', 'typedReason']);
   });
 });
 
@@ -785,7 +830,10 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     expect(saved.existed).toBe(false);
     expect(saved.path).toBe(path.join(totemDir, 'artifacts', 'verdicts', `${saved.hash}.json`));
     expect(verdictsDir(totemDir)).toBe(path.join(totemDir, 'artifacts', 'verdicts'));
-    expect(loadVerdictArtifact(totemDir, saved.hash)).toEqual(v);
+    const loaded = loadVerdictArtifact(totemDir, saved.hash);
+    expect(loaded.artifact).toEqual(v);
+    // rev-6 item 1: the load carries the verified stored address (= the filename stem).
+    expect(loaded.contentHash).toBe(saved.hash);
   });
 
   it('content address excludes createdAt — identical rounds dedup across time', () => {
@@ -797,7 +845,9 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     expect(second.existed).toBe(true); // logical-identity dedup, no throw
     expect(second.hash).toBe(first.hash);
     // first-write-wins: the stored createdAt is the early one.
-    expect(loadVerdictArtifact(totemDir, first.hash).createdAt).toBe('2026-07-10T00:00:00.000Z');
+    expect(loadVerdictArtifact(totemDir, first.hash).artifact.createdAt).toBe(
+      '2026-07-10T00:00:00.000Z',
+    );
   });
 
   it('rejects a schema-valid artifact stored under a mismatched content address (finding 4)', () => {
@@ -832,7 +882,7 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     const minorHash = computeVerdictArtifactContentHash(v17);
     fs.mkdirSync(verdictsDir(totemDir), { recursive: true });
     fs.writeFileSync(path.join(verdictsDir(totemDir), `${minorHash}.json`), JSON.stringify(v17));
-    expect(loadVerdictArtifact(totemDir, minorHash).schemaVersion).toBe('1.7.0');
+    expect(loadVerdictArtifact(totemDir, minorHash).artifact.schemaVersion).toBe('1.7.0');
 
     const v20 = verdict({ schemaVersion: '2.0.0' });
     const majorHash = computeVerdictArtifactContentHash(v20);
@@ -867,7 +917,7 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     const warnings: string[] = [];
     const found = findLatestVerdictForLineage(totemDir, lineageKey, (m) => warnings.push(m));
     // the good one still wins; the mis-addressed one is announced + dropped
-    expect(computeVerdictArtifactContentHash(found!)).toBe(good.hash);
+    expect(found!.contentHash).toBe(good.hash);
     expect(warnings.some((w) => /content-address|corrupt|mis-addressed/i.test(w))).toBe(true);
   });
 
@@ -899,8 +949,8 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     );
 
     const latest = findLatestVerdictForLineage(totemDir, lineageKey);
-    expect(latest?.round.index).toBe(2);
-    expect(computeVerdictArtifactContentHash(latest!)).toBe(r2.hash);
+    expect(latest?.artifact.round.index).toBe(2);
+    expect(latest!.contentHash).toBe(r2.hash);
     expect(findLatestVerdictForLineage(totemDir, 'no-such-lineage')).toBeUndefined();
   });
 
@@ -925,9 +975,9 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     saveVerdictArtifact(totemDir, winner);
     saveVerdictArtifact(totemDir, loser);
     const found = findLatestVerdictForLineage(totemDir, lineageKey)!;
-    expect(computeVerdictArtifactContentHash(found)).toBe(winnerHash);
+    expect(found.contentHash).toBe(winnerHash);
     // Deterministic + timestamp-independent: the earlier-stamped record won on hash.
-    expect(found.createdAt).toBe('2026-07-10T00:00:00.000Z');
+    expect(found.artifact.createdAt).toBe('2026-07-10T00:00:00.000Z');
   });
 
   // ── rev-5 item 5: content-address verification over the RAW logical payload ──
@@ -959,8 +1009,44 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     fs.mkdirSync(verdictsDir(totemDir), { recursive: true });
     fs.writeFileSync(path.join(verdictsDir(totemDir), `${rawHash}.json`), JSON.stringify(future));
     const loaded = loadVerdictArtifact(totemDir, rawHash);
-    expect(loaded.schemaVersion).toBe('1.7.0');
+    expect(loaded.artifact.schemaVersion).toBe('1.7.0');
     // The tolerant reader strips the unknown field from the RETURNED shape.
-    expect('futureAdditiveField' in loaded).toBe(false);
+    expect('futureAdditiveField' in loaded.artifact).toBe(false);
+    // rev-6 item 1: the VERIFIED stored address survives the tolerant parse.
+    expect(loaded.contentHash).toBe(rawHash);
+  });
+
+  // ── rev-6 item 1: the verified stored address survives the tolerant parse ──
+
+  it('a forward-minor artifact: covariate line, lineage selection, and round linkage all use the RAW file address (rev-6 item 1)', () => {
+    const lineageKey = computeLineageKey({ repoIdentity: '/r', branch: 'a', source: 'staged' });
+    // A future 1.x writer added an additive field; the on-disk address was computed over
+    // the RAW payload INCLUDING it. A recompute over the Zod-stripped shape DIVERGES.
+    const future = {
+      ...verdict({ schemaVersion: '1.7.0', round: { index: 0, lineageKey } }),
+      futureAdditiveField: 'from-a-newer-minor',
+    } as Record<string, unknown>;
+    const { createdAt: _excluded, ...identity } = future;
+    const rawHash = calculateDeterministicHash(identity);
+    fs.mkdirSync(verdictsDir(totemDir), { recursive: true });
+    fs.writeFileSync(path.join(verdictsDir(totemDir), `${rawHash}.json`), JSON.stringify(future));
+
+    const loaded = loadVerdictArtifact(totemDir, rawHash);
+    // The falsifier is LIVE: the normalized recompute diverges from the raw file address.
+    expect(loaded.contentHash).toBe(rawHash);
+    expect(computeVerdictArtifactContentHash(loaded.artifact)).not.toBe(rawHash);
+
+    // (a) covariate line emits the RAW file address (hash8), not the divergent recompute.
+    expect(renderCovariateLine(loaded)).toBe(
+      `local-lane: ${rawHash.slice(0, 8)} round=0 settled=${loaded.artifact.settled} lanes=1/1`,
+    );
+
+    // (b) lineage selection returns the RAW file address as its contentHash.
+    const found = findLatestVerdictForLineage(totemDir, lineageKey)!;
+    expect(found.contentHash).toBe(rawHash);
+
+    // (c) round linkage would set priorVerdictHash = found.contentHash — byte-equal to the
+    //     filename, so it points at a REAL file (not a nonexistent recompute address).
+    expect(fs.existsSync(path.join(verdictsDir(totemDir), `${found.contentHash}.json`))).toBe(true);
   });
 });
