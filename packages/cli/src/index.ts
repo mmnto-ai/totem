@@ -430,6 +430,10 @@ const reviewOptions = (cmd: Command) =>
       '--fail-on <severity>',
       'Multi-lane fan (review.lanes) exit gate: "critical" or "warn". When set, the fan exits non-zero (SHIELD_FAILED) on findings at/above that severity OR a non-cache-eligible round; --override converts the failure to a pass. Omit for the default sensor exit 0. Ignored on the legacy single-lane path.',
     )
+    .option(
+      '--covariate',
+      'Read-only, zero-LLM: resolve the current review lineage (same resolution as the fan), load its latest verdict artifact, and print the canonical local-lane covariate line to stdout. No verdict for the lineage prints a loud sensor message; always exits 0. Writes nothing.',
+    )
     .addHelpText(
       'after',
       [
@@ -490,6 +494,7 @@ async function runReview(opts: {
   history?: boolean;
   continues?: string;
   failOn?: string;
+  covariate?: boolean;
 }): Promise<void> {
   // Redirect removed --deterministic flag to totem lint
   if (opts.deterministic) {

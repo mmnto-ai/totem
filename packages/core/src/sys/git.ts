@@ -117,7 +117,23 @@ export function getDefaultBranch(cwd: string): string {
   }
 }
 
-export function getGitBranchDiff(cwd: string, base?: string): string {
+/**
+ * The branch-vs-base diff PLUS the ref that actually produced it (mmnto-ai/totem#2106
+ * rev-5 item 3). `getGitBranchDiff` returns only the diff text, so a caller that also
+ * needs to know WHICH ref was diffed (for scope/lineage metadata) previously re-probed
+ * ref existence separately — but `origin/<base>` can EXIST yet its `...HEAD` diff FAIL
+ * (unrelated histories / no merge base), in which case the payload is local-based while
+ * a separate existence probe would mislabel it `origin/<base>`. Returning `resolvedBase`
+ * from the diff operation itself couples the recorded ref to the diff that actually ran.
+ */
+export interface GitBranchDiffResult {
+  /** The unified diff text of `<resolvedBase>...HEAD`. */
+  diff: string;
+  /** The ref that PRODUCED the diff — `origin/<base>` when its diff succeeded, else the local `<base>`. */
+  resolvedBase: string;
+}
+
+export function getGitBranchDiffResult(cwd: string, base?: string): GitBranchDiffResult {
   const baseBranch = base ?? getDefaultBranch(cwd);
   // Prefer the remote-tracking ref over the local branch (mmnto-ai/totem#2054).
   // On a feature-branch workflow the local <base> is never checked out → stale,
@@ -132,11 +148,15 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
   const refs = [`origin/${localRef}`, localRef];
   for (const ref of refs) {
     try {
-      return safeExec('git', ['diff', `${ref}...HEAD`], {
+      const diff = safeExec('git', ['diff', `${ref}...HEAD`], {
         cwd,
         timeout: GIT_COMMAND_TIMEOUT_MS,
         maxBuffer: GIT_DIFF_MAX_BUFFER,
       });
+      // The ref whose `...HEAD` diff SUCCEEDED is the one that produced the payload —
+      // record exactly it (rev-5 item 3), so remote-exists-but-diff-fails can never
+      // mislabel a local-based diff as origin-based.
+      return { diff, resolvedBase: ref };
     } catch (err) {
       throwIfGitMissing(err);
       // If this was the last ref, throw
@@ -151,7 +171,16 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
     }
   }
   // Unreachable — loop always returns or throws
-  return '';
+  return { diff: '', resolvedBase: localRef };
+}
+
+/**
+ * Branch-vs-base diff text only. Thin wrapper over {@link getGitBranchDiffResult} that
+ * discards `resolvedBase` — retained at its original `string` return so the many
+ * existing callers keep compiling (mmnto-ai/totem#2106 rev-5 item 3, additive change).
+ */
+export function getGitBranchDiff(cwd: string, base?: string): string {
+  return getGitBranchDiffResult(cwd, base).diff;
 }
 
 /**

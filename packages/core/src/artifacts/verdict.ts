@@ -47,6 +47,7 @@ import { rethrowAsParseError, TotemError, TotemParseError } from '../errors.js';
 import { readJsonSafe } from '../sys/fs.js';
 import { calculateDeterministicHash } from './hash.js';
 import {
+  classifyDiversity,
   PanelDiversitySchema,
   type PersistedPostCheckFinding,
   PersistedPostCheckFindingSchema,
@@ -395,11 +396,14 @@ export const VerdictArtifactSchema = z
     /** Current-round dryness predicate (see the CLI lifecycle) — pure over artifact content. */
     settled: z.boolean(),
     /**
-     * ISO-8601 emission time. EXCLUDED from the content address (identical
-     * rounds dedup to one artifact regardless of when they ran) — observability
-     * only. See {@link computeVerdictArtifactContentHash}.
+     * ISO-8601 emission time — a VALIDATED datetime (rev-5 item 8): a malformed
+     * `createdAt` is rejected at the persisted boundary rather than trusted.
+     * EXCLUDED from the content address (identical rounds dedup to one artifact
+     * regardless of when they ran) — observability only, and it is never a
+     * lineage tie-breaker (see {@link findLatestVerdictForLineage}). See
+     * {@link computeVerdictArtifactContentHash}.
      */
-    createdAt: z.string(),
+    createdAt: z.string().datetime(),
   })
   .superRefine((a, ctx) => {
     if (a.attemptedLaneCount !== a.lanes.length) {
@@ -491,8 +495,90 @@ export const VerdictArtifactSchema = z
         message: `settled (${a.settled}) must equal the re-derived current-round dryness predicate (${derivedSettled}) — settled is derived at the persisted boundary, never trusted (finding 5)`,
       });
     }
+
+    // ── rev-5 item 6: structural laneId validation (array-index + backend equality) ──
+    // {@link LaneIdSchema} enforces the SHAPE + the runner-vocab blacklist per-value;
+    // the CROSS-FIELD invariants need the lane's array position and sibling fields, so
+    // they live here. For every lane the id must be exactly `lane-<i>:<suffix>` where
+    // `<i>` matches the array index; the suffix must equal `resolvedBackend` for a
+    // completed/abstained lane (and for a failed lane only when a backend actually
+    // resolved — the optional `resolvedBackend`). The blacklist stays as defense in depth.
+    a.lanes.forEach((lane, i) => {
+      const expectedPrefix = `lane-${i}:`;
+      if (!lane.laneId.startsWith(expectedPrefix)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['lanes', i, 'laneId'],
+          message: `laneId "${lane.laneId}" must begin with "${expectedPrefix}" — the index must match the lane's array position (${i})`,
+        });
+        return; // suffix checks are meaningless once the prefix is wrong
+      }
+      const suffix = lane.laneId.slice(expectedPrefix.length);
+      if (lane.status === 'completed' || lane.status === 'abstained') {
+        if (suffix !== lane.resolvedBackend) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['lanes', i, 'laneId'],
+            message: `laneId suffix "${suffix}" must equal resolvedBackend "${lane.resolvedBackend}" for a ${lane.status} lane`,
+          });
+        }
+      } else if (lane.resolvedBackend !== undefined && suffix !== lane.resolvedBackend) {
+        // A failed lane's suffix is the configured lane string; when a backend DID
+        // resolve (the optional `resolvedBackend` is present) the two must agree.
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['lanes', i, 'laneId'],
+          message: `failed laneId suffix "${suffix}" must equal resolvedBackend "${lane.resolvedBackend}" when a backend resolved`,
+        });
+      }
+    });
+
+    // ── rev-5 item 7: ground the diversity summary in the completed-lane backends ──
+    // A present diversity summary must be RE-DERIVABLE from the completed lanes'
+    // resolved backends via the SAME {@link classifyDiversity} logic the panel uses
+    // (single source of truth) — a fabricated cross-vendor claim over same-vendor lanes
+    // is rejected at the boundary. Compared on the provider SET (order-independent) +
+    // class, at minimum: the verdict's completed lanes are in configured order while the
+    // panel's providers[] is laneId-sorted, so an exact-array compare would false-reject.
+    if (a.diversity !== undefined) {
+      const completedProviders = a.lanes
+        .filter((l): l is Extract<VerdictLane, { status: 'completed' }> => l.status === 'completed')
+        .map((l) => providerFamilyOf(l.resolvedBackend));
+      const derived = classifyDiversity(completedProviders);
+      const storedSet = [...new Set(a.diversity.providers)].sort();
+      const derivedSet = [...new Set(derived.providers)].sort();
+      const setsEqual =
+        storedSet.length === derivedSet.length && storedSet.every((p, i) => p === derivedSet[i]);
+      if (!setsEqual) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['diversity', 'providers'],
+          message: `diversity providers set [${storedSet.join(', ')}] must equal the set derived from the completed lanes' backends [${derivedSet.join(', ')}] — the summary is re-derived at the persisted boundary, never trusted`,
+        });
+      }
+      if (a.diversity.class !== derived.class) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['diversity', 'class'],
+          message: `diversity.class "${a.diversity.class}" must equal the class derived from the completed lanes' backends ("${derived.class}")`,
+        });
+      }
+    }
   });
 export type VerdictArtifact = z.infer<typeof VerdictArtifactSchema>;
+
+/**
+ * The provider FAMILY of a resolved backend (`provider:model` → `provider`) — the
+ * unit {@link classifyDiversity} clusters on (rev-5 item 7). The panel derives its
+ * diversity from each lane's `backend.provider`; a completed verdict lane records
+ * `resolvedBackend` as the `qualifiedModel` (`provider:model`), so the family is the
+ * segment before the FIRST colon (`provider` never contains a colon). A bare string
+ * with no colon is returned whole (defensive — fan lanes are always `provider:model`).
+ */
+function providerFamilyOf(resolvedBackend: string): string {
+  const idx = resolvedBackend.indexOf(':');
+  return idx === -1 ? resolvedBackend : resolvedBackend.slice(0, idx);
+}
 
 // ─── Lineage key ──────────────────────────────────────────────────────────
 
@@ -626,6 +712,25 @@ export function computeVerdictArtifactContentHash(artifact: VerdictArtifact): st
 }
 
 /**
+ * Content address over the RAW parsed JSON payload with ONLY `createdAt` excluded
+ * (rev-5 item 5) — the canonical identity used for load verification. Unlike
+ * {@link computeVerdictArtifactContentHash} (which hashes the Zod-normalized shape),
+ * this hashes exactly the bytes on disk minus `createdAt`, so an unknown-key tamper
+ * is caught and a forward-minor additive field verifies. `calculateDeterministicHash`
+ * canonicalizes (recursive key sort), so for a same-version artifact with no unknown
+ * keys the two functions agree.
+ */
+function computeRawVerdictContentHash(raw: unknown): string {
+  if (typeof raw !== 'object' || raw === null) {
+    // Unreachable after a successful parse (the schema requires an object), but stay
+    // defensive rather than destructure a non-object.
+    return calculateDeterministicHash(raw);
+  }
+  const { createdAt: _excluded, ...identity } = raw as Record<string, unknown>;
+  return calculateDeterministicHash(identity);
+}
+
+/**
  * Render the machine-readable covariate line — the CORE-OWNED signal every caller
  * (CLI print, headless, `/review-reply`) emits identically so the skill stays pure
  * transport (strategy-codex G4; resolves finding 14). Format, EXACTLY:
@@ -728,11 +833,16 @@ export function loadVerdictArtifact(totemDirAbs: string, hash: string): VerdictA
   const migrate = major !== undefined ? MIGRATIONS.get(major) : undefined;
 
   let artifact: VerdictArtifact;
+  let verificationHash: string;
   if (migrate !== undefined) {
     // Re-validate migrated output against the CURRENT schema before returning: a
     // migration's contract is to PRODUCE the current shape, so a migration bug must
     // fail loud here — never return it unvalidated.
     artifact = VerdictArtifactSchema.parse(migrate(raw));
+    // A migration changes the on-disk shape, so addressing across a major bump is the
+    // migration author's responsibility (empty registry today) — verify over the
+    // migrated artifact rather than the pre-migration raw payload.
+    verificationHash = computeVerdictArtifactContentHash(artifact);
   } else {
     // `.safeParse` (not try/catch) so the fail-loud rethrow is an explicit
     // statement, never swallowed control flow: rethrowAsParseError returns `never`
@@ -747,19 +857,26 @@ export function loadVerdictArtifact(totemDirAbs: string, hash: string): VerdictA
       );
     }
     artifact = result.data;
+    // rev-5 item 5: content-address verification over the RAW logical payload
+    // (`createdAt` excluded), NOT the Zod-normalized artifact. Hashing the normalized
+    // output is unsound TWO ways: (a) an unknown-key TAMPER survives — Zod strips the
+    // injected key before the recompute, so the normalized hash still matches the
+    // address; (b) a forward-minor artifact is WRONGLY rejected — its writer addressed
+    // a raw payload that includes an additive field this reader strips, so a normalized
+    // recompute diverges. The raw payload IS the canonical identity; the tolerant Zod
+    // parse governs SHAPE only (still returned as `artifact`).
+    verificationHash = computeRawVerdictContentHash(raw);
   }
 
-  // Finding 4: content-address verification. Syntax + schema are not enough — a
-  // schema-VALID record stored under the WRONG 64-hex filename (a mis-addressed
-  // copy, a hand-edit, or a collision) would otherwise load silently and could win
-  // or lose a lineage scan. Recompute the content address from the parsed artifact
-  // and hard-error on any mismatch (same style as saveVerdictArtifact's EEXIST
-  // identity violation — the content-addressed store's core guarantee).
-  const recomputed = computeVerdictArtifactContentHash(artifact);
-  if (recomputed !== hash) {
+  // Finding 4 / rev-5 item 5: syntax + schema are not enough — a schema-VALID record
+  // stored under the WRONG 64-hex filename (a mis-addressed copy, a hand-edit, an
+  // unknown-key tamper, or a collision) would otherwise load silently and could win or
+  // lose a lineage scan. Hard-error on any mismatch (same style as saveVerdictArtifact's
+  // EEXIST identity violation — the content-addressed store's core guarantee).
+  if (verificationHash !== hash) {
     throw new TotemError(
       'DATABASE_MISMATCH',
-      `Verdict artifact at ${filePath} fails content-address verification: its recomputed content hash ${recomputed} does not match the filename address ${hash} (modulo createdAt).`,
+      `Verdict artifact at ${filePath} fails content-address verification: its recomputed content hash ${verificationHash} does not match the filename address ${hash} (modulo createdAt).`,
       'This should be unreachable in a content-addressed store. Investigate a mis-addressed copy, a hand-edited/corrupted verdict file, or a hash collision, then re-emit the round.',
     );
   }
@@ -829,13 +946,18 @@ export function listVerdictArtifacts(
 }
 
 /**
- * The latest verdict sharing `lineageKey` — highest `round.index`, ties broken
- * by latest `createdAt` (ISO strings sort chronologically). Returns `undefined`
- * when no verdict carries the key. Used for implicit round linkage (the next
- * round's `priorVerdictHash` = `computeVerdictArtifactContentHash` of this).
+ * The latest verdict sharing `lineageKey` — highest `round.index`, ties broken by
+ * the lexical content-address HASH (rev-5 item 8), NOT `createdAt`. Returns
+ * `undefined` when no verdict carries the key. Used for implicit round linkage (the
+ * next round's `priorVerdictHash` = `computeVerdictArtifactContentHash` of this).
  * Goes through the same verified scan load as {@link listVerdictArtifacts}: a
  * corrupt / mis-addressed artifact is warned + skipped (never silently winning or
  * losing the lineage), `onWarn` injectable (default `console.warn`).
+ *
+ * The tie-break is IDENTITY-BOUND and deterministic: two same-round verdicts break on
+ * their content address (a pure function of the artifact, `createdAt` excluded), so
+ * selection never depends on wall-clock emission time (observability-only) — the same
+ * corpus always resolves the same latest verdict regardless of when each round ran.
  */
 export function findLatestVerdictForLineage(
   totemDirAbs: string,
@@ -846,11 +968,13 @@ export function findLatestVerdictForLineage(
     (v) => v.round.lineageKey === lineageKey,
   );
   if (matching.length === 0) return undefined;
-  matching.sort((a, b) => {
-    if (b.round.index !== a.round.index) return b.round.index - a.round.index;
-    return b.createdAt.localeCompare(a.createdAt);
+  // Precompute each content address once so the comparator is cheap and stable.
+  const withHash = matching.map((v) => ({ v, hash: computeVerdictArtifactContentHash(v) }));
+  withHash.sort((a, b) => {
+    if (b.v.round.index !== a.v.round.index) return b.v.round.index - a.v.round.index;
+    return b.hash.localeCompare(a.hash);
   });
-  return matching[0];
+  return withHash[0]!.v;
 }
 
 /** Best-effort major extraction from a raw parsed payload; undefined when absent/garbled. */

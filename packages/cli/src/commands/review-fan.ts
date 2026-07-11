@@ -1182,7 +1182,13 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     );
   }
 
-  // ── Assemble + save the verdict ──
+  // ── Assemble + save the verdict — kept ADJACENT to the compare above and the stamp
+  // below (rev-5 item 2). The compare→stamp interval is deliberately narrowed to
+  // exactly assemble (pure, in-memory) + save (one `wx` write): this window is
+  // INHERENT, because `reviewedState` is persisted verdict content — the compare must
+  // precede assembly, and the artifact must exist before a stamp can claim the round
+  // is recorded. Every render/report/covariate/--out side effect happens AFTER the
+  // stamp decision, so mutation during that I/O can never influence it. ──
   const verdict = assembleVerdict({
     diffScope,
     laneResults,
@@ -1197,6 +1203,8 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   const verdictHash = saveVerdictArtifact(ctx.totemDirAbs, verdict).hash;
 
   // ── ALL lanes terminal-failed (Gate G3): the honest verdict is now WRITTEN — hard-error ──
+  // (A pure boolean check — it does not widen the compare→stamp window, and an
+  // all-failed round is never cache-eligible nor override-stampable: the run ends here.)
   if (!anyWithOutput) {
     throw new TotemError(
       'SHIELD_FAILED',
@@ -1205,12 +1213,58 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     );
   }
 
-  // ── Findings render (finding 2) — BEFORE the summary; the actual messages ──
-  const fanFindings = dedupeFanFindings(laneResults);
-  renderFanFindingsToStderr(fanFindings);
-
   // ── Predicates (the verdict IS a valid VerdictPredicateInput) ──
   const cacheEligible = deriveCacheEligible(verdict);
+
+  // ── Cache stamp — ADJACENT to the save (rev-5 item 2), BEFORE any render/report I/O;
+  // independent of the sensor/fail-on exit decision (finding 3) ──
+  const override = ctx.options.override;
+  if (cacheEligible) {
+    // cacheEligible carries `reviewedState === 'matched'`, so drift can never reach
+    // here. Stamp EXACTLY the PRE-fan hash via the primitive writer (reusing the single
+    // compare above), never a second recompute. A `null` pre-fan hash ⇒ nothing to stamp.
+    if (ctx.preFanContentHash !== null) {
+      await writeReviewedContentHashValue(
+        ctx.preFanContentHash,
+        ctx.cwd,
+        ctx.config.totemDir,
+        ctx.configRoot,
+        ctx.config.review.sourceExtensions,
+      );
+    }
+  } else if (override !== undefined) {
+    if (reviewedState === 'matched') {
+      // `--override` authorizes the trap-ledgered cache stamp on a non-cache-eligible
+      // round — through the ledger+explicit-hash primitive (rev-5 item 1, codex
+      // critical): it binds the PRE-FAN hash and recomputes the CURRENT tree hash once
+      // more immediately adjacent to the stamp write. An edit landing after the fan's
+      // one compare (which derived `reviewedState`) is caught there — loud refusal,
+      // ledgered override WITHOUT a stamp. The current tree hash is NEVER stamped.
+      log.warn(DISPLAY_TAG, `SHIELD OVERRIDE APPLIED: ${override}`);
+      const { recordShieldOverrideWithExpectedHash } = await import('./shield.js');
+      await recordShieldOverrideWithExpectedHash({
+        override,
+        cwd: ctx.cwd,
+        totemDir: ctx.config.totemDir,
+        configRoot: ctx.configRoot,
+        sourceExtensions: ctx.config.review.sourceExtensions,
+        expectedContentHash: ctx.preFanContentHash,
+        // The SAME seam the fan's own compare used (production: re-hash the tracked
+        // tree), so tests can inject a post-compare mutation and prove the refusal.
+        computeCurrentHash: contentHash,
+      });
+    } else {
+      // Drift is NEVER stampable, even overridden (finding 3) — say it loudly.
+      log.warn(
+        DISPLAY_TAG,
+        'OVERRIDE CANNOT STAMP A DRIFTED TREE: the worktree changed mid-review, so the reviewed-content-hash was NOT stamped even under --override. The verdict stands (bound to the pre-fan tree); no push is authorized. Re-run `totem review` against the current tree.',
+      );
+    }
+  }
+
+  // ── Findings render (finding 2) — the actual messages, AFTER the stamp decision ──
+  const fanFindings = dedupeFanFindings(laneResults);
+  renderFanFindingsToStderr(fanFindings);
 
   // ── The core-owned, grep-able covariate line (contract v1; finding 14) ──
   log.info(DISPLAY_TAG, renderCovariateLine(verdict));
@@ -1234,44 +1288,6 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
       DISPLAY_TAG,
       `Sensor: round ${verdict.round.index} reached the max-rounds advisory threshold (${MAX_ROUNDS_ADVISORY}) — advisory only; consider human judgment.`,
     );
-  }
-
-  // ── Cache stamp (finding 3) — independent of the sensor/fail-on exit decision ──
-  const override = ctx.options.override;
-  if (cacheEligible) {
-    // cacheEligible carries `reviewedState === 'matched'`, so drift can never reach
-    // here. Stamp EXACTLY the PRE-fan hash via the primitive writer (reusing the single
-    // compare above), never a second recompute. A `null` pre-fan hash ⇒ nothing to stamp.
-    if (ctx.preFanContentHash !== null) {
-      await writeReviewedContentHashValue(
-        ctx.preFanContentHash,
-        ctx.cwd,
-        ctx.config.totemDir,
-        ctx.configRoot,
-        ctx.config.review.sourceExtensions,
-      );
-    }
-  } else if (override !== undefined) {
-    if (reviewedState === 'matched') {
-      // `--override` authorizes the trap-ledgered cache stamp on a non-cache-eligible
-      // round — routed through recordShieldOverride EXACTLY like the legacy path. matched
-      // ⇒ the current tree == the pre-fan tree, so the stamp still binds the reviewed tree.
-      log.warn(DISPLAY_TAG, `SHIELD OVERRIDE APPLIED: ${override}`);
-      const { recordShieldOverride } = await import('./shield.js');
-      await recordShieldOverride({
-        override,
-        cwd: ctx.cwd,
-        totemDir: ctx.config.totemDir,
-        configRoot: ctx.configRoot,
-        sourceExtensions: ctx.config.review.sourceExtensions,
-      });
-    } else {
-      // Drift is NEVER stampable, even overridden (finding 3) — say it loudly.
-      log.warn(
-        DISPLAY_TAG,
-        'OVERRIDE CANNOT STAMP A DRIFTED TREE: the worktree changed mid-review, so the reviewed-content-hash was NOT stamped even under --override. The verdict stands (bound to the pre-fan tree); no push is authorized. Re-run `totem review` against the current tree.',
-      );
-    }
   }
 
   // ── Exit contract (finding 3 / Gate G5) ──
@@ -1303,6 +1319,57 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     DISPLAY_TAG,
     `Review complete — verdict ${verdictHash.slice(0, 8)} (round ${verdict.round.index}, settled=${verdict.settled}).`,
   );
+}
+
+// ─── Covariate transport (rev-5 item 4 — executable, read-only, zero-LLM) ─────
+
+/** `printCovariateLine` inputs — the resolved diff-scope metadata plus store location. */
+export interface CovariateQuery {
+  /**
+   * Resolved diff-scope metadata from `getDiffForReview`, or `null` when no diff was
+   * detected (no scope ⇒ no lineage ⇒ loud sensor message, exit 0).
+   */
+  diffMeta: DiffScopeMeta | null;
+  /** Absolute `.totem` dir. */
+  totemDirAbs: string;
+  cwd: string;
+  /** Injected git runner (tests); production uses `safeExec('git', ...)`. */
+  gitExec?: GitExec;
+}
+
+/**
+ * `totem review --covariate` (rev-5 item 4): the EXECUTABLE covariate transport.
+ * Read-only and zero-LLM — resolves the CURRENT lineage through exactly the same
+ * {@link resolveLineage} path `runReviewFan` uses (never a re-implementation), loads
+ * the latest verdict for that lineage, and prints the core-owned
+ * {@link renderCovariateLine} to STDOUT (the skills pipe it into the consolidated
+ * round-disposition comment). No verdict for the lineage ⇒ a LOUD sensor message and
+ * a clean return (exit 0) — the caller learns there is no line to carry, nothing gates.
+ */
+export async function printCovariateLine(query: CovariateQuery): Promise<void> {
+  const { log } = await import('../ui.js');
+  if (query.diffMeta === null) {
+    log.warn(
+      DISPLAY_TAG,
+      'Covariate: no diff detected — no review lineage resolves, so there is no covariate line to print (sensor; exit 0).',
+    );
+    return;
+  }
+  const gitExec = query.gitExec ?? (await defaultGitExec(query.cwd));
+  const lineage = await resolveLineage(query.diffMeta, gitExec);
+  const { findLatestVerdictForLineage } = await import('@mmnto/totem');
+  const verdict = findLatestVerdictForLineage(query.totemDirAbs, lineage.lineageKey, (msg) =>
+    log.warn(DISPLAY_TAG, `Sensor: ${msg}`),
+  );
+  if (verdict === undefined) {
+    log.warn(
+      DISPLAY_TAG,
+      'Covariate: no verdict artifact recorded for the current lineage — run `totem review` with review.lanes configured to emit one (sensor; exit 0).',
+    );
+    return;
+  }
+  // STDOUT, not the stderr log: this line IS the transport payload (format v1).
+  console.log(renderCovariateLine(verdict));
 }
 
 /** Name the failing cache-eligibility conjunct(s) for an honest exit reason. */

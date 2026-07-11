@@ -13,6 +13,7 @@ import {
   findLatestVerdictForLineage,
   listVerdictArtifacts,
   readLedgerEvents,
+  renderCovariateLine,
   type RunArtifact,
   type TotemConfig,
 } from '@mmnto/totem';
@@ -29,6 +30,7 @@ import {
   type LaneInvocation,
   type LaneInvoker,
   type LaneRunResult,
+  printCovariateLine,
   resolveLineage,
   type ReviewFanContext,
   runLane,
@@ -1155,6 +1157,100 @@ describe('runReviewFan', () => {
     );
   });
 
+  // ── rev-5 item 1 (codex critical falsifier): --override must never stamp an unreviewed tree ──
+
+  it('FALSIFIER: tree mutates AFTER the fan compare but BEFORE override stamping ⇒ ledgered override, NO stamp (rev-5 item 1)', async () => {
+    // The fan's one compare sees the pre-fan hash (matched); the tree then mutates
+    // before the override stamp. The ledger+explicit-hash primitive recomputes the
+    // current hash immediately adjacent to the stamp write and must refuse — the
+    // current (mutated, unreviewed) tree hash is never stamped, and neither is the
+    // pre-fan hash (it no longer describes the tree).
+    const hashes = ['pre-fan-hash', 'post-compare-mutated-hash'];
+    let calls = 0;
+    const ctx = makeCtx(
+      tmpDir,
+      ['anthropic:claude-a', 'gemini:g'],
+      twoLaneInvoker(CRITICAL_CONTENT, 'f1'),
+      {
+        preFanContentHash: 'pre-fan-hash',
+        contentHash: async () => hashes[Math.min(calls++, hashes.length - 1)]!,
+        options: { override: 'operator-accepted false positive — but the tree moved' },
+      },
+    );
+    const errSpy = vi.spyOn(console, 'error');
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
+    // The fan compare saw 'pre-fan-hash' ⇒ matched; the adjacent recompute saw the mutation.
+    expect(calls).toBe(2);
+    const v = listVerdictArtifacts(tmpDir)[0]!;
+    expect(v.reviewedState).toBe('matched');
+    // The override IS trap-ledgered (the operator's justification is auditable)…
+    const events = readLedgerEvents(path.join(tmpDir, '.totem'));
+    expect(events.some((e) => e.type === 'override' && e.ruleId === 'shield-override')).toBe(true);
+    // …but NOTHING was stamped: not the pre-fan hash, and never the current tree hash.
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(
+      false,
+    );
+    // The refusal is loud.
+    const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).toMatch(/OVERRIDE STAMP REFUSED/);
+  });
+
+  it('override stamp binds EXACTLY the pre-fan hash when the adjacent recompute still matches (rev-5 item 1 positive)', async () => {
+    const ctx = makeCtx(
+      tmpDir,
+      ['anthropic:claude-a', 'gemini:g'],
+      twoLaneInvoker(CRITICAL_CONTENT, 'f2'),
+      {
+        preFanContentHash: 'pre-fan-stable-hash',
+        contentHash: async () => 'pre-fan-stable-hash',
+        options: { override: 'operator-accepted false positive on a stable tree' },
+      },
+    );
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
+    const stampPath = path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash');
+    expect(fs.readFileSync(stampPath, 'utf-8')).toBe('pre-fan-stable-hash');
+  });
+
+  // ── rev-5 item 2: the stamp decision precedes ALL render/report I/O ──
+
+  it('the stamp lands BEFORE the findings render / covariate line / --out report; render-time mutation cannot affect it (rev-5 item 2)', async () => {
+    const outPath = path.join(tmpDir, 'fan-report.txt');
+    const stampPath = path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash');
+    let contentHashCalls = 0;
+    let stampExistedAtFindingsRender: boolean | undefined;
+    let stampExistedAtCovariateRender: boolean | undefined;
+    // Observe the stamp file's state AT the moment each render side effect fires
+    // (all render/log output goes through console.error).
+    vi.mocked(console.error).mockImplementation((...args: unknown[]) => {
+      const line = args.map(String).join(' ');
+      if (line.includes('Review fan —')) stampExistedAtFindingsRender = fs.existsSync(stampPath);
+      if (line.includes('local-lane:')) stampExistedAtCovariateRender = fs.existsSync(stampPath);
+    });
+    const ctx = makeCtx(
+      tmpDir,
+      ['anthropic:claude-a', 'gemini:g'],
+      twoLaneInvoker(wrapVerdict([]), 'ord'),
+      {
+        preFanContentHash: 'pre-hash-ordering',
+        contentHash: async () => {
+          contentHashCalls += 1;
+          return 'pre-hash-ordering';
+        },
+        options: { out: outPath },
+      },
+    );
+    await runReviewFan(ctx);
+    // The single fan compare is the ONLY tree read on the ordinary path — no re-hash
+    // during render/report I/O, so a mutation there cannot influence the stamp.
+    expect(contentHashCalls).toBe(1);
+    // The stamp decision was already durable when the findings render, the covariate
+    // line, and the --out report happened.
+    expect(stampExistedAtFindingsRender).toBe(true);
+    expect(stampExistedAtCovariateRender).toBe(true);
+    expect(fs.readFileSync(stampPath, 'utf-8')).toBe('pre-hash-ordering');
+    expect(fs.existsSync(outPath)).toBe(true);
+  });
+
   // ── Findings render (finding 2) ──
 
   it('a WARN round and a CRITICAL round both render the actual finding MESSAGES to output (finding 2)', async () => {
@@ -1250,5 +1346,124 @@ describe('runReviewFan', () => {
       /All 0 review lane/,
     );
     expect(listVerdictArtifacts(tmpDir)).toHaveLength(0);
+  });
+});
+
+// ─── printCovariateLine (rev-5 item 4 — executable covariate transport) ────────
+
+describe('printCovariateLine (rev-5 item 4)', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'covariate-'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanTmpDir(tmpDir);
+  });
+
+  const cleanTwoLaneInvoker = () =>
+    mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: wrapVerdict([]),
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: 'cva',
+      }),
+      'gemini:g': completedInvocation({
+        content: wrapVerdict([]),
+        provider: 'gemini',
+        model: 'g',
+        seed: 'cvb',
+      }),
+    });
+
+  it('prints the EXACT core-owned covariate line for the current lineage on stdout (mechanical)', async () => {
+    const git = fakeGit('feature-cov', 'covbase');
+    // Write a verdict via a real fan run (same lineage resolution the covariate uses).
+    await runReviewFan(
+      makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], cleanTwoLaneInvoker(), {
+        gitExec: git,
+      }),
+    );
+    const verdict = listVerdictArtifacts(tmpDir)[0]!;
+
+    const logSpy = vi.mocked(console.log);
+    logSpy.mockClear();
+    await printCovariateLine({
+      diffMeta: { source: 'branch-vs-base', base: 'main' },
+      totemDirAbs: tmpDir,
+      cwd: tmpDir,
+      gitExec: git,
+    });
+    // EXACTLY the core renderer's line, on stdout — format v1, byte-for-byte.
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy).toHaveBeenCalledWith(renderCovariateLine(verdict));
+    const line = String(logSpy.mock.calls[0]![0]);
+    expect(line).toMatch(/^local-lane: [0-9a-f]{8} round=0 settled=true lanes=2\/2$/);
+  });
+
+  it('resolves the LATEST verdict for the lineage (round chain respected)', async () => {
+    const git = fakeGit('feature-cov', 'covbase');
+    const mk = (seed: string) =>
+      makeCtx(
+        tmpDir,
+        ['anthropic:claude-a', 'gemini:g'],
+        mapInvoker({
+          'anthropic:claude-a': completedInvocation({
+            content: wrapVerdict([]),
+            provider: 'anthropic',
+            model: 'claude-a',
+            seed: `${seed}a`,
+          }),
+          'gemini:g': completedInvocation({
+            content: wrapVerdict([]),
+            provider: 'gemini',
+            model: 'g',
+            seed: `${seed}b`,
+          }),
+        }),
+        { gitExec: git },
+      );
+    await runReviewFan(mk('r0'));
+    await runReviewFan(mk('r1'));
+
+    const logSpy = vi.mocked(console.log);
+    logSpy.mockClear();
+    await printCovariateLine({
+      diffMeta: { source: 'branch-vs-base', base: 'main' },
+      totemDirAbs: tmpDir,
+      cwd: tmpDir,
+      gitExec: git,
+    });
+    expect(String(logSpy.mock.calls[0]![0])).toContain('round=1');
+  });
+
+  it('no verdict for the lineage ⇒ loud sensor message, NO stdout line, clean return (exit 0)', async () => {
+    const errSpy = vi.mocked(console.error);
+    const logSpy = vi.mocked(console.log);
+    await expect(
+      printCovariateLine({
+        diffMeta: { source: 'branch-vs-base', base: 'main' },
+        totemDirAbs: tmpDir,
+        cwd: tmpDir,
+        gitExec: fakeGit('feature-none', 'nobase'),
+      }),
+    ).resolves.toBeUndefined();
+    expect(logSpy).not.toHaveBeenCalled();
+    const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).toMatch(/no verdict artifact recorded for the current lineage/i);
+  });
+
+  it('no diff scope (diffMeta null) ⇒ loud sensor message, NO stdout line, clean return', async () => {
+    const errSpy = vi.mocked(console.error);
+    const logSpy = vi.mocked(console.log);
+    await expect(
+      printCovariateLine({ diffMeta: null, totemDirAbs: tmpDir, cwd: tmpDir }),
+    ).resolves.toBeUndefined();
+    expect(logSpy).not.toHaveBeenCalled();
+    const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).toMatch(/no diff detected/i);
   });
 });

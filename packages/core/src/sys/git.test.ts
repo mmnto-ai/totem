@@ -17,6 +17,7 @@ import {
   findRepoRootSync,
   findTotemRepoRootSync,
   getGitBranchDiff,
+  getGitBranchDiffResult,
   getGitDiffRange,
   getGitLogSince,
   getLatestTag,
@@ -186,6 +187,66 @@ describe('getGitBranchDiff base-ref resolution (#2054)', () => {
       // The fetch hint lives in the recovery field, not the message.
       expect(caught.recoveryHint).toMatch(/git fetch origin main/);
     }
+  });
+});
+
+describe('getGitBranchDiffResult resolved-base coupling (mmnto-ai/totem#2106 rev-5 item 3)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function routeDiffByRef(routes: Record<string, { ok?: string; fail?: string }>): void {
+    vi.mocked(crossSpawn.sync).mockImplementation((_command, args) => {
+      const range = (args ?? [])[1] ?? '';
+      const outcome = routes[range.replace(/\.\.\.HEAD$/, '')];
+      let result;
+      if (!outcome) result = fail(new Error(`unexpected git call: ${(args ?? []).join(' ')}`));
+      else if (outcome.fail) result = fail(new Error(outcome.fail));
+      else result = ok(outcome.ok ?? '');
+      return result as never;
+    });
+  }
+
+  it('returns resolvedBase=origin/<base> when the remote diff produced the payload', () => {
+    routeDiffByRef({
+      'origin/main': { ok: 'ORIGIN_DIFF' },
+      main: { ok: 'STALE_LOCAL_DIFF' },
+    });
+    expect(getGitBranchDiffResult('/tmp', 'main')).toEqual({
+      diff: 'ORIGIN_DIFF',
+      resolvedBase: 'origin/main',
+    });
+  });
+
+  it('remote ref EXISTS but its diff FAILS (no merge base) and local succeeds ⇒ resolvedBase is the LOCAL ref', () => {
+    // The item-3 falsifier: a separate ref-existence probe would say origin/main exists
+    // and mislabel the scope origin-based — but the origin diff itself failed and the
+    // payload came from the local ref. The diff operation reports the ref that RAN.
+    routeDiffByRef({
+      'origin/main': { fail: 'fatal: no merge base' },
+      main: { ok: 'LOCAL_DIFF' },
+    });
+    expect(getGitBranchDiffResult('/tmp', 'main')).toEqual({
+      diff: 'LOCAL_DIFF',
+      resolvedBase: 'main',
+    });
+  });
+
+  it('normalizes an origin-prefixed base and still reports the ref that ran', () => {
+    routeDiffByRef({
+      'origin/main': { fail: 'fatal: bad revision' },
+      main: { ok: 'LOCAL_DIFF' },
+    });
+    expect(getGitBranchDiffResult('/tmp', 'origin/main')).toEqual({
+      diff: 'LOCAL_DIFF',
+      resolvedBase: 'main',
+    });
+  });
+
+  it('getGitBranchDiff remains the diff-text-only wrapper (old callers keep compiling)', () => {
+    routeDiffByRef({
+      'origin/main': { ok: 'ORIGIN_DIFF' },
+      main: { ok: 'STALE_LOCAL_DIFF' },
+    });
+    expect(getGitBranchDiff('/tmp', 'main')).toBe('ORIGIN_DIFF');
   });
 });
 

@@ -871,7 +871,7 @@ Print summary of actions taken and exit.
 
 ## Consolidated round-disposition comment
 
-When assembling the single consolidated round-disposition comment, carry the pending \`local-lane:\` covariate line into it. Re-derive that line from the LATEST verdict artifact for the current branch's lineage (\`.totem/artifacts/verdicts/\`) rather than trusting a pasted value — the CLI prints the identical line on every fan run from a single core-owned renderer, so every emitter agrees, and the artifact is the canonical source. The local \`review-loop\` holds the line but never posts it, so \`/review-reply\` is the sole path that carries it to GitHub. This is a mechanism, not a hand-copied instruction, and needs no new CLI verb.
+When assembling the single consolidated round-disposition comment, carry the pending \`local-lane:\` covariate line into it. Obtain the line by running \`totem review --covariate\` (read-only, zero-LLM): it resolves the current branch lineage exactly as the review fan does, loads the LATEST verdict artifact for that lineage (\`.totem/artifacts/verdicts/\`), and prints the canonical line from the single core-owned renderer — never trust a pasted or hand-copied value. If it reports no verdict for the current lineage, there is no line to carry. The local \`review-loop\` holds the line but never posts it, so \`/review-reply\` is the sole path that carries it to GitHub.
 
 ${SKILL_MARKER_END}
 `;
@@ -913,7 +913,7 @@ This is NOT the external-bot triage skill. \`/review-reply\` handles bot comment
 local-lane: <verdictHash8> round=<n> settled=<true|false> lanes=<completed>/<attempted>
 \`\`\`
 
-\`<verdictHash8>\` is the first 8 hex characters of the verdict artifact hash the CLI reports. This line is a versioned contract (format v1) consumed by a measurement pilot — do not change its shape without a spec amendment. The CLI renders it from the verdict artifact on every fan run via a single core-owned renderer, so it is re-derivable from the canonical artifact and never hand-authored. Inclusion of any pending \`local-lane:\` line in the single consolidated round-disposition comment belongs to \`/review-reply\`, not to this loop — never post it to GitHub yourself.
+\`<verdictHash8>\` is the first 8 hex characters of the verdict artifact hash the CLI reports. This line is a versioned contract (format v1) consumed by a measurement pilot — do not change its shape without a spec amendment. The CLI renders it from the verdict artifact on every fan run via a single core-owned renderer, so it is re-derivable from the canonical artifact and never hand-authored — on demand, the read-only \`totem review --covariate\` (zero-LLM) resolves the current lineage and prints the latest verdict's line. Inclusion of any pending \`local-lane:\` line in the single consolidated round-disposition comment belongs to \`/review-reply\` (which obtains it by running \`totem review --covariate\`), not to this loop — never post it to GitHub yourself.
 
 ${SKILL_MARKER_END}
 `;

@@ -536,6 +536,7 @@ export {
 } from './sys/bash-resolver.js';
 
 // Git utilities (pure helpers — no CLI dependencies)
+export type { GitBranchDiffResult } from './sys/git.js';
 export {
   extractChangedFiles,
   filterDiffByPatterns,
@@ -544,6 +545,7 @@ export {
   getDefaultBranch,
   getGitBranch,
   getGitBranchDiff,
+  getGitBranchDiffResult,
   getGitDiff,
   getGitDiffRange,
   getGitDiffStat,

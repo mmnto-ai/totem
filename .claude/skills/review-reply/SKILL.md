@@ -61,6 +61,6 @@ Print summary of actions taken and exit.
 
 ## Consolidated round-disposition comment
 
-When assembling the single consolidated round-disposition comment, carry the pending `local-lane:` covariate line into it. Re-derive that line from the LATEST verdict artifact for the current branch's lineage (`.totem/artifacts/verdicts/`) rather than trusting a pasted value — the CLI prints the identical line on every fan run from a single core-owned renderer, so every emitter agrees, and the artifact is the canonical source. The local `review-loop` holds the line but never posts it, so `/review-reply` is the sole path that carries it to GitHub. This is a mechanism, not a hand-copied instruction, and needs no new CLI verb.
+When assembling the single consolidated round-disposition comment, carry the pending `local-lane:` covariate line into it. Obtain the line by running `totem review --covariate` (read-only, zero-LLM): it resolves the current branch lineage exactly as the review fan does, loads the LATEST verdict artifact for that lineage (`.totem/artifacts/verdicts/`), and prints the canonical line from the single core-owned renderer — never trust a pasted or hand-copied value. If it reports no verdict for the current lineage, there is no line to carry. The local `review-loop` holds the line but never posts it, so `/review-reply` is the sole path that carries it to GitHub.
 
 <!-- totem:skill-end -->

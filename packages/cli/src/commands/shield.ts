@@ -549,6 +549,30 @@ export async function writeReviewedContentHash(
   await writeReviewedContentHashValue(hash, cwd, totemDir, configRoot, extensions);
 }
 
+/** Append the shield-override event to the Trap Ledger (shared by both override paths). */
+async function appendShieldOverrideLedgerEvent(
+  cwd: string,
+  totemDir: string,
+  configRoot: string | undefined,
+  override: string,
+): Promise<void> {
+  const path = await import('node:path');
+  const { appendLedgerEvent } = await import('@mmnto/totem');
+  const resolvedTotemDir = path.join(configRoot ?? cwd, totemDir);
+  appendLedgerEvent(
+    resolvedTotemDir,
+    {
+      timestamp: new Date().toISOString(),
+      type: 'override',
+      ruleId: 'shield-override',
+      file: '(shield)',
+      justification: override,
+      source: 'shield',
+    },
+    (msg) => log.dim(DISPLAY_TAG, msg),
+  );
+}
+
 /**
  * Record a shield override: append the override event to the Trap Ledger
  * AND stamp the reviewed-content-hash so the push-gate hook unblocks.
@@ -558,6 +582,12 @@ export async function writeReviewedContentHash(
  * with a tribal-knowledge `git reset --soft HEAD~1 && totem review --staged`
  * workaround. Override is a legitimate completion path (with logged
  * justification) and must produce the same cache state as a passing review.
+ *
+ * LEGACY SINGLE-LANE ONLY: this stamps the CURRENT tree hash (a recompute). The
+ * multi-lane fan must never use it — its long LLM window makes a mid-run edit real,
+ * so the fan goes through {@link recordShieldOverrideWithExpectedHash}, which binds
+ * the PRE-FAN hash and refuses to stamp a tree that no longer matches it (Prop 304
+ * rev-5 item 1).
  */
 export async function recordShieldOverride(params: {
   override: string;
@@ -566,20 +596,11 @@ export async function recordShieldOverride(params: {
   configRoot?: string;
   sourceExtensions?: readonly string[];
 }): Promise<void> {
-  const path = await import('node:path');
-  const { appendLedgerEvent } = await import('@mmnto/totem');
-  const resolvedTotemDir = path.join(params.configRoot ?? params.cwd, params.totemDir);
-  appendLedgerEvent(
-    resolvedTotemDir,
-    {
-      timestamp: new Date().toISOString(),
-      type: 'override',
-      ruleId: 'shield-override',
-      file: '(shield)',
-      justification: params.override,
-      source: 'shield',
-    },
-    (msg) => log.dim(DISPLAY_TAG, msg),
+  await appendShieldOverrideLedgerEvent(
+    params.cwd,
+    params.totemDir,
+    params.configRoot,
+    params.override,
   );
   await writeReviewedContentHash(
     params.cwd,
@@ -587,6 +608,80 @@ export async function recordShieldOverride(params: {
     params.configRoot,
     params.sourceExtensions,
   );
+}
+
+/** {@link recordShieldOverrideWithExpectedHash} parameters. */
+export interface ShieldOverrideWithExpectedHashParams {
+  /** The trap-ledgered justification. */
+  override: string;
+  cwd: string;
+  totemDir: string;
+  configRoot?: string;
+  sourceExtensions?: readonly string[];
+  /**
+   * The PRE-FAN content hash the stamp must bind — the exact tree the lanes reviewed.
+   * `null` means there was no tracked source to authorize (the fan's legacy no-op
+   * case): the override is still ledgered, nothing is stamped.
+   */
+  expectedContentHash: string | null;
+  /**
+   * Injectable current-tree re-hasher (test seam). Defaults to
+   * `computeReviewedContentHash(cwd, configRoot, sourceExtensions)` — the SAME
+   * computation that produced `expectedContentHash` pre-fan.
+   */
+  computeCurrentHash?: () => Promise<string | null>;
+}
+
+/**
+ * Ledger + EXPLICIT-HASH override primitive (Prop 304 rev-5 item 1 — codex critical).
+ *
+ * `--override` on the fan path must never stamp an UNREVIEWED tree: the fan's one
+ * post-fan compare happens before verdict assembly, so an edit landing after that
+ * compare but before the stamp would — under `recordShieldOverride`'s current-tree
+ * recompute — be stamped as reviewed. This primitive closes that window:
+ *
+ *   1. The override event is ALWAYS appended to the Trap Ledger (the operator's
+ *      justification is auditable whether or not a stamp lands).
+ *   2. IMMEDIATELY ADJACENT to the stamp write, the current tree hash is recomputed
+ *      once more and compared to the caller's PRE-FAN `expectedContentHash`.
+ *   3. Match ⇒ stamp EXACTLY `expectedContentHash` via the explicit writer (never a
+ *      recompute value). Mismatch ⇒ LOUD refusal, no stamp — the ledger records the
+ *      override WITHOUT a stamp, and the return value says so.
+ *
+ * Returns `{ stamped }` so the caller can report honestly.
+ */
+export async function recordShieldOverrideWithExpectedHash(
+  params: ShieldOverrideWithExpectedHashParams,
+): Promise<{ stamped: boolean }> {
+  await appendShieldOverrideLedgerEvent(
+    params.cwd,
+    params.totemDir,
+    params.configRoot,
+    params.override,
+  );
+  if (params.expectedContentHash === null) return { stamped: false };
+
+  const computeCurrentHash =
+    params.computeCurrentHash ??
+    (() => computeReviewedContentHash(params.cwd, params.configRoot, params.sourceExtensions));
+  // The adjacent recompute — the LAST read before the stamp write. Any tree mutation
+  // after the fan's own compare (which fed reviewedState) is caught here.
+  const currentHash = await computeCurrentHash();
+  if (currentHash !== params.expectedContentHash) {
+    log.warn(
+      DISPLAY_TAG,
+      'OVERRIDE STAMP REFUSED: the tracked-source tree changed after the review compared it (current hash no longer matches the pre-review hash). The override was recorded in the Trap Ledger WITHOUT a stamp — this override does not authorize a push. Re-run `totem review` against the current tree.',
+    );
+    return { stamped: false };
+  }
+  await writeReviewedContentHashValue(
+    params.expectedContentHash,
+    params.cwd,
+    params.totemDir,
+    params.configRoot,
+    params.sourceExtensions,
+  );
+  return { stamped: true };
 }
 
 // ─── Main command ───────────────────────────────────────
@@ -656,6 +751,14 @@ export interface ShieldOptions {
    * legacy single-lane path (which keeps its own labeled-compat-debt exit contract).
    */
   failOn?: 'critical' | 'warn';
+  /**
+   * Executable covariate transport (Prop 304 rev-5 item 4). Read-only, zero-LLM:
+   * resolves the CURRENT lineage exactly as the review fan does, loads the latest
+   * verdict artifact for it, and prints the core-owned covariate line to stdout.
+   * No verdict for the lineage ⇒ loud sensor message, exit 0. Short-circuits before
+   * any LLM/engine work; nothing is stamped or written.
+   */
+  covariate?: boolean;
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─
@@ -1332,16 +1435,46 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   }
   const cwd = process.cwd();
 
-  // Silently upgrade the pre-push hook if it lacks review auto-refresh (#1045)
-  const { upgradePrePushHookIfNeeded } = await import('./install-hooks.js');
-  if (upgradePrePushHookIfNeeded(cwd)) {
-    log.dim(DISPLAY_TAG, 'Upgraded pre-push hook with review auto-refresh');
+  // Silently upgrade the pre-push hook if it lacks review auto-refresh (#1045).
+  // Skipped under --covariate: that verb is read-only by contract (rev-5 item 4).
+  if (!options.covariate) {
+    const { upgradePrePushHookIfNeeded } = await import('./install-hooks.js');
+    if (upgradePrePushHookIfNeeded(cwd)) {
+      log.dim(DISPLAY_TAG, 'Upgraded pre-push hook with review auto-refresh');
+    }
   }
 
   const configPath = resolveConfigPath(cwd);
   const configRoot = path.dirname(configPath);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
+
+  // ── Executable covariate transport (Prop 304 rev-5 item 4) — read-only, zero-LLM ──
+  // Short-circuits BEFORE engine boot, fan activation, and every stamp-bearing
+  // fast-path: `--covariate` resolves the current lineage via the SAME
+  // getDiffForReview → resolveLineage path the fan uses, prints the latest verdict's
+  // core-owned covariate line, and exits 0. A no-diff resolution is handled inside
+  // printCovariateLine as a loud sensor message (never the trivial-pass stamp the
+  // ordinary no-diff path performs — this verb writes nothing).
+  if (options.covariate) {
+    const diffResult = await getDiffForReview(options, config, cwd, DISPLAY_TAG);
+    const { printCovariateLine } = await import('./review-fan.js');
+    await printCovariateLine({
+      diffMeta:
+        diffResult === null
+          ? null
+          : {
+              source: diffResult.source,
+              base: diffResult.base,
+              head: diffResult.head,
+              selectorForm: diffResult.selectorForm,
+            },
+      totemDirAbs: path.join(configRoot, config.totemDir),
+      cwd,
+    });
+    return;
+  }
+
   // Engine boot (mmnto-ai/totem#1794) — see lint.ts wiring for context.
   const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
   await bootstrapEngine(config, configRoot);
