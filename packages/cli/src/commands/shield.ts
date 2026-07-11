@@ -447,14 +447,14 @@ export async function computeReviewedContentHash(
     const root = configRoot ?? cwd;
 
     const globArgs = extensions.map((e) => '*' + e);
-    const files = safeExec('git', ['ls-files', '-z', ...globArgs], {
+    const files = safeExec('git', ['ls-files', '-z', '--', ...globArgs], {
       cwd: root,
     });
     if (!files.trim()) return null; // No source files — nothing to stamp
 
     // Filter out deleted files (still in index but missing on disk)
     const deleted = new Set(
-      safeExec('git', ['ls-files', '--deleted', '-z', ...globArgs], {
+      safeExec('git', ['ls-files', '--deleted', '-z', '--', ...globArgs], {
         cwd: root,
       })
         .split('\0')
@@ -985,8 +985,15 @@ export async function captureObservationRules(
       manifest.output_hash = generateOutputHash(rulesPath);
       writeCompileManifest(manifestPath, manifest);
       // totem-context: intentional — the compile manifest may not exist yet (first run before compile); a missing manifest is not an error, verify-manifest resyncs later.
-    } catch {
-      // Non-fatal — manifest may not exist yet (e.g. first run before compile)
+    } catch (err) {
+      // Non-fatal — but only ENOENT (no manifest yet) is fully silent; a
+      // malformed/permission failure surfaces under TOTEM_DEBUG (PR #2337 CR).
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT' && process.env['TOTEM_DEBUG'] === '1') {
+        log.dim(
+          DISPLAY_TAG,
+          `Manifest re-hash failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
     // totem-context: intentional — Pipeline 5 auto-capture is best-effort; it must never crash the shield command, so any failure degrades to a TOTEM_DEBUG log (no rethrow).
   } catch (err) {

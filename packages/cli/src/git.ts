@@ -275,14 +275,28 @@ export async function getDiffForReview(
 
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
 
-  let diff: string;
-  let source: DiffForReviewSource;
+  // Definite-assignment asserted: every branch assigns both before use — the
+  // shared `resolveBranchScope` closure hides that from TS2454's flow analysis.
+  let diff!: string;
+  let source!: DiffForReviewSource;
   // Scope refs resolved at derivation time (Prop 304). Populated only where the
   // source makes them meaningful; left undefined otherwise.
   let scopeBase: string | undefined;
   let scopeHead: string | undefined;
   // Raw CLI selector form (finding 10) — captured for explicit-range only.
   let selectorForm: string | undefined;
+
+  // Shared branch-vs-base resolution for the forced-scope and auto-fallback
+  // paths — one sequence, so the two call sites cannot drift (PR #2337 CR).
+  // Finding 7 / rev-5 item 3: the diff operation itself returns the ref it
+  // ACTUALLY diffed (origin/<base> when its diff succeeded, else local <base>),
+  // so diffScope + lineage record the true comparison.
+  const resolveBranchScope = (base: string): void => {
+    const branchResult = getGitBranchDiffResult(cwd, base);
+    diff = filterDiffByPatterns(branchResult.diff, allIgnore);
+    source = 'branch-vs-base';
+    scopeBase = branchResult.resolvedBase;
+  };
 
   if (forcedBranchScope) {
     // Forced push-gate scope (mmnto-ai/totem#2091): bypass the working-tree
@@ -297,14 +311,7 @@ export async function getDiffForReview(
       tag,
       `Diff source: branch-vs-base (${forcingFlags}; origin/${safeBase}...HEAD, else local ${safeBase})`,
     );
-    // Finding 7 / rev-5 item 3: the diff operation itself returns the ref it ACTUALLY
-    // diffed (origin/<base> when its diff succeeded, else local <base>), so diffScope +
-    // lineage record the true comparison — a remote ref that exists but whose diff falls
-    // back to local can no longer be mislabeled origin-based.
-    const branchResult = getGitBranchDiffResult(cwd, base);
-    diff = filterDiffByPatterns(branchResult.diff, allIgnore);
-    source = 'branch-vs-base';
-    scopeBase = branchResult.resolvedBase;
+    resolveBranchScope(base);
     if (!diff.trim()) {
       log.warn(tag, 'No changes detected. Nothing to review.');
       return null;
@@ -339,12 +346,7 @@ export async function getDiffForReview(
         tag,
         `Diff source: branch-vs-base (origin/${safeBase}...HEAD, else local ${safeBase})`,
       );
-      // Finding 7 / rev-5 item 3: record the ref the diff operation ACTUALLY diffed
-      // (origin/<base> when its diff succeeded, else local <base>), coupled to the payload.
-      const branchResult = getGitBranchDiffResult(cwd, base);
-      diff = filterDiffByPatterns(branchResult.diff, allIgnore);
-      source = 'branch-vs-base';
-      scopeBase = branchResult.resolvedBase;
+      resolveBranchScope(base);
     }
 
     if (!diff.trim()) {

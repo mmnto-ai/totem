@@ -55,6 +55,9 @@ import {
 // laneIds follow the backend-derived vocabulary `lane-<index>:<backend>` (G1),
 // built from the lane's fan position + resolved backend / configured lane.
 
+/** Test sink for the now-required scan `onWarn` (core is console-free; PR #2337 CR). */
+const noWarn = (): void => {};
+
 function completedLane(index: number, provider = 'gemini'): VerdictLane {
   const resolvedBackend = `${provider}:${provider}-model`;
   return {
@@ -220,24 +223,35 @@ describe('VerdictArtifactSchema — structure', () => {
 });
 
 // ─── laneId value-channel lane-blindness (Prop 302 G1) ──────────────────────
+// Closed STRUCTURALLY: the suffix must equal the lane's binding field, so free
+// text (runner classes included) has no channel. The former substring blacklist
+// was removed — it false-positived legitimate model names (PR #2337 greptile P2).
 
-describe('laneId value-channel vocabulary (Prop 302 G1)', () => {
+describe('laneId value-channel lane-blindness (Prop 302 G1, structural)', () => {
   it('accepts a well-formed backend-derived laneId', () => {
     expect(VerdictArtifactSchema.safeParse(verdict()).success).toBe(true);
   });
 
-  it('rejects a laneId smuggling a runner class (warm) through the value channel', () => {
+  it('rejects a laneId smuggling a runner class (warm) — suffix diverges from the binding field', () => {
     const smuggled = verdict({
       lanes: [{ ...completedLane(0), laneId: 'lane-0:warm-resident:some-model' }],
     });
     expect(VerdictArtifactSchema.safeParse(smuggled).success).toBe(false);
   });
 
-  it('rejects each runner-class substring (warm/cold/headless/sdk-runner)', () => {
+  it('rejects each runner-class smuggle attempt (cold/headless/sdk-runner) structurally', () => {
     for (const smuggle of ['cold', 'headless', 'sdk-runner']) {
       const v = verdict({ lanes: [{ ...completedLane(0), laneId: `lane-0:${smuggle}-x:m` }] });
       expect(VerdictArtifactSchema.safeParse(v).success).toBe(false);
     }
+  });
+
+  it('ACCEPTS a legitimate model name containing a runner-class token when the suffix matches the binding (no substring false positive)', () => {
+    const backend = 'anthropic:claude-cold-inference-mini';
+    const lane = { ...completedLane(0), laneId: `lane-0:${backend}`, resolvedBackend: backend };
+    const v = verdict({ lanes: [lane], diversity: undefined, panelArtifactHash: undefined });
+    const parsed = VerdictArtifactSchema.safeParse(v);
+    expect(parsed.success).toBe(true);
   });
 
   it('rejects a laneId that violates the backend-derived shape', () => {
@@ -899,7 +913,7 @@ describe('verdict storage (mirrors run/panel storage)', () => {
   });
 
   it('listVerdictArtifacts returns [] when nothing has been written', () => {
-    expect(listVerdictArtifacts(totemDir)).toEqual([]);
+    expect(listVerdictArtifacts(totemDir, noWarn)).toEqual([]);
   });
 
   it('a corrupt / mis-addressed artifact is warned + skipped during a lineage scan, not crashed', () => {
@@ -948,10 +962,10 @@ describe('verdict storage (mirrors run/panel storage)', () => {
       verdict({ round: { index: 9, lineageKey: other, priorVerdictHash: 'c'.repeat(64) } }),
     );
 
-    const latest = findLatestVerdictForLineage(totemDir, lineageKey);
+    const latest = findLatestVerdictForLineage(totemDir, lineageKey, noWarn);
     expect(latest?.artifact.round.index).toBe(2);
     expect(latest!.contentHash).toBe(r2.hash);
-    expect(findLatestVerdictForLineage(totemDir, 'no-such-lineage')).toBeUndefined();
+    expect(findLatestVerdictForLineage(totemDir, 'no-such-lineage', noWarn)).toBeUndefined();
   });
 
   it('findLatestVerdictForLineage breaks round-index ties by lexical content hash, NOT createdAt (rev-5 item 8)', () => {
@@ -974,7 +988,7 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     loser.createdAt = '2026-07-11T00:00:00.000Z';
     saveVerdictArtifact(totemDir, winner);
     saveVerdictArtifact(totemDir, loser);
-    const found = findLatestVerdictForLineage(totemDir, lineageKey)!;
+    const found = findLatestVerdictForLineage(totemDir, lineageKey, noWarn)!;
     expect(found.contentHash).toBe(winnerHash);
     // Deterministic + timestamp-independent: the earlier-stamped record won on hash.
     expect(found.artifact.createdAt).toBe('2026-07-10T00:00:00.000Z');
@@ -1042,7 +1056,7 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     );
 
     // (b) lineage selection returns the RAW file address as its contentHash.
-    const found = findLatestVerdictForLineage(totemDir, lineageKey)!;
+    const found = findLatestVerdictForLineage(totemDir, lineageKey, noWarn)!;
     expect(found.contentHash).toBe(rawHash);
 
     // (c) round linkage would set priorVerdictHash = found.contentHash — byte-equal to the

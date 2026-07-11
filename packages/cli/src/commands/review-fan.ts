@@ -178,6 +178,16 @@ function resolveLaneProvider(
   baseProvider: string | undefined,
 ): { provider: string; model: string } {
   const colonIdx = trimmed.indexOf(':');
+  if (colonIdx === 0) {
+    // A leading colon (`":claude-sonnet-4"` — a plausible typo for a
+    // provider:model entry) must fail at config parse, not fall through to the
+    // bare-model path and surface as a confusing provider API error later
+    // (PR #2337 greptile P2).
+    throw makeLaneConfigError(
+      `review.lanes entry "${trimmed}" starts with ":" — the provider portion is empty.`,
+      `Name the provider explicitly, e.g. "anthropic${trimmed}".`,
+    );
+  }
   if (colonIdx > 0) {
     const prefix = trimmed.slice(0, colonIdx);
     if ((KNOWN_PROVIDERS as readonly string[]).includes(prefix)) {

@@ -168,28 +168,20 @@ export type VerdictLaneSummary = z.infer<typeof VerdictLaneSummarySchema>;
 export const LANE_ID_SHAPE_RE = /^lane-\d+:.+$/;
 
 /**
- * Runner-class vocabulary that must NEVER appear in a laneId (case-insensitive
- * substrings). The rev-2 structural key test snapshots the top-level + per-lane
- * KEY sets, but a runner class could still be smuggled through a laneId VALUE
- * (`lane-0:warm-resident`); this refinement closes that value channel (strategy-
- * codex G1).
- */
-const FORBIDDEN_LANE_RUNNER_VOCAB = /warm|cold|headless|sdk-runner/i;
-
-/**
- * laneId: the backend-derived vocabulary above, PLUS the value-channel
- * lane-blindness refinement (Prop 302 G1). Used by every lane variant so no lane
- * — completed, abstained, or failed — can encode a warm/cold/headless runner class.
+ * laneId: shape-validated here; the VALUE channel of lane-blindness (Prop 302
+ * G1) is closed STRUCTURALLY by the schema's superRefine — every lane's suffix
+ * must equal its binding field (`resolvedBackend` for completed/abstained,
+ * `configuredLane` for failed), so a laneId cannot carry free text at all and a
+ * runner class (`warm`/`cold`/`headless`) has no channel to ride. An earlier
+ * substring blacklist here was removed: with structural binding as the primary
+ * guard it added only false-positive risk against legitimate future model names
+ * (e.g. a model literally named `*-cold-*`; PR #2337 greptile P2).
  */
 export const LaneIdSchema = z
   .string()
   .regex(
     LANE_ID_SHAPE_RE,
     'laneId must have the shape `lane-<index>:<resolvedBackendOrConfiguredLane>` (e.g. `lane-0:anthropic:claude-4`) — backend-derived vocabulary only (Prop 302 G1)',
-  )
-  .refine(
-    (v) => !FORBIDDEN_LANE_RUNNER_VOCAB.test(v),
-    'laneId must not encode a warm/cold/headless/sdk-runner runner class — lane-blindness forbids this value-smuggling channel (Prop 302 G1)',
   );
 
 /**
@@ -990,13 +982,14 @@ function loadVerifiedVerdictForScan(
  * Load every stored verdict under `artifacts/verdicts/`, verifying each through
  * the SAME content-address check as {@link loadVerdictArtifact}. A missing
  * directory yields `[]` (nothing written yet). Non-verdict file names are skipped
- * silently; a corrupt / mis-addressed verdict is skipped LOUDLY via `onWarn`
- * (default `console.warn`; injectable so core stays decoupled from the presentation
- * layer) — see {@link loadVerifiedVerdictForScan}.
+ * silently; a corrupt / mis-addressed verdict is skipped LOUDLY via `onWarn`.
+ * `onWarn` is REQUIRED — core stays console-free (no presentation-layer default),
+ * and the caller must decide where scan warnings land rather than inheriting a
+ * silent noop (Tenet 4); see {@link loadVerifiedVerdictForScan}. (PR #2337 CR.)
  */
 export function listVerdictArtifacts(
   totemDirAbs: string,
-  onWarn: (message: string) => void = console.warn,
+  onWarn: (message: string) => void,
 ): VerdictWithAddress[] {
   const dir = verdictsDir(totemDirAbs);
   let names: string[];
@@ -1024,8 +1017,8 @@ export function listVerdictArtifacts(
  * next round's `priorVerdictHash` = the returned `contentHash`, so the link always
  * points at the on-disk file even for a forward-minor artifact). Goes through the same
  * verified scan load as {@link listVerdictArtifacts}: a corrupt / mis-addressed
- * artifact is warned + skipped (never silently winning or losing the lineage), `onWarn`
- * injectable (default `console.warn`).
+ * artifact is warned + skipped (never silently winning or losing the lineage). `onWarn`
+ * is REQUIRED — core is console-free and the caller owns where warnings land (Tenet 4).
  *
  * The tie-break is IDENTITY-BOUND and deterministic: two same-round verdicts break on
  * their STORED content address (the on-disk identity, `createdAt` excluded), so
@@ -1035,7 +1028,7 @@ export function listVerdictArtifacts(
 export function findLatestVerdictForLineage(
   totemDirAbs: string,
   lineageKey: string,
-  onWarn: (message: string) => void = console.warn,
+  onWarn: (message: string) => void,
 ): VerdictWithAddress | undefined {
   const matching = listVerdictArtifacts(totemDirAbs, onWarn).filter(
     (v) => v.artifact.round.lineageKey === lineageKey,

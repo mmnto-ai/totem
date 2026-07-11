@@ -43,6 +43,9 @@ import { MAX_DIFF_CHARS, type ShieldFinding } from './shield-templates.js';
 
 const hex = (seed: string): string => createHash('sha256').update(seed).digest('hex');
 
+/** Test sink for the now-required scan `onWarn` (core is console-free; PR #2337 CR). */
+const noWarn = (): void => {};
+
 const wrapVerdict = (findings: ShieldFinding[], summary = 's'): string =>
   `<shield_verdict>${JSON.stringify({ findings, summary })}</shield_verdict>`;
 
@@ -646,7 +649,7 @@ describe('runReviewFan', () => {
     // Default (no --fail-on): degraded coverage does NOT throw (sensor exit 0).
     await expect(runReviewFan(ctx)).resolves.toBeUndefined();
 
-    const verdicts = listVerdictArtifacts(tmpDir);
+    const verdicts = listVerdictArtifacts(tmpDir, noWarn);
     expect(verdicts).toHaveLength(1);
     const v = verdicts[0]!.artifact;
     expect(v.attemptedLaneCount).toBe(2);
@@ -666,7 +669,7 @@ describe('runReviewFan', () => {
     // No CRITICAL finding, but the round is not cache-eligible (a lane failed) ⇒ throws.
     await expect(runReviewFan(ctx)).rejects.toThrow(/lane coverage 1\/2/);
     // The honest verdict is still written before the throw.
-    expect(listVerdictArtifacts(tmpDir)[0]!.artifact.completedLaneCount).toBe(1);
+    expect(listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact.completedLaneCount).toBe(1);
   });
 
   it('two completed lanes assemble a panel from usable lanes only', async () => {
@@ -687,7 +690,7 @@ describe('runReviewFan', () => {
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
     await runReviewFan(ctx); // dry → PASS, no throw
 
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     expect(v.completedLaneCount).toBe(2);
     expect(v.panelArtifactHash).toMatch(/^[0-9a-f]{64}$/);
     expect(v.diversity?.class).toBe('cross-vendor');
@@ -724,7 +727,7 @@ describe('runReviewFan', () => {
         { gitExec: git },
       ),
     );
-    const r0 = findLatestVerdictForLineage(tmpDir, lk)!.artifact;
+    const r0 = findLatestVerdictForLineage(tmpDir, lk, noWarn)!.artifact;
     expect(r0.round.index).toBe(0);
     expect(r0.settled).toBe(false);
 
@@ -750,7 +753,7 @@ describe('runReviewFan', () => {
         { gitExec: git },
       ),
     );
-    const r1 = findLatestVerdictForLineage(tmpDir, lk)!.artifact;
+    const r1 = findLatestVerdictForLineage(tmpDir, lk, noWarn)!.artifact;
     expect(r1.round.index).toBe(1);
     expect(r1.round.priorVerdictHash).toBeDefined();
     expect(r1.settled).toBe(false);
@@ -777,7 +780,7 @@ describe('runReviewFan', () => {
         { gitExec: git },
       ),
     );
-    const r2 = findLatestVerdictForLineage(tmpDir, lk)!.artifact;
+    const r2 = findLatestVerdictForLineage(tmpDir, lk, noWarn)!.artifact;
     expect(r2.round.index).toBe(2);
     expect(r2.settled).toBe(true);
   });
@@ -812,8 +815,8 @@ describe('runReviewFan', () => {
     const lkB = lineageKeyFor('feature-b', 'mainbase', 'branch-vs-base');
     expect(lkA).not.toBe(lkB);
     // Neither branch's round advanced past 0 — no cross-link occurred.
-    expect(findLatestVerdictForLineage(tmpDir, lkA)!.artifact.round.index).toBe(0);
-    expect(findLatestVerdictForLineage(tmpDir, lkB)!.artifact.round.index).toBe(0);
+    expect(findLatestVerdictForLineage(tmpDir, lkA, noWarn)!.artifact.round.index).toBe(0);
+    expect(findLatestVerdictForLineage(tmpDir, lkB, noWarn)!.artifact.round.index).toBe(0);
   });
 
   it('malformed lane output ⇒ abstained ⇒ not settled; abstained lane gets its decidable post-check fail row (finding 8)', async () => {
@@ -828,7 +831,7 @@ describe('runReviewFan', () => {
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker);
     // Default sensor exit 0: an abstaining fan writes the verdict and does NOT throw.
     await expect(runReviewFan(ctx)).resolves.toBeUndefined();
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     expect(v.lanes[0]!.status).toBe('abstained');
     expect(v.settled).toBe(false);
     // Finding 8: the abstained lane's unextractable output persists a decidable
@@ -867,7 +870,7 @@ describe('runReviewFan', () => {
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
     await runReviewFan(ctx); // must not throw
 
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     expect(v.settled).toBe(true);
     // The sensor row IS recorded (honest) but did not gate.
     const sensorRow = v.postChecks.find((r) => r.ruleName === 'provenance-fail-safe-down');
@@ -886,7 +889,7 @@ describe('runReviewFan', () => {
     });
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker);
     await runReviewFan(ctx); // clean 1-lane fan → PASS
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     expect(v.attemptedLaneCount).toBe(1);
     expect(v.panelArtifactHash).toBeUndefined();
     expect(v.settled).toBe(true);
@@ -899,7 +902,7 @@ describe('runReviewFan', () => {
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
     await expect(runReviewFan(ctx)).rejects.toThrow(/All 2 review lane/);
     // Gate G3: the honest verdict is written BEFORE the throw (all lanes failed).
-    const verdicts = listVerdictArtifacts(tmpDir);
+    const verdicts = listVerdictArtifacts(tmpDir, noWarn);
     expect(verdicts).toHaveLength(1);
     const v = verdicts[0]!.artifact;
     expect(v.attemptedLaneCount).toBe(2);
@@ -933,7 +936,7 @@ describe('runReviewFan', () => {
         { gitExec: fakeGit('feature-a', 'baseA') },
       ),
     );
-    const prior = listVerdictArtifacts(tmpDir)[0]!;
+    const prior = listVerdictArtifacts(tmpDir, noWarn)[0]!;
     // The STORED, verified address is the continues target (rev-6 item 1).
     const priorContentHash = prior.contentHash;
 
@@ -961,7 +964,7 @@ describe('runReviewFan', () => {
       ),
     );
     const lkB = lineageKeyFor('feature-b', 'baseB', 'branch-vs-base');
-    const continued = findLatestVerdictForLineage(tmpDir, lkB)!.artifact;
+    const continued = findLatestVerdictForLineage(tmpDir, lkB, noWarn)!.artifact;
     // Linked as prior + 1, but recorded under the CURRENT (feature-b) lineage.
     expect(continued.round.index).toBe(prior.artifact.round.index + 1);
     expect(continued.round.priorVerdictHash).toBe(priorContentHash);
@@ -998,7 +1001,7 @@ describe('runReviewFan', () => {
     await expect(runReviewFan(ctx)).resolves.toBeUndefined();
 
     // The verdict IS written (bound to the pre-fan diff), honestly marked drifted.
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     expect(v.reviewedState).toBe('drifted');
     expect(v.settled).toBe(false);
     expect(v.completedLaneCount).toBe(2); // otherwise dry
@@ -1040,7 +1043,7 @@ describe('runReviewFan', () => {
     });
     await runReviewFan(ctx);
 
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     // Extract the <git_diff> segment from the persisted (delivered) masked prompt.
     const seg = capturedPrompt.match(/<git_diff>\n([\s\S]*?)\n<\/git_diff>/)![1]!;
     expect(createHash('sha256').update(seg, 'utf-8').digest('hex')).toBe(v.diffScope.diffHash);
@@ -1080,7 +1083,7 @@ describe('runReviewFan', () => {
       twoLaneInvoker(CRITICAL_CONTENT, 'sd'),
     );
     await expect(runReviewFan(ctx)).resolves.toBeUndefined();
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     expect(v.findings.some((f) => f.severity === 'CRITICAL')).toBe(true);
     expect(v.settled).toBe(false);
   });
@@ -1149,7 +1152,7 @@ describe('runReviewFan', () => {
       },
     );
     await expect(runReviewFan(ctx)).resolves.toBeUndefined();
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     expect(v.reviewedState).toBe('drifted');
     // No stamp authorizes the changed content — even under --override.
     expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(
@@ -1181,7 +1184,7 @@ describe('runReviewFan', () => {
     await expect(runReviewFan(ctx)).resolves.toBeUndefined();
     // The fan compare saw 'pre-fan-hash' ⇒ matched; the adjacent recompute saw the mutation.
     expect(calls).toBe(2);
-    const v = listVerdictArtifacts(tmpDir)[0]!.artifact;
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     expect(v.reviewedState).toBe('matched');
     // The override IS trap-ledgered (the operator's justification is auditable)…
     const events = readLedgerEvents(path.join(tmpDir, '.totem'));
@@ -1328,8 +1331,8 @@ describe('runReviewFan', () => {
           }),
         ),
       );
-      const v1 = listVerdictArtifacts(dir1)[0]!;
-      const v2 = listVerdictArtifacts(dir2)[0]!;
+      const v1 = listVerdictArtifacts(dir1, noWarn)[0]!;
+      const v2 = listVerdictArtifacts(dir2, noWarn)[0]!;
       // Content hash excludes createdAt → identical regardless of completion order. The
       // STORED addresses (verified filename stems) are equal for the same logical round.
       expect(v1.contentHash).toBe(v2.contentHash);
@@ -1359,7 +1362,7 @@ describe('runReviewFan', () => {
     await expect(runReviewFan(makeCtx(tmpDir, [], mapInvoker({})))).rejects.toThrow(
       /All 0 review lane/,
     );
-    expect(listVerdictArtifacts(tmpDir)).toHaveLength(0);
+    expect(listVerdictArtifacts(tmpDir, noWarn)).toHaveLength(0);
   });
 });
 
@@ -1401,7 +1404,7 @@ describe('printCovariateLine (rev-5 item 4)', () => {
         gitExec: git,
       }),
     );
-    const verdict = listVerdictArtifacts(tmpDir)[0]!;
+    const verdict = listVerdictArtifacts(tmpDir, noWarn)[0]!;
 
     const logSpy = vi.mocked(console.log);
     logSpy.mockClear();
