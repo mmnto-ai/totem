@@ -38,9 +38,16 @@ import type {
   VerdictArtifact,
   VerdictDiffScope,
   VerdictLane,
+  VerdictPredicateInput,
   VerdictRound,
 } from '@mmnto/totem';
-import { TotemConfigError, VERDICT_ARTIFACT_SCHEMA_VERSION } from '@mmnto/totem';
+import {
+  deriveCacheEligible,
+  deriveSettled,
+  renderCovariateLine,
+  TotemConfigError,
+  VERDICT_ARTIFACT_SCHEMA_VERSION,
+} from '@mmnto/totem';
 
 import type { ExemptionShared } from '../exemptions/exemption-schema.js';
 import {
@@ -107,9 +114,11 @@ export function validateReviewLanes(
 
     const { provider, model } = resolveLaneProvider(trimmed, baseProvider);
     if (provider === 'shell') {
+      // Capability-admission framing (strategy-codex G2): a support-limit error naming
+      // the unsupported adapter — NOT an allowlist / "structurally ineligible" rejection.
       throw makeLaneConfigError(
-        `review.lanes entry "${trimmed}" resolves to the 'shell' provider, which is not a valid review lane.`,
-        'A review lane must be an LLM "provider:model" (anthropic/gemini/openai/ollama), never a shell command.',
+        `review.lanes entry "${trimmed}" uses the 'shell' provider — an unsupported adapter for review fan lanes.`,
+        'Fan lanes are served by the LLM adapters (anthropic/gemini/openai/ollama); the shell adapter is not supported for review fan lanes. Use an LLM "provider:model".',
       );
     }
     if (model.length === 0) {
@@ -129,6 +138,31 @@ export function validateReviewLanes(
     normalizedLanes.push(normalized);
   }
   return normalizedLanes;
+}
+
+/**
+ * Reject fan-incompatible flags at review startup when the fan is active (finding 12).
+ * `--suppress`, `--learn`, and `--auto-capture` have NO defined fan semantics yet, so a
+ * fan-active run rejects them LOUDLY (naming the unsupported combination) rather than
+ * silently ignoring them. Note: `--raw` is diverted to the legacy zero-LLM path upstream
+ * (so the fan never activates with `--raw`; finding 1), and `--out` IS supported by the
+ * fan (it writes the human-readable fan report; finding 2).
+ */
+export function assertFanFlagsSupported(options: {
+  suppress?: string[];
+  learn?: boolean;
+  autoCapture?: boolean;
+}): void {
+  const unsupported: string[] = [];
+  if (options.suppress !== undefined && options.suppress.length > 0) unsupported.push('--suppress');
+  if (options.learn === true) unsupported.push('--learn');
+  if (options.autoCapture === true) unsupported.push('--auto-capture');
+  if (unsupported.length > 0) {
+    throw makeLaneConfigError(
+      `${unsupported.join(', ')} ${unsupported.length === 1 ? 'is' : 'are'} not supported with the multi-lane review fan (review.lanes configured).`,
+      'These flags have no defined fan semantics yet — drop them, or run a single-lane review (an explicit --model selects a one-lane invocation on the legacy path).',
+    );
+  }
 }
 
 /**
@@ -170,83 +204,20 @@ function resolveLaneProvider(
   return { provider: baseProvider, model: trimmed };
 }
 
-// ─── Predicates (item 6 — both derived, deterministic, never model-sourced) ──
+// ─── Predicates (item 6 — core-owned; consumed, never re-implemented) ────────
+//
+// `settled` and cache-eligibility are the SINGLE-SOURCE-OF-TRUTH pure predicates
+// exported by core (`deriveSettled` / `deriveCacheEligible`, over
+// `VerdictPredicateInput = { lanes, findings, postChecks, reviewedState }`). The
+// fan builds the verdict and derives both from it — the assembled artifact IS a
+// valid `VerdictPredicateInput`, so what the persisted boundary re-derives
+// (finding 5) and what the CLI acts on can never diverge. Only the private
+// `everyLaneCompleted` helper below stays local, for the honest exit-reason
+// prose in `describeIneligibility`.
 
-/** The artifact-content inputs both predicates read. */
-export interface PredicateInputs {
-  /** Every attempted lane's terminal outcome. */
-  lanes: readonly VerdictLane[];
-  /** The completed lanes' exemption-filtered findings, unioned. */
-  findingsUnion: readonly ShieldFinding[];
-  /** Every recorded post-check row (flattened across completed lanes). */
-  postChecks: readonly PersistedPostCheckFinding[];
-  /**
-   * Post-fan tree compare (codex rev-2 fold 1). `'drifted'` (the tracked-source
-   * tree changed mid-fan) fails BOTH predicates: the verdict is bound to the
-   * pre-fan diff, so a dry-but-drifted fan neither settles nor stamps the cache.
-   */
-  reviewedState: 'matched' | 'drifted';
-}
-
-/** First conjunct, shared by both predicates: every attempted lane completed. */
+/** First conjunct (local mirror, for exit-reason prose only): every attempted lane completed. */
 function everyLaneCompleted(lanes: readonly VerdictLane[]): boolean {
   return lanes.length > 0 && lanes.every((l) => l.status === 'completed');
-}
-
-/** A decidable-tier post-check row failed (sensor-tier rows never count). */
-function hasDecidablePostCheckFail(postChecks: readonly PersistedPostCheckFinding[]): boolean {
-  return postChecks.some((r) => r.tier === 'decidable' && r.verdict === 'fail');
-}
-
-/**
- * `settled` (item 6) — the current-round dryness predicate, pure over artifact
- * content (no cross-round input, no model output). As implemented:
- *
- *   settled = (every attempted lane status === 'completed')
- *             AND (zero actionable findings across completed lanes' filtered
- *                  findings union — actionable = WARN | CRITICAL; INFO cosmetic)
- *             AND (no decidable-tier post-check row with verdict 'fail')
- *             AND (reviewedState === 'matched' — the tree did not drift mid-fan)
- *
- * A failed/abstained lane ⇒ fan incomplete ⇒ never settled (a persistent
- * CRITICAL can never settle by lane dropout — agy fold 1, satisfied
- * structurally). The `reviewedState` clause (codex rev-2 fold 1): a dry fan over
- * a tree that mutated mid-fan is NOT settled — the verdict does not cover the
- * current tree, and the thin skill terminates on settled, so drift must fail the
- * predicate, not just the cache stamp.
- */
-export function computeSettled(inputs: PredicateInputs): boolean {
-  return (
-    everyLaneCompleted(inputs.lanes) &&
-    !inputs.findingsUnion.some((f) => f.severity === 'WARN' || f.severity === 'CRITICAL') &&
-    !hasDecidablePostCheckFail(inputs.postChecks) &&
-    inputs.reviewedState === 'matched'
-  );
-}
-
-/**
- * Cache eligibility (item 6) — the distinct, WEAKER predicate (WARNs allowed,
- * matching today's PASS semantics). As implemented:
- *
- *   cacheEligible = (every attempted lane status === 'completed')
- *                   AND (zero CRITICAL findings across the filtered union)
- *                   AND (no decidable-tier post-check row with verdict 'fail')
- *                   AND (reviewedState === 'matched' — the tree did not drift mid-fan)
- *
- * The post-fan tree-drift guard IS now a conjunct here (codex rev-2 fold 1) — the
- * fan computes the compare ONCE (deriving `reviewedState`) and reuses that single
- * result for both the verdict field and the stamp decision, so what the artifact
- * records and what the stamp did can never diverge (no TOCTOU second compare). A
- * degraded fan (any failed/abstained lane) fails the first conjunct and is
- * therefore never cache-eligible.
- */
-export function computeCacheEligible(inputs: PredicateInputs): boolean {
-  return (
-    everyLaneCompleted(inputs.lanes) &&
-    !inputs.findingsUnion.some((f) => f.severity === 'CRITICAL') &&
-    !hasDecidablePostCheckFail(inputs.postChecks) &&
-    inputs.reviewedState === 'matched'
-  );
 }
 
 // ─── Review-specific post-check rule set (item 4) ────────────────────────────
@@ -327,39 +298,57 @@ export interface LaneRunResult {
 }
 
 /**
- * Classify one lane. The invoker is called once; a throw is classified as a
- * typed `failed` lane (quota vs invoke-error), a missing artifact emission is a
- * `failed` lane, unextractable output is `abstained`, and an extractable verdict
- * is `completed` with a severity tally from its exemption-filtered findings.
+ * The lane-blind laneId (Prop 302 G1): `lane-<index>:<resolvedBackendOrConfiguredLane>`.
+ * `<index>` is the lane's zero-based position in the configured fan;
+ * `<resolvedBackendOrConfiguredLane>` is the resolved backend (`provider:model`) for a
+ * lane that reached one, or the configured lane string for a lane that failed before
+ * a backend resolved. Backend-derived vocabulary only — the `LaneIdSchema` refinement
+ * rejects any warm/cold/headless runner class.
+ */
+function laneId(index: number, resolvedBackendOrConfiguredLane: string): string {
+  return `lane-${index}:${resolvedBackendOrConfiguredLane}`;
+}
+
+/**
+ * Classify one lane's INVOCATION result (index-tagged for the laneId). The invoker is
+ * called once and NOT wrapped here: an invoker throw REJECTS this promise and the fan's
+ * `Promise.allSettled` maps the rejection to a `failed` lane via
+ * {@link classifyRejectedLane} — an explicit terminal classification, never a bare
+ * swallow (finding 13). A missing artifact emission is a `failed` lane, unextractable
+ * output is `abstained`, and an extractable verdict is `completed` with a severity tally
+ * from its exemption-filtered findings.
  *
  * NO retry lives here beyond `runOrchestrator`'s existing logged quota fallback
  * (the design's "no runner retry"); `resolvedBackend` records what actually ran.
  */
 export async function runLane(
+  index: number,
   laneModel: string,
   invoker: LaneInvoker,
   shared: ExemptionShared,
   deliveredPrompt: string,
 ): Promise<LaneRunResult> {
-  let invocation: LaneInvocation;
-  try {
-    invocation = await invoker(laneModel, deliveredPrompt);
-  } catch (err) {
-    const typedReason = await classifyInvokeFailure(err);
-    return { lane: { status: 'failed', laneId: laneModel, typedReason }, filteredFindings: [] };
-  }
+  // No try/catch: a throw here is classified by the fan's allSettled handler
+  // (classifyRejectedLane) so the classification is not a bare swallow (finding 13).
+  const invocation: LaneInvocation = await invoker(laneModel, deliveredPrompt);
 
   // A response-cache hit emits no run artifact (fresh is forced, so it cannot
   // occur — but defense in depth): missing emission is a terminal lane failure,
-  // never a completed lane without genuine provenance (invariant 2).
+  // never a completed lane without genuine provenance (invariant 2). The laneId
+  // uses the CONFIGURED lane (no backend resolved).
   if (invocation.runArtifactHash === undefined || invocation.runArtifact === undefined) {
     return {
-      lane: { status: 'failed', laneId: laneModel, typedReason: 'missing-artifact-emission' },
+      lane: {
+        status: 'failed',
+        laneId: laneId(index, laneModel),
+        typedReason: 'missing-artifact-emission',
+      },
       filteredFindings: [],
     };
   }
 
   const resolvedBackend = invocation.runArtifact.backend.qualifiedModel;
+  const id = laneId(index, resolvedBackend);
 
   if (invocation.content === undefined) {
     // The invoke produced no content (only the degenerate --raw path). Treat as
@@ -367,7 +356,7 @@ export async function runLane(
     return {
       lane: {
         status: 'abstained',
-        laneId: laneModel,
+        laneId: id,
         resolvedBackend,
         runArtifactHash: invocation.runArtifactHash,
         reason: 'lane produced no content to extract a verdict from',
@@ -382,7 +371,7 @@ export async function runLane(
     return {
       lane: {
         status: 'abstained',
-        laneId: laneModel,
+        laneId: id,
         resolvedBackend,
         runArtifactHash: invocation.runArtifactHash,
         reason: 'lane output not extractable by the shared Shield verdict cascade',
@@ -396,13 +385,31 @@ export async function runLane(
   return {
     lane: {
       status: 'completed',
-      laneId: laneModel,
+      laneId: id,
       resolvedBackend,
       runArtifactHash: invocation.runArtifactHash,
       verdictSummary,
     },
     runArtifact: invocation.runArtifact,
     filteredFindings: outcome.filteredFindings,
+  };
+}
+
+/**
+ * Map a REJECTED lane promise to a `failed` lane record (finding 13): an invoker throw
+ * is classified (quota vs generic invoke error) and lands in the verdict as a terminal
+ * `failed` lane — a lane is never lost to a rejection. The laneId uses the CONFIGURED
+ * lane (a rejection means no backend resolved).
+ */
+export async function classifyRejectedLane(
+  index: number,
+  laneModel: string,
+  reason: unknown,
+): Promise<LaneRunResult> {
+  const typedReason = await classifyInvokeFailure(reason);
+  return {
+    lane: { status: 'failed', laneId: laneId(index, laneModel), typedReason },
+    filteredFindings: [],
   };
 }
 
@@ -436,6 +443,14 @@ export interface DiffScopeMeta {
   source: 'explicit-range' | 'staged' | 'uncommitted' | 'branch-vs-base';
   base?: string;
   head?: string;
+  /**
+   * The RAW CLI selector form (finding 10) — the operator's exact `--diff` string. It
+   * distinguishes selectors that resolve to the same refs but describe different
+   * lineages: `--diff main` (base-vs-working-tree, no head) vs `--diff main..HEAD`
+   * (range mode) both resolve base='main' head='HEAD' but must NOT share a lineage.
+   * Threaded into `LineageKeyInput.selectorForm` so the two forms produce distinct keys.
+   */
+  selectorForm?: string;
 }
 
 /**
@@ -495,13 +510,39 @@ export async function resolveLineage(
   const repoIdentity = resolveRepoIdentity(gitExec, path);
   const branch = resolveBranch(gitExec);
   const mergeBase = resolveMergeBase(meta, gitExec);
-  const keyInput: LineageKeyInput = { repoIdentity, branch, source: meta.source };
-  if (meta.source === 'explicit-range') {
-    keyInput.base = meta.base ?? 'HEAD';
-    keyInput.head = meta.head ?? 'HEAD';
-  } else if (meta.source === 'branch-vs-base') {
-    keyInput.base = meta.base ?? '';
-    keyInput.mergeBase = mergeBase;
+  const selectorForm = meta.selectorForm;
+  // `LineageKeyInput` is a SOURCE-DISCRIMINATED union: each variant carries only the
+  // range fields its source makes meaningful, so it is built as a full per-source
+  // literal (mutation would not typecheck). `selectorForm` (finding 10) rides every
+  // variant's common fields.
+  let keyInput: LineageKeyInput;
+  switch (meta.source) {
+    case 'explicit-range':
+      keyInput = {
+        repoIdentity,
+        branch,
+        selectorForm,
+        source: 'explicit-range',
+        base: meta.base ?? 'HEAD',
+        head: meta.head ?? 'HEAD',
+      };
+      break;
+    case 'branch-vs-base':
+      keyInput = {
+        repoIdentity,
+        branch,
+        selectorForm,
+        source: 'branch-vs-base',
+        base: meta.base ?? '',
+        mergeBase,
+      };
+      break;
+    case 'staged':
+      keyInput = { repoIdentity, branch, selectorForm, source: 'staged' };
+      break;
+    case 'uncommitted':
+      keyInput = { repoIdentity, branch, selectorForm, source: 'uncommitted' };
+      break;
   }
   const lineageKey = computeLineageKey(keyInput);
   return { branch, mergeBase, lineageKey };
@@ -513,31 +554,39 @@ export async function resolveLineage(
  * distinct toplevels and so never cross-link. Falls back to a stable literal when
  * git is unavailable, keeping the lineage key deterministic.
  */
-function resolveRepoIdentity(gitExec: GitExec, path: typeof import('node:path')): string {
+/**
+ * Run a git probe through the injected seam and return its trimmed stdout, or
+ * `undefined` when git exits non-zero. For these lineage probes a non-zero exit is an
+ * EXPECTED state (a detached HEAD, a missing merge-base, a non-repo cwd), not an error.
+ * This is the ONE explicit degrade point (finding 12): the failure is surfaced as a
+ * Result (`undefined`), never rethrown, and every caller reads the `undefined` and
+ * applies its documented fallback — so no probe site carries a bare swallow.
+ */
+function tryGit(gitExec: GitExec, args: readonly string[]): string | undefined {
+  // totem-context: intentional fail-open — a non-zero git exit on a lineage probe is an
+  // EXPECTED state (detached HEAD / missing merge-base / non-repo cwd), surfaced as a
+  // Result (`undefined`) for the caller's documented fallback, never a silent drop.
   try {
-    const top = gitExec(['rev-parse', '--show-toplevel']).trim();
-    if (top.length > 0) return path.resolve(top);
-  } catch {
-    /* not a git worktree (or git unavailable) — fall through */
+    return gitExec(args).trim();
+    // totem-context: intentional fail-open — expected git-probe miss → Result (undefined).
+  } catch (_err) {
+    return undefined;
   }
+}
+
+function resolveRepoIdentity(gitExec: GitExec, path: typeof import('node:path')): string {
+  const top = tryGit(gitExec, ['rev-parse', '--show-toplevel']);
+  if (top !== undefined && top.length > 0) return path.resolve(top);
   return 'WORKTREE:unknown';
 }
 
 function resolveBranch(gitExec: GitExec): string {
-  try {
-    const branch = gitExec(['symbolic-ref', '--short', 'HEAD']).trim();
-    if (branch.length > 0) return branch;
-  } catch {
-    /* detached HEAD — fall through */
-  }
+  const branch = tryGit(gitExec, ['symbolic-ref', '--short', 'HEAD']);
+  if (branch !== undefined && branch.length > 0) return branch;
   // Detached HEAD: use a stable literal so distinct detached states do not
   // collide with a real branch named the same as a sha prefix.
-  try {
-    const sha = gitExec(['rev-parse', 'HEAD']).trim();
-    return `DETACHED:${sha}`;
-  } catch {
-    return 'DETACHED:unknown';
-  }
+  const sha = tryGit(gitExec, ['rev-parse', 'HEAD']);
+  return sha !== undefined && sha.length > 0 ? `DETACHED:${sha}` : 'DETACHED:unknown';
 }
 
 function resolveMergeBase(meta: DiffScopeMeta, gitExec: GitExec): string {
@@ -547,13 +596,9 @@ function resolveMergeBase(meta: DiffScopeMeta, gitExec: GitExec): string {
   const base = meta.base;
   if (base === undefined) return '';
   const head = meta.head ?? 'HEAD';
-  try {
-    return gitExec(['merge-base', base, head]).trim();
-  } catch {
-    // No shared history (or the ref moved): fall back to '' — the branch +
-    // source still key the lineage; a moved merge-base forks the chain.
-    return '';
-  }
+  // No shared history (or the ref moved) ⇒ `undefined` ⇒ '' — the branch + source
+  // still key the lineage; a moved merge-base forks the chain.
+  return tryGit(gitExec, ['merge-base', base, head]) ?? '';
 }
 
 /** The default `git` runner (production). */
@@ -604,17 +649,14 @@ export async function resolveRound(
     };
   }
 
-  // Implicit linkage on the composite lineage key.
-  let prior: VerdictArtifact | undefined;
-  try {
-    prior = findLatestVerdictForLineage(totemDirAbs, lineageKey);
-  } catch (err) {
-    // A corrupt verdict in the ledger must not wedge the chain — restart at 0.
-    warnings.push(
-      `prior verdict in this lineage failed to load (${err instanceof Error ? err.message : String(err)}); restarting the round chain at 0.`,
-    );
-    return { round: { index: 0, lineageKey }, warnings };
-  }
+  // Implicit linkage on the composite lineage key. A corrupt / mis-addressed prior in
+  // this lineage is content-address-verified, warned, and SKIPPED inside the scan
+  // (finding 4, core-owned) — it returns `undefined` ⇒ the chain honestly restarts at
+  // round 0 (the failure-table "prior verdict missing/corrupt" row). No bare catch is
+  // needed here, and an UNEXPECTED failure (e.g. a filesystem permission error) now
+  // propagates loud instead of masquerading as a chain restart (finding 12). The
+  // per-entry skip warnings route into `warnings` for the sensor line.
+  const prior = findLatestVerdictForLineage(totemDirAbs, lineageKey, (msg) => warnings.push(msg));
   if (prior === undefined) {
     return { round: { index: 0, lineageKey }, warnings };
   }
@@ -641,12 +683,18 @@ export interface PanelAndChecks {
 }
 
 /**
- * Run the #2103 post-check engine per completed lane and, with ≥2 completed
- * lanes, assemble + write the #2104 panel from the completed lanes' run
- * artifacts ONLY (failed/abstained lanes never reach `assemblePanelArtifact`).
+ * Run the #2103 post-check engine over every lane that emitted a run artifact
+ * (completed AND abstained — finding 8) and, with ≥2 COMPLETED lanes, assemble + write
+ * the #2104 panel from the completed lanes' run artifacts ONLY (failed/abstained lanes
+ * never reach `assemblePanelArtifact`).
+ *
+ * Panel inputs stay completed-only, but post-checks ALSO cover abstained lanes: an
+ * abstained lane's unextractable output is exactly what the review-specific decidable
+ * structured-output rule must persist a 'fail' row for, so its failure lands honestly
+ * in `verdict.postChecks` instead of vanishing.
  */
 export async function runPanelAndPostChecks(
-  completed: readonly LaneRunResult[],
+  laneResults: readonly LaneRunResult[],
   totemDirAbs: string,
   configRoot: string,
   createdAt: string,
@@ -658,8 +706,9 @@ export async function runPanelAndPostChecks(
   const postChecks: PersistedPostCheckFinding[] = [];
   const laneReports = new Map<string, PostCheckReport>();
 
-  for (const lr of completed) {
-    // Completed lanes always carry a run artifact (structural invariant).
+  // Completed AND abstained lanes both carry a run artifact; failed lanes do not.
+  const withArtifact = laneResults.filter((lr) => lr.runArtifact !== undefined);
+  for (const lr of withArtifact) {
     const artifact = lr.runArtifact!;
     const report = await evaluatePostChecks(artifact, rules, { configRoot });
     laneReports.set(lr.lane.laneId, report);
@@ -674,6 +723,7 @@ export async function runPanelAndPostChecks(
   }
 
   // A panel is assembled ONLY from ≥2 usable (completed) lanes.
+  const completed = laneResults.filter((lr) => lr.lane.status === 'completed');
   if (completed.length < 2) {
     return { postChecks };
   }
@@ -723,10 +773,13 @@ export function assembleVerdict(inputs: VerdictAssemblyInputs): VerdictArtifact 
   const lanes = inputs.laneResults.map((lr) => lr.lane);
   const completed = inputs.laneResults.filter((lr) => lr.lane.status === 'completed');
   const findingsUnion = completed.flatMap((lr) => lr.filteredFindings);
+  const findings = toVerdictFindings(findingsUnion);
 
-  const settled = computeSettled({
+  // `settled` is the core-owned dryness predicate over THIS artifact's own content
+  // (the persisted boundary re-derives + checks it — finding 5).
+  const settled = deriveSettled({
     lanes,
-    findingsUnion,
+    findings,
     postChecks: inputs.panelAndChecks.postChecks,
     reviewedState: inputs.reviewedState,
   });
@@ -741,7 +794,7 @@ export function assembleVerdict(inputs: VerdictAssemblyInputs): VerdictArtifact 
       ? { panelArtifactHash: inputs.panelAndChecks.panelArtifactHash }
       : {}),
     postChecks: inputs.panelAndChecks.postChecks,
-    findings: toVerdictFindings(findingsUnion),
+    findings,
     ...(inputs.panelAndChecks.diversity !== undefined
       ? { diversity: inputs.panelAndChecks.diversity }
       : {}),
@@ -799,8 +852,21 @@ export interface ReviewFanContext {
   configRoot: string;
   /** Absolute `.totem` dir (`configRoot`/`config.totemDir`). */
   totemDirAbs: string;
-  /** The shield options (model/fresh/out/raw) — the fan forces `fresh` per lane. */
-  options: { raw?: boolean; out?: string; model?: string; fresh?: boolean };
+  /**
+   * The shield options the fan reads. The fan forces `fresh` per lane and forces `raw`
+   * OFF (a fan-configured `--raw` is diverted to the legacy zero-LLM path upstream, so
+   * `raw` never reaches here true). `out` writes the human-readable fan report;
+   * `failOn` (`critical`|`warn`) opts into a non-zero exit; `override` converts a
+   * `--fail-on` failure to pass AND authorizes the trap-ledgered stamp (finding 3).
+   */
+  options: {
+    raw?: boolean;
+    out?: string;
+    model?: string;
+    fresh?: boolean;
+    override?: string;
+    failOn?: 'critical' | 'warn';
+  };
   /** Grounding identity for the run-artifact request (same as the single-lane path). */
   groundingHash: string;
   provenanceSummary: string;
@@ -875,16 +941,145 @@ function makeLaneInvoker(ctx: ReviewFanContext): LaneInvoker {
   };
 }
 
+// ─── Findings render + human-readable report (finding 2) ─────────────────────
+
+/** One normalized finding plus how many lanes converged on it (identical bytes). */
+interface AttributedFinding {
+  finding: ShieldFinding;
+  /** Distinct completed lanes that emitted this identical (severity,file,line,message). */
+  laneCount: number;
+}
+
+/** Display order — CRITICAL first, INFO last (echoes the single-lane display). */
+const FAN_SEVERITY_ORDER: readonly ShieldFinding['severity'][] = ['CRITICAL', 'WARN', 'INFO'];
+
 /**
- * The standard-path fan entry. Runs every configured lane, assembles the panel +
- * post-checks + verdict, resolves the round chain, derives the predicates,
- * emits the verdict, prints the one-line report + sensor lines, and enforces the
- * exit contract: cache-eligible ⇒ PASS (stamp attempted); not ⇒ SHIELD_FAILED
- * with an honest reason. All lanes failing ⇒ a hard error with NO verdict.
+ * Dedupe the completed lanes' exemption-filtered findings on
+ * `(severity, file, line, message)` and count how many distinct lanes converged on
+ * each (finding 2). Failed/abstained lanes contribute nothing (no findings).
+ */
+function dedupeFanFindings(laneResults: readonly LaneRunResult[]): AttributedFinding[] {
+  const map = new Map<string, { finding: ShieldFinding; lanes: Set<string> }>();
+  for (const lr of laneResults) {
+    if (lr.lane.status !== 'completed') continue;
+    const id = lr.lane.laneId;
+    for (const f of lr.filteredFindings) {
+      const key = JSON.stringify([f.severity, f.file ?? null, f.line ?? null, f.message]);
+      const existing = map.get(key);
+      if (existing !== undefined) existing.lanes.add(id);
+      else map.set(key, { finding: f, lanes: new Set([id]) });
+    }
+  }
+  const out = [...map.values()].map((e) => ({ finding: e.finding, laneCount: e.lanes.size }));
+  out.sort(
+    (a, b) =>
+      FAN_SEVERITY_ORDER.indexOf(a.finding.severity) -
+      FAN_SEVERITY_ORDER.indexOf(b.finding.severity),
+  );
+  return out;
+}
+
+/**
+ * One rendered finding line — echoes the single-lane display styling
+ * (`  <SEVERITY> [<conf>] <file>:<line> — <message>`) plus a lane-convergence
+ * annotation (`(N lanes)`).
+ */
+function formatFanFinding(af: AttributedFinding): string {
+  const f = af.finding;
+  const location =
+    f.file !== undefined ? (f.line !== undefined ? `${f.file}:${f.line} ` : `${f.file} `) : '';
+  const conf = f.confidence !== undefined ? ` [${f.confidence}]` : '';
+  const conv = ` (${af.laneCount} lane${af.laneCount === 1 ? '' : 's'})`;
+  return `  ${f.severity}${conf} ${location}— ${f.message}${conv}`;
+}
+
+/**
+ * Render the normalized finding union to stderr BEFORE the summary (finding 2) — the
+ * actual finding MESSAGES, with lane attribution, in severity order.
+ */
+function renderFanFindingsToStderr(findings: readonly AttributedFinding[]): void {
+  if (findings.length === 0) {
+    console.error('Review fan — 0 finding(s) across lanes.');
+    return;
+  }
+  console.error(`Review fan — ${findings.length} finding(s) (deduped across lanes):`);
+  for (const af of findings) console.error(formatFanFinding(af));
+}
+
+/**
+ * The human-readable fan report written by `--out` (finding 2): the findings, the
+ * per-lane outcomes, and the summary (covariate line + settled/cache/drift state).
+ */
+function renderFanReport(
+  laneResults: readonly LaneRunResult[],
+  verdict: VerdictArtifact,
+  findings: readonly AttributedFinding[],
+  cacheEligible: boolean,
+): string {
+  const lines: string[] = [];
+  lines.push(
+    `Review fan — ${verdict.completedLaneCount}/${verdict.attemptedLaneCount} lane(s) completed`,
+  );
+  lines.push('');
+  lines.push('Lanes:');
+  for (const lr of laneResults) {
+    const l = lr.lane;
+    if (l.status === 'completed') {
+      const s = l.verdictSummary;
+      lines.push(
+        `  ${l.laneId} — completed (${s.critical} critical, ${s.warn} warn, ${s.info} info)`,
+      );
+    } else if (l.status === 'abstained') {
+      lines.push(`  ${l.laneId} — abstained (${l.reason})`);
+    } else {
+      lines.push(`  ${l.laneId} — failed (${l.typedReason})`);
+    }
+  }
+  lines.push('');
+  lines.push(`Findings (${findings.length}):`);
+  if (findings.length === 0) lines.push('  (none)');
+  else for (const af of findings) lines.push(formatFanFinding(af));
+  lines.push('');
+  lines.push(renderCovariateLine(verdict));
+  lines.push(
+    `settled=${verdict.settled} cache-eligible=${cacheEligible} reviewedState=${verdict.reviewedState}`,
+  );
+  return lines.join('\n');
+}
+
+/**
+ * The standard-path fan entry. Runs every configured lane IN PARALLEL (finding 13),
+ * canonicalizes the results into configured-lane order, runs the panel + post-checks,
+ * resolves the round chain, takes the single post-fan tree compare in a short critical
+ * section (finding 6), assembles + saves the verdict, renders the findings + covariate
+ * line, and enforces the exit contract (finding 3 / Gate G5):
+ *
+ *   - DEFAULT: sensor exit 0 — the verdict, the covariate line, and the findings render
+ *     are always emitted; a findings-bearing or degraded-coverage round does NOT throw.
+ *   - `--fail-on <severity>`: throw `SHIELD_FAILED` when the round has findings at/above
+ *     that severity OR is not cache-eligible.
+ *   - `--override <reason>`: converts a `--fail-on` failure to pass AND authorizes the
+ *     trap-ledgered cache stamp on a non-cache-eligible round (matched trees only —
+ *     drift is never stampable, even overridden).
+ *
+ * Cache-eligible ⇒ stamp the pre-fan hash. ALL lanes terminal-failed (Gate G3) ⇒ the
+ * honest verdict is WRITTEN FIRST, then the run hard-errors. Zero configured lanes ⇒ a
+ * pre-attempt hard error with no verdict.
  */
 export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   const { log } = await import('../ui.js');
   const { TotemError, maskSecrets } = await import('@mmnto/totem');
+
+  // ── Pre-attempt guard: zero configured lanes ⇒ no verdict (the schema requires a
+  // nonempty lanes array; there is nothing to converge). This is a pre-attempt failure,
+  // NOT the all-lanes-failed case (which writes an honest verdict first, Gate G3). ──
+  if (ctx.laneModels.length === 0) {
+    throw new TotemError(
+      'SHIELD_FAILED',
+      'All 0 review lane(s) configured — no verdict written (configure at least one review.lanes entry).',
+      'Add a `provider:model` entry to `review.lanes`, then re-run `totem review`.',
+    );
+  }
 
   const now = ctx.now ?? (() => new Date().toISOString());
   const invoker = ctx.invoker ?? makeLaneInvoker(ctx);
@@ -911,60 +1106,51 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     extractGitDiffSegment(deliveredPrompt) ?? maskSecrets(deliveredDiffSegment(ctx.filteredDiff));
   const diffHash = await sha256Hex(diffSegment);
 
-  // ── Run every lane (sequentially — each is a fresh invoke) ──
+  // ── Run every lane IN PARALLEL over the immutable shared deliveredPrompt (finding 13) ──
+  // `Promise.allSettled` preserves input order, so the results are already in
+  // configured-lane order — the artifact is deterministic regardless of completion
+  // order. A rejected lane promise is mapped to a `failed` lane classification
+  // (classifyRejectedLane) so a lane is never lost.
+  const settledLanes = await Promise.allSettled(
+    ctx.laneModels.map((laneModel, index) =>
+      runLane(index, laneModel, invoker, ctx.shared, deliveredPrompt),
+    ),
+  );
   const laneResults: LaneRunResult[] = [];
-  for (const laneModel of ctx.laneModels) {
-    const result = await runLane(laneModel, invoker, ctx.shared, deliveredPrompt);
-    if (result.lane.status === 'failed') {
-      log.warn(DISPLAY_TAG, `Lane ${laneModel} FAILED (${result.lane.typedReason}).`);
-    } else if (result.lane.status === 'abstained') {
-      log.warn(DISPLAY_TAG, `Lane ${laneModel} ABSTAINED (${result.lane.reason}).`);
+  for (let index = 0; index < settledLanes.length; index++) {
+    const s = settledLanes[index]!;
+    laneResults.push(
+      s.status === 'fulfilled'
+        ? s.value
+        : await classifyRejectedLane(index, ctx.laneModels[index]!, s.reason),
+    );
+  }
+
+  // ── Log per-lane outcomes in configured order (deterministic) ──
+  for (let index = 0; index < laneResults.length; index++) {
+    const laneModel = ctx.laneModels[index]!;
+    const lane = laneResults[index]!.lane;
+    if (lane.status === 'failed') {
+      log.warn(DISPLAY_TAG, `Lane ${laneModel} FAILED (${lane.typedReason}).`);
+    } else if (lane.status === 'abstained') {
+      log.warn(DISPLAY_TAG, `Lane ${laneModel} ABSTAINED (${lane.reason}).`);
     } else {
-      const s = result.lane.verdictSummary;
+      const s = lane.verdictSummary;
       log.info(
         DISPLAY_TAG,
         `Lane ${laneModel} completed — ${s.critical} critical, ${s.warn} warn, ${s.info} info.`,
       );
     }
-    laneResults.push(result);
   }
 
-  // ── ALL lanes failed (no completed AND no abstained) ⇒ hard error, no verdict ──
   const anyWithOutput = laneResults.some(
     (lr) => lr.lane.status === 'completed' || lr.lane.status === 'abstained',
   );
-  if (!anyWithOutput) {
-    throw new TotemError(
-      'SHIELD_FAILED',
-      `All ${laneResults.length} review lane(s) failed to invoke — no verdict written.`,
-      'Check backend API keys / quota, then re-run `totem review`.',
-    );
-  }
-
-  const completed = laneResults.filter((lr) => lr.lane.status === 'completed');
   const createdAt = now();
 
-  // ── Post-fan tree compare, computed ONCE (codex rev-2 fold 1) ──
-  // Re-hash the tracked-source tree AFTER the fan and compare to the PRE-fan hash
-  // captured before any lane ran. This single result feeds BOTH the verdict's
-  // `reviewedState` field AND the stamp decision — no second compare, no TOCTOU
-  // divergence between what the artifact records and what the stamp did. A `null`
-  // pre-fan hash means there was no tracked source to authorize (legacy no-op).
-  const postFanContentHash = await contentHash();
-  const reviewedState: 'matched' | 'drifted' =
-    ctx.preFanContentHash === null || postFanContentHash === ctx.preFanContentHash
-      ? 'matched'
-      : 'drifted';
-  if (reviewedState === 'drifted') {
-    log.warn(
-      DISPLAY_TAG,
-      'WORKTREE DRIFT: tracked source files changed during the review fan. The verdict is bound to the pre-fan tree, so it is NOT settled and the reviewed-content-hash was NOT stamped — this review does not authorize a push. Re-run `totem review` against the current tree.',
-    );
-  }
-
-  // ── Panel + post-checks (from completed lanes' run artifacts only) ──
+  // ── Panel + post-checks (over completed AND abstained lanes; finding 8) ──
   const panelAndChecks = await runPanelAndPostChecks(
-    completed,
+    laneResults,
     ctx.totemDirAbs,
     ctx.configRoot,
     createdAt,
@@ -977,6 +1163,24 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   const lineage = await resolveLineage(ctx.diffMeta, gitExec);
   const roundRes = await resolveRound(ctx.totemDirAbs, lineage.lineageKey, ctx.continues);
   for (const w of roundRes.warnings) log.warn(DISPLAY_TAG, `Sensor: ${w}`);
+
+  // ── Post-fan tree compare — the REAL critical section (finding 6) ──
+  // Sampled here, AFTER the post-check / panel / lineage work, immediately before
+  // verdict assembly + report + stamp: a mutation DURING any of that work is caught.
+  // This single compare feeds BOTH predicates AND the stamp decision — no second
+  // compare, no TOCTOU divergence. A `null` pre-fan hash means there was no tracked
+  // source to authorize (legacy no-op).
+  const postFanContentHash = await contentHash();
+  const reviewedState: 'matched' | 'drifted' =
+    ctx.preFanContentHash === null || postFanContentHash === ctx.preFanContentHash
+      ? 'matched'
+      : 'drifted';
+  if (reviewedState === 'drifted') {
+    log.warn(
+      DISPLAY_TAG,
+      'WORKTREE DRIFT: tracked source files changed during the review fan. The verdict is bound to the pre-fan tree, so it is NOT settled and the reviewed-content-hash was NOT stamped — this review does not authorize a push. Re-run `totem review` against the current tree.',
+    );
+  }
 
   // ── Assemble + save the verdict ──
   const verdict = assembleVerdict({
@@ -992,21 +1196,31 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   // the existing address).
   const verdictHash = saveVerdictArtifact(ctx.totemDirAbs, verdict).hash;
 
-  // ── Predicates ──
-  const findingsUnion = completed.flatMap((lr) => lr.filteredFindings);
-  const predicateInputs: PredicateInputs = {
-    lanes: verdict.lanes,
-    findingsUnion,
-    postChecks: panelAndChecks.postChecks,
-    reviewedState,
-  };
-  const cacheEligible = computeCacheEligible(predicateInputs);
+  // ── ALL lanes terminal-failed (Gate G3): the honest verdict is now WRITTEN — hard-error ──
+  if (!anyWithOutput) {
+    throw new TotemError(
+      'SHIELD_FAILED',
+      `All ${laneResults.length} review lane(s) failed to invoke — an honest verdict was written (all lanes failed, not settled), then the run hard-errors.`,
+      'Check backend API keys / quota, then re-run `totem review`.',
+    );
+  }
 
-  // ── The one-line, grep-able report (contract — versioned with the skill) ──
-  log.info(
-    DISPLAY_TAG,
-    `local-lane: ${verdictHash.slice(0, 8)} round=${verdict.round.index} settled=${verdict.settled} lanes=${verdict.completedLaneCount}/${verdict.attemptedLaneCount}`,
-  );
+  // ── Findings render (finding 2) — BEFORE the summary; the actual messages ──
+  const fanFindings = dedupeFanFindings(laneResults);
+  renderFanFindingsToStderr(fanFindings);
+
+  // ── Predicates (the verdict IS a valid VerdictPredicateInput) ──
+  const cacheEligible = deriveCacheEligible(verdict);
+
+  // ── The core-owned, grep-able covariate line (contract v1; finding 14) ──
+  log.info(DISPLAY_TAG, renderCovariateLine(verdict));
+
+  // ── --out: write the human-readable fan report (findings + lanes + summary) ──
+  if (ctx.options.out) {
+    const { writeOutput } = await import('../utils.js');
+    writeOutput(renderFanReport(laneResults, verdict, fanFindings, cacheEligible), ctx.options.out);
+    log.success(DISPLAY_TAG, `Fan report written to ${ctx.options.out}`);
+  }
 
   // ── Sensor lines (warnings-class, never blocks) ──
   if (ctx.laneModels.length === 1) {
@@ -1022,14 +1236,12 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     );
   }
 
-  // ── Exit contract ──
+  // ── Cache stamp (finding 3) — independent of the sensor/fail-on exit decision ──
+  const override = ctx.options.override;
   if (cacheEligible) {
-    // cacheEligible already carries `reviewedState === 'matched'`, so a mid-fan
-    // drift can never reach here. Stamp EXACTLY the PRE-fan hash via the primitive
-    // writer — the fan bypasses `stampReviewedContentHashIfTreeUnchanged` (which
-    // would re-compute a SECOND compare) and reuses the single compare above, so
-    // the artifact and the stamp can never disagree (the single-lane path keeps
-    // the helper). A `null` pre-fan hash means nothing to stamp (legacy no-op).
+    // cacheEligible carries `reviewedState === 'matched'`, so drift can never reach
+    // here. Stamp EXACTLY the PRE-fan hash via the primitive writer (reusing the single
+    // compare above), never a second recompute. A `null` pre-fan hash ⇒ nothing to stamp.
     if (ctx.preFanContentHash !== null) {
       await writeReviewedContentHashValue(
         ctx.preFanContentHash,
@@ -1039,28 +1251,68 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
         ctx.config.review.sourceExtensions,
       );
     }
-    log.success(
-      DISPLAY_TAG,
-      `Review PASS — verdict ${verdictHash.slice(0, 8)} (round ${verdict.round.index}).`,
-    );
-    return;
+  } else if (override !== undefined) {
+    if (reviewedState === 'matched') {
+      // `--override` authorizes the trap-ledgered cache stamp on a non-cache-eligible
+      // round — routed through recordShieldOverride EXACTLY like the legacy path. matched
+      // ⇒ the current tree == the pre-fan tree, so the stamp still binds the reviewed tree.
+      log.warn(DISPLAY_TAG, `SHIELD OVERRIDE APPLIED: ${override}`);
+      const { recordShieldOverride } = await import('./shield.js');
+      await recordShieldOverride({
+        override,
+        cwd: ctx.cwd,
+        totemDir: ctx.config.totemDir,
+        configRoot: ctx.configRoot,
+        sourceExtensions: ctx.config.review.sourceExtensions,
+      });
+    } else {
+      // Drift is NEVER stampable, even overridden (finding 3) — say it loudly.
+      log.warn(
+        DISPLAY_TAG,
+        'OVERRIDE CANNOT STAMP A DRIFTED TREE: the worktree changed mid-review, so the reviewed-content-hash was NOT stamped even under --override. The verdict stands (bound to the pre-fan tree); no push is authorized. Re-run `totem review` against the current tree.',
+      );
+    }
   }
 
-  throw new TotemError(
-    'SHIELD_FAILED',
-    `Shield review failed: ${describeIneligibility(predicateInputs)}`,
-    'Fix the issues in the verdict above, then re-run `totem review`.',
+  // ── Exit contract (finding 3 / Gate G5) ──
+  // Default: sensor exit 0. `--fail-on <severity>` opts into a non-zero exit when the
+  // round has findings at/above that severity OR is not cache-eligible; `--override`
+  // converts that failure to a pass.
+  const failOn = ctx.options.failOn;
+  if (failOn !== undefined) {
+    const hasAtOrAbove =
+      failOn === 'critical'
+        ? verdict.findings.some((f) => f.severity === 'CRITICAL')
+        : verdict.findings.some((f) => f.severity === 'WARN' || f.severity === 'CRITICAL');
+    if (hasAtOrAbove || !cacheEligible) {
+      if (override === undefined) {
+        throw new TotemError(
+          'SHIELD_FAILED',
+          `Shield review failed (--fail-on ${failOn}): ${describeFailOnFailure(verdict, failOn, cacheEligible)}`,
+          'Fix the issues in the verdict above, then re-run `totem review` (or pass --override <reason> to convert this --fail-on failure to a pass).',
+        );
+      }
+      log.warn(
+        DISPLAY_TAG,
+        `SHIELD OVERRIDE: --fail-on ${failOn} failure converted to pass by override (${override}).`,
+      );
+    }
+  }
+
+  log.success(
+    DISPLAY_TAG,
+    `Review complete — verdict ${verdictHash.slice(0, 8)} (round ${verdict.round.index}, settled=${verdict.settled}).`,
   );
 }
 
 /** Name the failing cache-eligibility conjunct(s) for an honest exit reason. */
-function describeIneligibility(inputs: PredicateInputs): string {
+function describeIneligibility(inputs: VerdictPredicateInput): string {
   const parts: string[] = [];
   const completed = inputs.lanes.filter((l) => l.status === 'completed').length;
   if (!everyLaneCompleted(inputs.lanes)) {
     parts.push(`lane coverage ${completed}/${inputs.lanes.length} (a lane failed or abstained)`);
   }
-  const criticals = inputs.findingsUnion.filter((f) => f.severity === 'CRITICAL').length;
+  const criticals = inputs.findings.filter((f) => f.severity === 'CRITICAL').length;
   if (criticals > 0) {
     parts.push(`${criticals} CRITICAL finding(s)`);
   }
@@ -1074,6 +1326,25 @@ function describeIneligibility(inputs: PredicateInputs): string {
     parts.push('worktree drifted mid-review (verdict bound to the pre-fan tree; not authorized)');
   }
   return parts.length > 0 ? parts.join('; ') : 'not cache-eligible';
+}
+
+/**
+ * The honest reason a `--fail-on <severity>` gate tripped: the findings at/above the
+ * threshold (WARNs are surfaced only for `--fail-on warn`, since they don't affect
+ * cache-eligibility) plus any cache-ineligibility conjunct.
+ */
+function describeFailOnFailure(
+  verdict: VerdictArtifact,
+  failOn: 'critical' | 'warn',
+  cacheEligible: boolean,
+): string {
+  const parts: string[] = [];
+  if (failOn === 'warn') {
+    const warns = verdict.findings.filter((f) => f.severity === 'WARN').length;
+    if (warns > 0) parts.push(`${warns} WARN finding(s)`);
+  }
+  if (!cacheEligible) parts.push(describeIneligibility(verdict));
+  return parts.length > 0 ? parts.join('; ') : `findings at or above ${failOn}`;
 }
 
 /** sha256 hex of a UTF-8 string (the masked-diff payload identity). */

@@ -143,6 +143,15 @@ export interface DiffForReviewResult {
    * scope-distinguishing ref) and for `staged`/`uncommitted`.
    */
   head?: string;
+  /**
+   * The RAW CLI selector form (Prop 304 finding 10) — the operator's exact `--diff`
+   * string, captured for `explicit-range` only. It distinguishes selectors that resolve
+   * to the same refs but describe different lineages: `--diff main` (base-vs-working-tree,
+   * no head) vs `--diff main..HEAD` (range mode) both resolve base='main' head='HEAD' but
+   * must NOT share a round-chain lineage. Omitted for the non-explicit sources (no
+   * ambiguity — the source + resolved refs already key them).
+   */
+  selectorForm?: string;
 }
 
 /**
@@ -180,6 +189,44 @@ function resolveExplicitRangeRefs(range: string): { base?: string; head?: string
  * (`git.ts` is intended to be substrate for many commands, not just review).
  */
 export const REVIEW_DIFF_TRUNCATION_THRESHOLD = 50_000;
+
+/**
+ * Does `ref` resolve in this repo? Runs `git rev-parse --verify --quiet <ref>` — exit 0
+ * ⇒ the ref exists, a non-zero exit (safeExec throws) ⇒ it does not. The named error is
+ * an EXPECTED probe outcome (a missing remote-tracking ref), surfaced as `false`.
+ */
+function gitRefExists(cwd: string, ref: string): boolean {
+  // totem-context: intentional fail-open — a non-zero `git rev-parse --verify` exit is the
+  // EXPECTED "ref does not resolve" answer (a missing remote-tracking ref), surfaced as
+  // `false` (a Result), never a silent drop; the caller applies its documented fallback.
+  try {
+    safeExec('git', ['rev-parse', '--verify', '--quiet', ref], { cwd });
+    return true;
+    // totem-context: intentional fail-open — missing ref → false (probe answer, not an error).
+  } catch (_err) {
+    return false;
+  }
+}
+
+/**
+ * Resolve the git ref `getGitBranchDiff` will ACTUALLY diff against for `base` (Prop 304
+ * finding 7). `getGitBranchDiff` prefers the remote-tracking `origin/<base>` over a
+ * (possibly stale) local `<base>` (mmnto-ai/totem#2054) but returns only the diff text —
+ * so the resolved ref is recovered here in the SAME preference order: `origin/<localRef>`
+ * when it exists, else the local `<localRef>`. Recording THIS ref (not the bare `<base>`)
+ * keeps `diffScope.base` and the merge-base lineage honest about what was compared, so a
+ * run against `origin/main` and one against a diverged local `main` never silently share
+ * a lineage. The `origin/` prefix is normalized off first so an already-remote base can't
+ * become `origin/origin/<base>` (mirrors getGitBranchDiff, mmnto-ai/totem#2074).
+ */
+function resolveBranchDiffRef(cwd: string, base: string): string {
+  const localRef = base.replace(/^origin\//, '');
+  for (const ref of [`origin/${localRef}`, localRef]) {
+    if (gitRefExists(cwd, ref)) return ref;
+  }
+  // Neither verifies: record the local ref (getGitBranchDiff's final attempt / error ref).
+  return localRef;
+}
 
 /**
  * Shared diff-fetching logic used by both `shield` and `lint` commands.
@@ -271,6 +318,8 @@ export async function getDiffForReview(
   // source makes them meaningful; left undefined otherwise.
   let scopeBase: string | undefined;
   let scopeHead: string | undefined;
+  // Raw CLI selector form (finding 10) — captured for explicit-range only.
+  let selectorForm: string | undefined;
 
   if (forcedBranchScope) {
     // Forced push-gate scope (mmnto-ai/totem#2091): bypass the working-tree
@@ -287,7 +336,9 @@ export async function getDiffForReview(
     );
     diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
     source = 'branch-vs-base';
-    scopeBase = base;
+    // Finding 7: record the ref ACTUALLY diffed (origin/<base> preferred, else local
+    // <base>) so diffScope + lineage reflect the true comparison, not the bare name.
+    scopeBase = resolveBranchDiffRef(cwd, base);
     if (!diff.trim()) {
       log.warn(tag, 'No changes detected. Nothing to review.');
       return null;
@@ -298,6 +349,8 @@ export async function getDiffForReview(
     log.info(tag, `Diff source: explicit range (${options.diff})`);
     diff = filterDiffByPatterns(getGitDiffRange(cwd, options.diff), allIgnore);
     source = 'explicit-range';
+    // Finding 10: the raw selector form distinguishes `--diff main` from `--diff main..HEAD`.
+    selectorForm = options.diff;
     ({ base: scopeBase, head: scopeHead } = resolveExplicitRangeRefs(options.diff));
     if (!diff.trim()) {
       log.warn(tag, `Explicit range '${options.diff}' produced no diff. Nothing to review.`);
@@ -322,7 +375,8 @@ export async function getDiffForReview(
       );
       diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
       source = 'branch-vs-base';
-      scopeBase = base;
+      // Finding 7: record the ref ACTUALLY diffed (origin/<base> preferred, else local).
+      scopeBase = resolveBranchDiffRef(cwd, base);
     }
 
     if (!diff.trim()) {
@@ -371,5 +425,5 @@ export async function getDiffForReview(
     }
   }
 
-  return { diff, changedFiles, source, base: scopeBase, head: scopeHead };
+  return { diff, changedFiles, source, base: scopeBase, head: scopeHead, selectorForm };
 }

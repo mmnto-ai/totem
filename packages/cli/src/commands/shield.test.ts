@@ -1253,10 +1253,12 @@ describe('review fan activation (Prop 304 R2)', () => {
   const fanActive = (
     lanes: string[] | undefined,
     baseProvider: string | undefined,
-    opts: { model?: string; mode?: string },
+    opts: { model?: string; mode?: string; raw?: boolean },
   ): boolean => {
     const laneModels = validateReviewLanes(lanes, baseProvider);
-    return laneModels.length >= 1 && opts.model === undefined && opts.mode !== 'structural';
+    return (
+      laneModels.length >= 1 && opts.model === undefined && opts.mode !== 'structural' && !opts.raw
+    );
   };
 
   it('review.lanes absent → the legacy single-lane path runs (fan inactive)', () => {
@@ -1275,6 +1277,10 @@ describe('review fan activation (Prop 304 R2)', () => {
 
   it('structural mode with lanes configured stays legacy single-lane (fan inactive)', () => {
     expect(fanActive(['anthropic:claude-a'], 'anthropic', { mode: 'structural' })).toBe(false);
+  });
+
+  it('--raw with lanes configured stays the legacy zero-LLM path (fan inactive — finding 1)', () => {
+    expect(fanActive(['anthropic:claude-a', 'gemini:g'], 'anthropic', { raw: true })).toBe(false);
   });
 });
 

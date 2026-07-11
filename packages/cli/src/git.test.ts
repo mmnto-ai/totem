@@ -421,11 +421,19 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
 describe('getDiffForReview scope metadata (Prop 304)', () => {
   const config = { ignorePatterns: [] as string[] };
   const sampleDiff = 'diff --git a/foo.ts b/foo.ts\n+++ b/foo.ts\n@@ -1 +1 @@\n+x';
+  // Finding 7: the branch-vs-base scope records the ref ACTUALLY diffed, resolved via a
+  // `git rev-parse --verify` probe (safeExec). `noRemoteRef` simulates "no origin/<base>"
+  // so the resolver falls back to the bare local ref.
+  const noRemoteRef = () =>
+    mockSafeExec.mockImplementation(() => {
+      throw new Error('no such ref');
+    });
 
   beforeEach(() => {
     mockGetGitDiffRange.mockReset();
     mockGetGitDiff.mockReset();
     mockGetGitBranchDiff.mockReset();
+    mockSafeExec.mockReset();
     mockGetDefaultBranch.mockClear();
   });
 
@@ -458,16 +466,30 @@ describe('getDiffForReview scope metadata (Prop 304)', () => {
     expect(result!.head).toBeUndefined();
   });
 
-  it('forced --base carries the resolved base name and no head', async () => {
+  it('forced --base records the local base ref when no remote-tracking ref exists (finding 7)', async () => {
     mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    noRemoteRef();
     const result = await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Review');
     expect(result!.source).toBe('branch-vs-base');
     expect(result!.base).toBe('develop');
     expect(result!.head).toBeUndefined();
   });
 
+  it('forced --base records origin/<base> when the remote-tracking ref exists (finding 7 — divergent local/remote)', async () => {
+    mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    // Only origin/develop resolves ⇒ the ref ACTUALLY diffed is origin/develop.
+    mockSafeExec.mockImplementation((_cmd, args) => {
+      if (Array.isArray(args) && args.includes('origin/develop')) return '';
+      throw new Error('no such local ref');
+    });
+    const result = await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Review');
+    expect(result!.source).toBe('branch-vs-base');
+    expect(result!.base).toBe('origin/develop');
+  });
+
   it('--branch resolves the default branch as base with no head', async () => {
     mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    noRemoteRef();
     const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Review');
     expect(result!.base).toBe('main');
     expect(result!.head).toBeUndefined();
@@ -476,6 +498,7 @@ describe('getDiffForReview scope metadata (Prop 304)', () => {
   it('auto-fallback branch-vs-base records the default base, no head', async () => {
     mockGetGitDiff.mockReturnValue('');
     mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    noRemoteRef();
     const result = await getDiffForReview({}, config, '/tmp', 'Review');
     expect(result!.source).toBe('branch-vs-base');
     expect(result!.base).toBe('main');
@@ -496,6 +519,18 @@ describe('getDiffForReview scope metadata (Prop 304)', () => {
     expect(result!.source).toBe('uncommitted');
     expect(result!.base).toBeUndefined();
     expect(result!.head).toBeUndefined();
+  });
+
+  it('explicit-range captures the raw selectorForm; other sources omit it (finding 10)', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const bare = await getDiffForReview({ diff: 'main' }, config, '/tmp', 'Review');
+    expect(bare!.selectorForm).toBe('main');
+    const range = await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Review');
+    expect(range!.selectorForm).toBe('main..HEAD');
+    // A non-explicit source carries no selectorForm.
+    mockGetGitDiff.mockReturnValue(sampleDiff);
+    const staged = await getDiffForReview({ staged: true }, config, '/tmp', 'Review');
+    expect(staged!.selectorForm).toBeUndefined();
   });
 });
 

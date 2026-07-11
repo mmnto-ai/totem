@@ -22,6 +22,14 @@
  * neither of which is a warm/cold runner discriminator. The absence is enforced
  * by a structural test (snapshots the key set) IN ADDITION to this note.
  *
+ * The KEY-set structural test is not enough on its own: a runner class could be
+ * smuggled through a laneId VALUE. So `laneId` is additionally constrained to a
+ * backend-derived vocabulary — `lane-<index>:<resolvedBackendOrConfiguredLane>`
+ * (see {@link LaneIdSchema}) — with a refinement rejecting warm/cold/headless/
+ * sdk-runner substrings (strategy-codex G1). Net invariant: a consumer can
+ * identify WHICH backend participated (diversity), NEVER whether the producer was
+ * warm / cold / headless.
+ *
  * Schema-evolution policy mirrors {@link RunArtifactSchema} / the panel artifact
  * (F1): the reader is version-tolerant WITHIN the major — `schemaVersion`
  * validates as `1.x`, every post-1.0.0 field is additive-optional, and a MAJOR
@@ -38,7 +46,11 @@ import { z } from 'zod';
 import { rethrowAsParseError, TotemError, TotemParseError } from '../errors.js';
 import { readJsonSafe } from '../sys/fs.js';
 import { calculateDeterministicHash } from './hash.js';
-import { PanelDiversitySchema, PersistedPostCheckFindingSchema } from './panel.js';
+import {
+  PanelDiversitySchema,
+  type PersistedPostCheckFinding,
+  PersistedPostCheckFindingSchema,
+} from './panel.js';
 
 // ─── Schema version (mirrors RunArtifact / Panel F1) ────────────────────────
 
@@ -136,6 +148,49 @@ export const VerdictLaneSummarySchema = z.object({
 });
 export type VerdictLaneSummary = z.infer<typeof VerdictLaneSummarySchema>;
 
+// ─── laneId value-channel vocabulary (Prop 302 G1) ──────────────────────────
+
+/**
+ * The EXACT laneId shape — `lane-<index>:<resolvedBackendOrConfiguredLane>`:
+ *   - `lane-` literal prefix,
+ *   - `<index>` — the lane's zero-based position in the fan (`\d+`),
+ *   - `:` separator,
+ *   - `<resolvedBackendOrConfiguredLane>` — the resolved backend (`provider:model`,
+ *     which itself carries a colon) for a lane that reached a backend, or the
+ *     CONFIGURED lane string for a lane that failed before one resolved. Non-empty,
+ *     opaque backend/lane text (`.+` — newlines excluded).
+ *
+ * This is backend-DERIVED vocabulary: a consumer can read the id and identify
+ * WHICH backend participated (panel-diversity data), and NOTHING about whether the
+ * producer was warm / cold / headless.
+ */
+export const LANE_ID_SHAPE_RE = /^lane-\d+:.+$/;
+
+/**
+ * Runner-class vocabulary that must NEVER appear in a laneId (case-insensitive
+ * substrings). The rev-2 structural key test snapshots the top-level + per-lane
+ * KEY sets, but a runner class could still be smuggled through a laneId VALUE
+ * (`lane-0:warm-resident`); this refinement closes that value channel (strategy-
+ * codex G1).
+ */
+const FORBIDDEN_LANE_RUNNER_VOCAB = /warm|cold|headless|sdk-runner/i;
+
+/**
+ * laneId: the backend-derived vocabulary above, PLUS the value-channel
+ * lane-blindness refinement (Prop 302 G1). Used by every lane variant so no lane
+ * — completed, abstained, or failed — can encode a warm/cold/headless runner class.
+ */
+export const LaneIdSchema = z
+  .string()
+  .regex(
+    LANE_ID_SHAPE_RE,
+    'laneId must have the shape `lane-<index>:<resolvedBackendOrConfiguredLane>` (e.g. `lane-0:anthropic:claude-4`) — backend-derived vocabulary only (Prop 302 G1)',
+  )
+  .refine(
+    (v) => !FORBIDDEN_LANE_RUNNER_VOCAB.test(v),
+    'laneId must not encode a warm/cold/headless/sdk-runner runner class — lane-blindness forbids this value-smuggling channel (Prop 302 G1)',
+  );
+
 /**
  * One lane's terminal outcome, DISCRIMINATED by `status`. The union makes
  * impossible records unrepresentable (codex fold 2): a `completed` lane STRUCTURALLY
@@ -147,14 +202,14 @@ export type VerdictLaneSummary = z.infer<typeof VerdictLaneSummarySchema>;
 export const VerdictLaneSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('completed'),
-    laneId: z.string().min(1),
+    laneId: LaneIdSchema,
     resolvedBackend: z.string().min(1),
     runArtifactHash: Sha256HexSchema,
     verdictSummary: VerdictLaneSummarySchema,
   }),
   z.object({
     status: z.literal('abstained'),
-    laneId: z.string().min(1),
+    laneId: LaneIdSchema,
     resolvedBackend: z.string().min(1),
     runArtifactHash: Sha256HexSchema,
     /** Why no usable structured verdict was extractable (invoke happened, output unparseable). */
@@ -162,7 +217,7 @@ export const VerdictLaneSchema = z.discriminatedUnion('status', [
   }),
   z.object({
     status: z.literal('failed'),
-    laneId: z.string().min(1),
+    laneId: LaneIdSchema,
     typedReason: z.enum(VERDICT_LANE_FAILURE_REASONS),
     /** Optional: a lane can fail BEFORE a backend resolves (e.g. `config-error`). */
     resolvedBackend: z.string().min(1).optional(),
@@ -210,6 +265,83 @@ export const VerdictRoundSchema = z.object({
 });
 export type VerdictRound = z.infer<typeof VerdictRoundSchema>;
 
+// ─── Derived dryness / cache predicates (single source of truth) ─────────────
+
+/**
+ * The subset of a verdict the pure predicates read. The persisted boundary AND
+ * every CLI caller derive `settled` / cache-eligibility from THESE fields — the
+ * stored `settled` boolean is re-derived and checked at parse, never trusted
+ * (totem-codex finding 5). `findings` is the exemption-FILTERED union the CLI
+ * lands on the artifact; the R2 severity map is pinned `INFO = cosmetic`,
+ * `WARN | CRITICAL = actionable`.
+ */
+export interface VerdictPredicateInput {
+  lanes: readonly VerdictLane[];
+  findings: readonly VerdictFinding[];
+  postChecks: readonly PersistedPostCheckFinding[];
+  reviewedState: 'matched' | 'drifted';
+}
+
+/** Shared first conjunct: a nonempty fan where every attempted lane completed. */
+function everyLaneCompleted(lanes: readonly VerdictLane[]): boolean {
+  return lanes.length > 0 && lanes.every((l) => l.status === 'completed');
+}
+
+/** A decidable-tier post-check row failed (sensor-tier rows never gate — ADR-109 / #2106). */
+function hasDecidablePostCheckFail(postChecks: readonly PersistedPostCheckFinding[]): boolean {
+  return postChecks.some((r) => r.tier === 'decidable' && r.verdict === 'fail');
+}
+
+/**
+ * `settled` — the current-round dryness predicate, PURE over artifact content (no
+ * cross-round input, no model output):
+ *
+ *   settled = (every attempted lane completed)
+ *             AND (zero actionable — WARN|CRITICAL — findings)
+ *             AND (no decidable-tier post-check row with verdict 'fail')
+ *             AND (reviewedState === 'matched')
+ *
+ * A failed/abstained lane ⇒ fan incomplete ⇒ never settled (a persistent CRITICAL
+ * can never settle by lane dropout — agy fold 1, satisfied structurally); drift ⇒
+ * the verdict is bound to the pre-fan diff and does NOT cover the current tree ⇒
+ * not settled (codex rev-2 fold 1). This export is the SINGLE SOURCE OF TRUTH: the
+ * CLI derives its loop-termination signal from it and {@link VerdictArtifactSchema}
+ * re-derives + checks the stored `settled` (finding 5) — a crafted lane output
+ * cannot flip it (pure function; the exemption filter is the only removal
+ * mechanism, upstream of this boundary).
+ */
+export function deriveSettled(v: VerdictPredicateInput): boolean {
+  return (
+    everyLaneCompleted(v.lanes) &&
+    !v.findings.some((f) => f.severity === 'WARN' || f.severity === 'CRITICAL') &&
+    !hasDecidablePostCheckFail(v.postChecks) &&
+    v.reviewedState === 'matched'
+  );
+}
+
+/**
+ * Cache eligibility — the DISTINCT, weaker predicate (codex fold 4). Identical to
+ * {@link deriveSettled} except it tolerates WARNs (matching today's PASS
+ * semantics — the drip class the runner absorbs is WARN-shaped):
+ *
+ *   cacheEligible = (every attempted lane completed)
+ *                   AND (zero CRITICAL findings)
+ *                   AND (no decidable-tier post-check row with verdict 'fail')
+ *                   AND (reviewedState === 'matched')
+ *
+ * A degraded fan (any failed/abstained lane) fails the first conjunct and is
+ * therefore never cache-eligible; drift blocks the stamp. `settled` (no WARNs) is
+ * deliberately STRICTER than cache-eligible (no CRITICALs).
+ */
+export function deriveCacheEligible(v: VerdictPredicateInput): boolean {
+  return (
+    everyLaneCompleted(v.lanes) &&
+    !v.findings.some((f) => f.severity === 'CRITICAL') &&
+    !hasDecidablePostCheckFail(v.postChecks) &&
+    v.reviewedState === 'matched'
+  );
+}
+
 // ─── Verdict artifact ──────────────────────────────────────────────────────
 
 /**
@@ -217,11 +349,18 @@ export type VerdictRound = z.infer<typeof VerdictRoundSchema>;
  * invariant (Prop 302): NO warm/cold runner-lane discriminator field exists,
  * deliberately.
  *
- * `superRefine` enforces the count/panel invariants that a hand-edited or
+ * `superRefine` enforces the cross-field invariants that a hand-edited or
  * builder-buggy record could otherwise violate silently — mirrored counts are
- * NEVER accepted on trust (codex): `attemptedLaneCount === lanes.length`,
- * `completedLaneCount === #completed lanes`, and `panelArtifactHash` present ⇒
- * at least two completed lanes (a panel is assembled only from ≥2 usable lanes).
+ * NEVER accepted on trust (codex):
+ *   - `attemptedLaneCount === lanes.length`; `completedLaneCount === #completed`.
+ *   - lanes nonempty, laneIds unique (finding 9c).
+ *   - panel ⟺ diversity AND panel ⟺ ≥2 completed lanes, BOTH directions
+ *     (finding 9a): a panel is assembled from — and only from — ≥2 usable lanes,
+ *     and always emits its diversity summary.
+ *   - round-chain shape (finding 9b): `round.index === 0` ⟺ `priorVerdictHash`
+ *     absent (round 0 starts a chain; round N>0 links its prior).
+ *   - stored `settled === deriveSettled(value)` (finding 5): the persisted
+ *     boundary re-derives the dryness predicate, never trusting a fabricated flag.
  */
 export const VerdictArtifactSchema = z
   .object({
@@ -278,13 +417,78 @@ export const VerdictArtifactSchema = z
         message: `completedLaneCount (${a.completedLaneCount}) must equal the number of completed lanes (${completed}) — counts are never mirrored on trust`,
       });
     }
-    // A panel is assembled only from ≥2 usable (completed) lanes; a panelArtifactHash
-    // over fewer completed lanes is a structurally impossible record.
-    if (a.panelArtifactHash !== undefined && completed < 2) {
+
+    // ── Finding 9c: lanes nonempty, laneIds unique ──
+    if (a.lanes.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['lanes'],
+        message:
+          'lanes must be nonempty — a verdict records at least the lane(s) attempted (even a total-failure fan lists its failed lanes)',
+      });
+    }
+    const laneIds = a.lanes.map((l) => l.laneId);
+    const duplicateLaneIds = [...new Set(laneIds.filter((id, i) => laneIds.indexOf(id) !== i))];
+    if (duplicateLaneIds.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['lanes'],
+        message: `duplicate laneId(s) [${duplicateLaneIds.join(', ')}] — each lane needs a unique id`,
+      });
+    }
+
+    // ── Finding 9a: panel ⟺ diversity AND panel ⟺ ≥2 completed lanes (both directions) ──
+    const hasPanel = a.panelArtifactHash !== undefined;
+    const hasDiversity = a.diversity !== undefined;
+    if (hasPanel !== hasDiversity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [hasPanel ? 'diversity' : 'panelArtifactHash'],
+        message:
+          'panelArtifactHash and diversity must be present together — a panel always emits its diversity summary, and a diversity summary is meaningful only alongside a panel',
+      });
+    }
+    if (hasPanel && completed < 2) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['panelArtifactHash'],
         message: `panelArtifactHash present requires at least 2 completed lanes (found ${completed}) — a panel is assembled only from usable lanes`,
+      });
+    }
+    if (!hasPanel && completed >= 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['panelArtifactHash'],
+        message: `${completed} completed lanes require a panel (panelArtifactHash + diversity) — a panel is assembled from ALL usable lanes (≥2)`,
+      });
+    }
+
+    // ── Finding 9b: round.index === 0 ⟺ priorVerdictHash absent ──
+    const isRoundZero = a.round.index === 0;
+    const hasPrior = a.round.priorVerdictHash !== undefined;
+    if (isRoundZero && hasPrior) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['round', 'priorVerdictHash'],
+        message:
+          'round 0 must NOT carry priorVerdictHash — round 0 starts a lineage chain (a divergence forks back to round 0)',
+      });
+    }
+    if (!isRoundZero && !hasPrior) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['round', 'priorVerdictHash'],
+        message: `round ${a.round.index} (>0) requires priorVerdictHash linking the prior round in the chain`,
+      });
+    }
+
+    // ── Finding 5: the persisted boundary re-derives `settled`, never trusts it ──
+    const derivedSettled = deriveSettled(a);
+    if (a.settled !== derivedSettled) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['settled'],
+        message: `settled (${a.settled}) must equal the re-derived current-round dryness predicate (${derivedSettled}) — settled is derived at the persisted boundary, never trusted (finding 5)`,
       });
     }
   });
@@ -307,18 +511,38 @@ export type VerdictArtifact = z.infer<typeof VerdictArtifactSchema>;
  *   - `staged` / `uncommitted` — NO range fields (worktree identity + branch +
  *     source carry the lineage).
  */
-export interface LineageKeyInput {
+/** Fields every lineage-key variant carries, regardless of source. */
+interface LineageKeyCommon {
   /** Stable worktree identity — the absolute resolved `git rev-parse --show-toplevel`. */
   repoIdentity: string;
+  /** The current branch, or the `DETACHED:<sha>` marker. */
   branch: string;
-  source: VerdictDiffSource;
-  /** Resolved merge-base sha (branch-vs-base). */
-  mergeBase?: string;
-  /** Range base selector (explicit-range / branch-vs-base). */
-  base?: string;
-  /** Range head selector (explicit-range). */
-  head?: string;
+  /**
+   * The raw CLI selector FORM (finding 10) — accepted on EVERY variant now so the
+   * key shape is stable before the CLI populates it. It distinguishes selectors
+   * that resolve to the same refs but describe different lineages, e.g. `--diff main`
+   * (working-tree mode) vs `main..HEAD` (range mode). Absent today (⇒ hashed as
+   * `null`); when the CLI agent supplies it (finding 10) the key already accounts
+   * for it — no further domain-tag bump needed.
+   */
+  selectorForm?: string;
 }
+
+/**
+ * `computeLineageKey` input, SOURCE-DISCRIMINATED (totem-codex finding 9d): each
+ * variant carries ONLY the range fields its source makes meaningful, so an
+ * impossible record (e.g. a `staged` scope with a `head` endpoint) is
+ * unrepresentable.
+ *   - `explicit-range` — `base` + `head` (the two endpoints).
+ *   - `branch-vs-base` — `base` (resolved base ref) + `mergeBase` (resolved sha).
+ *   - `staged` / `uncommitted` — NO range fields; repoIdentity + branch + source
+ *     (+ optional selectorForm) carry the lineage (the index/worktree has no endpoint).
+ */
+export type LineageKeyInput =
+  | (LineageKeyCommon & { source: 'explicit-range'; base: string; head: string })
+  | (LineageKeyCommon & { source: 'branch-vs-base'; base: string; mergeBase: string })
+  | (LineageKeyCommon & { source: 'staged' })
+  | (LineageKeyCommon & { source: 'uncommitted' });
 
 /**
  * The composite round-chain lineage key: a domain-tagged sha256 over the resolved
@@ -327,23 +551,44 @@ export interface LineageKeyInput {
  * ranges on one branch + merge-base cannot cross-link because `base`/`head`
  * participate.
  *
- * The selector is hashed as a canonicalized (recursively key-sorted) JSON object
- * with a fixed domain tag, so there is NO delimiter-injection ambiguity —
- * `branch='a', mergeBase='b|c'` and `branch='a|b', mergeBase='c'` serialize to
- * distinct JSON and therefore distinct keys, which a naive `join('|')` would
- * collide. Absent selector fields are pinned to `null` (a stable, unambiguous
- * hole) so a source that omits a field can never collide with one that supplies
- * an empty string for it.
+ * The domain tag is `verdict-lineage/3` — bumped from `/2` because the selector
+ * shape changed (source-discriminated input + `selectorForm`), so keys under the
+ * two tags are deliberately incompatible.
+ *
+ * Only the fields VALID for the discriminated `source` participate (the switch
+ * reads them per-variant), pinning the others to `null`. The selector is hashed as
+ * a canonicalized (recursively key-sorted) JSON object with the fixed domain tag,
+ * so there is NO delimiter-injection ambiguity — `branch='a', mergeBase='b|c'` and
+ * `branch='a|b', mergeBase='c'` serialize to distinct JSON and therefore distinct
+ * keys, which a naive `join('|')` would collide. A `null` hole (a source that omits
+ * a field) can never collide with an empty string a source supplies for it.
  */
 export function computeLineageKey(input: LineageKeyInput): string {
+  let base: string | null = null;
+  let head: string | null = null;
+  let mergeBase: string | null = null;
+  switch (input.source) {
+    case 'explicit-range':
+      base = input.base;
+      head = input.head;
+      break;
+    case 'branch-vs-base':
+      base = input.base;
+      mergeBase = input.mergeBase;
+      break;
+    case 'staged':
+    case 'uncommitted':
+      break;
+  }
   return calculateDeterministicHash({
-    domain: 'verdict-lineage/2',
+    domain: 'verdict-lineage/3',
     repoIdentity: input.repoIdentity,
     branch: input.branch,
     source: input.source,
-    mergeBase: input.mergeBase ?? null,
-    base: input.base ?? null,
-    head: input.head ?? null,
+    selectorForm: input.selectorForm ?? null,
+    base,
+    head,
+    mergeBase,
   });
 }
 
@@ -378,6 +623,28 @@ export function verdictsDir(totemDirAbs: string): string {
 export function computeVerdictArtifactContentHash(artifact: VerdictArtifact): string {
   const { createdAt: _excluded, ...identity } = artifact;
   return calculateDeterministicHash(identity);
+}
+
+/**
+ * Render the machine-readable covariate line — the CORE-OWNED signal every caller
+ * (CLI print, headless, `/review-reply`) emits identically so the skill stays pure
+ * transport (strategy-codex G4; resolves finding 14). Format, EXACTLY:
+ *
+ *   `local-lane: <hash8> round=<n> settled=<true|false> lanes=<completed>/<attempted>`
+ *
+ * where `<hash8>` is the first 8 hex of the artifact's CONTENT ADDRESS. The signature
+ * takes the artifact (not a caller-supplied hash string) and recomputes the address
+ * via {@link computeVerdictArtifactContentHash} — the least-surprising shape: the
+ * hash is a pure function of the artifact, so a caller can never pass one that
+ * disagrees with the record it is describing.
+ *
+ * @remarks Covariate line format v1 — do NOT alter without a spec amendment (the
+ * pilot ledger joins on this grep-able line; the format is contract, versioned with
+ * the `review-loop` skill).
+ */
+export function renderCovariateLine(verdict: VerdictArtifact): string {
+  const hash8 = computeVerdictArtifactContentHash(verdict).slice(0, 8);
+  return `local-lane: ${hash8} round=${verdict.round.index} settled=${verdict.settled} lanes=${verdict.completedLaneCount}/${verdict.attemptedLaneCount}`;
 }
 
 export interface SaveVerdictArtifactResult {
@@ -423,18 +690,15 @@ export function saveVerdictArtifact(
     });
   } catch (err) {
     if (err !== null && typeof err === 'object' && 'code' in err && err.code === 'EEXIST') {
-      // Load + validate the incumbent, then verify it is the SAME logical verdict
-      // modulo createdAt (its content hash must recompute back to this address).
-      const existing = loadVerdictArtifact(totemDirAbs, hash);
-      if (computeVerdictArtifactContentHash(existing) === hash) {
-        return { hash, path: filePath, existed: true };
-      }
-      throw new TotemError(
-        'DATABASE_MISMATCH',
-        `Verdict artifact identity violation at ${filePath}: the record already stored at this content address does not match the verdict being saved (differs beyond createdAt).`,
-        'This should be unreachable (content-addressed store). Investigate a corrupted/hand-edited verdict file or a hash collision before re-running.',
-        err,
-      );
+      // Logical-identity dedup (codex fold 8 / agy fold 4). loadVerdictArtifact now
+      // VERIFIES the incumbent's content address (finding 4): a successful load
+      // proves the stored record hashes back to THIS address — which equals our
+      // artifact's content address — i.e. the SAME logical verdict modulo createdAt
+      // (first-write-wins). A DIFFERING or corrupt record cannot occupy this address
+      // without failing that verification, so the verified load itself surfaces the
+      // identity violation loud (its own hard error) — nothing is swallowed here.
+      loadVerdictArtifact(totemDirAbs, hash);
+      return { hash, path: filePath, existed: true };
     }
     throw err;
   }
@@ -443,8 +707,10 @@ export function saveVerdictArtifact(
 
 /**
  * Load + validate a verdict by content address. Throws {@link TotemParseError}
- * on a missing file, corrupt JSON, schema violation, or an unknown major with
- * no migration entry — loud, never a silent partial (Tenet 4).
+ * on a missing file, corrupt JSON, schema violation, or an unknown major with no
+ * migration entry, and {@link TotemError} (`DATABASE_MISMATCH`) when the stored
+ * bytes do not hash back to their filename address (finding 4) — loud, never a
+ * silent partial (Tenet 4).
  */
 export function loadVerdictArtifact(totemDirAbs: string, hash: string): VerdictArtifact {
   if (!Sha256HexSchema.safeParse(hash).success) {
@@ -459,34 +725,91 @@ export function loadVerdictArtifact(totemDirAbs: string, hash: string): VerdictA
   // major routes through its migration. Empty registry ⇒ straight fall-through.
   const raw = readJsonSafe(filePath);
   const major = readMajor(raw);
-  if (major !== undefined) {
-    const migrate = MIGRATIONS.get(major);
+  const migrate = major !== undefined ? MIGRATIONS.get(major) : undefined;
+
+  let artifact: VerdictArtifact;
+  if (migrate !== undefined) {
     // Re-validate migrated output against the CURRENT schema before returning: a
     // migration's contract is to PRODUCE the current shape, so a migration bug must
     // fail loud here — never return it unvalidated.
-    if (migrate !== undefined) return VerdictArtifactSchema.parse(migrate(raw));
+    artifact = VerdictArtifactSchema.parse(migrate(raw));
+  } else {
+    // `.safeParse` (not try/catch) so the fail-loud rethrow is an explicit
+    // statement, never swallowed control flow: rethrowAsParseError returns `never`
+    // (always throws), normalizing ZodError to the module's TotemParseError load
+    // contract and preserving cause. No catch clause ⇒ no bare-swallow surface.
+    const result = VerdictArtifactSchema.safeParse(raw);
+    if (!result.success) {
+      rethrowAsParseError(
+        `Verdict artifact ${hash} failed schema validation`,
+        result.error,
+        'The artifact may be corrupted or written by an incompatible totem version; re-emit it (or add the migration entry for its major).',
+      );
+    }
+    artifact = result.data;
   }
 
-  try {
-    return VerdictArtifactSchema.parse(raw);
-    // totem-context: rethrowAsParseError always throws (returns `never`) — this catch
-    // RE-throws via the shared helper, normalizing ZodError to the module's stated
-    // TotemParseError load contract; nothing is swallowed.
-  } catch (err) {
-    rethrowAsParseError(
-      `Verdict artifact ${hash} failed schema validation`,
-      err,
-      'The artifact may be corrupted or written by an incompatible totem version; re-emit it (or add the migration entry for its major).',
+  // Finding 4: content-address verification. Syntax + schema are not enough — a
+  // schema-VALID record stored under the WRONG 64-hex filename (a mis-addressed
+  // copy, a hand-edit, or a collision) would otherwise load silently and could win
+  // or lose a lineage scan. Recompute the content address from the parsed artifact
+  // and hard-error on any mismatch (same style as saveVerdictArtifact's EEXIST
+  // identity violation — the content-addressed store's core guarantee).
+  const recomputed = computeVerdictArtifactContentHash(artifact);
+  if (recomputed !== hash) {
+    throw new TotemError(
+      'DATABASE_MISMATCH',
+      `Verdict artifact at ${filePath} fails content-address verification: its recomputed content hash ${recomputed} does not match the filename address ${hash} (modulo createdAt).`,
+      'This should be unreachable in a content-addressed store. Investigate a mis-addressed copy, a hand-edited/corrupted verdict file, or a hash collision, then re-emit the round.',
     );
+  }
+  return artifact;
+}
+
+/**
+ * Verified per-entry load for a SCAN (list / lineage). A KNOWN corruption class —
+ * bad JSON, schema violation, or a content-address mismatch (finding 4), all
+ * surfaced by {@link loadVerdictArtifact} as a {@link TotemError} — is routed to
+ * `onWarn` and the entry is SKIPPED (returns `undefined`). An UNEXPECTED failure
+ * (e.g. a filesystem permission error) is rethrown, never swallowed.
+ *
+ * This is the honest degradation for a scan (vs the hard error of a direct
+ * load-by-hash): one corrupt / mis-addressed artifact must neither crash an
+ * UNRELATED lineage query nor silently WIN or LOSE a lineage scan by being counted
+ * as valid — it is announced LOUDLY per entry and dropped, so a broken prior round
+ * makes the chain honestly restart at round 0 (the failure-table "prior verdict
+ * missing/corrupt" row) rather than aborting the whole command.
+ */
+function loadVerifiedVerdictForScan(
+  totemDirAbs: string,
+  hash: string,
+  onWarn: (message: string) => void,
+): VerdictArtifact | undefined {
+  try {
+    return loadVerdictArtifact(totemDirAbs, hash);
+  } catch (err) {
+    if (err instanceof TotemError) {
+      onWarn(
+        `Skipping corrupt or mis-addressed verdict artifact ${hash} during scan: ${err.message}`,
+      );
+      return undefined;
+    }
+    throw err;
   }
 }
 
 /**
- * Load every stored verdict under `artifacts/verdicts/`, validating each. A
- * missing directory yields `[]` (nothing has been written yet). Non-verdict file
- * names are skipped; a corrupt verdict file fails loud via {@link loadVerdictArtifact}.
+ * Load every stored verdict under `artifacts/verdicts/`, verifying each through
+ * the SAME content-address check as {@link loadVerdictArtifact}. A missing
+ * directory yields `[]` (nothing written yet). Non-verdict file names are skipped
+ * silently; a corrupt / mis-addressed verdict is skipped LOUDLY via `onWarn`
+ * (default `console.warn`; injectable so core stays decoupled from the presentation
+ * layer) — see {@link loadVerifiedVerdictForScan}.
  */
-export function listVerdictArtifacts(totemDirAbs: string): VerdictArtifact[] {
+export function listVerdictArtifacts(
+  totemDirAbs: string,
+  onWarn: (message: string) => void = console.warn,
+): VerdictArtifact[] {
   const dir = verdictsDir(totemDirAbs);
   let names: string[];
   try {
@@ -499,7 +822,8 @@ export function listVerdictArtifacts(totemDirAbs: string): VerdictArtifact[] {
   for (const name of names) {
     const match = VERDICT_FILE_RE.exec(name);
     if (match === null) continue;
-    out.push(loadVerdictArtifact(totemDirAbs, match[1]));
+    const loaded = loadVerifiedVerdictForScan(totemDirAbs, match[1], onWarn);
+    if (loaded !== undefined) out.push(loaded);
   }
   return out;
 }
@@ -509,12 +833,16 @@ export function listVerdictArtifacts(totemDirAbs: string): VerdictArtifact[] {
  * by latest `createdAt` (ISO strings sort chronologically). Returns `undefined`
  * when no verdict carries the key. Used for implicit round linkage (the next
  * round's `priorVerdictHash` = `computeVerdictArtifactContentHash` of this).
+ * Goes through the same verified scan load as {@link listVerdictArtifacts}: a
+ * corrupt / mis-addressed artifact is warned + skipped (never silently winning or
+ * losing the lineage), `onWarn` injectable (default `console.warn`).
  */
 export function findLatestVerdictForLineage(
   totemDirAbs: string,
   lineageKey: string,
+  onWarn: (message: string) => void = console.warn,
 ): VerdictArtifact | undefined {
-  const matching = listVerdictArtifacts(totemDirAbs).filter(
+  const matching = listVerdictArtifacts(totemDirAbs, onWarn).filter(
     (v) => v.round.lineageKey === lineageKey,
   );
   if (matching.length === 0) return undefined;

@@ -35,6 +35,6 @@ This is NOT the external-bot triage skill. `/review-reply` handles bot comments 
 local-lane: <verdictHash8> round=<n> settled=<true|false> lanes=<completed>/<attempted>
 ```
 
-`<verdictHash8>` is the first 8 hex characters of the verdict artifact hash the CLI reports. This line is a versioned contract (format v1) consumed by a measurement pilot — do not change its shape without a spec amendment. Inclusion of any pending `local-lane:` line in the single consolidated round-disposition comment belongs to `/review-reply`, not to this loop — never post it to GitHub yourself.
+`<verdictHash8>` is the first 8 hex characters of the verdict artifact hash the CLI reports. This line is a versioned contract (format v1) consumed by a measurement pilot — do not change its shape without a spec amendment. The CLI renders it from the verdict artifact on every fan run via a single core-owned renderer, so it is re-derivable from the canonical artifact and never hand-authored. Inclusion of any pending `local-lane:` line in the single consolidated round-disposition comment belongs to `/review-reply`, not to this loop — never post it to GitHub yourself.
 
 <!-- totem:skill-end -->

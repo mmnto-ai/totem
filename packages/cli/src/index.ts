@@ -426,6 +426,10 @@ const reviewOptions = (cmd: Command) =>
       '--continues <hash>',
       'Explicit round-chain link for the multi-lane review fan (review.lanes): the prior verdict artifact hash this round continues. A lineage mismatch warns and proceeds. Ignored unless review.lanes is configured and --model is absent.',
     )
+    .option(
+      '--fail-on <severity>',
+      'Multi-lane fan (review.lanes) exit gate: "critical" or "warn". When set, the fan exits non-zero (SHIELD_FAILED) on findings at/above that severity OR a non-cache-eligible round; --override converts the failure to a pass. Omit for the default sensor exit 0. Ignored on the legacy single-lane path.',
+    )
     .addHelpText(
       'after',
       [
@@ -485,6 +489,7 @@ async function runReview(opts: {
   estimate?: boolean;
   history?: boolean;
   continues?: string;
+  failOn?: string;
 }): Promise<void> {
   // Redirect removed --deterministic flag to totem lint
   if (opts.deterministic) {
@@ -512,6 +517,8 @@ async function runReview(opts: {
   await shieldCommand({
     ...opts,
     mode: opts.mode as 'standard' | 'structural' | undefined,
+    // Validated inside shieldCommand (Gate G5) — a bad value is a hard CONFIG_INVALID.
+    failOn: opts.failOn as 'critical' | 'warn' | undefined,
   });
 }
 

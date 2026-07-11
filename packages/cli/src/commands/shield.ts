@@ -647,6 +647,15 @@ export interface ShieldOptions {
    * fan path runs; ignored on the legacy single-lane path.
    */
   continues?: string;
+  /**
+   * Non-zero exit opt-in for the multi-lane fan (Prop 304 R2 / Gate G5). `'critical'`
+   * or `'warn'`: when the fan round has findings at/above that severity OR is not
+   * cache-eligible, the fan exits via `SHIELD_FAILED`. Absent ⇒ the fan defaults to
+   * sensor exit 0 (a findings-bearing verdict never gates a naive CI consumer without
+   * this opt-in). `--override` converts a `--fail-on` failure to a pass. Ignored on the
+   * legacy single-lane path (which keeps its own labeled-compat-debt exit contract).
+   */
+  failOn?: 'critical' | 'warn';
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─
@@ -872,11 +881,12 @@ export async function captureObservationRules(
       const manifest = readCompileManifest(manifestPath);
       manifest.output_hash = generateOutputHash(rulesPath);
       writeCompileManifest(manifestPath, manifest);
+      // totem-context: intentional — the compile manifest may not exist yet (first run before compile); a missing manifest is not an error, verify-manifest resyncs later.
     } catch {
       // Non-fatal — manifest may not exist yet (e.g. first run before compile)
     }
+    // totem-context: intentional — Pipeline 5 auto-capture is best-effort; it must never crash the shield command, so any failure degrades to a TOTEM_DEBUG log (no rethrow).
   } catch (err) {
-    // Non-fatal — auto-capture should never crash the shield command
     if (process.env['TOTEM_DEBUG'] === '1') {
       log.dim(
         DISPLAY_TAG,
@@ -1343,10 +1353,28 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // also does not apply to structural mode (context-blind single-lane stays
   // legacy). `review.lanes` absent ⇒ [] ⇒ the legacy single-lane path runs
   // byte-for-byte as today (invariant 7).
-  const { validateReviewLanes } = await import('./review-fan.js');
+  const { validateReviewLanes, assertFanFlagsSupported } = await import('./review-fan.js');
   const laneModels = validateReviewLanes(config.review.lanes, config.orchestrator?.provider);
+  // Finding 1: a fan-configured `--raw` stays the legacy ZERO-LLM context dump (no
+  // invokers, no verdict/run artifacts, `--out` behaves as legacy) — `--raw`
+  // DEACTIVATES the fan so the run falls through to the legacy raw path below.
   const fanActive =
-    laneModels.length >= 1 && options.model === undefined && options.mode !== 'structural';
+    laneModels.length >= 1 &&
+    options.model === undefined &&
+    options.mode !== 'structural' &&
+    !options.raw;
+  // Finding 12: when the fan is active, reject flags with no defined fan semantics
+  // LOUDLY (naming the unsupported combination) rather than silently ignoring them.
+  if (fanActive) assertFanFlagsSupported(options);
+  // Gate G5: validate `--fail-on` (only the fan reads it, but a bad value is a hard
+  // config error on any path so the user is never silently ignored).
+  if (options.failOn !== undefined && options.failOn !== 'critical' && options.failOn !== 'warn') {
+    throw new TotemConfigError(
+      `Invalid --fail-on "${options.failOn}". Use "critical" or "warn".`,
+      'Pass --fail-on critical (exit non-zero on CRITICAL findings) or --fail-on warn (WARN or CRITICAL). Omit it for the default sensor exit 0.',
+      'CONFIG_INVALID',
+    );
+  }
 
   // --- Incremental shield fast-path (#1010) ---
   // If the change since the last passed shield is small enough (< 15 lines,
@@ -1363,6 +1391,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         source: 'explicit-range' | 'staged' | 'uncommitted' | 'branch-vs-base';
         base?: string;
         head?: string;
+        selectorForm?: string;
       }
     | undefined;
 
@@ -1395,7 +1424,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     }
     diff = diffResult.diff;
     changedFiles = diffResult.changedFiles;
-    diffScopeMeta = { source: diffResult.source, base: diffResult.base, head: diffResult.head };
+    diffScopeMeta = {
+      source: diffResult.source,
+      base: diffResult.base,
+      head: diffResult.head,
+      // Finding 10: the raw CLI selector form so `--diff main` and `--diff main..HEAD`
+      // (same resolved refs) do NOT share a lineage.
+      selectorForm: diffResult.selectorForm,
+    };
   }
 
   // Stage 1: Classify files — fast-path for non-code-only diffs

@@ -7,8 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   computeLineageKey,
+  computeVerdictArtifactContentHash,
+  deriveCacheEligible,
+  deriveSettled,
   findLatestVerdictForLineage,
   listVerdictArtifacts,
+  readLedgerEvents,
   type RunArtifact,
   type TotemConfig,
 } from '@mmnto/totem';
@@ -17,9 +21,9 @@ import { EMPTY_SHARED } from '../exemptions/exemption-schema.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
   assembleVerdict,
+  assertFanFlagsSupported,
   buildDiffScope,
-  computeCacheEligible,
-  computeSettled,
+  classifyRejectedLane,
   type DiffScopeMeta,
   type GitExec,
   type LaneInvocation,
@@ -177,8 +181,12 @@ describe('validateReviewLanes', () => {
     expect(validateReviewLanes(undefined, 'anthropic')).toEqual([]);
   });
 
-  it('rejects the shell provider', () => {
-    expect(() => validateReviewLanes(['shell:echo'], 'anthropic')).toThrow(/shell/);
+  it('rejects the shell provider as an unsupported adapter for fan lanes (Gate G2)', () => {
+    // Capability-admission wording — a support-limit error, not "structurally
+    // ineligible" / allowlist phrasing.
+    expect(() => validateReviewLanes(['shell:echo'], 'anthropic')).toThrow(
+      /unsupported adapter for review fan lanes/,
+    );
   });
 
   it('rejects duplicate normalized lanes', () => {
@@ -202,9 +210,36 @@ describe('validateReviewLanes', () => {
   });
 });
 
-// ─── Predicates (pure — gate 6 + gate 8) ─────────────────────────────────────
+// ─── assertFanFlagsSupported (finding 12 — loud flag honesty) ─────────────────
 
-describe('computeSettled / computeCacheEligible', () => {
+describe('assertFanFlagsSupported', () => {
+  it('rejects --suppress when the fan is active', () => {
+    expect(() => assertFanFlagsSupported({ suppress: ['some-label'] })).toThrow(/--suppress/);
+  });
+
+  it('rejects --learn when the fan is active', () => {
+    expect(() => assertFanFlagsSupported({ learn: true })).toThrow(/--learn/);
+  });
+
+  it('rejects --auto-capture when the fan is active', () => {
+    expect(() => assertFanFlagsSupported({ autoCapture: true })).toThrow(/--auto-capture/);
+  });
+
+  it('names ALL unsupported flags when several are combined', () => {
+    expect(() =>
+      assertFanFlagsSupported({ suppress: ['x'], learn: true, autoCapture: true }),
+    ).toThrow(/--suppress.*--learn.*--auto-capture/);
+  });
+
+  it('accepts a clean options set (no unsupported flags)', () => {
+    expect(() => assertFanFlagsSupported({})).not.toThrow();
+    expect(() => assertFanFlagsSupported({ suppress: [] })).not.toThrow();
+  });
+});
+
+// ─── Predicates (core-owned deriveSettled / deriveCacheEligible — gate 6 + gate 8) ──
+
+describe('deriveSettled / deriveCacheEligible (core-owned)', () => {
   const completedLane = (id: string): LaneRunResult['lane'] => ({
     status: 'completed',
     laneId: id,
@@ -217,68 +252,68 @@ describe('computeSettled / computeCacheEligible', () => {
     laneId: id,
     typedReason: 'invoke-error',
   });
-  const warn: ShieldFinding = { severity: 'WARN', confidence: 0.6, message: 'w' };
-  const critical: ShieldFinding = { severity: 'CRITICAL', confidence: 0.9, message: 'c' };
+  const warn = { severity: 'WARN' as const, confidence: 0.6, message: 'w' };
+  const critical = { severity: 'CRITICAL' as const, confidence: 0.9, message: 'c' };
 
   it('a dry round settles and is cache-eligible', () => {
     const inputs = {
       lanes: [completedLane('a'), completedLane('b')],
-      findingsUnion: [],
+      findings: [],
       postChecks: [],
       reviewedState: 'matched' as const,
     };
-    expect(computeSettled(inputs)).toBe(true);
-    expect(computeCacheEligible(inputs)).toBe(true);
+    expect(deriveSettled(inputs)).toBe(true);
+    expect(deriveCacheEligible(inputs)).toBe(true);
   });
 
   it('a WARN blocks settled but NOT cache-eligibility (WARN-drip class)', () => {
     const inputs = {
       lanes: [completedLane('a')],
-      findingsUnion: [warn],
+      findings: [warn],
       postChecks: [],
       reviewedState: 'matched' as const,
     };
-    expect(computeSettled(inputs)).toBe(false);
-    expect(computeCacheEligible(inputs)).toBe(true);
+    expect(deriveSettled(inputs)).toBe(false);
+    expect(deriveCacheEligible(inputs)).toBe(true);
   });
 
   it('a CRITICAL blocks BOTH settled and cache-eligibility', () => {
     const inputs = {
       lanes: [completedLane('a')],
-      findingsUnion: [critical],
+      findings: [critical],
       postChecks: [],
       reviewedState: 'matched' as const,
     };
-    expect(computeSettled(inputs)).toBe(false);
-    expect(computeCacheEligible(inputs)).toBe(false);
+    expect(deriveSettled(inputs)).toBe(false);
+    expect(deriveCacheEligible(inputs)).toBe(false);
   });
 
   it('a failed lane blocks BOTH (lane coverage conjunct)', () => {
     const inputs = {
       lanes: [completedLane('a'), failedLane('b')],
-      findingsUnion: [],
+      findings: [],
       postChecks: [],
       reviewedState: 'matched' as const,
     };
-    expect(computeSettled(inputs)).toBe(false);
-    expect(computeCacheEligible(inputs)).toBe(false);
+    expect(deriveSettled(inputs)).toBe(false);
+    expect(deriveCacheEligible(inputs)).toBe(false);
   });
 
   it("reviewedState 'drifted' blocks BOTH even on an otherwise-dry round (codex rev-2 fold 1)", () => {
     const inputs = {
       lanes: [completedLane('a'), completedLane('b')],
-      findingsUnion: [],
+      findings: [],
       postChecks: [],
       reviewedState: 'drifted' as const,
     };
-    expect(computeSettled(inputs)).toBe(false);
-    expect(computeCacheEligible(inputs)).toBe(false);
+    expect(deriveSettled(inputs)).toBe(false);
+    expect(deriveCacheEligible(inputs)).toBe(false);
   });
 
   it('a decidable-tier post-check fail gates BOTH; a sensor-tier fail gates NEITHER (gate 8)', () => {
     const base = {
       lanes: [completedLane('a')],
-      findingsUnion: [],
+      findings: [],
       reviewedState: 'matched' as const,
     };
     const sensorFail = {
@@ -292,8 +327,8 @@ describe('computeSettled / computeCacheEligible', () => {
         },
       ],
     };
-    expect(computeSettled(sensorFail)).toBe(true);
-    expect(computeCacheEligible(sensorFail)).toBe(true);
+    expect(deriveSettled(sensorFail)).toBe(true);
+    expect(deriveCacheEligible(sensorFail)).toBe(true);
 
     const decidableFail = {
       ...base,
@@ -306,8 +341,8 @@ describe('computeSettled / computeCacheEligible', () => {
         },
       ],
     };
-    expect(computeSettled(decidableFail)).toBe(false);
-    expect(computeCacheEligible(decidableFail)).toBe(false);
+    expect(deriveSettled(decidableFail)).toBe(false);
+    expect(deriveCacheEligible(decidableFail)).toBe(false);
   });
 });
 
@@ -322,10 +357,18 @@ describe('runLane', () => {
         runArtifact: undefined,
       },
     });
-    const result = await runLane('anthropic:claude-x', invoker, EMPTY_SHARED, 'delivered-prompt');
+    const result = await runLane(
+      1,
+      'anthropic:claude-x',
+      invoker,
+      EMPTY_SHARED,
+      'delivered-prompt',
+    );
     expect(result.lane.status).toBe('failed');
     if (result.lane.status === 'failed') {
       expect(result.lane.typedReason).toBe('missing-artifact-emission');
+      // A failed lane (no backend resolved) uses the CONFIGURED lane in the laneId.
+      expect(result.lane.laneId).toBe('lane-1:anthropic:claude-x');
     }
   });
 
@@ -333,11 +376,17 @@ describe('runLane', () => {
     const invoker = mapInvoker({
       'anthropic:claude-x': completedInvocation({ content: 'not a verdict at all', seed: 'l1' }),
     });
-    const result = await runLane('anthropic:claude-x', invoker, EMPTY_SHARED, 'delivered-prompt');
+    const result = await runLane(
+      0,
+      'anthropic:claude-x',
+      invoker,
+      EMPTY_SHARED,
+      'delivered-prompt',
+    );
     expect(result.lane.status).toBe('abstained');
   });
 
-  it('an extractable verdict completes with an honest severity tally', async () => {
+  it('an extractable verdict completes with an honest severity tally + lane-blind laneId', async () => {
     const content = wrapVerdict([
       { severity: 'CRITICAL', confidence: 0.9, message: 'c' },
       { severity: 'WARN', confidence: 0.6, message: 'w' },
@@ -345,31 +394,53 @@ describe('runLane', () => {
     const invoker = mapInvoker({
       'anthropic:claude-x': completedInvocation({ content, seed: 'l2' }),
     });
-    const result = await runLane('anthropic:claude-x', invoker, EMPTY_SHARED, 'delivered-prompt');
+    const result = await runLane(
+      0,
+      'anthropic:claude-x',
+      invoker,
+      EMPTY_SHARED,
+      'delivered-prompt',
+    );
     expect(result.lane.status).toBe('completed');
     if (result.lane.status === 'completed') {
       expect(result.lane.verdictSummary).toEqual({ critical: 1, warn: 1, info: 0 });
       expect(result.lane.resolvedBackend).toBe('anthropic:claude-x');
+      // laneId is `lane-<index>:<resolvedBackend>` (Prop 302 G1 vocabulary).
+      expect(result.lane.laneId).toBe('lane-0:anthropic:claude-x');
     }
     expect(result.filteredFindings).toHaveLength(2);
   });
 
-  it('a quota throw is classified failed quota-exhausted', async () => {
+  it('a quota throw REJECTS runLane and classifies to a failed quota-exhausted lane (finding 13)', async () => {
     const invoker: LaneInvoker = async () => {
       throw new Error('Quota exhausted for anthropic:claude-x.');
     };
-    const result = await runLane('anthropic:claude-x', invoker, EMPTY_SHARED, 'delivered-prompt');
-    expect(result.lane.status).toBe('failed');
-    if (result.lane.status === 'failed') expect(result.lane.typedReason).toBe('quota-exhausted');
+    // runLane no longer swallows the invoker throw — it rejects, and the fan's
+    // allSettled maps the rejection to a failed lane via classifyRejectedLane.
+    await expect(
+      runLane(0, 'anthropic:claude-x', invoker, EMPTY_SHARED, 'delivered-prompt'),
+    ).rejects.toThrow(/Quota exhausted/);
+    const classified = await classifyRejectedLane(
+      2,
+      'anthropic:claude-x',
+      new Error('Quota exhausted for anthropic:claude-x.'),
+    );
+    expect(classified.lane.status).toBe('failed');
+    if (classified.lane.status === 'failed') {
+      expect(classified.lane.typedReason).toBe('quota-exhausted');
+      expect(classified.lane.laneId).toBe('lane-2:anthropic:claude-x');
+    }
   });
 
-  it('a generic invoke throw is classified failed invoke-error', async () => {
-    const invoker: LaneInvoker = async () => {
-      throw new Error('socket hang up');
-    };
-    const result = await runLane('anthropic:claude-x', invoker, EMPTY_SHARED, 'delivered-prompt');
-    expect(result.lane.status).toBe('failed');
-    if (result.lane.status === 'failed') expect(result.lane.typedReason).toBe('invoke-error');
+  it('a generic invoke throw classifies to a failed invoke-error lane', async () => {
+    const classified = await classifyRejectedLane(
+      0,
+      'anthropic:claude-x',
+      new Error('socket hang up'),
+    );
+    expect(classified.lane.status).toBe('failed');
+    if (classified.lane.status === 'failed')
+      expect(classified.lane.typedReason).toBe('invoke-error');
   });
 });
 
@@ -425,6 +496,26 @@ describe('resolveLineage (gate 6)', () => {
       git,
     );
     expect(a.lineageKey).toBe(a2.lineageKey);
+  });
+
+  it('--diff main (working-tree) and --diff main..HEAD (range) do NOT share a lineage (finding 10)', async () => {
+    const git = fakeGit('feature-x', 'sharedbase');
+    // Both resolve to base='main' head='HEAD' — only the raw selectorForm differs.
+    const bareForm = await resolveLineage(
+      { source: 'explicit-range', base: 'main', selectorForm: 'main' },
+      git,
+    );
+    const rangeForm = await resolveLineage(
+      { source: 'explicit-range', base: 'main', head: 'HEAD', selectorForm: 'main..HEAD' },
+      git,
+    );
+    expect(bareForm.lineageKey).not.toBe(rangeForm.lineageKey);
+    // Sanity: the same selector form is stable.
+    const bareForm2 = await resolveLineage(
+      { source: 'explicit-range', base: 'main', selectorForm: 'main' },
+      git,
+    );
+    expect(bareForm.lineageKey).toBe(bareForm2.lineageKey);
   });
 
   it('staged/uncommitted use an empty merge-base (branch + source carry lineage)', async () => {
@@ -509,15 +600,32 @@ describe('runReviewFan', () => {
   // Predict the composite lineage key `resolveLineage` computes for a makeCtx fan:
   // repoIdentity = resolved fake toplevel; branch-vs-base contributes base='main'
   // (the makeCtx diffMeta base) + the resolved merge-base.
-  const lineageKeyFor = (branch: string, mergeBase: string, source: DiffScopeMeta['source']) =>
-    computeLineageKey(
-      source === 'branch-vs-base'
-        ? { repoIdentity: RESOLVED_REPO, branch, source, base: 'main', mergeBase }
-        : { repoIdentity: RESOLVED_REPO, branch, source },
-    );
+  const lineageKeyFor = (branch: string, mergeBase: string, source: DiffScopeMeta['source']) => {
+    switch (source) {
+      case 'branch-vs-base':
+        return computeLineageKey({
+          repoIdentity: RESOLVED_REPO,
+          branch,
+          source,
+          base: 'main',
+          mergeBase,
+        });
+      case 'explicit-range':
+        return computeLineageKey({
+          repoIdentity: RESOLVED_REPO,
+          branch,
+          source,
+          base: 'main',
+          head: 'HEAD',
+        });
+      case 'staged':
+      case 'uncommitted':
+        return computeLineageKey({ repoIdentity: RESOLVED_REPO, branch, source });
+    }
+  };
 
-  it('one failed + one passing lane: honest counts, verdict written, NO panel, not cache-eligible → SHIELD_FAILED', async () => {
-    const invoker = mapInvoker({
+  const oneFailedOnePassing = () =>
+    mapInvoker({
       'anthropic:claude-a': completedInvocation({
         content: wrapVerdict([]),
         provider: 'anthropic',
@@ -528,9 +636,12 @@ describe('runReviewFan', () => {
         throw new Error('socket hang up');
       },
     });
-    const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
 
-    await expect(runReviewFan(ctx)).rejects.toThrow(/lane coverage 1\/2/);
+  it('one failed + one passing lane: DEFAULT sensor exit 0 — honest counts, verdict written, NO panel (finding 3)', async () => {
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], oneFailedOnePassing());
+
+    // Default (no --fail-on): degraded coverage does NOT throw (sensor exit 0).
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
 
     const verdicts = listVerdictArtifacts(tmpDir);
     expect(verdicts).toHaveLength(1);
@@ -541,8 +652,18 @@ describe('runReviewFan', () => {
     expect(v.panelArtifactHash).toBeUndefined();
     expect(v.diversity).toBeUndefined();
     expect(v.settled).toBe(false);
-    // The verdict records the honest lane mix.
+    // The verdict records the honest lane mix (a rejected lane is never lost — finding 13).
     expect(v.lanes.map((l) => l.status).sort()).toEqual(['completed', 'failed']);
+  });
+
+  it('one failed + one passing lane: --fail-on critical throws on the degraded (not cache-eligible) round', async () => {
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], oneFailedOnePassing(), {
+      options: { failOn: 'critical' },
+    });
+    // No CRITICAL finding, but the round is not cache-eligible (a lane failed) ⇒ throws.
+    await expect(runReviewFan(ctx)).rejects.toThrow(/lane coverage 1\/2/);
+    // The honest verdict is still written before the throw.
+    expect(listVerdictArtifacts(tmpDir)[0]!.completedLaneCount).toBe(1);
   });
 
   it('two completed lanes assemble a panel from usable lanes only', async () => {
@@ -578,58 +699,54 @@ describe('runReviewFan', () => {
     const git = fakeGit('feature-x', 'basesha');
     const lk = lineageKeyFor('feature-x', 'basesha', 'branch-vs-base');
 
-    // Round 0 — CRITICAL present.
-    await expect(
-      runReviewFan(
-        makeCtx(
-          tmpDir,
-          ['anthropic:claude-a', 'gemini:g'],
-          mapInvoker({
-            'anthropic:claude-a': completedInvocation({
-              content: criticalContent,
-              provider: 'anthropic',
-              model: 'claude-a',
-              seed: 'r0a',
-            }),
-            'gemini:g': completedInvocation({
-              content: cleanContent,
-              provider: 'gemini',
-              model: 'g',
-              seed: 'r0b',
-            }),
+    // Round 0 — CRITICAL present. Default sensor exit 0: writes the verdict, no throw.
+    await runReviewFan(
+      makeCtx(
+        tmpDir,
+        ['anthropic:claude-a', 'gemini:g'],
+        mapInvoker({
+          'anthropic:claude-a': completedInvocation({
+            content: criticalContent,
+            provider: 'anthropic',
+            model: 'claude-a',
+            seed: 'r0a',
           }),
-          { gitExec: git },
-        ),
+          'gemini:g': completedInvocation({
+            content: cleanContent,
+            provider: 'gemini',
+            model: 'g',
+            seed: 'r0b',
+          }),
+        }),
+        { gitExec: git },
       ),
-    ).rejects.toThrow(/CRITICAL/);
+    );
     const r0 = findLatestVerdictForLineage(tmpDir, lk)!;
     expect(r0.round.index).toBe(0);
     expect(r0.settled).toBe(false);
 
     // Round 1 — same CRITICAL persists; must link as round 1 and still not settle.
-    await expect(
-      runReviewFan(
-        makeCtx(
-          tmpDir,
-          ['anthropic:claude-a', 'gemini:g'],
-          mapInvoker({
-            'anthropic:claude-a': completedInvocation({
-              content: criticalContent,
-              provider: 'anthropic',
-              model: 'claude-a',
-              seed: 'r1a',
-            }),
-            'gemini:g': completedInvocation({
-              content: cleanContent,
-              provider: 'gemini',
-              model: 'g',
-              seed: 'r1b',
-            }),
+    await runReviewFan(
+      makeCtx(
+        tmpDir,
+        ['anthropic:claude-a', 'gemini:g'],
+        mapInvoker({
+          'anthropic:claude-a': completedInvocation({
+            content: criticalContent,
+            provider: 'anthropic',
+            model: 'claude-a',
+            seed: 'r1a',
           }),
-          { gitExec: git },
-        ),
+          'gemini:g': completedInvocation({
+            content: cleanContent,
+            provider: 'gemini',
+            model: 'g',
+            seed: 'r1b',
+          }),
+        }),
+        { gitExec: git },
       ),
-    ).rejects.toThrow(/CRITICAL/);
+    );
     const r1 = findLatestVerdictForLineage(tmpDir, lk)!;
     expect(r1.round.index).toBe(1);
     expect(r1.round.priorVerdictHash).toBeDefined();
@@ -696,7 +813,7 @@ describe('runReviewFan', () => {
     expect(findLatestVerdictForLineage(tmpDir, lkB)!.round.index).toBe(0);
   });
 
-  it('malformed lane output ⇒ abstained ⇒ not settled, not cache-eligible → SHIELD_FAILED', async () => {
+  it('malformed lane output ⇒ abstained ⇒ not settled; abstained lane gets its decidable post-check fail row (finding 8)', async () => {
     const invoker = mapInvoker({
       'anthropic:claude-a': completedInvocation({
         content: 'garbage, not a verdict',
@@ -706,10 +823,16 @@ describe('runReviewFan', () => {
       }),
     });
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker);
-    await expect(runReviewFan(ctx)).rejects.toThrow(/SHIELD|lane coverage/i);
+    // Default sensor exit 0: an abstaining fan writes the verdict and does NOT throw.
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
     const v = listVerdictArtifacts(tmpDir)[0]!;
     expect(v.lanes[0]!.status).toBe('abstained');
     expect(v.settled).toBe(false);
+    // Finding 8: the abstained lane's unextractable output persists a decidable
+    // structured-output 'fail' row (post-checks now cover abstained lanes too).
+    const row = v.postChecks.find((r) => r.ruleName === 'review-structured-verdict');
+    expect(row?.tier).toBe('decidable');
+    expect(row?.verdict).toBe('fail');
   });
 
   it('a sensor-tier post-check fail never gates: an otherwise-dry round still PASSes and settles', async () => {
@@ -766,13 +889,21 @@ describe('runReviewFan', () => {
     expect(v.settled).toBe(true);
   });
 
-  it('ALL lanes failing writes NO verdict and hard-errors', async () => {
+  it('ALL lanes failing WRITES the honest verdict FIRST, then hard-errors (Gate G3)', async () => {
     const invoker: LaneInvoker = async () => {
       throw new Error('socket hang up');
     };
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
     await expect(runReviewFan(ctx)).rejects.toThrow(/All 2 review lane/);
-    expect(listVerdictArtifacts(tmpDir)).toHaveLength(0);
+    // Gate G3: the honest verdict is written BEFORE the throw (all lanes failed).
+    const verdicts = listVerdictArtifacts(tmpDir);
+    expect(verdicts).toHaveLength(1);
+    const v = verdicts[0]!;
+    expect(v.attemptedLaneCount).toBe(2);
+    expect(v.completedLaneCount).toBe(0);
+    expect(v.lanes.every((l) => l.status === 'failed')).toBe(true);
+    expect(v.settled).toBe(false);
+    expect(v.findings).toEqual([]);
   });
 
   it('--continues on a mismatched lineage warns but proceeds, recording the current lineage', async () => {
@@ -836,10 +967,11 @@ describe('runReviewFan', () => {
     expect(errSpy.mock.calls.map((c) => c.join(' ')).join('\n')).toMatch(/DIFFERENT lineage/);
   });
 
-  it("mid-fan tree mutation on an otherwise-dry fan ⇒ reviewedState='drifted', settled=false, NO cache stamp (codex rev-2 gate 1)", async () => {
+  it("tree mutation DURING post-check/panel/lineage ⇒ reviewedState='drifted', settled=false, NO cache stamp (findings 6, gate 1)", async () => {
     // Both lanes complete cleanly (zero findings, no decidable fail) — the fan
-    // would otherwise settle. But the tracked-source tree mutates DURING the fan:
-    // the post-fan content hash differs from the pre-fan hash captured before it.
+    // would otherwise settle. But the tracked-source tree mutates during the fan:
+    // the post-fan content hash (sampled AFTER the post-check/panel/lineage work in
+    // the real critical section — finding 6) differs from the pre-fan hash.
     const clean = wrapVerdict([]);
     const invoker = mapInvoker({
       'anthropic:claude-a': completedInvocation({
@@ -860,8 +992,8 @@ describe('runReviewFan', () => {
       contentHash: async () => 'post-hash-different',
     });
 
-    // A drifted fan is not cache-eligible ⇒ SHIELD_FAILED naming the drift.
-    await expect(runReviewFan(ctx)).rejects.toThrow(/drift/i);
+    // DEFAULT sensor exit 0: drift does NOT throw (no --fail-on); it is loud + un-stamped.
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
 
     // The verdict IS written (bound to the pre-fan diff), honestly marked drifted.
     const v = listVerdictArtifacts(tmpDir)[0]!;
@@ -913,6 +1045,199 @@ describe('runReviewFan', () => {
     // The truncated-away secret never entered the delivered payload nor the hash.
     expect(seg).not.toContain(SECRET);
     expect(capturedPrompt).not.toContain(SECRET);
+  });
+
+  // ── Exit contract (finding 3 / Gate G5) ──
+
+  const twoLaneInvoker = (aContent: string, seed: string) =>
+    mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: aContent,
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: `${seed}a`,
+      }),
+      'gemini:g': completedInvocation({
+        content: wrapVerdict([]),
+        provider: 'gemini',
+        model: 'g',
+        seed: `${seed}b`,
+      }),
+    });
+  const CRITICAL_CONTENT = wrapVerdict([
+    { severity: 'CRITICAL', confidence: 0.9, message: 'boom-critical-finding' },
+  ]);
+  const WARN_CONTENT = wrapVerdict([
+    { severity: 'WARN', confidence: 0.6, message: 'a-warn-finding' },
+  ]);
+
+  it('DEFAULT sensor exit 0 even with CRITICAL findings present (finding 3 / OQ-2 re-rule)', async () => {
+    const ctx = makeCtx(
+      tmpDir,
+      ['anthropic:claude-a', 'gemini:g'],
+      twoLaneInvoker(CRITICAL_CONTENT, 'sd'),
+    );
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
+    const v = listVerdictArtifacts(tmpDir)[0]!;
+    expect(v.findings.some((f) => f.severity === 'CRITICAL')).toBe(true);
+    expect(v.settled).toBe(false);
+  });
+
+  it('--fail-on critical throws on a CRITICAL round but NOT on a WARN-only round', async () => {
+    await expect(
+      runReviewFan(
+        makeCtx(
+          tmpDir,
+          ['anthropic:claude-a', 'gemini:g'],
+          twoLaneInvoker(CRITICAL_CONTENT, 'fc'),
+          {
+            options: { failOn: 'critical' },
+          },
+        ),
+      ),
+    ).rejects.toThrow(/CRITICAL/);
+    // A WARN-only round is cache-eligible ⇒ --fail-on critical does NOT trip.
+    await expect(
+      runReviewFan(
+        makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], twoLaneInvoker(WARN_CONTENT, 'fcw'), {
+          options: { failOn: 'critical' },
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('--fail-on warn throws on a WARN-only round', async () => {
+    await expect(
+      runReviewFan(
+        makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], twoLaneInvoker(WARN_CONTENT, 'fw'), {
+          options: { failOn: 'warn' },
+        }),
+      ),
+    ).rejects.toThrow(/WARN/);
+  });
+
+  it('--override converts a --fail-on failure to pass AND ledgers the trap-ledgered stamp (matched tree)', async () => {
+    const ctx = makeCtx(
+      tmpDir,
+      ['anthropic:claude-a', 'gemini:g'],
+      twoLaneInvoker(CRITICAL_CONTENT, 'ov'),
+      {
+        options: {
+          failOn: 'critical',
+          override: 'operator-accepted false positive on the boom finding',
+        },
+      },
+    );
+    // Converted to a pass — no throw.
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
+    // The override is trap-ledgered (routed through recordShieldOverride).
+    const events = readLedgerEvents(path.join(tmpDir, '.totem'));
+    expect(events.some((e) => e.type === 'override' && e.ruleId === 'shield-override')).toBe(true);
+  });
+
+  it('drift + --override NEVER stamps — a drifted tree is never stampable, even overridden', async () => {
+    const ctx = makeCtx(
+      tmpDir,
+      ['anthropic:claude-a', 'gemini:g'],
+      twoLaneInvoker(wrapVerdict([]), 'dov'),
+      {
+        preFanContentHash: 'pre-hash-xyz',
+        contentHash: async () => 'post-hash-drifted',
+        options: { override: 'operator override on a drifted tree — must still refuse the stamp' },
+      },
+    );
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
+    const v = listVerdictArtifacts(tmpDir)[0]!;
+    expect(v.reviewedState).toBe('drifted');
+    // No stamp authorizes the changed content — even under --override.
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(
+      false,
+    );
+  });
+
+  // ── Findings render (finding 2) ──
+
+  it('a WARN round and a CRITICAL round both render the actual finding MESSAGES to output (finding 2)', async () => {
+    const errSpy = vi.spyOn(console, 'error');
+    await runReviewFan(
+      makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], twoLaneInvoker(WARN_CONTENT, 'rw')),
+    );
+    let out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).toContain('a-warn-finding');
+
+    errSpy.mockClear();
+    await runReviewFan(
+      makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], twoLaneInvoker(CRITICAL_CONTENT, 'rc')),
+    );
+    out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).toContain('boom-critical-finding');
+  });
+
+  it('--out writes the human-readable fan report (findings + lanes + covariate line)', async () => {
+    const outPath = path.join(tmpDir, 'fan-report.txt');
+    await runReviewFan(
+      makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], twoLaneInvoker(WARN_CONTENT, 'out'), {
+        options: { out: outPath },
+      }),
+    );
+    const report = fs.readFileSync(outPath, 'utf-8');
+    expect(report).toContain('a-warn-finding');
+    expect(report).toContain('lane-0:anthropic:claude-a');
+    expect(report).toContain('local-lane:');
+  });
+
+  // ── Parallel determinism (finding 13) ──
+
+  it('lanes completing OUT OF ORDER yield an artifact identical to in-order completion (finding 13)', async () => {
+    const clean = wrapVerdict([]);
+    const laneA = (): LaneInvocation =>
+      completedInvocation({ content: clean, provider: 'anthropic', model: 'claude-a', seed: 'pa' });
+    const laneB = (): LaneInvocation =>
+      completedInvocation({ content: clean, provider: 'gemini', model: 'g', seed: 'pb' });
+    const delayed =
+      (inv: LaneInvocation, ms: number): (() => Promise<LaneInvocation>) =>
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve(inv), ms));
+
+    const dir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'fan-order1-'));
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'fan-order2-'));
+    try {
+      // Run 1: lane A slow, lane B fast (B completes first).
+      await runReviewFan(
+        makeCtx(
+          dir1,
+          ['anthropic:claude-a', 'gemini:g'],
+          mapInvoker({
+            'anthropic:claude-a': delayed(laneA(), 25),
+            'gemini:g': delayed(laneB(), 1),
+          }),
+        ),
+      );
+      // Run 2: lane A fast, lane B slow (A completes first).
+      await runReviewFan(
+        makeCtx(
+          dir2,
+          ['anthropic:claude-a', 'gemini:g'],
+          mapInvoker({
+            'anthropic:claude-a': delayed(laneA(), 1),
+            'gemini:g': delayed(laneB(), 25),
+          }),
+        ),
+      );
+      const v1 = listVerdictArtifacts(dir1)[0]!;
+      const v2 = listVerdictArtifacts(dir2)[0]!;
+      // Content hash excludes createdAt → identical regardless of completion order.
+      expect(computeVerdictArtifactContentHash(v1)).toBe(computeVerdictArtifactContentHash(v2));
+      // Lanes are canonicalized into configured order in both.
+      expect(v1.lanes.map((l) => l.laneId)).toEqual([
+        'lane-0:anthropic:claude-a',
+        'lane-1:gemini:g',
+      ]);
+      expect(v2.lanes.map((l) => l.laneId)).toEqual(v1.lanes.map((l) => l.laneId));
+    } finally {
+      cleanTmpDir(dir1);
+      cleanTmpDir(dir2);
+    }
   });
 
   it('review.lanes absent ⇒ no fan surface: [] from the validator, and an empty fan writes no verdict / no local-lane line (codex rev-2 gate 5/7)', async () => {
