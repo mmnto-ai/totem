@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   applyRules,
@@ -13,7 +13,9 @@ import {
   saveCompiledRules,
 } from '@mmnto/totem';
 
+import { EMPTY_SHARED } from '../exemptions/exemption-schema.js';
 import { cleanTmpDir, makeRuleEngineCtx } from '../test-utils.js';
+import { validateReviewLanes } from './review-fan.js';
 
 let ctx: RuleEngineContext;
 beforeEach(() => {
@@ -23,15 +25,19 @@ import {
   assemblePrompt,
   assembleStructuralPrompt,
   buildFileContext,
+  computeReviewedContentHash,
   computeVerdict,
+  deriveLaneOutcome,
   extractStructuredVerdict,
   formatVerdictForDisplay,
   MAX_DIFF_CHARS,
   parseVerdict,
   recordShieldOverride,
   SHIELD_LEARN_SYSTEM_PROMPT,
+  stampReviewedContentHashIfTreeUnchanged,
   STRUCTURAL_SYSTEM_PROMPT,
   writeReviewedContentHash,
+  writeReviewedContentHashValue,
 } from './shield.js';
 
 describe('parseVerdict', () => {
@@ -1051,6 +1057,224 @@ describe('captureObservationRules', () => {
     const newHash = generateOutputHash(rulesPath);
     expect(manifest.output_hash).toBe(newHash);
     expect(manifest.output_hash).not.toBe(originalHash);
+  });
+});
+
+// ─── deriveLaneOutcome (Prop 304 R2 fan seam) ─────────
+
+describe('deriveLaneOutcome', () => {
+  const wrap = (v: unknown): string => `<shield_verdict>${JSON.stringify(v)}</shield_verdict>`;
+
+  it('flags a CRITICAL finding as not-passing with the finding retained', async () => {
+    const content = wrap({
+      findings: [{ severity: 'CRITICAL', confidence: 0.95, message: 'Missing auth middleware' }],
+      summary: 'unsafe',
+    });
+    const outcome = await deriveLaneOutcome(content, EMPTY_SHARED);
+    expect(outcome.structuredVerdict).not.toBeNull();
+    expect(outcome.pass).toBe(false);
+    expect(outcome.filteredFindings).toHaveLength(1);
+    expect(outcome.filteredFindings[0]!.severity).toBe('CRITICAL');
+    expect(outcome.exemptedFindings).toHaveLength(0);
+  });
+
+  it('passes when only WARN/INFO findings are present', async () => {
+    const content = wrap({
+      findings: [
+        { severity: 'WARN', confidence: 0.6, message: 'consider a retry' },
+        { severity: 'INFO', confidence: 0.3, message: 'style nit' },
+      ],
+      summary: 'soft',
+    });
+    const outcome = await deriveLaneOutcome(content, EMPTY_SHARED);
+    expect(outcome.pass).toBe(true);
+    expect(outcome.filteredFindings).toHaveLength(2);
+    expect(outcome.exemptedFindings).toHaveLength(0);
+  });
+
+  it('surfaces malformed output as structuredVerdict null without throwing', async () => {
+    const outcome = await deriveLaneOutcome('this is not a verdict at all', EMPTY_SHARED);
+    expect(outcome.structuredVerdict).toBeNull();
+    expect(outcome.pass).toBe(false);
+    expect(outcome.filteredFindings).toEqual([]);
+    expect(outcome.exemptedFindings).toEqual([]);
+  });
+
+  it('passes cleanly for an empty findings array', async () => {
+    const outcome = await deriveLaneOutcome(wrap({ findings: [], summary: 'clean' }), EMPTY_SHARED);
+    expect(outcome.structuredVerdict).not.toBeNull();
+    expect(outcome.pass).toBe(true);
+    expect(outcome.filteredFindings).toEqual([]);
+  });
+});
+
+// ─── reviewed-content-hash race fix (Prop 304 R2) ─────
+// The two-hash-domains authorization fix: the content hash is captured once
+// BEFORE the reviewer runs (pre-fan) and the PASS stamp compares against it,
+// refusing to authorize a tree that changed mid-review.
+
+describe('reviewed-content-hash race fix (Prop 304 R2)', () => {
+  let tmpDir: string;
+
+  function gitInit(cwd: string): void {
+    execFileSync('git', ['init', '-q'], { cwd, stdio: 'pipe' });
+    execFileSync('git', ['config', 'user.email', 'test@totem.local'], { cwd, stdio: 'pipe' });
+    execFileSync('git', ['config', 'user.name', 'totem-test'], { cwd, stdio: 'pipe' });
+    execFileSync('git', ['config', 'commit.gpgsign', 'false'], { cwd, stdio: 'pipe' });
+  }
+  function gitCommitAll(cwd: string): void {
+    execFileSync('git', ['add', '-A'], { cwd, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-q', '-m', 'fixture'], { cwd, stdio: 'pipe' });
+  }
+
+  // review.sourceExtensions omitted → the LEGACY default set (includes .ts).
+  const cfg = {
+    totemDir: '.totem',
+    review: {},
+  } as unknown as import('@mmnto/totem').TotemConfig;
+  const hashPath = (cwd: string): string =>
+    path.join(cwd, '.totem', 'cache', '.reviewed-content-hash');
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-race-'));
+  });
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it(
+    'stamps the pre-fan hash when the tree is unchanged across the fan',
+    { timeout: 15_000 },
+    async () => {
+      gitInit(tmpDir);
+      fs.writeFileSync(path.join(tmpDir, 'index.ts'), 'export const x = 1;\n');
+      gitCommitAll(tmpDir);
+
+      const preFan = await computeReviewedContentHash(tmpDir);
+      expect(preFan).toMatch(/^[a-f0-9]{64}$/);
+
+      await stampReviewedContentHashIfTreeUnchanged(preFan, tmpDir, cfg, undefined);
+
+      expect(fs.existsSync(hashPath(tmpDir))).toBe(true);
+      expect(fs.readFileSync(hashPath(tmpDir), 'utf-8').trim()).toBe(preFan);
+    },
+  );
+
+  it(
+    'mid-run tree mutation: PASS emits a drift warning and skips the cache stamp',
+    { timeout: 15_000 },
+    async () => {
+      gitInit(tmpDir);
+      const src = path.join(tmpDir, 'index.ts');
+      fs.writeFileSync(src, 'export const x = 1;\n');
+      gitCommitAll(tmpDir);
+
+      const preFan = await computeReviewedContentHash(tmpDir);
+      expect(preFan).toMatch(/^[a-f0-9]{64}$/);
+
+      // Simulate an edit landing WHILE the reviewer was running.
+      fs.writeFileSync(src, 'export const x = 999; // edited mid-review\n');
+      const postFan = await computeReviewedContentHash(tmpDir);
+      expect(postFan).not.toBe(preFan);
+
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let emitted = '';
+      try {
+        await stampReviewedContentHashIfTreeUnchanged(preFan, tmpDir, cfg, undefined);
+        // Capture BEFORE mockRestore() — restoring resets mock.calls.
+        emitted = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      } finally {
+        errSpy.mockRestore();
+      }
+
+      // No stamp — the mutated content is NOT authorized for push.
+      expect(fs.existsSync(hashPath(tmpDir))).toBe(false);
+      // Loud, labeled drift warning on stderr (log.warn → console.error).
+      expect(emitted).toMatch(/WORKTREE DRIFT/);
+    },
+  );
+
+  it(
+    'writeReviewedContentHashValue stamps EXACTLY the given hash, never a recompute',
+    { timeout: 15_000 },
+    async () => {
+      gitInit(tmpDir);
+      const src = path.join(tmpDir, 'index.ts');
+      fs.writeFileSync(src, 'export const x = 1;\n');
+      gitCommitAll(tmpDir);
+
+      const preFan = await computeReviewedContentHash(tmpDir);
+      expect(preFan).not.toBeNull();
+
+      // Mutate the tree so a recompute would produce a DIFFERENT hash.
+      fs.writeFileSync(src, 'export const x = 2;\n');
+      const recomputed = await computeReviewedContentHash(tmpDir);
+      expect(recomputed).not.toBe(preFan);
+
+      // The explicit writer must stamp the value it was handed (pre-fan),
+      // ignoring the current tree entirely.
+      await writeReviewedContentHashValue(preFan!, tmpDir, '.totem');
+
+      const stamped = fs.readFileSync(hashPath(tmpDir), 'utf-8').trim();
+      expect(stamped).toBe(preFan);
+      expect(stamped).not.toBe(recomputed);
+    },
+  );
+
+  it(
+    'no-op (no stamp) when the pre-fan hash is null (no tracked source files)',
+    { timeout: 15_000 },
+    async () => {
+      gitInit(tmpDir);
+      // A non-source tracked file only → pre-fan hash is null.
+      fs.writeFileSync(path.join(tmpDir, 'README.md'), '# hi\n');
+      gitCommitAll(tmpDir);
+
+      const preFan = await computeReviewedContentHash(tmpDir);
+      expect(preFan).toBeNull();
+
+      await stampReviewedContentHashIfTreeUnchanged(preFan, tmpDir, cfg, undefined);
+      expect(fs.existsSync(hashPath(tmpDir))).toBe(false);
+    },
+  );
+});
+
+// ─── git.ts scope-metadata (Prop 304 R2) is covered in git.test.ts ──
+
+// ─── Review fan activation + precedence (Prop 304 R2, invariant 7) ────
+// The fan-activation gate `shieldCommand` computes is:
+//   fanActive = laneModels.length >= 1 && options.model === undefined && options.mode !== 'structural'
+// where laneModels = validateReviewLanes(config.review.lanes, baseProvider).
+// These assert the two precedence-critical arms against the REAL validator:
+// lanes absent ⇒ legacy single-lane path (no verdict artifact); an explicit
+// --model ⇒ a one-lane invocation that never joins the fan.
+
+describe('review fan activation (Prop 304 R2)', () => {
+  const fanActive = (
+    lanes: string[] | undefined,
+    baseProvider: string | undefined,
+    opts: { model?: string; mode?: string },
+  ): boolean => {
+    const laneModels = validateReviewLanes(lanes, baseProvider);
+    return laneModels.length >= 1 && opts.model === undefined && opts.mode !== 'structural';
+  };
+
+  it('review.lanes absent → the legacy single-lane path runs (fan inactive)', () => {
+    expect(fanActive(undefined, 'anthropic', {})).toBe(false);
+  });
+
+  it('review.lanes configured → the fan activates on the standard path', () => {
+    expect(fanActive(['anthropic:claude-a', 'gemini:g'], 'anthropic', {})).toBe(true);
+  });
+
+  it('--model with lanes configured → one-lane invocation, the fan never joins', () => {
+    expect(
+      fanActive(['anthropic:claude-a', 'gemini:g'], 'anthropic', { model: 'gemini:flash' }),
+    ).toBe(false);
+  });
+
+  it('structural mode with lanes configured stays legacy single-lane (fan inactive)', () => {
+    expect(fanActive(['anthropic:claude-a'], 'anthropic', { mode: 'structural' })).toBe(false);
   });
 });
 

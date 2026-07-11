@@ -422,9 +422,19 @@ const reviewOptions = (cmd: Command) =>
       '--no-history',
       'Pattern-history overlay (effective only with --estimate). On by default; pass --no-history to skip the overlay even when .totem/recurrence-stats.json is present. No effect on the LLM review path.',
     )
+    .option(
+      '--continues <hash>',
+      'Explicit round-chain link for the multi-lane review fan (review.lanes): the prior verdict artifact hash this round continues. A lineage mismatch warns and proceeds. Ignored unless review.lanes is configured and --model is absent.',
+    )
     .addHelpText(
       'after',
       [
+        '',
+        'Multi-lane fan (review.lanes configured):',
+        '  Each configured provider:model lane reviews the same masked diff and',
+        '  converges on a verdict artifact (.totem/artifacts/verdicts/). An explicit',
+        '  --model selects a ONE-lane invocation and NEVER joins or overrides the',
+        '  configured fan (precedence pinned). --continues <hash> links the round chain.',
         '',
         'Diff resolution (when --diff and --branch/--base are omitted):',
         '  1. --staged          → staged-only diff',
@@ -474,6 +484,7 @@ async function runReview(opts: {
   autoCapture?: boolean;
   estimate?: boolean;
   history?: boolean;
+  continues?: string;
 }): Promise<void> {
   // Redirect removed --deterministic flag to totem lint
   if (opts.deterministic) {

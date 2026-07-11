@@ -59,4 +59,8 @@ Print summary of actions taken and exit.
 
 **NEVER reply individually to GCA bot comments.** GCA has a quota and will NOT respond to replies unless they contain `@gemini-code-assist`. Always batch ALL GCA responses into a single PR-level comment using the issue comments API endpoint (`/issues/{pr}/comments`), not the review comments reply endpoint.
 
+## Consolidated round-disposition comment
+
+Include any pending `local-lane:` covariate line reported by the local `review-loop` in the single consolidated round-disposition comment — the local loop holds that line but never posts it, so `/review-reply` is what carries it to GitHub.
+
 <!-- totem:skill-end -->

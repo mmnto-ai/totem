@@ -416,6 +416,89 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
   });
 });
 
+// ─── getDiffForReview scope metadata (Prop 304 R2) ───────
+
+describe('getDiffForReview scope metadata (Prop 304)', () => {
+  const config = { ignorePatterns: [] as string[] };
+  const sampleDiff = 'diff --git a/foo.ts b/foo.ts\n+++ b/foo.ts\n@@ -1 +1 @@\n+x';
+
+  beforeEach(() => {
+    mockGetGitDiffRange.mockReset();
+    mockGetGitDiff.mockReset();
+    mockGetGitBranchDiff.mockReset();
+    mockGetDefaultBranch.mockClear();
+  });
+
+  it('explicit two-dot range resolves both base and head endpoints', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'HEAD^..HEAD' }, config, '/tmp', 'Review');
+    expect(result!.source).toBe('explicit-range');
+    expect(result!.base).toBe('HEAD^');
+    expect(result!.head).toBe('HEAD');
+  });
+
+  it('explicit three-dot range resolves both endpoints', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'main...feature' }, config, '/tmp', 'Review');
+    expect(result!.base).toBe('main');
+    expect(result!.head).toBe('feature');
+  });
+
+  it('explicit range with an omitted head side defaults head to HEAD', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'main..' }, config, '/tmp', 'Review');
+    expect(result!.base).toBe('main');
+    expect(result!.head).toBe('HEAD');
+  });
+
+  it('bare explicit ref resolves base only (working-tree head is unnamed)', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'HEAD' }, config, '/tmp', 'Review');
+    expect(result!.base).toBe('HEAD');
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('forced --base carries the resolved base name and no head', async () => {
+    mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Review');
+    expect(result!.source).toBe('branch-vs-base');
+    expect(result!.base).toBe('develop');
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('--branch resolves the default branch as base with no head', async () => {
+    mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Review');
+    expect(result!.base).toBe('main');
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('auto-fallback branch-vs-base records the default base, no head', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({}, config, '/tmp', 'Review');
+    expect(result!.source).toBe('branch-vs-base');
+    expect(result!.base).toBe('main');
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('staged scope carries neither base nor head', async () => {
+    mockGetGitDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ staged: true }, config, '/tmp', 'Review');
+    expect(result!.source).toBe('staged');
+    expect(result!.base).toBeUndefined();
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('uncommitted scope carries neither base nor head', async () => {
+    mockGetGitDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({}, config, '/tmp', 'Review');
+    expect(result!.source).toBe('uncommitted');
+    expect(result!.base).toBeUndefined();
+    expect(result!.head).toBeUndefined();
+  });
+});
+
 // ─── getDiffForReview narrow-scope warning (#2090) ───────
 
 describe('getDiffForReview narrow-scope warning (#2090)', () => {

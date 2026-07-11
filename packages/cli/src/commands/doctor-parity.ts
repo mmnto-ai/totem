@@ -176,6 +176,7 @@ interface MechanicalArtifact {
 interface SkillTemplateSource {
   distributedSkills: ReadonlyArray<{ name: string; content: string }>;
   reviewReplyContent: string;
+  reviewLoopContent: string;
   markers: ManagedBlockMarkers;
 }
 
@@ -183,9 +184,10 @@ interface SkillTemplateSource {
  * Resolve the on-disk artifact(s) a mechanical contract checks, or `undefined`
  * when this slice doesn't handle the contract (hooks / presence / value-equality
  * → kept as `skip` stubs). `claude-skills` yields one artifact PER distributed
- * skill; `review-reply-skill-content` is the single review-reply skill (it
- * overlaps `claude-skills` by design — both are distinct manifest contracts on
- * the same file; flagged to strategy as a manifest observation).
+ * skill; `review-reply-skill-content` and `review-loop-skill-content` are the
+ * single per-skill contracts (each overlaps `claude-skills` by design — both are
+ * distinct manifest contracts on the same file; flagged to strategy as a manifest
+ * observation).
  *
  * The canonical block is extracted from the running CLI's OWN `init-templates`
  * export (passed-in `extract` is the core `extractManagedBlock`, dynamic-imported
@@ -213,6 +215,15 @@ function mechanicalArtifactsFor(
           markers,
           canonicalBlock: extract(templates.reviewReplyContent, markers),
           lineName: 'Parity: review-reply-skill-content',
+        },
+      ];
+    case 'review-loop-skill-content':
+      return [
+        {
+          consumerPath: path.join(gitRoot, '.claude', 'skills', 'review-loop', 'SKILL.md'),
+          markers,
+          canonicalBlock: extract(templates.reviewLoopContent, markers),
+          lineName: 'Parity: review-loop-skill-content',
         },
       ];
     default:
@@ -672,6 +683,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const {
         DISTRIBUTED_CLAUDE_SKILLS,
         REVIEW_REPLY_SKILL_CONTENT,
+        REVIEW_LOOP_SKILL_CONTENT,
         SKILL_MARKER_START,
         SKILL_MARKER_END,
         CLAUDE_SESSION_START,
@@ -681,6 +693,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const skillTemplates: SkillTemplateSource = {
         distributedSkills: DISTRIBUTED_CLAUDE_SKILLS,
         reviewReplyContent: REVIEW_REPLY_SKILL_CONTENT,
+        reviewLoopContent: REVIEW_LOOP_SKILL_CONTENT,
         markers: { start: SKILL_MARKER_START, end: SKILL_MARKER_END },
       };
       // The running CLI's own whole-file SessionStart hook templates (static — no
@@ -1376,6 +1389,14 @@ function readoutJsonArtifact(
       ...(r.reasonClass !== undefined ? { 'reason-class': r.reasonClass } : {}),
       message: r.message,
       ...(r.lastAttested !== undefined ? { 'last-attested': r.lastAttested } : {}),
+      // R5 (build delta 4, mmnto-ai/totem-strategy#851): a qualifying row —
+      // `verdict: skip` on a `blocking: true` contract (id ∈ strict.blocking-ids)
+      // — carries `skipped-not-gated: true`. Presence-only, mirroring the
+      // `last-attested?` convention: emitted true or the key is ABSENT, never
+      // `false`. The fact is derivable, but R5's never-a-silent-pass posture
+      // states it outright in the spec-shaped artifact rather than making every
+      // consumer join two sections. Additive — `readout-schema-version` stays 1.
+      ...(r.skippedNotGated ? { 'skipped-not-gated': true } : {}),
     })),
   };
 }

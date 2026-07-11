@@ -128,7 +128,7 @@ export function isQuotaError(err: unknown): boolean {
 
 // ─── Model string parsing (#243) ─────────────────────
 
-const KNOWN_PROVIDERS = ['gemini', 'anthropic', 'openai', 'ollama', 'shell'] as const;
+export const KNOWN_PROVIDERS = ['gemini', 'anthropic', 'openai', 'ollama', 'shell'] as const;
 
 /**
  * Parse a `provider:model` string into its components.

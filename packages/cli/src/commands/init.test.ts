@@ -42,6 +42,7 @@ import {
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   generateConfigForFormat,
+  REVIEW_LOOP_SKILL_CONTENT,
   REVIEW_REPLY_SKILL_CONTENT,
   SIGNOFF_SKILL_CONTENT,
   SIGNON_SKILL_CONTENT,
@@ -1776,13 +1777,65 @@ LC-specific: run \`pnpm docs:inject\` before journal write.
     expect(fs.readFileSync(filePath, 'utf-8')).toBe(malformed);
   });
 
-  it('DISTRIBUTED_CLAUDE_SKILLS lists signoff, signon, and review-reply with their canonical content', () => {
+  it('DISTRIBUTED_CLAUDE_SKILLS lists signoff, signon, review-reply, and review-loop with their canonical content', () => {
     const names = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
-    expect(names).toEqual(['signoff', 'signon', 'review-reply']);
+    expect(names).toEqual(['signoff', 'signon', 'review-reply', 'review-loop']);
     const lookup = Object.fromEntries(DISTRIBUTED_CLAUDE_SKILLS.map((s) => [s.name, s.content]));
     expect(lookup.signoff).toBe(SIGNOFF_SKILL_CONTENT);
     expect(lookup.signon).toBe(SIGNON_SKILL_CONTENT);
     expect(lookup['review-reply']).toBe(REVIEW_REPLY_SKILL_CONTENT);
+    expect(lookup['review-loop']).toBe(REVIEW_LOOP_SKILL_CONTENT);
+  });
+
+  // ─── review-loop distribution (Prop 304 R2, mmnto-ai/totem#2106) ──────────
+  // The warm-lane thin driver scaffolds like its siblings: created on a fresh
+  // repo, refreshed inside the markers while preserving below-marker user
+  // addenda, unchanged when byte-identical. Mirrors the signoff coverage above
+  // so the new skill rides the same marker-based replace contract.
+  it('scaffolds review-loop SKILL.md with canonical content + markers on a fresh repo', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'review-loop', 'SKILL.md');
+    const result = scaffoldClaudeSkill(filePath, REVIEW_LOOP_SKILL_CONTENT);
+    expect(result.action).toBe('created');
+    const written = fs.readFileSync(filePath, 'utf-8');
+    expect(written).toBe(REVIEW_LOOP_SKILL_CONTENT);
+    expect(written).toContain(SKILL_MARKER_START);
+    expect(written).toContain(SKILL_MARKER_END);
+  });
+
+  it('refreshes review-loop inside markers and preserves user addenda below', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'review-loop', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const stale = `---
+name: review-loop
+description: stale
+---
+
+${SKILL_MARKER_START}
+OLD driver step.
+${SKILL_MARKER_END}
+
+## User addenda
+
+Local override: post covariate line to the ops channel too.
+`;
+    fs.writeFileSync(filePath, stale, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, REVIEW_LOOP_SKILL_CONTENT);
+    expect(result.action).toBe('refreshed');
+    const after = fs.readFileSync(filePath, 'utf-8');
+    expect(after).toContain('Local override: post covariate line to the ops channel too.');
+    const canonicalEnd = REVIEW_LOOP_SKILL_CONTENT.indexOf(SKILL_MARKER_END);
+    expect(
+      after.startsWith(REVIEW_LOOP_SKILL_CONTENT.slice(0, canonicalEnd + SKILL_MARKER_END.length)),
+    ).toBe(true);
+  });
+
+  it('returns `unchanged` for a review-loop file already matching canonical', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'review-loop', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, REVIEW_LOOP_SKILL_CONTENT, 'utf-8');
+    const result = scaffoldClaudeSkill(filePath, REVIEW_LOOP_SKILL_CONTENT);
+    expect(result.action).toBe('unchanged');
   });
 });
 
@@ -1993,5 +2046,26 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
       'utf-8',
     );
     expect(REVIEW_REPLY_SKILL_CONTENT).toBe(source);
+  });
+
+  it('REVIEW_LOOP_SKILL_CONTENT matches .claude/skills/review-loop/SKILL.md', () => {
+    const source = fs.readFileSync(
+      path.join(repoRoot, '.claude', 'skills', 'review-loop', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(REVIEW_LOOP_SKILL_CONTENT).toBe(source);
+  });
+
+  // The covariate PR-line is a versioned contract (format v1) consumed by a
+  // measurement pilot (Prop 304 R2, mmnto-ai/totem#2106). Its shape is grep-able
+  // and MUST NOT drift without a spec amendment — lock the exact template string
+  // + the v1 do-not-alter marker into the canonical skill content.
+  it('REVIEW_LOOP_SKILL_CONTENT carries the exact covariate line format v1 contract', () => {
+    expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
+      'local-lane: <verdictHash8> round=<n> settled=<true|false> lanes=<completed>/<attempted>',
+    );
+    expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
+      'covariate line format v1 — do not alter without a spec amendment',
+    );
   });
 });

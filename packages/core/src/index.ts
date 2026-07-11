@@ -655,6 +655,40 @@ export {
   synthesizePanel,
   writePanelArtifact,
 } from './artifacts/panel.js';
+// Verdict artifact — the single lane-convergence point (mmnto-ai/totem#2106, Prop 302/304 R2)
+export type {
+  LineageKeyInput,
+  SaveVerdictArtifactResult,
+  VerdictArtifact,
+  VerdictDiffScope,
+  VerdictDiffSource,
+  VerdictFinding,
+  VerdictFindingSeverity,
+  VerdictLane,
+  VerdictLaneFailureReason,
+  VerdictLaneSummary,
+  VerdictRound,
+} from './artifacts/verdict.js';
+export {
+  computeLineageKey,
+  computeVerdictArtifactContentHash,
+  findLatestVerdictForLineage,
+  listVerdictArtifacts,
+  loadVerdictArtifact,
+  saveVerdictArtifact,
+  VERDICT_ARTIFACT_KNOWN_MAJOR,
+  VERDICT_ARTIFACT_SCHEMA_VERSION,
+  VERDICT_DIFF_SOURCES,
+  VERDICT_LANE_FAILURE_REASONS,
+  VerdictArtifactSchema,
+  VerdictDiffScopeSchema,
+  VerdictFindingSchema,
+  VerdictFindingSeveritySchema,
+  VerdictLaneSchema,
+  VerdictLaneSummarySchema,
+  VerdictRoundSchema,
+  verdictsDir,
+} from './artifacts/verdict.js';
 
 // Strategy-root resolver (mmnto-ai/totem#1710)
 export type {
