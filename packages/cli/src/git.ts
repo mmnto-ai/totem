@@ -127,6 +127,56 @@ export interface DiffForReviewResult {
   changedFiles: string[];
   /** Which path produced the diff (mmnto-ai/totem#1717 — surfaced for operator-visible logging). */
   source: DiffForReviewSource;
+  /**
+   * Resolved base ref for the scope, captured at derivation time (Prop 304
+   * verdict `diffScope`). Present only where the source makes it meaningful:
+   * the resolved base branch name for `branch-vs-base`, the range's base
+   * endpoint for `explicit-range`. Omitted for `staged`/`uncommitted` (no base
+   * ref participates). Recorded here so downstream consumers never reconstruct
+   * the scope refs from flags after the fact.
+   */
+  base?: string;
+  /**
+   * Resolved head ref for the scope, captured at derivation time (Prop 304
+   * verdict `diffScope`). Present only for `explicit-range` (the range's head
+   * endpoint). Omitted for `branch-vs-base` (head is the working `HEAD`, not a
+   * scope-distinguishing ref) and for `staged`/`uncommitted`.
+   */
+  head?: string;
+  /**
+   * The RAW CLI selector form (Prop 304 finding 10) — the operator's exact `--diff`
+   * string, captured for `explicit-range` only. It distinguishes selectors that resolve
+   * to the same refs but describe different lineages: `--diff main` (base-vs-working-tree,
+   * no head) vs `--diff main..HEAD` (range mode) both resolve base='main' head='HEAD' but
+   * must NOT share a round-chain lineage. Omitted for the non-explicit sources (no
+   * ambiguity — the source + resolved refs already key them).
+   */
+  selectorForm?: string;
+}
+
+/**
+ * Resolve the base/head endpoints of an explicit `--diff` range for scope
+ * metadata (Prop 304). Records the refs the operator named, at derivation
+ * time, so the verdict artifact never reconstructs them later. Mirrors git's
+ * range grammar: three-dot (`A...B`) is tested before two-dot (`A..B`); an
+ * omitted side defaults to `HEAD` (`A..` ≡ `A..HEAD`, `..B` ≡ `HEAD..B`); a
+ * bare ref (`git diff A`, which compares against the working tree) yields only
+ * a named `base`, leaving `head` undefined.
+ */
+function resolveExplicitRangeRefs(range: string): { base?: string; head?: string } {
+  const trimmed = range.trim();
+  for (const sep of ['...', '..'] as const) {
+    const idx = trimmed.indexOf(sep);
+    if (idx !== -1) {
+      const left = trimmed.slice(0, idx).trim();
+      const right = trimmed.slice(idx + sep.length).trim();
+      return {
+        base: left.length > 0 ? left : 'HEAD',
+        head: right.length > 0 ? right : 'HEAD',
+      };
+    }
+  }
+  return trimmed.length > 0 ? { base: trimmed } : {};
 }
 
 /**
@@ -173,6 +223,7 @@ export async function getDiffForReview(
     filterDiffByPatterns,
     getDefaultBranch,
     getGitBranchDiff,
+    getGitBranchDiffResult,
     getGitDiff,
     getGitDiffRange,
     sanitizeForTerminal,
@@ -224,8 +275,28 @@ export async function getDiffForReview(
 
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
 
-  let diff: string;
-  let source: DiffForReviewSource;
+  // Definite-assignment asserted: every branch assigns both before use — the
+  // shared `resolveBranchScope` closure hides that from TS2454's flow analysis.
+  let diff!: string;
+  let source!: DiffForReviewSource;
+  // Scope refs resolved at derivation time (Prop 304). Populated only where the
+  // source makes them meaningful; left undefined otherwise.
+  let scopeBase: string | undefined;
+  let scopeHead: string | undefined;
+  // Raw CLI selector form (finding 10) — captured for explicit-range only.
+  let selectorForm: string | undefined;
+
+  // Shared branch-vs-base resolution for the forced-scope and auto-fallback
+  // paths — one sequence, so the two call sites cannot drift (PR #2337 CR).
+  // Finding 7 / rev-5 item 3: the diff operation itself returns the ref it
+  // ACTUALLY diffed (origin/<base> when its diff succeeded, else local <base>),
+  // so diffScope + lineage record the true comparison.
+  const resolveBranchScope = (base: string): void => {
+    const branchResult = getGitBranchDiffResult(cwd, base);
+    diff = filterDiffByPatterns(branchResult.diff, allIgnore);
+    source = 'branch-vs-base';
+    scopeBase = branchResult.resolvedBase;
+  };
 
   if (forcedBranchScope) {
     // Forced push-gate scope (mmnto-ai/totem#2091): bypass the working-tree
@@ -240,8 +311,7 @@ export async function getDiffForReview(
       tag,
       `Diff source: branch-vs-base (${forcingFlags}; origin/${safeBase}...HEAD, else local ${safeBase})`,
     );
-    diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
-    source = 'branch-vs-base';
+    resolveBranchScope(base);
     if (!diff.trim()) {
       log.warn(tag, 'No changes detected. Nothing to review.');
       return null;
@@ -252,6 +322,9 @@ export async function getDiffForReview(
     log.info(tag, `Diff source: explicit range (${options.diff})`);
     diff = filterDiffByPatterns(getGitDiffRange(cwd, options.diff), allIgnore);
     source = 'explicit-range';
+    // Finding 10: the raw selector form distinguishes `--diff main` from `--diff main..HEAD`.
+    selectorForm = options.diff;
+    ({ base: scopeBase, head: scopeHead } = resolveExplicitRangeRefs(options.diff));
     if (!diff.trim()) {
       log.warn(tag, `Explicit range '${options.diff}' produced no diff. Nothing to review.`);
       return null;
@@ -273,8 +346,7 @@ export async function getDiffForReview(
         tag,
         `Diff source: branch-vs-base (origin/${safeBase}...HEAD, else local ${safeBase})`,
       );
-      diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
-      source = 'branch-vs-base';
+      resolveBranchScope(base);
     }
 
     if (!diff.trim()) {
@@ -323,5 +395,5 @@ export async function getDiffForReview(
     }
   }
 
-  return { diff, changedFiles, source };
+  return { diff, changedFiles, source, base: scopeBase, head: scopeHead, selectorForm };
 }

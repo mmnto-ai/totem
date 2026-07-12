@@ -536,6 +536,7 @@ export {
 } from './sys/bash-resolver.js';
 
 // Git utilities (pure helpers — no CLI dependencies)
+export type { GitBranchDiffResult } from './sys/git.js';
 export {
   extractChangedFiles,
   filterDiffByPatterns,
@@ -544,6 +545,7 @@ export {
   getDefaultBranch,
   getGitBranch,
   getGitBranchDiff,
+  getGitBranchDiffResult,
   getGitDiff,
   getGitDiffRange,
   getGitDiffStat,
@@ -655,6 +657,46 @@ export {
   synthesizePanel,
   writePanelArtifact,
 } from './artifacts/panel.js';
+// Verdict artifact — the single lane-convergence point (mmnto-ai/totem#2106, Prop 302/304 R2)
+export type {
+  LineageKeyInput,
+  SaveVerdictArtifactResult,
+  VerdictArtifact,
+  VerdictDiffScope,
+  VerdictDiffSource,
+  VerdictFinding,
+  VerdictFindingSeverity,
+  VerdictLane,
+  VerdictLaneFailureReason,
+  VerdictLaneSummary,
+  VerdictPredicateInput,
+  VerdictRound,
+  VerdictWithAddress,
+} from './artifacts/verdict.js';
+export {
+  computeLineageKey,
+  computeVerdictArtifactContentHash,
+  deriveCacheEligible,
+  deriveSettled,
+  findLatestVerdictForLineage,
+  LaneIdSchema,
+  listVerdictArtifacts,
+  loadVerdictArtifact,
+  renderCovariateLine,
+  saveVerdictArtifact,
+  VERDICT_ARTIFACT_KNOWN_MAJOR,
+  VERDICT_ARTIFACT_SCHEMA_VERSION,
+  VERDICT_DIFF_SOURCES,
+  VERDICT_LANE_FAILURE_REASONS,
+  VerdictArtifactSchema,
+  VerdictDiffScopeSchema,
+  VerdictFindingSchema,
+  VerdictFindingSeveritySchema,
+  VerdictLaneSchema,
+  VerdictLaneSummarySchema,
+  VerdictRoundSchema,
+  verdictsDir,
+} from './artifacts/verdict.js';
 
 // Strategy-root resolver (mmnto-ai/totem#1710)
 export type {

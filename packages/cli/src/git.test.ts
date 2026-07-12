@@ -62,6 +62,7 @@ vi.mock('@mmnto/totem', async () => {
     safeExec: vi.fn(),
     getGitDiff: vi.fn(),
     getGitBranchDiff: vi.fn(),
+    getGitBranchDiffResult: vi.fn(),
     getGitDiffRange: vi.fn(),
     getDefaultBranch: vi.fn(() => 'main'),
   };
@@ -86,6 +87,7 @@ const uiMod = await import('./ui.js');
 const mockSafeExec = vi.mocked(totemMod.safeExec);
 const mockGetGitDiff = vi.mocked(totemMod.getGitDiff);
 const mockGetGitBranchDiff = vi.mocked(totemMod.getGitBranchDiff);
+const mockGetGitBranchDiffResult = vi.mocked(totemMod.getGitBranchDiffResult);
 const mockGetGitDiffRange = vi.mocked(totemMod.getGitDiffRange);
 const mockGetDefaultBranch = vi.mocked(totemMod.getDefaultBranch);
 const mockLog = vi.mocked(uiMod.log);
@@ -199,6 +201,7 @@ describe('getDiffForReview --diff (#1717)', () => {
     mockGetGitDiffRange.mockReset();
     mockGetGitDiff.mockReset();
     mockGetGitBranchDiff.mockReset();
+    mockGetGitBranchDiffResult.mockReset();
   });
 
   it('uses the explicit-range path and reports source: explicit-range', async () => {
@@ -215,6 +218,7 @@ describe('getDiffForReview --diff (#1717)', () => {
     expect(mockGetGitDiffRange).toHaveBeenCalledTimes(1);
     expect(mockGetGitDiff).not.toHaveBeenCalled();
     expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+    expect(mockGetGitBranchDiffResult).not.toHaveBeenCalled();
   });
 
   it('returns null when explicit range produces an empty diff', async () => {
@@ -245,7 +249,7 @@ describe('getDiffForReview --diff (#1717)', () => {
 
   it('reports source: branch-vs-base when the working-tree diff is empty', async () => {
     mockGetGitDiff.mockReturnValue('');
-    mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: sampleDiff, resolvedBase: 'main' });
     const result = await getDiffForReview({}, config, '/tmp', 'Review');
     expect(result).not.toBeNull();
     expect(result!.source).toBe('branch-vs-base');
@@ -281,6 +285,7 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
     mockGetGitDiffRange.mockReset();
     mockGetGitDiff.mockReset();
     mockGetGitBranchDiff.mockReset();
+    mockGetGitBranchDiffResult.mockReset();
     mockGetDefaultBranch.mockClear();
     mockLog.info.mockClear();
     mockLog.warn.mockClear();
@@ -290,7 +295,10 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
     // Dirty tree: getGitDiff WOULD return uncommitted content — the forced
     // path must never consult it, so none of it can enter the diff.
     mockGetGitDiff.mockReturnValue(diffFor('dirty.ts'));
-    mockGetGitBranchDiff.mockReturnValue(diffFor('committed.ts'));
+    mockGetGitBranchDiffResult.mockReturnValue({
+      diff: diffFor('committed.ts'),
+      resolvedBase: 'develop',
+    });
 
     const result = await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Lint');
 
@@ -298,22 +306,22 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
     expect(result!.source).toBe('branch-vs-base');
     expect(result!.changedFiles).toEqual(['committed.ts']);
     expect(mockGetGitDiff).not.toHaveBeenCalled();
-    expect(mockGetGitBranchDiff).toHaveBeenCalledWith('/tmp', 'develop');
+    expect(mockGetGitBranchDiffResult).toHaveBeenCalledWith('/tmp', 'develop');
   });
 
   it('--branch resolves the default branch and reports source: branch-vs-base', async () => {
-    mockGetGitBranchDiff.mockReturnValue(diffFor('a.ts'));
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: diffFor('a.ts'), resolvedBase: 'main' });
 
     const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
 
     expect(result).not.toBeNull();
     expect(result!.source).toBe('branch-vs-base');
-    expect(mockGetGitBranchDiff).toHaveBeenCalledWith('/tmp', 'main');
+    expect(mockGetGitBranchDiffResult).toHaveBeenCalledWith('/tmp', 'main');
     expect(mockGetGitDiff).not.toHaveBeenCalled();
   });
 
   it('logs the forced diff-source disclosure line marking the forcing flag', async () => {
-    mockGetGitBranchDiff.mockReturnValue(diffFor('a.ts'));
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: diffFor('a.ts'), resolvedBase: 'main' });
 
     await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
 
@@ -325,7 +333,7 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
   });
 
   it('discloses only --base when --branch was not passed (Greptile on #2098)', async () => {
-    mockGetGitBranchDiff.mockReturnValue(diffFor('a.ts'));
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: diffFor('a.ts'), resolvedBase: 'develop' });
 
     await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Lint');
 
@@ -393,7 +401,7 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
   });
 
   it('returns null with the existing no-changes warn when the forced branch diff is empty', async () => {
-    mockGetGitBranchDiff.mockReturnValue('');
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
 
     const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
 
@@ -404,15 +412,124 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
     expect(warned).toBeDefined();
   });
 
-  it('lets getGitBranchDiff errors bubble on the forced path', async () => {
-    mockGetGitBranchDiff.mockImplementation(() => {
-      // totem-context: throw inside a vitest mock to prove the forced path does NOT swallow getGitBranchDiff failures (its TotemGitError carries the actionable fetch hint); sentinel message is test-only
+  it('lets branch-diff errors bubble on the forced path', async () => {
+    mockGetGitBranchDiffResult.mockImplementation(() => {
+      // totem-context: throw inside a vitest mock to prove the forced path does NOT swallow branch-diff failures (the TotemGitError carries the actionable fetch hint); sentinel message is test-only
       throw new Error('fatal: bad revision');
     });
 
     await expect(getDiffForReview({ branch: true }, config, '/tmp', 'Lint')).rejects.toThrow(
       /bad revision/,
     );
+  });
+});
+
+// ─── getDiffForReview scope metadata (Prop 304 R2) ───────
+
+describe('getDiffForReview scope metadata (Prop 304)', () => {
+  const config = { ignorePatterns: [] as string[] };
+  const sampleDiff = 'diff --git a/foo.ts b/foo.ts\n+++ b/foo.ts\n@@ -1 +1 @@\n+x';
+
+  beforeEach(() => {
+    mockGetGitDiffRange.mockReset();
+    mockGetGitDiff.mockReset();
+    mockGetGitBranchDiff.mockReset();
+    mockGetGitBranchDiffResult.mockReset();
+    mockSafeExec.mockReset();
+    mockGetDefaultBranch.mockClear();
+  });
+
+  it('explicit two-dot range resolves both base and head endpoints', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'HEAD^..HEAD' }, config, '/tmp', 'Review');
+    expect(result!.source).toBe('explicit-range');
+    expect(result!.base).toBe('HEAD^');
+    expect(result!.head).toBe('HEAD');
+  });
+
+  it('explicit three-dot range resolves both endpoints', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'main...feature' }, config, '/tmp', 'Review');
+    expect(result!.base).toBe('main');
+    expect(result!.head).toBe('feature');
+  });
+
+  it('explicit range with an omitted head side defaults head to HEAD', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'main..' }, config, '/tmp', 'Review');
+    expect(result!.base).toBe('main');
+    expect(result!.head).toBe('HEAD');
+  });
+
+  it('bare explicit ref resolves base only (working-tree head is unnamed)', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'HEAD' }, config, '/tmp', 'Review');
+    expect(result!.base).toBe('HEAD');
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('forced --base records the resolvedBase the diff operation returned — local fallback (rev-5 item 3)', async () => {
+    // The diff operation itself reports which ref produced the payload: here the
+    // remote-exists-but-diff-fails (or remote-absent) case fell back to local `develop`.
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: sampleDiff, resolvedBase: 'develop' });
+    const result = await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Review');
+    expect(result!.source).toBe('branch-vs-base');
+    expect(result!.base).toBe('develop');
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('forced --base records origin/<base> when the REMOTE diff produced the payload (finding 7 — divergent local/remote)', async () => {
+    mockGetGitBranchDiffResult.mockReturnValue({
+      diff: sampleDiff,
+      resolvedBase: 'origin/develop',
+    });
+    const result = await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Review');
+    expect(result!.source).toBe('branch-vs-base');
+    expect(result!.base).toBe('origin/develop');
+  });
+
+  it('--branch resolves the default branch as base with no head', async () => {
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: sampleDiff, resolvedBase: 'main' });
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Review');
+    expect(result!.base).toBe('main');
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('auto-fallback branch-vs-base records the default base, no head', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: sampleDiff, resolvedBase: 'main' });
+    const result = await getDiffForReview({}, config, '/tmp', 'Review');
+    expect(result!.source).toBe('branch-vs-base');
+    expect(result!.base).toBe('main');
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('staged scope carries neither base nor head', async () => {
+    mockGetGitDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ staged: true }, config, '/tmp', 'Review');
+    expect(result!.source).toBe('staged');
+    expect(result!.base).toBeUndefined();
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('uncommitted scope carries neither base nor head', async () => {
+    mockGetGitDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({}, config, '/tmp', 'Review');
+    expect(result!.source).toBe('uncommitted');
+    expect(result!.base).toBeUndefined();
+    expect(result!.head).toBeUndefined();
+  });
+
+  it('explicit-range captures the raw selectorForm; other sources omit it (finding 10)', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const bare = await getDiffForReview({ diff: 'main' }, config, '/tmp', 'Review');
+    expect(bare!.selectorForm).toBe('main');
+    const range = await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Review');
+    expect(range!.selectorForm).toBe('main..HEAD');
+    // A non-explicit source carries no selectorForm.
+    mockGetGitDiff.mockReturnValue(sampleDiff);
+    const staged = await getDiffForReview({ staged: true }, config, '/tmp', 'Review');
+    expect(staged!.selectorForm).toBeUndefined();
   });
 });
 
@@ -430,6 +547,7 @@ describe('getDiffForReview narrow-scope warning (#2090)', () => {
     mockGetGitDiffRange.mockReset();
     mockGetGitDiff.mockReset();
     mockGetGitBranchDiff.mockReset();
+    mockGetGitBranchDiffResult.mockReset();
     mockGetDefaultBranch.mockClear();
     mockLog.info.mockClear();
     mockLog.warn.mockClear();
@@ -492,15 +610,16 @@ describe('getDiffForReview narrow-scope warning (#2090)', () => {
 
   it('does not warn when the source resolves to branch-vs-base (auto-fallback)', async () => {
     mockGetGitDiff.mockReturnValue('');
-    mockGetGitBranchDiff.mockReturnValue(diffFor('A.ts'));
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: diffFor('A.ts'), resolvedBase: 'main' });
 
     const result = await getDiffForReview({ warnNarrowScope: true }, config, '/tmp', 'Lint');
 
     expect(result!.source).toBe('branch-vs-base');
     expect(findNarrowScopeWarning()).toBeUndefined();
     // Branch diff was computed once for the scope itself — never a second
-    // time for the warning.
-    expect(mockGetGitBranchDiff).toHaveBeenCalledTimes(1);
+    // time for the warning (the advisory's separate getGitBranchDiff was never consulted).
+    expect(mockGetGitBranchDiffResult).toHaveBeenCalledTimes(1);
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
   });
 
   it('does not warn when the source is explicit-range', async () => {

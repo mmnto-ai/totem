@@ -422,9 +422,27 @@ const reviewOptions = (cmd: Command) =>
       '--no-history',
       'Pattern-history overlay (effective only with --estimate). On by default; pass --no-history to skip the overlay even when .totem/recurrence-stats.json is present. No effect on the LLM review path.',
     )
+    .option(
+      '--continues <hash>',
+      'Explicit round-chain link for the multi-lane review fan (review.lanes): the prior verdict artifact hash this round continues. A lineage mismatch warns and proceeds. Ignored unless review.lanes is configured and --model is absent.',
+    )
+    .option(
+      '--fail-on <severity>',
+      'Multi-lane fan (review.lanes) exit gate: "critical" or "warn". When set, the fan exits non-zero (SHIELD_FAILED) on findings at/above that severity OR a non-cache-eligible round; --override converts the failure to a pass. Omit for the default sensor exit 0. Ignored on the legacy single-lane path.',
+    )
+    .option(
+      '--covariate',
+      'Read-only, zero-LLM: resolve the current review lineage (same resolution as the fan), load its latest verdict artifact, and print the canonical local-lane covariate line to stdout. No verdict for the lineage prints a loud sensor message; always exits 0. Writes nothing.',
+    )
     .addHelpText(
       'after',
       [
+        '',
+        'Multi-lane fan (review.lanes configured):',
+        '  Each configured provider:model lane reviews the same masked diff and',
+        '  converges on a verdict artifact (.totem/artifacts/verdicts/). An explicit',
+        '  --model selects a ONE-lane invocation and NEVER joins or overrides the',
+        '  configured fan (precedence pinned). --continues <hash> links the round chain.',
         '',
         'Diff resolution (when --diff and --branch/--base are omitted):',
         '  1. --staged          → staged-only diff',
@@ -474,6 +492,9 @@ async function runReview(opts: {
   autoCapture?: boolean;
   estimate?: boolean;
   history?: boolean;
+  continues?: string;
+  failOn?: string;
+  covariate?: boolean;
 }): Promise<void> {
   // Redirect removed --deterministic flag to totem lint
   if (opts.deterministic) {
@@ -501,6 +522,8 @@ async function runReview(opts: {
   await shieldCommand({
     ...opts,
     mode: opts.mode as 'standard' | 'structural' | undefined,
+    // Validated inside shieldCommand (Gate G5) — a bad value is a hard CONFIG_INVALID.
+    failOn: opts.failOn as 'critical' | 'warn' | undefined,
   });
 }
 

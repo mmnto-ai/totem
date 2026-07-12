@@ -28,6 +28,7 @@ import {
   CLAUDE_SESSION_START,
   DISTRIBUTED_CLAUDE_SKILLS,
   GEMINI_SESSION_START,
+  REVIEW_LOOP_SKILL_CONTENT,
   SESSION_START_MARKER,
   SKILL_MARKER_START,
 } from './init-templates.js';
@@ -710,6 +711,62 @@ describe('checkParity — mechanical skills wiring (#2073)', () => {
 
     const { blockingDriftIds } = await checkParity(tmpDir);
     expect(blockingDriftIds).toEqual(['claude-skills']);
+  });
+});
+
+// ─── mechanical review-loop-skill-content detection wiring (Prop 304 R2, #2106) ──
+
+/** A manifest with the single-skill review-loop-skill-content mechanical contract. */
+const REVIEW_LOOP_SKILL_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: review-loop-skill-content
+    dimension: skills
+    canonical-source: mmnto-ai/totem:packages/cli/src/commands/init-templates.ts#REVIEW_LOOP_SKILL_CONTENT
+    detection-method: managed-block content equality of the review-loop skill
+    expected-value-or-derivation: consumer review-loop skill managed-block matches distributed source
+    tractability: mechanical
+    tracking-issue: mmnto-ai/totem-strategy#497
+`;
+
+describe('checkParity — mechanical review-loop-skill-content wiring (Prop 304 R2, #2106)', () => {
+  it('emits the review-loop-skill-content row; PASS when the consumer block matches canonical', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', REVIEW_LOOP_SKILL_MANIFEST_YAML);
+    writeSkill('review-loop', REVIEW_LOOP_SKILL_CONTENT);
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: review-loop-skill-content');
+    expect(line).toBeDefined();
+    expect(line!.status).toBe('pass');
+  });
+
+  it('WARN on a drifted review-loop block with no fork marker', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', REVIEW_LOOP_SKILL_MANIFEST_YAML);
+    writeSkill(
+      'review-loop',
+      REVIEW_LOOP_SKILL_CONTENT.replace(
+        SKILL_MARKER_START,
+        `${SKILL_MARKER_START}\nDRIFT INJECTED`,
+      ),
+    );
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: review-loop-skill-content')!;
+    expect(line.status).toBe('warn');
+    expect(line.message).toMatch(/drift/i);
+  });
+
+  it('SKIP when the review-loop skill is not installed (cohort permits absence), never fail', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', REVIEW_LOOP_SKILL_MANIFEST_YAML);
+    // Install nothing → the single row is a skip, never a fail.
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === 'Parity: review-loop-skill-content')!;
+    expect(line.status).toBe('skip');
+    expect(results.some((r) => r.status === 'fail')).toBe(false);
   });
 });
 
@@ -1628,5 +1685,105 @@ describe('doctorParityCliCommand — --json verdict artifact (#2327 R4)', () => 
     expect(artifact.rollup.global['fail']).toBe(1);
     const row = artifact.rows.find((r) => r['id'] === 'cr-profile')!;
     expect(row['verdict']).toBe('fail');
+  });
+
+  // ─ Delta 4 (mmnto-ai/totem-strategy#851): presence-only skipped-not-gated ─
+  // A qualifying row (verdict skip ∧ id ∈ strict.blocking-ids) carries
+  // `skipped-not-gated: true` in the JSON artifact; non-qualifiers omit the key.
+  it('a blocking row skipped by scoping carries skipped-not-gated: true in its JSON row', async () => {
+    // gate-config is blocking: true and scoped to mmnto-ai/totem, so it skips in
+    // the tmpdir — the qualifying R5 row.
+    writeReadoutFixture();
+    const cap = captureStdout();
+    try {
+      await doctorParityCliCommand({ json: true, cwdForTest: tmpDir });
+    } finally {
+      cap.restore();
+    }
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    // Sanity: the id is in the declared blocking set the field keys off.
+    expect(artifact.strict['blocking-ids']).toEqual(['gate-config']);
+    const gate = artifact.rows.find((r) => r['id'] === 'gate-config')!;
+    expect(gate['verdict']).toBe('skip');
+    expect(gate['skipped-not-gated']).toBe(true);
+  });
+
+  it('a non-blocking skipped row omits skipped-not-gated (key absent, presence-only)', async () => {
+    // cr-profile skips (.coderabbit.yaml absent) but is NOT blocking → no key.
+    // mcp-corpus-indexing is an honest-absent skip, also non-blocking → no key.
+    writeReadoutFixture();
+    const cap = captureStdout();
+    try {
+      await doctorParityCliCommand({ json: true, cwdForTest: tmpDir });
+    } finally {
+      cap.restore();
+    }
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    const crProfile = artifact.rows.find((r) => r['id'] === 'cr-profile')!;
+    expect(crProfile['verdict']).toBe('skip');
+    expect('skipped-not-gated' in crProfile).toBe(false);
+    const mcp = artifact.rows.find((r) => r['id'] === 'mcp-corpus-indexing')!;
+    expect(mcp['verdict']).toBe('skip');
+    expect('skipped-not-gated' in mcp).toBe(false);
+  });
+
+  it('a blocking row with a non-skip verdict (fail) omits skipped-not-gated', async () => {
+    // Make cr-profile blocking + drift a real value on disk → warn promoted to
+    // fail under --strict. A blocking row, but verdict is not skip → no key.
+    const drifted = READOUT_MANIFEST_YAML.replace(
+      '    tracking-issue: mmnto-ai/totem-strategy#738\n    vendor-adapter: [claude]',
+      '    tracking-issue: mmnto-ai/totem-strategy#738\n    vendor-adapter: [claude]\n    blocking: true',
+    );
+    writeReadoutFixture(drifted);
+    fs.writeFileSync(
+      path.join(tmpDir, '.coderabbit.yaml'),
+      'reviews:\n  profile: chill\n',
+      'utf-8',
+    );
+    const cap = captureStdout();
+    try {
+      await expect(
+        doctorParityCliCommand({ json: true, strict: true, cwdForTest: tmpDir }),
+      ).rejects.toThrow(/blocking drift/);
+    } finally {
+      cap.restore();
+    }
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    // cr-profile is now blocking but verdict is fail (not skip) → key absent.
+    const crProfile = artifact.rows.find((r) => r['id'] === 'cr-profile')!;
+    expect(crProfile['verdict']).toBe('fail');
+    expect(crProfile['id']).toBe('cr-profile');
+    expect(artifact.strict['blocking-ids']).toContain('cr-profile');
+    expect('skipped-not-gated' in crProfile).toBe(false);
+  });
+
+  it('skipped-not-gated is never emitted with value false anywhere in the artifact', async () => {
+    writeReadoutFixture();
+    const cap = captureStdout();
+    try {
+      await doctorParityCliCommand({ json: true, cwdForTest: tmpDir });
+    } finally {
+      cap.restore();
+    }
+    const raw = cap.writes.join('');
+    // The literal `"skipped-not-gated": false` must not appear (presence-only).
+    expect(raw).not.toContain('"skipped-not-gated": false');
+    const artifact = JSON.parse(raw) as JsonArtifact;
+    for (const row of artifact.rows) {
+      expect(row['skipped-not-gated']).not.toBe(false);
+      if ('skipped-not-gated' in row) expect(row['skipped-not-gated']).toBe(true);
+    }
+  });
+
+  it('readout-schema-version stays 1 with the additive skipped-not-gated field', async () => {
+    writeReadoutFixture();
+    const cap = captureStdout();
+    try {
+      await doctorParityCliCommand({ json: true, cwdForTest: tmpDir });
+    } finally {
+      cap.restore();
+    }
+    const artifact = JSON.parse(cap.writes.join('')) as JsonArtifact;
+    expect(artifact['readout-schema-version']).toBe(1);
   });
 });

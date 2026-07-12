@@ -384,6 +384,28 @@ export const ReviewConfigSchema = z
       .min(1, 'review.sourceExtensions must contain at least one extension')
       .default([...DEFAULT_REVIEW_SOURCE_EXTENSIONS]),
     stage4Baseline: Stage4BaselineConfigSchema.optional(),
+    /**
+     * Opt-in multi-lane review fan (Prop 304 R2, mmnto-ai/totem#2106). Each
+     * entry is a `provider:model` lane the reviewer runs independently over the
+     * one masked diff, converging on a verdict artifact. A DECLARED key here
+     * (this schema is otherwise `.passthrough()`) so `config.review.lanes` is
+     * typed rather than an untyped passthrough value (codex fold 7).
+     *
+     * ABSENT ⇒ the legacy single-lane path runs byte-for-byte as today
+     * (invariant 7). PRESENT ⇒ the fan path, and present means ≥1: an
+     * explicitly-configured EMPTY array (`lanes: []`) is a hard config PARSE
+     * error (`.min(1)`), never a silent synonym for the legacy default
+     * (totem-codex finding 11) — omit the key to opt out.
+     *
+     * Zod validates only the SHAPE here (`string[]`, nonempty). The remaining
+     * SEMANTIC contract — known `provider:model` entries, the shell provider
+     * rejected, no empty/duplicate normalized entries — is enforced CLI-side by
+     * `validateReviewLanes`, which reuses the CLI's
+     * `parseModelString`/`assertValidModelName` (core cannot import from cli).
+     * An explicit `--model` selects a ONE-lane invocation and never joins or
+     * overrides this fan.
+     */
+    lanes: z.array(z.string().min(1)).min(1).optional(),
   })
   .passthrough()
   .default({});

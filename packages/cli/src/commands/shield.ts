@@ -1,5 +1,6 @@
 import type { ContentType, LanceStore, SearchResult, TotemConfig } from '@mmnto/totem';
 
+import type { ExemptionShared } from '../exemptions/exemption-schema.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import {
   applyCodeBlindGuard,
@@ -412,9 +413,20 @@ function refreshReviewExtensionsFileIfStale(
 }
 
 /**
- * Write the .reviewed-content-hash flag on PASS.
- * Uses a content hash of tracked source files (not Git SHA) so the flag
- * survives commits, amends, and rebases. Only breaks when source files change.
+ * Pure content-hash computation for the reviewed-source flag (Prop 304 R2,
+ * codex fold 1). Hashes all tracked source-file objects whose extension is in
+ * `extensions` — the extension-scoped tracked-source content hash that
+ * authorizes an agent push. NO writes: neither the cache flag nor the
+ * canonical `review-extensions.txt` refresh happen here, so a caller can
+ * compute the hash BEFORE invoking the reviewer and stamp it only if the tree
+ * is unchanged afterward — closing the mid-run authorization race.
+ *
+ * This is a DIFFERENT hash domain from `diffScope.diffHash` (the masked
+ * review-payload identity); the two bind different state and are never equal.
+ *
+ * Returns the hex sha256, or `null` when there are no tracked source files (or
+ * the git plumbing is unavailable — the flag is a best-effort hook
+ * convenience, so failures are swallowed rather than thrown).
  *
  * The `extensions` parameter drives which file types are hashed. Defaults to
  * the historical hardcoded set for backward compatibility with callers that
@@ -423,42 +435,33 @@ function refreshReviewExtensionsFileIfStale(
  * glob arguments via safeExec and the regex refinement is the shell-injection
  * boundary.
  */
-export async function writeReviewedContentHash(
+export async function computeReviewedContentHash(
   cwd: string,
-  totemDir: string,
   configRoot?: string,
   extensions: readonly string[] = LEGACY_REVIEW_SOURCE_EXTENSIONS,
-): Promise<void> {
+): Promise<string | null> {
   try {
-    const path = await import('node:path');
-    const fs = await import('node:fs');
     const { safeExec } = await import('@mmnto/totem');
 
     // Compute content hash: hash of all tracked source file objects
     const root = configRoot ?? cwd;
-    const totemDirAbs = path.join(root, totemDir);
-
-    // Auto-refresh the canonical file if it drifted from the config's set.
-    // Closes the stale-canonical-file window without requiring the user to
-    // re-run `totem sync` after editing totem.config.ts. (#1527)
-    refreshReviewExtensionsFileIfStale(totemDirAbs, extensions, fs, path);
 
     const globArgs = extensions.map((e) => '*' + e);
-    const files = safeExec('git', ['ls-files', '-z', ...globArgs], {
+    const files = safeExec('git', ['ls-files', '-z', '--', ...globArgs], {
       cwd: root,
     });
-    if (!files.trim()) return; // No source files — nothing to stamp
+    if (!files.trim()) return null; // No source files — nothing to stamp
 
     // Filter out deleted files (still in index but missing on disk)
     const deleted = new Set(
-      safeExec('git', ['ls-files', '--deleted', '-z', ...globArgs], {
+      safeExec('git', ['ls-files', '--deleted', '-z', '--', ...globArgs], {
         cwd: root,
       })
         .split('\0')
         .filter(Boolean),
     );
     const existing = files.split('\0').filter((f) => f && !deleted.has(f));
-    if (existing.length === 0) return;
+    if (existing.length === 0) return null;
 
     const objectHashes = safeExec('git', ['hash-object', '--stdin-paths'], {
       cwd: root,
@@ -468,11 +471,49 @@ export async function writeReviewedContentHash(
     const crypto = await import('node:crypto');
     // Ensure trailing newline to match bash pipeline output (sha256sum sees it)
     const normalizedHashes = objectHashes.endsWith('\n') ? objectHashes : objectHashes + '\n';
-    const contentHash = crypto.createHash('sha256').update(normalizedHashes).digest('hex');
+    return crypto.createHash('sha256').update(normalizedHashes).digest('hex'); // totem-context: intentional cleanup — best-effort hook-convenience hash; failure degrades to no-stamp (TOTEM_DEBUG-only log), pre-refactor behavior per #1527
+  } catch (err) {
+    // Non-fatal — flag is a convenience for PreToolUse hooks
+    if (process.env['TOTEM_DEBUG'] === '1') {
+      console.error(
+        '[Review] Failed to compute .reviewed-content-hash:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+    return null;
+  }
+}
+
+/**
+ * Stamp `<totemDir>/cache/.reviewed-content-hash` with EXACTLY the supplied
+ * hash — never recomputes (Prop 304 R2, codex fold 1). Also refreshes the
+ * canonical `review-extensions.txt` so the bash pre-push hook keys off the
+ * same extension set (#1527). Best-effort; a write failure is non-fatal (the
+ * flag is a PreToolUse-hook convenience). The caller owns hash provenance:
+ * pass the pre-fan hash so the stamp authorizes the exact tree that was
+ * reviewed, not whatever the tree happens to be at stamp time.
+ */
+export async function writeReviewedContentHashValue(
+  precomputedHash: string,
+  cwd: string,
+  totemDir: string,
+  configRoot?: string,
+  extensions: readonly string[] = LEGACY_REVIEW_SOURCE_EXTENSIONS,
+): Promise<void> {
+  try {
+    const path = await import('node:path');
+    const fs = await import('node:fs');
+    const root = configRoot ?? cwd;
+    const totemDirAbs = path.join(root, totemDir);
+
+    // Auto-refresh the canonical file if it drifted from the config's set.
+    // Closes the stale-canonical-file window without requiring the user to
+    // re-run `totem sync` after editing totem.config.ts. (#1527)
+    refreshReviewExtensionsFileIfStale(totemDirAbs, extensions, fs, path);
 
     const cacheDir = path.join(totemDirAbs, 'cache');
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-    fs.writeFileSync(path.join(cacheDir, '.reviewed-content-hash'), contentHash);
+    fs.writeFileSync(path.join(cacheDir, '.reviewed-content-hash'), precomputedHash);
   } catch (err) {
     // Non-fatal — flag is a convenience for PreToolUse hooks
     if (process.env['TOTEM_DEBUG'] === '1') {
@@ -485,6 +526,54 @@ export async function writeReviewedContentHash(
 }
 
 /**
+ * Write the .reviewed-content-hash flag on PASS.
+ * Uses a content hash of tracked source files (not Git SHA) so the flag
+ * survives commits, amends, and rebases. Only breaks when source files change.
+ *
+ * Now a thin compose of the pure computer + explicit writer (Prop 304 R2): it
+ * hashes the CURRENT tree and stamps it. Retained at its original signature
+ * for the trivial fast-path stamps (no-changes / all-non-code / filtered-empty
+ * — none of which open a mid-run LLM window) and `recordShieldOverride`, where
+ * there is no drift race to guard. The LLM review path does NOT use this — it
+ * captures the hash pre-fan and compare-and-stamps in `shieldCommand` /
+ * `handleVerdictResult` so a mid-review edit can never be authorized.
+ */
+export async function writeReviewedContentHash(
+  cwd: string,
+  totemDir: string,
+  configRoot?: string,
+  extensions: readonly string[] = LEGACY_REVIEW_SOURCE_EXTENSIONS,
+): Promise<void> {
+  const hash = await computeReviewedContentHash(cwd, configRoot, extensions);
+  if (hash === null) return;
+  await writeReviewedContentHashValue(hash, cwd, totemDir, configRoot, extensions);
+}
+
+/** Append the shield-override event to the Trap Ledger (shared by both override paths). */
+async function appendShieldOverrideLedgerEvent(
+  cwd: string,
+  totemDir: string,
+  configRoot: string | undefined,
+  override: string,
+): Promise<void> {
+  const path = await import('node:path');
+  const { appendLedgerEvent } = await import('@mmnto/totem');
+  const resolvedTotemDir = path.join(configRoot ?? cwd, totemDir);
+  appendLedgerEvent(
+    resolvedTotemDir,
+    {
+      timestamp: new Date().toISOString(),
+      type: 'override',
+      ruleId: 'shield-override',
+      file: '(shield)',
+      justification: override,
+      source: 'shield',
+    },
+    (msg) => log.dim(DISPLAY_TAG, msg),
+  );
+}
+
+/**
  * Record a shield override: append the override event to the Trap Ledger
  * AND stamp the reviewed-content-hash so the push-gate hook unblocks.
  *
@@ -493,6 +582,12 @@ export async function writeReviewedContentHash(
  * with a tribal-knowledge `git reset --soft HEAD~1 && totem review --staged`
  * workaround. Override is a legitimate completion path (with logged
  * justification) and must produce the same cache state as a passing review.
+ *
+ * LEGACY SINGLE-LANE ONLY: this stamps the CURRENT tree hash (a recompute). The
+ * multi-lane fan must never use it — its long LLM window makes a mid-run edit real,
+ * so the fan goes through {@link recordShieldOverrideWithExpectedHash}, which binds
+ * the PRE-FAN hash and refuses to stamp a tree that no longer matches it (Prop 304
+ * rev-5 item 1).
  */
 export async function recordShieldOverride(params: {
   override: string;
@@ -501,20 +596,11 @@ export async function recordShieldOverride(params: {
   configRoot?: string;
   sourceExtensions?: readonly string[];
 }): Promise<void> {
-  const path = await import('node:path');
-  const { appendLedgerEvent } = await import('@mmnto/totem');
-  const resolvedTotemDir = path.join(params.configRoot ?? params.cwd, params.totemDir);
-  appendLedgerEvent(
-    resolvedTotemDir,
-    {
-      timestamp: new Date().toISOString(),
-      type: 'override',
-      ruleId: 'shield-override',
-      file: '(shield)',
-      justification: params.override,
-      source: 'shield',
-    },
-    (msg) => log.dim(DISPLAY_TAG, msg),
+  await appendShieldOverrideLedgerEvent(
+    params.cwd,
+    params.totemDir,
+    params.configRoot,
+    params.override,
   );
   await writeReviewedContentHash(
     params.cwd,
@@ -522,6 +608,80 @@ export async function recordShieldOverride(params: {
     params.configRoot,
     params.sourceExtensions,
   );
+}
+
+/** {@link recordShieldOverrideWithExpectedHash} parameters. */
+export interface ShieldOverrideWithExpectedHashParams {
+  /** The trap-ledgered justification. */
+  override: string;
+  cwd: string;
+  totemDir: string;
+  configRoot?: string;
+  sourceExtensions?: readonly string[];
+  /**
+   * The PRE-FAN content hash the stamp must bind — the exact tree the lanes reviewed.
+   * `null` means there was no tracked source to authorize (the fan's legacy no-op
+   * case): the override is still ledgered, nothing is stamped.
+   */
+  expectedContentHash: string | null;
+  /**
+   * Injectable current-tree re-hasher (test seam). Defaults to
+   * `computeReviewedContentHash(cwd, configRoot, sourceExtensions)` — the SAME
+   * computation that produced `expectedContentHash` pre-fan.
+   */
+  computeCurrentHash?: () => Promise<string | null>;
+}
+
+/**
+ * Ledger + EXPLICIT-HASH override primitive (Prop 304 rev-5 item 1 — codex critical).
+ *
+ * `--override` on the fan path must never stamp an UNREVIEWED tree: the fan's one
+ * post-fan compare happens before verdict assembly, so an edit landing after that
+ * compare but before the stamp would — under `recordShieldOverride`'s current-tree
+ * recompute — be stamped as reviewed. This primitive closes that window:
+ *
+ *   1. The override event is ALWAYS appended to the Trap Ledger (the operator's
+ *      justification is auditable whether or not a stamp lands).
+ *   2. IMMEDIATELY ADJACENT to the stamp write, the current tree hash is recomputed
+ *      once more and compared to the caller's PRE-FAN `expectedContentHash`.
+ *   3. Match ⇒ stamp EXACTLY `expectedContentHash` via the explicit writer (never a
+ *      recompute value). Mismatch ⇒ LOUD refusal, no stamp — the ledger records the
+ *      override WITHOUT a stamp, and the return value says so.
+ *
+ * Returns `{ stamped }` so the caller can report honestly.
+ */
+export async function recordShieldOverrideWithExpectedHash(
+  params: ShieldOverrideWithExpectedHashParams,
+): Promise<{ stamped: boolean }> {
+  await appendShieldOverrideLedgerEvent(
+    params.cwd,
+    params.totemDir,
+    params.configRoot,
+    params.override,
+  );
+  if (params.expectedContentHash === null) return { stamped: false };
+
+  const computeCurrentHash =
+    params.computeCurrentHash ??
+    (() => computeReviewedContentHash(params.cwd, params.configRoot, params.sourceExtensions));
+  // The adjacent recompute — the LAST read before the stamp write. Any tree mutation
+  // after the fan's own compare (which fed reviewedState) is caught here.
+  const currentHash = await computeCurrentHash();
+  if (currentHash !== params.expectedContentHash) {
+    log.warn(
+      DISPLAY_TAG,
+      'OVERRIDE STAMP REFUSED: the tracked-source tree changed after the review compared it (current hash no longer matches the pre-review hash). The override was recorded in the Trap Ledger WITHOUT a stamp — this override does not authorize a push. Re-run `totem review` against the current tree.',
+    );
+    return { stamped: false };
+  }
+  await writeReviewedContentHashValue(
+    params.expectedContentHash,
+    params.cwd,
+    params.totemDir,
+    params.configRoot,
+    params.sourceExtensions,
+  );
+  return { stamped: true };
 }
 
 // ─── Main command ───────────────────────────────────────
@@ -574,6 +734,31 @@ export interface ShieldOptions {
    * `--no-history` and this field receives `false` when the flag is set.
    */
   history?: boolean;
+  /**
+   * Explicit round-chain override for the multi-lane fan (Prop 304 R2,
+   * mmnto-ai/totem#2106). A prior verdict's content hash: the next round links
+   * to it (its round + 1). A lineage mismatch warns and proceeds (honoring the
+   * explicit intent). Only meaningful when `review.lanes` is configured and the
+   * fan path runs; ignored on the legacy single-lane path.
+   */
+  continues?: string;
+  /**
+   * Non-zero exit opt-in for the multi-lane fan (Prop 304 R2 / Gate G5). `'critical'`
+   * or `'warn'`: when the fan round has findings at/above that severity OR is not
+   * cache-eligible, the fan exits via `SHIELD_FAILED`. Absent ⇒ the fan defaults to
+   * sensor exit 0 (a findings-bearing verdict never gates a naive CI consumer without
+   * this opt-in). `--override` converts a `--fail-on` failure to a pass. Ignored on the
+   * legacy single-lane path (which keeps its own labeled-compat-debt exit contract).
+   */
+  failOn?: 'critical' | 'warn';
+  /**
+   * Executable covariate transport (Prop 304 rev-5 item 4). Read-only, zero-LLM:
+   * resolves the CURRENT lineage exactly as the review fan does, loads the latest
+   * verdict artifact for it, and prints the core-owned covariate line to stdout.
+   * No verdict for the lineage ⇒ loud sensor message, exit 0. Short-circuits before
+   * any LLM/engine work; nothing is stamped or written.
+   */
+  covariate?: boolean;
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─
@@ -799,11 +984,19 @@ export async function captureObservationRules(
       const manifest = readCompileManifest(manifestPath);
       manifest.output_hash = generateOutputHash(rulesPath);
       writeCompileManifest(manifestPath, manifest);
-    } catch {
-      // Non-fatal — manifest may not exist yet (e.g. first run before compile)
+      // totem-context: intentional — the compile manifest may not exist yet (first run before compile); a missing manifest is not an error, verify-manifest resyncs later.
+    } catch (err) {
+      // Non-fatal — but only ENOENT (no manifest yet) is fully silent; a
+      // malformed/permission failure surfaces under TOTEM_DEBUG (PR #2337 CR).
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT' && process.env['TOTEM_DEBUG'] === '1') {
+        log.dim(
+          DISPLAY_TAG,
+          `Manifest re-hash failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
+    // totem-context: intentional — Pipeline 5 auto-capture is best-effort; it must never crash the shield command, so any failure degrades to a TOTEM_DEBUG log (no rethrow).
   } catch (err) {
-    // Non-fatal — auto-capture should never crash the shield command
     if (process.env['TOTEM_DEBUG'] === '1') {
       log.dim(
         DISPLAY_TAG,
@@ -811,6 +1004,105 @@ export async function captureObservationRules(
       );
     }
   }
+}
+
+// ─── Pure per-lane outcome (Prop 304 R2 fan seam) ───
+
+/**
+ * The pure result of reviewing one lane's raw model output: the extracted
+ * verdict, the exemption-filtered findings, and conformance — no display,
+ * cache, or throw side effects. This is the seam the multi-lane fan (a later
+ * slice) calls once per lane.
+ */
+export interface LaneOutcome {
+  /**
+   * The extracted structured verdict, or `null` when the model output was not
+   * extractable by the shared cascade (malformed / unstructured). The null is
+   * a distinguishable abstention signal — never a throw — so a fan lane can
+   * record it as `abstained` instead of aborting the whole run.
+   */
+  structuredVerdict: ShieldStructuredVerdict | null;
+  /** Actionable findings after the exemption filter — drives pass/fail. */
+  filteredFindings: ShieldFinding[];
+  /**
+   * Exempted findings, downgraded to INFO by the exemption filter. Surfaced so
+   * the single-lane display can still show them; never counted toward pass.
+   */
+  exemptedFindings: ShieldFinding[];
+  /** CRITICAL-free after exemptions ⇒ `true`. Also `false` for the null case. */
+  pass: boolean;
+}
+
+/**
+ * Pure per-lane outcome derivation (Prop 304 R2 — codex fold 3). Runs the
+ * single shared `extractStructuredVerdict` cascade, applies the exemption
+ * filter, and computes conformance, with NO display / cache / throw side
+ * effects. Unextractable output surfaces as `structuredVerdict: null` (a
+ * distinguishable abstention) rather than a throw, so a fan lane can record it
+ * as `abstained`.
+ *
+ * `shared` exemptions are passed IN (not read from disk) to keep this
+ * side-effect-free; the caller owns exemption I/O and any `--suppress`
+ * mutation before invoking.
+ */
+export async function deriveLaneOutcome(
+  content: string,
+  shared: ExemptionShared,
+): Promise<LaneOutcome> {
+  const structuredVerdict = extractStructuredVerdict(content);
+  if (!structuredVerdict) {
+    return { structuredVerdict: null, filteredFindings: [], exemptedFindings: [], pass: false };
+  }
+  const { filterExemptedFindings } = await import('../exemptions/exemption-engine.js');
+  const { filtered, exempted } = filterExemptedFindings(structuredVerdict.findings, shared);
+  const { pass } = computeVerdict({ ...structuredVerdict, findings: filtered });
+  return {
+    structuredVerdict,
+    filteredFindings: filtered,
+    exemptedFindings: exempted,
+    pass,
+  };
+}
+
+/**
+ * Two-hash-domains authorization fix (Prop 304 R2, codex fold 1). On a PASS,
+ * re-hash the CURRENT tracked-source tree and compare to the `preFanContentHash`
+ * captured before the reviewer ran. A mismatch means a mid-review edit landed:
+ * the verdict is bound to a tree that no longer exists on disk, so refuse to
+ * stamp — and say so loudly. On an unchanged tree, stamp EXACTLY the pre-fan
+ * hash (never a recompute) via the explicit writer.
+ *
+ * A `null` pre-fan hash means there were no tracked source files (or git
+ * plumbing was unavailable) before the fan; the legacy path wrote nothing in
+ * that case either, so this is a no-op — preserving prior behavior.
+ */
+export async function stampReviewedContentHashIfTreeUnchanged(
+  preFanContentHash: string | null,
+  cwd: string,
+  config: TotemConfig,
+  configRoot: string | undefined,
+): Promise<void> {
+  if (preFanContentHash === null) return;
+
+  const currentHash = await computeReviewedContentHash(
+    cwd,
+    configRoot,
+    config.review.sourceExtensions,
+  );
+  if (currentHash !== preFanContentHash) {
+    log.warn(
+      DISPLAY_TAG,
+      'WORKTREE DRIFT: tracked source files changed during review. The verdict is bound to the pre-review tree, so the reviewed-content-hash was NOT stamped — this review does not authorize a push. Re-run `totem review` against the current tree.',
+    );
+    return;
+  }
+  await writeReviewedContentHashValue(
+    preFanContentHash,
+    cwd,
+    config.totemDir,
+    configRoot,
+    config.review.sourceExtensions,
+  );
 }
 
 // ─── Shared verdict handler ─────────────────────────
@@ -823,6 +1115,7 @@ async function handleVerdictResult(
   cwd: string,
   configRoot: string | undefined,
   modeLabel: string,
+  preFanContentHash: string | null,
 ): Promise<void> {
   const { TotemError } = await import('@mmnto/totem');
 
@@ -831,46 +1124,49 @@ async function handleVerdictResult(
 
   if (options.raw) return;
 
-  // Try structured parsing first (V2)
-  const structured = extractStructuredVerdict(content);
-  if (structured) {
-    // ─── Exemption filtering ───────────────────────────
-    const pathMod = await import('node:path');
-    const resolvedTotemDir = pathMod.join(configRoot ?? cwd, config.totemDir);
-    const cacheDir = pathMod.join(resolvedTotemDir, 'cache');
+  // ─── Exemption I/O + --suppress (side effects live in the shell) ──
+  const pathMod = await import('node:path');
+  const resolvedTotemDir = pathMod.join(configRoot ?? cwd, config.totemDir);
+  const cacheDir = pathMod.join(resolvedTotemDir, 'cache');
 
-    const { readSharedExemptions, writeSharedExemptions } =
-      await import('../exemptions/exemption-store.js');
-    const { filterExemptedFindings, addManualSuppression } =
-      await import('../exemptions/exemption-engine.js');
+  const { readSharedExemptions, writeSharedExemptions } =
+    await import('../exemptions/exemption-store.js');
+  const { addManualSuppression } = await import('../exemptions/exemption-engine.js');
 
-    let shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(DISPLAY_TAG, msg));
+  let shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(DISPLAY_TAG, msg));
 
-    // Apply manual --suppress flags
-    if (options.suppress?.length) {
-      const { appendLedgerEvent: appendExemptionEvent } = await import('@mmnto/totem');
-      for (const label of options.suppress) {
-        if (!label.trim()) continue;
-        shared = addManualSuppression(shared, label, `Manual suppression via --suppress`);
-        log.info(DISPLAY_TAG, `Suppression registered: ${label}`);
-        appendExemptionEvent(
-          resolvedTotemDir,
-          {
-            timestamp: new Date().toISOString(),
-            type: 'exemption',
-            ruleId: 'exemption-manual',
-            file: '(shield)',
-            justification: `--suppress ${label}`,
-            source: 'shield',
-          },
-          (msg) => log.dim(DISPLAY_TAG, msg),
-        );
-      }
-      writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(DISPLAY_TAG, msg));
+  // Apply manual --suppress flags
+  if (options.suppress?.length) {
+    const { appendLedgerEvent: appendExemptionEvent } = await import('@mmnto/totem');
+    for (const label of options.suppress) {
+      if (!label.trim()) continue;
+      shared = addManualSuppression(shared, label, `Manual suppression via --suppress`);
+      log.info(DISPLAY_TAG, `Suppression registered: ${label}`);
+      appendExemptionEvent(
+        resolvedTotemDir,
+        {
+          timestamp: new Date().toISOString(),
+          type: 'exemption',
+          ruleId: 'exemption-manual',
+          file: '(shield)',
+          justification: `--suppress ${label}`,
+          source: 'shield',
+        },
+        (msg) => log.dim(DISPLAY_TAG, msg),
+      );
     }
+    writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(DISPLAY_TAG, msg));
+  }
 
-    // Filter exempted findings
-    const { filtered, exempted } = filterExemptedFindings(structured.findings, shared);
+  // Pure lane derivation: extract → exemption filter → conformance.
+  const outcome = await deriveLaneOutcome(content, shared);
+
+  // Try structured parsing first (V2)
+  if (outcome.structuredVerdict) {
+    const structured = outcome.structuredVerdict;
+    const filtered = outcome.filteredFindings;
+    const exempted = outcome.exemptedFindings;
+
     if (exempted.length > 0) {
       log.dim(DISPLAY_TAG, `${exempted.length} finding(s) exempted by suppression rules`);
     }
@@ -878,8 +1174,7 @@ async function handleVerdictResult(
     // Use filtered verdict for pass/fail, but show all findings in display
     const filteredVerdict = { ...structured, findings: [...filtered, ...exempted] };
 
-    const verdict = computeVerdict({ ...structured, findings: filtered });
-    const display = formatVerdictForDisplay(filteredVerdict, verdict.pass);
+    const display = formatVerdictForDisplay(filteredVerdict, outcome.pass);
     console.error(display);
 
     // ─── Pipeline 5: auto-capture observation rules ──
@@ -887,13 +1182,8 @@ async function handleVerdictResult(
       await captureObservationRules(filtered, cwd, config, configRoot);
     }
 
-    if (verdict.pass) {
-      await writeReviewedContentHash(
-        cwd,
-        config.totemDir,
-        configRoot,
-        config.review.sourceExtensions,
-      );
+    if (outcome.pass) {
+      await stampReviewedContentHashIfTreeUnchanged(preFanContentHash, cwd, config, configRoot);
     } else if (options.override) {
       const criticalFindings = filtered.filter((f) => f.severity === 'CRITICAL');
 
@@ -955,9 +1245,12 @@ async function handleVerdictResult(
           configRoot,
         );
       }
+      // Recompute the reason string for the failure message (the pure lane
+      // outcome carries `pass` but not the human reason).
+      const { reason } = computeVerdict({ ...structured, findings: filtered });
       throw new TotemError(
         'SHIELD_FAILED',
-        `Shield ${modeLabel} review failed: ${verdict.reason}`,
+        `Shield ${modeLabel} review failed: ${reason}`,
         'Fix the issues identified in the review above, then re-run `totem review`.',
       );
     }
@@ -972,12 +1265,7 @@ async function handleVerdictResult(
     // totem-context: reason is either empty string or pre-prefixed with ' — ', so direct concat is intentional
     log.info(DISPLAY_TAG, `Verdict: ${verdictLabel}${reason}`);
     if (verdict.pass) {
-      await writeReviewedContentHash(
-        cwd,
-        config.totemDir,
-        configRoot,
-        config.review.sourceExtensions,
-      );
+      await stampReviewedContentHashIfTreeUnchanged(preFanContentHash, cwd, config, configRoot);
     } else if (options.override) {
       log.warn(DISPLAY_TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
 
@@ -1154,27 +1442,106 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   }
   const cwd = process.cwd();
 
-  // Silently upgrade the pre-push hook if it lacks review auto-refresh (#1045)
-  const { upgradePrePushHookIfNeeded } = await import('./install-hooks.js');
-  if (upgradePrePushHookIfNeeded(cwd)) {
-    log.dim(DISPLAY_TAG, 'Upgraded pre-push hook with review auto-refresh');
+  // Silently upgrade the pre-push hook if it lacks review auto-refresh (#1045).
+  // Skipped under --covariate: that verb is read-only by contract (rev-5 item 4).
+  if (!options.covariate) {
+    const { upgradePrePushHookIfNeeded } = await import('./install-hooks.js');
+    if (upgradePrePushHookIfNeeded(cwd)) {
+      log.dim(DISPLAY_TAG, 'Upgraded pre-push hook with review auto-refresh');
+    }
   }
 
   const configPath = resolveConfigPath(cwd);
   const configRoot = path.dirname(configPath);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
+
+  // ── Executable covariate transport (Prop 304 rev-5 item 4) — read-only, zero-LLM ──
+  // Short-circuits BEFORE engine boot, fan activation, and every stamp-bearing
+  // fast-path: `--covariate` resolves the current lineage via the SAME
+  // getDiffForReview → resolveLineage path the fan uses, prints the latest verdict's
+  // core-owned covariate line, and exits 0. A no-diff resolution is handled inside
+  // printCovariateLine as a loud sensor message (never the trivial-pass stamp the
+  // ordinary no-diff path performs — this verb writes nothing).
+  if (options.covariate) {
+    const diffResult = await getDiffForReview(options, config, cwd, DISPLAY_TAG);
+    const { printCovariateLine } = await import('./review-fan.js');
+    await printCovariateLine({
+      diffMeta:
+        diffResult === null
+          ? null
+          : {
+              source: diffResult.source,
+              base: diffResult.base,
+              head: diffResult.head,
+              selectorForm: diffResult.selectorForm,
+            },
+      totemDirAbs: path.join(configRoot, config.totemDir),
+      cwd,
+    });
+    return;
+  }
+
   // Engine boot (mmnto-ai/totem#1794) — see lint.ts wiring for context.
   const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
   await bootstrapEngine(config, configRoot);
 
+  // ── Multi-lane review fan activation (Prop 304 R2, mmnto-ai/totem#2106) ──
+  // Validate `review.lanes` at review startup (a hard init error on any
+  // violation) and normalize. An explicit `--model` selects a ONE-lane
+  // invocation and never joins the configured fan (precedence pinned); the fan
+  // also does not apply to structural mode (context-blind single-lane stays
+  // legacy). `review.lanes` absent ⇒ [] ⇒ the legacy single-lane path runs
+  // byte-for-byte as today (invariant 7).
+  const { validateReviewLanes, assertFanFlagsSupported } = await import('./review-fan.js');
+  const laneModels = validateReviewLanes(
+    config.review.lanes,
+    config.orchestrator?.provider,
+    TotemConfigError,
+  );
+  // Finding 1: a fan-configured `--raw` stays the legacy ZERO-LLM context dump (no
+  // invokers, no verdict/run artifacts, `--out` behaves as legacy) — `--raw`
+  // DEACTIVATES the fan so the run falls through to the legacy raw path below.
+  const fanActive =
+    laneModels.length >= 1 &&
+    options.model === undefined &&
+    options.mode !== 'structural' &&
+    !options.raw;
+  // Finding 12: when the fan is active, reject flags with no defined fan semantics
+  // LOUDLY (naming the unsupported combination) rather than silently ignoring them.
+  if (fanActive) assertFanFlagsSupported(options, TotemConfigError);
+  // Gate G5: validate `--fail-on` (only the fan reads it, but a bad value is a hard
+  // config error on any path so the user is never silently ignored).
+  if (options.failOn !== undefined && options.failOn !== 'critical' && options.failOn !== 'warn') {
+    throw new TotemConfigError(
+      `Invalid --fail-on "${options.failOn}". Use "critical" or "warn".`,
+      'Pass --fail-on critical (exit non-zero on CRITICAL findings) or --fail-on warn (WARN or CRITICAL). Omit it for the default sensor exit 0.',
+      'CONFIG_INVALID',
+    );
+  }
+
   // --- Incremental shield fast-path (#1010) ---
   // If the change since the last passed shield is small enough (< 15 lines,
   // no new files), only evaluate the delta instead of the full branch diff.
+  // The fan needs full diff-scope metadata (source/base/head) for lineage, so
+  // the incremental fast-path is bypassed when the fan is active.
   let diff: string;
   let changedFiles: string[];
+  // Resolved diff-scope metadata (Prop 304 R2) — captured for the fan's verdict
+  // `diffScope` + lineage. Only populated on the full-diff path (the fan bypasses
+  // the incremental fast-path), so it is defined whenever `fanActive`.
+  let diffScopeMeta:
+    | {
+        source: 'explicit-range' | 'staged' | 'uncommitted' | 'branch-vs-base';
+        base?: string;
+        head?: string;
+        selectorForm?: string;
+      }
+    | undefined;
 
-  const incremental = await evaluateIncrementalEligibility(cwd, config.totemDir, configRoot);
+  const incremental: IncrementalResult = fanActive
+    ? { eligible: false, reason: 'multi-lane fan requires full diff scope' }
+    : await evaluateIncrementalEligibility(cwd, config.totemDir, configRoot);
   if (incremental.eligible && incremental.deltaDiff && incremental.changedFiles) {
     log.info(
       DISPLAY_TAG,
@@ -1201,6 +1568,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     }
     diff = diffResult.diff;
     changedFiles = diffResult.changedFiles;
+    diffScopeMeta = {
+      source: diffResult.source,
+      base: diffResult.base,
+      head: diffResult.head,
+      // Finding 10: the raw CLI selector form so `--diff main` and `--diff main..HEAD`
+      // (same resolved refs) do NOT share a lineage.
+      selectorForm: diffResult.selectorForm,
+    };
   }
 
   // Stage 1: Classify files — fast-path for non-code-only diffs
@@ -1285,6 +1660,18 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     log.dim(DISPLAY_TAG, `File context: ${(fileContext.length / 1024).toFixed(0)}KB`);
   }
 
+  // Two hash domains (Prop 304 R2, codex fold 1): capture the extension-scoped
+  // tracked-source content hash ONCE, before the reviewer runs, so a PASS
+  // stamp authorizes the EXACT tree that was reviewed. The shipped code
+  // recomputed this hash after the LLM returned, racing any mid-review edit;
+  // `handleVerdictResult` now compare-and-stamps against this pre-fan value and
+  // refuses to stamp on drift. Distinct from the review payload's `diffHash`.
+  const preFanContentHash = await computeReviewedContentHash(
+    cwd,
+    configRoot,
+    config.review.sourceExtensions,
+  );
+
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
   if (options.mode === 'structural') {
     log.info(DISPLAY_TAG, 'Running structural review (context-blind, no Totem knowledge)...');
@@ -1321,7 +1708,16 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       );
     }
     if (content != null) {
-      await handleVerdictResult(content, diff, options, config, cwd, configRoot, 'structural');
+      await handleVerdictResult(
+        content,
+        diff,
+        options,
+        config,
+        cwd,
+        configRoot,
+        'structural',
+        preFanContentHash,
+      );
     }
     return;
   }
@@ -1375,6 +1771,52 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     await import('@mmnto/totem');
   const { buildRetrievalGroundingBundle } = await import('../utils.js');
   const groundingBundle = buildRetrievalGroundingBundle(context);
+
+  // ── Multi-lane review fan (Prop 304 R2, mmnto-ai/totem#2106) ──
+  // When `review.lanes` is configured (and neither --model nor structural mode
+  // opts out), fan the IDENTICAL assembled prompt across every lane, converge on
+  // a verdict artifact, and enforce the cache-eligibility exit contract. The
+  // legacy single-lane path below is left byte-for-byte unchanged (invariant 7).
+  if (fanActive) {
+    if (diffScopeMeta === undefined) {
+      // Unreachable: the fan bypasses the incremental fast-path, so the full
+      // getDiffForReview path always populated diffScopeMeta. Fail loud, never a
+      // silent scope guess (Tenet 4).
+      throw new TotemError(
+        'SHIELD_FAILED',
+        'Internal: diff-scope metadata was not resolved for the review fan.',
+        'Re-run `totem review`; report this if it recurs.',
+      );
+    }
+    // Exemptions are read once here and passed in side-effect-free (the fan is
+    // pure over them). --suppress mutation is not wired into the fan this slice;
+    // committed shared exemptions still filter each lane.
+    const { readSharedExemptions } = await import('../exemptions/exemption-store.js');
+    const resolvedTotemDir = path.join(configRoot, config.totemDir);
+    const shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(DISPLAY_TAG, msg));
+    const { runReviewFan } = await import('./review-fan.js');
+    await runReviewFan({
+      laneModels,
+      prompt,
+      filteredDiff,
+      diffMeta: diffScopeMeta,
+      config,
+      cwd,
+      configRoot,
+      totemDirAbs: resolvedTotemDir,
+      options,
+      groundingHash: calculateDeterministicHash(groundingBundle),
+      provenanceSummary: summarizeProvenance(groundingBundle),
+      groundingBundle,
+      totalResults,
+      codeBlind: codeBlindGuard.codeBlind,
+      shared,
+      preFanContentHash,
+      continues: options.continues,
+    });
+    return;
+  }
+
   const content = await runOrchestrator({
     prompt,
     tag: TAG,
@@ -1397,6 +1839,15 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     },
   });
   if (content != null) {
-    await handleVerdictResult(content, diff, options, config, cwd, configRoot, 'standard');
+    await handleVerdictResult(
+      content,
+      diff,
+      options,
+      config,
+      cwd,
+      configRoot,
+      'standard',
+      preFanContentHash,
+    );
   }
 }
