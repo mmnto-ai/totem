@@ -33,7 +33,7 @@ Markdown is readable by humans but not enforceable by machines.
 totem lesson compile
 ```
 
-Totem's compiler reads the lesson and generates a deterministic AST or regex rule tailored to your codebase. The rule is saved to `.totem/compiled-rules.json`. Structural lessons compile this way; behavioral and process lessons stay as retrievable context for AI review instead — that boundary is measured, not aspirational (ADR-091).
+Totem's compiler reads the lesson and generates a deterministic AST or regex rule tailored to your codebase. The rule is saved to `.totem/compiled-rules.json`. Structural lessons compile this way; behavioral and process lessons stay as retrievable context for AI review instead (ADR-091's measured boundary).
 
 From this point forward, no LLM is involved in enforcement.
 
