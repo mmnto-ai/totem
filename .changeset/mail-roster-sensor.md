@@ -1,5 +1,5 @@
 ---
-'@mmnto/cli': patch
+'@mmnto/cli': minor
 ---
 
 feat(mail): `totem mail` gains an outbox roster-validation sensor (mmnto-ai/totem#2335; write-side sibling of the #2311 basename-collision sensor).
