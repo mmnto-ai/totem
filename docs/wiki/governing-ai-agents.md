@@ -39,7 +39,7 @@ $ git push
 [Lint] Verdict: FAIL — Fix violations before pushing.
 ```
 
-The agent cannot bypass this. When the lint gate fails, the push is rejected, and the agent is forced to fix the violation before trying again. The agent learns the architecture through mechanical failure, not by reading documentation.
+When the lint gate fails, the push is rejected until the agent fixes the violation. The agent learns the architecture through mechanical failure, not by reading documentation. Bypassing the hook takes an explicit `git push --no-verify` — and CI re-runs the same gates against the pushed tree, so the violation still surfaces in the PR checks.
 
 ## 3. MCP Knowledge Base
 

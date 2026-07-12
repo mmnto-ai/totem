@@ -4,7 +4,7 @@ Zero-Trust Agent Governance security pack for Totem. Flagship consumer of the To
 
 ## Status
 
-Scaffolding only. The pack ships with an empty rules array at this stage. Rule content lands in follow-up PRs that implement the four attack surfaces defined in ADR-089:
+The pack ships five immutable rules (severity `error`, non-downgradable) covering the four attack surfaces defined in ADR-089:
 
 1. Unauthorized process spawning outside known build paths.
 2. Dynamic code evaluation with non-literal arguments.
@@ -21,7 +21,7 @@ Future releases expand coverage as attack vectors evolve. Language coverage star
 
 ## Install
 
-Will land with `totem install pack/agent-security` once the pack resolver ships. See `mmnto-ai/totem#1491`.
+Not yet published to npm. The pack resolver (`totem install pack/<name>`) shipped in 1.15.0; publication of this pack is gated on signed-pack verification (`mmnto-ai/totem#1492`, tracked at `mmnto-ai/totem#1609`).
 
 ## License
 

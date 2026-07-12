@@ -6,12 +6,12 @@ This document provides a detailed breakdown of the `totem` command-line interfac
 >
 > **Global Flags:** Every Totem command supports the `--json` flag to output structured JSON instead of human-readable text. This makes it trivial to pipe Totem into your own automation scripts or UI dashboards (e.g., `totem status --json`).
 
-> **Standalone Binary (Totem Lite):** If you are using the compiled standalone binary (no Node.js required), certain commands that require the LLM orchestrator or local Vector database are excluded to keep the binary small (~35MB).
+> **Standalone Binary (Totem Lite):** If you are using the compiled standalone binary (no Node.js required), commands that require the LLM orchestrator or local Vector database are excluded to keep the binary small.
 >
-> - **Available in Lite:** `init`, `lint`, `hooks`, `compile` (AST/Regex), `doctor`, `status`, `rule list`
-> - **Excluded in Lite:** `review`, `sync`, `extract`, `spec`, `triage`
+> - **Available in Lite:** `init`, `lint`, `hooks`, `doctor`, `status`, `rule list`
+> - **Excluded in Lite:** `review`, `sync`, `extract`, `spec`, `triage`, `lesson compile`, and the other orchestrator- or index-dependent commands
 >
-> Excluded commands will show a `[Totem Lite]` tag in the `--help` menu and will exit with status code `78` (Configuration Error) if invoked, prompting you to install the full Node.js package.
+> Excluded commands are tagged `[requires full install]` in the `--help` menu and exit with status code `78` (configuration error) if invoked, prompting you to install the full Node.js package.
 
 ---
 

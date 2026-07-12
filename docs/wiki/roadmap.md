@@ -1,54 +1,14 @@
 # Totem Roadmap
 
-This document outlines the strategic milestones for the Totem project.
+Totem is a standard library for codebase governance — deterministic primitives that let teams enforce architectural boundaries on AI agents without opinionated workflows.
 
-Totem is a standard library for codebase governance — deterministic primitives that let teams enforce architectural boundaries on AI agents without opinionated workflows. The roadmap below tracks the active progression of enforcement primitives, platform validation, and rule distribution.
+This page keeps the dated history of what has shipped. Current and planned work is not mirrored here — it lives in the trackers:
 
----
+- [Releases](https://github.com/mmnto-ai/totem/releases) — what shipped, when.
+- [GitHub Project: Convergent Spine](https://github.com/orgs/mmnto-ai/projects/1) — in-flight work.
+- [Open issues](https://github.com/mmnto-ai/totem/issues) — the backlog.
 
-## 1.26.0: Pack Ecosystem Graduation (Active)
-
-**Theme:** Close the Pack v0.1 alpha pilot by closing the remaining language-pack publish-and-wire arc and starting the convention-rule deterministic substrate that replaces LLM-prose enforcement (Tenet 15 violations surfaced by drift firing across multiple agents and repos).
-
-The strategic frame is **publishing without runtime-wiring is incomplete; ship gates require both**. The substrate-wiring gap shipped in `mmnto-ai/totem#1795` (1.25.0) closed the runtime-completeness leg of the alpha-pilot graduation gate.
-
-> **Note on bot packs.** A "Bot Interpretive Pack" graduation arc previously sat under this milestone (publish `@mmnto/pack-bot-coderabbit` + `@mmnto/pack-bot-gemini-code-assist`, wire into session hooks, refactor agent memory to point at packs). It was retired on 2026-05-12 per [ADR-105 (Bot-Protocol Centralization)](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md). Bot-interaction protocols now live as canonical doctrine at `mmnto-ai/totem-strategy:doctrine/bot-protocols.md`; mechanical enforcement is tracked at [`mmnto-ai/totem#1900`](https://github.com/mmnto-ai/totem/issues/1900).
-
-- **Headline Work — Pack v0.1 graduation:**
-  - [ ] **LC un-quarantine validation.** Pattern-quality review per `mmnto-ai/totem#1793` BEFORE un-quarantining the 4-rule `.rs` cohort (3 from upstream-014, 1 from upstream-048). End-to-end validation that PR #1795's substrate-wiring fix unblocks the LC PR-C cascade is the load-bearing signal that closes the alpha-pilot gate.
-
-- **Headline Work — Substrate hardening (Tenet 15):**
-
-  Convention rules currently encoded only as LLM-prose in CR `.coderabbit.yaml` and GCA `.gemini/styleguide.md`. Drift firing across multiple agents and repos documented in `mmnto-ai/totem-strategy/upstream-feedback/049`. Strategic posture: replace LLM-prose enforcement with regex / AST / schema enforcement wherever the rule has a deterministic shape.
-  - [ ] **Built-in lint pack architecture (`mmnto-ai/totem#1800`).** Tier-1, broader Option B from `upstream-feedback/049`. Lift the convention-rules-as-deterministic-substrate primitive to a built-in lint pack so cross-repo consumers inherit deterministic enforcement of styleguide rules without local pack maintenance.
-  - [ ] **`@mmnto/pack-voice` (`mmnto-ai/totem#1798`).** Tier-2, scope: core, domain: architecture. Compile voice rules from `voice-tuning-dataset.md` (em-dash detection, banned-vocab list, "Not X, but Y" patterns) into a deterministic pack with regex / ast-grep rules. First concrete instance of the `#1800` architecture; solves the cross-repo voice-rules access path problem.
-  - [ ] **upstream-feedback/049 substrate response.** Local lint pack in totem-strategy for doubled-slug variants, bare-ref forms, section-link enforcement, and truncation residues. Lifts to `@mmnto/pack-governance` after false-positive rate stays low.
-  - [ ] **`mmnto-ai/totem#1796` cwd/configRoot harmonization.** Tier-3. Mirror the eager `repoRoot` resolution pattern from PR #1787's `first-lint-promote-runner.ts` into `compile.ts:663` and `test-rules.ts`. Same monorepo-subpackage class of bug as PR #1787 fixed in T6.
-  - [ ] **`mmnto-ai/totem#1801` batched embedding requests.** Tier-2. Substrate gap surfaced by upstream-feedback/050 — the `totem sync` provider currently issues one embedding request per chunk; batching reduces token-rate pressure on Gemini and Ollama.
-
-- **Bundled Cleanup / Validation:**
-  - [ ] **`mmnto-ai/totem#1685`** — `totem doctor` Stage 4 UX. T4 of #1684. Surface verification-outcomes state to operators.
-  - [ ] **`mmnto-ai/totem#1686`** — Stage 4 perf hardening. T5 of #1684.
-  - [ ] **`mmnto-ai/totem#1226`** — SARIF hex escape fix.
-  - [ ] **`mmnto-ai/totem#1802`** — Tier-3 `config-schema.ts` comment alignment, surfaced from PR #1799 R1 Major.
-
----
-
-## Backlog: Horizon 3+
-
-Strategic research not currently scoped to 1.26.0:
-
-- **Strategy #6** — Adversarial trap corpus: evaluation suite to test the deterministic engine against evasion techniques.
-- **Model-specific prompt adapters** (Strategy #62) — partially addressed by `#1220` rewrite.
-- **Formal model routing matrix** (Strategy #64) — partially addressed by `#73` benchmark.
-- **`#1236`** — Revisit 6 upgrade-target lessons silenced during 1.13.0 cleanup.
-
-Carried over and de-prioritized for 1.26.0:
-
-- **ADR-091 non-Stage-4 ingestion work.** Classifier gate (Stage 2), GHAS / SARIF Extraction (Strategy #50, gated on ADR-086), Lint Warning Extraction (Strategy #51 ↔ #1253), ADR-mining extractor.
-- **ADR-090 Substrate DX.** `mmnto-ai/totem#1497` (rich `describe_project` MCP), `mmnto-ai/totem#1498` (`totem init` agent-runtime auto-detect). Likely 1.27.0 or later.
-- **`mmnto-ai/totem#1414`** — Pipeline 1 smoke-gate flip after 136-lesson Bad Example backfill. Mechanism shipped in `#1415`; hard enforcement deferred until the curation sweep.
-- **`mmnto-ai/totem#1419`** — Cryptographic attestation for the Trap Ledger (SOX compliance gap, Proposal 225 enterprise pitch).
+**Goal (as of 2026-07):** the Convergent Spine — a certified path from merged-PR lessons to deterministic rules, validated by catching real defects that external review bots miss.
 
 ---
 
