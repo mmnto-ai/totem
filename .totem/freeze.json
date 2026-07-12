@@ -1,0 +1,18 @@
+{
+  "_note": "Local mirror of the cohort rule-compilation hold so gate consumers that cannot resolve the @mmnto/strategy-doctrine snapshot still see the freeze — CI's Compile Manifest Attestation runs without registry read auth, the optional doctrine pin never materializes there, and the verify-manifest WARN-downgrade was unreachable (mmnto-ai/totem#2289). The consult honors local provenance identically to the cohort hold (mmnto-ai/totem#2167 Q3 ruling). Mirrors the entry at @mmnto/strategy-doctrine freeze.json; lift this when the cohort hold lifts (change-authority: the cohort registry, not this file).",
+  "frozen": [
+    {
+      "subsystem": "rule-compilation (legacy lesson-compile path)",
+      "id": "rule-compilation",
+      "since": "2026-05-17",
+      "scope": "local",
+      "reason": "CI-visible mirror of the cohort hold (see _note): parked pending the Convergent Spine replacement. The legacy `totem lesson compile` path cannot recompile (safe-regex2 ReDoS gate vs the xrepo-qualify-refs lookbehind; upstream fix declined, mmnto-ai/totem#1855 NOT_PLANNED).",
+      "tracking": "Rule-compilation freeze (2026-05-17) — multi-gate lift status (GH Project board, orgs/mmnto-ai/projects/1)",
+      "do-not": [
+        "edit .totem/lessons/**",
+        "run `totem lesson compile`",
+        "hand-edit .totem/compiled-rules.json (Tenet 20 — it's a regenerable cache)"
+      ]
+    }
+  ]
+}
