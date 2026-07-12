@@ -2268,9 +2268,9 @@
       "lessonHash": "2266fc0dfe824f24",
       "lessonHeading": "Static top-level imports from heavy internal packages delay",
       "pattern": "",
-      "message": "Avoid static top-level imports from heavy internal packages in CLI commands. Use dynamic `await import(...)` inside the command function to avoid delaying startup for every invocation (including --help).",
+      "message": "Avoid static top-level value imports from '@mmnto/totem' in CLI commands — the core barrel pulls LanceDB and other heavy deps into every startup, including --help. Use dynamic `await import('@mmnto/totem')` inside the command function; `import type { ... }` stays static (erased at build). Named-import shape; default-import shape is covered by sibling rules 3bb96274/c5192192 (mmnto-ai/totem#2339).",
       "engine": "ast-grep",
-      "astGrepPattern": "import $NAME from '$PKG'",
+      "astGrepPattern": "import { $$$NAMES } from '@mmnto/totem'",
       "compiledAt": "2026-04-06T03:25:03.655Z",
       "createdAt": "2026-04-06T03:25:03.655Z",
       "fileGlobs": [
@@ -2278,7 +2278,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "error",
+      "badExample": "import {\n  deriveCacheEligible,\n  deriveSettled,\n  renderCovariateLine,\n  TotemConfigError,\n  VERDICT_ARTIFACT_SCHEMA_VERSION,\n} from '@mmnto/totem';",
+      "goodExample": "import type { VerdictArtifact } from '@mmnto/totem';\nexport async function runFan(): Promise<void> {\n  const { deriveSettled } = await import('@mmnto/totem');\n}"
     },
     {
       "lessonHash": "94ad9eb3fe20bdb0",
