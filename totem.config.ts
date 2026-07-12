@@ -44,6 +44,16 @@ const config: TotemConfig = {
     junie: '.junie/skills/totem-rules/rules.md',
   },
 
+  // mmnto-ai/totem#2106 (Prop 304 R2): opt totem itself into the multi-lane
+  // review fan — two vendor-distinct lanes over the one masked diff, converging
+  // on verdict artifacts under `.totem/artifacts/verdicts/`. First dogfood of
+  // the runner on its own repo (Prop 302 T2 evidence source). Explicit
+  // `totem review --model ...` stays a one-lane invocation; omit `lanes` to
+  // fall back to the legacy single-lane path.
+  review: {
+    lanes: ['anthropic:claude-sonnet-4-6', 'gemini:gemini-3.1-pro-preview'],
+  },
+
   docs: [
     { path: 'docs/wiki/roadmap.md', description: 'Strategic roadmap with phase progress' },
     {
