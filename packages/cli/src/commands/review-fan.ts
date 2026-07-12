@@ -199,9 +199,15 @@ function resolveLaneProvider(
     // A `:`-prefixed entry whose prefix is not a known provider is an unknown
     // provider, not a colon-bearing model name — reject it loud (a lane is an
     // explicit provider:model; a typo'd provider must never route silently).
+    // Deliberately NOT folded into the base provider: a typo'd provider
+    // (`anthropc:x`) must never route silently to whatever base happens to be
+    // configured. A model name that itself contains ':' (ollama quantization
+    // tags) is supported via an explicit provider prefix — the split is on the
+    // FIRST colon, so `ollama:llama3:8b` parses as provider=ollama,
+    // model=llama3:8b. The hint teaches that spelling (PR #2337 GCA round 2).
     throw makeLaneConfigError(
       `review.lanes entry "${trimmed}" names an unknown provider "${prefix}".`,
-      `Use one of the known providers (${KNOWN_PROVIDERS.filter((p) => p !== 'shell').join(', ')}), e.g. "anthropic:claude-sonnet-4".`,
+      `Use one of the known providers (${KNOWN_PROVIDERS.filter((p) => p !== 'shell').join(', ')}), e.g. "anthropic:claude-sonnet-4". If the model name itself contains ":" (e.g. an ollama quantization tag), spell the provider explicitly: "ollama:llama3:8b".`,
     );
   }
   // Bare (prefix-less) lane — resolve against the base provider.
