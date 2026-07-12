@@ -2,7 +2,7 @@
 
 Totem 1.9.0 introduces the Pipeline Engine, the core subsystem that governs how institutional knowledge (lessons) becomes deterministically enforced code constraints (rules).
 
-The Pipeline Engine is built around the **Create → Enforce Lifecycle**. It moves Totem from a simple linter to a structural governance platform.
+The Pipeline Engine is built around the **Create → Enforce Lifecycle**.
 
 ## The Pipelines (P1–P5)
 
@@ -92,7 +92,7 @@ Totem will leverage the LLM (P3) to infer the exact structural constraint from y
 
 ### Pipeline 4: Importing Rules
 
-Instantly ingest your team's historical ESLint restrictions into the fast, deterministic Totem engine:
+Ingest your team's historical ESLint restrictions into the fast, deterministic Totem engine:
 
 ```bash
 totem import --from-eslint ./eslint.config.mjs
