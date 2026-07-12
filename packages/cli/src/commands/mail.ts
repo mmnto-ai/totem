@@ -572,6 +572,25 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     }
   }
 
+  // Roster-validation sensor (mmnto-ai/totem#2335, write-side sibling of the
+  // #2311 basename-collision sensor below): a dispatch whose `to:` names no
+  // roster agent is invisible to EVERY seat-scoped poll — it "looks sent
+  // forever" and is never discoverable as unread (live exhibit: a verdict
+  // deposited with `to: cohort`, a non-roster literal). The roster is the SAME
+  // set the send-side actuator validates recipients against —
+  // `knownCohortAgents` reused, not re-derived (the hardcoded-map audit is
+  // mmnto-ai/totem#2017) — UNIONed with this repo's resolved self agents,
+  // because an env/config self-id (mmnto-ai/totem#2141) can sit outside the
+  // cohort map yet is a valid recipient here (never false-flag self-addressed
+  // mail). The no-`to:` / mail-shaped-reject sub-class is the same
+  // undeliverable class but is already surfaced loudly by the parse-fail
+  // warning above (`no to: field in frontmatter`), so this sensor deliberately
+  // does not re-warn it; non-mail-shaped strays stay silent by the #2118
+  // design (a warning there is permanent, unclearable noise).
+  const rosterLower = new Set(
+    [...knownCohortAgents(workspace), ...selfResolution.agents].map((a) => a.toLowerCase()),
+  );
+
   const mail: MailEntry[] = [];
   // Cross-sender basename-collision sensor (mmnto-ai/totem#2311, read-side
   // half of mmnto-ai/totem-strategy#827): dispatch filenames don't encode the
@@ -606,6 +625,17 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     }
     const header = parsed.header;
     const toLower = header.to.toLowerCase();
+    // Roster check runs HERE — before the self-filter below — because an
+    // unresolvable `to:` is undeliverable to EVERY seat, not just this one, and
+    // the whole-workspace scan is the only place the file is ever seen (Tenet
+    // 13: warn, don't gate). `broadcast` is a routing literal, not an agent, so
+    // it is a valid target. `header.to` is already control-byte-escaped by
+    // `parseHeader`, so interpolating it into the warning is display-safe.
+    if (toLower !== 'broadcast' && !rosterLower.has(toLower)) {
+      warnings.push(
+        `unresolvable outbox address: ${slot.repo}/${slot.agent}/${file} — to: "${header.to}" matches no roster agent; invisible to every seat-scoped poll`,
+      );
+    }
     if (toLower !== 'broadcast' && !selfLower.has(toLower)) continue;
     const senderSeat = slot.agent.toLowerCase();
     let seats = collisionsByBasename.get(file);

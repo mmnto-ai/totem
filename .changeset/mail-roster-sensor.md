@@ -1,0 +1,11 @@
+---
+'@mmnto/cli': patch
+---
+
+feat(mail): `totem mail` gains an outbox roster-validation sensor (mmnto-ai/totem#2335; write-side sibling of the #2311 basename-collision sensor).
+
+**What it detects.** A dispatch whose frontmatter `to:` resolves to no roster agent is invisible to every seat-scoped poll — it "looks sent forever" and is never discoverable as unread (live exhibit: a verdict deposited with `to: cohort`, a non-roster literal). During its existing workspace scan `pollMail` now checks each parsed dispatch's `to:` against the roster and emits one structured `unresolvable outbox address:` warning per stranded file, naming the `repo/agent/file` path and the offending address, into the existing `warnings` array. The roster reuses the send-side actuator's `knownCohortAgents` set (the hardcoded-map audit is mmnto-ai/totem#2017) UNIONed with the polling repo's resolved self agents, so an env/config self-id outside the cohort map is never false-flagged. The no-`to:` / non-ADR-098 mail-shaped reject is the same undeliverable class but is already surfaced loudly by the existing `no to: field in frontmatter` parse warning, so the sensor does not double-warn it; non-mail-shaped strays stay silent per the #2118 unclearable-noise invariant.
+
+**Sensor, not actuator (Tenet 13).** Warn-only: unread counting is untouched and nothing is renamed, moved, or deleted. The check runs before the self-filter because an unresolvable address is undeliverable to every seat, not just the poller. As with #2311, because `totem ecl-gc --compact` arms its A2.2 completeness gate on `poll.warnings.length === 0` (mmnto-ai/totem#2309) and its discovery poll reads through marks (`includeProcessed`), a live unresolvable dispatch also holds mark-compaction shut with zero new gate surface.
+
+Consumer-impact: CLI surface — additive `totem mail` sensor output only. `pollMail` emits new `unresolvable outbox address:` lines on the existing `warnings` channel (text output and `--json`); no `MailPollResult` shape change and no change to `mail`/`scanned` counting semantics. No obligated consumer move — a workspace with only roster-valid `to:` addresses sees byte-identical output; scripts parsing warnings should treat the new class like any other warning line.
