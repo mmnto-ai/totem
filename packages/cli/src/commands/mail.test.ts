@@ -379,6 +379,97 @@ describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#23
   });
 });
 
+// ─── Outbox roster-validation sensor (mmnto-ai/totem#2335) ──────────────
+
+describe('pollMail — outbox roster-validation sensor (mmnto-ai/totem#2335)', () => {
+  const UNRESOLVABLE_PREFIX = 'unresolvable outbox address';
+
+  it('warns on the `to: cohort` exhibit — a non-roster literal invisible to every seat-scoped poll', () => {
+    // The live exhibit: a verdict deposited with `to: cohort` matched no seat,
+    // so it never surfaced as unread and "looked sent forever."
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-07-11T0900Z-cohort-verdict.md', to: 'cohort', subject: 'r2 verdict' },
+    ]);
+    const result = poll();
+    const rosterWarnings = result.warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX));
+    expect(rosterWarnings).toHaveLength(1);
+    expect(rosterWarnings[0]).toContain('2026-07-11T0900Z-cohort-verdict.md');
+    expect(rosterWarnings[0]).toContain('cohort');
+    // Sensor, not gate (Tenet 13): unread counting is untouched — the file is
+    // (correctly) not addressed to this seat, so it stays out of `mail`; the
+    // warning is the only surface it appears on.
+    expect(result.mail).toEqual([]);
+  });
+
+  it('warns on any unresolvable `to:` address, naming the file and the address', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-07-11T1000Z-typo.md', to: 'totem-claud', subject: 'fat-fingered recipient' },
+    ]);
+    const rosterWarnings = poll().warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX));
+    expect(rosterWarnings).toHaveLength(1);
+    expect(rosterWarnings[0]).toContain('2026-07-11T1000Z-typo.md');
+    expect(rosterWarnings[0]).toContain('totem-claud');
+  });
+
+  it('does NOT warn on a valid roster recipient — including one addressed to another seat', () => {
+    // Roster ≠ this seat's self-set: a dispatch to lc-claude (a cohort-map
+    // agent, not self) is deliverable and must not warn, even though it is
+    // filtered OUT of this seat's mail. broadcast is a routing literal, valid too.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: 'a.md', to: 'totem-claude', subject: 'to me' },
+      { name: 'b.md', to: 'lc-claude', subject: 'to a peer seat' },
+      { name: 'c.md', to: 'broadcast', subject: 'cohort-wide' },
+    ]);
+    expect(poll().warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX))).toEqual([]);
+  });
+
+  it('never false-flags an env/config self-id that sits outside the cohort map (#2141 union)', () => {
+    // A self-id resolved from TOTEM_SELF_AGENT (not the hardcoded map) is a
+    // valid recipient here; the roster unions it so self-addressed mail is
+    // never reported unresolvable.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: 'x.md', to: 'custom-id', subject: 'env self' },
+    ]);
+    const result = poll({ env: { TOTEM_SELF_AGENT: 'custom-id' } });
+    expect(result.warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX))).toEqual([]);
+    expect(result.mail).toHaveLength(1);
+  });
+
+  it('a mail-shaped file with no `to:` keeps its distinct parse-fail message; the roster sensor does not re-warn it', () => {
+    // Same undeliverable class, different surface: the no-`to:` reject is
+    // already loud via the parse-fail path ("no to: field in frontmatter"), so
+    // the roster sensor must not double-warn it.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: 'noto.md', to: 'unused', raw: '---\nfrom: strategy-claude\n---\n' },
+    ]);
+    const result = poll();
+    expect(
+      result.warnings.some((w) => w.startsWith('mail parse failed') && w.includes('no to: field')),
+    ).toBe(true);
+    expect(result.warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX))).toEqual([]);
+    expect(result.mail).toEqual([]);
+  });
+
+  it('stays silent on a non-mail-shaped stray (no `---` opener) — the #2118 unclearable-noise invariant', () => {
+    // The roster sensor runs only on successfully-parsed dispatches; a stray
+    // .md that isn't mail-shaped must not draw a permanent, unclearable warning.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: 'stray.md', to: 'unused', raw: 'to: cohort\njust a note\n' },
+    ]);
+    expect(poll().warnings).toEqual([]);
+  });
+
+  it('warns once per unresolvable dispatch (per-file, not basename-deduped)', () => {
+    // Distinct from the #2311 basename sensor (which dedupes by basename): each
+    // stranded dispatch is independently undeliverable, so each is named.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-07-11T1100Z-cohort-1.md', to: 'cohort', subject: 'one' },
+      { name: '2026-07-11T1200Z-cohort-2.md', to: 'cohort', subject: 'two' },
+    ]);
+    expect(poll().warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX))).toHaveLength(2);
+  });
+});
+
 // ─── Sort + metadata ────────────────────────────────────
 
 describe('pollMail — sort + metadata', () => {
