@@ -16,6 +16,8 @@ import {
   renderCovariateLine,
   type RunArtifact,
   type TotemConfig,
+  TotemConfigError,
+  VERDICT_ARTIFACT_SCHEMA_VERSION,
 } from '@mmnto/totem';
 
 import { EMPTY_SHARED } from '../exemptions/exemption-schema.js';
@@ -173,45 +175,55 @@ function makeCtx(
 
 describe('validateReviewLanes', () => {
   it('accepts and normalizes known provider:model lanes', () => {
-    const out = validateReviewLanes(['anthropic:claude-x', 'gemini:gemini-2.5'], 'anthropic');
+    const out = validateReviewLanes(
+      ['anthropic:claude-x', 'gemini:gemini-2.5'],
+      'anthropic',
+      TotemConfigError,
+    );
     expect(out).toEqual(['anthropic:claude-x', 'gemini:gemini-2.5']);
   });
 
   it('resolves a bare lane against the base provider', () => {
-    const out = validateReviewLanes(['claude-x'], 'anthropic');
+    const out = validateReviewLanes(['claude-x'], 'anthropic', TotemConfigError);
     expect(out).toEqual(['anthropic:claude-x']);
   });
 
   it('returns [] for absent lanes (legacy path)', () => {
-    expect(validateReviewLanes(undefined, 'anthropic')).toEqual([]);
+    expect(validateReviewLanes(undefined, 'anthropic', TotemConfigError)).toEqual([]);
   });
 
   it('rejects the shell provider as an unsupported adapter for fan lanes (Gate G2)', () => {
     // Capability-admission wording — a support-limit error, not "structurally
     // ineligible" / allowlist phrasing.
-    expect(() => validateReviewLanes(['shell:echo'], 'anthropic')).toThrow(
+    expect(() => validateReviewLanes(['shell:echo'], 'anthropic', TotemConfigError)).toThrow(
       /unsupported adapter for review fan lanes/,
     );
   });
 
   it('rejects duplicate normalized lanes', () => {
     expect(() =>
-      validateReviewLanes(['anthropic:claude-x', 'anthropic:claude-x'], 'anthropic'),
+      validateReviewLanes(
+        ['anthropic:claude-x', 'anthropic:claude-x'],
+        'anthropic',
+        TotemConfigError,
+      ),
     ).toThrow(/duplicate/);
   });
 
   it('rejects an unknown provider prefix', () => {
-    expect(() => validateReviewLanes(['weirdvendor:some-model'], 'anthropic')).toThrow(
-      /unknown provider/,
-    );
+    expect(() =>
+      validateReviewLanes(['weirdvendor:some-model'], 'anthropic', TotemConfigError),
+    ).toThrow(/unknown provider/);
   });
 
   it('rejects empty / whitespace-only entries', () => {
-    expect(() => validateReviewLanes(['  '], 'anthropic')).toThrow(/empty/);
+    expect(() => validateReviewLanes(['  '], 'anthropic', TotemConfigError)).toThrow(/empty/);
   });
 
   it('rejects a bare lane when no base provider is configured', () => {
-    expect(() => validateReviewLanes(['claude-x'], undefined)).toThrow(/no orchestrator provider/);
+    expect(() => validateReviewLanes(['claude-x'], undefined, TotemConfigError)).toThrow(
+      /no orchestrator provider/,
+    );
   });
 });
 
@@ -219,26 +231,33 @@ describe('validateReviewLanes', () => {
 
 describe('assertFanFlagsSupported', () => {
   it('rejects --suppress when the fan is active', () => {
-    expect(() => assertFanFlagsSupported({ suppress: ['some-label'] })).toThrow(/--suppress/);
+    expect(() => assertFanFlagsSupported({ suppress: ['some-label'] }, TotemConfigError)).toThrow(
+      /--suppress/,
+    );
   });
 
   it('rejects --learn when the fan is active', () => {
-    expect(() => assertFanFlagsSupported({ learn: true })).toThrow(/--learn/);
+    expect(() => assertFanFlagsSupported({ learn: true }, TotemConfigError)).toThrow(/--learn/);
   });
 
   it('rejects --auto-capture when the fan is active', () => {
-    expect(() => assertFanFlagsSupported({ autoCapture: true })).toThrow(/--auto-capture/);
+    expect(() => assertFanFlagsSupported({ autoCapture: true }, TotemConfigError)).toThrow(
+      /--auto-capture/,
+    );
   });
 
   it('names ALL unsupported flags when several are combined', () => {
     expect(() =>
-      assertFanFlagsSupported({ suppress: ['x'], learn: true, autoCapture: true }),
+      assertFanFlagsSupported(
+        { suppress: ['x'], learn: true, autoCapture: true },
+        TotemConfigError,
+      ),
     ).toThrow(/--suppress.*--learn.*--auto-capture/);
   });
 
   it('accepts a clean options set (no unsupported flags)', () => {
-    expect(() => assertFanFlagsSupported({})).not.toThrow();
-    expect(() => assertFanFlagsSupported({ suppress: [] })).not.toThrow();
+    expect(() => assertFanFlagsSupported({}, TotemConfigError)).not.toThrow();
+    expect(() => assertFanFlagsSupported({ suppress: [] }, TotemConfigError)).not.toThrow();
   });
 });
 
@@ -539,6 +558,33 @@ describe('resolveLineage (gate 6)', () => {
     const res = await resolveLineage({ source: 'uncommitted' }, git);
     expect(res.branch).toBe('DETACHED:abc123');
   });
+
+  it('an explicit-range lineage never spawns git merge-base — only branch-vs-base needs it (greptile item 2)', async () => {
+    // A spy git that RECORDS every probe. explicit-range keys on its base+head endpoints
+    // and discards the merge-base, so `resolveMergeBase` must short-circuit WITHOUT
+    // shelling out to `git merge-base` for it.
+    const recordingGit = (): { git: GitExec; calls: string[][] } => {
+      const calls: string[][] = [];
+      const git: GitExec = (args) => {
+        calls.push([...args]);
+        if (args[0] === 'symbolic-ref') return 'feature-x';
+        if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') return REPO_TOPLEVEL;
+        if (args[0] === 'rev-parse') return 'deadbeefdeadbeef';
+        if (args[0] === 'merge-base') return 'shouldNotBeCalled';
+        return '';
+      };
+      return { git, calls };
+    };
+
+    const range = recordingGit();
+    await resolveLineage({ source: 'explicit-range', base: 'HEAD~3', head: 'HEAD' }, range.git);
+    expect(range.calls.some((c) => c[0] === 'merge-base')).toBe(false);
+
+    // Control: branch-vs-base DOES probe merge-base — proving the spy would have caught it.
+    const branch = recordingGit();
+    await resolveLineage({ source: 'branch-vs-base', base: 'main' }, branch.git);
+    expect(branch.calls.some((c) => c[0] === 'merge-base')).toBe(true);
+  });
 });
 
 // ─── assembleVerdict (structure) ──────────────────────────────────────────────
@@ -561,14 +607,18 @@ describe('assembleVerdict', () => {
   });
 
   it('derives counts and settled from artifact content, never mirrored on trust', () => {
-    const verdict = assembleVerdict({
-      diffScope: { source: 'staged', diffHash: hex('d') },
-      laneResults: [lane('a', []), lane('b', [])],
-      panelAndChecks: { postChecks: [] },
-      round: { index: 0, lineageKey: 'lk' },
-      reviewedState: 'matched',
-      createdAt: '2026-07-10T00:00:00.000Z',
-    });
+    const verdict = assembleVerdict(
+      {
+        diffScope: { source: 'staged', diffHash: hex('d') },
+        laneResults: [lane('a', []), lane('b', [])],
+        panelAndChecks: { postChecks: [] },
+        round: { index: 0, lineageKey: 'lk' },
+        reviewedState: 'matched',
+        createdAt: '2026-07-10T00:00:00.000Z',
+      },
+      deriveSettled,
+      VERDICT_ARTIFACT_SCHEMA_VERSION,
+    );
     expect(verdict.attemptedLaneCount).toBe(2);
     expect(verdict.completedLaneCount).toBe(2);
     expect(verdict.reviewedState).toBe('matched');
@@ -577,14 +627,18 @@ describe('assembleVerdict', () => {
   });
 
   it("records reviewedState='drifted' and forces settled=false on an otherwise-dry fan", () => {
-    const verdict = assembleVerdict({
-      diffScope: { source: 'staged', diffHash: hex('d') },
-      laneResults: [lane('a', []), lane('b', [])],
-      panelAndChecks: { postChecks: [] },
-      round: { index: 0, lineageKey: 'lk' },
-      reviewedState: 'drifted',
-      createdAt: '2026-07-10T00:00:00.000Z',
-    });
+    const verdict = assembleVerdict(
+      {
+        diffScope: { source: 'staged', diffHash: hex('d') },
+        laneResults: [lane('a', []), lane('b', [])],
+        panelAndChecks: { postChecks: [] },
+        round: { index: 0, lineageKey: 'lk' },
+        reviewedState: 'drifted',
+        createdAt: '2026-07-10T00:00:00.000Z',
+      },
+      deriveSettled,
+      VERDICT_ARTIFACT_SCHEMA_VERSION,
+    );
     expect(verdict.reviewedState).toBe('drifted');
     expect(verdict.settled).toBe(false);
   });
@@ -1356,7 +1410,7 @@ describe('runReviewFan', () => {
   it('review.lanes absent ⇒ no fan surface: [] from the validator, and an empty fan writes no verdict / no local-lane line (codex rev-2 gate 5/7)', async () => {
     // Production gate: absent lanes normalize to [] → shieldCommand's fanActive is
     // false → the legacy single-lane path runs unchanged (findings/display/exit/cache).
-    expect(validateReviewLanes(undefined, 'anthropic')).toEqual([]);
+    expect(validateReviewLanes(undefined, 'anthropic', TotemConfigError)).toEqual([]);
     // And the fan — the SOLE emitter of the verdict artifact + additive `local-lane:`
     // line — produces neither when there are no lanes to converge.
     await expect(runReviewFan(makeCtx(tmpDir, [], mapInvoker({})))).rejects.toThrow(

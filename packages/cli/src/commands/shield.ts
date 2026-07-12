@@ -1494,7 +1494,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // legacy). `review.lanes` absent ⇒ [] ⇒ the legacy single-lane path runs
   // byte-for-byte as today (invariant 7).
   const { validateReviewLanes, assertFanFlagsSupported } = await import('./review-fan.js');
-  const laneModels = validateReviewLanes(config.review.lanes, config.orchestrator?.provider);
+  const laneModels = validateReviewLanes(
+    config.review.lanes,
+    config.orchestrator?.provider,
+    TotemConfigError,
+  );
   // Finding 1: a fan-configured `--raw` stays the legacy ZERO-LLM context dump (no
   // invokers, no verdict/run artifacts, `--out` behaves as legacy) — `--raw`
   // DEACTIVATES the fan so the run falls through to the legacy raw path below.
@@ -1505,7 +1509,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     !options.raw;
   // Finding 12: when the fan is active, reject flags with no defined fan semantics
   // LOUDLY (naming the unsupported combination) rather than silently ignoring them.
-  if (fanActive) assertFanFlagsSupported(options);
+  if (fanActive) assertFanFlagsSupported(options, TotemConfigError);
   // Gate G5: validate `--fail-on` (only the fan reads it, but a bad value is a hard
   // config error on any path so the user is never silently ignored).
   if (options.failOn !== undefined && options.failOn !== 'critical' && options.failOn !== 'warn') {

@@ -11,6 +11,7 @@ import {
   loadCompiledRules,
   type RuleEngineContext,
   saveCompiledRules,
+  TotemConfigError,
 } from '@mmnto/totem';
 
 import { EMPTY_SHARED } from '../exemptions/exemption-schema.js';
@@ -1255,7 +1256,7 @@ describe('review fan activation (Prop 304 R2)', () => {
     baseProvider: string | undefined,
     opts: { model?: string; mode?: string; raw?: boolean },
   ): boolean => {
-    const laneModels = validateReviewLanes(lanes, baseProvider);
+    const laneModels = validateReviewLanes(lanes, baseProvider, TotemConfigError);
     return (
       laneModels.length >= 1 && opts.model === undefined && opts.mode !== 'structural' && !opts.raw
     );

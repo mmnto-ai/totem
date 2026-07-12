@@ -27,6 +27,11 @@
  * divergent compare — the single-lane path still uses that helper).
  */
 
+// Repository style rule 64: this CLI command module must NOT statically import VALUES
+// from '@mmnto/totem' — the core package pulls heavy deps (LanceDB), and a top-level
+// value import would eagerly load them on every CLI startup. Types erase at compile
+// time, so `import type` is fine; every core VALUE is reached via `await import(...)`
+// inside an async entry point and threaded down to the sync helpers.
 import type {
   GroundingBundle,
   LineageKeyInput,
@@ -35,18 +40,12 @@ import type {
   PostCheckRule,
   RunArtifact,
   TotemConfig,
+  TotemConfigError,
   VerdictArtifact,
   VerdictDiffScope,
   VerdictLane,
   VerdictPredicateInput,
   VerdictRound,
-} from '@mmnto/totem';
-import {
-  deriveCacheEligible,
-  deriveSettled,
-  renderCovariateLine,
-  TotemConfigError,
-  VERDICT_ARTIFACT_SCHEMA_VERSION,
 } from '@mmnto/totem';
 
 import type { ExemptionShared } from '../exemptions/exemption-schema.js';
@@ -96,14 +95,21 @@ export const MAX_ROUNDS_ADVISORY = 5;
 export function validateReviewLanes(
   lanes: readonly string[] | undefined,
   baseProvider: string | undefined,
+  // Rule 64: this module never statically imports core VALUES. The async caller
+  // (`shieldCommand`) imports the `TotemConfigError` class once and threads it in; we
+  // bind a plain factory closure and pass it down to the sync helpers (design item 1 —
+  // thread values rather than making every tiny helper async, so the throw-shaped tests
+  // stay synchronous).
+  TotemConfigError: TotemConfigErrorClass,
 ): string[] {
   if (lanes === undefined) return [];
+  const mkErr = makeLaneConfigErrorFactory(TotemConfigError);
   const seen = new Set<string>();
   const normalizedLanes: string[] = [];
   for (const raw of lanes) {
     const trimmed = typeof raw === 'string' ? raw.trim() : '';
     if (trimmed.length === 0) {
-      throw makeLaneConfigError(
+      throw mkErr(
         `review.lanes contains an empty or whitespace-only entry.`,
         'Every lane must be a non-empty "provider:model" string, e.g. "anthropic:claude-sonnet-4".',
       );
@@ -112,24 +118,24 @@ export function validateReviewLanes(
     // resolver applies, so a lane accepted here is accepted at invoke time.
     assertValidModelName(trimmed);
 
-    const { provider, model } = resolveLaneProvider(trimmed, baseProvider);
+    const { provider, model } = resolveLaneProvider(trimmed, baseProvider, mkErr);
     if (provider === 'shell') {
       // Capability-admission framing (strategy-codex G2): a support-limit error naming
       // the unsupported adapter — NOT an allowlist / "structurally ineligible" rejection.
-      throw makeLaneConfigError(
+      throw mkErr(
         `review.lanes entry "${trimmed}" uses the 'shell' provider — an unsupported adapter for review fan lanes.`,
         'Fan lanes are served by the LLM adapters (anthropic/gemini/openai/ollama); the shell adapter is not supported for review fan lanes. Use an LLM "provider:model".',
       );
     }
     if (model.length === 0) {
-      throw makeLaneConfigError(
+      throw mkErr(
         `review.lanes entry "${trimmed}" has an empty model portion.`,
         'Provide a model name after the provider prefix, e.g. "gemini:gemini-2.5-flash-preview".',
       );
     }
     const normalized = `${provider}:${model}`;
     if (seen.has(normalized)) {
-      throw makeLaneConfigError(
+      throw mkErr(
         `review.lanes has a duplicate lane "${normalized}" (normalized from "${trimmed}").`,
         'Remove the duplicate — each fan lane must be a distinct provider:model.',
       );
@@ -140,6 +146,12 @@ export function validateReviewLanes(
   return normalizedLanes;
 }
 
+/** A bound config-error factory: `(message, hint) => TotemConfigError CONFIG_INVALID`. */
+type LaneConfigErrorFactory = (message: string, hint: string) => TotemConfigError;
+
+/** The dynamically-imported core `TotemConfigError` class, threaded to the sync validators (rule 64). */
+type TotemConfigErrorClass = typeof import('@mmnto/totem').TotemConfigError;
+
 /**
  * Reject fan-incompatible flags at review startup when the fan is active (finding 12).
  * `--suppress`, `--learn`, and `--auto-capture` have NO defined fan semantics yet, so a
@@ -148,19 +160,25 @@ export function validateReviewLanes(
  * (so the fan never activates with `--raw`; finding 1), and `--out` IS supported by the
  * fan (it writes the human-readable fan report; finding 2).
  */
-export function assertFanFlagsSupported(options: {
-  suppress?: string[];
-  learn?: boolean;
-  autoCapture?: boolean;
-}): void {
+export function assertFanFlagsSupported(
+  options: {
+    suppress?: string[];
+    learn?: boolean;
+    autoCapture?: boolean;
+  },
+  // Threaded from `shieldCommand`'s single core import (rule 64) — this validator stays
+  // sync so its throw-shaped tests never become async.
+  TotemConfigError: TotemConfigErrorClass,
+): void {
   const unsupported: string[] = [];
   if (options.suppress !== undefined && options.suppress.length > 0) unsupported.push('--suppress');
   if (options.learn === true) unsupported.push('--learn');
   if (options.autoCapture === true) unsupported.push('--auto-capture');
   if (unsupported.length > 0) {
-    throw makeLaneConfigError(
+    throw new TotemConfigError(
       `${unsupported.join(', ')} ${unsupported.length === 1 ? 'is' : 'are'} not supported with the multi-lane review fan (review.lanes configured).`,
       'These flags have no defined fan semantics yet — drop them, or run a single-lane review (an explicit --model selects a one-lane invocation on the legacy path).',
+      'CONFIG_INVALID',
     );
   }
 }
@@ -176,6 +194,7 @@ export function assertFanFlagsSupported(options: {
 function resolveLaneProvider(
   trimmed: string,
   baseProvider: string | undefined,
+  mkErr: LaneConfigErrorFactory,
 ): { provider: string; model: string } {
   const colonIdx = trimmed.indexOf(':');
   if (colonIdx === 0) {
@@ -183,7 +202,7 @@ function resolveLaneProvider(
     // provider:model entry) must fail at config parse, not fall through to the
     // bare-model path and surface as a confusing provider API error later
     // (PR #2337 greptile P2).
-    throw makeLaneConfigError(
+    throw mkErr(
       `review.lanes entry "${trimmed}" starts with ":" — the provider portion is empty.`,
       `Name the provider explicitly, e.g. "anthropic${trimmed}".`,
     );
@@ -205,14 +224,14 @@ function resolveLaneProvider(
     // tags) is supported via an explicit provider prefix — the split is on the
     // FIRST colon, so `ollama:llama3:8b` parses as provider=ollama,
     // model=llama3:8b. The hint teaches that spelling (PR #2337 GCA round 2).
-    throw makeLaneConfigError(
+    throw mkErr(
       `review.lanes entry "${trimmed}" names an unknown provider "${prefix}".`,
       `Use one of the known providers (${KNOWN_PROVIDERS.filter((p) => p !== 'shell').join(', ')}), e.g. "anthropic:claude-sonnet-4". If the model name itself contains ":" (e.g. an ollama quantization tag), spell the provider explicitly: "ollama:llama3:8b".`,
     );
   }
   // Bare (prefix-less) lane — resolve against the base provider.
   if (baseProvider === undefined) {
-    throw makeLaneConfigError(
+    throw mkErr(
       `review.lanes entry "${trimmed}" has no provider prefix and no orchestrator provider is configured to resolve it.`,
       'Prefix the lane with a provider, e.g. "anthropic:claude-sonnet-4", or configure an orchestrator.',
     );
@@ -616,9 +635,13 @@ function resolveBranch(gitExec: GitExec): string {
 }
 
 function resolveMergeBase(meta: DiffScopeMeta, gitExec: GitExec): string {
-  // staged / uncommitted have no second endpoint — the branch + source carry
-  // the lineage (documented on the schema); '' keeps the key stable per-branch.
-  if (meta.source === 'staged' || meta.source === 'uncommitted') return '';
+  // ONLY `branch-vs-base` contributes a resolved merge-base to its lineage key, so it is
+  // the only source that spawns `git merge-base`. Every other source returns '' WITHOUT a
+  // subprocess (greptile item 2): staged / uncommitted have no second endpoint, and
+  // `explicit-range` keys on its base+head endpoints and DISCARDS the merge-base entirely
+  // — the branch + source (plus the range endpoints) carry the lineage, and '' keeps the
+  // key stable per-branch.
+  if (meta.source !== 'branch-vs-base') return '';
   const base = meta.base;
   if (base === undefined) return '';
   const head = meta.head ?? 'HEAD';
@@ -800,7 +823,14 @@ export interface VerdictAssemblyInputs {
  * `settled` is the derived predicate over this artifact's own content (including
  * the `reviewedState` drift clause — codex rev-2 fold 1).
  */
-export function assembleVerdict(inputs: VerdictAssemblyInputs): VerdictArtifact {
+export function assembleVerdict(
+  inputs: VerdictAssemblyInputs,
+  // Rule 64: the core predicate + schema-version VALUE are threaded in by the async
+  // caller (`runReviewFan`), never statically imported here — so this stays sync and its
+  // structural tests do not become async.
+  deriveSettled: (typeof import('@mmnto/totem'))['deriveSettled'],
+  VERDICT_ARTIFACT_SCHEMA_VERSION: (typeof import('@mmnto/totem'))['VERDICT_ARTIFACT_SCHEMA_VERSION'],
+): VerdictArtifact {
   const lanes = inputs.laneResults.map((lr) => lr.lane);
   const completed = inputs.laneResults.filter((lr) => lr.lane.status === 'completed');
   const findingsUnion = completed.flatMap((lr) => lr.filteredFindings);
@@ -1047,6 +1077,9 @@ function renderFanReport(
   verdictHash: string,
   findings: readonly AttributedFinding[],
   cacheEligible: boolean,
+  // Threaded from `runReviewFan`'s single core import (rule 64) — this sync helper never
+  // imports core itself.
+  renderCovariateLine: (typeof import('@mmnto/totem'))['renderCovariateLine'],
 ): string {
   const lines: string[] = [];
   lines.push(
@@ -1102,7 +1135,14 @@ function renderFanReport(
  */
 export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   const { log } = await import('../ui.js');
-  const { TotemError, maskSecrets } = await import('@mmnto/totem');
+  const {
+    deriveCacheEligible,
+    deriveSettled,
+    maskSecrets,
+    renderCovariateLine,
+    TotemError,
+    VERDICT_ARTIFACT_SCHEMA_VERSION,
+  } = await import('@mmnto/totem');
 
   // ── Pre-attempt guard: zero configured lanes ⇒ no verdict (the schema requires a
   // nonempty lanes array; there is nothing to converge). This is a pre-attempt failure,
@@ -1223,14 +1263,18 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   // precede assembly, and the artifact must exist before a stamp can claim the round
   // is recorded. Every render/report/covariate/--out side effect happens AFTER the
   // stamp decision, so mutation during that I/O can never influence it. ──
-  const verdict = assembleVerdict({
-    diffScope,
-    laneResults,
-    panelAndChecks,
-    round: roundRes.round,
-    reviewedState,
-    createdAt,
-  });
+  const verdict = assembleVerdict(
+    {
+      diffScope,
+      laneResults,
+      panelAndChecks,
+      round: roundRes.round,
+      reviewedState,
+      createdAt,
+    },
+    deriveSettled,
+    VERDICT_ARTIFACT_SCHEMA_VERSION,
+  );
   const { saveVerdictArtifact } = await import('@mmnto/totem');
   // The saved hash IS the content address (dedup-safe: an identical round returns
   // the existing address).
@@ -1309,7 +1353,14 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   if (ctx.options.out) {
     const { writeOutput } = await import('../utils.js');
     writeOutput(
-      renderFanReport(laneResults, verdict, verdictHash, fanFindings, cacheEligible),
+      renderFanReport(
+        laneResults,
+        verdict,
+        verdictHash,
+        fanFindings,
+        cacheEligible,
+        renderCovariateLine,
+      ),
       ctx.options.out,
     );
     log.success(DISPLAY_TAG, `Fan report written to ${ctx.options.out}`);
@@ -1396,7 +1447,7 @@ export async function printCovariateLine(query: CovariateQuery): Promise<void> {
   }
   const gitExec = query.gitExec ?? (await defaultGitExec(query.cwd));
   const lineage = await resolveLineage(query.diffMeta, gitExec);
-  const { findLatestVerdictForLineage } = await import('@mmnto/totem');
+  const { findLatestVerdictForLineage, renderCovariateLine } = await import('@mmnto/totem');
   const verdict = findLatestVerdictForLineage(query.totemDirAbs, lineage.lineageKey, (msg) =>
     log.warn(DISPLAY_TAG, `Sensor: ${msg}`),
   );
@@ -1461,7 +1512,15 @@ async function sha256Hex(text: string): Promise<string> {
   return crypto.createHash('sha256').update(text, 'utf-8').digest('hex');
 }
 
-/** Config-error factory for the lane validator — a hard `CONFIG_INVALID` init error. */
-function makeLaneConfigError(message: string, hint: string): TotemConfigError {
-  return new TotemConfigError(message, hint, 'CONFIG_INVALID');
+/**
+ * Build the lane-validator config-error factory bound to the dynamically-imported core
+ * `TotemConfigError` class (rule 64: no static core VALUE import). Each async entry point
+ * imports the class once and threads the returned `(message, hint) => TotemConfigError`
+ * closure to the sync helpers, so a lane accepted/rejected here still raises a hard
+ * `CONFIG_INVALID` init error.
+ */
+function makeLaneConfigErrorFactory(
+  TotemConfigError: TotemConfigErrorClass,
+): LaneConfigErrorFactory {
+  return (message, hint) => new TotemConfigError(message, hint, 'CONFIG_INVALID');
 }
