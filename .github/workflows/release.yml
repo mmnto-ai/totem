@@ -15,9 +15,18 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      # token: makes ALL git operations in this job PAT-actored — including the
+      # changesets action's fallback `git push` of changeset-release/main. The
+      # 2026-07-08 actor flip (#2331) happened because the push path degraded
+      # to the checkout-persisted default GITHUB_TOKEN: bot-actored pushes put
+      # every VP-PR pull_request run into action_required (GitHub's stock
+      # posture), stalling cuts behind a manual approval click. The PAT keeps
+      # runs auto-running as they did from 2026-03-03 (433fc92d) to 2026-07-08.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
 
       # Node 24 ships with npm 11.x natively, which supports OIDC trusted
       # publishing (added in npm 11.5.1). Node 22 ships with npm 10.9.x and
@@ -28,7 +37,7 @@ jobs:
       # No registry-url: it writes an .npmrc with _authToken=${NODE_AUTH_TOKEN},
       # which blocks npm's OIDC trusted-publishing negotiation. See #1180 +
       # #1182 history.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24
           cache: pnpm
@@ -42,7 +51,7 @@ jobs:
 
       - name: Create Release PR (version-only)
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1
         with:
           version: pnpm run version
           # No `publish` parameter: `changeset publish` does not propagate
