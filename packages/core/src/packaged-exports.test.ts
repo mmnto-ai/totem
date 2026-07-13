@@ -116,13 +116,13 @@ beforeAll(() => {
   run('tar', ['-xzf', tarballRel, '-C', 'node_modules/@mmnto/totem', '--strip-components=1'], {
     cwd: sandbox,
   });
-});
+}, INTEGRATION_TIMEOUT_MS);
 
 afterAll(() => {
   if (sandbox) {
     fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 5 });
   }
-});
+}, INTEGRATION_TIMEOUT_MS);
 
 describe('@mmnto/totem packaged subpath exports (#2336)', () => {
   it(
