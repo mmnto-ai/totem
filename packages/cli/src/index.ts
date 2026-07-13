@@ -7,6 +7,7 @@ import { Command } from 'commander';
 import { z } from 'zod';
 
 import { initCommand } from './commands/init.js';
+import { TOTEM_DESCRIPTION } from './description.js';
 import { REVIEW_DIFF_TRUNCATION_THRESHOLD } from './git.js';
 import { TotemHelp } from './help.js';
 import { reapOrphanedTempFiles } from './utils.js';
@@ -83,13 +84,27 @@ function handleError(err: unknown): never {
 
 const program = new Command();
 
+// Root-help tier state (mmnto-ai/totem#2336 D2). Mutated before help renders
+// (the `--help` option path precomputes below; the `help` command action sets
+// it directly) and read back by the configured formatHelp via this closure —
+// the bridge between commander's SYNCHRONOUS help render and the ASYNC freeze
+// read that derives the `[frozen]` badge.
+const helpState: { all: boolean; freezeActive: boolean } = { all: false, freezeActive: false };
+
 program
   .name('totem')
-  .description('Totem — persistent memory and context layer for AI agents')
+  .description(TOTEM_DESCRIPTION)
   .version(version)
   .option('--json', 'Output structured JSON to stdout')
+  // Disable commander's built-in help command so our tiered `help [command...]
+  // --all` command (registered below) owns `totem help`.
+  .helpCommand(false)
   .configureHelp({
-    formatHelp: (cmd, helper) => new TotemHelp().formatHelp(cmd, helper),
+    formatHelp: (cmd, helper) =>
+      new TotemHelp({ all: helpState.all, freezeActive: helpState.freezeActive }).formatHelp(
+        cmd,
+        helper,
+      ),
   });
 
 // Set JSON mode early — preAction may not fire on parse errors
@@ -1634,7 +1649,7 @@ lessonCmd
 
 lessonCmd
   .command('compile')
-  .description('Compile lessons into deterministic regex rules')
+  .description('Compile lesson files into deterministic lint rules')
   .option('--raw', 'Output compiler prompts without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
@@ -2185,6 +2200,72 @@ windtunnelCmd
       throw err;
     }
   });
+
+// Derive the `[frozen]` badge state for root help (mmnto-ai/totem#2336 D2.4)
+// from the canonical freeze primitive. Only ever called on a help render, so
+// ordinary commands never pay for the freeze read.
+async function computeFreezeActive(): Promise<boolean> {
+  const { deriveRuleCompilationFrozen } = await import('./help-freeze.js');
+  return deriveRuleCompilationFrozen(process.cwd());
+}
+
+// Tiered help surface (mmnto-ai/totem#2336 D2). Replaces commander's built-in
+// help command (disabled via .helpCommand(false)) so `totem help --all` renders
+// the FULL command surface, tiered, while `totem help <command>` still delegates
+// to the default per-command help. Bare `totem help` / `totem --help` show only
+// the consumer tier plus the pointer to `--all` (partially addresses the
+// progressive-disclosure ask in mmnto-ai/totem#1722; grouping is left to it).
+program
+  .command('help [command...]')
+  .description('Show help; add --all for the full command surface (consumer + advanced tiers)')
+  .option('--all', 'List every command, grouped into consumer and advanced tiers')
+  .action(async (commandPath: string[], opts: { all?: boolean }) => {
+    try {
+      if (commandPath.length > 0) {
+        let target: Command | undefined = program;
+        for (const part of commandPath) {
+          target = target?.commands.find((c) => c.name() === part);
+        }
+        if (target !== undefined && target !== program) {
+          target.outputHelp();
+          return;
+        }
+        const { TotemConfigError } = await import('@mmnto/totem');
+        throw new TotemConfigError(
+          `Unknown command: ${commandPath.join(' ')}`,
+          "Run 'totem help --all' to list every command.",
+          'CONFIG_INVALID',
+        );
+      }
+      helpState.all = opts.all === true;
+      helpState.freezeActive = await computeFreezeActive();
+      program.outputHelp();
+    } catch (err) {
+      handleError(err);
+      // handleError returns `never` (process.exit); the throw is unreachable but
+      // required to satisfy the Tenet 4 fail-loud rule that bans bare-catch
+      // silent-degrade. Mirrors the stats/mail command pattern in this file.
+      throw err;
+    }
+  });
+
+// Precompute root-help tier state for the `--help`/`-h` OPTION path (the `help`
+// COMMAND path sets it in its own action above). `--all` is cheap to read
+// always; the freeze read only fires on an actual help request. A corrupt
+// freeze.json surfaces loudly via handleError rather than silently dropping the
+// badge (no fail-open).
+helpState.all = process.argv.includes('--all');
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  try {
+    helpState.freezeActive = await computeFreezeActive();
+  } catch (err) {
+    handleError(err);
+    // handleError returns `never` (process.exit); the throw is unreachable but
+    // required to satisfy the Tenet 4 fail-loud rule that bans bare-catch
+    // silent-degrade. Mirrors the stats/mail command pattern in this file.
+    throw err;
+  }
+}
 
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
