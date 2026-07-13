@@ -33,8 +33,14 @@ function run(
 ): { stdout: string; stderr: string; status: number } {
   // cross-spawn spawns binaries under paths with spaces (node.exe in "Program
   // Files") and win32 `.cmd` shims WITHOUT a shell — same argv array on both
-  // platforms, no manual quoting (repo safe-exec convention).
-  const res = spawnSync(cmd, [...args], { cwd: opts.cwd, encoding: 'utf-8' });
+  // platforms, no manual quoting (repo safe-exec convention). The child-level
+  // `timeout` is the ONLY effective bound here: spawnSync blocks the event
+  // loop, so vitest's test timeout cannot fire while the child hangs.
+  const res = spawnSync(cmd, [...args], {
+    cwd: opts.cwd,
+    encoding: 'utf-8',
+    timeout: LITE_BUILD_TIMEOUT_MS,
+  });
   if (res.error) {
     throw new Error(`spawn failed for \`${cmd}\`: ${res.error.message}`);
   }

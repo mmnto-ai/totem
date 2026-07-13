@@ -51,8 +51,14 @@ function run(
 ): { stdout: string; stderr: string } {
   // cross-spawn resolves win32 `.cmd` shims (e.g. `pnpm`) and binaries under
   // paths with spaces WITHOUT a shell, so both platforms spawn the same argv
-  // array — no cmd.exe, no manual quoting (repo safe-exec convention).
-  const res = spawnSync(cmd, [...args], { cwd: opts.cwd, encoding: 'utf-8' });
+  // array — no cmd.exe, no manual quoting (repo safe-exec convention). The
+  // child-level `timeout` is the ONLY effective bound here: spawnSync blocks
+  // the event loop, so vitest's hook/test timeouts cannot fire mid-hang.
+  const res = spawnSync(cmd, [...args], {
+    cwd: opts.cwd,
+    encoding: 'utf-8',
+    timeout: INTEGRATION_TIMEOUT_MS,
+  });
   if (res.error) {
     throw new Error(`spawn failed for \`${cmd}\`: ${res.error.message}`);
   }
