@@ -19,13 +19,15 @@
  * sandbox — none touch a git seam.
  */
 
-import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { sync as spawnSync } from 'cross-spawn';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { VERDICT_ARTIFACT_SCHEMA_VERSION } from './artifacts.js';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -47,17 +49,10 @@ function run(
   args: readonly string[],
   opts: { cwd: string },
 ): { stdout: string; stderr: string } {
-  // Node 24 on win32 refuses to spawn `.cmd` shims (e.g. `pnpm`) without a
-  // shell, and `node.exe` itself lives under a path with a space ("Program
-  // Files"). Route win32 through the shell with manual quoting; posix spawns
-  // directly so no shell quoting is involved.
-  const res =
-    process.platform === 'win32'
-      ? spawnSync(
-          [cmd, ...args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a)).join(' '),
-          { cwd: opts.cwd, encoding: 'utf-8', shell: true },
-        )
-      : spawnSync(cmd, [...args], { cwd: opts.cwd, encoding: 'utf-8', shell: false });
+  // cross-spawn resolves win32 `.cmd` shims (e.g. `pnpm`) and binaries under
+  // paths with spaces WITHOUT a shell, so both platforms spawn the same argv
+  // array — no cmd.exe, no manual quoting (repo safe-exec convention).
+  const res = spawnSync(cmd, [...args], { cwd: opts.cwd, encoding: 'utf-8' });
   if (res.error) {
     throw new Error(`spawn failed for \`${cmd}\`: ${res.error.message}`);
   }
@@ -118,9 +113,11 @@ beforeAll(() => {
   });
 }, INTEGRATION_TIMEOUT_MS);
 
+const CLEANUP_MAX_RETRIES = 5;
+
 afterAll(() => {
   if (sandbox) {
-    fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 5 });
+    fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: CLEANUP_MAX_RETRIES });
   }
 }, INTEGRATION_TIMEOUT_MS);
 
@@ -139,17 +136,28 @@ describe('@mmnto/totem packaged subpath exports (#2336)', () => {
         types: './dist/index.d.ts',
       });
 
+      // Exact per-subpath targets: a lazy exports map pointing every subpath
+      // at dist/index.js would satisfy shape regexes AND the ESM-import test
+      // (the barrel is a superset), silently republishing the full unsupported
+      // surface at each curated subpath. Pin the exact aggregator targets.
+      const expectedTargets: Record<string, { import: string; types: string }> = {
+        './config': { import: './dist/config.js', types: './dist/config.d.ts' },
+        './lessons': { import: './dist/lessons.js', types: './dist/lessons.d.ts' },
+        './artifacts': { import: './dist/artifacts.js', types: './dist/artifacts.d.ts' },
+        './packs': { import: './dist/packs.js', types: './dist/packs.d.ts' },
+      };
+
       for (const subpath of SUPPORTED_SUBPATHS) {
-        const entry = exportsMap[subpath];
-        expect(entry, `exports["${subpath}"] present`).toBeDefined();
-        expect(entry?.import, `${subpath} import condition`).toMatch(/^\.\/dist\/.+\.js$/);
-        expect(entry?.types, `${subpath} types condition`).toMatch(/^\.\/dist\/.+\.d\.ts$/);
+        const expected = expectedTargets[subpath];
+        expect(expected, `expectedTargets["${subpath}"] declared`).toBeDefined();
+        if (!expected) continue;
+        expect(exportsMap[subpath], `exports["${subpath}"]`).toEqual(expected);
         expect(
-          fs.existsSync(path.join(installedPkgDir, entry?.import ?? '')),
+          fs.existsSync(path.join(installedPkgDir, expected.import)),
           `${subpath} import target exists in tarball`,
         ).toBe(true);
         expect(
-          fs.existsSync(path.join(installedPkgDir, entry?.types ?? '')),
+          fs.existsSync(path.join(installedPkgDir, expected.types)),
           `${subpath} types target exists in tarball`,
         ).toBe(true);
       }
@@ -171,7 +179,11 @@ describe('@mmnto/totem packaged subpath exports (#2336)', () => {
           'const report = {',
           '  config: typeof config.TotemConfigSchema !== "undefined" && typeof config.getConfigTier === "function",',
           '  lessons: typeof lessons.lessonFileName === "function" && typeof lessons.LessonRoleSchema !== "undefined",',
-          '  artifacts: typeof artifacts.VerdictArtifactSchema !== "undefined" && artifacts.VERDICT_ARTIFACT_SCHEMA_VERSION === "1.0.0",',
+          // Deliberate contract pin, derived not hardcoded: the packed artifact's
+          // exported schema version must equal the workspace source constant. A
+          // legit version bump moves both sides together; a mismatch means the
+          // packed tarball drifted from source.
+          `  artifacts: typeof artifacts.VerdictArtifactSchema !== "undefined" && artifacts.VERDICT_ARTIFACT_SCHEMA_VERSION === ${JSON.stringify(VERDICT_ARTIFACT_SCHEMA_VERSION)},`,
           '  packs: typeof packs.loadInstalledPacks === "function" && typeof packs.isEngineSealed === "function" && typeof packs.InstalledPacksManifestSchema !== "undefined",',
           '};',
           'process.stdout.write(JSON.stringify(report));',

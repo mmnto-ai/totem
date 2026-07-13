@@ -11,17 +11,19 @@
  * `node build/esbuild-lite.mjs`.
  */
 
-import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { sync as spawnSync } from 'cross-spawn';
 import { describe, expect, it } from 'vitest';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT = path.resolve(HERE, '..');
 const CORE_ROOT = path.resolve(CLI_ROOT, '..', 'core');
 const LITE_BUILD_TIMEOUT_MS = 180_000;
+/** Status reported when the child never yielded an exit code (spawn-level failure). */
+const SPAWN_FAILURE_STATUS = -1;
 
 /** Run a child process, failing loud with captured output. */
 function run(
@@ -29,19 +31,18 @@ function run(
   args: readonly string[],
   opts: { cwd: string },
 ): { stdout: string; stderr: string; status: number } {
-  // win32/Node 24: route through the shell with manual quoting (node.exe lives
-  // under a path with a space); posix spawns directly.
-  const res =
-    process.platform === 'win32'
-      ? spawnSync(
-          [cmd, ...args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a)).join(' '),
-          { cwd: opts.cwd, encoding: 'utf-8', shell: true },
-        )
-      : spawnSync(cmd, [...args], { cwd: opts.cwd, encoding: 'utf-8', shell: false });
+  // cross-spawn spawns binaries under paths with spaces (node.exe in "Program
+  // Files") and win32 `.cmd` shims WITHOUT a shell — same argv array on both
+  // platforms, no manual quoting (repo safe-exec convention).
+  const res = spawnSync(cmd, [...args], { cwd: opts.cwd, encoding: 'utf-8' });
   if (res.error) {
     throw new Error(`spawn failed for \`${cmd}\`: ${res.error.message}`);
   }
-  return { stdout: res.stdout ?? '', stderr: res.stderr ?? '', status: res.status ?? -1 };
+  return {
+    stdout: res.stdout ?? '',
+    stderr: res.stderr ?? '',
+    status: res.status ?? SPAWN_FAILURE_STATUS,
+  };
 }
 
 describe('build:lite gate (#2336)', () => {

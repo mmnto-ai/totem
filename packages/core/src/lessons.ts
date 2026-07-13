@@ -27,7 +27,13 @@ export {
   writeLessonFileAsync,
 } from './lesson-io.js';
 
-// Parsed-lesson shape — the element type `readAllLessons` returns.
+// Parsed-lesson shape — the element type `readAllLessons` returns. Sourced
+// from drift-detector.ts because that module OWNS the type today (lesson-io
+// imports it from there; the root barrel exports it from there) — this entry
+// mirrors the established owner rather than minting a second source. If the
+// type ever moves to a dedicated types module, re-point this ONE re-export;
+// the `@mmnto/totem/lessons` surface (the semver promise) is unchanged by
+// where the type lives internally.
 export type { ParsedLesson } from './drift-detector.js';
 
 // Frontmatter parse/build (ADR-070).
