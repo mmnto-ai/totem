@@ -12,6 +12,22 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./config": {
+      "import": "./dist/config.js",
+      "types": "./dist/config.d.ts"
+    },
+    "./lessons": {
+      "import": "./dist/lessons.js",
+      "types": "./dist/lessons.d.ts"
+    },
+    "./artifacts": {
+      "import": "./dist/artifacts.js",
+      "types": "./dist/artifacts.d.ts"
+    },
+    "./packs": {
+      "import": "./dist/packs.js",
+      "types": "./dist/packs.d.ts"
     }
   },
   "scripts": {
