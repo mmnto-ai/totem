@@ -199,4 +199,58 @@ describe('invokeOpenAIOrchestrator', () => {
       );
     });
   });
+
+  // ─── Reasoning-family param shape (mmnto-ai/totem#1476) ──
+  //
+  // GPT-5+ / o-series models reject the legacy `max_tokens` key (the API
+  // requires `max_completion_tokens`) and reject non-default `temperature`.
+  // OpenAI-compatible local servers and older chat models keep the legacy
+  // shape — some compat servers do not recognize `max_completion_tokens`.
+
+  describe('reasoning-family param shape', () => {
+    const okResponse = () => ({
+      choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    });
+
+    it.each(['gpt-5.6-sol', 'gpt-5.4', 'o3-pro'])(
+      'sends max_completion_tokens and omits temperature for %s',
+      async (model) => {
+        mockCreate.mockResolvedValueOnce(okResponse());
+
+        await invokeOpenAIOrchestrator({ ...baseOpts, model, temperature: 0 });
+
+        const call = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+        expect(call['model']).toBe(model);
+        expect(call['max_completion_tokens']).toBe(16_384);
+        expect('max_tokens' in call).toBe(false);
+        expect('temperature' in call).toBe(false);
+      },
+    );
+
+    it.each(['gpt-4.1', 'gpt-4o-mini', 'llama3.2'])(
+      'keeps the legacy max_tokens + temperature shape for %s (compat servers, older models)',
+      async (model) => {
+        mockCreate.mockResolvedValueOnce(okResponse());
+
+        await invokeOpenAIOrchestrator({ ...baseOpts, model, temperature: 0.4 });
+
+        const call = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+        expect(call['max_tokens']).toBe(16_384);
+        expect('max_completion_tokens' in call).toBe(false);
+        expect(call['temperature']).toBe(0.4);
+      },
+    );
+
+    it('gpt-5 chat variants get max_completion_tokens but KEEP temperature — the two axes diverge there (CR finding)', async () => {
+      mockCreate.mockResolvedValueOnce(okResponse());
+
+      await invokeOpenAIOrchestrator({ ...baseOpts, model: 'gpt-5-chat-latest', temperature: 0 });
+
+      const call = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(call['max_completion_tokens']).toBe(16_384);
+      expect('max_tokens' in call).toBe(false);
+      expect(call['temperature']).toBe(0);
+    });
+  });
 });

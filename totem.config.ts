@@ -25,20 +25,27 @@ const config: TotemConfig = {
     provider: 'gemini',
     // Tenet-16 corollary (mmnto-ai/totem-strategy#800 item 1, cohort sweep
     // 2026-07-14): no ambient `defaultModel` — every LLM-backed role this repo
-    // runs is named per-role below instead. `extract`/`reviewlearn` pin what
-    // the dropped default resolved to, so behavior is identical. Siblings:
-    // mmnto-ai/totem-status#97, mmnto-ai/totem-strategy#870.
+    // runs is named per-role below instead. Siblings: mmnto-ai/totem-status#97,
+    // mmnto-ai/totem-strategy#870.
+    //
+    // Model refresh 2026-07-14 (operator-ruled): gemini roles → gemini-3.5-flash
+    // (GA 2026-05-19; beats 3.1 Pro on coding/agentic at ~25% lower cost, flat
+    // long-context pricing, and it is a stable ID where 3.1 Pro is still
+    // preview-only); anthropic roles → claude-sonnet-5 (same $ tier as 4.6,
+    // near-Opus review quality). Watch-item: if spec/docs prose quality
+    // regresses on Flash, revert those two roles to gemini-3.1-pro-preview.
+    // Re-evaluate when Gemini 3.5 Pro actually ships.
     overrides: {
-      compile: 'anthropic:claude-sonnet-4-6', // totem-context: valid model ID — verified via SDK, shield false-positive (predates Claude 4.6 release)
-      docs: 'gemini-3.1-pro-preview',
-      spec: 'gemini-3.1-pro-preview',
-      shield: 'gemini-3.1-pro-preview',
-      triage: 'gemini-3.1-pro-preview',
-      extract: 'gemini-3-flash-preview',
-      reviewlearn: 'gemini-3-flash-preview',
+      compile: 'anthropic:claude-sonnet-5', // totem-context: valid model ID — Sonnet 5 GA June 2026; shield's known-model lesson predates it
+      docs: 'gemini-3.5-flash',
+      spec: 'gemini-3.5-flash',
+      shield: 'gemini-3.5-flash',
+      triage: 'gemini-3.5-flash',
+      extract: 'gemini-3.5-flash',
+      reviewlearn: 'gemini-3.5-flash',
     },
     // mmnto/totem#1291 Phase 3: dogfood prompt caching against our own
-    // compile path. Sonnet 4.6 caches the static compiler template (~50KB
+    // compile path. Sonnet 5 caches the static compiler template (~50KB
     // ast-grep manual + few-shot) on the first call of a session and reads
     // from cache on every subsequent lesson within the 5-minute TTL window.
     // Default 5m ephemeral covers bulk recompile + multi-lesson CI runs.
@@ -57,7 +64,7 @@ const config: TotemConfig = {
   // `totem review --model ...` stays a one-lane invocation; omit `lanes` to
   // fall back to the legacy single-lane path.
   review: {
-    lanes: ['anthropic:claude-sonnet-4-6', 'gemini:gemini-3.1-pro-preview'],
+    lanes: ['anthropic:claude-sonnet-5', 'gemini:gemini-3.5-flash'],
   },
 
   docs: [

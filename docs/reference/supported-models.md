@@ -1,6 +1,6 @@
 # Supported Models & AI Tools Reference
 
-> **Last validated:** 2026-05-02 (1.25.0 ship state). The Gemini tier below was refreshed 2026-06-13 from Google's published model docs (a targeted update, not a full re-validation).
+> **Last validated:** 2026-07-14 (model-refresh PR: Gemini, Anthropic, and OpenAI orchestrator tiers re-validated against published provider docs; Totem defaults moved to `gemini-3.5-flash` / `claude-sonnet-5`; sampling-param stripping now handled at the orchestrator boundary).
 
 Totem supports four LLM provider families for orchestration, and exports project
 knowledge to all major AI coding tools. This document tracks model IDs, tool
@@ -14,15 +14,15 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem lesson extract`, et
 
 ### Google Gemini
 
-| Role                | Model ID                         | Notes                                                                                                                               |
-| ------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Flagship (agentic)  | `gemini-3.5-flash`               | GA flagship — coding/agentic; Gemini API + Antigravity. **Not Totem's default** (default stays `gemini-3-flash-preview`, next row). |
-| Default (fast)      | `gemini-3-flash-preview`         | Preview — current Totem default                                                                                                     |
-| Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026)                                                                                        |
-| Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                                                                             |
-| Fast-lite (newest)  | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost                                                                                            |
-| Stable fast         | `gemini-2.5-flash`               | GA — **deprecating June 17, 2026**                                                                                                  |
-| Stable pro          | `gemini-2.5-pro`                 | GA — **deprecating June 17, 2026**                                                                                                  |
+| Role                | Model ID                         | Notes                                                                                                                                            |
+| ------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Flagship (agentic)  | `gemini-3.5-flash`               | GA flagship — coding/agentic; **Totem's default for all Gemini roles since 2026-07-14** ($1.50/$9 flat; beats 3.1 Pro on coding/agentic)         |
+| Previous default    | `gemini-3-flash-preview`         | Preview — superseded as Totem default by `gemini-3.5-flash`                                                                                      |
+| Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026). Still preview-only; $2/$12 (→$4/$18 >200k). Fallback if Flash prose quality regresses on docs/spec |
+| Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                                                                                          |
+| Fast-lite (newest)  | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost                                                                                                         |
+| Stable fast         | `gemini-2.5-flash`               | GA — **deprecating June 17, 2026**                                                                                                               |
+| Stable pro          | `gemini-2.5-pro`                 | GA — **deprecating June 17, 2026**                                                                                                               |
 
 **Listing API:** `GET https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY`
 
@@ -33,15 +33,16 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem lesson extract`, et
 
 ### Anthropic (Claude)
 
-| Role              | Model ID            | Dated Snapshot               | Notes                                          |
-| ----------------- | ------------------- | ---------------------------- | ---------------------------------------------- |
-| Flagship          | `claude-opus-4-7`   | (undated alias)              | 1M context, Jan 2026 cutoff, adaptive thinking |
-| Previous Opus     | `claude-opus-4-6`   | (undated alias)              | 1M context, May 2025 cutoff, still available   |
-| Fast/balanced     | `claude-sonnet-4-6` | (undated alias)              | Default for `totem lesson compile` routing     |
-| Cheapest          | `claude-haiku-4-5`  | `claude-haiku-4-5-20251001`  |                                                |
-| Legacy Opus       | `claude-opus-4-5`   | Still available              |                                                |
-| Legacy Sonnet 4.5 | `claude-sonnet-4-5` | `claude-sonnet-4-5-20250929` |                                                |
-| Legacy Sonnet 4   | `claude-sonnet-4-0` | `claude-sonnet-4-20250514`   |                                                |
+| Role            | Model ID                                  | Dated Snapshot                                            | Notes                                                                                                                                                       |
+| --------------- | ----------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Top tier        | `claude-fable-5`                          | (undated alias)                                           | Most capable; premium pricing ($10/$50); rejects sampling params                                                                                            |
+| Flagship Opus   | `claude-opus-4-8`                         | (undated alias)                                           | 1M context, adaptive thinking; rejects sampling params                                                                                                      |
+| Fast/balanced   | `claude-sonnet-5`                         | (undated alias)                                           | **Totem default for `compile` + the Anthropic review lane since 2026-07-14.** $3/$15 (intro $2/$10 through 2026-08-31); rejects non-default sampling params |
+| Previous Opus   | `claude-opus-4-7`                         | (undated alias)                                           | 1M context, Jan 2026 cutoff; rejects sampling params                                                                                                        |
+| Previous Sonnet | `claude-sonnet-4-6`                       | (undated alias)                                           | Previous Totem compile/review default; accepts sampling params                                                                                              |
+| Cheapest        | `claude-haiku-4-5`                        | `claude-haiku-4-5-20251001`                               |                                                                                                                                                             |
+| Legacy Opus     | `claude-opus-4-5` / `claude-opus-4-6`     | Still available                                           |                                                                                                                                                             |
+| Legacy Sonnet   | `claude-sonnet-4-5` / `claude-sonnet-4-0` | `claude-sonnet-4-5-20250929` / `claude-sonnet-4-20250514` |                                                                                                                                                             |
 
 **Listing API:** `GET https://api.anthropic.com/v1/models`
 
@@ -49,31 +50,31 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem lesson extract`, et
 - Docs: https://docs.anthropic.com/en/docs/about-claude/models
 - Note: Anthropic does **not** offer an embedding model.
 
-**Migrating to Claude Opus 4.7.** Behaviour changes if you switch any override from 4.6 to 4.7:
+**Current-generation param constraints (Opus 4.7+ / Sonnet 5+ / Fable).** These families reject client sampling params (`temperature`, `top_p`, `top_k`) with a 400:
 
-1. `temperature`, `top_p`, and `top_k` now return 400 errors. Strip sampling params from orchestrator calls. Tracked for Totem in [#1476](https://github.com/mmnto-ai/totem/issues/1476) (seven internal call sites still pass `temperature`, latent until an override points at 4.7).
+1. **Handled at the orchestrator boundary since 2026-07-14** ([#1476](https://github.com/mmnto-ai/totem/issues/1476)): `modelStripsTemperature()` gates the param in the anthropic and openai orchestrators, so callers keep declaring intent and the boundary omits it for models that reject it. No per-call-site changes needed when pointing an override at a new family.
 2. `extended_thinking` is replaced by `adaptive_thinking`, steered via the `effort: low | medium | high | xhigh | max` parameter. Totem does not currently use extended thinking, so no migration needed today.
-3. New tokenizer adds a 1.0 to 1.35x token overhead vs 4.6 depending on content. Re-budget `max_tokens` if you previously tuned it for 4.6.
+3. The Opus 4.7+ / Sonnet 5 tokenizers add a 1.0 to 1.35x token overhead vs 4.6 depending on content. Re-budget `max_tokens` if you previously tuned it for 4.6.
 
-See the [Opus 4.7 migration guide](https://platform.claude.com/docs/en/about-claude/models/migration-guide) for the full list.
+See the [model migration guide](https://platform.claude.com/docs/en/about-claude/models/migration-guide) for the full list.
 
 ### OpenAI
 
-| Role                 | Model ID                  | Notes                                 |
-| -------------------- | ------------------------- | ------------------------------------- |
-| Flagship             | `gpt-5.4`                 | Latest                                |
-| Pro (higher compute) | `gpt-5.4-pro`             | Higher token limits                   |
-| Fast/cheap           | `gpt-5.4-mini`            | Cost-optimized (succeeded gpt-5-mini) |
-| Ultra-cheap          | `gpt-5.4-nano`            | Smallest (succeeded gpt-5-nano)       |
-| Reasoning (best)     | `o3-pro`                  | API only — retired from ChatGPT       |
-| Reasoning (fast)     | `o4-mini`                 | API only — retired from ChatGPT       |
-| Previous gen         | `gpt-4.1`, `gpt-4.1-mini` | Legacy, still available in API        |
+| Role               | Model ID                  | Notes                                                                      |
+| ------------------ | ------------------------- | -------------------------------------------------------------------------- |
+| Flagship           | `gpt-5.6-sol`             | GA July 2026 (alias `gpt-5.6`) — frontier reasoning + long-horizon agentic |
+| Balanced           | `gpt-5.6-terra`           | GPT-5.5-competitive at ~2x lower cost                                      |
+| Fast/cheap         | `gpt-5.6-luna`            | Fastest and most affordable 5.6-family model                               |
+| Previous flagship  | `gpt-5.4` / `gpt-5.4-pro` | Still available in API                                                     |
+| Reasoning (legacy) | `o3-pro`, `o4-mini`       | API only — retired from ChatGPT                                            |
+| Previous gen       | `gpt-4.1`, `gpt-4.1-mini` | Legacy, still available in API                                             |
 
 **Listing API:** `GET https://api.openai.com/v1/models`
 
 - Auth: `Authorization: Bearer $OPENAI_API_KEY`
 - Docs: https://platform.openai.com/docs/models
 - Note: `gpt-4o`, `gpt-4o-mini`, `o4-mini` retired from ChatGPT (Feb 2026) but still in API.
+- **Param constraints:** every `gpt-5*` and o-series model rejects `max_tokens` (requires `max_completion_tokens`) and rejects non-default `temperature`. Handled at the openai-orchestrator boundary since 2026-07-14 via `modelStripsTemperature()` — GPT models work as spec/review/lane orchestrators out of the box; OpenAI-compatible local servers (Ollama, LM Studio, Groq) keep the legacy `max_tokens` shape. "Codex" is OpenAI's coding agent surface, not a model ID — the mainline `gpt-5.5+` models ship in Codex directly.
 
 ### Ollama (Local)
 
@@ -105,17 +106,18 @@ can be used as an orchestrator.
 
 Used by `totem sync` for indexing chunks into LanceDB.
 
-| Provider             | Model ID                     | Dimensions | Notes                                 |
-| -------------------- | ---------------------------- | ---------- | ------------------------------------- |
-| **Gemini** (default) | `gemini-embedding-2-preview` | 768        | Multimodal, task-type aware retrieval |
-| Gemini               | `gemini-embedding-001`       | 768        | Stable, text-only                     |
-| OpenAI               | `text-embedding-3-small`     | 1536       | Lowest onboarding friction            |
-| OpenAI (large)       | `text-embedding-3-large`     | 3072       | Higher quality, higher cost           |
-| **Ollama** (offline) | `nomic-embed-text`           | 768        | Most popular local embed model        |
-| Ollama               | `nomic-embed-text-v2-moe`    | 768        | Multilingual MoE variant              |
-| Ollama               | `mxbai-embed-large`          | 1024       | BERT-large class SOTA                 |
-| Ollama               | `embeddinggemma`             | 768        | 300M params, from Gemma 3, 100+ langs |
-| Ollama               | `qwen3-embedding`            | varies     | 0.6B–8B, 100+ languages               |
+| Provider             | Model ID                     | Dimensions | Notes                                                                                              |
+| -------------------- | ---------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| **Gemini** (default) | `gemini-embedding-2-preview` | 768        | Multimodal, task-type aware retrieval                                                              |
+| Gemini (GA)          | `gemini-embedding-2`         | 768        | GA successor to the preview — **swapping requires a full re-index** (deferred, tracked separately) |
+| Gemini               | `gemini-embedding-001`       | 768        | Stable, text-only                                                                                  |
+| OpenAI               | `text-embedding-3-small`     | 1536       | Lowest onboarding friction                                                                         |
+| OpenAI (large)       | `text-embedding-3-large`     | 3072       | Higher quality, higher cost                                                                        |
+| **Ollama** (offline) | `nomic-embed-text`           | 768        | Most popular local embed model                                                                     |
+| Ollama               | `nomic-embed-text-v2-moe`    | 768        | Multilingual MoE variant                                                                           |
+| Ollama               | `mxbai-embed-large`          | 1024       | BERT-large class SOTA                                                                              |
+| Ollama               | `embeddinggemma`             | 768        | 300M params, from Gemma 3, 100+ langs                                                              |
+| Ollama               | `qwen3-embedding`            | varies     | 0.6B–8B, 100+ languages                                                                            |
 
 ---
 
@@ -125,7 +127,10 @@ Current defaults configured in `totem.config.ts` and `packages/cli/src/commands/
 
 ```
 Embedding:    Gemini gemini-embedding-2-preview  (or OpenAI text-embedding-3-small, Ollama nomic-embed-text)
-Orchestrator: Gemini gemini-3-flash-preview  (overrides: gemini-3.1-pro-preview for spec/review/triage)
+Orchestrator: per-role overrides (no ambient default — Tenet-16 corollary):
+              gemini-3.5-flash for docs/spec/shield/triage/extract/reviewlearn,
+              anthropic:claude-sonnet-5 for compile;
+              review.lanes: anthropic:claude-sonnet-5 + gemini:gemini-3.5-flash
 ```
 
 ### Updating Defaults

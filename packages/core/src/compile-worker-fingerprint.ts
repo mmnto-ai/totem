@@ -96,14 +96,24 @@ export function readPromptTemplateContentHash(promptTemplatePath: string): strin
 /**
  * True when the model's API rejects the `temperature` (and `top_p` / `top_k`)
  * sampling parameter with HTTP 400. Sourced from
- * `docs/reference/supported-models.md` lines 50-52: Claude Opus 4.7+ rejects
- * sampling params.
+ * `docs/reference/supported-models.md` § Orchestrator Models. Covers:
+ *   - Anthropic Opus 4.7+ / Opus 5+ / Sonnet 5+ / Haiku 5+ / Fable / Mythos —
+ *     the adaptive-thinking generation removed client sampling control
+ *   - OpenAI gpt-5+ reasoning models and the o-series — `temperature` is
+ *     unsupported. gpt-5+ *chat* variants (e.g. `gpt-5-chat-latest`) are
+ *     excluded: they accept `temperature` while still rejecting the legacy
+ *     `max_tokens` key, so the token-key axis is decided separately at the
+ *     openai-orchestrator boundary (CR finding on mmnto-ai/totem#2358)
+ * Accepts provider-qualified strings ('anthropic:claude-sonnet-5') as well
+ * as bare IDs. Consumed by the compile-worker fingerprint (records absence)
+ * and by the anthropic/openai orchestrator boundaries (omit the param).
  *
- * Regex is Phase 1 sniff infrastructure. When Anthropic ships a new family
- * that strips params (Sonnet 5.0+, Haiku 5.0+, etc.), widen here. A.3.b's
- * `totem doctor --compliance` is the future home for a richer reconciliation
- * surface; defer until that lands.
+ * Regex is Phase 1 sniff infrastructure — when a provider ships a new family
+ * that strips params, widen here. A.3.b's `totem doctor --compliance` is the
+ * future home for a richer reconciliation surface; defer until that lands.
  */
 export function modelStripsTemperature(model: string): boolean {
-  return /opus-4-[7-9]|opus-[5-9]/.test(model);
+  return /opus-4-[7-9]|opus-[5-9]|sonnet-[5-9]|haiku-[5-9]|claude-fable|claude-mythos|gpt-[5-9](?!.*chat)|(?:^|[^a-zA-Z0-9])o[1-9]\d*(?:\D|$)/.test(
+    model,
+  );
 }
