@@ -241,5 +241,16 @@ describe('invokeOpenAIOrchestrator', () => {
         expect(call['temperature']).toBe(0.4);
       },
     );
+
+    it('gpt-5 chat variants get max_completion_tokens but KEEP temperature — the two axes diverge there (CR finding)', async () => {
+      mockCreate.mockResolvedValueOnce(okResponse());
+
+      await invokeOpenAIOrchestrator({ ...baseOpts, model: 'gpt-5-chat-latest', temperature: 0 });
+
+      const call = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(call['max_completion_tokens']).toBe(16_384);
+      expect('max_tokens' in call).toBe(false);
+      expect(call['temperature']).toBe(0);
+    });
   });
 });

@@ -99,9 +99,11 @@ export function readPromptTemplateContentHash(promptTemplatePath: string): strin
  * `docs/reference/supported-models.md` § Orchestrator Models. Covers:
  *   - Anthropic Opus 4.7+ / Opus 5+ / Sonnet 5+ / Haiku 5+ / Fable / Mythos —
  *     the adaptive-thinking generation removed client sampling control
- *   - OpenAI gpt-5+ and o-series reasoning families — `temperature` is
- *     unsupported (these also require `max_completion_tokens` over
- *     `max_tokens`; that half lives at the openai-orchestrator boundary)
+ *   - OpenAI gpt-5+ reasoning models and the o-series — `temperature` is
+ *     unsupported. gpt-5+ *chat* variants (e.g. `gpt-5-chat-latest`) are
+ *     excluded: they accept `temperature` while still rejecting the legacy
+ *     `max_tokens` key, so the token-key axis is decided separately at the
+ *     openai-orchestrator boundary (CR finding on mmnto-ai/totem#2358)
  * Accepts provider-qualified strings ('anthropic:claude-sonnet-5') as well
  * as bare IDs. Consumed by the compile-worker fingerprint (records absence)
  * and by the anthropic/openai orchestrator boundaries (omit the param).
@@ -111,7 +113,7 @@ export function readPromptTemplateContentHash(promptTemplatePath: string): strin
  * future home for a richer reconciliation surface; defer until that lands.
  */
 export function modelStripsTemperature(model: string): boolean {
-  return /opus-4-[7-9]|opus-[5-9]|sonnet-[5-9]|haiku-[5-9]|claude-fable|claude-mythos|gpt-[5-9]|(?:^|[^a-zA-Z0-9])o[1-9]\d*(?:\D|$)/.test(
+  return /opus-4-[7-9]|opus-[5-9]|sonnet-[5-9]|haiku-[5-9]|claude-fable|claude-mythos|gpt-[5-9](?!.*chat)|(?:^|[^a-zA-Z0-9])o[1-9]\d*(?:\D|$)/.test(
     model,
   );
 }

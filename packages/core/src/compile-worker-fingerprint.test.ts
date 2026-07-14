@@ -156,10 +156,12 @@ describe('modelStripsTemperature', () => {
     ['o4-mini', true],
     ['o10', true], // two-digit o-series (review-lane finding, 2026-07-14)
     ['openai:o3-pro', true], // provider-qualified config value
+    ['gpt-5-chat-latest', false], // chat variant accepts temperature (CR finding, mmnto-ai/totem#2358)
     ['gpt-4o', false], // the 'o' in 4o is digit-preceded, not an o-series ID
     ['gpt-4o-mini', false],
     ['gpt-4.1', false],
-    ['turbo-1', false], // letter-preceded 'o' is not an o-series boundary
+    ['turbo-1', false], // 'o' not immediately followed by a digit (adjacency, not boundary)
+    ['turbo1', false], // letter-preceded 'o' immediately followed by a digit (boundary exclusion)
     ['gemini-3.5-flash', false],
   ])('%s → %s', (model, expected) => {
     expect(modelStripsTemperature(model)).toBe(expected);

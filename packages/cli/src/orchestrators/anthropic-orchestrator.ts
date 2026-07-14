@@ -12,6 +12,8 @@ import { detectPackageManager, isQuotaError } from './orchestrator.js';
 // ─── Constants ───────────────────────────────────────
 
 const DEFAULT_MAX_TOKENS = 8_192;
+/** Opus-tier / current-generation output headroom (adaptive thinking draws from max_tokens). */
+const CURRENT_GEN_MAX_TOKENS = 16_384;
 
 /** Model-aware max output tokens — prevents API errors on smaller models. */
 function getMaxTokens(model: string): number {
@@ -24,9 +26,9 @@ function getMaxTokens(model: string): number {
   // from max_tokens — the 8K Sonnet cap truncated Sonnet 5 review verdicts
   // mid-JSON (output == cap exactly, lane abstained). Give the family
   // Opus-level headroom.
-  if (modelStripsTemperature(model)) return 16_384;
+  if (modelStripsTemperature(model)) return CURRENT_GEN_MAX_TOKENS;
   if (model.includes('sonnet')) return DEFAULT_MAX_TOKENS;
-  if (model.includes('opus')) return 16_384;
+  if (model.includes('opus')) return CURRENT_GEN_MAX_TOKENS;
   return DEFAULT_MAX_TOKENS;
 }
 
