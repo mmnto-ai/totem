@@ -11,7 +11,7 @@ This is the **Semantic Overlay**. It is the unified, primary mechanism for overr
 When you use `totem-context:`, you are telling the system: _"I know this breaks a rule, and here is my exact architectural reasoning for why it is necessary."_
 
 - **Rule Engine:** It strictly suppresses the deterministic `totem lint` error for the following block of code.
-- **Telemetry:** It writes a `suppress` event into the **Trap Ledger**, capturing your reason. If a rule accumulates too many of these contexts, Totem will automatically downgrade the rule via `totem doctor --pr`.
+- **Telemetry:** It writes a `suppress` event into the **Trap Ledger**, capturing your reason. If a rule accumulates too many of these contexts, `totem doctor --pr` will propose downgrading it in a PR you review and merge.
 - **Review Layer:** During an AI-powered `totem review`, the LLM reads your context as a semantic hint and incorporates your logic into its evaluation, rather than blindly flagging the violation.
 
 **Example:**

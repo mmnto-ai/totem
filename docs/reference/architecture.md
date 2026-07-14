@@ -43,7 +43,7 @@ graph TD
     Compile -->|Emits Rule| Lint
     Lint -->|Blocked by| Hooks
 
-    %% The Self-Healing Path
+    %% The Rule-Tuning Path
     Hooks -.->|Developer Bypass| Ledger[(Trap Ledger)]:::core
     Ledger -.->|totem doctor --pr| Compile
 ```
@@ -55,7 +55,7 @@ How Totem uses project-management artifacts (ADRs, proposals, compiled rules) to
 ```mermaid
 sequenceDiagram
     participant Dev as Human / Architect
-    participant Strategy as Strategy Repo (Governance OS)
+    participant Strategy as Strategy Repo (ADRs & proposals)
     participant Agent as Local AI Agent
     participant Product as Main Codebase
 
@@ -79,9 +79,9 @@ sequenceDiagram
     Product-->>Agent: git commit success
 ```
 
-### 3. The Self-Healing Engine
+### 3. The Rule-Tuning Engine
 
-Totem assumes LLMs will hallucinate and developers will get frustrated. Each bypass is logged to the Trap Ledger; `totem doctor --pr` reads that telemetry, downgrades rules that exceed the bypass-rate threshold from error to warning, and surfaces upgrade candidates.
+Totem assumes LLMs will hallucinate and developers will get frustrated. Each bypass is logged to the Trap Ledger; `totem doctor --pr` reads that telemetry, downgrades rules that exceed the bypass-rate threshold from error to warning, and surfaces upgrade candidates — staged as a pull request for human review.
 
 ```mermaid
 graph LR
@@ -103,12 +103,12 @@ graph LR
     Override -->|Logs justification| Ledger
     Doctor -->|Analyzes| Ledger
     Doctor -->|Detects High Bypass Rate| Nursery
-    Nursery -->|Auto-Downgrades to Warning| Lint
+    Nursery -->|Downgrade PR, human-merged| Lint
 ```
 
 ### 4. Structural Layers (Deep Dive)
 
-The separation of concerns within the codebase itself: the fuzzy semantic layer, the rigid deterministic layer, and the persistent memory mesh.
+The separation of concerns within the codebase itself: the fuzzy semantic layer, the rigid deterministic layer, and the file-anchored knowledge substrate.
 
 ```mermaid
 graph TD

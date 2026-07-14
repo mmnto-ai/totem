@@ -1,6 +1,6 @@
 # Architecture & Metrics
 
-Totem tracks telemetry on rule execution to identify false positives and drive the self-healing loop.
+Totem tracks telemetry on rule execution to identify false positives and drive the rule-tuning loop (`totem doctor --pr`).
 
 ## RuleMetric schema
 

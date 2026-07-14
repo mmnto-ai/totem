@@ -46,7 +46,7 @@ Runs a battery of automated health checks to verify config bloat, index health, 
 
 - **Flags:**
   - `--ci`: Exits with a non-zero status code if critical checks fail.
-  - `--pr`: Analyzes the Trap Ledger and auto-downgrades rules with a >30% bypass rate by generating a GitHub Pull Request (Self-Healing Loop).
+  - `--pr`: Analyzes the Trap Ledger and downgrades rules with a >30% bypass rate, staging the changes as a GitHub Pull Request for review (the rule-tuning loop).
 
 ### `totem status` / `totem check`
 
@@ -266,7 +266,7 @@ The classifier is a fixed table over the four-axis cube `(severityBucket × roun
 
 ### `totem review-learn <pr-number>`
 
-Extracts systemic lessons from resolved bot review comments on a merged PR. The other half of the Self-Healing Loop.
+Extracts systemic lessons from resolved bot review comments on a merged PR. The input half of the extract → compile → enforce loop.
 
 ### `totem spec <issue-ids...>`
 

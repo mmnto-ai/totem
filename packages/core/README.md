@@ -1,6 +1,6 @@
 # @mmnto/totem
 
-Core engine for [Totem](https://github.com/mmnto-ai/totem), a persistent memory and context layer for AI agents. This is the library that [`@mmnto/cli`](https://www.npmjs.com/package/@mmnto/cli) and [`@mmnto/mcp`](https://www.npmjs.com/package/@mmnto/mcp) build on; most users want one of those instead.
+Core engine for [Totem](https://github.com/mmnto-ai/totem) — a local-first, file-anchored substrate that makes AI-agent work queryable, enforceable, and derivable in your codebase. This is the library that [`@mmnto/cli`](https://www.npmjs.com/package/@mmnto/cli) and [`@mmnto/mcp`](https://www.npmjs.com/package/@mmnto/mcp) build on; most users want one of those instead.
 
 It contains the lesson parsing and compilation substrate, the deterministic rule engine (regex, Tree-sitter AST classification, ast-grep), the LanceDB-backed vector store, chunkers and embedders, and pack manifest helpers.
 
