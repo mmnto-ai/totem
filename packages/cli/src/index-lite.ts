@@ -6,6 +6,7 @@ declare const __TOTEM_VERSION__: string;
 
 import { Command } from 'commander';
 
+import { TOTEM_DESCRIPTION } from './description.js';
 import { TotemHelp } from './help.js';
 
 function handleError(err: unknown): never {
@@ -78,13 +79,23 @@ function registerExcluded(name: string, description: string): void {
 // ─── Program setup ──────────────────────────────────────────
 const program = new Command();
 
+// Root-help tier state (mmnto-ai/totem#2336 D2). The Lite binary never derives
+// the freeze badge (freezeActive stays false — the [frozen] badge is a
+// full-CLI concern); only `--all` is toggled.
+const helpState: { all: boolean; freezeActive: boolean } = { all: false, freezeActive: false };
+
 program
   .name('totem')
-  .description('Totem — deterministic governance for AI agents [Lite]')
+  .description(`${TOTEM_DESCRIPTION} [Lite]`)
   .version(__TOTEM_VERSION__)
   .option('--json', 'Output structured JSON to stdout')
+  .helpCommand(false)
   .configureHelp({
-    formatHelp: (cmd, helper) => new TotemHelp().formatHelp(cmd, helper),
+    formatHelp: (cmd, helper) =>
+      new TotemHelp({ all: helpState.all, freezeActive: helpState.freezeActive }).formatHelp(
+        cmd,
+        helper,
+      ),
   });
 
 // Set JSON mode early — preAction may not fire on parse errors
@@ -575,6 +586,38 @@ lessonCmd
     console.error('Install the full version: npm install -g @mmnto/cli');
     process.exitCode = 78;
   });
+
+// Tiered help surface (mmnto-ai/totem#2336 D2). Replaces commander's built-in
+// help command (disabled via .helpCommand(false)) so `totem help --all` renders
+// the FULL command surface, tiered, while `totem help <command>` delegates to
+// the default per-command help. The Lite binary renders plain help (no freeze
+// read).
+program
+  .command('help [command...]')
+  .description('Show help; add --all for the full command surface (consumer + advanced tiers)')
+  .option('--all', 'List every command, grouped into consumer and advanced tiers')
+  .action((commandPath: string[], opts: { all?: boolean }) => {
+    if (commandPath.length > 0) {
+      let target: Command | undefined = program;
+      for (const part of commandPath) {
+        target = target?.commands.find((c) => c.name() === part);
+      }
+      if (target !== undefined && target !== program) {
+        target.outputHelp();
+        return;
+      }
+      console.error(`[Totem Error] Unknown command: ${commandPath.join(' ')}`);
+      console.error("  Run 'totem help --all' to list every command.");
+      process.exitCode = 1;
+      return;
+    }
+    helpState.all = opts.all === true;
+    program.outputHelp();
+  });
+
+// Precompute the `--all` tier flag for the `--help`/`-h` OPTION path (the `help`
+// COMMAND path sets it in its own action above).
+helpState.all = process.argv.includes('--all');
 
 // ─── Parse and run ──────────────────────────────────────────
 try {

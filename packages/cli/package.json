@@ -1,7 +1,7 @@
 {
   "name": "@mmnto/cli",
   "version": "1.94.0",
-  "description": "CLI for Totem — AI persistent memory and context layer",
+  "description": "Totem — a local-first, file-anchored substrate that makes AI-agent work queryable, enforceable, and derivable in your codebase",
   "type": "module",
   "engines": {
     "node": ">=24"
