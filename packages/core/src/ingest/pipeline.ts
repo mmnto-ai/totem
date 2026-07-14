@@ -9,6 +9,7 @@ import { TotemDatabaseError } from '../errors.js';
 import { withLock } from '../lock.js';
 import { sanitizeForIngestion } from '../sanitize.js';
 import { LanceStore } from '../store/lance-store.js';
+import { sanitizeForTerminal } from '../terminal-sanitize.js';
 import type { Chunk, SyncOptions, SyncState } from '../types.js';
 import type { ResolvedFile } from './file-resolver.js';
 import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
@@ -361,14 +362,25 @@ async function runSyncInner(
   }
 
   for (const file of filesToProcess) {
-    log(`Chunking ${file.relativePath}...`);
+    const safeRel = sanitizeForTerminal(file.relativePath);
+    log(`Chunking ${safeRel}...`);
 
     let content: string;
     try {
+      // Symlink guard at the READ site (mmnto-ai/totem#2354, #2356 review):
+      // resolveFiles skips symlinks at discovery, but this read happens later,
+      // so a path swapped to a symlink after resolution would still be followed
+      // by readFileSync. Re-check here and skip — closes the discovery→read
+      // TOCTOU gap.
+      if (fs.lstatSync(file.absolutePath).isSymbolicLink()) {
+        log(`  Skipping symlink (not indexed): ${safeRel}`);
+        continue;
+      }
       content = fs.readFileSync(file.absolutePath, 'utf-8');
+      // totem-context: intentional skip — a per-file read failure (vanished/raced file, permission, decode) logs and skips just that file so sync continues over the rest; aborting the whole sync over one unreadable file would be the drift, not the skip.
     } catch (err) {
       log(
-        `  Skipping (read error: ${err instanceof Error ? err.message : String(err)}): ${file.relativePath}`,
+        `  Skipping (read error: ${err instanceof Error ? err.message : String(err)}): ${safeRel}`,
       );
       continue;
     }

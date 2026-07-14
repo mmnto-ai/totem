@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 
 import * as crossSpawn from 'cross-spawn';
 import { globSync } from 'glob';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fail, ok } from '../test-utils.js';
 import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
@@ -22,6 +22,16 @@ vi.mock('node:fs', async (importOriginal) => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+  // Default the fs mock to a normal (non-symlink) stat so tests that don't pin
+  // lstat exercise the real non-symlink path — not the error fallback a bare
+  // vi.fn() (returning undefined → throws in the guard) would silently route
+  // them through.
+  vi.mocked(fs.lstatSync).mockReturnValue({
+    isSymbolicLink: () => false,
+  } as unknown as fs.Stats);
 });
 
 describe('getHeadSha', () => {
@@ -199,5 +209,23 @@ describe('resolveFiles — symlink guard (mmnto-ai/totem#2354)', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].relativePath).toBe('.totem/lessons/good.md');
+  });
+
+  it('degrades a raced/ENOENT lstat to non-symlink (still resolves the match)', () => {
+    vi.mocked(crossSpawn.sync).mockImplementation((() => ok('.totem/lessons/raced.md\0')) as never);
+    vi.mocked(globSync).mockReturnValue(['.totem/lessons/raced.md'] as unknown as string[] & {
+      [Symbol.iterator]: () => IterableIterator<string>;
+    });
+    vi.mocked(fs.lstatSync).mockImplementation(() => {
+      throw Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' });
+    });
+
+    const result = resolveFiles(
+      [{ glob: '.totem/lessons/*.md', type: 'spec', strategy: 'markdown-heading' }],
+      '/project',
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].relativePath).toBe('.totem/lessons/raced.md');
   });
 });

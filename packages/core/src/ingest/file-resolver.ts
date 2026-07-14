@@ -6,6 +6,7 @@ import { globSync } from 'glob';
 import type { IngestTarget } from '../config-schema.js';
 import { DEFAULT_IGNORE_PATTERNS } from '../config-schema.js';
 import { describeSafeExecError, safeExec } from '../sys/exec.js';
+import { sanitizeForTerminal } from '../terminal-sanitize.js';
 
 export interface ResolvedFile {
   absolutePath: string;
@@ -115,7 +116,9 @@ export function resolveFiles(
       }
       if (isSymlink) {
         if (onWarn) {
-          onWarn(`Skipping symlink under ingest target (not indexed): ${relativePath}`);
+          onWarn(
+            `Skipping symlink under ingest target (not indexed): ${sanitizeForTerminal(relativePath)}`,
+          );
         }
         continue;
       }
