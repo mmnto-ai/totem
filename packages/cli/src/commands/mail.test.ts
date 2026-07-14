@@ -271,6 +271,17 @@ describe('pollMail — symlinked agent/outbox dirs are not traversed (mmnto-ai/t
     expect(result.scanned).toBe(0);
   });
 
+  it('skips a symlinked orchestration dir under a real repo', () => {
+    const outside = mkDir(path.join(tmpRoot, 'orch-target', 'rogue-agent', 'outbox'));
+    writeRogueMail(outside, '2026-07-14T0004Z-orch.md');
+    const totemDir = mkDir(path.join(workspace, 'totem-strategy', '.totem'));
+    symlinkDir(path.join(tmpRoot, 'orch-target'), path.join(totemDir, 'orchestration'));
+
+    const result = poll();
+    expect(result.mail).toEqual([]);
+    expect(result.scanned).toBe(0);
+  });
+
   it('still scans a real sibling outbox alongside a symlinked agent dir', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-07-14T0002Z.md', to: 'totem-claude', subject: 'real mail' },

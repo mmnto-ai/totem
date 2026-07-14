@@ -401,7 +401,11 @@ function enumerateOutboxes(
   }
 
   const visit = (repoLabel: string, orchDir: string): void => {
-    if (!fs.existsSync(orchDir)) return;
+    // No-follow both remaining path hops (greptile round on this PR):
+    // `existsSync` follows symlinks, so a symlinked `.totem/` or
+    // `orchestration/` inside a real repo would swing the whole agent scan
+    // into the link target. `path.dirname(orchDir)` is the `.totem` hop.
+    if (!isRealDirectory(path.dirname(orchDir)) || !isRealDirectory(orchDir)) return;
     let agents: string[];
     try {
       // Dirent-filter the agent level like the workspace/repo levels above:
