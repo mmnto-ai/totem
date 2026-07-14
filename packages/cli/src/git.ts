@@ -191,6 +191,14 @@ function resolveExplicitRangeRefs(range: string): { base?: string; head?: string
 export const REVIEW_DIFF_TRUNCATION_THRESHOLD = 50_000;
 
 /**
+ * Cap on file names printed by the ignore-filter disclosure line
+ * (mmnto-ai/totem#1748): enough to name every file in the observed exhibits
+ * while bounding terminal noise when a broad pattern drops a large set; the
+ * overflow is still counted (`+N more`).
+ */
+export const MAX_DISCLOSED_FILTERED_FILES = 8;
+
+/**
  * Shared diff-fetching logic used by both `shield` and `lint` commands.
  *
  * Resolution order:
@@ -287,7 +295,9 @@ export async function getDiffForReview(
     const kept = new Set(extractChangedFiles(filtered));
     const dropped = extractChangedFiles(rawDiff).filter((file) => !kept.has(file));
     if (dropped.length > 0) {
-      const shown = dropped.slice(0, 8).map((file) => sanitizeForTerminal(file));
+      const shown = dropped
+        .slice(0, MAX_DISCLOSED_FILTERED_FILES)
+        .map((file) => sanitizeForTerminal(file));
       const more = dropped.length > shown.length ? ` (+${dropped.length - shown.length} more)` : '';
       log.warn(
         tag,
