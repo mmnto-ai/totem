@@ -23,13 +23,19 @@ const config: TotemConfig = {
 
   orchestrator: {
     provider: 'gemini',
-    defaultModel: 'gemini-3-flash-preview',
+    // Tenet-16 corollary (mmnto-ai/totem-strategy#800 item 1, cohort sweep
+    // 2026-07-14): no ambient `defaultModel` — every LLM-backed role this repo
+    // runs is named per-role below instead. `extract`/`reviewlearn` pin what
+    // the dropped default resolved to, so behavior is identical. Siblings:
+    // mmnto-ai/totem-status#97, mmnto-ai/totem-strategy#870.
     overrides: {
       compile: 'anthropic:claude-sonnet-4-6', // totem-context: valid model ID — verified via SDK, shield false-positive (predates Claude 4.6 release)
       docs: 'gemini-3.1-pro-preview',
       spec: 'gemini-3.1-pro-preview',
       shield: 'gemini-3.1-pro-preview',
       triage: 'gemini-3.1-pro-preview',
+      extract: 'gemini-3-flash-preview',
+      reviewlearn: 'gemini-3-flash-preview',
     },
     // mmnto/totem#1291 Phase 3: dogfood prompt caching against our own
     // compile path. Sonnet 4.6 caches the static compiler template (~50KB
