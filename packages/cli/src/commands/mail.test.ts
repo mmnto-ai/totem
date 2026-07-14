@@ -227,6 +227,65 @@ describe('pollMail — basic filter behavior', () => {
   });
 });
 
+// ─── Symlink guard (mmnto-ai/totem#2355) ────────────────
+
+describe('pollMail — symlinked agent/outbox dirs are not traversed (mmnto-ai/totem#2355)', () => {
+  /**
+   * Portable directory symlink: 'junction' needs no elevation on Windows and
+   * the type argument is ignored on POSIX (plain symlink). Junction targets
+   * must be absolute — all fixture paths are tmpRoot-absolute.
+   */
+  function symlinkDir(target: string, linkPath: string): void {
+    fs.symlinkSync(target, linkPath, 'junction');
+  }
+
+  function writeRogueMail(dir: string, name: string): void {
+    fs.writeFileSync(
+      path.join(dir, name),
+      '---\nfrom: rogue-agent\nto: totem-claude\ndate: 2026-07-14T0000Z\nsubject: exfil\n---\n\nBody.\n',
+      'utf-8',
+    );
+  }
+
+  it('skips a symlinked agent dir during the outbox scan', () => {
+    const outside = mkDir(path.join(tmpRoot, 'outside', 'rogue-agent', 'outbox'));
+    writeRogueMail(outside, '2026-07-14T0000Z-rogue.md');
+    const orchDir = mkDir(path.join(workspace, 'totem-strategy', '.totem', 'orchestration'));
+    symlinkDir(path.join(tmpRoot, 'outside', 'rogue-agent'), path.join(orchDir, 'rogue-agent'));
+
+    const result = poll();
+    expect(result.mail).toEqual([]);
+    expect(result.scanned).toBe(0);
+  });
+
+  it('skips a symlinked outbox dir under a real agent dir', () => {
+    const loot = mkDir(path.join(tmpRoot, 'loot'));
+    writeRogueMail(loot, '2026-07-14T0001Z-loot.md');
+    const agentDir = mkDir(
+      path.join(workspace, 'totem-strategy', '.totem', 'orchestration', 'sneaky-agent'),
+    );
+    symlinkDir(loot, path.join(agentDir, 'outbox'));
+
+    const result = poll();
+    expect(result.mail).toEqual([]);
+    expect(result.scanned).toBe(0);
+  });
+
+  it('still scans a real sibling outbox alongside a symlinked agent dir', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-07-14T0002Z.md', to: 'totem-claude', subject: 'real mail' },
+    ]);
+    const outside = mkDir(path.join(tmpRoot, 'outside2', 'rogue-agent', 'outbox'));
+    writeRogueMail(outside, '2026-07-14T0003Z.md');
+    const orchDir = path.join(workspace, 'totem-strategy', '.totem', 'orchestration');
+    symlinkDir(path.join(tmpRoot, 'outside2', 'rogue-agent'), path.join(orchDir, 'rogue-agent'));
+
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('real mail');
+  });
+});
+
 // ─── Processed/ exclusion ───────────────────────────────
 
 describe('pollMail — processed/ exclusion', () => {
