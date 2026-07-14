@@ -69,6 +69,12 @@ app.post('/compile', async (c) => {
     return c.json({ err: 'Missing lessons or prompt' }, 400);
   }
 
+  // Tenet-16 corollary (mmnto-ai/totem-strategy#800 item 1): the model is the
+  // caller's to name — no silent vendor default on the server half either.
+  if (!body.model) {
+    return c.json({ err: 'Missing model' }, 400);
+  }
+
   // Request validation — prevent abuse
   const MAX_LESSONS = 1000;
   const MAX_PAYLOAD_CHARS = 10_000_000; // ~10MB
@@ -80,7 +86,7 @@ app.post('/compile', async (c) => {
     return c.json({ err: `Payload too large (max ${MAX_PAYLOAD_CHARS} chars)` }, 400);
   }
 
-  const model = body.model ?? 'gemini-3-flash-preview';
+  const model = body.model;
   const concurrency = Math.min(body.concurrency ?? 50, 100);
 
   const startTime = Date.now();

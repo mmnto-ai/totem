@@ -1419,6 +1419,20 @@ export async function compileCommand(
             `${newRules.length} rules — ${compiled} compiled${failed > 0 ? `, ${failed} failed` : ''} (all manual, no cloud call needed)`,
           );
         } else {
+          // Tenet-16 corollary (mmnto-ai/totem-strategy#800 item 1): the model
+          // sent to the cloud worker must come from the caller or config —
+          // never a hardcoded vendor default (the three manifest-provenance
+          // sibling sites fall back to 'unknown'; this one is a live request
+          // parameter, so absence fails loud instead).
+          const cloudModel = options.model ?? config.orchestrator?.defaultModel;
+          if (!cloudModel) {
+            throw new TotemConfigError(
+              'No model specified for cloud compile.',
+              "Provide one with --model, or set a 'defaultModel' in your orchestrator config.",
+              'CONFIG_INVALID',
+            );
+          }
+
           log.info(TAG, `Cloud compile: ${cloudLessons.length} lessons → ${cloudUrl}`);
 
           // Resolve auth token for Cloud Run (uses gcloud identity token or TOTEM_CLOUD_TOKEN env)
@@ -1450,7 +1464,7 @@ export async function compileCommand(
             body: JSON.stringify({
               lessons: scrubbedLessons,
               prompt: COMPILER_SYSTEM_PROMPT,
-              model: options.model ?? config.orchestrator?.defaultModel ?? 'gemini-3-flash-preview',
+              model: cloudModel,
               concurrency: CLOUD_CONCURRENCY,
             }),
           });
