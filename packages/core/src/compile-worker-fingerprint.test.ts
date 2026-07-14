@@ -139,8 +139,28 @@ describe('modelStripsTemperature', () => {
     ['claude-sonnet-4-6', false],
     ['claude-sonnet-4-7', false], // Sonnet 4-7 doesn't strip per Phase 1 doc
     ['claude-haiku-4-5', false],
-    ['gpt-4o', false],
     ['gemini-2.5-pro', false],
+    // 2026-07-14 widening (#1476): Sonnet 5+ / Haiku 5+ / Fable / Mythos
+    ['claude-sonnet-5', true],
+    ['claude-sonnet-5-1', true],
+    ['claude-haiku-5', true],
+    ['claude-fable-5', true],
+    ['claude-mythos-5', true],
+    ['anthropic:claude-sonnet-5', true], // provider-qualified config value
+    ['anthropic:claude-sonnet-4-6', false],
+    // 2026-07-14 widening (#1476): OpenAI gpt-5+ and o-series reasoning
+    ['gpt-5.6-sol', true],
+    ['gpt-5.6', true],
+    ['gpt-5.4-mini', true],
+    ['o3-pro', true],
+    ['o4-mini', true],
+    ['o10', true], // two-digit o-series (review-lane finding, 2026-07-14)
+    ['openai:o3-pro', true], // provider-qualified config value
+    ['gpt-4o', false], // the 'o' in 4o is digit-preceded, not an o-series ID
+    ['gpt-4o-mini', false],
+    ['gpt-4.1', false],
+    ['turbo-1', false], // letter-preceded 'o' is not an o-series boundary
+    ['gemini-3.5-flash', false],
   ])('%s → %s', (model, expected) => {
     expect(modelStripsTemperature(model)).toBe(expected);
   });

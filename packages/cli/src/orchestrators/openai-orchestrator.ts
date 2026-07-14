@@ -1,4 +1,9 @@
-import { buildMissingSdkHint, TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
+import {
+  buildMissingSdkHint,
+  modelStripsTemperature,
+  TotemConfigError,
+  TotemOrchestratorError,
+} from '@mmnto/totem';
 
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
@@ -83,11 +88,21 @@ export async function invokeOpenAIOrchestrator(
     }
     messages.push({ role: 'user', content: prompt });
 
+    // GPT-5+ / o-series reasoning models reject the legacy `max_tokens` key
+    // (400 — the API requires `max_completion_tokens`) and reject non-default
+    // `temperature` (mmnto-ai/totem#1476). Older chat models and OpenAI-
+    // compatible local servers (Ollama, LM Studio, Groq) keep the legacy
+    // param shape — some of them do not recognize `max_completion_tokens`.
+    const isReasoningFamily = modelStripsTemperature(model);
     const response = await client.chat.completions.create({
       model,
-      max_tokens: DEFAULT_MAX_TOKENS,
+      ...(isReasoningFamily
+        ? { max_completion_tokens: DEFAULT_MAX_TOKENS }
+        : { max_tokens: DEFAULT_MAX_TOKENS }),
       messages,
-      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      ...(opts.temperature !== undefined && !isReasoningFamily
+        ? { temperature: opts.temperature }
+        : {}),
     });
 
     const durationMs = Date.now() - startMs;

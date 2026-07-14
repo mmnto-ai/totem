@@ -1,4 +1,9 @@
-import { buildMissingSdkHint, TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
+import {
+  buildMissingSdkHint,
+  modelStripsTemperature,
+  TotemConfigError,
+  TotemOrchestratorError,
+} from '@mmnto/totem';
 
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
@@ -10,7 +15,16 @@ const DEFAULT_MAX_TOKENS = 8_192;
 
 /** Model-aware max output tokens — prevents API errors on smaller models. */
 function getMaxTokens(model: string): number {
+  // Haiku keeps its conservative cap even for future 5+ variants — their
+  // output ceiling is unknown, and 4K is the proven-safe allocation. Revisit
+  // when a Haiku 5 actually ships (review-lane finding, 2026-07-14).
   if (model.includes('haiku')) return 4_096;
+  // Current-generation models (Sonnet 5+ / Opus 4.7+ / Fable) run adaptive
+  // thinking when the `thinking` param is omitted, and thinking tokens draw
+  // from max_tokens — the 8K Sonnet cap truncated Sonnet 5 review verdicts
+  // mid-JSON (output == cap exactly, lane abstained). Give the family
+  // Opus-level headroom.
+  if (modelStripsTemperature(model)) return 16_384;
   if (model.includes('sonnet')) return DEFAULT_MAX_TOKENS;
   if (model.includes('opus')) return 16_384;
   return DEFAULT_MAX_TOKENS;
@@ -124,7 +138,13 @@ export async function invokeAnthropicOrchestrator(
       max_tokens: getMaxTokens(model),
       ...(systemField !== undefined ? { system: systemField } : {}),
       messages: [{ role: 'user' as const, content: prompt }],
-      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      // Opus 4.7+ / Sonnet 5+ / Fable reject client sampling params with a
+      // 400 — omit temperature entirely for them (mmnto-ai/totem#1476). The
+      // caller's declared value still reaches models that accept it; the
+      // compile-worker fingerprint records the same absence.
+      ...(opts.temperature !== undefined && !modelStripsTemperature(model)
+        ? { temperature: opts.temperature }
+        : {}),
     });
 
     const durationMs = Date.now() - startMs;

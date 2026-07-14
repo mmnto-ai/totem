@@ -138,6 +138,72 @@ describe('invokeAnthropicOrchestrator', () => {
     expect(result.finishReason).toBeUndefined();
   });
 
+  // ─── Sampling-param stripping (mmnto-ai/totem#1476) ──
+
+  describe('temperature stripping for current-generation models', () => {
+    const okResponse = {
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+      stop_reason: 'end_turn',
+    };
+
+    it('forwards temperature to models that accept sampling params (Sonnet 4.6)', async () => {
+      mockCreate.mockResolvedValueOnce(okResponse);
+
+      await invokeAnthropicOrchestrator({ ...baseOpts, temperature: 0 });
+
+      expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ temperature: 0 }));
+    });
+
+    it.each(['claude-sonnet-5', 'claude-opus-4-8', 'claude-fable-5'])(
+      'omits temperature entirely for %s (API rejects sampling params with 400)',
+      async (model) => {
+        mockCreate.mockResolvedValueOnce(okResponse);
+
+        await invokeAnthropicOrchestrator({ ...baseOpts, model, temperature: 0 });
+
+        const call = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+        expect(call['model']).toBe(model);
+        expect('temperature' in call).toBe(false);
+      },
+    );
+
+    it('omits temperature when the caller never set one (unchanged shape)', async () => {
+      mockCreate.mockResolvedValueOnce(okResponse);
+
+      await invokeAnthropicOrchestrator(baseOpts);
+
+      const call = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect('temperature' in call).toBe(false);
+    });
+
+    it('gives current-generation models Opus-level max_tokens headroom (adaptive thinking draws from it)', async () => {
+      mockCreate.mockResolvedValueOnce(okResponse);
+
+      await invokeAnthropicOrchestrator({ ...baseOpts, model: 'claude-sonnet-5' });
+
+      expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ max_tokens: 16_384 }));
+    });
+
+    it('keeps the 8K cap for previous-generation sonnet models', async () => {
+      mockCreate.mockResolvedValueOnce(okResponse);
+
+      await invokeAnthropicOrchestrator(baseOpts); // claude-sonnet-4-6
+
+      expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ max_tokens: 8_192 }));
+    });
+
+    it('haiku keeps its conservative 4K cap even for hypothetical 5+ variants — but still strips temperature', async () => {
+      mockCreate.mockResolvedValueOnce(okResponse);
+
+      await invokeAnthropicOrchestrator({ ...baseOpts, model: 'claude-haiku-5', temperature: 0 });
+
+      const call = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(call['max_tokens']).toBe(4_096);
+      expect('temperature' in call).toBe(false);
+    });
+  });
+
   // ─── Caching (mmnto/totem#1291 Phase 2) ──────────────
 
   describe('prompt caching', { timeout: 15000 }, () => {
