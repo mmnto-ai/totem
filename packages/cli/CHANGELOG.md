@@ -1,5 +1,50 @@
 # @mmnto/cli
 
+## 1.96.0
+
+### Minor Changes
+
+- 01c2ed0: fix(config): `indexIgnorePatterns` — index-only exclusions split from lint/shield scope, plus loud disclosure when `ignorePatterns` drops files from a review diff (mmnto-ai/totem#1748, upstream-feedback/046).
+
+  `config.ignorePatterns` is documented as index exclusion but was also silently merged into the lint/shield diff filter — an operator excluding paths from _indexing_ (e.g. `audits/**`, "keep on disk, out of the semantic index") silently disabled _lint_ on those paths (two live exhibits, including a staged lint that dropped audit files with no trace). Conservative composite, no behavior break:
+  - New `indexIgnorePatterns` config key (core schema): excluded ONLY from indexing, never from lint/shield scope. Moving index-intent patterns here restores lint coverage immediately.
+  - `ignorePatterns` keeps its dual scope for back-compat; its docstring now states the dual scope honestly. The full inheritance split (lint stops consuming `ignorePatterns`) is registered for 2.0.0 in mmnto-ai/totem#1746.
+  - Tenet-4 floor at the diff boundary: every review/lint diff derivation now discloses `Filtered N file(s) from the diff per ignorePatterns/shieldIgnorePatterns: ...`, naming each dropped file (capped at 8 + overflow count), so un-migrated configs stop failing silently.
+
+  Consumer-impact: config schema (additive key, no migration required) + lint/shield/review terminal output (new warning line whenever ignore patterns drop files from the derived diff; verdicts, exit codes, and diff contents are byte-identical for runs where the patterns drop nothing).
+
+- 7d24edd: feat(init): generated configs name models per-role — no ambient `defaultModel` — and stamp current-generation IDs (Tenet-16 corollary follow-on, mmnto-ai/totem-strategy#800 item 1).
+
+  `totem init`'s orchestrator detection was the generator of the ambient-default violation class cohort-wide: every generated config committed a concrete `orchestrator.defaultModel`, and the stamped IDs (`gemini-3-flash-preview` / `claude-sonnet-4-6` / `gpt-5.4-mini`) were stale after the 2026-07-14 model refresh. Detection itself is legitimate local-environment resolution at genesis, so it stays; the emitted shape changes to per-role `overrides` covering every LLM-backed role tag (compile/docs/spec/shield/triage/extract/reviewlearn) with current IDs: `gemini-3.5-flash` (Gemini CLI + API branches), `claude-sonnet-5` (Anthropic API), `gpt-5.6-terra` (OpenAI API), the `sonnet` tier alias (claude CLI), `gemma4` (Ollama). The TS-template block is now rendered from the same object serialized into YAML/TOML configs, so the two emission surfaces cannot drift.
+
+  Consumer-impact: `totem init` generated-config surface only — newly generated configs get the per-role shape and current model IDs; existing configs are never rewritten. One behavioral edge: a freshly generated config no longer feeds `totem lesson compile --cloud`'s `defaultModel` fallback, so `--cloud` without `--model` fails loud (CONFIG_INVALID) instead of silently riding the previously-generated vendor default — consistent with the mmnto-ai/totem#2357 ruling. No migration required.
+
+- fa21188: feat(orchestrators): current-generation model support — sampling params reconciled at the provider boundary (mmnto-ai/totem#1476).
+
+  Current-generation models reject client sampling params with a 400 (Anthropic Opus 4.7+/Sonnet 5+/Fable reject `temperature`/`top_p`/`top_k`; OpenAI gpt-5+/o-series additionally reject the legacy `max_tokens` key in favor of `max_completion_tokens`). Previously every Totem LLM role hardcoded a `temperature`, so pointing any override or review lane at a current-generation model failed at runtime — GPT-5-family models could not be used as orchestrators at all.
+
+  `modelStripsTemperature()` (`@mmnto/totem`) widens from the Opus-4.7+-only regex to the cross-provider predicate (Sonnet 5+, Haiku 5+, Fable/Mythos, gpt-5+, o-series; provider-qualified strings accepted), and both the anthropic and openai orchestrator boundaries now consume it: callers keep declaring their intended temperature, and the boundary omits it for models that reject it. The openai orchestrator additionally selects `max_completion_tokens` vs legacy `max_tokens` on the same predicate, so OpenAI-compatible local servers (Ollama, LM Studio, Groq) keep the legacy shape they expect.
+
+  Consumer-impact: orchestrator request shape — configs pointing at Opus 4.7+/Sonnet 5+/Fable or gpt-5+/o-series models now work instead of failing with a 400; requests to models that accept sampling params are byte-identical. `modelStripsTemperature` returns `true` for the new families, which also flows into the compile-worker fingerprint (records temperature absence) for anthropic-provider configs. No config migration required.
+
+### Patch Changes
+
+- d3cf878: fix(mail): the ECL outbox scan no longer follows symlinked agent/outbox directories (mmnto-ai/totem#2355, sibling class to the #2354 ingest guard).
+
+  `enumerateOutboxes` dirent-filtered the workspace and repo levels but the inner agent-level scan used a bare `readdirSync` + `existsSync` (both follow symlinks), so a symlinked `<agent>/` or `outbox/` directory was traversed during the mail poll. The agent level is now dirent-filtered like the outer levels (and like `orchestration-resolver.ts`, which is no-follow by design), and the outbox probe is an lstat-based no-follow directory check.
+
+  Consumer-impact: `totem mail` scan enumeration only — symlinked agent/outbox directories under `.totem/orchestration/` are skipped instead of followed; regular directories scan identically. Severity was bounded to enumeration/display (not index persistence). No migration required.
+
+- d8b0287: fix(compile): cloud compile fails loud when no model is resolvable instead of silently substituting a hardcoded vendor default (Tenet-16 corollary, mmnto-ai/totem-strategy#800 item 1).
+
+  The `--cloud` request body's `model` field fell back to a concrete `'gemini-3-flash-preview'` where the three manifest-provenance sibling sites fall back to `'unknown'`. Unlike those provenance stamps, this is a live request parameter sent to the cloud worker — so the fix is not `'unknown'` but a loud `CONFIG_INVALID` error before any token exec or network call when neither `--model` nor `orchestrator.defaultModel` resolves.
+
+  Consumer-impact: CLI surface — `totem lesson compile --cloud` invoked with no `--model` and no `orchestrator.defaultModel` now errors loudly instead of silently compiling via an undeclared vendor model. Cloud runs with an explicitly resolved model are byte-identical; the local compile path is untouched.
+
+- Updated dependencies [01c2ed0]
+- Updated dependencies [fa21188]
+  - @mmnto/totem@1.96.0
+
 ## 1.95.0
 
 ### Minor Changes
