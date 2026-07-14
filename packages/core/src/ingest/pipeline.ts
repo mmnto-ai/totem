@@ -270,9 +270,16 @@ async function runSyncInner(
     incremental = false;
   }
 
-  // 3. Resolve files to process
+  // 3. Resolve files to process. Index exclusion unions both keys:
+  // `ignorePatterns` (legacy dual-scope) + `indexIgnorePatterns` (index-only,
+  // mmnto-ai/totem#1748) — only the former also gates lint/shield scope.
   const totemDir = path.join(projectRoot, config.totemDir);
-  const allFiles = resolveFiles(config.targets, projectRoot, config.ignorePatterns, log);
+  const allFiles = resolveFiles(
+    config.targets,
+    projectRoot,
+    [...config.ignorePatterns, ...config.indexIgnorePatterns],
+    log,
+  );
   let filesToProcess: ResolvedFile[];
   let deletedPaths: string[] = [];
 

@@ -432,8 +432,24 @@ export const TotemConfigSchema = z.object({
     .default('.lancedb')
     .refine((p) => !/^(\/|\\|[A-Za-z]:)/.test(p), 'lanceDir must be a relative path'),
 
-  /** Optional: glob patterns to exclude from indexing */
+  /**
+   * Optional: glob patterns to exclude from indexing.
+   *
+   * Back-compat note (mmnto-ai/totem#1748): these patterns are ALSO merged
+   * into the lint/shield diff filter, so they remove files from review scope
+   * — the diff layer now discloses each drop loudly. For index-only intent
+   * ("keep on disk and lintable, out of the semantic index") use
+   * `indexIgnorePatterns`. The 2.0.0 split that removes this key from lint
+   * scope is registered in mmnto-ai/totem#1746.
+   */
   ignorePatterns: z.array(z.string()).default(DEFAULT_IGNORE_PATTERNS),
+
+  /**
+   * Optional: glob patterns excluded ONLY from indexing — never from
+   * lint/shield scope (mmnto-ai/totem#1748, upstream-feedback/046). This is
+   * the clean home for "don't embed this into the semantic index" intent.
+   */
+  indexIgnorePatterns: z.array(z.string()).optional().default([]),
 
   /** Optional: additional glob patterns to exclude from deterministic shield scanning (merged with ignorePatterns) */
   shieldIgnorePatterns: z.array(z.string()).optional().default([]),

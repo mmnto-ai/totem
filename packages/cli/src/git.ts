@@ -275,6 +275,28 @@ export async function getDiffForReview(
 
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
 
+  // Tenet-4 disclosure (mmnto-ai/totem#1748, upstream-feedback/046):
+  // `ignorePatterns` is documented as index exclusion but is merged into this
+  // review/lint diff filter (kept for back-compat until the 2.0.0 split,
+  // mmnto-ai/totem#1746) — so every file the filter drops from review scope
+  // is named loudly instead of vanishing. Both live 046 exhibits were silent
+  // lint-scope holes opened by index-intent patterns.
+  const filterDiffWithDisclosure = (rawDiff: string): string => {
+    const filtered = filterDiffByPatterns(rawDiff, allIgnore);
+    if (filtered === rawDiff) return filtered;
+    const kept = new Set(extractChangedFiles(filtered));
+    const dropped = extractChangedFiles(rawDiff).filter((file) => !kept.has(file));
+    if (dropped.length > 0) {
+      const shown = dropped.slice(0, 8).map((file) => sanitizeForTerminal(file));
+      const more = dropped.length > shown.length ? ` (+${dropped.length - shown.length} more)` : '';
+      log.warn(
+        tag,
+        `Filtered ${dropped.length} file(s) from the diff per ignorePatterns/shieldIgnorePatterns: ${shown.join(', ')}${more}`,
+      );
+    }
+    return filtered;
+  };
+
   // Definite-assignment asserted: every branch assigns both before use — the
   // shared `resolveBranchScope` closure hides that from TS2454's flow analysis.
   let diff!: string;
@@ -293,7 +315,7 @@ export async function getDiffForReview(
   // so diffScope + lineage record the true comparison.
   const resolveBranchScope = (base: string): void => {
     const branchResult = getGitBranchDiffResult(cwd, base);
-    diff = filterDiffByPatterns(branchResult.diff, allIgnore);
+    diff = filterDiffWithDisclosure(branchResult.diff);
     source = 'branch-vs-base';
     scopeBase = branchResult.resolvedBase;
   };
@@ -320,7 +342,7 @@ export async function getDiffForReview(
     // Explicit-range path — no fallback. getGitDiffRange rejects flag-injection
     // (leading `-`) and empty values; ignore patterns still apply per repo policy.
     log.info(tag, `Diff source: explicit range (${options.diff})`);
-    diff = filterDiffByPatterns(getGitDiffRange(cwd, options.diff), allIgnore);
+    diff = filterDiffWithDisclosure(getGitDiffRange(cwd, options.diff));
     source = 'explicit-range';
     // Finding 10: the raw selector form distinguishes `--diff main` from `--diff main..HEAD`.
     selectorForm = options.diff;
@@ -333,7 +355,7 @@ export async function getDiffForReview(
     const mode: 'staged' | 'all' = options.staged ? 'staged' : 'all';
     const sourceLabel: DiffForReviewSource = options.staged ? 'staged' : 'uncommitted';
     log.info(tag, `Diff source: ${sourceLabel}`);
-    diff = filterDiffByPatterns(getGitDiff(mode, cwd), allIgnore);
+    diff = filterDiffWithDisclosure(getGitDiff(mode, cwd));
     source = sourceLabel;
 
     if (!diff.trim()) {
