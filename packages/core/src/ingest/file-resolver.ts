@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { globSync } from 'glob';
@@ -5,6 +6,7 @@ import { globSync } from 'glob';
 import type { IngestTarget } from '../config-schema.js';
 import { DEFAULT_IGNORE_PATTERNS } from '../config-schema.js';
 import { describeSafeExecError, safeExec } from '../sys/exec.js';
+import { sanitizeForTerminal } from '../terminal-sanitize.js';
 
 export interface ResolvedFile {
   absolutePath: string;
@@ -95,8 +97,34 @@ export function resolveFiles(
       if (nonIgnored && !nonIgnored.has(relativePath)) continue;
       seen.add(relativePath);
 
+      const absolutePath = path.join(projectRoot, rawPath);
+
+      // Symlink guard (mmnto-ai/totem#2354): the downstream read follows the
+      // link (fs.readFileSync), so a symlink under an ingest glob would pull its
+      // TARGET content into the index — a link escaping the repo
+      // (e.g. -> /etc/passwd, -> ~/.ssh/id_rsa) exfiltrates host files into a
+      // queryable store, and the git-tracked-set gate does NOT catch it
+      // (a symlink is a valid git entry, mode 120000). Skip symlinks entirely,
+      // mirroring run-compiled-rules.ts's mode-120000 exclusion, and surface
+      // each skip loudly so the drop is never silent (Tenet 13 sensor).
+      let isSymlink = false;
+      try {
+        isSymlink = fs.lstatSync(absolutePath).isSymbolicLink();
+        // totem-context: intentional fall-through — a raced/ENOENT lstat means there is no stat-able target at this path; treat it as a non-symlink and let the downstream read (which has its own error guard) degrade to honest-absent. Aborting sync over one unstattable path would be inconsistent with that skip-don't-abort read behavior.
+      } catch {
+        // degrade to non-symlink — see totem-context above
+      }
+      if (isSymlink) {
+        if (onWarn) {
+          onWarn(
+            `Skipping symlink under ingest target (not indexed): ${sanitizeForTerminal(relativePath)}`,
+          );
+        }
+        continue;
+      }
+
       results.push({
-        absolutePath: path.join(projectRoot, rawPath),
+        absolutePath,
         relativePath,
         target,
       });
