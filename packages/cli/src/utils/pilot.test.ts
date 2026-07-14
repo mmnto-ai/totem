@@ -22,6 +22,7 @@ function makeConfig(pilot?: TotemConfig['pilot']): TotemConfig {
     totemDir: '.totem',
     lanceDir: '.lancedb',
     ignorePatterns: [],
+    indexIgnorePatterns: [],
     shieldIgnorePatterns: [],
     contextWarningThreshold: 40_000,
     shieldAutoLearn: false,

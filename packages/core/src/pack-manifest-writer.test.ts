@@ -90,6 +90,7 @@ function makeConfig(extendsList: readonly string[] | undefined): TotemConfig {
     totemDir: '.totem',
     lanceDir: '.lancedb',
     ignorePatterns: [],
+    indexIgnorePatterns: [],
     shieldIgnorePatterns: [],
     contextWarningThreshold: 40_000,
     shieldAutoLearn: false,

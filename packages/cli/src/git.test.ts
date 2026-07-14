@@ -191,6 +191,86 @@ describe('getDiffBetween', () => {
   });
 });
 
+// ─── ignore-filter disclosure (#1748) ─────────────────
+
+describe('getDiffForReview ignore-filter disclosure (#1748)', () => {
+  // Mirrors the live 046 exhibit: an index-intent `audits/**` pattern silently
+  // dropping a staged audit file from the lint diff.
+  const twoFileDiff = [
+    'diff --git a/audits/internal/report.md b/audits/internal/report.md',
+    '--- a/audits/internal/report.md',
+    '+++ b/audits/internal/report.md',
+    '@@ -1 +1 @@',
+    '+audited',
+    'diff --git a/src/kept.ts b/src/kept.ts',
+    '--- a/src/kept.ts',
+    '+++ b/src/kept.ts',
+    '@@ -1 +1 @@',
+    '+x',
+    '',
+  ].join('\n');
+
+  beforeEach(() => {
+    mockGetGitDiffRange.mockReset();
+    vi.mocked(uiMod.log.warn).mockClear();
+  });
+
+  it('names each file the ignore filter drops from review scope', async () => {
+    mockGetGitDiffRange.mockReturnValue(twoFileDiff);
+    const result = await getDiffForReview(
+      { diff: 'HEAD^..HEAD' },
+      { ignorePatterns: ['audits/**'] },
+      '/tmp',
+      'Lint',
+    );
+    expect(result).not.toBeNull();
+    expect(result!.diff).not.toContain('audits/internal/report.md');
+    expect(result!.diff).toContain('src/kept.ts');
+    expect(uiMod.log.warn).toHaveBeenCalledWith(
+      'Lint',
+      expect.stringContaining(
+        'Filtered 1 file(s) from the diff per ignorePatterns/shieldIgnorePatterns: audits/internal/report.md',
+      ),
+    );
+  });
+
+  it('stays silent when the filter drops nothing', async () => {
+    mockGetGitDiffRange.mockReturnValue(twoFileDiff);
+    await getDiffForReview(
+      { diff: 'HEAD^..HEAD' },
+      { ignorePatterns: ['nomatch/**'] },
+      '/tmp',
+      'Lint',
+    );
+    const warns = vi.mocked(uiMod.log.warn).mock.calls.map((call) => String(call[1]));
+    expect(warns.some((line) => line.includes('Filtered'))).toBe(false);
+  });
+
+  it('caps the disclosure list and counts the overflow', async () => {
+    const manyFiles = Array.from({ length: 10 }, (_, i) =>
+      [
+        `diff --git a/audits/f${i}.md b/audits/f${i}.md`,
+        `--- a/audits/f${i}.md`,
+        `+++ b/audits/f${i}.md`,
+        '@@ -1 +1 @@',
+        '+x',
+        '',
+      ].join('\n'),
+    ).join('');
+    mockGetGitDiffRange.mockReturnValue(manyFiles + twoFileDiff);
+    await getDiffForReview(
+      { diff: 'HEAD^..HEAD' },
+      { ignorePatterns: ['audits/**'] },
+      '/tmp',
+      'Lint',
+    );
+    expect(uiMod.log.warn).toHaveBeenCalledWith(
+      'Lint',
+      expect.stringMatching(/Filtered 11 file\(s\) from the diff .*\(\+3 more\)$/),
+    );
+  });
+});
+
 // ─── getDiffForReview --diff (#1717) ─────────────────
 
 describe('getDiffForReview --diff (#1717)', () => {

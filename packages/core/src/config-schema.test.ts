@@ -61,6 +61,21 @@ describe('TotemConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('defaults indexIgnorePatterns to an empty array (index-only exclusions, #1748)', () => {
+    const result = TotemConfigSchema.parse({ targets: BASE_TARGETS });
+    expect(result.indexIgnorePatterns).toEqual([]);
+  });
+
+  it('preserves indexIgnorePatterns independently of ignorePatterns', () => {
+    const result = TotemConfigSchema.parse({
+      targets: BASE_TARGETS,
+      indexIgnorePatterns: ['audits/**'],
+      ignorePatterns: ['dist/**'],
+    });
+    expect(result.indexIgnorePatterns).toEqual(['audits/**']);
+    expect(result.ignorePatterns).toEqual(['dist/**']);
+  });
+
   it('rejects absolute lanceDir (Unix)', () => {
     const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, lanceDir: '/tmp/lancedb' });
     expect(result.success).toBe(false);
