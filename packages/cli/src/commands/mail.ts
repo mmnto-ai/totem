@@ -356,6 +356,21 @@ interface OutboxSlot {
 }
 
 /**
+ * No-follow directory probe for the outbox level: `fs.existsSync` follows
+ * symlinks, so a symlinked `outbox/` would pull outside-tree content into the
+ * mail scan (mmnto-ai/totem#2355, sibling class to the #2354 ingest guard).
+ */
+function isRealDirectory(p: string): boolean {
+  // totem-context: intentional cleanup — a raced/ENOENT lstat degrades to "not a directory" and skips this slot, matching the scan's skip-don't-abort posture (same idiom as the #2356 ingest guard).
+  try {
+    return fs.lstatSync(p).isDirectory();
+    // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Enumerate outbox directories under `<workspace>/<repo>/.totem/orchestration/<agent>/outbox`.
  * Single-level by default; recursive mode walks `<workspace>/**` (capped at MAX_SCAN
  * to bound runtime on deep trees).
@@ -386,10 +401,21 @@ function enumerateOutboxes(
   }
 
   const visit = (repoLabel: string, orchDir: string): void => {
-    if (!fs.existsSync(orchDir)) return;
+    // No-follow both remaining path hops (greptile round on this PR):
+    // `existsSync` follows symlinks, so a symlinked `.totem/` or
+    // `orchestration/` inside a real repo would swing the whole agent scan
+    // into the link target. `path.dirname(orchDir)` is the `.totem` hop.
+    if (!isRealDirectory(path.dirname(orchDir)) || !isRealDirectory(orchDir)) return;
     let agents: string[];
     try {
-      agents = fs.readdirSync(orchDir).sort();
+      // Dirent-filter the agent level like the workspace/repo levels above:
+      // a symlinked `<agent>/` dir must not be followed into the mail scan
+      // (mmnto-ai/totem#2355; orchestration-resolver.ts is no-follow by design).
+      agents = fs
+        .readdirSync(orchDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
+        .sort();
       // totem-context: intentional cleanup — per-repo readdir failure skips this slot, emits a structured warning, and lets sibling repos continue; one inaccessible orchestration tree must not block the rest of the scan.
     } catch (err) {
       warnings.push(`orchestration scan failed (${repoLabel}): ${String(err)}`);
@@ -397,7 +423,7 @@ function enumerateOutboxes(
     }
     for (const agent of agents) {
       const outbox = path.join(orchDir, agent, 'outbox');
-      if (fs.existsSync(outbox)) {
+      if (isRealDirectory(outbox)) {
         slots.push({ repo: repoLabel, agent, outbox });
       }
     }
