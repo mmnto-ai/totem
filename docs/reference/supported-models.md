@@ -1,6 +1,6 @@
 # Supported Models & AI Tools Reference
 
-> **Last validated:** 2026-07-14 (model-refresh PR: Gemini, Anthropic, and OpenAI orchestrator tiers re-validated against published provider docs; Totem defaults moved to `gemini-3.5-flash` / `claude-sonnet-5`; sampling-param stripping now handled at the orchestrator boundary).
+> **Last validated:** 2026-07-14 (model-refresh PR: Gemini, Anthropic, and OpenAI orchestrator tiers re-validated against published provider docs; Totem defaults moved to `gemini-3.5-flash` / `claude-sonnet-5`; sampling-param stripping now handled at the orchestrator boundary. Same day, follow-on: `totem init` generated configs moved to the per-role-overrides shape with the same current-generation IDs).
 
 Totem supports four LLM provider families for orchestration, and exports project
 knowledge to all major AI coding tools. This document tracks model IDs, tool
@@ -123,14 +123,22 @@ Used by `totem sync` for indexing chunks into LanceDB.
 
 ## Totem Defaults
 
-Current defaults configured in `totem.config.ts` and `packages/cli/src/commands/init.ts`:
+Current defaults configured in `totem.config.ts` (this repo) and stamped into
+generated consumer configs by `totem init`
+(`packages/cli/src/commands/init-detect.ts`):
 
-```
+```text
 Embedding:    Gemini gemini-embedding-2-preview  (or OpenAI text-embedding-3-small, Ollama nomic-embed-text)
 Orchestrator: per-role overrides (no ambient default — Tenet-16 corollary):
               gemini-3.5-flash for docs/spec/shield/triage/extract/reviewlearn,
               anthropic:claude-sonnet-5 for compile;
               review.lanes: anthropic:claude-sonnet-5 + gemini:gemini-3.5-flash
+totem init:   emitted per detected environment, every role named, no ambient defaultModel:
+              gemini CLI / GEMINI_API_KEY → gemini-3.5-flash
+              claude CLI                  → 'sonnet' (the CLI's own tier alias)
+              ANTHROPIC_API_KEY           → claude-sonnet-5
+              OPENAI_API_KEY              → gpt-5.6-terra
+              ollama                      → gemma4
 ```
 
 ### Updating Defaults

@@ -217,9 +217,93 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   return 'none';
 }
 
+// ─── Orchestrator emission (Tenet-16 corollary) ──────────
+
+/**
+ * Every LLM-backed role tag (lowercased `runOrchestrator` tag) a generated
+ * config names explicitly. Emitted configs assign a model per role instead of
+ * committing an ambient `orchestrator.defaultModel` — config names roles, not
+ * one ambient vendor default (Tenet-16 corollary, mmnto-ai/totem-strategy#800
+ * item 1). A role absent from this list fails loud at invocation ("No model
+ * specified") instead of silently riding a vendor default.
+ */
+export const INIT_ORCHESTRATOR_ROLES = [
+  'compile',
+  'docs',
+  'spec',
+  'shield',
+  'triage',
+  'extract',
+  'reviewlearn',
+] as const;
+
+/**
+ * Model IDs stamped into generated consumer configs, one per detection branch
+ * (docs/reference/supported-models.md § Updating Defaults, location 3).
+ * `claudeCli` is the claude CLI's own tier alias, which tracks that CLI's
+ * current Sonnet instead of pinning a dated ID.
+ */
+export const INIT_ORCHESTRATOR_MODELS = {
+  geminiCli: 'gemini-3.5-flash',
+  claudeCli: 'sonnet',
+  gemini: 'gemini-3.5-flash',
+  anthropic: 'claude-sonnet-5',
+  openai: 'gpt-5.6-terra',
+  ollama: 'gemma4',
+} as const;
+
+/** Map every emitted role to the same model ID (uniform per-provider default). */
+export function buildRoleOverrides(model: string): Record<string, string> {
+  return Object.fromEntries(INIT_ORCHESTRATOR_ROLES.map((role) => [role, model]));
+}
+
+/** Escape a value for embedding in a single-quoted TS string literal, so a
+ *  future model ID or shell command containing `'` or `\` cannot emit a
+ *  syntactically broken consumer config (mmnto-ai/totem#2360 review round). */
+function escapeTsString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+/**
+ * Render the TS-template orchestrator block from the same object that gets
+ * serialized into YAML/TOML configs, so the two surfaces cannot drift.
+ * Handles every JSON-shaped value type; `null`/`undefined` render as an
+ * absent key (optional-key semantics, matching the YAML/TOML serializers).
+ */
+export function renderOrchestratorBlock(config: Record<string, unknown>): string {
+  const lines = ['  orchestrator: {'];
+  for (const [key, value] of Object.entries(config)) {
+    if (typeof value === 'string') {
+      lines.push(`    ${key}: '${escapeTsString(value)}',`);
+    } else if (typeof value === 'boolean' || typeof value === 'number') {
+      lines.push(`    ${key}: ${String(value)},`);
+    } else if (Array.isArray(value)) {
+      lines.push(`    ${key}: ${JSON.stringify(value)},`);
+    } else if (value && typeof value === 'object') {
+      lines.push(`    ${key}: {`);
+      for (const [role, model] of Object.entries(value as Record<string, string>)) {
+        lines.push(`      ${role}: '${escapeTsString(model)}',`);
+      }
+      lines.push('    },');
+    }
+  }
+  lines.push('  },');
+  return lines.join('\n');
+}
+
+function orchestratorResult(config: Record<string, unknown>): DetectedOrchestrator {
+  return { config, block: renderOrchestratorBlock(config) };
+}
+
 /**
  * Auto-detect the best orchestrator from the environment.
- * Priority: gemini CLI → claude CLI → API keys (GEMINI → ANTHROPIC → OPENAI) → null.
+ * Priority: gemini CLI → claude CLI → API keys (GEMINI → ANTHROPIC → OPENAI) → ollama → null.
+ *
+ * Detection resolves the consumer's local environment at genesis; the emitted
+ * block names a model per role rather than committing an ambient
+ * `defaultModel`. Note `totem lesson compile --cloud` deliberately resolves
+ * from `--model` / `defaultModel` only (mmnto-ai/totem#2357), so it stays
+ * fail-loud under this shape.
  */
 export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
   // Read .env file once (loadEnv may not have run yet)
@@ -233,105 +317,50 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
 
   // 1. Gemini CLI on PATH → shell provider
   if (cliExists('gemini')) {
-    const config = {
+    return orchestratorResult({
       provider: 'shell',
       command: 'gemini --model {model} -o json -e none < {file}',
-      defaultModel: 'gemini-3-flash-preview',
-      overrides: {
-        spec: 'gemini-3.1-pro-preview',
-        shield: 'gemini-3.1-pro-preview',
-        triage: 'gemini-3.1-pro-preview',
-      },
-    };
-    return {
-      config,
-      block: `  orchestrator: {
-    provider: 'shell',
-    command: 'gemini --model {model} -o json -e none < {file}',
-    defaultModel: 'gemini-3-flash-preview',
-    overrides: {
-      'spec': 'gemini-3.1-pro-preview',
-      'shield': 'gemini-3.1-pro-preview',
-      'triage': 'gemini-3.1-pro-preview',
-    },
-  },`,
-    };
+      overrides: buildRoleOverrides(INIT_ORCHESTRATOR_MODELS.geminiCli),
+    });
   }
 
   // 2. Claude CLI on PATH → shell provider (anthropic)
   if (cliExists('claude')) {
-    const config = {
+    return orchestratorResult({
       provider: 'shell',
       command: 'claude -p {file} --model {model} --output-format json',
-      defaultModel: 'sonnet',
-    };
-    return {
-      config,
-      block: `  orchestrator: {
-    provider: 'shell',
-    command: 'claude -p {file} --model {model} --output-format json',
-    defaultModel: 'sonnet',
-  },`,
-    };
+      overrides: buildRoleOverrides(INIT_ORCHESTRATOR_MODELS.claudeCli),
+    });
   }
 
   // 3. API keys → native SDK providers
   if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) {
-    const config = {
+    return orchestratorResult({
       provider: 'gemini',
-      defaultModel: 'gemini-3-flash-preview',
-      overrides: {
-        spec: 'gemini-3.1-pro-preview',
-        shield: 'gemini-3.1-pro-preview',
-        triage: 'gemini-3.1-pro-preview',
-      },
-    };
-    return {
-      config,
-      block: `  orchestrator: {
-    provider: 'gemini',
-    defaultModel: 'gemini-3-flash-preview',
-    overrides: {
-      'spec': 'gemini-3.1-pro-preview',
-      'shield': 'gemini-3.1-pro-preview',
-      'triage': 'gemini-3.1-pro-preview',
-    },
-  },`,
-    };
+      overrides: buildRoleOverrides(INIT_ORCHESTRATOR_MODELS.gemini),
+    });
   }
 
   if (hasKey(envContent, 'ANTHROPIC_API_KEY')) {
-    const config = { provider: 'anthropic', defaultModel: 'claude-sonnet-4-6' };
-    return {
-      config,
-      block: `  orchestrator: {
-    provider: 'anthropic',
-    defaultModel: 'claude-sonnet-4-6',
-  },`,
-    };
+    return orchestratorResult({
+      provider: 'anthropic',
+      overrides: buildRoleOverrides(INIT_ORCHESTRATOR_MODELS.anthropic),
+    });
   }
 
   if (hasKey(envContent, 'OPENAI_API_KEY')) {
-    const config = { provider: 'openai', defaultModel: 'gpt-5.4-mini' };
-    return {
-      config,
-      block: `  orchestrator: {
-    provider: 'openai',
-    defaultModel: 'gpt-5.4-mini',
-  },`,
-    };
+    return orchestratorResult({
+      provider: 'openai',
+      overrides: buildRoleOverrides(INIT_ORCHESTRATOR_MODELS.openai),
+    });
   }
 
   // 4. Ollama running locally → use gemma4 (free, fast, air-gappable)
   if (cliExists('ollama')) {
-    const config = { provider: 'ollama', defaultModel: 'gemma4' };
-    return {
-      config,
-      block: `  orchestrator: {
-    provider: 'ollama',
-    defaultModel: 'gemma4',
-  },`,
-    };
+    return orchestratorResult({
+      provider: 'ollama',
+      overrides: buildRoleOverrides(INIT_ORCHESTRATOR_MODELS.ollama),
+    });
   }
 
   // 5. Nothing found → omit orchestrator (Lite/Standard tier)
