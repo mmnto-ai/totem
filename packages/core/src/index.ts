@@ -1,3 +1,21 @@
+/**
+ * `@mmnto/totem` (`.`) — legacy / compatibility barrel.
+ *
+ * This root barrel re-exports the full core module graph and makes no
+ * per-symbol semver promise: consumers cannot tell which exports are stable
+ * contract and which are lab surface. It is retained unchanged for backward
+ * compatibility (zero removals, zero reordering).
+ *
+ * Prefer the curated, semver-tracked subpath entry points for new code:
+ *   - `@mmnto/totem/config`    — `TotemConfig` + config-schema surface
+ *   - `@mmnto/totem/packs`     — pack registration + load (ADR-097/099)
+ *   - `@mmnto/totem/lessons`   — lesson read/write + frontmatter + role/schema
+ *   - `@mmnto/totem/artifacts` — Prop 302 verdict-artifact schema/loader
+ *
+ * Subtraction from this barrel is deferred to a future major (mmnto-ai/totem#2336,
+ * ADR-084 / Proposal 294).
+ */
+
 // Unified findings model (ADR-071)
 export type { FindingCategory, FindingSeverity, FindingSource, TotemFinding } from './finding.js';
 export { findingToViolation, violationToFinding } from './finding.js';
