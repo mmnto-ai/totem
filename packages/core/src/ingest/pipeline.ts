@@ -380,7 +380,7 @@ async function runSyncInner(
       // totem-context: intentional skip — a per-file read failure (vanished/raced file, permission, decode) logs and skips just that file so sync continues over the rest; aborting the whole sync over one unreadable file would be the drift, not the skip.
     } catch (err) {
       log(
-        `  Skipping (read error: ${err instanceof Error ? err.message : String(err)}): ${safeRel}`,
+        `  Skipping (read error: ${sanitizeForTerminal(err instanceof Error ? err.message : String(err))}): ${safeRel}`,
       );
       continue;
     }
