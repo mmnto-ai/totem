@@ -109,9 +109,9 @@ export function resolveFiles(
       let isSymlink = false;
       try {
         isSymlink = fs.lstatSync(absolutePath).isSymbolicLink();
+        // totem-context: intentional fall-through — a raced/ENOENT lstat means there is no stat-able target at this path; treat it as a non-symlink and let the downstream read (which has its own error guard) degrade to honest-absent. Aborting sync over one unstattable path would be inconsistent with that skip-don't-abort read behavior.
       } catch {
-        // lstat race/ENOENT: treat as non-symlink; the downstream read has its
-        // own error guard and degrades to honest-absent for a vanished file.
+        // degrade to non-symlink — see totem-context above
       }
       if (isSymlink) {
         if (onWarn) {
