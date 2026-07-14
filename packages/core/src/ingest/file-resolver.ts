@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { globSync } from 'glob';
@@ -95,8 +96,32 @@ export function resolveFiles(
       if (nonIgnored && !nonIgnored.has(relativePath)) continue;
       seen.add(relativePath);
 
+      const absolutePath = path.join(projectRoot, rawPath);
+
+      // Symlink guard (mmnto-ai/totem#2354): the downstream read follows the
+      // link (fs.readFileSync), so a symlink under an ingest glob would pull its
+      // TARGET content into the index — a link escaping the repo
+      // (e.g. -> /etc/passwd, -> ~/.ssh/id_rsa) exfiltrates host files into a
+      // queryable store, and the git-tracked-set gate does NOT catch it
+      // (a symlink is a valid git entry, mode 120000). Skip symlinks entirely,
+      // mirroring run-compiled-rules.ts's mode-120000 exclusion, and surface
+      // each skip loudly so the drop is never silent (Tenet 13 sensor).
+      let isSymlink = false;
+      try {
+        isSymlink = fs.lstatSync(absolutePath).isSymbolicLink();
+      } catch {
+        // lstat race/ENOENT: treat as non-symlink; the downstream read has its
+        // own error guard and degrades to honest-absent for a vanished file.
+      }
+      if (isSymlink) {
+        if (onWarn) {
+          onWarn(`Skipping symlink under ingest target (not indexed): ${relativePath}`);
+        }
+        continue;
+      }
+
       results.push({
-        absolutePath: path.join(projectRoot, rawPath),
+        absolutePath,
         relativePath,
         target,
       });

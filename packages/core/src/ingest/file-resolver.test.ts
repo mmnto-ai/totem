@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+
 import * as crossSpawn from 'cross-spawn';
 import { globSync } from 'glob';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +14,11 @@ vi.mock('cross-spawn', () => ({
 vi.mock('glob', () => ({
   globSync: vi.fn(() => []),
 }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, lstatSync: vi.fn() };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -149,5 +156,48 @@ describe('resolveFiles — submodule support', () => {
     );
     expect(result).toHaveLength(1);
     expect(result[0].relativePath).toBe('src/a.ts');
+  });
+});
+
+describe('resolveFiles — symlink guard (mmnto-ai/totem#2354)', () => {
+  it('skips a symlink under an ingest target (never read/indexed) and warns', () => {
+    // git ls-files reports the symlink path (mode 120000 is a valid entry), so
+    // the git-tracked-set gate does NOT filter it — the guard must.
+    vi.mocked(crossSpawn.sync).mockImplementation((() => ok('.totem/lessons/evil.md\0')) as never);
+    vi.mocked(globSync).mockReturnValue(['.totem/lessons/evil.md'] as unknown as string[] & {
+      [Symbol.iterator]: () => IterableIterator<string>;
+    });
+    vi.mocked(fs.lstatSync).mockReturnValue({
+      isSymbolicLink: () => true,
+    } as unknown as fs.Stats);
+    const warn = vi.fn();
+
+    const result = resolveFiles(
+      [{ glob: '.totem/lessons/*.md', type: 'spec', strategy: 'markdown-heading' }],
+      '/project',
+      undefined,
+      warn,
+    );
+
+    expect(result).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('symlink'));
+  });
+
+  it('indexes a regular (non-symlink) file under the same target', () => {
+    vi.mocked(crossSpawn.sync).mockImplementation((() => ok('.totem/lessons/good.md\0')) as never);
+    vi.mocked(globSync).mockReturnValue(['.totem/lessons/good.md'] as unknown as string[] & {
+      [Symbol.iterator]: () => IterableIterator<string>;
+    });
+    vi.mocked(fs.lstatSync).mockReturnValue({
+      isSymbolicLink: () => false,
+    } as unknown as fs.Stats);
+
+    const result = resolveFiles(
+      [{ glob: '.totem/lessons/*.md', type: 'spec', strategy: 'markdown-heading' }],
+      '/project',
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].relativePath).toBe('.totem/lessons/good.md');
   });
 });
