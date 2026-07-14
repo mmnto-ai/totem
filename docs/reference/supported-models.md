@@ -127,7 +127,7 @@ Current defaults configured in `totem.config.ts` (this repo) and stamped into
 generated consumer configs by `totem init`
 (`packages/cli/src/commands/init-detect.ts`):
 
-```
+```text
 Embedding:    Gemini gemini-embedding-2-preview  (or OpenAI text-embedding-3-small, Ollama nomic-embed-text)
 Orchestrator: per-role overrides (no ambient default — Tenet-16 corollary):
               gemini-3.5-flash for docs/spec/shield/triage/extract/reviewlearn,

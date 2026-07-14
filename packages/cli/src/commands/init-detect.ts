@@ -257,19 +257,32 @@ export function buildRoleOverrides(model: string): Record<string, string> {
   return Object.fromEntries(INIT_ORCHESTRATOR_ROLES.map((role) => [role, model]));
 }
 
+/** Escape a value for embedding in a single-quoted TS string literal, so a
+ *  future model ID or shell command containing `'` or `\` cannot emit a
+ *  syntactically broken consumer config (mmnto-ai/totem#2360 review round). */
+function escapeTsString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 /**
  * Render the TS-template orchestrator block from the same object that gets
  * serialized into YAML/TOML configs, so the two surfaces cannot drift.
+ * Handles every JSON-shaped value type; `null`/`undefined` render as an
+ * absent key (optional-key semantics, matching the YAML/TOML serializers).
  */
 export function renderOrchestratorBlock(config: Record<string, unknown>): string {
   const lines = ['  orchestrator: {'];
   for (const [key, value] of Object.entries(config)) {
     if (typeof value === 'string') {
-      lines.push(`    ${key}: '${value}',`);
+      lines.push(`    ${key}: '${escapeTsString(value)}',`);
+    } else if (typeof value === 'boolean' || typeof value === 'number') {
+      lines.push(`    ${key}: ${String(value)},`);
+    } else if (Array.isArray(value)) {
+      lines.push(`    ${key}: ${JSON.stringify(value)},`);
     } else if (value && typeof value === 'object') {
       lines.push(`    ${key}: {`);
       for (const [role, model] of Object.entries(value as Record<string, string>)) {
-        lines.push(`      ${role}: '${model}',`);
+        lines.push(`      ${role}: '${escapeTsString(model)}',`);
       }
       lines.push('    },');
     }
