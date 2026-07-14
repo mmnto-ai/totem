@@ -364,6 +364,7 @@ function isRealDirectory(p: string): boolean {
   // totem-context: intentional cleanup — a raced/ENOENT lstat degrades to "not a directory" and skips this slot, matching the scan's skip-don't-abort posture (same idiom as the #2356 ingest guard).
   try {
     return fs.lstatSync(p).isDirectory();
+    // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
   } catch {
     return false;
   }
