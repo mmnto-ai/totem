@@ -34,6 +34,7 @@
 // inside an async entry point and threaded down to the sync helpers.
 import type {
   GroundingBundle,
+  LessonsConsulted,
   LineageKeyInput,
   PersistedPostCheckFinding,
   PostCheckReport,
@@ -814,6 +815,15 @@ export interface VerdictAssemblyInputs {
   /** Post-fan tree compare (codex rev-2 fold 1) — recorded AND fed into `settled`. */
   reviewedState: 'matched' | 'drifted';
   createdAt: string;
+  /**
+   * The round's lesson-recall record (mmnto-ai/totem#2363) — derived from the
+   * shared grounding bundle via core's `deriveLessonsConsulted`, never
+   * hand-built. Optional in the INPUTS (additive 1.x — structural callers
+   * predate it); the production fan always supplies it, so every fan verdict
+   * carries recall state (`hit`/`empty`). Absent ⇒ the field is omitted from
+   * the artifact (honest-absent), never fabricated as `empty`.
+   */
+  lessonsConsulted?: LessonsConsulted;
 }
 
 /**
@@ -859,6 +869,7 @@ export function assembleVerdict(
     ...(inputs.panelAndChecks.diversity !== undefined
       ? { diversity: inputs.panelAndChecks.diversity }
       : {}),
+    ...(inputs.lessonsConsulted !== undefined ? { lessonsConsulted: inputs.lessonsConsulted } : {}),
     round: inputs.round,
     reviewedState: inputs.reviewedState,
     settled,
@@ -1137,6 +1148,7 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   const { log } = await import('../ui.js');
   const {
     deriveCacheEligible,
+    deriveLessonsConsulted,
     deriveSettled,
     maskSecrets,
     renderCovariateLine,
@@ -1271,6 +1283,10 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
       round: roundRes.round,
       reviewedState,
       createdAt,
+      // The round's lesson-recall record (mmnto-ai/totem#2363): derived from the
+      // SAME bundle every lane's run artifact carries — the fan's identical-kit
+      // discipline makes this a round-level fact, recorded once on the verdict.
+      lessonsConsulted: deriveLessonsConsulted(ctx.groundingBundle),
     },
     deriveSettled,
     VERDICT_ARTIFACT_SCHEMA_VERSION,

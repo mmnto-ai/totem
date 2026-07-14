@@ -677,6 +677,8 @@ export {
 } from './artifacts/panel.js';
 // Verdict artifact — the single lane-convergence point (mmnto-ai/totem#2106, Prop 302/304 R2)
 export type {
+  LessonConsultedItem,
+  LessonsConsulted,
   LineageKeyInput,
   SaveVerdictArtifactResult,
   VerdictArtifact,
@@ -695,9 +697,12 @@ export {
   computeLineageKey,
   computeVerdictArtifactContentHash,
   deriveCacheEligible,
+  deriveLessonsConsulted,
   deriveSettled,
   findLatestVerdictForLineage,
   LaneIdSchema,
+  LessonConsultedItemSchema,
+  LessonsConsultedSchema,
   listVerdictArtifacts,
   loadVerdictArtifact,
   renderCovariateLine,

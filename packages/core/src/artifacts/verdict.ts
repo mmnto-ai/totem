@@ -52,11 +52,17 @@ import {
   type PersistedPostCheckFinding,
   PersistedPostCheckFindingSchema,
 } from './panel.js';
+import type { GroundingBundle } from './schema.js';
 
 // ─── Schema version (mirrors RunArtifact / Panel F1) ────────────────────────
 
-/** The verdict schemaVersion WRITTEN by this code. Readers accept any 1.x (F1). */
-export const VERDICT_ARTIFACT_SCHEMA_VERSION = '1.0.0';
+/**
+ * The verdict schemaVersion WRITTEN by this code. Readers accept any 1.x (F1).
+ * 1.1.0 (mmnto-ai/totem#2363): additive-optional `lessonsConsulted` — the
+ * round's lesson-recall record. The minor is the observable marker; the
+ * registry stays empty because the tolerant reader parses both.
+ */
+export const VERDICT_ARTIFACT_SCHEMA_VERSION = '1.1.0';
 
 /** The major this reader understands; other majors need a migration entry. */
 export const VERDICT_ARTIFACT_KNOWN_MAJOR = 1;
@@ -257,6 +263,65 @@ export const VerdictFindingSchema = z.object({
 });
 export type VerdictFinding = z.infer<typeof VerdictFindingSchema>;
 
+// ─── Lessons consulted (mmnto-ai/totem#2363) ─────────────────────────────────
+
+/**
+ * One lesson delivered into the round's shared lane prompt — identity only
+ * (`contentHash` over the delivered snippet + repo-relative `filePath`,
+ * mirroring {@link GroundingItemSchema} identity semantics), never content
+ * bytes. `sourceRepo` names a linked index for cross-repo hits; ABSENT = the
+ * run's own repo.
+ */
+export const LessonConsultedItemSchema = z.object({
+  contentHash: Sha256HexSchema,
+  filePath: z.string().trim().min(1),
+  sourceRepo: z.string().trim().min(1).optional(),
+});
+export type LessonConsultedItem = z.infer<typeof LessonConsultedItemSchema>;
+
+/**
+ * The round's lesson-recall record (mmnto-ai/totem#2363, strategy#474
+ * grounding lever): which lessons the retrieval delivered into the shared
+ * per-lane prompt, and whether recall hit at all. One field per VERDICT, not
+ * per lane — identical-kit discipline means every lane received the same
+ * retrieval, so a per-lane copy would be a mirrored count.
+ *
+ * Three observable states, honest-absent by construction:
+ *   - field ABSENT — the producer performed no lesson retrieval (pre-1.1
+ *     artifacts, or a path without index retrieval); never fabricated.
+ *   - `status: 'empty'` — retrieval RAN and returned zero lessons: the
+ *     visibly-ungrounded state the strategy#474 abstain-on-empty rule needs
+ *     to be checkable.
+ *   - `status: 'hit'` — ≥1 lesson delivered; `items` carries identities.
+ *
+ * `status` ⟺ `items` consistency is enforced in the artifact `superRefine`
+ * (never mirrored on trust). Per-lane delivery provenance stays one hop away
+ * in each lane's run-artifact grounding bundle; this field is the round-level
+ * contract line so recall can never silently drop out of the redesign.
+ */
+export const LessonsConsultedSchema = z.object({
+  status: z.enum(['hit', 'empty']),
+  items: z.array(LessonConsultedItemSchema),
+});
+export type LessonsConsulted = z.infer<typeof LessonsConsultedSchema>;
+
+/**
+ * Derive the round-level recall record from the grounding bundle the runner
+ * delivered to its lanes (single home for the mapping — every future runner
+ * derives, never hand-builds). `lesson`-partition items only; identity fields
+ * pass through verbatim.
+ */
+export function deriveLessonsConsulted(bundle: GroundingBundle): LessonsConsulted {
+  const items = bundle.items
+    .filter((i) => i.sourceType === 'lesson')
+    .map((i) => ({
+      contentHash: i.contentHash,
+      filePath: i.filePath,
+      ...(i.sourceRepo !== undefined ? { sourceRepo: i.sourceRepo } : {}),
+    }));
+  return { status: items.length > 0 ? 'hit' : 'empty', items };
+}
+
 // ─── Round / lineage ─────────────────────────────────────────────────────────
 
 /**
@@ -390,6 +455,13 @@ export const VerdictArtifactSchema = z
     findings: z.array(VerdictFindingSchema),
     /** A SINGLE top-level panel-diversity summary (classifyDiversity output) — present only with a panel; NEVER mirrored per finding. */
     diversity: PanelDiversitySchema.optional(),
+    /**
+     * The round's lesson-recall record (mmnto-ai/totem#2363) — see
+     * {@link LessonsConsultedSchema}. Additive-optional 1.x (F1): pre-1.1
+     * artifacts predate it, and a producer that performed no retrieval omits
+     * it (honest-absent) rather than fabricating an `empty`.
+     */
+    lessonsConsulted: LessonsConsultedSchema.optional(),
     round: VerdictRoundSchema,
     /**
      * Post-fan tree compare against the PRE-fan content hash (codex rev-2 fold 1):
@@ -492,6 +564,19 @@ export const VerdictArtifactSchema = z
         path: ['round', 'priorVerdictHash'],
         message: `round ${a.round.index} (>0) requires priorVerdictHash linking the prior round in the chain`,
       });
+    }
+
+    // ── mmnto-ai/totem#2363: lessonsConsulted status ⟺ items (never mirrored on trust) ──
+    if (a.lessonsConsulted !== undefined) {
+      const hasItems = a.lessonsConsulted.items.length > 0;
+      const claimsHit = a.lessonsConsulted.status === 'hit';
+      if (claimsHit !== hasItems) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['lessonsConsulted', 'status'],
+          message: `lessonsConsulted.status "${a.lessonsConsulted.status}" must match items (${a.lessonsConsulted.items.length}) — 'hit' ⟺ at least one item; the status is never mirrored on trust`,
+        });
+      }
     }
 
     // ── Finding 5: the persisted boundary re-derives `settled`, never trusts it ──
