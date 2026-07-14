@@ -2251,19 +2251,24 @@ program
 
 // Precompute root-help tier state for the `--help`/`-h` OPTION path (the `help`
 // COMMAND path sets it in its own action above). `--all` is cheap to read
-// always; the freeze read only fires on an actual help request. A corrupt
-// freeze.json surfaces loudly via handleError rather than silently dropping the
-// badge (no fail-open).
+// always. The freeze read fires ONLY for ROOT help (`totem --help`), never for
+// subcommand help (`totem lint --help`) — the badge renders only on the root
+// surface, and gating on isRootHelpInvocation keeps a corrupt freeze.json from
+// breaking unrelated `totem <command> --help`. A corrupt freeze on the root
+// path still surfaces loudly via handleError (no fail-open).
 helpState.all = process.argv.includes('--all');
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  try {
-    helpState.freezeActive = await computeFreezeActive();
-  } catch (err) {
-    handleError(err);
-    // handleError returns `never` (process.exit); the throw is unreachable but
-    // required to satisfy the Tenet 4 fail-loud rule that bans bare-catch
-    // silent-degrade. Mirrors the stats/mail command pattern in this file.
-    throw err;
+  const { isRootHelpInvocation } = await import('./help-freeze.js');
+  if (isRootHelpInvocation(process.argv.slice(2))) {
+    try {
+      helpState.freezeActive = await computeFreezeActive();
+    } catch (err) {
+      handleError(err);
+      // handleError returns `never` (process.exit); the throw is unreachable
+      // but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch
+      // silent-degrade. Mirrors the stats/mail command pattern in this file.
+      throw err;
+    }
   }
 }
 

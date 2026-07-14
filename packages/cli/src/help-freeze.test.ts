@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { deriveRuleCompilationFrozen } from './help-freeze.js';
+import { deriveRuleCompilationFrozen, isRootHelpInvocation } from './help-freeze.js';
 
 describe('deriveRuleCompilationFrozen (mmnto-ai/totem#2336 D2.4 freeze badge)', () => {
   let dir: string;
@@ -53,5 +53,29 @@ describe('deriveRuleCompilationFrozen (mmnto-ai/totem#2336 D2.4 freeze badge)', 
     // fixture freeze is the sole input.
     writeFreeze([{ subsystem: 'rc', id: 'rule-compilation', scope: 'local' }]);
     expect(await deriveRuleCompilationFrozen(dir)).toBe(true);
+  });
+});
+
+describe('isRootHelpInvocation (freeze read fires only on root help)', () => {
+  it('is true for bare root help', () => {
+    expect(isRootHelpInvocation(['--help'])).toBe(true);
+    expect(isRootHelpInvocation(['-h'])).toBe(true);
+  });
+
+  it('is true for root help alongside global flags', () => {
+    expect(isRootHelpInvocation(['--all', '--help'])).toBe(true);
+    expect(isRootHelpInvocation(['--debug', '-h'])).toBe(true);
+  });
+
+  it('is false for subcommand help (no freeze read → corrupt freeze.json cannot break it)', () => {
+    expect(isRootHelpInvocation(['lint', '--help'])).toBe(false);
+    expect(isRootHelpInvocation(['review', '-h'])).toBe(false);
+    expect(isRootHelpInvocation(['lesson', 'compile', '--help'])).toBe(false);
+  });
+
+  it('is false when no help flag is present', () => {
+    expect(isRootHelpInvocation([])).toBe(false);
+    expect(isRootHelpInvocation(['lint'])).toBe(false);
+    expect(isRootHelpInvocation(['--all'])).toBe(false);
   });
 });

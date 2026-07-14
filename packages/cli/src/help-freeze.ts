@@ -23,6 +23,23 @@ import * as path from 'node:path';
  * `@mmnto/totem` is imported dynamically inside the function per the repo rule
  * banning top-level VALUE imports from core in CLI files.
  */
+/**
+ * Whether an argv denotes ROOT help (`totem --help` / `totem -h`, optionally
+ * with global flags like `--all`/`--debug`) as opposed to SUBCOMMAND help
+ * (`totem lint --help`, `totem lesson compile --help`). Only root help renders
+ * the `[frozen]` badge, so only root help should pay the freeze read — a
+ * corrupt freeze.json must never break `totem <command> --help`.
+ *
+ * `argv` is the post-executable arg list (`process.argv.slice(2)`). Any
+ * positional (non-flag) token means a subcommand precedes the help flag, so it
+ * is NOT root help.
+ */
+export function isRootHelpInvocation(argv: readonly string[]): boolean {
+  const helpRequested = argv.includes('--help') || argv.includes('-h');
+  if (!helpRequested) return false;
+  return !argv.some((a) => !a.startsWith('-'));
+}
+
 export async function deriveRuleCompilationFrozen(
   cwd: string,
   opts: { totemDir?: string; packageName?: string } = {},
