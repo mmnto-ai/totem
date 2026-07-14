@@ -664,6 +664,20 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     }
     if (toLower !== 'broadcast' && !selfLower.has(toLower)) continue;
     const senderSeat = slot.agent.toLowerCase();
+    // Own-broadcast exclusion (mmnto-ai/totem#2364): a seat's outbound
+    // broadcast is not its own inbound — without this, a broadcasting seat
+    // reads "1 unread" from its own outbox forever unless it hand-backfills a
+    // `processed/_broadcast/` mark. Keyed on the OUTBOX-OWNER seat
+    // (`slot.agent`, single-writer filesystem truth — same doctrine as the
+    // collision sensor below), never the forgeable `from:` header. Reader
+    // path only: the `includeProcessed` compaction discovery (ADR-106 § A2.1)
+    // must keep the RAW addressed-inbound set, or existing self-broadcast
+    // marks would read as stale and be collected — the false-unread bomb.
+    // Directed self-mail (`to:` a SELF agent) stays surfaced; broadcasts are
+    // the observed noise class.
+    if (opts.includeProcessed !== true && toLower === 'broadcast' && selfLower.has(senderSeat)) {
+      continue;
+    }
     let seats = collisionsByBasename.get(file);
     if (seats === undefined) {
       seats = new Map();
