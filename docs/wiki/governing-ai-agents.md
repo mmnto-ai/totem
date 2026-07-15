@@ -29,7 +29,7 @@ The agent now sees whether the manifest is fresh, whether the review stamp is st
 
 ## 2. Deterministic Enforcement (Pre-Push Hook)
 
-Context injection helps agents make better decisions, but it cannot guarantee compliance. The pre-push Git hook provides the hard guarantee:
+Context injection helps agents make better decisions, but it cannot guarantee compliance. The pre-push Git hook enforces the compiled rules mechanically at push time:
 
 ```bash
 $ git push

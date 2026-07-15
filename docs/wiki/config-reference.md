@@ -88,7 +88,7 @@ export default {
   // Defines the baseline level of strictness and overhead.
   tier: 'Standard',
 
-  // Self-Healing Loop
+  // Lesson-extraction prompt on review failure
   shieldAutoLearn: true, // Auto-triggers lesson extraction on FAIL verdicts
 
   // Targets Configuration

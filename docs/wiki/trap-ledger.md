@@ -1,8 +1,8 @@
-# Trap Ledger & Self-Healing Rules
+# Trap Ledger & Rule Tuning
 
 Architectural enforcement is the floor. On top of that floor, Totem adapts rules from telemetry.
 
-If a compiled rule is too strict or hallucinates false positives, it will cause developer friction. Instead of forcing developers to manually edit configuration files or blindly bypass the system, Totem uses developer friction as data to automatically heal itself.
+If a compiled rule is too strict or hallucinates false positives, it will cause developer friction. Instead of forcing developers to manually edit configuration files or blindly bypass the system, Totem records that friction as telemetry — and `totem doctor --pr` turns the telemetry into reviewable rule changes.
 
 ## 1. The Trap Ledger
 
@@ -68,11 +68,11 @@ Per ADR-078 § Event Attribution: agent attribution lives in `agent_source`; `so
 
 ---
 
-## 2. The Self-Healing Loop (`totem doctor --pr`)
+## 2. The Rule-Tuning Loop (`totem doctor --pr`)
 
 The Trap Ledger provides the raw telemetry, but the **Doctor** provides the cure.
 
-By running `totem doctor --pr`, you initiate the self-healing sequence. The command aggregates the local telemetry, calculates bypass rates for every compiled rule, and takes autonomous action.
+Running `totem doctor --pr` starts the tuning sequence: the command aggregates the local telemetry, calculates bypass rates for every compiled rule, and stages the resulting changes as a pull request for human review.
 
 ### The Algorithm
 
@@ -83,7 +83,7 @@ By running `totem doctor --pr`, you initiate the self-healing sequence. The comm
 
 ### The Full Cycle
 
-This creates an autonomous, self-regulating ecosystem:
+The full cycle — every change lands through a human-reviewed PR:
 
 1. **Developer writes code.**
 2. **`totem lint` catches a violation.**

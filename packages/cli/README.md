@@ -1,6 +1,6 @@
 # @mmnto/cli
 
-Command-line interface for [Totem](https://github.com/mmnto-ai/totem), a persistent memory and context layer for AI coding agents. Installs the `totem` binary.
+Command-line interface for [Totem](https://github.com/mmnto-ai/totem) — a local-first, file-anchored substrate that makes AI-agent work queryable, enforceable, and derivable in your codebase. Installs the `totem` binary.
 
 ## Install
 

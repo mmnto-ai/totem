@@ -157,7 +157,7 @@ By default, the MCP integration runs via `npx -y @mmnto/mcp`, which always fetch
 
 ## Auto-Learning (shieldAutoLearn)
 
-You can configure Totem to automatically prompt for lesson extraction whenever a `totem review` (shield) fails. This accelerates the Self-Healing Loop. Every violation becomes an immediate opportunity to improve the ruleset.
+You can configure Totem to automatically prompt for lesson extraction whenever a `totem review` (shield) fails. This accelerates the extract → compile → enforce loop. Every violation becomes an immediate opportunity to improve the ruleset.
 
 ```typescript
 // totem.config.ts

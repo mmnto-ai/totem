@@ -38,7 +38,7 @@ Sometimes, breaking an architectural rule is the correct technical decision. Use
 globalThis.__legacyAPIState = {};
 ```
 
-Every override is recorded in the local **Trap Ledger**. If a rule is overridden frequently, `totem doctor --pr` will automatically downgrade it to a warning. Totem learns from your context and steps out of your way.
+Every override is recorded in the local **Trap Ledger**. If a rule is overridden frequently, `totem doctor --pr` derives an error → warning downgrade from that telemetry and opens a PR proposing it. Your justifications become the evidence for tuning the rule — and a human reviews every change.
 
 ## Unified Findings Model
 

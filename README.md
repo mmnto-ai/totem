@@ -83,9 +83,9 @@ When a rule matches comments or string literals instead of actual code, `totem d
 
 AI agents are stateless by default. Every new session starts from zero, with no record of prior incidents or the shared helpers you've already written. You end up re-explaining the same context over and over.
 
-Totem's approach is to ship a queryable knowledge index that holds your lessons and ADRs in a local semantic store (Tree-sitter + LanceDB). The index lives in your repo as plain files, so there's no cloud dependency and no vendor lock-in.
+Totem's approach: your lessons and ADRs live in your repo as plain markdown files — those files are the canonical source. `totem sync` derives a local semantic index from them (Tree-sitter + LanceDB) so they become queryable. The derived store stays on your machine and rebuilds from the files at any time, so there's no cloud dependency and no vendor lock-in.
 
-Any MCP-compatible agent can query it. Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real set of ranked candidates from your project's actual history (the agent still has to read them and synthesize — a queryable index returns candidates, not pre-synthesized answers). Whether an agent actually issues that query before deriving from scratch is currently an agent-discipline question — see [What Works and What Doesn't](#what-works-and-what-doesnt).
+MCP-compatible agents query it through the bundled MCP server. Registering that server with your agent is a one-time, per-agent configuration step — `totem init` scaffolds it for the agents it detects; for anything else, see [MCP Server Setup](docs/wiki/mcp-setup.md). Once registered, before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real set of ranked candidates from your project's actual history (the agent still has to read them and synthesize — a queryable index returns candidates, not pre-synthesized answers). Whether an agent actually issues that query before deriving from scratch is currently an agent-discipline question — see [What Works and What Doesn't](#what-works-and-what-doesnt).
 
 With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), federation across sibling repos is supported via the opt-in `linkedIndexes` config — one repo's lessons become queryable from all linked repos when cohorts opt in, so context doesn't stop at the repo boundary.
 
@@ -104,7 +104,7 @@ Totem is a set of CLI tools, not a framework. Building blocks you wire into what
 | `totem sync`           | Rebuild the semantic index from your lessons and docs.                                                         |
 | `totem hook install`   | Install Git hooks (`pre-push` lint gate).                                                                      |
 
-The built-in MCP server exposes the knowledge base to any compatible agent. It's the same index, with no extra setup.
+The built-in MCP server exposes the same index to MCP-compatible agents, once it's registered in your agent's MCP config — an IDE-level step; see [MCP Server Setup](docs/wiki/mcp-setup.md).
 
 ## CI/CD and GitHub Integration
 
@@ -123,7 +123,7 @@ The same `--format sarif` flag works on the standalone `totem-lite` binary for C
 Totem has three layers, and I want to be honest about where each one stands:
 
 1. **The enforcement layer works.** Compiled rules and Git hooks catch violations mechanically and offline, in under 2 seconds. This is the load-bearing floor that everything else stands on. Nothing on that floor touches the network, so it runs natively in air-gapped environments. No source code leaves your machine.
-2. **The planning layer works too, to my surprise.** Before the agent writes any code, `totem spec` pulls the GitHub issue body and queries the knowledge base for relevant lessons and ADRs. It writes a structured implementation spec to `.totem/specs/<issue>.md`. The spec includes architectural context, files to examine, edge cases the issue description missed, and task-by-task TDD directives with retrieved lessons injected inline as invariants. None of this is a hard tripwire. The agent could write a vague spec and ignore the retrieved context. But in practice the structured prompt reliably catches "I'm about to reinvent a helper that already exists" before the agent commits to an approach. A meaningful chunk of the velocity and architectural consistency I've been getting comes from this upstream gate, more than I expected when I first added it.
+2. **The planning layer works too, to my surprise.** Before the agent writes any code, `totem spec` pulls the GitHub issue body and queries the knowledge base for relevant lessons and ADRs. It writes a structured implementation spec to `.totem/specs/<issue>.md`. The spec includes architectural context, files to examine, edge cases the issue description missed, and task-by-task TDD directives with retrieved lessons injected inline as invariants. None of this is a hard tripwire. The agent could write a vague spec and ignore the retrieved context. But in practice — in my own use of it — the structured prompt has repeatedly caught "I'm about to reinvent a helper that already exists" before the agent commits to an approach. A meaningful chunk of the velocity and architectural consistency I've been getting comes from this upstream gate, more than I expected when I first added it.
 3. **The knowledge index is real infrastructure.** The index exists. It's portable across repos, and any MCP agent can query it. But whether an agent _consistently acts_ on the context it retrieves is an open question I'm actively working through. Availability is deterministic. The agent's discipline is not.
 
 I built the enforcement layer because the upstream layers aren't enough on their own. An agent can have a clean spec, relevant lessons in context, and still drift when it gets deep into a task. The tripwires catch what the planning layer and the knowledge index miss. That's the whole point of keeping them as three distinct layers rather than one: each catches a different class of failure, at a different stage of the workflow.
@@ -170,7 +170,7 @@ See the Wiki for how to use Totem to govern your workflows:
 
 - [**It Never Happens Again:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-never-happens-again.md) How to turn a PR mistake into a permanent project law in 60 seconds.
 - [**Governing AI Agents:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/governing-ai-agents.md) How to use hooks and MCP tools to enforce project rules on Claude and Gemini from Turn 1.
-- [**It Stops Crying Wolf:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-stops-crying-wolf.md) How the Self-Healing Loop automatically downgrades noisy rules based on developer frustration.
+- [**It Stops Crying Wolf:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-stops-crying-wolf.md) How override telemetry flags noisy rules for downgrade — proposed as a PR, merged by a human.
 
 ### Deep Dives
 
@@ -181,7 +181,7 @@ See the Wiki for how to use Totem to govern your workflows:
 
 ## Open Source Commitment
 
-The core toolkit (enforcement engine, `totem lesson compile`, MCP server, and self-healing loop) is Apache 2.0. If federation, hosted services, or centralized telemetry are introduced later, they are intended to be separate products, while the local toolkit remains Apache 2.0.
+The core toolkit (enforcement engine, `totem lesson compile`, MCP server, and the rule-tuning loop) is Apache 2.0. If federation, hosted services, or centralized telemetry are introduced later, they are intended to be separate products, while the local toolkit remains Apache 2.0.
 
 See [`COVENANT.md`](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md) for details.
 
