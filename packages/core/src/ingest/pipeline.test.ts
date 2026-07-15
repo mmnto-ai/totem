@@ -9,7 +9,9 @@ import { TotemConfigSchema } from '../config-schema.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
   buildIndexManifest,
+  computeNewlyEligiblePaths,
   computeOrphanPaths,
+  hashIndexExclusionSet,
   INDEX_MANIFEST_SCHEMA,
   runSync,
 } from './pipeline.js';
@@ -111,6 +113,73 @@ describe('orphan reconciliation (computeOrphanPaths)', () => {
     // The inputs are the indexed set and the working tree, never changedPaths,
     // so an empty diff window cannot hide an orphan.
     expect(computeOrphanPaths(['src/orphan.ts'], ['src/kept.ts'])).toEqual(['src/orphan.ts']);
+  });
+});
+
+describe('index-exclusion hash (hashIndexExclusionSet) — #2366', () => {
+  it('(d) reordering patterns does NOT change the hash (order-normalized)', () => {
+    // A config reorder must not read as an exclusion-set change and trigger a
+    // spurious newly-eligible re-enqueue.
+    expect(hashIndexExclusionSet(['a/**', 'b/**', 'c/**'])).toBe(
+      hashIndexExclusionSet(['c/**', 'a/**', 'b/**']),
+    );
+  });
+
+  it('a membership change (a removed pattern) DOES change the hash', () => {
+    expect(hashIndexExclusionSet(['dist/**', 'vendor/**'])).not.toBe(
+      hashIndexExclusionSet(['dist/**']),
+    );
+  });
+
+  it('an empty set hashes stably and differs from any non-empty set', () => {
+    expect(hashIndexExclusionSet([])).toBe(hashIndexExclusionSet([]));
+    expect(hashIndexExclusionSet([])).not.toBe(hashIndexExclusionSet(['dist/**']));
+  });
+});
+
+describe('newly-eligible reconciliation (computeNewlyEligiblePaths) — #2366', () => {
+  it('(a) a previously-ignored file that is now live but not indexed is enqueued', () => {
+    // vendor/lib.ts was excluded → never indexed; the pattern was removed → it is
+    // now in the live set. Its bytes are unchanged (absent from the git diff), so
+    // only the membership pass recovers it.
+    expect(computeNewlyEligiblePaths(['src/a.ts', 'vendor/lib.ts'], ['src/a.ts'])).toEqual([
+      'vendor/lib.ts',
+    ]);
+  });
+
+  it('(b) hash match → the reconciliation branch never runs; an up-to-date index yields nothing new', () => {
+    const patterns = ['dist/**', 'vendor/**'];
+    // Same effective set across syncs → hashes equal → runSync guards the branch off.
+    expect(hashIndexExclusionSet(patterns)).toBe(hashIndexExclusionSet([...patterns]));
+    // And even if it were evaluated, an up-to-date index (live ⊆ indexed) adds nothing.
+    expect(computeNewlyEligiblePaths(['src/a.ts', 'src/b.ts'], ['src/a.ts', 'src/b.ts'])).toEqual(
+      [],
+    );
+  });
+
+  it('(c) an absent stored hash is treated as a mismatch — the first-run scan recovers unindexed files and is benign when up to date', () => {
+    // Sync state predating #2366 has no indexExclusionHash; runSync compares
+    // `undefined !== currentHash` → mismatch → the newly-eligible pass runs.
+    // On a partially-unindexed tree that one-time scan recovers exactly the gap…
+    expect(computeNewlyEligiblePaths(['src/a.ts', 'docs/uncovered.md'], ['src/a.ts'])).toEqual([
+      'docs/uncovered.md',
+    ]);
+    // …and on an up-to-date index (live ⊆ indexed) the enqueue is empty, so the
+    // absent-hash mismatch costs existing consumers nothing.
+    expect(computeNewlyEligiblePaths(['src/a.ts', 'src/b.ts'], ['src/a.ts', 'src/b.ts'])).toEqual(
+      [],
+    );
+  });
+
+  it('separator-normalized like the orphan pass: a backslash-indexed live file is not re-enqueued', () => {
+    expect(computeNewlyEligiblePaths(['src/live.ts'], ['src\\live.ts'])).toEqual([]);
+  });
+
+  it('returns raw live paths so the caller re-embeds via the resolved file record', () => {
+    expect(computeNewlyEligiblePaths(['docs/new.md', 'src/a.ts'], [])).toEqual([
+      'docs/new.md',
+      'src/a.ts',
+    ]);
   });
 });
 

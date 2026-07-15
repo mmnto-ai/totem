@@ -138,6 +138,16 @@ export interface SyncOptions {
 export interface SyncState {
   lastSyncSha: string;
   timestamp: number;
+  /**
+   * Order-normalized content hash of the effective index-exclusion set
+   * (`ignorePatterns` ∪ `indexIgnorePatterns`) at the last sync. A change on the
+   * next incremental sync means the patterns moved — including a REMOVAL, which
+   * the git-diff window cannot surface — so the newly-eligible files are
+   * re-enqueued (mmnto-ai/totem#2366). Optional: absent in state written before
+   * #2366; readers treat absence as a mismatch (benign — the enqueue is
+   * near-empty for an up-to-date index).
+   */
+  indexExclusionHash?: string;
 }
 
 /**
