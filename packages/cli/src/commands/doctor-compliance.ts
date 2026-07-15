@@ -113,6 +113,7 @@ export function parseSearchLog(content: string): ParseResult {
     let obj: unknown;
     try {
       obj = JSON.parse(line);
+      // totem-context: intentional malformed-line tolerance — a corrupt/partial JSONL line is counted (malformedCount surfaces it in the readout) and skipped; the sensor records + continues (Tenet 13), and crashing the doctor on one torn append would be the real degradation.
     } catch {
       malformedCount++;
       continue;
