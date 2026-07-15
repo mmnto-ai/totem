@@ -17,13 +17,23 @@
  * never sets a non-zero exit code, and is not part of the gating `--strict`
  * suite — it only ever reports.
  *
- * Concurrency (ADR-029 § 2 was written single-seat): this cohort runs
- * concurrent multi-seat sessions per repo, so the reader partitions the event
- * stream by `agent_source` BEFORE the rolling-2h clustering runs. Without that,
- * interleaved seats would merge into one pseudo-session, corrupting numerator
- * and denominator both. Entries with no `agent_source` (all ~420 pre-schema
- * entries, plus any hookless session) land in an explicit "unattributed"
- * bucket, surfaced with its count — never fabricated into a seat (Tenet 4/20).
+ * Session model (ADR-029 § 2, verbatim): a coding session is "contiguous
+ * `search_knowledge` calls and git commits occurring within a rolling 2-hour
+ * window" — ONE merged event stream. An intervening commit extends a session
+ * exactly like a search does; search-only clusters with window-attached commits
+ * are NOT equivalent and were reworked out (2026-07-15 panel fold, codex
+ * architecture lens, verified against the ADR text).
+ *
+ * Why the rate is repo-wide only (same fold): commits carry no seat identity —
+ * SHA + timestamp — so a per-seat Compliance Rate would have to guess which
+ * seat's search "owns" a commit, fabricating attribution (Tenet 4).
+ * `agent_source` renders as an attribution-coverage diagnostic (entry counts
+ * per seat; `unattributed` = the ~420 pre-schema entries + hookless sessions),
+ * explicitly not a per-seat rate. The per-seat rate activates when a
+ * commit-side identity primitive exists (ADR-078 boundary / commit-stamped
+ * session ids). `session_id` is stamped by the producer for that same forward
+ * join and is deliberately unused in this windowing — there is nothing
+ * commit-side to join it against yet.
  *
  * Known precision limit: a later `git rebase` rewrites commit timestamps, which
  * retroactively shifts the 2-hour windows a past run computed against — so a
@@ -67,22 +77,28 @@ export interface CommitRecord {
   timestamp: string;
 }
 
-/** Per-bucket (or overall) rate numerator/denominator. */
+/** Rate numerator/denominator. */
 export interface RateStat {
-  /** Counted sessions (coding sessions — those with an associated commit). */
+  /** Counted sessions (coding sessions — windows containing ≥1 commit). */
   n: number;
-  /** Of `n`, how many had a search precede the first commit. */
+  /** Of `n`, how many had a search precede the window's first commit. */
   compliant: number;
 }
 
 export interface ComplianceReport {
+  /** Repo-wide Compliance Rate over merged-stream § 2 windows. */
   overall: RateStat;
-  /** Per-bucket stats, sorted by bucket name; includes `unattributed` when present. */
-  buckets: Array<{ bucket: string; stat: RateStat }>;
   /**
-   * Sessions that searched but never committed (no associated commit). Not a
-   * coding session per ADR-029 § 3, so excluded from every denominator — but
-   * surfaced so a search-heavy/commit-light window is visible, not hidden.
+   * Attribution coverage — entry counts per `agent_source` bucket, sorted by
+   * name (`unattributed` = null/pre-schema). A diagnostic, NOT compliance:
+   * commits carry no seat identity, so per-seat rates are non-identifiable
+   * until a commit-side join primitive exists.
+   */
+  coverage: Array<{ bucket: string; entries: number }>;
+  /**
+   * Windows that searched but never committed. Not a coding session per
+   * ADR-029 § 3, so excluded from the denominator — but surfaced so a
+   * search-heavy/commit-light stretch is visible, not hidden.
    */
   searchOnlySessions: number;
   /** Raw count of parsed entries with no `agent_source` (the unattributed backlog). */
@@ -139,184 +155,85 @@ export function parseSearchLog(content: string): ParseResult {
   return { entries, malformedCount };
 }
 
-// ─── Pure: session model ────────────────────────────────
-
-interface Session {
-  bucket: string;
-  /** Sorted ascending. Empty for a commit-only session. */
-  searchMs: number[];
-  start: number;
-  end: number;
-  /** Commit epoch-ms claimed by this session (sorted ascending). */
-  commitMs: number[];
-}
-
-/**
- * Cluster a sorted list of epoch-ms into rolling-window groups: a new group
- * starts whenever the gap from the previous timestamp exceeds `WINDOW_MS`
- * (ADR-029 § 2).
- */
-function rollingClusters(sortedMs: number[]): number[][] {
-  const clusters: number[][] = [];
-  let current: number[] = [];
-  for (const ms of sortedMs) {
-    if (current.length === 0 || ms - current[current.length - 1]! <= WINDOW_MS) {
-      current.push(ms);
-    } else {
-      clusters.push(current);
-      current = [ms];
-    }
-  }
-  if (current.length > 0) clusters.push(current);
-  return clusters;
-}
-
-/**
- * Build the search-anchored sessions for one partition's entries. An explicit
- * `session_id` groups its entries directly (overriding the time heuristic — an
- * agent that provides a persistent id gets exact session boundaries per
- * ADR-029 § 2); entries without one fall through to rolling-2h clustering.
- */
-function buildSearchSessions(bucket: string, entries: ComplianceLogEntry[]): Session[] {
-  const sessions: Session[] = [];
-
-  // Override path: one session per distinct session_id, regardless of time gaps.
-  const byId = new Map<string, number[]>();
-  const unkeyed: number[] = [];
-  for (const e of entries) {
-    const ms = Date.parse(e.timestamp);
-    if (e.session_id !== null) {
-      const list = byId.get(e.session_id) ?? [];
-      list.push(ms);
-      byId.set(e.session_id, list);
-    } else {
-      unkeyed.push(ms);
-    }
-  }
-  for (const list of byId.values()) {
-    list.sort((a, b) => a - b);
-    sessions.push({
-      bucket,
-      searchMs: list,
-      start: list[0]!,
-      end: list[list.length - 1]!,
-      commitMs: [],
-    });
-  }
-
-  // Clustering path: rolling-2h over the id-less entries.
-  unkeyed.sort((a, b) => a - b);
-  for (const cluster of rollingClusters(unkeyed)) {
-    sessions.push({
-      bucket,
-      searchMs: cluster,
-      start: cluster[0]!,
-      end: cluster[cluster.length - 1]!,
-      commitMs: [],
-    });
-  }
-
-  return sessions;
-}
-
 // ─── Pure: compute ──────────────────────────────────────
+
+/** One event on the merged § 2 timeline. */
+interface StreamEvent {
+  ms: number;
+  kind: 'search' | 'commit';
+}
 
 /**
  * Compute the Compliance Rate report from parsed log entries + the commit seam.
  *
- * 1. Partition entries by `agent_source` (null → `unattributed`).
- * 2. Per partition, build sessions (session_id override, else rolling-2h).
- * 3. Assign each commit to the earliest-starting session whose window
- *    `[start-2h, end+2h]` contains it (commits carry no `agent_source`, so they
- *    attach to a seat's session by time-proximity). A commit is claimed once.
- * 4. Unclaimed commits (committed with no nearby search) cluster into
- *    commit-only sessions in the `unattributed` bucket — each non-compliant.
- * 5. A search session with ≥1 commit is compliant iff its earliest search
- *    precedes its earliest commit; a session with no commit is search-only
- *    (excluded from the rate). Commit-only sessions are counted, non-compliant.
+ * 1. Merge searches + commits into ONE repo-wide event timeline (§ 2 verbatim:
+ *    sessions are contiguous searches AND commits in a rolling 2-hour window —
+ *    an intervening commit extends a session exactly like a search does).
+ * 2. Roll windows: a new session starts when the gap from the previous event
+ *    exceeds 2 hours.
+ * 3. Score each window containing ≥1 commit: compliant iff its earliest search
+ *    precedes its earliest commit (a commit-only window is non-compliant by
+ *    construction). Search-only windows are excluded from the denominator (not
+ *    coding sessions per § 3) but surfaced.
+ * 4. Coverage: entry counts per `agent_source` — a diagnostic, never a rate
+ *    (commits carry no seat identity; see the header).
  */
 export function computeCompliance(
   entries: ComplianceLogEntry[],
   commits: CommitRecord[],
 ): ComplianceReport {
-  // 1. Partition.
-  const partitions = new Map<string, ComplianceLogEntry[]>();
+  // Coverage diagnostic (per-seat entry counts; null → unattributed).
+  const coverageMap = new Map<string, number>();
   let unattributedEntries = 0;
   for (const e of entries) {
     const bucket = e.agent_source ?? UNATTRIBUTED;
     if (e.agent_source === null) unattributedEntries++;
-    const list = partitions.get(bucket) ?? [];
-    list.push(e);
-    partitions.set(bucket, list);
+    coverageMap.set(bucket, (coverageMap.get(bucket) ?? 0) + 1);
   }
 
-  // 2. Build search sessions across all partitions.
-  const sessions: Session[] = [];
-  for (const [bucket, list] of partitions) {
-    sessions.push(...buildSearchSessions(bucket, list));
+  // Merged § 2 timeline. Entry timestamps are parse-validated finite; commit
+  // timestamps come from the seam and are filtered here.
+  const events: StreamEvent[] = entries.map((e) => ({
+    ms: Date.parse(e.timestamp),
+    kind: 'search' as const,
+  }));
+  for (const c of commits) {
+    const ms = Date.parse(c.timestamp);
+    if (Number.isFinite(ms)) events.push({ ms, kind: 'commit' });
   }
-  // Deterministic assignment: earliest-starting session claims a commit first.
-  sessions.sort((a, b) => a.start - b.start);
+  events.sort((a, b) => a.ms - b.ms);
 
-  // 3. Assign commits to sessions.
-  const commitMsList = commits
-    .map((c) => Date.parse(c.timestamp))
-    .filter((ms) => Number.isFinite(ms))
-    .sort((a, b) => a - b);
-  const unclaimed: number[] = [];
-  for (const cm of commitMsList) {
-    const owner = sessions.find((s) => cm >= s.start - WINDOW_MS && cm <= s.end + WINDOW_MS);
-    if (owner) owner.commitMs.push(cm);
-    else unclaimed.push(cm);
-  }
-
-  // 4. Commit-only sessions (unattributed) from unclaimed commits.
-  for (const cluster of rollingClusters(unclaimed)) {
-    sessions.push({
-      bucket: UNATTRIBUTED,
-      searchMs: [],
-      start: cluster[0]!,
-      end: cluster[cluster.length - 1]!,
-      commitMs: cluster,
-    });
-  }
-
-  // 5. Score.
-  const bucketStats = new Map<string, RateStat>();
+  // Rolling windows + scoring.
+  const overall: RateStat = { n: 0, compliant: 0 };
   let searchOnlySessions = 0;
-  const bump = (bucket: string, compliant: boolean): void => {
-    const stat = bucketStats.get(bucket) ?? { n: 0, compliant: 0 };
-    stat.n++;
-    if (compliant) stat.compliant++;
-    bucketStats.set(bucket, stat);
-  };
-
-  for (const s of sessions) {
-    if (s.commitMs.length === 0) {
-      // Search-only: searched but never committed → not a coding session.
+  const scoreWindow = (window: StreamEvent[]): void => {
+    if (window.length === 0) return;
+    const firstCommit = window.find((ev) => ev.kind === 'commit');
+    if (firstCommit === undefined) {
+      // Searched, never committed — not a coding session (§ 3).
       searchOnlySessions++;
-      continue;
+      return;
     }
-    if (s.searchMs.length === 0) {
-      // Commit-only: committed with no preceding search → non-compliant.
-      bump(s.bucket, false);
-      continue;
+    const firstSearch = window.find((ev) => ev.kind === 'search');
+    overall.n++;
+    if (firstSearch !== undefined && firstSearch.ms <= firstCommit.ms) overall.compliant++;
+  };
+  let window: StreamEvent[] = [];
+  for (const ev of events) {
+    if (window.length === 0 || ev.ms - window[window.length - 1]!.ms <= WINDOW_MS) {
+      window.push(ev);
+    } else {
+      scoreWindow(window);
+      window = [ev];
     }
-    const firstSearch = s.searchMs[0]!;
-    const firstCommit = s.commitMs[0]!; // commitMs pushed in ascending commit order
-    bump(s.bucket, firstSearch <= firstCommit);
   }
+  scoreWindow(window);
 
-  const buckets = [...bucketStats.entries()]
-    .map(([bucket, stat]) => ({ bucket, stat }))
+  const coverage = [...coverageMap.entries()]
+    .map(([bucket, count]) => ({ bucket, entries: count }))
     .sort((a, b) => a.bucket.localeCompare(b.bucket));
 
-  const overall = buckets.reduce<RateStat>(
-    (acc, b) => ({ n: acc.n + b.stat.n, compliant: acc.compliant + b.stat.compliant }),
-    { n: 0, compliant: 0 },
-  );
-
-  return { overall, buckets, searchOnlySessions, unattributedEntries };
+  return { overall, coverage, searchOnlySessions, unattributedEntries };
 }
 
 // ─── Pure: render helper ────────────────────────────────
@@ -431,20 +348,23 @@ export async function doctorComplianceCliCommand(
 
   // ── Render ──
   log.info(TAG, bold('Compliance Rate'));
-  log.info(TAG, `overall: ${formatRate(report.overall)}`);
-
-  for (const { bucket, stat } of report.buckets) {
-    log.info(TAG, `  seat ${sanitizeForTerminal(bucket)}: ${formatRate(stat)}`);
-  }
+  log.info(TAG, `repo-wide: ${formatRate(report.overall)}`);
 
   // Caveat line (ruled in on #2362) — a caveat, never a rename.
   log.dim(TAG, 'commit-granularity per ADR-029 § 1');
 
-  if (report.unattributedEntries > 0) {
-    log.dim(
-      TAG,
-      `${report.unattributedEntries} entr${report.unattributedEntries === 1 ? 'y' : 'ies'} unattributed (legacy / hookless — no agent_source)`,
-    );
+  // Coverage is a diagnostic, never a per-seat rate: commits carry no seat
+  // identity, so a seat-partitioned Compliance Rate would fabricate commit
+  // ownership (2026-07-15 panel fold; see the header).
+  if (report.coverage.length > 0) {
+    log.dim(TAG, 'search attribution coverage (diagnostic — not compliance):');
+    for (const { bucket, entries } of report.coverage) {
+      const legacyNote = bucket === UNATTRIBUTED ? ' (legacy / hookless — no agent_source)' : '';
+      log.dim(
+        TAG,
+        `  ${sanitizeForTerminal(bucket)}: ${entries} entr${entries === 1 ? 'y' : 'ies'}${legacyNote}`,
+      );
+    }
   }
   if (report.searchOnlySessions > 0) {
     log.dim(
