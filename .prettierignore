@@ -10,6 +10,8 @@ pnpm-lock.yaml
 # Compiled rules hash must match compile-manifest.json — prettier would invalidate it
 .totem/compiled-rules.json
 .totem/compile-manifest.json
+# Proof-kit fixture .totem mirrors both concerns above (lesson regex + hash seal)
+examples/proof-kit/fixture/.totem/
 # Spine artifacts are canonicalStringify-emitted; the freeze proof compares raw file
 # bytes to the committed blob (spine-freeze-proof.ts) — prettier rewrap reads as tamper
 .totem/spine/
