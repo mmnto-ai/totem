@@ -1,6 +1,6 @@
 {
   "name": "@mmnto/totem",
-  "version": "1.96.0",
+  "version": "1.97.0",
   "description": "Core engine for Totem — a local-first, file-anchored substrate that makes AI-agent work queryable, enforceable, and derivable in your codebase",
   "type": "module",
   "engines": {
