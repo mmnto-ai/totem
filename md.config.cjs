@@ -18,5 +18,9 @@ module.exports = {
     HOOK_LIST: transforms.HOOK_LIST,
     CHMOD_HOOKS: transforms.CHMOD_HOOKS,
     COMMAND_TABLE: transforms.COMMAND_TABLE,
+    MATURITY_TABLE: transforms.MATURITY_TABLE,
+    RULE_PROVENANCE: transforms.RULE_PROVENANCE,
+    DAYS_UNDER_FREEZE: transforms.DAYS_UNDER_FREEZE,
+    LINT_RECEIPT: transforms.LINT_RECEIPT,
   },
 };

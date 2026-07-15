@@ -41,6 +41,36 @@ jobs:
 
       - run: pnpm format:check
 
+  docs-governance:
+    name: Docs Governance (maturity surface drift gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the lint receipt recomputes against pinned SHAs.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - run: pnpm test:docs
+
+      - name: Docs drift gate (inject must be a no-op)
+        run: |
+          pnpm docs:inject
+          git diff --exit-code -- README.md docs/
+
+      - name: Recompute lint receipt (pinned fields must reproduce)
+        run: node tools/gen-lint-receipt.mjs --verify
+
   wind-tunnel-sha:
     name: Wind Tunnel SHA Integrity
     runs-on: ubuntu-latest

@@ -1,0 +1,15 @@
+{
+  "baseSha": "c14e90abefe25b6a334e6ac796dfcc3af3024a44",
+  "headSha": "ba8c591da7993451ecb08bc31d271ba3974e4eef",
+  "filesChanged": 41,
+  "rules": 387,
+  "errors": 0,
+  "warnings": 20,
+  "llmCalls": 0,
+  "apiKeysStripped": true,
+  "elapsedMs": 3570,
+  "platform": "win32-x64",
+  "node": "24.16.0",
+  "cliVersion": "1.96.0",
+  "generatedAt": "2026-07-15T02:58:15.223Z"
+}

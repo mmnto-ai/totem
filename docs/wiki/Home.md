@@ -12,6 +12,7 @@ Welcome to the Totem documentation.
 
 ## Reference
 
+- [Maturity](maturity.md) — what's shipped, partial, and still a goal, with receipts
 - [Installation Guide](installation.md)
 - [CLI Reference](cli-reference.md)
 - [Configuration Reference](config-reference.md)

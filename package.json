@@ -15,7 +15,7 @@
     "changeset": "changeset",
     "version": "changeset version && node tools/augment-cohort-changelog-headers.mjs",
     "release": "pnpm build && node tools/publish-oidc.mjs",
-    "docs:inject": "node tools/docs-inject.cjs",
+    "docs:inject": "node tools/docs-inject.cjs && prettier --write README.md \"docs/**/*.md\"",
     "test:docs": "node tools/docs-transforms.test.cjs",
     "test:augment-headers": "node tools/augment-cohort-changelog-headers.test.mjs",
     "test:cut-sensor": "node --test tools/vp-pr-cut-sensor.test.mjs"
