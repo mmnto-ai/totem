@@ -216,7 +216,9 @@ export function computeCompliance(
     }
     const firstSearch = window.find((ev) => ev.kind === 'search');
     overall.n++;
-    if (firstSearch !== undefined && firstSearch.ms <= firstCommit.ms) overall.compliant++;
+    // Strictly before: § 3 says "preceded" — an equal-timestamp tie does not
+    // demonstrate the search informed the commit, so it does not credit.
+    if (firstSearch !== undefined && firstSearch.ms < firstCommit.ms) overall.compliant++;
   };
   let window: StreamEvent[] = [];
   for (const ev of events) {
@@ -321,6 +323,8 @@ export async function doctorComplianceCliCommand(
   }
 
   const logPath = path.join(cwd, totemDir, '.search-log.jsonl');
+  // totemDir is repo-controlled config — sanitize before it reaches a terminal.
+  const displayLogPath = sanitizeForTerminal(path.join(totemDir, '.search-log.jsonl'));
 
   let content: string;
   if (options.logContentForTest !== undefined) {
@@ -329,7 +333,7 @@ export async function doctorComplianceCliCommand(
     // Absent log file → skip idiom (NOT a fail, NOT 0%). Point at the producer.
     log.dim(
       TAG,
-      `SKIP — no ${path.join(totemDir, '.search-log.jsonl')} found. The log is produced by the MCP search_knowledge tool; wire the MCP server (.mcp.json) and run some search_knowledge calls, then re-run totem doctor --compliance.`,
+      `SKIP — no ${displayLogPath} found. The log is produced by the MCP search_knowledge tool; wire the MCP server (.mcp.json) and run some search_knowledge calls, then re-run totem doctor --compliance.`,
     );
     return;
   } else {
@@ -337,7 +341,7 @@ export async function doctorComplianceCliCommand(
       content = fs.readFileSync(logPath, 'utf-8');
       // totem-context: an unreadable search-log is the honest-absent path for this cosmetic sensor — degrade to the skip idiom, never crash the doctor pipeline.
     } catch {
-      log.dim(TAG, `SKIP — ${path.join(totemDir, '.search-log.jsonl')} present but unreadable.`);
+      log.dim(TAG, `SKIP — ${displayLogPath} present but unreadable.`);
       return;
     }
   }

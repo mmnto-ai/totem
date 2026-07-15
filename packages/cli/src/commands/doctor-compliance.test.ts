@@ -113,6 +113,12 @@ describe('computeCompliance', () => {
     assertRateBounds(report);
   });
 
+  it('equal search/commit timestamps do NOT credit ("preceded" per § 3 is strict)', () => {
+    const report = computeCompliance([entry(0, 'claude')], [commit(0)]);
+    expect(report.overall).toEqual({ n: 1, compliant: 0 });
+    assertRateBounds(report);
+  });
+
   it('§ 2 merged stream: an intervening commit EXTENDS the session', () => {
     // search t0 · commit +1.5h · commit +3h — each gap ≤ 2h through the merged
     // stream, so this is ONE session and the t0 search covers it (compliant).

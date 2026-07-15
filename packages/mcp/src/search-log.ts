@@ -22,12 +22,13 @@ export interface SearchLogEntry {
    * highest-precedence layer). `null` (stamped explicitly, never guessed —
    * Tenet 4) when the env var is absent, so the reader can partition legacy +
    * hookless events into an explicit "unattributed" bucket rather than a
-   * fabricated seat. The ADR-029 compliance reader partitions on this field
-   * BEFORE its rolling-2h session clustering, so concurrent multi-seat
-   * sessions no longer merge into one pseudo-session.
+   * fabricated seat. The ADR-029 compliance reader renders this field as
+   * attribution COVERAGE (per-seat entry counts); per-seat compliance rates
+   * wait on a commit-side identity primitive, because commits carry no seat
+   * identity to join against (ruled on mmnto-ai/totem#2362).
    */
   agent_source?: string | null;
-  /** A.3.a: explicit session id passed through from `TOTEM_SESSION_ID` if present, else null (never guessed). Overrides the rolling-2h clustering when the reader groups sessions. */
+  /** A.3.a: explicit session id passed through from `TOTEM_SESSION_ID` if present, else null (never guessed). Reserved forward primitive for the ADR-078 commit-side session join; deliberately inert in the current repo-wide windowing. */
   session_id?: string | null;
   /** A.3.a: trace-correlation id passed through from `TOTEM_CORRELATION_ID` if present, else null (never guessed). Reserved for the A.3.c end-to-end correlation pass; carried now so the trio lands in one producer touch. */
   correlation_id?: string | null;
@@ -125,10 +126,10 @@ export function setLogDir(totemDir: string): void {
  * without touching the filesystem.
  */
 export function logSearch(entry: SearchLogEntry): SearchLogEntry {
-  // `...derived` first so an explicit caller value (should one ever be passed)
-  // overrides the env stamp; today no call site sets the trio, so the derived
-  // values land as-is.
-  const stamped: SearchLogEntry = { ...deriveSearchLogAttribution(), ...entry };
+  // Env stamp LAST: the attribution trio is governance telemetry, so the
+  // environment-derived values are authoritative — a caller-supplied (or
+  // spread-truthy `undefined`) trio field must never displace the stamp.
+  const stamped: SearchLogEntry = { ...entry, ...deriveSearchLogAttribution() };
   entries.push(stamped);
 
   // Best-effort, non-blocking file append
