@@ -4,13 +4,13 @@
   "rules": 1,
   "lessonHash": "006eba85929b92f9",
   "chainIntact": true,
-  "mistakeElapsedMs": 731,
-  "cleanElapsedMs": 732,
+  "mistakeElapsedMs": 415,
+  "cleanElapsedMs": 342,
   "timingBoundMs": 2000,
   "llmCalls": 0,
   "apiKeysStripped": true,
-  "platform": "win32-x64",
-  "node": "24.16.0",
-  "cliVersion": "1.96.0",
-  "generatedAt": "2026-07-15T04:15:38.213Z"
+  "platform": "linux-x64",
+  "node": "24.18.0",
+  "cliVersion": "1.97.0",
+  "generatedAt": "2026-07-15T10:04:03.196Z"
 }
