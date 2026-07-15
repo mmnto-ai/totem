@@ -131,6 +131,10 @@ const config: TotemConfig = {
     '.totem/lessons/**',
     '.strategy',
     'packages/cli/src/assets/compiled-baseline.ts',
+    // The proof-kit fixture is a demo corpus: it deliberately carries the bad
+    // shapes its own rule blocks (incident repro = Stage-4 positive control).
+    // Same class as the lesson-corpus exclusion above.
+    'examples/proof-kit/fixture/**',
   ],
 };
 

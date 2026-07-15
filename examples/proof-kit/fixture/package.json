@@ -1,0 +1,7 @@
+{
+  "name": "totem-proof-kit-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tiny fixture repo for the totem proof kit — materialized into a temp git repo by ../run.mjs, never built or published.",
+  "type": "module"
+}

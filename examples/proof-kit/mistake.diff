@@ -1,0 +1,15 @@
+diff --git a/src/notify.js b/src/notify.js
+index 6bb2064..89666fa 100644
+--- a/src/notify.js
++++ b/src/notify.js
+@@ -1,3 +1,10 @@
+ export function notify(user, message) {
+   return `[notify] ${user}: ${message}`;
+ }
++
++export function notifySafe(transport, message) {
++  try {
++    transport.send(message);
++  } catch {}
++  return true;
++}

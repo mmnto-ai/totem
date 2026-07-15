@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "lessonHash": "006eba85929b92f9",
+      "lessonHeading": "Empty catch blocks swallow failures",
+      "pattern": "",
+      "message": "Empty catch blocks swallow failures silently. Every catch must rethrow, log, or route the error to the terminal handler — failures fail loud.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "try { $$$TRY } catch ($ERR) {}"
+            },
+            {
+              "pattern": "try { $$$TRY } catch {}"
+            }
+          ]
+        }
+      },
+      "badExample": "try {\n  transport.send(message);\n} catch {}",
+      "goodExample": "try {\n  transport.send(message);\n} catch (err) {\n  console.error('notify: transport.send failed', err);\n  throw err;\n}",
+      "compiledAt": "2026-07-15T03:39:22.290Z",
+      "createdAt": "2026-07-15T03:39:22.290Z",
+      "fileGlobs": [
+        "**/*.js",
+        "**/*.ts",
+        "**/*.jsx",
+        "**/*.tsx"
+      ],
+      "severity": "error",
+      "confidence": "high"
+    }
+  ],
+  "nonCompilable": []
+}
