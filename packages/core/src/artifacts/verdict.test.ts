@@ -36,6 +36,7 @@ import {
   computeLineageKey,
   computeVerdictArtifactContentHash,
   deriveCacheEligible,
+  deriveLessonsConsulted,
   deriveSettled,
   findLatestVerdictForLineage,
   listVerdictArtifacts,
@@ -655,6 +656,97 @@ describe('renderCovariateLine (gate G4, format v1)', () => {
   });
 });
 
+// ─── lessonsConsulted (mmnto-ai/totem#2363) ─────────────────────────────────
+
+describe('lessonsConsulted — round-level recall record (mmnto-ai/totem#2363)', () => {
+  const item = (seed: string) => ({
+    contentHash: seed.repeat(64).slice(0, 64),
+    filePath: `.totem/lessons/${seed}.md`,
+  });
+
+  it('accepts an absent field (pre-1.1 artifacts / no-retrieval producers)', () => {
+    expect(VerdictArtifactSchema.safeParse(verdict()).success).toBe(true);
+  });
+
+  it("accepts 'hit' with items and 'empty' with none", () => {
+    expect(
+      VerdictArtifactSchema.safeParse(
+        verdict({ lessonsConsulted: { status: 'hit', items: [item('a')] } }),
+      ).success,
+    ).toBe(true);
+    expect(
+      VerdictArtifactSchema.safeParse(verdict({ lessonsConsulted: { status: 'empty', items: [] } }))
+        .success,
+    ).toBe(true);
+  });
+
+  it("rejects a mirrored-on-trust status: 'hit' with zero items and 'empty' with items", () => {
+    const hitNoItems = VerdictArtifactSchema.safeParse(
+      verdict({ lessonsConsulted: { status: 'hit', items: [] } }),
+    );
+    expect(hitNoItems.success).toBe(false);
+    const emptyWithItems = VerdictArtifactSchema.safeParse(
+      verdict({ lessonsConsulted: { status: 'empty', items: [item('b')] } }),
+    );
+    expect(emptyWithItems.success).toBe(false);
+  });
+
+  it('rejects a non-sha256 contentHash', () => {
+    const bad = VerdictArtifactSchema.safeParse(
+      verdict({
+        lessonsConsulted: {
+          status: 'hit',
+          items: [{ contentHash: 'not-a-hash', filePath: '.totem/lessons/x.md' }],
+        },
+      }),
+    );
+    expect(bad.success).toBe(false);
+  });
+
+  it('deriveLessonsConsulted filters the lesson partition and passes identity through', () => {
+    const lessonItem = {
+      provenance: 'similarity-only',
+      contentHash: 'c'.repeat(64),
+      sourceType: 'lesson',
+      filePath: '.totem/lessons/no-child-process.md',
+    };
+    const crossRepoLesson = {
+      provenance: 'similarity-only',
+      contentHash: 'd'.repeat(64),
+      sourceType: 'lesson',
+      filePath: '.totem/lessons/remote.md',
+      sourceRepo: 'linked-repo',
+    };
+    const codeItem = {
+      provenance: 'similarity-only',
+      contentHash: 'e'.repeat(64),
+      sourceType: 'code',
+      filePath: 'src/x.ts',
+    };
+    const derived = deriveLessonsConsulted({ items: [lessonItem, codeItem, crossRepoLesson] });
+    expect(derived.status).toBe('hit');
+    expect(derived.items).toEqual([
+      { contentHash: 'c'.repeat(64), filePath: '.totem/lessons/no-child-process.md' },
+      {
+        contentHash: 'd'.repeat(64),
+        filePath: '.totem/lessons/remote.md',
+        sourceRepo: 'linked-repo',
+      },
+    ]);
+  });
+
+  it("deriveLessonsConsulted yields 'empty' when the bundle has no lesson items", () => {
+    const codeOnly = {
+      provenance: 'similarity-only',
+      contentHash: 'e'.repeat(64),
+      sourceType: 'code',
+      filePath: 'src/x.ts',
+    };
+    expect(deriveLessonsConsulted({ items: [codeOnly] })).toEqual({ status: 'empty', items: [] });
+    expect(deriveLessonsConsulted({ items: [] })).toEqual({ status: 'empty', items: [] });
+  });
+});
+
 // ─── LANE-BLINDNESS structural test (Prop 302) ──────────────────────────────
 
 describe('lane-blindness: no runner/lane-mode discriminator (Prop 302)', () => {
@@ -664,6 +756,10 @@ describe('lane-blindness: no runner/lane-mode discriminator (Prop 302)', () => {
       ...verdict({ lanes: [completedLane(0), completedLane(1, 'anthropic')] }),
       panelArtifactHash: 'e'.repeat(64),
       diversity: classifyDiversity(['gemini', 'anthropic']),
+      lessonsConsulted: {
+        status: 'hit' as const,
+        items: [{ contentHash: 'f'.repeat(64), filePath: '.totem/lessons/x.md' }],
+      },
     };
     expect(VerdictArtifactSchema.safeParse(full).success).toBe(true);
     const topKeys = Object.keys(full).sort();
@@ -675,6 +771,7 @@ describe('lane-blindness: no runner/lane-mode discriminator (Prop 302)', () => {
       'diversity',
       'findings',
       'lanes',
+      'lessonsConsulted',
       'panelArtifactHash',
       'postChecks',
       'reviewedState',

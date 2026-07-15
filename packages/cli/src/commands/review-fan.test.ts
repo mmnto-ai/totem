@@ -642,6 +642,35 @@ describe('assembleVerdict', () => {
     expect(verdict.reviewedState).toBe('drifted');
     expect(verdict.settled).toBe(false);
   });
+
+  it('carries lessonsConsulted when supplied and omits the key when absent (mmnto-ai/totem#2363)', () => {
+    const base = {
+      diffScope: { source: 'staged' as const, diffHash: hex('d') },
+      laneResults: [lane('a', []), lane('b', [])],
+      panelAndChecks: { postChecks: [] },
+      round: { index: 0, lineageKey: 'lk' },
+      reviewedState: 'matched' as const,
+      createdAt: '2026-07-10T00:00:00.000Z',
+    };
+    const withRecall = assembleVerdict(
+      {
+        ...base,
+        lessonsConsulted: {
+          status: 'hit',
+          items: [{ contentHash: hex('l'), filePath: '.totem/lessons/x.md' }],
+        },
+      },
+      deriveSettled,
+      VERDICT_ARTIFACT_SCHEMA_VERSION,
+    );
+    expect(withRecall.lessonsConsulted).toEqual({
+      status: 'hit',
+      items: [{ contentHash: hex('l'), filePath: '.totem/lessons/x.md' }],
+    });
+    // Absent input ⇒ the KEY is omitted (honest-absent), never an empty object.
+    const without = assembleVerdict(base, deriveSettled, VERDICT_ARTIFACT_SCHEMA_VERSION);
+    expect('lessonsConsulted' in without).toBe(false);
+  });
 });
 
 // ─── runReviewFan (end-to-end — gates 4, 5, 7 wiring) ─────────────────────────
@@ -724,6 +753,40 @@ describe('runReviewFan', () => {
     await expect(runReviewFan(ctx)).rejects.toThrow(/lane coverage 1\/2/);
     // The honest verdict is still written before the throw.
     expect(listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact.completedLaneCount).toBe(1);
+  });
+
+  it("the persisted verdict records the round's lesson recall from the delivered bundle (mmnto-ai/totem#2363)", async () => {
+    const lessonItem = {
+      provenance: 'similarity-only',
+      contentHash: 'c'.repeat(64),
+      sourceType: 'lesson',
+      filePath: '.totem/lessons/no-child-process.md',
+    };
+    const codeItem = {
+      provenance: 'similarity-only',
+      contentHash: 'e'.repeat(64),
+      sourceType: 'code',
+      filePath: 'src/x.ts',
+    };
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], oneFailedOnePassing(), {
+      groundingBundle: { items: [lessonItem, codeItem] },
+    });
+    await runReviewFan(ctx);
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    // Round-level recall: lesson-partition identity only, code items excluded.
+    expect(v.lessonsConsulted).toEqual({
+      status: 'hit',
+      items: [{ contentHash: 'c'.repeat(64), filePath: '.totem/lessons/no-child-process.md' }],
+    });
+  });
+
+  it("a zero-lesson bundle records the visibly-ungrounded 'empty' state, never absent (mmnto-ai/totem#2363)", async () => {
+    // makeCtx's default bundle is empty — the fan still emits the field, so a
+    // consumer can distinguish "retrieval ran, zero lessons" from a pre-1.1 artifact.
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], oneFailedOnePassing());
+    await runReviewFan(ctx);
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    expect(v.lessonsConsulted).toEqual({ status: 'empty', items: [] });
   });
 
   it('two completed lanes assemble a panel from usable lanes only', async () => {
