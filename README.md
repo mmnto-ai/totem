@@ -172,6 +172,7 @@ See the Wiki for how to use Totem to govern your workflows:
 - [**Governing AI Agents:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/governing-ai-agents.md) How to use hooks and MCP tools to enforce project rules on Claude and Gemini from Turn 1.
 - [**It Stops Crying Wolf:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-stops-crying-wolf.md) How override telemetry flags noisy rules for downgrade — proposed as a PR, merged by a human.
 - [**Maturity:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/maturity.md) What's shipped, partial, and still a goal — each row backed by verifiable data in the repo and checked in CI.
+- [**Proof Kit:**](https://github.com/mmnto-ai/totem/blob/main/examples/proof-kit) A committed, re-runnable exhibit: one real mistake, the rule compiled from its lesson, and CI re-proving on every pull request that the mistake stays blocked — with zero LLM calls.
 
 ### Deep Dives
 
