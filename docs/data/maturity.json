@@ -90,6 +90,17 @@
       "note": "README badges and this page are derived from committed data and drift-gated in CI. A claim whose anchor stops resolving fails the build."
     },
     {
+      "id": "proof-kit",
+      "mechanism": "Reproducible proof kit (`examples/proof-kit`)",
+      "status": "shipped",
+      "headline": false,
+      "anchors": [
+        { "kind": "file", "ref": "examples/proof-kit/run.mjs" },
+        { "kind": "data", "ref": "examples/proof-kit/receipt.json" }
+      ],
+      "note": "A committed exhibit of the loop: one real mistake, the rule compiled from its lesson, and CI re-proving on every pull request that the mistake stays blocked — zero LLM calls. Timing lives in the committed receipt beside the parameters that produced it."
+    },
+    {
       "id": "multi-seat-coordination",
       "mechanism": "Multi-seat coordination substrate",
       "status": "shipped",
