@@ -1398,6 +1398,10 @@ program
     'Run only the parity-drift sensor against the cohort parity manifest (mmnto-ai/totem-strategy#448)',
   )
   .option(
+    '--compliance',
+    'Run only the ADR-029 recall-compliance sensor (search-before-commit rate from .totem/.search-log.jsonl + git history). Sensor-only readout — never gates (mmnto-ai/totem#2362)',
+  )
+  .option(
     '--json',
     'With --parity: emit the trust-readout as a diffable JSON verdict artifact on stdout (mmnto-ai/totem#2327)',
   )
@@ -1409,6 +1413,7 @@ program
         claimDiscipline?: boolean;
         scopeToDiff?: boolean;
         parity?: boolean;
+        compliance?: boolean;
         json?: boolean;
       },
       cmd: Command,
@@ -1420,10 +1425,15 @@ program
         // scopes so `totem doctor --parity --json` and `totem --json doctor
         // --parity` agree.
         opts.json = cmd.optsWithGlobals<{ json?: boolean }>().json;
-        if (opts.claimDiscipline && opts.parity) {
+        const specializedModes = [
+          opts.claimDiscipline && '--claim-discipline',
+          opts.parity && '--parity',
+          opts.compliance && '--compliance',
+        ].filter((m): m is string => typeof m === 'string');
+        if (specializedModes.length > 1) {
           const { TotemConfigError } = await import('@mmnto/totem');
           throw new TotemConfigError(
-            'Cannot combine --claim-discipline with --parity.',
+            `Cannot combine ${specializedModes.join(' with ')}.`,
             'Choose exactly one specialized doctor mode.',
           );
         }
@@ -1446,6 +1456,14 @@ program
         if (opts.parity) {
           const { doctorParityCliCommand } = await import('./commands/doctor-parity.js');
           await doctorParityCliCommand({ strict: opts.strict, json: opts.json });
+          return;
+        }
+        if (opts.compliance) {
+          // Sensor-only (Tenet 13): renders the ADR-029 recall-compliance
+          // readout and returns. Never gates — no exit-code effect, so `--strict`
+          // is intentionally not threaded here.
+          const { doctorComplianceCliCommand } = await import('./commands/doctor-compliance.js');
+          await doctorComplianceCliCommand();
           return;
         }
         const { doctorCommand } = await import('./commands/doctor.js');
