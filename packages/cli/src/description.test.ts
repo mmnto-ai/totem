@@ -17,13 +17,17 @@ describe('CLI self-description parity (mmnto-ai/totem#2336 D1)', () => {
     expect(pkg.description).toBe(TOTEM_DESCRIPTION);
   });
 
-  it('carries the ruled descriptive core (Prop 294 D1 headline)', () => {
-    // The exact ruled string; the product-name prefix is permitted, the core is not.
+  it('carries the ruled descriptive core (strategy#531 A1 tagline convergence)', () => {
+    // The exact ruled string (mmnto-ai/totem-strategy#531 gate release comment
+    // 4979503772 + operator veto-edit 2026-07-15, superseding the Prop 294 D1
+    // headline); the product-name prefix is permitted, the core is not.
     expect(TOTEM_DESCRIPTION).toContain(
-      'a local-first, file-anchored substrate that makes AI-agent work queryable, enforceable, and derivable in your codebase',
+      'local-first toolkit that keeps AI-agent work queryable, enforceable, and derivable as plain files in your codebase',
     );
-    // Guards against a regression to the retired category.
+    // Guards against regressions to retired vocabulary.
     expect(TOTEM_DESCRIPTION).not.toContain('persistent memory and context layer');
+    expect(TOTEM_DESCRIPTION).not.toContain('substrate');
+    expect(TOTEM_DESCRIPTION).not.toContain('—');
   });
 
   it('root help renders the constant as its header', () => {
