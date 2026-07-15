@@ -42,12 +42,18 @@ function sanitize(s) {
   return String(s ?? '')
     .replace(ANSI_RE, '')
     .split('')
-    .filter((c) => c === '\n' || c === '\t' || (c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127))
+    .filter((c) => {
+      const code = c.charCodeAt(0);
+      // Reject C0 (except \n/\t), DEL, and C1 (0x80–0x9F — ANSI-compatible
+      // single-byte controls like CSI survive some terminals).
+      return c === '\n' || c === '\t' || (code >= 32 && code !== 127 && (code < 128 || code > 159));
+    })
     .join('');
 }
 
 function git(args) {
-  const g = spawnSync('git', args, { cwd: TMP, encoding: 'utf-8' });
+  // Same rationale as lint(): a hung git must fail fast, not stall CI.
+  const g = spawnSync('git', args, { cwd: TMP, encoding: 'utf-8', timeout: 30_000 });
   if (g.status !== 0) fail(`git ${args.join(' ')} failed: ${sanitize(g.stderr)}`);
   return g.stdout;
 }
@@ -115,6 +121,7 @@ function lint(label) {
 const apply = spawnSync('git', ['apply', path.join(KIT, 'mistake.diff')], {
   cwd: TMP,
   encoding: 'utf-8',
+  timeout: 30_000,
 });
 if (apply.status !== 0)
   fail(`mistake.diff no longer applies to the fixture: ${sanitize(apply.stderr)}`);

@@ -34,7 +34,12 @@ function sanitize(s) {
   return String(s ?? '')
     .replace(ANSI_RE, '')
     .split('')
-    .filter((c) => c === '\n' || c === '\t' || (c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127))
+    .filter((c) => {
+      const code = c.charCodeAt(0);
+      // Reject C0 (except \n/\t), DEL, and C1 (0x80–0x9F — ANSI-compatible
+      // single-byte controls like CSI survive some terminals).
+      return c === '\n' || c === '\t' || (code >= 32 && code !== 127 && (code < 128 || code > 159));
+    })
     .join('');
 }
 
