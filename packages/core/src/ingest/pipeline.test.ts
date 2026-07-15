@@ -157,12 +157,15 @@ describe('newly-eligible reconciliation (computeNewlyEligiblePaths) — #2366', 
     );
   });
 
-  it('(c) an absent stored hash is treated as a mismatch; on an up-to-date index the enqueue is empty', () => {
+  it('(c) an absent stored hash is treated as a mismatch — the first-run scan recovers unindexed files and is benign when up to date', () => {
     // Sync state predating #2366 has no indexExclusionHash; runSync compares
-    // `undefined !== currentHash`, which is a mismatch and triggers the pass.
-    const storedHash: string | undefined = undefined;
-    expect(storedHash !== hashIndexExclusionSet(['dist/**'])).toBe(true);
-    // The enqueue (live − indexed) is near-empty because everything is already indexed.
+    // `undefined !== currentHash` → mismatch → the newly-eligible pass runs.
+    // On a partially-unindexed tree that one-time scan recovers exactly the gap…
+    expect(computeNewlyEligiblePaths(['src/a.ts', 'docs/uncovered.md'], ['src/a.ts'])).toEqual([
+      'docs/uncovered.md',
+    ]);
+    // …and on an up-to-date index (live ⊆ indexed) the enqueue is empty, so the
+    // absent-hash mismatch costs existing consumers nothing.
     expect(computeNewlyEligiblePaths(['src/a.ts', 'src/b.ts'], ['src/a.ts', 'src/b.ts'])).toEqual(
       [],
     );

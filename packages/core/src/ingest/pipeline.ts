@@ -249,6 +249,8 @@ export function computeOrphanPaths(
  * convention shared with run artifacts.
  */
 export function hashIndexExclusionSet(patterns: string[]): string {
+  // calculateDeterministicHash treats array order as significant — the .sort()
+  // here IS the order-independence invariant. Do not remove or move it.
   return calculateDeterministicHash([...patterns].sort());
 }
 
