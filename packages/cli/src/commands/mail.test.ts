@@ -227,6 +227,67 @@ describe('pollMail — basic filter behavior', () => {
   });
 });
 
+// ─── Own-broadcast exclusion (mmnto-ai/totem#2364) ──────
+
+describe('pollMail — own-broadcast exclusion (mmnto-ai/totem#2364)', () => {
+  it('excludes a broadcast whose source outbox belongs to a SELF agent', () => {
+    writeOutbox('totem', 'totem-claude', [
+      { name: '2026-07-06T2326Z-broadcast-round-reply.md', to: 'broadcast', subject: 'own round' },
+    ]);
+    const result = poll();
+    expect(result.mail).toEqual([]);
+  });
+
+  it("still surfaces another seat's broadcast", () => {
+    writeOutbox('totem', 'totem-claude', [
+      { name: '2026-07-06T2326Z-broadcast-own.md', to: 'broadcast', subject: 'own' },
+    ]);
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-07-06T2330Z-broadcast-theirs.md', to: 'broadcast', subject: 'theirs' },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('theirs');
+  });
+
+  it('keys on the outbox-owner seat, not the forgeable from: header', () => {
+    // A foreign-outbox broadcast forging `from: totem-claude` is NOT ours —
+    // it must still surface (single-writer filesystem truth, as the
+    // collision sensor).
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-07-06T2331Z-broadcast-forged.md',
+        to: 'broadcast',
+        from: 'totem-claude',
+        subject: 'forged sender',
+      },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.subject).toBe('forged sender');
+  });
+
+  it('directed self-mail from an own outbox stays surfaced (out of scope)', () => {
+    writeOutbox('totem', 'totem-claude', [
+      { name: '2026-07-06T2332Z-totem-claude-note-to-self.md', to: 'totem-claude' },
+    ]);
+    const result = poll();
+    expect(result.mail).toHaveLength(1);
+  });
+
+  it('includeProcessed keeps the own broadcast in the RAW addressed-inbound set (ADR-106 § A2.1)', () => {
+    // The ecl-gc compaction key is `processed ∩ raw-addressed-inbound`;
+    // excluding own-broadcasts there would read an existing self-mark as
+    // stale and collect a mark that must be retained.
+    writeOutbox('totem', 'totem-claude', [
+      { name: '2026-07-06T2326Z-broadcast-own.md', to: 'broadcast', subject: 'own round' },
+    ]);
+    const result = poll({ includeProcessed: true });
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.to).toBe('broadcast');
+  });
+});
+
 // ─── Symlink guard (mmnto-ai/totem#2355) ────────────────
 
 describe('pollMail — symlinked agent/outbox dirs are not traversed (mmnto-ai/totem#2355)', () => {
