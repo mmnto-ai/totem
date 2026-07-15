@@ -241,7 +241,7 @@ test('DAYS_UNDER_FREEZE derives days from freeze.since and the committed asOf', 
 test('LINT_RECEIPT renders the zero-LLM claim only from an attesting receipt', () => {
   const result = transforms.LINT_RECEIPT();
   assert.ok(result.includes('zero LLM calls'), 'must render the receipted claim');
-  const lying = writeTmpJson('bad-receipt.json', {
+  const fullReceipt = {
     baseSha: 'a'.repeat(40),
     headSha: 'b'.repeat(40),
     filesChanged: 1,
@@ -251,8 +251,27 @@ test('LINT_RECEIPT renders the zero-LLM claim only from an attesting receipt', (
     elapsedMs: 1,
     llmCalls: 1,
     apiKeysStripped: true,
-  });
+    platform: 'test-x64',
+    node: '24.0.0',
+    cliVersion: '0.0.0',
+    generatedAt: '2026-07-15T00:00:00.000Z',
+  };
+  const lying = writeTmpJson('bad-receipt.json', fullReceipt);
   assert.throws(() => transforms._renderLintReceipt(lying), /refusing to render/);
+  const undefinedField = writeTmpJson('undef-receipt.json', {
+    ...fullReceipt,
+    llmCalls: 0,
+    platform: undefined,
+  });
+  assert.throws(() => transforms._renderLintReceipt(undefinedField), /missing platform/);
+});
+
+test('maturity asOf rejects impossible calendar dates without consulting the clock', () => {
+  const badDate = writeTmpJson('bad-date.json', {
+    asOf: '2026-02-31',
+    rows: maturityData.rows,
+  });
+  assert.throws(() => transforms._renderMaturityTable(badDate), /not a valid YYYY-MM-DD/);
 });
 
 fs.rmSync(TMP, { recursive: true, force: true });

@@ -44,6 +44,8 @@ jobs:
   docs-governance:
     name: Docs Governance (maturity surface drift gate)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:

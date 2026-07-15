@@ -110,6 +110,24 @@ function readJson(filePath, transform) {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 
+/**
+ * Strict YYYY-MM-DD validation via UTC round-trip: impossible calendar dates
+ * (e.g. 2026-02-31, which Date.parse silently normalizes) reject. Deliberately
+ * no wall-clock comparison — determinism means the same committed tree renders
+ * identically on any day, including a stale or mistyped date (the drift gate
+ * stays idempotent; a wrong date is a human-review matter, not a clock matter).
+ */
+function assertUtcDate(value, label) {
+  const m = typeof value === 'string' && value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const roundTrip = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+      .toISOString()
+      .slice(0, 10);
+    if (roundTrip === value) return;
+  }
+  throw new Error(`[Totem Error] ${label} is not a valid YYYY-MM-DD date: ${value}`);
+}
+
 /** Registered CLI command names, parsed from the same source COMMAND_TABLE uses. */
 function registeredCommandNames() {
   const indexPath = path.join(ROOT, 'packages', 'cli', 'src', 'index.ts');
@@ -155,16 +173,7 @@ function assertAnchorResolves(anchor, rowId, commandNames) {
 
 function loadMaturityData(dataPath) {
   const data = readJson(dataPath, 'MATURITY_TABLE');
-  if (typeof data.asOf !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(data.asOf)) {
-    throw new Error(
-      '[Totem Error] MATURITY_TABLE failed: maturity.json needs an asOf date (YYYY-MM-DD).',
-    );
-  }
-  // Sanity only — a future-dated asOf is a fat-finger. (An OLD asOf is legal:
-  // determinism means a stale date renders identically until a PR bumps it.)
-  if (new Date(data.asOf).getTime() > Date.now() + 86_400_000) {
-    throw new Error(`[Totem Error] MATURITY_TABLE failed: asOf ${data.asOf} is in the future.`);
-  }
+  assertUtcDate(data.asOf, 'MATURITY_TABLE failed: maturity.json asOf');
   if (!Array.isArray(data.rows) || data.rows.length === 0) {
     throw new Error('[Totem Error] MATURITY_TABLE failed: maturity.json has no rows.');
   }
@@ -221,6 +230,20 @@ function renderRuleProvenance(rulesPath) {
       `[Totem Error] RULE_PROVENANCE transform failed: ${rulesPath} has no rules array.`,
     );
   }
+  // Every field this receipt claims must exist before the claim renders —
+  // a malformed entry must fail the build, not render "undefined".
+  data.rules.forEach((r, i) => {
+    if (typeof r.lessonHash !== 'string' || r.lessonHash.length === 0) {
+      throw new Error(
+        `[Totem Error] RULE_PROVENANCE transform failed: rule[${i}] has no lessonHash — the provenance-chain claim cannot render.`,
+      );
+    }
+    if (typeof r.compiledAt !== 'string' || Number.isNaN(Date.parse(r.compiledAt))) {
+      throw new Error(
+        `[Totem Error] RULE_PROVENANCE transform failed: rule[${i}] (${r.lessonHash}) has no valid compiledAt.`,
+      );
+    }
+  });
   const total = data.rules.length;
   const lessons = new Set(data.rules.map((r) => r.lessonHash)).size;
   const engines = {};
@@ -257,6 +280,7 @@ function renderDaysUnderFreeze(freezePath, maturityPath) {
   }
   const { asOf } = loadMaturityData(maturityPath);
   const since = entry.since;
+  assertUtcDate(since, 'DAYS_UNDER_FREEZE failed: freeze.json since');
   const days = Math.floor((Date.parse(asOf) - Date.parse(since)) / 86_400_000);
   if (!Number.isFinite(days) || days < 0) {
     throw new Error(
@@ -278,6 +302,8 @@ function DAYS_UNDER_FREEZE() {
 
 function renderLintReceipt(receiptPath) {
   const r = readJson(receiptPath, 'LINT_RECEIPT');
+  // Every rendered field is required — including the environment labels; a
+  // hand-edited receipt must fail here, not render "undefined" into the page.
   for (const field of [
     'baseSha',
     'headSha',
@@ -286,10 +312,19 @@ function renderLintReceipt(receiptPath) {
     'errors',
     'warnings',
     'elapsedMs',
+    'platform',
+    'node',
+    'cliVersion',
+    'generatedAt',
   ]) {
-    if (r[field] === undefined) {
+    if (r[field] === undefined || r[field] === null || r[field] === '') {
       throw new Error(`[Totem Error] LINT_RECEIPT transform failed: receipt missing ${field}.`);
     }
+  }
+  if (Number.isNaN(Date.parse(r.generatedAt))) {
+    throw new Error(
+      `[Totem Error] LINT_RECEIPT transform failed: generatedAt is not a valid timestamp: ${r.generatedAt}`,
+    );
   }
   if (r.llmCalls !== 0 || r.apiKeysStripped !== true) {
     throw new Error(

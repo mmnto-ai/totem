@@ -102,6 +102,14 @@ function computeReceipt() {
     }
     const lint = JSON.parse(fs.readFileSync(outFile, 'utf-8'));
 
+    // Key-stripping is the mechanical enforcement; this is the sensor. Lint's
+    // JSON carries no llmCalls counter today, so absent = 0 — but if one ever
+    // appears and is non-zero, the receipt must refuse rather than attest.
+    const llmCalls = lint.llmCalls ?? 0;
+    if (llmCalls !== 0) {
+      fail(`lint reported ${llmCalls} LLM call(s) — a zero-LLM receipt cannot attest this run.`);
+    }
+
     const cliVersion = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'packages', 'cli', 'package.json'), 'utf-8'),
     ).version;
@@ -113,7 +121,7 @@ function computeReceipt() {
       rules: lint.rules,
       errors: lint.errors,
       warnings: lint.warnings,
-      llmCalls: 0,
+      llmCalls,
       apiKeysStripped: true,
       elapsedMs,
       platform: `${os.platform()}-${os.arch()}`,
@@ -150,7 +158,11 @@ if (verify) {
       `over ${fresh.filesChanged} files (recomputed in ${fresh.elapsedMs} ms, zero LLM calls).`,
   );
 } else {
-  fs.writeFileSync(RECEIPT_PATH, JSON.stringify(fresh, null, 2) + '\n');
+  // Atomic write (tmp + rename) — the committed receipt is a manifest-class
+  // file; a torn write must never land as the canonical state.
+  const tmpPath = `${RECEIPT_PATH}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(fresh, null, 2) + '\n');
+  fs.renameSync(tmpPath, RECEIPT_PATH);
   console.log(
     `wrote ${RECEIPT_PATH}: ${fresh.rules} rules, ${fresh.errors} errors, ${fresh.warnings} warnings, ${fresh.elapsedMs} ms.`,
   );
