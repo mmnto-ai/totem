@@ -1,0 +1,109 @@
+{
+  "asOf": "2026-07-15",
+  "rows": [
+    {
+      "id": "deterministic-lint",
+      "mechanism": "Deterministic rule enforcement (`totem lint`)",
+      "status": "shipped",
+      "headline": true,
+      "anchors": [
+        { "kind": "command", "ref": "lint" },
+        { "kind": "data", "ref": ".totem/compiled-rules.json" }
+      ],
+      "note": "Compiled rules run offline against your diff — zero LLM calls in the gate. Wall time is receipted below, not asserted."
+    },
+    {
+      "id": "git-hooks",
+      "mechanism": "Git-hook enforcement",
+      "status": "shipped",
+      "headline": true,
+      "anchors": [
+        { "kind": "command", "ref": "hook" },
+        { "kind": "file", "ref": "packages/cli/src/commands/install-hooks.ts" }
+      ],
+      "note": "pre-commit / pre-push / post-merge / post-checkout. Installed explicitly — never silently."
+    },
+    {
+      "id": "lesson-banking",
+      "mechanism": "Lesson banking from real incidents",
+      "status": "shipped",
+      "headline": true,
+      "anchors": [
+        { "kind": "command", "ref": "lesson" },
+        { "kind": "file", "ref": ".totem/lessons" }
+      ],
+      "note": "Plain markdown files are the canonical source; the search index is a derived, rebuildable cache."
+    },
+    {
+      "id": "knowledge-index",
+      "mechanism": "Semantic knowledge index + MCP retrieval",
+      "status": "shipped",
+      "headline": true,
+      "anchors": [
+        { "kind": "command", "ref": "sync" },
+        { "kind": "file", "ref": "packages/mcp/src/context.ts" }
+      ],
+      "note": "Requires one IDE-level MCP registration step (see the MCP setup guide). The vector store is derived — deleting it loses nothing canonical."
+    },
+    {
+      "id": "rule-compilation",
+      "mechanism": "Lesson → rule compilation (legacy path)",
+      "status": "partial",
+      "headline": true,
+      "anchors": [
+        { "kind": "command", "ref": "lesson" },
+        { "kind": "data", "ref": ".totem/freeze.json" }
+      ],
+      "note": "Parked under a standing freeze since 2026-05-17 (receipt below) pending a replacement derivation pipeline. The compiled corpus remains fully enforced."
+    },
+    {
+      "id": "review-lanes",
+      "mechanism": "AI review lanes with lesson grounding (`totem review`)",
+      "status": "shipped",
+      "headline": true,
+      "anchors": [
+        { "kind": "command", "ref": "review" },
+        { "kind": "file", "ref": "packages/cli/src/commands/review-fan.ts" }
+      ],
+      "note": "LLM-assisted and advisory — verdicts record which lessons were consulted. The deterministic gates above are the floor; this never replaces them."
+    },
+    {
+      "id": "rule-tuning",
+      "mechanism": "Rule-tuning loop (`totem doctor --pr`)",
+      "status": "shipped",
+      "headline": true,
+      "anchors": [
+        { "kind": "command", "ref": "doctor" },
+        { "kind": "file", "ref": "packages/cli/src/commands/doctor.ts" }
+      ],
+      "note": "Proposes rule fixes as a pull request; a human merges every change. Nothing lands autonomously."
+    },
+    {
+      "id": "claim-gates",
+      "mechanism": "Claim-discipline gates on our own docs",
+      "status": "shipped",
+      "headline": true,
+      "anchors": [
+        { "kind": "command", "ref": "verify-badges" },
+        { "kind": "file", "ref": "tools/docs-transforms.cjs" }
+      ],
+      "note": "README badges and this page are derived from committed data and drift-gated in CI. A claim whose anchor stops resolving fails the build."
+    },
+    {
+      "id": "multi-seat-coordination",
+      "mechanism": "Multi-seat coordination substrate",
+      "status": "shipped",
+      "headline": false,
+      "anchors": [{ "kind": "command", "ref": "mail" }],
+      "note": "local-only · multi-seat opt-in. File-anchored mailboxes for repos where several agents share one working tree; the single-seat path never touches it. Bring your own orchestration — this is coordination state, not a runtime."
+    },
+    {
+      "id": "history-derived-rules",
+      "mechanism": "Rule derivation from merged-PR history, validated against held-out controls",
+      "status": "goal",
+      "headline": true,
+      "anchors": [{ "kind": "file", "ref": "packages/core/src/spine" }],
+      "note": "Goal: replace the parked legacy compiler with derivation that passes held-out validation before any public claim rides on it. A prototype exists; its runs to date are under-powered, so this stays a goal row."
+    }
+  ]
+}
