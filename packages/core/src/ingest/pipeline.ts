@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { calculateDeterministicHash } from '../artifacts/hash.js';
 import { createChunker } from '../chunkers/chunker.js';
 import type { TotemConfig } from '../config-schema.js';
 import { requireEmbedding } from '../config-schema.js';
@@ -238,6 +239,36 @@ export function computeOrphanPaths(
   return indexedRawPaths.filter((raw) => !live.has(normalizeRel(raw)));
 }
 
+/**
+ * Order-normalized content hash of the effective index-exclusion set
+ * (`ignorePatterns` ∪ `indexIgnorePatterns`). Patterns are sorted before hashing
+ * so reordering the config is not a spurious mismatch — only a membership change
+ * (a pattern added or removed) moves the hash. Persisted in sync state to detect
+ * ignore-pattern REMOVALS between incremental syncs (mmnto-ai/totem#2366), which
+ * the git-diff window alone never surfaces. Uses the one deterministic-hash
+ * convention shared with run artifacts.
+ */
+export function hashIndexExclusionSet(patterns: string[]): string {
+  return calculateDeterministicHash([...patterns].sort());
+}
+
+/**
+ * Files that are index-eligible now but absent from the index — the symmetric
+ * complement of {@link computeOrphanPaths} (mmnto-ai/totem#2366). Removing an
+ * ignore pattern makes files eligible without changing their bytes, so the git
+ * diff window never reports them; this recovers them by membership alone
+ * (live-vs-indexed), independent of the diff. Compares on a separator-normalized
+ * key like the orphan pass but RETURNS THE RAW live relative path (the caller
+ * re-embeds via the resolved file record).
+ */
+export function computeNewlyEligiblePaths(
+  liveRelativePaths: string[],
+  indexedRawPaths: string[],
+): string[] {
+  const indexed = new Set(indexedRawPaths.map(normalizeRel));
+  return liveRelativePaths.filter((rel) => !indexed.has(normalizeRel(rel)));
+}
+
 async function runSyncInner(
   config: TotemConfig,
   options: SyncOptions,
@@ -274,24 +305,24 @@ async function runSyncInner(
   // `ignorePatterns` (legacy dual-scope) + `indexIgnorePatterns` (index-only,
   // mmnto-ai/totem#1748) — only the former also gates lint/shield scope.
   const totemDir = path.join(projectRoot, config.totemDir);
-  const allFiles = resolveFiles(
-    config.targets,
-    projectRoot,
-    [...config.ignorePatterns, ...config.indexIgnorePatterns],
-    log,
-  );
+  const exclusionPatterns = [...config.ignorePatterns, ...config.indexIgnorePatterns];
+  const allFiles = resolveFiles(config.targets, projectRoot, exclusionPatterns, log);
+  // Order-normalized hash of the effective exclusion set — persisted below and
+  // compared on the next incremental sync to catch pattern REMOVALS (#2366).
+  const indexExclusionHash = hashIndexExclusionSet(exclusionPatterns);
   let filesToProcess: ResolvedFile[];
   let deletedPaths: string[] = [];
 
   if (incremental) {
+    // Persisted sync state carries both the diff baseline (lastSyncSha) and the
+    // exclusion-set hash used for removal reconciliation (mmnto-ai/totem#2366).
+    const syncState = readSyncState(totemDir, log);
+
     // Determine the ref to diff against: saved sync state > fallback HEAD~1
     let sinceRef = 'HEAD~1';
-    if (!options.changedFiles) {
-      const syncState = readSyncState(totemDir, log);
-      if (syncState) {
-        sinceRef = syncState.lastSyncSha;
-        log(`Resuming from last sync at ${sinceRef.slice(0, 8)}...`);
-      }
+    if (!options.changedFiles && syncState) {
+      sinceRef = syncState.lastSyncSha;
+      log(`Resuming from last sync at ${sinceRef.slice(0, 8)}...`);
     }
 
     const changedPaths = options.changedFiles ?? getChangedFiles(projectRoot, sinceRef, log);
@@ -302,20 +333,34 @@ async function runSyncInner(
       log(`Full sync (fallback): ${filesToProcess.length} files to process`);
     } else {
       const changedSet = new Set(changedPaths);
+      let newlyEligible = new Set<string>();
 
-      // Re-embed stays diff-scoped: only changed files that still exist.
-      filesToProcess = allFiles.filter((f) => changedSet.has(f.relativePath));
-
-      // Deletion is reconciliation-based, NOT diff-derived (mmnto-ai/totem#2151):
-      // purge any indexed path no longer in the working tree, regardless of the
-      // git diff window — self-heals deletions, renames-into-ignored, and
-      // de-targeted files even after the baseline advanced past them. On read
-      // failure, skip the purge this run (warn, no false purge); a later sync heals.
+      // Reconciliation is NOT diff-derived (mmnto-ai/totem#2151, #2366): both the
+      // orphan purge and the newly-eligible enqueue below read the indexed set
+      // once and compare against the live tree, independent of the git diff
+      // window. On a getDistinctPaths read failure, skip BOTH this run (warn, no
+      // false purge / no spurious enqueue); a later sync reconciles.
       try {
-        deletedPaths = computeOrphanPaths(
-          await store.getDistinctPaths(),
-          allFiles.map((f) => f.relativePath),
-        );
+        const indexedPaths = await store.getDistinctPaths();
+        const liveRelPaths = allFiles.map((f) => f.relativePath);
+
+        // Deletion (ADDITION direction): purge any indexed path no longer in the
+        // working tree — self-heals deletions, renames-into-ignored, and
+        // de-targeted / newly-ignored files even after the baseline advanced past
+        // them.
+        deletedPaths = computeOrphanPaths(indexedPaths, liveRelPaths);
+
+        // Ignore-pattern REMOVAL reconciliation: symmetric to the orphan pass. A
+        // pattern removed from the exclusion set makes files index-eligible
+        // without changing their bytes, so the diff window never surfaces them. A
+        // change in the stored order-normalized exclusion hash — or its ABSENCE
+        // (state predating #2366) — enqueues the newly-eligible set (live −
+        // indexed). The union naturally reduces to the diff alone when the
+        // exclusion set is unchanged, and on a pure ADDITION the newly-eligible
+        // files are all already in the changed set.
+        if (syncState?.indexExclusionHash !== indexExclusionHash) {
+          newlyEligible = new Set(computeNewlyEligiblePaths(liveRelPaths, indexedPaths));
+        }
         // totem-context: intentional warn+skip on a getDistinctPaths read failure (mmnto-ai/totem#2151 Q3, cohort-endorsed) — never a false purge; a later sync reconciles, and the Warning below means it is not silent degradation.
       } catch (err) {
         log(
@@ -323,8 +368,20 @@ async function runSyncInner(
         );
       }
 
+      // Re-embed the changed files (diff-scoped) UNION the newly-eligible set an
+      // ignore-pattern removal exposed (#2366); every path in either set still
+      // exists (both derive from allFiles / the live tree).
+      filesToProcess = allFiles.filter(
+        (f) => changedSet.has(f.relativePath) || newlyEligible.has(f.relativePath),
+      );
+
+      // Count only the extras the exclusion-set change pulled back in (those not
+      // already surfaced by the diff), so the log reports honest reconciliation work.
+      const reconciledCount = [...newlyEligible].filter((rel) => !changedSet.has(rel)).length;
+
       log(
-        `Incremental sync: ${filesToProcess.length} changed files` +
+        `Incremental sync: ${filesToProcess.length} file(s) to process` +
+          (reconciledCount > 0 ? `, ${reconciledCount} newly-eligible` : '') +
           (deletedPaths.length > 0 ? `, ${deletedPaths.length} orphan candidate(s)` : '') +
           ` (of ${allFiles.length} total)`,
       );
@@ -453,9 +510,10 @@ async function runSyncInner(
     );
   }
 
-  // Persist sync state so next incremental sync knows where to diff from
+  // Persist sync state so the next incremental sync knows where to diff from and
+  // can detect an ignore-pattern change (including a removal) via the hash (#2366).
   if (headSha) {
-    writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now() });
+    writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now(), indexExclusionHash });
   }
 
   // Persist index metadata for dimension mismatch detection
