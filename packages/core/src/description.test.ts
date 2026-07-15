@@ -14,9 +14,11 @@ describe('package self-description parity (mmnto-ai/totem#2336 D1 family alignme
     };
     expect(pkg.name).toBe('@mmnto/totem');
     expect(pkg.description).toContain(
-      'a local-first, file-anchored substrate that makes AI-agent work queryable, enforceable, and derivable in your codebase',
+      'local-first toolkit that keeps AI-agent work queryable, enforceable, and derivable as plain files in your codebase',
     );
-    // Guards against a regression to the retired category.
+    // Guards against regressions to retired vocabulary.
     expect(pkg.description).not.toContain('persistent memory and context layer');
+    expect(pkg.description).not.toContain('substrate');
+    expect(pkg.description).not.toContain('—');
   });
 });

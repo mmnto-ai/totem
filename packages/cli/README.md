@@ -1,6 +1,6 @@
 # @mmnto/cli
 
-Command-line interface for [Totem](https://github.com/mmnto-ai/totem) — a local-first, file-anchored substrate that makes AI-agent work queryable, enforceable, and derivable in your codebase. Installs the `totem` binary.
+Command-line interface for [Totem](https://github.com/mmnto-ai/totem), the local-first toolkit that keeps AI-agent work queryable, enforceable, and derivable as plain files in your codebase. Installs the `totem` binary.
 
 ## Install
 

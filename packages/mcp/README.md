@@ -1,6 +1,6 @@
 # @mmnto/mcp
 
-MCP (Model Context Protocol) server for [Totem](https://github.com/mmnto-ai/totem) — a local-first, file-anchored substrate that makes AI-agent work queryable, enforceable, and derivable in your codebase. A stdio-based server that exposes a Totem project's knowledge index to MCP-compatible agents. Installs the `totem-mcp` binary.
+MCP (Model Context Protocol) server for [Totem](https://github.com/mmnto-ai/totem), the local-first toolkit that keeps AI-agent work queryable, enforceable, and derivable as plain files in your codebase. A stdio-based server that exposes a Totem project's knowledge index to MCP-compatible agents. Installs the `totem-mcp` binary.
 
 ## Setup
 
