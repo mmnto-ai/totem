@@ -40,8 +40,12 @@ node examples/proof-kit/run.mjs --ci   # what CI runs on every pull request
 The proving run makes **zero LLM calls** — every provider API key is stripped
 from the environment before lint runs, so anything trying to call a model
 would fail loudly. [`receipt.json`](receipt.json) records the outcome and the
-measured wall time; the public "lint completes in under 2 seconds" claim is
-recomputed here as a hard assertion (`timingBoundMs`), re-proven by the
+measured wall time together with the conditions that produced it (rule count,
+diff size, platform, node, CLI version). The `timingBoundMs` assertion is the
+fixture's own receipted envelope — a regression tripwire for a one-rule
+corpus and a ten-line diff — not a general speed claim: lint wall time scales
+with the size of your diff and your rule corpus, so numbers here always
+travel with their parameters. Re-proven by the
 [Proof Kit workflow](../../.github/workflows/proof-kit.yml) on every PR.
 
 ## The compile half (local, recorded — never CI)

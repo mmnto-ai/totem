@@ -1,8 +1,8 @@
 // Proves the proof-kit loop with zero LLM calls: the committed compiled rule
 // (produced from the fixture's lesson by compile-fixture.mjs) must BLOCK the
 // recurrence of the banked mistake, and must stay quiet on a clean change.
-// Timing of the clean run recomputes the README's public "under 2 seconds"
-// lint claim — measured here, never asserted from memory.
+// The clean run's wall time is receipted together with the conditions that
+// produced it — numbers travel with their parameters, never alone.
 //
 //   node examples/proof-kit/run.mjs         prove the loop, write receipt.json
 //   node examples/proof-kit/run.mjs --ci    prove the loop, verify the committed
@@ -22,7 +22,11 @@ const CLI_DIST = path.join(ROOT, 'packages', 'cli', 'dist', 'index.js');
 const TMP = path.join(ROOT, '.totem', 'temp', 'proof-kit-run');
 const RECEIPT_PATH = path.join(KIT, 'receipt.json');
 
-// The public claim under test (README: "completes in under 2 seconds").
+// The fixture's receipted envelope — a regression tripwire for THIS corpus
+// (one rule) and THIS diff (~10 lines), not a general product speed claim:
+// lint wall time scales with diff size × rule corpus × machine, so any
+// number is only honest alongside those parameters (receipt.json carries
+// them all).
 const TIMING_BOUND_MS = 2000;
 
 function fail(message) {
@@ -135,7 +139,7 @@ console.log(`[proof-kit] clean change passes (${clean.elapsedMs} ms)`);
 // ── 3. The public timing number, recomputed. ─────────────────────────
 if (clean.elapsedMs >= TIMING_BOUND_MS) {
   fail(
-    `clean lint took ${clean.elapsedMs} ms — the public "under ${TIMING_BOUND_MS} ms" claim did not reproduce here.`,
+    `clean lint took ${clean.elapsedMs} ms — outside the fixture's receipted ${TIMING_BOUND_MS} ms envelope; something regressed.`,
   );
 }
 
