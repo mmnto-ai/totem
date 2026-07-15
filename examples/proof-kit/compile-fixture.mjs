@@ -26,6 +26,18 @@ function fail(message) {
   process.exit(1);
 }
 
+// House rule: sanitize subprocess-derived strings before they reach a
+// terminal (ANSI + control chars stripped; newline/tab kept for readability).
+const ESC = String.fromCharCode(27);
+const ANSI_RE = new RegExp(ESC + '\\[[0-9;]*[A-Za-z]', 'g');
+function sanitize(s) {
+  return String(s ?? '')
+    .replace(ANSI_RE, '')
+    .split('')
+    .filter((c) => c === '\n' || c === '\t' || (c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127))
+    .join('');
+}
+
 if (process.env.CI) {
   fail(
     'refusing to run in CI — the compile step is local + recorded only; CI asserts the committed rule (run.mjs --ci).',
@@ -60,7 +72,7 @@ for (const args of [
   ],
 ]) {
   const g = spawnSync('git', args, { cwd: TMP, encoding: 'utf-8' });
-  if (g.status !== 0) fail(`git ${args.join(' ')} failed: ${g.stderr}`);
+  if (g.status !== 0) fail(`git ${args.join(' ')} failed: ${sanitize(g.stderr)}`);
 }
 
 // The CLI loads .env relative to where it runs; the materialized fixture has
@@ -72,7 +84,19 @@ const hostEnvFile = path.join(ROOT, '.env');
 if (fs.existsSync(hostEnvFile)) {
   for (const line of fs.readFileSync(hostEnvFile, 'utf-8').split('\n')) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m && /API_KEY$/.test(m[1]) && !env[m[1]]) env[m[1]] = m[2].trim();
+    if (m && /API_KEY$/.test(m[1]) && !env[m[1]]) {
+      // Dotenv-style quoted values must be unwrapped — a quoted key reaches
+      // the SDK malformed and the compile silently rides the CLI fallback.
+      let value = m[2].trim();
+      if (
+        value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'")))
+      ) {
+        value = value.slice(1, -1);
+      }
+      env[m[1]] = value;
+    }
   }
 }
 
@@ -142,7 +166,11 @@ if (promoted.unverified !== undefined) {
 for (const artifact of ['compiled-rules.json', 'compile-manifest.json']) {
   const src = path.join(TMP, '.totem', artifact);
   if (!fs.existsSync(src)) fail(`compile did not produce ${artifact}.`);
-  fs.copyFileSync(src, path.join(FIXTURE, '.totem', artifact));
+  // Atomic copy (tmp + rename) — manifest-class files must never land torn.
+  const dest = path.join(FIXTURE, '.totem', artifact);
+  const tmpDest = `${dest}.tmp`;
+  fs.copyFileSync(src, tmpDest);
+  fs.renameSync(tmpDest, dest);
   console.log(`[proof-kit] committed fixture/.totem/${artifact}`);
 }
 
