@@ -25,6 +25,7 @@ import { TotemConfigError } from './errors.js';
 import {
   deriveCohortRepoId,
   detectCapabilityProbeContract,
+  detectDeclaredContract,
   type DetectGeneratedArtifactContext,
   detectGeneratedArtifactContract,
   type DetectManualAttestationContext,
@@ -39,6 +40,7 @@ import {
   normalizeManagedBlock,
   type PackageJsonShape,
   packageNameForContract,
+  parseDeclarationMarker,
   parseForkMarker,
   resolveCohortFloor,
   type ValueEqualityField,
@@ -712,6 +714,133 @@ describe('parseForkMarker', () => {
       reason: 'multi line',
       owner: 'me',
     });
+  });
+});
+
+describe('parseDeclarationMarker', () => {
+  it('parses role/seat/declared, whitespace-tolerant, token with a colon matched literally', () => {
+    expect(
+      parseDeclarationMarker(
+        'preamble\n<!--  totem:agent-bus   role="bus"  seat="totem-claude" declared="2026-07-16" -->\ntrailer',
+        'totem:agent-bus',
+      ),
+    ).toEqual({ role: 'bus', seat: 'totem-claude', declared: '2026-07-16' });
+  });
+
+  it('returns an empty object for a bare marker, undefined when the token is absent', () => {
+    expect(parseDeclarationMarker('<!-- totem:agent-bus -->', 'totem:agent-bus')).toEqual({});
+    expect(parseDeclarationMarker('no marker here', 'totem:agent-bus')).toBeUndefined();
+    // A DIFFERENT totem marker is not this token — no cross-token match.
+    expect(
+      parseDeclarationMarker('<!-- totem:fork reason="x" -->', 'totem:agent-bus'),
+    ).toBeUndefined();
+  });
+
+  it('does not prefix-match a longer sibling token (agent-bus vs agent-bus-v2)', () => {
+    // The post-token lookahead (whitespace or `-->`) — not `\b` — is what makes
+    // this fail: `\b` would match between the `s` and the `-` of `-v2`.
+    expect(
+      parseDeclarationMarker('<!-- totem:agent-bus-v2 role="bus" -->', 'totem:agent-bus'),
+    ).toBeUndefined();
+    // Bare marker (token directly against `-->`) still parses.
+    expect(parseDeclarationMarker('<!-- totem:agent-bus-->', 'totem:agent-bus')).toEqual({});
+  });
+
+  it('matches a marker authored across multiple lines (dotAll)', () => {
+    expect(
+      parseDeclarationMarker(
+        '<!-- totem:agent-bus\n  role="bus"\n  seat="totem-claude"\n-->',
+        'totem:agent-bus',
+      ),
+    ).toEqual({ role: 'bus', seat: 'totem-claude' });
+  });
+
+  it('stays linear on a pathological unterminated input (ReDoS-safe, no catastrophic backtrack)', () => {
+    // A very long run with no closing `-->`: the non-greedy `.*?` bounded by the
+    // first `-->` cannot backtrack catastrophically. Guard on wall-clock so a
+    // regression to a nested quantifier is caught, mirroring the marker family.
+    const pathological = `<!-- totem:agent-bus ${'role="bus" '.repeat(50_000)}`;
+    const start = Date.now();
+    expect(parseDeclarationMarker(pathological, 'totem:agent-bus')).toBeUndefined();
+    expect(Date.now() - start).toBeLessThan(1_000);
+  });
+});
+
+describe('detectDeclaredContract', () => {
+  const AGENTS_PATH = path.join('repo', 'AGENTS.md');
+  const AGENTS =
+    (body: string) =>
+    (p: string): string | undefined =>
+      p === AGENTS_PATH ? body : undefined;
+
+  it('pass — marker present with role + seat names the binding + the file', () => {
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: AGENTS(
+        '<!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" -->',
+      ),
+    });
+    expect(verdict.status).toBe('pass');
+    expect(verdict.message).toContain('agent-bus declared');
+    expect(verdict.message).toContain('role "bus"');
+    expect(verdict.message).toContain('seat "totem-claude"');
+    expect(verdict.message).toContain('AGENTS.md');
+  });
+
+  it('skip (honest-absent) — no marker in an otherwise-present file, never warn', () => {
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: AGENTS('# AGENTS\n\nno declaration here\n'),
+    });
+    expect(verdict.status).toBe('skip');
+    expect(verdict.message).toContain('honest-absent until a repo declares');
+  });
+
+  it('skip (honest-absent) — file absent, never warn', () => {
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: () => undefined,
+    });
+    expect(verdict.status).toBe('skip');
+    expect(verdict.message).toContain('no AGENTS.md present');
+  });
+
+  it('skip — a marker missing the seat attr is not a valid declaration, names the missing attr (fail loud)', () => {
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: AGENTS('<!-- totem:agent-bus role="bus" -->'),
+    });
+    expect(verdict.status).toBe('skip');
+    expect(verdict.message).toContain('missing seat');
+    expect(verdict.message).not.toContain('missing role');
+  });
+
+  it('skip — a marker missing the role attr names role in the why-not', () => {
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: AGENTS('<!-- totem:agent-bus seat="totem-claude" -->'),
+    });
+    expect(verdict.status).toBe('skip');
+    expect(verdict.message).toContain('missing role');
+  });
+
+  it('never throws — a throwing reader degrades to honest-absent skip', () => {
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: () => {
+        throw new Error('boom');
+      },
+    });
+    // The default readFileText swallows read failures; an injected thrower is the
+    // never-throw contract at the CLI seam — but detectDeclaredContract calls the
+    // reader directly, so a thrower here would surface. Guard the honest degrade.
+    expect(verdict.status).toBe('skip');
   });
 });
 

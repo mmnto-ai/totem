@@ -75,6 +75,18 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 **Controller, not implementer.** Delegate code+test tasks to background agents. Keep this thread for decisions. Prefer Monitor over Bash `sleep` loops; use `/loop <prompt>` self-paced for poll-and-react.
 
+## Agent-bus binding (Proposal 305)
+
+<!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" -->
+
+This repo implements the cohort's judgment-bus contract ([Proposal 305 §3](https://github.com/mmnto-ai/totem-strategy/blob/main/proposals/active/305-agent-bus-pattern.md) — a private cohort-doctrine ref; the access-class note in § Bot-Protocol Gate applies):
+
+1. **Binding:** role `bus` → seat `totem-claude` (a seat-id, never a model). Bus seat down ⇒ automated lanes stage-only; no automatic succession — the operator rules the work directly or explicitly binds one acting bus, recorded on the work.
+2. **Judgment-density file classes** — cohort defaults inherited (public-copy floor: README · repo About · package descriptions · wiki); local additions: `AGENTS.md` · `docs/wiki/**` · `.claude/skills/**`. Class labels are routing hints; density is derived fresh at routing time.
+3. **Lane table:** the [mmnto-ai/totem-strategy#697 capability ledger](https://github.com/mmnto-ai/totem-strategy/issues/697) — pointer only, never a local copy.
+4. **Drift duties:** in-repo premise sweep per the [mmnto-ai/totem-strategy#639 operating spec](https://github.com/mmnto-ai/totem-strategy/issues/639#issuecomment-4994756249) · event-driven couplings on governed pages · the Monday world-claims re-verify step.
+5. **Manifestation** is sensed by the `agent-bus` parity row of `totem doctor --parity` (declaration present / honest-absent); whether the bus _executes_ these duties is adherence-class, never inferred from the row.
+
 ## Detailed Docs (read when relevant)
 
 - [Architecture context](.claude/docs/architecture.md)
