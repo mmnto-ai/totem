@@ -370,10 +370,14 @@ try {
   const sessionId = randomUUID();
   writeFileSync(join(ledgerDir, '.session-id'), sessionId, 'utf-8');
   // Amended ADR-078 (2026-07-15): agent_source is the env-carried seat-id
-  // (TOTEM_SELF_AGENT, first non-empty comma entry — same parse as the MCP
-  // producer), never a vendor class ('claude' has no reverse projection to
-  // a seat). Omitted entirely when the env var is absent: stamp absence,
-  // never guess (Tenet 4).
+  // (TOTEM_SELF_AGENT, first non-empty comma entry), never a vendor class
+  // ('claude' has no reverse projection to a seat). Omitted entirely when
+  // the env var is absent: stamp absence, never guess (Tenet 4). The parse
+  // deliberately mirrors deriveSearchLogAttribution (packages/mcp/src/
+  // search-log.ts) and parseEnvAgentList (packages/core/src/
+  // orchestration-resolver.ts) — inlined because this rendered .cjs hook
+  // runs standalone in consumer repos with no access to those modules; if
+  // the shared parse semantics change, change this template in the same PR.
   const selfAgent = (process.env.TOTEM_SELF_AGENT || '')
     .split(',')
     .map((s) => s.trim())
