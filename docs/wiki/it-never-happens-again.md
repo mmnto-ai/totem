@@ -4,7 +4,7 @@ When a reviewer (human or AI) spots an architectural mistake, like a static impo
 
 Two days later, an agent or a junior developer makes the exact same mistake in a different file. The cycle repeats. Knowledge is trapped in merged PRs.
 
-Totem breaks this cycle with a three-step loop: **Extract → Compile → Enforce.** You turn a PR mistake into a permanent, mechanically enforced rule in under 60 seconds.
+Totem breaks this cycle with a three-step loop: **Extract → Compile → Enforce.** You turn a PR mistake into a permanent, mechanically enforced rule in two commands — from then on, enforcement is automatic.
 
 ## 1. Extract the Lesson
 
