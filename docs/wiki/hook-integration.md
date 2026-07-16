@@ -5,7 +5,7 @@ Totem enforces its rules locally using Git hooks, preventing bad code from ever 
 You can install or update the hooks using:
 
 ```bash
-totem hooks install
+totem hook install
 ```
 
 ## Supported Hooks

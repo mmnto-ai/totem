@@ -66,12 +66,12 @@ embedding: {
 
 Requires `GEMINI_API_KEY` in your `.env` file.
 
-### OpenAI (Default)
+### OpenAI
 
 The simplest setup. Works out of the box if you have an OpenAI key.
 
 ```typescript
-// totem.config.ts - OpenAI embeddings (default)
+// totem.config.ts - OpenAI embeddings
 embedding: {
   provider: 'openai',
   model: 'text-embedding-3-small',
@@ -106,8 +106,8 @@ export default {
   orchestrator: {
     provider: 'ollama',
     defaultModel: 'llama3', // or 'deepseek-coder'
-    // Optional: Override context window size
-    options: { num_ctx: 16384 },
+    // Optional: Override context window size (passed to Ollama as num_ctx)
+    numCtx: 16384,
   },
 };
 ```

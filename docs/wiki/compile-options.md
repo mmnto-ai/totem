@@ -6,7 +6,7 @@ The `totem lesson compile` command transforms your Markdown lessons into determi
 
 ## Key Flags
 
-- `--cloud <url>`: Offloads the compilation process to a cloud endpoint for parallel fan-out. (Note: Cloud compile is still routed to Gemini until #1221 migrates the cloud worker to Sonnet; local compile is the golden path and routes to Sonnet 4.6.)
+- `--cloud <url>`: Offloads the compilation process to a cloud endpoint for parallel fan-out. (Note: Cloud compile stays Gemini-only — the migration to Claude was considered and declined ([mmnto-ai/totem#1221](https://github.com/mmnto-ai/totem/issues/1221), closed not-planned). Local compile is the golden path and routes to the configured orchestrator model, scaffolded default Claude Sonnet 5.)
 - `--concurrency <n>`: Compiles multiple lessons in parallel (default: 5).
 - `--export`: Re-exports compiled rules to AI tool config files per the `exports` map in `totem.config.ts`.
 - `--force`: Forces recompilation of all lessons, bypassing the cache.

@@ -18,7 +18,7 @@ export default {
   // AI Orchestrator Settings
   orchestrator: {
     provider: 'anthropic', // 'shell', 'openai', 'ollama', 'gemini', 'anthropic'
-    defaultModel: 'claude-sonnet-4-6',
+    defaultModel: 'claude-sonnet-5',
     options: {
       temperature: 0.1,
       // Provider-specific options like maxTokens or num_ctx
@@ -40,7 +40,7 @@ export default {
   // Command-Specific Options
   compileOptions: {
     concurrency: 4, // Max parallel lesson compilations
-    cloudFallback: true, // Whether to fall back to the Totem cloud worker if local compile fails. Local Sonnet 4.6 is the golden path; cloud is still routed to Gemini until #1221 ships.
+    cloudFallback: true, // Whether to fall back to the Totem cloud worker if local compile fails. Local compile (scaffolded default Claude Sonnet 5) is the golden path; the cloud worker stays Gemini-only — the migration to Claude was considered and declined (mmnto-ai/totem#1221, closed not-planned).
   },
 
   // Review configuration. `TotemConfigSchema` reads only the `review` key

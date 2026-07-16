@@ -60,7 +60,7 @@ If using Ollama for embeddings or local orchestration (Air-Gapped Doctrine), you
 
 ### Azure OpenAI & Custom Gateways
 
-If your enterprise requires routing OpenAI API calls through Azure or an internal corporate proxy, you do not need a custom orchestrator. You can override the endpoint directly in your `totem.config.ts` using the `baseUrl` parameter for both the orchestrator and the embedding configuration:
+If your enterprise requires routing OpenAI API calls through Azure or an internal corporate proxy, you do not need a custom orchestrator. You can override the endpoint directly in your `totem.config.ts` using the `baseUrl` parameter on the OpenAI **orchestrator** (the Ollama embedder also accepts `baseUrl`). The OpenAI **embedding** provider does not accept a `baseUrl` — Azure-style endpoint routing for OpenAI embeddings is not currently supported, so the embedder talks to the default OpenAI endpoint:
 
 ```typescript
 // totem.config.ts
@@ -69,7 +69,6 @@ export default {
   embedding: {
     provider: 'openai',
     model: 'text-embedding-3-small',
-    baseUrl: 'https://your-azure-endpoint.openai.azure.com/v1',
   },
   orchestrator: {
     provider: 'openai',
