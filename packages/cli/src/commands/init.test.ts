@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
+import { LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
 
 import {
   UNIVERSAL_BASELINE_LESSONS,
@@ -1675,6 +1676,86 @@ describe('PreWriteShield runtime behavior', () => {
       tool_input: { command: 'echo "see #247"' },
     });
     expect(result.exitCode).toBe(0);
+  });
+});
+
+describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
+  let tmpDir: string;
+  let hookPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-sessionstart-runtime-'));
+    hookPath = path.join(tmpDir, 'SessionStart.cjs');
+    fs.writeFileSync(hookPath, CLAUDE_SESSION_START, 'utf-8');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /**
+   * Execute the rendered hook in tmpDir with a controlled TOTEM_SELF_AGENT
+   * and return the latest session_start event it appended. `undefined`
+   * removes the variable so the test is hermetic even when the host shell
+   * exports a seat.
+   */
+  function runHook(selfAgent?: string): Record<string, unknown> {
+    const env = { ...process.env };
+    delete env['TOTEM_SELF_AGENT'];
+    if (selfAgent !== undefined) env['TOTEM_SELF_AGENT'] = selfAgent;
+    const result = spawnSync(process.execPath, [hookPath], {
+      cwd: tmpDir,
+      env,
+      encoding: 'utf-8',
+    });
+    expect(result.status).toBe(0);
+    const ndjson = fs.readFileSync(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'), 'utf-8');
+    const lines = ndjson.trim().split('\n');
+    return JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>;
+  }
+
+  it('omits agent_source entirely when TOTEM_SELF_AGENT is unset (Tenet 4: stamp absence)', () => {
+    const event = runHook();
+    expect('agent_source' in event).toBe(false);
+    expect(event.type).toBe('session_start');
+    expect(typeof event.session_id).toBe('string');
+  });
+
+  it('omits agent_source when TOTEM_SELF_AGENT is empty or comma/whitespace noise', () => {
+    for (const value of ['', '   ', ' , ,']) {
+      const event = runHook(value);
+      expect('agent_source' in event).toBe(false);
+    }
+  });
+
+  it('stamps the first trimmed non-empty entry from a comma-separated roster', () => {
+    const event = runHook(' , strategy-claude , lc-codex ');
+    expect(event['agent_source']).toBe('strategy-claude');
+  });
+
+  it('stays in parity with resolveSelfAgents env parsing (sync-anchor drift sensor)', () => {
+    // The template inlines the comma-split/trim/first-non-empty parse because
+    // the rendered standalone .cjs cannot import @mmnto/totem. This parity
+    // check is the automated drift sensor behind the sync-anchor comment: if
+    // the shared env-parse semantics ever change, this test forces the
+    // template to change in the same PR.
+    const roster = ' , strategy-claude , lc-codex ';
+    const event = runHook(roster);
+    const resolved = resolveSelfAgents(tmpDir, { TOTEM_SELF_AGENT: roster });
+    expect(resolved.source).toBe('env');
+    expect(event['agent_source']).toBe(resolved.agents[0]);
+  });
+
+  it('emits an event that parses under the widened schema with a seat-id value', () => {
+    // The end-to-end regression this PR fixes: under the old vendor enum a
+    // seat-valued session_start would fail safeParse and readLedgerEvents
+    // would silently drop it.
+    const event = runHook('totem-claude');
+    const parsed = LedgerEventSchema.safeParse(event);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.agent_source).toBe('totem-claude');
+    }
   });
 });
 

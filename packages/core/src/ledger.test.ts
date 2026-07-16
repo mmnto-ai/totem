@@ -136,7 +136,14 @@ describe('LedgerEventSchema', () => {
     // seat-id ∪ {human} per ADR-078 (amended 2026-07-15, strategy#879); legacy
     // vendor-class values from pre-amendment writers must remain parseable
     // because readLedgerEvents silently skips invalid lines.
-    for (const value of ['totem-claude', 'strategy-claude', 'lc-codex', 'human', 'claude']) {
+    for (const value of [
+      'totem-claude',
+      'strategy-claude',
+      'lc-codex',
+      'human',
+      'claude',
+      'gemini',
+    ]) {
       const event = makeActivityEvent({ agent_source: value });
       const result = LedgerEventSchema.safeParse(event);
       expect(result.success).toBe(true);
