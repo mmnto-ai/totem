@@ -1680,6 +1680,11 @@ describe('PreWriteShield runtime behavior', () => {
 });
 
 describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
+  // Fail-fast guard for the spawned hook process, matching the 30s timeout
+  // the hook's own internal spawnSync uses — a stalled child must fail the
+  // test, not hang the runner (CR round 2).
+  const HOOK_SPAWN_TIMEOUT_MS = 30_000;
+
   let tmpDir: string;
   let hookPath: string;
 
@@ -1707,6 +1712,7 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       cwd: tmpDir,
       env,
       encoding: 'utf-8',
+      timeout: HOOK_SPAWN_TIMEOUT_MS,
     });
     expect(result.status).toBe(0);
     const ndjson = fs.readFileSync(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'), 'utf-8');
