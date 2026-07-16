@@ -505,9 +505,9 @@ export async function compileCommand(
   // SessionStart-hook'd runs get cross-event correlation; CI / hookless runs
   // emit without it (matches `logMcpCall` in packages/mcp/src/ledger-writer.ts).
   // agent_source is intentionally omitted — compile.ts has no reliable way to
-  // attribute its caller to claude/gemini/human until A.3.c wires the
-  // orchestrator → telemetry correlation. Schema (compile_run) shipped in
-  // Proposal 278 § Action 3 (vi).
+  // attribute its caller to a seat (seat-id ∪ {human}, amended ADR-078) until
+  // A.3.c wires the orchestrator → telemetry correlation. Schema (compile_run)
+  // shipped in Proposal 278 § Action 3 (vi).
   const logCompileRun = (totemDir: string): void => {
     try {
       const provider = config.orchestrator?.provider ?? 'unknown';

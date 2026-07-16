@@ -57,12 +57,12 @@ The NDJSON records contain high-fidelity context about the friction event.
 }
 ```
 
-(MCP `agent_source` attribution lands in A.3.c via orchestrator → MCP correlation propagation; `session_start` events emitted by the Claude hook DO carry `agent_source: "claude"` today.)
+(MCP `agent_source` attribution lands in A.3.c via orchestrator → MCP correlation propagation; `session_start` events emitted by the Claude hook carry the env-derived seat from `TOTEM_SELF_AGENT` when it is set, and omit the field otherwise.)
 
 The canonical schema (with field-level descriptions, optionality, and discriminator semantics) lives in `packages/core/src/ledger.ts` (`LedgerEventSchema`). Two orthogonal axes worth calling out:
 
 - `source` — emitting subsystem (`lint` | `shield` | `bot`)
-- `agent_source` — agent runtime that produced the event (`claude` | `gemini` | `human`)
+- `agent_source` — agent identity that produced the event: a cohort seat-id or `human` (e.g. `strategy-claude`, `lc-codex`, `human`), per ADR-078 § Event Attribution as amended 2026-07-15. A vendor class projects mechanically from a seat (`strategy-claude` → `claude`); the reverse projection does not exist. Legacy vendor-class values (`claude` | `gemini`) from pre-amendment writers remain parseable.
 
 Per ADR-078 § Event Attribution: agent attribution lives in `agent_source`; `source` identifies which Totem subsystem fired the event. Pre-A.3.a events have no `agent_source` field and are forward-compatible (the field is optional).
 

@@ -1436,11 +1436,14 @@ describe('CLAUDE_SESSION_START template', () => {
     expect(CLAUDE_SESSION_START).toContain('appendFileSync');
   });
 
-  it('stamps agent_source: claude on the Claude-specific hook', () => {
-    // Claude hook knows its origin — populating agent_source here is the
-    // minimal-coupling alternative to waiting for A.3.c correlation
-    // propagation.
-    expect(CLAUDE_SESSION_START).toContain("agent_source: 'claude'");
+  it('derives agent_source from TOTEM_SELF_AGENT instead of stamping a vendor literal', () => {
+    // Amended ADR-078 (strategy#879): agent_source is seat-id ∪ {human};
+    // 'claude' is a vendor class with no reverse projection to a seat. The
+    // hook stamps the env-carried seat and omits the field when unset
+    // (Tenet 4: stamp absence, never guess).
+    expect(CLAUDE_SESSION_START).toContain('TOTEM_SELF_AGENT');
+    expect(CLAUDE_SESSION_START).toContain('agent_source: selfAgent');
+    expect(CLAUDE_SESSION_START).not.toContain("agent_source: 'claude'");
   });
 
   it('keeps the session-start writer fire-and-forget (no rethrow)', () => {
