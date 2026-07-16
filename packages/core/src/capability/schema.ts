@@ -72,7 +72,9 @@ export type CapabilityProvenance = z.infer<typeof CapabilityProvenanceSchema>;
  * An append-only output-time claim. `agentSource` is a STABLE Layer-B actor-id (a
  * cohort seat id or a review-backend catalog id); model/backend identity is NEVER
  * folded into it (kept as separate optional `payload` metadata) so the hit-rate
- * aggregates across model swaps (#697 fold 5; ADR-078 `agent_source` is NOT amended).
+ * aggregates across model swaps (#697 fold 5 left ADR-078 untouched; ADR-078
+ * `agent_source` has since converged on the same seat-id space — amended
+ * 2026-07-15, strategy#879).
  */
 export const CapabilityClaimSchema = z.object({
   claimId: nonEmpty('claimId'),

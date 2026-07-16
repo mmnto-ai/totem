@@ -72,14 +72,22 @@ export const LedgerEventSchema = z.object({
    */
   immutable: z.boolean().optional(),
   /**
-   * Agent runtime that produced the event. Orthogonal to `source`
+   * Agent identity that produced the event. Orthogonal to `source`
    * (which identifies the emitting subsystem). Optional for
    * backward-compat with pre-A.3.a events; required by writer for
-   * activity events. Per ADR-078 § Event Attribution, with the
-   * field renamed from `source` to disambiguate against the
-   * load-bearing emitter identifier already in production code.
+   * activity events. Per ADR-078 § Event Attribution (amended
+   * 2026-07-15, strategy#879 / #2362 fold-1): the value space is
+   * seat-id ∪ {`human`} (e.g. `strategy-claude`, `lc-codex`,
+   * `human`), env-carried as `TOTEM_SELF_AGENT`. A vendor class
+   * projects mechanically from a seat (`strategy-claude` → `claude`);
+   * the reverse projection does not exist, so vendor literals must
+   * never be stamped. Open string, not an enum: the seat roster is
+   * open-ended, and `readLedgerEvents` silently skips schema-invalid
+   * lines — a closed set here turns new seats into data loss.
+   * Legacy vendor-class values (`claude`/`gemini`/`human`) from
+   * pre-amendment writers remain parseable.
    */
-  agent_source: z.enum(['claude', 'gemini', 'human']).optional(),
+  agent_source: z.string().trim().min(1).optional(),
   /**
    * Session UUID minted at SessionStart hook fire (24h TTL, rotates on
    * subsequent SessionStart). Persisted to `.totem/ledger/.session-id`

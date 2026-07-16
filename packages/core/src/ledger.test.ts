@@ -38,7 +38,7 @@ function makeActivityEvent(overrides: Partial<LedgerEvent> = {}): LedgerEvent {
     type: 'mcp_call',
     justification: '',
     source: 'bot',
-    agent_source: 'claude',
+    agent_source: 'totem-claude',
     session_id: '550e8400-e29b-41d4-a716-446655440000',
     activity_name: 'search_knowledge',
     ...overrides,
@@ -92,7 +92,7 @@ describe('LedgerEventSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.type).toBe('mcp_call');
-      expect(result.data.agent_source).toBe('claude');
+      expect(result.data.agent_source).toBe('totem-claude');
       expect(result.data.session_id).toBe('550e8400-e29b-41d4-a716-446655440000');
       expect(result.data.activity_name).toBe('search_knowledge');
       expect(result.data.ruleId).toBeUndefined();
@@ -132,21 +132,30 @@ describe('LedgerEventSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts all three agent_source values', () => {
-    for (const value of ['claude', 'gemini', 'human'] as const) {
+  it('accepts the amended ADR-078 value space: seat-ids, human, and legacy vendor classes', () => {
+    // seat-id ∪ {human} per ADR-078 (amended 2026-07-15, strategy#879); legacy
+    // vendor-class values from pre-amendment writers must remain parseable
+    // because readLedgerEvents silently skips invalid lines.
+    for (const value of [
+      'totem-claude',
+      'strategy-claude',
+      'lc-codex',
+      'human',
+      'claude',
+      'gemini',
+    ]) {
       const event = makeActivityEvent({ agent_source: value });
       const result = LedgerEventSchema.safeParse(event);
       expect(result.success).toBe(true);
     }
   });
 
-  it('rejects an unknown agent_source value', () => {
-    const event = makeActivityEvent({
-      // @ts-expect-error — intentionally invalid for the test
-      agent_source: 'cursor',
-    });
-    const result = LedgerEventSchema.safeParse(event);
-    expect(result.success).toBe(false);
+  it('rejects an empty or whitespace-only agent_source', () => {
+    for (const value of ['', '   ']) {
+      const event = makeActivityEvent({ agent_source: value });
+      const result = LedgerEventSchema.safeParse(event);
+      expect(result.success).toBe(false);
+    }
   });
 
   it('rejects a malformed session_id UUID', () => {
@@ -191,14 +200,14 @@ describe('LedgerEventSchema', () => {
     const event = makeEvent({
       type: 'override',
       source: 'shield',
-      agent_source: 'claude',
+      agent_source: 'totem-claude',
       session_id: '550e8400-e29b-41d4-a716-446655440000',
       correlation_id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
     });
     const result = LedgerEventSchema.safeParse(event);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.agent_source).toBe('claude');
+      expect(result.data.agent_source).toBe('totem-claude');
       expect(result.data.correlation_id).toBe('6ba7b810-9dad-11d1-80b4-00c04fd430c8');
     }
   });
@@ -337,9 +346,10 @@ describe('test-fixture per-branch field presence (factory output validation)', (
   });
 
   it('session_start events carry agent_source + session_id', () => {
-    // session_start is what the SessionStart hook emits; agent_source identifies
-    // the orchestrator vendor (hook knows its own origin), session_id is the
-    // freshly-minted UUID that subsequent events correlate against.
+    // session_start is what the SessionStart hook emits; agent_source is the
+    // env-carried seat-id (TOTEM_SELF_AGENT, amended ADR-078 — omitted when
+    // the env var is absent), session_id is the freshly-minted UUID that
+    // subsequent events correlate against.
     expectWriterCarriesFields(
       makeActivityEvent({ type: 'session_start', activity_name: 'SessionStart' }),
       ['agent_source', 'session_id'],
@@ -492,7 +502,7 @@ describe('readLedgerEvents', () => {
       type: 'override',
       source: 'shield',
       ruleId: 'rule-xyz',
-      agent_source: 'claude',
+      agent_source: 'totem-claude',
       session_id: sessionId,
     });
 
