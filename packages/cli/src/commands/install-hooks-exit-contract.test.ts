@@ -487,14 +487,16 @@ describe('hooksCommand in a linked worktree (mmnto-ai/totem#2418)', () => {
     expect(fs.statSync(path.join(wtDir, '.git')).isFile()).toBe(true);
     const resolved = resolveHooksDir(wtDir);
     expect(resolved).not.toBeNull();
-    // realpath both sides: tmpdir segments can differ by symlink/8.3 aliasing.
-    expect(fs.realpathSync(resolved!)).toBe(fs.realpathSync(sharedHooksDir()));
+    // realpathSync.native both sides: git prints the LONG form while os.tmpdir()
+    // can carry a Windows 8.3 alias (RUNNER~1 on GH runners) or a symlinked
+    // tmpdir (macOS /var → /private/var); only the native variant expands both.
+    expect(fs.realpathSync.native(resolved!)).toBe(fs.realpathSync.native(sharedHooksDir()));
   });
 
   it('resolveHooksDir in a plain checkout stays .git/hooks', () => {
     const resolved = resolveHooksDir(mainDir);
     expect(resolved).not.toBeNull();
-    expect(fs.realpathSync(resolved!)).toBe(fs.realpathSync(sharedHooksDir()));
+    expect(fs.realpathSync.native(resolved!)).toBe(fs.realpathSync.native(sharedHooksDir()));
   });
 
   it('exit 0: install from the worktree lands in the shared hooks dir (no ENOTDIR)', async () => {
