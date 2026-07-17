@@ -1,5 +1,42 @@
 # @mmnto/cli
 
+## 1.100.0
+
+### Minor Changes
+
+- bb42b26: feat(doctor): `totem doctor --parity` now senses `manifestation: declared` (the `agent-bus` row).
+
+  Wires the CLI-side declaration registry (`declarationMarkersFor`, `agent-bus` → the repo's own `AGENTS.md` + the `totem:agent-bus` marker token) and routes `declared` rows to `detectDeclaredContract` before the unrecognized-manifestation guard. The `agent-bus` row now PASSes — naming the `role → seat` binding — when the repo declares a `totem:agent-bus` marker, and stays an honest-absent SKIP ("honest-absent until a repo declares") when it does not. An unknown `declared` contract id gets a registry-gap stub, mirroring an unwired capability probe. Never warns on absence.
+
+  Consumer-impact: new additive sensing surface on `totem doctor --parity`; no behavior change for repos without the marker (the row stays a skip), never affects exit codes. No breaking changes.
+
+### Patch Changes
+
+- e982baf: fix(hooks): worktree-safe sync-log path + truthful drift remediation.
+  - **Worktree ENOTDIR (mmnto-ai/totem#2376):** the generated post-merge / post-checkout hooks resolved their sync log via a hardcoded `.git/totem-sync.log`. In a linked worktree `.git` is a FILE (a `gitdir:` pointer), so that redirect failed with `Not a directory`. The hook scripts now derive the log directory from `git rev-parse --git-dir` at runtime, which is correct in both a normal checkout and a linked worktree.
+  - **No-op drift remediation (mmnto-ai/totem#2138):** `totem doctor --parity` git-hooks drift rows now name `totem hook install --force`, and bare `totem hook install` drift-repairs a totem-OWNED whole-file hook in place (a user hook with an appended totem block is still left untouched without `--force`).
+  - **Appended-content safety for pre-commit / pre-push:** these two templates now emit an end marker (`# [totem] end pre-commit` / `# [totem] end pre-push`) so the totem region is bounded on all four hooks. No-force drift-repair now requires that bounded region, so custom logic appended after the marker is never silently clobbered. A legacy hook from an older (markerless) template declines auto-repair and takes the one `totem hook install --force` already prescribed above.
+  - **Loud chmod on POSIX:** `writeExecutableHook` no longer swallows chmod failures — a POSIX exec-bit failure now propagates instead of falsely reporting `installed` for a hook git cannot run (Windows still skips the chmod; git-bash owns the exec bit there).
+  - **Revision-terminated diffs:** the generated post-checkout / post-merge scripts pass `--` to `git diff` / `git diff-tree` so a ref/path ambiguity can never reinterpret a SHA as a pathspec.
+
+  Consumer-impact: hook templates regenerate-owed for consumers — run `totem hook install --force` after upgrade to pick up the worktree-safe log path and the bounded pre-commit / pre-push regions.
+
+- 70da385: fix(lint): compile-manifest staleness warning names the changed/added/removed lessons (capped) with last-commit provenance instead of a generic line
+
+  `totem lint`'s non-blocking staleness advisory previously printed one fixed sentence that named nothing. It now diffs the lesson corpus against the commit that last wrote `compile-manifest.json` and reports which lessons changed / were added / were removed since the last compile — up to 5 by filename with their change kind, then "…and K more", each carrying the last-touching commit short-sha + author (one `git log -1` per named file via the shared safe git-exec helper). A lesson with no commit history renders `(untracked)`, distinguishing the mmnto-ai/totem#2113 class. The check stays inside its never-crash try/catch, degrades to an mtime-vs-`compiled_at` fallback when git has no anchor, and skips provenance above 500 lesson files so the naming logic never paces the lint hot path.
+
+  Consumer-impact: warning TEXT change only — no behavior/exit-code change. The first line keeps the stable `Compile manifest is stale` prefix, so any consumer matching on that prefix (unlikely — it is a stderr advisory) keeps working; the remediation still points at `totem lesson compile`.
+
+- c8cb390: Correct two drifted doc/hint surfaces in the scaffolded CLI.
+  - The `totem wrap` retirement hint no longer instructs the manifest-desyncing `git checkout HEAD -- .totem/compiled-rules.json` rules-file revert (which desyncs the compile-manifest input/output hashes and fails `verify-manifest` at push); it now curates via `totem lesson archive` and stages the `.totem/compiled-rules.json` + `.totem/compile-manifest.json` artifacts, with a pointer to the canonical `.claude/skills/postmerge/SKILL.md` sequence.
+  - The scaffolded signon skill narrows its SessionStart-injection enumeration to what the hook actually injects (latest journal + carryforward, inbound mail, branch/ticket-matched context, and the bounded session-orientation slice), routing everything else to on-demand `totem orient`.
+
+  Consumer impact: docs/skill-template text only, no behavioral change.
+
+- Updated dependencies [bb42b26]
+- Updated dependencies [c0a56bd]
+  - @mmnto/totem@1.100.0
+
 ## 1.99.0
 
 ### Minor Changes
