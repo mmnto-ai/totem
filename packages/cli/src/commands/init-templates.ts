@@ -63,6 +63,20 @@ ${REFLEX_END}
 
 export const TOTEM_FILE_MARKER = '// [totem] auto-generated';
 
+/**
+ * The end marker that CLOSES every managed whole-file session hook template
+ * (`.claude/hooks/*.cjs`, `.gemini/hooks/*.js`). Mirrors the #2406 git-hook
+ * bounded-ownership semantics (`TOTEM_HOOK_END` et al.) for the JS/CJS hook
+ * family: a marker-headed file whose end marker is present with nothing after
+ * it is a bounded totem-OWNED whole file, safe to drift-repair without
+ * `--force`. A LEGACY file written by a pre-#2410 template carries no in-file
+ * end marker → not bounded → declines bare repair and takes one
+ * `totem hook install --force` (identical to the shipped #2406 git-hook
+ * migration). Collision-free against {@link TOTEM_FILE_MARKER}: the `end `
+ * infix means the start marker is never a substring of the end marker.
+ */
+export const TOTEM_FILE_END = '// [totem] end auto-generated';
+
 // ─── Bare-ref regex (xrepo-qualify-refs sealed at mmnto-ai/totem-strategy#145) ───
 //
 // Mirrors the compiled rule pattern at lessonHash "xrepo-qualify-refs"
@@ -120,6 +134,7 @@ try {
   // surface a NON-fatal breadcrumb (matches the Claude-side hook) rather than swallow.
   process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
+${TOTEM_FILE_END}
 `;
 
 export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook
@@ -175,6 +190,7 @@ module.exports = function beforeTool(toolName, toolInput) {
     throw new Error('[Totem Error] Shield check failed. Fix violations before pushing.\\n' + err.message);
   }
 };
+${TOTEM_FILE_END}
 `;
 
 export const GEMINI_SKILL = `<!-- [totem] auto-generated — Totem Architect skill -->
@@ -309,6 +325,7 @@ process.stdin.on('end', () => {
   );
   process.exit(2);
 });
+${TOTEM_FILE_END}
 `;
 
 export const CLAUDE_PREWRITESHIELD_ENTRY = {
@@ -461,6 +478,7 @@ try {
       '\\n',
   );
 }
+${TOTEM_FILE_END}
 `;
 
 export const CLAUDE_SESSION_START_ENTRY = {
@@ -689,6 +707,7 @@ process.stdin.on('end', () => {
   );
   process.exit(2);
 });
+${TOTEM_FILE_END}
 `;
 
 // The PreToolUse entry constant for the freeze-check gate. The \`--event\`
@@ -715,6 +734,69 @@ export const CLAUDE_GATE_WRAPPER_ENTRY = {
     },
   ],
 };
+
+// ─── Managed session-hook regeneration roster (mmnto-ai/totem#2410 PR-A) ───
+//
+// The whole-file, marker-headed `.cjs` / `.js` hook artifacts that `totem init`
+// distributes and `totem hook install` regenerates-if-present. Each entry pairs
+// the repo-relative path with its canonical content + the marker/end-marker that
+// bound the totem-OWNED region (the #2406 git-hook semantics, generalized to the
+// JS/CJS hook family). Read by init's installers, `hook install`'s
+// `regenerateManagedSessionHooks`, and the roster-invariant test.
+//
+// INVARIANT (locked by test): every entry's `content` embeds its own `marker`
+// AND `endMarker`, so a regenerated artifact is always bounded-owned and thus
+// self-repairing on the next bare `totem hook install`.
+//
+// Not the git hooks (`.git/hooks/*` — those ride `installGitHook`), and not the
+// distributed skills (marker-block REPLACE, a different ownership model). The
+// gate-wrapper is a roster member because it is a marker-headed whole file even
+// though its creation is owned by `gate install` / `init --gates=` rather than
+// the default Claude installer.
+
+export interface ManagedSessionHook {
+  /** Repo-relative install path (POSIX separators). */
+  rel: string;
+  /** Canonical whole-file content — embeds `marker` at the head and `endMarker` at the tail. */
+  content: string;
+  /** Ownership/presence marker that must OPEN the file. */
+  marker: string;
+  /** End marker that must CLOSE the bounded totem-owned region. */
+  endMarker: string;
+}
+
+export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
+  {
+    rel: '.claude/hooks/PreWriteShield.cjs',
+    content: CLAUDE_PREWRITESHIELD,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+  {
+    rel: '.claude/hooks/SessionStart.cjs',
+    content: CLAUDE_SESSION_START,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+  {
+    rel: '.claude/hooks/gate-wrapper.cjs',
+    content: CLAUDE_GATE_WRAPPER,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+  {
+    rel: '.gemini/hooks/SessionStart.js',
+    content: GEMINI_SESSION_START,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+  {
+    rel: '.gemini/hooks/BeforeTool.js',
+    content: GEMINI_BEFORE_TOOL,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+];
 
 // ─── Claude Code skill distribution (mmnto-ai/totem#1890 Phase C slice 3) ───
 //

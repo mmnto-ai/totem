@@ -137,7 +137,16 @@ export function installGates(
   const wrapperResult = scaffoldFile(wrapperPath, CLAUDE_GATE_WRAPPER, TOTEM_FILE_MARKER);
   results.push({
     file: GATE_WRAPPER_REL,
-    action: wrapperResult.action === 'exists' ? 'skipped' : wrapperResult.action,
+    // `exists` normalizes to `skipped` (no write, no change); a `refreshed`
+    // drift-repair (scaffoldFile's new bounded-repair action, mmnto-ai/totem#2410 —
+    // unreachable here since this call threads no end marker, but kept type-safe)
+    // maps to `merged` (a write happened). `created` passes through.
+    action:
+      wrapperResult.action === 'exists'
+        ? 'skipped'
+        : wrapperResult.action === 'refreshed'
+          ? 'merged'
+          : wrapperResult.action,
     err: wrapperResult.err,
   });
 
