@@ -28,3 +28,4 @@ try {
   // surface a NON-fatal breadcrumb (matches the Claude-side hook) rather than swallow.
   process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\n');
 }
+// [totem] end auto-generated
