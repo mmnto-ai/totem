@@ -1833,12 +1833,19 @@ export function detectDeclaredContract(ctx: DetectDeclaredContext): ParityContra
 
   // A marker missing role OR seat is NOT a valid declaration: name the missing
   // attribute (fail loud, Tenet 4) but stay honest-absent (`skip`) — a malformed
-  // marker is still "not yet declared", never drift.
+  // marker is still "not yet declared", never drift. Blank counts as missing:
+  // role="" / seat="  " would mint a degenerate binding with no real referent
+  // (greptile P2 on mmnto-ai/totem#2400).
   const { role, seat } = marker;
   const missing: string[] = [];
-  if (role === undefined) missing.push('role');
-  if (seat === undefined) missing.push('seat');
-  if (role === undefined || seat === undefined) {
+  if (role === undefined || role.trim().length === 0) missing.push('role');
+  if (seat === undefined || seat.trim().length === 0) missing.push('seat');
+  if (
+    role === undefined ||
+    role.trim().length === 0 ||
+    seat === undefined ||
+    seat.trim().length === 0
+  ) {
     return {
       status: 'skip',
       message: `${declarationName}: ${ctx.markerToken} marker in ${fileLabel} is missing ${missing.join(

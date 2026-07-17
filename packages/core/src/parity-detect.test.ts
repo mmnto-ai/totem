@@ -829,6 +829,27 @@ describe('detectDeclaredContract', () => {
     expect(verdict.message).toContain('missing role');
   });
 
+  it('skip — an empty-string role is a degenerate binding, counts as missing (greptile P2, mmnto-ai/totem#2400)', () => {
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: AGENTS('<!-- totem:agent-bus role="" seat="totem-claude" -->'),
+    });
+    expect(verdict.status).toBe('skip');
+    expect(verdict.message).toContain('missing role');
+    expect(verdict.message).not.toContain('missing role + seat');
+  });
+
+  it('skip — a whitespace-only seat counts as missing', () => {
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: AGENTS('<!-- totem:agent-bus role="bus" seat="   " -->'),
+    });
+    expect(verdict.status).toBe('skip');
+    expect(verdict.message).toContain('missing seat');
+  });
+
   it('never throws — a throwing reader degrades to honest-absent skip', () => {
     const verdict = detectDeclaredContract({
       filePath: AGENTS_PATH,
