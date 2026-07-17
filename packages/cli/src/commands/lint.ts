@@ -1,6 +1,78 @@
 import type { TimeoutMode } from '@mmnto/totem';
 
+import type { LessonDelta, LessonFileStat, ProvenanceValue } from './lint-staleness.js';
 import type { ShieldFormat } from './shield.js';
+
+// ─── Staleness naming helpers (mmnto-ai/totem#2399) ─
+
+/**
+ * Timeout for each git spawn in the non-blocking staleness delta. Bounded so a
+ * hung git can never stall the lint hot path — the whole check is advisory and
+ * degrades to name-only / the generic line on any git failure.
+ */
+const STALENESS_GIT_TIMEOUT_MS = 5_000;
+
+type FsModule = typeof import('node:fs');
+type PathModule = typeof import('node:path');
+
+/**
+ * Recursively count `.md` files under `lessonsDir` (readdir only, never reads
+ * file content) so the caller can gate provenance on corpus size. Returns 0
+ * when the directory is unreadable — a safe floor that does not force the skip.
+ */
+function countLessonMdFiles(fs: FsModule, path: PathModule, lessonsDir: string): number {
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = fs.readdirSync(lessonsDir, { withFileTypes: true });
+    // totem-context: best-effort — an unreadable lessons dir yields 0 (does not force provenance-skip); this advisory-only count must never crash lint (mmnto-ai/totem#2399)
+  } catch {
+    return 0;
+  }
+  let count = 0;
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      count += countLessonMdFiles(fs, path, path.join(lessonsDir, entry.name));
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/**
+ * Walk `.md` files under `lessonsDir` and return each one's mtime (ms), keyed by
+ * a lessons-dir-relative forward-slash path. Feeds the mtime fallback classifier
+ * when git has no anchor. Best-effort: an unreadable subtree contributes nothing
+ * rather than throwing.
+ */
+function walkLessonMtimes(fs: FsModule, path: PathModule, lessonsDir: string): LessonFileStat[] {
+  const out: LessonFileStat[] = [];
+  const walk = (dir: string): void => {
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+      // totem-context: best-effort — an unreadable subtree is skipped so this advisory-only mtime walk never crashes lint (mmnto-ai/totem#2399)
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        try {
+          const rel = path.relative(lessonsDir, full).replace(/\\/g, '/');
+          out.push({ path: rel, mtimeMs: fs.statSync(full).mtimeMs });
+          // totem-context: best-effort — an unstattable file is omitted so this advisory-only mtime walk never crashes lint (mmnto-ai/totem#2399)
+        } catch {
+          continue;
+        }
+      }
+    }
+  };
+  walk(lessonsDir);
+  return out;
+}
 
 // ─── Types ──────────────────────────────────────────
 
@@ -71,20 +143,110 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
   await bootstrapEngine(config, configRoot);
 
-  // Non-blocking staleness check — warn if compile manifest is stale
+  // Non-blocking staleness check — warn if compile manifest is stale, and NAME
+  // the delta (which lessons changed/added/removed since last compile, with
+  // last-commit provenance) so the advisory is actionable (mmnto-ai/totem#2399).
   try {
     const fs = await import('node:fs');
     const manifestPath = path.join(cwd, config.totemDir, 'compile-manifest.json');
     if (fs.existsSync(manifestPath)) {
-      const { readCompileManifest, generateInputHash } = await import('@mmnto/totem');
+      const { readCompileManifest, generateInputHash, safeExec, findRepoRootSync } =
+        await import('@mmnto/totem');
       const { log: uiLog } = await import('../ui.js');
+      const {
+        STALE_LESSON_NAME_CAP,
+        PROVENANCE_LESSON_FILE_CAP,
+        UNTRACKED_PROVENANCE,
+        parseLessonNameStatus,
+        classifyLessonsByMtime,
+        formatStalenessWarning,
+      } = await import('./lint-staleness.js');
+
       const manifest = readCompileManifest(manifestPath);
       const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
       const currentInputHash = generateInputHash(lessonsDir, cwd);
       if (currentInputHash !== manifest.input_hash) {
+        // Bounded best-effort: any git failure inside these helpers degrades to
+        // the mtime fallback (or the generic line) rather than killing the warn.
+        // The whole block stays inside the outer never-crash try/catch below.
+        const toPosix = (p: string): string => p.replace(/\\/g, '/');
+        const repoRoot = findRepoRootSync(cwd);
+
+        // Primary: classify from a `--name-status` diff against the commit that
+        // last wrote the manifest — the lesson drift since that anchor is exactly
+        // what makes the aggregate input hash disagree.
+        let delta: LessonDelta | null = null;
+        let deltaFromGit = false;
+        if (repoRoot) {
+          const lessonsPrefix = toPosix(path.relative(repoRoot, lessonsDir));
+          try {
+            const anchor = safeExec(
+              'git',
+              ['log', '-1', '--format=%H', '--', toPosix(path.relative(repoRoot, manifestPath))],
+              { cwd: repoRoot, timeout: STALENESS_GIT_TIMEOUT_MS },
+            );
+            if (anchor.length > 0 && lessonsPrefix.length > 0) {
+              const nameStatus = safeExec(
+                'git',
+                ['diff', '--name-status', anchor, '--', lessonsPrefix],
+                { cwd: repoRoot, timeout: STALENESS_GIT_TIMEOUT_MS },
+              );
+              delta = parseLessonNameStatus(nameStatus, lessonsPrefix);
+              deltaFromGit = true;
+            }
+            // totem-context: best-effort — git unavailable/errored degrades to the mtime fallback below; this advisory-only naming must never crash lint (mmnto-ai/totem#2399)
+          } catch {
+            delta = null;
+          }
+        }
+
+        // Fallback: name lessons whose mtime is after the manifest's compile
+        // instant (no git anchor available). Every hit is reported as 'changed'.
+        if (!deltaFromGit) {
+          const compiledAtMs = Date.parse(manifest.compiled_at);
+          delta = classifyLessonsByMtime(walkLessonMtimes(fs, path, lessonsDir), compiledAtMs);
+        }
+
+        const namedDelta = delta ?? { entries: [] };
+
+        // Provenance only for the git-derived delta (its paths are repo-relative,
+        // so a per-file `log -1` lookup resolves against repoRoot). Skipped
+        // entirely on a very large lesson corpus (PROVENANCE_LESSON_FILE_CAP) so
+        // the naming logic never paces the lint hot path.
+        let provenance: Map<string, ProvenanceValue> | null = null;
+        if (deltaFromGit && repoRoot && namedDelta.entries.length > 0) {
+          if (countLessonMdFiles(fs, path, lessonsDir) <= PROVENANCE_LESSON_FILE_CAP) {
+            provenance = new Map<string, ProvenanceValue>();
+            for (const entry of namedDelta.entries.slice(0, STALE_LESSON_NAME_CAP)) {
+              try {
+                const out = safeExec('git', ['log', '-1', '--format=%h|%an', '--', entry.path], {
+                  cwd: repoRoot,
+                  timeout: STALENESS_GIT_TIMEOUT_MS,
+                });
+                if (out.length === 0) {
+                  // No commit history — staged-but-uncommitted / untracked (mmnto-ai/totem#2113).
+                  provenance.set(entry.path, UNTRACKED_PROVENANCE);
+                  continue;
+                }
+                const sep = out.indexOf('|');
+                const shortSha = sep === -1 ? out : out.slice(0, sep);
+                const author = sep === -1 ? '' : out.slice(sep + 1);
+                provenance.set(entry.path, { shortSha, author });
+                // totem-context: best-effort — a per-file provenance lookup that errors leaves the entry unset (renders name-only); this advisory must never crash lint (mmnto-ai/totem#2399)
+              } catch {
+                provenance.delete(entry.path);
+              }
+            }
+          }
+        }
+
         uiLog.warn(
           TAG,
-          "Compile manifest is stale — lessons changed since last compile. Run 'totem lesson compile' to update.",
+          formatStalenessWarning(namedDelta, {
+            nameCap: STALE_LESSON_NAME_CAP,
+            displayNameFor: (p) => path.basename(p),
+            provenance,
+          }),
         );
       }
     }
