@@ -9,7 +9,7 @@
       "reason": "CI-visible mirror of the cohort hold (see _note): parked pending the Convergent Spine replacement. The legacy `totem lesson compile` path cannot recompile (safe-regex2 ReDoS gate vs the xrepo-qualify-refs lookbehind; upstream fix declined, mmnto-ai/totem#1855 NOT_PLANNED).",
       "tracking": "Rule-compilation freeze (2026-05-17) — multi-gate lift status (GH Project board, orgs/mmnto-ai/projects/1)",
       "do-not": [
-        "edit .totem/lessons/**",
+        "edit COMPILE-INPUT lessons under .totem/lessons/** (scope ruled 2026-07-17, operator: the freeze governs the compile path only — index-only lessons added via add_lesson feed retrieval, never the frozen compiler, and are EXEMPT)",
         "run `totem lesson compile`",
         "hand-edit .totem/compiled-rules.json (Tenet 20 — it's a regenerable cache)"
       ]
