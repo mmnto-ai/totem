@@ -417,6 +417,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Config',
   'Compiled Rules',
   'Git Hooks',
+  'Prepare Wrapper',
   'Embedding',
   'Ollama',
   'Index',
