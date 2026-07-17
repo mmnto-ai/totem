@@ -77,7 +77,10 @@ ${buildResolveBlock(fallbackCmd)}
 
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
 if [ -n "$TOTEM_CMD" ] && git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
-  ($TOTEM_CMD sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+  # Resolve the real git dir so the sync-log redirect works in a linked worktree,
+  # where .git is a FILE (gitdir: pointer), not a directory (mmnto-ai/totem#2376).
+  GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)
+  ($TOTEM_CMD sync --incremental --quiet > "$GIT_DIR_RESOLVED/totem-sync.log" 2>&1) &
 fi
 # ${TOTEM_HOOK_END}
 `;
@@ -95,17 +98,21 @@ fi
 
 ${buildResolveBlock(fallbackCmd)}
 
+# Resolve the real git dir so the sync-log redirect works in a linked worktree,
+# where .git is a FILE (gitdir: pointer), not a directory (mmnto-ai/totem#2376).
+GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)
+
 # Handle initial checkout (null SHA) — sync if .totem/ exists
 if [ "$1" = "0000000000000000000000000000000000000000" ]; then
   if [ -n "$TOTEM_CMD" ] && [ -d ".totem" ]; then
-    ($TOTEM_CMD sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+    ($TOTEM_CMD sync --incremental --quiet > "$GIT_DIR_RESOLVED/totem-sync.log" 2>&1) &
   fi
   exit 0
 fi
 
 # Only sync when .totem/ files differ between branches
 if [ -n "$TOTEM_CMD" ] && git diff --name-only "$1" "$2" 2>/dev/null | grep -q '\\.totem/'; then
-  ($TOTEM_CMD sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+  ($TOTEM_CMD sync --incremental --quiet > "$GIT_DIR_RESOLVED/totem-sync.log" 2>&1) &
 fi
 # ${TOTEM_CHECKOUT_END}
 `;
@@ -433,9 +440,66 @@ fi
 
 const SHELL_SHEBANG_RE = /^#!\/bin\/(ba)?sh|^#!\/usr\/bin\/env\s+(ba)?sh/;
 
+// Only a shebang line plus the start of the marker comment may precede an owned
+// whole-file hook (`#!/bin/sh` then `# <marker> …`). Used to distinguish a
+// totem-generated whole file from a user hook with a totem block appended after
+// their own content. Mirrors core's isOwnedGeneratedFile shell-hook branch.
+const OWNED_WHOLE_FILE_PREAMBLE_RE = /^#![^\n]*\n#[ \t]*$/;
+
+/**
+ * Write a hook file and mark it executable (best-effort chmod — a no-op on
+ * Windows, where git bash handles the executable bit).
+ */
+function writeExecutableHook(hookPath: string, content: string): void {
+  fs.writeFileSync(hookPath, content);
+  try {
+    fs.chmodSync(hookPath, 0o755); // totem-context: intentional cleanup — best-effort chmod
+  } catch {
+    // chmod may fail on Windows — hooks still work via git bash (git owns the exec bit)
+  }
+}
+
+/**
+ * Whether an existing hook is a totem-OWNED whole file (generated verbatim by a
+ * `build*Hook` template) rather than a user hook with a totem block appended into
+ * it. Ownership is the precondition for a no-force drift-repair overwrite: only a
+ * whole file totem itself authored may be replaced without `--force`.
+ *
+ *   - The totem marker must open the file (only a shebang + comment-start before it),
+ *     so no user content precedes the block.
+ *   - For end-marked hooks (post-merge / post-checkout), the user must not have added
+ *     content AFTER the totem end marker — a whole-file overwrite would clobber it, so
+ *     such a file is NOT owned (only trailing whitespace may follow the end marker).
+ */
+function isTotemOwnedWholeFile(content: string, marker: string, endMarker?: string): boolean {
+  const idx = content.indexOf(marker);
+  if (idx === -1) return false;
+  const before = content.slice(0, idx);
+  if (before.trim().length !== 0 && !OWNED_WHOLE_FILE_PREAMBLE_RE.test(before)) {
+    return false;
+  }
+  if (endMarker !== undefined) {
+    const end = content.indexOf(endMarker, idx + marker.length);
+    // Start marker present but end marker missing → region cannot be bounded →
+    // not safe to whole-file overwrite without --force.
+    if (end === -1) return false;
+    if (content.slice(end + endMarker.length).trim().length !== 0) return false;
+  }
+  return true;
+}
+
 /**
  * Install a single git hook with idempotency and chain preservation.
  * Returns the action taken.
+ *
+ * When the hook already carries the totem marker and `force` is not set, a
+ * totem-OWNED whole file whose content has drifted from the regenerated canonical
+ * is repaired in place (`overwritten`) — this makes bare `totem hook install`
+ * actually fix a stale hook, so the doctor's drift remediation is truthful
+ * (mmnto-ai/totem#2138). A user hook with an appended totem block is left untouched
+ * (`exists`); overwriting it still requires `--force`. `endMarker`, when supplied
+ * (post-merge / post-checkout), bounds the totem region so appended user content
+ * downstream of it is never clobbered.
  */
 export function installGitHook(
   hooksDir: string,
@@ -443,6 +507,7 @@ export function installGitHook(
   hookContent: string,
   marker: string,
   force?: boolean,
+  endMarker?: string,
 ): 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten' {
   const hookPath = path.join(hooksDir, hookName);
 
@@ -451,12 +516,14 @@ export function installGitHook(
     if (existing.includes(marker)) {
       if (force) {
         // Force overwrite — replace the entire hook with the new content
-        fs.writeFileSync(hookPath, hookContent);
-        try {
-          fs.chmodSync(hookPath, 0o755);
-        } catch {
-          // chmod may fail on Windows — hooks still work via git bash
-        }
+        writeExecutableHook(hookPath, hookContent);
+        return 'overwritten';
+      }
+      // Drift-repair (mmnto-ai/totem#2138): a totem-owned whole file that no longer
+      // matches the regenerated canonical is upgraded without --force. A file that
+      // already matches, or a user hook with an appended totem block, is left as-is.
+      if (existing !== hookContent && isTotemOwnedWholeFile(existing, marker, endMarker)) {
+        writeExecutableHook(hookPath, hookContent);
         return 'overwritten';
       }
       return 'exists';
@@ -479,14 +546,7 @@ export function installGitHook(
 
   // Create new hook
   fs.mkdirSync(hooksDir, { recursive: true });
-  fs.writeFileSync(hookPath, hookContent);
-
-  // Make executable (no-op on Windows, git bash handles it)
-  try {
-    fs.chmodSync(hookPath, 0o755);
-  } catch {
-    // chmod may fail on Windows — hooks still work via git bash
-  }
+  writeExecutableHook(hookPath, hookContent);
 
   return 'installed';
 }
@@ -584,6 +644,8 @@ export async function installHooksCommand(): Promise<void> {
           'post-checkout',
           buildPostCheckoutHookContent(fallbackCmd),
           TOTEM_CHECKOUT_MARKER,
+          undefined,
+          TOTEM_CHECKOUT_END,
         );
       }
     }
@@ -651,6 +713,7 @@ export function installHooksNonInteractive(
     postMergeContent,
     TOTEM_HOOK_MARKER,
     force,
+    TOTEM_HOOK_END,
   );
 
   const postCheckoutContent = buildPostCheckoutHookContent(fallbackCmd);
@@ -660,6 +723,7 @@ export function installHooksNonInteractive(
     postCheckoutContent,
     TOTEM_CHECKOUT_MARKER,
     force,
+    TOTEM_CHECKOUT_END,
   );
 
   return { preCommit, prePush, postMerge, postCheckout };

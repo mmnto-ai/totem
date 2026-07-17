@@ -1,31 +1,26 @@
 #!/bin/sh
-# [totem] pre-commit hook — branch protection + auto-format staged files.
+# [totem] pre-commit hook — block direct commits to protected branches.
 # Override with: git commit --no-verify
+TOTEM_HOOK_TIER="standard"
 
-# ─── Branch protection ────────────────────────────────
+# Agent detection — strict enforcement for AI agents
+is_agent=0
+if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then
+  is_agent=1
+fi
+
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
-  echo "[totem] ERROR: Direct commits to '$branch' are blocked."
-  echo "[totem] Create a feature branch: git checkout -b feat/my-feature"
-  echo "[totem] Override with: git commit --no-verify"
+  echo "[Totem] ERROR: Direct commits to '$branch' are blocked."
+  echo "[Totem] Create a feature branch: git checkout -b feat/my-feature"
+  echo "[Totem] Override with: git commit --no-verify"
   exit 1
 fi
 
-# ─── Auto-format staged files ─────────────────────────
-# Run eslint --fix and prettier on staged .ts/.js files, then re-stage.
-# This ensures import sorting and formatting are always correct.
-
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx)$')
-
-if [ -n "$STAGED_FILES" ]; then
-  echo "[totem] Auto-formatting staged files..."
-
-  # Run eslint --fix (handles import sorting)
-  echo "$STAGED_FILES" | xargs npx eslint --fix --quiet 2>/dev/null
-
-  # Run prettier
-  echo "$STAGED_FILES" | xargs npx prettier --write 2>/dev/null
-
-  # Re-stage the fixed files
-  echo "$STAGED_FILES" | xargs git add
+# Strict mode: require spec before commit
+if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
+  if [ ! -f ".totem/cache/.spec-completed" ]; then
+    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode)"
+    exit 1
+  fi
 fi

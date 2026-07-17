@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
+  buildHookContent,
   buildPostCheckoutHookContent,
   buildPreCommitHook,
   buildPrePushHook,
@@ -17,6 +18,8 @@ import {
   getFallbackCommand,
   installGitHook,
   installHooksNonInteractive,
+  TOTEM_HOOK_END,
+  TOTEM_HOOK_MARKER,
   TOTEM_PRECOMMIT_MARKER,
   TOTEM_PREPUSH_MARKER,
   upgradePrePushHookIfNeeded,
@@ -621,10 +624,36 @@ describe('installGitHook', () => {
     expect(content).not.toContain('$TOTEM_CMD lint\n'); // old format gone (trailing newline distinguishes bare line)
   });
 
-  it('returns exists when marker found and force is false', () => {
+  it('returns exists when on-disk content already matches canonical (idempotent)', () => {
     fs.mkdirSync(hooksDir, { recursive: true });
     const hookPath = path.join(hooksDir, 'pre-push');
-    fs.writeFileSync(hookPath, `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\nold content\n`);
+    const canonical = buildPrePushHook('pnpm dlx @mmnto/cli');
+    fs.writeFileSync(hookPath, canonical);
+
+    const result = installGitHook(hooksDir, 'pre-push', canonical, TOTEM_PREPUSH_MARKER);
+
+    expect(result).toBe('exists');
+  });
+
+  it('drift-repairs a stale totem-owned hook without force (mmnto-ai/totem#2138)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-push');
+    // A totem-owned whole file frozen at an older generator's output.
+    fs.writeFileSync(hookPath, `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\n$TOTEM_CMD lint\n`);
+    const canonical = buildPrePushHook('pnpm dlx @mmnto/cli');
+
+    const result = installGitHook(hooksDir, 'pre-push', canonical, TOTEM_PREPUSH_MARKER);
+
+    expect(result).toBe('overwritten');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical);
+  });
+
+  it('does not drift-repair a user hook with an appended totem block without force', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-push');
+    // User content precedes the totem block → NOT an owned whole file.
+    const userThenTotem = `#!/bin/sh\nrun_my_tests\n# ${TOTEM_PREPUSH_MARKER}\nold content\n`;
+    fs.writeFileSync(hookPath, userThenTotem);
 
     const result = installGitHook(
       hooksDir,
@@ -634,6 +663,29 @@ describe('installGitHook', () => {
     );
 
     expect(result).toBe('exists');
+    // Left untouched — the user's hook is preserved verbatim.
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(userThenTotem);
+  });
+
+  it('does not drift-repair a post-merge hook with user content after the end marker', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'post-merge');
+    // Stale totem region, but the user appended content AFTER the end marker — a
+    // whole-file overwrite would clobber it, so the end-marker guard must decline.
+    const staleWithTrailingUser = `#!/bin/sh\n# ${TOTEM_HOOK_MARKER}\nstale body\n# ${TOTEM_HOOK_END}\necho "my deploy notice"\n`;
+    fs.writeFileSync(hookPath, staleWithTrailingUser);
+
+    const result = installGitHook(
+      hooksDir,
+      'post-merge',
+      buildHookContent('pnpm dlx @mmnto/cli'),
+      TOTEM_HOOK_MARKER,
+      false,
+      TOTEM_HOOK_END,
+    );
+
+    expect(result).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(staleWithTrailingUser);
   });
 });
 
@@ -956,6 +1008,28 @@ describe('post-checkout hook content', () => {
 
     expect(result).not.toBeNull();
     expect(result!.postCheckout).toBe('installed');
+  });
+});
+
+// ─── worktree-safe sync-log path (mmnto-ai/totem#2376) ─
+
+describe('sync-log redirect resolves the git dir (worktree-safe)', () => {
+  it('post-merge hook derives the log path from git rev-parse --git-dir', () => {
+    const hook = buildHookContent('pnpm dlx @mmnto/cli');
+
+    expect(hook).toContain('GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)');
+    expect(hook).toContain('> "$GIT_DIR_RESOLVED/totem-sync.log"');
+    // The hardcoded `.git/`-as-directory redirect must be gone (ENOTDIR in a worktree).
+    expect(hook).not.toContain('> .git/totem-sync.log');
+  });
+
+  it('post-checkout hook derives the log path from git rev-parse --git-dir on both branches', () => {
+    const hook = buildPostCheckoutHookContent('pnpm dlx @mmnto/cli');
+
+    expect(hook).toContain('GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)');
+    // Both the null-SHA and the branch-diff redirect use the resolved dir.
+    expect(hook.match(/> "\$GIT_DIR_RESOLVED\/totem-sync\.log"/g)).toHaveLength(2);
+    expect(hook).not.toContain('> .git/totem-sync.log');
   });
 });
 

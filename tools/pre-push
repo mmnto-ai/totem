@@ -1,65 +1,124 @@
 #!/bin/sh
-# [totem] pre-push hook — runs format check, lint, tests, and totem lint.
+# [totem] pre-push hook — stateless enforcement.
+TOTEM_HOOK_TIER="standard"
 
-# Skip in CI — release workflows handle their own quality gates
-if [ "${CI:-}" = "true" ]; then
-  exit 0
+# Agent detection — strict enforcement for AI agents
+is_agent=0
+if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then
+  is_agent=1
 fi
 
-echo "[totem] Running pre-push checks..."
-
-# Ensure temp files are cleaned up on any exit (success, failure, or interrupt)
-LINT_OUTPUT=""
-TEST_OUTPUT=""
-cleanup() { rm -f "$LINT_OUTPUT" "$TEST_OUTPUT"; }
-trap cleanup EXIT INT TERM
-
-echo "[totem] Checking formatting..."
-pnpm run format:check
-if [ $? -ne 0 ]; then
-  echo "[totem] ❌ Formatting check failed. Run 'pnpm run format' to fix."
-  exit 1
-fi
-
-echo "[totem] Running linter..."
-LINT_OUTPUT=$(mktemp)
-pnpm run lint > "$LINT_OUTPUT" 2>&1
-LINT_EXIT=$?
-if [ $LINT_EXIT -ne 0 ]; then
-  echo "[totem] ❌ Lint failed. See output below:"
-  cat "$LINT_OUTPUT"
-  exit 1
-fi
-
-echo "[totem] Running tests..."
-TEST_OUTPUT=$(mktemp)
-if [ "${TOTEM_DEBUG:-0}" = "1" ]; then
-  pnpm run test > "$TEST_OUTPUT" 2>&1
+# Resolve totem — prefer the pinned / in-tree build over a volatile ambient global
+# (mmnto-ai/totem#2053). Order: workspace-HEAD > pinned @mmnto/cli > pnpm exec > PATH > dlx.
+if [ -f packages/cli/dist/index.js ] && grep -q '"name": *"@mmnto/cli"' packages/cli/package.json 2>/dev/null; then
+  TOTEM_CMD="node packages/cli/dist/index.js"
+elif [ -f node_modules/@mmnto/cli/dist/index.js ]; then
+  TOTEM_CMD="node node_modules/@mmnto/cli/dist/index.js"
+elif [ -f pnpm-workspace.yaml ] && pnpm exec totem --version >/dev/null 2>&1; then
+  TOTEM_CMD="pnpm exec totem"
+elif command -v totem >/dev/null 2>&1; then
+  TOTEM_CMD="totem"
+elif [ -f package.json ]; then
+  TOTEM_CMD="pnpm dlx @mmnto/cli"
 else
-  pnpm run test -- --reporter=dot > "$TEST_OUTPUT" 2>&1
+  echo "[Totem] totem not found in PATH and no package.json present." >&2
+  TOTEM_CMD=""
 fi
-TEST_EXIT=$?
-if [ $TEST_EXIT -ne 0 ]; then
-  echo "[totem] ❌ Tests failed. See output below:"
-  cat "$TEST_OUTPUT"
-  exit 1
-fi
-# Count passed tests from vitest summary lines.
-# Expected format: "      Tests  577 passed (577)" — falls back to "all" if parsing fails.
-# Uses perl for portable ANSI stripping (BSD sed on macOS doesn't support \x1b).
-PASSED=$(perl -pe 's/\e\[[0-9;]*m//g' "$TEST_OUTPUT" | grep 'Tests ' | grep -v 'Test Files' | grep -oE '[0-9]+ passed' | awk '{s+=$1} END {print s}')
-echo "[totem] ✓ ${PASSED:-all} tests passed"
 
-echo "[totem] ✅ All pre-push checks passed."
-
-# Totem lint gate — only runs when compiled rules exist AND CLI is available.
-if [ -f ".totem/compiled-rules.json" ] && pnpm exec totem --version > /dev/null 2>&1; then
-  echo "[totem] Running compiled rules..."
-  pnpm exec totem lint
-  if [ $? -ne 0 ]; then
-    echo "[totem] ❌ Totem lint found violations. Fix before pushing."
-    echo "[totem] If this is a false positive, file a ticket. Do not bypass without approval."
-    exit 1
+if [ -n "$TOTEM_CMD" ]; then
+  # Verify compile manifest is current
+  if [ -f ".totem/compile-manifest.json" ]; then
+    if ! $TOTEM_CMD verify-manifest > /dev/null 2>&1; then
+      echo "[totem] Push blocked: compile manifest is stale. Run 'totem lesson compile'." >&2
+      exit 1
+    fi
   fi
-  echo "[totem] ✅ Totem lint passed."
+
+  # Run deterministic lint
+  if [ -f ".totem/compiled-rules.json" ]; then
+    if ! $TOTEM_CMD lint; then
+      exit 1
+    fi
+  fi
+
+  # Verify shields.io badges in README.md (mmnto-ai/totem#1926 — deterministic claim-discipline)
+  if [ -f "README.md" ] && [ -f ".totem/compiled-rules.json" ]; then
+    if ! $TOTEM_CMD verify-badges; then
+      exit 1
+    fi
+  fi
+
+  # Verify lockfile-sync (mmnto-ai/totem#1961 — block caret bumps committed
+  # without a regenerated pnpm-lock.yaml). Gate is universally applicable to
+  # any repo that tracks pnpm-lock.yaml; pre-conditions are checked inside
+  # the command (lockfile tracked + diff range resolvable). Slotted before
+  # the WWND claim-discipline gate so this mechanical fast-fail runs before
+  # the slower prose-discipline walk.
+  if [ -f "pnpm-lock.yaml" ]; then
+    if ! $TOTEM_CMD verify-lockfile-sync; then
+      exit 1
+    fi
+  fi
+
+  # WWND claim-discipline gate (Proposal 279 § Implementation Notes Q3 —
+  # slot after verify-badges; gates on public-surface absolute promises,
+  # missing-Goal-prefix, covenant-without-backing). Fires only when at
+  # least one in-scope surface exists. Bypass with mandatory justification:
+  #   TOTEM_GATE_BYPASS_JUSTIFICATION="<reason>" git push
+  if [ -f ".totem/compiled-rules.json" ] && { [ -f "README.md" ] || [ -f "AGENTS.md" ] || [ -f "design-tenets.md" ] || [ -d "docs/wiki" ]; }; then
+    # --scope-to-diff (mmnto-ai/totem#2002): narrow the WWND scan to files
+    # touched in the current push diff. Eliminates the standing-gate
+    # false-positive class where pre-existing warnings on in-scope surfaces
+    # (e.g. docs/wiki/governing-ai-agents.md) fire on diffs that don't touch
+    # those files. The flag falls back to a full scan if diff resolution
+    # fails (no upstream + no HEAD~1 — fresh/detached state).
+    #
+    # Defensive degrade: the hook MUST work when $TOTEM_CMD resolves to an
+    # older CLI that doesn't yet ship --scope-to-diff (PATH-resolved global
+    # @mmnto/cli predates 1.47.0; cohort bootstrap window). Probe `--help`
+    # for flag support; fall back to the full standing scan if absent.
+    if $TOTEM_CMD doctor --claim-discipline --help 2>/dev/null | grep -q -- '--scope-to-diff'; then
+      if ! $TOTEM_CMD doctor --claim-discipline --strict --scope-to-diff; then
+        exit 1
+      fi
+    else
+      echo "[totem] Hook running in compat mode (CLI <1.47.0); 'npm i -g @mmnto/cli@latest' enables --scope-to-diff defense." >&2
+      if ! $TOTEM_CMD doctor --claim-discipline --strict; then
+        exit 1
+      fi
+    fi
+  fi
+
+  # Strict mode: require doctor repo-state + shield pass before push
+  if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
+    echo "[Totem] Running doctor --strict (repo-state gate)..."
+    $TOTEM_CMD doctor --strict || exit 1
+    echo "[Totem] Running shield gate (strict mode)..."
+    $TOTEM_CMD review || exit 1
+  fi
+fi
+
+# Format check — catch unformatted files before CI does
+# Only runs if the project defines a format:check script (no workflow opinions)
+# Detects package manager from lockfile presence
+if [ -f "package.json" ]; then
+  FORMAT_CMD=""
+  if [ -f "pnpm-lock.yaml" ] && command -v pnpm >/dev/null 2>&1; then
+    FORMAT_CMD="pnpm run"
+  elif [ -f "yarn.lock" ] && command -v yarn >/dev/null 2>&1; then
+    FORMAT_CMD="yarn run"
+  elif [ -f "bun.lockb" ] || [ -f "bun.lock" ]; then
+    command -v bun >/dev/null 2>&1 && FORMAT_CMD="bun run"
+  elif command -v npm >/dev/null 2>&1; then
+    FORMAT_CMD="npm run"
+  fi
+
+  if [ -n "$FORMAT_CMD" ] && node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['format:check'] ? 0 : 1)" 2>/dev/null; then
+    if $FORMAT_CMD format:check > /dev/null 2>&1; then
+      : # pass
+    else
+      echo "[totem] ❌ Formatting check failed. Run '$FORMAT_CMD format' to fix." >&2
+      exit 1
+    fi
+  fi
 fi

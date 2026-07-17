@@ -51,7 +51,9 @@ describe('dev hooks match consumer templates', () => {
 
   it('dev pre-push runs totem lint and consumer template runs lint stateless', () => {
     const consumerHook = buildPrePushHook('pnpm dlx @mmnto/cli');
-    expect(devPrePush).toContain('totem lint');
+    // tools/ is now byte-identical to the builder output (mmnto-ai/totem#2404), so the
+    // dev hook runs lint via the resolved $TOTEM_CMD, exactly like the consumer template.
+    expect(devPrePush).toContain('$TOTEM_CMD lint');
     // Consumer hook runs lint directly via $TOTEM_CMD — no flag files
     expect(consumerHook).toContain('$TOTEM_CMD lint');
     expect(consumerHook).toContain('verify-manifest');
@@ -59,7 +61,8 @@ describe('dev hooks match consumer templates', () => {
   });
 
   it('dev post-merge runs totem sync like consumer template', () => {
-    expect(devPostMerge).toContain('totem sync');
+    // Byte-identical to buildHookContent (mmnto-ai/totem#2404): sync runs via $TOTEM_CMD.
+    expect(devPostMerge).toContain('$TOTEM_CMD sync');
     expect(devPostMerge).toContain('[totem]');
   });
 
