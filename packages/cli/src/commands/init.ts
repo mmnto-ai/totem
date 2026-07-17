@@ -174,14 +174,18 @@ export function scaffoldFile(
  *   - A DIFFERENT existing `prepare` (or a non-string value) → `declined` (NO write, byte-
  *     identical): the caller prints the canonical line to add manually.
  *   - No `package.json`              → `missing` (nothing to wire).
- *   - Unreadable / invalid JSON      → `unparseable` (surfaced, never a crash).
+ *   - Unreadable / invalid JSON / a non-object root / a present-but-non-object
+ *     `scripts` → `unparseable` (surfaced, never a crash; a non-object `scripts` is
+ *     user content we must NOT silently replace — the decline posture, not a clobber).
+ *   - A write that throws (perms/FS) → `write-failed` (distinct from a parse/shape
+ *     problem, so the caller can tell "couldn't read your file" from "couldn't save it").
  *
  * On the `wired` path the file is rewritten with 2-space JSON + a trailing newline
  * (mirrors `scaffoldMcpConfig`, the repo's package.json-edit precedent); existing keys
  * keep their order and `prepare` is appended within `scripts` (stable key order).
  */
 export function wirePreparePackageJson(pkgPath: string): {
-  action: 'wired' | 'exists' | 'declined' | 'missing' | 'unparseable';
+  action: 'wired' | 'exists' | 'declined' | 'missing' | 'unparseable' | 'write-failed';
   /** The different existing `prepare` value, for the decline notice (present only when a string). */
   existing?: string;
   err?: string;
@@ -199,9 +203,9 @@ export function wirePreparePackageJson(pkgPath: string): {
     return { action: 'unparseable', err: `Could not read ${path.basename(pkgPath)}: ${message}` };
   }
 
-  let parsed: Record<string, unknown>;
+  let parsedRoot: unknown;
   try {
-    parsed = JSON.parse(raw) as Record<string, unknown>;
+    parsedRoot = JSON.parse(raw);
     // totem-context: intentional cleanup — surface invalid package.json as a returned result (`err`), the established scaffoldMcpConfig parse posture; init logs it and declines rather than crashing.
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -211,11 +215,31 @@ export function wirePreparePackageJson(pkgPath: string): {
     };
   }
 
+  // The root must be a plain object. `JSON.parse` also yields `null`, arrays, and
+  // scalars (`null`/`5`/`"x"`/`[]`) — dereferencing `.scripts` on those either throws
+  // (null) or reads garbage, and we must never write a wrapper into a non-object root.
+  if (parsedRoot === null || typeof parsedRoot !== 'object' || Array.isArray(parsedRoot)) {
+    return {
+      action: 'unparseable',
+      err: `${path.basename(pkgPath)} is not a JSON object — cannot wire a prepare script.`,
+    };
+  }
+  const parsed = parsedRoot as Record<string, unknown>;
+
   const scriptsRaw = parsed.scripts;
-  const scripts =
-    scriptsRaw !== undefined && typeof scriptsRaw === 'object' && !Array.isArray(scriptsRaw)
-      ? (scriptsRaw as Record<string, unknown>)
-      : undefined;
+  // A PRESENT `scripts` that is not a plain object (a string, array, number, null) is
+  // user content — replacing it would clobber it, violating the decline posture. Surface
+  // it as unparseable rather than silently overwriting (mmnto-ai/totem#2416 F1).
+  if (
+    scriptsRaw !== undefined &&
+    (scriptsRaw === null || typeof scriptsRaw !== 'object' || Array.isArray(scriptsRaw))
+  ) {
+    return {
+      action: 'unparseable',
+      err: `${path.basename(pkgPath)} "scripts" is not an object — leaving it unchanged.`,
+    };
+  }
+  const scripts = scriptsRaw as Record<string, unknown> | undefined;
   const existingPrepare = scripts ? scripts.prepare : undefined;
 
   if (existingPrepare !== undefined) {
@@ -237,7 +261,7 @@ export function wirePreparePackageJson(pkgPath: string): {
     // totem-context: intentional cleanup — surface a write failure as a returned result (`err`) for the caller to log, never a silent swallow; the established scaffoldMcpConfig IO posture.
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { action: 'unparseable', err: `Could not write ${path.basename(pkgPath)}: ${message}` };
+    return { action: 'write-failed', err: `Could not write ${path.basename(pkgPath)}: ${message}` };
   }
   return { action: 'wired' };
 }
@@ -1413,7 +1437,10 @@ export default {
             `To run the Totem hook installer on install, add "prepare": "${PREPARE_SCRIPT_COMMAND}" ` +
             `(or chain it into your existing prepare script).`,
         );
-      } else if (prepareWiring.action === 'unparseable' && prepareWiring.err) {
+      } else if (
+        (prepareWiring.action === 'unparseable' || prepareWiring.action === 'write-failed') &&
+        prepareWiring.err
+      ) {
         log.warn('Totem', prepareWiring.err);
       }
       // 'exists' (already canonical) and 'missing' (no package.json) are silent no-ops.

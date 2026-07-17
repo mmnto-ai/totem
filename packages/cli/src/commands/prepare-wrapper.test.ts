@@ -25,7 +25,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 import { checkPrepareWrapper } from './doctor.js';
 import { wirePreparePackageJson } from './init.js';
-import { PREPARE_SCRIPT_COMMAND, PREPARE_WRAPPER, TOTEM_FILE_MARKER } from './init-templates.js';
+import {
+  PREPARE_SCRIPT_COMMAND,
+  PREPARE_WRAPPER,
+  TOTEM_FILE_END,
+  TOTEM_FILE_MARKER,
+} from './init-templates.js';
 
 // ─── PREPARE_WRAPPER: exit-code behavior ─────────────────────────────
 
@@ -177,6 +182,47 @@ describe('wirePreparePackageJson — wiring matrix', () => {
     expect(r.err).toBeDefined();
     expect(fs.readFileSync(pkgPath(), 'utf-8')).toBe(raw);
   });
+
+  // F1 (mmnto-ai/totem#2416): a non-object JSON root must not crash at `.scripts` or be
+  // written into — validate the shape and decline as unparseable.
+  it.each([
+    ['null root', 'null'],
+    ['scalar root', '5'],
+    ['string root', '"hi"'],
+    ['array root', '[]'],
+  ])('%s → unparseable + byte-identical (never dereferenced or written)', (_label, raw) => {
+    fs.writeFileSync(pkgPath(), raw);
+    const r = wirePreparePackageJson(pkgPath());
+    expect(r.action).toBe('unparseable');
+    expect(r.err).toBeDefined();
+    expect(fs.readFileSync(pkgPath(), 'utf-8')).toBe(raw);
+  });
+
+  it('a present-but-non-object `scripts` → unparseable + byte-identical (never clobbered)', () => {
+    // The pre-fix bug: a non-object `scripts` fell through to the wire branch and was
+    // silently REPLACED by `{ prepare: ... }`. It must be declined as unparseable.
+    const raw = JSON.stringify({ name: 'consumer', scripts: 'oops-a-string' }, null, 2) + '\n';
+    fs.writeFileSync(pkgPath(), raw);
+    const r = wirePreparePackageJson(pkgPath());
+    expect(r.action).toBe('unparseable');
+    expect(fs.readFileSync(pkgPath(), 'utf-8')).toBe(raw);
+  });
+
+  // F5 (mmnto-ai/totem#2416): a write that throws is a DISTINCT discriminant from a
+  // read/parse/shape problem.
+  it('a write failure → write-failed (distinct from unparseable)', () => {
+    const raw = JSON.stringify({ name: 'consumer' }, null, 2) + '\n';
+    fs.writeFileSync(pkgPath(), raw);
+    fs.chmodSync(pkgPath(), 0o444); // read-only → read+parse succeed, writeFileSync throws (EPERM/EACCES)
+    try {
+      const r = wirePreparePackageJson(pkgPath());
+      expect(r.action).toBe('write-failed');
+      expect(r.err).toBeDefined();
+    } finally {
+      // Restore write perms so cleanup can remove the temp dir.
+      fs.chmodSync(pkgPath(), 0o644);
+    }
+  });
 });
 
 // ─── checkPrepareWrapper: doctor sensor row ──────────────────────────
@@ -226,15 +272,47 @@ describe('checkPrepareWrapper — doctor parity row (sensor, never gates)', () =
     expect(r.message).toContain('not wired');
   });
 
-  it('wrapper present + marker-headed but DRIFTED → warn, remedy is bare totem hook install', async () => {
-    writeWrapper(
-      `${TOTEM_FILE_MARKER} — drifted\nconsole.log("stale");\n// [totem] end auto-generated\n`,
-    );
+  it('wrapper present + marker-headed + BOUNDED but drifted → warn, remedy is bare totem hook install', async () => {
+    writeWrapper(`${TOTEM_FILE_MARKER} — drifted\nconsole.log("stale");\n${TOTEM_FILE_END}\n`);
     writePkg({ name: 'consumer', scripts: { prepare: PREPARE_SCRIPT_COMMAND } });
     const r = await checkPrepareWrapper(tmpDir);
     expect(r.status).toBe('warn');
     expect(r.remediation).toBe('totem hook install');
     expect(r.message).toContain('drifted');
+  });
+
+  // F3 (mmnto-ai/totem#2416): a marker-headed but UNBOUNDED drifted wrapper (no end
+  // marker) is not bare-repairable — the remedy must name --force.
+  it('wrapper present + marker-headed but UNBOUNDED drifted → warn, remedy is totem hook install --force', async () => {
+    writeWrapper(`${TOTEM_FILE_MARKER} — drifted, no end marker\nconsole.log("stale");\n`);
+    writePkg({ name: 'consumer', scripts: { prepare: PREPARE_SCRIPT_COMMAND } });
+    const r = await checkPrepareWrapper(tmpDir);
+    expect(r.status).toBe('warn');
+    expect(r.remediation).toBe('totem hook install --force');
+    expect(r.message).toContain('drifted');
+  });
+
+  // F2 (mmnto-ai/totem#2416): a wrapper that EXISTS but cannot be read must warn with the
+  // read-failure detail, not fall through to the user-owned skip. A directory-at-path makes
+  // existsSync true while readFileSync throws EISDIR (cross-platform).
+  it('wrapper present but unreadable (EISDIR) → warn naming the read failure, not a user-owned skip', async () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem', 'prepare.cjs'), { recursive: true });
+    writePkg({ name: 'consumer', scripts: { prepare: PREPARE_SCRIPT_COMMAND } });
+    const r = await checkPrepareWrapper(tmpDir);
+    expect(r.status).toBe('warn');
+    expect(r.message).toContain('could not read');
+    expect(r.message).not.toContain('user-owned');
+  });
+
+  // F4 (mmnto-ai/totem#2416): canonical wrapper present but a DIFFERENT prepare exists —
+  // `totem init` deliberately declines that, so the remedy must be the manual line.
+  it('wrapper present + canonical but a DIFFERENT prepare → warn, remedy is the manual line (not totem init)', async () => {
+    writeWrapper(PREPARE_WRAPPER);
+    writePkg({ name: 'consumer', scripts: { prepare: 'husky install' } });
+    const r = await checkPrepareWrapper(tmpDir);
+    expect(r.status).toBe('warn');
+    expect(r.remediation).toContain('add or chain');
+    expect(r.remediation).not.toBe('totem init');
   });
 
   it('owner-repo exception: wrapper absent + a DIFFERENT user-managed prepare → skip (no nudge)', async () => {

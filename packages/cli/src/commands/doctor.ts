@@ -185,6 +185,8 @@ export async function checkPrepareWrapper(cwd: string): Promise<DiagnosticResult
     PREPARE_SCRIPT_REL,
     PREPARE_SCRIPT_COMMAND,
     TOTEM_FILE_MARKER,
+    TOTEM_FILE_END,
+    isBoundedOwnedFile,
     markerOpensFile,
   } = await import('./init-templates.js');
 
@@ -210,19 +212,20 @@ export async function checkPrepareWrapper(cwd: string): Promise<DiagnosticResult
     typeof prepareValue === 'string' && prepareValue.trim() === PREPARE_SCRIPT_COMMAND;
   const prepareDifferent = prepareValue !== undefined && !wiredCanonical;
 
-  // Wrapper file state.
+  // Wrapper file state. A file that EXISTS but cannot be read is a distinct signal
+  // from a missing / user-owned file — capture the read error so the present-wrapper
+  // branch can surface it (mmnto-ai/totem#2416 F2) instead of misreading it as "no marker".
   const wrapperPresent = fs.existsSync(wrapperPath);
   let wrapperContent: string | undefined;
+  let wrapperReadError: string | undefined;
   if (wrapperPresent) {
     try {
       wrapperContent = fs.readFileSync(wrapperPath, 'utf-8');
-      // totem-context: intentional cleanup — best-effort sensor read; an unreadable wrapper file degrades the doctor check honestly (Tenet 13) rather than crashing the diagnostic pipeline, mirroring checkGitHooks.
-    } catch {
-      wrapperContent = undefined;
+      // totem-context: intentional cleanup — best-effort sensor read; an unreadable wrapper file surfaces as a `warn` (below) rather than crashing the diagnostic pipeline (Tenet 13), mirroring checkGitHooks.
+    } catch (err) {
+      wrapperReadError = err instanceof Error ? err.message : String(err);
     }
   }
-  const wrapperMarkerHeaded =
-    wrapperContent !== undefined && markerOpensFile(wrapperContent, TOTEM_FILE_MARKER);
 
   // ── absent wrapper ──
   if (!wrapperPresent) {
@@ -254,7 +257,16 @@ export async function checkPrepareWrapper(cwd: string): Promise<DiagnosticResult
   }
 
   // ── present wrapper ──
-  if (!wrapperMarkerHeaded) {
+  // Present-but-unreadable → warn with the read-failure detail (never a silent skip
+  // that misreports the file as user-owned; mmnto-ai/totem#2416 F2).
+  if (wrapperContent === undefined) {
+    return {
+      name,
+      status: 'warn',
+      message: `could not read ${PREPARE_SCRIPT_REL} (${wrapperReadError ?? 'unknown error'}) — the wired prepare lifecycle may be broken`,
+    };
+  }
+  if (!markerOpensFile(wrapperContent, TOTEM_FILE_MARKER)) {
     return {
       name,
       status: 'skip',
@@ -262,19 +274,29 @@ export async function checkPrepareWrapper(cwd: string): Promise<DiagnosticResult
     };
   }
   if (wrapperContent !== PREPARE_WRAPPER) {
+    // A marker-headed drifted wrapper: bare `totem hook install` only bounded-repairs a
+    // BOUNDED totem-owned file (PR-A semantics). An unbounded one (no end marker / trailing
+    // user content) needs `--force` (mmnto-ai/totem#2416 F3).
+    const bounded = isBoundedOwnedFile(wrapperContent, TOTEM_FILE_MARKER, TOTEM_FILE_END);
     return {
       name,
       status: 'warn',
       message: `${PREPARE_SCRIPT_REL} has drifted from canonical`,
-      remediation: 'totem hook install',
+      remediation: bounded ? 'totem hook install' : 'totem hook install --force',
     };
   }
   if (!wiredCanonical) {
+    // The canonical wrapper is present but the prepare lifecycle does not invoke it.
+    // If a DIFFERENT `prepare` already exists, `totem init` deliberately declines to touch
+    // it (Prop 289), so `totem init` cannot resolve this — name the manual line instead
+    // (mmnto-ai/totem#2416 F4). With no prepare at all, `totem init` wires it.
     return {
       name,
       status: 'warn',
       message: `prepare wrapper present but package.json \`prepare\` is not wired to \`${PREPARE_SCRIPT_COMMAND}\``,
-      remediation: 'totem init',
+      remediation: prepareDifferent
+        ? `add or chain \`${PREPARE_SCRIPT_COMMAND}\` into your package.json \`prepare\` script`
+        : 'totem init',
     };
   }
   return {

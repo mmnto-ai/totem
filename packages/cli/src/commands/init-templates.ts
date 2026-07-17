@@ -9,7 +9,7 @@ import type { ConfigFormat, EmbeddingTier } from './init-detect.js';
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
 // This allows `totem init` to detect stale blocks and offer upgrades.
 
-export const REFLEX_VERSION = 6;
+export const REFLEX_VERSION = 7;
 export const REFLEX_START = '<!-- totem:reflexes:start -->';
 export const REFLEX_END = '<!-- totem:reflexes:end -->';
 export const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
@@ -48,6 +48,7 @@ Totem provides CLI commands that map to your development lifecycle. Use them at 
 2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to generate an architectural plan and review related context before writing code.
 3. **Before Push:** Run \`totem lint\` for a fast compiled-rules check (zero LLM, ~2s). **Before PR:** Run \`totem review\` for a full AI-powered code review against project knowledge (~18s).
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
+5. **Managed hooks self-repair:** \`totem init\` distributes \`.totem/prepare.cjs\` and wires \`package.json\` \`prepare\` to it only when no \`prepare\` script exists. The wrapper runs \`totem hook install\` on every \`pnpm install\`, drift-repairing the managed Claude/Gemini hooks — no manual re-install needed.
 
 ### Cloud / PR Review Bots
 [FOR CLOUD BOTS ONLY — e.g., Gemini Code Assist, GitHub Copilot PR Review]
