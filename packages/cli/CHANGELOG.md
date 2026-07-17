@@ -1,5 +1,27 @@
 # @mmnto/cli
 
+## 1.101.0
+
+### Minor Changes
+
+- 0ea9da2: feat(cli): init-distributed prepare wrapper — `.totem/prepare.cjs` + package.json wiring + doctor parity row (mmnto-ai/totem#2410 PR-B).
+  - **`.totem/prepare.cjs` wrapper (`PREPARE_WRAPPER`):** `totem init` now distributes a dependency-free CommonJS wrapper and wires the consumer's `package.json` `prepare` script to invoke it (`node .totem/prepare.cjs`), so every `pnpm install` runs `totem hook install` and the managed hooks self-repair. All logic runs in Node — never a shell (the Windows quoting class, mmnto-ai/totem#2351). It resolves the CLI via a manual `node_modules` walk (the real `@mmnto/cli` `exports` map declares only an `import` condition and no `./package.json` subpath, so `require.resolve` throws `ERR_PACKAGE_PATH_NOT_EXPORTED` from a CommonJS file), reads the `bin` off the resolved manifest, and `spawnSync`s `node <bin> hook install`. CLI not installed → one stderr skip line + exit 0 (strategy#630 declared-skip class); CLI present → the child's exit code is propagated verbatim (a genuine `hook install` failure fails `prepare` loud, exit ≠0). The wrapper is marker-headed + end-marker-bounded and a `MANAGED_SESSION_HOOKS` roster member, so bare `totem hook install` drift-repairs it for adopters.
+  - **package.json wiring (`wirePreparePackageJson`):** absent `prepare` → set the canonical command; already-canonical → unchanged; a DIFFERENT existing `prepare` (or non-string value) → left byte-identical with a decline notice naming the line to add manually (no overwrite of user-owned content, Prop 289).
+  - **Doctor sensor (`checkPrepareWrapper`):** a new `totem doctor` row senses wrapper presence + marker-heading + canonical content + `prepare` wiring — pass when installed+wired, `warn` (never gates; `--strict` gates only on `fail`) with `totem init` / bare `totem hook install` remedies when absent/miswired/drifted, and `skip` for the owner-repo exception (a user-managed `prepare`) and user-owned wrapper files.
+
+  Consumer-impact: consumers adopt the prepare wrapper via `totem init`, which scaffolds `.totem/prepare.cjs` and wires `package.json` `prepare` to `node .totem/prepare.cjs` only when no `prepare` script exists; an existing different `prepare` script is never modified (init prints the canonical line to add manually).
+
+- 053b37a: feat(cli): hooksCommand exit-code contract + managed session-hook bounded drift-repair.
+  - **Exit-code contract test block (mmnto-ai/totem#2410 slice 2):** a dedicated falsifying test locks `totem hook install`'s 0/1 semantics (Tenet 19) — exit 0 ⟺ {fresh install, already-current, bounded drift-repair (git hook AND session hook), declared skips (not-a-git-repo, hook-manager-detected)}, exit ≠0 ⟺ a genuine hook-write failure propagates, and `--check` is exactly 0/1 on all-present-with-marker vs missing/markerless.
+  - **Managed session-hook regeneration (slice 3):** the marker-headed whole-file `.claude/hooks/*.cjs` + `.gemini/hooks/*.js` artifacts gain the mmnto-ai/totem#2406 bounded-ownership end marker (`// [totem] end auto-generated`) and are now drift-repaired in place by `totem hook install` via the new `MANAGED_SESSION_HOOKS` roster (regenerate-only-if-present — creation stays with `totem init`; a user-owned file carrying no Totem marker is never touched, even under `--force`). `totem init`'s `scaffoldFile` picks up the same bounded self-repair (new `refreshed` action).
+  - **Truthful messages:** a bare drift-repair now prints `Drift-repaired … (totem-owned bounded region)`; `Force-overwritten …` prints only when `--force` was actually passed (was previously the misleading force text on every in-place repair). The `--check` failure remedy now names `totem hook install` (not the deprecated `totem hooks`).
+
+  Consumer-impact: existing marker-headed session hooks (`.claude/hooks/*.cjs`, `.gemini/hooks/*.js`) each need one `totem hook install --force` after upgrade to adopt the end marker, after which bare `totem hook install` self-repairs their drift (identical to the shipped mmnto-ai/totem#2406 git-hook migration).
+
+### Patch Changes
+
+- @mmnto/totem@1.101.0
+
 ## 1.100.0
 
 ### Minor Changes
