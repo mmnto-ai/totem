@@ -774,6 +774,126 @@ export const CLAUDE_GATE_WRAPPER_ENTRY = {
   ],
 };
 
+// ─── Init-distributed prepare wrapper (mmnto-ai/totem#2410 PR-B) ─────────
+//
+// `totem init` distributes this dependency-free CommonJS wrapper to
+// `.totem/prepare.cjs` and wires the consumer's `package.json` `prepare` script
+// to invoke it (`node .totem/prepare.cjs`). On every `pnpm install` (the npm
+// `prepare` lifecycle) it runs `totem hook install`, so a consumer repo's managed
+// hooks self-repair without a manual step. It is a MANAGED_SESSION_HOOKS roster
+// member (below), so `totem hook install` itself drift-repairs it for adopters.
+//
+// The repo-relative install path + the canonical `prepare` script command, shared
+// by init's wiring and the doctor parity sensor so both key off one source of truth.
+export const PREPARE_SCRIPT_REL = '.totem/prepare.cjs';
+export const PREPARE_SCRIPT_COMMAND = 'node .totem/prepare.cjs';
+
+// Wrapper semantics (strategy#894 Option B, Tenet-4 core):
+//   - ALL logic runs in Node — NEVER a shell (the Windows quoting class, mmnto-ai/totem#2351).
+//   - CLI RESOLUTION: `@mmnto/cli` ships an `exports` map declaring only an `import`
+//     condition and NO `./package.json` subpath, so from this CommonJS wrapper BOTH
+//     `require.resolve('@mmnto/cli/package.json')` AND `require.resolve('@mmnto/cli')`
+//     throw ERR_PACKAGE_PATH_NOT_EXPORTED (verified against the real manifest at
+//     packages/cli/package.json, mmnto-ai/totem#2410 PR-B). The working alternative:
+//     a manual node_modules walk from the wrapper's own dir + the install cwd, reading
+//     package.json directly off disk — it bypasses the exports gate entirely.
+//   - NOT INSTALLED: the walk finds no `@mmnto/cli` → ONE stderr line naming the
+//     declared-skip class (CLI absent → hooks skipped; strategy#630 class) → exit 0.
+//   - INSTALLED: spawn `node <bin> hook install` (stdio inherited) and propagate the
+//     child's exit code VERBATIM — a genuine `hook install` failure fails `prepare`
+//     LOUD (exit != 0); the CLI's OWN declared skips are exit 0 and pass through. A
+//     spawn-level error (child.error set) → print + exit 1.
+//
+// Marker-headed (opens the file) + end-marker-bounded, so a bare `totem hook install`
+// bounded-repairs it and a user-owned `.totem/prepare.cjs` is never clobbered.
+export const PREPARE_WRAPPER = `${TOTEM_FILE_MARKER} — Totem init-distributed prepare wrapper (mmnto-ai/totem#2410)
+// Runs \`totem hook install\` on \`pnpm install\` (the npm \`prepare\` lifecycle) so a
+// consumer repo's managed hooks self-repair without a manual step. Dependency-free
+// CommonJS by design — Node execs a \`.cjs\` via plain \`node\`, no build step. ALL
+// logic is in Node, NEVER a shell (the Windows quoting class, mmnto-ai/totem#2351).
+//
+// CLI resolution note: @mmnto/cli's \`exports\` map declares only an \`import\` condition
+// and no \`./package.json\` subpath, so \`require.resolve\` (both the package and its
+// package.json) throws ERR_PACKAGE_PATH_NOT_EXPORTED from this CommonJS file. The
+// working alternative is a manual node_modules walk that reads package.json off disk.
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+// Walk up from each start dir looking for node_modules/@mmnto/cli/package.json.
+// Bypasses the exports gate that blocks require.resolve from a CommonJS wrapper.
+function findCliPackageJson(startDirs) {
+  for (const start of startDirs) {
+    if (typeof start !== 'string' || start.length === 0) continue;
+    let dir = start;
+    while (true) {
+      const candidate = path.join(dir, 'node_modules', '@mmnto', 'cli', 'package.json');
+      if (fs.existsSync(candidate)) return candidate;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  return null;
+}
+
+const pkgJsonPath = findCliPackageJson([__dirname, process.cwd()]);
+if (pkgJsonPath === null) {
+  // Declared skip (strategy#630 class): the CLI is not a dependency here, so there
+  // is nothing to install — exit 0 so \`prepare\` (and thus \`pnpm install\`) succeeds.
+  process.stderr.write(
+    '[totem prepare] @mmnto/cli is not installed — skipping hook install ' +
+      '(managed hooks will be set up once the CLI is a dependency).\\n',
+  );
+  process.exit(0);
+}
+
+// Read the bin entry off the resolved manifest and resolve it to an absolute path.
+let binJs;
+try {
+  const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+  const bin = pkg && pkg.bin;
+  let binRel = null;
+  if (typeof bin === 'string') {
+    binRel = bin;
+  } else if (bin && typeof bin === 'object') {
+    binRel = bin.totem || bin[Object.keys(bin)[0]] || null;
+  }
+  if (typeof binRel !== 'string' || binRel.length === 0) {
+    process.stderr.write(
+      '[totem prepare] @mmnto/cli is installed but declares no usable bin — ' +
+        'cannot run hook install. Reinstall @mmnto/cli.\\n',
+    );
+    process.exit(1);
+  }
+  binJs = path.resolve(path.dirname(pkgJsonPath), binRel);
+} catch (err) {
+  process.stderr.write(
+    '[totem prepare] could not read @mmnto/cli package.json: ' +
+      (err && err.message ? err.message : String(err)) +
+      '\\n',
+  );
+  process.exit(1);
+}
+
+// Spawn \`node <bin> hook install\` — never a shell (the Windows quoting class).
+const child = spawnSync(process.execPath, [binJs, 'hook', 'install'], { stdio: 'inherit' });
+if (child.error) {
+  process.stderr.write(
+    '[totem prepare] failed to spawn totem hook install: ' +
+      (child.error.message || String(child.error)) +
+      '\\n',
+  );
+  process.exit(1);
+}
+// Propagate the child's exit code verbatim: a genuine hook-install failure fails
+// prepare loud; the CLI's own declared skips already exit 0.
+process.exit(child.status == null ? 1 : child.status);
+${TOTEM_FILE_END}
+`;
+
 // ─── Managed session-hook regeneration roster (mmnto-ai/totem#2410 PR-A) ───
 //
 // The whole-file, marker-headed `.cjs` / `.js` hook artifacts that `totem init`
@@ -832,6 +952,16 @@ export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
   {
     rel: '.gemini/hooks/BeforeTool.js',
     content: GEMINI_BEFORE_TOOL,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+  {
+    // The init-distributed prepare wrapper (mmnto-ai/totem#2410 PR-B). A roster member
+    // so `totem hook install` drift-repairs it for adopters (init creates it; this verb
+    // regenerates-if-present). Not a session hook per se, but the same bounded-ownership
+    // whole-file semantics apply.
+    rel: PREPARE_SCRIPT_REL,
+    content: PREPARE_WRAPPER,
     marker: TOTEM_FILE_MARKER,
     endMarker: TOTEM_FILE_END,
   },

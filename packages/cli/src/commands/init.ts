@@ -33,6 +33,9 @@ import {
   isBoundedOwnedFile,
   LEGACY_SENTINEL,
   markerOpensFile,
+  PREPARE_SCRIPT_COMMAND,
+  PREPARE_SCRIPT_REL,
+  PREPARE_WRAPPER,
   REFLEX_END,
   REFLEX_START,
   REFLEX_VERSION,
@@ -160,6 +163,83 @@ export function scaffoldFile(
     const message = err instanceof Error ? err.message : String(err);
     return { action: 'skipped', err: `[Totem Error] ${message}` };
   }
+}
+
+/**
+ * Wire a consumer `package.json`'s `prepare` script to the init-distributed prepare
+ * wrapper (mmnto-ai/totem#2410 PR-B). User-owned content is never overwritten (Prop 289):
+ *
+ *   - No `prepare` script            → set `"prepare": "node .totem/prepare.cjs"` (`wired`).
+ *   - `prepare` already exactly that → `exists` (no write; the file is left byte-identical).
+ *   - A DIFFERENT existing `prepare` (or a non-string value) → `declined` (NO write, byte-
+ *     identical): the caller prints the canonical line to add manually.
+ *   - No `package.json`              → `missing` (nothing to wire).
+ *   - Unreadable / invalid JSON      → `unparseable` (surfaced, never a crash).
+ *
+ * On the `wired` path the file is rewritten with 2-space JSON + a trailing newline
+ * (mirrors `scaffoldMcpConfig`, the repo's package.json-edit precedent); existing keys
+ * keep their order and `prepare` is appended within `scripts` (stable key order).
+ */
+export function wirePreparePackageJson(pkgPath: string): {
+  action: 'wired' | 'exists' | 'declined' | 'missing' | 'unparseable';
+  /** The different existing `prepare` value, for the decline notice (present only when a string). */
+  existing?: string;
+  err?: string;
+} {
+  if (!fs.existsSync(pkgPath)) {
+    return { action: 'missing' };
+  }
+
+  let raw: string;
+  try {
+    raw = fs.readFileSync(pkgPath, 'utf-8');
+    // totem-context: intentional cleanup — surface a read failure as a returned result (the `err` field the caller logs), never a silent swallow; the established scaffoldMcpConfig IO posture.
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'unparseable', err: `Could not read ${path.basename(pkgPath)}: ${message}` };
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+    // totem-context: intentional cleanup — surface invalid package.json as a returned result (`err`), the established scaffoldMcpConfig parse posture; init logs it and declines rather than crashing.
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      action: 'unparseable',
+      err: `Could not parse ${path.basename(pkgPath)} (invalid JSON): ${message}`,
+    };
+  }
+
+  const scriptsRaw = parsed.scripts;
+  const scripts =
+    scriptsRaw !== undefined && typeof scriptsRaw === 'object' && !Array.isArray(scriptsRaw)
+      ? (scriptsRaw as Record<string, unknown>)
+      : undefined;
+  const existingPrepare = scripts ? scripts.prepare : undefined;
+
+  if (existingPrepare !== undefined) {
+    if (typeof existingPrepare === 'string' && existingPrepare.trim() === PREPARE_SCRIPT_COMMAND) {
+      return { action: 'exists' };
+    }
+    // A different `prepare` (or a non-string value) is user-owned — never overwrite it.
+    return {
+      action: 'declined',
+      ...(typeof existingPrepare === 'string' ? { existing: existingPrepare } : {}),
+    };
+  }
+
+  // No `prepare` script — set it, appending `prepare` at the end of `scripts` (or
+  // creating `scripts` at the end of the object) so existing key order is preserved.
+  parsed.scripts = { ...(scripts ?? {}), prepare: PREPARE_SCRIPT_COMMAND };
+  try {
+    fs.writeFileSync(pkgPath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    // totem-context: intentional cleanup — surface a write failure as a returned result (`err`) for the caller to log, never a silent swallow; the established scaffoldMcpConfig IO posture.
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'unparseable', err: `Could not write ${path.basename(pkgPath)}: ${message}` };
+  }
+  return { action: 'wired' };
 }
 
 // --- Gemini CLI hook installer ---
@@ -1295,6 +1375,48 @@ export default {
           }
         }
       }
+
+      // --- Always run: init-distributed prepare wrapper (mmnto-ai/totem#2410 PR-B) ---
+      // Scaffold .totem/prepare.cjs (managed, marker + end-marker bounded — a roster
+      // member so `totem hook install` drift-repairs it) and wire the consumer's
+      // package.json `prepare` to invoke it, so every `pnpm install` self-repairs the
+      // managed hooks. A DIFFERENT existing `prepare` is never overwritten (Prop 289):
+      // init declines and prints the canonical line to add manually.
+      const preparePath = path.join(cwd, ...PREPARE_SCRIPT_REL.split('/'));
+      const prepareScaffold = scaffoldFile(
+        preparePath,
+        PREPARE_WRAPPER,
+        TOTEM_FILE_MARKER,
+        TOTEM_FILE_END,
+      );
+      if (prepareScaffold.err) {
+        log.error('Totem Error', `Prepare wrapper scaffolding failed: ${prepareScaffold.err}`); // totem-ignore — internal scaffold error, not LLM output
+      } else if (prepareScaffold.action === 'created') {
+        summary.push({
+          file: PREPARE_SCRIPT_REL,
+          action: 'Scaffolded init-distributed prepare wrapper',
+        });
+      } else if (prepareScaffold.action === 'refreshed') {
+        summary.push({ file: PREPARE_SCRIPT_REL, action: 'Drift-repaired prepare wrapper' });
+      }
+
+      const prepareWiring = wirePreparePackageJson(path.join(cwd, 'package.json'));
+      if (prepareWiring.action === 'wired') {
+        summary.push({
+          file: 'package.json',
+          action: `Wired \`prepare\` → ${PREPARE_SCRIPT_COMMAND}`,
+        });
+      } else if (prepareWiring.action === 'declined') {
+        log.warn(
+          'Totem',
+          `package.json already defines a different \`prepare\` script — leaving it unchanged. ` +
+            `To run the Totem hook installer on install, add "prepare": "${PREPARE_SCRIPT_COMMAND}" ` +
+            `(or chain it into your existing prepare script).`,
+        );
+      } else if (prepareWiring.action === 'unparseable' && prepareWiring.err) {
+        log.warn('Totem', prepareWiring.err);
+      }
+      // 'exists' (already canonical) and 'missing' (no package.json) are silent no-ops.
 
       // --- Always run: enforcement hooks (pre-commit + pre-push) ---
       const hookTier = options?.strict ? 'strict' : undefined;

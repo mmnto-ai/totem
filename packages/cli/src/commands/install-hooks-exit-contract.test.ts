@@ -61,7 +61,7 @@ describe('MANAGED_SESSION_HOOKS roster invariant', () => {
     }
   });
 
-  it('covers the five distributed session-hook artifacts', () => {
+  it('covers the six distributed managed artifacts (incl. the PR-B prepare wrapper)', () => {
     const rels = MANAGED_SESSION_HOOKS.map((h) => h.rel).sort();
     expect(rels).toEqual(
       [
@@ -70,6 +70,7 @@ describe('MANAGED_SESSION_HOOKS roster invariant', () => {
         '.claude/hooks/gate-wrapper.cjs',
         '.gemini/hooks/BeforeTool.js',
         '.gemini/hooks/SessionStart.js',
+        '.totem/prepare.cjs',
       ].sort(),
     );
   });

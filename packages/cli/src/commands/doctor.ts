@@ -160,6 +160,130 @@ export function checkGitHooks(cwd: string): DiagnosticResult {
   };
 }
 
+/**
+ * Sense the init-distributed prepare wrapper (mmnto-ai/totem#2410 PR-B): whether
+ * `.totem/prepare.cjs` is present + marker-headed + canonical AND the consumer's
+ * `package.json` `prepare` invokes it. A SENSOR, never a gate — every non-pass state
+ * is `warn`/`skip` (doctor `--strict` gates only on `fail`), so this can never block CI.
+ *
+ * Remedies follow the PR-A/PR-B semantics:
+ *   - absent / wired-but-file-missing → `totem init` (adoption / scaffolding).
+ *   - present, marker-headed, but DRIFTED from canonical → `totem hook install`
+ *     (bare — the wrapper is a bounded roster member, so bare self-repair suffices).
+ *   - present + canonical but `prepare` not wired → `totem init`.
+ *
+ * Honest-absent (Tenet 14), so it stays quiet where absence is legitimate:
+ *   - no `package.json` → `skip`.
+ *   - wrapper absent AND a DIFFERENT user-managed `prepare` exists (the owner-repo
+ *     exception — totem itself runs `tools/install-hooks.js`) → `skip`, never a nudge.
+ *   - a user-owned `.totem/prepare.cjs` with no totem marker → `skip` (left as-is).
+ */
+export async function checkPrepareWrapper(cwd: string): Promise<DiagnosticResult> {
+  const name = 'Prepare Wrapper';
+  const {
+    PREPARE_WRAPPER,
+    PREPARE_SCRIPT_REL,
+    PREPARE_SCRIPT_COMMAND,
+    TOTEM_FILE_MARKER,
+    markerOpensFile,
+  } = await import('./init-templates.js');
+
+  const wrapperPath = path.join(cwd, ...PREPARE_SCRIPT_REL.split('/'));
+  const pkgPath = path.join(cwd, 'package.json');
+
+  // Read the package.json `prepare` state (best-effort — an unreadable/invalid
+  // manifest is honest-absent for wiring, not a crash).
+  const hasPkg = fs.existsSync(pkgPath);
+  let prepareValue: unknown;
+  if (hasPkg) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as {
+        scripts?: Record<string, unknown>;
+      };
+      prepareValue = parsed.scripts?.prepare;
+      // totem-context: intentional cleanup — best-effort sensor read; a doctor check degrades honestly (Tenet 13, unreadable/invalid package.json → treated as unwired) rather than crashing the diagnostic pipeline, mirroring checkGitHooks / readConfigFile.
+    } catch {
+      prepareValue = undefined;
+    }
+  }
+  const wiredCanonical =
+    typeof prepareValue === 'string' && prepareValue.trim() === PREPARE_SCRIPT_COMMAND;
+  const prepareDifferent = prepareValue !== undefined && !wiredCanonical;
+
+  // Wrapper file state.
+  const wrapperPresent = fs.existsSync(wrapperPath);
+  let wrapperContent: string | undefined;
+  if (wrapperPresent) {
+    try {
+      wrapperContent = fs.readFileSync(wrapperPath, 'utf-8');
+      // totem-context: intentional cleanup — best-effort sensor read; an unreadable wrapper file degrades the doctor check honestly (Tenet 13) rather than crashing the diagnostic pipeline, mirroring checkGitHooks.
+    } catch {
+      wrapperContent = undefined;
+    }
+  }
+  const wrapperMarkerHeaded =
+    wrapperContent !== undefined && markerOpensFile(wrapperContent, TOTEM_FILE_MARKER);
+
+  // ── absent wrapper ──
+  if (!wrapperPresent) {
+    if (!hasPkg) {
+      return { name, status: 'skip', message: 'no package.json — nothing to wire' };
+    }
+    if (wiredCanonical) {
+      return {
+        name,
+        status: 'warn',
+        message: `package.json \`prepare\` points at ${PREPARE_SCRIPT_REL} but the wrapper file is missing`,
+        remediation: 'totem init',
+      };
+    }
+    if (prepareDifferent) {
+      // Owner-repo exception / user-managed prepare — absence is legitimate here.
+      return {
+        name,
+        status: 'skip',
+        message: 'prepare is a user-managed script (not the Totem wrapper) — left as-is',
+      };
+    }
+    return {
+      name,
+      status: 'warn',
+      message: 'init-distributed prepare wrapper not installed',
+      remediation: 'totem init',
+    };
+  }
+
+  // ── present wrapper ──
+  if (!wrapperMarkerHeaded) {
+    return {
+      name,
+      status: 'skip',
+      message: `user-owned ${PREPARE_SCRIPT_REL} (no Totem marker) — left as-is`,
+    };
+  }
+  if (wrapperContent !== PREPARE_WRAPPER) {
+    return {
+      name,
+      status: 'warn',
+      message: `${PREPARE_SCRIPT_REL} has drifted from canonical`,
+      remediation: 'totem hook install',
+    };
+  }
+  if (!wiredCanonical) {
+    return {
+      name,
+      status: 'warn',
+      message: `prepare wrapper present but package.json \`prepare\` is not wired to \`${PREPARE_SCRIPT_COMMAND}\``,
+      remediation: 'totem init',
+    };
+  }
+  return {
+    name,
+    status: 'pass',
+    message: `installed and wired (\`prepare\` → ${PREPARE_SCRIPT_COMMAND})`,
+  };
+}
+
 /** Check if a config file content has an embedding provider configured. */
 function hasEmbeddingProvider(content: string): boolean {
   return /provider:\s*['"]?(openai|gemini|ollama)['"]?/.test(content);
@@ -1789,6 +1913,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkConfig(cwd),
     checkCompiledRules(cwd),
     checkGitHooks(cwd),
+    await checkPrepareWrapper(cwd),
     checkEmbeddingConfig(cwd),
     await checkOllama(loadedConfig),
     checkIndex(cwd),
