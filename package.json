@@ -35,6 +35,6 @@
     "typescript-eslint": "^8.59.4"
   },
   "optionalDependencies": {
-    "@mmnto/strategy-doctrine": "0.1.19"
+    "@mmnto/strategy-doctrine": "0.1.20"
   }
 }
