@@ -1093,9 +1093,11 @@ export function hashManagedBlock(normalized: string): string {
 
 /** Format a fork marker's attested/owner attributes as a message suffix. */
 function formatForkMeta(fork: ForkMarker): string {
+  // attested/owner are repository content: strip ANSI/control sequences so a
+  // hostile marker cannot spoof terminal output (CR round 2, mmnto-ai/totem#2400).
   return (
-    (fork.attested !== undefined ? `, attested ${fork.attested}` : '') +
-    (fork.owner !== undefined ? `, owner ${fork.owner}` : '')
+    (fork.attested !== undefined ? `, attested ${sanitize(fork.attested)}` : '') +
+    (fork.owner !== undefined ? `, owner ${sanitize(fork.owner)}` : '')
   );
 }
 

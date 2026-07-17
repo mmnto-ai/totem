@@ -924,6 +924,21 @@ describe('detectMechanicalContract', () => {
     expect(v.message).toContain('2026-06-03');
   });
 
+  it('intentional-fork message strips ANSI/control sequences from repo-provided owner/attested (mmnto-ai/totem#2403)', () => {
+    const ESC = String.fromCharCode(27);
+    const consumerPath = writeArtifact(
+      '.claude/skills/x/SKILL.md',
+      skillFile('DRIFTED BODY', {
+        fork: `<!-- totem:fork reason="x" owner="${ESC}[31msatur8d" attested="2026${ESC}[0m-06-03" -->`,
+      }),
+    );
+    const v = detectMechanicalContract(mechCtx({ consumerPath }));
+    expect(v.status).toBe('info');
+    expect(v.message).not.toContain(ESC);
+    expect(v.message).toContain('owner satur8d');
+    expect(v.message).toContain('attested 2026-06-03');
+  });
+
   it('pass — a fork marker present but content actually matching is still pass (no false fork)', () => {
     const consumerPath = writeArtifact(
       '.claude/skills/x/SKILL.md',
