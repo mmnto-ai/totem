@@ -11,7 +11,7 @@ import { ejectCommand } from './eject.js';
 import { gateInstallCommand, resolveGateEvents } from './gate.js';
 import { commandInstallsGate, GATE_WRAPPER_REL, installGates } from './gate-install.js';
 import { initCommand } from './init.js';
-import { CLAUDE_GATE_WRAPPER } from './init-templates.js';
+import { CLAUDE_GATE_WRAPPER, TOTEM_FILE_END, TOTEM_FILE_MARKER } from './init-templates.js';
 
 /**
  * CLI-seam tests for `totem gate install` + the parameterized gate wrapper
@@ -94,6 +94,20 @@ describe('installGates / gate install (settings merge)', () => {
     // wrapper scaffold + one entry merge
     expect(results.some((r) => r.file === GATE_WRAPPER_REL && r.action === 'created')).toBe(true);
     expect(fs.existsSync(path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs'))).toBe(true);
+    expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
+  });
+
+  it('drift-repairs a bounded stale gate-wrapper during install (refreshed → merged, mmnto-ai/totem#2413)', () => {
+    // Plant a bounded-but-stale wrapper: marker opens it, end marker present, body drifted.
+    const wrapperPath = path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs');
+    fs.mkdirSync(path.dirname(wrapperPath), { recursive: true });
+    fs.writeFileSync(wrapperPath, `${TOTEM_FILE_MARKER}\nstale\n${TOTEM_FILE_END}\n`, 'utf-8');
+
+    const results = installGates(cwd, ['freeze-check']);
+    // gate install now threads the end marker, so scaffoldFile drift-repairs the bounded
+    // wrapper (`refreshed`) and gate-install maps that to `merged` (a write happened).
+    expect(results.find((r) => r.file === GATE_WRAPPER_REL)!.action).toBe('merged');
+    expect(fs.readFileSync(wrapperPath, 'utf-8')).toBe(CLAUDE_GATE_WRAPPER);
     expect(gateEntryCount(cwd, 'freeze-check')).toBe(1);
   });
 

@@ -218,6 +218,21 @@ describe('scaffoldFile', () => {
     expect(fs.readFileSync(filePath, 'utf-8')).toContain('user custom hook');
   });
 
+  it('skips a user file that merely QUOTES the marker (marker not at start), never exists', () => {
+    // Positional ownership gate (mmnto-ai/totem#2413): a user-owned file that quotes
+    // the marker string in its body is NOT marker-headed → `skipped` (not `exists`),
+    // and never written (even with an end marker threaded, i.e. via `--force` callers).
+    const filePath = path.join(tmpDir, 'hook.js');
+    const quotesMarker = `// user hook\n// see: ${MARKER}\nconsole.log("mine");\n`;
+    fs.writeFileSync(filePath, quotesMarker, 'utf-8');
+
+    expect(scaffoldFile(filePath, CONTENT, MARKER, '// [totem] end auto-generated')).toEqual({
+      action: 'skipped',
+    });
+    // Byte-untouched.
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(quotesMarker);
+  });
+
   it('is idempotent — double invoke produces same result', () => {
     const filePath = path.join(tmpDir, 'hook.js');
 

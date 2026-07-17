@@ -5,6 +5,7 @@ import { scaffoldFile } from './init.js';
 import {
   CLAUDE_GATE_WRAPPER,
   CLAUDE_GATE_WRAPPER_ENTRY,
+  TOTEM_FILE_END,
   TOTEM_FILE_MARKER,
 } from './init-templates.js';
 
@@ -134,10 +135,25 @@ export function installGates(
   //    GateInstallResult.action stays within created|merged|skipped (both mean
   //    "no write happened, no change") — see GateInstallResult below.
   const wrapperPath = path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs');
-  const wrapperResult = scaffoldFile(wrapperPath, CLAUDE_GATE_WRAPPER, TOTEM_FILE_MARKER);
+  // Thread the end marker (mmnto-ai/totem#2413) so a bounded drifted gate-wrapper is
+  // actually drift-repaired (`refreshed`) during gate install, not left stale.
+  const wrapperResult = scaffoldFile(
+    wrapperPath,
+    CLAUDE_GATE_WRAPPER,
+    TOTEM_FILE_MARKER,
+    TOTEM_FILE_END,
+  );
   results.push({
     file: GATE_WRAPPER_REL,
-    action: wrapperResult.action === 'exists' ? 'skipped' : wrapperResult.action,
+    // `exists` normalizes to `skipped` (no write, no change); a `refreshed`
+    // bounded drift-repair (scaffoldFile's bounded-repair action, mmnto-ai/totem#2410)
+    // maps to `merged` (a write happened). `created` passes through.
+    action:
+      wrapperResult.action === 'exists'
+        ? 'skipped'
+        : wrapperResult.action === 'refreshed'
+          ? 'merged'
+          : wrapperResult.action,
     err: wrapperResult.err,
   });
 

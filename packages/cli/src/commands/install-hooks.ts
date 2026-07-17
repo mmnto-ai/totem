@@ -817,7 +817,7 @@ export async function hooksCommand(opts: {
     if (ok) {
       console.error('[Totem] All hooks installed.');
     } else {
-      console.error('[Totem] Some hooks are missing. Run `totem hooks` to install.');
+      console.error('[Totem] Some hooks are missing. Run `totem hook install` to install.');
       process.exit(1);
     }
     return;
@@ -850,36 +850,180 @@ export async function hooksCommand(opts: {
 
   const result = installHooksNonInteractive(cwd, opts.force, { tier });
 
-  if (!result) {
-    // Hook manager detected — guidance already printed by installHooksNonInteractive
-    return;
+  // The git-hook summary prints ONLY when git hooks were actually written. A null
+  // result means a hook manager (husky/lefthook) was detected and
+  // installHooksNonInteractive already printed its guidance — but this MUST NOT
+  // early-return: the managed session hooks below are Claude/Gemini artifacts,
+  // independent of any git-hook manager, and must still be regenerated (a
+  // hook-manager repo otherwise recreates the lc#806 stale-session-hook class).
+  if (result) {
+    const actions = [
+      { name: 'pre-commit', status: result.preCommit },
+      { name: 'pre-push', status: result.prePush },
+      { name: 'post-merge', status: result.postMerge },
+      { name: 'post-checkout', status: result.postCheckout },
+    ];
+
+    for (const { name, status } of actions) {
+      switch (status) {
+        case 'installed':
+          console.error(`[Totem] Installed ${name} hook.`);
+          break;
+        case 'appended':
+          console.error(`[Totem] Appended Totem to existing ${name} hook.`);
+          break;
+        case 'exists':
+          console.error(`[Totem] ${name} hook already installed.`);
+          break;
+        case 'overwritten':
+          // `installGitHook` returns `overwritten` for BOTH a forced overwrite and a
+          // bare (no-force) drift-repair of a totem-owned bounded region. Print the
+          // truthful cause: "Force-overwritten" ONLY when --force was actually passed,
+          // "Drift-repaired" for the bare bounded self-repair (mmnto-ai/totem#2410 —
+          // fixes the misleading always-"Force-overwritten" message).
+          console.error(
+            opts.force
+              ? `[Totem] Force-overwritten ${name} hook.`
+              : `[Totem] Drift-repaired ${name} hook (totem-owned bounded region).`,
+          );
+          break;
+        case 'skipped-non-shell':
+          console.error(
+            `[Totem] Warning: ${name} hook uses a non-shell interpreter. Integrate manually.`,
+          );
+          break;
+      }
+    }
   }
 
-  const actions = [
-    { name: 'pre-commit', status: result.preCommit },
-    { name: 'pre-push', status: result.prePush },
-    { name: 'post-merge', status: result.postMerge },
-    { name: 'post-checkout', status: result.postCheckout },
-  ];
+  // ── Managed session-hook regeneration (mmnto-ai/totem#2410 PR-A slice 3) ──
+  // Runs on BOTH the manager and no-manager paths (the `if (result)` above only
+  // gates the git-hook summary): the `.claude/hooks/*.cjs` and `.gemini/hooks/*.js`
+  // artifacts are Claude/Gemini hooks, not git hooks, so they are regenerated
+  // whether or not a git-hook manager (husky/lefthook) is in play. The `--check`
+  // and not-a-git-repo paths already returned above, so this never fires for the
+  // read-only verify or the honest-skip. Regenerate-only-if-present: creation stays
+  // with `totem init`; this verb repairs drift in artifacts the repo already adopted.
+  await printManagedSessionHookSummary(gitRoot, opts.force);
+}
 
-  for (const { name, status } of actions) {
-    switch (status) {
-      case 'installed':
-        console.error(`[Totem] Installed ${name} hook.`);
-        break;
-      case 'appended':
-        console.error(`[Totem] Appended Totem to existing ${name} hook.`);
-        break;
+// ─── Managed session-hook regeneration (mmnto-ai/totem#2410 PR-A) ─────
+
+/**
+ * The action taken on one managed session-hook artifact by
+ * {@link regenerateManagedSessionHooks}:
+ *   - `exists`      — present, marker-headed, already byte-identical to canonical (no write).
+ *   - `overwritten` — regenerated: a bare bounded drift-repair OR a `--force` overwrite.
+ *   - `declined`    — marker present but the region is NOT bounded-owned (legacy file
+ *                     with no end marker, or user content after the end marker) and no
+ *                     `--force`: left untouched, takes one `totem hook install --force`.
+ *   - `skipped`     — a user-owned file carrying NO totem marker at all: never touched,
+ *                     not even under `--force`.
+ */
+export type ManagedSessionHookAction = 'exists' | 'overwritten' | 'declined' | 'skipped';
+
+export interface ManagedSessionHookResult {
+  /** Repo-relative path of the artifact. */
+  file: string;
+  action: ManagedSessionHookAction;
+}
+
+/**
+ * Walk the {@link MANAGED_SESSION_HOOKS} roster and regenerate the whole-file
+ * session-hook artifacts (`.claude/hooks/*.cjs`, `.gemini/hooks/*.js`) that EXIST
+ * under `cwd`, applying the #2406 bounded-ownership semantics generalized to the
+ * JS/CJS hook family:
+ *
+ *   - Missing file            → not created (creation is `totem init`'s job); omitted
+ *                               from the results entirely.
+ *   - Marker + identical      → `exists` (already current).
+ *   - Marker + drifted, bounded totem-owned whole file → bare drift-repair
+ *                               (`overwritten`), or `--force` → `overwritten`.
+ *   - Marker + drifted, unbounded (legacy no-end-marker / trailing user content):
+ *                               bare → `declined`; `--force` → `overwritten`.
+ *   - Marker does not OPEN the file (no marker, or a merely-quoted marker) →
+ *                               `skipped` even under `--force` (never clobber a
+ *                               user-owned file).
+ *
+ * Regenerate-only-if-present, single-writer per invocation. A write failure
+ * (perms/FS) PROPAGATES (Tenet 4 — a hook the tool cannot write must fail loud,
+ * never silently report success), mirroring `installGitHook`.
+ */
+export async function regenerateManagedSessionHooks(
+  cwd: string,
+  force?: boolean,
+): Promise<ManagedSessionHookResult[]> {
+  // Dynamic-import the roster (large canonical template strings) + the shared
+  // ownership helpers so init-templates stays off the CLI cold-start graph
+  // (packages/cli lazy-load guideline; mirrors doctor-parity.ts's own import).
+  // `isBoundedOwnedFile` is the single shared session-hook ownership checker
+  // (mmnto-ai/totem#2413 — was a divergent twin of init's local copy).
+  const { MANAGED_SESSION_HOOKS, isBoundedOwnedFile, markerOpensFile } =
+    await import('./init-templates.js');
+
+  const results: ManagedSessionHookResult[] = [];
+  for (const { rel, content, marker, endMarker } of MANAGED_SESSION_HOOKS) {
+    const filePath = path.join(cwd, ...rel.split('/'));
+    if (!fs.existsSync(filePath)) {
+      // Regenerate-only-if-present: never create a session hook the repo opted out of.
+      continue;
+    }
+    const existing = fs.readFileSync(filePath, 'utf-8');
+
+    // Positional ownership gate (mmnto-ai/totem#2413): the marker must OPEN the file.
+    // A user-owned file with NO marker — or one that merely QUOTES the marker string in
+    // a comment/string — is never touched, not even under --force. (The old
+    // `includes(marker)` gate let a quoting user file be clobbered by --force, breaking
+    // the "no marker → never touched, even forced" contract.)
+    if (!markerOpensFile(existing, marker)) {
+      results.push({ file: rel, action: 'skipped' });
+      continue;
+    }
+
+    if (existing === content) {
+      results.push({ file: rel, action: 'exists' });
+      continue;
+    }
+
+    // Content differs. --force overwrites any marker-headed file (bounded or not);
+    // a bare run repairs only a bounded totem-OWNED whole file, and declines the rest.
+    if (force || isBoundedOwnedFile(existing, marker, endMarker)) {
+      fs.writeFileSync(filePath, content, 'utf-8');
+      results.push({ file: rel, action: 'overwritten' });
+    } else {
+      results.push({ file: rel, action: 'declined' });
+    }
+  }
+  return results;
+}
+
+/**
+ * Regenerate the managed session hooks and print one summary line per artifact,
+ * mirroring the git-hook summary. The `overwritten` line distinguishes a forced
+ * overwrite from a bare bounded drift-repair (same truthful split the git-hook
+ * summary uses).
+ */
+async function printManagedSessionHookSummary(cwd: string, force?: boolean): Promise<void> {
+  const results = await regenerateManagedSessionHooks(cwd, force);
+  for (const { file, action } of results) {
+    switch (action) {
       case 'exists':
-        console.error(`[Totem] ${name} hook already installed.`);
+        console.error(`[Totem] ${file} session hook already current.`);
         break;
       case 'overwritten':
-        console.error(`[Totem] Force-overwritten ${name} hook.`);
-        break;
-      case 'skipped-non-shell':
         console.error(
-          `[Totem] Warning: ${name} hook uses a non-shell interpreter. Integrate manually.`,
+          force
+            ? `[Totem] Force-overwritten ${file} session hook.`
+            : `[Totem] Drift-repaired ${file} session hook (totem-owned bounded region).`,
         );
+        break;
+      case 'declined':
+        console.error(
+          `[Totem] ${file} session hook has drifted but is not a bounded totem-owned region — run \`totem hook install --force\` to regenerate.`,
+        );
+        break;
+      case 'skipped':
+        console.error(`[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`);
         break;
     }
   }

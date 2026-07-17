@@ -30,13 +30,16 @@ import {
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
+  isBoundedOwnedFile,
   LEGACY_SENTINEL,
+  markerOpensFile,
   REFLEX_END,
   REFLEX_START,
   REFLEX_VERSION,
   REFLEX_VERSION_RE,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
+  TOTEM_FILE_END,
   TOTEM_FILE_MARKER,
 } from './init-templates.js';
 
@@ -89,18 +92,58 @@ export async function probeOllamaFloor(): Promise<{
 }
 
 /**
- * Scaffold a file with idempotency — skips if the marker is already present.
- * Creates parent directories as needed.
+ * Scaffold a file with idempotency — skips any file the totem `marker` does NOT
+ * OPEN (a user-owned file, or one that merely QUOTES the marker in its body — the
+ * positional ownership gate shared with `regenerateManagedSessionHooks`,
+ * mmnto-ai/totem#2413). When the caller threads an `endMarker`, a marker-headed
+ * whole file that is a bounded totem-owned region (marker opens it, end marker
+ * present, nothing after) and whose content has DRIFTED from canonical is repaired
+ * in place (`refreshed`) — the #2406 git-hook bounded drift-repair, generalized to
+ * the session-hook family (mmnto-ai/totem#2410, the lc#806 stale-SessionStart fix).
+ * A marker-headed file that is NOT bounded (legacy template with no end marker, or
+ * user content after the end marker) keeps the pre-#2410 `exists` behavior and emits
+ * a one-line notice. Creates parent directories as needed.
  */
 export function scaffoldFile(
   filePath: string,
   content: string,
   marker: string = TOTEM_FILE_MARKER,
-): { action: 'created' | 'exists' | 'skipped'; err?: string } {
+  endMarker?: string,
+): { action: 'created' | 'exists' | 'skipped' | 'refreshed'; err?: string } {
   try {
     if (fs.existsSync(filePath)) {
       const existing = fs.readFileSync(filePath, 'utf-8');
-      if (existing.includes(marker)) {
+      // Positional ownership gate (mmnto-ai/totem#2413): the marker must OPEN the file.
+      // A file that merely quotes the marker string is user-owned → `skipped`, never
+      // written (harmonized with regenerateManagedSessionHooks; both non-destructive).
+      if (markerOpensFile(existing, marker)) {
+        if (existing === content) {
+          return { action: 'exists' };
+        }
+        // Content drifted. Bounded drift-repair only when the caller threaded an end
+        // marker AND the on-disk file is a bounded totem-owned whole file.
+        if (endMarker !== undefined && isBoundedOwnedFile(existing, marker, endMarker)) {
+          fs.writeFileSync(filePath, content, 'utf-8');
+          return { action: 'refreshed' };
+        }
+        // Marker opens the file but we are not refreshing it. Two distinct causes,
+        // two distinct notices (mmnto-ai/totem#2413 accuracy fix — the old message
+        // asserted "unbounded" even when the caller simply withheld the end marker):
+        if (endMarker === undefined) {
+          // This caller did not request a bounded refresh (e.g. the Gemini skill,
+          // which is marker-block replace territory, not whole-file regeneration).
+          console.error(
+            `[Totem] ${path.basename(filePath)} differs from canonical, but this installer does not manage its whole-file refresh — run \`totem hook install --force\` to regenerate a managed hook.`,
+          );
+        } else {
+          // The caller threaded an end marker but the on-disk region is genuinely
+          // unbounded (legacy no-end-marker file, or user content after the end
+          // marker). The regenerated (post-force) artifact carries the end marker, so
+          // subsequent bare self-repair works.
+          console.error(
+            `[Totem] ${path.basename(filePath)} has drifted but is not a bounded totem-owned region — run \`totem hook install --force\` to regenerate.`,
+          );
+        }
         return { action: 'exists' };
       }
       return { action: 'skipped' };
@@ -123,13 +166,22 @@ export function scaffoldFile(
 
 async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
   const results: HookInstallerResult[] = [];
-  const files: Array<{ rel: string; content: string; marker: string }> = [
+  // The two whole-file hooks carry the managed end marker (mmnto-ai/totem#2410) so a
+  // drifted-but-bounded artifact self-repairs on re-init; the skill is marker-block
+  // replace territory (no end marker threaded here).
+  const files: Array<{ rel: string; content: string; marker: string; endMarker?: string }> = [
     {
       rel: '.gemini/hooks/SessionStart.js',
       content: GEMINI_SESSION_START,
       marker: TOTEM_FILE_MARKER,
+      endMarker: TOTEM_FILE_END,
     },
-    { rel: '.gemini/hooks/BeforeTool.js', content: GEMINI_BEFORE_TOOL, marker: TOTEM_FILE_MARKER },
+    {
+      rel: '.gemini/hooks/BeforeTool.js',
+      content: GEMINI_BEFORE_TOOL,
+      marker: TOTEM_FILE_MARKER,
+      endMarker: TOTEM_FILE_END,
+    },
     {
       rel: '.gemini/skills/totem.md',
       content: GEMINI_SKILL,
@@ -137,10 +189,17 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
     },
   ];
 
-  for (const { rel, content, marker } of files) {
+  for (const { rel, content, marker, endMarker } of files) {
     const filePath = path.join(cwd, rel);
-    const result = scaffoldFile(filePath, content, marker);
-    results.push({ file: rel, ...result });
+    const result = scaffoldFile(filePath, content, marker, endMarker);
+    // Map the scaffold action onto HookInstallerResult: a bounded drift-repair
+    // (`refreshed`) surfaces as `merged` (file mutated) for installer summary parity
+    // with scaffoldClaudeSkill's mapping.
+    results.push({
+      file: rel,
+      action: result.action === 'refreshed' ? 'merged' : result.action,
+      ...(result.err ? { err: result.err } : {}),
+    });
   }
 
   return results;
@@ -239,11 +298,19 @@ async function installClaudeHooks(
   const settingsPath = path.join(cwd, '.claude', 'settings.json');
 
   // 1. Scaffold the PreWriteShield hook script (committed to .claude/hooks/).
+  //    Threads the managed end marker (mmnto-ai/totem#2410) so a drifted-but-bounded
+  //    artifact self-repairs on re-init; `refreshed` maps to `merged` (file mutated).
   const preWritePath = path.join(cwd, '.claude', 'hooks', 'PreWriteShield.cjs');
-  const preWriteResult = scaffoldFile(preWritePath, CLAUDE_PREWRITESHIELD, TOTEM_FILE_MARKER);
+  const preWriteResult = scaffoldFile(
+    preWritePath,
+    CLAUDE_PREWRITESHIELD,
+    TOTEM_FILE_MARKER,
+    TOTEM_FILE_END,
+  );
   results.push({
     file: '.claude/hooks/PreWriteShield.cjs',
-    ...preWriteResult,
+    action: preWriteResult.action === 'refreshed' ? 'merged' : preWriteResult.action,
+    ...(preWriteResult.err ? { err: preWriteResult.err } : {}),
   });
 
   // 2. Scaffold the SessionStart hook script (committed to .claude/hooks/).
@@ -253,10 +320,12 @@ async function installClaudeHooks(
     sessionStartPath,
     CLAUDE_SESSION_START,
     TOTEM_FILE_MARKER,
+    TOTEM_FILE_END,
   );
   results.push({
     file: '.claude/hooks/SessionStart.cjs',
-    ...sessionStartResult,
+    action: sessionStartResult.action === 'refreshed' ? 'merged' : sessionStartResult.action,
+    ...(sessionStartResult.err ? { err: sessionStartResult.err } : {}),
   });
 
   // 3. Merge the PreWriteShield PreToolUse entry into committed
