@@ -1,13 +1,30 @@
 #!/bin/sh
-# [totem] post-merge hook — re-indexes Totem in the background after pull/merge.
+# [totem] post-merge hook — background re-index after pull/merge.
 
-echo "[totem] Triggering background re-index..."
+# Resolve totem — prefer the pinned / in-tree build over a volatile ambient global
+# (mmnto-ai/totem#2053). Order: workspace-HEAD > pinned @mmnto/cli > pnpm exec > PATH > dlx.
+if [ -f packages/cli/dist/index.js ] && grep -q '"name": *"@mmnto/cli"' packages/cli/package.json 2>/dev/null; then
+  TOTEM_CMD="node packages/cli/dist/index.js"
+elif [ -f node_modules/@mmnto/cli/dist/index.js ]; then
+  TOTEM_CMD="node node_modules/@mmnto/cli/dist/index.js"
+elif [ -f pnpm-workspace.yaml ] && pnpm exec totem --version >/dev/null 2>&1; then
+  TOTEM_CMD="pnpm exec totem"
+elif command -v totem >/dev/null 2>&1; then
+  TOTEM_CMD="totem"
+elif [ -f package.json ]; then
+  TOTEM_CMD="pnpm dlx @mmnto/cli"
+else
+  echo "[Totem] totem not found in PATH and no package.json present." >&2
+  TOTEM_CMD=""
+fi
 
-# Run totem sync in background. Non-blocking, informational only.
-(
-  if pnpm totem sync > .git/totem-sync.log 2>&1; then
-    echo "[totem] Background re-index complete."
-  else
-    echo "[totem] Warning: background re-index failed. See .git/totem-sync.log for details."
-  fi
-) &
+# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing).
+# The trailing -- terminates the revision list so a ref/path ambiguity can never
+# reinterpret ORIG_HEAD/HEAD as pathspecs.
+if [ -n "$TOTEM_CMD" ] && git diff-tree -r --name-only ORIG_HEAD HEAD -- 2>/dev/null | grep -q '\.totem/lessons/'; then
+  # Resolve the real git dir so the sync-log redirect works in a linked worktree,
+  # where .git is a FILE (gitdir: pointer), not a directory (mmnto-ai/totem#2376).
+  GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)
+  ($TOTEM_CMD sync --incremental --quiet > "$GIT_DIR_RESOLVED/totem-sync.log" 2>&1) &
+fi
+# [totem] end post-merge

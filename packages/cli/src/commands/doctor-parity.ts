@@ -1036,7 +1036,11 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           if (c.id === 'git-hooks') {
             generatedArtifacts = gitHookArtifactsFor(gitRoot, hookTier, fallbackCmd, hookBuilders);
             artifactLabel = 'git hook';
-            installCommand = 'totem hook install';
+            // --force so the remediation actually repairs a stale hook: bare
+            // `totem hook install` only drift-repairs a totem-OWNED whole file, but
+            // --force is the always-correct instruction for any drift class incl. a
+            // user hook with an appended totem block (mmnto-ai/totem#2138).
+            installCommand = 'totem hook install --force';
           } else if (c.id === 'session-start-orientation') {
             generatedArtifacts = sessionStartArtifactsFor(gitRoot, sessionStartTemplates);
             artifactLabel = 'SessionStart hook';
