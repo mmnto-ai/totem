@@ -498,6 +498,41 @@ function capabilityProbesFor(
   }
 }
 
+// ─── Declared-contract registry (CLI-side, Prop 305 §3 agent-bus) ──
+
+/**
+ * One declaration surface a `manifestation: declared` contract maps to: the file
+ * that carries the `<!-- totem:<token> role="…" seat="…" -->` marker plus the
+ * bare marker token to sense it under. Mirrors {@link capabilityProbesFor}: the
+ * CLI owns the wiring (which file, which token per contract-id), core owns the
+ * verdict (`detectDeclaredContract`).
+ */
+interface DeclarationMarkerTarget {
+  filePath: string;
+  markerToken: string;
+}
+
+/**
+ * Resolve the declaration surface a `declared` contract senses, or `undefined`
+ * when this build wires no marker for the row (→ honest-absent stub, mirroring
+ * how `capabilityProbesFor` handles an unknown probe id). Today only `agent-bus`
+ * (Prop 305 §3): its role→seat binding is declared in the repo's own AGENTS.md.
+ */
+function declarationMarkersFor(
+  contractId: string,
+  gitRoot: string,
+): DeclarationMarkerTarget | undefined {
+  switch (contractId) {
+    case 'agent-bus':
+      return {
+        filePath: path.join(gitRoot, 'AGENTS.md'),
+        markerToken: 'totem:agent-bus',
+      };
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Resolve the running `@mmnto/cli`'s version + install path for the req-#5
  * binary self-report (the Stale-Doctor-Paradox guard — surface WHICH binary
@@ -542,6 +577,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   const {
     deriveCohortRepoId,
     detectCapabilityProbeContract,
+    detectDeclaredContract,
     detectGeneratedArtifactContract,
     detectLockContentContract,
     detectManualAttestationContract,
@@ -886,6 +922,40 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           });
           if (blockingDrift) blockingDriftIds.push(c.id);
           return lines;
+        }
+
+        // ── declared routing (Prop 305 §3 agent-bus) ──
+        // Routes on `manifestation` BEFORE the tractability dispatch (like the
+        // other promoted rungs). A declaration SURFACE: the repo authors a
+        // `<!-- totem:<token> role="…" seat="…" -->` marker in its OWN agent
+        // config (AGENTS.md); the detector senses marker PRESENCE only, never
+        // duty execution (adherence-class, Tenet 19 / Prop 305 §3.5). The registry
+        // supplies the file + token; an unwired contract id gets an honest-absent
+        // stub (mirrors capability-probe). NEVER warns on absence — an undeclared
+        // repo is "honest-absent until a repo declares", not drift, so the class
+        // never enters blockingDriftIds (cannot gate even under --strict).
+        if (c.manifestation === 'declared') {
+          // Registry resolution BEFORE the scope guard is meta-only (pure switch,
+          // no read): a scoped-out row still classifies by whether the registry
+          // wires it (mmnto-ai/totem#2327 R2).
+          const target = declarationMarkersFor(c.id, gitRoot);
+          // A declaration-presence probe reads the repo's own config (mmnto-ai/totem#2327 R3): 'present'.
+          readoutMeta[c.id] =
+            target === undefined
+              ? { coverage: 'honest-absent' }
+              : { coverage: 'mechanical', sensesProbed: 'present' };
+          const scopeSkip = consumersSkip(c);
+          if (scopeSkip !== undefined) return scopeSkip;
+          if (target === undefined) {
+            return [
+              stub(c, `${c.dimension} (declared) — no declaration marker wired for this row`),
+            ];
+          }
+          const verdict = detectDeclaredContract({
+            filePath: target.filePath,
+            markerToken: target.markerToken,
+          });
+          return [verdictToLine(c, verdict)];
         }
 
         if (

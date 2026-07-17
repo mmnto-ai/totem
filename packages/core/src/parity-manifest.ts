@@ -89,6 +89,14 @@ export const PARITY_MANIFESTATIONS = [
   'content-hash',
   'attestation',
   'capability-probe',
+  // `declared` (Prop 305 §3 agent-bus): a declaration SURFACE — the repo authors
+  // a `<!-- totem:<token> role="…" seat="…" -->` marker in its agent config; the
+  // detector (`detectDeclaredContract`) senses marker PRESENCE only, never duty
+  // execution (adherence-class, Tenet 19). NB the same `declared` token also
+  // exists on the INDEPENDENT `PARITY_SENSES` scale (below) as the sensed-state
+  // floor — same string, two orthogonal axes (manifestation vs sensed-state),
+  // intentional. Order is cosmetic (routing narrows on membership, not index).
+  'declared',
 ] as const;
 export type ParityManifestation = (typeof PARITY_MANIFESTATIONS)[number];
 

@@ -1350,6 +1350,83 @@ describe('checkParity - capability-probe routing (mmnto-ai/totem#2140)', () => {
   });
 });
 
+// ─── declared routing (Prop 305 §3 agent-bus) ──────────────
+const DECLARED_MANIFEST_YAML = `schema-version: 1
+status: active
+contracts:
+  - id: agent-bus
+    dimension: coordination
+    canonical-source: mmnto-ai/totem-strategy:proposals/active/305-agent-bus-pattern.md
+    detection-method: repo declares the Prop 305 §3 bus contract in agent config / AGENTS.md; honest-absent until a repo declares
+    expected-value-or-derivation: contract manifestation declared per Prop 305 §3
+    tractability: mechanical
+    manifestation: declared
+    senses: present
+    tracking-issue: mmnto-ai/totem-strategy#482
+`;
+
+describe('checkParity - declared routing (Prop 305 §3 agent-bus)', () => {
+  it('declared + a present totem:agent-bus marker → pass naming the role→seat binding', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', DECLARED_MANIFEST_YAML);
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '# AGENTS\n<!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" -->\n',
+      'utf-8',
+    );
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('agent-bus'))!;
+    expect(line.status).toBe('pass');
+    expect(line.message).toContain('role "bus"');
+    expect(line.message).toContain('seat "totem-claude"');
+    expect(line.message).toContain('AGENTS.md');
+    expect(line.message).not.toContain('not yet implemented');
+  });
+
+  it('declared + no marker → honest-absent skip (never warns on absence)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', DECLARED_MANIFEST_YAML);
+    // No AGENTS.md written into the tmp repo at all.
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('agent-bus'))!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toContain('honest-absent until a repo declares');
+  });
+
+  it('declared + an unknown contract id → registry-gap stub (mirrors an unwired probe)', async () => {
+    const unwired = DECLARED_MANIFEST_YAML.replace('id: agent-bus', 'id: some-future-declared-row');
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', unwired);
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name.includes('some-future-declared-row'))!;
+    expect(line.status).toBe('skip');
+    expect(line.message).toContain('no declaration marker wired for this row');
+  });
+
+  it('classifies coverage: mechanical/present when wired + present, honest-absent when unwired', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: parity-manifest.yaml\n`);
+    writeManifest('parity-manifest.yaml', DECLARED_MANIFEST_YAML);
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '<!-- totem:agent-bus role="bus" seat="totem-claude" -->\n',
+      'utf-8',
+    );
+    const wired = await checkParity(tmpDir);
+    expect(wired.readout!.meta['agent-bus']).toEqual({
+      coverage: 'mechanical',
+      sensesProbed: 'present',
+    });
+
+    const unwiredYaml = DECLARED_MANIFEST_YAML.replace(
+      'id: agent-bus',
+      'id: some-future-declared-row',
+    );
+    writeManifest('parity-manifest.yaml', unwiredYaml);
+    const unwired = await checkParity(tmpDir);
+    expect(unwired.readout!.meta['some-future-declared-row']!.coverage).toBe('honest-absent');
+  });
+});
+
 // ─── Trust-readout (mmnto-ai/totem#2327, Prop 303 §5(a)) ──────────
 
 // Four deterministic-in-a-tmpdir rows covering every coverage class + the

@@ -44,6 +44,8 @@ import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
 import { PARITY_SENSES, type ParityContract, type ParitySense } from './parity-manifest.js';
+import { escapeRegex } from './regex-utils.js';
+import { sanitize } from './sanitize.js';
 import {
   resolveStrategyRoot,
   type StrategyResolverOptions,
@@ -1717,6 +1719,150 @@ export function detectCapabilityProbeContract(
     ctx,
     `governance floor not suppressed in ${path.basename(ctx.consumerPath)}`,
   );
+}
+
+// ─── Declared-contract detector (Prop 305 §3 agent-bus) ──
+
+/**
+ * A parsed `<!-- totem:<token> role="…" seat="…" declared="…" -->` declaration
+ * marker (Prop 305 §3 agent-bus class). Every attribute is independently
+ * optional at PARSE time; the VALIDITY rule (a real declaration binds BOTH a
+ * role and a seat) lives in {@link detectDeclaredContract} so a missing
+ * attribute surfaces as a NAMED why-not, never a silent drop (fail loud, Tenet 4).
+ */
+export interface DeclarationMarker {
+  role?: string;
+  seat?: string;
+  /** ISO-8601 date the declaration was authored (as authored; not validated here). */
+  declared?: string;
+}
+
+/**
+ * Parse a `<!-- totem:<token> key="value" … -->` declaration marker from
+ * anywhere in `content`. Modeled on {@link parseForkMarker}: dotAll + whitespace
+ * tolerant, `.*?` non-greedy + bounded by the first `-->` (linear, no nested
+ * quantifiers → ReDoS-safe). `token` is the full bare marker name (e.g.
+ * `totem:agent-bus`) and is regex-escaped via the shared `escapeRegex`, so a
+ * `:` or any metachar is matched as a literal, never as a live pattern (the
+ * token is code-owned by the CLI registry, but escaping keeps it robust
+ * regardless). The FIRST marker for `token` wins — duplicates are ignored, the
+ * same single-match posture as {@link parseForkMarker}. The token must be
+ * followed by whitespace or `-->` (a lookahead, not `\b`), so a token never
+ * prefix-matches a longer sibling (`totem:agent-bus` vs `totem:agent-bus-v2`)
+ * and non-word-char-ending tokens need no special casing. Returns undefined
+ * when no marker for `token` is present.
+ */
+export function parseDeclarationMarker(
+  content: string,
+  token: string,
+): DeclarationMarker | undefined {
+  const markerRe = new RegExp(`<!--\\s*${escapeRegex(token)}(?=\\s|-->)(.*?)-->`, 'is');
+  const markerMatch = markerRe.exec(content);
+  if (markerMatch === null) return undefined;
+  const attrsText = markerMatch[1] ?? '';
+  const marker: DeclarationMarker = {};
+  // matchAll (not a single match()) so a safe prefix pair cannot shadow later
+  // pairs — the security lesson parseForkMarker documents; attributes are
+  // unordered + each independently optional.
+  for (const pair of attrsText.matchAll(/(\w+)\s*=\s*"([^"]*)"/g)) {
+    const value = pair[2] ?? '';
+    if (pair[1] === 'role') marker.role = value;
+    else if (pair[1] === 'seat') marker.seat = value;
+    else if (pair[1] === 'declared') marker.declared = value;
+  }
+  return marker;
+}
+
+/** Inputs + test seams for {@link detectDeclaredContract}. */
+export interface DetectDeclaredContext {
+  /** Absolute path of the file that carries the declaration marker (AGENTS.md). */
+  filePath: string;
+  /** The bare `totem:<token>` marker name the declaration is authored under (e.g. `totem:agent-bus`). */
+  markerToken: string;
+  /** Test seam — override the file read. Production callers omit it. */
+  readFile?: (absPath: string) => string | undefined;
+}
+
+/**
+ * Detect ONE `manifestation: declared` contract (Prop 305 §3 agent-bus class).
+ * A declaration SURFACE — the repo AUTHORS the binding itself in a file
+ * (AGENTS.md) via a `<!-- totem:<token> role="…" seat="…" -->` HTML-comment
+ * marker rather than installing a managed block. This sensor claims DECLARATION
+ * PRESENCE ONLY; whether the declared bus actually EXECUTES its duties is
+ * adherence-class (Tenet 19 / Prop 305 §3.5) and is NEVER inferred from this row.
+ *
+ * Deterministic, local-read-only, NEVER networks, NEVER throws, NEVER emits
+ * `fail` (CLI edge owns promotion), and NEVER `warn`/`fail` on absence — an
+ * undeclared repo is honest-absent (`skip`), the row's own "honest-absent until
+ * a repo declares" semantics, not drift.
+ *
+ *   - `pass` — marker present with BOTH role + seat parsed (a well-formed binding).
+ *   - `skip` — file absent, marker absent, or the marker is missing role/seat
+ *              (the why-not names the missing attribute — fail loud, Tenet 4).
+ */
+export function detectDeclaredContract(ctx: DetectDeclaredContext): ParityContractVerdict {
+  const readFile = ctx.readFile ?? readFileText;
+  const fileLabel = path.basename(ctx.filePath);
+  // The human declaration name is the marker token minus the `totem:` namespace
+  // (e.g. `totem:agent-bus` → `agent-bus`), so the message reads as the contract.
+  const declarationName = ctx.markerToken.startsWith('totem:')
+    ? ctx.markerToken.slice('totem:'.length)
+    : ctx.markerToken;
+
+  // File absent / unreadable → honest-absent (NEVER warn on absence).
+  let content: string | undefined;
+  try {
+    content = readFile(ctx.filePath);
+    // totem-context: the default readFileText already degrades a missing / unreadable file to undefined; wrapping the call treats a throwing INJECTED reader as the same honest-absent signal, so a degraded read can NEVER crash the doctor pipeline (the never-throws invariant, mirroring readJsonResult).
+  } catch {
+    content = undefined;
+  }
+  if (content === undefined) {
+    return {
+      status: 'skip',
+      message: `${declarationName}: no ${fileLabel} present — honest-absent until a repo declares`,
+    };
+  }
+
+  const marker = parseDeclarationMarker(content, ctx.markerToken);
+  if (marker === undefined) {
+    return {
+      status: 'skip',
+      message: `${declarationName}: no ${ctx.markerToken} declaration marker in ${fileLabel} — honest-absent until a repo declares`,
+    };
+  }
+
+  // A marker missing role OR seat is NOT a valid declaration: name the missing
+  // attribute (fail loud, Tenet 4) but stay honest-absent (`skip`) — a malformed
+  // marker is still "not yet declared", never drift. Blank counts as missing:
+  // role="" / seat="  " would mint a degenerate binding with no real referent
+  // (greptile P2 on mmnto-ai/totem#2400).
+  const { role, seat } = marker;
+  const missing: string[] = [];
+  if (role === undefined || role.trim().length === 0) missing.push('role');
+  if (seat === undefined || seat.trim().length === 0) missing.push('seat');
+  if (
+    role === undefined ||
+    role.trim().length === 0 ||
+    seat === undefined ||
+    seat.trim().length === 0
+  ) {
+    return {
+      status: 'skip',
+      message: `${declarationName}: ${ctx.markerToken} marker in ${fileLabel} is missing ${missing.join(
+        ' + ',
+      )} — not a valid declaration (honest-absent until a repo declares)`,
+    };
+  }
+
+  // Presence claim ONLY — the declaration is present + well-formed. This is NOT a
+  // claim that the bus executes its duties (adherence-class, Tenet 19 / §3.5).
+  // role/seat are repository content: strip ANSI/control sequences so a
+  // hostile marker cannot spoof terminal output (CR round 2, mmnto-ai/totem#2400).
+  return {
+    status: 'pass',
+    message: `${declarationName} declared — role "${sanitize(role)}" → seat "${sanitize(seat)}" in ${fileLabel}`,
+  };
 }
 
 // ─── Value-equality detector (mmnto-ai/totem-strategy#738 Slice A, Proposal 296 §13) ──

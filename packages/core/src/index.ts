@@ -774,8 +774,10 @@ export {
 export type {
   CapabilityProbeKind,
   CohortFloorStatus,
+  DeclarationMarker,
   DeriveCohortRepoIdOptions,
   DetectCapabilityProbeContext,
+  DetectDeclaredContext,
   DetectGeneratedArtifactContext,
   DetectLockContentContext,
   DetectManualAttestationContext,
@@ -796,6 +798,7 @@ export type {
 export {
   deriveCohortRepoId,
   detectCapabilityProbeContract,
+  detectDeclaredContract,
   detectGeneratedArtifactContract,
   detectLockContentContract,
   detectManualAttestationContract,
@@ -808,6 +811,7 @@ export {
   normalizeLockArtifact,
   normalizeManagedBlock,
   packageNameForContract,
+  parseDeclarationMarker,
   parseForkMarker,
   parseStrategyDoctrineLock,
   resolveCohortFloor,
