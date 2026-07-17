@@ -14,15 +14,15 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem lesson extract`, et
 
 ### Google Gemini
 
-| Role                | Model ID                         | Notes                                                                                                                                            |
-| ------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Flagship (agentic)  | `gemini-3.5-flash`               | GA flagship — coding/agentic; **Totem's default for all Gemini roles since 2026-07-14** ($1.50/$9 flat; beats 3.1 Pro on coding/agentic)         |
-| Previous default    | `gemini-3-flash-preview`         | Preview — superseded as Totem default by `gemini-3.5-flash`                                                                                      |
-| Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026). Still preview-only; $2/$12 (→$4/$18 >200k). Fallback if Flash prose quality regresses on docs/spec |
-| Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                                                                                          |
-| Fast-lite (newest)  | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost                                                                                                         |
-| Stable fast         | `gemini-2.5-flash`               | GA — **deprecating June 17, 2026**                                                                                                               |
-| Stable pro          | `gemini-2.5-pro`                 | GA — **deprecating June 17, 2026**                                                                                                               |
+| Role                     | Model ID                         | Notes                                                                                                                                            |
+| ------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Flagship (agentic)       | `gemini-3.5-flash`               | GA flagship — coding/agentic; **Totem's default for all Gemini roles since 2026-07-14** ($1.50/$9 flat; beats 3.1 Pro on coding/agentic)         |
+| Previous default         | `gemini-3-flash-preview`         | Preview — superseded as Totem default by `gemini-3.5-flash`                                                                                      |
+| Pro (complex tasks)      | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026). Still preview-only; $2/$12 (→$4/$18 >200k). Fallback if Flash prose quality regresses on docs/spec |
+| Image generation         | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                                                                                          |
+| Fast-lite (newest)       | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost                                                                                                         |
+| Legacy fast (deprecated) | `gemini-2.5-flash`               | **Deprecated June 17, 2026** — do not target for new work; use `gemini-3.5-flash`                                                                |
+| Legacy pro (deprecated)  | `gemini-2.5-pro`                 | **Deprecated June 17, 2026** — do not target for new work; use `gemini-3.1-pro-preview`                                                          |
 
 **Listing API:** `GET https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY`
 
