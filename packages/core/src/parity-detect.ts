@@ -45,6 +45,7 @@ import { z } from 'zod';
 
 import { PARITY_SENSES, type ParityContract, type ParitySense } from './parity-manifest.js';
 import { escapeRegex } from './regex-utils.js';
+import { sanitize } from './sanitize.js';
 import {
   resolveStrategyRoot,
   type StrategyResolverOptions,
@@ -1856,9 +1857,11 @@ export function detectDeclaredContract(ctx: DetectDeclaredContext): ParityContra
 
   // Presence claim ONLY — the declaration is present + well-formed. This is NOT a
   // claim that the bus executes its duties (adherence-class, Tenet 19 / §3.5).
+  // role/seat are repository content: strip ANSI/control sequences so a
+  // hostile marker cannot spoof terminal output (CR round 2, mmnto-ai/totem#2400).
   return {
     status: 'pass',
-    message: `${declarationName} declared — role "${role}" → seat "${seat}" in ${fileLabel}`,
+    message: `${declarationName} declared — role "${sanitize(role)}" → seat "${sanitize(seat)}" in ${fileLabel}`,
   };
 }
 

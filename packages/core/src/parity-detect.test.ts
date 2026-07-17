@@ -850,6 +850,21 @@ describe('detectDeclaredContract', () => {
     expect(verdict.message).toContain('missing seat');
   });
 
+  it('pass message strips ANSI/control sequences from repo-provided role/seat (CR round 2, mmnto-ai/totem#2400)', () => {
+    const ESC = String.fromCharCode(27);
+    const verdict = detectDeclaredContract({
+      filePath: AGENTS_PATH,
+      markerToken: 'totem:agent-bus',
+      readFile: AGENTS(
+        `<!-- totem:agent-bus role="${ESC}[31mbus" seat="totem${ESC}[0m-claude" -->`,
+      ),
+    });
+    expect(verdict.status).toBe('pass');
+    expect(verdict.message).not.toContain(ESC);
+    expect(verdict.message).toContain('role "bus"');
+    expect(verdict.message).toContain('seat "totem-claude"');
+  });
+
   it('never throws — a throwing reader degrades to honest-absent skip', () => {
     const verdict = detectDeclaredContract({
       filePath: AGENTS_PATH,
