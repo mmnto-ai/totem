@@ -18,8 +18,10 @@ else
   TOTEM_CMD=""
 fi
 
-# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
-if [ -n "$TOTEM_CMD" ] && git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\.totem/lessons/'; then
+# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing).
+# The trailing -- terminates the revision list so a ref/path ambiguity can never
+# reinterpret ORIG_HEAD/HEAD as pathspecs.
+if [ -n "$TOTEM_CMD" ] && git diff-tree -r --name-only ORIG_HEAD HEAD -- 2>/dev/null | grep -q '\.totem/lessons/'; then
   # Resolve the real git dir so the sync-log redirect works in a linked worktree,
   # where .git is a FILE (gitdir: pointer), not a directory (mmnto-ai/totem#2376).
   GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)

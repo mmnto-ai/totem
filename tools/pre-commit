@@ -24,3 +24,4 @@ if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
     exit 1
   fi
 fi
+# [totem] end pre-commit

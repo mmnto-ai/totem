@@ -20,7 +20,9 @@ import {
   installHooksNonInteractive,
   TOTEM_HOOK_END,
   TOTEM_HOOK_MARKER,
+  TOTEM_PRECOMMIT_END,
   TOTEM_PRECOMMIT_MARKER,
+  TOTEM_PREPUSH_END,
   TOTEM_PREPUSH_MARKER,
   upgradePrePushHookIfNeeded,
 } from './install-hooks.js';
@@ -635,24 +637,81 @@ describe('installGitHook', () => {
     expect(result).toBe('exists');
   });
 
-  it('drift-repairs a stale totem-owned hook without force (mmnto-ai/totem#2138)', () => {
+  it('drift-repairs a stale totem-owned pre-push (WITH end marker) without force (mmnto-ai/totem#2138)', () => {
     fs.mkdirSync(hooksDir, { recursive: true });
     const hookPath = path.join(hooksDir, 'pre-push');
-    // A totem-owned whole file frozen at an older generator's output.
-    fs.writeFileSync(hookPath, `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\n$TOTEM_CMD lint\n`);
+    // A totem-owned whole file frozen at an older generator's output — but it carries
+    // the bounded end marker, so drift-repair may upgrade it in place without --force.
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\n$TOTEM_CMD lint\n# ${TOTEM_PREPUSH_END}\n`,
+    );
     const canonical = buildPrePushHook('pnpm dlx @mmnto/cli');
 
-    const result = installGitHook(hooksDir, 'pre-push', canonical, TOTEM_PREPUSH_MARKER);
+    const result = installGitHook(
+      hooksDir,
+      'pre-push',
+      canonical,
+      TOTEM_PREPUSH_MARKER,
+      false,
+      TOTEM_PREPUSH_END,
+    );
 
     expect(result).toBe('overwritten');
     expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical);
   });
 
+  it('drift-repairs a stale totem-owned pre-commit (WITH end marker) without force', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale body\n# ${TOTEM_PRECOMMIT_END}\n`,
+    );
+    const canonical = buildPreCommitHook();
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('overwritten');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical);
+  });
+
+  it('does NOT drift-repair a LEGACY totem pre-commit missing the end marker (takes one --force)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    // A hook written by an OLD template that predates the pre-commit end marker: the
+    // start marker opens it and the body has drifted, but there is no in-file end
+    // marker → the region cannot be bounded → drift-repair declines (legacy path).
+    const legacy = `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale legacy body\n`;
+    fs.writeFileSync(hookPath, legacy);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      buildPreCommitHook(),
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('exists');
+    // Left untouched — the legacy hook takes one `totem hook install --force`.
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(legacy);
+  });
+
   it('does not drift-repair a user hook with an appended totem block without force', () => {
     fs.mkdirSync(hooksDir, { recursive: true });
     const hookPath = path.join(hooksDir, 'pre-push');
-    // User content precedes the totem block → NOT an owned whole file.
-    const userThenTotem = `#!/bin/sh\nrun_my_tests\n# ${TOTEM_PREPUSH_MARKER}\nold content\n`;
+    // User content precedes the totem block → NOT an owned whole file, even though the
+    // block is bounded by an end marker.
+    const userThenTotem = `#!/bin/sh\nrun_my_tests\n# ${TOTEM_PREPUSH_MARKER}\nold content\n# ${TOTEM_PREPUSH_END}\n`;
     fs.writeFileSync(hookPath, userThenTotem);
 
     const result = installGitHook(
@@ -660,11 +719,53 @@ describe('installGitHook', () => {
       'pre-push',
       buildPrePushHook('pnpm dlx @mmnto/cli'),
       TOTEM_PREPUSH_MARKER,
+      false,
+      TOTEM_PREPUSH_END,
     );
 
     expect(result).toBe('exists');
     // Left untouched — the user's hook is preserved verbatim.
     expect(fs.readFileSync(hookPath, 'utf-8')).toBe(userThenTotem);
+  });
+
+  it('does not drift-repair a pre-commit with user content AFTER the end marker (protected)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    // Stale totem region, but the user appended content AFTER the end marker — a
+    // whole-file overwrite would clobber it, so the end-marker guard must decline.
+    const staleWithTrailingUser = `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale body\n# ${TOTEM_PRECOMMIT_END}\necho "my pre-commit notice"\n`;
+    fs.writeFileSync(hookPath, staleWithTrailingUser);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      buildPreCommitHook(),
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(staleWithTrailingUser);
+  });
+
+  it('does not drift-repair a pre-push with user content AFTER the end marker (protected)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-push');
+    const staleWithTrailingUser = `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\nstale body\n# ${TOTEM_PREPUSH_END}\necho "my pre-push notice"\n`;
+    fs.writeFileSync(hookPath, staleWithTrailingUser);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-push',
+      buildPrePushHook('pnpm dlx @mmnto/cli'),
+      TOTEM_PREPUSH_MARKER,
+      false,
+      TOTEM_PREPUSH_END,
+    );
+
+    expect(result).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(staleWithTrailingUser);
   });
 
   it('does not drift-repair a post-merge hook with user content after the end marker', () => {
@@ -1048,51 +1149,21 @@ describe('upgradePrePushHookIfNeeded', () => {
     cleanTmpDir(tmpDir);
   });
 
-  // Top-level if/fi blocks in the canonical pre-push hook:
-  // 1. agent detection, 2. resolve, 3. main guard, 4. format:check
-  const PRE_PUSH_TOP_LEVEL_BLOCKS = 4;
-
   /**
    * Helper: extract the totem block from a hook file and compare it against
    * the canonical output of buildPrePushHook('pnpm dlx @mmnto/cli') (shebang stripped, trimmed).
    * Catches stale shell fragments or splice boundary bugs that toContain would miss.
+   * The stateless format is now bounded by the pre-push end marker, so the block is the
+   * span from the start-marker comment through the end-marker comment line inclusive —
+   * a missing/misplaced end marker (a splice-boundary bug) fails the equality check.
    */
   function extractTotemBlock(hookContent: string): string {
     const markerIdx = hookContent.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
     if (markerIdx === -1) return '';
-
-    const afterMarker = hookContent.slice(markerIdx);
-    // Match lines that start with `if ` or are standalone `fi`.
-    // Skip inline `if ... fi` (both on same line) — they don't change depth.
-    const lines = afterMarker.split('\n');
-    let depth = 0;
-    let endOffset = -1;
-    let firstIfFound = false;
-    let balancedCount = 0;
-    let charOffset = 0;
-
-    for (const line of lines) {
-      const trimmed = line.trimStart();
-      const isInlineIfFi = /^if\s.*;\s*fi\s*$/.test(trimmed);
-
-      if (!isInlineIfFi) {
-        if (/^if\s/.test(trimmed)) {
-          if (!firstIfFound) firstIfFound = true;
-          depth++;
-        } else if (/^fi\s*$/.test(trimmed) && firstIfFound) {
-          depth--;
-        }
-      }
-
-      if (firstIfFound && depth === 0 && /^fi\s*$/.test(trimmed)) {
-        balancedCount++;
-        endOffset = charOffset + line.length;
-        if (balancedCount >= PRE_PUSH_TOP_LEVEL_BLOCKS) break;
-      }
-      charOffset += line.length + 1; // +1 for the newline
-    }
-    if (endOffset === -1) return '';
-    return hookContent.slice(markerIdx, markerIdx + endOffset).trim();
+    const endMarkerLine = `# ${TOTEM_PREPUSH_END}`;
+    const endIdx = hookContent.indexOf(endMarkerLine, markerIdx);
+    if (endIdx === -1) return '';
+    return hookContent.slice(markerIdx, endIdx + endMarkerLine.length).trim();
   }
 
   /** Canonical totem block: shebang stripped, trimmed — the expected upgrade output. */
