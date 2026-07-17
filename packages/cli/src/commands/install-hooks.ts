@@ -941,7 +941,8 @@ export interface ManagedSessionHookResult {
  *                               (`overwritten`), or `--force` → `overwritten`.
  *   - Marker + drifted, unbounded (legacy no-end-marker / trailing user content):
  *                               bare → `declined`; `--force` → `overwritten`.
- *   - No totem marker at all  → `skipped` even under `--force` (never clobber a
+ *   - Marker does not OPEN the file (no marker, or a merely-quoted marker) →
+ *                               `skipped` even under `--force` (never clobber a
  *                               user-owned file).
  *
  * Regenerate-only-if-present, single-writer per invocation. A write failure
@@ -952,10 +953,13 @@ export async function regenerateManagedSessionHooks(
   cwd: string,
   force?: boolean,
 ): Promise<ManagedSessionHookResult[]> {
-  // Dynamic-import the roster (large canonical template strings) so init-templates
-  // stays off the CLI cold-start graph (packages/cli lazy-load guideline; mirrors
-  // doctor-parity.ts's own init-templates import).
-  const { MANAGED_SESSION_HOOKS } = await import('./init-templates.js');
+  // Dynamic-import the roster (large canonical template strings) + the shared
+  // ownership helpers so init-templates stays off the CLI cold-start graph
+  // (packages/cli lazy-load guideline; mirrors doctor-parity.ts's own import).
+  // `isBoundedOwnedFile` is the single shared session-hook ownership checker
+  // (mmnto-ai/totem#2413 — was a divergent twin of init's local copy).
+  const { MANAGED_SESSION_HOOKS, isBoundedOwnedFile, markerOpensFile } =
+    await import('./init-templates.js');
 
   const results: ManagedSessionHookResult[] = [];
   for (const { rel, content, marker, endMarker } of MANAGED_SESSION_HOOKS) {
@@ -966,8 +970,12 @@ export async function regenerateManagedSessionHooks(
     }
     const existing = fs.readFileSync(filePath, 'utf-8');
 
-    if (!existing.includes(marker)) {
-      // User-owned file with no totem marker — never touched, not even under --force.
+    // Positional ownership gate (mmnto-ai/totem#2413): the marker must OPEN the file.
+    // A user-owned file with NO marker — or one that merely QUOTES the marker string in
+    // a comment/string — is never touched, not even under --force. (The old
+    // `includes(marker)` gate let a quoting user file be clobbered by --force, breaking
+    // the "no marker → never touched, even forced" contract.)
+    if (!markerOpensFile(existing, marker)) {
       results.push({ file: rel, action: 'skipped' });
       continue;
     }
@@ -977,9 +985,9 @@ export async function regenerateManagedSessionHooks(
       continue;
     }
 
-    // Content differs. --force overwrites any marker-bearing file (bounded or not);
+    // Content differs. --force overwrites any marker-headed file (bounded or not);
     // a bare run repairs only a bounded totem-OWNED whole file, and declines the rest.
-    if (force || isTotemOwnedWholeFile(existing, marker, endMarker)) {
+    if (force || isBoundedOwnedFile(existing, marker, endMarker)) {
       fs.writeFileSync(filePath, content, 'utf-8');
       results.push({ file: rel, action: 'overwritten' });
     } else {

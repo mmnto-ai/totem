@@ -164,6 +164,22 @@ describe('regenerateManagedSessionHooks — bounded drift-repair matrix', () => 
     expect(fs.readFileSync(p, 'utf-8')).toBe(userOwned);
   });
 
+  it('never touches a user file that merely QUOTES the marker (marker not at start), even under --force', async () => {
+    // A user-owned hook that quotes the marker string in a comment/string is NOT
+    // marker-headed (positional gate, mmnto-ai/totem#2413). The old `includes(marker)`
+    // gate would treat it as owned and let --force clobber it.
+    const quotesMarker = `// my own hook\n// I copied this line: ${TOTEM_FILE_MARKER}\nconsole.log("mine");\n`;
+    const p = writeHook(CLAUDE_SS, quotesMarker);
+
+    const bare = await regenerateManagedSessionHooks(tmpDir);
+    expect(bare.find((x) => x.file === CLAUDE_SS)!.action).toBe('skipped');
+    expect(fs.readFileSync(p, 'utf-8')).toBe(quotesMarker);
+
+    const forced = await regenerateManagedSessionHooks(tmpDir, true);
+    expect(forced.find((x) => x.file === CLAUDE_SS)!.action).toBe('skipped');
+    expect(fs.readFileSync(p, 'utf-8')).toBe(quotesMarker);
+  });
+
   it('repairs each vendor family independently (claude + gemini)', async () => {
     writeHook(
       '.claude/hooks/PreWriteShield.cjs',

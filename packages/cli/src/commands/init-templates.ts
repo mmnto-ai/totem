@@ -77,6 +77,45 @@ export const TOTEM_FILE_MARKER = '// [totem] auto-generated';
  */
 export const TOTEM_FILE_END = '// [totem] end auto-generated';
 
+/**
+ * Whether the totem `marker` OPENS the file — only whitespace may precede it. The
+ * ownership GATE for the session-hook family (`.claude/hooks/*.cjs`,
+ * `.gemini/hooks/*.js` — no shebang preamble): a user-owned file that merely QUOTES
+ * the marker string somewhere in its body is NOT marker-headed and must never be
+ * regenerated or overwritten, not even under `--force` (mmnto-ai/totem#2413 — the
+ * `includes(marker)` false-positive that let a quoting user file be clobbered).
+ * Distinct from install-hooks' `isTotemOwnedWholeFile`, which additionally tolerates
+ * a `#!`-shebang preamble that is legitimate for git hooks but never appears here.
+ */
+export function markerOpensFile(content: string, marker: string): boolean {
+  const idx = content.indexOf(marker);
+  if (idx === -1) return false;
+  return content.slice(0, idx).trim().length === 0;
+}
+
+/**
+ * Whether a marker-headed session-hook file is a bounded totem-OWNED whole file —
+ * the precondition for a no-force drift-repair (mmnto-ai/totem#2410). The single
+ * shared ownership checker for the session-hook family, consumed by both init's
+ * `scaffoldFile` and install-hooks' `regenerateManagedSessionHooks`
+ * (mmnto-ai/totem#2413 — was two divergent twins). The session-hook analog of
+ * install-hooks' git-hook `isTotemOwnedWholeFile`, minus the shebang preamble the
+ * JS/CJS family never carries:
+ *   - the marker must OPEN the file (only whitespace before it — no user content);
+ *   - the `endMarker` must be present;
+ *   - nothing but trailing whitespace may follow the end marker (else a whole-file
+ *     rewrite would clobber appended user content).
+ */
+export function isBoundedOwnedFile(content: string, marker: string, endMarker: string): boolean {
+  const idx = content.indexOf(marker);
+  if (idx === -1) return false;
+  if (content.slice(0, idx).trim().length !== 0) return false;
+  const end = content.indexOf(endMarker, idx + marker.length);
+  if (end === -1) return false;
+  if (content.slice(end + endMarker.length).trim().length !== 0) return false;
+  return true;
+}
+
 // ─── Bare-ref regex (xrepo-qualify-refs sealed at mmnto-ai/totem-strategy#145) ───
 //
 // Mirrors the compiled rule pattern at lessonHash "xrepo-qualify-refs"
