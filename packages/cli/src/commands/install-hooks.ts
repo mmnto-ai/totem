@@ -1,9 +1,8 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
-
-import { safeExec } from '@mmnto/totem';
 
 import { resolveGitRoot } from '../git.js';
 
@@ -34,13 +33,17 @@ type HookManager = 'husky' | 'lefthook' | 'simple-git-hooks';
  * loudly instead of guessing a path.
  */
 export function resolveHooksDir(gitRoot: string): string | null {
-  try {
-    const resolved = safeExec('git', ['rev-parse', '--git-path', 'hooks'], { cwd: gitRoot });
+  // Raw spawnSync (the doctor.ts idiom): a builtin, so the heavy core barrel
+  // stays off the CLI cold-start graph, and a failed invocation reports via
+  // `status`/`error` instead of throwing — the probe below is the fallback.
+  const resolved = spawnSync('git', ['rev-parse', '--git-path', 'hooks'], {
+    cwd: gitRoot,
+    encoding: 'utf-8',
+  });
+  if (resolved.status === 0 && resolved.stdout && resolved.stdout.trim()) {
     // git prints forward slashes even on Windows, and a repo-relative path in
     // the common case — normalize and anchor at the git root.
-    if (resolved) return path.resolve(gitRoot, path.normalize(resolved));
-  } catch {
-    // git unavailable or the invocation failed — fall through to the probe.
+    return path.resolve(gitRoot, path.normalize(resolved.stdout.trim()));
   }
   const gitPath = path.join(gitRoot, '.git');
   if (fs.existsSync(gitPath) && fs.statSync(gitPath).isDirectory()) {
