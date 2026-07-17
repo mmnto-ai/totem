@@ -850,55 +850,60 @@ export async function hooksCommand(opts: {
 
   const result = installHooksNonInteractive(cwd, opts.force, { tier });
 
-  if (!result) {
-    // Hook manager detected — guidance already printed by installHooksNonInteractive
-    return;
-  }
+  // The git-hook summary prints ONLY when git hooks were actually written. A null
+  // result means a hook manager (husky/lefthook) was detected and
+  // installHooksNonInteractive already printed its guidance — but this MUST NOT
+  // early-return: the managed session hooks below are Claude/Gemini artifacts,
+  // independent of any git-hook manager, and must still be regenerated (a
+  // hook-manager repo otherwise recreates the lc#806 stale-session-hook class).
+  if (result) {
+    const actions = [
+      { name: 'pre-commit', status: result.preCommit },
+      { name: 'pre-push', status: result.prePush },
+      { name: 'post-merge', status: result.postMerge },
+      { name: 'post-checkout', status: result.postCheckout },
+    ];
 
-  const actions = [
-    { name: 'pre-commit', status: result.preCommit },
-    { name: 'pre-push', status: result.prePush },
-    { name: 'post-merge', status: result.postMerge },
-    { name: 'post-checkout', status: result.postCheckout },
-  ];
-
-  for (const { name, status } of actions) {
-    switch (status) {
-      case 'installed':
-        console.error(`[Totem] Installed ${name} hook.`);
-        break;
-      case 'appended':
-        console.error(`[Totem] Appended Totem to existing ${name} hook.`);
-        break;
-      case 'exists':
-        console.error(`[Totem] ${name} hook already installed.`);
-        break;
-      case 'overwritten':
-        // `installGitHook` returns `overwritten` for BOTH a forced overwrite and a
-        // bare (no-force) drift-repair of a totem-owned bounded region. Print the
-        // truthful cause: "Force-overwritten" ONLY when --force was actually passed,
-        // "Drift-repaired" for the bare bounded self-repair (mmnto-ai/totem#2410 —
-        // fixes the misleading always-"Force-overwritten" message).
-        console.error(
-          opts.force
-            ? `[Totem] Force-overwritten ${name} hook.`
-            : `[Totem] Drift-repaired ${name} hook (totem-owned bounded region).`,
-        );
-        break;
-      case 'skipped-non-shell':
-        console.error(
-          `[Totem] Warning: ${name} hook uses a non-shell interpreter. Integrate manually.`,
-        );
-        break;
+    for (const { name, status } of actions) {
+      switch (status) {
+        case 'installed':
+          console.error(`[Totem] Installed ${name} hook.`);
+          break;
+        case 'appended':
+          console.error(`[Totem] Appended Totem to existing ${name} hook.`);
+          break;
+        case 'exists':
+          console.error(`[Totem] ${name} hook already installed.`);
+          break;
+        case 'overwritten':
+          // `installGitHook` returns `overwritten` for BOTH a forced overwrite and a
+          // bare (no-force) drift-repair of a totem-owned bounded region. Print the
+          // truthful cause: "Force-overwritten" ONLY when --force was actually passed,
+          // "Drift-repaired" for the bare bounded self-repair (mmnto-ai/totem#2410 —
+          // fixes the misleading always-"Force-overwritten" message).
+          console.error(
+            opts.force
+              ? `[Totem] Force-overwritten ${name} hook.`
+              : `[Totem] Drift-repaired ${name} hook (totem-owned bounded region).`,
+          );
+          break;
+        case 'skipped-non-shell':
+          console.error(
+            `[Totem] Warning: ${name} hook uses a non-shell interpreter. Integrate manually.`,
+          );
+          break;
+      }
     }
   }
 
   // ── Managed session-hook regeneration (mmnto-ai/totem#2410 PR-A slice 3) ──
-  // Independent of the git-hook manager branch above: the `.claude/hooks/*.cjs`
-  // and `.gemini/hooks/*.js` artifacts are Claude/Gemini hooks, not git hooks, so
-  // they are regenerated whether or not a git-hook manager (husky/lefthook) is in
-  // play. Regenerate-only-if-present: creation stays with `totem init`; this verb
-  // repairs drift in artifacts the repo already adopted.
+  // Runs on BOTH the manager and no-manager paths (the `if (result)` above only
+  // gates the git-hook summary): the `.claude/hooks/*.cjs` and `.gemini/hooks/*.js`
+  // artifacts are Claude/Gemini hooks, not git hooks, so they are regenerated
+  // whether or not a git-hook manager (husky/lefthook) is in play. The `--check`
+  // and not-a-git-repo paths already returned above, so this never fires for the
+  // read-only verify or the honest-skip. Regenerate-only-if-present: creation stays
+  // with `totem init`; this verb repairs drift in artifacts the repo already adopted.
   await printManagedSessionHookSummary(gitRoot, opts.force);
 }
 

@@ -282,6 +282,26 @@ describe('hooksCommand exit-code contract', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
+  it('hook-manager repo STILL drift-repairs an existing bounded session hook (lc#806 guard)', async () => {
+    // A git-hook manager (husky) means git hooks are the manager's job — a declared
+    // skip for the git side. But the session hooks are Claude/Gemini artifacts,
+    // independent of the manager, so they must still be regenerated: the fix for the
+    // hook-manager early-return that otherwise recreates the lc#806 stale class.
+    fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
+    const ssPath = path.join(tmpDir, '.claude', 'hooks', 'SessionStart.cjs');
+    fs.mkdirSync(path.dirname(ssPath), { recursive: true });
+    fs.writeFileSync(ssPath, `${TOTEM_FILE_MARKER}\nstale\n${TOTEM_FILE_END}\n`);
+    errorSpy.mockClear();
+
+    await expect(hooksCommand({})).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    // The bounded session hook is drift-repaired even though git hooks were skipped.
+    expect(fs.readFileSync(ssPath, 'utf-8')).toBe(CLAUDE_SESSION_START);
+    expect(errorOutput()).toContain(
+      'Drift-repaired .claude/hooks/SessionStart.cjs session hook (totem-owned bounded region).',
+    );
+  });
+
   // ── exit ≠0: genuine failure ────────────────────────────────────
 
   it('exit ≠0: a genuine hook-write failure propagates as a thrown error', async () => {
@@ -319,6 +339,21 @@ describe('hooksCommand exit-code contract', () => {
     fs.writeFileSync(path.join(hooksDir(), 'pre-push'), '#!/bin/sh\necho "no marker"\n');
     await expect(hooksCommand({ check: true })).rejects.toThrow('process.exit:1');
     expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('--check is read-only: it does NOT mutate a drifted session hook', async () => {
+    // Install git hooks so --check passes on the git side (exit 0), then plant a
+    // drifted-but-bounded session hook. --check is a verify-only path and returns
+    // before session-hook regeneration, so the drifted hook must be left untouched.
+    await hooksCommand({});
+    const ssPath = path.join(tmpDir, '.claude', 'hooks', 'SessionStart.cjs');
+    fs.mkdirSync(path.dirname(ssPath), { recursive: true });
+    const drifted = `${TOTEM_FILE_MARKER}\nstale\n${TOTEM_FILE_END}\n`;
+    fs.writeFileSync(ssPath, drifted);
+
+    await expect(hooksCommand({ check: true })).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(fs.readFileSync(ssPath, 'utf-8')).toBe(drifted);
   });
 
   // ── the two `overwritten` messages are distinct ─────────────────
