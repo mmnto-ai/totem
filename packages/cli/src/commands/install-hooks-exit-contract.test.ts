@@ -20,7 +20,7 @@
  * spy (the doctor.test.ts idiom); the session-hook matrix drives the pure
  * `regenerateManagedSessionHooks(cwd, force)` seam directly.
  */
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -40,6 +40,7 @@ import {
   hooksCommand,
   installHooksNonInteractive,
   regenerateManagedSessionHooks,
+  resolveHooksDir,
   TOTEM_PREPUSH_END,
   TOTEM_PREPUSH_MARKER,
 } from './install-hooks.js';
@@ -428,5 +429,140 @@ describe('installHooksNonInteractive (contract sanity)', () => {
 
   it('returns null outside a git repo (declared skip, exit 0 at the command edge)', () => {
     expect(installHooksNonInteractive(tmpDir)).toBeNull();
+  });
+});
+
+// ─── Worktree + gitdir-pointer resolution (mmnto-ai/totem#2418) ──────
+//
+// In a linked worktree `.git` is a FILE (`gitdir: <path>` pointer), so the
+// pre-fix blind `mkdir '.git/hooks'` crashed ENOTDIR and failed the consumer's
+// whole `pnpm install` through the prepare wrapper. The contract names the
+// worktree/submodule pointer cases: resolvable → install into the SHARED hooks
+// dir (what git actually executes); unparseable → declared skip, exit 0.
+
+describe('hooksCommand in a linked worktree (mmnto-ai/totem#2418)', () => {
+  let mainDir: string;
+  let wtParent: string;
+  let wtDir: string;
+  let originalCwd: string;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: ReturnType<typeof vi.spyOn>;
+
+  const sharedHooksDir = () => path.join(mainDir, '.git', 'hooks');
+  const errorOutput = (): string =>
+    errorSpy.mock.calls
+      .map((c: unknown[]) => c.map((a: unknown) => String(a)).join(' '))
+      .join('\n');
+
+  beforeEach(() => {
+    mainDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2418-main-'));
+    execSync('git init', { cwd: mainDir, stdio: 'ignore' });
+    // `git worktree add` needs a commit to branch from.
+    execSync(
+      'git -c user.name=totem -c user.email=totem@test.invalid commit --allow-empty -m init',
+      { cwd: mainDir, stdio: 'ignore' },
+    );
+    wtParent = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2418-wt-'));
+    wtDir = path.join(wtParent, 'wt');
+    // Arg-array spawn — no shell, so the tmp path is never shell-interpreted.
+    execFileSync('git', ['worktree', 'add', wtDir], { cwd: mainDir, stdio: 'ignore' });
+
+    originalCwd = process.cwd();
+    process.chdir(wtDir);
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit:${code ?? 0}`);
+    }) as never);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    vi.restoreAllMocks();
+    cleanTmpDir(wtParent);
+    cleanTmpDir(mainDir);
+  });
+
+  it('resolveHooksDir follows the gitdir pointer to the SHARED hooks dir', () => {
+    // The worktree's `.git` is a pointer FILE, not a directory.
+    expect(fs.statSync(path.join(wtDir, '.git')).isFile()).toBe(true);
+    const resolved = resolveHooksDir(wtDir);
+    expect(resolved).not.toBeNull();
+    // realpath both sides: tmpdir segments can differ by symlink/8.3 aliasing.
+    expect(fs.realpathSync(resolved!)).toBe(fs.realpathSync(sharedHooksDir()));
+  });
+
+  it('resolveHooksDir in a plain checkout stays .git/hooks', () => {
+    const resolved = resolveHooksDir(mainDir);
+    expect(resolved).not.toBeNull();
+    expect(fs.realpathSync(resolved!)).toBe(fs.realpathSync(sharedHooksDir()));
+  });
+
+  it('exit 0: install from the worktree lands in the shared hooks dir (no ENOTDIR)', async () => {
+    await expect(hooksCommand({})).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    for (const hook of ['pre-commit', 'pre-push', 'post-merge', 'post-checkout']) {
+      expect(
+        fs.existsSync(path.join(sharedHooksDir(), hook)),
+        `${hook} missing from the shared hooks dir`,
+      ).toBe(true);
+    }
+    // The pointer file survives untouched — nothing tried to mkdir through it.
+    expect(fs.statSync(path.join(wtDir, '.git')).isFile()).toBe(true);
+  });
+
+  it('--check from the worktree sees the shared hooks (exit 0)', async () => {
+    await hooksCommand({});
+    errorSpy.mockClear();
+    await expect(hooksCommand({ check: true })).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errorOutput()).toContain('All hooks installed');
+  });
+
+  it('installHooksNonInteractive from the worktree classifies all four hooks', () => {
+    const result = installHooksNonInteractive(wtDir);
+    expect(result).not.toBeNull();
+    expect(result!.preCommit).toBe('installed');
+    expect(result!.prePush).toBe('installed');
+    expect(result!.postMerge).toBe('installed');
+    expect(result!.postCheckout).toBe('installed');
+  });
+});
+
+describe('hooksCommand with an unparseable .git pointer file (declared skip)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2418-badptr-'));
+    // A `.git` FILE whose content is not a `gitdir:` pointer — git reports
+    // `fatal: invalid gitfile format` for it.
+    fs.writeFileSync(path.join(tmpDir, '.git'), 'not a gitdir pointer\n');
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit:${code ?? 0}`);
+    }) as never);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    vi.restoreAllMocks();
+    cleanTmpDir(tmpDir);
+  });
+
+  it('exit 0: install declares the skip instead of crashing prepare', async () => {
+    await expect(hooksCommand({})).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    const out = errorSpy.mock.calls
+      .map((c: unknown[]) => c.map((a: unknown) => String(a)).join(' '))
+      .join('\n');
+    expect(out).toContain('not a directory or a resolvable gitdir pointer');
+  });
+
+  it('resolveHooksDir returns null for the unparseable pointer (never a blind join)', () => {
+    expect(resolveHooksDir(tmpDir)).toBeNull();
   });
 });
