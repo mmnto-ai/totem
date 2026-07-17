@@ -10,7 +10,7 @@ Totem relies on a semantic annotation system to guide the review pipeline and pr
 ## How it Works
 
 1. **Extraction:**
-   Annotations are extracted using the regex `/\/\/\s*(?:totem-context|shield-context):\s*(.+)/` in `packages/cli/src/commands/shield-hints.ts:8`.
+   Annotations are extracted using the regex `/\/\/\s*(?:totem-context|shield-context):\s*(.+)/` in `packages/cli/src/commands/shield-hints.ts`.
 
 2. **Injection:**
    The extracted context is injected into the `=== SMART REVIEW HINTS ===` section of the LLM review prompt. This prevents the AI from blindly flagging acceptable deviations from the architecture.
@@ -23,7 +23,7 @@ Totem relies on a semantic annotation system to guide the review pipeline and pr
 
 ## Example
 
-Real example from the `totem` codebase (`packages/cli/src/commands/init.ts:454`):
+Real example from the `totem` codebase (`packages/cli/src/commands/init.ts`):
 
 ```typescript
 // totem-context: fs and path are static imports at top of file (lines 1-2)

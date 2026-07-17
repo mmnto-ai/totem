@@ -24,7 +24,7 @@ When establishing rules, prefer pipelines in the following order: **P1 > P3 > P2
    - _Use when:_ You have a strict, highly specific pattern (e.g., `process.exit()`).
 2. **P3 (Example-Based):** The next best option. If you don't know how to write an AST selector but you have clear examples of the "Wrong Way" and the "Right Way," P3 uses an LLM once to generate the deterministic rule for you.
    - _Use when:_ You can easily provide `bad.ts` and `good.ts` snippets in your Markdown lesson.
-3. **P2 (LLM/Sonnet):** Fallback. Generates rules from prose explanations in extracted lessons. Powered by Claude Sonnet 4.6. Highly capable but requires well-written lessons.
+3. **P2 (LLM/Sonnet):** Fallback. Generates rules from prose explanations in extracted lessons. Powered by the configured orchestrator model (scaffolded default: Claude Sonnet 5). Highly capable but requires well-written lessons.
    - _Use when:_ Rules are derived from PR review feedback where strict examples weren't provided.
 4. **P4 (Import):** The bootstrapping pipeline. Use this on Day 1 to suck in your existing `eslint-plugin-no-restricted-syntax` configurations into the fast Totem engine.
 5. **P5 (Observation Capture):** Opt-in auto-capture. When invoked with `totem review --auto-capture`, P5 extracts the flagged line into a `severity: warning` rule. Default is off because captured rules are context-less and apply globally; enable per-invocation only when you want to seed rules from the current review pass.
@@ -49,7 +49,7 @@ The ADR-091 five-stage ingestion funnel (`Extract → Classify → Compile → V
 You can upgrade noisy regex rules using context telemetry. Run `totem lesson compile --upgrade <hash>` to target a specific rule.
 
 - **Semantics:** Evicts only that rule from the cache (preserves `createdAt` metadata), recompiles through Sonnet with a telemetry-driven directive, and replaces the rule.
-- **Fail-safe:** Rejects `--cloud` (still routed to Gemini until #1221 ships) and `--force` (scoped eviction makes `--force` redundant and dangerous).
+- **Fail-safe:** Rejects `--cloud` (the cloud worker stays Gemini-only — migration to Claude declined, mmnto-ai/totem#1221 closed not-planned) and `--force` (scoped eviction makes `--force` redundant and dangerous).
 - **Outcome:** Returns an `UpgradeOutcome { hash, status }` shape to callers (`runSelfHealing` only counts 'replaced' outcomes as actual upgrades).
 
 ### Pipeline 1: Manual Scaffolding

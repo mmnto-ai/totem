@@ -45,7 +45,7 @@ Outputs a structured description of the project's governance parameters for MCP 
 Runs a battery of automated health checks to verify config bloat, index health, hook wiring, and secret hygiene.
 
 - **Flags:**
-  - `--ci`: Exits with a non-zero status code if critical checks fail.
+  - `--strict`: Exits non-zero when critical checks fail.
   - `--pr`: Analyzes the Trap Ledger and downgrades rules with a >30% bypass rate, staging the changes as a GitHub Pull Request for review (the rule-tuning loop).
 
 ### `totem status` / `totem check`
@@ -63,6 +63,9 @@ Safely removes all Totem git hooks, config files, agent prompt injections, and t
 ### `totem lint`
 
 Stateless, zero-LLM linting against `compiled-rules.json`. It reads the compiled constraints and evaluates your local files.
+
+- **Flags:**
+  - `--format <format>`: Output format — `text` (default, human-readable), `sarif` (SARIF 2.1.0, for the GitHub Advanced Security tab), or `json` (structured findings for scripting and automation).
 
 Regex rules execute under a runtime timeout budget in a persistent worker thread so catastrophic-backtracking patterns (ReDoS) cannot hang the lint run. The timeout behavior is configurable via `--timeout-mode`:
 
@@ -124,9 +127,7 @@ Manage rule exemptions for specific files or lines that deliberately bypass a st
 The core of the Codebase Immune System. Reads your uncommitted diff and checks it against compiled rules and vector DB traps. Pipeline 5 observation auto-capture is off by default; opt in per invocation with `--auto-capture`.
 
 - **Flags:**
-  - `--deterministic`: Runs zero-LLM checks using `compiled-rules.json` (sub-3 seconds).
-  - `--format sarif`: Exports violations in SARIF 2.1.0 format.
-  - `--format json`: Exports structured JSON including a unified `findings[]` array (ADR-071 Unified Findings Model) alongside raw `violations[]`.
+  - Deterministic (zero-LLM) runs and SARIF/JSON export have moved to `totem lint`: use `totem lint` for a sub-3-second deterministic pass and `totem lint --format sarif` / `totem lint --format json` to export findings. (`totem review --deterministic` and `totem review --format` were removed; the CLI redirects deterministic runs to `totem lint` and errors on `--format` with the same guidance.)
   - `--learn`: Prompts you to extract a new lesson if a violation is found.
   - `--auto-capture`: Enables Pipeline 5 observation auto-capture during the review (off by default).
   - `--estimate`: Pre-flight deterministic-rule predictor (zero-LLM). Runs `compiled-rules.json` against the diff and prints predicted findings tagged `[Estimate]` so they are not conflated with an LLM verdict. Bypasses the entire Verification Layer — no orchestrator, no embedder, no LanceDB. Useful for predicting bot findings before opening a PR. Example: `totem review --estimate --diff main...HEAD`. Incompatible with `--learn`, `--auto-capture`, `--override`, `--suppress`, `--fresh`, `--mode`, and `--raw`.
@@ -190,12 +191,12 @@ Lists all locally documented lessons from `.totem/lessons.md` and the lessons di
 
 ### `totem lesson compile`
 
-Compiles `.totem/lessons.md` and `.totem/lessons/*.md` into deterministic regex / AST rules for zero-LLM checks. Outputs to `compiled-rules.json`. Supports Pipeline 2 (LLM-generated) and Pipeline 3 (Example-based compilation). Local compile routes to Sonnet 4.6 by default.
+Compiles `.totem/lessons.md` and `.totem/lessons/*.md` into deterministic regex / AST rules for zero-LLM checks. Outputs to `compiled-rules.json`. Supports Pipeline 2 (LLM-generated) and Pipeline 3 (Example-based compilation). Local compile routes to the configured orchestrator model (scaffolded default: Claude Sonnet 5).
 
 > **Note:** `totem compile` is a deprecated alias for `totem lesson compile`. The CLI's own `--help` output marks it as deprecated. New documentation should use the entity-grouped form (`totem lesson compile`); the `totem --help` `Entities:` section lists `rule`, `lesson`, `exemption`, `config` as the canonical command groupings.
 
 - **Flags:**
-  - `--cloud <url>`: Offloads the compilation process to a cloud endpoint for parallel fan-out. (Note: Cloud compile is still routed to Gemini until #1221 migrates the cloud worker to Sonnet; local compile is the golden path.)
+  - `--cloud <url>`: Offloads the compilation process to a cloud endpoint for parallel fan-out. (Note: Cloud compile stays Gemini-only — the migration to Claude was considered and declined ([mmnto-ai/totem#1221](https://github.com/mmnto-ai/totem/issues/1221), closed not-planned); local compile is the golden path.)
   - `--concurrency <n>`: Sets parallel compilation limit (default: 5).
   - `--export`: Re-exports compiled rules to AI tool config files per the `exports` map in `totem.config.ts`.
   - `--force`: Bypasses the compilation cache.

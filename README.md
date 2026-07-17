@@ -138,7 +138,7 @@ pnpm dlx @mmnto/cli doctor --strict
 
 `doctor --strict` reports config, hooks, rules, and index wiring, and exits non-zero on fail-class diagnostics. Read and resolve its warnings before treating setup as complete; if an agent is running this setup for you, that is its checklist too.
 
-No Node.js? The **Totem Lite** standalone binary runs `init`, `lint`, and `hook install` fully offline: grab it from [Releases](https://github.com/mmnto-ai/totem/releases); platform commands in the [Installation Guide](docs/wiki/installation.md).
+No Node.js? The **Totem Lite** standalone binary runs `init`, `lint`, and `hooks` fully offline: grab it from [Releases](https://github.com/mmnto-ai/totem/releases); platform commands in the [Installation Guide](docs/wiki/installation.md).
 
 ## Documentation & Workflows
 

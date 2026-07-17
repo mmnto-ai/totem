@@ -8,16 +8,20 @@ Context Caching is supported on the **Anthropic** provider (`anthropic:` prefix)
 
 Context Caching is opt-in. The substrate has been in place since 1.14.0 (orchestrator middleware, `cache_control` markers on the static prompt sections, per-call cache metric tracking), and the feature defaults to off so existing users are not surprised by a sudden change in their token-usage profile.
 
-Add the flag to your `totem.config.ts`:
+Add the flag to the `orchestrator` block of your `totem.config.ts`. It is an orchestrator-scope field — a root-level `enableContextCaching` key is silently stripped at config load, so caching stays off:
 
 ```typescript
 export default {
   // ... other config ...
-  enableContextCaching: true,
+  orchestrator: {
+    provider: 'anthropic',
+    // ... other orchestrator settings ...
+    enableContextCaching: true,
+  },
 };
 ```
 
-That is the only change required. The next `totem lesson compile` or `totem review` invocation against an Anthropic provider will start writing to and reading from the prompt cache.
+That single orchestrator-scoped flag is the only change required. The next `totem lesson compile` or `totem review` invocation against an Anthropic provider will start writing to and reading from the prompt cache.
 
 ## How It Works
 
@@ -51,7 +55,7 @@ _(Note: Placing dynamic content inside the cached section of a prompt is an anti
 - **Google Gemini:** Deferred pending integration with the Gemini `CachedContent` API.
 - **Other Providers:** No caching layer is currently wired into the orchestrator middleware.
 
-_(Note regarding Cloud Compilation: The self-hosted cloud worker is currently Gemini-only and does **not** benefit from this caching layer. For the lowest cost and highest quality compilation, use local compilation with Anthropic models. Migration of the cloud worker to Claude Sonnet is tracked as [mmnto-ai/totem#1221](https://github.com/mmnto-ai/totem/issues/1221) and remains open.)_
+_(Note regarding Cloud Compilation: The self-hosted cloud worker stays Gemini-only and does **not** benefit from this caching layer. For the lowest cost and highest quality compilation, use local compilation with Anthropic models. Migration of the cloud worker to Claude was considered and declined ([mmnto-ai/totem#1221](https://github.com/mmnto-ai/totem/issues/1221), closed not-planned).)_
 
 ## Cost Expectations
 

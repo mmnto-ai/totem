@@ -18,8 +18,10 @@ with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
    `pnpm exec totem sync`
 
 3. Compile new rules locally and export to AI tool configs. Do NOT
-   pass `--cloud`; the cloud worker is still Gemini-only per
-   mmnto-ai/totem#1221. Local compile routes to Sonnet 4.6:
+   pass `--cloud`; the cloud worker is Gemini-only (migration to
+   Claude declined — mmnto-ai/totem#1221, closed not-planned).
+   Local compile routes to the `orchestrator.overrides.compile`
+   role in `totem.config.ts` (currently Claude Sonnet 5):
    `pnpm exec totem lesson compile --export`
 
 4. Review the newly compiled rules. Step 3's output prints a count
@@ -105,6 +107,6 @@ manual edits to compiled-rules.json for other lifecycle reasons),
 use `pnpm exec totem lesson compile --refresh-manifest` — the
 no-LLM primitive that backs the atomic archive command.
 
-The retirement error from `totem wrap` produces this same workaround
-text at runtime, so if you forget the sequence, just run
-`pnpm exec totem wrap <prs>` and copy the hint.
+The retirement error from `totem wrap` prints the same sequence at
+runtime (without step 4's curation detail), so if you forget the
+steps, run `pnpm exec totem wrap <prs>` for the short form.

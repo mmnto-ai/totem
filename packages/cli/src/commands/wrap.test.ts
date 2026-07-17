@@ -60,7 +60,17 @@ describe('wrapCommand (retired)', () => {
       expect(hint).toContain('totem lesson extract');
       expect(hint).toContain('totem sync');
       expect(hint).toContain('totem lesson compile --export');
-      expect(hint).toContain('git checkout HEAD -- .totem/compiled-rules.json');
+      // Curation goes through the atomic archive, not a rules-file revert:
+      // `git checkout HEAD -- .totem/compiled-rules.json` desyncs the
+      // compile-manifest input/output hashes (postmerge SKILL forbids it).
+      expect(hint).toContain('totem lesson archive');
+      expect(hint).not.toContain('git checkout HEAD -- .totem/compiled-rules.json');
+      // The rules + manifest artifacts must be staged so the revert is
+      // unnecessary in the first place.
+      expect(hint).toContain('.totem/compiled-rules.json');
+      expect(hint).toContain('.totem/compile-manifest.json');
+      // Points at the canonical long-form sequence.
+      expect(hint).toContain('.claude/skills/postmerge/SKILL.md');
     }
   });
 });
