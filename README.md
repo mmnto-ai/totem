@@ -104,7 +104,7 @@ MCP-compatible agents query it through the bundled MCP server. Registering that 
 
 ## What's in the Box
 
-Totem is a set of CLI tools, not a framework. Building blocks you wire into whatever CI and workflow you already have. Several commands support `--json` for scripting; check `totem <command> --help`.
+Totem is a set of CLI tools, not a framework. Building blocks you wire into whatever CI and workflow you already have. The table below highlights the commands you'll reach for most; several support `--json` for scripting, so check `totem <command> --help`.
 
 | Command                | What it does                                                                                                                     |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -116,6 +116,8 @@ Totem is a set of CLI tools, not a framework. Building blocks you wire into what
 | `totem review`         | LLM-powered review on an uncommitted diff, grounded in your project's lessons (requires a configured LLM provider).              |
 | `totem sync`           | Rebuild the semantic index from your lessons and docs.                                                                           |
 | `totem hook install`   | Install Git hooks (`pre-push` lint gate).                                                                                        |
+
+The table above is a curated highlights reel, not the full surface. `totem help --all` lists every command the CLI ships (46 today), and the [CLI Reference](docs/wiki/cli-reference.md) documents each one with its flags.
 
 For CI, `totem lint --format sarif` pipes into GitHub Code Scanning or any SARIF-compliant tool, so tripwires show up as inline PR annotations. The stream is scoped to error-severity findings; warnings stay local until a rule earns promotion. Recipes in [CI/CD Integration](docs/wiki/ci-integration.md); the same flag works on the standalone `totem-lite` binary for CI without Node.js.
 
