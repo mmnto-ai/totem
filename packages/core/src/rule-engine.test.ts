@@ -16,6 +16,8 @@ import {
   applyAstRulesToAdditions,
   applyRulesToAdditions,
   extractJustification,
+  getRustTestSpans,
+  isProductionRustRule,
   matchesGlob,
   parseFailSoftAttestation,
   type RuleEngineContext,
@@ -1295,5 +1297,247 @@ describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/tot
     // silent skip on unmapped extensions is the right behavior here.
     // Fail-loud is reserved for the explicit "I scope to .py" case.
     await expect(applyAstRulesToAdditions(ctx, [rule], additions, tmpDir)).resolves.toEqual([]);
+  });
+});
+
+// ─── Rust Inline Test Module Exemption (#2397) ─────────────────────
+
+describe('Rust Inline Test Module Exemption (#2397)', () => {
+  it('isProductionRustRule identifies production-only Rust rules', () => {
+    // Production Rust rule with explicit exclusions
+    const rule1 = makeRule({
+      fileGlobs: ['**/*.rs', '!**/tests/**', '!**/*test*.rs'],
+      lessonHash: 'unwrap-rule',
+    });
+    expect(isProductionRustRule(rule1)).toBe(true);
+
+    // Production Rust rule with implicit exclusions (no test globs matched)
+    const rule2 = makeRule({
+      fileGlobs: ['src/**/*.rs'],
+      lessonHash: 'safe-rule',
+    });
+    expect(isProductionRustRule(rule2)).toBe(true);
+
+    // Test-specific rule (targets test files)
+    const rule3 = makeRule({
+      fileGlobs: ['**/*test*.rs'],
+      lessonHash: 'test-rule',
+    });
+    expect(isProductionRustRule(rule3)).toBe(false);
+
+    // Non-Rust rule
+    const rule4 = makeRule({
+      fileGlobs: ['**/*.ts'],
+      lessonHash: 'ts-rule',
+    });
+    expect(isProductionRustRule(rule4)).toBe(false);
+
+    // Non-string fileGlobs (ast-grep compound object rules)
+    const rule5 = makeRule({
+      fileGlobs: ['**/*.rs', { pattern: 'src/**/*.rs' } as any, '!**/tests/**', '!**/*test*.rs'],
+      lessonHash: 'unwrap-rule-obj',
+    });
+    expect(isProductionRustRule(rule5)).toBe(true);
+  });
+
+  it('getRustTestSpans parses Rust content to find #[cfg(test)] mod spans', () => {
+    const code = `
+fn prod_code() {
+    let x = 1;
+    let module_name = "test"; // offset test: 'module' starts with 'mod'
+    let mode_active = true;   // offset test: 'mode' starts with 'mod'
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_something() {
+        assert_eq!(1, 1);
+    }
+}
+
+fn more_prod_code() {}
+
+#[cfg(test)]
+#[allow(non_snake_case)]
+mod MoreTests {
+    use super::*;
+}
+
+mod non_test_mod {
+    // not exempt
+}
+
+#[cfg(test)]
+mod external; // non-inline mod
+`;
+
+    const spans = getRustTestSpans(code);
+    // There are 2 inline test modules
+    expect(spans).toHaveLength(2);
+
+    // First inline module: #[cfg(test)] mod tests
+    // #[cfg(test)] is on line 8 (1-based)
+    // Closing brace is on line 14
+    expect(spans[0]).toEqual({ startLine: 8, endLine: 14 });
+
+    // Second inline module: #[cfg(test)] mod MoreTests
+    // #[cfg(test)] is on line 18
+    // Closing brace is on line 22
+    expect(spans[1]).toEqual({ startLine: 18, endLine: 22 });
+  });
+
+  it('applyRulesToAdditions exempts regex violations inside inline Rust test modules', () => {
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: '\\.unwrap\\(\\)',
+      fileGlobs: ['**/*.rs', '!**/tests/**', '!**/*test*.rs'],
+      lessonHash: 'b2c3d4e5f6a70001',
+    });
+
+    const rsContent = `
+fn prod_code() {
+    let val = Some(1).unwrap(); // line 3, violation!
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_val() {
+        let val = Some(1).unwrap(); // line 10, exempt!
+    }
+}
+`;
+
+    // Write file to temporary directory
+    const filePath = 'src/lib.rs';
+    fs.writeFileSync(path.join(tmpDir, filePath), rsContent, 'utf-8');
+
+    const additions: DiffAddition[] = [
+      {
+        file: filePath,
+        line: '    let val = Some(1).unwrap(); // line 3, violation!',
+        lineNumber: 3,
+        precedingLine: null,
+      },
+      {
+        file: filePath,
+        line: '        let val = Some(1).unwrap(); // line 10, exempt!',
+        lineNumber: 10,
+        precedingLine: null,
+      },
+    ];
+
+    const violations = applyRulesToAdditions(ctx, [rule], additions, undefined, tmpDir);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.lineNumber).toBe(3);
+  });
+
+  it('applyAstRulesToAdditions exempts AST/ast-grep violations inside inline Rust test modules', async () => {
+    // Seed fresh manifest to prevent stale manifest nudge
+    seedFreshManifest(tmpDir);
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: '$X.unwrap()',
+      fileGlobs: ['**/*.ts', '!**/tests/**', '!**/*test*.ts'],
+      lessonHash: 'unwrap-ast-rule',
+    });
+
+    const rsContent = `
+fn prod_code() {
+    let val = Some(1).unwrap(); // line 3, violation!
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_val() {
+        let val = Some(1).unwrap(); // line 10, exempt!
+    }
+}
+`;
+
+    const filePath = 'src/lib.ts';
+    fs.writeFileSync(path.join(tmpDir, filePath), rsContent, 'utf-8');
+
+    const additions: DiffAddition[] = [
+      {
+        file: filePath,
+        line: '    let val = Some(1).unwrap(); // line 3, violation!',
+        lineNumber: 3,
+        precedingLine: null,
+      },
+      {
+        file: filePath,
+        line: '        let val = Some(1).unwrap(); // line 10, exempt!',
+        lineNumber: 10,
+        precedingLine: null,
+      },
+    ];
+
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.lineNumber).toBe(3);
+  });
+
+  it('applyRulesToAdditionsBounded exempts bounded-regex violations inside Rust test modules', async () => {
+    const { applyRulesToAdditionsBounded } = await import('./regex-safety/apply-rules-bounded.js');
+    const { RegexEvaluator } = await import('./regex-safety/evaluator.js');
+
+    const evaluator = new RegexEvaluator();
+    try {
+      const rule = makeRule({
+        engine: 'regex',
+        pattern: '\\.unwrap\\(\\)',
+        fileGlobs: ['**/*.rs', '!**/tests/**', '!**/*test*.rs'],
+        lessonHash: 'b2c3d4e5f6a70001',
+      });
+
+      const rsContent = `
+fn prod_code() {
+    let val = Some(1).unwrap(); // line 3, violation!
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_val() {
+        let val = Some(1).unwrap(); // line 10, exempt!
+    }
+}
+`;
+
+      const filePath = 'src/lib.rs';
+      fs.writeFileSync(path.join(tmpDir, filePath), rsContent, 'utf-8');
+
+      const additions: DiffAddition[] = [
+        {
+          file: filePath,
+          line: '    let val = Some(1).unwrap(); // line 3, violation!',
+          lineNumber: 3,
+          precedingLine: null,
+        },
+        {
+          file: filePath,
+          line: '        let val = Some(1).unwrap(); // line 10, exempt!',
+          lineNumber: 10,
+          precedingLine: null,
+        },
+      ];
+
+      const result = await applyRulesToAdditionsBounded(ctx, [rule], additions, {
+        evaluator,
+        timeoutMode: 'strict',
+        repoRoot: tmpDir,
+      });
+
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]?.lineNumber).toBe(3);
+    } finally {
+      evaluator.dispose();
+    }
   });
 });

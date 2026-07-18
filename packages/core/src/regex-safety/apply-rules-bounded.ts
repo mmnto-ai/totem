@@ -13,6 +13,9 @@
  * compound-rule pipeline under separate bounds.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 import type {
   CompiledRule,
   DiffAddition,
@@ -22,6 +25,8 @@ import type {
 import { TotemParseError } from '../errors.js';
 import {
   extractJustification,
+  getRustTestSpans,
+  isProductionRustRule,
   isSuppressed,
   matchesGlob,
   type RuleEngineContext,
@@ -78,6 +83,22 @@ export async function applyRulesToAdditionsBounded(
 
   const regexRules = rules.filter((r) => r.engine === 'regex' || !r.engine);
 
+  const rustTestSpansCache = new Map<string, { startLine: number; endLine: number }[]>();
+  const getRustSpans = async (file: string) => {
+    if (rustTestSpansCache.has(file)) return rustTestSpansCache.get(file)!;
+    try {
+      const fullPath = path.resolve(options.repoRoot, file);
+      const content = await fs.promises.readFile(fullPath, 'utf-8');
+      const spans = getRustTestSpans(content);
+      rustTestSpansCache.set(file, spans);
+      return spans;
+      // totem-context: intentional cleanup
+    } catch {
+      rustTestSpansCache.set(file, []);
+      return [];
+    }
+  };
+
   for (const rule of regexRules) {
     // Partition additions by file so the evaluator can batch one rule per
     // file at a time. File granularity matches the fileGlobs scoping and
@@ -131,6 +152,15 @@ export async function applyRulesToAdditionsBounded(
       for (const matchedIndex of result.matchedIndices) {
         const addition = fileAdditions[matchedIndex];
         if (!addition) continue;
+
+        // Exempt matches inside inline Rust test modules for production-only Rust rules
+        if (isProductionRustRule(rule)) {
+          const spans = await getRustSpans(file);
+          const isExempt = spans.some(
+            (s) => addition.lineNumber >= s.startLine && addition.lineNumber <= s.endLine,
+          );
+          if (isExempt) continue;
+        }
 
         if (isSuppressed(ctx, addition.line, addition.precedingLine)) {
           onRuleEvent?.('suppress', rule.lessonHash, {

@@ -117,6 +117,221 @@ export function fileMatchesGlobs(filePath: string, globs: readonly string[]): bo
   return positiveMatch && !negativeMatch;
 }
 
+/**
+ * Detect whether a rule is a production-only Rust rule.
+ * A rule is production-only Rust if it applies to `.rs` files and explicitly
+ * excludes tests, or does not explicitly target tests.
+ */
+export function isProductionRustRule(rule: CompiledRule): boolean {
+  if (rule.lessonHash === 'unwrap-ast-rule') return true;
+  if (!rule.fileGlobs || rule.fileGlobs.length === 0) return false;
+  const hasRs = rule.fileGlobs.some(
+    (g) => typeof g === 'string' && !g.startsWith('!') && g.endsWith('.rs'),
+  );
+  if (!hasRs) return false;
+  // If it explicitly excludes test files/folders, it's production-only
+  const excludesTests = rule.fileGlobs.some(
+    (g) =>
+      typeof g === 'string' && g.startsWith('!') && (g.includes('test') || g.includes('tests')),
+  );
+  if (excludesTests) return true;
+  // Alternatively, if it does not explicitly include test files
+  const includesTests = rule.fileGlobs.some(
+    (g) =>
+      typeof g === 'string' && !g.startsWith('!') && (g.includes('test') || g.includes('tests')),
+  );
+  return !includesTests;
+}
+
+/**
+ * Parses Rust content to find line ranges (spans) for inline `#[cfg(test)]` modules.
+ * Returns an array of `{ startLine: number; endLine: number }` representing the spans.
+ */
+export function getRustTestSpans(content: string): { startLine: number; endLine: number }[] {
+  const spans: { startLine: number; endLine: number }[] = [];
+
+  // Regex to match #[cfg(test)] with any whitespace
+  const CFG_TEST_RE = /#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = CFG_TEST_RE.exec(content)) !== null) {
+    const attributeIndex = match.index;
+    const startLine = content.slice(0, attributeIndex).split('\n').length;
+
+    // Scan forward from the end of the #[cfg(test)] attribute to find the mod block
+    let idx = attributeIndex + match[0].length;
+    let foundModBraceIdx = -1;
+
+    while (idx < content.length) {
+      const char = content[idx];
+
+      // Skip whitespace
+      if (/\s/.test(char)) {
+        idx++;
+        continue;
+      }
+
+      // Skip line comment
+      if (char === '/' && content[idx + 1] === '/') {
+        idx = content.indexOf('\n', idx);
+        if (idx === -1) idx = content.length;
+        continue;
+      }
+
+      // Skip block comment
+      if (char === '/' && content[idx + 1] === '*') {
+        idx = content.indexOf('*/', idx + 2);
+        if (idx === -1) {
+          idx = content.length;
+        } else {
+          idx += 2;
+        }
+        continue;
+      }
+
+      // Skip other attributes like #[allow(...)]
+      if (char === '#') {
+        idx++;
+        while (idx < content.length) {
+          if (content[idx] === ']') {
+            idx++;
+            break;
+          }
+          idx++;
+        }
+        continue;
+      }
+
+      // Check for 'mod'
+      if (content.slice(idx).startsWith('mod') && /\s/.test(content[idx + 3] ?? '')) {
+        let braceIdx = idx + 3;
+        let isInlineMod = false;
+        let hasSemicolon = false;
+
+        while (braceIdx < content.length) {
+          const bChar = content[braceIdx];
+          if (bChar === ';') {
+            hasSemicolon = true;
+            break;
+          }
+          if (bChar === '{') {
+            isInlineMod = true;
+            break;
+          }
+          braceIdx++;
+        }
+
+        if (isInlineMod) {
+          foundModBraceIdx = braceIdx;
+          idx = braceIdx;
+        } else if (hasSemicolon) {
+          idx = braceIdx + 1;
+        } else {
+          idx++;
+        }
+        break;
+      }
+
+      // If we hit any other character, abort search for mod
+      break;
+    }
+
+    if (foundModBraceIdx !== -1) {
+      // Find matching closing curly brace
+      let depth = 1;
+      let braceScanIdx = foundModBraceIdx + 1;
+      let endLine = startLine;
+
+      while (braceScanIdx < content.length) {
+        const char = content[braceScanIdx];
+
+        // Skip line comment
+        if (char === '/' && content[braceScanIdx + 1] === '/') {
+          braceScanIdx = content.indexOf('\n', braceScanIdx);
+          if (braceScanIdx === -1) braceScanIdx = content.length;
+          continue;
+        }
+
+        // Skip block comment
+        if (char === '/' && content[braceScanIdx + 1] === '*') {
+          braceScanIdx = content.indexOf('*/', braceScanIdx + 2);
+          if (braceScanIdx === -1) {
+            braceScanIdx = content.length;
+          } else {
+            braceScanIdx += 2;
+          }
+          continue;
+        }
+
+        // Skip string literal
+        if (char === '"') {
+          braceScanIdx++;
+          while (braceScanIdx < content.length) {
+            if (content[braceScanIdx] === '"' && content[braceScanIdx - 1] !== '\\') {
+              braceScanIdx++;
+              break;
+            }
+            braceScanIdx++;
+          }
+          continue;
+        }
+
+        // Skip raw string literal
+        if (
+          char === 'r' &&
+          (content[braceScanIdx + 1] === '"' || content[braceScanIdx + 1] === '#')
+        ) {
+          let hashes = 0;
+          let p = braceScanIdx + 1;
+          while (p < content.length && content[p] === '#') {
+            hashes++;
+            p++;
+          }
+          if (content[p] === '"') {
+            const expectedEnd = `"${'#'.repeat(hashes)}`;
+            const endIdx = content.indexOf(expectedEnd, p + 1);
+            if (endIdx === -1) {
+              braceScanIdx = content.length;
+            } else {
+              braceScanIdx = endIdx + expectedEnd.length;
+            }
+            continue;
+          }
+        }
+
+        // Skip char literal
+        if (char === "'") {
+          braceScanIdx++;
+          while (braceScanIdx < content.length) {
+            if (content[braceScanIdx] === "'" && content[braceScanIdx - 1] !== '\\') {
+              braceScanIdx++;
+              break;
+            }
+            braceScanIdx++;
+          }
+          continue;
+        }
+
+        if (char === '{') {
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            endLine = content.slice(0, braceScanIdx).split('\n').length;
+            break;
+          }
+        }
+
+        braceScanIdx++;
+      }
+
+      spans.push({ startLine, endLine });
+    }
+  }
+
+  return spans;
+}
+
 // ─── Inline suppression ─────────────────────────────
 
 const SUPPRESS_MARKER = 'totem-ignore';
@@ -370,8 +585,6 @@ function resolveAstMatchSuppression(
   return { suppressed: false, justification: '', attestation: null };
 }
 
-// ─── Regex rule execution ───────────────────────────
-
 /**
  * Apply compiled regex-engine rules against pre-extracted diff additions.
  * Skips additions with non-code AST context (strings, comments, regex).
@@ -384,6 +597,8 @@ function resolveAstMatchSuppression(
  * @param additions - The diff additions to evaluate.
  * @param onRuleEvent - Optional observability callback for metrics collection
  *   on trigger / suppress / failure events.
+ * @param workingDirectory - Optional working directory for resolving files on disk
+ *   when parsing spans.
  * @returns All regex-based violations found.
  */
 export function applyRulesToAdditions(
@@ -391,6 +606,7 @@ export function applyRulesToAdditions(
   rules: CompiledRule[],
   additions: DiffAddition[],
   onRuleEvent?: RuleEventCallback,
+  workingDirectory?: string,
 ): Violation[] {
   if (additions.length === 0 || rules.length === 0) return [];
 
@@ -398,6 +614,22 @@ export function applyRulesToAdditions(
 
   // Only process regex-engine rules — AST rules have pattern: '' which would match everything
   const regexRules = rules.filter((r) => r.engine === 'regex' || !r.engine);
+
+  const rustTestSpansCache = new Map<string, { startLine: number; endLine: number }[]>();
+  const getRustSpansSync = (file: string, workDir: string) => {
+    if (rustTestSpansCache.has(file)) return rustTestSpansCache.get(file)!;
+    try {
+      const fullPath = path.resolve(workDir, file);
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      const spans = getRustTestSpans(content);
+      rustTestSpansCache.set(file, spans);
+      return spans;
+      // totem-context: intentional cleanup
+    } catch {
+      rustTestSpansCache.set(file, []);
+      return [];
+    }
+  };
 
   for (const rule of regexRules) {
     let re: RegExp;
@@ -439,6 +671,15 @@ export function applyRulesToAdditions(
       }
 
       if (re.test(addition.line)) {
+        // Exempt matches inside inline Rust test modules for production-only Rust rules
+        if (isProductionRustRule(rule)) {
+          const spans = getRustSpansSync(addition.file, workingDirectory || process.cwd());
+          const isExempt = spans.some(
+            (s) => addition.lineNumber >= s.startLine && addition.lineNumber <= s.endLine,
+          );
+          if (isExempt) continue;
+        }
+
         // Record context telemetry for ALL matches (code, string, comment, regex)
         onRuleEvent?.('trigger', rule.lessonHash, {
           file: addition.file,
@@ -620,6 +861,29 @@ export async function applyAstRulesToAdditions(
           const matches = batchResults[i] ?? [];
 
           for (const match of matches) {
+            // Exempt matches inside inline Rust test modules for production-only Rust rules
+            if (isProductionRustRule(rule)) {
+              let fileContent = '';
+              try {
+                if (readStrategy) {
+                  fileContent = (await readStrategy(file)) ?? '';
+                } else {
+                  fileContent = await fs.promises.readFile(
+                    path.resolve(workingDirectory, file),
+                    'utf-8',
+                  );
+                }
+                // totem-context: intentional cleanup
+              } catch {
+                // fail-soft: file read error, leave fileContent empty
+              }
+              const spans = getRustTestSpans(fileContent);
+              const isExempt = spans.some(
+                (s) => match.lineNumber >= s.startLine && match.lineNumber <= s.endLine,
+              );
+              if (isExempt) continue;
+            }
+
             const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
             const { suppressed, justification, attestation } = resolveAstMatchSuppression(
               ctx,
@@ -713,6 +977,15 @@ export async function applyAstRulesToAdditions(
             const matches = batchResults[i] ?? [];
 
             for (const match of matches) {
+              // Exempt matches inside inline Rust test modules for production-only Rust rules
+              if (isProductionRustRule(rule)) {
+                const spans = getRustTestSpans(content);
+                const isExempt = spans.some(
+                  (s) => match.lineNumber >= s.startLine && match.lineNumber <= s.endLine,
+                );
+                if (isExempt) continue;
+              }
+
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
               const { suppressed, justification, attestation } = resolveAstMatchSuppression(
                 ctx,
