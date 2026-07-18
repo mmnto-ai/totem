@@ -55,6 +55,20 @@ function stripWrapperTags(html: string): string {
 }
 
 /**
+ * CodeRabbit renders the whole "Review details" region as a markdown
+ * BLOCKQUOTE — every line carries a `> ` prefix, so `<details>` and its
+ * `<summary>` are separated by `\n> ` and the `\s*`-joined section regexes
+ * below never match. That is the mmnto-ai/totem#2414 live-miss shape (two
+ * same-day specimens): the sections were present, the parser saw none of
+ * them. Strip leading blockquote markers per line (nested `> > ` included)
+ * before any section parsing; non-blockquoted legacy bodies pass through
+ * unchanged.
+ */
+function stripBlockquotePrefixes(body: string): string {
+  return body.replace(/^(?:>[ \t]?)+/gm, '');
+}
+
+/**
  * Extract nit content from CodeRabbit review bodies.
  * Finds all `<details>` blocks whose `<summary>` contains "Nitpick", "nitpick", or the broom emoji.
  * Returns an array of cleaned nit text strings.
@@ -62,7 +76,7 @@ function stripWrapperTags(html: string): string {
 export function parseCodeRabbitNits(body: string): string[] {
   if (!body) return [];
   // Strip fenced code blocks to avoid extracting fake nits from examples
-  const stripped = body.replace(/```[\s\S]*?```/g, '');
+  const stripped = stripBlockquotePrefixes(body).replace(/```[\s\S]*?```/g, '');
   const nits: string[] = [];
   const nitpickRe = /<details>\s*<summary>[^<]*(?:nitpick|🧹)[^<]*<\/summary>/gi;
   let match: RegExpExecArray | null;
@@ -98,7 +112,7 @@ export function parseCodeRabbitNits(body: string): string[] {
 export function parseCodeRabbitOutsideDiff(body: string): string[] {
   if (!body) return [];
   // Strip fenced code blocks to avoid extracting fake matches from examples
-  const stripped = body.replace(/```[\s\S]*?```/g, '');
+  const stripped = stripBlockquotePrefixes(body).replace(/```[\s\S]*?```/g, '');
   const results: string[] = [];
   const outsideDiffRe =
     /<details>\s*<summary>[^<]*(?:outside\s+the\s+diff|outside\s+diff\s+range)[^<]*<\/summary>/gi;
@@ -197,21 +211,125 @@ export function parseGreptileReviewFindings(
   return parseGreptileOutsideDiff(body).map((content) => ({ type: 'outside-diff', content }));
 }
 
+// ─── File-attributed CR section extraction (mmnto-ai/totem#2414) ───
+
+/** One entry from a CR review-body section, with the per-file attribution the
+ * nested `<summary>path/to/file.ts (N)</summary>` block carries when present. */
+export interface CrSectionEntry {
+  content: string;
+  file?: string;
+}
+
+/** Split a stripped block into individual entries on CR's `---` dividers. */
+function splitEntries(block: string): string[] {
+  const cleaned = stripWrapperTags(block);
+  if (!cleaned) return [];
+  return cleaned
+    .split(/\r?\n---\r?\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
 /**
- * Combined parser that extracts both nitpick and outside-diff findings
- * from a CodeRabbit review body, returning typed results.
+ * Split a section's inner content into per-file entry lists. CR nests one
+ * `<details><summary>path/to/file.ts (N)</summary>` block per file inside the
+ * section; the path in that summary is the ONLY file attribution a body
+ * finding carries (stripWrapperTags used to delete it, leaving dispositions to
+ * hand-attribute line ranges — the #2422 round-2 exhibit). A summary must look
+ * path-like (`/` or `.`) to count as a file block; when the section carries no
+ * file blocks at all, the whole content is split flat (legacy shape).
+ */
+function splitFileBlocks(sectionInner: string): CrSectionEntry[] {
+  const fileBlockRe = /<details>\s*<summary>([^<]+?)\s*\((\d+)\)<\/summary>/gi;
+  const entries: CrSectionEntry[] = [];
+  let m: RegExpExecArray | null;
+  let sawFileBlock = false;
+  while ((m = fileBlockRe.exec(sectionInner)) !== null) {
+    const file = m[1]!.trim();
+    if (!/[/.]/.test(file)) continue;
+    const inner = extractNestedBlock(sectionInner, m.index + m[0].length);
+    if (inner === null) continue;
+    sawFileBlock = true;
+    for (const content of splitEntries(inner)) entries.push({ content, file });
+  }
+  if (!sawFileBlock) {
+    for (const content of splitEntries(sectionInner)) entries.push({ content });
+  }
+  return entries;
+}
+
+/**
+ * Extract file-attributed entries from every CR section whose `<summary>`
+ * matches `summaryPattern`. Blockquote-normalized and fence-stripped like the
+ * flat parsers above.
+ */
+function extractCrSectionEntries(body: string, summaryPattern: RegExp): CrSectionEntry[] {
+  if (!body) return [];
+  const stripped = stripBlockquotePrefixes(body).replace(/```[\s\S]*?```/g, '');
+  const sectionRe = new RegExp(
+    `<details>\\s*<summary>[^<]*(?:${summaryPattern.source})[^<]*</summary>`,
+    'gi',
+  );
+  const entries: CrSectionEntry[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = sectionRe.exec(stripped)) !== null) {
+    const inner = extractNestedBlock(stripped, match.index + match[0].length);
+    if (inner === null) continue;
+    entries.push(...splitFileBlocks(inner));
+  }
+  return entries;
+}
+
+/**
+ * CR's finding template carries an italic severity tag (`_🟠 Major_`-style).
+ * Its presence is what separates an actionable body-only finding from the
+ * verification notes / LGTM lines that fill the rest of the section.
+ */
+const CR_SEVERITY_TAG_RE = /_[^_\n]*(?:critical|major|minor)[^_\n]*_/i;
+
+/**
+ * Extract ACTIONABLE entries from CodeRabbit's "Additional comments"
+ * review-body section (mmnto-ai/totem#2414 specimen 2: an actionable body-only
+ * finding that never becomes an inline thread — #2413's lazy-import finding).
+ * The section is mostly verification notes, so an entry qualifies only when it
+ * carries the finding template's severity tag; bare LGTMs never surface.
+ */
+export function parseCodeRabbitAdditionalComments(body: string): CrSectionEntry[] {
+  return extractCrSectionEntries(body, /additional\s+comments/).filter((e) =>
+    CR_SEVERITY_TAG_RE.test(e.content),
+  );
+}
+
+/**
+ * Combined parser that extracts nitpick, outside-diff, and actionable
+ * body-only ("Additional comments") findings from a CodeRabbit review body,
+ * returning typed results with per-file attribution where the section nests it
+ * (mmnto-ai/totem#2414).
  */
 export function parseCodeRabbitReviewFindings(
   body: string,
-): Array<{ type: 'nitpick' | 'outside-diff'; content: string }> {
-  const findings: Array<{ type: 'nitpick' | 'outside-diff'; content: string }> = [];
+): Array<{ type: 'nitpick' | 'outside-diff' | 'body-only'; content: string; file?: string }> {
+  const findings: Array<{
+    type: 'nitpick' | 'outside-diff' | 'body-only';
+    content: string;
+    file?: string;
+  }> = [];
 
   for (const content of parseCodeRabbitNits(body)) {
     findings.push({ type: 'nitpick', content });
   }
 
-  for (const content of parseCodeRabbitOutsideDiff(body)) {
-    findings.push({ type: 'outside-diff', content });
+  // File-attributed extraction (not the flat legacy string[] surface) so a
+  // disposition can cite `file (outside-diff)` instead of `(review body)`.
+  for (const entry of extractCrSectionEntries(
+    body,
+    /outside\s+the\s+diff|outside\s+diff\s+range/,
+  )) {
+    findings.push({ type: 'outside-diff', content: entry.content, file: entry.file });
+  }
+
+  for (const entry of parseCodeRabbitAdditionalComments(body)) {
+    findings.push({ type: 'body-only', content: entry.content, file: entry.file });
   }
 
   return findings;
