@@ -143,6 +143,36 @@ export function isProductionRustRule(rule: CompiledRule): boolean {
 }
 
 /**
+ * Consume a Rust block comment beginning at `start` (which MUST point at the
+ * slash of an open-comment marker). Rust block comments NEST, so a naive
+ * first-terminator scan (`indexOf` of the close marker) stops at the FIRST
+ * close marker and leaves the unconsumed tail — a `}` in that tail corrupts
+ * brace-depth tracking. This consumer increments depth on each nested open
+ * marker and decrements on each close marker, ending when depth returns to 0
+ * (the true comment end) or at EOF. Returns the index just past the final
+ * close marker (or `content.length` on an unterminated comment).
+ */
+function skipRustBlockComment(content: string, start: number): number {
+  let idx = start + 2; // past the two-char open-comment marker
+  let depth = 1;
+  while (idx < content.length) {
+    if (content[idx] === '/' && content[idx + 1] === '*') {
+      depth++;
+      idx += 2;
+      continue;
+    }
+    if (content[idx] === '*' && content[idx + 1] === '/') {
+      depth--;
+      idx += 2;
+      if (depth === 0) return idx;
+      continue;
+    }
+    idx++;
+  }
+  return content.length;
+}
+
+/**
  * Parses Rust content to find line ranges (spans) for inline `#[cfg(test)]` modules.
  * Returns an array of `{ startLine: number; endLine: number }` representing the spans.
  */
@@ -177,14 +207,9 @@ export function getRustTestSpans(content: string): { startLine: number; endLine:
         continue;
       }
 
-      // Skip block comment
+      // Skip block comment (Rust block comments NEST — see skipRustBlockComment)
       if (char === '/' && content[idx + 1] === '*') {
-        idx = content.indexOf('*/', idx + 2);
-        if (idx === -1) {
-          idx = content.length;
-        } else {
-          idx += 2;
-        }
+        idx = skipRustBlockComment(content, idx);
         continue;
       }
 
@@ -217,12 +242,12 @@ export function getRustTestSpans(content: string): { startLine: number; endLine:
       if (content.slice(idx).startsWith('mod') && /\s/.test(content[idx + 3] ?? '')) {
         let braceIdx = idx + 3;
         let isInlineMod = false;
-        let hasSemicolon = false;
 
         while (braceIdx < content.length) {
           const bChar = content[braceIdx];
+          // A `;` ends a non-inline `mod external;` declaration (no span);
+          // a `{` opens an inline module body.
           if (bChar === ';') {
-            hasSemicolon = true;
             break;
           }
           if (bChar === '{') {
@@ -232,13 +257,12 @@ export function getRustTestSpans(content: string): { startLine: number; endLine:
           braceIdx++;
         }
 
+        // Only the inline case records a brace to scan from. The former
+        // `idx = braceIdx` / `idx = braceIdx + 1` / `idx++` assignments were
+        // dead stores (CodeQL) — the unconditional `break` below exits the
+        // scan loop and `idx` is never read afterward.
         if (isInlineMod) {
           foundModBraceIdx = braceIdx;
-          idx = braceIdx;
-        } else if (hasSemicolon) {
-          idx = braceIdx + 1;
-        } else {
-          idx++;
         }
         break;
       }
@@ -263,24 +287,33 @@ export function getRustTestSpans(content: string): { startLine: number; endLine:
           continue;
         }
 
-        // Skip block comment
+        // Skip block comment (Rust block comments NEST — see skipRustBlockComment)
         if (char === '/' && content[braceScanIdx + 1] === '*') {
-          braceScanIdx = content.indexOf('*/', braceScanIdx + 2);
-          if (braceScanIdx === -1) {
-            braceScanIdx = content.length;
-          } else {
-            braceScanIdx += 2;
-          }
+          braceScanIdx = skipRustBlockComment(content, braceScanIdx);
           continue;
         }
 
-        // Skip string literal
+        // Skip string literal. A quote terminates the string only when the run
+        // of backslashes immediately before it is EVEN (each pair is an escaped
+        // backslash); an ODD run means the quote itself is escaped. The naive
+        // `content[i-1] !== '\\'` check mis-reads a string ending in an escaped
+        // backslash (`"...\\"`) as unterminated, over-reading past the closing
+        // quote and swallowing braces (over-exemption — real violations after
+        // the module get suppressed).
         if (char === '"') {
           braceScanIdx++;
           while (braceScanIdx < content.length) {
-            if (content[braceScanIdx] === '"' && content[braceScanIdx - 1] !== '\\') {
-              braceScanIdx++;
-              break;
+            if (content[braceScanIdx] === '"') {
+              let backslashes = 0;
+              let b = braceScanIdx - 1;
+              while (b >= 0 && content[b] === '\\') {
+                backslashes++;
+                b--;
+              }
+              if (backslashes % 2 === 0) {
+                braceScanIdx++;
+                break;
+              }
             }
             braceScanIdx++;
           }
@@ -699,7 +732,17 @@ export function applyRulesToAdditions(
           const isExempt = spans.some(
             (s) => addition.lineNumber >= s.startLine && addition.lineNumber <= s.endLine,
           );
-          if (isExempt) continue;
+          if (isExempt) {
+            // Emit a suppress event so metrics distinguish "matched but
+            // test-span-exempt" from "never matched" (#2397 / greptile P2).
+            onRuleEvent?.('suppress', rule.lessonHash, {
+              file: addition.file,
+              line: addition.lineNumber,
+              justification: 'exempt: inline #[cfg(test)] module span (#2397)',
+              immutable: rule.immutable,
+            });
+            continue;
+          }
         }
 
         // Record context telemetry for ALL matches (code, string, comment, regex)
@@ -906,6 +949,14 @@ export async function applyAstRulesToAdditions(
                 (s) => match.lineNumber >= s.startLine && match.lineNumber <= s.endLine,
               )
             ) {
+              // Emit a suppress event so metrics distinguish "matched but
+              // test-span-exempt" from "never matched" (#2397 / greptile P2).
+              onRuleEvent?.('suppress', rule.lessonHash, {
+                file,
+                line: match.lineNumber,
+                justification: 'exempt: inline #[cfg(test)] module span (#2397)',
+                immutable: rule.immutable,
+              });
               continue;
             }
 
@@ -1015,6 +1066,14 @@ export async function applyAstRulesToAdditions(
                   (s) => match.lineNumber >= s.startLine && match.lineNumber <= s.endLine,
                 )
               ) {
+                // Emit a suppress event so metrics distinguish "matched but
+                // test-span-exempt" from "never matched" (#2397 / greptile P2).
+                onRuleEvent?.('suppress', rule.lessonHash, {
+                  file,
+                  line: match.lineNumber,
+                  justification: 'exempt: inline #[cfg(test)] module span (#2397)',
+                  immutable: rule.immutable,
+                });
                 continue;
               }
 

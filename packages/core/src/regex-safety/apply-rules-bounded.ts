@@ -159,7 +159,17 @@ export async function applyRulesToAdditionsBounded(
           const isExempt = spans.some(
             (s) => addition.lineNumber >= s.startLine && addition.lineNumber <= s.endLine,
           );
-          if (isExempt) continue;
+          if (isExempt) {
+            // Emit a suppress event so metrics distinguish "matched but
+            // test-span-exempt" from "never matched" (#2397 / greptile P2).
+            onRuleEvent?.('suppress', rule.lessonHash, {
+              file: addition.file,
+              line: addition.lineNumber,
+              justification: 'exempt: inline #[cfg(test)] module span (#2397)',
+              immutable: rule.immutable,
+            });
+            continue;
+          }
         }
 
         if (isSuppressed(ctx, addition.line, addition.precedingLine)) {

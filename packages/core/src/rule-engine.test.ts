@@ -1426,6 +1426,60 @@ pub mod pub_tests {
     expect(spans[1]).toEqual({ startLine: 12, endLine: 15 });
   });
 
+  it('getRustTestSpans: a string ending in an escaped backslash does not over-read the module', () => {
+    // Regression (greptile P1): the plain-string skip's `content[i-1] !== '\\'`
+    // terminator check mis-reads a string ending in an escaped backslash
+    // (`"\\"`) — the closing quote looks escaped, the scan over-reads, braces
+    // get swallowed, and the span over-extends into production code. Counting
+    // the CONSECUTIVE backslashes before the quote (odd = escaped, even =
+    // terminator) fixes it. `"\\\\"` in this template literal is the two-char
+    // Rust source `"\\"` (a string holding a single backslash).
+    const code = `
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn escaped_backslash() {
+        let s = "\\\\";
+    }
+}
+
+fn prod_after_mod() {
+    let x = Some(1).unwrap();
+}
+`;
+    const spans = getRustTestSpans(code);
+    expect(spans).toHaveLength(1);
+    // The module closes at its real brace (line 8), NOT over-extended past it.
+    expect(spans[0]).toEqual({ startLine: 2, endLine: 8 });
+    // The production unwrap on line 11 stays OUTSIDE every span.
+    expect(spans.some((s) => 11 >= s.startLine && 11 <= s.endLine)).toBe(false);
+  });
+
+  it('getRustTestSpans: nested block comments do not corrupt span depth', () => {
+    // Regression (CodeRabbit Major, concrete half): Rust block comments NEST.
+    // A naive `indexOf('*/')` closes at the first terminator, leaving a tail
+    // whose `}` corrupts brace depth. A nesting-depth consumer keeps the span
+    // ending at the module's real closing brace.
+    const code = `
+#[cfg(test)]
+mod tests {
+    /* outer /* inner */ has a } in it */
+    let x = 1;
+}
+
+fn prod_after_mod() {
+    let y = Some(1).unwrap();
+}
+`;
+    const spans = getRustTestSpans(code);
+    expect(spans).toHaveLength(1);
+    // Span ends at the real closing brace (line 6), not the `}` inside the
+    // nested comment on line 4.
+    expect(spans[0]).toEqual({ startLine: 2, endLine: 6 });
+    // The production unwrap on line 9 stays OUTSIDE every span.
+    expect(spans.some((s) => 9 >= s.startLine && 9 <= s.endLine)).toBe(false);
+  });
+
   it('applyRulesToAdditions exempts regex violations inside inline Rust test modules', () => {
     const rule = makeRule({
       engine: 'regex',
@@ -1471,6 +1525,60 @@ mod tests {
 
     expect(violations).toHaveLength(1);
     expect(violations[0]?.lineNumber).toBe(3);
+  });
+
+  it('applyRulesToAdditions emits a suppress event for a span-exempted match (#2397)', () => {
+    // greptile P2: an exemption `continue` must still emit `onRuleEvent` so
+    // metrics can distinguish "matched but test-span-exempt" from "never
+    // matched". Assert the suppress event on the sync regex path (any one path
+    // suffices — all four mirror this shape).
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: '\\.unwrap\\(\\)',
+      fileGlobs: ['**/*.rs', '!**/tests/**', '!**/*test*.rs'],
+      lessonHash: 'b2c3d4e5f6a70001',
+    });
+
+    const rsContent = `
+fn prod_code() {
+    let val = Some(1).unwrap(); // line 3, violation!
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_val() {
+        let val = Some(1).unwrap(); // line 10, exempt!
+    }
+}
+`;
+
+    const filePath = 'src/lib.rs';
+    fs.writeFileSync(path.join(tmpDir, filePath), rsContent, 'utf-8');
+
+    const additions: DiffAddition[] = [
+      {
+        file: filePath,
+        line: '        let val = Some(1).unwrap(); // line 10, exempt!',
+        lineNumber: 10,
+        precedingLine: null,
+      },
+    ];
+
+    const events: { event: string; lessonHash: string; context?: RuleEventContext }[] = [];
+    const onRuleEvent: RuleEventCallback = (event, lessonHash, context) => {
+      events.push({ event, lessonHash, context });
+    };
+
+    const violations = applyRulesToAdditions(ctx, [rule], additions, onRuleEvent, tmpDir);
+
+    // The exempted match yields no violation but DOES emit a suppress event.
+    expect(violations).toHaveLength(0);
+    const suppressEvents = events.filter((e) => e.event === 'suppress');
+    expect(suppressEvents).toHaveLength(1);
+    expect(suppressEvents[0]?.lessonHash).toBe('b2c3d4e5f6a70001');
+    expect(suppressEvents[0]?.context?.line).toBe(10);
+    expect(suppressEvents[0]?.context?.justification).toContain('#2397');
   });
 
   // NOTE (review round): the original AST-path e2e test here asserted exemption
@@ -1536,7 +1644,9 @@ mod tests {
       expect(result.violations).toHaveLength(1);
       expect(result.violations[0]?.lineNumber).toBe(3);
     } finally {
-      evaluator.dispose();
+      // dispose() is async (evaluator.ts) — await it so the worker teardown
+      // completes before the test exits (CodeRabbit minor).
+      await evaluator.dispose();
     }
   });
 });
