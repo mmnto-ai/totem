@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { knownGateEvents, TotemError } from '@mmnto/totem';
 
@@ -12,6 +12,29 @@ import { gateInstallCommand, resolveGateEvents } from './gate.js';
 import { commandInstallsGate, GATE_WRAPPER_REL, installGates } from './gate-install.js';
 import { initCommand } from './init.js';
 import { CLAUDE_GATE_WRAPPER, TOTEM_FILE_END, TOTEM_FILE_MARKER } from './init-templates.js';
+import { resolveGitRootForHookPath, resolveHooksDir } from './install-hooks.js';
+
+// The eject-parity tests below drive `ejectCommand`, which (mmnto-ai/totem#2426)
+// now resolves the git root + hooks dir via the #2422 helpers. Mock that seam so
+// no real `git` is spawned in a temp dir; only eject imports these two exports,
+// so the gate/init tests here are unaffected. Default: git root = cwd, hooks dir
+// = <root>/.git/hooks (matching the plain `.git/hooks` fixtures these tests build).
+vi.mock('./install-hooks.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./install-hooks.js')>();
+  return {
+    ...actual,
+    resolveGitRootForHookPath: vi.fn(),
+    resolveHooksDir: vi.fn(),
+  };
+});
+
+beforeEach(() => {
+  vi.mocked(resolveGitRootForHookPath).mockImplementation((c: string) => ({
+    gitRoot: c,
+    unparseablePointer: false,
+  }));
+  vi.mocked(resolveHooksDir).mockImplementation((root: string) => path.join(root, '.git', 'hooks'));
+});
 
 /**
  * CLI-seam tests for `totem gate install` + the parameterized gate wrapper
