@@ -19,6 +19,7 @@
  */
 
 import type { Chunker } from './chunker.js';
+import { GenericChunker } from './generic-chunker.js';
 import { MarkdownChunker } from './markdown-chunker.js';
 import { SchemaFileChunker } from './schema-file-chunker.js';
 import { SessionLogChunker } from './session-log-chunker.js';
@@ -152,6 +153,10 @@ function registerBuiltins(): void {
   registerBuiltin('typescript-ast', TypeScriptChunker);
   registerBuiltin('schema-file', SchemaFileChunker);
   registerBuiltin('test-file', TestFileChunker);
+  // Fourth-language layer, Stage 1: the language-agnostic generic fallback
+  // (mmnto-ai/totem#2387, Prop 256 Option A). Explicit-opt-in only — a normal
+  // built-in a consumer selects by name; never an implicit catch-all (#2308).
+  registerBuiltin('generic', GenericChunker);
 }
 
 registerBuiltins();

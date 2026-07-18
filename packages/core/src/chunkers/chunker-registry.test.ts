@@ -4,7 +4,7 @@
  * Covers invariants 4-9 + 11 (chunker side) from
  * `.totem/specs/pack-substrate-bundle.md`:
  *
- * - All five built-in chunkers self-register at module load.
+ * - All six built-in chunkers self-register at module load.
  * - Pack-style registration adds new entries.
  * - Re-registration of the same name throws.
  * - Registering a built-in name throws (immutable).
@@ -49,16 +49,19 @@ afterEach(() => {
 });
 
 describe('chunker-registry built-ins', () => {
-  it('registers all five built-in chunkers at module load', () => {
+  it('registers all six built-in chunkers at module load', () => {
     expect(lookup('session-log')).toBeDefined();
     expect(lookup('markdown-heading')).toBeDefined();
     expect(lookup('typescript-ast')).toBeDefined();
     expect(lookup('schema-file')).toBeDefined();
     expect(lookup('test-file')).toBeDefined();
+    // Fourth-language layer, Stage 1 (mmnto-ai/totem#2387, #2308).
+    expect(lookup('generic')).toBeDefined();
   });
 
   it('exposes registered names sorted alphabetically', () => {
     expect(registeredNames()).toEqual([
+      'generic',
       'markdown-heading',
       'schema-file',
       'session-log',
@@ -70,6 +73,7 @@ describe('chunker-registry built-ins', () => {
   it('marks built-ins as built-in', () => {
     expect(isBuiltin('markdown-heading')).toBe(true);
     expect(isBuiltin('typescript-ast')).toBe(true);
+    expect(isBuiltin('generic')).toBe(true);
     expect(isBuiltin('not-a-real-strategy')).toBe(false);
   });
 });
