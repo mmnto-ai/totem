@@ -1334,7 +1334,15 @@ describe('Rust Inline Test Module Exemption (#2397)', () => {
 
     // Non-string fileGlobs (ast-grep compound object rules)
     const rule5 = makeRule({
-      fileGlobs: ['**/*.rs', { pattern: 'src/**/*.rs' } as any, '!**/tests/**', '!**/*test*.rs'],
+      fileGlobs: [
+        '**/*.rs',
+        // Runtime reality the string-guard defends against: ast-grep compound
+        // rules can carry OBJECT entries in fileGlobs despite the declared
+        // string[] type — modeled with a double-cast, not `any` (ESLint).
+        { pattern: 'src/**/*.rs' } as unknown as string,
+        '!**/tests/**',
+        '!**/*test*.rs',
+      ],
       lessonHash: 'unwrap-rule-obj',
     });
     expect(isProductionRustRule(rule5)).toBe(true);
