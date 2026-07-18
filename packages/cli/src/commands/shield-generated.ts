@@ -218,7 +218,12 @@ export function splitDiffIntoFileSections(diff: string): DiffFileSection[] {
   return rawSections
     .filter((section) => section.length > 0)
     .map((section) => {
-      const firstLine = section.slice(0, section.indexOf('\n'));
+      // A section with no newline at all (a truncated diff tail) must use the
+      // WHOLE section as its first line — indexOf's -1 would otherwise slice
+      // off the final character and break the $-anchored filename match (GCA
+      // round on #2443).
+      const newlineIdx = section.indexOf('\n');
+      const firstLine = newlineIdx === -1 ? section : section.slice(0, newlineIdx);
       const quoted = firstLine.match(/^diff --git "a\/.*?" "b\/(.*?)"$/);
       const unquoted = firstLine.match(/^diff --git a\/\S+ b\/(.+)$/);
       const file = quoted?.[1] ?? unquoted?.[1] ?? null;
@@ -244,9 +249,11 @@ function summarizeSection(file: string, section: string): GeneratedArtifactSumma
   let removedLines = 0;
   if (!binary) {
     for (const line of section.split('\n')) {
-      // Skip the `+++`/`---` file-header lines; count only hunk-body +/- lines.
-      if (line.startsWith('+') && !line.startsWith('+++')) addedLines++;
-      else if (line.startsWith('-') && !line.startsWith('---')) removedLines++;
+      // Skip the `+++ `/`--- ` file-header lines (always a space or /dev/null
+      // after the triple marker); a bare `+++`/`---` prefix check would also
+      // swallow real hunk content like `++i;` → `+++i;` (GCA round on #2443).
+      if (line.startsWith('+') && !line.startsWith('+++ ')) addedLines++;
+      else if (line.startsWith('-') && !line.startsWith('--- ')) removedLines++;
     }
   }
 

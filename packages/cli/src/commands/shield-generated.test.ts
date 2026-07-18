@@ -102,6 +102,14 @@ describe('splitDiffIntoFileSections', () => {
   it('returns an empty array for an empty diff', () => {
     expect(splitDiffIntoFileSections('')).toEqual([]);
   });
+
+  it('parses a newline-less section (truncated diff tail) without truncating the filename', () => {
+    // GCA round on #2443: indexOf('\n') === -1 previously fed slice(0, -1),
+    // chopping the final character and breaking the $-anchored path match.
+    const sections = splitDiffIntoFileSections('diff --git a/dist/out.js b/dist/out.js');
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.file).toBe('dist/out.js');
+  });
 });
 
 // ─── hashDiffSection ────────────────────────────────────
@@ -179,6 +187,31 @@ describe('classifyGeneratedArtifacts', () => {
     expect(byFile['dist/new.js']).toBe('added');
     expect(byFile['dist/old.js']).toBe('deleted');
     expect(byFile['dist/mod.js']).toBe('regenerated');
+  });
+
+  it('counts hunk content beginning with ++/-- (e.g. `+++i;`) and still skips the `+++ `/`--- ` headers', () => {
+    // GCA round on #2443: a bare `+++` prefix check swallowed real added lines
+    // like C's `++i;` (rendered `+++i;` in a hunk). Headers always carry a
+    // space (`+++ b/...`, `+++ /dev/null`) — that is the discriminator.
+    const section = [
+      'diff --git a/dist/gen.c b/dist/gen.c',
+      'index 1111111..2222222 100644',
+      '--- a/dist/gen.c',
+      '+++ b/dist/gen.c',
+      '@@ -1,2 +1,2 @@',
+      '---x;',
+      '+++i;',
+      '',
+    ].join('\n');
+    const result = classifyGeneratedArtifacts({
+      diff: section,
+      changedFiles: ['dist/gen.c'],
+      generatedGlobs: [...DEFAULT_GENERATED_ARTIFACT_GLOBS],
+      excludeGlobs: [],
+    });
+    expect(result.summaries).toHaveLength(1);
+    expect(result.summaries[0]?.addedLines).toBe(1);
+    expect(result.summaries[0]?.removedLines).toBe(1);
   });
 
   it('marks a binary artifact and reports no line counts', () => {
