@@ -552,3 +552,62 @@ describe('parseCodeRabbitReviewFindings — Additional comments (body-only, mmnt
     expect(findings.filter((f) => f.type === 'body-only')).toHaveLength(0);
   });
 });
+
+describe('CR_SEVERITY_TAG_RE anchoring + file-block scan position (#2427 review round)', () => {
+  function additionalSection(entry: string): string {
+    return [
+      '<details>',
+      '<summary>🔇 Additional comments (1)</summary><blockquote>',
+      '<details>',
+      '<summary>packages/cli/src/x.ts (1)</summary><blockquote>',
+      '',
+      entry,
+      '',
+      '</blockquote></details>',
+      '</blockquote></details>',
+    ].join('\n');
+  }
+
+  it('italic prose merely CONTAINING a severity word is not actionable (CR example)', () => {
+    const findings = parseCodeRabbitReviewFindings(
+      additionalSection('`5-5`: _major version verified_ — bump is safe. LGTM.'),
+    );
+    expect(findings.filter((f) => f.type === 'body-only')).toHaveLength(0);
+  });
+
+  it('a bare italic severity word inside a sentence is not actionable (greptile example)', () => {
+    const findings = parseCodeRabbitReviewFindings(
+      additionalSection('`5-10`: ✅ Fixed the _minor_ nit. LGTM.'),
+    );
+    expect(findings.filter((f) => f.type === 'body-only')).toHaveLength(0);
+  });
+
+  it('the real emoji-prefixed template still qualifies', () => {
+    const findings = parseCodeRabbitReviewFindings(
+      additionalSection('`5-5`: _📐 Maintainability_ | _🟡 Minor_\n\n**A real finding.**'),
+    );
+    expect(findings.filter((f) => f.type === 'body-only')).toHaveLength(1);
+  });
+
+  it('a path-like details block NESTED in a finding body is not re-matched as a sibling file block', () => {
+    const body = [
+      '<details>',
+      '<summary>⚠️ Outside diff range comments (1)</summary><blockquote>',
+      '<details>',
+      '<summary>packages/cli/src/outer.ts (1)</summary><blockquote>',
+      '',
+      '`1-2`: _🟠 Major_ finding text.',
+      '',
+      '<details>',
+      '<summary>packages/cli/src/inner.ts (1)</summary><blockquote>',
+      'embedded illustration, not a sibling block',
+      '</blockquote></details>',
+      '',
+      '</blockquote></details>',
+      '</blockquote></details>',
+    ].join('\n');
+    const findings = parseCodeRabbitReviewFindings(body).filter((f) => f.type === 'outside-diff');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.file).toBe('packages/cli/src/outer.ts');
+  });
+});

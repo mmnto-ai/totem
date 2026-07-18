@@ -251,6 +251,10 @@ function splitFileBlocks(sectionInner: string): CrSectionEntry[] {
     if (inner === null) continue;
     sawFileBlock = true;
     for (const content of splitEntries(inner)) entries.push({ content, file });
+    // Resume the scan PAST the extracted block, not inside its content — a
+    // path-like <details> nested within a finding's body must never be
+    // re-matched as an independent sibling file block (greptile #2427 round).
+    fileBlockRe.lastIndex = m.index + m[0].length + inner.length;
   }
   if (!sawFileBlock) {
     for (const content of splitEntries(sectionInner)) entries.push({ content });
@@ -283,9 +287,13 @@ function extractCrSectionEntries(body: string, summaryPattern: RegExp): CrSectio
 /**
  * CR's finding template carries an italic severity tag (`_🟠 Major_`-style).
  * Its presence is what separates an actionable body-only finding from the
- * verification notes / LGTM lines that fill the rest of the section.
+ * verification notes / LGTM lines that fill the rest of the section. Anchored
+ * to the concrete template shape — severity emoji + the severity word as the
+ * WHOLE italic span — so italic prose that merely contains the word
+ * (`_major version verified_`, `✅ Fixed the _minor_ nit`) never qualifies
+ * (#2427 review round, CR + greptile convergent).
  */
-const CR_SEVERITY_TAG_RE = /_[^_\n]*(?:critical|major|minor)[^_\n]*_/i;
+const CR_SEVERITY_TAG_RE = /_(?:🔴|🟠|🟡)\s*(?:critical|major|minor)_/iu;
 
 /**
  * Extract ACTIONABLE entries from CodeRabbit's "Additional comments"
