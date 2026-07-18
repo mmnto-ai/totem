@@ -686,38 +686,38 @@ describe('resolveEjectHooksContext', () => {
     cleanTmpDir(dir);
   });
 
-  it('plain checkout (.git DIRECTORY): resolves the hooks dir, not a worktree', () => {
+  it('plain checkout (.git DIRECTORY): resolves the hooks dir, not a worktree', async () => {
     fs.mkdirSync(path.join(dir, '.git', 'hooks'), { recursive: true });
-    const ctx = resolveEjectHooksContext(dir);
+    const ctx = await resolveEjectHooksContext(dir);
     expect(ctx.isLinkedWorktree).toBe(false);
     expect(ctx.hooksDir).toBe(path.join(dir, '.git', 'hooks'));
   });
 
-  it('linked worktree (.git POINTER FILE): flagged as shared across worktrees', () => {
+  it('linked worktree (.git POINTER FILE): flagged as shared across worktrees', async () => {
     // A `.git` FILE is the gitdir pointer git writes for a linked worktree.
     fs.writeFileSync(path.join(dir, '.git'), 'gitdir: /elsewhere/.git/worktrees/wt\n');
     // The shared hooks dir git would resolve for it (mocked — no real git walk).
     vi.mocked(resolveHooksDir).mockReturnValue('/elsewhere/.git/hooks');
-    const ctx = resolveEjectHooksContext(dir);
+    const ctx = await resolveEjectHooksContext(dir);
     expect(ctx.isLinkedWorktree).toBe(true);
     expect(ctx.hooksDir).toBe('/elsewhere/.git/hooks');
   });
 
-  it('not a git repo / unparseable pointer (null root): null hooks dir, not a worktree', () => {
+  it('not a git repo / unparseable pointer (null root): null hooks dir, not a worktree', async () => {
     vi.mocked(resolveGitRootForHookPath).mockReturnValue({
       gitRoot: null,
       unparseablePointer: true,
     });
-    const ctx = resolveEjectHooksContext(dir);
+    const ctx = await resolveEjectHooksContext(dir);
     expect(ctx.hooksDir).toBeNull();
     expect(ctx.isLinkedWorktree).toBe(false);
   });
 
-  it('best-effort: a resolver throw degrades to unresolvable, never propagates', () => {
+  it('best-effort: a resolver throw degrades to unresolvable, never propagates', async () => {
     vi.mocked(resolveGitRootForHookPath).mockImplementation(() => {
       throw new Error('git broke');
     });
-    const ctx = resolveEjectHooksContext(dir);
+    const ctx = await resolveEjectHooksContext(dir);
     expect(ctx.hooksDir).toBeNull();
     expect(ctx.isLinkedWorktree).toBe(false);
   });

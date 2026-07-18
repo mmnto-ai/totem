@@ -1,8 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveGitRootForHookPath, resolveHooksDir } from './install-hooks.js';
-
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Eject';
@@ -66,12 +64,21 @@ export interface EjectHooksContext {
  * `hook install` entry point uses (mmnto-ai/totem#2426, sibling of #2422): the
  * git root via `resolveGitRootForHookPath` (anchors from a subdirectory; maps an
  * unparseable pointer to a null root) and the hooks dir via `resolveHooksDir`
- * (git's own worktree/`commondir` walk). Best-effort per Tenet 4's eject
+ * (git's own worktree/`commondir` walk — the rev-parse root resolution the
+ * hardcode-`.git/hooks` lesson prescribes). Best-effort per Tenet 4's eject
  * cleanup carve-out — a genuine git failure is reported as unresolvable, never a
  * crash of the whole eject.
  */
-export function resolveEjectHooksContext(cwd: string): EjectHooksContext {
+export async function resolveEjectHooksContext(cwd: string): Promise<EjectHooksContext> {
+  // Lazy-load the hook-path resolvers: they pull the core git barrel, so keeping
+  // them off the static graph preserves this command file's cold-start discipline
+  // (the same dynamic-import pattern `scrubClaudeSkills`/`ejectCommand` use).
+  const { resolveGitRootForHookPath, resolveHooksDir } = await import('./install-hooks.js');
   let gitRoot: string | null;
+  // totem-context: intentional cleanup — eject is best-effort per Tenet 4's
+  // cleanup carve-out; a genuine git failure degrades to "unresolvable", never a
+  // crash of the whole eject. (Not-a-repo / unparseable pointer already return a
+  // null root without throwing; this guards the residual "git broke" class.)
   try {
     ({ gitRoot } = resolveGitRootForHookPath(cwd));
   } catch {
@@ -80,6 +87,10 @@ export function resolveEjectHooksContext(cwd: string): EjectHooksContext {
   if (!gitRoot) {
     return { hooksDir: null, isLinkedWorktree: false };
   }
+  // Worktree detection: git resolved the root, so the root itself is trusted;
+  // `.git` here is only probed for its SHAPE — a pointer FILE marks a linked
+  // worktree whose hooks are shared — not used to locate the root (that came
+  // from rev-parse above).
   const dotGit = path.join(gitRoot, '.git');
   const isLinkedWorktree = fs.existsSync(dotGit) && fs.statSync(dotGit).isFile();
   return { hooksDir: resolveHooksDir(gitRoot), isLinkedWorktree };
@@ -551,7 +562,7 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   //    `.git` is a gitdir POINTER FILE and hooks live in the shared common dir)
   //    every hook reported "not found" and the eject silently no-oped. Resolve
   //    the real hooks dir via the #2422 helpers instead.
-  const hooks = resolveEjectHooksContext(cwd);
+  const hooks = await resolveEjectHooksContext(cwd);
   if (hooks.isLinkedWorktree) {
     // Conservative decline (mmnto-ai/totem#2426 semantics question, left
     // deliberately UNRESOLVED by the issue): the resolved hooks dir is SHARED
