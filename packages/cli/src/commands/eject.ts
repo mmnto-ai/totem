@@ -77,10 +77,10 @@ export async function resolveEjectHooksContext(cwd: string): Promise<EjectHooksC
   let gitRoot: string | null;
   try {
     ({ gitRoot } = resolveGitRootForHookPath(cwd));
-    // totem-context: intentional cleanup — eject is best-effort per Tenet 4's
-    // cleanup carve-out; a genuine git failure (NOT not-a-repo / unparseable
-    // pointer, which return a null root without throwing) degrades to
-    // "unresolvable" rather than crashing the whole eject.
+    // Eject is best-effort per Tenet 4's cleanup carve-out: a genuine git failure
+    // (NOT not-a-repo / unparseable pointer, which return a null root WITHOUT
+    // throwing) degrades to "unresolvable" rather than crashing the whole eject.
+    // totem-context: intentional cleanup — best-effort git resolution for eject.
   } catch {
     return { hooksDir: null, isLinkedWorktree: false };
   }
