@@ -198,7 +198,7 @@ program
     try {
       const { doctorCommand, doctorGateFailed, resolveStrictTier } =
         await import('./commands/doctor.js');
-      const strictTier = resolveStrictTier(opts.strict);
+      const strictTier = await resolveStrictTier(opts.strict);
       const results = await doctorCommand(opts);
       if (strictTier && doctorGateFailed(results, strictTier)) {
         process.exitCode = 1;

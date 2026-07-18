@@ -1429,7 +1429,7 @@ program
         // errors identically across every doctor mode (mmnto-ai/totem#2385).
         const { doctorCommand, doctorGateFailed, resolveStrictTier } =
           await import('./commands/doctor.js');
-        const strictTier = resolveStrictTier(opts.strict);
+        const strictTier = await resolveStrictTier(opts.strict);
         const specializedModes = [
           opts.claimDiscipline && '--claim-discipline',
           opts.parity && '--parity',

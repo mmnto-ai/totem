@@ -4,8 +4,6 @@ import * as path from 'node:path';
 
 import pc from 'picocolors';
 
-import { TotemConfigError } from '@mmnto/totem';
-
 import { resolveGitRoot } from '../git.js';
 import { CONFIG_FILES } from '../utils.js';
 
@@ -41,11 +39,16 @@ export const STRICT_TIERS: readonly StrictTier[] = ['fail', 'warn'];
  * `true` (bare flag) maps to `'fail'`. Returns `undefined` when strict mode
  * is off. Throws on an unknown tier (fail-loud, Tenet 4 — a silently ignored
  * tier would let a consumer believe it gated on more than it did).
+ * Async solely so the error class rides the dynamic-import convention (no
+ * static `@mmnto/totem` import in command handlers — CLI startup latency).
  */
-export function resolveStrictTier(strict: boolean | string | undefined): StrictTier | undefined {
+export async function resolveStrictTier(
+  strict: boolean | string | undefined,
+): Promise<StrictTier | undefined> {
   if (strict === undefined || strict === false) return undefined;
   if (strict === true || strict === 'fail') return 'fail';
   if (strict === 'warn') return 'warn';
+  const { TotemConfigError } = await import('@mmnto/totem');
   throw new TotemConfigError(
     `Unknown --strict tier "${strict}".`,
     `Valid tiers: ${STRICT_TIERS.join(', ')} (bare --strict selects the fail tier).`,

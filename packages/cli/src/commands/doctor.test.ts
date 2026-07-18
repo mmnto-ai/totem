@@ -621,23 +621,23 @@ describe('doctorCommand strict mode contract', () => {
 // pure; the exit-code mapping itself stays at the CLI edge.
 
 describe('resolveStrictTier', () => {
-  it('returns undefined when strict mode is off', () => {
-    expect(resolveStrictTier(undefined)).toBeUndefined();
-    expect(resolveStrictTier(false)).toBeUndefined();
+  it('returns undefined when strict mode is off', async () => {
+    await expect(resolveStrictTier(undefined)).resolves.toBeUndefined();
+    await expect(resolveStrictTier(false)).resolves.toBeUndefined();
   });
 
-  it('maps the bare flag and the explicit fail tier to fail', () => {
-    expect(resolveStrictTier(true)).toBe('fail');
-    expect(resolveStrictTier('fail')).toBe('fail');
+  it('maps the bare flag and the explicit fail tier to fail', async () => {
+    await expect(resolveStrictTier(true)).resolves.toBe('fail');
+    await expect(resolveStrictTier('fail')).resolves.toBe('fail');
   });
 
-  it('maps the warn tier', () => {
-    expect(resolveStrictTier('warn')).toBe('warn');
+  it('maps the warn tier', async () => {
+    await expect(resolveStrictTier('warn')).resolves.toBe('warn');
   });
 
-  it('throws fail-loud on an unknown tier', () => {
-    expect(() => resolveStrictTier('banana')).toThrow('Unknown --strict tier "banana"');
-    expect(() => resolveStrictTier('')).toThrow('Unknown --strict tier');
+  it('throws fail-loud on an unknown tier', async () => {
+    await expect(resolveStrictTier('banana')).rejects.toThrow('Unknown --strict tier "banana"');
+    await expect(resolveStrictTier('')).rejects.toThrow('Unknown --strict tier');
   });
 });
 
