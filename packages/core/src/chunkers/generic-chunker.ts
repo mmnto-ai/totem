@@ -46,7 +46,17 @@ export class GenericChunker implements Chunker {
   readonly strategy: ChunkStrategy = 'generic';
 
   chunk(content: string, filePath: string, type: ContentType): Chunk[] {
-    const lines = content.split('\n');
+    const rawLines = content.split('\n');
+    // A file ending in a newline (the norm for real source) splits into a
+    // phantom empty final element — without stripping it, the EOF check misses
+    // by one and the final window over-reports `endLine` past the real last
+    // line (greptile P1 on #2442). Strip exactly ONE trailing empty element:
+    // it is the artifact of the final newline; further empties are REAL blank
+    // lines.
+    const lines =
+      rawLines.length > 0 && rawLines[rawLines.length - 1] === ''
+        ? rawLines.slice(0, -1)
+        : rawLines;
     const chunks: Chunk[] = [];
 
     for (let start = 0; start < lines.length; start += GENERIC_STEP_LINES) {

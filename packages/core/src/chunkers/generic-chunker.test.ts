@@ -91,6 +91,32 @@ func _ready():
     expect(chunks[1]!.endLine).toBe(61);
   });
 
+  it('trailing newline does not inflate endLine or mint a phantom window (greptile P1, #2442)', () => {
+    // Real source files end with a newline. A 60-line file + trailing \n splits
+    // into 61 elements; pre-fix the EOF check missed at 60-vs-61 and a second
+    // window [51-61] shipped with endLine one beyond the real last line.
+    const sixtyWithNewline =
+      Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const chunks = chunker.chunk(sixtyWithNewline, 'x.rs', 'code');
+    expect(chunks.length).toBe(1);
+    expect(chunks[0]!.endLine).toBe(60);
+
+    // 61 real lines + trailing newline: same shape as the no-newline 61-line
+    // case — two windows, endLine 61, no phantom 62.
+    const sixtyOneWithNewline =
+      Array.from({ length: 61 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+    const chunks61 = chunker.chunk(sixtyOneWithNewline, 'x.gd', 'code');
+    expect(chunks61.length).toBe(2);
+    expect(chunks61[1]!.endLine).toBe(61);
+
+    // A REAL run of trailing blank lines is not the phantom: only the single
+    // newline artifact is stripped; blank-window dropping handles the rest.
+    const withRealBlanks = 'line 1\nline 2\n\n\n';
+    const blankChunks = chunker.chunk(withRealBlanks, 'y.rs', 'code');
+    expect(blankChunks.length).toBe(1);
+    expect(blankChunks[0]!.content).toBe('line 1\nline 2\n\n');
+  });
+
   it('yields no chunks for empty content', () => {
     expect(chunker.chunk('', 'empty.rs', 'code')).toEqual([]);
   });
