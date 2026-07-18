@@ -262,7 +262,11 @@ export function extractReviewBodyFindings(
     if (!review.author || !isBotComment(review.author)) continue;
 
     const tool = detectBot(review.author);
-    let parsed: Array<{ type: 'nitpick' | 'outside-diff'; content: string }> = [];
+    let parsed: Array<{
+      type: 'nitpick' | 'outside-diff' | 'body-only';
+      content: string;
+      file?: string;
+    }> = [];
 
     if (tool === 'coderabbit') {
       parsed = parseCodeRabbitReviewFindings(review.body);
@@ -275,8 +279,19 @@ export function extractReviewBodyFindings(
     for (const finding of parsed) {
       findings.push({
         tool,
-        severity: finding.type === 'outside-diff' ? 'warning' : 'info',
-        file: '(review body)',
+        // A body-only ("Additional comments") entry carries CR's own severity
+        // tag — parse it instead of flattening to a fixed tier (mmnto-ai/totem#2414).
+        severity:
+          finding.type === 'body-only'
+            ? parseSeverityForTool(tool, finding.content)
+            : finding.type === 'outside-diff'
+              ? 'warning'
+              : 'info',
+        // Provenance marker (mmnto-ai/totem#2414): dispositions reference
+        // `path (outside-diff)` / `path (body-only)` when the section's nested
+        // per-file block carried the attribution; the bare `(review body)`
+        // fallback stays for unattributed shapes.
+        file: finding.file !== undefined ? `${finding.file} (${finding.type})` : '(review body)',
         line: undefined,
         body: finding.content,
         suggestion: undefined,

@@ -446,3 +446,168 @@ describe('parseGreptileReviewFindings (marker-anchored)', () => {
     expect(parseGreptileReviewFindings('## Just a normal summary.')).toEqual([]);
   });
 });
+
+// ─── Blockquoted review-details + Additional comments (mmnto-ai/totem#2414) ───
+
+// The live #2422 round-2 shape: CR renders the whole Review-details region as a
+// markdown BLOCKQUOTE (`> ` line prefixes), which broke every section regex —
+// both same-day #2414 specimens were this class. Structure mirrors the captured
+// body: outside-diff section → nested per-file block → finding entry.
+const BLOCKQUOTED_OUTSIDE_DIFF = [
+  '**Actionable comments posted: 0**',
+  '',
+  '<details>',
+  '<summary>📜 Review details</summary>',
+  '',
+  '> <details>',
+  '> <summary>⚠️ Outside diff range comments (1)</summary><blockquote>',
+  '> ',
+  '> <details>',
+  '> <summary>packages/cli/src/commands/install-hooks.ts (1)</summary><blockquote>',
+  '> ',
+  '> `831-838`: _🎯 Functional Correctness_ | _🟠 Major_ | _⚡ Quick win_',
+  '> ',
+  '> **Distinguish an unresolved hooks directory from a hook-manager skip.**',
+  '> ',
+  '> Returning `null` here conflates both outcomes.',
+  '> ',
+  '> </blockquote></details>',
+  '> ',
+  '> </blockquote></details>',
+  '',
+  '</details>',
+].join('\n');
+
+const ADDITIONAL_COMMENTS_MIXED = [
+  '<details>',
+  '<summary>🔇 Additional comments (2)</summary><blockquote>',
+  '',
+  '<details>',
+  '<summary>packages/cli/src/commands/install-hooks-exit-contract.test.ts (2)</summary><blockquote>',
+  '',
+  '`23-23`: _📐 Maintainability_ | _🟡 Minor_',
+  '',
+  '**Static test import question.**',
+  '',
+  'The new test file statically imports the module under test.',
+  '',
+  '---',
+  '',
+  '`1-10`: ✅ Verified — the roster invariant test covers all six artifacts. LGTM.',
+  '',
+  '</blockquote></details>',
+  '',
+  '</blockquote></details>',
+].join('\n');
+
+describe('blockquoted CR review bodies (mmnto-ai/totem#2414)', () => {
+  it('parses the outside-diff section through the blockquote wrapper (the live-miss shape)', () => {
+    const findings = parseCodeRabbitReviewFindings(BLOCKQUOTED_OUTSIDE_DIFF);
+    const outside = findings.filter((f) => f.type === 'outside-diff');
+    expect(outside).toHaveLength(1);
+    expect(outside[0]!.content).toContain('Distinguish an unresolved hooks directory');
+  });
+
+  it('attributes the finding to the nested per-file block, not "(review body)"', () => {
+    const findings = parseCodeRabbitReviewFindings(BLOCKQUOTED_OUTSIDE_DIFF);
+    expect(findings[0]!.file).toBe('packages/cli/src/commands/install-hooks.ts');
+  });
+
+  it('parses blockquoted nit sections too (shared normalization)', () => {
+    const quoted = SAMPLE_NIT_BLOCK.split('\n')
+      .map((l) => `> ${l}`)
+      .join('\n');
+    const nits = parseCodeRabbitNits(quoted);
+    expect(nits).toHaveLength(1);
+    expect(nits[0]).toContain('Hardcoded path and fragile counting method');
+  });
+
+  it('legacy non-blockquoted bodies are unaffected', () => {
+    const flat = BLOCKQUOTED_OUTSIDE_DIFF.replace(/^> /gm, '').replace(/^>$/gm, '');
+    const findings = parseCodeRabbitReviewFindings(flat);
+    expect(findings.filter((f) => f.type === 'outside-diff')).toHaveLength(1);
+  });
+});
+
+describe('parseCodeRabbitReviewFindings — Additional comments (body-only, mmnto-ai/totem#2414)', () => {
+  it('surfaces the severity-tagged actionable entry as a body-only finding', () => {
+    const findings = parseCodeRabbitReviewFindings(ADDITIONAL_COMMENTS_MIXED);
+    const bodyOnly = findings.filter((f) => f.type === 'body-only');
+    expect(bodyOnly).toHaveLength(1);
+    expect(bodyOnly[0]!.content).toContain('Static test import question');
+    expect(bodyOnly[0]!.file).toBe('packages/cli/src/commands/install-hooks-exit-contract.test.ts');
+  });
+
+  it('filters verification/LGTM entries that carry no finding template', () => {
+    const findings = parseCodeRabbitReviewFindings(ADDITIONAL_COMMENTS_MIXED);
+    expect(findings.some((f) => f.content.includes('LGTM'))).toBe(false);
+  });
+
+  it('returns nothing for an Additional-comments section of pure verifications', () => {
+    const pure = ADDITIONAL_COMMENTS_MIXED.replace(
+      /_📐 Maintainability_ \| _🟡 Minor_/,
+      '',
+    ).replace(/\*\*Static test import question\.\*\*/, '✅ fine');
+    const findings = parseCodeRabbitReviewFindings(pure);
+    expect(findings.filter((f) => f.type === 'body-only')).toHaveLength(0);
+  });
+});
+
+describe('CR_SEVERITY_TAG_RE anchoring + file-block scan position (#2427 review round)', () => {
+  function additionalSection(entry: string): string {
+    return [
+      '<details>',
+      '<summary>🔇 Additional comments (1)</summary><blockquote>',
+      '<details>',
+      '<summary>packages/cli/src/x.ts (1)</summary><blockquote>',
+      '',
+      entry,
+      '',
+      '</blockquote></details>',
+      '</blockquote></details>',
+    ].join('\n');
+  }
+
+  it('italic prose merely CONTAINING a severity word is not actionable (CR example)', () => {
+    const findings = parseCodeRabbitReviewFindings(
+      additionalSection('`5-5`: _major version verified_ — bump is safe. LGTM.'),
+    );
+    expect(findings.filter((f) => f.type === 'body-only')).toHaveLength(0);
+  });
+
+  it('a bare italic severity word inside a sentence is not actionable (greptile example)', () => {
+    const findings = parseCodeRabbitReviewFindings(
+      additionalSection('`5-10`: ✅ Fixed the _minor_ nit. LGTM.'),
+    );
+    expect(findings.filter((f) => f.type === 'body-only')).toHaveLength(0);
+  });
+
+  it('the real emoji-prefixed template still qualifies', () => {
+    const findings = parseCodeRabbitReviewFindings(
+      additionalSection('`5-5`: _📐 Maintainability_ | _🟡 Minor_\n\n**A real finding.**'),
+    );
+    expect(findings.filter((f) => f.type === 'body-only')).toHaveLength(1);
+  });
+
+  it('a path-like details block NESTED in a finding body is not re-matched as a sibling file block', () => {
+    const body = [
+      '<details>',
+      '<summary>⚠️ Outside diff range comments (1)</summary><blockquote>',
+      '<details>',
+      '<summary>packages/cli/src/outer.ts (1)</summary><blockquote>',
+      '',
+      '`1-2`: _🟠 Major_ finding text.',
+      '',
+      '<details>',
+      '<summary>packages/cli/src/inner.ts (1)</summary><blockquote>',
+      'embedded illustration, not a sibling block',
+      '</blockquote></details>',
+      '',
+      '</blockquote></details>',
+      '</blockquote></details>',
+    ].join('\n');
+    const findings = parseCodeRabbitReviewFindings(body).filter((f) => f.type === 'outside-diff');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.file).toBe('packages/cli/src/outer.ts');
+  });
+});
