@@ -191,14 +191,16 @@ program
   .description('Run workspace health diagnostics')
   .option('--pr', 'Auto-downgrade noisy rules and open a PR')
   .option(
-    '--strict',
-    'Exit non-zero if any check reports a `fail` status (gating mode for hooks / CI)',
+    '--strict [tier]',
+    'Exit non-zero on fail-class diagnostics (gating mode for hooks / CI); --strict=warn also gates on warn-class diagnostics — the machine-checkable all-wiring oracle (mmnto-ai/totem#2385)',
   )
-  .action(async (opts: { pr?: boolean; strict?: boolean }) => {
+  .action(async (opts: { pr?: boolean; strict?: boolean | string }) => {
     try {
-      const { doctorCommand } = await import('./commands/doctor.js');
+      const { doctorCommand, doctorGateFailed, resolveStrictTier } =
+        await import('./commands/doctor.js');
+      const strictTier = await resolveStrictTier(opts.strict);
       const results = await doctorCommand(opts);
-      if (opts.strict && results.some((r) => r.status === 'fail')) {
+      if (strictTier && doctorGateFailed(results, strictTier)) {
         process.exitCode = 1;
       }
     } catch (err) {
