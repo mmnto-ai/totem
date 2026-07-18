@@ -153,6 +153,33 @@ describe('statusCommand', () => {
     expect(output).toContain('Shield: stale');
   });
 
+  it('derives rule count from compiled-rules.json when manifest is missing', async () => {
+    const { totemDir } = scaffold(tmpDir);
+    // Write compiled-rules.json but NO compile-manifest.json
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({
+        version: 1,
+        rules: [
+          { lessonHash: 'rule-1', lessonHeading: 'Rule 1', pattern: 'foo', message: 'No foo', engine: 'regex', compiledAt: '2026-07-18T00:00:00.000Z' },
+          { lessonHash: 'rule-2', lessonHeading: 'Rule 2', pattern: 'bar', message: 'No bar', engine: 'regex', compiledAt: '2026-07-18T00:00:00.000Z' },
+          { lessonHash: 'rule-3', lessonHeading: 'Rule 3', pattern: 'baz', message: 'No baz', engine: 'regex', compiledAt: '2026-07-18T00:00:00.000Z' }
+        ],
+        nonCompilable: [],
+      }),
+      'utf-8',
+    );
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { statusCommand } = await import('./status.js');
+    await statusCommand();
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(output).toContain('Rules: 3 compiled');
+    expect(output).toContain('Manifest: missing');
+  });
+
   it('handles missing .totem directory gracefully', async () => {
     // No scaffold — no .totem dir at all
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

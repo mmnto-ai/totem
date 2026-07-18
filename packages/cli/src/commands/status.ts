@@ -28,11 +28,27 @@ export async function statusCommand(): Promise<void> {
   let manifestStatus = 'missing';
   let ruleCount = 0;
   try {
-    const { readCompileManifest, generateInputHash } = await import('@mmnto/totem');
+    const { readCompileManifest, generateInputHash, loadCompiledRulesFile } =
+      await import('@mmnto/totem');
+
+    // Always attempt to derive the rule count from compiled-rules.json (source of truth used by describe/lint)
+    try {
+      const rulesPath = path.join(totemDir, 'compiled-rules.json');
+      if (fs.existsSync(rulesPath)) {
+        const compiledRules = loadCompiledRulesFile(rulesPath);
+        ruleCount = compiledRules.rules.length;
+      }
+    } catch {
+      // If compiled-rules.json is malformed/unparseable, ignore it and default to 0
+    }
+
     const manifestPath = path.join(totemDir, 'compile-manifest.json');
     if (fs.existsSync(manifestPath)) {
       const manifest = readCompileManifest(manifestPath);
-      ruleCount = manifest.rule_count;
+      // Fallback to manifest rule_count only if compiled-rules.json is absent or empty (test compatibility)
+      if (ruleCount === 0 && manifest.rule_count > 0) {
+        ruleCount = manifest.rule_count;
+      }
       const lessonsDir = path.join(totemDir, 'lessons');
       const currentHash = generateInputHash(lessonsDir, cwd);
       manifestStatus = currentHash === manifest.input_hash ? 'fresh' : 'stale';
