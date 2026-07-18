@@ -527,11 +527,17 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // an empty mark-count map makes the subtraction below a no-op, so nothing is
   // subtracted. The reader default stays `inbound − processed`; the compaction
   // path opts in to the pre-dedupe view.
+  // Normalize duplicate ids once (env/config can carry them): a duplicated seat
+  // would double-drain its marks AND inflate the broadcast requirement in
+  // lockstep — behavior-equivalent today by symmetry, but the equality between
+  // "seats counted" and "seats that can hold marks" is load-bearing for the
+  // per-seat broadcast rule, so it is enforced rather than assumed (GCA #2424).
+  const selfAgents = [...new Set(selfResolution.agents)];
   const processedMarkCounts =
-    opts.includeProcessed !== true && selfResolution.agents.length > 0
-      ? buildProcessedMarkCounts(repoRoot, selfResolution.agents, warnings)
+    opts.includeProcessed !== true && selfAgents.length > 0
+      ? buildProcessedMarkCounts(repoRoot, selfAgents, warnings)
       : new Map<string, number>();
-  const selfSeatCount = selfResolution.agents.length;
+  const selfSeatCount = selfAgents.length;
 
   const slots = enumerateOutboxes(workspace, opts.recursive === true, warnings);
 

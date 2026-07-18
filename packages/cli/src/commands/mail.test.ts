@@ -462,6 +462,17 @@ describe('pollMail — broadcast marks are per-seat, not union (mmnto-ai/totem#2
     expect(poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' } }).mail).toEqual([]);
   });
 
+  it('duplicate seat ids are normalized — the requirement counts DISTINCT seats (GCA #2424)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: BROADCAST_FILE, to: 'broadcast', subject: 'consumers move' },
+    ]);
+    writeProcessed('totem', 'totem-claude', [BROADCAST_FILE]);
+    writeProcessed('totem', 'totem-gemini', [BROADCAST_FILE]);
+    // Both distinct seats hold marks; the duplicated id must not raise the bar to 3.
+    const dupes = { TOTEM_SELF_AGENT: 'totem-claude,totem-claude,totem-gemini' };
+    expect(poll({ env: dupes }).mail).toEqual([]);
+  });
+
   it('legacy broadcast WITHOUT the filename token stays on the union rule (disclosed residual)', () => {
     // Subtraction runs pre-parse, so the broadcast rule keys on the positional
     // filename token; a tokenless `to: broadcast` dispatch keeps the historical
