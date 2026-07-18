@@ -17,12 +17,13 @@ When using LLMs on projects, I found that agents kept making the same architectu
 
 The cause is structural, not a prompt problem. Models are stateless. Every session starts from zero, and anything the last session learned is gone unless it lives somewhere durable. If project rules and lessons don't reside in the repository alongside the code, no amount of re-explaining fixes it for the next session.
 
-Totem is what I extracted to solve that friction. It's a file-based toolkit: plain markdown lessons, a queryable knowledge index derived from them, and compiled lint rules a zero-LLM linter enforces. The lint engine is deterministic; the index is local, derived, and rebuilt from your files at any time; the compiler and review commands are LLM-powered and opt-in. The structural pieces ship today. Read the loop below with one composition note: the **enforcement floor** (deterministic lint, hooks, index) is the stable half this repo exercises on every push, while the **lesson-compiler** half is mid-replacement — rule compilation has been frozen since 2026-05-17 while its successor is built in the open, so new lessons currently accrue and stay queryable without compiling into new rules. The discipline and telemetry layers are in active development; the [maturity page](docs/wiki/maturity.md) carries the honest split, machine-derived from committed data.
+Totem is what I extracted to solve that friction. It's a file-based toolkit: plain markdown lessons, a queryable knowledge index derived from them, and compiled lint rules a zero-LLM linter enforces. The lint engine is deterministic; the index is local, derived, and rebuilt from your files at any time; the compiler and review commands are LLM-powered and opt-in. The structural pieces ship today; [Where the Loop Stands](#where-the-loop-stands) says exactly which half is which. The discipline and telemetry layers are in active development; the [maturity page](docs/wiki/maturity.md) carries the honest split, machine-derived from committed data.
 
 ---
 
 - [Tripwires, Not Tracks](#tripwires-not-tracks)
 - [How Mistakes Become Rules](#how-mistakes-become-rules)
+- [Where the Loop Stands](#where-the-loop-stands)
 - [The Queryable Knowledge Index](#the-queryable-knowledge-index)
 - [What's in the Box](#whats-in-the-box)
 - [What Works and What Doesn't](#what-works-and-what-doesnt)
@@ -66,7 +67,7 @@ The core loop is simple. A mistake gets caught in a PR review, a bot nit, or a p
 
 ```mermaid
 graph LR
-    Catch["Catch a mistake"] -->|write a lesson| Compile["totem lesson compile"]
+    Catch["Catch a mistake"] -->|write a lesson| Compile["totem lesson compile (frozen)"]
     Compile -->|generates rule| Enforce["totem lint"]
     Enforce -->|catches next attempt| Catch
 
@@ -75,9 +76,25 @@ graph LR
     style Enforce fill:#1a4d2e,stroke:#34a853,color:#fff
 ```
 
+The compile step is frozen today; [Where the Loop Stands](#where-the-loop-stands), next, says why and what still runs.
+
 When a rule matches comments or string literals instead of actual code, `totem doctor` flags it as noisy, and `totem lesson compile --upgrade` re-runs the compiler with a precision-targeted prompt. I'd rather have 300 precise rules than 1,000 noisy ones.
 
 Want to watch the whole loop run on a committed fixture? [`examples/proof-kit/`](examples/proof-kit/) is a tiny repo where a real mistake, its lesson, and the compiled rule that blocks the recurrence are all committed. CI re-proves the block on every push and writes a [receipt](examples/proof-kit/receipt.json) with its parameters.
+
+## Where the Loop Stands
+
+The loop above is the design. Here is where it stands today.
+
+**Enforcement is stable.** Compiled rules run on every diff: deterministic, offline, zero LLM.
+
+**Lessons are live.** They bank, index, and surface to agents today. They advise; they do not yet compile.
+
+**The compiler is frozen on purpose, since 2026-05-17.** We hit a soundness problem in the lesson-to-rule path and froze it fail-closed: a corrupt [freeze file](.totem/freeze.json) throws rather than bypassing itself. Fewer rules we trust beat more rules we do not.
+
+**The path back is gated, not dated.** The replacement compiler ships only after it passes held-out validation on real work; status lives on the [maturity page](docs/wiki/maturity.md).
+
+What this means today: existing rules keep enforcing, new lessons bank and advise, and new-rule compilation waits for the gate. If that trade is wrong for you, we would rather you know now.
 
 ## The Queryable Knowledge Index
 
