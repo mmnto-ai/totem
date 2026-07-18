@@ -28,26 +28,35 @@ export async function statusCommand(): Promise<void> {
   let manifestStatus = 'missing';
   let ruleCount = 0;
   try {
-    const { readCompileManifest, generateInputHash, loadCompiledRulesFile } =
+    const { readCompileManifest, generateInputHash, loadCompiledRules } =
       await import('@mmnto/totem');
 
-    // totem-context: intentional cleanup — loading compiled rules is best-effort for CLI status command
+    // Rule count parity (#2388): count the ACTIVE set through the SAME loader
+    // lint/describe use — `loadCompiledRules` applies the #1345 status filter
+    // (archived / untested-against-codebase / pending-verification excluded).
+    // The raw file total would be a third, different number (485 raw vs 387
+    // active at the time of this fix). When the compiled-rules file is present
+    // and readable, its active count is AUTHORITATIVE — including an honest 0.
+    let compiledFileReadable = false;
     try {
       const rulesPath = path.join(totemDir, 'compiled-rules.json');
       if (fs.existsSync(rulesPath)) {
-        const compiledRules = loadCompiledRulesFile(rulesPath);
-        ruleCount = compiledRules.rules.length;
+        ruleCount = loadCompiledRules(rulesPath).length;
+        compiledFileReadable = true;
       }
-      // totem-context: intentional cleanup — dual placement to satisfy the catch clause linter
+      // totem-context: status is a read-only sensor — a malformed compiled-rules.json degrades to the manifest fallback below instead of crashing the whole display; lint's own loader is where malformation fails loud.
     } catch {
-      // If compiled-rules.json is malformed/unparseable, ignore it and default to 0
+      compiledFileReadable = false;
     }
 
     const manifestPath = path.join(totemDir, 'compile-manifest.json');
     if (fs.existsSync(manifestPath)) {
       const manifest = readCompileManifest(manifestPath);
-      // Fallback to manifest rule_count only if compiled-rules.json is absent or empty (test compatibility)
-      if (ruleCount === 0 && manifest.rule_count > 0) {
+      // Manifest count is the FALLBACK, used only when the compiled-rules file
+      // is absent/unreadable — not whenever the active count happens to be 0
+      // (an all-archived file should honestly report 0, not a stale manifest
+      // number).
+      if (!compiledFileReadable) {
         ruleCount = manifest.rule_count;
       }
       const lessonsDir = path.join(totemDir, 'lessons');

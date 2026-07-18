@@ -189,6 +189,18 @@ describe('statusCommand', () => {
               engine: 'regex',
               compiledAt: '2026-07-18T00:00:00.000Z',
             },
+            // ARCHIVED rule — must NOT count. Parity means the ACTIVE set via
+            // the same #1345-filtered loader lint/describe use, not the raw
+            // file total (review round, #2388).
+            {
+              lessonHash: 'rule-4-archived',
+              lessonHeading: 'Rule 4 (archived)',
+              pattern: 'qux',
+              message: 'No qux',
+              engine: 'regex',
+              compiledAt: '2026-07-18T00:00:00.000Z',
+              status: 'archived',
+            },
           ],
           nonCompilable: [],
         }),
@@ -201,6 +213,7 @@ describe('statusCommand', () => {
       await statusCommand();
 
       const output = consoleSpy.mock.calls.map((c) => `${c[0]}`).join('\n');
+      // 4 rules in the raw file, 3 active — the count is the ACTIVE set.
       expect(output).toMatch(/Rules: 3 compiled/);
       expect(output).toMatch(/Manifest: missing/);
     },
