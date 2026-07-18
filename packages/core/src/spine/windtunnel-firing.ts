@@ -255,7 +255,7 @@ export async function buildFirings(input: BuildFiringsInput): Promise<BuildFirin
     // || !engine`; applyAstRulesToAdditions takes `engine === 'ast' | 'ast-grep'`
     // (rule-engine.ts). No rule is processed by both, so double-processing can
     // never manufacture a same-rule labelId self-collision at the A1 gate. (CR #2215.)
-    const regexViolations = applyRulesToAdditions(ruleEngineCtx, rules, additions);
+    const regexViolations = applyRulesToAdditions(ruleEngineCtx, rules, additions, undefined, cwd);
     // AST / ast-grep violations (whole post-image via the shared readStrategy).
     const astViolations = await applyAstRulesToAdditions(
       ruleEngineCtx,

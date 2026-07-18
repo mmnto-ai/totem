@@ -123,7 +123,6 @@ export function fileMatchesGlobs(filePath: string, globs: readonly string[]): bo
  * excludes tests, or does not explicitly target tests.
  */
 export function isProductionRustRule(rule: CompiledRule): boolean {
-  if (rule.lessonHash === 'unwrap-ast-rule') return true;
   if (!rule.fileGlobs || rule.fileGlobs.length === 0) return false;
   const hasRs = rule.fileGlobs.some(
     (g) => typeof g === 'string' && !g.startsWith('!') && g.endsWith('.rs'),
@@ -198,6 +197,18 @@ export function getRustTestSpans(content: string): { startLine: number; endLine:
             break;
           }
           idx++;
+        }
+        continue;
+      }
+
+      // Skip a visibility modifier — `#[cfg(test)] pub mod` / `pub(crate) mod`
+      // are valid test modules and must still be spanned.
+      if (content.slice(idx).startsWith('pub') && !/[A-Za-z0-9_]/.test(content[idx + 3] ?? '')) {
+        idx += 3;
+        while (idx < content.length && /\s/.test(content[idx]!)) idx++;
+        if (content[idx] === '(') {
+          const close = content.indexOf(')', idx);
+          idx = close === -1 ? content.length : close + 1;
         }
         continue;
       }
@@ -299,14 +310,25 @@ export function getRustTestSpans(content: string): { startLine: number; endLine:
           }
         }
 
-        // Skip char literal
+        // Char literal vs LIFETIME: a `'` opens a char literal only when it
+        // closes within the char grammar (`'x'`, `'\n'`, `'\u{7FFF}'`).
+        // Otherwise it is a lifetime (`'a`, `'static`) — consuming to the next
+        // apostrophe would swallow braces and corrupt depth tracking, producing
+        // an over-long span (over-EXEMPTION: real violations after the test
+        // module suppressed — the unsafe direction for a lint gate).
         if (char === "'") {
-          braceScanIdx++;
-          while (braceScanIdx < content.length) {
-            if (content[braceScanIdx] === "'" && content[braceScanIdx - 1] !== '\\') {
+          if (content[braceScanIdx + 1] === '\\') {
+            // Escaped char literal — scan to its closing quote.
+            braceScanIdx += 2;
+            while (braceScanIdx < content.length && content[braceScanIdx] !== "'") {
               braceScanIdx++;
-              break;
             }
+            braceScanIdx++;
+          } else if (content[braceScanIdx + 2] === "'") {
+            // Plain char literal `'x'`.
+            braceScanIdx += 3;
+          } else {
+            // Lifetime — consume only the tick; the identifier is ordinary code.
             braceScanIdx++;
           }
           continue;
@@ -624,7 +646,7 @@ export function applyRulesToAdditions(
       const spans = getRustTestSpans(content);
       rustTestSpansCache.set(file, spans);
       return spans;
-      // totem-context: intentional cleanup
+      // totem-context: span-read failure yields no spans → no exemption → the rule still FIRES; the exemption fails toward flagging, never toward suppression.
     } catch {
       rustTestSpansCache.set(file, []);
       return [];
@@ -855,33 +877,36 @@ export async function applyAstRulesToAdditions(
           readStrategy,
         );
 
+        // Rust test-span exemption (#2397): resolve spans ONCE per file — not
+        // per match — and only when some applicable rule is production-Rust.
+        let treeSitterRustSpans: { startLine: number; endLine: number }[] = [];
+        if (applicableTreeSitter.some(isProductionRustRule)) {
+          let fileContent = '';
+          try {
+            fileContent = readStrategy
+              ? ((await readStrategy(file)) ?? '')
+              : await fs.promises.readFile(path.resolve(workingDirectory, file), 'utf-8');
+            // totem-context: span-read failure yields no spans → no exemption → the rule still FIRES; the exemption fails toward flagging, never toward suppression.
+          } catch {
+            fileContent = '';
+          }
+          treeSitterRustSpans = getRustTestSpans(fileContent);
+        }
+
         // Map results back to violations
         for (let i = 0; i < applicableTreeSitter.length; i++) {
           const rule = applicableTreeSitter[i]!;
           const matches = batchResults[i] ?? [];
 
           for (const match of matches) {
-            // Exempt matches inside inline Rust test modules for production-only Rust rules
-            if (isProductionRustRule(rule)) {
-              let fileContent = '';
-              try {
-                if (readStrategy) {
-                  fileContent = (await readStrategy(file)) ?? '';
-                } else {
-                  fileContent = await fs.promises.readFile(
-                    path.resolve(workingDirectory, file),
-                    'utf-8',
-                  );
-                }
-                // totem-context: intentional cleanup
-              } catch {
-                // fail-soft: file read error, leave fileContent empty
-              }
-              const spans = getRustTestSpans(fileContent);
-              const isExempt = spans.some(
+            // Exempt matches inside inline Rust test modules (#2397).
+            if (
+              isProductionRustRule(rule) &&
+              treeSitterRustSpans.some(
                 (s) => match.lineNumber >= s.startLine && match.lineNumber <= s.endLine,
-              );
-              if (isExempt) continue;
+              )
+            ) {
+              continue;
             }
 
             const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
@@ -972,18 +997,25 @@ export async function applyAstRulesToAdditions(
             });
           });
 
+          // Rust test-span exemption (#2397): compute once per file, only when
+          // some applicable rule is production-Rust (content is already in hand).
+          const astGrepRustSpans = applicableAstGrep.some(isProductionRustRule)
+            ? getRustTestSpans(content)
+            : [];
+
           for (let i = 0; i < applicableAstGrep.length; i++) {
             const rule = applicableAstGrep[i]!;
             const matches = batchResults[i] ?? [];
 
             for (const match of matches) {
-              // Exempt matches inside inline Rust test modules for production-only Rust rules
-              if (isProductionRustRule(rule)) {
-                const spans = getRustTestSpans(content);
-                const isExempt = spans.some(
+              // Exempt matches inside inline Rust test modules (#2397).
+              if (
+                isProductionRustRule(rule) &&
+                astGrepRustSpans.some(
                   (s) => match.lineNumber >= s.startLine && match.lineNumber <= s.endLine,
-                );
-                if (isExempt) continue;
+                )
+              ) {
+                continue;
               }
 
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);

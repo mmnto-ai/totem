@@ -92,7 +92,7 @@ export async function applyRulesToAdditionsBounded(
       const spans = getRustTestSpans(content);
       rustTestSpansCache.set(file, spans);
       return spans;
-      // totem-context: intentional cleanup
+      // totem-context: span-read failure yields no spans → no exemption → the rule still FIRES; the exemption fails toward flagging, never toward suppression.
     } catch {
       rustTestSpansCache.set(file, []);
       return [];

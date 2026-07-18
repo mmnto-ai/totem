@@ -1387,6 +1387,37 @@ mod external; // non-inline mod
     expect(spans[1]).toEqual({ startLine: 18, endLine: 22 });
   });
 
+  it('getRustTestSpans: lifetimes are not char-literal openers; pub test mods are spanned', () => {
+    // Regression (review round): the char-literal skip must not treat a
+    // lifetime tick (`'a`, `'static`) as a string opener — swallowing braces
+    // between two lifetimes corrupts depth tracking and mis-sizes the span
+    // (over-exemption suppresses REAL violations after the test module).
+    const code = `
+#[cfg(test)]
+mod tests {
+    struct Wrap<'a> { inner: &'a str }
+    fn mk<'a>(s: &'a str) -> Wrap<'a> { Wrap { inner: s } }
+}
+
+fn prod_after_mod() {
+    let x = Some('x').unwrap();
+}
+
+#[cfg(test)]
+pub mod pub_tests {
+    use super::*;
+}
+`;
+    const spans = getRustTestSpans(code);
+    expect(spans).toHaveLength(2);
+    // Lifetime-laden module closes on its real brace (line 6), so line 9's
+    // production unwrap stays OUTSIDE every span.
+    expect(spans[0]).toEqual({ startLine: 2, endLine: 6 });
+    expect(spans[0]!.endLine).toBeLessThan(9);
+    // `pub mod` after #[cfg(test)] is still a test module.
+    expect(spans[1]).toEqual({ startLine: 12, endLine: 15 });
+  });
+
   it('applyRulesToAdditions exempts regex violations inside inline Rust test modules', () => {
     const rule = makeRule({
       engine: 'regex',
@@ -1434,54 +1465,14 @@ mod tests {
     expect(violations[0]?.lineNumber).toBe(3);
   });
 
-  it('applyAstRulesToAdditions exempts AST/ast-grep violations inside inline Rust test modules', async () => {
-    // Seed fresh manifest to prevent stale manifest nudge
-    seedFreshManifest(tmpDir);
-
-    const rule = makeRule({
-      engine: 'ast-grep',
-      astGrepPattern: '$X.unwrap()',
-      fileGlobs: ['**/*.ts', '!**/tests/**', '!**/*test*.ts'],
-      lessonHash: 'unwrap-ast-rule',
-    });
-
-    const rsContent = `
-fn prod_code() {
-    let val = Some(1).unwrap(); // line 3, violation!
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_val() {
-        let val = Some(1).unwrap(); // line 10, exempt!
-    }
-}
-`;
-
-    const filePath = 'src/lib.ts';
-    fs.writeFileSync(path.join(tmpDir, filePath), rsContent, 'utf-8');
-
-    const additions: DiffAddition[] = [
-      {
-        file: filePath,
-        line: '    let val = Some(1).unwrap(); // line 3, violation!',
-        lineNumber: 3,
-        precedingLine: null,
-      },
-      {
-        file: filePath,
-        line: '        let val = Some(1).unwrap(); // line 10, exempt!',
-        lineNumber: 10,
-        precedingLine: null,
-      },
-    ];
-
-    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
-
-    expect(violations).toHaveLength(1);
-    expect(violations[0]?.lineNumber).toBe(3);
-  });
+  // NOTE (review round): the original AST-path e2e test here asserted exemption
+  // through a fixture no real rule can produce — Rust source in a `.ts` file
+  // under `.ts` fileGlobs, reachable only via a production hardcode
+  // (`lessonHash === 'unwrap-ast-rule'`) that existed to serve the fixture. Both
+  // are removed. The AST-path exemption shares `isProductionRustRule` +
+  // `getRustTestSpans` (unit-tested above) with the regex/bounded paths
+  // (e2e-tested below); an honest AST e2e needs the Rust grammar registered,
+  // which core's test env does not have (the #2308/#2387 language-pack lane).
 
   it('applyRulesToAdditionsBounded exempts bounded-regex violations inside Rust test modules', async () => {
     const { applyRulesToAdditionsBounded } = await import('./regex-safety/apply-rules-bounded.js');
