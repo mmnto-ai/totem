@@ -848,6 +848,50 @@ describe('assembleStructuralPrompt fileContext integration', () => {
   });
 });
 
+// ─── assemble*Prompt generated-artifact summary (#2398) ──
+
+describe('assemblePrompt generated-artifact summary integration', () => {
+  const sampleDiff = 'diff --git a/foo.ts b/foo.ts\n+const x = 1;\n';
+  const changedFiles = ['foo.ts'];
+  const emptyContext = { specs: [], sessions: [], code: [], lessons: [] };
+  const summary =
+    '\n=== EXCLUDED GENERATED ARTIFACTS (TOTEM SUMMARY — NOT DIFF CONTENT) ===\n' +
+    '<generated_artifacts_summary>\n- pnpm-lock.yaml — regenerated, +5/-2 lines, hash abcdef012345\n</generated_artifacts_summary>';
+
+  it('injects the excluded-artifact summary into the standard prompt', () => {
+    const prompt = assemblePrompt(
+      sampleDiff,
+      changedFiles,
+      emptyContext,
+      'SYS',
+      undefined,
+      undefined,
+      summary,
+    );
+    expect(prompt).toContain('EXCLUDED GENERATED ARTIFACTS');
+    expect(prompt).toContain('NOT DIFF CONTENT');
+    expect(prompt).toContain('pnpm-lock.yaml');
+  });
+
+  it('omits the summary section when undefined', () => {
+    const prompt = assemblePrompt(sampleDiff, changedFiles, emptyContext, 'SYS');
+    expect(prompt).not.toContain('EXCLUDED GENERATED ARTIFACTS');
+  });
+
+  it('injects the excluded-artifact summary into the structural prompt', () => {
+    const prompt = assembleStructuralPrompt(
+      sampleDiff,
+      changedFiles,
+      'SYS',
+      undefined,
+      undefined,
+      summary,
+    );
+    expect(prompt).toContain('EXCLUDED GENERATED ARTIFACTS');
+    expect(prompt).toContain('pnpm-lock.yaml');
+  });
+});
+
 // ─── shield override validation ──────────────────────
 
 describe('shield override validation', () => {

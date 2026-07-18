@@ -139,6 +139,7 @@ export function assemblePrompt(
   systemPrompt: string,
   smartHints?: string[],
   fileContext?: string,
+  generatedArtifactSummary?: string,
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -155,6 +156,12 @@ export function assemblePrompt(
     );
   } else {
     sections.push(wrapXml('git_diff', diff));
+  }
+
+  // Excluded generated-artifact summary (mmnto-ai/totem#2398) — bytes excluded,
+  // signal preserved. Clearly labelled as a summary, not diff content (#2329).
+  if (generatedArtifactSummary) {
+    sections.push(generatedArtifactSummary);
   }
 
   // File context — full source for small changed files
@@ -203,6 +210,7 @@ export function assembleStructuralPrompt(
   systemPrompt: string,
   smartHints?: string[],
   fileContext?: string,
+  generatedArtifactSummary?: string,
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -220,6 +228,12 @@ export function assembleStructuralPrompt(
     );
   } else {
     sections.push(wrapXml('git_diff', diff));
+  }
+
+  // Excluded generated-artifact summary (mmnto-ai/totem#2398) — bytes excluded,
+  // signal preserved. Clearly labelled as a summary, not diff content (#2329).
+  if (generatedArtifactSummary) {
+    sections.push(generatedArtifactSummary);
   }
 
   // File context — full source for small changed files
@@ -1384,6 +1398,13 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const { filterDiffByPatterns, getDiffForReview } = await import('../git.js');
   const { classifyChangedFiles } = await import('./shield-classify.js');
   const { extractShieldContextAnnotations, extractShieldHints } = await import('./shield-hints.js');
+  const {
+    DEFAULT_GENERATED_ARTIFACT_GLOBS,
+    buildGeneratedArtifactSection,
+    classifyGeneratedArtifacts,
+    formatGeneratedArtifactLine,
+    readGitattributesGeneratedPatterns,
+  } = await import('./shield-generated.js');
 
   // mmnto-ai/totem#1714: --estimate is the deterministic-rule pre-flight
   // path. Reject incompatible flag combinations BEFORE any other
@@ -1578,6 +1599,50 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     };
   }
 
+  // Stage 0.5: Exclude generated-artifact BYTES from the synthesis input
+  // (mmnto-ai/totem#2398). Generated artifacts (lockfiles, compiled-rules.json,
+  // dist/**, *.wasm, regenerated dashboards) burn review-context tokens on bytes
+  // no reviewer should read. Classify them by default (seeded globs + honor
+  // `.gitattributes` `linguist-generated`), strip their diff sections, and inject
+  // a per-file SUMMARY instead of a silent drop — path, change shape, size delta,
+  // semantic hash — so the "this regenerated" signal survives without the bytes.
+  let generatedArtifactSummary: string | undefined;
+  {
+    const gitattr = readGitattributesGeneratedPatterns(cwd);
+    const generated = classifyGeneratedArtifacts({
+      diff,
+      changedFiles,
+      generatedGlobs: [...DEFAULT_GENERATED_ARTIFACT_GLOBS, ...gitattr.generated],
+      excludeGlobs: gitattr.notGenerated,
+    });
+    if (generated.summaries.length > 0) {
+      log.info(
+        DISPLAY_TAG,
+        `Excluded ${generated.summaries.length} generated-artifact file(s) from the review payload (summarized, not dropped):`,
+      );
+      for (const summary of generated.summaries) {
+        log.dim(DISPLAY_TAG, formatGeneratedArtifactLine(summary));
+      }
+      diff = generated.keptDiff;
+      changedFiles = generated.keptFiles;
+      generatedArtifactSummary = buildGeneratedArtifactSection(generated.summaries);
+
+      // All changed files were generated artifacts — nothing left to review.
+      // Deterministic PASS: the summary was already surfaced above (never a
+      // silent skip). The artifacts' correctness is a gate concern, not the LLM's.
+      if (!diff.trim()) {
+        log.info(DISPLAY_TAG, 'Deterministic fast-path: all changed files are generated artifacts');
+        await writeReviewedContentHash(
+          cwd,
+          config.totemDir,
+          configRoot,
+          config.review.sourceExtensions,
+        );
+        return;
+      }
+    }
+  }
+
   // Stage 1: Classify files — fast-path for non-code-only diffs
   const classification = classifyChangedFiles(changedFiles);
   if (classification.allNonCode) {
@@ -1688,6 +1753,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       systemPrompt,
       smartHints,
       fileContext,
+      generatedArtifactSummary,
     );
     log.dim(DISPLAY_TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
@@ -1760,6 +1826,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     codeBlindGuard.systemPrompt,
     smartHints,
     fileContext,
+    generatedArtifactSummary,
   );
   log.dim(DISPLAY_TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 

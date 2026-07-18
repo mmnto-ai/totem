@@ -284,6 +284,13 @@ export { sanitize } from '@mmnto/totem';
 // Re-export from core — unified XML escaping (#158)
 export { wrapUntrustedXml, wrapXml } from '@mmnto/totem';
 
+// ─── Glob matching ──────────────────────────────────────
+
+// Re-export from core — shared glob semantics so CLI command modules avoid a
+// static top-level barrel import of '@mmnto/totem' (heavy-deps-at-startup rule,
+// mmnto-ai/totem#2339). Used by the review generated-artifact classifier (#2398).
+export { matchesGlob } from '@mmnto/totem';
+
 // ─── Context formatting ─────────────────────────────────
 
 const MAX_RESULT_CONTENT_LENGTH = 300;
