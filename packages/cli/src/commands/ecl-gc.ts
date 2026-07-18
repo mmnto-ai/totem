@@ -791,9 +791,15 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
     maxScan: opts.maxScan,
     env: { ...env, TOTEM_SELF_AGENT: agent },
   });
+  // Normalize BOTH sides through the same sanitizer as the A2.1 retention
+  // comparison (mmnto-ai/totem#2431): the verify poll's inbound files can be
+  // colon-bearing while `allMarks` are stored NTFS-safe, so a raw-vs-actual
+  // compare would MISS a colon-bearing resurfaced dispatch and read the A2.4
+  // falsifier as falsely clean. No-op for the colon-free common case.
+  const allMarksSanitized = new Set([...allMarks].map(sanitizeEclBasename));
   result.resurfaced = verify.mail
     .map((m) => m.file)
-    .filter((f) => allMarks.has(f))
+    .filter((f) => allMarksSanitized.has(sanitizeEclBasename(f)))
     .sort();
   // The A2.4 verdict is trustworthy only if the re-poll itself was complete: a
   // truncated or warned verify could miss a resurfaced dispatch beyond its

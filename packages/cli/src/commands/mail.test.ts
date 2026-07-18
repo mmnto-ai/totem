@@ -14,7 +14,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { findTotemRepoRootSync } from '@mmnto/totem';
+import { findTotemRepoRootSync, TotemError } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
@@ -494,6 +494,31 @@ describe('pollMail — broadcast marks are per-seat, not union (mmnto-ai/totem#2
     writeBroadcastProcessed('totem', 'totem-gemini', [BROADCAST_FILE]);
     expect(poll({ env: TWO_SEATS }).mail).toEqual([]);
     expect(poll({ env: TWO_SEATS, includeProcessed: true }).mail).toHaveLength(1);
+  });
+
+  it('a COLON-bearing broadcast-named file requires EVERY seat mark (CR @623 — classify on sanitized)', () => {
+    // Before the fix, `isBroadcastNamed` ran the raw `T\d{4}Z` stamp regex, which
+    // a colon stamp (`T05:10Z`) fails → the broadcast fell to the ANY-seat rule
+    // and one seat's mark hid it from the other (the #2412 class, resurrected for
+    // that name shape). Now classification runs on the sanitized basename.
+    const colon = '2026-07-18T05:10Z-broadcast-consumers.md';
+    const sanitized = sanitizeEclBasename(colon);
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: colon, to: 'broadcast', subject: 'consumers move' },
+    ]);
+    // Only meaningful where the FS preserves colons in a directory listing; NTFS
+    // turns the colon into an ADS the readdir never lists, so the corrupt inbound
+    // is simply absent there (no first-consumer-wins hazard). Guard so the
+    // assertion runs on colon-legal filesystems (CI/Linux) and no-ops on win32.
+    if (!fs.readdirSync(outbox).includes(colon)) return;
+    // Marks are stored sanitized; one seat's mark must NOT hide the broadcast.
+    writeProcessed('totem', 'totem-gemini', [sanitized]);
+    expect(poll({ env: TWO_SEATS }).mail.map((m) => sanitizeEclBasename(m.file))).toContain(
+      sanitized,
+    );
+    // Only once EVERY resolved seat holds the mark does it subtract.
+    writeProcessed('totem', 'totem-claude', [sanitized]);
+    expect(poll({ env: TWO_SEATS }).mail).toEqual([]);
   });
 });
 
@@ -1976,7 +2001,10 @@ describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
     const src = writeSource();
     const res = mailReply(src, {
       from: 'totem-claude',
-      repoRoot: mkDir(path.join(workspace, 'totem')),
+      // Marker-bearing root: markSource resolves the repo root via the shared
+      // walk-up resolver (CR @1480), so a marker-less fixture would climb to a
+      // host ancestor `.totem`.
+      repoRoot: selfRepoRoot(),
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -2009,7 +2037,7 @@ describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
     fs.writeFileSync(src, '---\nto: totem-claude\nsubject: legacy mail\n---\n\nBody.\n', 'utf-8');
     const res = mailReply(src, {
       from: 'totem-claude',
-      repoRoot: mkDir(path.join(workspace, 'totem')),
+      repoRoot: selfRepoRoot(), // marker-bearing (CR @1480 resolver parity)
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -2274,6 +2302,43 @@ describe('markSource — standalone mail mark (mmnto-ai/totem#2396)', () => {
     const res = markSource(source, { repoRoot: selfRepoRoot(), agentId: 'totem-claude', env: {} });
     expect(res.agent).toBe('totem-claude');
   });
+
+  it('resolves the repo root by walking up from a subdirectory (CR @1480 parity)', () => {
+    const name = '2026-07-16T2200Z-totem-claude-subdir.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-claude' }]);
+    const source = path.join(outbox, name);
+    // Invoke with a repoRoot BELOW the real root (which carries the `.totem`
+    // marker): the shared resolver must climb to the real root so the mark lands
+    // in the store the poll reads — not a phantom `<subdir>/.totem`.
+    const subdir = mkDir(path.join(selfRepoRoot(), 'packages', 'cli'));
+    const res = markSource(source, { repoRoot: subdir, agentId: 'totem-claude', env: {} });
+    expect(res.markPath).toBe(processedPath('totem-claude', name));
+    expect(fs.existsSync(processedPath('totem-claude', name))).toBe(true);
+    // Nothing was written under the subdir.
+    expect(fs.existsSync(path.join(subdir, '.totem'))).toBe(false);
+  });
+
+  it('refuses to mark a directed dispatch into a non-recipient seat (CR @1532 reject)', () => {
+    const name = '2026-07-16T2200Z-totem-gemini-owned.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-gemini' }]);
+    const source = path.join(outbox, name);
+    // Directed to totem-gemini, but marking as totem-claude → any-seat subtraction
+    // would suppress gemini's dispatch in a union poll. Hard reject.
+    expect(() =>
+      markSource(source, { repoRoot: selfRepoRoot(), agentId: 'totem-claude', env: {} }),
+    ).toThrow(/refusing to mark directed dispatch/);
+    // No mark was written into the wrong seat's cursor.
+    expect(fs.existsSync(processedPath('totem-claude', name))).toBe(false);
+  });
+
+  it('accepts a directed mark when the resolving seat IS the recipient (CR @1532 accept)', () => {
+    const name = '2026-07-16T2200Z-totem-gemini-owned2.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-gemini' }]);
+    const source = path.join(outbox, name);
+    const res = markSource(source, { repoRoot: selfRepoRoot(), agentId: 'totem-gemini', env: {} });
+    expect(res.agent).toBe('totem-gemini');
+    expect(res.markPath).toBe(processedPath('totem-gemini', name));
+  });
 });
 
 describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
@@ -2311,9 +2376,9 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
     return p;
   }
 
-  it('marks the source processed atomically with the reply (default; copy under the replying seat)', () => {
+  it('marks the source processed in the same command as the reply (default; copy under the replying seat)', () => {
     const src = writeSource();
-    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    const repoRoot = selfRepoRoot(); // marker-bearing (CR @1480 resolver parity)
     const res = mailReply(src, {
       from: 'totem-claude',
       repoRoot,
@@ -2339,6 +2404,11 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
 
   it('a subsequent poll no longer surfaces the replied-to source', () => {
     const src = writeSource();
+    // Pre-reply: the source IS unread for this seat (CR @2351 test-hardening —
+    // without this the post-reply assertion could pass vacuously).
+    expect(poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' } }).mail.map((m) => m.file)).toContain(
+      SRC_NAME,
+    );
     mailReply(src, {
       from: 'totem-claude',
       repoRoot: selfRepoRoot(),
@@ -2349,6 +2419,40 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
     expect(
       poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' } }).mail.map((m) => m.file),
     ).not.toContain(SRC_NAME);
+  });
+
+  it('when the mark fails after the reply lands, the error is distinguishable + anti-retry (greptile P1)', () => {
+    const src = writeSource();
+    const repoRoot = selfRepoRoot();
+    // Block ONLY the mark write: occupy the seat's `processed/` PATH with a file
+    // so markSource's mkdir fails — the reply (a sibling `outbox/` write) still
+    // lands. Distinct from a reply failure.
+    const seatDir = mkDir(path.join(repoRoot, '.totem', 'orchestration', 'totem-claude'));
+    fs.writeFileSync(path.join(seatDir, 'processed'), 'occupied (not a dir)', 'utf-8');
+
+    let threw: unknown;
+    try {
+      mailReply(src, {
+        from: 'totem-claude',
+        repoRoot,
+        env: {},
+        now: fixedClock,
+        knownAgents: ['strategy-claude'],
+      });
+    } catch (e) {
+      threw = e;
+    }
+    expect(threw).toBeInstanceOf(TotemError);
+    const err = threw as TotemError;
+    // Message names the LANDED reply path so a re-run is visibly unnecessary.
+    expect(err.message).toContain('reply written to');
+    expect(err.message).toContain(path.join('totem-claude', 'outbox'));
+    // Hint forbids the duplicate-producing retry and routes to `mail mark`.
+    expect(err.recoveryHint).toContain('do NOT retry mail reply');
+    expect(err.recoveryHint).toContain(`totem mail mark ${src}`);
+    // The reply really did land in the outbox.
+    const outbox = path.join(repoRoot, '.totem', 'orchestration', 'totem-claude', 'outbox');
+    expect(fs.readdirSync(outbox).filter((f) => f.endsWith('.md')).length).toBeGreaterThan(0);
   });
 
   it('--no-mark (noMark) leaves the source unmarked (stage-only reply)', () => {
@@ -2378,7 +2482,7 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
     // Reply target derives from source.from (strategy-claude, directed), but the
     // MARK follows the SOURCE's class — a broadcast source lands in _broadcast/.
     const src = writeSource('broadcast');
-    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    const repoRoot = selfRepoRoot(); // marker-bearing (CR @1480 resolver parity)
     const res = mailReply(src, {
       from: 'totem-claude',
       repoRoot,
