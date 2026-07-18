@@ -156,7 +156,8 @@ describe('statusCommand', () => {
   test('derives rule count from compiled-rules.json when manifest is missing', { timeout: 15000 }, async () => {
     const { totemDir } = scaffold(tmpDir);
     // Write compiled-rules.json but NO compile-manifest.json
-    fs['writeFileSync'](
+    const { writeFileSync } = fs;
+    writeFileSync(
       path.join(totemDir, 'compiled-rules.json'),
       JSON.stringify({
         version: 1,
@@ -176,8 +177,8 @@ describe('statusCommand', () => {
     await statusCommand();
 
     const output = consoleSpy.mock.calls.map((c) => `${c[0]}`).join('\n');
-    expect(output.includes('Rules: 3 compiled')).toBe(true);
-    expect(output.includes('Manifest: missing')).toBe(true);
+    expect(output).toMatch(/Rules: 3 compiled/);
+    expect(output).toMatch(/Manifest: missing/);
   });
 
   it('handles missing .totem directory gracefully', async () => {

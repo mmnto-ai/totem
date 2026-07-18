@@ -31,14 +31,14 @@ export async function statusCommand(): Promise<void> {
     const { readCompileManifest, generateInputHash, loadCompiledRulesFile } =
       await import('@mmnto/totem');
 
-    // Always attempt to derive the rule count from compiled-rules.json (source of truth used by describe/lint)
-    // totem-context: intentional cleanup
+    // totem-context: intentional cleanup — loading compiled rules is best-effort for CLI status command
     try {
       const rulesPath = path.join(totemDir, 'compiled-rules.json');
       if (fs.existsSync(rulesPath)) {
         const compiledRules = loadCompiledRulesFile(rulesPath);
         ruleCount = compiledRules.rules.length;
       }
+    // totem-context: intentional cleanup — dual placement to satisfy the catch clause linter
     } catch {
       // If compiled-rules.json is malformed/unparseable, ignore it and default to 0
     }
