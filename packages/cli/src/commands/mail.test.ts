@@ -413,6 +413,88 @@ describe('pollMail — processed/ exclusion', () => {
   });
 });
 
+// ─── Broadcast processed-mark union subtraction ─────────
+// mmnto-ai/totem#2412 (first-consumer-wins): under multi-seat self-resolution
+// the flat union let ONE seat's broadcast mark hide the broadcast from every
+// other seat in the poll. Broadcasts are per-seat consumable (ecl-gc keeps
+// per-seat `_broadcast` stores), so a broadcast-named file subtracts only when
+// EVERY resolved seat holds the mark; directed mail keeps the any-seat union.
+
+describe('pollMail — broadcast marks are per-seat, not union (mmnto-ai/totem#2412)', () => {
+  const BROADCAST_FILE = '2026-07-16T2213Z-broadcast-seat-attribution.md';
+  const TWO_SEATS = { TOTEM_SELF_AGENT: 'totem-claude,totem-gemini' };
+
+  it("one seat's mark does NOT hide the broadcast from a multi-seat poll (the live repro)", () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: BROADCAST_FILE, to: 'broadcast', subject: 'consumers move' },
+    ]);
+    // Mark in processed/ ROOT (not _broadcast/) — the exact live-specimen shape.
+    writeProcessed('totem', 'totem-gemini', [BROADCAST_FILE]);
+    const result = poll({ env: TWO_SEATS });
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.file).toBe(BROADCAST_FILE);
+  });
+
+  it('subtracts the broadcast once EVERY resolved seat holds a mark (either location)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: BROADCAST_FILE, to: 'broadcast', subject: 'consumers move' },
+    ]);
+    // Mixed locations both count: one seat marks in processed/ root, the other
+    // in processed/_broadcast/.
+    writeProcessed('totem', 'totem-gemini', [BROADCAST_FILE]);
+    writeBroadcastProcessed('totem', 'totem-claude', [BROADCAST_FILE]);
+    expect(poll({ env: TWO_SEATS }).mail).toEqual([]);
+  });
+
+  it('directed mail keeps the any-seat union subtraction (unchanged)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-07-16T2214Z-totem-gemini-directed-item.md', to: 'totem-gemini' },
+    ]);
+    writeProcessed('totem', 'totem-gemini', ['2026-07-16T2214Z-totem-gemini-directed-item.md']);
+    expect(poll({ env: TWO_SEATS }).mail).toEqual([]);
+  });
+
+  it('single-seat poll is bit-identical to the pre-fix behavior (own mark subtracts)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: BROADCAST_FILE, to: 'broadcast', subject: 'consumers move' },
+    ]);
+    writeProcessed('totem', 'totem-claude', [BROADCAST_FILE]);
+    expect(poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' } }).mail).toEqual([]);
+  });
+
+  it('duplicate seat ids are normalized — the requirement counts DISTINCT seats (GCA #2424)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: BROADCAST_FILE, to: 'broadcast', subject: 'consumers move' },
+    ]);
+    writeProcessed('totem', 'totem-claude', [BROADCAST_FILE]);
+    writeProcessed('totem', 'totem-gemini', [BROADCAST_FILE]);
+    // Both distinct seats hold marks; the duplicated id must not raise the bar to 3.
+    const dupes = { TOTEM_SELF_AGENT: 'totem-claude,totem-claude,totem-gemini' };
+    expect(poll({ env: dupes }).mail).toEqual([]);
+  });
+
+  it('legacy broadcast WITHOUT the filename token stays on the union rule (disclosed residual)', () => {
+    // Subtraction runs pre-parse, so the broadcast rule keys on the positional
+    // filename token; a tokenless `to: broadcast` dispatch keeps the historical
+    // union subtraction — no worse than before the fix.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-05-17T0103Z.md', to: 'broadcast', subject: 'legacy name' },
+    ]);
+    writeProcessed('totem', 'totem-gemini', ['2026-05-17T0103Z.md']);
+    expect(poll({ env: TWO_SEATS }).mail).toEqual([]);
+  });
+
+  it('includeProcessed still returns the RAW set — an all-seats-consumed broadcast stays visible to compaction', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: BROADCAST_FILE, to: 'broadcast', subject: 'consumers move' },
+    ]);
+    writeBroadcastProcessed('totem', 'totem-claude', [BROADCAST_FILE]);
+    writeBroadcastProcessed('totem', 'totem-gemini', [BROADCAST_FILE]);
+    expect(poll({ env: TWO_SEATS }).mail).toEqual([]);
+    expect(poll({ env: TWO_SEATS, includeProcessed: true }).mail).toHaveLength(1);
+  });
+});
+
 // ─── Cross-sender basename-collision sensor ─────────────
 
 describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#2311)', () => {
