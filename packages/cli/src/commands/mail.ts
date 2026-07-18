@@ -312,6 +312,29 @@ function readHeaderWindow(filePath: string): HeaderWindowRead {
 }
 
 /**
+ * Normalize an ECL dispatch basename to its portable, NTFS-safe form by
+ * STRIPPING COLONS — the compact `...T0510Z...` shape the send actuator already
+ * emits (mmnto-ai/totem#2431). A colon in a filename is an NTFS Alternate Data
+ * Stream separator: `fs.writeFileSync` to `...T05:10Z-x.md` "succeeds" but
+ * writes a 0-byte base file (`...T05`) with the real bytes in an invisible
+ * `:10Z-x.md` stream that `fs.readdirSync` NEVER lists — so a colon-bearing
+ * `processed/` mark is unreadable and its dispatch reports UNREAD forever
+ * (agy root-cause, live-verified with `Get-Item -Stream *`). Applied on ALL
+ * platforms (not just win32) so marks stay portable across checkouts: a mark
+ * written on a colon-legal filesystem must still be found on Windows. This is
+ * the single normalization seam — the writer (`markSource`) stores under the
+ * sanitized name, and the reader normalizes BOTH inbound outbox basenames AND
+ * mark basenames through it before comparison, so sanitized marks subtract
+ * colon-bearing inbound names and pre-existing corrupted 0-byte marks stop
+ * mattering once a healed mark lands. Idempotent — a colon-free basename passes
+ * through unchanged. Colons ONLY: broadening to other characters would perturb
+ * the reader's positional-token bucketing (which keys on the raw filename).
+ */
+export function sanitizeEclBasename(name: string): string {
+  return name.replace(/:/g, '');
+}
+
+/**
  * Per-basename count of RESOLVED SELF seats holding a processed mark (in
  * `processed/` or `processed/_broadcast/` — both locations count; the live
  * mmnto-ai/totem#2412 specimen sat in the root). Directed mail subtracts on ANY
@@ -321,7 +344,10 @@ function readHeaderWindow(filePath: string): HeaderWindowRead {
  * that, letting one seat's consumption hide a live broadcast from every other
  * seat in a multi-seat poll (first-consumer-wins, mmnto-ai/totem#2412). A
  * multi-seat poll's unread line then truthfully asserts "unread for at least
- * one of my seats" — the only claim it can make.
+ * one of my seats" — the only claim it can make. Marks are keyed by their
+ * SANITIZED basename (mmnto-ai/totem#2431) so a colon-bearing inbound name
+ * (matched via the same sanitizer in `pollMail`) subtracts against its
+ * NTFS-safe mark.
  */
 function buildProcessedMarkCounts(
   repoRoot: string,
@@ -334,8 +360,14 @@ function buildProcessedMarkCounts(
     const seatMarks = new Set<string>();
     drainProcessedDir(agentDir, seatMarks, warnings);
     drainProcessedDir(path.join(agentDir, '_broadcast'), seatMarks, warnings);
-    for (const name of seatMarks) {
-      counts.set(name, (counts.get(name) ?? 0) + 1);
+    // Normalize to the portable/NTFS-safe basename BEFORE counting, and dedupe
+    // per seat so a corrupted+healed pair (a legacy colon mark on a colon-legal
+    // FS plus its sanitized heal) in one seat's stores still counts as ONE seat
+    // — load-bearing for the per-seat broadcast requirement (mmnto-ai/totem#2431).
+    const seatKeys = new Set<string>();
+    for (const name of seatMarks) seatKeys.add(sanitizeEclBasename(name));
+    for (const key of seatKeys) {
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
   }
   return counts;
@@ -563,9 +595,16 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // token (legacy names) stays on the union rule — no worse than before, and
   // the ecl filename discipline makes the token standard on new dispatches.
   const isBroadcastNamed = (file: string): boolean => {
-    const stamp = stampPrefix.exec(file);
+    // Classify on the SANITIZED basename (mmnto-ai/totem#2431, CR @623): the
+    // `T\d{4}Z` stamp fails against a colon-bearing stamp (`T05:10Z`), so an
+    // UN-normalized colon-bearing BROADCAST would fall to the any-seat rule and
+    // one seat's mark would hide it from every other seat — the #2412
+    // first-consumer-wins class, resurrected for that name shape. No-op for the
+    // colon-free common case.
+    const normalized = sanitizeEclBasename(file);
+    const stamp = stampPrefix.exec(normalized);
     if (stamp === null) return false;
-    const rest = file.slice(stamp[0].length).toLowerCase();
+    const rest = normalized.slice(stamp[0].length).toLowerCase();
     return rest === 'broadcast.md' || rest.startsWith('broadcast-');
   };
 
@@ -584,7 +623,11 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       // from vacuously treating every broadcast as consumed, and makes a
       // single-seat poll bit-identical to the pre-#2412 behavior.
       const required = isBroadcastNamed(file) ? Math.max(selfSeatCount, 1) : 1;
-      if ((processedMarkCounts.get(file) ?? 0) >= required) continue;
+      // Normalize the inbound basename through the same sanitizer the marks are
+      // keyed by (mmnto-ai/totem#2431), so a colon-bearing inbound name subtracts
+      // against its NTFS-safe mark. `isBroadcastNamed` keeps reading the RAW file
+      // (positional-token logic is untouched per the amendment scope).
+      if ((processedMarkCounts.get(sanitizeEclBasename(file)) ?? 0) >= required) continue;
       unread.push({ slot, file });
     }
   }
@@ -606,9 +649,17 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // `to:` field.
   const selfTokens = [...selfLower, 'broadcast'];
   const hasSelfToken = (file: string): boolean => {
-    const stamp = stampPrefix.exec(file);
+    // Normalize identically to `isBroadcastNamed` (mmnto-ai/totem#2431, CR @623
+    // second `stampPrefix.exec` site): a colon-bearing self/broadcast name would
+    // otherwise fail the stamp match and mis-bucket into the LOW-priority tail,
+    // where it could fall past the MAX_SCAN horizon on a colon-legal filesystem
+    // (on win32 the ADS-corrupt name never lists, so this is the cross-checkout
+    // guard). Ordering only — delivery truth stays the parsed `to:`. No-op for
+    // colon-free names.
+    const normalized = sanitizeEclBasename(file);
+    const stamp = stampPrefix.exec(normalized);
     if (stamp === null) return false;
-    const rest = file.slice(stamp[0].length).toLowerCase();
+    const rest = normalized.slice(stamp[0].length).toLowerCase();
     return selfTokens.some((token) => rest === `${token}.md` || rest.startsWith(`${token}-`));
   };
   const ordered = [
@@ -955,6 +1006,12 @@ export interface MailSendResult {
   header: DispatchHeader;
   /** Content-class warnings surfaced at emit-time; dispatch still written. */
   warnings: string[];
+  /**
+   * Present only on a `mailReply` that atomically marked the source dispatch
+   * consumed (ADR-106 § A1.4; mmnto-ai/totem#2396). Absent on `mailSend` and on
+   * a `--no-mark` (stage-only) reply.
+   */
+  mark?: MailMarkResult;
 }
 
 /**
@@ -1294,6 +1351,15 @@ export function mailReply(
   opts: Omit<MailSendOptions, 'to' | 'subject' | 'inReplyTo'> & {
     to?: string;
     subject?: string;
+    /**
+     * Skip the atomic consume-mark (ADR-106 § A1.4; mmnto-ai/totem#2396).
+     * Default (undefined/false) copies the source into the replying seat's own
+     * `processed/` cursor the moment the reply lands — reply IS consumption, so
+     * the mark is a side-effect of the read tool (A1.3 "never a separate
+     * ritual"), never the dropped-copy step that re-surfaces as phantom-unread.
+     * `--no-mark` opts out for stage-only reply workflows.
+     */
+    noMark?: boolean;
   } = {},
 ): MailSendResult {
   let content: string;
@@ -1329,7 +1395,41 @@ export function mailReply(
     );
   }
   const subject = opts.subject ?? `Re: ${parsed.header.subject ?? '(no subject)'}`;
-  return mailSend({ ...opts, to: replyTo, subject, inReplyTo: portableSourceRef(source) });
+  // Keep the CLI-specific `noMark` flag OUT of the core actuator's options
+  // (GCA @1392): destructure it off before the spread so it can never be read
+  // as a `MailSendOptions` field.
+  const { noMark, ...sendOpts } = opts;
+  const result = mailSend({
+    ...sendOpts,
+    to: replyTo,
+    subject,
+    inReplyTo: portableSourceRef(source),
+  });
+  // Consume-marking (ADR-106 § A1.4; mmnto-ai/totem#2396): in the SAME command,
+  // AFTER the reply lands, mark the source processed — bound to the replying seat
+  // (`result.header.from` — the resolved sender IS the source's recipient, the
+  // consuming seat). Sequential fail-loud, not filesystem-atomic across two files:
+  // the reply is the primary actuation and lands first, so a mark that cannot
+  // land never suppresses a reply that did; `--no-mark` is the explicit
+  // stage-only opt-out.
+  if (noMark === true) return result;
+  let mark: MailMarkResult;
+  try {
+    mark = markSource(source, {
+      agentId: result.header.from,
+      repoRoot: opts.repoRoot,
+      env: opts.env,
+    });
+    // totem-context: the reply WAS written above (mailSend succeeded); only the consume-mark failed. Re-throw a DISTINGUISHABLE error naming the landed reply so the operator never re-runs `mail reply` (which would send a duplicate) — the recovery is the standalone `mail mark`, not a retry (greptile P1, the headline of the #2431 bot round).
+  } catch (err) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `reply written to ${result.filePath}, but marking the source consumed failed (${source}): ${err instanceof Error ? err.message : String(err)}`,
+      `do NOT retry mail reply — the reply landed; run \`totem mail mark ${source}\` to complete the mark.`,
+      err,
+    );
+  }
+  return { ...result, mark };
 }
 
 /**
@@ -1357,6 +1457,210 @@ function portableSourceRef(source: string): string {
   return idx >= 0 ? normalized.slice(idx) : path.basename(source);
 }
 
+// ─── Consume-marking: mail mark (mmnto-ai/totem#2396) ───
+//
+// ADR-106 § A1.3/A1.4: `processed/` is recipient-owned — the consuming seat
+// marks handled inbound in its OWN `processed/` subtree, AT CONSUMPTION TIME,
+// as a side-effect of the read/reply tool ("never a separate ritual"). Before
+// this, the copy-into-`processed/` step lived on no surface on any agent's path,
+// so it was dropped and the dispatch re-surfaced as phantom-unread on every
+// subsequent poll. A mark is a same-basename COPY of the source dispatch under
+// the seat's `processed/` (directed) or `processed/_broadcast/` (broadcast) —
+// the exact stores the reader (`buildProcessedMarkCounts`) drains and `ecl-gc`
+// compacts. Single-writer (§ A2.3): a seat marks only into ITS OWN subtree.
+
+export interface MailMarkOptions {
+  /**
+   * Seat whose `processed/` cursor receives the mark. Precedence mirrors the
+   * `ecl-gc` single-seat self-resolver (`resolveSelfSender`): explicit
+   * `--agent-id` > unambiguous resolved self > error. Ambiguous/zero self is a
+   * hard usage error — a seat may only mark into its OWN subtree (§ A2.3
+   * single-writer), so the command never guesses which seat consumed a dispatch.
+   */
+  agentId?: string;
+  /** Walk-start for the repo-root resolver (default: cwd — same contract as
+   * `pollMail`/`eclCompact`). Test injection point. */
+  repoRoot?: string;
+  /** Env override (default: process.env). Test injection point. */
+  env?: Record<string, string | undefined>;
+}
+
+export interface MailMarkResult {
+  /** Absolute path of the mark (written, or the pre-existing one on a no-op). */
+  markPath: string;
+  /** Basename of the mark — matches the source dispatch (the reader's dedupe key). */
+  fileName: string;
+  /** The seat whose `processed/` cursor now holds the mark. */
+  agent: string;
+  /** True iff the mark landed under `processed/_broadcast/` (source is a broadcast). */
+  broadcast: boolean;
+  /** True iff a same-basename mark already existed — the operation was an idempotent no-op. */
+  alreadyMarked: boolean;
+}
+
+/**
+ * `totem mail mark <source>` — copy a consumed dispatch into the consuming
+ * seat's own `processed/` cursor WITHOUT replying (read-and-acted-elsewhere).
+ * The binary-guaranteed path for the marking obligation ADR-106 § A1.3 puts on
+ * the recipient. Shared by the standalone command and `mailReply`'s atomic mark.
+ *
+ * HARD-errors (fail-loud, Tenet 4 — a dropped mark is the phantom-unread class
+ * this closes) on: an unreadable/unparseable source, an unresolvable/ambiguous
+ * seat, an unsafe agent-id, or a write that did not land. Idempotent: a
+ * same-basename mark already present is a no-op (safe to run twice).
+ */
+export function markSource(source: string, opts: MailMarkOptions = {}): MailMarkResult {
+  const env = opts.env ?? process.env;
+  // Walk-start, not definitive root (CR @1480): use the SAME resolver as
+  // `pollMail` (mail.ts) and `eclCompact` (ecl-gc.ts) so a subdirectory
+  // invocation lands the mark in the REAL repo root's `processed/` store — where
+  // the poll reads it — instead of writing a phantom `<subdir>/.totem` mark that
+  // no poll would ever find. A marker-less start (bare test fixture) is used
+  // as-is by the resolver's own fallback.
+  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
+
+  // Read + parse the source (HARD error if missing/unparseable — parity with
+  // `mailReply`): the `to:` field selects the broadcast-vs-directed store, and a
+  // stray non-dispatch must never be silently copied into `processed/`.
+  let content: string;
+  try {
+    content = fs.readFileSync(source, 'utf-8');
+    // totem-context: mark cannot proceed without the source (it copies it into processed/ and reads its to: to pick the store) — a missing/unreadable source is a hard usage error, rethrown clearly, never a silent no-op.
+  } catch (err) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `cannot read mark source dispatch (${source}): ${String(err)}`,
+      'check the mark <source> path exists and is readable.',
+      err,
+    );
+  }
+  const parsed = parseHeader(content);
+  if (!parsed.ok) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `mark source is not parseable mail (${source}): ${parsed.reason}`,
+      'the source must be an ADR-098 dispatch with a frontmatter block; a stray file is not markable.',
+    );
+  }
+
+  // Single-writer seat resolution (§ A2.3): resolve EXACTLY one seat, same
+  // precedence as `ecl-gc` compaction. Ambiguous/zero self is a usage error —
+  // never guess which seat consumed the dispatch.
+  let agent: string;
+  try {
+    agent = resolveSelfSender(repoRoot, env, opts.agentId);
+    // totem-context: an unresolvable/ambiguous consuming seat is a hard usage error — a mark must land in exactly one seat's own processed/ (single-writer); rethrow with the ecl-gc-parity hint (--agent-id, not send's --from).
+  } catch (err) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `cannot resolve the consuming seat whose processed/ cursor to mark: ${err instanceof Error ? err.message : String(err)}`,
+      'set TOTEM_SELF_AGENT or pass --agent-id <agent-id>.',
+      err,
+    );
+  }
+  assertSafeAgentId(agent, 'agent-id');
+
+  // Placement store: a broadcast dispatch's mark lives under
+  // `processed/_broadcast/` (per-seat consumable, mmnto-ai/totem#2412), a
+  // directed dispatch's under `processed/`. The reader drains BOTH into the
+  // seat's mark set, so subtraction is correct either way; the split keeps
+  // `ecl-gc`'s per-store compaction honest (it reads/deletes each store
+  // separately). `to:` is the authoritative broadcast signal (the reader's
+  // filename token is only a zero-I/O proxy it uses because it can't parse
+  // every file — here we already have the parsed header).
+  const broadcast = parsed.header.to.trim().toLowerCase() === 'broadcast';
+
+  // Directed-mark ownership (CR @1532): directed subtraction is ANY-seat, so a
+  // mark written into seat B's store for mail addressed to seat A would suppress
+  // A's dispatch in a multi-seat union poll. `to:` is SINGLE-VALUED in ADR-098
+  // (`parseHeader` captures one scalar `/^to:\s*(.+)$/`; `DispatchHeader.to` is a
+  // string — no comma-list form exists anywhere), so equality is the correct
+  // membership test: refuse to mark a directed dispatch whose recipient is not
+  // the resolving seat. `broadcast` is addressed to every seat, so it is exempt.
+  const directedTo = parsed.header.to.trim();
+  if (!broadcast && directedTo.toLowerCase() !== agent.toLowerCase()) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `refusing to mark directed dispatch (to: "${directedTo}") into a different seat's cursor — resolving seat is "${agent}" (${source})`,
+      `pass the recipient seat with --agent-id ${directedTo}, or run mail mark from that seat.`,
+    );
+  }
+
+  const processedBase = path.join(repoRoot, '.totem', 'orchestration', agent, 'processed');
+  const markDir = broadcast ? path.join(processedBase, '_broadcast') : processedBase;
+  // Store under the SANITIZED basename (mmnto-ai/totem#2431): a colon-bearing
+  // source name (a legacy inbound) written verbatim would be silently corrupted
+  // into a 0-byte NTFS ADS base file that `readdirSync` never lists — the mark
+  // would exist yet never subtract, and `mail mark` would still report success.
+  // The reader matches the inbound through the same sanitizer, so the sanitized
+  // mark still subtracts the colon-bearing dispatch.
+  const fileName = sanitizeEclBasename(path.basename(source));
+  const markPath = path.join(markDir, fileName);
+
+  // Idempotent (§ A2.3): a same-basename mark already present is a no-op — the
+  // binary-guaranteed path is safe to run twice, and re-copying could only
+  // clobber a mark the seat already owns.
+  if (fs.existsSync(markPath)) {
+    return { markPath, fileName, agent, broadcast, alreadyMarked: true };
+  }
+
+  try {
+    fs.mkdirSync(markDir, { recursive: true });
+    // totem-context: a failed processed/ mkdir (EACCES, read-only FS, a file where the dir should be) means the mark cannot land — fail LOUD (Tenet 4) with the path; a dropped mark is the phantom-unread class this command exists to close.
+  } catch (err) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `could not create processed/ directory (${markDir}): ${String(err)}`,
+      'check write permissions on the repo .totem/orchestration tree.',
+      err,
+    );
+  }
+
+  // Atomic write (ADR-106 § A1.2: temp + rename; a reader never sees a torn
+  // mark, and the `.tmp` suffix is invisible to the `.md`-only drain). The mark
+  // is a full COPY of the source so the recipient retains forensic evidence
+  // after the sender sweeps its outbox (§ A1.4 falsifying test (a)). The temp
+  // suffix is UNIQUE per invocation (`.<pid>.tmp`) so two concurrent same-seat
+  // marks cannot delete each other's shared temp and spuriously fail (CR @1568
+  // / greptile @1476, partial): single-writer § A2.3 remains the contract, this
+  // just keeps an out-of-contract double-launch benign.
+  const tmp = `${markPath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmp, content, 'utf-8');
+    fs.renameSync(tmp, markPath);
+  } catch (err) {
+    // Best-effort remove our own partial temp first.
+    const hint = 'check processed/ directory permissions and available disk space.';
+    try {
+      fs.rmSync(tmp, { force: true, maxRetries: 3, retryDelay: 50 });
+    } catch (cleanupErr) {
+      throw new TotemError(
+        'MAIL_SEND_FAILED',
+        `mark write failed (${markPath}): ${String(err)} (temp file ${tmp} could not be removed: ${String(cleanupErr)})`,
+        hint,
+        err,
+      );
+    }
+    // Race-benign (CR @1568 / greptile @1476): if the destination now exists, a
+    // concurrent same-seat writer won the rename — both carry identical bytes, so
+    // overwrite/no-op are equally benign. Report already-marked rather than a
+    // spurious failure. (The `alreadyMarked:false` double-report under an
+    // out-of-contract double-launch is an accepted cosmetic residual.)
+    if (fs.existsSync(markPath)) {
+      return { markPath, fileName, agent, broadcast, alreadyMarked: true };
+    }
+    // Otherwise actuation genuinely failed — fail LOUD (Tenet 4).
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `mark write failed (${markPath}): ${String(err)}`,
+      hint,
+      err,
+    );
+  }
+
+  return { markPath, fileName, agent, broadcast, alreadyMarked: false };
+}
+
 /**
  * CLI wrapper for `mail send` / `mail reply`. Surfaces content warnings LOUDLY
  * on stderr at emit-time (inv6: the dispatch still wrote — this is the typo
@@ -1370,5 +1674,36 @@ export async function mailSendCommand(result: MailSendResult): Promise<MailSendR
     TAG,
     `  to: ${result.header.to} · from: ${result.header.from} · ${result.header.timestamp}`,
   );
+  // Consume-atomicity confirmation (mmnto-ai/totem#2396): a reply marked the
+  // source processed in the same command. Present only on `mailReply` (absent
+  // on plain `mailSend` and `--no-mark`).
+  if (result.mark !== undefined) {
+    const rel = path.relative(process.cwd(), result.mark.markPath);
+    log.info(
+      TAG,
+      result.mark.alreadyMarked
+        ? `  source already marked processed (${result.mark.agent}): ${rel}`
+        : `  source marked processed (${result.mark.agent}): ${rel}`,
+    );
+  }
+  return result;
+}
+
+/**
+ * CLI wrapper for `mail mark`. Confirms the mark (or reports the idempotent
+ * no-op) on stderr — the informational, non-primary-data path the mail surface
+ * uses throughout.
+ */
+export async function mailMarkCommand(result: MailMarkResult): Promise<MailMarkResult> {
+  const { log } = await import('../ui.js');
+  const rel = path.relative(process.cwd(), result.markPath);
+  if (result.alreadyMarked) {
+    log.info(TAG, `Already marked processed (${result.agent}): ${rel}`);
+  } else {
+    log.success(
+      TAG,
+      `Marked processed (${result.agent}${result.broadcast ? ', broadcast' : ''}): ${rel}`,
+    );
+  }
   return result;
 }

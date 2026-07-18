@@ -878,6 +878,10 @@ mailCmd
     '--workspace <path>',
     'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
   )
+  .option(
+    '--no-mark',
+    'Do NOT mark the source dispatch processed (stage-only reply; default marks it — ADR-106 § A1.4)',
+  )
   .action(
     async (
       source: string,
@@ -890,17 +894,41 @@ mailCmd
         related?: string[];
         expectedAction?: string;
         workspace?: string;
+        // Commander `--no-mark` sets `mark: false`; absent ⇒ `true` (default).
+        mark?: boolean;
       },
     ) => {
       try {
         const { mailReply, mailSendCommand } = await import('./commands/mail.js');
-        await mailSendCommand(mailReply(source, opts));
+        // Translate the Commander boolean-negation flag into the lib's opt-out
+        // and keep `mark` out of the spread (mmnto-ai/totem#2396).
+        const { mark, ...rest } = opts;
+        await mailSendCommand(mailReply(source, { ...rest, noMark: mark === false }));
         // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
       } catch (err) {
         handleError(err);
       }
     },
   );
+
+mailCmd
+  .command('mark <source>')
+  .description(
+    'Mark a consumed dispatch processed in your OWN processed/ cursor — consume-without-reply (ADR-106 § A1.4; mmnto-ai/totem#2396)',
+  )
+  .option(
+    '--agent-id <id>',
+    'Seat whose processed/ cursor to mark into (default: resolved self; required if ambiguous — same self-resolving discipline as ecl-gc)',
+  )
+  .action(async (source: string, opts: { agentId?: string }) => {
+    try {
+      const { markSource, mailMarkCommand } = await import('./commands/mail.js');
+      await mailMarkCommand(markSource(source, opts));
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
 
 // ECL outbox retention prune (mmnto-ai/totem#2279; parent mmnto-ai/totem-strategy#700;
 // doctrine/ecl-discipline.md § 4.4). The binary-guaranteed cohort-wide replacement

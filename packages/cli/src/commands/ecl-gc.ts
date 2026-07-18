@@ -44,7 +44,7 @@ import {
   TotemError,
 } from '@mmnto/totem';
 
-import { pollMail, resolveSelfSender } from './mail.js';
+import { pollMail, resolveSelfSender, sanitizeEclBasename } from './mail.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -673,7 +673,13 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
     env: { ...env, TOTEM_SELF_AGENT: agent },
   });
   warnings.push(...poll.warnings);
-  const rawBasenames = new Set(poll.mail.map((m) => m.file));
+  // Normalize inbound basenames through the SAME sanitizer the marks are stored
+  // under (mmnto-ai/totem#2431): `markSource` writes NTFS-safe (colon-stripped)
+  // marks on all platforms, so comparing them against raw colon-bearing inbound
+  // names here would read a healed mark as inert and collect the very mark it
+  // must retain — the A2.1 false-unread bomb, in the compactor. No-op for the
+  // colon-free common case.
+  const rawBasenames = new Set(poll.mail.map((m) => sanitizeEclBasename(m.file)));
 
   // A2.2 gate: roster present (or forced) AND every roster name scannable AND
   // zero scan/read warnings AND not truncated. `--force-incomplete` waives the
@@ -702,7 +708,7 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   // always matches), which mirrors `pollMail`'s recipient-class-blind basename
   // filter — so a mark in EITHER store shadows a live dispatch of that basename;
   // union retention is the sound match (codex panel). Deterministic order.
-  const collectable = [...allMarks].filter((m) => !rawBasenames.has(m)).sort();
+  const collectable = [...allMarks].filter((m) => !rawBasenames.has(sanitizeEclBasename(m))).sort();
 
   const result: EclCompactResult = {
     agent,
@@ -785,9 +791,15 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
     maxScan: opts.maxScan,
     env: { ...env, TOTEM_SELF_AGENT: agent },
   });
+  // Normalize BOTH sides through the same sanitizer as the A2.1 retention
+  // comparison (mmnto-ai/totem#2431): the verify poll's inbound files can be
+  // colon-bearing while `allMarks` are stored NTFS-safe, so a raw-vs-actual
+  // compare would MISS a colon-bearing resurfaced dispatch and read the A2.4
+  // falsifier as falsely clean. No-op for the colon-free common case.
+  const allMarksSanitized = new Set([...allMarks].map(sanitizeEclBasename));
   result.resurfaced = verify.mail
     .map((m) => m.file)
-    .filter((f) => allMarks.has(f))
+    .filter((f) => allMarksSanitized.has(sanitizeEclBasename(f)))
     .sort();
   // The A2.4 verdict is trustworthy only if the re-poll itself was complete: a
   // truncated or warned verify could miss a resurfaced dispatch beyond its
