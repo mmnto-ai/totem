@@ -1382,8 +1382,8 @@ program
   .description('Run workspace health diagnostics')
   .option('--pr', 'Auto-downgrade noisy rules and open a PR')
   .option(
-    '--strict',
-    'Exit non-zero if any check reports a `fail` status (gating mode for hooks / CI)',
+    '--strict [tier]',
+    'Exit non-zero on fail-class diagnostics (gating mode for hooks / CI); --strict=warn also gates on warn-class diagnostics — the machine-checkable all-wiring oracle (mmnto-ai/totem#2385)',
   )
   .option(
     '--claim-discipline',
@@ -1409,7 +1409,7 @@ program
     async (
       opts: {
         pr?: boolean;
-        strict?: boolean;
+        strict?: boolean | string;
         claimDiscipline?: boolean;
         scopeToDiff?: boolean;
         parity?: boolean;
@@ -1425,6 +1425,11 @@ program
         // scopes so `totem doctor --parity --json` and `totem --json doctor
         // --parity` agree.
         opts.json = cmd.optsWithGlobals<{ json?: boolean }>().json;
+        // Resolve the strict tier up front so an unknown `--strict=<tier>`
+        // errors identically across every doctor mode (mmnto-ai/totem#2385).
+        const { doctorCommand, doctorGateFailed, resolveStrictTier } =
+          await import('./commands/doctor.js');
+        const strictTier = resolveStrictTier(opts.strict);
         const specializedModes = [
           opts.claimDiscipline && '--claim-discipline',
           opts.parity && '--parity',
@@ -1448,14 +1453,14 @@ program
           const { doctorClaimDisciplineCliCommand } =
             await import('./commands/doctor-claim-discipline.js');
           await doctorClaimDisciplineCliCommand({
-            strict: opts.strict,
+            strict: strictTier !== undefined,
             scopeToDiff: opts.scopeToDiff,
           });
           return;
         }
         if (opts.parity) {
           const { doctorParityCliCommand } = await import('./commands/doctor-parity.js');
-          await doctorParityCliCommand({ strict: opts.strict, json: opts.json });
+          await doctorParityCliCommand({ strict: strictTier !== undefined, json: opts.json });
           return;
         }
         if (opts.compliance) {
@@ -1466,9 +1471,8 @@ program
           await doctorComplianceCliCommand();
           return;
         }
-        const { doctorCommand } = await import('./commands/doctor.js');
         const results = await doctorCommand(opts);
-        if (opts.strict && results.some((r) => r.status === 'fail')) {
+        if (strictTier && doctorGateFailed(results, strictTier)) {
           process.exitCode = 1;
         }
         // S0 (mmnto-ai/totem#2085, mmnto-ai/totem-strategy#545 Half 2): fold parity
@@ -1479,7 +1483,7 @@ program
         // never configured a manifest — zero churn for non-adopters. Per ADR-109 /
         // Tenet 13 the throw-gate lives here at the CLI edge, not inside the composable
         // doctorCommand. The `--parity` branch returned above, so this never double-runs.
-        if (opts.strict) {
+        if (strictTier) {
           const { doctorParityCliCommand } = await import('./commands/doctor-parity.js');
           await doctorParityCliCommand({ strict: true, onlyWhenConfigured: true });
         }

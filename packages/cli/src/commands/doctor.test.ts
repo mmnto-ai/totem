@@ -27,11 +27,13 @@ import {
   checkUpgradeCandidates,
   CLAUDE_MD_REDIRECT_MAX_BYTES,
   doctorCommand,
+  doctorGateFailed,
   findLegacyGrandfatheredRules,
   findStaleRules,
   MIN_CONTEXT_EVENTS,
   MIN_EVENTS,
   NON_CODE_THRESHOLD,
+  resolveStrictTier,
   runSelfHealing,
   V_1_13_0_SHIP_DATE_ISO,
 } from './doctor.js';
@@ -609,6 +611,60 @@ describe('doctorCommand strict mode contract', () => {
     expect(resultsStrict.map((r: DiagnosticResult) => r.name)).toEqual(
       resultsLoose.map((r: DiagnosticResult) => r.name),
     );
+  });
+});
+
+// ─── Strict-warn tier (mmnto-ai/totem#2385) ─────────────
+//
+// `--strict=warn` upgrades the CLI-edge gate so warn-class diagnostics also
+// exit non-zero — the machine-checkable all-wiring oracle. These helpers are
+// pure; the exit-code mapping itself stays at the CLI edge.
+
+describe('resolveStrictTier', () => {
+  it('returns undefined when strict mode is off', () => {
+    expect(resolveStrictTier(undefined)).toBeUndefined();
+    expect(resolveStrictTier(false)).toBeUndefined();
+  });
+
+  it('maps the bare flag and the explicit fail tier to fail', () => {
+    expect(resolveStrictTier(true)).toBe('fail');
+    expect(resolveStrictTier('fail')).toBe('fail');
+  });
+
+  it('maps the warn tier', () => {
+    expect(resolveStrictTier('warn')).toBe('warn');
+  });
+
+  it('throws fail-loud on an unknown tier', () => {
+    expect(() => resolveStrictTier('banana')).toThrow('Unknown --strict tier "banana"');
+    expect(() => resolveStrictTier('')).toThrow('Unknown --strict tier');
+  });
+});
+
+describe('doctorGateFailed', () => {
+  const clean: DiagnosticResult[] = [
+    { name: 'A', status: 'pass', message: '' },
+    { name: 'B', status: 'skip', message: '' },
+  ];
+  const withWarn: DiagnosticResult[] = [...clean, { name: 'C', status: 'warn', message: '' }];
+  const withFail: DiagnosticResult[] = [...clean, { name: 'D', status: 'fail', message: '' }];
+
+  it('fail tier gates on fail only (pre-#2385 contract)', () => {
+    expect(doctorGateFailed(clean, 'fail')).toBe(false);
+    expect(doctorGateFailed(withWarn, 'fail')).toBe(false);
+    expect(doctorGateFailed(withFail, 'fail')).toBe(true);
+  });
+
+  it('warn tier gates on warn and fail (all-wiring oracle)', () => {
+    expect(doctorGateFailed(clean, 'warn')).toBe(false);
+    expect(doctorGateFailed(withWarn, 'warn')).toBe(true);
+    expect(doctorGateFailed(withFail, 'warn')).toBe(true);
+  });
+
+  it('skip never gates in either tier', () => {
+    const onlySkip: DiagnosticResult[] = [{ name: 'S', status: 'skip', message: '' }];
+    expect(doctorGateFailed(onlySkip, 'fail')).toBe(false);
+    expect(doctorGateFailed(onlySkip, 'warn')).toBe(false);
   });
 });
 

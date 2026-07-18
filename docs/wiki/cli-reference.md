@@ -45,7 +45,7 @@ Outputs a structured description of the project's governance parameters for MCP 
 Runs a battery of automated health checks to verify config bloat, index health, hook wiring, and secret hygiene.
 
 - **Flags:**
-  - `--strict`: Exits non-zero when critical checks fail.
+  - `--strict [tier]`: Exits non-zero when critical checks fail. `--strict=warn` also gates on warn-class diagnostics, giving CI a single machine-checkable all-wiring oracle (bare `--strict` keeps the fail-only contract).
   - `--pr`: Analyzes the Trap Ledger and downgrades rules with a >30% bypass rate, staging the changes as a GitHub Pull Request for review (the rule-tuning loop).
 
 ### `totem status` / `totem check`

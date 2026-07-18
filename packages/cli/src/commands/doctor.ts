@@ -4,6 +4,8 @@ import * as path from 'node:path';
 
 import pc from 'picocolors';
 
+import { TotemConfigError } from '@mmnto/totem';
+
 import { resolveGitRoot } from '../git.js';
 import { CONFIG_FILES } from '../utils.js';
 
@@ -16,6 +18,48 @@ export interface DiagnosticResult {
   status: CheckStatus;
   message: string;
   remediation?: string;
+}
+
+// ─── Strict-gate tiers (mmnto-ai/totem#2385) ────────────
+
+/**
+ * Gating tiers for `totem doctor --strict [tier]`:
+ * - `fail` (bare `--strict`): exit non-zero on fail-class diagnostics only —
+ *   the pre-#2385 boolean contract.
+ * - `warn`: exit non-zero on warn- OR fail-class diagnostics — the
+ *   machine-checkable all-wiring oracle for CI / agent consumers.
+ *
+ * `skip` never gates in either tier: it marks checks that are intentionally
+ * inapplicable (e.g. unconfigured optional wiring), not gaps.
+ */
+export type StrictTier = 'fail' | 'warn';
+
+export const STRICT_TIERS: readonly StrictTier[] = ['fail', 'warn'];
+
+/**
+ * Resolve the raw commander `--strict [tier]` value into a StrictTier.
+ * `true` (bare flag) maps to `'fail'`. Returns `undefined` when strict mode
+ * is off. Throws on an unknown tier (fail-loud, Tenet 4 — a silently ignored
+ * tier would let a consumer believe it gated on more than it did).
+ */
+export function resolveStrictTier(strict: boolean | string | undefined): StrictTier | undefined {
+  if (strict === undefined || strict === false) return undefined;
+  if (strict === true || strict === 'fail') return 'fail';
+  if (strict === 'warn') return 'warn';
+  throw new TotemConfigError(
+    `Unknown --strict tier "${strict}".`,
+    `Valid tiers: ${STRICT_TIERS.join(', ')} (bare --strict selects the fail tier).`,
+    'CONFIG_INVALID',
+  );
+}
+
+/**
+ * The gate predicate the CLI edge applies to `doctorCommand` results. Kept
+ * pure and exported so the edge stays thin and the semantics stay unit-tested
+ * (the exit-code decision itself lives at the CLI edge — see DoctorOptions).
+ */
+export function doctorGateFailed(results: readonly DiagnosticResult[], tier: StrictTier): boolean {
+  return results.some((r) => r.status === 'fail' || (tier === 'warn' && r.status === 'warn'));
 }
 
 // ─── Secret leak patterns ───────────────────────────────
@@ -1415,15 +1459,18 @@ export async function checkGrandfatheredRules(
 export interface DoctorOptions {
   pr?: boolean;
   /**
-   * When true, callers should treat any `fail` diagnostic as a gating
-   * condition (exit non-zero). The flag itself doesn't change what
-   * `doctorCommand` returns — the exit-code decision lives at the CLI edge
-   * so this function stays composable and free of process-exit side effects.
+   * Raw commander `--strict [tier]` value (`true` for the bare flag, a string
+   * for `--strict=<tier>`). When set, callers should treat gate-class
+   * diagnostics as a gating condition (exit non-zero) — resolve via
+   * `resolveStrictTier` and apply `doctorGateFailed` at the CLI edge. The flag
+   * itself doesn't change what `doctorCommand` returns — the exit-code
+   * decision lives at the CLI edge so this function stays composable and free
+   * of process-exit side effects.
    *
    * Reference: mmnto-ai/totem#1908 (Proposal 273 § 6 Q2 / § 7 routing matrix
-   * row 5).
+   * row 5); mmnto-ai/totem#2385 (warn tier — the all-wiring oracle).
    */
-  strict?: boolean;
+  strict?: boolean | string;
 }
 
 // ─── Self-healing flow ──────────────────────────────────

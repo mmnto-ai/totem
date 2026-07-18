@@ -153,7 +153,7 @@ Then verify the wiring:
 pnpm dlx @mmnto/cli doctor --strict
 ```
 
-`doctor --strict` reports config, hooks, rules, and index wiring, and exits non-zero on fail-class diagnostics. Read and resolve its warnings before treating setup as complete; if an agent is running this setup for you, that is its checklist too.
+`doctor --strict` reports config, hooks, rules, and index wiring, and exits non-zero on fail-class diagnostics. Read and resolve its warnings before treating setup as complete; if an agent is running this setup for you, that is its checklist too. For a machine-checkable all-wiring oracle in CI, `--strict=warn` also exits non-zero on warn-class diagnostics.
 
 The npm packages declare `engines.node >= 24` deliberately: Node 24 (LTS since 2025-10) is the runtime CI actually tests and the one the publishing pipeline (npm 11 / OIDC) runs on — a floor we exercise rather than one we claim. On CI images pinned to older Node, use the Lite binary below instead.
 
