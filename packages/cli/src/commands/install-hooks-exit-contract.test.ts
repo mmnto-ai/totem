@@ -38,6 +38,7 @@ import {
 } from './init-templates.js';
 import {
   hooksCommand,
+  installHooksCommand,
   installHooksNonInteractive,
   regenerateManagedSessionHooks,
   resolveHooksDir,
@@ -565,6 +566,45 @@ describe('hooksCommand with an unparseable .git pointer file (declared skip)', (
   });
 
   it('resolveHooksDir returns null for the unparseable pointer (never a blind join)', () => {
+    expect(resolveHooksDir(tmpDir)).toBeNull();
+  });
+
+  it('legacy installHooksCommand declares the skip too — exit 0, never handleError (#2422 round)', async () => {
+    // The hidden `totem install-hooks` command routes here; pre-fix its callees
+    // let the resolveGitRoot throw reach handleError → exit 1, violating the
+    // #2410 declared-skip contract on that entry point.
+    await expect(installHooksCommand()).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    const out = errorSpy.mock.calls
+      .map((c: unknown[]) => c.map((a: unknown) => String(a)).join(' '))
+      .join('\n');
+    expect(out).toContain('not a directory or a resolvable gitdir pointer');
+  });
+
+  it('installHooksNonInteractive maps the bad pointer to the declared-skip null (direct API path)', () => {
+    expect(installHooksNonInteractive(tmpDir)).toBeNull();
+  });
+});
+
+describe('resolveHooksDir with core.hooksPath aimed at a non-directory (#2422 round)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2418-hookspath-'));
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('returns null instead of a write-target that can never receive hooks', () => {
+    // The /dev/null hooks-disabled idiom, portably: point core.hooksPath at an
+    // existing FILE. `git rev-parse --git-path hooks` returns it verbatim; the
+    // resolver must classify it as the declared skip, not hand it to mkdir.
+    const notADir = path.join(tmpDir, 'hooks-disabled.txt');
+    fs.writeFileSync(notADir, 'not a directory\n');
+    execFileSync('git', ['config', 'core.hooksPath', notADir], { cwd: tmpDir });
     expect(resolveHooksDir(tmpDir)).toBeNull();
   });
 });
