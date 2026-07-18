@@ -21,6 +21,10 @@ export const BUILTIN_CHUNK_STRATEGIES = [
   'session-log',
   'schema-file',
   'test-file',
+  // Fourth-language layer, Stage 1: language-agnostic generic fallback for
+  // source with no dedicated chunker yet (Rust/GDScript). Explicit-opt-in
+  // only (mmnto-ai/totem#2387, #2308; Prop 256 Option A).
+  'generic',
 ] as const;
 
 /**
