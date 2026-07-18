@@ -38,7 +38,7 @@ export async function statusCommand(): Promise<void> {
         const compiledRules = loadCompiledRulesFile(rulesPath);
         ruleCount = compiledRules.rules.length;
       }
-    // totem-context: intentional cleanup — dual placement to satisfy the catch clause linter
+      // totem-context: intentional cleanup — dual placement to satisfy the catch clause linter
     } catch {
       // If compiled-rules.json is malformed/unparseable, ignore it and default to 0
     }
