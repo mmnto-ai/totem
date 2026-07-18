@@ -2,12 +2,47 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
 import type { EjectSummary } from './eject.js';
-import { ejectCommand, scrubPostCheckoutHook, scrubPostMergeHook } from './eject.js';
+import {
+  ejectCommand,
+  resolveEjectHooksContext,
+  scrubPostCheckoutHook,
+  scrubPostMergeHook,
+} from './eject.js';
 import { SKILL_MARKER_END, SKILL_MARKER_START } from './init-templates.js';
+import { resolveGitRootForHookPath, resolveHooksDir } from './install-hooks.js';
+
+// Mock the git seam (mmnto-ai/totem#2426): eject now resolves the git root +
+// hooks dir via the SAME #2422 helpers `hook install` uses. Tests must NOT spawn
+// real `git` with cwd inside a temp dir (leaves undeletable directories on
+// Windows AND, if TMPDIR happened to sit inside a repo, could scrub the OUTER
+// repo's hooks). So the two resolvers are mocked; the fixtures below are plain
+// filesystem `.git/hooks` trees. The `...actual` spread keeps every other export
+// real — and eject is the only module importing these two, so intra-module
+// install-hooks calls (init/hooks tests) are untouched.
+vi.mock('./install-hooks.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./install-hooks.js')>();
+  return {
+    ...actual,
+    resolveGitRootForHookPath: vi.fn(),
+    resolveHooksDir: vi.fn(),
+  };
+});
+
+// Default seam behavior for the plain-checkout fixtures every describe below
+// builds: git root = cwd, hooks dir = <root>/.git/hooks. Re-established before
+// EVERY test (file-scope hook runs before each describe-scope hook); the
+// worktree/anchoring/unresolvable cases override it in the test body.
+beforeEach(() => {
+  vi.mocked(resolveGitRootForHookPath).mockImplementation((c: string) => ({
+    gitRoot: c,
+    unparseablePointer: false,
+  }));
+  vi.mocked(resolveHooksDir).mockImplementation((root: string) => path.join(root, '.git', 'hooks'));
+});
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'totem-eject-'));
@@ -423,7 +458,7 @@ fi
     );
 
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
-    scrubPostMergeHook(cwd, summary);
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
 
     expect(fs.existsSync(hookPath)).toBe(false);
     expect(summary.removed).toContain('.git/hooks/post-merge');
@@ -437,7 +472,7 @@ fi
     );
 
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
-    scrubPostMergeHook(cwd, summary);
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
 
     expect(fs.existsSync(hookPath)).toBe(false);
     expect(summary.removed).toContain('.git/hooks/post-merge');
@@ -460,7 +495,7 @@ fi
     );
 
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
-    scrubPostMergeHook(cwd, summary);
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
 
     expect(fs.existsSync(hookPath)).toBe(true);
     const content = fs.readFileSync(hookPath, 'utf-8');
@@ -506,7 +541,7 @@ fi
     );
 
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
-    scrubPostCheckoutHook(cwd, summary);
+    scrubPostCheckoutHook(path.join(cwd, '.git', 'hooks'), summary);
 
     expect(fs.existsSync(hookPath)).toBe(false);
     expect(summary.removed).toContain('.git/hooks/post-checkout');
@@ -533,7 +568,7 @@ fi
     );
 
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
-    scrubPostCheckoutHook(cwd, summary);
+    scrubPostCheckoutHook(path.join(cwd, '.git', 'hooks'), summary);
 
     expect(fs.existsSync(hookPath)).toBe(true);
     const content = fs.readFileSync(hookPath, 'utf-8');
@@ -631,5 +666,173 @@ describe('eject — distributed Claude skills (mmnto-ai/totem#1890 Phase C slice
     expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'signoff'))).toBe(false);
     expect(fs.existsSync(customSkill)).toBe(true);
     expect(fs.existsSync(path.join(cwd, '.claude', 'skills'))).toBe(true);
+  });
+});
+
+// ─── resolveEjectHooksContext (mmnto-ai/totem#2426) ─────────
+//
+// The seam eject uses to decide WHERE the git hooks are and whether they are
+// SHARED. Driven with the mocked resolvers (no real git); the `.git`-shape check
+// is a real filesystem probe on the fixtures.
+
+describe('resolveEjectHooksContext', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2426-ctx-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(dir);
+  });
+
+  it('plain checkout (.git DIRECTORY): resolves the hooks dir, not a worktree', () => {
+    fs.mkdirSync(path.join(dir, '.git', 'hooks'), { recursive: true });
+    const ctx = resolveEjectHooksContext(dir);
+    expect(ctx.isLinkedWorktree).toBe(false);
+    expect(ctx.hooksDir).toBe(path.join(dir, '.git', 'hooks'));
+  });
+
+  it('linked worktree (.git POINTER FILE): flagged as shared across worktrees', () => {
+    // A `.git` FILE is the gitdir pointer git writes for a linked worktree.
+    fs.writeFileSync(path.join(dir, '.git'), 'gitdir: /elsewhere/.git/worktrees/wt\n');
+    // The shared hooks dir git would resolve for it (mocked — no real git walk).
+    vi.mocked(resolveHooksDir).mockReturnValue('/elsewhere/.git/hooks');
+    const ctx = resolveEjectHooksContext(dir);
+    expect(ctx.isLinkedWorktree).toBe(true);
+    expect(ctx.hooksDir).toBe('/elsewhere/.git/hooks');
+  });
+
+  it('not a git repo / unparseable pointer (null root): null hooks dir, not a worktree', () => {
+    vi.mocked(resolveGitRootForHookPath).mockReturnValue({
+      gitRoot: null,
+      unparseablePointer: true,
+    });
+    const ctx = resolveEjectHooksContext(dir);
+    expect(ctx.hooksDir).toBeNull();
+    expect(ctx.isLinkedWorktree).toBe(false);
+  });
+
+  it('best-effort: a resolver throw degrades to unresolvable, never propagates', () => {
+    vi.mocked(resolveGitRootForHookPath).mockImplementation(() => {
+      throw new Error('git broke');
+    });
+    const ctx = resolveEjectHooksContext(dir);
+    expect(ctx.hooksDir).toBeNull();
+    expect(ctx.isLinkedWorktree).toBe(false);
+  });
+});
+
+// ─── ejectCommand git-hook resolution (mmnto-ai/totem#2426) ─────────
+//
+// The three behaviors the fix adds on top of the plain-checkout scrub the
+// existing suite already covers: the worktree SHARED-hooks decline (the
+// conservative semantics ruling), git-root anchoring from a subdirectory, and
+// the unresolvable-dir skip.
+
+describe('ejectCommand git-hook resolution (mmnto-ai/totem#2426)', () => {
+  let originalCwd: string;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  const errorOutput = (): string =>
+    errorSpy.mock.calls
+      .map((c: unknown[]) => c.map((a: unknown) => String(a)).join(' '))
+      .join('\n');
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    errorSpy.mockRestore();
+  });
+
+  it('DECLINES to scrub the SHARED hooks from a linked worktree, leaving them intact', async () => {
+    // Main checkout: a real `.git` DIRECTORY holding an installed totem post-merge hook.
+    const mainDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2426-main-'));
+    const mainHooks = path.join(mainDir, '.git', 'hooks');
+    fs.mkdirSync(mainHooks, { recursive: true });
+    const sharedHook = path.join(mainHooks, 'post-merge');
+    fs.writeFileSync(
+      sharedHook,
+      '#!/bin/sh\n# [totem] post-merge hook — background re-index after pull/merge.\n\n# [totem] end post-merge\n',
+    );
+
+    // Worktree: `.git` is a POINTER FILE; its hooks RESOLVE to the shared dir.
+    const wtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2426-wt-'));
+    fs.writeFileSync(
+      path.join(wtDir, '.git'),
+      `gitdir: ${path.join(mainDir, '.git', 'worktrees', 'wt')}\n`,
+    );
+    vi.mocked(resolveHooksDir).mockReturnValue(mainHooks);
+
+    process.chdir(wtDir);
+    try {
+      await expect(ejectCommand({ force: true })).resolves.toBeUndefined();
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    // The shared hook is UNTOUCHED — eject declined rather than mutate shared state.
+    expect(fs.existsSync(sharedHook)).toBe(true);
+    const out = errorOutput();
+    expect(out).toContain('shared git directory');
+    expect(out).toContain('run `totem eject` from the main working tree');
+
+    cleanTmpDir(wtDir);
+    cleanTmpDir(mainDir);
+  });
+
+  it('anchors at the git root when run from a subdirectory (not the blind cwd/.git join)', async () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2426-anchor-'));
+    const hooksDir = path.join(repoRoot, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(hooksDir, 'post-merge'),
+      '#!/bin/sh\n# [totem] post-merge hook — background re-index after pull/merge.\n\n# [totem] end post-merge\n',
+    );
+    const subdir = path.join(repoRoot, 'packages', 'x');
+    fs.mkdirSync(subdir, { recursive: true });
+
+    // What real git does from a subdirectory: resolve UP to the repo root.
+    vi.mocked(resolveGitRootForHookPath).mockReturnValue({
+      gitRoot: repoRoot,
+      unparseablePointer: false,
+    });
+    vi.mocked(resolveHooksDir).mockReturnValue(hooksDir);
+
+    process.chdir(subdir);
+    try {
+      await ejectCommand({ force: true });
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    // The hook at the RESOLVED root is removed — not missed because cwd was a subdir.
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge'))).toBe(false);
+
+    cleanTmpDir(repoRoot);
+  });
+
+  it('reports the hooks dir as unresolvable (not-a-repo / bad pointer) without crashing', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2426-unres-'));
+    vi.mocked(resolveGitRootForHookPath).mockReturnValue({
+      gitRoot: null,
+      unparseablePointer: true,
+    });
+    vi.mocked(resolveHooksDir).mockReturnValue(null);
+
+    process.chdir(dir);
+    try {
+      await expect(ejectCommand({ force: true })).resolves.toBeUndefined();
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    expect(errorOutput()).toContain('git hooks directory could not be resolved');
+
+    cleanTmpDir(dir);
   });
 });

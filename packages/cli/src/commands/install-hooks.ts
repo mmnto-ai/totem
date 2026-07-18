@@ -91,8 +91,12 @@ function isUnparseableGitFileError(err: unknown): boolean {
  * #2410 declared skip on it, including the hidden legacy `totem install-hooks`
  * command and the direct `installHooksNonInteractive` API (#2422 review round:
  * only `hooksCommand` was guarded). All other failures stay fail-loud.
+ *
+ * Exported so the hook-REMOVAL path (`eject`) resolves the git root the SAME way
+ * every install entry point does, instead of hand-rolling a second resolver
+ * (mmnto-ai/totem#2426).
  */
-function resolveGitRootForHookPath(cwd: string): {
+export function resolveGitRootForHookPath(cwd: string): {
   gitRoot: string | null;
   unparseablePointer: boolean;
 } {

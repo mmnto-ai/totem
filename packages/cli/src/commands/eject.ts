@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { resolveGitRootForHookPath, resolveHooksDir } from './install-hooks.js';
+
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Eject';
@@ -37,18 +39,67 @@ export interface EjectSummary {
 }
 
 /**
+ * Resolved git-hook context for eject (mmnto-ai/totem#2426).
+ *
+ * `.git` is a DIRECTORY in a plain checkout / main working tree and a POINTER
+ * FILE in a linked worktree (or submodule), where the hooks git actually runs
+ * live in the SHARED common dir — so a blind `.git/hooks` join from `cwd` (the
+ * pre-fix behavior) silently no-oped in a worktree AND missed the git root when
+ * eject was run from a subdirectory.
+ */
+export interface EjectHooksContext {
+  /**
+   * The resolved git hooks directory (via the #2422 `resolveHooksDir` helper —
+   * worktree/`commondir`/`core.hooksPath`-aware), or `null` when no repo/hooks
+   * dir could be resolved (not-a-repo, unparseable `.git` pointer).
+   */
+  hooksDir: string | null;
+  /**
+   * `.git` is a POINTER FILE — a linked worktree (or submodule) whose resolved
+   * hooks dir is SHARED across every worktree of the repo.
+   */
+  isLinkedWorktree: boolean;
+}
+
+/**
+ * Resolve where eject should look for git hooks, reusing the SAME helpers every
+ * `hook install` entry point uses (mmnto-ai/totem#2426, sibling of #2422): the
+ * git root via `resolveGitRootForHookPath` (anchors from a subdirectory; maps an
+ * unparseable pointer to a null root) and the hooks dir via `resolveHooksDir`
+ * (git's own worktree/`commondir` walk). Best-effort per Tenet 4's eject
+ * cleanup carve-out — a genuine git failure is reported as unresolvable, never a
+ * crash of the whole eject.
+ */
+export function resolveEjectHooksContext(cwd: string): EjectHooksContext {
+  let gitRoot: string | null;
+  try {
+    ({ gitRoot } = resolveGitRootForHookPath(cwd));
+  } catch {
+    return { hooksDir: null, isLinkedWorktree: false };
+  }
+  if (!gitRoot) {
+    return { hooksDir: null, isLinkedWorktree: false };
+  }
+  const dotGit = path.join(gitRoot, '.git');
+  const isLinkedWorktree = fs.existsSync(dotGit) && fs.statSync(dotGit).isFile();
+  return { hooksDir: resolveHooksDir(gitRoot), isLinkedWorktree };
+}
+
+/**
  * Generic hook scrubber — removes Totem block from a git hook file.
  * Uses deterministic end marker when present, falls back to heuristic for old format.
+ * `hooksDir` is the RESOLVED git hooks directory (mmnto-ai/totem#2426), not a
+ * blind `<cwd>/.git/hooks` join.
  */
 function scrubHook(
-  cwd: string,
+  hooksDir: string,
   summary: EjectSummary,
   hookName: string,
   startMarker: string,
   endMarker: string,
 ): void {
   const hookFileName = `.git/hooks/${hookName}`;
-  const hookPath = path.join(cwd, hookFileName);
+  const hookPath = path.join(hooksDir, hookName);
   if (!fs.existsSync(hookPath)) {
     summary.skipped.push(`${hookFileName} (not found)`);
     return;
@@ -113,17 +164,19 @@ function scrubHook(
 /**
  * Remove the Totem section from the post-merge git hook.
  * Deletes the file entirely if it only contains the Totem hook.
+ * `hooksDir` is the resolved git hooks directory (mmnto-ai/totem#2426).
  */
-export function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
-  scrubHook(cwd, summary, 'post-merge', TOTEM_HOOK_MARKER, TOTEM_HOOK_END);
+export function scrubPostMergeHook(hooksDir: string, summary: EjectSummary): void {
+  scrubHook(hooksDir, summary, 'post-merge', TOTEM_HOOK_MARKER, TOTEM_HOOK_END);
 }
 
 /**
  * Remove the Totem section from the post-checkout git hook.
  * Deletes the file entirely if it only contains the Totem hook.
+ * `hooksDir` is the resolved git hooks directory (mmnto-ai/totem#2426).
  */
-export function scrubPostCheckoutHook(cwd: string, summary: EjectSummary): void {
-  scrubHook(cwd, summary, 'post-checkout', TOTEM_CHECKOUT_MARKER, TOTEM_CHECKOUT_END);
+export function scrubPostCheckoutHook(hooksDir: string, summary: EjectSummary): void {
+  scrubHook(hooksDir, summary, 'post-checkout', TOTEM_CHECKOUT_MARKER, TOTEM_CHECKOUT_END);
 }
 
 /**
@@ -493,9 +546,41 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
 
   const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
 
-  // 1. Scrub git hooks
-  scrubPostMergeHook(cwd, summary);
-  scrubPostCheckoutHook(cwd, summary);
+  // 1. Scrub git hooks — worktree-aware (mmnto-ai/totem#2426). The pre-fix code
+  //    blind-joined `<cwd>/.git/hooks/<name>`, so in a linked worktree (where
+  //    `.git` is a gitdir POINTER FILE and hooks live in the shared common dir)
+  //    every hook reported "not found" and the eject silently no-oped. Resolve
+  //    the real hooks dir via the #2422 helpers instead.
+  const hooks = resolveEjectHooksContext(cwd);
+  if (hooks.isLinkedWorktree) {
+    // Conservative decline (mmnto-ai/totem#2426 semantics question, left
+    // deliberately UNRESOLVED by the issue): the resolved hooks dir is SHARED
+    // across every worktree of this repo, so scrubbing it from one linked
+    // worktree silently changes hook behavior for the main checkout and every
+    // sibling worktree. Rather than take that cross-worktree destructive action
+    // on a bug-fix — or invent the "eject-from-worktree removes shared hooks"
+    // policy (symmetric with install, but the issue flags it as owing its own
+    // ruling) — decline the git-hook removal and point at the main working tree.
+    // Everything else eject removes below is per-working-tree, so it still runs.
+    const sharedLoc = hooks.hooksDir ? ` (${hooks.hooksDir})` : '';
+    for (const name of ['post-merge', 'post-checkout']) {
+      summary.skipped.push(
+        `.git/hooks/${name} (shared across worktrees — run \`totem eject\` from the main working tree to remove)`,
+      );
+    }
+    log.warn(
+      TAG,
+      `Git hooks live in the shared git directory${sharedLoc}, used by every worktree of this repo — skipping hook removal. Run \`totem eject\` from the main working tree to remove them.`,
+    );
+  } else if (!hooks.hooksDir) {
+    // Not a git repo, or an unparseable `.git` pointer — nothing to resolve.
+    for (const name of ['post-merge', 'post-checkout']) {
+      summary.skipped.push(`.git/hooks/${name} (git hooks directory could not be resolved)`);
+    }
+  } else {
+    scrubPostMergeHook(hooks.hooksDir, summary);
+    scrubPostCheckoutHook(hooks.hooksDir, summary);
+  }
 
   // 2. Remove scaffolded Gemini/Claude hook files
   removeScaffoldedFiles(cwd, summary);
