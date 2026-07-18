@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
 import { generateInputHash, writeCompileManifest } from '@mmnto/totem';
 
@@ -152,6 +152,72 @@ describe('statusCommand', () => {
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(output).toContain('Shield: stale');
   });
+
+  test(
+    'derives rule count from compiled-rules.json when manifest is missing',
+    { timeout: 15000 },
+    async () => {
+      const { totemDir } = scaffold(tmpDir);
+      // Write compiled-rules.json but NO compile-manifest.json
+      const { writeFileSync } = fs;
+      writeFileSync(
+        path.join(totemDir, 'compiled-rules.json'),
+        JSON.stringify({
+          version: 1,
+          rules: [
+            {
+              lessonHash: 'rule-1',
+              lessonHeading: 'Rule 1',
+              pattern: 'foo',
+              message: 'No foo',
+              engine: 'regex',
+              compiledAt: '2026-07-18T00:00:00.000Z',
+            },
+            {
+              lessonHash: 'rule-2',
+              lessonHeading: 'Rule 2',
+              pattern: 'bar',
+              message: 'No bar',
+              engine: 'regex',
+              compiledAt: '2026-07-18T00:00:00.000Z',
+            },
+            {
+              lessonHash: 'rule-3',
+              lessonHeading: 'Rule 3',
+              pattern: 'baz',
+              message: 'No baz',
+              engine: 'regex',
+              compiledAt: '2026-07-18T00:00:00.000Z',
+            },
+            // ARCHIVED rule — must NOT count. Parity means the ACTIVE set via
+            // the same #1345-filtered loader lint/describe use, not the raw
+            // file total (review round, #2388).
+            {
+              lessonHash: 'rule-4-archived',
+              lessonHeading: 'Rule 4 (archived)',
+              pattern: 'qux',
+              message: 'No qux',
+              engine: 'regex',
+              compiledAt: '2026-07-18T00:00:00.000Z',
+              status: 'archived',
+            },
+          ],
+          nonCompilable: [],
+        }),
+        'utf-8',
+      );
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { statusCommand } = await import('./status.js');
+      await statusCommand();
+
+      const output = consoleSpy.mock.calls.map((c) => `${c[0]}`).join('\n');
+      // 4 rules in the raw file, 3 active — the count is the ACTIVE set.
+      expect(output).toMatch(/Rules: 3 compiled/);
+      expect(output).toMatch(/Manifest: missing/);
+    },
+  );
 
   it('handles missing .totem directory gracefully', async () => {
     // No scaffold — no .totem dir at all

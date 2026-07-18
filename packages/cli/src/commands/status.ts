@@ -28,11 +28,37 @@ export async function statusCommand(): Promise<void> {
   let manifestStatus = 'missing';
   let ruleCount = 0;
   try {
-    const { readCompileManifest, generateInputHash } = await import('@mmnto/totem');
+    const { readCompileManifest, generateInputHash, loadCompiledRules } =
+      await import('@mmnto/totem');
+
+    // Rule count parity (#2388): count the ACTIVE set through the SAME loader
+    // lint/describe use — `loadCompiledRules` applies the #1345 status filter
+    // (archived / untested-against-codebase / pending-verification excluded).
+    // The raw file total would be a third, different number (485 raw vs 387
+    // active at the time of this fix). When the compiled-rules file is present
+    // and readable, its active count is AUTHORITATIVE — including an honest 0.
+    let compiledFileReadable = false;
+    try {
+      const rulesPath = path.join(totemDir, 'compiled-rules.json');
+      if (fs.existsSync(rulesPath)) {
+        ruleCount = loadCompiledRules(rulesPath).length;
+        compiledFileReadable = true;
+      }
+      // totem-context: status is a read-only sensor — a malformed compiled-rules.json degrades to the manifest fallback below instead of crashing the whole display; lint's own loader is where malformation fails loud.
+    } catch {
+      compiledFileReadable = false;
+    }
+
     const manifestPath = path.join(totemDir, 'compile-manifest.json');
     if (fs.existsSync(manifestPath)) {
       const manifest = readCompileManifest(manifestPath);
-      ruleCount = manifest.rule_count;
+      // Manifest count is the FALLBACK, used only when the compiled-rules file
+      // is absent/unreadable — not whenever the active count happens to be 0
+      // (an all-archived file should honestly report 0, not a stale manifest
+      // number).
+      if (!compiledFileReadable) {
+        ruleCount = manifest.rule_count;
+      }
       const lessonsDir = path.join(totemDir, 'lessons');
       const currentHash = generateInputHash(lessonsDir, cwd);
       manifestStatus = currentHash === manifest.input_hash ? 'fresh' : 'stale';
