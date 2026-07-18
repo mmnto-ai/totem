@@ -24,13 +24,17 @@ Auto-detects your project structure, package manager, and installed AI agents. I
 - **Flags:**
   - `--bare`: Initializes Totem in a zero-config mode optimized for non-code repositories (e.g., Markdown notes, Obsidian vaults, documentation sites). Skips Git hooks, orchestrator detection, and API key prompts, forcing the Lite tier so you can use Totem as a local MCP RAG server without developer tooling overhead.
 
-### `totem hooks`
+### `totem hook` (install / run / test)
 
-Installs or updates background git hooks (`pre-commit`, `pre-push`, `post-merge`, `post-checkout`). Automatically resolves the git root in monorepo sub-packages.
+The hook engine. `totem hook install` installs or updates background git hooks (`pre-commit`, `pre-push`, `post-merge`) non-interactively and resolves the git root in monorepo sub-packages. `totem hooks` remains as a deprecated alias for `totem hook install`.
 
-- **Flags:**
-  - `--force`: Overwrites existing Totem hooks. Use this after a major version upgrade.
-- **Troubleshooting (Mac/Linux):** If you clone a repository initialized on Windows and the hooks fail to fire, Git may not recognize them as executable. Fix this by running: `chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout`
+- **`hook install` flags:**
+  - `--check`: Verifies the hooks are installed and exits non-zero if any are missing (no writes).
+  - `-f, --force`: Overwrites existing Totem hooks. Use this after a major version upgrade.
+  - `--strict`: Installs the strict enforcement tier (spec-required plus a review gate).
+  - `--standard`: Installs the standard enforcement tier (default).
+- **Other subcommands:** `hook run` evaluates compiled hooks against a tool-call payload (the PreToolUse runtime entrypoint); `hook test` runs hook fixtures against the compiled-hooks rules.
+- **Troubleshooting (Mac/Linux):** If you clone a repository initialized on Windows and the hooks fail to fire, Git may not recognize them as executable. Fix this by running: `chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge`
 
 ### `totem config`
 
@@ -50,11 +54,24 @@ Runs a battery of automated health checks to verify config bloat, index health, 
 
 ### `totem status` / `totem check`
 
-Provides a high-level overview of project health, including active exemptions, shield status, and index state. `totem check` runs enforcement health checks.
+`totem status` provides a high-level overview of project health (manifest, review, and rule state). `totem check` runs `totem lint` and `totem review` sequentially.
+
+- **`check` flags:**
+  - `--staged`: Only check staged changes.
+  - `-m, --model <model>`: Override the orchestrator model.
+  - `--fresh`: Skip the cache.
 
 ### `totem eject`
 
 Safely removes all Totem git hooks, config files, agent prompt injections, and the local `.lancedb/` index.
+
+### `totem link <path>`
+
+Links a neighboring repo into this project so its rules and lessons are visible to the current workspace.
+
+- **Flags:**
+  - `--unlink`: Remove a previously linked repo.
+  - `-y, --yes`: Skip the security confirmation prompt.
 
 ---
 
@@ -76,13 +93,23 @@ Timeout outcomes land in `.totem/temp/telemetry.jsonl` tagged `type: 'regex-exec
 
 For authoring patterns that pass the input-time gate, see [Regex Safety](regex-safety.md), which documents two empirically-verified safe forms for module-path-tolerant identifier matching (a class the gate makes non-obvious).
 
-### `totem rule` (list / scaffold / promote)
+### `totem rule`
 
-Manage your deterministic rules (Pipeline 1).
+Manage your deterministic rules (Pipeline 1). Subcommands: `list`, `inspect`, `test`, `scaffold`, `promote`, `author`.
 
 - `rule list` outputs active rules.
-- `rule scaffold` creates a template for manual rule authoring.
+- `rule inspect <id>` shows rule details by hash (supports prefix matching).
+- `rule test <id>` tests a rule against its inline Example Hit/Miss.
+- `rule scaffold <id>` generates a test fixture skeleton for a compiled rule.
 - `rule promote <hash>` flips a rule from `unverified` to active per ADR-089 (Zero-Trust Default). Pipeline 2 and Pipeline 3 LLM-generated rules ship `unverified: true` unconditionally; this command is the atomic activation surface. Supports partial hash prefixes; ambiguous prefixes print candidates and exit non-zero with no mutation. Idempotent.
+- `rule author` ingests `.totem/spine/authored-rules.yaml` into authored rules and the §8 authoring-ledger (ADR-112).
+
+### `totem gate` (check / install)
+
+Gate engine. Evaluates decidable predicates against deterministic state.
+
+- `gate check` evaluates a gate predicate and emits a `GateVerdict` (`allow` / `warn` / `deny`) as JSON to stdout.
+- `gate install [name]` installs a gate PreToolUse hook into the committed `.claude/settings.json` (idempotent).
 
 ### `totem install pack/<name>`
 
@@ -106,13 +133,20 @@ Imports rules from existing tools into the Totem engine (Pipeline 4).
   - `--out <path>`: Specify an output path.
   - `--dry-run`: Preview the import without saving.
 
-### `totem gc-rules`
-
-Garbage collect stale or unused rules from the compilation manifest.
-
 ### `totem verify-manifest`
 
-Verifies the integrity of the compiled rule manifest against current active rules.
+Verifies the integrity of the compiled rule manifest against current active rules (CI gate).
+
+- **Flags:**
+  - `--allow-compile-drift`: Override compile-worker fingerprint drift. In CI this requires a `## Compile Drift Justification` heading in the PR body; a pre-push run without an open PR requires the `TOTEM_DRIFT_JUSTIFICATION` env var to be set.
+
+### `totem verify-badges`
+
+Verifies the shields.io badges in `README.md` resolve and match project state (a deterministic claim-discipline gate).
+
+### `totem verify-lockfile-sync`
+
+Verifies `pnpm-lock.yaml` is in the diff range when a `package.json` adds a dependency pin (cohort-sync gate, mmnto-ai/totem#1961).
 
 ### `totem explain <hash>`
 
@@ -158,7 +192,7 @@ The Rule Simulator. Runs `compiled-rules.json` against local `pass.ts` and `fail
 
 ### `totem drift`
 
-Detects architectural drift by comparing the current codebase state against historical baselines.
+Checks lessons for stale file references (a CI gate). Flags lessons whose scoped paths no longer exist in the tree so the knowledge base stays anchored to the current codebase.
 
 ---
 
@@ -172,22 +206,42 @@ Parses your codebase, chunks the AST, and builds the local LanceDB vector index.
   - `--incremental`: (Default) Only indexes files changed since the last sync.
   - `--full`: Drops the existing index and rebuilds it entirely from scratch.
   - `--prune`: Interactively detects and removes stale lessons that reference deleted files.
+  - `--packs-only`: Run only the deterministic pack manifest write (no API key required); skips embedding sync, prune, and the global registry update.
+  - `--index-only`: Run only the embedding sync; skip the pack manifest write.
+  - `-q, --quiet`: Suppress output (for background or hook usage).
 
-### `totem search`
+### `totem search <query>`
 
 Searches the local knowledge index for lessons, code snippets, or rules relevant to a query.
+
+- **Flags:**
+  - `-t, --type <type>`: Filter by content type (`code`, `session_log`, `spec`).
+  - `-n, --max-results <n>`: Maximum results to return (default: 5).
 
 ### `totem stats`
 
 Displays statistics about the vector index, rule bypass rates, and lesson counts.
 
-### `totem add-lesson`
+- **Flags:**
+  - `--pattern-recurrence`: Cluster bot-review findings and trap-ledger overrides across the most recent merged PRs and write `.totem/recurrence-stats.json`. Requires the GitHub CLI (`gh`) authenticated against the current repo.
+  - `--threshold <n>`: Recurrence mode: minimum occurrences for a pattern to land in the headline output (default: 5).
+  - `--history-depth <n>`: Recurrence mode: number of recent merged PRs to scan (default: 50, capped at 200).
+  - `--yes`: Recurrence mode: auto-confirm overwrite when an existing `recurrence-stats.json` is newer.
 
-Interactively documents a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
+### `totem lesson add <text>`
+
+Adds a lesson to project memory as a markdown file under `.totem/lessons/`. `totem add-lesson` remains as a deprecated alias.
 
 ### `totem lesson list`
 
-Lists all locally documented lessons from `.totem/lessons.md` and the lessons directory.
+Lists all lessons with their hash, heading, and tags.
+
+### `totem lint-lessons`
+
+Validates lesson metadata (patterns, scopes, severity) before compilation.
+
+- **Flags:**
+  - `--strict`: Promote warnings to errors (exit non-zero on any diagnostic).
 
 ### `totem lesson compile`
 
@@ -280,6 +334,27 @@ Captures uncommitted changes and lessons learned today for your next session.
 - **Flags:**
   - `--lite`: An ANSI-sanitized, zero-LLM snapshot (fast).
 
+### `totem orient`
+
+Derives session orientation from repo primitives (open PRs, issues, board state, freeze status) with zero LLM calls.
+
+- **Flags:**
+  - `--json`: Output the `OrientReport` as structured JSON.
+  - `--session`: Emit the bounded session-orientation block for a `SessionStart` hook (boot-safe; empty when nothing is high-signal).
+
+### `totem docs [paths...]`
+
+Auto-updates registered project docs using LLM synthesis. Requires a configured LLM provider.
+
+- **Flags:**
+  - `--raw`: Output the assembled prompt without LLM synthesis.
+  - `--out <path>`: Write output to a file instead of stdout.
+  - `--model <name>`: Override the default orchestrator model.
+  - `--fresh`: Bypass the cache and force a fresh LLM call.
+  - `--only <names>`: Comma-separated filter that restricts synthesis to the named docs (e.g., `--only readme`).
+  - `--dry-run`: Preview changes without writing files.
+  - `--yes`: Skip the confirmation prompt (for scripts and CI).
+
 ### `totem wrap` (RETIRED)
 
 Previously a 6-step post-merge workflow chain. Retired pending [mmnto-ai/totem#1361](https://github.com/mmnto-ai/totem/issues/1361) because the `totem docs` step silently overwrote hand-crafted committed documentation. Running the command now prints a hard error with the manual workaround sequence. Use the individual commands directly:
@@ -306,3 +381,70 @@ Adds a user-defined secret to the local DLP pipeline (`.totem/secrets.json`). Se
 
 - **Flags:**
   - `--pattern`: Treat the value as a regex pattern instead of a literal string. Patterns are validated for syntax and **ReDoS safety**. Catastrophic backtracking patterns like `(a+)+$` are rejected at input time.
+
+### `totem list-secrets`
+
+Lists all configured custom secrets (shared and local) with source labels.
+
+### `totem remove-secret <index>`
+
+Removes a custom secret from `.totem/secrets.json` by index (the index printed by `totem list-secrets`).
+
+---
+
+## Governance Records
+
+### `totem adr new <title>`
+
+Scaffolds a new NNN-prefixed Architecture Decision Record under `adr/` with the heading `# ADR NNN: Title`.
+
+### `totem proposal new <title>`
+
+Scaffolds a new NNN-prefixed governance proposal under `proposals/active/`.
+
+---
+
+## Cross-Repo Coordination (ECL)
+
+### `totem mail` (send / reply / mark)
+
+Shows unread cross-repo mail addressed to this repo's agent(s) (ADR-106 § 3). Subcommands compose and mark dispatches.
+
+- **Flags (`mail`):**
+  - `--json`: Emit JSON to stdout instead of human-readable text to stderr.
+  - `--recursive`: Walk the workspace recursively for nested layouts (default: single-level siblings).
+  - `--workspace <path>`: Workspace dir to scan (default: `$TOTEM_WORKSPACE`, else the parent of the current directory).
+- **Subcommands:**
+  - `mail send` composes and writes a validated ADR-098 dispatch to your outbox.
+  - `mail reply <source>` replies to a dispatch, inferring recipient and subject from the source.
+  - `mail mark <source>` marks a consumed dispatch processed in your own `processed/` cursor (consume-without-reply, ADR-106 § A1.4).
+
+### `totem ecl-gc`
+
+Prunes your own aged ECL outbox dispatches; with `--compact`, also compacts your processed-mark cursor. Self-resolving and dry-run unless `--apply` is passed.
+
+- **Flags:**
+  - `--apply`: Actually delete aged dispatches (default is a dry-run listing only).
+  - `--retain-days <n>`: Retention window in days (default 14).
+  - `--agent-id <id>`: Override the self-resolved agent whose outbox/cursor to gc (visiting or orchestrator case).
+  - `--compact`: Also compact your processed-mark cursor; runs after the prune.
+  - `--force-incomplete`: Unsafe. Proceed with compaction even when a declared cohort repo is absent from the workspace (waives only the roster-presence gate).
+  - `--json`: Emit the structured result as JSON to stdout instead of human text.
+
+---
+
+## Evidence & Spine
+
+### `totem artifact` (rerun / compare)
+
+Inspects grounded run artifacts under `.totem/artifacts/runs/`.
+
+- `artifact rerun <hash>` re-invokes a recorded run with its exact stored bundle and backend, emitting a new artifact.
+- `artifact compare <hashA> <hashB>` produces a deterministic artifact-vs-artifact diff (structural equality plus metric deltas).
+
+### `totem spine` (windtunnel / freeze-split)
+
+Spine evidence harness for Gate-1 wind-tunnel evaluation.
+
+- `spine windtunnel` freezes the corpus lock and runs the evidence harness.
+- `spine freeze-split` freezes the pre-authoring split, derives the window from lc HEAD, stamps `frozenAt`, and writes the tamper-evident tracked artifact (ADR-112 §5.1/§8 R1).
