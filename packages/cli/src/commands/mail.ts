@@ -312,22 +312,33 @@ function readHeaderWindow(filePath: string): HeaderWindowRead {
 }
 
 /**
- * Build the set of basenames that should be skipped because they have
- * already been actioned. Drains `processed/` and `processed/_broadcast/`
- * for each SELF_AGENT in the calling repo.
+ * Per-basename count of RESOLVED SELF seats holding a processed mark (in
+ * `processed/` or `processed/_broadcast/` — both locations count; the live
+ * mmnto-ai/totem#2412 specimen sat in the root). Directed mail subtracts on ANY
+ * seat's mark (the historical flat union). A broadcast is per-seat consumable —
+ * ecl-gc stores and collects `_broadcast` marks per seat — so it subtracts only
+ * when EVERY resolved seat holds the mark: the flat union collapsed exactly
+ * that, letting one seat's consumption hide a live broadcast from every other
+ * seat in a multi-seat poll (first-consumer-wins, mmnto-ai/totem#2412). A
+ * multi-seat poll's unread line then truthfully asserts "unread for at least
+ * one of my seats" — the only claim it can make.
  */
-function buildProcessedSet(
+function buildProcessedMarkCounts(
   repoRoot: string,
   selfAgents: string[],
   warnings: string[],
-): Set<string> {
-  const processed = new Set<string>();
+): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const agent of selfAgents) {
     const agentDir = path.join(repoRoot, '.totem', 'orchestration', agent, 'processed');
-    drainProcessedDir(agentDir, processed, warnings);
-    drainProcessedDir(path.join(agentDir, '_broadcast'), processed, warnings);
+    const seatMarks = new Set<string>();
+    drainProcessedDir(agentDir, seatMarks, warnings);
+    drainProcessedDir(path.join(agentDir, '_broadcast'), seatMarks, warnings);
+    for (const name of seatMarks) {
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
   }
-  return processed;
+  return counts;
 }
 
 function drainProcessedDir(dir: string, into: Set<string>, warnings: string[]): void {
@@ -513,13 +524,14 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   }
 
   // `includeProcessed` (ADR-106 § A2.1) yields the RAW addressed-inbound set:
-  // an empty processed set makes the `processedNames.has(file)` filter below a
-  // no-op, so nothing is subtracted. The reader default stays `inbound −
-  // processed`; the compaction path opts in to the pre-dedupe view.
-  const processedNames =
+  // an empty mark-count map makes the subtraction below a no-op, so nothing is
+  // subtracted. The reader default stays `inbound − processed`; the compaction
+  // path opts in to the pre-dedupe view.
+  const processedMarkCounts =
     opts.includeProcessed !== true && selfResolution.agents.length > 0
-      ? buildProcessedSet(repoRoot, selfResolution.agents, warnings)
-      : new Set<string>();
+      ? buildProcessedMarkCounts(repoRoot, selfResolution.agents, warnings)
+      : new Map<string, number>();
+  const selfSeatCount = selfResolution.agents.length;
 
   const slots = enumerateOutboxes(workspace, opts.recursive === true, warnings);
 
@@ -531,6 +543,26 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // (per GCA review on mmnto-ai/totem#1971); without the self-first bucket,
   // other-recipient volume crowds self mail out of the horizon
   // (mmnto-ai/totem#2144).
+  // Compact-stamp prefix shared by the subtraction discriminator below and the
+  // self-priority bucket further down.
+  const stampPrefix = /^\d{4}-\d{2}-\d{2}T\d{4}Z-/;
+
+  // Positional broadcast token — the same zero-I/O filename signal the
+  // self-priority bucket trusts (mmnto-ai/totem#2144): `broadcast` immediately
+  // after the compact stamp. Subtraction runs pre-parse (the scan cap must not
+  // be spent opening consumed files), so this token also selects the
+  // subtraction rule: a broadcast-named file needs EVERY resolved seat's mark
+  // (per-seat consumable, mmnto-ai/totem#2412); anything else keeps the
+  // historical any-seat union. A `to: broadcast` dispatch WITHOUT the filename
+  // token (legacy names) stays on the union rule — no worse than before, and
+  // the ecl filename discipline makes the token standard on new dispatches.
+  const isBroadcastNamed = (file: string): boolean => {
+    const stamp = stampPrefix.exec(file);
+    if (stamp === null) return false;
+    const rest = file.slice(stamp[0].length).toLowerCase();
+    return rest === 'broadcast.md' || rest.startsWith('broadcast-');
+  };
+
   const unread: Array<{ slot: OutboxSlot; file: string }> = [];
   for (const slot of slots) {
     let files: string[];
@@ -542,7 +574,11 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       continue;
     }
     for (const file of files) {
-      if (processedNames.has(file)) continue;
+      // `max(seats, 1)` keeps the zero-resolution poll (empty map, seats = 0)
+      // from vacuously treating every broadcast as consumed, and makes a
+      // single-seat poll bit-identical to the pre-#2412 behavior.
+      const required = isBroadcastNamed(file) ? Math.max(selfSeatCount, 1) : 1;
+      if ((processedMarkCounts.get(file) ?? 0) >= required) continue;
       unread.push({ slot, file });
     }
   }
@@ -562,7 +598,6 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // today's scan would (codex F2 — a mislabeled filename carrying `to: self`
   // inside). The token grants priority only; delivery truth stays the parsed
   // `to:` field.
-  const stampPrefix = /^\d{4}-\d{2}-\d{2}T\d{4}Z-/;
   const selfTokens = [...selfLower, 'broadcast'];
   const hasSelfToken = (file: string): boolean => {
     const stamp = stampPrefix.exec(file);

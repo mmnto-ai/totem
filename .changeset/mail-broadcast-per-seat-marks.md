@@ -1,0 +1,5 @@
+---
+'@mmnto/cli': patch
+---
+
+`totem mail` no longer hides a live broadcast from a multi-seat poll after a single seat consumes it (mmnto-ai/totem#2412, first-consumer-wins). The unread filter previously drained every resolved seat's `processed/` marks into one flat basename union — so under multi-seat self-resolution (unscoped polls, `config.json` host_agents), one seat's broadcast mark subtracted the broadcast for every other seat, silently. Broadcasts are per-seat consumable by design (ecl-gc keeps per-seat `_broadcast` stores): a broadcast-named dispatch now subtracts only when EVERY resolved seat holds the mark, so a multi-seat poll truthfully asserts "unread for at least one of my seats". Directed mail keeps the any-seat union, and single-seat (`TOTEM_SELF_AGENT`-scoped) polls are bit-identical to before. A `to: broadcast` dispatch without the positional `broadcast` filename token stays on the union rule (subtraction runs pre-parse; the ecl filename discipline makes the token standard).
