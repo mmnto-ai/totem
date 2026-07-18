@@ -301,6 +301,30 @@ describe('hooksCommand exit-code contract', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
+  it('file-valued core.hooksPath: declares the git-hook skip, session hooks STILL repaired (exit 0)', async () => {
+    // CR #2422 round 2 falsifier: an unresolvable hooks dir (core.hooksPath at a
+    // non-directory — the hooks-disabled idiom) skips GIT hook installation with
+    // the truthful scoped line, while the managed session hooks — vendor
+    // artifacts independent of git-hook state (PR-A slice 3 / lc#806) — are
+    // still drift-repaired. Continuing past the git-hook skip is the contract,
+    // not a leak.
+    const notADir = path.join(tmpDir, 'hooks-disabled.txt');
+    fs.writeFileSync(notADir, 'not a directory\n');
+    execFileSync('git', ['config', 'core.hooksPath', notADir], { cwd: tmpDir });
+    const ssPath = path.join(tmpDir, '.claude', 'hooks', 'SessionStart.cjs');
+    fs.mkdirSync(path.dirname(ssPath), { recursive: true });
+    fs.writeFileSync(ssPath, `${TOTEM_FILE_MARKER}\nstale\n${TOTEM_FILE_END}\n`);
+    errorSpy.mockClear();
+
+    await expect(hooksCommand({})).resolves.toBeUndefined();
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errorOutput()).toContain('skipping git hook installation');
+    // The non-directory target never receives a write.
+    expect(fs.readFileSync(notADir, 'utf-8')).toBe('not a directory\n');
+    // The bounded session hook is still repaired after the git-hook skip.
+    expect(fs.readFileSync(ssPath, 'utf-8')).toBe(CLAUDE_SESSION_START);
+  });
+
   it('hook-manager repo STILL drift-repairs an existing bounded session hook (lc#806 guard)', async () => {
     // A git-hook manager (husky) means git hooks are the manager's job — a declared
     // skip for the git side. But the session hooks are Claude/Gemini artifacts,
