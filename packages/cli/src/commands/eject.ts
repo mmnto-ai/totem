@@ -75,12 +75,12 @@ export async function resolveEjectHooksContext(cwd: string): Promise<EjectHooksC
   // (the same dynamic-import pattern `scrubClaudeSkills`/`ejectCommand` use).
   const { resolveGitRootForHookPath, resolveHooksDir } = await import('./install-hooks.js');
   let gitRoot: string | null;
-  // totem-context: intentional cleanup — eject is best-effort per Tenet 4's
-  // cleanup carve-out; a genuine git failure degrades to "unresolvable", never a
-  // crash of the whole eject. (Not-a-repo / unparseable pointer already return a
-  // null root without throwing; this guards the residual "git broke" class.)
   try {
     ({ gitRoot } = resolveGitRootForHookPath(cwd));
+    // totem-context: intentional cleanup — eject is best-effort per Tenet 4's
+    // cleanup carve-out; a genuine git failure (NOT not-a-repo / unparseable
+    // pointer, which return a null root without throwing) degrades to
+    // "unresolvable" rather than crashing the whole eject.
   } catch {
     return { hooksDir: null, isLinkedWorktree: false };
   }
