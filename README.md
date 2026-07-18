@@ -17,7 +17,7 @@ When using LLMs on projects, I found that agents kept making the same architectu
 
 The cause is structural, not a prompt problem. Models are stateless. Every session starts from zero, and anything the last session learned is gone unless it lives somewhere durable. If project rules and lessons don't reside in the repository alongside the code, no amount of re-explaining fixes it for the next session.
 
-Totem is what I extracted to solve that friction. It's a file-based toolkit: plain markdown lessons, a queryable knowledge index derived from them, and compiled lint rules a zero-LLM linter enforces. The lint engine is deterministic; the index is local, derived, and rebuilt from your files at any time; the compiler and review commands are LLM-powered and opt-in. The structural pieces ship today. The discipline and telemetry layers are in active development; the [maturity page](docs/wiki/maturity.md) carries the honest split, machine-derived from committed data.
+Totem is what I extracted to solve that friction. It's a file-based toolkit: plain markdown lessons, a queryable knowledge index derived from them, and compiled lint rules a zero-LLM linter enforces. The lint engine is deterministic; the index is local, derived, and rebuilt from your files at any time; the compiler and review commands are LLM-powered and opt-in. The structural pieces ship today. Read the loop below with one composition note: the **enforcement floor** (deterministic lint, hooks, index) is the stable half this repo exercises on every push, while the **lesson-compiler** half is mid-replacement — rule compilation has been frozen since 2026-05-17 while its successor is built in the open, so new lessons currently accrue and stay queryable without compiling into new rules. The discipline and telemetry layers are in active development; the [maturity page](docs/wiki/maturity.md) carries the honest split, machine-derived from committed data.
 
 ---
 
@@ -137,6 +137,8 @@ pnpm dlx @mmnto/cli doctor --strict
 ```
 
 `doctor --strict` reports config, hooks, rules, and index wiring, and exits non-zero on fail-class diagnostics. Read and resolve its warnings before treating setup as complete; if an agent is running this setup for you, that is its checklist too.
+
+The npm packages declare `engines.node >= 24` deliberately: Node 24 (LTS since 2025-10) is the runtime CI actually tests and the one the publishing pipeline (npm 11 / OIDC) runs on — a floor we exercise rather than one we claim. On CI images pinned to older Node, use the Lite binary below instead.
 
 No Node.js? The **Totem Lite** standalone binary runs `init`, `lint`, and `hooks` fully offline: grab it from [Releases](https://github.com/mmnto-ai/totem/releases); platform commands in the [Installation Guide](docs/wiki/installation.md).
 
