@@ -237,6 +237,13 @@ const ALLOWLIST: AllowEntry[] = [
   },
   {
     hash: 'c2c09301bb56a02b',
+    file: 'packages/cli/src/commands/install-hooks.ts',
+    expectedCount: 1,
+    reason:
+      'resolveHooksDir invokes `spawnSync` for one git plumbing call (`rev-parse --git-path hooks`) to locate the worktree-aware hooks directory (mmnto-ai/totem#2418). Literal target, fixed args, cwd anchored at the resolved git root; raw spawnSync (the doctor.ts idiom) because a static safeExec import would pull the core barrel into CLI cold-start.',
+  },
+  {
+    hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/add-lesson.ts',
     expectedCount: 1,
     reason:

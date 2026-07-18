@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
@@ -15,6 +16,93 @@ export const TOTEM_PREPUSH_MARKER = '[totem] pre-push hook';
 export const TOTEM_PREPUSH_END = '[totem] end pre-push';
 
 type HookManager = 'husky' | 'lefthook' | 'simple-git-hooks';
+
+// ─── Hooks-directory resolution (mmnto-ai/totem#2418) ─────────
+
+/**
+ * Resolve the git hooks directory for `gitRoot`. In a plain checkout this is
+ * `.git/hooks`, but in a linked worktree (or submodule) `.git` is a FILE
+ * (`gitdir: <path>` pointer) and hooks live under the resolved git dir — shared
+ * across worktrees via `commondir` — so a blind `.git/hooks` join makes
+ * `mkdirSync` crash with ENOTDIR (mmnto-ai/totem#2418; the owner-repo
+ * `tools/install-hooks.js` variant already discriminates). Resolution is
+ * delegated to `git rev-parse --git-path hooks` — git's own worktree/commondir
+ * walk, which also honors `core.hooksPath` — with a filesystem probe as the
+ * offline fallback for the plain-directory layout. Returns null when no hooks
+ * directory can be resolved: the #2410 declared-skip class — callers skip
+ * loudly instead of guessing a path.
+ */
+export function resolveHooksDir(gitRoot: string): string | null {
+  // Raw spawnSync (the doctor.ts idiom): a builtin, so the heavy core barrel
+  // stays off the CLI cold-start graph, and a failed invocation reports via
+  // `status`/`error` instead of throwing — the probe below is the fallback.
+  const resolved = spawnSync('git', ['rev-parse', '--git-path', 'hooks'], {
+    cwd: gitRoot,
+    encoding: 'utf-8',
+  });
+  if (resolved.status === 0 && resolved.stdout && resolved.stdout.trim()) {
+    // git prints forward slashes even on Windows, and a repo-relative path in
+    // the common case — normalize and anchor at the git root.
+    const hooksDir = path.resolve(gitRoot, path.normalize(resolved.stdout.trim()));
+    // `core.hooksPath` can aim hooks at a non-directory (the /dev/null
+    // hooks-disabled idiom) — an existing non-directory can never receive hook
+    // files, so it joins the declared-skip class instead of crashing the write
+    // (#2422 review round).
+    if (fs.existsSync(hooksDir) && !fs.statSync(hooksDir).isDirectory()) {
+      return null;
+    }
+    return hooksDir;
+  }
+  const gitPath = path.join(gitRoot, '.git');
+  if (fs.existsSync(gitPath) && fs.statSync(gitPath).isDirectory()) {
+    return path.join(gitPath, 'hooks');
+  }
+  // `.git` is a pointer file git could not resolve for us — never guess.
+  return null;
+}
+
+/** Skip line shared by every caller that hits an unresolvable hooks directory. */
+const HOOKS_DIR_UNRESOLVED_MSG =
+  '[Totem] .git is not a directory or a resolvable gitdir pointer — skipping git hook installation.';
+
+/**
+ * Whether `err` (typically the TotemGitError thrown by `resolveGitRoot`) stems
+ * from a malformed `.git` pointer FILE — git's `fatal: invalid gitfile format`.
+ * This is the "unparseable gitdir pointer (worktree/submodule)" member of the
+ * #2410 declared-skip class: `totem hook install` must exit 0 on it, not
+ * propagate a crash into the consumer's `prepare` lifecycle
+ * (mmnto-ai/totem#2418). Walks the cause chain the same bounded way core's
+ * not-a-git-repo matcher does.
+ */
+function isUnparseableGitFileError(err: unknown): boolean {
+  let cursor: unknown = err;
+  for (let depth = 0; depth < 5 && cursor !== undefined && cursor !== null; depth++) {
+    const text = cursor instanceof Error ? cursor.message : String(cursor);
+    if (/invalid gitfile format/i.test(text)) return true;
+    cursor = cursor instanceof Error ? cursor.cause : undefined;
+  }
+  return false;
+}
+
+/**
+ * `resolveGitRoot` for hook-install paths: maps the malformed `.git` pointer
+ * FILE to `{ gitRoot: null, unparseablePointer: true }` instead of letting the
+ * throw reach `handleError` → exit 1 — EVERY hook-install entry point owes the
+ * #2410 declared skip on it, including the hidden legacy `totem install-hooks`
+ * command and the direct `installHooksNonInteractive` API (#2422 review round:
+ * only `hooksCommand` was guarded). All other failures stay fail-loud.
+ */
+function resolveGitRootForHookPath(cwd: string): {
+  gitRoot: string | null;
+  unparseablePointer: boolean;
+} {
+  try {
+    return { gitRoot: resolveGitRoot(cwd), unparseablePointer: false };
+  } catch (err) {
+    if (isUnparseableGitFileError(err)) return { gitRoot: null, unparseablePointer: true };
+    throw err;
+  }
+}
 
 /**
  * Determine the package-manager fallback command for invoking totem.
@@ -226,10 +314,16 @@ export async function installPostMergeHook(
   rl: readline.Interface,
   options?: { tier?: 'strict' | 'standard' },
 ): Promise<void> {
-  // Guard: must be a git repo — resolve root from any subdirectory
-  const gitRoot = resolveGitRoot(cwd);
+  // Guard: must be a git repo — resolve root from any subdirectory. A malformed
+  // `.git` pointer file is the same declared-skip class, not a crash (#2422 round:
+  // the legacy `totem install-hooks` path previously let it reach handleError).
+  const { gitRoot, unparseablePointer } = resolveGitRootForHookPath(cwd);
   if (!gitRoot) {
-    console.log('[Totem] Not a git repository — skipping hook installation.');
+    console.error(
+      unparseablePointer
+        ? HOOKS_DIR_UNRESOLVED_MSG
+        : '[Totem] Not a git repository — skipping hook installation.',
+    );
     return;
   }
 
@@ -250,7 +344,12 @@ export async function installPostMergeHook(
     return;
   }
 
-  const hooksDir = path.join(gitRoot, '.git', 'hooks');
+  const hooksDir = resolveHooksDir(gitRoot);
+  if (!hooksDir) {
+    // stderr like every other skip/diagnostic line (#2422 round: stream parity).
+    console.error(HOOKS_DIR_UNRESOLVED_MSG);
+    return;
+  }
   const hookPath = path.join(hooksDir, 'post-merge');
 
   // Idempotency: check if already installed
@@ -592,8 +691,10 @@ export async function installEnforcementHooks(
 ): Promise<EnforcementHookResult> {
   const skip: EnforcementHookResult = { preCommit: 'skipped', prePush: 'skipped' };
 
-  // Guard: must be a git repo — resolve root from any subdirectory
-  const gitRoot = resolveGitRoot(cwd);
+  // Guard: must be a git repo — resolve root from any subdirectory. Both skip
+  // classes stay silent here: installPostMergeHook always runs next in the two
+  // callers (init + the legacy install-hooks command) and prints the one line.
+  const { gitRoot } = resolveGitRootForHookPath(cwd);
   if (!gitRoot) {
     return skip;
   }
@@ -614,8 +715,13 @@ export async function installEnforcementHooks(
     return skip;
   }
 
+  const hooksDir = resolveHooksDir(gitRoot);
+  if (!hooksDir) {
+    // stderr like every other skip/diagnostic line (#2422 round: stream parity).
+    console.error(HOOKS_DIR_UNRESOLVED_MSG);
+    return skip;
+  }
   const fallbackCmd = getFallbackCommand(gitRoot);
-  const hooksDir = path.join(gitRoot, '.git', 'hooks');
 
   const preCommit = installGitHook(
     hooksDir,
@@ -658,10 +764,12 @@ export async function installHooksCommand(): Promise<void> {
     await installEnforcementHooks(cwd, rl);
     await installPostMergeHook(cwd, rl);
 
-    // Silently install post-checkout alongside post-merge (same guard — only if post-merge was accepted)
-    const gitRoot = resolveGitRoot(cwd);
-    if (gitRoot && !detectHookManager(gitRoot)) {
-      const hooksDir = path.join(gitRoot, '.git', 'hooks');
+    // Silently install post-checkout alongside post-merge (same guard — only if
+    // post-merge was accepted). Bad-pointer skip stays silent: installPostMergeHook
+    // above already printed the line.
+    const { gitRoot } = resolveGitRootForHookPath(cwd);
+    const hooksDir = gitRoot ? resolveHooksDir(gitRoot) : null;
+    if (gitRoot && hooksDir && !detectHookManager(gitRoot)) {
       const postMerge = path.join(hooksDir, 'post-merge');
       const hasPostMerge =
         fs.existsSync(postMerge) && fs.readFileSync(postMerge, 'utf-8').includes(TOTEM_HOOK_MARKER);
@@ -700,9 +808,13 @@ export function installHooksNonInteractive(
   force?: boolean,
   options?: { tier?: 'strict' | 'standard' },
 ): HooksCommandResult | null {
-  // Guard: must be a git repo — resolve root from any subdirectory
-  const gitRoot = resolveGitRoot(cwd);
+  // Guard: must be a git repo — resolve root from any subdirectory. Not-a-repo
+  // stays a silent null (the documented contract — callers print); the malformed
+  // pointer prints its declared-skip line here so a direct API caller honors the
+  // #2410 contract without hooksCommand's pre-guard (#2422 round).
+  const { gitRoot, unparseablePointer } = resolveGitRootForHookPath(cwd);
   if (!gitRoot) {
+    if (unparseablePointer) console.error(HOOKS_DIR_UNRESOLVED_MSG);
     return null;
   }
 
@@ -716,7 +828,14 @@ export function installHooksNonInteractive(
     return null;
   }
 
-  const hooksDir = path.join(gitRoot, '.git', 'hooks');
+  const hooksDir = resolveHooksDir(gitRoot);
+  if (!hooksDir) {
+    // Unresolvable hooks dir (worktree/submodule pointer git could not follow) —
+    // the #2410 declared-skip class: report and exit 0, never mkdir '.git/hooks'
+    // blind (the mmnto-ai/totem#2418 ENOTDIR crash).
+    console.error(HOOKS_DIR_UNRESOLVED_MSG);
+    return null;
+  }
 
   const preCommit = installGitHook(
     hooksDir,
@@ -763,11 +882,18 @@ export function installHooksNonInteractive(
  * Check that all Totem hooks are installed. Returns true if all present.
  */
 export function checkHooksInstalled(cwd: string): boolean {
-  const gitRoot = resolveGitRoot(cwd);
+  // Malformed pointer → false like not-a-repo: a verify that cannot locate the
+  // hooks has nothing to certify (hooksCommand's pre-guard already declared the
+  // skip on the CLI --check path).
+  const { gitRoot } = resolveGitRootForHookPath(cwd);
   if (!gitRoot) {
     return false;
   }
-  const hooksDir = path.join(gitRoot, '.git', 'hooks');
+  const hooksDir = resolveHooksDir(gitRoot);
+  if (!hooksDir) {
+    console.error('[Totem] Git hooks directory could not be resolved — cannot check hooks.');
+    return false;
+  }
 
   const markers = [
     { file: 'pre-commit', marker: TOTEM_PRECOMMIT_MARKER },
@@ -805,10 +931,17 @@ export async function hooksCommand(opts: {
 }): Promise<void> {
   const cwd = process.cwd();
 
-  // Resolve git root once — guards both --check and install paths
-  const gitRoot = resolveGitRoot(cwd);
+  // Resolve git root once — guards both --check and install paths. A malformed
+  // `.git` pointer FILE is the "unparseable gitdir pointer (worktree/submodule)"
+  // member of the #2410 declared-skip class: exit 0 with a truthful skip line
+  // instead of crashing the consumer's `prepare` lifecycle (mmnto-ai/totem#2418).
+  const { gitRoot, unparseablePointer } = resolveGitRootForHookPath(cwd);
   if (!gitRoot) {
-    console.error('[Totem] Not a git repository — skipping hook installation.');
+    console.error(
+      unparseablePointer
+        ? HOOKS_DIR_UNRESOLVED_MSG
+        : '[Totem] Not a git repository — skipping hook installation.',
+    );
     return;
   }
 
@@ -1043,7 +1176,10 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     const gitRoot = resolveGitRoot(cwd);
     if (!gitRoot) return false;
 
-    const hookPath = path.join(gitRoot, '.git', 'hooks', 'pre-push');
+    const hooksDir = resolveHooksDir(gitRoot);
+    if (!hooksDir) return false;
+
+    const hookPath = path.join(hooksDir, 'pre-push');
     if (!fs.existsSync(hookPath)) return false;
 
     const content = fs.readFileSync(hookPath, 'utf-8');

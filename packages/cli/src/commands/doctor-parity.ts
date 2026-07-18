@@ -357,18 +357,18 @@ interface GeneratedArtifact {
 
 /**
  * Resolve the four git-hook artifacts the `git-hooks` contract checks, each with a
- * per-repo regenerated canonical. Checks `.git/hooks/*` only — hook-manager installs
+ * per-repo regenerated canonical. `hooksDir` is the repo's RESOLVED hooks directory
+ * (worktree-aware — mmnto-ai/totem#2418). Checks git hooks only — hook-manager installs
  * (`.totem/hooks/*.sh` for husky / lefthook) are a follow-on (no cohort consumer uses
  * one today); the detector's present-without-marker → `skip` keeps a manager repo
  * honest in the meantime.
  */
 function gitHookArtifactsFor(
-  gitRoot: string,
+  hooksDir: string,
   tier: 'strict' | 'standard',
   fallbackCmd: string,
   builders: HookBuilderSource,
 ): GeneratedArtifact[] {
-  const hooksDir = path.join(gitRoot, '.git', 'hooks');
   const m = builders.markers;
   return [
     {
@@ -749,6 +749,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         buildHookContent,
         buildPostCheckoutHookContent,
         getFallbackCommand,
+        resolveHooksDir,
         TOTEM_PRECOMMIT_MARKER,
         TOTEM_PREPUSH_MARKER,
         TOTEM_HOOK_MARKER,
@@ -1034,7 +1035,18 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
           let artifactLabel = 'artifact';
           let installCommand = 'totem init';
           if (c.id === 'git-hooks') {
-            generatedArtifacts = gitHookArtifactsFor(gitRoot, hookTier, fallbackCmd, hookBuilders);
+            // Worktree-aware hooks location (mmnto-ai/totem#2418): a linked
+            // worktree's hooks live behind the `.git` gitdir pointer, so a blind
+            // `.git/hooks` join would report every hook missing there. The
+            // read-only join fallback keeps the pre-#2418 behavior when even the
+            // resolver comes up empty.
+            const parityHooksDir = resolveHooksDir(gitRoot) ?? path.join(gitRoot, '.git', 'hooks');
+            generatedArtifacts = gitHookArtifactsFor(
+              parityHooksDir,
+              hookTier,
+              fallbackCmd,
+              hookBuilders,
+            );
             artifactLabel = 'git hook';
             // --force so the remediation actually repairs a stale hook: bare
             // `totem hook install` only drift-repairs a totem-OWNED whole file, but
