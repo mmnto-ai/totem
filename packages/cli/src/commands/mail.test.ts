@@ -25,6 +25,7 @@ import {
   type MailPollResult,
   mailReply,
   mailSend,
+  markSource,
   pollMail,
   resolveMailExitCode,
   resolveSelfSender,
@@ -2167,5 +2168,235 @@ describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)'
     expect(resolveSelfSender(totemRepo, {}, 'totem-gemini')).toBe('totem-gemini'); // explicit wins
     expect(resolveSelfSender(totemRepo, { TOTEM_SELF_AGENT: 'totem-claude' })).toBe('totem-claude'); // env → single
     expect(() => resolveSelfSender(totemRepo, {})).toThrow(/ambiguous/); // map → 2 agents
+  });
+});
+
+// ─── Consume-marking: mail mark (mmnto-ai/totem#2396) ───
+
+describe('markSource — standalone mail mark (mmnto-ai/totem#2396)', () => {
+  const SOLO = { TOTEM_SELF_AGENT: 'totem-claude' };
+
+  function processedPath(seat: string, name: string, broadcast = false): string {
+    const base = path.join(selfRepoRoot(), '.totem', 'orchestration', seat, 'processed');
+    return broadcast ? path.join(base, '_broadcast', name) : path.join(base, name);
+  }
+
+  it('marks a directed dispatch so a subsequent poll subtracts it (consume-atomicity)', () => {
+    const name = '2026-07-16T2200Z-totem-claude-handoff.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [
+      { name, to: 'totem-claude', subject: 'lane handoff' },
+    ]);
+    const source = path.join(outbox, name);
+    // Pre-mark: the dispatch is unread for this seat.
+    expect(poll({ env: SOLO }).mail.map((m) => m.file)).toContain(name);
+
+    const res = markSource(source, { repoRoot: selfRepoRoot(), env: SOLO });
+    expect(res.agent).toBe('totem-claude');
+    expect(res.broadcast).toBe(false);
+    expect(res.alreadyMarked).toBe(false);
+    // The mark is a same-basename FULL COPY of the source under the directed store.
+    expect(res.markPath).toBe(processedPath('totem-claude', name));
+    expect(fs.readFileSync(res.markPath, 'utf-8')).toBe(fs.readFileSync(source, 'utf-8'));
+    // Post-mark: the reader no longer surfaces it (phantom-unread closed).
+    expect(poll({ env: SOLO }).mail).toEqual([]);
+  });
+
+  it('marks a broadcast dispatch under processed/_broadcast/ (per-seat store)', () => {
+    const name = '2026-07-16T2213Z-broadcast-cohort-move.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [
+      { name, to: 'broadcast', subject: 'cohort move' },
+    ]);
+    const source = path.join(outbox, name);
+
+    const res = markSource(source, { repoRoot: selfRepoRoot(), agentId: 'totem-claude', env: {} });
+    expect(res.broadcast).toBe(true);
+    expect(res.markPath).toBe(processedPath('totem-claude', name, true));
+    // Single-seat poll subtracts it (broadcast needs every seat; SOLO = just this one).
+    expect(poll({ env: SOLO }).mail).toEqual([]);
+  });
+
+  it('is idempotent — a second mark is a no-op (alreadyMarked, same path)', () => {
+    const name = '2026-07-16T2200Z-totem-claude-x.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-claude' }]);
+    const source = path.join(outbox, name);
+    const first = markSource(source, {
+      repoRoot: selfRepoRoot(),
+      agentId: 'totem-claude',
+      env: {},
+    });
+    expect(first.alreadyMarked).toBe(false);
+    const second = markSource(source, {
+      repoRoot: selfRepoRoot(),
+      agentId: 'totem-claude',
+      env: {},
+    });
+    expect(second.alreadyMarked).toBe(true);
+    expect(second.markPath).toBe(first.markPath);
+  });
+
+  it('marks only into the resolved seat OWN cursor (single-writer, § A2.3)', () => {
+    const name = '2026-07-16T2200Z-totem-gemini-item.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-gemini' }]);
+    const source = path.join(outbox, name);
+    const res = markSource(source, { repoRoot: selfRepoRoot(), agentId: 'totem-gemini', env: {} });
+    expect(res.markPath).toBe(processedPath('totem-gemini', name));
+    // A different seat's cursor is untouched.
+    expect(fs.existsSync(processedPath('totem-claude', name))).toBe(false);
+  });
+
+  it('hard-errors when the source is missing', () => {
+    expect(() =>
+      markSource(path.join(tmpRoot, 'nope.md'), {
+        repoRoot: selfRepoRoot(),
+        agentId: 'totem-claude',
+        env: {},
+      }),
+    ).toThrow(/cannot read mark source dispatch/);
+  });
+
+  it('hard-errors when the source is not parseable mail (a stray file is not markable)', () => {
+    const stray = path.join(mkDir(path.join(tmpRoot, 'stray')), 'not-mail.md');
+    fs.writeFileSync(stray, 'no frontmatter here\n', 'utf-8');
+    expect(() =>
+      markSource(stray, { repoRoot: selfRepoRoot(), agentId: 'totem-claude', env: {} }),
+    ).toThrow(/not parseable mail/);
+  });
+
+  it('hard-errors on ambiguous self with no --agent-id; explicit --agent-id disambiguates', () => {
+    const name = '2026-07-16T2200Z-totem-claude-amb.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-claude' }]);
+    const source = path.join(outbox, name);
+    // The `totem` repo hosts totem-claude + totem-gemini → ambiguous without --agent-id.
+    expect(() => markSource(source, { repoRoot: selfRepoRoot(), env: {} })).toThrow(
+      /cannot resolve the consuming seat/,
+    );
+    const res = markSource(source, { repoRoot: selfRepoRoot(), agentId: 'totem-claude', env: {} });
+    expect(res.agent).toBe('totem-claude');
+  });
+});
+
+describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
+  const fixedClock = (): Date => new Date('2026-07-16T18:00:00.000Z');
+  const SRC_NAME = '2026-07-16T1710Z-totem-claude-orig.md';
+
+  function writeSource(to = 'totem-claude'): string {
+    const outbox = mkDir(
+      path.join(
+        workspace,
+        'totem-strategy',
+        '.totem',
+        'orchestration',
+        'strategy-claude',
+        'outbox',
+      ),
+    );
+    const p = path.join(outbox, SRC_NAME);
+    fs.writeFileSync(
+      p,
+      [
+        '---',
+        'schema: adr-098-v0.4',
+        'from: strategy-claude',
+        `to: ${to}`,
+        'timestamp: 2026-07-16T17:10:00.000Z',
+        'subject: Original',
+        '---',
+        '',
+        'orig body',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+    return p;
+  }
+
+  it('marks the source processed atomically with the reply (default; copy under the replying seat)', () => {
+    const src = writeSource();
+    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    const res = mailReply(src, {
+      from: 'totem-claude',
+      repoRoot,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.mark).toBeDefined();
+    expect(res.mark!.agent).toBe('totem-claude'); // = the replying seat (source's recipient)
+    expect(res.mark!.broadcast).toBe(false);
+    expect(res.mark!.alreadyMarked).toBe(false);
+    const expected = path.join(
+      repoRoot,
+      '.totem',
+      'orchestration',
+      'totem-claude',
+      'processed',
+      SRC_NAME,
+    );
+    expect(res.mark!.markPath).toBe(expected);
+    expect(fs.readFileSync(expected, 'utf-8')).toBe(fs.readFileSync(src, 'utf-8'));
+  });
+
+  it('a subsequent poll no longer surfaces the replied-to source', () => {
+    const src = writeSource();
+    mailReply(src, {
+      from: 'totem-claude',
+      repoRoot: selfRepoRoot(),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(
+      poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' } }).mail.map((m) => m.file),
+    ).not.toContain(SRC_NAME);
+  });
+
+  it('--no-mark (noMark) leaves the source unmarked (stage-only reply)', () => {
+    const src = writeSource();
+    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    const res = mailReply(src, {
+      from: 'totem-claude',
+      noMark: true,
+      repoRoot,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.mark).toBeUndefined();
+    const markPath = path.join(
+      repoRoot,
+      '.totem',
+      'orchestration',
+      'totem-claude',
+      'processed',
+      SRC_NAME,
+    );
+    expect(fs.existsSync(markPath)).toBe(false);
+  });
+
+  it('marks a broadcast source under processed/_broadcast/ even when the reply itself is directed', () => {
+    // Reply target derives from source.from (strategy-claude, directed), but the
+    // MARK follows the SOURCE's class — a broadcast source lands in _broadcast/.
+    const src = writeSource('broadcast');
+    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    const res = mailReply(src, {
+      from: 'totem-claude',
+      repoRoot,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.header.to).toBe('strategy-claude'); // reply is directed to the sender
+    expect(res.mark!.broadcast).toBe(true);
+    expect(res.mark!.markPath).toBe(
+      path.join(
+        repoRoot,
+        '.totem',
+        'orchestration',
+        'totem-claude',
+        'processed',
+        '_broadcast',
+        SRC_NAME,
+      ),
+    );
   });
 });

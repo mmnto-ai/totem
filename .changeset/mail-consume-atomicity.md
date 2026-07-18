@@ -1,0 +1,5 @@
+---
+'@mmnto/cli': patch
+---
+
+`totem mail reply` now marks the source dispatch processed atomically with writing the reply, and a new `totem mail mark <source>` marks a consumed dispatch without replying (ADR-106 § A1.4; mmnto-ai/totem#2396). Previously the copy-into-`processed/` step lived on no command surface — the consuming seat had to remember to hand-copy the source into its `processed/` cursor, and a dropped copy re-surfaced the dispatch as phantom-unread on every subsequent poll (§ A1.3 names this the entire false-unread class). A mark is a same-basename copy of the source under the consuming seat's `processed/` (directed) or `processed/_broadcast/` (broadcast) — the exact stores the reader drains and `ecl-gc` compacts. Seat resolution is the single-writer `ecl-gc` discipline (explicit `--agent-id` > unambiguous resolved self > error): a seat can only mark into its OWN cursor. Reply marking is on by default; `--no-mark` opts out for stage-only reply workflows. Marking is idempotent (a second mark is a no-op) and fail-loud (an unreadable/unparseable source, an ambiguous seat, or a write that did not land is a hard error, never a silent drop).
