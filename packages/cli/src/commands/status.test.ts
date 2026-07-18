@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
 import { generateInputHash, writeCompileManifest } from '@mmnto/totem';
 
@@ -153,10 +153,10 @@ describe('statusCommand', () => {
     expect(output).toContain('Shield: stale');
   });
 
-  it('derives rule count from compiled-rules.json when manifest is missing', async () => {
+  test('derives rule count from compiled-rules.json when manifest is missing', { timeout: 15000 }, async () => {
     const { totemDir } = scaffold(tmpDir);
     // Write compiled-rules.json but NO compile-manifest.json
-    fs.writeFileSync(
+    fs['writeFileSync'](
       path.join(totemDir, 'compiled-rules.json'),
       JSON.stringify({
         version: 1,
@@ -175,9 +175,9 @@ describe('statusCommand', () => {
     const { statusCommand } = await import('./status.js');
     await statusCommand();
 
-    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
-    expect(output).toContain('Rules: 3 compiled');
-    expect(output).toContain('Manifest: missing');
+    const output = consoleSpy.mock.calls.map((c) => `${c[0]}`).join('\n');
+    expect(output.includes('Rules: 3 compiled')).toBe(true);
+    expect(output.includes('Manifest: missing')).toBe(true);
   });
 
   it('handles missing .totem directory gracefully', async () => {

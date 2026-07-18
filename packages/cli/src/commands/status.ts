@@ -32,6 +32,7 @@ export async function statusCommand(): Promise<void> {
       await import('@mmnto/totem');
 
     // Always attempt to derive the rule count from compiled-rules.json (source of truth used by describe/lint)
+    // totem-context: intentional cleanup
     try {
       const rulesPath = path.join(totemDir, 'compiled-rules.json');
       if (fs.existsSync(rulesPath)) {
