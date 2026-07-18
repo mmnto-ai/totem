@@ -15,14 +15,14 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
 
    a. **Identify your agent-id** from the current repo's basename. The hardcoded map (Proposal 282 § Scope item 3 — keep in sync with the ADR-106 cohort list):
 
-   | Repo (`git rev-parse --show-toplevel` basename) | Claude agent-id                     | Gemini agent-id   |
-   | ----------------------------------------------- | ----------------------------------- | ----------------- |
-   | `totem`                                         | `totem-claude`                      | `totem-gemini`    |
-   | `totem-strategy`                                | `strategy-claude`                   | `strategy-gemini` |
-   | `liquid-city`                                   | `lc-claude`                         | `lc-gemini`       |
-   | `arhgap11`                                      | `arhgap11-claude`                   | `arhgap11-gemini` |
-   | `totem-status`                                  | _(no Claude variant)_               | `status-gemini`   |
-   | `totem-playground`                              | _(orphan stream — no native agent)_ | _(orphan stream)_ |
+   | Repo (`git rev-parse --show-toplevel` basename) | Claude agent-id                     | Gemini agent-id   | Kimi agent-id     |
+   | ----------------------------------------------- | ----------------------------------- | ----------------- | ----------------- |
+   | `totem`                                         | `totem-claude`                      | `totem-gemini`    | `totem-kimi`      |
+   | `totem-strategy`                                | `strategy-claude`                   | `strategy-gemini` | _(not seated)_    |
+   | `liquid-city`                                   | `lc-claude`                         | `lc-gemini`       | _(not seated)_    |
+   | `arhgap11`                                      | `arhgap11-claude`                   | `arhgap11-gemini` | _(not seated)_    |
+   | `totem-status`                                  | _(no Claude variant)_               | `status-gemini`   | _(not seated)_    |
+   | `totem-playground`                              | _(orphan stream — no native agent)_ | _(orphan stream)_ | _(orphan stream)_ |
 
    Seat discovery is dir-derived (mmnto-ai/totem#2141): any `.totem/orchestration/<agent-id>/` directory registers that seat for this repo, UNIONED with the basename map above so roster siblings stay visible on fresh clones where the gitignored tree is partial (precedence: `TOTEM_SELF_AGENT` env > `config.json` `host_agents` > seat dirs ∪ basename map). Override hook: a `host_agents: string[]` field in `.totem/orchestration/config.json` still **replaces** the derived answer — but omitting a PRESENT seat dir attaches a loud warning naming the omitted seat (the dir is the registration; config-exclusion is not a decommission mechanism). The returned list of agent-ids is used by consumers (e.g., `totem mail`) to filter cross-repo handoffs — messages addressed to any agent-id in the list belong to this repo's session.
 
