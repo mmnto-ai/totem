@@ -312,6 +312,29 @@ function readHeaderWindow(filePath: string): HeaderWindowRead {
 }
 
 /**
+ * Normalize an ECL dispatch basename to its portable, NTFS-safe form by
+ * STRIPPING COLONS — the compact `...T0510Z...` shape the send actuator already
+ * emits (mmnto-ai/totem#2431). A colon in a filename is an NTFS Alternate Data
+ * Stream separator: `fs.writeFileSync` to `...T05:10Z-x.md` "succeeds" but
+ * writes a 0-byte base file (`...T05`) with the real bytes in an invisible
+ * `:10Z-x.md` stream that `fs.readdirSync` NEVER lists — so a colon-bearing
+ * `processed/` mark is unreadable and its dispatch reports UNREAD forever
+ * (agy root-cause, live-verified with `Get-Item -Stream *`). Applied on ALL
+ * platforms (not just win32) so marks stay portable across checkouts: a mark
+ * written on a colon-legal filesystem must still be found on Windows. This is
+ * the single normalization seam — the writer (`markSource`) stores under the
+ * sanitized name, and the reader normalizes BOTH inbound outbox basenames AND
+ * mark basenames through it before comparison, so sanitized marks subtract
+ * colon-bearing inbound names and pre-existing corrupted 0-byte marks stop
+ * mattering once a healed mark lands. Idempotent — a colon-free basename passes
+ * through unchanged. Colons ONLY: broadening to other characters would perturb
+ * the reader's positional-token bucketing (which keys on the raw filename).
+ */
+export function sanitizeEclBasename(name: string): string {
+  return name.replace(/:/g, '');
+}
+
+/**
  * Per-basename count of RESOLVED SELF seats holding a processed mark (in
  * `processed/` or `processed/_broadcast/` — both locations count; the live
  * mmnto-ai/totem#2412 specimen sat in the root). Directed mail subtracts on ANY
@@ -321,7 +344,10 @@ function readHeaderWindow(filePath: string): HeaderWindowRead {
  * that, letting one seat's consumption hide a live broadcast from every other
  * seat in a multi-seat poll (first-consumer-wins, mmnto-ai/totem#2412). A
  * multi-seat poll's unread line then truthfully asserts "unread for at least
- * one of my seats" — the only claim it can make.
+ * one of my seats" — the only claim it can make. Marks are keyed by their
+ * SANITIZED basename (mmnto-ai/totem#2431) so a colon-bearing inbound name
+ * (matched via the same sanitizer in `pollMail`) subtracts against its
+ * NTFS-safe mark.
  */
 function buildProcessedMarkCounts(
   repoRoot: string,
@@ -334,8 +360,14 @@ function buildProcessedMarkCounts(
     const seatMarks = new Set<string>();
     drainProcessedDir(agentDir, seatMarks, warnings);
     drainProcessedDir(path.join(agentDir, '_broadcast'), seatMarks, warnings);
-    for (const name of seatMarks) {
-      counts.set(name, (counts.get(name) ?? 0) + 1);
+    // Normalize to the portable/NTFS-safe basename BEFORE counting, and dedupe
+    // per seat so a corrupted+healed pair (a legacy colon mark on a colon-legal
+    // FS plus its sanitized heal) in one seat's stores still counts as ONE seat
+    // — load-bearing for the per-seat broadcast requirement (mmnto-ai/totem#2431).
+    const seatKeys = new Set<string>();
+    for (const name of seatMarks) seatKeys.add(sanitizeEclBasename(name));
+    for (const key of seatKeys) {
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
   }
   return counts;
@@ -584,7 +616,11 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       // from vacuously treating every broadcast as consumed, and makes a
       // single-seat poll bit-identical to the pre-#2412 behavior.
       const required = isBroadcastNamed(file) ? Math.max(selfSeatCount, 1) : 1;
-      if ((processedMarkCounts.get(file) ?? 0) >= required) continue;
+      // Normalize the inbound basename through the same sanitizer the marks are
+      // keyed by (mmnto-ai/totem#2431), so a colon-bearing inbound name subtracts
+      // against its NTFS-safe mark. `isBroadcastNamed` keeps reading the RAW file
+      // (positional-token logic is untouched per the amendment scope).
+      if ((processedMarkCounts.get(sanitizeEclBasename(file)) ?? 0) >= required) continue;
       unread.push({ slot, file });
     }
   }
@@ -1494,7 +1530,13 @@ export function markSource(source: string, opts: MailMarkOptions = {}): MailMark
   const broadcast = parsed.header.to.trim().toLowerCase() === 'broadcast';
   const processedBase = path.join(repoRoot, '.totem', 'orchestration', agent, 'processed');
   const markDir = broadcast ? path.join(processedBase, '_broadcast') : processedBase;
-  const fileName = path.basename(source);
+  // Store under the SANITIZED basename (mmnto-ai/totem#2431): a colon-bearing
+  // source name (a legacy inbound) written verbatim would be silently corrupted
+  // into a 0-byte NTFS ADS base file that `readdirSync` never lists — the mark
+  // would exist yet never subtract, and `mail mark` would still report success.
+  // The reader matches the inbound through the same sanitizer, so the sanitized
+  // mark still subtracts the colon-bearing dispatch.
+  const fileName = sanitizeEclBasename(path.basename(source));
   const markPath = path.join(markDir, fileName);
 
   // Idempotent (§ A2.3): a same-basename mark already present is a no-op — the

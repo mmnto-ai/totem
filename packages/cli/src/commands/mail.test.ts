@@ -29,6 +29,7 @@ import {
   pollMail,
   resolveMailExitCode,
   resolveSelfSender,
+  sanitizeEclBasename,
   validateDispatchContent,
 } from './mail.js';
 
@@ -2398,5 +2399,109 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
         SRC_NAME,
       ),
     );
+  });
+});
+
+// ─── NTFS-safe basename sanitization (mmnto-ai/totem#2431) ───
+// A colon in an ECL filename is an NTFS Alternate Data Stream separator: writing
+// `...T05:10Z-x.md` verbatim creates a 0-byte base file (`...T05`) with the real
+// bytes in an invisible stream `fs.readdirSync` never lists — so a colon-bearing
+// mark is unreadable and its dispatch reports unread forever. The writer stores
+// the sanitized name; the reader normalizes both sides before comparison.
+
+describe('sanitizeEclBasename (unit)', () => {
+  it('strips colons on all platforms and is idempotent', () => {
+    expect(sanitizeEclBasename('2026-07-18T05:10Z-foo.md')).toBe('2026-07-18T0510Z-foo.md');
+    // Full ISO with seconds (two colons) collapses to the compact stamp shape.
+    expect(sanitizeEclBasename('2026-07-18T05:10:23Z-foo.md')).toBe('2026-07-18T051023Z-foo.md');
+    // A colon-free basename passes through unchanged (idempotent).
+    expect(sanitizeEclBasename('2026-07-18T0510Z-foo.md')).toBe('2026-07-18T0510Z-foo.md');
+  });
+});
+
+describe('markSource — colon-bearing source basenames are sanitized (mmnto-ai/totem#2431)', () => {
+  const SOLO = { TOTEM_SELF_AGENT: 'totem-claude' };
+
+  function processedPath(seat: string, name: string, broadcast = false): string {
+    const base = path.join(selfRepoRoot(), '.totem', 'orchestration', seat, 'processed');
+    return broadcast ? path.join(base, '_broadcast', name) : path.join(base, name);
+  }
+
+  it('(a) marks a colon-bearing directed source under the sanitized name; the poll subtracts it', () => {
+    const colon = '2026-07-18T05:10Z-totem-claude-legacy.md';
+    const sanitized = '2026-07-18T0510Z-totem-claude-legacy.md';
+    // `fs.writeFileSync` to the colon path round-trips via the ADS stream on
+    // win32, so `markSource`'s read of the source still works; the mark is
+    // written NTFS-safe (colon-free) so it is actually listable.
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: colon, to: 'totem-claude', subject: 'legacy colon name' },
+    ]);
+    const source = path.join(outbox, colon);
+
+    const res = markSource(source, { repoRoot: selfRepoRoot(), env: SOLO });
+    expect(res.fileName).toBe(sanitized); // stored NTFS-safe, not verbatim
+    expect(res.markPath).toBe(processedPath('totem-claude', sanitized));
+    expect(fs.existsSync(res.markPath)).toBe(true); // the mark is a real, listable file
+
+    // Wherever the colon inbound is discoverable (a colon-legal FS), the reader
+    // subtracts it via the shared sanitizer; on win32 the corrupt inbound is not
+    // listed at all, so this holds vacuously — never a phantom-unread either way.
+    const remaining = poll({ env: SOLO }).mail.map((m) => sanitizeEclBasename(m.file));
+    expect(remaining).not.toContain(sanitized);
+  });
+
+  it('(b) idempotent re-mark of a colon-bearing source is a no-op (sanitized-name check)', () => {
+    const colon = '2026-07-18T05:10Z-totem-claude-x.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: colon, to: 'totem-claude' },
+    ]);
+    const source = path.join(outbox, colon);
+    const first = markSource(source, {
+      repoRoot: selfRepoRoot(),
+      agentId: 'totem-claude',
+      env: {},
+    });
+    expect(first.alreadyMarked).toBe(false);
+    const second = markSource(source, {
+      repoRoot: selfRepoRoot(),
+      agentId: 'totem-claude',
+      env: {},
+    });
+    expect(second.alreadyMarked).toBe(true);
+    expect(second.markPath).toBe(first.markPath);
+  });
+
+  it('(c) sanitizes a colon-bearing broadcast source into processed/_broadcast/', () => {
+    const colon = '2026-07-18T05:10Z-broadcast-cohort.md';
+    const sanitized = '2026-07-18T0510Z-broadcast-cohort.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: colon, to: 'broadcast', subject: 'cohort move' },
+    ]);
+    const source = path.join(outbox, colon);
+    const res = markSource(source, { repoRoot: selfRepoRoot(), agentId: 'totem-claude', env: {} });
+    expect(res.broadcast).toBe(true);
+    expect(res.fileName).toBe(sanitized);
+    expect(res.markPath).toBe(processedPath('totem-claude', sanitized, true));
+    expect(fs.existsSync(res.markPath)).toBe(true);
+  });
+});
+
+describe('mailSend — the filename emitter is colon-free / ADS-safe (mmnto-ai/totem#2431)', () => {
+  it('(d) composes a colon-free compact-stamp outbox filename even from a seconds-bearing ISO clock', () => {
+    // The emitter path is compactStamp (drops the HH:MM colon) → fileToken →
+    // slugify, none of which can emit a colon. A raw ISO with seconds is the
+    // worst case; the written name must still carry no colon.
+    const res = mailSend({
+      to: 'strategy-claude',
+      subject: 'lane handoff',
+      from: 'totem-claude',
+      repoRoot: mkDir(path.join(workspace, 'totem')),
+      env: {},
+      now: () => new Date('2026-07-18T05:10:23.456Z'),
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.fileName).not.toContain(':');
+    expect(res.fileName).toMatch(/^2026-07-18T0510Z-/); // compact stamp, colon dropped
+    expect(path.basename(res.filePath)).not.toContain(':');
   });
 });
