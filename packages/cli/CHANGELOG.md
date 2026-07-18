@@ -1,5 +1,14 @@
 # @mmnto/cli
 
+## 1.101.1
+
+### Patch Changes
+
+- 5950088: `totem mail` no longer hides a live broadcast from a multi-seat poll after a single seat consumes it (mmnto-ai/totem#2412, first-consumer-wins). The unread filter previously drained every resolved seat's `processed/` marks into one flat basename union — so under multi-seat self-resolution (unscoped polls, `config.json` host_agents), one seat's broadcast mark subtracted the broadcast for every other seat, silently. Broadcasts are per-seat consumable by design (ecl-gc keeps per-seat `_broadcast` stores): a broadcast-named dispatch now subtracts only when EVERY resolved seat holds the mark, so a multi-seat poll truthfully asserts "unread for at least one of my seats". Directed mail keeps the any-seat union, and single-seat (`TOTEM_SELF_AGENT`-scoped) polls are bit-identical to before. A `to: broadcast` dispatch without the positional `broadcast` filename token stays on the union rule (subtraction runs pre-parse; the ecl filename discipline makes the token standard).
+- b21c06b: `totem triage-pr` / `review-reply` no longer miss CodeRabbit review-body findings (mmnto-ai/totem#2414, the strategy#828 fetch-completeness class — three live specimens in two days). CodeRabbit renders the whole "Review details" region as a markdown blockquote, so every line's `> ` prefix broke the section regexes — outside-diff sections were present but parsed as absent, and the tool's confident "N findings" output actively suppressed the manual full-body read it replaced. Section parsing now normalizes blockquote prefixes first; the "Additional comments" section gets a parser for ACTIONABLE body-only entries (severity-tagged finding templates only — verification notes and LGTMs never surface); and body findings carry per-file provenance (`path (outside-diff)` / `path (body-only)`) parsed from the section's nested per-file blocks instead of an anonymous `(review body)`, with the body-only severity taken from CodeRabbit's own tag.
+- cf00bc5: `totem hook install` (and the `.totem/prepare.cjs` consumer wrapper that invokes it) no longer crashes with ENOTDIR in a linked git worktree (mmnto-ai/totem#2418). In a worktree `.git` is a `gitdir:` pointer FILE, and every hooks-path site blindly joined `.git/hooks` before `mkdir` — failing the consumer's whole `pnpm install` through the `prepare` lifecycle. A shared `resolveHooksDir()` now delegates to `git rev-parse --git-path hooks` (git's own worktree/`commondir` walk, which also honors `core.hooksPath`), so hooks install into the shared hooks directory git actually executes; `--check`, the silent pre-push upgrade, and the doctor `git-hooks` parity row read the same resolved location instead of wrongly reporting hooks missing from a worktree. An unparseable `.git` pointer file is now the declared skip the #2410 exit-code contract names (exit 0 with a truthful skip line), never a crash.
+  - @mmnto/totem@1.101.1
+
 ## 1.101.0
 
 ### Minor Changes
