@@ -1,5 +1,16 @@
 # @mmnto/totem
 
+## 1.101.2
+
+### Patch Changes
+
+- f21fbb8: Consolidate rule-engine and spine path matching into one bounded glob compiler while preserving both compatibility profiles. Rule evaluation keeps its historical muted wildcard behavior, the anchored spine classifier keeps brace, question-mark, and normalized-separator support, and the bounded evaluator and git diff filter now route through the shared matcher.
+- 296f0d0: Add a `generic` built-in chunk strategy — the chunker's fourth-language-layer Stage 1 (Proposal 256 Option A, mmnto-ai/totem#2387). A language-agnostic, fixed-size line-window chunker (with overlap) that gives retrieval-index coverage to source with no dedicated chunker yet (Rust, GDScript), closing the non-TypeScript index lockout.
+
+  Selection is explicit-opt-in only (mmnto-ai/totem#2308): consumers reach it by naming `strategy: 'generic'` on a `totem.config.ts` target. It is a normal registered built-in rather than an implicit catch-all — `createChunker` still fail-louds on an unknown/misspelled strategy per Tenet 4. Precision-poor by design; superseded per-language by the Stage 2 AST chunkers as they ship.
+
+- 64c5716: Add span-aware `#[cfg(test)]` module exemption for production-only Rust rules to eliminate false-positives inside inline unit test modules.
+
 ## 1.101.1
 
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
