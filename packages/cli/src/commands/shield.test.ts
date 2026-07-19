@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,6 +31,7 @@ import {
   computeVerdict,
   deriveLaneOutcome,
   extractStructuredVerdict,
+  extractStructuredVerdictDetailed,
   formatVerdictForDisplay,
   MAX_DIFF_CHARS,
   parseVerdict,
@@ -40,6 +42,12 @@ import {
   writeReviewedContentHash,
   writeReviewedContentHashValue,
 } from './shield.js';
+
+const SHIELD_FIXTURES_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures',
+  'shield',
+);
 
 describe('parseVerdict', () => {
   it('parses a clean PASS with em-dash', () => {
@@ -563,9 +571,85 @@ describe('extractStructuredVerdict', () => {
   });
 
   it('handles LLM preamble before XML tags', () => {
-    const content = `Here is my analysis:\n\n<shield_verdict>\n${JSON.stringify(validVerdict)}\n</shield_verdict>`;
+    const content = `Here is my analysis:\n\n<shield_verdict>\n${JSON.stringify(validVerdict)}\n</shield_verdict>\n\nLet me know if you want more detail.`;
     const result = extractStructuredVerdict(content);
     expect(result).toEqual(validVerdict);
+  });
+
+  it('extracts a valid structured verdict from conversational fenced output', () => {
+    const content = `I reviewed the changes.\n\n\`\`\`json\n${JSON.stringify(validVerdict)}\n\`\`\`\n\nThat is the complete review.`;
+    const result = extractStructuredVerdictDetailed(content);
+    expect(result).toEqual({ ok: true, verdict: validVerdict, layer: 'fence' });
+  });
+
+  it.each(['sonnet-refusal-925e0d2e.txt', 'sonnet-refusal-be1a57f1.txt'])(
+    'keeps the real sanitized refusal fixture %s unextractable',
+    (fixtureName) => {
+      const content = fs.readFileSync(path.join(SHIELD_FIXTURES_DIR, fixtureName), 'utf-8');
+      expect(extractStructuredVerdictDetailed(content)).toEqual({
+        ok: false,
+        cause: 'no-candidate',
+        attempts: [],
+      });
+      expect(extractStructuredVerdict(content)).toBeNull();
+    },
+  );
+
+  it('reports empty output without retaining content', () => {
+    expect(extractStructuredVerdictDetailed(' \n\t')).toEqual({
+      ok: false,
+      cause: 'empty-output',
+      attempts: [],
+    });
+  });
+
+  it('reports bounded validation diagnostics without candidate text', () => {
+    const marker = 'DO_NOT_RETAIN_THIS_CANDIDATE';
+    const invalidVerdict = {
+      findings: Array.from({ length: 10 }, (_, index) => ({
+        severity: `${marker}-${index}`,
+        confidence: 2 + index,
+        message: marker.repeat(20),
+      })),
+      summary: marker,
+    };
+    const result = extractStructuredVerdictDetailed(
+      `<shield_verdict>${JSON.stringify(invalidVerdict)}</shield_verdict>`,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected extraction failure');
+    expect(result.cause).toBe('schema-invalid');
+    expect(result.attempts.length).toBeLessThanOrEqual(3);
+    expect(result.attempts[0]?.issues).toHaveLength(4);
+    expect(
+      result.attempts
+        .flatMap((attempt) => attempt.issues ?? [])
+        .every((issue) => issue.length <= 160),
+    ).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(marker);
+  });
+
+  it('records each attempted layer and prefers schema-invalid over malformed JSON', () => {
+    const content = [
+      '<shield_verdict>{not json}</shield_verdict>',
+      '```json',
+      JSON.stringify({ findings: [], summary: 42 }),
+      '```',
+    ].join('\n');
+    const result = extractStructuredVerdictDetailed(content);
+    expect(result).toEqual({
+      ok: false,
+      cause: 'schema-invalid',
+      attempts: [
+        { layer: 'xml', cause: 'invalid-json' },
+        {
+          layer: 'fence',
+          cause: 'schema-invalid',
+          issues: ['summary: invalid_type'],
+        },
+        { layer: 'bare-json', cause: 'invalid-json' },
+      ],
+    });
   });
 
   it('rejects confidence outside 0-1 range', () => {

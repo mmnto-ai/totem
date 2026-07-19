@@ -265,50 +265,127 @@ export function parseVerdict(content: string): { pass: boolean; reason: string }
 
 // ─── V2 Structured verdict parsing ───────────────────
 
+export type StructuredVerdictExtractionLayer = 'xml' | 'fence' | 'bare-json';
+
+export type StructuredVerdictExtractionFailureCause =
+  | 'empty-output'
+  | 'no-candidate'
+  | 'invalid-json'
+  | 'schema-invalid';
+
+export interface StructuredVerdictExtractionAttempt {
+  layer: StructuredVerdictExtractionLayer;
+  cause: Extract<StructuredVerdictExtractionFailureCause, 'invalid-json' | 'schema-invalid'>;
+  /** Bounded validation summaries; candidate/output text is never retained here. */
+  issues?: string[];
+}
+
+export type StructuredVerdictExtractionResult =
+  | {
+      ok: true;
+      verdict: ShieldStructuredVerdict;
+      layer: StructuredVerdictExtractionLayer;
+    }
+  | {
+      ok: false;
+      cause: StructuredVerdictExtractionFailureCause;
+      attempts: StructuredVerdictExtractionAttempt[];
+    };
+
+const MAX_EXTRACTION_ISSUES = 4;
+const MAX_EXTRACTION_ISSUE_CHARS = 160;
+
+function summarizeValidationIssues(
+  issues: Array<{ path: Array<string | number>; code: string }>,
+): string[] {
+  return issues.slice(0, MAX_EXTRACTION_ISSUES).map((issue) => {
+    const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+    return `${path}: ${issue.code}`.slice(0, MAX_EXTRACTION_ISSUE_CHARS);
+  });
+}
+
+function tryStructuredVerdictCandidate(
+  layer: StructuredVerdictExtractionLayer,
+  candidate: string,
+):
+  | { ok: true; verdict: ShieldStructuredVerdict; layer: StructuredVerdictExtractionLayer }
+  | { ok: false; attempt: StructuredVerdictExtractionAttempt } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(candidate);
+    // totem-context: malformed candidates are expected during the extraction cascade and are converted into the typed invalid-json result below.
+  } catch {
+    return { ok: false, attempt: { layer, cause: 'invalid-json' } };
+  }
+
+  const result = ShieldStructuredVerdictSchema.safeParse(parsed);
+  if (result.success) return { ok: true, verdict: result.data, layer };
+
+  return {
+    ok: false,
+    attempt: {
+      layer,
+      cause: 'schema-invalid',
+      issues: summarizeValidationIssues(result.error.issues),
+    },
+  };
+}
+
 /**
- * Three-layer JSON extraction from LLM plain-text response.
- * Layer 1: XML tags, Layer 2: markdown code fences, Layer 3: bare JSON.
- * Returns null if all layers fail (caller falls back to V1 regex parseVerdict).
+ * Three-layer JSON extraction with bounded, candidate-free failure diagnostics.
+ * A schema-invalid candidate takes precedence over malformed candidates because
+ * it is the most semantically advanced failure reached by the cascade.
  */
-export function extractStructuredVerdict(content: string): ShieldStructuredVerdict | null {
-  // Layer 1 — XML tags (primary)
+export function extractStructuredVerdictDetailed(
+  content: string,
+): StructuredVerdictExtractionResult {
+  if (content.trim().length === 0) return { ok: false, cause: 'empty-output', attempts: [] };
+
+  const attempts: StructuredVerdictExtractionAttempt[] = [];
+
+  const tryCandidate = (
+    layer: StructuredVerdictExtractionLayer,
+    candidate: string,
+  ): ShieldStructuredVerdict | null => {
+    const result = tryStructuredVerdictCandidate(layer, candidate);
+    if (result.ok) return result.verdict;
+    attempts.push(result.attempt);
+    return null;
+  };
+
   const xmlMatch = content.match(/<shield_verdict>([\s\S]*?)<\/shield_verdict>/);
   if (xmlMatch) {
-    try {
-      const parsed = JSON.parse(xmlMatch[1]!);
-      const result = ShieldStructuredVerdictSchema.safeParse(parsed);
-      if (result.success) return result.data;
-    } catch {
-      // Move to next layer
-    }
+    const verdict = tryCandidate('xml', xmlMatch[1]!);
+    if (verdict) return { ok: true, verdict, layer: 'xml' };
   }
 
-  // Layer 2 — Markdown code fences (fallback)
   const fenceMatch = content.match(/(?:```|~~~)(?:json)?\s*\n([\s\S]*?)\n\s*(?:```|~~~)/);
   if (fenceMatch) {
-    try {
-      const parsed = JSON.parse(fenceMatch[1]!);
-      const result = ShieldStructuredVerdictSchema.safeParse(parsed);
-      if (result.success) return result.data;
-    } catch {
-      // Move to next layer
-    }
+    const verdict = tryCandidate('fence', fenceMatch[1]!);
+    if (verdict) return { ok: true, verdict, layer: 'fence' };
   }
 
-  // Layer 3 — Bare JSON (last resort, guarded by "findings" keyword)
   const firstBrace = content.indexOf('{');
   const lastBrace = content.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace && content.includes('"findings"')) {
-    try {
-      const parsed = JSON.parse(content.slice(firstBrace, lastBrace + 1));
-      const result = ShieldStructuredVerdictSchema.safeParse(parsed);
-      if (result.success) return result.data;
-    } catch {
-      // All layers exhausted
-    }
+    const verdict = tryCandidate('bare-json', content.slice(firstBrace, lastBrace + 1));
+    if (verdict) return { ok: true, verdict, layer: 'bare-json' };
   }
 
-  return null;
+  if (attempts.length === 0) return { ok: false, cause: 'no-candidate', attempts };
+  const cause = attempts.some((attempt) => attempt.cause === 'schema-invalid')
+    ? 'schema-invalid'
+    : 'invalid-json';
+  return { ok: false, cause, attempts };
+}
+
+/**
+ * Compatibility wrapper for callers that only need the parsed verdict.
+ * Returns null when all XML, fenced, and bare-JSON layers fail.
+ */
+export function extractStructuredVerdict(content: string): ShieldStructuredVerdict | null {
+  const result = extractStructuredVerdictDetailed(content);
+  return result.ok ? result.verdict : null;
 }
 
 /**

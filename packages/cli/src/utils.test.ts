@@ -6,7 +6,13 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
-import { calculateDeterministicHash, RunArtifactSchema, summarizeProvenance } from '@mmnto/totem';
+import {
+  calculateDeterministicHash,
+  InvocationFailureArtifactSchema,
+  RunArtifactSchema,
+  summarizeProvenance,
+  TotemOrchestratorError,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from './test-utils.js';
 import {
@@ -22,10 +28,12 @@ import {
   loadConfig,
   loadEnv,
   partitionLessons,
+  persistRuntimeTextEvidence,
   reapOrphanedTempFiles,
   requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
+  runtimeMessageEvidence,
   sanitize,
   wrapXml,
   writeOutput,
@@ -691,7 +699,7 @@ vi.mock('./orchestrators/orchestrator.js', async (importOriginal) => {
   };
 });
 
-import { createOrchestrator } from './orchestrators/orchestrator.js';
+import { createOrchestrator, OrchestratorInvokeError } from './orchestrators/orchestrator.js';
 
 const mockedCreateOrchestrator = vi.mocked(createOrchestrator);
 
@@ -1293,11 +1301,15 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
 
   const GROUNDING_HASH = 'b'.repeat(64);
 
-  function artifactRequest(onEmitted?: (hash: string, artifactPath: string) => void) {
+  function artifactRequest(
+    onEmitted?: (hash: string, artifactPath: string) => void,
+    onFailureEmitted?: (hash: string, artifactPath: string) => void,
+  ) {
     return {
       groundingHash: GROUNDING_HASH,
       provenanceSummary: 'similarity-only',
       ...(onEmitted !== undefined ? { onEmitted } : {}),
+      ...(onFailureEmitted !== undefined ? { onFailureEmitted } : {}),
     };
   }
 
@@ -1318,6 +1330,49 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
 
   function runsDirPath(): string {
     return path.join(tmpDir, '.totem', 'artifacts', 'runs');
+  }
+
+  function failureRunsDirPath(): string {
+    return path.join(runsDirPath(), 'failures');
+  }
+
+  function runtimeText(text: string) {
+    const bytes = Buffer.byteLength(text, 'utf-8');
+    return {
+      encoding: 'utf-8' as const,
+      head: text,
+      observedBytes: bytes,
+      retainedBytes: bytes,
+      limitBytes: 64 * 1024,
+      truncated: false,
+    };
+  }
+
+  function invokeFailure(message = 'provider rejected request') {
+    return new OrchestratorInvokeError(
+      message,
+      'process-exit',
+      [
+        {
+          sequence: 1,
+          route: 'configured-shell',
+          provider: 'gemini',
+          model: 'gemini-3-flash-preview',
+          status: 'failed',
+          durationMs: 125,
+          failureKind: 'process-exit',
+          providerCode: 'x'.repeat(129),
+          process: {
+            exitCode: 1,
+            signal: null,
+            timedOut: false,
+            stdout: runtimeText('partial stdout'),
+            stderr: runtimeText(message),
+          },
+        },
+      ],
+      { cause: new Error(message) },
+    );
   }
 
   beforeEach(() => {
@@ -1371,6 +1426,60 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
       outputTokens: 50,
       durationMs: 500,
     });
+    expect(artifact.schemaVersion).toBe('1.2.0');
+    expect(artifact.output.execution).toBeUndefined();
+  });
+
+  it('persists DLP-safe execution evidence only when runtime attempts are present', async () => {
+    const secret = 'RUNTIME-EVIDENCE-SECRET-12345';
+    const mockInvoke = vi.fn().mockResolvedValue({
+      content: 'mock result',
+      inputTokens: 100,
+      outputTokens: 50,
+      durationMs: 500,
+      attempts: [
+        {
+          sequence: 1,
+          route: 'configured-shell',
+          provider: 'gemini',
+          model: 'gemini-3-flash-preview',
+          status: 'succeeded',
+          durationMs: 500,
+          providerCode: secret,
+          process: {
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            stdout: runtimeText(`\u001b[31mresult ${secret}\u001b[0m`),
+            stderr: runtimeText(''),
+          },
+        },
+      ],
+    });
+    mockedCreateOrchestrator.mockReturnValue(mockInvoke);
+    const emitted: string[] = [];
+
+    await runOrchestrator({
+      prompt: 'attempt evidence run',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      customSecrets: [{ type: 'literal', value: secret }],
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    const raw = fs.readFileSync(path.join(runsDirPath(), `${emitted[0]!}.json`), 'utf-8');
+    expect(raw).not.toContain(secret);
+    expect(raw).not.toContain('\u001b');
+    const artifact = RunArtifactSchema.parse(JSON.parse(raw));
+    expect(artifact.output.execution?.attempts).toHaveLength(1);
+    expect(artifact.output.execution?.attempts[0]?.process?.stdout).toMatchObject({
+      head: 'result [REDACTED_CUSTOM]',
+      dlp: 'masked',
+      truncated: false,
+    });
+    expect(artifact.output.execution?.attempts[0]?.providerCode).toBeUndefined();
   });
 
   it('records the grounding bundle verbatim and the attested hash recomputes from it (mmnto-ai/totem#2101)', async () => {
@@ -1427,6 +1536,271 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
     expect(rawOnDisk).not.toContain(secret);
     const artifact = RunArtifactSchema.parse(JSON.parse(rawOnDisk));
     expect(artifact.inputBundle.maskedPrompt).not.toContain(secret);
+  });
+
+  it('emits terminal failure evidence, attaches its hash, and invokes the failure callback', async () => {
+    const secret = 'FAILURE-EVIDENCE-SECRET-12345';
+    const invokeErr = invokeFailure(`provider rejected ${secret}`);
+    const mockInvoke = vi.fn().mockRejectedValue(invokeErr);
+    mockedCreateOrchestrator.mockReturnValue(mockInvoke);
+    const emitted: Array<{ hash: string; artifactPath: string }> = [];
+
+    let caught: unknown;
+    try {
+      await runOrchestrator({
+        prompt: 'failed attempt prompt',
+        tag: 'Spec',
+        options: { fresh: true },
+        config: artifactConfig(),
+        cwd: tmpDir,
+        customSecrets: [{ type: 'literal', value: secret }],
+        artifact: artifactRequest(undefined, (hash, artifactPath) =>
+          emitted.push({ hash, artifactPath }),
+        ),
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBe(invokeErr);
+    expect(invokeErr.failureArtifactHash).toBe(emitted[0]?.hash);
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]?.artifactPath).toBe(
+      path.join(failureRunsDirPath(), `${emitted[0]!.hash}.json`),
+    );
+    const raw = fs.readFileSync(emitted[0]!.artifactPath, 'utf-8');
+    expect(raw).not.toContain(secret);
+    const artifact = InvocationFailureArtifactSchema.parse(JSON.parse(raw));
+    expect(artifact.terminal).toMatchObject({ kind: 'process-exit', attempt: 1 });
+    expect(artifact.terminal.message.head).toContain('[REDACTED_CUSTOM]');
+    expect(artifact.attempts[0]?.process?.stderr?.head).toContain('[REDACTED_CUSTOM]');
+    expect(artifact.attempts[0]?.providerCode).toBeUndefined();
+    expect(RunArtifactSchema.safeParse(artifact).success).toBe(false);
+  });
+
+  it.each([
+    {
+      label: 'OpenAI wrapped auth failure',
+      provider: 'openai',
+      model: 'gpt-5',
+      cause: Object.assign(new Error('provider auth response'), {
+        status: 401,
+        code: 'authentication_error',
+      }),
+      kind: 'auth',
+      providerStatus: 401,
+      providerCode: 'authentication_error',
+    },
+    {
+      label: 'Ollama wrapped model failure',
+      provider: 'ollama',
+      model: 'llama3',
+      cause: null,
+      originalMessage: "Ollama model 'llama3' is not installed.",
+      kind: 'model',
+      providerStatus: undefined,
+      providerCode: undefined,
+    },
+    {
+      label: 'plain injected failure',
+      provider: 'gemini',
+      model: 'gemini-3-flash-preview',
+      cause: undefined,
+      originalMessage: undefined,
+      kind: 'unknown',
+      providerStatus: undefined,
+      providerCode: undefined,
+    },
+  ])('normalizes and persists $label', async (testCase) => {
+    const original =
+      testCase.cause === undefined
+        ? new Error('unclassified provider transport failure')
+        : new TotemOrchestratorError(
+            testCase.originalMessage ?? `${testCase.provider} provider call failed`,
+            `recover ${testCase.provider}`,
+            testCase.cause,
+          );
+    mockedCreateOrchestrator.mockReturnValue(vi.fn().mockRejectedValue(original));
+    const emitted: Array<{ hash: string; artifactPath: string }> = [];
+
+    let caught: unknown;
+    try {
+      await runOrchestrator({
+        prompt: `${testCase.provider} terminal failure`,
+        tag: 'Spec',
+        options: { fresh: true },
+        config: artifactConfig({
+          orchestrator: {
+            provider: testCase.provider,
+            defaultModel: testCase.model,
+          } as TotemConfig['orchestrator'],
+        }),
+        cwd: tmpDir,
+        artifact: artifactRequest(undefined, (hash, artifactPath) =>
+          emitted.push({ hash, artifactPath }),
+        ),
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(OrchestratorInvokeError);
+    expect(caught).toBeInstanceOf(TotemOrchestratorError);
+    const structured = caught as OrchestratorInvokeError;
+    expect(structured.cause).toBe(original);
+    expect(structured).toMatchObject({
+      kind: testCase.kind,
+      failureArtifactHash: emitted[0]?.hash,
+    });
+    expect(structured.attempts[0]).toMatchObject({
+      route: 'sdk',
+      provider: testCase.provider,
+      model: testCase.model,
+      status: 'failed',
+      failureKind: testCase.kind,
+      ...(testCase.providerStatus !== undefined ? { providerStatus: testCase.providerStatus } : {}),
+      ...(testCase.providerCode !== undefined ? { providerCode: testCase.providerCode } : {}),
+    });
+    expect(emitted).toHaveLength(1);
+    const artifact = InvocationFailureArtifactSchema.parse(
+      JSON.parse(fs.readFileSync(emitted[0]!.artifactPath, 'utf-8')),
+    );
+    expect(artifact.terminal.kind).toBe(testCase.kind);
+    expect(artifact.attempts).toMatchObject(structured.attempts);
+  });
+
+  it('a failure-artifact write error preserves the original structured invocation error', async () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'artifacts'), 'not a directory');
+    const invokeErr = invokeFailure();
+    mockedCreateOrchestrator.mockReturnValue(vi.fn().mockRejectedValue(invokeErr));
+    const onFailureEmitted = vi.fn();
+
+    let caught: unknown;
+    try {
+      await runOrchestrator({
+        prompt: 'failed ledger prompt',
+        tag: 'Spec',
+        options: { fresh: true },
+        config: artifactConfig(),
+        cwd: tmpDir,
+        artifact: artifactRequest(undefined, onFailureEmitted),
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBe(invokeErr);
+    expect(invokeErr.failureArtifactHash).toBeUndefined();
+    expect(onFailureEmitted).not.toHaveBeenCalled();
+  });
+
+  it('masking failure omits runtime text instead of persisting raw bytes', () => {
+    const evidence = persistRuntimeTextEvidence(
+      runtimeText('must never survive'),
+      undefined,
+      64 * 1024,
+      () => {
+        throw new Error('synthetic DLP failure');
+      },
+    );
+
+    expect(evidence).toEqual({
+      encoding: 'utf-8',
+      head: '',
+      observedBytes: Buffer.byteLength('must never survive', 'utf-8'),
+      retainedBytes: 0,
+      limitBytes: 64 * 1024,
+      truncated: false,
+      dlp: 'omitted-on-mask-failure',
+    });
+  });
+
+  it('pre-bounds oversized ASCII terminal messages before DLP and re-bounds masked text', () => {
+    const secret = 'ASCII-OVERSIZED-SECRET-12345';
+    const message = [secret, 'x'.repeat(9_000), '-terminal-tail'].join('');
+    const runtime = runtimeMessageEvidence(message);
+
+    expect(runtime).toMatchObject({
+      observedBytes: Buffer.byteLength(message, 'utf-8'),
+      limitBytes: 4 * 1024,
+      retainedBytes: 4 * 1024,
+      truncated: true,
+    });
+    expect(Buffer.byteLength(runtime.head, 'utf-8')).toBe(2 * 1024);
+    expect(Buffer.byteLength(runtime.tail ?? '', 'utf-8')).toBe(2 * 1024);
+    expect(runtime.head).toContain(secret);
+    expect(runtime.tail).toContain('-terminal-tail');
+
+    const masker = vi.fn((value: string) => value.replaceAll(secret, '[REDACTED_CUSTOM]'));
+    const persisted = persistRuntimeTextEvidence(runtime, undefined, 4 * 1024, masker);
+
+    expect(masker).toHaveBeenCalledTimes(2);
+    for (const [fragment] of masker.mock.calls) {
+      expect(Buffer.byteLength(fragment, 'utf-8')).toBeLessThanOrEqual(2 * 1024);
+    }
+    const persistedText = [persisted.head, persisted.tail ?? ''].join('');
+    expect(persistedText).not.toContain(secret);
+    expect(persisted).toMatchObject({
+      observedBytes: Buffer.byteLength(message, 'utf-8'),
+      limitBytes: 4 * 1024,
+      truncated: true,
+      dlp: 'masked',
+    });
+    expect(persisted.retainedBytes).toBeLessThanOrEqual(4 * 1024);
+  });
+
+  it('pre-bounds oversized multi-byte messages on code-point boundaries and masks retained text', () => {
+    const secret = '秘密-TERMINAL-KEY-12345';
+    const message = [secret, '🧪'.repeat(2_000), '-終端'].join('');
+    const runtime = runtimeMessageEvidence(message);
+
+    expect(runtime.observedBytes).toBe(Buffer.byteLength(message, 'utf-8'));
+    expect(runtime.retainedBytes).toBeLessThanOrEqual(4 * 1024);
+    expect(runtime.truncated).toBe(true);
+    expect(runtime.head).not.toContain('\uFFFD');
+    expect(runtime.tail).not.toContain('\uFFFD');
+    expect(Buffer.byteLength(runtime.head, 'utf-8')).toBeLessThanOrEqual(2 * 1024);
+    expect(Buffer.byteLength(runtime.tail ?? '', 'utf-8')).toBeLessThanOrEqual(2 * 1024);
+
+    const persisted = persistRuntimeTextEvidence(
+      runtime,
+      [{ type: 'literal', value: secret }],
+      4 * 1024,
+    );
+    const persistedText = [persisted.head, persisted.tail ?? ''].join('');
+    expect(persistedText).not.toContain(secret);
+    expect(persistedText).not.toContain('\uFFFD');
+    expect(persisted).toMatchObject({
+      observedBytes: Buffer.byteLength(message, 'utf-8'),
+      limitBytes: 4 * 1024,
+      truncated: true,
+      dlp: 'masked',
+    });
+    expect(persisted.retainedBytes).toBeLessThanOrEqual(4 * 1024);
+  });
+
+  it('masks non-contiguous runtime head and tail independently', () => {
+    const head = 'HEAD-SENTINEL-cross-';
+    const tail = 'boundary-TAIL-SENTINEL';
+    const evidence = persistRuntimeTextEvidence(
+      {
+        encoding: 'utf-8',
+        head,
+        tail,
+        observedBytes: 100_000,
+        retainedBytes: Buffer.byteLength(head + tail, 'utf-8'),
+        limitBytes: 64 * 1024,
+        truncated: true,
+      },
+      [{ type: 'literal', value: head + tail }],
+    );
+
+    expect(evidence.head).toBe(head);
+    expect(evidence.tail).toBe(tail);
+    expect(evidence.head).not.toContain(head + tail);
+    expect(evidence.tail).not.toContain(head + tail);
+    expect(evidence.truncated).toBe(true);
   });
 
   it('a response-cache hit emits NO artifact (artifacts record actual invokes)', async () => {
@@ -1508,6 +1882,75 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
     const artifact = RunArtifactSchema.parse(JSON.parse(fs.readFileSync(file, 'utf-8')));
     expect(artifact.backend.qualifiedModel).toBe('gemini-3-flash-preview');
     expect(artifact.output.content).toBe('fallback result');
+    expect(artifact.output.execution?.attempts).toMatchObject([
+      { sequence: 1, route: 'sdk', status: 'failed', failureKind: 'quota' },
+      { sequence: 2, route: 'quota-model-fallback', status: 'succeeded' },
+    ]);
+  });
+
+  it('persists merged, contiguous quota-fallback attempts when both models fail', async () => {
+    const quotaErr = new Error('429 quota exhausted');
+    quotaErr.name = 'QuotaError';
+    const fallbackErr = new OrchestratorInvokeError(
+      'fallback model unavailable',
+      'model',
+      [
+        {
+          sequence: 1,
+          route: 'sdk',
+          provider: 'gemini',
+          model: 'gemini-3-flash-preview',
+          status: 'failed',
+          durationMs: 50,
+          failureKind: 'model',
+        },
+      ],
+      { cause: new Error('404 model unavailable') },
+    );
+    mockedCreateOrchestrator.mockReturnValue(
+      vi.fn().mockRejectedValueOnce(quotaErr).mockRejectedValueOnce(fallbackErr),
+    );
+    const emitted: string[] = [];
+
+    let caught: unknown;
+    try {
+      await runOrchestrator({
+        prompt: 'double failure prompt',
+        tag: 'Spec',
+        options: { fresh: true },
+        config: artifactConfig({
+          orchestrator: {
+            provider: 'gemini',
+            defaultModel: 'gemini-3.1-pro-preview',
+            fallbackModel: 'gemini-3-flash-preview',
+          },
+        }),
+        cwd: tmpDir,
+        artifact: artifactRequest(undefined, (hash) => emitted.push(hash)),
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(OrchestratorInvokeError);
+    expect(caught).not.toBe(fallbackErr);
+    const structured = caught as OrchestratorInvokeError;
+    expect(structured.kind).toBe('model');
+    expect(structured.failureArtifactHash).toBe(emitted[0]);
+    expect(structured.attempts).toMatchObject([
+      { sequence: 1, route: 'sdk', status: 'failed', failureKind: 'quota' },
+      {
+        sequence: 2,
+        route: 'quota-model-fallback',
+        status: 'failed',
+        failureKind: 'model',
+      },
+    ]);
+    const artifact = InvocationFailureArtifactSchema.parse(
+      JSON.parse(fs.readFileSync(path.join(failureRunsDirPath(), `${emitted[0]!}.json`), 'utf-8')),
+    );
+    expect(artifact.attempts).toMatchObject(structured.attempts);
+    expect(artifact.terminal).toMatchObject({ kind: 'model', attempt: 2 });
   });
 });
 
@@ -1518,11 +1961,15 @@ describe('runOrchestrator admission contract (#2102)', { timeout: 15_000 }, () =
 
   const GROUNDING_HASH = 'b'.repeat(64);
 
-  function artifactRequest(onEmitted?: (hash: string, artifactPath: string) => void) {
+  function artifactRequest(
+    onEmitted?: (hash: string, artifactPath: string) => void,
+    onFailureEmitted?: (hash: string, artifactPath: string) => void,
+  ) {
     return {
       groundingHash: GROUNDING_HASH,
       provenanceSummary: 'similarity-only',
       ...(onEmitted !== undefined ? { onEmitted } : {}),
+      ...(onFailureEmitted !== undefined ? { onFailureEmitted } : {}),
     };
   }
 
@@ -1715,18 +2162,41 @@ describe('runOrchestrator admission contract (#2102)', { timeout: 15_000 }, () =
     mockedCreateOrchestrator.mockReturnValue(mockInvoke);
 
     const onEmitted = vi.fn();
-    await expect(
-      runOrchestrator({
+    const failures: Array<{ hash: string; artifactPath: string }> = [];
+    let caught: unknown;
+    try {
+      await runOrchestrator({
         prompt: 'elevated quota-bound run',
         tag: 'Spec',
         options: { fresh: true },
         config: declaredConfig({ fallbackModel: 'anthropic:claude-sonnet-4-6' }),
         cwd: tmpDir,
         backendAdmissionClass: 'self_grounding_agent',
-        artifact: { ...artifactRequest(), onEmitted },
-      }),
-      // Primary error + admission error reported together.
-    ).rejects.toThrow(/429 quota exhausted[\s\S]*self_grounding_agent/);
+        artifact: {
+          ...artifactRequest(undefined, (hash, artifactPath) =>
+            failures.push({ hash, artifactPath }),
+          ),
+          onEmitted,
+        },
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(OrchestratorInvokeError);
+    expect(caught).toBeInstanceOf(TotemOrchestratorError);
+    expect(caught).toMatchObject({
+      kind: 'quota',
+      failureArtifactHash: failures[0]?.hash,
+      attempts: [expect.objectContaining({ failureKind: 'quota', route: 'sdk' })],
+    });
+    expect((caught as Error).message).toMatch(/429 quota exhausted[\s\S]*self_grounding_agent/);
+    expect(failures).toHaveLength(1);
+    const artifact = InvocationFailureArtifactSchema.parse(
+      JSON.parse(fs.readFileSync(failures[0]!.artifactPath, 'utf-8')),
+    );
+    expect(artifact.terminal).toMatchObject({ kind: 'quota', attempt: 1 });
+    expect(artifact.attempts).toHaveLength(1);
 
     // Exactly ONE invoke: the primary. The cross-provider fallback was never invoked.
     expect(mockInvoke).toHaveBeenCalledTimes(1);

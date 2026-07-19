@@ -328,7 +328,7 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
   if (cliExists('claude')) {
     return orchestratorResult({
       provider: 'shell',
-      command: 'claude -p {file} --model {model} --output-format json',
+      command: 'claude -p --model {model} < {file}',
       overrides: buildRoleOverrides(INIT_ORCHESTRATOR_MODELS.claudeCli),
     });
   }

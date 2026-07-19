@@ -1,15 +1,82 @@
 import { describe, expect, it } from 'vitest';
 
-import type { BackendAdmissionClass, RunArtifact } from './schema.js';
+import type {
+  BackendAdmissionClass,
+  BoundedTextEvidence,
+  InvocationFailureArtifact,
+  InvokeAttemptEvidence,
+  RunArtifact,
+} from './schema.js';
 import {
   ADMISSION_COMPLETION_ONLY,
   ADMISSION_SELF_GROUNDING_AGENT,
   ContextPolicySchema,
+  INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION,
+  InvocationFailureArtifactSchema,
+  INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+  InvokeAttemptEvidenceSchema,
+  InvokeProcessEvidenceSchema,
   OutputContractSchema,
   RUN_ARTIFACT_SCHEMA_VERSION,
   RunArtifactSchema,
   RunMetadataSchema,
 } from './schema.js';
+
+function textEvidence(text: string, limitBytes = 64 * 1024): BoundedTextEvidence {
+  const bytes = Buffer.byteLength(text, 'utf-8');
+  return {
+    encoding: 'utf-8',
+    head: text,
+    observedBytes: bytes,
+    retainedBytes: bytes,
+    limitBytes,
+    truncated: false,
+    dlp: 'masked',
+  };
+}
+
+function attempt(overrides: Partial<InvokeAttemptEvidence> = {}): InvokeAttemptEvidence {
+  return {
+    sequence: 1,
+    route: 'configured-shell',
+    provider: 'anthropic',
+    model: 'claude-sonnet-5',
+    status: 'failed',
+    durationMs: 900,
+    failureKind: 'process-exit',
+    process: {
+      exitCode: 1,
+      signal: null,
+      timedOut: false,
+      stdout: textEvidence('partial stdout'),
+      stderr: textEvidence('provider rejected request'),
+    },
+    ...overrides,
+  };
+}
+
+function failureArtifact(): InvocationFailureArtifact {
+  return {
+    schemaVersion: INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION,
+    inputBundle: { maskedPrompt: 'prompt after DLP' },
+    inputHash: 'a'.repeat(64),
+    grounding: { hash: 'b'.repeat(64), provenanceSummary: 'similarity-only' },
+    requestedBackend: {
+      provider: 'anthropic',
+      model: 'claude-sonnet-5',
+      qualifiedModel: 'anthropic:claude-sonnet-5',
+      admissionClass: 'completion_only',
+      taskProfile: 'Review',
+    },
+    attempts: [attempt()],
+    terminal: {
+      kind: 'process-exit',
+      attempt: 1,
+      message: textEvidence('Claude CLI exited with code 1', INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES),
+    },
+    createdAt: '2026-07-19T12:00:00.000Z',
+  };
+}
 
 /** A minimal valid artifact for mutation in each case. */
 function validArtifact(): RunArtifact {
@@ -31,8 +98,9 @@ function validArtifact(): RunArtifact {
 }
 
 describe('RunArtifactSchema', () => {
-  it('accepts a minimal valid 1.0.0 artifact', () => {
-    expect(RunArtifactSchema.parse(validArtifact())).toEqual(validArtifact());
+  it.each(['1.0.0', '1.1.0'])('accepts a historical %s artifact unchanged', (schemaVersion) => {
+    const historical = { ...validArtifact(), schemaVersion };
+    expect(RunArtifactSchema.parse(historical)).toEqual(historical);
   });
 
   it('accepts a future 1.x minor (corpus survives minor bumps — F1)', () => {
@@ -71,6 +139,288 @@ describe('RunArtifactSchema', () => {
     artifact.output.metrics.inputTokens = null;
     artifact.output.metrics.outputTokens = null;
     expect(RunArtifactSchema.safeParse(artifact).success).toBe(true);
+  });
+
+  it('roundtrips additive 1.2.0 fallback execution evidence', () => {
+    const artifact = validArtifact();
+    artifact.output.execution = {
+      attempts: [
+        attempt({
+          route: 'sdk',
+          process: undefined,
+          failureKind: 'auth',
+        }),
+        attempt({
+          sequence: 2,
+          route: 'cli-fallback',
+          status: 'succeeded',
+          failureKind: undefined,
+          durationMs: 1_200,
+          process: {
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            stdout: textEvidence('valid response'),
+            stderr: textEvidence(''),
+          },
+        }),
+      ],
+    };
+
+    expect(RunArtifactSchema.parse(artifact)).toEqual(artifact);
+  });
+});
+
+describe('invocation evidence schemas (#2452 slice B)', () => {
+  it('roundtrips a terminal failure artifact and cannot parse it as a successful run', () => {
+    const failure = failureArtifact();
+    expect(InvocationFailureArtifactSchema.parse(failure)).toEqual(failure);
+    expect(RunArtifactSchema.safeParse(failure).success).toBe(false);
+  });
+
+  it('requires ordered attempts and terminal agreement with the final failed attempt', () => {
+    const failure = failureArtifact();
+    failure.attempts[0] = attempt({ sequence: 2 });
+    expect(InvocationFailureArtifactSchema.safeParse(failure).success).toBe(false);
+
+    const mismatched = failureArtifact();
+    mismatched.terminal.kind = 'timeout';
+    expect(InvocationFailureArtifactSchema.safeParse(mismatched).success).toBe(false);
+  });
+
+  it('requires failed attempts to carry a kind and successful attempts not to', () => {
+    expect(InvokeAttemptEvidenceSchema.safeParse(attempt({ failureKind: undefined })).success).toBe(
+      false,
+    );
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({ status: 'succeeded', failureKind: 'unknown' }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('accepts only bounded machine-token provider codes', () => {
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(attempt({ providerCode: 'rate_limit:429' })).success,
+    ).toBe(true);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(attempt({ providerCode: `secret ${'x'.repeat(200)}` }))
+        .success,
+    ).toBe(false);
+  });
+
+  it('requires timeoutMs if and only if process timedOut is true', () => {
+    expect(
+      InvokeProcessEvidenceSchema.safeParse({
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      InvokeProcessEvidenceSchema.safeParse({
+        exitCode: null,
+        signal: null,
+        timedOut: true,
+        timeoutMs: 180_000,
+      }).success,
+    ).toBe(true);
+    expect(
+      InvokeProcessEvidenceSchema.safeParse({
+        exitCode: null,
+        signal: null,
+        timedOut: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      InvokeProcessEvidenceSchema.safeParse({
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        timeoutMs: 180_000,
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    {
+      label: 'timeout',
+      process: { exitCode: null, signal: null, timedOut: true, timeoutMs: 180_000 },
+    },
+    {
+      label: 'signal',
+      process: { exitCode: null, signal: 'SIGTERM', timedOut: false },
+    },
+    {
+      label: 'nonzero exit',
+      process: { exitCode: 1, signal: null, timedOut: false },
+    },
+  ])('rejects a succeeded attempt that reports $label', ({ process }) => {
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({ status: 'succeeded', failureKind: undefined, process }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('accepts coherent SDK and configured-shell success facts', () => {
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({
+          route: 'sdk',
+          status: 'succeeded',
+          failureKind: undefined,
+          process: undefined,
+        }),
+      ).success,
+    ).toBe(true);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({
+          status: 'succeeded',
+          failureKind: undefined,
+          process: { exitCode: 0, signal: null, timedOut: false },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it('requires timeout failure kind and process timeout facts to agree in both directions', () => {
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({
+          failureKind: 'timeout',
+          process: { exitCode: null, signal: null, timedOut: true, timeoutMs: 180_000 },
+        }),
+      ).success,
+    ).toBe(true);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(attempt({ failureKind: 'timeout', process: undefined }))
+        .success,
+    ).toBe(false);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({
+          failureKind: 'timeout',
+          process: { exitCode: null, signal: null, timedOut: false },
+        }),
+      ).success,
+    ).toBe(false);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({
+          failureKind: 'quota',
+          process: { exitCode: null, signal: null, timedOut: true, timeoutMs: 180_000 },
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('requires process-exit failures to record an abnormal exit or signal', () => {
+    expect(InvokeAttemptEvidenceSchema.safeParse(attempt()).success).toBe(true);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({ process: { exitCode: null, signal: 'SIGTERM', timedOut: false } }),
+      ).success,
+    ).toBe(true);
+    expect(InvokeAttemptEvidenceSchema.safeParse(attempt({ process: undefined })).success).toBe(
+      false,
+    );
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({ process: { exitCode: 0, signal: null, timedOut: false } }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('allows pre-spawn evidence without a process, but rejects impossible spawn completion facts', () => {
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({ route: 'cli-fallback', failureKind: 'process-spawn', process: undefined }),
+      ).success,
+    ).toBe(true);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({ route: 'sdk', failureKind: 'process-spawn', process: undefined }),
+      ).success,
+    ).toBe(true);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({
+          failureKind: 'process-spawn',
+          process: { exitCode: null, signal: null, timedOut: false },
+        }),
+      ).success,
+    ).toBe(true);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({
+          failureKind: 'process-spawn',
+          process: { exitCode: 1, signal: null, timedOut: false },
+        }),
+      ).success,
+    ).toBe(false);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({
+          failureKind: 'process-spawn',
+          process: { exitCode: null, signal: 'SIGTERM', timedOut: false },
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('keeps process evidence consistent with sdk and configured-shell routes', () => {
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({ route: 'sdk', failureKind: 'auth', process: undefined }),
+      ).success,
+    ).toBe(true);
+    expect(InvokeAttemptEvidenceSchema.safeParse(attempt({ route: 'sdk' })).success).toBe(false);
+    expect(
+      InvokeAttemptEvidenceSchema.safeParse(
+        attempt({ route: 'configured-shell', failureKind: 'auth', process: undefined }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('rejects byte-accounting drift and any text retained after a DLP mask failure', () => {
+    const badCount = failureArtifact();
+    badCount.terminal.message.retainedBytes += 1;
+    expect(InvocationFailureArtifactSchema.safeParse(badCount).success).toBe(false);
+
+    const dlpFailure = failureArtifact();
+    dlpFailure.terminal.message = {
+      encoding: 'utf-8',
+      head: 'must not persist',
+      observedBytes: 16,
+      retainedBytes: 16,
+      limitBytes: INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+      truncated: false,
+      dlp: 'omitted-on-mask-failure',
+    };
+    expect(InvocationFailureArtifactSchema.safeParse(dlpFailure).success).toBe(false);
+  });
+
+  it('allows DLP replacement to change retained byte length independently of raw observation', () => {
+    const expanded = textEvidence('[MASKED:LONGER-THAN-RAW]', INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES);
+    expanded.observedBytes = 3;
+    expect(
+      InvocationFailureArtifactSchema.safeParse({
+        ...failureArtifact(),
+        terminal: { ...failureArtifact().terminal, message: expanded },
+      }).success,
+    ).toBe(true);
+
+    const shortened = textEvidence('[MASKED]', INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES);
+    shortened.observedBytes = 10_000;
+    shortened.truncated = false;
+    expect(
+      InvocationFailureArtifactSchema.safeParse({
+        ...failureArtifact(),
+        terminal: { ...failureArtifact().terminal, message: shortened },
+      }).success,
+    ).toBe(true);
   });
 });
 
