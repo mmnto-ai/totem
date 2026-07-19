@@ -303,9 +303,9 @@ const ALLOWLIST: AllowEntry[] = [
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/orchestrators/shell-orchestrator.ts',
-    expectedCount: 2,
+    expectedCount: 1,
     reason:
-      'Windows-only process-tree cleanup via `spawn(taskkill, [...])`. Literal target, fixed args. Required because Node child_process does not propagate SIGTERM on Windows.',
+      'Primary orchestrator command execution via `spawn(resolvedCmd, ...)`. The command template is an intentionally trusted, repository-configured boundary rather than a hardcoded executable; dynamic fields are constrained: `model` passes `assertValidModelName`, both the model and temporary prompt-file path are shell-quoted before interpolation, and the prompt file is created with mode 0600.',
   },
   {
     hash: 'c2c09301bb56a02b',
