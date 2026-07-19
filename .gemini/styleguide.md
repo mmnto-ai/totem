@@ -24,7 +24,7 @@ When a review finding conflicts with these tenets, the tenet wins.
 We intentionally avoid metaphor-heavy names in the shipped code to ensure immediate developer comprehension.
 
 - **DO USE:** `search_knowledge`, `add_lesson`, `totem init`, `totem sync`.
-- **DO NOT USE as identifiers:** `spin`, `anchor`, `kick`, `dream`. This is an **identifier** rule (the DO-USE list is entirely identifiers), not a word-ban: as _product vocabulary_ these terms belong only in the README/wiki philosophy surfaces, but they appear freely in **prose** — including **code comments** — where they are sentences, not names (see the § 6 prose carve-out).
+- **AVOID as identifiers — judged in context:** `spin`, `anchor`, `kick`, `dream`. The list is unchanged and load-bearing: these are the **tells to look for**, not a string-ban. This is an **identifier** rule (the DO-USE list is entirely identifiers). Flag one when it is doing **metaphor work in a name**; allow it when it is the **precise, load-bearing technical term** — `repo-anchored` is legitimate terminology, not a violation. A blanket string-match here is a Tenet-9 miscompile (a Green gate standing in for a Yellow judgment), and its false positives force per-repo workarounds around real terms — the `repo-anchored` → `git-native` churn on mmnto-ai/totem#2132 is the falsifier. As _product vocabulary_ these terms belong on the README/wiki philosophy surfaces, and they appear freely in **prose** — including **code comments** — where they are sentences, not names (see the § 6 prose carve-out). Canonical ruleset: [`voice-tuning-dataset.md`](https://github.com/mmnto-ai/totem-strategy/blob/main/voice-tuning-dataset.md) (mmnto-ai/totem-strategy#938).
 
 ## 3. TypeScript Rules
 
@@ -68,7 +68,7 @@ The following suggestions have been repeatedly declined during code review. Do n
 - **Empty catch blocks in core library pure functions.** Core library functions (`packages/core/src/`) sometimes use empty catch blocks when: (a) the function is pure with no logger dependency, (b) validation happens at the schema level, and (c) the catch guards against edge cases only. Do not flag these as violations — the design intent is silent fallback, not logging.
 
 - **`.catch()` rewrites to escape `lesson-fail-open-catch-ban`.** Do not suggest rewriting a blanket fail-soft `catch (err) { … }` as `.catch(() => …)` to get past the Tenet-4 catch-ban rule — a `call_expression` the rule never matches is matcher-evasion, strictly worse for the corpus. The sanctioned form for a Tenet-4 shape-2 fail-soft (a declared IO/LLM/network boundary whose whole surface is operational) is the honest `catch_clause` annotated `// totem-context: fail-soft backstop=<name>`, naming the loud systemic backstop that throws on whole-boundary failure (the ADR-111 fold-C `assertPipelineProductive` shape, `attempted>0 && succeeded===0 ⟹ throw`). The lint recognizes this attestation and emits a **non-blocking WARN** when `backstop=` is missing — it establishes token-presence only; the backstop's loudness + per-item accounting are verified at review/ADR level, not by the lint (Tenet 13/19; `design-tenets.md` Tenet 4; mmnto-ai/totem#2214, strategy#702/#708). Shape 1 (type-discriminated rethrow, `if (!(err instanceof <ExpectedError>)) throw err; return <soft-default>`) is the rule working — it already carries a `throw_statement`, so do not flag it.
-- **§ 2 naming terms in prose (docs or code comments).** The metaphor-heavy-name ban (`spin`, `anchor`, `kick`, `dream`) governs IDENTIFIERS in shipped code — § 2's DO-USE list is entirely identifiers. Do not extend it to **prose anywhere** — internal records (`.totem/specs/**`, dispatches, journals) **or code comments** (`// anchor the cursor` is a sentence, not a name). (Declined on mmnto-ai/totem#2162; re-fired 5× HIGH on code-comment prose on mmnto-ai/totem#2246 — this clause closes that recurrence so GCA stops re-flagging comment prose each round.)
+- **§ 2 naming terms in prose (docs or code comments).** The metaphor-heavy-name rule (`spin`, `anchor`, `kick`, `dream`) governs IDENTIFIERS in shipped code, and is judged in context rather than string-matched (§ 2) — § 2's DO-USE list is entirely identifiers. Do not extend it to **prose anywhere** — internal records (`.totem/specs/**`, dispatches, journals) **or code comments** (`// anchor the cursor` is a sentence, not a name). (Declined on mmnto-ai/totem#2162; re-fired 5× HIGH on code-comment prose on mmnto-ai/totem#2246 — this clause closes that recurrence so GCA stops re-flagging comment prose each round.)
 
 - **Lesson heading truncation.** Do not suggest expanding lesson headings beyond 60 characters. The `HEADING_MAX_CHARS` limit is enforced by `lesson-format.ts`. Headings serve as SARIF identifiers and vector search labels, not prose. Truncation is by design.
 - **Redundant "Lesson:" prefix in lesson headings.** Do not flag `## Lesson — Lesson: ...` as a style issue on auto-generated lesson files. This is a known `sanitizeHeading` improvement tracked separately.
@@ -100,6 +100,16 @@ Every feature, doc, and CLI output must pass this test: **Can a developer workin
 - Enterprise features (SARIF, federated memory, RBAC) are always opt-in. The default path is zero-config.
 - CLI output should feel like instant gratification, not a compliance report.
 - If a sentence sounds like it belongs in a SOC 2 audit deck, rewrite it so it sounds like a README.
+
+### Strictness follows the surface
+
+Mirrors the canonical [`voice-tuning-dataset.md`](https://github.com/mmnto-ai/totem-strategy/blob/main/voice-tuning-dataset.md) (mmnto-ai/totem-strategy#938). Every constraint above names an AI **tell** — a pattern that reads as machine-generated. Apply them as **judgment, not string-matching**: flag a tell when it is doing **filler work**, allow it when it is the **precise, load-bearing choice** in context.
+
+- **Public / marketing copy** — `README.md`, `wiki/**`, release and landing copy. The worse error is sounding AI-generated: read the tells **strictly** and accept the occasional false positive.
+- **Technical surfaces** — `AGENTS.md`, published ADRs and doctrine, CLI help text. The worse error is **imprecise terminology and per-repo workarounds**: precision wins, and a tell is flagged **only when it is genuinely vague filler**.
+- **Internal working artifacts** — `.totem/specs/**`, dispatches, journals, and code comments. **Exempt.** Do not raise voice findings on them at all (see also the § 6 prose carve-out).
+
+A blanket string-ban across all surfaces is a Tenet-9 miscompile — a Green gate standing in for a Yellow judgment.
 
 ## 8. Override Directives (ADR-071)
 
