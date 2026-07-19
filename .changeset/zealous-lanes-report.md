@@ -1,6 +1,6 @@
 ---
-'@mmnto/cli': patch
-'@mmnto/totem': patch
+'@mmnto/cli': minor
+'@mmnto/totem': minor
 ---
 
 fix(review): a review fan with zero completed verdict lanes hard-errors instead of exiting 0 (#2452 slice A)
