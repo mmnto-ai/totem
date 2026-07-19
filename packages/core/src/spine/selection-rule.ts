@@ -8,6 +8,8 @@
 // real gate. IO (git enumeration → PrMeta) lives in the cli layer; this module
 // is the pure mathematical predicate over PrMeta.
 
+import { matchesPathGlob } from '../sys/glob.js';
+
 // ─── Types ──────────────────────────────────────────
 
 /**
@@ -70,75 +72,6 @@ export class SelectionRuleParseError extends Error {
   }
 }
 
-// ─── Glob matching (self-contained; frozen narrow classifier) ────────────────
-
-function escapeRegexChar(ch: string): string {
-  return /[.*+?^${}()|[\]\\]/.test(ch) ? `\\${ch}` : ch;
-}
-
-/**
- * Translate a path glob to an anchored RegExp. Supports:
- *   `**​/`     → zero or more path segments
- *   `**`      → any characters including `/`
- *   `*`       → any characters except `/`
- *   `?`       → a single character except `/`
- *   `{a,b,c}` → brace alternation (e.g. `**​/*.{ts,tsx}`)
- * Sufficient for the frozen code-path classifier; avoids a glob dependency and
- * keeps matching deterministic/offline.
- */
-function globToRegExp(glob: string): RegExp {
-  const g = glob.replace(/\\/g, '/');
-  let re = '';
-  let i = 0;
-  while (i < g.length) {
-    const c = g[i]!;
-    if (c === '*') {
-      if (g[i + 1] === '*') {
-        if (g[i + 2] === '/') {
-          re += '(?:[^/]+/)*'; // '**/' → zero or more segments (matches the empty case)
-          i += 3;
-        } else {
-          re += '.*'; // '**' (e.g. trailing) → any chars incl. '/'
-          i += 2;
-        }
-      } else {
-        re += '[^/]*'; // '*' → any chars within a segment
-        i += 1;
-      }
-    } else if (c === '?') {
-      re += '[^/]';
-      i += 1;
-    } else if (c === '{') {
-      const end = g.indexOf('}', i);
-      if (end > i) {
-        const alts = g
-          .slice(i + 1, end)
-          .split(',')
-          .map((alt) => alt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')); // alternatives are literals
-        re += `(?:${alts.join('|')})`; // '{ts,tsx}' → '(?:ts|tsx)'
-        i = end + 1;
-      } else {
-        re += escapeRegexChar(c); // unmatched '{' → literal
-        i += 1;
-      }
-    } else {
-      re += escapeRegexChar(c);
-      i += 1;
-    }
-  }
-  return new RegExp(`^${re}$`);
-}
-
-const globCache = new Map<string, RegExp>();
-function matchGlob(filePath: string, glob: string): boolean {
-  let re = globCache.get(glob);
-  if (!re) {
-    re = globToRegExp(glob);
-    globCache.set(glob, re);
-  }
-  return re.test(filePath);
-}
-
 /**
  * A PR is code-touching iff at least one changed file matches ≥1 includeGlob and
  * no excludeGlob. Exclude wins at the FILE level (not the PR level), so a PR
@@ -148,9 +81,9 @@ function matchGlob(filePath: string, glob: string): boolean {
 export function isCodeTouching(changedFiles: string[], classifier: CodePathClassifier): boolean {
   return changedFiles.some((raw) => {
     const file = raw.replace(/\\/g, '/');
-    const included = classifier.includeGlobs.some((g) => matchGlob(file, g));
+    const included = classifier.includeGlobs.some((g) => matchesPathGlob(file, g));
     if (!included) return false;
-    const excluded = classifier.excludeGlobs.some((g) => matchGlob(file, g));
+    const excluded = classifier.excludeGlobs.some((g) => matchesPathGlob(file, g));
     return !excluded;
   });
 }
