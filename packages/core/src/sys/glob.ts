@@ -106,6 +106,7 @@ function collectRuleEngineStarIndexes(pattern: string): StarSyntaxPlan {
   while (offset < pattern.length) {
     const remaining = pattern.slice(offset);
 
+    // Legacy extension shape: `*.`.
     if (remaining.startsWith('*.')) {
       active.add(offset);
       starOverrides.set(offset, 'cross-segment');
@@ -119,6 +120,7 @@ function collectRuleEngineStarIndexes(pattern: string): StarSyntaxPlan {
       return { active, globstarOverrides, starOverrides, neverMatch };
     }
 
+    // Legacy leading globstar shape: `**/`.
     if (remaining.startsWith('**/')) {
       active.add(offset);
       active.add(offset + 1);
@@ -126,6 +128,7 @@ function collectRuleEngineStarIndexes(pattern: string): StarSyntaxPlan {
       continue;
     }
 
+    // Legacy middle globstar shape: `/**/`.
     const recursiveIndex = remaining.indexOf('/**/');
     if (recursiveIndex > 0) {
       const globstarIndex = offset + recursiveIndex + 1;
@@ -142,12 +145,14 @@ function collectRuleEngineStarIndexes(pattern: string): StarSyntaxPlan {
       continue;
     }
 
+    // Legacy recursive tail shape: `/**`.
     if (remaining.endsWith('/**')) {
       active.add(pattern.length - 2);
       active.add(pattern.length - 1);
       return { active, globstarOverrides, starOverrides, neverMatch };
     }
 
+    // Legacy directory-extension shape: `/*.`.
     const singleStarIndex = remaining.indexOf('/*.');
     if (singleStarIndex > 0 && !remaining.includes('**')) {
       active.add(offset + singleStarIndex + 1);
@@ -183,7 +188,9 @@ function collectActiveStarIndexes(pattern: string, profile: GlobProfileOptions):
 
 function tokenizeGlob(pattern: string, profile: GlobProfileOptions): GlobToken[] {
   const starPlan = collectActiveStarIndexes(pattern, profile);
-  const tokens: GlobToken[] = starPlan.neverMatch ? [{ kind: 'never' }] : [];
+  if (starPlan.neverMatch) return [{ kind: 'never' }];
+
+  const tokens: GlobToken[] = [];
   let index = 0;
 
   while (index < pattern.length) {
