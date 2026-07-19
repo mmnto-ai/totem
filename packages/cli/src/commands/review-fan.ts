@@ -1323,7 +1323,7 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     const failed = verdict.lanes.filter((l) => l.status === 'failed').length;
     throw new TotemError(
       'SHIELD_FAILED',
-      `Review produced no completed verdict lane (completed=0, abstained=${abstained}, failed=${failed} of ${laneResults.length}) — this is a non-pass, NOT a crash: an honest verdict was written (settled=false), then the run hard-errors. A provider-unsettled round never counts as a review pass and never authorizes a push (Tenets 12/13).`,
+      `Review produced no completed verdict lane (completed=0, abstained=${abstained}, failed=${failed} of ${verdict.lanes.length}) — this is a non-pass, NOT a crash: an honest verdict was written (settled=false), then the run hard-errors. A provider-unsettled round never counts as a review pass and never authorizes a push (Tenets 12/13).`,
       'Abstained lanes invoked but their output was not extractable; failed lanes did not invoke. Check backend API keys / quota and lane output, then re-run `totem review`.',
     );
   }
