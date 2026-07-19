@@ -228,6 +228,7 @@ function errorCauseChain(err: unknown): unknown[] {
     seen.add(current);
     try {
       current = (current as Record<string, unknown>)['cause'];
+      // totem-context: intentional cleanup — a hostile cause getter ends this bounded, cycle-safe traversal at the last readable error; the already-collected evidence remains usable.
     } catch {
       break;
     }
