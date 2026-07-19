@@ -268,6 +268,9 @@ describe('invokeShellOrchestrator', () => {
 
     expect(err).toBeInstanceOf(OrchestratorInvokeError);
     expect(err).toMatchObject({ kind: 'process-spawn' });
+    expect((err as Error).message).toBe(
+      '[Totem Error] Shell orchestrator command failed to start.',
+    );
     expect((err as Error).message).not.toContain('secret');
     expect((err as OrchestratorInvokeError).attempts[0]).toMatchObject({
       providerCode: 'ENOENT',

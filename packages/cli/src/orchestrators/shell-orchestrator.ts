@@ -345,7 +345,7 @@ export async function invokeShellOrchestrator(
         };
         reject(
           new OrchestratorInvokeError(
-            '[Totem Error] Shell orchestrator command failed to start.',
+            'Shell orchestrator command failed to start.',
             'process-spawn',
             [attempt],
             { cause },
