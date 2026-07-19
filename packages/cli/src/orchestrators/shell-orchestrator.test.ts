@@ -5,6 +5,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { InvokeAttemptEvidenceSchema } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import { OrchestratorInvokeError } from './orchestrator.js';
 import {
@@ -381,6 +383,48 @@ describe('invokeShellOrchestrator', () => {
     expect(attempt.process).toMatchObject({ exitCode: null, signal: 'SIGTERM', timedOut: false });
     expect(attempt.process?.stdout?.head).toBe('partial output');
     expect(attempt.process?.stderr?.head).toBe('terminated');
+  });
+
+  it('records a close without exit code or signal as an unknown structured failure', async () => {
+    process.nextTick(() => {
+      mockChild.stdout.emit('data', Buffer.from('partial output'));
+      mockChild.emit('close', null, null);
+    });
+
+    const err = await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'cmd',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
+      totemDir,
+    }).catch((cause: unknown) => cause);
+
+    expect(err).toBeInstanceOf(OrchestratorInvokeError);
+    expect(err).toMatchObject({ kind: 'unknown' });
+    expect((err as Error).message).toContain('closed without an exit code or signal');
+    const attempt = (err as OrchestratorInvokeError).attempts[0]!;
+    expect(attempt).toMatchObject({
+      status: 'failed',
+      failureKind: 'unknown',
+      process: {
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        stdout: expect.objectContaining({ head: 'partial output' }),
+      },
+    });
+    // Runtime streams remain raw until the persistence boundary adds DLP
+    // metadata; validate the failure/process cross-field contract directly.
+    const schemaAttempt = {
+      ...attempt,
+      process: {
+        exitCode: attempt.process?.exitCode,
+        signal: attempt.process?.signal,
+        timedOut: attempt.process?.timedOut,
+      },
+    };
+    expect(InvokeAttemptEvidenceSchema.safeParse(schemaAttempt).success).toBe(true);
   });
 
   it('retains bounded head and tail evidence independently of semantic output', async () => {

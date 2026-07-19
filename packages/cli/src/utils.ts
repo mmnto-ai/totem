@@ -529,16 +529,16 @@ function takeUtf8Prefix(text: string, limitBytes: number): string {
 
 function takeUtf8Tail(text: string, limitBytes: number): string {
   const characters = Array.from(text);
-  let retained = '';
+  const retainedReversed: string[] = [];
   let bytes = 0;
   for (let index = characters.length - 1; index >= 0; index--) {
     const character = characters[index]!;
     const characterBytes = Buffer.byteLength(character, 'utf-8');
     if (bytes + characterBytes > limitBytes) break;
-    retained = character + retained;
+    retainedReversed.push(character);
     bytes += characterBytes;
   }
-  return retained;
+  return retainedReversed.reverse().join('');
 }
 
 /**
@@ -1085,7 +1085,7 @@ export async function runOrchestrator(opts: {
   let resolved = resolveOrchestrator(rawModel, baseProvider, baseInvoke);
   let model = resolved.parsed.model;
   let qualifiedModel = resolved.qualifiedModel;
-  let invoke = resolved.invoke;
+  const invoke = resolved.invoke;
 
   // ── Admission gate, primary path (mmnto-ai/totem#2102) ──
   // Decided per RESOLVED backend BEFORE the invoke (and before the response
@@ -1317,12 +1317,11 @@ export async function runOrchestrator(opts: {
           ...fallbackResult,
           attempts: resequenceRuntimeAttempts([...primaryAttempts, ...fallbackAttempts]),
         };
-        // Update model/invoke so telemetry, cache, and success artifacts log
-        // the backend that actually produced the semantic output.
+        // Update the resolved backend identity so telemetry, cache, and success
+        // artifacts log the backend that actually produced the semantic output.
         model = fallbackResolved.parsed.model;
         qualifiedModel = fallbackResolved.qualifiedModel;
         resolved = fallbackResolved;
-        invoke = fallbackResolved.invoke;
       } catch (fallbackErr: unknown) {
         const normalizedFallbackErr = toOrchestratorInvokeError({
           err: fallbackErr,

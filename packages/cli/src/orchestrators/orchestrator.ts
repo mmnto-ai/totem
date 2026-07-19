@@ -659,21 +659,28 @@ function withCliFallback(provider: string, sdkInvoker: InvokeOrchestrator): Invo
         err,
       );
       if (!isFallbackEligible(err)) {
+        const recoveryHint = recoveryHintProperty(err);
         throw new OrchestratorInvokeError(
           err instanceof Error ? err.message : `Invocation failed for '${provider}'.`,
           sdkAttempt.failureKind ?? 'unknown',
           [sdkAttempt],
-          { cause: err },
+          {
+            cause: err,
+            ...(recoveryHint !== undefined ? { recoveryHint } : {}),
+          },
         );
       }
 
-      if (!(await isCliAvailable(binary))) {
+      const cliProbeStartMs = Date.now();
+      const cliAvailable = await isCliAvailable(binary);
+      const cliProbeDurationMs = Date.now() - cliProbeStartMs;
+      if (!cliAvailable) {
         const cliUnavailable = new Error(`[Totem Error] '${binary}' not found on PATH.`);
         const cliAttempt = failedRuntimeAttempt(
           provider,
           opts.model,
           'cli-fallback',
-          0,
+          cliProbeDurationMs,
           cliUnavailable,
           { spawnFailed: true },
         );

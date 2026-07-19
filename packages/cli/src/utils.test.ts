@@ -1730,7 +1730,7 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
     expect(Buffer.byteLength(runtime.head, 'utf-8')).toBe(2 * 1024);
     expect(Buffer.byteLength(runtime.tail ?? '', 'utf-8')).toBe(2 * 1024);
     expect(runtime.head).toContain(secret);
-    expect(runtime.tail).toContain('-terminal-tail');
+    expect(runtime.tail).toBe(message.slice(-2 * 1024));
 
     const masker = vi.fn((value: string) => value.replaceAll(secret, '[REDACTED_CUSTOM]'));
     const persisted = persistRuntimeTextEvidence(runtime, undefined, 4 * 1024, masker);
@@ -1761,7 +1761,8 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
     expect(runtime.head).not.toContain('\uFFFD');
     expect(runtime.tail).not.toContain('\uFFFD');
     expect(Buffer.byteLength(runtime.head, 'utf-8')).toBeLessThanOrEqual(2 * 1024);
-    expect(Buffer.byteLength(runtime.tail ?? '', 'utf-8')).toBeLessThanOrEqual(2 * 1024);
+    expect(Buffer.byteLength(runtime.tail ?? '', 'utf-8')).toBe(2 * 1024 - 1);
+    expect(runtime.tail).toBe(`${'🧪'.repeat(510)}-終端`);
 
     const persisted = persistRuntimeTextEvidence(
       runtime,

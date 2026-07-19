@@ -286,10 +286,15 @@ describe('withCliFallback (via createOrchestrator)', () => {
     vi.mocked(invokeAnthropicOrchestrator).mockRejectedValueOnce(
       new Error('No Anthropic API key found'),
     );
+    let nowMs = 1_000;
+    const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const availability = new EventEmitter() as EventEmitter & { kill: () => void };
     availability.kill = vi.fn();
     mockSpawn.mockImplementationOnce(() => {
-      process.nextTick(() => availability.emit('close', 1));
+      process.nextTick(() => {
+        nowMs += 75;
+        availability.emit('close', 1);
+      });
       return availability;
     });
 
@@ -301,21 +306,27 @@ describe('withCliFallback (via createOrchestrator)', () => {
       tag: 'Test',
       totemDir: '.totem',
     }).catch((cause: unknown) => cause);
+    dateNow.mockRestore();
 
     expect(err).toBeInstanceOf(OrchestratorInvokeError);
     expect(err).toMatchObject({
       code: 'ORCHESTRATOR_UNAVAILABLE',
       kind: 'process-spawn',
       recoveryHint: 'Install the anthropic CLI or its SDK to use this provider.',
+      attempts: [
+        expect.objectContaining({ sequence: 1, route: 'sdk' }),
+        expect.objectContaining({ sequence: 2, route: 'cli-fallback', durationMs: 75 }),
+      ],
     });
   });
 
-  it('non-fallback-eligible errors are re-thrown', async () => {
+  it('preserves recovery guidance on non-fallback-eligible errors', async () => {
     // Override the mock to throw a non-eligible error
     const { invokeGeminiOrchestrator } = await import('./gemini-orchestrator.js');
-    vi.mocked(invokeGeminiOrchestrator).mockRejectedValueOnce(
-      new Error('Gemini API call failed: model not found'),
-    );
+    const sdkErr = Object.assign(new Error('Gemini API call failed: model not found'), {
+      recoveryHint: 'Select a Gemini model available to this account.',
+    });
+    vi.mocked(invokeGeminiOrchestrator).mockRejectedValueOnce(sdkErr);
 
     const config: OrchestratorConfig = { provider: 'gemini' };
     const invoke = createOrchestrator(config);
@@ -330,6 +341,8 @@ describe('withCliFallback (via createOrchestrator)', () => {
     await expect(rejection).rejects.toMatchObject({
       name: 'OrchestratorInvokeError',
       kind: 'model',
+      cause: sdkErr,
+      recoveryHint: 'Select a Gemini model available to this account.',
       attempts: [
         expect.objectContaining({
           sequence: 1,

@@ -35,7 +35,12 @@ import { z } from 'zod';
  */
 export const RUN_ARTIFACT_SCHEMA_VERSION = '1.2.0';
 
-/** Schema version for the distinct terminal-invocation failure ledger. */
+/**
+ * Schema version for the distinct terminal-invocation failure ledger. The
+ * exact 1.0.0 literal is deliberate fail-closed behavior: before accepting a
+ * future version, add an explicit versioned union and migration path rather
+ * than widening this schema in place.
+ */
 export const INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION = '1.0.0';
 
 /** Persisted evidence bounds (mmnto-ai/totem#2452 slice B). */

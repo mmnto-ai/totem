@@ -433,25 +433,27 @@ export async function invokeShellOrchestrator(
         const process = processEvidence(code, normalizedSignal);
 
         if (code !== 0 || normalizedSignal !== null) {
-          const processDescription =
-            normalizedSignal === null
-              ? `code ${code}`
-              : `code ${code} (signal ${normalizedSignal})`;
+          const closedWithoutStatus = code === null && normalizedSignal === null;
+          const processDescription = closedWithoutStatus
+            ? 'closed without an exit code or signal'
+            : normalizedSignal === null
+              ? `exited with code ${code}`
+              : `exited with code ${code} (signal ${normalizedSignal})`;
           const err = new Error(
-            `[Totem Error] Shell orchestrator command failed: Process exited with ${processDescription}.`,
+            `[Totem Error] Shell orchestrator command failed: Process ${processDescription}.`,
           );
           const diagnosticText = [process.stderr?.head, process.stderr?.tail]
             .filter((part): part is string => part !== undefined)
             .join('\n');
-          const classificationSource = Object.assign(new Error(diagnosticText), {
-            exitCode: code,
-          });
-          rejectInvocation(
-            err,
-            process,
-            { exitCode: code, signal: normalizedSignal },
-            classificationSource,
+          const classificationSource = Object.assign(
+            new Error(diagnosticText),
+            code === null ? {} : { exitCode: code },
           );
+          const failureContext: Parameters<typeof classifyInvokeFailure>[1] = {
+            ...(code === null ? {} : { exitCode: code }),
+            ...(normalizedSignal === null ? {} : { signal: normalizedSignal }),
+          };
+          rejectInvocation(err, process, failureContext, classificationSource);
           return;
         }
 
