@@ -936,7 +936,7 @@ describe('runReviewFan', () => {
     expect(findLatestVerdictForLineage(tmpDir, lkB, noWarn)!.artifact.round.index).toBe(0);
   });
 
-  it('malformed lane output ⇒ abstained ⇒ not settled; abstained lane gets its decidable post-check fail row (finding 8)', async () => {
+  it('malformed lane output ⇒ abstained ⇒ ZERO completed lanes ⇒ hard-errors as a non-pass; honest verdict written first with the decidable post-check fail row (#2452, finding 8)', async () => {
     const invoker = mapInvoker({
       'anthropic:claude-a': completedInvocation({
         content: 'garbage, not a verdict',
@@ -946,13 +946,17 @@ describe('runReviewFan', () => {
       }),
     });
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker);
-    // Default sensor exit 0: an abstaining fan writes the verdict and does NOT throw.
-    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
+    // #2452: the lone lane invoked but its output was unextractable ⇒ it ABSTAINED ⇒
+    // zero completed verdict lanes. That is a NON-PASS — the fan must hard-error, not
+    // exit 0. The message names the shape (abstained, not "failed to invoke").
+    await expect(runReviewFan(ctx)).rejects.toThrow(/completed=0, abstained=1, failed=0/);
+    // The honest verdict is written BEFORE the throw (#2452 / inv 6).
     const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    expect(v.completedLaneCount).toBe(0);
     expect(v.lanes[0]!.status).toBe('abstained');
     expect(v.settled).toBe(false);
-    // Finding 8: the abstained lane's unextractable output persists a decidable
-    // structured-output 'fail' row (post-checks now cover abstained lanes too).
+    // Finding 8 preserved: the abstained lane's unextractable output persists a decidable
+    // structured-output 'fail' row (post-checks cover abstained lanes too).
     const row = v.postChecks.find((r) => r.ruleName === 'review-structured-verdict');
     expect(row?.tier).toBe('decidable');
     expect(row?.verdict).toBe('fail');
@@ -1012,12 +1016,14 @@ describe('runReviewFan', () => {
     expect(v.settled).toBe(true);
   });
 
-  it('ALL lanes failing WRITES the honest verdict FIRST, then hard-errors (Gate G3)', async () => {
+  it('ALL lanes failing WRITES the honest verdict FIRST, then hard-errors (Gate G3, #2452 enumerated message)', async () => {
     const invoker: LaneInvoker = async () => {
       throw new Error('socket hang up');
     };
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
-    await expect(runReviewFan(ctx)).rejects.toThrow(/All 2 review lane/);
+    // #2452: the widened zero-completed gate subsumes the all-failed case; the message
+    // now enumerates the lane-status breakdown instead of "All N review lane(s)".
+    await expect(runReviewFan(ctx)).rejects.toThrow(/completed=0, abstained=0, failed=2/);
     // Gate G3: the honest verdict is written BEFORE the throw (all lanes failed).
     const verdicts = listVerdictArtifacts(tmpDir, noWarn);
     expect(verdicts).toHaveLength(1);
@@ -1027,6 +1033,156 @@ describe('runReviewFan', () => {
     expect(v.lanes.every((l) => l.status === 'failed')).toBe(true);
     expect(v.settled).toBe(false);
     expect(v.findings).toEqual([]);
+  });
+
+  // ── #2452 zero-completed exit contract: an abstain-bearing fan is a non-pass ──
+
+  it('abstained + failed (still zero completed) hard-errors; verdict written; message enumerates the mix (#2452 inv 3)', async () => {
+    const invoker = mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: 'garbage, not a verdict',
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: 'af-a',
+      }),
+      'gemini:g': async () => {
+        throw new Error('socket hang up');
+      },
+    });
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
+    await expect(runReviewFan(ctx)).rejects.toThrow(/completed=0, abstained=1, failed=1/);
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    expect(v.completedLaneCount).toBe(0);
+    expect(v.lanes.map((l) => l.status).sort()).toEqual(['abstained', 'failed']);
+    expect(v.settled).toBe(false);
+  });
+
+  it('completed + abstained mix (≥1 completed) still DEFAULT sensor exit 0 — the gate keys on completed lanes, not "any output" (#2452 inv 8b)', async () => {
+    const invoker = mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: wrapVerdict([]),
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: 'ca-a',
+      }),
+      'gemini:g': completedInvocation({
+        content: 'garbage, not a verdict',
+        provider: 'gemini',
+        model: 'g',
+        seed: 'ca-b',
+      }),
+    });
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
+    // The shape whose meaning did NOT change under the old `anyWithOutput` (true both
+    // before and after): one usable lane makes the fan a pass-eligible result — the new
+    // gate must NOT fire on it.
+    await expect(runReviewFan(ctx)).resolves.toBeUndefined();
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    expect(v.completedLaneCount).toBe(1);
+    expect(v.lanes.map((l) => l.status).sort()).toEqual(['abstained', 'completed']);
+  });
+
+  it('zero-completed fires BEFORE --fail-on: an abstained-only fan with --fail-on rejects with the zero-completed message, not the fail-on message (#2452 ordering)', async () => {
+    const invoker = mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: 'garbage, not a verdict',
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: 'fo-a',
+      }),
+    });
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker, {
+      options: { failOn: 'critical' },
+    });
+    let err: unknown;
+    try {
+      await runReviewFan(ctx);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/completed=0, abstained=1, failed=0/);
+    // The --fail-on "lane coverage" message would only appear if the gate ran AFTER it.
+    expect((err as Error).message).not.toMatch(/lane coverage/);
+  });
+
+  it('--override on a zero-completed fan STILL hard-errors and NEVER stamps — override cannot mint a pass from a provider-unsettled round (#2452 inv 5, Tenets 12/13)', async () => {
+    const invoker = mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: 'garbage, not a verdict',
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: 'ov-a',
+      }),
+    });
+    // Matched tree (preFan === post-fan): under the OLD gate, --override on an abstained-only
+    // matched fan reached the ledgered stamp branch and wrote the reviewed-content-hash,
+    // falsely authorizing a push. The widened gate pre-empts that branch.
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker, {
+      preFanContentHash: 'pre-hash-unsettled',
+      contentHash: async () => 'pre-hash-unsettled',
+      options: { override: 'operator insists — must still refuse a zero-completed pass' },
+    });
+    await expect(runReviewFan(ctx)).rejects.toThrow(/completed=0, abstained=1, failed=0/);
+    // No stamp authorizes a push from a zero-completed round, even under --override.
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(
+      false,
+    );
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    expect(v.completedLaneCount).toBe(0);
+    expect(v.settled).toBe(false);
+  });
+
+  it('drift + zero-completed still hard-errors; the drifted verdict is written and nothing is stamped (#2452, low)', async () => {
+    const invoker = mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: 'garbage, not a verdict',
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: 'dz-a',
+      }),
+    });
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker, {
+      preFanContentHash: 'pre-hash-drift',
+      contentHash: async () => 'post-hash-different',
+    });
+    await expect(runReviewFan(ctx)).rejects.toThrow(/completed=0, abstained=1, failed=0/);
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    expect(v.reviewedState).toBe('drifted');
+    expect(v.completedLaneCount).toBe(0);
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(
+      false,
+    );
+  });
+
+  it('the fan report splits diff budget from total prompt budget (#2452 inv 7) — diff is a strict subset of the prompt', async () => {
+    const diff = 'diff --git a/x.ts b/x.ts\n@@ -1 +1 @@\n-const x = 0;\n+const x = 1;\n';
+    const prompt = `SYSTEM: review the following.\n<git_diff>\n${diff}\n</git_diff>\nEND INSTRUCTIONS — respond with a verdict.`;
+    const invoker = mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: wrapVerdict([]),
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: 'bud',
+      }),
+    });
+    const outPath = path.join(tmpDir, 'fan-report.txt');
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker, {
+      prompt,
+      filteredDiff: diff,
+      options: { out: outPath },
+    });
+    await runReviewFan(ctx);
+    const report = fs.readFileSync(outPath, 'utf-8');
+    const m = report.match(/Budget: diff (\d+) chars, prompt (\d+) chars/);
+    expect(m).not.toBeNull();
+    const diffChars = Number(m![1]);
+    const promptChars = Number(m![2]);
+    // The diff is a strict subset of the assembled prompt (the prompt wraps it in
+    // template text), so both numbers report and diff < prompt — never the
+    // "my whole prompt is the diff" double-count.
+    expect(diffChars).toBeGreaterThan(0);
+    expect(diffChars).toBeLessThan(promptChars);
   });
 
   it('--continues on a mismatched lineage warns but proceeds, recording the current lineage', async () => {

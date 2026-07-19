@@ -416,6 +416,26 @@ export function deriveCacheEligible(v: VerdictPredicateInput): boolean {
   );
 }
 
+/**
+ * The exit-contract's non-pass gate (mmnto-ai/totem#2452): a fan produced ZERO
+ * `completed` verdict lanes. `completed` is the ONLY lane status that carries a
+ * usable structured verdict — an `abstained` lane invoked but its output was not
+ * extractable (sensor-down), and a `failed` lane never produced one — so neither
+ * is a verdict. A zero-completed fan is therefore NEVER a review pass (Tenets
+ * 12/13: a provider-unsettled round is honest-absent, never an external pass);
+ * the CLI writes the honest verdict, then hard-errors on this predicate BEFORE
+ * any cache stamp so `--override` can never mint a push authorization from it.
+ *
+ * Expressed over `lanes` as the SINGLE SOURCE OF TRUTH the artifact's
+ * `completedLaneCount` is validated against (`VerdictArtifactSchema` superRefine
+ * binds `completedLaneCount === #completed`), so `hasNoCompletedLane(v.lanes)`
+ * and `v.completedLaneCount === 0` are equal by construction. An empty fan
+ * (guarded upstream as a distinct pre-attempt error) trivially has none.
+ */
+export function hasNoCompletedLane(lanes: readonly VerdictLane[]): boolean {
+  return !lanes.some((l) => l.status === 'completed');
+}
+
 // ─── Verdict artifact ──────────────────────────────────────────────────────
 
 /**

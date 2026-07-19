@@ -1088,6 +1088,12 @@ function renderFanReport(
   verdictHash: string,
   findings: readonly AttributedFinding[],
   cacheEligible: boolean,
+  // Budget split (mmnto-ai/totem#2452): the reviewed DIFF size vs the TOTAL assembled
+  // prompt/context size, in chars. The diff is a SUBSET of the prompt (the prompt wraps
+  // the `<git_diff>` block in template/grounding), so `diffChars <= promptChars` always
+  // — reporting them separately stops the "my whole prompt is the diff" double-count.
+  diffChars: number,
+  promptChars: number,
   // Threaded from `runReviewFan`'s single core import (rule 64) — this sync helper never
   // imports core itself.
   renderCovariateLine: (typeof import('@mmnto/totem'))['renderCovariateLine'],
@@ -1095,6 +1101,9 @@ function renderFanReport(
   const lines: string[] = [];
   lines.push(
     `Review fan — ${verdict.completedLaneCount}/${verdict.attemptedLaneCount} lane(s) completed`,
+  );
+  lines.push(
+    `Budget: diff ${diffChars} chars, prompt ${promptChars} chars total (diff is a subset of the prompt)`,
   );
   lines.push('');
   lines.push('Lanes:');
@@ -1150,6 +1159,7 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     deriveCacheEligible,
     deriveLessonsConsulted,
     deriveSettled,
+    hasNoCompletedLane,
     maskSecrets,
     renderCovariateLine,
     TotemError,
@@ -1229,9 +1239,6 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     }
   }
 
-  const anyWithOutput = laneResults.some(
-    (lr) => lr.lane.status === 'completed' || lr.lane.status === 'abstained',
-  );
   const createdAt = now();
 
   // ── Panel + post-checks (over completed AND abstained lanes; finding 8) ──
@@ -1296,14 +1303,25 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   // the existing address).
   const verdictHash = saveVerdictArtifact(ctx.totemDirAbs, verdict).hash;
 
-  // ── ALL lanes terminal-failed (Gate G3): the honest verdict is now WRITTEN — hard-error ──
-  // (A pure boolean check — it does not widen the compare→stamp window, and an
-  // all-failed round is never cache-eligible nor override-stampable: the run ends here.)
-  if (!anyWithOutput) {
+  // ── ZERO completed verdict lanes (Gate G3, mmnto-ai/totem#2452): the honest verdict
+  // is now WRITTEN — hard-error ──
+  // Keyed on `hasNoCompletedLane` (⇔ `verdict.completedLaneCount === 0`, superRefine-bound):
+  // `completed` is the ONLY status carrying a usable structured verdict, so a fan with
+  // zero completed lanes is a non-pass whether the other lanes ABSTAINED (invoked but
+  // output unextractable — sensor-down) or FAILED (never invoked). Widened from the old
+  // all-failed-only predicate, which let an abstain-bearing fan skip this gate and exit 0
+  // (#2452). This MUST sit after the save (the artifact is on disk first) and BEFORE the
+  // override/cache-stamp block below: a zero-completed fan is never cache-eligible, so an
+  // `--override` would otherwise reach the ledgered stamp branch and falsely authorize a
+  // push on a provider-unsettled round (Tenets 12/13). A pure check — no compare→stamp
+  // window widening; the run ends here.
+  if (hasNoCompletedLane(verdict.lanes)) {
+    const abstained = laneResults.filter((lr) => lr.lane.status === 'abstained').length;
+    const failed = laneResults.filter((lr) => lr.lane.status === 'failed').length;
     throw new TotemError(
       'SHIELD_FAILED',
-      `All ${laneResults.length} review lane(s) failed to invoke — an honest verdict was written (all lanes failed, not settled), then the run hard-errors.`,
-      'Check backend API keys / quota, then re-run `totem review`.',
+      `Review produced no completed verdict lane (completed=0, abstained=${abstained}, failed=${failed} of ${laneResults.length}) — this is a non-pass, NOT a crash: an honest verdict was written (settled=false), then the run hard-errors. A provider-unsettled round never counts as a review pass and never authorizes a push (Tenets 12/13).`,
+      'Abstained lanes invoked but their output was not extractable; failed lanes did not invoke. Check backend API keys / quota and lane output, then re-run `totem review`.',
     );
   }
 
@@ -1375,6 +1393,12 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
         verdictHash,
         fanFindings,
         cacheEligible,
+        // Budget split (#2452): `diffSegment` is the masked `<git_diff>` block the lanes
+        // reviewed; `deliveredPrompt` is the full masked prompt that wraps it. Both are
+        // the exact bytes assembled above (lines ~1190-1192), so the report never
+        // recomputes or drifts from what was delivered.
+        diffSegment.length,
+        deliveredPrompt.length,
         renderCovariateLine,
       ),
       ctx.options.out,
