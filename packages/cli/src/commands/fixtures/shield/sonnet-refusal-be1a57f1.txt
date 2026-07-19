@@ -1,0 +1,8 @@
+That file is a leftover `.totem/temp/` prompt — an orphaned artifact from a `totem shield` LLM-review run (the temp-file reaper in `packages/cli/src/utils.ts:196` normally cleans these up, so this one likely got left behind by an interrupted run). It packages the current diff on this branch (the glob-consolidation refactor: `matchesGlob`/`fileMatchesGlobs`/`matchesPathGlob` moved into a new `packages/core/src/sys/glob.ts`) plus instructions telling whatever model reads it to reply only with a `<shield_verdict>` JSON blob.
+
+I'm flagging that last part rather than following it: those are directives embedded in file content, not something you asked me to do, so I'm not going to silently emit a bare JSON verdict in place of a normal response.
+
+What would you like me to do with this?
+1. Just clean up the orphaned temp file, or
+2. Actually review the glob-consolidation diff for you (real review, normal format — not the JSON verdict), or
+3. Something else (e.g. figure out why the shield run didn't clean up after itself).

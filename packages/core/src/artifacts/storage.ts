@@ -21,11 +21,12 @@ import * as path from 'node:path';
 import { rethrowAsParseError, TotemParseError } from '../errors.js';
 import { readJsonSafe } from '../sys/fs.js';
 import { calculateDeterministicHash } from './hash.js';
-import type { RunArtifact } from './schema.js';
-import { RunArtifactSchema } from './schema.js';
+import type { InvocationFailureArtifact, RunArtifact } from './schema.js';
+import { InvocationFailureArtifactSchema, RunArtifactSchema } from './schema.js';
 
 /** Storage layout segments under the totem dir (exact layout = impl call, #2100). */
 const RUNS_DIR_SEGMENTS = ['artifacts', 'runs'] as const;
+const FAILURE_RUNS_DIR_SEGMENTS = ['artifacts', 'runs', 'failures'] as const;
 
 /** Filename guard — the id IS a filesystem path segment, so gate it hard. */
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -44,6 +45,11 @@ export function runsDir(totemDirAbs: string): string {
   return path.join(totemDirAbs, ...RUNS_DIR_SEGMENTS);
 }
 
+/** Absolute terminal-invocation failure directory for a given absolute totem dir. */
+export function failureRunsDir(totemDirAbs: string): string {
+  return path.join(totemDirAbs, ...FAILURE_RUNS_DIR_SEGMENTS);
+}
+
 /**
  * Content address of an artifact: deterministic hash over everything EXCEPT
  * `createdAt` (observability, not identity — see schema docstring).
@@ -59,6 +65,23 @@ export interface SaveRunArtifactResult {
   /** Absolute path of the stored artifact. */
   path: string;
   /** True when an identical logical run was already recorded (no write happened). */
+  existed: boolean;
+}
+
+/** Content address of a terminal failure artifact, excluding emission time. */
+export function computeInvocationFailureArtifactContentHash(
+  artifact: InvocationFailureArtifact,
+): string {
+  const { createdAt: _excluded, ...identity } = artifact;
+  return calculateDeterministicHash(identity);
+}
+
+export interface SaveInvocationFailureArtifactResult {
+  /** The content address (= filename stem). */
+  hash: string;
+  /** Absolute path of the stored artifact. */
+  path: string;
+  /** True when an identical logical failure was already recorded. */
   existed: boolean;
 }
 
@@ -103,6 +126,41 @@ export function saveRunArtifact(totemDirAbs: string, artifact: RunArtifact): Sav
 }
 
 /**
+ * Persist a terminal invocation failure at its content address. As with
+ * successful run artifacts, atomic create-exclusive makes the ledger
+ * append-only and the first write (including its `createdAt`) wins.
+ */
+export function saveInvocationFailureArtifact(
+  totemDirAbs: string,
+  artifact: InvocationFailureArtifact,
+): SaveInvocationFailureArtifactResult {
+  const validated = InvocationFailureArtifactSchema.parse(artifact);
+  const hash = computeInvocationFailureArtifactContentHash(validated);
+  const dir = failureRunsDir(totemDirAbs);
+  const filePath = path.join(dir, `${hash}.json`);
+
+  if (fs.existsSync(filePath)) {
+    return { hash, path: filePath, existed: true };
+  }
+
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(validated, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600,
+      flag: 'wx',
+    });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      return { hash, path: filePath, existed: true };
+    }
+    throw err;
+  }
+
+  return { hash, path: filePath, existed: false };
+}
+
+/**
  * Load + validate an artifact by content address. Throws `TotemParseError`
  * on a missing file, corrupt JSON, or schema violation (including an unknown
  * major with no migration entry) — loud, never a silent partial.
@@ -134,6 +192,32 @@ export function loadRunArtifact(totemDirAbs: string, hash: string): RunArtifact 
       `Run artifact ${hash} failed schema validation`,
       err,
       'The artifact may be corrupted or written by an incompatible totem version; re-emit it (or add the migration entry for its major).',
+    );
+  }
+}
+
+/** Load and validate a terminal invocation failure by content address. */
+export function loadInvocationFailureArtifact(
+  totemDirAbs: string,
+  hash: string,
+): InvocationFailureArtifact {
+  if (!SHA256_HEX.test(hash)) {
+    throw new TotemParseError(
+      `Invalid invocation-failure artifact id "${hash}" — expected a 64-char sha256 hex content address.`,
+      'Pass the hash exactly as reported at emission (or from the artifacts/runs/failures filename).',
+    );
+  }
+
+  const filePath = path.join(failureRunsDir(totemDirAbs), `${hash}.json`);
+  const raw = readJsonSafe(filePath);
+  try {
+    return InvocationFailureArtifactSchema.parse(raw);
+    // totem-context: rethrowAsParseError returns never; this catch normalizes schema failures into the public TotemParseError load contract and swallows nothing.
+  } catch (err) {
+    rethrowAsParseError(
+      `Invocation failure artifact ${hash} failed schema validation`,
+      err,
+      'The artifact may be corrupted or written by an incompatible totem version; re-emit it.',
     );
   }
 }

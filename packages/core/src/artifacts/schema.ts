@@ -26,12 +26,43 @@ import { z } from 'zod';
 
 /**
  * The schemaVersion WRITTEN by this code. Readers accept any 1.x (F1).
- * 1.1.0 (mmnto-ai/totem#2101): `grounding` gained the optional per-item
+ * 1.2.0 (mmnto-ai/totem#2452): `output` gained optional execution-attempt
+ * evidence for fallback/configured-shell provenance. 1.1.0
+ * (mmnto-ai/totem#2101): `grounding` gained the optional per-item
  * `bundle`, and `grounding.hash` semantics changed from hash-of-raw-context
  * to hash-of-bundle — the minor is the observable marker for that meaning
  * change; the registry stays empty because the tolerant reader parses both.
  */
-export const RUN_ARTIFACT_SCHEMA_VERSION = '1.1.0';
+export const RUN_ARTIFACT_SCHEMA_VERSION = '1.2.0';
+
+/**
+ * Schema version for the distinct terminal-invocation failure ledger. The
+ * exact 1.0.0 literal is deliberate fail-closed behavior: before accepting a
+ * future version, add an explicit versioned union and migration path rather
+ * than widening this schema in place.
+ */
+export const INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION = '1.0.0';
+
+/** Persisted evidence bounds (mmnto-ai/totem#2452 slice B). */
+export const MAX_INVOKE_ATTEMPTS = 8;
+export const INVOKE_STREAM_EVIDENCE_LIMIT_BYTES = 64 * 1024;
+export const INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES = 4 * 1024;
+
+/** Stable machine-readable failure taxonomy shared by CLI producers and artifact readers. */
+export const INVOKE_FAILURE_KINDS = [
+  'auth',
+  'quota',
+  'model',
+  'process-spawn',
+  'process-exit',
+  'timeout',
+  'unknown',
+] as const;
+
+/** Persisted provider codes are bounded identifiers, never arbitrary provider prose. */
+export const SAFE_PROVIDER_CODE_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
+
+export const InvokeFailureKindSchema = z.enum(INVOKE_FAILURE_KINDS);
 
 /** The major this reader understands; other majors need a migration entry. */
 export const RUN_ARTIFACT_KNOWN_MAJOR = 1;
@@ -183,6 +214,207 @@ export const BackendSchema = z.object({
 });
 
 /**
+ * A byte-bounded, post-DLP text fragment safe to persist. `head` and optional
+ * `tail` preserve both structured envelopes and terminal diagnostics without
+ * retaining an unbounded provider response.
+ */
+export const BoundedTextEvidenceSchema = z
+  .object({
+    encoding: z.literal('utf-8'),
+    head: z.string(),
+    tail: z.string().optional(),
+    observedBytes: z.number().int().nonnegative(),
+    retainedBytes: z.number().int().nonnegative(),
+    limitBytes: z.number().int().positive().max(INVOKE_STREAM_EVIDENCE_LIMIT_BYTES),
+    truncated: z.boolean(),
+    dlp: z.enum(['masked', 'omitted-on-mask-failure']),
+  })
+  .superRefine((value, ctx) => {
+    const textBytes =
+      Buffer.byteLength(value.head, 'utf-8') + Buffer.byteLength(value.tail ?? '', 'utf-8');
+    if (value.retainedBytes !== textBytes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['retainedBytes'],
+        message: 'retainedBytes must equal the UTF-8 byte length of head + tail',
+      });
+    }
+    if (value.retainedBytes > value.limitBytes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['retainedBytes'],
+        message: 'retainedBytes cannot exceed limitBytes',
+      });
+    }
+
+    if (value.dlp === 'masked') return;
+
+    if (
+      value.head !== '' ||
+      value.tail !== undefined ||
+      value.retainedBytes !== 0 ||
+      value.truncated
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'DLP mask failure must omit all text and cannot claim byte truncation',
+      });
+    }
+  });
+
+/** Process-level facts captured by configured-shell and CLI-fallback routes. */
+export const InvokeProcessEvidenceSchema = z
+  .object({
+    exitCode: z.number().int().nullable(),
+    signal: z.string().min(1).nullable(),
+    timedOut: z.boolean(),
+    timeoutMs: z.number().int().positive().optional(),
+    stdout: BoundedTextEvidenceSchema.optional(),
+    stderr: BoundedTextEvidenceSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.timedOut !== (value.timeoutMs !== undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['timeoutMs'],
+        message: 'timeoutMs must be present if and only if timedOut is true',
+      });
+    }
+  });
+
+/** One ordered invocation leg, retained after DLP and byte bounding. */
+export const InvokeAttemptEvidenceSchema = z
+  .object({
+    sequence: z.number().int().positive().max(MAX_INVOKE_ATTEMPTS),
+    route: z.enum(['sdk', 'cli-fallback', 'configured-shell', 'quota-model-fallback']),
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    status: z.enum(['succeeded', 'failed']),
+    durationMs: z.number().nonnegative(),
+    failureKind: InvokeFailureKindSchema.optional(),
+    providerStatus: z.number().int().optional(),
+    providerCode: z
+      .string()
+      .regex(SAFE_PROVIDER_CODE_RE, 'providerCode must be a bounded machine token')
+      .optional(),
+    process: InvokeProcessEvidenceSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === 'failed' && value.failureKind === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['failureKind'],
+        message: 'failed attempts must record a failureKind',
+      });
+    }
+    if (value.status === 'succeeded' && value.failureKind !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['failureKind'],
+        message: 'succeeded attempts cannot record a failureKind',
+      });
+    }
+
+    if (
+      value.status === 'succeeded' &&
+      value.process !== undefined &&
+      (value.process.timedOut ||
+        value.process.signal !== null ||
+        (value.process.exitCode !== null && value.process.exitCode !== 0))
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['process'],
+        message: 'succeeded attempts cannot be timed out, signaled, or have a nonzero exitCode',
+      });
+    }
+
+    if (value.failureKind === 'timeout' && value.process?.timedOut !== true) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['process'],
+        message: 'timeout failures must carry process evidence with timedOut=true',
+      });
+    }
+    if (value.failureKind !== 'timeout' && value.process?.timedOut === true) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['process', 'timedOut'],
+        message: 'only timeout failures may claim timedOut=true',
+      });
+    }
+
+    if (value.failureKind === 'process-exit') {
+      const processExitedAbnormally =
+        value.process !== undefined &&
+        ((value.process.exitCode !== null && value.process.exitCode !== 0) ||
+          value.process.signal !== null);
+      if (!processExitedAbnormally) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['process'],
+          message: 'process-exit failures must record a nonzero exitCode or signal',
+        });
+      }
+    }
+
+    if (
+      value.failureKind === 'process-spawn' &&
+      value.process !== undefined &&
+      (value.process.exitCode !== null || value.process.signal !== null || value.process.timedOut)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['process'],
+        message: 'process-spawn evidence cannot claim an exitCode, signal, or timeout',
+      });
+    }
+
+    if (value.route === 'sdk' && value.process !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['process'],
+        message: 'sdk attempts cannot carry shell process evidence',
+      });
+    }
+    if (value.route === 'configured-shell' && value.process === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['process'],
+        message: 'configured-shell attempts must carry process evidence',
+      });
+    }
+  });
+
+const InvokeAttemptsSchema = z
+  .array(InvokeAttemptEvidenceSchema)
+  .min(1)
+  .max(MAX_INVOKE_ATTEMPTS)
+  .superRefine((attempts, ctx) => {
+    attempts.forEach((attempt, index) => {
+      if (attempt.sequence !== index + 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index, 'sequence'],
+          message: 'attempt sequences must be contiguous and ordered from 1',
+        });
+      }
+    });
+  });
+
+export const RunExecutionEvidenceSchema = z
+  .object({ attempts: InvokeAttemptsSchema })
+  .superRefine((value, ctx) => {
+    if (value.attempts.at(-1)?.status !== 'succeeded') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['attempts'],
+        message: 'successful run execution evidence must end in a succeeded attempt',
+      });
+    }
+  });
+
+/**
  * Caller-declared output contract (mmnto-ai/totem#2102): the citations-or-
  * `VERIFY:` declaration. Callers write; #2103 post-checks read; providers
  * transport, never enforce (Totem is not zero-user — backend cooperation is
@@ -251,6 +483,44 @@ export const RunMetricsSchema = z.object({
   finishReason: z.string().optional(),
 });
 
+/**
+ * Terminal invocation evidence is deliberately NOT a RunArtifact: it has no
+ * successful semantic output and lives under `artifacts/runs/failures/`.
+ */
+export const InvocationFailureArtifactSchema = z
+  .object({
+    schemaVersion: z.literal(INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION),
+    inputBundle: InputBundleSchema,
+    inputHash: z.string().regex(SHA256_HEX, 'inputHash must be a sha256 hex digest'),
+    grounding: GroundingSchema,
+    requestedBackend: BackendSchema,
+    attempts: InvokeAttemptsSchema,
+    terminal: z.object({
+      kind: InvokeFailureKindSchema,
+      attempt: z.number().int().positive().max(MAX_INVOKE_ATTEMPTS),
+      message: BoundedTextEvidenceSchema.refine(
+        (value) => value.limitBytes <= INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+        `terminal message evidence cannot exceed ${INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES} bytes`,
+      ),
+    }),
+    admission: RunAdmissionSchema.optional(),
+    createdAt: z.string().datetime(),
+  })
+  .superRefine((artifact, ctx) => {
+    const last = artifact.attempts.at(-1);
+    if (
+      last?.sequence !== artifact.terminal.attempt ||
+      last.status !== 'failed' ||
+      last.failureKind !== artifact.terminal.kind
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['terminal'],
+        message: 'terminal must reference the final failed attempt and its failureKind',
+      });
+    }
+  });
+
 export const RunArtifactSchema = z.object({
   schemaVersion: schemaVersionField,
   inputBundle: InputBundleSchema,
@@ -261,6 +531,8 @@ export const RunArtifactSchema = z.object({
   output: z.object({
     content: z.string(),
     metrics: RunMetricsSchema,
+    /** Additive 1.2 execution provenance; absent on ordinary one-shot SDK success. */
+    execution: RunExecutionEvidenceSchema.optional(),
   }),
   /** Admitted contract group (mmnto-ai/totem#2102) — additive 1.x optional; slice-1/2 artifacts predate it. */
   admission: RunAdmissionSchema.optional(),
@@ -272,6 +544,12 @@ export const RunArtifactSchema = z.object({
 });
 
 export type RunArtifact = z.infer<typeof RunArtifactSchema>;
+export type InvokeFailureKind = z.infer<typeof InvokeFailureKindSchema>;
+export type BoundedTextEvidence = z.infer<typeof BoundedTextEvidenceSchema>;
+export type InvokeProcessEvidence = z.infer<typeof InvokeProcessEvidenceSchema>;
+export type InvokeAttemptEvidence = z.infer<typeof InvokeAttemptEvidenceSchema>;
+export type RunExecutionEvidence = z.infer<typeof RunExecutionEvidenceSchema>;
+export type InvocationFailureArtifact = z.infer<typeof InvocationFailureArtifactSchema>;
 export type InputBundle = z.infer<typeof InputBundleSchema>;
 export type GroundingItem = z.infer<typeof GroundingItemSchema>;
 export type GroundingBundle = z.infer<typeof GroundingBundleSchema>;

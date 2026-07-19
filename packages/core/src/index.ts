@@ -586,21 +586,37 @@ export { buildGroundingBundle, summarizeProvenance } from './artifacts/grounding
 export { calculateDeterministicHash } from './artifacts/hash.js';
 export type {
   BackendAdmissionClass,
+  BoundedTextEvidence,
   ContextPolicy,
   GroundingBundle,
   GroundingItem,
   InputBundle,
+  InvocationFailureArtifact,
+  InvokeAttemptEvidence,
+  InvokeFailureKind,
+  InvokeProcessEvidence,
   OutputContract,
   RunArtifact,
+  RunExecutionEvidence,
   RunMetadata,
 } from './artifacts/schema.js';
 export {
   ADMISSION_CLASSES,
   ADMISSION_COMPLETION_ONLY,
   ADMISSION_SELF_GROUNDING_AGENT,
+  BoundedTextEvidenceSchema,
   ContextPolicySchema,
   GroundingBundleSchema,
   GroundingItemSchema,
+  INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION,
+  InvocationFailureArtifactSchema,
+  INVOKE_FAILURE_KINDS,
+  INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+  INVOKE_STREAM_EVIDENCE_LIMIT_BYTES,
+  InvokeAttemptEvidenceSchema,
+  InvokeFailureKindSchema,
+  InvokeProcessEvidenceSchema,
+  MAX_INVOKE_ATTEMPTS,
   OutputContractSchema,
   PROVENANCE_CLASSES,
   PROVENANCE_COMPILED_RULE,
@@ -610,7 +626,9 @@ export {
   PROVENANCE_UNGROUNDED,
   RUN_ARTIFACT_SCHEMA_VERSION,
   RunArtifactSchema,
+  RunExecutionEvidenceSchema,
   RunMetadataSchema,
+  SAFE_PROVIDER_CODE_RE,
 } from './artifacts/schema.js';
 // Deterministic structural post-checks (mmnto-ai/totem#2103 slice 4)
 export type {
@@ -636,11 +654,18 @@ export {
   specVerifyRule,
   structuredOutputRule,
 } from './artifacts/post-checks-rules.js';
-export type { SaveRunArtifactResult } from './artifacts/storage.js';
+export type {
+  SaveInvocationFailureArtifactResult,
+  SaveRunArtifactResult,
+} from './artifacts/storage.js';
 export {
+  computeInvocationFailureArtifactContentHash,
   computeRunArtifactContentHash,
+  failureRunsDir,
+  loadInvocationFailureArtifact,
   loadRunArtifact,
   runsDir,
+  saveInvocationFailureArtifact,
   saveRunArtifact,
 } from './artifacts/storage.js';
 // Panel synthesis — independent lanes, script aggregation (mmnto-ai/totem#2104 slice 5)

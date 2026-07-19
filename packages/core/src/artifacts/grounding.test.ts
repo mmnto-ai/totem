@@ -199,7 +199,7 @@ describe('grounding schemas', () => {
     expect(parsed.grounding.hash).toBe(calculateDeterministicHash(parsed.grounding.bundle));
   });
 
-  it('the written schema version is a 1.x minor bump marking the bundle semantics (Q3)', () => {
-    expect(RUN_ARTIFACT_SCHEMA_VERSION).toBe('1.1.0');
+  it('the 1.2.0 writer preserves the 1.1 bundle-semantics minor marker (Q3)', () => {
+    expect(RUN_ARTIFACT_SCHEMA_VERSION).toBe('1.2.0');
   });
 });

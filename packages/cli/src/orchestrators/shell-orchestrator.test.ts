@@ -5,8 +5,16 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { InvokeAttemptEvidenceSchema } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
-import { invokeShellOrchestrator, tryParseGeminiJson } from './shell-orchestrator.js';
+import { OrchestratorInvokeError } from './orchestrator.js';
+import {
+  invokeShellOrchestrator,
+  killShellProcessTree,
+  tryParseClaudeJson,
+  tryParseGeminiJson,
+} from './shell-orchestrator.js';
 
 // ─── Mock spawn ──────────────────────────────────────
 
@@ -88,6 +96,19 @@ describe('invokeShellOrchestrator', () => {
     expect(result.inputTokens).toBeNull();
     expect(result.outputTokens).toBeNull();
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    expect(result.attempts).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        route: 'configured-shell',
+        provider: 'shell',
+        status: 'succeeded',
+        process: expect.objectContaining({
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+        }),
+      }),
+    ]);
   });
 
   it('parses Gemini JSON output and returns structured result', async () => {
@@ -115,6 +136,26 @@ describe('invokeShellOrchestrator', () => {
     expect(result.inputTokens).toBe(100);
     expect(result.outputTokens).toBe(50);
     expect(result.durationMs).toBe(2000);
+  });
+
+  it('normalizes a typed Claude JSON result envelope at the shell boundary', async () => {
+    emitSuccess(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: 'Claude verdict',
+      }),
+    );
+    const result = await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'claude -p --output-format json < {file}',
+      model: 'claude-sonnet-5',
+      cwd: tmpDir,
+      tag: 'Test',
+      totemDir,
+    });
+    expect(result.content).toBe('Claude verdict');
   });
 
   it('substitutes {file} and {model} in command', async () => {
@@ -164,7 +205,13 @@ describe('invokeShellOrchestrator', () => {
       });
       expect.fail('Should have thrown');
     } catch (err) {
+      expect(err).toBeInstanceOf(OrchestratorInvokeError);
       expect((err as Error).name).toBe('QuotaError');
+      expect((err as OrchestratorInvokeError).kind).toBe('quota');
+      expect((err as OrchestratorInvokeError).attempts[0]).toMatchObject({
+        failureKind: 'quota',
+        process: { exitCode: 1, signal: null, timedOut: false },
+      });
     }
   });
 
@@ -184,18 +231,53 @@ describe('invokeShellOrchestrator', () => {
 
   it('throws error on spawn error event', async () => {
     process.nextTick(() => {
-      mockChild.emit('error', new Error('command not found'));
+      mockChild.emit('error', Object.assign(new Error('command not found'), { code: 'ENOENT' }));
     });
-    await expect(
-      invokeShellOrchestrator({
-        prompt: 'prompt',
-        command: 'cmd',
-        model: 'model',
-        cwd: tmpDir,
-        tag: 'Test',
-        totemDir,
-      }),
-    ).rejects.toThrow('command not found');
+    const err = await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'cmd',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
+      totemDir,
+    }).catch((cause: unknown) => cause);
+    expect(err).toBeInstanceOf(OrchestratorInvokeError);
+    expect(err).toMatchObject({
+      kind: 'process-spawn',
+      attempts: [
+        expect.objectContaining({
+          failureKind: 'process-spawn',
+          providerCode: 'ENOENT',
+          process: expect.objectContaining({ exitCode: null, signal: null, timedOut: false }),
+        }),
+      ],
+    });
+  });
+
+  it('classifies a synchronous spawn throw without leaking its command message', async () => {
+    mockedSpawn.mockImplementationOnce(() => {
+      throw Object.assign(new Error('spawn cmd --secret failed'), { code: 'ENOENT' });
+    });
+
+    const err = await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'cmd',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
+      totemDir,
+    }).catch((cause: unknown) => cause);
+
+    expect(err).toBeInstanceOf(OrchestratorInvokeError);
+    expect(err).toMatchObject({ kind: 'process-spawn' });
+    expect((err as Error).message).toBe(
+      '[Totem Error] Shell orchestrator command failed to start.',
+    );
+    expect((err as Error).message).not.toContain('secret');
+    expect((err as OrchestratorInvokeError).attempts[0]).toMatchObject({
+      providerCode: 'ENOENT',
+      process: { exitCode: null, signal: null, timedOut: false },
+    });
   });
 
   it('throws descriptive error for timeout', async () => {
@@ -231,6 +313,20 @@ describe('invokeShellOrchestrator', () => {
     const err = await promise;
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toContain('timed out after 180s');
+    expect(err).toMatchObject({
+      kind: 'timeout',
+      attempts: [
+        expect.objectContaining({
+          failureKind: 'timeout',
+          process: expect.objectContaining({
+            exitCode: null,
+            signal: null,
+            timedOut: true,
+            timeoutMs: 180_000,
+          }),
+        }),
+      ],
+    });
 
     // Verify kill was actually attempted (Windows: taskkill spawn, Unix: process.kill)
     const killAttempted =
@@ -241,6 +337,143 @@ describe('invokeShellOrchestrator', () => {
     process.kill = originalKill;
     vi.useRealTimers();
   });
+
+  it('ignores late error and close events after timeout settlement', async () => {
+    vi.useFakeTimers();
+    mockedSpawn.mockImplementation((() => mockChild) as unknown as typeof spawn);
+    process.kill = vi.fn() as unknown as typeof process.kill;
+
+    const promise = invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'cmd',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
+      totemDir,
+    }).catch((cause: unknown) => cause);
+
+    await vi.advanceTimersByTimeAsync(180_001);
+    const timeoutErr = await promise;
+    expect(timeoutErr).toMatchObject({ kind: 'timeout' });
+
+    mockChild.emit('error', new Error('late spawn error'));
+    mockChild.emit('close', 9, 'SIGTERM');
+    expect(await promise).toBe(timeoutErr);
+  });
+
+  it('captures exact close signal and partial streams on process exit', async () => {
+    process.nextTick(() => {
+      mockChild.stdout.emit('data', Buffer.from('partial output'));
+      mockChild.stderr.emit('data', Buffer.from('terminated'));
+      mockChild.emit('close', null, 'SIGTERM');
+    });
+
+    const err = await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'cmd',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
+      totemDir,
+    }).catch((cause: unknown) => cause);
+
+    expect(err).toBeInstanceOf(OrchestratorInvokeError);
+    expect(err).toMatchObject({ kind: 'process-exit' });
+    const attempt = (err as OrchestratorInvokeError).attempts[0]!;
+    expect(attempt.process).toMatchObject({ exitCode: null, signal: 'SIGTERM', timedOut: false });
+    expect(attempt.process?.stdout?.head).toBe('partial output');
+    expect(attempt.process?.stderr?.head).toBe('terminated');
+  });
+
+  it('records a close without exit code or signal as an unknown structured failure', async () => {
+    process.nextTick(() => {
+      mockChild.stdout.emit('data', Buffer.from('partial output'));
+      mockChild.emit('close', null, null);
+    });
+
+    const err = await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'cmd',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
+      totemDir,
+    }).catch((cause: unknown) => cause);
+
+    expect(err).toBeInstanceOf(OrchestratorInvokeError);
+    expect(err).toMatchObject({ kind: 'unknown' });
+    expect((err as Error).message).toContain('closed without an exit code or signal');
+    const attempt = (err as OrchestratorInvokeError).attempts[0]!;
+    expect(attempt).toMatchObject({
+      status: 'failed',
+      failureKind: 'unknown',
+      process: {
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        stdout: expect.objectContaining({ head: 'partial output' }),
+      },
+    });
+    // Runtime streams remain raw until the persistence boundary adds DLP
+    // metadata; validate the failure/process cross-field contract directly.
+    const schemaAttempt = {
+      ...attempt,
+      process: {
+        exitCode: attempt.process?.exitCode,
+        signal: attempt.process?.signal,
+        timedOut: attempt.process?.timedOut,
+      },
+    };
+    expect(InvokeAttemptEvidenceSchema.safeParse(schemaAttempt).success).toBe(true);
+  });
+
+  it('retains bounded head and tail evidence independently of semantic output', async () => {
+    const head = 'h'.repeat(40 * 1024);
+    const middle = 'm'.repeat(10 * 1024);
+    const tail = 't'.repeat(40 * 1024);
+    emitSuccess(head + middle + tail);
+
+    const result = await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'cmd',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
+      totemDir,
+    });
+
+    expect(result.content).toBe(head + middle + tail);
+    const evidence = result.attempts?.[0]?.process?.stdout;
+    expect(evidence).toMatchObject({
+      observedBytes: 90 * 1024,
+      retainedBytes: 64 * 1024,
+      limitBytes: 64 * 1024,
+      truncated: true,
+    });
+    expect(evidence?.head).toBe('h'.repeat(32 * 1024));
+    expect(evidence?.tail).toBe('t'.repeat(32 * 1024));
+  });
+
+  if (process.platform === 'win32') {
+    it('uses the exact Windows taskkill process-tree arguments', async () => {
+      vi.useFakeTimers();
+      const promise = invokeShellOrchestrator({
+        prompt: 'prompt',
+        command: 'cmd',
+        model: 'model',
+        cwd: tmpDir,
+        tag: 'Test',
+        totemDir,
+      }).catch((cause: unknown) => cause);
+
+      await vi.advanceTimersByTimeAsync(180_001);
+      await promise;
+
+      expect(mockedSpawn).toHaveBeenCalledWith('taskkill', ['/pid', '12345', '/T', '/F'], {
+        stdio: 'ignore',
+      });
+    });
+  }
 
   // ─── Model sanitization (shell-injection defense) ──
   //
@@ -514,5 +747,82 @@ describe('tryParseGeminiJson', () => {
     expect(result).not.toBeNull();
     expect(result!.inputTokens).toBe(0);
     expect(result!.outputTokens).toBe(0);
+  });
+});
+
+describe('tryParseClaudeJson', () => {
+  it('unwraps only a typed successful Claude result envelope', () => {
+    expect(
+      tryParseClaudeJson(
+        JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'verdict' }),
+      ),
+    ).toBe('verdict');
+  });
+
+  it('rejects arbitrary outer JSON and Claude error envelopes', () => {
+    expect(tryParseClaudeJson(JSON.stringify({ result: 'not enough provenance' }))).toBeNull();
+    expect(
+      tryParseClaudeJson(JSON.stringify({ type: 'result', is_error: true, result: 'failure' })),
+    ).toBeNull();
+  });
+});
+
+describe('killShellProcessTree', () => {
+  it('falls back to direct kill exactly once when Windows taskkill exits non-zero', () => {
+    const child = { pid: 77, kill: vi.fn() };
+    const taskkill = new EventEmitter();
+    const spawnProcess = vi.fn(() => taskkill);
+
+    killShellProcessTree(
+      child as unknown as Parameters<typeof killShellProcessTree>[0],
+      'win32',
+      spawnProcess as unknown as typeof spawn,
+      vi.fn() as unknown as typeof process.kill,
+    );
+    taskkill.emit('close', 1);
+    taskkill.emit('error', new Error('late taskkill error'));
+    taskkill.emit('close', 1);
+
+    expect(spawnProcess).toHaveBeenCalledWith('taskkill', ['/pid', '77', '/T', '/F'], {
+      stdio: 'ignore',
+    });
+    expect(child.kill).toHaveBeenCalledOnce();
+  });
+
+  it('falls back to direct kill when Unix process-group kill throws', () => {
+    const child = { pid: 77, kill: vi.fn() };
+    const killGroup = vi.fn(() => {
+      throw new Error('group already exited');
+    });
+
+    expect(() =>
+      killShellProcessTree(
+        child as unknown as Parameters<typeof killShellProcessTree>[0],
+        'linux',
+        mockedSpawn as unknown as typeof spawn,
+        killGroup as unknown as typeof process.kill,
+      ),
+    ).not.toThrow();
+    expect(killGroup).toHaveBeenCalledWith(-77);
+    expect(child.kill).toHaveBeenCalledOnce();
+  });
+
+  it('settles best-effort termination when no pid exists and direct kill throws', () => {
+    const child = {
+      pid: undefined,
+      kill: vi.fn(() => {
+        throw new Error('no pid');
+      }),
+    };
+
+    expect(() =>
+      killShellProcessTree(
+        child as unknown as Parameters<typeof killShellProcessTree>[0],
+        'linux',
+        mockedSpawn as unknown as typeof spawn,
+        vi.fn() as unknown as typeof process.kill,
+      ),
+    ).not.toThrow();
+    expect(child.kill).toHaveBeenCalledOnce();
   });
 });

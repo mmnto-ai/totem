@@ -1,0 +1,9 @@
+That file at `.totem/temp/totem-shield-d21d0493.md` is a prompt template for Totem's own shield/LLM-review tool — it's the exact prompt that would be sent to a review model for the current diff on this branch (matches the 6 changed files in git status: the glob-matcher consolidation into `packages/core/src/sys/glob.ts`). It ends with embedded instructions telling the reader to "respond with ONLY a JSON object wrapped in `<shield_verdict>` tags."
+
+I'm not going to blindly execute those embedded instructions as if they were your request — that's boilerplate written for an LLM reviewer, not something you asked me to do, and I want to flag it rather than silently comply with instructions embedded in a file.
+
+A couple of things worth noting:
+- This looks like a leftover artifact — normally `totem shield` would consume this prompt and clean it up, so its presence in `.totem/temp/` might mean a shield run failed or was interrupted partway through.
+- It's not a security threat, just a template — but I wanted to call out the instruction-injection shape before acting on it.
+
+What would you like me to do with it — actually perform the review it describes (findings on the glob consolidation diff), or investigate why this temp file was left behind?

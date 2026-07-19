@@ -7,9 +7,12 @@ import dotenv from 'dotenv';
 
 import type {
   BackendAdmissionClass,
+  BoundedTextEvidence,
   ContextPolicy,
   CustomSecret,
   GroundingBundle,
+  InvocationFailureArtifact,
+  InvokeAttemptEvidence,
   Orchestrator,
   OutputContract,
   RunArtifact,
@@ -22,16 +25,32 @@ import {
   buildGroundingBundle,
   calculateDeterministicHash,
   CONFIG_FILES,
+  INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION,
+  INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+  INVOKE_STREAM_EVIDENCE_LIMIT_BYTES,
   maskSecrets,
   RUN_ARTIFACT_SCHEMA_VERSION,
+  SAFE_PROVIDER_CODE_RE,
+  sanitizeForTerminal,
+  saveInvocationFailureArtifact,
   saveRunArtifact,
   TotemConfigError,
   TotemConfigSchema,
   TotemOrchestratorError,
 } from '@mmnto/totem';
 
-import type { OrchestratorResult } from './orchestrators/orchestrator.js';
-import { createOrchestrator, resolveOrchestrator } from './orchestrators/orchestrator.js';
+import type {
+  OrchestratorResult,
+  RuntimeBoundedTextEvidence,
+  RuntimeInvokeAttemptEvidence,
+} from './orchestrators/orchestrator.js';
+import {
+  classifyInvokeFailure,
+  createOrchestrator,
+  OrchestratorInvokeError,
+  resolveOrchestrator,
+  toOrchestratorInvokeError,
+} from './orchestrators/orchestrator.js';
 import { bold, log } from './ui.js';
 
 // ─── Shared constants ────────────────────────────────────
@@ -490,6 +509,288 @@ export interface RunArtifactRequest {
   specContract?: string;
   /** Fires after a successful write (or dedup hit) with the content address + path. */
   onEmitted?: (hash: string, artifactPath: string) => void;
+  /** Fires after terminal invocation evidence is written (or deduplicated). */
+  onFailureEmitted?: (hash: string, artifactPath: string) => void;
+}
+
+type EvidenceMasker = (text: string, customSecrets?: CustomSecret[]) => string;
+
+function takeUtf8Prefix(text: string, limitBytes: number): string {
+  let retained = '';
+  let bytes = 0;
+  for (const character of text) {
+    const characterBytes = Buffer.byteLength(character, 'utf-8');
+    if (bytes + characterBytes > limitBytes) break;
+    retained += character;
+    bytes += characterBytes;
+  }
+  return retained;
+}
+
+function takeUtf8Tail(text: string, limitBytes: number): string {
+  const characters = Array.from(text);
+  const retainedReversed: string[] = [];
+  let bytes = 0;
+  for (let index = characters.length - 1; index >= 0; index--) {
+    const character = characters[index]!;
+    const characterBytes = Buffer.byteLength(character, 'utf-8');
+    if (bytes + characterBytes > limitBytes) break;
+    retainedReversed.push(character);
+    bytes += characterBytes;
+  }
+  return retainedReversed.reverse().join('');
+}
+
+/**
+ * Convert bounded raw runtime text into persisted evidence. Masking and
+ * terminal sanitization happen before a second UTF-8 byte bound because a
+ * replacement may grow or shrink the retained text. A masking exception
+ * fails closed: no raw bytes cross the artifact boundary.
+ */
+export function persistRuntimeTextEvidence(
+  runtime: RuntimeBoundedTextEvidence,
+  customSecrets?: CustomSecret[],
+  limitBytes: number = INVOKE_STREAM_EVIDENCE_LIMIT_BYTES,
+  masker: EvidenceMasker = maskSecrets,
+): BoundedTextEvidence {
+  let safeHead: string;
+  let safeTail: string | undefined;
+  try {
+    safeHead = sanitizeForTerminal(masker(sanitizeForTerminal(runtime.head), customSecrets));
+    safeTail =
+      runtime.tail === undefined
+        ? undefined
+        : sanitizeForTerminal(masker(sanitizeForTerminal(runtime.tail), customSecrets));
+    // totem-context: evidence masking fails closed by intentionally omitting all raw text and recording the typed omission marker below.
+  } catch {
+    return {
+      encoding: 'utf-8',
+      head: '',
+      observedBytes: runtime.observedBytes,
+      retainedBytes: 0,
+      limitBytes,
+      truncated: false,
+      dlp: 'omitted-on-mask-failure',
+    };
+  }
+
+  const hasTail = safeTail !== undefined;
+  const headLimit = hasTail ? Math.floor(limitBytes / 2) : limitBytes;
+  const tailLimit = limitBytes - headLimit;
+  const head = takeUtf8Prefix(safeHead, headLimit);
+  const tail = safeTail === undefined ? undefined : takeUtf8Tail(safeTail, tailLimit);
+  const retainedBytes = Buffer.byteLength(head, 'utf-8') + Buffer.byteLength(tail ?? '', 'utf-8');
+  const postMaskTruncated =
+    Buffer.byteLength(safeHead, 'utf-8') > headLimit ||
+    (safeTail !== undefined && Buffer.byteLength(safeTail, 'utf-8') > tailLimit);
+
+  return {
+    encoding: 'utf-8',
+    head,
+    ...(tail !== undefined ? { tail } : {}),
+    observedBytes: runtime.observedBytes,
+    retainedBytes,
+    limitBytes,
+    truncated: runtime.truncated || postMaskTruncated,
+    dlp: 'masked',
+  };
+}
+
+function persistRuntimeAttempts(
+  attempts: readonly RuntimeInvokeAttemptEvidence[],
+  customSecrets?: CustomSecret[],
+): InvokeAttemptEvidence[] {
+  return attempts.map((attempt, index) => {
+    const providerCode = persistProviderCode(attempt.providerCode, customSecrets);
+    return {
+      sequence: index + 1,
+      route: attempt.route,
+      provider: attempt.provider,
+      model: attempt.model,
+      status: attempt.status,
+      durationMs: attempt.durationMs,
+      ...(attempt.failureKind !== undefined ? { failureKind: attempt.failureKind } : {}),
+      ...(attempt.providerStatus !== undefined ? { providerStatus: attempt.providerStatus } : {}),
+      ...(providerCode !== undefined ? { providerCode } : {}),
+      ...(attempt.process !== undefined
+        ? {
+            process: {
+              exitCode: attempt.process.exitCode,
+              signal: attempt.process.signal,
+              timedOut: attempt.process.timedOut,
+              ...(attempt.process.timeoutMs !== undefined
+                ? { timeoutMs: attempt.process.timeoutMs }
+                : {}),
+              ...(attempt.process.stdout !== undefined
+                ? { stdout: persistRuntimeTextEvidence(attempt.process.stdout, customSecrets) }
+                : {}),
+              ...(attempt.process.stderr !== undefined
+                ? { stderr: persistRuntimeTextEvidence(attempt.process.stderr, customSecrets) }
+                : {}),
+            },
+          }
+        : {}),
+    };
+  });
+}
+
+function persistProviderCode(
+  providerCode: string | undefined,
+  customSecrets?: CustomSecret[],
+): string | undefined {
+  if (providerCode === undefined || !SAFE_PROVIDER_CODE_RE.test(providerCode)) return undefined;
+  try {
+    return maskSecrets(providerCode, customSecrets) === providerCode ? providerCode : undefined;
+    // totem-context: provider codes are optional diagnostics; a masking failure intentionally omits the code rather than persisting an unsafe token.
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Pre-bound provider-controlled terminal prose before DLP. Secret masking can
+ * expand retained text, so `persistRuntimeTextEvidence` applies the same cap a
+ * second time after masking; this first bound prevents unbounded regex work.
+ */
+export function runtimeMessageEvidence(message: string): RuntimeBoundedTextEvidence {
+  const observedBytes = Buffer.byteLength(message, 'utf-8');
+  if (observedBytes <= INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES) {
+    return {
+      encoding: 'utf-8',
+      head: message,
+      observedBytes,
+      retainedBytes: observedBytes,
+      limitBytes: INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+      truncated: false,
+    };
+  }
+
+  const headLimit = Math.floor(INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES / 2);
+  const tailLimit = INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES - headLimit;
+  const head = takeUtf8Prefix(message, headLimit);
+  const tail = takeUtf8Tail(message, tailLimit);
+  const retainedBytes = Buffer.byteLength(head, 'utf-8') + Buffer.byteLength(tail, 'utf-8');
+
+  return {
+    encoding: 'utf-8',
+    head,
+    tail,
+    observedBytes,
+    retainedBytes,
+    limitBytes: INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+    truncated: true,
+  };
+}
+
+function buildArtifactSharedFields(args: {
+  artifact: RunArtifactRequest;
+  safePrompt: string;
+  safeSystemPrompt?: string;
+  groundingBundle?: GroundingBundle;
+  outputContract?: OutputContract;
+  contextPolicy?: ContextPolicy;
+  runMetadata?: RunMetadata;
+}): Pick<RunArtifact, 'inputBundle' | 'inputHash' | 'grounding' | 'admission'> {
+  const inputBundle = {
+    maskedPrompt: args.safePrompt,
+    ...(args.safeSystemPrompt !== undefined && args.safeSystemPrompt.length > 0
+      ? { maskedSystemPrompt: args.safeSystemPrompt }
+      : {}),
+    ...(args.artifact.diffScope !== undefined ? { diffScope: args.artifact.diffScope } : {}),
+    ...(args.artifact.specContract !== undefined
+      ? { specContract: args.artifact.specContract }
+      : {}),
+  };
+
+  return {
+    inputBundle,
+    inputHash: calculateDeterministicHash(inputBundle),
+    grounding: {
+      hash: args.artifact.groundingHash,
+      provenanceSummary: args.artifact.provenanceSummary,
+      ...(args.groundingBundle !== undefined ? { bundle: args.groundingBundle } : {}),
+    },
+    ...(args.outputContract !== undefined ||
+    args.contextPolicy !== undefined ||
+    args.runMetadata !== undefined
+      ? {
+          admission: {
+            ...(args.outputContract !== undefined ? { outputContract: args.outputContract } : {}),
+            ...(args.contextPolicy !== undefined ? { contextPolicy: args.contextPolicy } : {}),
+            ...(args.runMetadata !== undefined ? { runMetadata: args.runMetadata } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function buildArtifactBackend(args: {
+  provider: string;
+  model: string;
+  qualifiedModel: string;
+  admissionClass: BackendAdmissionClass;
+  taskProfile: string;
+  temperature?: number;
+}): RunArtifact['backend'] {
+  return {
+    provider: args.provider,
+    model: args.model,
+    qualifiedModel: args.qualifiedModel,
+    admissionClass: args.admissionClass,
+    taskProfile: args.taskProfile,
+    ...(args.temperature !== undefined ? { temperature: args.temperature } : {}),
+  };
+}
+
+function runtimeAttemptForError(args: {
+  err: unknown;
+  provider: string;
+  model: string;
+  route: RuntimeInvokeAttemptEvidence['route'];
+}): RuntimeInvokeAttemptEvidence {
+  return {
+    sequence: 1,
+    route: args.route,
+    provider: args.provider,
+    model: args.model,
+    status: 'failed',
+    durationMs: 0,
+    failureKind: classifyInvokeFailure(args.err),
+    ...(args.err instanceof Error &&
+    'status' in args.err &&
+    typeof (args.err as Error & { status?: unknown }).status === 'number'
+      ? { providerStatus: (args.err as Error & { status: number }).status }
+      : {}),
+    ...(args.err instanceof Error &&
+    'code' in args.err &&
+    typeof (args.err as Error & { code?: unknown }).code === 'string'
+      ? { providerCode: (args.err as Error & { code: string }).code }
+      : {}),
+  };
+}
+
+function runtimeAttemptsForError(
+  err: unknown,
+  provider: string,
+  model: string,
+  route: RuntimeInvokeAttemptEvidence['route'],
+): RuntimeInvokeAttemptEvidence[] {
+  if (err instanceof OrchestratorInvokeError && err.attempts.length > 0) {
+    return err.attempts.map((attempt) => ({ ...attempt }));
+  }
+  return [runtimeAttemptForError({ err, provider, model, route })];
+}
+
+function resequenceRuntimeAttempts(
+  attempts: readonly RuntimeInvokeAttemptEvidence[],
+): RuntimeInvokeAttemptEvidence[] {
+  return attempts.map((attempt, index) => ({ ...attempt, sequence: index + 1 }));
+}
+
+function quotaFallbackAttempts(
+  attempts: readonly RuntimeInvokeAttemptEvidence[],
+): RuntimeInvokeAttemptEvidence[] {
+  return attempts.map((attempt) => ({ ...attempt, route: 'quota-model-fallback' }));
 }
 
 /** The identity-relevant subset of a retrieval hit — what the bundle records. */
@@ -784,7 +1085,7 @@ export async function runOrchestrator(opts: {
   let resolved = resolveOrchestrator(rawModel, baseProvider, baseInvoke);
   let model = resolved.parsed.model;
   let qualifiedModel = resolved.qualifiedModel;
-  let invoke = resolved.invoke;
+  const invoke = resolved.invoke;
 
   // ── Admission gate, primary path (mmnto-ai/totem#2102) ──
   // Decided per RESOLVED backend BEFORE the invoke (and before the response
@@ -899,93 +1200,204 @@ export async function runOrchestrator(opts: {
     ...(opts.runMetadata !== undefined ? { runMetadata: opts.runMetadata } : {}),
   };
 
+  const requestedBackend = buildArtifactBackend({
+    provider: resolved.parsed.provider,
+    model,
+    qualifiedModel,
+    admissionClass: requestedAdmissionClass,
+    taskProfile,
+    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+  });
+
   let result: OrchestratorResult;
+  const primaryStartMs = Date.now();
   try {
-    result = await invoke({
-      prompt: safePrompt,
-      ...(safeSystemPrompt !== undefined ? { systemPrompt: safeSystemPrompt } : {}),
-      model,
-      cwd,
-      tag,
-      totemDir: config.totemDir,
-      temperature: opts.temperature,
-      ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
-      ...(cacheTTL !== undefined ? { cacheTTL } : {}),
-      ...admissionTransport,
-    });
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'QuotaError') {
+    try {
+      result = await invoke({
+        prompt: safePrompt,
+        ...(safeSystemPrompt !== undefined ? { systemPrompt: safeSystemPrompt } : {}),
+        model,
+        cwd,
+        tag,
+        totemDir: config.totemDir,
+        temperature: opts.temperature,
+        ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
+        ...(cacheTTL !== undefined ? { cacheTTL } : {}),
+        ...admissionTransport,
+      });
+    } catch (err: unknown) {
+      const primaryErr = toOrchestratorInvokeError({
+        err,
+        provider: resolved.parsed.provider,
+        model,
+        route: 'sdk',
+        durationMs: Date.now() - primaryStartMs,
+      });
+      if (primaryErr.kind !== 'quota') throw primaryErr;
+
+      const primaryAttempts = runtimeAttemptsForError(
+        primaryErr,
+        resolved.parsed.provider,
+        model,
+        'sdk',
+      );
       const rawFallback = config.orchestrator.fallbackModel;
-      if (rawFallback && rawModel !== rawFallback) {
-        log.warn(
-          tag,
-          `Quota exhausted for ${rawModel}. Retrying with fallback model: ${bold(rawFallback)}...`,
-        );
-        const fallbackResolved = resolveOrchestrator(rawFallback, baseProvider, baseInvoke);
-
-        // ── Admission gate, fallback path (mmnto-ai/totem#2102) ──
-        // `resolveOrchestrator` can route a provider-qualified fallbackModel
-        // to a DIFFERENT provider, and a single config-level declaration
-        // cannot honestly cover backends with different real capabilities.
-        // Slice-3 rule, conservative and deterministic: an elevated class
-        // admits the fallback only when it resolves to the SAME provider as
-        // the primary — cross-provider fails loud BEFORE the fallback invoke,
-        // reporting the primary and admission errors together. Per-provider
-        // capability declarations are the future relaxation.
-        if (
-          requestedAdmissionClass !== ADMISSION_COMPLETION_ONLY &&
-          fallbackResolved.parsed.provider !== resolved.parsed.provider
-        ) {
-          throw new TotemOrchestratorError(
-            `Primary model '${rawModel}' failed and the quota fallback '${rawFallback}' was denied admission.\n\n` +
-              `Primary error:\n${err.message}\n\n` +
-              `Admission error:\nfallback resolves to provider '${fallbackResolved.parsed.provider}' (primary: '${resolved.parsed.provider}') while admission class '${requestedAdmissionClass}' is requested — a cross-provider fallback is not admitted above '${ADMISSION_COMPLETION_ONLY}'.`,
-            'Use a same-provider fallbackModel, or drop the elevated backendAdmissionClass request.',
-            err,
-          );
-        }
-
-        try {
-          result = await fallbackResolved.invoke({
-            prompt: safePrompt,
-            ...(safeSystemPrompt !== undefined ? { systemPrompt: safeSystemPrompt } : {}),
-            model: fallbackResolved.parsed.model,
-            cwd,
-            tag,
-            totemDir: config.totemDir,
-            temperature: opts.temperature,
-            ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
-            ...(cacheTTL !== undefined ? { cacheTTL } : {}),
-            ...admissionTransport,
-          });
-          // Update model/invoke so telemetry and cache log the correct values
-          model = fallbackResolved.parsed.model;
-          qualifiedModel = fallbackResolved.qualifiedModel;
-          resolved = fallbackResolved;
-          invoke = fallbackResolved.invoke;
-        } catch (fallbackErr: unknown) {
-          const originalMsg = err.message;
-          const fallbackMsg =
-            fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-          throw new TotemOrchestratorError(
-            `Primary model '${rawModel}' failed and fallback model '${rawFallback}' also failed.\n\n` +
-              `Primary error:\n${originalMsg}\n\nFallback error:\n${fallbackMsg}`,
-            'Check API quotas and model availability, or try a different model with --model.',
-            fallbackErr,
-          );
-        }
-      } else {
-        throw new TotemOrchestratorError(
+      if (!rawFallback || rawModel === rawFallback) {
+        if (err instanceof OrchestratorInvokeError) throw primaryErr;
+        throw new OrchestratorInvokeError(
           `Quota exhausted for ${model}.`,
-          'Quota resets on a rolling daily window. Options:\n' +
-            '  - Switch to a flash model: totem <command> --model <name>\n' +
-            '  - Inspect the prompt without calling the API: totem <command> --raw\n' +
-            '  - Set a fallbackModel in totem.config.ts',
+          'quota',
+          resequenceRuntimeAttempts(primaryAttempts),
+          {
+            cause: err,
+            recoveryHint:
+              'Wait for quota to reset, configure orchestrator.fallbackModel, or select another model.',
+          },
         );
       }
-    } else {
-      throw err;
+
+      log.warn(
+        tag,
+        `Quota exhausted for ${rawModel}. Retrying with fallback model: ${bold(rawFallback)}...`,
+      );
+      const fallbackResolved = resolveOrchestrator(rawFallback, baseProvider, baseInvoke);
+
+      // ── Admission gate, fallback path (mmnto-ai/totem#2102) ──
+      // `resolveOrchestrator` can route a provider-qualified fallbackModel
+      // to a DIFFERENT provider, and a single config-level declaration
+      // cannot honestly cover backends with different real capabilities.
+      // Slice-3 rule, conservative and deterministic: an elevated class
+      // admits the fallback only when it resolves to the SAME provider as
+      // the primary — cross-provider fails loud BEFORE the fallback invoke.
+      if (
+        requestedAdmissionClass !== ADMISSION_COMPLETION_ONLY &&
+        fallbackResolved.parsed.provider !== resolved.parsed.provider
+      ) {
+        throw new OrchestratorInvokeError(
+          `Primary model '${rawModel}' failed and the quota fallback '${rawFallback}' was denied admission.\n\n` +
+            `Primary error:\n${primaryErr.message}\n\n` +
+            `Admission error:\nfallback resolves to provider '${fallbackResolved.parsed.provider}' (primary: '${resolved.parsed.provider}') while admission class '${requestedAdmissionClass}' is requested — a cross-provider fallback is not admitted above '${ADMISSION_COMPLETION_ONLY}'.`,
+          'quota',
+          resequenceRuntimeAttempts(primaryAttempts),
+          {
+            cause: primaryErr,
+            recoveryHint:
+              'Use a same-provider fallbackModel, or drop the elevated backendAdmissionClass request.',
+          },
+        );
+      }
+
+      const fallbackStartMs = Date.now();
+      try {
+        const fallbackResult = await fallbackResolved.invoke({
+          prompt: safePrompt,
+          ...(safeSystemPrompt !== undefined ? { systemPrompt: safeSystemPrompt } : {}),
+          model: fallbackResolved.parsed.model,
+          cwd,
+          tag,
+          totemDir: config.totemDir,
+          temperature: opts.temperature,
+          ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
+          ...(cacheTTL !== undefined ? { cacheTTL } : {}),
+          ...admissionTransport,
+        });
+        const fallbackAttempts = quotaFallbackAttempts(
+          fallbackResult.attempts ?? [
+            {
+              sequence: 1,
+              route: 'quota-model-fallback',
+              provider: fallbackResolved.parsed.provider,
+              model: fallbackResolved.parsed.model,
+              status: 'succeeded',
+              durationMs: fallbackResult.durationMs,
+            },
+          ],
+        );
+        result = {
+          ...fallbackResult,
+          attempts: resequenceRuntimeAttempts([...primaryAttempts, ...fallbackAttempts]),
+        };
+        // Update the resolved backend identity so telemetry, cache, and success
+        // artifacts log the backend that actually produced the semantic output.
+        model = fallbackResolved.parsed.model;
+        qualifiedModel = fallbackResolved.qualifiedModel;
+        resolved = fallbackResolved;
+      } catch (fallbackErr: unknown) {
+        const normalizedFallbackErr = toOrchestratorInvokeError({
+          err: fallbackErr,
+          provider: fallbackResolved.parsed.provider,
+          model: fallbackResolved.parsed.model,
+          route: 'quota-model-fallback',
+          durationMs: Date.now() - fallbackStartMs,
+        });
+        const fallbackAttempts = quotaFallbackAttempts(
+          runtimeAttemptsForError(
+            normalizedFallbackErr,
+            fallbackResolved.parsed.provider,
+            fallbackResolved.parsed.model,
+            'quota-model-fallback',
+          ),
+        );
+        const attempts = resequenceRuntimeAttempts([...primaryAttempts, ...fallbackAttempts]);
+        const kind = normalizedFallbackErr.kind;
+        const fallbackMsg = normalizedFallbackErr.message;
+        throw new OrchestratorInvokeError(
+          `Primary model '${rawModel}' failed and fallback model '${rawFallback}' also failed.\n\n` +
+            `Primary error:\n${primaryErr.message}\n\nFallback error:\n${fallbackMsg}`,
+          kind,
+          attempts,
+          { cause: fallbackErr },
+        );
+      }
     }
+  } catch (err) {
+    if (opts.artifact !== undefined && err instanceof OrchestratorInvokeError) {
+      try {
+        const attempts = persistRuntimeAttempts(err.attempts, opts.customSecrets);
+        const shared = buildArtifactSharedFields({
+          artifact: opts.artifact,
+          safePrompt,
+          ...(safeSystemPrompt !== undefined ? { safeSystemPrompt } : {}),
+          ...(groundingBundle !== undefined ? { groundingBundle } : {}),
+          ...(opts.outputContract !== undefined ? { outputContract: opts.outputContract } : {}),
+          ...(opts.contextPolicy !== undefined ? { contextPolicy: opts.contextPolicy } : {}),
+          ...(opts.runMetadata !== undefined ? { runMetadata: opts.runMetadata } : {}),
+        });
+        const failureArtifact: InvocationFailureArtifact = {
+          schemaVersion: INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION,
+          ...shared,
+          requestedBackend,
+          attempts,
+          terminal: {
+            kind: err.kind,
+            attempt: attempts.at(-1)?.sequence ?? 1,
+            message: persistRuntimeTextEvidence(
+              runtimeMessageEvidence(err.message),
+              opts.customSecrets,
+              INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+            ),
+          },
+          createdAt: new Date().toISOString(),
+        };
+        const saved = saveInvocationFailureArtifact(
+          path.join(configRoot, config.totemDir),
+          failureArtifact,
+        );
+        err.failureArtifactHash = saved.hash;
+        log.dim(
+          tag,
+          `Invocation failure artifact ${saved.existed ? 'already recorded' : 'recorded'}: ${saved.hash.slice(0, 12)}…`,
+        );
+        opts.artifact.onFailureEmitted?.(saved.hash, saved.path);
+        // totem-context: companion failure evidence is warn-only by contract; preserve and rethrow the original invocation error after surfacing this emission failure.
+      } catch (artifactErr) {
+        log.warn(
+          tag,
+          `Invocation failure artifact emission failed (original error preserved): ${artifactErr instanceof Error ? artifactErr.message : String(artifactErr)}`,
+        );
+      }
+    }
+    throw err;
   }
 
   if (useCache && result.content && result.durationMs > 0) {
@@ -1020,39 +1432,26 @@ export async function runOrchestrator(opts: {
   // degradation is warned, never silent).
   if (opts.artifact !== undefined) {
     try {
-      const inputBundle = {
-        maskedPrompt: safePrompt,
-        ...(safeSystemPrompt !== undefined && safeSystemPrompt.length > 0
-          ? { maskedSystemPrompt: safeSystemPrompt }
-          : {}),
-        ...(opts.artifact.diffScope !== undefined ? { diffScope: opts.artifact.diffScope } : {}),
-        ...(opts.artifact.specContract !== undefined
-          ? { specContract: opts.artifact.specContract }
-          : {}),
-      };
+      const shared = buildArtifactSharedFields({
+        artifact: opts.artifact,
+        safePrompt,
+        ...(safeSystemPrompt !== undefined ? { safeSystemPrompt } : {}),
+        ...(groundingBundle !== undefined ? { groundingBundle } : {}),
+        ...(opts.outputContract !== undefined ? { outputContract: opts.outputContract } : {}),
+        ...(opts.contextPolicy !== undefined ? { contextPolicy: opts.contextPolicy } : {}),
+        ...(opts.runMetadata !== undefined ? { runMetadata: opts.runMetadata } : {}),
+      });
       const runArtifact: RunArtifact = {
         schemaVersion: RUN_ARTIFACT_SCHEMA_VERSION,
-        inputBundle,
-        inputHash: calculateDeterministicHash(inputBundle),
-        grounding: {
-          hash: opts.artifact.groundingHash,
-          provenanceSummary: opts.artifact.provenanceSummary,
-          // Verbatim passthrough — the bundle was assembled and hashed by the
-          // caller (mmnto-ai/totem#2101); this seam records, never re-derives
-          // or upgrades. Post-reconciliation (#2102): a caller-supplied
-          // `groundingBundle` serves this role when `artifact.bundle` is absent.
-          ...(groundingBundle !== undefined ? { bundle: groundingBundle } : {}),
-        },
-        backend: {
+        ...shared,
+        backend: buildArtifactBackend({
           provider: resolved.parsed.provider,
           model,
           qualifiedModel,
-          // #2102: caller-supplied wins; the default reproduces the slice-1
-          // constant — every undeclared backend is factually completion-only.
           admissionClass: requestedAdmissionClass,
           taskProfile,
           ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-        },
+        }),
         output: {
           content: result.content,
           metrics: {
@@ -1064,23 +1463,14 @@ export async function runOrchestrator(opts: {
             durationMs: result.durationMs,
             ...(result.finishReason !== undefined ? { finishReason: result.finishReason } : {}),
           },
+          ...(result.attempts !== undefined
+            ? {
+                execution: {
+                  attempts: persistRuntimeAttempts(result.attempts, opts.customSecrets),
+                },
+              }
+            : {}),
         },
-        // #2102: the admitted contract group is recorded ONLY when the caller
-        // supplied at least one member — an omitted contract stays an omitted
-        // key, never an empty object (additive 1.x, slice-1 artifacts unchanged).
-        ...(opts.outputContract !== undefined ||
-        opts.contextPolicy !== undefined ||
-        opts.runMetadata !== undefined
-          ? {
-              admission: {
-                ...(opts.outputContract !== undefined
-                  ? { outputContract: opts.outputContract }
-                  : {}),
-                ...(opts.contextPolicy !== undefined ? { contextPolicy: opts.contextPolicy } : {}),
-                ...(opts.runMetadata !== undefined ? { runMetadata: opts.runMetadata } : {}),
-              },
-            }
-          : {}),
         createdAt: new Date().toISOString(),
       };
       const saved = saveRunArtifact(path.join(configRoot, config.totemDir), runArtifact);

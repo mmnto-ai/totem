@@ -117,7 +117,8 @@ describe('detectOrchestrator emission shape (Tenet-16 corollary)', () => {
     stubCliOnPath('claude');
     const result = detectOrchestrator(tmpDir);
     expect(result!.config['provider']).toBe('shell');
-    expect(result!.config['command']).toContain('claude -p {file}');
+    expect(result!.config['command']).toBe('claude -p --model {model} < {file}');
+    expect(result!.config['command']).not.toContain('-p {file}');
     expect(result!.config['overrides']).toEqual(
       Object.fromEntries(EXPECTED_ROLES.map((role) => [role, 'sonnet'])),
     );
