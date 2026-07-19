@@ -39,6 +39,7 @@ import {
   deriveLessonsConsulted,
   deriveSettled,
   findLatestVerdictForLineage,
+  hasNoCompletedLane,
   listVerdictArtifacts,
   loadVerdictArtifact,
   renderCovariateLine,
@@ -546,6 +547,38 @@ describe('deriveSettled / deriveCacheEligible (pure predicates)', () => {
     };
     expect(deriveSettled(drift)).toBe(false);
     expect(deriveCacheEligible(drift)).toBe(false);
+  });
+});
+
+// ─── hasNoCompletedLane — exit-contract non-pass gate (mmnto-ai/totem#2452) ───
+
+describe('hasNoCompletedLane (exit-contract non-pass gate, #2452)', () => {
+  it('is TRUE when zero lanes completed — the abstain-bearing shapes that used to exit 0', () => {
+    // A single abstained lane (the exact #2452 repro): output invoked but unextractable.
+    expect(hasNoCompletedLane([abstainedLane(0)])).toBe(true);
+    // Abstained + failed mix — still no usable verdict.
+    expect(hasNoCompletedLane([abstainedLane(0), failedLane(1)])).toBe(true);
+    // All lanes failed to invoke (the pre-existing all-failed case this predicate subsumes).
+    expect(hasNoCompletedLane([failedLane(0), failedLane(1)])).toBe(true);
+  });
+
+  it('is FALSE when at least one lane completed — a usable (even partially-degraded) fan', () => {
+    expect(hasNoCompletedLane([completedLane(0)])).toBe(false);
+    // The sharp guard: a completed + ABSTAINED mix must NOT trip the gate (completedLaneCount===1).
+    expect(hasNoCompletedLane([completedLane(0), abstainedLane(1)])).toBe(false);
+    expect(hasNoCompletedLane([completedLane(0), failedLane(1)])).toBe(false);
+  });
+
+  it('agrees with completedLaneCount === 0 by construction (the superRefine binds them)', () => {
+    for (const lanes of [
+      [completedLane(0)],
+      [abstainedLane(0)],
+      [completedLane(0), abstainedLane(1)],
+      [abstainedLane(0), failedLane(1)],
+    ]) {
+      const completedCount = lanes.filter((l) => l.status === 'completed').length;
+      expect(hasNoCompletedLane(lanes)).toBe(completedCount === 0);
+    }
   });
 });
 

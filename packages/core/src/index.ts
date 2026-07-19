@@ -700,6 +700,7 @@ export {
   deriveLessonsConsulted,
   deriveSettled,
   findLatestVerdictForLineage,
+  hasNoCompletedLane,
   LaneIdSchema,
   LessonConsultedItemSchema,
   LessonsConsultedSchema,
