@@ -1316,8 +1316,11 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   // push on a provider-unsettled round (Tenets 12/13). A pure check — no compare→stamp
   // window widening; the run ends here.
   if (hasNoCompletedLane(verdict.lanes)) {
-    const abstained = laneResults.filter((lr) => lr.lane.status === 'abstained').length;
-    const failed = laneResults.filter((lr) => lr.lane.status === 'failed').length;
+    // Count from `verdict.lanes` — the SAME validated collection the gate reads — so the
+    // enumerated message can never drift from the gate predicate under a future refactor
+    // (both derive from one source, not from `laneResults` in parallel).
+    const abstained = verdict.lanes.filter((l) => l.status === 'abstained').length;
+    const failed = verdict.lanes.filter((l) => l.status === 'failed').length;
     throw new TotemError(
       'SHIELD_FAILED',
       `Review produced no completed verdict lane (completed=0, abstained=${abstained}, failed=${failed} of ${laneResults.length}) — this is a non-pass, NOT a crash: an honest verdict was written (settled=false), then the run hard-errors. A provider-unsettled round never counts as a review pass and never authorizes a push (Tenets 12/13).`,
