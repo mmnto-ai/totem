@@ -28,9 +28,9 @@ import {
   getRustTestSpans,
   isProductionRustRule,
   isSuppressed,
-  matchesGlob,
   type RuleEngineContext,
 } from '../rule-engine.js';
+import { fileMatchesGlobs } from '../sys/glob.js';
 import type { RegexEvaluator } from './evaluator.js';
 import { redactPath } from './telemetry.js';
 
@@ -52,19 +52,6 @@ export interface BoundedApplyOptions {
 export interface BoundedApplyResult {
   violations: Violation[];
   timeoutOutcomes: RuleTimeoutOutcome[];
-}
-
-function fileMatchesGlobs(filePath: string, globs: readonly string[]): boolean {
-  const hasIncludes = globs.some((g) => !g.startsWith('!'));
-  let matched = !hasIncludes;
-  for (const glob of globs) {
-    if (glob.startsWith('!')) {
-      if (matchesGlob(filePath, glob.slice(1))) return false;
-    } else if (matchesGlob(filePath, glob)) {
-      matched = true;
-    }
-  }
-  return matched;
 }
 
 export async function applyRulesToAdditionsBounded(

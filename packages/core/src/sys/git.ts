@@ -1,9 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { matchesGlob } from '../compiler.js';
 import { TotemGitError } from '../errors.js';
 import { safeExec } from './exec.js';
+import { matchesGlob } from './glob.js';
 
 // ─── Constants ──────────────────────────────────────────
 
