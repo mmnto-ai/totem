@@ -122,10 +122,16 @@ describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () 
    * below is made on the stamp and the emitted output, never on resolution.
    */
   async function runWithDiff(files: string[]): Promise<void> {
-    getDiffForReviewSpy.mockResolvedValueOnce({
-      diff: files.map(diffFor).join('\n'),
-      changedFiles: files,
-    });
+    await runWithDiffRaw(files.map(diffFor).join('\n'), files);
+  }
+
+  /**
+   * Lower-level driver for cases where the diff BODY and the changed-file LIST
+   * must differ — the filtered-empty path needs a code file present in the list
+   * whose hunks are absent from the diff (a mode-only change has this shape).
+   */
+  async function runWithDiffRaw(diff: string, changedFiles: string[]): Promise<void> {
+    getDiffForReviewSpy.mockResolvedValueOnce({ diff, changedFiles });
     const { shieldCommand } = await import('./shield.js');
     try {
       await shieldCommand({} as Parameters<typeof shieldCommand>[0]);
@@ -150,6 +156,39 @@ describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () 
 
     expect(fs.existsSync(stampPath())).toBe(false);
     expect(warnings.join('\n')).toMatch(/NON-REVIEW/);
+    expect(warnings.join('\n')).toMatch(/does not authorize a push/);
+  });
+
+  it('all-generated via .gitattributes on a TRACKED .ts: does not stamp (the bypass case)', async () => {
+    // The scenario the default-glob lockfile test does NOT reach, and the only
+    // one where the old stamp could authorize genuinely-changed, hashed source:
+    // `linguist-generated` marks a real `.ts`, so the file is dropped from review
+    // while still counting toward the content hash the push gate compares.
+    fs.writeFileSync(
+      path.join(tmpDir, '.gitattributes'),
+      'src/generated-client.ts linguist-generated\n',
+    );
+
+    await runWithDiff(['src/generated-client.ts']);
+
+    expect(fs.existsSync(stampPath())).toBe(false);
+    // Assert the GENERATED-path wording specifically. A bare /NON-REVIEW/ match
+    // would also pass if this fell through to the all-non-code branch, which
+    // would mean the test proves nothing about the bypass it exists to cover.
+    expect(warnings.join('\n')).toMatch(/every changed file is a generated artifact/);
+    expect(warnings.join('\n')).toMatch(/does not authorize a push/);
+  });
+
+  it('filtered-empty: does not stamp when no code hunks survive filtering', async () => {
+    // Stage 2 fires when the diff is neither all-code nor all-non-code and the
+    // code side contributes no hunks — a mode-only change on a tracked source
+    // file has exactly this shape: listed as changed, absent from the diff body.
+    await runWithDiffRaw(diffFor('docs/plan.md'), ['docs/plan.md', 'src/index.ts']);
+
+    expect(fs.existsSync(stampPath())).toBe(false);
+    // Stage-2 wording specifically — distinguishes this from the Stage-1
+    // all-non-code branch, which a generic NON-REVIEW match would not.
+    expect(warnings.join('\n')).toMatch(/no code changes remain after filtering/);
     expect(warnings.join('\n')).toMatch(/does not authorize a push/);
   });
 
