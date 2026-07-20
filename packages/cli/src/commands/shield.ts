@@ -468,6 +468,19 @@ export function formatVerdictForDisplay(verdict: ShieldStructuredVerdict, pass: 
 const LEGACY_REVIEW_SOURCE_EXTENSIONS: readonly string[] = ['.ts', '.tsx', '.js', '.jsx'];
 
 /**
+ * Shared tail for every deterministic skip that drops the ENTIRE diff
+ * (mmnto-ai/totem#2466). Such a run is a NON-REVIEW, not a pass: no lane ran and
+ * nothing was examined, so it must not stamp `.reviewed-content-hash` and must not
+ * read as a clean review.
+ *
+ * Single-sourced deliberately — the three skip sites must never drift into
+ * describing the same guarantee three different ways. Voice matches the existing
+ * worktree-drift notices, which are the other "NOT stamped" surface.
+ */
+const NO_STAMP_NOTICE =
+  'Nothing was examined, so the reviewed-content-hash was NOT stamped — this run does not authorize a push.';
+
+/**
  * Refresh `<totemDir>/review-extensions.txt` if its contents do not match
  * the supplied extension set (or the file is missing). Closes the stale-
  * canonical-file window when a user edits `totem.config.ts` but forgets to
@@ -622,10 +635,14 @@ export async function writeReviewedContentHashValue(
  * survives commits, amends, and rebases. Only breaks when source files change.
  *
  * Now a thin compose of the pure computer + explicit writer (Prop 304 R2): it
- * hashes the CURRENT tree and stamps it. Retained at its original signature
- * for the trivial fast-path stamps (no-changes / all-non-code / filtered-empty
- * — none of which open a mid-run LLM window) and `recordShieldOverride`, where
- * there is no drift race to guard. The LLM review path does NOT use this — it
+ * hashes the CURRENT tree and stamps it. Retained at its original signature for
+ * the no-changes stamp (an empty diff opens no mid-run LLM window) and
+ * `recordShieldOverride`, where there is no drift race to guard.
+ *
+ * NO LONGER used by the deterministic skip paths (all-non-code / filtered-empty /
+ * all-generated). Those drop the entire diff without examining it, so they are
+ * non-reviews and must not stamp — see `NO_STAMP_NOTICE` (mmnto-ai/totem#2466).
+ * The LLM review path does NOT use this — it
  * captures the hash pre-fan and compare-and-stamps in `shieldCommand` /
  * `handleVerdictResult` so a mid-review edit can never be authorized.
  */
@@ -1705,15 +1722,16 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       generatedArtifactSummary = buildGeneratedArtifactSection(generated.summaries);
 
       // All changed files were generated artifacts — nothing left to review.
-      // Deterministic PASS: the summary was already surfaced above (never a
-      // silent skip). The artifacts' correctness is a gate concern, not the LLM's.
+      // Not sending them to the LLM stays correct (their correctness is a gate
+      // concern, not the LLM's) but that does NOT extend to stamping the push
+      // gate on their behalf: this is the one skip path that can drop a TRACKED,
+      // HASHED source file, because `.gitattributes linguist-generated` can mark
+      // a `.ts` as generated. Stamping here would authorize code no reviewer saw
+      // (mmnto-ai/totem#2466).
       if (!diff.trim()) {
-        log.info(DISPLAY_TAG, 'Deterministic fast-path: all changed files are generated artifacts');
-        await writeReviewedContentHash(
-          cwd,
-          config.totemDir,
-          configRoot,
-          config.review.sourceExtensions,
+        log.warn(
+          DISPLAY_TAG,
+          `NON-REVIEW: every changed file is a generated artifact, so no lane ran. ${NO_STAMP_NOTICE}`,
         );
         return;
       }
@@ -1723,14 +1741,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Stage 1: Classify files — fast-path for non-code-only diffs
   const classification = classifyChangedFiles(changedFiles);
   if (classification.allNonCode) {
-    log.info(DISPLAY_TAG, 'Deterministic fast-path: all changed files are non-code');
-    log.dim(DISPLAY_TAG, `Skipped: ${changedFiles.join(', ')}`);
-    await writeReviewedContentHash(
-      cwd,
-      config.totemDir,
-      configRoot,
-      config.review.sourceExtensions,
+    log.warn(
+      DISPLAY_TAG,
+      `NON-REVIEW: every changed file is non-code, so no lane ran. ${NO_STAMP_NOTICE}`,
     );
+    log.dim(DISPLAY_TAG, `Skipped: ${changedFiles.join(', ')}`);
     return;
   }
 
@@ -1741,16 +1756,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     filteredDiff = await filterDiffByPatterns(diff, classification.nonCodeFiles);
     filteredFiles = classification.codeFiles;
     if (!filteredDiff.trim()) {
-      // After filtering, no code diff remains — fast-path PASS
-      log.info(
+      // After filtering non-code files, no code diff remains — nothing was examined.
+      log.warn(
         DISPLAY_TAG,
-        'Deterministic fast-path: no code changes after filtering non-code files',
-      );
-      await writeReviewedContentHash(
-        cwd,
-        config.totemDir,
-        configRoot,
-        config.review.sourceExtensions,
+        `NON-REVIEW: no code changes remain after filtering non-code files, so no lane ran. ${NO_STAMP_NOTICE}`,
       );
       return;
     }
