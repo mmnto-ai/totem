@@ -41,6 +41,7 @@ export type TotemErrorCode =
   | 'GATE_INVALID'
   | 'PARITY_DRIFT_DETECTED'
   | 'MAIL_SEND_FAILED'
+  | 'PR_MERGE_FAILED'
   | 'BASH_RESOLUTION_FAILED';
 
 export class TotemError extends Error {

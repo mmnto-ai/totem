@@ -638,7 +638,10 @@ prCmd
     async (number: string | undefined, opts: { checkOnly?: boolean; closeDeclared?: boolean }) => {
       requireGhCli();
       try {
-        const { prMergeCommand } = await import('./commands/pr.js');
+        const { assertValidPrNumberArg, prMergeCommand } = await import('./commands/pr.js');
+        // Validate at the Commander boundary too (defense in depth, codex B-2): a
+        // URL/branch positional is refused before any gh call.
+        assertValidPrNumberArg(number);
         const { exitCode } = await prMergeCommand(number, {
           checkOnly: opts.checkOnly === true,
           closeDeclared: opts.closeDeclared === true,

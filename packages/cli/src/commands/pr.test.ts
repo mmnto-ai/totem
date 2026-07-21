@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  assertValidPrNumberArg,
   buildIssueCloseArgv,
   buildMergeArgv,
+  displayGhCommand,
   evaluatePrMerge,
   FORBIDDEN_MERGE_FLAGS,
   type GhRunner,
@@ -22,6 +24,8 @@ interface HarnessConfig {
   repo?: string;
   posture?: Record<string, unknown>;
   pr?: Record<string, unknown>;
+  /** The post-merge landing state re-read by fetchMergeState (default MERGED). */
+  mergedState?: string;
   throwOn?: (args: string[]) => Error | undefined;
 }
 
@@ -33,6 +37,7 @@ function makeHarness(cfg: HarnessConfig = {}) {
   let errStr = '';
   const repo = cfg.repo ?? 'mmnto-ai/totem';
   const posture = cfg.posture ?? CONFORMING_POSTURE;
+  const mergedState = cfg.mergedState ?? 'MERGED';
   const pr = cfg.pr ?? {
     title: 'feat: a clean title',
     body: 'A body with no close keywords. references #9.',
@@ -46,7 +51,17 @@ function makeHarness(cfg: HarnessConfig = {}) {
     if (thrown) throw thrown;
     if (args[0] === 'repo' && args[1] === 'view') return `${repo}\n`;
     if (args[0] === 'api' && args[1] === 'graphql') return JSON.stringify(posture);
-    if (args[0] === 'pr' && args[1] === 'view') return JSON.stringify(pr);
+    if (args[0] === 'pr' && args[1] === 'view') {
+      // Two `pr view` shapes: the pre-merge fetch (title,body,…) and the
+      // post-merge landing-state re-read (--json state,mergedAt).
+      if (args.includes('state,mergedAt')) {
+        return JSON.stringify({
+          state: mergedState,
+          mergedAt: mergedState === 'MERGED' ? '2026-07-21T00:00:00Z' : null,
+        });
+      }
+      return JSON.stringify(pr);
+    }
     return '';
   };
   const deps: Partial<PrMergeDeps> = {
@@ -71,14 +86,23 @@ function makeHarness(cfg: HarnessConfig = {}) {
   };
 }
 
-describe('buildMergeArgv (structural — NO body/subject flags, EVER)', () => {
-  it('is exactly `pr merge <n> --squash`', () => {
-    expect(buildMergeArgv(5)).toEqual(['pr', 'merge', '5', '--squash']);
+describe('buildMergeArgv (structural — NO body/subject flags; repo + head-bound)', () => {
+  it('is `pr merge <n> --repo <r> --squash --match-head-commit <oid>`', () => {
+    expect(buildMergeArgv(5, 'mmnto-ai/totem', 'deadbeef')).toEqual([
+      'pr',
+      'merge',
+      '5',
+      '--repo',
+      'mmnto-ai/totem',
+      '--squash',
+      '--match-head-commit',
+      'deadbeef',
+    ]);
   });
 
-  it('never contains any forbidden body/subject flag for any PR number', () => {
+  it('never contains any forbidden body/subject flag; DOES bind --match-head-commit', () => {
     for (const n of [1, 42, 1762, 999999]) {
-      const argv = buildMergeArgv(n);
+      const argv = buildMergeArgv(n, 'o/r', 'sha123');
       for (const flag of FORBIDDEN_MERGE_FLAGS) {
         expect(argv).not.toContain(flag);
       }
@@ -86,29 +110,71 @@ describe('buildMergeArgv (structural — NO body/subject flags, EVER)', () => {
       expect(argv).toContain('--squash');
       expect(argv).not.toContain('--merge');
       expect(argv).not.toContain('--rebase');
+      // Snapshot binding (codex Q): the evaluated head is pinned.
+      expect(argv).toContain('--match-head-commit');
+      expect(argv[argv.indexOf('--match-head-commit') + 1]).toBe('sha123');
+      // Repo binding (codex B-2): same identity the lookup used.
+      expect(argv).toContain('--repo');
+      expect(argv[argv.indexOf('--repo') + 1]).toBe('o/r');
     }
   });
 });
 
 describe('buildIssueCloseArgv', () => {
-  it('builds a bare same-repo close with a PR-naming comment', () => {
-    const argv = buildIssueCloseArgv({ issue: 42 }, 5);
+  it('binds a bare ref to the resolved repo with a PR-naming comment', () => {
+    const argv = buildIssueCloseArgv({ issue: 42 }, 5, 'mmnto-ai/totem');
     expect(argv.slice(0, 3)).toEqual(['issue', 'close', '42']);
-    expect(argv).not.toContain('--repo');
+    expect(argv).toContain('--repo');
+    expect(argv[argv.indexOf('--repo') + 1]).toBe('mmnto-ai/totem');
     const comment = argv[argv.indexOf('--comment') + 1];
     expect(comment).toContain('#5');
   });
 
-  it('adds --repo for a cross-repo qualified ref', () => {
-    const argv = buildIssueCloseArgv({ qualifier: 'mmnto-ai/totem-strategy', issue: 7 }, 5);
-    expect(argv).toContain('--repo');
+  it('uses the qualifier repo for a cross-repo qualified ref', () => {
+    const argv = buildIssueCloseArgv({ qualifier: 'mmnto-ai/totem-strategy', issue: 7 }, 5, 'o/r');
     expect(argv[argv.indexOf('--repo') + 1]).toBe('mmnto-ai/totem-strategy');
   });
 
   it('the close comment carries no close-keyword adjacent to the digit ref', () => {
-    const comment = buildIssueCloseArgv({ issue: 42 }, 5).at(-1) ?? '';
+    const comment = buildIssueCloseArgv({ issue: 42 }, 5, 'o/r').at(-1) ?? '';
     // The word immediately before the #N ref must not be a close keyword.
     expect(comment).not.toMatch(/\b(?:closes?d?|fix(?:e[sd])?|resolve[sd]?)\s+#\d/i);
+  });
+
+  it('the close comment carries NO backticks (paste-safe — codex NB-1)', () => {
+    const comment = buildIssueCloseArgv({ issue: 42 }, 5, 'o/r').at(-1) ?? '';
+    expect(comment).not.toContain('`');
+  });
+});
+
+describe('assertValidPrNumberArg (confused-deputy guard — codex B-2)', () => {
+  it('accepts undefined (merge the current branch PR) and a positive decimal', () => {
+    expect(() => assertValidPrNumberArg(undefined)).not.toThrow();
+    expect(() => assertValidPrNumberArg('1762')).not.toThrow();
+  });
+
+  it('rejects a URL positional (the confused-deputy vector)', () => {
+    expect(() => assertValidPrNumberArg('https://github.com/other/repo/pull/5')).toThrow(
+      /invalid PR argument/i,
+    );
+  });
+
+  it('rejects a branch name, a zero, and a leading-zero form', () => {
+    expect(() => assertValidPrNumberArg('feature/x')).toThrow();
+    expect(() => assertValidPrNumberArg('0')).toThrow();
+    expect(() => assertValidPrNumberArg('007')).toThrow();
+  });
+});
+
+describe('displayGhCommand (paste-safe rendering — codex NB-1)', () => {
+  it('quotes the multi-word comment arg and never emits a bare #N or backtick', () => {
+    const line = displayGhCommand(buildIssueCloseArgv({ issue: 55 }, 5, 'o/r'));
+    expect(line.startsWith('gh issue close 55 --repo o/r --comment ')).toBe(true);
+    expect(line).not.toContain('`');
+    // The comment (with spaces + #N) must be a single quoted token, not bare.
+    expect(line).toMatch(/--comment '.*#5.*'/);
+    // No unquoted `#5` sitting outside quotes (would truncate as a shell comment).
+    expect(line).not.toMatch(/[^']#5(?![^']*')/);
   });
 });
 
@@ -184,7 +250,16 @@ describe('prMergeCommand — happy path', () => {
     expect(exitCode).toBe(0);
     expect(h.mergeCalled()).toBe(true);
     const merge = h.calls.find((a) => a[0] === 'pr' && a[1] === 'merge');
-    expect(merge).toEqual(['pr', 'merge', '5', '--squash']);
+    expect(merge).toEqual([
+      'pr',
+      'merge',
+      '5',
+      '--repo',
+      'mmnto-ai/totem',
+      '--squash',
+      '--match-head-commit',
+      'deadbeef',
+    ]);
   });
 
   it('forwards an explicit PR number to `gh pr view`', async () => {
@@ -408,5 +483,118 @@ describe('prMergeCommand — --close-declared', () => {
     expect(h.mergeCalled()).toBe(true);
     expect(h.issueCloseCalls()).toHaveLength(0);
     expect(h.out()).toContain('gh issue close');
+    // The printed commands are paste-safe (codex NB-1): quoted comment, no backticks.
+    expect(h.out()).not.toContain('`');
+    expect(h.out()).toMatch(/gh issue close 55 --repo mmnto-ai\/totem --comment '/);
+  });
+
+  it('exit 1 + summary when a requested close fails; still attempts every target (codex B-4)', async () => {
+    const h = makeHarness({
+      pr: declaredPr,
+      throwOn: (a) =>
+        a[0] === 'issue' && a[1] === 'close' && a.includes('55')
+          ? new Error('denied: not a collaborator')
+          : undefined,
+    });
+    const { exitCode } = await prMergeCommand(
+      undefined,
+      { checkOnly: false, closeDeclared: true },
+      h.deps,
+    );
+    expect(exitCode).toBe(1);
+    expect(h.mergeCalled()).toBe(true);
+    // Continued through ALL targets despite the #55 failure.
+    const closes = h.issueCloseCalls();
+    expect(closes.some((a) => a.includes('55'))).toBe(true);
+    expect(closes.some((a) => a.includes('7'))).toBe(true);
+    // The final summary names the failed target.
+    expect(h.err()).toMatch(/FAILED.*#55/);
+  });
+});
+
+describe('prMergeCommand — confused-deputy positional (codex B-2)', () => {
+  it('refuses a URL positional BEFORE any gh call (throws, never merges)', async () => {
+    const h = makeHarness();
+    await expect(
+      prMergeCommand(
+        'https://github.com/other/repo/pull/5',
+        { checkOnly: false, closeDeclared: false },
+        h.deps,
+      ),
+    ).rejects.toThrow(/invalid PR argument/i);
+    expect(h.calls).toHaveLength(0);
+    expect(h.mergeCalled()).toBe(false);
+  });
+
+  it('binds --repo on BOTH `gh pr view` and `gh pr merge` to the resolved repo', async () => {
+    const h = makeHarness({
+      pr: { title: 't', body: 'clean', state: 'OPEN', number: 88, headRefOid: 'oid88' },
+    });
+    await prMergeCommand('88', { checkOnly: false, closeDeclared: false }, h.deps);
+    const view = h.calls.find((a) => a[0] === 'pr' && a[1] === 'view' && a.includes('88'));
+    const merge = h.calls.find((a) => a[0] === 'pr' && a[1] === 'merge');
+    expect(view?.[view.indexOf('--repo') + 1]).toBe('mmnto-ai/totem');
+    expect(merge?.[merge.indexOf('--repo') + 1]).toBe('mmnto-ai/totem');
+    // Snapshot binding uses the fetched head oid.
+    expect(merge?.[merge.indexOf('--match-head-commit') + 1]).toBe('oid88');
+  });
+});
+
+describe('prMergeCommand — snapshot binding / head mismatch (codex Q)', () => {
+  it('exit 1 + re-evaluate instruction when the head-bound merge fails', async () => {
+    const h = makeHarness({
+      throwOn: (a) =>
+        a[0] === 'pr' && a[1] === 'merge'
+          ? new Error('Pull request is not mergeable: head branch was modified')
+          : undefined,
+    });
+    const { exitCode } = await prMergeCommand(
+      undefined,
+      { checkOnly: false, closeDeclared: false },
+      h.deps,
+    );
+    expect(exitCode).toBe(1);
+    expect(h.err()).toMatch(/re-run `totem pr merge` to re-evaluate/i);
+    // No closes attempted after a failed merge.
+    expect(h.issueCloseCalls()).toHaveLength(0);
+  });
+});
+
+describe('prMergeCommand — merge-queue semantics (codex B-5)', () => {
+  const queuedDeclaredPr = {
+    title: 'feat: x',
+    body: '<!-- totem-close: #55 -->\nFixes #55',
+    state: 'OPEN',
+    number: 5,
+    headRefOid: 'x',
+  };
+
+  it('a non-MERGED landing state DEFERS closes and exits 0', async () => {
+    const h = makeHarness({ pr: queuedDeclaredPr, mergedState: 'OPEN' });
+    const { exitCode } = await prMergeCommand(
+      undefined,
+      { checkOnly: false, closeDeclared: true },
+      h.deps,
+    );
+    expect(exitCode).toBe(0);
+    expect(h.mergeCalled()).toBe(true);
+    // The merge was invoked, but no issue was closed (deferred).
+    expect(h.issueCloseCalls()).toHaveLength(0);
+    expect(h.out()).toMatch(/not yet MERGED|merge queue|auto-merge/i);
+    expect(h.out()).toMatch(/DEFERRED/);
+    // Does NOT print the completed-merge line.
+    expect(h.out()).not.toContain('merged PR #5 (--squash)');
+  });
+
+  it('a MERGED landing state proceeds to the merged message + closes', async () => {
+    const h = makeHarness({ pr: queuedDeclaredPr, mergedState: 'MERGED' });
+    const { exitCode } = await prMergeCommand(
+      undefined,
+      { checkOnly: false, closeDeclared: true },
+      h.deps,
+    );
+    expect(exitCode).toBe(0);
+    expect(h.out()).toContain('merged PR #5 (--squash)');
+    expect(h.issueCloseCalls().some((a) => a.includes('55'))).toBe(true);
   });
 });
