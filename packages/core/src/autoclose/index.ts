@@ -11,7 +11,7 @@ export {
   autoCloseKeyForms,
   findAutoCloseRefs,
 } from './matcher.js';
-export type { MergeConfigPosture, MergeConfigVerdict } from './merge-config.js';
+export type { MergeConfigPosture, MergeConfigStatus, MergeConfigVerdict } from './merge-config.js';
 export {
   evaluateMergeConfigPosture,
   REQUIRED_SQUASH_MERGE_MESSAGE,

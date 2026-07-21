@@ -70,11 +70,39 @@ describe('evaluateMergeConfigPosture (D1 posture assertion, #1762 E-lever + squa
     expect(v.drift).toHaveLength(5);
   });
 
-  it('treats absent fields as drift (never assumes the posture)', () => {
+  it('all fields absent → UNVERIFIABLE, never reported as drift (token-visibility class)', () => {
+    // D1's first live run: the Actions GITHUB_TOKEN cannot see REST merge-policy
+    // fields, so a HEALTHY posture read as all-absent and was misreported as
+    // drift. Absent must be its own verdict with its own remedy (fix the read
+    // source, not the settings).
     const v = evaluateMergeConfigPosture({});
     expect(v.conforms).toBe(false);
-    expect(v.drift).toHaveLength(5);
-    expect(v.message).toMatch(/\(absent\)/);
+    expect(v.status).toBe('unverifiable');
+    expect(v.drift).toEqual([]);
+    expect(v.absent).toHaveLength(5);
+    expect(v.message).toMatch(/UNVERIFIABLE/);
+    expect(v.message).toMatch(/token-visibility/);
+    expect(v.message).not.toMatch(/DRIFTED/);
+  });
+
+  it('null fields (GraphQL null) behave as absent, not as drift', () => {
+    const v = evaluateMergeConfigPosture({
+      ...CONFORMING,
+      squash_merge_commit_title: null,
+    });
+    expect(v.status).toBe('unverifiable');
+    expect(v.absent).toEqual(['squash_merge_commit_title']);
+  });
+
+  it('a present-and-wrong field wins over absent fields: status=drift, absentees named', () => {
+    const v = evaluateMergeConfigPosture({
+      allow_merge_commit: true,
+    });
+    expect(v.status).toBe('drift');
+    expect(v.drift).toHaveLength(1);
+    expect(v.absent).toHaveLength(4);
+    expect(v.message).toMatch(/DRIFTED/);
+    expect(v.message).toMatch(/not visible to this token/);
   });
 
   it('the current live totem posture (all three methods on) drifts on the two off-axes', () => {

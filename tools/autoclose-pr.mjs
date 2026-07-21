@@ -42,24 +42,47 @@ export function gh(args) {
  * Assert the repo's merge config matches the required posture — E lever
  * (PR_TITLE + BLANK) AND squash-only (allow_squash_merge on, merge-commit +
  * rebase off) — and fail loud on drift (mmnto-ai/totem#1762 addendum
- * 2026-07-21T0235Z + codex squash-only supplement 0356Z). Squash-only is an
- * OPERATOR settings action (routed separately); until flipped, D1 reds by design.
+ * 2026-07-21T0235Z + codex squash-only supplement 0356Z).
  * A repo setting is one settings-page click from silently reverting.
+ *
+ * SOURCE IS GRAPHQL, not REST: the REST repos endpoint omits the merge-policy
+ * fields for non-admin callers, and the Actions GITHUB_TOKEN is one — on D1's
+ * first live run a healthy posture read as all-absent via REST. The GraphQL
+ * repository fields are readable with a plain read token. An absent/null read
+ * is reported as UNVERIFIABLE (fix the read path / token), never as drift.
  */
 function assertMergeConfigPosture(repo, ghFn = gh) {
+  const [owner, name] = repo.split('/');
+  const query =
+    'query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ' +
+    'squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed ' +
+    'squashMergeCommitTitle squashMergeCommitMessage } }';
   const raw = ghFn([
     'api',
-    `repos/${repo}`,
+    'graphql',
+    '-f',
+    `query=${query}`,
+    '-f',
+    `owner=${owner}`,
+    '-f',
+    `name=${name}`,
     '--jq',
-    '{squash_merge_commit_title: .squash_merge_commit_title, ' +
-      'squash_merge_commit_message: .squash_merge_commit_message, ' +
-      'allow_squash_merge: .allow_squash_merge, ' +
-      'allow_merge_commit: .allow_merge_commit, ' +
-      'allow_rebase_merge: .allow_rebase_merge}',
+    '.data.repository',
   ]);
-  const verdict = evaluateMergeConfigPosture(JSON.parse(raw));
+  const r = JSON.parse(raw) ?? {};
+  const verdict = evaluateMergeConfigPosture({
+    squash_merge_commit_title: r.squashMergeCommitTitle,
+    squash_merge_commit_message: r.squashMergeCommitMessage,
+    allow_squash_merge: r.squashMergeAllowed,
+    allow_merge_commit: r.mergeCommitAllowed,
+    allow_rebase_merge: r.rebaseMergeAllowed,
+  });
   if (!verdict.conforms) {
-    console.error(`::error title=Merge-config posture drift::${verdict.message}`);
+    const title =
+      verdict.status === 'unverifiable'
+        ? 'Merge-config posture unverifiable'
+        : 'Merge-config posture drift';
+    console.error(`::error title=${title}::${verdict.message}`);
     process.exit(1);
   }
   console.log(`[autoclose D1] ${verdict.message}`);
