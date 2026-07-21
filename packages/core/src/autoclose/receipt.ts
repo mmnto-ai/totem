@@ -188,11 +188,16 @@ export function buildReceipt(
   };
 }
 
-export type ReconcileStatus = 'clean' | 'anomaly' | 'missing-receipt' | 'ambiguous-receipt';
+export type ReconcileStatus =
+  | 'clean'
+  | 'anomaly'
+  | 'missing-receipt'
+  | 'ambiguous-receipt'
+  | 'unexpected-body';
 
 export interface ReconcileResult {
   status: ReconcileStatus;
-  /** Normalized keys found in the merged body. */
+  /** Normalized keys found in the merged commit message. */
   findings: string[];
   /** Findings not covered by the receipt's declared set (the anomaly set). */
   undeclared: string[];
@@ -201,6 +206,13 @@ export interface ReconcileResult {
    * audit trail; D2 never acts on it (no auto-reopen until controls pass).
    */
   reopenCandidates: string[];
+  /**
+   * Whether the merged commit carried a non-empty BODY (content after the subject
+   * line). Under the E lever (squash message = BLANK, mmnto-ai/totem#1762
+   * addendum) the body should be empty; a non-empty body is itself the posture
+   * signal (`unexpected-body`).
+   */
+  bodyPresent: boolean;
   /** Precise operator-facing message for the job log. */
   message: string;
 }
@@ -245,8 +257,60 @@ export function reconcile(
   mergedBody: string,
   opts: ReconcileOptions = {},
 ): ReconcileResult {
+  const message = mergedBody ?? '';
+  // Body-presence FIRST (E-lever addendum, mmnto-ai/totem#1762): under the BLANK
+  // squash posture the server composes no body, so a non-empty body is itself the
+  // posture signal. The content scan runs regardless — a close-keyword ref in the
+  // SUBJECT (now deterministically the PR_TITLE) still auto-closes.
+  const bodyPresent = messageBody(message).length > 0;
+
+  // Content scan / harm axis: an UNDECLARED close-keyword ref is the top-severity
+  // alert (the accidental-closure harm) and always wins over the posture signal.
+  const harm = evaluateContent(receipt, message, bodyPresent, opts);
+  if (harm.status !== 'clean') return harm;
+
+  // No undeclared close-keyword harm. A non-empty body under BLANK is the posture
+  // signal: only a local `gh pr merge --body` override (the confirmed-vector
+  // class), a config-drift regression, or a non-squash merge produces one.
+  // INTERPRETATION CALL (E-lever addendum): a non-empty-but-keyword-free body is
+  // surfaced as posture-drift EVIDENCE (`unexpected-body`) — distinct from a hard
+  // close-anomaly, since no issue-closure harm occurred. It carries NO reopen
+  // candidates. The D2 script surfaces it as a NON-failing annotation (not
+  // silent, not a false CI failure on a rare legitimate authored body).
+  if (bodyPresent) {
+    return {
+      status: 'unexpected-body',
+      findings: harm.findings,
+      undeclared: [],
+      reopenCandidates: [],
+      bodyPresent: true,
+      message:
+        `Merged commit carries a NON-EMPTY body under the BLANK squash posture (findings: ${
+          harm.findings.length > 0 ? harm.findings.join(', ') : 'none'
+        }). No undeclared close-keyword ref, so no accidental-closure harm — but under BLANK the ` +
+        'server composes no body, so this is posture-drift / local `--body`-override evidence. ' +
+        'Surfaced (observation mode; no auto-reopen). Verify the merge-config posture (D1 asserts ' +
+        'it) and that no local `--body` override was used. mmnto-ai/totem#1762.',
+    };
+  }
+
+  return { ...harm, message: harm.message };
+}
+
+/**
+ * The content/harm axis of {@link reconcile}: scan the whole merged message
+ * (subject + body) for close-keyword refs and reconcile them against the receipt.
+ * Returns `clean` | `anomaly` | `missing-receipt` | `ambiguous-receipt` only — the
+ * `unexpected-body` posture leaf is decided by {@link reconcile}.
+ */
+function evaluateContent(
+  receipt: AutoCloseReceipt | null,
+  message: string,
+  bodyPresent: boolean,
+  opts: ReconcileOptions,
+): ReconcileResult {
   const repo = opts.repo;
-  const matches = findAutoCloseRefs(stripIntentMarkers(mergedBody ?? ''));
+  const matches = findAutoCloseRefs(stripIntentMarkers(message));
   const findings = dedupe(matches.map((m) => m.ref));
 
   if (matches.length === 0) {
@@ -255,11 +319,12 @@ export function reconcile(
       findings,
       undeclared: [],
       reopenCandidates: [],
-      message: 'No close-keyword-adjacent issue reference in the merged commit body.',
+      bodyPresent,
+      message: 'No close-keyword-adjacent issue reference in the merged commit message.',
     };
   }
 
-  // A closure-capable body with no usable receipt: alert, never guess.
+  // A closure-capable message with no usable receipt: alert, never guess.
   if (receipt === null || !isValidReceipt(receipt)) {
     const why = receipt === null ? 'missing-receipt' : 'ambiguous-receipt';
     return {
@@ -267,8 +332,9 @@ export function reconcile(
       findings,
       undeclared: findings,
       reopenCandidates: findings,
+      bodyPresent,
       message:
-        `Merged body closes ${findings.join(', ')} but the D1 receipt is ` +
+        `Merged message closes ${findings.join(', ')} but the D1 receipt is ` +
         `${receipt === null ? 'ABSENT' : 'MALFORMED'} — cannot verify intent. ` +
         'Alerting (observation mode; no auto-reopen). Verify the closure was intended; ' +
         'if not, `gh issue reopen <n>`.',
@@ -281,8 +347,9 @@ export function reconcile(
       findings,
       undeclared: findings,
       reopenCandidates: findings,
+      bodyPresent,
       message:
-        `Merged body closes ${findings.join(', ')} but the fetched receipt is for ` +
+        `Merged message closes ${findings.join(', ')} but the fetched receipt is for ` +
         `PR #${receipt.prNumber}, not the merged PR #${opts.expectedPrNumber} — ` +
         'cannot verify intent. Alerting (observation mode; no auto-reopen).',
     };
@@ -299,8 +366,9 @@ export function reconcile(
       findings,
       undeclared,
       reopenCandidates: undeclared,
+      bodyPresent,
       message:
-        `Merged body closes ${undeclared.join(', ')} but the D1 receipt did NOT ` +
+        `Merged message closes ${undeclared.join(', ')} but the D1 receipt did NOT ` +
         `declare ${undeclared.length > 1 ? 'them' : 'it'} ` +
         `(declared: ${receipt.declaredCloseKeys.length === 0 ? '[] (zero-allowed-set)' : receipt.declaredCloseKeys.join(', ')}). ` +
         'This is an accidental-closure anomaly. Alerting (observation mode; no auto-reopen). ' +
@@ -313,8 +381,15 @@ export function reconcile(
     findings,
     undeclared: [],
     reopenCandidates: [],
-    message: `All closes in the merged body (${findings.join(', ')}) were declared at PR time.`,
+    bodyPresent,
+    message: `All closes in the merged message (${findings.join(', ')}) were declared at PR time.`,
   };
+}
+
+/** The commit BODY — content after the first line (the subject), trimmed. */
+function messageBody(message: string): string {
+  const nl = message.indexOf('\n');
+  return nl === -1 ? '' : message.slice(nl + 1).trim();
 }
 
 function dedupe(xs: string[]): string[] {

@@ -2,17 +2,26 @@
 /**
  * D2 — post-merge auto-close reconciliation, OBSERVATION MODE (mmnto-ai/totem#1762).
  *
- * On push-to-main, compares the merged HEAD commit body against the D1 receipt
- * via the ONE shared evaluator (`@mmnto/totem` autoclose `reconcile`). It ALERTS
- * loud — fails the job with a precise message — and NEVER auto-reopens (the
- * Tenet 9 sense→enforce gate: reopen arms only after positive+negative controls).
+ * On push-to-main, reconciles the merged HEAD commit message against the D1
+ * receipt via the ONE shared evaluator (`@mmnto/totem` autoclose `reconcile`).
+ * NEVER auto-reopens (the Tenet 9 sense→enforce gate: reopen arms only after
+ * positive+negative controls).
  *
- *   - clean            → exit 0 (no closure-capable body, or every close declared).
- *   - anomaly          → exit 1. The zero-allowed-set (receipt `[]`) + a
- *                        closure-capable body is the #2471 specimen.
- *   - missing-receipt  → exit 1. A closure-capable body but no receipt (PR merged
- *                        before D1 existed, or the artifact expired). Never guess.
+ * Body-presence-first under the E lever (squash message = BLANK, PR_TITLE title —
+ * mmnto-ai/totem#1762 addendum 2026-07-21T0235Z): a non-empty squash body should
+ * not exist under BLANK, so its presence is itself a posture signal.
+ *
+ *   - clean            → exit 0 (empty body + no undeclared close-keyword ref).
+ *   - anomaly          → exit 1. An undeclared close-keyword ref (the accidental-
+ *                        closure harm). The zero-allowed-set (receipt `[]`) + a
+ *                        closure-capable message is the #2471 specimen.
+ *   - missing-receipt  → exit 1. A closure-capable message but no receipt (PR
+ *                        merged before D1 existed, or the artifact expired).
  *   - ambiguous-receipt→ exit 1. Malformed / wrong-PR receipt. Never guess.
+ *   - unexpected-body  → exit 0 + `::warning`. A non-empty body under BLANK with
+ *                        NO undeclared close-keyword ref: posture-drift / local
+ *                        `--body`-override EVIDENCE (no closure harm). Surfaced,
+ *                        not silent, not a hard anomaly (interpretation call).
  *
  * Never scans issue/PR COMMENT bodies — comments never auto-close.
  *
@@ -111,7 +120,15 @@ export function main() {
     process.exit(0);
   }
 
-  // OBSERVATION MODE: alert loud, never auto-reopen.
+  // Posture-drift EVIDENCE (E-lever addendum, mmnto-ai/totem#1762): a non-empty
+  // body under BLANK with NO undeclared close-keyword ref — no accidental-closure
+  // harm, so surface a NON-failing annotation (not a hard anomaly, not silent).
+  if (result.status === 'unexpected-body') {
+    console.log(`::warning title=Unexpected non-empty body under BLANK posture::${result.message}`);
+    process.exit(0);
+  }
+
+  // OBSERVATION MODE: alert loud on a close-anomaly, never auto-reopen.
   console.error(`::error title=Auto-close anomaly (${result.status})::${result.message}`);
   console.error(
     `[autoclose D2] reopen candidates (NOT acted on — observation mode): ${result.reopenCandidates.join(', ')}`,

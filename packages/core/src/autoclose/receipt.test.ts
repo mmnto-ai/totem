@@ -166,12 +166,12 @@ describe('reconcile (D2, observation mode)', () => {
     expect(r.undeclared).toEqual([]);
   });
 
-  it('NEGATIVE CONTROL: a clean body with NO close keyword => clean even with null receipt', () => {
-    const r = reconcile(null, 'refactor: tidy the widget (#2471)\n\nNo issue closed here.', {
-      repo: REPO,
-    });
+  it('NEGATIVE CONTROL: an empty-body subject with NO close keyword => clean even with null receipt', () => {
+    // Under BLANK the squash message is the PR title only (empty body).
+    const r = reconcile(null, 'refactor: tidy the widget (#2471)', { repo: REPO });
     expect(r.status).toBe('clean');
     expect(r.findings).toEqual([]);
+    expect(r.bodyPresent).toBe(false);
   });
 
   it('reconciles a self-qualified declaration against a bare body ref', () => {
@@ -199,5 +199,45 @@ describe('reconcile (D2, observation mode)', () => {
     const r = reconcile(receiptWith([]), B8AA74A2_BODY, { repo: REPO });
     // Observation mode: the candidates are reported but the caller must not act.
     expect(Array.isArray(r.reopenCandidates)).toBe(true);
+  });
+
+  // ── E-lever addendum: body-presence-first + unexpected-body (#1762 0235Z) ──
+
+  it('EMPTY body + no close keyword => clean, bodyPresent=false (the BLANK normal state)', () => {
+    const r = reconcile(null, 'chore: bump deps (#2500)', { repo: REPO });
+    expect(r.status).toBe('clean');
+    expect(r.bodyPresent).toBe(false);
+  });
+
+  it('NON-EMPTY body with NO close-keyword ref => unexpected-body (surfaced, not silent)', () => {
+    // The interpretation call: a non-empty body under BLANK is posture-drift /
+    // `--body`-override EVIDENCE — surfaced, but NOT a hard close-anomaly (no
+    // closure harm), and carries no reopen candidates.
+    const r = reconcile(null, 'feat: thing (#2500)\n\nSome authored body text, no issue closed.', {
+      repo: REPO,
+    });
+    expect(r.status).toBe('unexpected-body');
+    expect(r.bodyPresent).toBe(true);
+    expect(r.reopenCandidates).toEqual([]);
+    expect(r.message).toMatch(/posture-drift|--body/);
+  });
+
+  it('an UNDECLARED close-keyword ref beats the posture signal (body-present anomaly wins)', () => {
+    // A local `--body` override carrying an undeclared close is the confirmed
+    // vector — the hard anomaly must take precedence over unexpected-body.
+    const r = reconcile(receiptWith([]), 'feat: thing (#2500)\n\nAlso closes #2466 in passing.', {
+      repo: REPO,
+    });
+    expect(r.status).toBe('anomaly');
+    expect(r.undeclared).toEqual(['#2466']);
+    expect(r.bodyPresent).toBe(true);
+  });
+
+  it('a close keyword in the SUBJECT (PR_TITLE) with empty body still reconciles', () => {
+    // Under PR_TITLE the subject can carry a close; an undeclared one still alerts.
+    const r = reconcile(receiptWith([]), 'Fix #2466: the widget', { repo: REPO });
+    expect(r.status).toBe('anomaly');
+    expect(r.undeclared).toEqual(['#2466']);
+    expect(r.bodyPresent).toBe(false);
   });
 });

@@ -22,7 +22,11 @@ import * as fs from 'node:fs';
 import * as process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
-import { buildReceipt, scanPrCorpus } from '../packages/core/dist/autoclose/index.js';
+import {
+  buildReceipt,
+  evaluateMergeConfigPosture,
+  scanPrCorpus,
+} from '../packages/core/dist/autoclose/index.js';
 
 /** Run `gh` and return stdout; throws (with stderr) on a non-zero exit. */
 export function gh(args) {
@@ -32,6 +36,26 @@ export function gh(args) {
     throw new Error(`gh ${args.join(' ')} exited ${res.status}: ${res.stderr || ''}`);
   }
   return res.stdout;
+}
+
+/**
+ * Assert the repo's squash-merge config matches the E-lever posture (PR_TITLE +
+ * BLANK) and fail loud on drift (mmnto-ai/totem#1762 addendum, 2026-07-21T0235Z).
+ * A repo setting is one settings-page click from silently reverting.
+ */
+function assertMergeConfigPosture(repo) {
+  const raw = gh([
+    'api',
+    `repos/${repo}`,
+    '--jq',
+    '{squash_merge_commit_title: .squash_merge_commit_title, squash_merge_commit_message: .squash_merge_commit_message}',
+  ]);
+  const verdict = evaluateMergeConfigPosture(JSON.parse(raw));
+  if (!verdict.conforms) {
+    console.error(`::error title=Merge-config posture drift::${verdict.message}`);
+    process.exit(1);
+  }
+  console.log(`[autoclose D1] ${verdict.message}`);
 }
 
 /** Fetch title/body/headSha for the PR. */
@@ -93,6 +117,9 @@ export function main() {
     console.error('[autoclose D1] GITHUB_REPOSITORY and PR_NUMBER are required.');
     process.exit(2);
   }
+
+  // Assert the E-lever merge-config posture FIRST — fail loud on drift.
+  assertMergeConfigPosture(repo);
 
   const { title, body, headSha } = fetchPr(repo, pr);
   const commitMessages = fetchCommitMessages(repo, pr);
