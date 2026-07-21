@@ -153,6 +153,23 @@ const AUTO_CLOSE_REGEX_SOURCE =
   '|([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)#(\\d+)' +
   '|#(\\d+))';
 
+// ─── Raw-merge command regex (mmnto-ai/totem#1762 A-slice) ────────────────
+//
+// The CANONICAL source is `@mmnto/totem`'s `MERGE_COMMAND_REGEX_SOURCE`
+// (packages/core/src/autoclose/command-matcher.ts) — the ONE shared detector the
+// A-slice PreToolUse interlock inlines to DENY raw `gh pr merge` / merge-API
+// invocations and reroute them to `totem pr merge`. This is a LOCAL MIRROR (same
+// cold-start / module-top-level constraint as AUTO_CLOSE_REGEX_SOURCE above), drift-
+// LOCKED by the init.test.ts assertions that render the templates and assert each
+// inlines `JSON.stringify(<core MERGE_COMMAND_REGEX_SOURCE>)`. Update BOTH together.
+const MERGE_COMMAND_REGEX_SOURCE =
+  '(?<![\\w-])gh(?:\\.exe)?[\'"\\s]+' +
+  '(?:' +
+  '(pr\\b[\'"\\s]+merge)(?![\\w-])' +
+  '|(api\\b[\\s\\S]*?/pulls/\\d+/merge)(?![\\w-])' +
+  '|(pr\\b[\'"\\s]*(?:\\$|`))' +
+  ')';
+
 // --- Gemini CLI hook templates ---
 
 /**
@@ -201,6 +218,10 @@ export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI Befo
 // Intercepts (Gemini CLI write tools are write_file + replace — there is NO
 // edit_file; docs.gemini file-system tools + gemini-cli#20321):
 //   Guard 1: git push/commit → run \`totem lint\` before proceeding (shield-gate)
+//   Guard 2: run_shell_command → block a raw \`gh pr merge\` / merge-API invocation
+//            and reroute to \`totem pr merge\` — auto-close enforcement seam A-slice
+//            (mmnto-ai/totem#1762). Bounded surface (condition 2): recognizable
+//            shell invocations only; D1/D2 are the loud backstop.
 //   Rule 1:  write_file/replace → block bare cross-repo refs in substrate paths —
 //            xrepo-qualify-refs, sealed in mmnto-ai/totem-strategy#145 (SHA c488888b).
 //   Rule 2:  write_file/replace → block GitHub auto-close keywords adjacent to an
@@ -212,6 +233,9 @@ const BARE_REF_REGEX_SOURCE = ${JSON.stringify(BARE_REF_REGEX_SOURCE)};
 // Single-sourced from @mmnto/totem's AUTO_CLOSE_REGEX_SOURCE (mmnto-ai/totem#1762);
 // inlined for the rendered standalone hook the way BARE_REF_REGEX_SOURCE is.
 const AUTO_CLOSE_REGEX_SOURCE = ${JSON.stringify(AUTO_CLOSE_REGEX_SOURCE)};
+// Single-sourced from @mmnto/totem's MERGE_COMMAND_REGEX_SOURCE (mmnto-ai/totem#1762
+// A-slice); inlined the same way. The raw-merge interlock's ONE detector.
+const MERGE_COMMAND_REGEX_SOURCE = ${JSON.stringify(MERGE_COMMAND_REGEX_SOURCE)};
 const SCOPED_PATH_RE = /(\\.handoff[\\\\\\/]|\\.journal[\\\\\\/]|\\.md$)/i;
 const MD_PATH_RE = /\\.md$/i;
 // EXEMPT .github/** (intentional close keywords) and .totem/** (tool/agent-authored
@@ -286,9 +310,29 @@ function checkXrepoQualifyRefs(toolName, toolInput) {
   );
 }
 
+// mmnto-ai/totem#1762 A-slice: a raw \`gh pr merge\` / merge-API invocation in a
+// run_shell_command bypasses the sanctioned \`totem pr merge\` actuator (which asserts
+// merge-config posture + auto-close safety before merging squash-only, no body
+// flags). Presence-invariant, deny-on-undecidable (a \`gh pr\` + substitution
+// continuation blocks too). Bounded surface — recognizable invocations only.
+function checkMergeInterlock(toolName, toolInput) {
+  if (toolName !== 'run_shell_command') return;
+  const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
+  const re = new RegExp(MERGE_COMMAND_REGEX_SOURCE, 'gi');
+  if (!re.test(cmd)) return;
+  throw new Error(
+    '[totem BeforeTool] raw \`gh pr merge\` / merge-API invocation blocked at the harness.\\n' +
+    'Merge through the sanctioned actuator instead: \`totem pr merge [number]\` (or \`--check-only\`).\\n' +
+    'It asserts the merge-config posture (E lever + squash-only) and refuses undeclared close-keyword ' +
+    'refs via the totem-close marker before merging squash-only with no body flags.\\n' +
+    'mmnto-ai/totem#1762.',
+  );
+}
+
 module.exports = function beforeTool(toolName, toolInput) {
   checkAutoCloseKeywords(toolName, toolInput);
   checkXrepoQualifyRefs(toolName, toolInput);
+  checkMergeInterlock(toolName, toolInput);
 
   if (toolName !== 'run_shell_command') return;
   const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
@@ -485,6 +529,88 @@ export const CLAUDE_PREWRITESHIELD_ENTRY = {
     {
       type: 'command',
       command: 'node .claude/hooks/PreWriteShield.cjs',
+    },
+  ],
+};
+
+// ─── MergeInterlock: raw-merge PreToolUse interlock (mmnto-ai/totem#1762 A-slice) ──
+//
+// Denies a raw `gh pr merge` / raw merge-API invocation on a `Bash` tool call at
+// the harness boundary, rerouting to the sanctioned `totem pr merge` actuator (B)
+// which asserts merge-config posture + auto-close safety before merging squash-only
+// with NO body flags. Agent-only by construction — humans never transit PreToolUse.
+// Installs into committed `.claude/settings.json` (team-level, like PreWriteShield).
+//
+// Inlines the shared MERGE_COMMAND_REGEX_SOURCE via JSON.stringify (the drift-locked
+// local-mirror shape; init.test.ts asserts parity with core + the Gemini host).
+
+export const CLAUDE_MERGE_INTERLOCK = `${TOTEM_FILE_MARKER} — Claude Code MergeInterlock hook (mmnto-ai/totem#1762 A-slice)
+// Denies a raw \`gh pr merge\` / raw merge-API invocation at the harness boundary,
+// rerouting to the sanctioned \`totem pr merge\` actuator (which asserts merge-config
+// posture + auto-close safety via the ONE shared evaluator before merging squash-only
+// with no body flags). Agent-only by construction — humans never transit PreToolUse.
+//
+// BOUNDED-SURFACE CLAIM (ADR-082 Amendment 1, condition 2): blocks RECOGNIZABLE
+// raw-merge invocations in a Bash command string. It does not defeat an
+// aliased/renamed gh, a shell function, or an injected spawn (mmnto-ai/totem#2460
+// class); D1 (PR-time check) + D2 (post-merge reconciliation) are the loud backstop.
+//
+// Exit-code contract (LOAD-BEARING):
+//   0 = allow (not a Bash tool call, no raw-merge match, OR unparseable stdin →
+//       fail-soft: A guards ONE invocation shape; an unrecognizable payload is out
+//       of its bounded claim, and B + D1 + D2 remain the layered gates)
+//   2 = block (Claude Code blocking convention; a raw-merge invocation detected)
+'use strict';
+
+const MERGE_COMMAND_REGEX_SOURCE = ${JSON.stringify(MERGE_COMMAND_REGEX_SOURCE)};
+
+let stdin = '';
+process.stdin.setEncoding('utf-8');
+process.stdin.on('data', (chunk) => {
+  stdin += chunk;
+});
+process.stdin.on('end', () => {
+  let parsed;
+  try {
+    parsed = stdin ? JSON.parse(stdin) : {};
+  } catch (err) {
+    process.stderr.write('[totem MergeInterlock] could not parse stdin JSON; allowing (fail-soft)\\n');
+    process.exit(0);
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || parsed.tool_name !== 'Bash') {
+    process.exit(0);
+  }
+
+  const input = (typeof parsed.tool_input === 'object' && parsed.tool_input !== null) ? parsed.tool_input : {};
+  const command = typeof input.command === 'string' ? input.command : '';
+  if (command.length === 0) {
+    process.exit(0);
+  }
+
+  const re = new RegExp(MERGE_COMMAND_REGEX_SOURCE, 'gi');
+  if (!re.test(command)) {
+    process.exit(0);
+  }
+
+  process.stderr.write(
+    '[totem MergeInterlock] raw \`gh pr merge\` / merge-API invocation blocked at the harness.\\n' +
+    'Merge through the sanctioned actuator instead: \`totem pr merge [number]\` (or \`--check-only\`).\\n' +
+    'It asserts the merge-config posture (E lever + squash-only) and refuses undeclared close-keyword ' +
+    'refs via the totem-close marker before merging squash-only with no body flags.\\n' +
+    'mmnto-ai/totem#1762.\\n',
+  );
+  process.exit(2);
+});
+${TOTEM_FILE_END}
+`;
+
+export const CLAUDE_MERGE_INTERLOCK_ENTRY = {
+  matcher: 'Bash',
+  hooks: [
+    {
+      type: 'command',
+      command: 'node .totem/hooks/merge-interlock.cjs',
     },
   ],
 };
@@ -1052,6 +1178,15 @@ export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
   {
     rel: '.claude/hooks/gate-wrapper.cjs',
     content: CLAUDE_GATE_WRAPPER,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+  {
+    // The raw-merge PreToolUse interlock (mmnto-ai/totem#1762 A-slice). A roster
+    // member so `totem hook install` drift-repairs it for adopters, same bounded
+    // whole-file ownership as the sibling hooks.
+    rel: '.totem/hooks/merge-interlock.cjs',
+    content: CLAUDE_MERGE_INTERLOCK,
     marker: TOTEM_FILE_MARKER,
     endMarker: TOTEM_FILE_END,
   },

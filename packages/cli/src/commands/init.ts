@@ -21,6 +21,8 @@ import {
 } from './init-detect.js';
 import {
   AI_PROMPT_BLOCK,
+  CLAUDE_MERGE_INTERLOCK,
+  CLAUDE_MERGE_INTERLOCK_ENTRY,
   CLAUDE_PRETOOLUSE_ENTRY,
   CLAUDE_PREWRITESHIELD,
   CLAUDE_PREWRITESHIELD_ENTRY,
@@ -336,6 +338,12 @@ function hasPreWriteShield(entry: z.infer<typeof HookCommandSchema>): boolean {
   return entry.command.includes('PreWriteShield');
 }
 
+/** Check whether a hook entry already contains a merge-interlock reference. */
+function hasMergeInterlock(entry: z.infer<typeof HookCommandSchema>): boolean {
+  if (typeof entry === 'string') return entry.includes('merge-interlock');
+  return entry.command.includes('merge-interlock');
+}
+
 /** Check whether a hook entry already contains a SessionStart.cjs reference. */
 function hasTotemSessionStart(entry: z.infer<typeof HookCommandSchema>): boolean {
   if (typeof entry === 'string') return entry.includes('SessionStart.cjs');
@@ -372,6 +380,19 @@ export function scaffoldClaudeHooks(filePath: string): ScaffoldOutcome {
 export function scaffoldClaudeWriteShield(filePath: string): ScaffoldOutcome {
   return mergeClaudeHooksKey(filePath, 'PreToolUse', CLAUDE_PREWRITESHIELD_ENTRY, (parsed) =>
     preToolUseHasMatcher(parsed, 'Write|Edit', hasPreWriteShield),
+  );
+}
+
+/**
+ * Merge the MergeInterlock hook into committed `.claude/settings.json`
+ * (team-level, like PreWriteShield) without overwriting existing user hooks.
+ * Installs a `Bash` matcher pointed at `.totem/hooks/merge-interlock.cjs` — the
+ * A-slice raw-merge interlock (mmnto-ai/totem#1762) that reroutes raw
+ * `gh pr merge` to `totem pr merge`.
+ */
+export function scaffoldClaudeMergeInterlock(filePath: string): ScaffoldOutcome {
+  return mergeClaudeHooksKey(filePath, 'PreToolUse', CLAUDE_MERGE_INTERLOCK_ENTRY, (parsed) =>
+    preToolUseHasMatcher(parsed, 'Bash', hasMergeInterlock),
   );
 }
 
@@ -439,6 +460,28 @@ async function installClaudeHooks(
   results.push({
     file: '.claude/settings.json',
     ...writeShieldEntryResult,
+  });
+
+  // 3b. Scaffold the MergeInterlock hook script + merge its Bash-matcher entry
+  //     into committed .claude/settings.json (mmnto-ai/totem#1762 A-slice). The
+  //     script lives under .totem/hooks/ (bounded-owned whole file, roster member).
+  const mergeInterlockPath = path.join(cwd, '.totem', 'hooks', 'merge-interlock.cjs');
+  const mergeInterlockResult = scaffoldFile(
+    mergeInterlockPath,
+    CLAUDE_MERGE_INTERLOCK,
+    TOTEM_FILE_MARKER,
+    TOTEM_FILE_END,
+  );
+  results.push({
+    file: '.totem/hooks/merge-interlock.cjs',
+    action: mergeInterlockResult.action === 'refreshed' ? 'merged' : mergeInterlockResult.action,
+    ...(mergeInterlockResult.err ? { err: mergeInterlockResult.err } : {}),
+  });
+
+  const mergeInterlockEntryResult = scaffoldClaudeMergeInterlock(settingsPath);
+  results.push({
+    file: '.claude/settings.json (MergeInterlock)',
+    ...mergeInterlockEntryResult,
   });
 
   // 4. Merge the SessionStart entry into committed .claude/settings.json.

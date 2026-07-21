@@ -6,7 +6,12 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
-import { AUTO_CLOSE_REGEX_SOURCE, LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
+import {
+  AUTO_CLOSE_REGEX_SOURCE,
+  LedgerEventSchema,
+  MERGE_COMMAND_REGEX_SOURCE,
+  resolveSelfAgents,
+} from '@mmnto/totem';
 
 import {
   UNIVERSAL_BASELINE_LESSONS,
@@ -25,6 +30,7 @@ import {
   probeOllamaFloor,
   REFLEX_VERSION,
   scaffoldClaudeHooks,
+  scaffoldClaudeMergeInterlock,
   scaffoldClaudeSessionStart,
   scaffoldClaudeSkill,
   scaffoldClaudeWriteShield,
@@ -35,6 +41,8 @@ import {
 import { detectProject } from './init-detect.js';
 import {
   BARE_REF_REGEX_SOURCE,
+  CLAUDE_MERGE_INTERLOCK,
+  CLAUDE_MERGE_INTERLOCK_ENTRY,
   CLAUDE_PREWRITESHIELD,
   CLAUDE_PREWRITESHIELD_ENTRY,
   CLAUDE_SESSION_START,
@@ -1289,6 +1297,160 @@ describe('scaffoldClaudeWriteShield', () => {
   });
 });
 
+// mmnto-ai/totem#1762 A-slice — MergeInterlock settings-merge (Bash matcher into
+// committed .claude/settings.json, mirroring the PreWriteShield idempotency probe).
+describe('scaffoldClaudeMergeInterlock', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mergeinterlock-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('creates settings.json with a Bash merge-interlock entry when none exists', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.json');
+    const result = scaffoldClaudeMergeInterlock(filePath);
+
+    expect(result).toEqual({ action: 'created' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.PreToolUse).toHaveLength(1);
+    expect(content.hooks.PreToolUse[0].matcher).toBe('Bash');
+    expect(content.hooks.PreToolUse[0].hooks[0]).toEqual({
+      type: 'command',
+      command: expect.stringContaining('merge-interlock.cjs'),
+    });
+  });
+
+  it('is idempotent — double invoke does not duplicate', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.json');
+    expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'created' });
+    expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'skipped' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.PreToolUse).toHaveLength(1);
+  });
+
+  it('coexists with a PreWriteShield Write|Edit entry under the same hooks object', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.json');
+    scaffoldClaudeWriteShield(filePath);
+    const result = scaffoldClaudeMergeInterlock(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const matchers = content.hooks.PreToolUse.map((e: { matcher: string }) => e.matcher).sort();
+    expect(matchers).toEqual(['Bash', 'Write|Edit']);
+  });
+
+  it('skips when the merge-interlock entry is already present', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ hooks: { PreToolUse: [CLAUDE_MERGE_INTERLOCK_ENTRY] } }, null, 2) + '\n',
+      'utf-8',
+    );
+    expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'skipped' });
+  });
+});
+
+describe('CLAUDE_MERGE_INTERLOCK template (mmnto-ai/totem#1762 A-slice)', () => {
+  it('is a bounded totem-owned whole file (marker opens, end marker closes)', () => {
+    expect(CLAUDE_MERGE_INTERLOCK.trimStart().startsWith('// [totem] auto-generated')).toBe(true);
+    expect(CLAUDE_MERGE_INTERLOCK).toContain('// [totem] end auto-generated');
+  });
+
+  it('inlines the shared MERGE_COMMAND_REGEX_SOURCE (JSON-encoded, drift-locked mirror)', () => {
+    expect(CLAUDE_MERGE_INTERLOCK).toContain(JSON.stringify(MERGE_COMMAND_REGEX_SOURCE));
+  });
+
+  it('documents the exit-code contract (0=allow/fail-soft, 2=block) and names the actuator', () => {
+    expect(CLAUDE_MERGE_INTERLOCK).toMatch(/0\s*=.*allow/i);
+    expect(CLAUDE_MERGE_INTERLOCK).toMatch(/2\s*=.*block/i);
+    expect(CLAUDE_MERGE_INTERLOCK).toContain('totem pr merge');
+  });
+
+  it('cites the auto-close issue mmnto-ai/totem#1762', () => {
+    expect(CLAUDE_MERGE_INTERLOCK).toContain('mmnto-ai/totem#1762');
+  });
+});
+
+describe('MergeInterlock runtime behavior (mmnto-ai/totem#1762 A-slice)', () => {
+  let tmpDir: string;
+  let hookPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mergeinterlock-runtime-'));
+    hookPath = path.join(tmpDir, 'merge-interlock.cjs');
+    fs.writeFileSync(hookPath, CLAUDE_MERGE_INTERLOCK, 'utf-8');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function runHook(input: unknown): { exitCode: number; stderr: string } {
+    const result = spawnSync(process.execPath, [hookPath], {
+      input: typeof input === 'string' ? input : JSON.stringify(input),
+      encoding: 'utf-8',
+    });
+    return { exitCode: result.status ?? -1, stderr: result.stderr ?? '' };
+  }
+
+  it('exits 2 and names totem pr merge on a bodyless `gh pr merge`', () => {
+    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr merge' } });
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain('totem pr merge');
+  });
+
+  it('exits 2 on a hidden-body form (--body-file)', () => {
+    const r = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'gh pr merge 5 --squash --body-file x.md' },
+    });
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('exits 2 on a raw merge-API call', () => {
+    const r = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'gh api repos/mmnto-ai/totem/pulls/5/merge -X PUT' },
+    });
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('exits 2 on a `gh pr $(...)` deny-on-undecidable continuation', () => {
+    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr $(echo merge)' } });
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('exits 0 on a read-only `gh pr view`', () => {
+    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr view 5 --json title' } });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it('exits 0 on an unrelated Bash command', () => {
+    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'ls -la packages' } });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it('exits 0 on a non-Bash tool call', () => {
+    const r = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'x', content: 'gh pr merge' },
+    });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it('exits 0 (fail-soft) on unparseable stdin, with a stderr note', () => {
+    const r = runHook('{ not json');
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toMatch(/could not parse|fail-soft/i);
+  });
+});
+
 // Phase C slice 1 — symmetric Claude SessionStart hook (mmnto-ai/totem#1845).
 // Locks the install-side parity with .gemini/hooks/SessionStart.js: scaffold
 // the .cjs script, merge a SessionStart entry into committed
@@ -1922,6 +2084,15 @@ describe('GEMINI_BEFORE_TOOL write_file/replace extension', () => {
     expect(GEMINI_BEFORE_TOOL).toContain('checkAutoCloseKeywords(toolName, toolInput)');
     expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem#1762');
   });
+
+  it('inlines the shared MERGE_COMMAND_REGEX_SOURCE (A-slice parity with the Claude interlock)', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain(JSON.stringify(MERGE_COMMAND_REGEX_SOURCE));
+  });
+
+  it('wires the merge interlock into beforeTool and names the actuator', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain('checkMergeInterlock(toolName, toolInput)');
+    expect(GEMINI_BEFORE_TOOL).toContain('totem pr merge');
+  });
 });
 
 describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)', () => {
@@ -2005,6 +2176,51 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
       file_path: 'docs/x.md',
       new_string: 'see mmnto-ai/totem#5',
     });
+    expect(r.threw).toBe(false);
+  });
+});
+
+describe('GEMINI_BEFORE_TOOL merge-interlock runtime (mmnto-ai/totem#1762 A-slice)', () => {
+  let tmpDir: string;
+  let hookPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-mergeinterlock-'));
+    hookPath = path.join(tmpDir, 'BeforeTool.js');
+    fs.writeFileSync(hookPath, GEMINI_BEFORE_TOOL, 'utf-8');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function runBeforeTool(tool: string, input: unknown): { threw: boolean; message: string } {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
+    try {
+      beforeTool(tool, input);
+      return { threw: false, message: '' };
+    } catch (err) {
+      return { threw: true, message: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  it('throws (blocks) on a raw `gh pr merge` run_shell_command and names the actuator', () => {
+    const r = runBeforeTool('run_shell_command', { command: 'gh pr merge 5 --squash' });
+    expect(r.threw).toBe(true);
+    expect(r.message).toContain('totem pr merge');
+    expect(r.message).toContain('[totem BeforeTool]');
+  });
+
+  it('throws on a raw merge-API run_shell_command', () => {
+    const r = runBeforeTool('run_shell_command', {
+      command: 'gh api repos/o/r/pulls/5/merge -X PUT',
+    });
+    expect(r.threw).toBe(true);
+  });
+
+  it('does NOT throw on a read-only `gh pr view`', () => {
+    const r = runBeforeTool('run_shell_command', { command: 'gh pr view 5' });
     expect(r.threw).toBe(false);
   });
 });
