@@ -1229,6 +1229,7 @@ export type {
   ClosingIssueRef,
   DeclaredIntentRef,
   MergeConfigPosture,
+  MergeConfigStatus,
   MergeConfigVerdict,
   PrCorpus,
   PrScanResult,

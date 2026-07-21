@@ -176,7 +176,10 @@ export function main() {
   fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, 'utf-8');
 
   console.log(`[autoclose D1] repo=${repo} pr=#${pr} head=${headSha}`);
-  console.log(`[autoclose D1] declared-intended-close: ${JSON.stringify(scan.declaredCloseKeys)}`);
+  console.log(
+    `[autoclose D1] declared-by-marker (authorizing): ${JSON.stringify(scan.declaredByMarker)}; ` +
+      `closingIssuesReferences (informational): ${JSON.stringify(scan.closingIssuesReferences)}`,
+  );
   console.log(`[autoclose D1] corpus findings: ${JSON.stringify(scan.findings)}`);
 
   if (!scan.ok) {
