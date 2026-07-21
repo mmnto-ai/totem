@@ -6,8 +6,8 @@
 feat(autoclose): GitHub auto-close enforcement-seam guard — D1 + D2-observe + C (#1762)
 
 Adds the ruled Layer-1 slice of the GitHub auto-close guard: a defense against a
-close-keyword adjacent to an issue reference (`Closes #131`, and — the confirmed
-#2471→#2466 incident — even a negated `Does not close #2466`) reaching a PR body
+close-keyword adjacent to an issue reference (`Closes #NNN` — and, per the confirmed
+#2471→#2466 incident, even a negated variant of that phrase) reaching a PR body
 or squash merge-commit body and auto-closing a linked issue.
 
 - **Core** ships `@mmnto/totem` `autoclose` — the ONE shared evaluator
