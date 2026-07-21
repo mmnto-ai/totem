@@ -133,6 +133,22 @@ export function isBoundedOwnedFile(content: string, marker: string, endMarker: s
 
 export const BARE_REF_REGEX_SOURCE = '(?<!\\b[\\w-]+/[\\w-]+)#(\\d+)(?![-\\w])';
 
+// ─── Auto-close keyword regex (mmnto-ai/totem#1762) ──────────────────────
+//
+// The CANONICAL source is `@mmnto/totem`'s `AUTO_CLOSE_REGEX_SOURCE`
+// (packages/core/src/autoclose/matcher.ts) — the ONE shared evaluator that D1
+// (PR-time check) and D2 (post-merge reconciliation) consume. This is a LOCAL
+// MIRROR, not an independent copy: init-templates must NOT statically
+// value-import from the heavy core barrel (the cold-start rule,
+// mmnto-ai/totem#2339 — it pulls LanceDB into every `--help`), and these
+// template constants are evaluated at module top-level so a deferred
+// `await import()` is not possible. The mirror is drift-LOCKED by the
+// init.test.ts assertions that render the templates and assert each inlines
+// `JSON.stringify(<core AUTO_CLOSE_REGEX_SOURCE>)`; if this literal ever drifts
+// from core's, those tests fail. Update BOTH in the same change.
+const AUTO_CLOSE_REGEX_SOURCE =
+  '\\b(?:closed|closes|close|fixed|fixes|fix|resolved|resolves|resolve)\\b\\s*(?::\\s*|\\s+)(?:([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)#|#)(\\d+)';
+
 // --- Gemini CLI hook templates ---
 
 /**
@@ -182,11 +198,53 @@ export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI Befo
 //   1. git push/commit   → run \`totem lint\` before proceeding (existing shield-gate behavior)
 //   2. write_file/edit_file → block bare cross-repo refs in substrate paths
 //      (xrepo-qualify-refs, sealed in mmnto-ai/totem-strategy#145)
+//   3. write_file/edit_file → block GitHub auto-close keywords adjacent to an
+//      issue ref in **/*.md (EXEMPT .github/**) — mmnto-ai/totem#1762
 const { execSync } = require('child_process');
 
 const BARE_REF_REGEX_SOURCE = ${JSON.stringify(BARE_REF_REGEX_SOURCE)};
+// Single-sourced from @mmnto/totem's AUTO_CLOSE_REGEX_SOURCE (mmnto-ai/totem#1762);
+// inlined for the rendered standalone hook the way BARE_REF_REGEX_SOURCE is.
+const AUTO_CLOSE_REGEX_SOURCE = ${JSON.stringify(AUTO_CLOSE_REGEX_SOURCE)};
 const SCOPED_PATH_RE = /(\\.handoff[\\\\\\/]|\\.journal[\\\\\\/]|\\.md$)/i;
+const MD_PATH_RE = /\\.md$/i;
+const GITHUB_EXEMPT_RE = /(^|[\\\\\\/])\\.github[\\\\\\/]/i;
 const SUPPRESS_DIRECTIVE_RE = /<!--\\s*totem-context:/;
+
+// mmnto-ai/totem#1762: any close-keyword (close/fix/resolve inflections) adjacent
+// to an issue ref in narrative markdown can auto-close a linked issue when the
+// text reaches a PR body / commit message — genuine OR negated. Presence
+// invariant, zero semantics (no negation parser). Scoped to **/*.md, EXEMPT
+// .github/** (PR/issue templates where close keywords are intentional).
+function checkAutoCloseKeywords(toolName, toolInput) {
+  if (toolName !== 'write_file' && toolName !== 'edit_file') return;
+  const input = (typeof toolInput === 'object' && toolInput !== null) ? toolInput : {};
+  const filePath = String(input.file_path || input.path || '');
+  if (!MD_PATH_RE.test(filePath) || GITHUB_EXEMPT_RE.test(filePath)) return;
+  const content = input.content !== undefined ? input.content : input.new_string;
+  if (typeof content !== 'string') return;
+
+  const lines = content.split(/\\r?\\n/);
+  const filtered = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prev = i > 0 ? lines[i - 1] : '';
+    if (SUPPRESS_DIRECTIVE_RE.test(line) || SUPPRESS_DIRECTIVE_RE.test(prev)) continue;
+    filtered.push(line);
+  }
+  const re = new RegExp(AUTO_CLOSE_REGEX_SOURCE, 'gi');
+  const matches = [...filtered.join('\\n').matchAll(re)];
+  if (matches.length === 0) return;
+
+  const refs = matches.slice(0, 5).map((m) => (m[1] ? m[1] + '#' : '#') + m[2]).join(', ');
+  throw new Error(
+    '[totem PreWriteShield] GitHub auto-close keyword adjacent to issue ref in write to ' + filePath + ': ' + refs + '. ' +
+    'GitHub auto-closes linked issues from a PR body / commit message carrying this pattern (even under negation). ' +
+    'Rephrase to a non-keyword form (references / see / tracks), or declare the intended close via the PR linked issue. ' +
+    'For verbatim quotation, prefix with a <!-- totem-context: <reason> --> directive on the preceding line. ' +
+    'mmnto-ai/totem#1762.',
+  );
+}
 
 function checkXrepoQualifyRefs(toolName, toolInput) {
   if (toolName !== 'write_file' && toolName !== 'edit_file') return;
@@ -218,6 +276,7 @@ function checkXrepoQualifyRefs(toolName, toolInput) {
 }
 
 module.exports = function beforeTool(toolName, toolInput) {
+  checkAutoCloseKeywords(toolName, toolInput);
   checkXrepoQualifyRefs(toolName, toolInput);
 
   if (toolName !== 'run_shell_command') return;
@@ -278,6 +337,13 @@ export const CLAUDE_PRETOOLUSE_ENTRY = {
 // before they hit disk. Eliminates the agent friction loop where a write
 // only fails at commit-time (`totem lint` pre-commit).
 //
+// ALSO enforces the GitHub auto-close guard (mmnto-ai/totem#1762): any
+// close-keyword (close/fix/resolve inflections) adjacent to an issue ref in a
+// **/*.md write (EXEMPT .github/**) is blocked before it can reach a PR body /
+// commit message and accidentally auto-close a linked issue — presence
+// invariant, zero semantics, no negation parser. Shares @mmnto/totem's
+// AUTO_CLOSE_REGEX_SOURCE (the one shared evaluator).
+//
 // Exit-code contract is load-bearing — see hook source for details.
 //
 // Per OQ 2 of mmnto-ai/totem#1846 design: this entry installs into
@@ -288,7 +354,8 @@ export const CLAUDE_PRETOOLUSE_ENTRY = {
 // and per-developer command interception.
 
 export const CLAUDE_PREWRITESHIELD = `// [totem] auto-generated — Claude Code PreWriteShield hook
-// Write-time enforcement of xrepo-qualify-refs.
+// Write-time enforcement of xrepo-qualify-refs
+// + the GitHub auto-close keyword guard (mmnto-ai/totem#1762).
 // Sealed in mmnto-ai/totem-strategy#145 (seal SHA c488888b).
 //
 // Mirrors the compiled rule pattern at lessonHash "xrepo-qualify-refs"
@@ -305,7 +372,12 @@ export const CLAUDE_PREWRITESHIELD = `// [totem] auto-generated — Claude Code 
 'use strict';
 
 const BARE_REF_REGEX_SOURCE = ${JSON.stringify(BARE_REF_REGEX_SOURCE)};
+// Single-sourced from @mmnto/totem's AUTO_CLOSE_REGEX_SOURCE (mmnto-ai/totem#1762);
+// inlined for the rendered standalone .cjs the way BARE_REF_REGEX_SOURCE is.
+const AUTO_CLOSE_REGEX_SOURCE = ${JSON.stringify(AUTO_CLOSE_REGEX_SOURCE)};
 const SCOPED_PATH_RE = /(\\.handoff[\\\\\\/]|\\.journal[\\\\\\/]|\\.md$)/i;
+const AUTO_CLOSE_MD_RE = /\\.md$/i;
+const AUTO_CLOSE_GITHUB_RE = /(^|[\\\\\\/])\\.github[\\\\\\/]/i;
 const SUPPRESS_DIRECTIVE_RE = /<!--\\s*totem-context:/;
 
 let stdin = '';
@@ -350,8 +422,30 @@ process.stdin.on('end', () => {
     filtered.push(line);
   }
 
+  const joined = filtered.join('\\n');
+
+  // ── Auto-close keyword guard (mmnto-ai/totem#1762): **/*.md, EXEMPT .github/** ──
+  // Presence invariant, zero semantics: any close-keyword adjacent to an issue
+  // ref (genuine OR negated) is blocked. Checked before the bare-ref arm because
+  // accidental upstream-issue closure is the higher-blast-radius failure.
+  if (AUTO_CLOSE_MD_RE.test(filePath) && !AUTO_CLOSE_GITHUB_RE.test(filePath)) {
+    const acRe = new RegExp(AUTO_CLOSE_REGEX_SOURCE, 'gi');
+    const acMatches = [...joined.matchAll(acRe)];
+    if (acMatches.length > 0) {
+      const acRefs = acMatches.slice(0, 5).map((m) => (m[1] ? m[1] + '#' : '#') + m[2]).join(', ');
+      process.stderr.write(
+        '[totem PreWriteShield] GitHub auto-close keyword adjacent to issue ref in write to ' + filePath + ': ' + acRefs + '\\n' +
+        'GitHub auto-closes linked issues from a PR body / commit message carrying this pattern (even under negation).\\n' +
+        'Rephrase to a non-keyword form (\`references\` / \`see\` / \`tracks\`), or declare the intended close via the PR linked issue.\\n' +
+        'For verbatim quotation, prefix with a \`<!-- totem-context: <reason> -->\` directive on the preceding line.\\n' +
+        'mmnto-ai/totem#1762.\\n',
+      );
+      process.exit(2);
+    }
+  }
+
   const re = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
-  const matches = [...filtered.join('\\n').matchAll(re)];
+  const matches = [...joined.matchAll(re)];
   if (matches.length === 0) {
     process.exit(0);
   }

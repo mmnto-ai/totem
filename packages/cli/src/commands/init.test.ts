@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
-import { LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
+import { AUTO_CLOSE_REGEX_SOURCE, LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
 
 import {
   UNIVERSAL_BASELINE_LESSONS,
@@ -1560,6 +1560,14 @@ describe('CLAUDE_PREWRITESHIELD template', () => {
   it('cites the seal at mmnto-ai/totem-strategy#145', () => {
     expect(CLAUDE_PREWRITESHIELD).toContain('mmnto-ai/totem-strategy#145');
   });
+
+  it('inlines the shared AUTO_CLOSE_REGEX_SOURCE (mmnto-ai/totem#1762, JSON-encoded)', () => {
+    expect(CLAUDE_PREWRITESHIELD).toContain(JSON.stringify(AUTO_CLOSE_REGEX_SOURCE));
+  });
+
+  it('cites the auto-close issue mmnto-ai/totem#1762', () => {
+    expect(CLAUDE_PREWRITESHIELD).toContain('mmnto-ai/totem#1762');
+  });
 });
 
 describe('PreWriteShield runtime behavior', () => {
@@ -1692,6 +1700,73 @@ describe('PreWriteShield runtime behavior', () => {
     });
     expect(result.exitCode).toBe(0);
   });
+
+  // ─── Auto-close keyword guard (mmnto-ai/totem#1762) ───────────────────────
+
+  it('exits 2 on a close keyword adjacent to an issue ref in a **/*.md write', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'docs/x.md', content: 'Closes #131' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+    expect(result.stderr).toContain('#131');
+  });
+
+  it('exits 2 even under NEGATION (presence invariant — the #2471 shape)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.journal/t.md', content: 'Does not close #2466' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+    expect(result.stderr).toContain('#2466');
+  });
+
+  it('exits 2 on a QUALIFIED close ref (owner/repo#N still auto-closes)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'docs/x.md', content: 'Closes mmnto-ai/totem#131' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+  });
+
+  it('EXEMPTS .github/** from the auto-close guard (AC-4 — keywords intentional there)', () => {
+    // Qualified ref so the sealed bare-ref arm (unchanged) also stays quiet; this
+    // isolates the auto-close .github exemption.
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: '.github/PULL_REQUEST_TEMPLATE.md',
+        content: 'Closes mmnto-ai/totem#131',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('respects the suppression-directive bypass for a verbatim-quoted close keyword', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: 'docs/x.md',
+        content:
+          '<!-- totem-context: verbatim quotation of a historical commit -->\nThe commit said closes #131.',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 0 on a non-keyword issue reference in markdown (references/see form)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: 'docs/x.md',
+        content: 'references mmnto-ai/totem#131 and see mmnto-ai/totem#5',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
 });
 
 describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
@@ -1797,6 +1872,71 @@ describe('GEMINI_BEFORE_TOOL write_file/edit_file extension', () => {
 
   it('cites the seal at mmnto-ai/totem-strategy#145 in BeforeTool extension', () => {
     expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem-strategy#145');
+  });
+
+  it('inlines the shared AUTO_CLOSE_REGEX_SOURCE (mmnto-ai/totem#1762, parity with PreWriteShield)', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain(JSON.stringify(AUTO_CLOSE_REGEX_SOURCE));
+  });
+
+  it('wires the auto-close check into beforeTool and cites mmnto-ai/totem#1762', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain('checkAutoCloseKeywords(toolName, toolInput)');
+    expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem#1762');
+  });
+});
+
+describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)', () => {
+  let tmpDir: string;
+  let hookPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-beforetool-'));
+    hookPath = path.join(tmpDir, 'BeforeTool.js');
+    fs.writeFileSync(hookPath, GEMINI_BEFORE_TOOL, 'utf-8');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /** Require the rendered hook fresh and report whether it threw. */
+  function runBeforeTool(
+    tool: string,
+    input: Record<string, unknown>,
+  ): { threw: boolean; message: string } {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
+    try {
+      beforeTool(tool, input);
+      return { threw: false, message: '' };
+    } catch (err) {
+      return { threw: true, message: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  it('throws (blocks) on a close keyword adjacent to an issue ref in a **/*.md write, even negated', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: 'docs/x.md',
+      content: 'Does not close #2466',
+    });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/auto-close/i);
+    expect(r.message).toContain('#2466');
+  });
+
+  it('exempts .github/** (qualified ref keeps the bare-ref arm quiet too)', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.github/x.md',
+      content: 'Closes mmnto-ai/totem#5',
+    });
+    expect(r.threw).toBe(false);
+  });
+
+  it('does not throw on a non-keyword reference form', () => {
+    const r = runBeforeTool('edit_file', {
+      file_path: 'docs/x.md',
+      new_string: 'see mmnto-ai/totem#5',
+    });
+    expect(r.threw).toBe(false);
   });
 });
 
