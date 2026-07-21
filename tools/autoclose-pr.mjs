@@ -39,16 +39,23 @@ export function gh(args) {
 }
 
 /**
- * Assert the repo's squash-merge config matches the E-lever posture (PR_TITLE +
- * BLANK) and fail loud on drift (mmnto-ai/totem#1762 addendum, 2026-07-21T0235Z).
+ * Assert the repo's merge config matches the required posture — E lever
+ * (PR_TITLE + BLANK) AND squash-only (allow_squash_merge on, merge-commit +
+ * rebase off) — and fail loud on drift (mmnto-ai/totem#1762 addendum
+ * 2026-07-21T0235Z + codex squash-only supplement 0356Z). Squash-only is an
+ * OPERATOR settings action (routed separately); until flipped, D1 reds by design.
  * A repo setting is one settings-page click from silently reverting.
  */
-function assertMergeConfigPosture(repo) {
-  const raw = gh([
+function assertMergeConfigPosture(repo, ghFn = gh) {
+  const raw = ghFn([
     'api',
     `repos/${repo}`,
     '--jq',
-    '{squash_merge_commit_title: .squash_merge_commit_title, squash_merge_commit_message: .squash_merge_commit_message}',
+    '{squash_merge_commit_title: .squash_merge_commit_title, ' +
+      'squash_merge_commit_message: .squash_merge_commit_message, ' +
+      'allow_squash_merge: .allow_squash_merge, ' +
+      'allow_merge_commit: .allow_merge_commit, ' +
+      'allow_rebase_merge: .allow_rebase_merge}',
   ]);
   const verdict = evaluateMergeConfigPosture(JSON.parse(raw));
   if (!verdict.conforms) {
@@ -70,36 +77,52 @@ function fetchPr(repo, pr) {
 }
 
 /**
- * Fetch branch commit messages (first page, per_page=100 — PRs rarely exceed
- * 100 commits; parsed as structured JSON so multi-line messages never split).
+ * Fetch ALL branch commit messages, paginated to exhaustion (codex #4 — the
+ * binding "scan ALL branch commit messages" contract; rarity is not a
+ * deterministic bound). `gh api --paginate` merges the array pages into one JSON
+ * array, parsed structurally so multi-line messages never split. `ghFn` is
+ * injectable for the adapter test.
  */
-function fetchCommitMessages(repo, pr) {
-  const raw = gh(['api', `repos/${repo}/pulls/${pr}/commits?per_page=100`]);
+export function fetchCommitMessages(repo, pr, ghFn = gh) {
+  const raw = ghFn(['api', '--paginate', `repos/${repo}/pulls/${pr}/commits?per_page=100`]);
   const commits = JSON.parse(raw);
   return Array.isArray(commits) ? commits.map((c) => c?.commit?.message ?? '') : [];
 }
 
-/** Fetch GitHub's own linked closing references (the primary declared channel). */
-function fetchClosingIssueRefs(repo, pr) {
+/**
+ * Fetch GitHub's linked closing references (OBSERVED state — recorded on the
+ * receipt as informational, NOT authorizing; the marker is the sole authorizer,
+ * codex #3). Paginated to exhaustion via the GraphQL cursor (codex #6) so the
+ * informational audit record is complete. `ghFn` is injectable for the test.
+ */
+export function fetchClosingIssueRefs(repo, pr, ghFn = gh) {
   const [owner, name] = repo.split('/');
-  const query =
-    'query($owner:String!,$name:String!,$pr:Int!){repository(owner:$owner,name:$name)' +
-    '{pullRequest(number:$pr){closingIssuesReferences(first:100)' +
-    '{nodes{number repository{nameWithOwner}}}}}}';
-  const raw = gh([
-    'api',
-    'graphql',
-    '-f',
-    `query=${query}`,
-    '-f',
-    `owner=${owner}`,
-    '-f',
-    `name=${name}`,
-    '-F',
-    `pr=${pr}`,
-  ]);
-  const nodes =
-    JSON.parse(raw)?.data?.repository?.pullRequest?.closingIssuesReferences?.nodes ?? [];
+  const nodes = [];
+  let after = null;
+  for (let page = 0; page < 50; page++) {
+    // `$after: String` is nullable — omitting the arg on page 1 means null.
+    const query =
+      'query($owner:String!,$name:String!,$pr:Int!,$after:String){repository(owner:$owner,name:$name)' +
+      '{pullRequest(number:$pr){closingIssuesReferences(first:100,after:$after)' +
+      '{pageInfo{hasNextPage endCursor} nodes{number repository{nameWithOwner}}}}}}';
+    const args = [
+      'api',
+      'graphql',
+      '-f',
+      `query=${query}`,
+      '-f',
+      `owner=${owner}`,
+      '-f',
+      `name=${name}`,
+      '-F',
+      `pr=${pr}`,
+    ];
+    if (after) args.push('-f', `after=${after}`);
+    const conn = JSON.parse(ghFn(args))?.data?.repository?.pullRequest?.closingIssuesReferences;
+    for (const n of conn?.nodes ?? []) nodes.push(n);
+    if (!conn?.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
   return nodes.map((n) => ({
     number: n.number,
     ...(n.repository?.nameWithOwner &&
@@ -135,12 +158,14 @@ export function main() {
 
   if (!scan.ok) {
     console.error(
-      `[autoclose D1] FAIL — undeclared close-keyword ref(s): ${scan.undeclared.join(', ')}.\n` +
+      `[autoclose D1] FAIL — unauthorized close-keyword ref(s): ${scan.undeclared.join(', ')}.\n` +
         'A close-keyword adjacent to an issue ref (genuine OR negated) in the PR title, ' +
         'description, or ANY branch commit message auto-closes the linked issue when it reaches ' +
-        'the squash merge-commit body. Declare intended closures via the PR linked issue ' +
-        '(closingIssuesReferences) or a `<!-- totem-close: #N -->` marker; otherwise rephrase to a ' +
-        'non-keyword form (references / see / tracks). mmnto-ai/totem#1762.',
+        'the squash merge-commit body. Declare each intended closure with a ' +
+        '`<!-- totem-close: #N -->` marker (or a `Totem-Close: #N` trailer) — the SOLE authorizing ' +
+        "channel, since GitHub's closingIssuesReferences is DERIVED from the same keyword and " +
+        'cannot authorize it (the circularity fix). Otherwise rephrase to a non-keyword form ' +
+        '(references / see / tracks). mmnto-ai/totem#1762.',
     );
     process.exit(1);
   }

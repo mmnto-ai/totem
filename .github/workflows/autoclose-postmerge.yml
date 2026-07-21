@@ -6,6 +6,11 @@
 # NEVER auto-reopens — the Tenet 9 sense→enforce gate (reopen arms only after
 # positive+negative controls). Quiet by default: a merge whose body carries no
 # close-keyword-adjacent ref is clean regardless of receipt.
+#
+# TRIAGE NOTE: an `unexpected-body` ::warning is the FINGERPRINT of the confirmed
+# vector class (a local `gh pr merge --body` override under BLANK) — it is a
+# triage item when it fires, not wallpaper. Read the step summary; verify no
+# unintended close landed. (strategy-claude 0308Z/0330Z.)
 name: Auto-close reconcile (observe)
 
 on:
@@ -31,7 +36,7 @@ jobs:
 
       - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm

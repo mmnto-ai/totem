@@ -11,8 +11,13 @@
 name: Auto-close guard
 
 on:
+  # Explicit types: the default set omits `edited`, so a title/body change after a
+  # green run would keep the stale check (same head SHA). `edited` re-runs D1 so a
+  # late `Closes #N` in the title/description is caught (codex #2). Under PR_TITLE
+  # a later title becomes the squash subject, so a title edit must re-gate.
   pull_request:
     branches: [main]
+    types: [opened, edited, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -32,7 +37,7 @@ jobs:
 
       - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm

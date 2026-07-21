@@ -8,21 +8,28 @@
  * positive+negative controls).
  *
  * Body-presence-first under the E lever (squash message = BLANK, PR_TITLE title —
- * mmnto-ai/totem#1762 addendum 2026-07-21T0235Z): a non-empty squash body should
- * not exist under BLANK, so its presence is itself a posture signal.
+ * mmnto-ai/totem#1762 addendum 2026-07-21T0235Z; RFC-822 attribution trailers are
+ * stripped before the presence test, 0330Z): a non-empty non-trailer squash body
+ * should not exist under BLANK, so its presence is itself a posture signal.
  *
- *   - clean            → exit 0 (empty body + no undeclared close-keyword ref).
- *   - anomaly          → exit 1. An undeclared close-keyword ref (the accidental-
+ * CONTENT-SCAN-FIRST (agy b): the merged message is scanned for close-keyword
+ * refs BEFORE any receipt fetch. A clean commit (no refs) makes ZERO `gh api`
+ * calls — the 95% path pays no network tax.
+ *
+ *   - clean            → exit 0 (no refs; empty/trailer-only body). No receipt fetch.
+ *   - anomaly          → exit 1. An unauthorized close-keyword ref (the accidental-
  *                        closure harm). The zero-allowed-set (receipt `[]`) + a
  *                        closure-capable message is the #2471 specimen.
  *   - missing-receipt  → exit 1. A closure-capable message but no receipt (PR
  *                        merged before D1 existed, or the artifact expired).
  *   - ambiguous-receipt→ exit 1. Malformed / wrong-PR receipt. Never guess.
- *   - unexpected-body  → exit 0 + `::warning`. A non-empty body under BLANK with
- *                        NO undeclared close-keyword ref: posture-drift / local
- *                        `--body`-override EVIDENCE (no closure harm). Surfaced,
- *                        not silent, not a hard anomaly (interpretation call).
+ *   - unexpected-body  → exit 0 + `::warning`. A non-empty non-trailer body under
+ *                        BLANK with NO unauthorized ref: the local `--body`-override
+ *                        FINGERPRINT (posture-drift evidence, no closure harm).
+ *                        A triage item when it fires — surfaced, not silent, not a
+ *                        hard anomaly (interpretation call, confirmed 0308Z/0330Z).
  *
+ * Every non-clean status also writes a GITHUB_STEP_SUMMARY block (visibility).
  * Never scans issue/PR COMMENT bodies — comments never auto-close.
  *
  * Usage: node tools/autoclose-postmerge.mjs
@@ -38,7 +45,7 @@ import * as path from 'node:path';
 import * as process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
-import { reconcile } from '../packages/core/dist/autoclose/index.js';
+import { findAutoCloseRefs, reconcile } from '../packages/core/dist/autoclose/index.js';
 
 /** Run `gh` and return stdout; throws (with stderr) on a non-zero exit. */
 export function gh(args) {
@@ -58,10 +65,22 @@ export function resolvePrNumberFromSubject(subject) {
   return last ? Number(last[1]) : undefined;
 }
 
+/** Log WHICH link in the receipt-load chain broke, before returning null (agy a). */
+function warnLink(link, err) {
+  const msg = err && err.message ? err.message : String(err);
+  console.error(
+    `[autoclose D2] loadReceipt failed at [${link}]: ${msg}. Returning null ` +
+      '(D2 treats a closure-capable body with no receipt as missing-receipt).',
+  );
+}
+
 /**
  * Best-effort load of the D1 receipt for `prNumber`. Returns the parsed receipt
  * or `null` on ANY failure — the single funnel to reconcile's "missing-receipt →
- * alert, never guess" branch (incl. PRs merged before D1 existed).
+ * alert, never guess" branch (incl. PRs merged before D1 existed). Each link
+ * (PR lookup, run lookup, artifact download, JSON parse) logs a precise stderr
+ * warning naming the broken link before returning null (agy a — no diagnostic
+ * black hole).
  */
 export function loadReceipt(repo, prNumber, workflowFile) {
   // A pre-downloaded receipt (workflow actions/download-artifact) wins.
@@ -69,26 +88,74 @@ export function loadReceipt(repo, prNumber, workflowFile) {
   if (preset && fs.existsSync(preset)) {
     try {
       return JSON.parse(fs.readFileSync(preset, 'utf-8'));
-    } catch {
+    } catch (err) {
+      warnLink('preset receipt JSON parse', err);
       return null;
     }
   }
-  if (!Number.isFinite(prNumber)) return null;
+  if (!Number.isFinite(prNumber)) {
+    console.error(
+      '[autoclose D2] loadReceipt: no PR number resolved from the squash subject; returning null.',
+    );
+    return null;
+  }
+
+  let headSha;
   try {
-    const headSha = gh(['api', `repos/${repo}/pulls/${prNumber}`, '--jq', '.head.sha']).trim();
+    headSha = gh(['api', `repos/${repo}/pulls/${prNumber}`, '--jq', '.head.sha']).trim();
+  } catch (err) {
+    warnLink('PR head-SHA lookup', err);
+    return null;
+  }
+
+  let runIds;
+  try {
+    // Pick the LATEST D1 run for this head SHA — an edited-PR rerun (same head
+    // SHA, higher run_number) must supersede the earlier receipt (codex #2
+    // follow-up). Sort by run_number descending rather than trusting API order.
     const runsRaw = gh([
       'api',
       `repos/${repo}/actions/runs?head_sha=${headSha}&per_page=100`,
       '--jq',
-      `[.workflow_runs[] | select(.path | endswith("${workflowFile}")) | .id]`,
+      `[.workflow_runs[] | select(.path | endswith("${workflowFile}"))] | sort_by(.run_number) | reverse | [.[].id]`,
     ]);
-    const runIds = JSON.parse(runsRaw);
-    if (!Array.isArray(runIds) || runIds.length === 0) return null;
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'autoclose-receipt-'));
-    gh(['run', 'download', String(runIds[0]), '-n', 'autoclose-receipt', '-D', dir]);
-    return JSON.parse(fs.readFileSync(path.join(dir, 'autoclose-receipt.json'), 'utf-8'));
-  } catch {
+    runIds = JSON.parse(runsRaw);
+  } catch (err) {
+    warnLink('workflow-run lookup', err);
     return null;
+  }
+  if (!Array.isArray(runIds) || runIds.length === 0) {
+    console.error(
+      `[autoclose D2] loadReceipt: no ${workflowFile} run found for head ${headSha}; returning null.`,
+    );
+    return null;
+  }
+
+  let dir;
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'autoclose-receipt-'));
+    gh(['run', 'download', String(runIds[0]), '-n', 'autoclose-receipt', '-D', dir]);
+  } catch (err) {
+    warnLink('artifact download', err);
+    return null;
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, 'autoclose-receipt.json'), 'utf-8'));
+  } catch (err) {
+    warnLink('receipt JSON parse', err);
+    return null;
+  }
+}
+
+/** Append a visibility block to the GitHub step summary (no-op off-CI). */
+function writeStepSummary(md) {
+  const p = process.env.GITHUB_STEP_SUMMARY;
+  if (!p) return;
+  try {
+    fs.appendFileSync(p, `${md}\n`);
+  } catch (err) {
+    console.error(`[autoclose D2] could not write GITHUB_STEP_SUMMARY: ${err.message || err}`);
   }
 }
 
@@ -103,7 +170,12 @@ export function main() {
 
   const mergedBody = gh(['api', `repos/${repo}/commits/${sha}`, '--jq', '.commit.message']);
   const prNumber = resolvePrNumberFromSubject(mergedBody);
-  const receipt = loadReceipt(repo, prNumber, workflowFile);
+
+  // Content-scan FIRST (agy b): only fetch the receipt when the merged message
+  // actually carries a close-keyword ref. A clean commit makes ZERO receipt API
+  // calls. reconcile is authoritative for the final verdict either way.
+  const hasRefs = findAutoCloseRefs(mergedBody).length > 0;
+  const receipt = hasRefs ? loadReceipt(repo, prNumber, workflowFile) : null;
 
   const result = reconcile(receipt, mergedBody, {
     repo,
@@ -113,16 +185,28 @@ export function main() {
   console.log(
     `[autoclose D2] repo=${repo} sha=${sha} pr=${prNumber ? `#${prNumber}` : '(unresolved)'}`,
   );
-  console.log(`[autoclose D2] status=${result.status} findings=${JSON.stringify(result.findings)}`);
+  console.log(
+    `[autoclose D2] status=${result.status} findings=${JSON.stringify(result.findings)} receiptFetched=${hasRefs}`,
+  );
 
   if (result.status === 'clean') {
     console.log(`[autoclose D2] OK — ${result.message}`);
     process.exit(0);
   }
 
+  // Every non-clean status gets a step-summary block (visibility — agy b/c).
+  writeStepSummary(
+    `### Auto-close reconciliation (D2, observe)\n\n` +
+      `- **status:** \`${result.status}\`\n` +
+      `- **commit:** \`${sha}\`${prNumber ? ` (PR #${prNumber})` : ''}\n` +
+      `- **findings:** ${result.findings.length ? result.findings.join(', ') : 'none'}\n\n` +
+      `${result.message}`,
+  );
+
   // Posture-drift EVIDENCE (E-lever addendum, mmnto-ai/totem#1762): a non-empty
-  // body under BLANK with NO undeclared close-keyword ref — no accidental-closure
-  // harm, so surface a NON-failing annotation (not a hard anomaly, not silent).
+  // non-trailer body under BLANK with NO unauthorized close-keyword ref — no
+  // accidental-closure harm, so surface a NON-failing annotation (not a hard
+  // anomaly, not silent). Confirmed warning semantics (0308Z/0330Z).
   if (result.status === 'unexpected-body') {
     console.log(`::warning title=Unexpected non-empty body under BLANK posture::${result.message}`);
     process.exit(0);
