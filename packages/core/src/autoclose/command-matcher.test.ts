@@ -135,4 +135,69 @@ describe('MERGE_COMMAND_REGEX_SOURCE / findMergeInvocations', () => {
     expect(found.map((m) => m.form)).toEqual(['gh-pr-merge']);
     expect(found[0]?.index).toBeGreaterThan(0);
   });
+
+  // ─── flag-splice: inherited flags between gh↔pr and pr↔merge (kimi B-2 + codex B-1) ─
+
+  it('BLOCKS a --repo flag spliced between gh and pr', () => {
+    expect(forms('gh --repo mmnto-ai/totem pr merge 123')).toEqual(['gh-pr-merge']);
+    expect(forms('gh --repo mmnto-ai/totem pr merge 2478 --squash')).toEqual(['gh-pr-merge']);
+  });
+
+  it('BLOCKS a --repo flag spliced between pr and merge', () => {
+    expect(forms('gh pr --repo mmnto-ai/totem merge 123')).toEqual(['gh-pr-merge']);
+    expect(forms('gh pr --repo mmnto-ai/totem merge 2478 --squash')).toEqual(['gh-pr-merge']);
+  });
+
+  it('BLOCKS short `-R` and `--repo=owner/name` splice forms', () => {
+    expect(forms('gh -R o/r pr merge 5')).toEqual(['gh-pr-merge']);
+    expect(forms('gh pr --repo=o/r merge 5')).toEqual(['gh-pr-merge']);
+  });
+
+  it('does NOT over-fire when a spliced flag precedes a read-only verb', () => {
+    expect(blocks('gh --repo o/r pr view 5')).toBe(false);
+    expect(blocks('gh pr --repo o/r view 5')).toBe(false);
+    expect(blocks('gh pr --repo o/r list')).toBe(false);
+    // `merge` only as a flag VALUE of a read verb must not resolve to the subcommand.
+    expect(blocks('gh pr list --search merge')).toBe(false);
+  });
+
+  // ─── variable / substitution REST merge (kimi NB-1 deny direction; codex B-1) ─
+
+  it('BLOCKS a variable REST merge path (…/pulls/$PR/merge)', () => {
+    expect(forms('gh api repos/mmnto-ai/totem/pulls/$PR/merge -X PUT')).toEqual([
+      'gh-api-undecidable',
+    ]);
+    expect(forms('gh api repos/o/r/pulls/${PR}/merge')).toEqual(['gh-api-undecidable']);
+  });
+
+  it('BLOCKS `gh api` with a $/backtick continuation (undecidable endpoint)', () => {
+    expect(forms('gh api "$ENDPOINT"')).toEqual(['gh-api-undecidable']);
+    expect(forms('gh api $EP')).toEqual(['gh-api-undecidable']);
+  });
+
+  // ─── shell / cmd.exe line continuations (kimi B-3) ────────────────────────
+
+  it('BLOCKS a `\\`+LF (sh) continuation between tokens', () => {
+    expect(forms('gh pr \\\nmerge 123 --squash')).toEqual(['gh-pr-merge']);
+    expect(forms('gh \\\npr merge 123')).toEqual(['gh-pr-merge']);
+    expect(forms('gh \\\npr \\\nmerge')).toEqual(['gh-pr-merge']);
+  });
+
+  it('BLOCKS a `^`+LF (cmd.exe) continuation between tokens', () => {
+    expect(forms('gh pr ^\nmerge 123')).toEqual(['gh-pr-merge']);
+    expect(forms('gh ^\npr merge 123')).toEqual(['gh-pr-merge']);
+  });
+
+  // ─── GraphQL merge mutation (kimi NB-2) ───────────────────────────────────
+
+  it('BLOCKS a `gh api graphql` mergePullRequest mutation', () => {
+    expect(
+      forms('gh api graphql -f query=\'mutation{mergePullRequest(input:{pullRequestId:"x"})}\''),
+    ).toEqual(['gh-api-merge']);
+  });
+
+  it('does NOT fire on an unrelated `gh api graphql` read', () => {
+    expect(blocks("gh api graphql -f query='query{repository(owner:\"o\"){name}}'")).toBe(false);
+    expect(blocks('gh api graphql -f query=...')).toBe(false);
+  });
 });
