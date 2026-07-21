@@ -32,6 +32,12 @@ import { TotemError, TotemParseError } from '../errors.js';
 import { cleanTmpDir } from '../test-utils.js';
 import { calculateDeterministicHash } from './hash.js';
 import { classifyDiversity } from './panel.js';
+import type { BoundedTextEvidence, InvocationFailureArtifact } from './schema.js';
+import {
+  INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION,
+  INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
+} from './schema.js';
+import { loadInvocationFailureArtifact, saveInvocationFailureArtifact } from './storage.js';
 import {
   computeLineageKey,
   computeVerdictArtifactContentHash,
@@ -45,12 +51,66 @@ import {
   renderCovariateLine,
   saveVerdictArtifact,
   VERDICT_ARTIFACT_SCHEMA_VERSION,
+  VERDICT_LANE_FAILURE_REASONS,
   type VerdictArtifact,
   VerdictArtifactSchema,
   type VerdictLane,
+  type VerdictLaneFailureReason,
   type VerdictPredicateInput,
   verdictsDir,
 } from './verdict.js';
+
+/** Minimal valid BoundedTextEvidence for a failure-artifact fixture (mirrors storage.test). */
+function boundedTextEvidence(text: string, limitBytes = 64 * 1024): BoundedTextEvidence {
+  const bytes = Buffer.byteLength(text, 'utf-8');
+  return {
+    encoding: 'utf-8',
+    head: text,
+    observedBytes: bytes,
+    retainedBytes: bytes,
+    limitBytes,
+    truncated: false,
+    dlp: 'masked',
+  };
+}
+
+/** A valid terminal `InvocationFailureArtifact` (slice B) for the lane→artifact resolve test. */
+function invocationFailureArtifact(
+  overrides: Partial<InvocationFailureArtifact> = {},
+): InvocationFailureArtifact {
+  return {
+    schemaVersion: INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION,
+    inputBundle: { maskedPrompt: 'prompt after DLP' },
+    inputHash: 'c'.repeat(64),
+    grounding: { hash: 'd'.repeat(64), provenanceSummary: 'similarity-only' },
+    requestedBackend: {
+      provider: 'anthropic',
+      model: 'claude-sonnet-5',
+      qualifiedModel: 'anthropic:claude-sonnet-5',
+      admissionClass: 'completion_only',
+      taskProfile: 'Review',
+    },
+    attempts: [
+      {
+        sequence: 1,
+        route: 'cli-fallback',
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+        status: 'failed',
+        durationMs: 900,
+        failureKind: 'timeout',
+        process: { exitCode: null, signal: 'SIGTERM', timedOut: true, timeoutMs: 60_000 },
+      },
+    ],
+    terminal: {
+      kind: 'timeout',
+      attempt: 1,
+      message: boundedTextEvidence('Claude CLI timed out', INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES),
+    },
+    createdAt: '2026-07-19T12:00:00.000Z',
+    ...overrides,
+  };
+}
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 //
@@ -89,6 +149,25 @@ function failedLane(index: number, configured = 'openai:gpt-model'): VerdictLane
     typedReason: 'quota-exhausted',
     // rev-6 item 3: the configured lane the id suffix binds to (present even pre-resolution).
     configuredLane: configured,
+  };
+}
+
+/**
+ * A concrete `failed`-lane record (NOT the union) so tests can add `typedReason` /
+ * `failureArtifactHash` without tripping excess-property checks on a spread of the
+ * status-discriminated union (mmnto-ai/totem#2459). `laneId` binds to `configuredLane`.
+ */
+function failedLaneRecord(
+  index: number,
+  overrides: Partial<Extract<VerdictLane, { status: 'failed' }>> = {},
+): Extract<VerdictLane, { status: 'failed' }> {
+  const configured = overrides.configuredLane ?? 'openai:gpt-model';
+  return {
+    status: 'failed',
+    laneId: `lane-${index}:${configured}`,
+    typedReason: 'quota-exhausted',
+    configuredLane: configured,
+    ...overrides,
   };
 }
 
@@ -854,6 +933,89 @@ describe('schema-version tolerance (F1)', () => {
   });
 });
 
+// ─── #2459: slice-B invoke-failure kinds + failed-lane evidence hash ─────────
+
+describe('failed-lane invoke-failure kinds + evidence (mmnto-ai/totem#2459)', () => {
+  it('the writer stamps the 1.2.0 widening marker', () => {
+    expect(VERDICT_ARTIFACT_SCHEMA_VERSION).toBe('1.2.0');
+  });
+
+  it('accepts EACH widened failure reason on a failed lane — no auth/timeout/spawn collapse', () => {
+    // Every InvokeFailureKind must have a DISTINGUISHABLE reason: the exported set is the
+    // 4 legacy values PLUS the 5 execution-phase invoke kinds (quota/unknown reuse the
+    // legacy `quota-exhausted`/`invoke-error`), and each is a legal `typedReason`.
+    expect([...VERDICT_LANE_FAILURE_REASONS]).toEqual([
+      'invoke-error',
+      'quota-exhausted',
+      'missing-artifact-emission',
+      'config-error',
+      'invoke-auth',
+      'invoke-model',
+      'invoke-process-spawn',
+      'invoke-process-exit',
+      'invoke-timeout',
+    ]);
+    for (const typedReason of VERDICT_LANE_FAILURE_REASONS) {
+      const v = verdict({ lanes: [failedLaneRecord(0, { typedReason })] });
+      expect(VerdictArtifactSchema.safeParse(v).success).toBe(true);
+    }
+    // The five auth/model/spawn/exit/timeout reasons are pairwise distinct (no collapse).
+    const invokeKinds: VerdictLaneFailureReason[] = [
+      'invoke-auth',
+      'invoke-model',
+      'invoke-process-spawn',
+      'invoke-process-exit',
+      'invoke-timeout',
+    ];
+    expect(new Set(invokeKinds).size).toBe(invokeKinds.length);
+  });
+
+  it('records an OPTIONAL failureArtifactHash on a failed lane; absent is the honest default', () => {
+    const hash = 'e'.repeat(64);
+    const withHash = verdict({
+      lanes: [failedLaneRecord(0, { typedReason: 'invoke-timeout', failureArtifactHash: hash })],
+    });
+    const parsed = VerdictArtifactSchema.safeParse(withHash);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      const lane = parsed.data.lanes[0]!;
+      expect(lane.status === 'failed' && lane.failureArtifactHash).toBe(hash);
+    }
+    // Absent by default — pre-1.2 artifacts and admission-phase failures never carry one.
+    const parsedDefault = VerdictArtifactSchema.parse(verdict({ lanes: [failedLane(0)] }));
+    expect('failureArtifactHash' in parsedDefault.lanes[0]!).toBe(false);
+  });
+
+  it('rejects a non-sha256 failureArtifactHash (a recorded reference is a real address)', () => {
+    const bad = verdict({ lanes: [failedLaneRecord(0, { failureArtifactHash: 'not-a-hash' })] });
+    expect(VerdictArtifactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('a pre-widening 1.1.0 verdict (legacy typedReason, no failureArtifactHash) STILL parses', () => {
+    // Structural version-tolerance (acceptance criterion): an artifact written before the
+    // widening — a legacy `typedReason`, no `failureArtifactHash` — parses unchanged under
+    // the 1.2.0 reader. The widening is additive; nothing existing is invalidated.
+    const legacy = verdict({
+      schemaVersion: '1.1.0',
+      lanes: [
+        {
+          status: 'failed',
+          laneId: 'lane-0:openai:gpt-model',
+          typedReason: 'invoke-error',
+          configuredLane: 'openai:gpt-model',
+        },
+      ],
+    });
+    const parsed = VerdictArtifactSchema.safeParse(legacy);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      const lane = parsed.data.lanes[0]!;
+      expect(lane.status).toBe('failed');
+      expect('failureArtifactHash' in lane).toBe(false);
+    }
+  });
+});
+
 // ─── computeLineageKey ──────────────────────────────────────────────────────
 
 describe('computeLineageKey — source-discriminated selector, injection-proof', () => {
@@ -978,6 +1140,35 @@ describe('verdict storage (mirrors run/panel storage)', () => {
     expect(loaded.artifact).toEqual(v);
     // rev-6 item 1: the load carries the verified stored address (= the filename stem).
     expect(loaded.contentHash).toBe(saved.hash);
+  });
+
+  it("a failed lane's failureArtifactHash RESOLVES to its InvocationFailureArtifact (mmnto-ai/totem#2459)", () => {
+    // Acceptance criterion: if `failureArtifactHash` is recorded, the lane→artifact
+    // reference must resolve. Persist B's terminal failure evidence, record its hash on
+    // the failed lane, round-trip the verdict, then dereference the hash one hop away.
+    const failure = invocationFailureArtifact();
+    const savedFailure = saveInvocationFailureArtifact(totemDir, failure);
+
+    const v = verdict({
+      lanes: [
+        failedLaneRecord(0, {
+          typedReason: 'invoke-timeout',
+          failureArtifactHash: savedFailure.hash,
+        }),
+      ],
+    });
+    const savedVerdict = saveVerdictArtifact(totemDir, v);
+    const reloaded = loadVerdictArtifact(totemDir, savedVerdict.hash).artifact;
+
+    const lane = reloaded.lanes[0]!;
+    expect(lane.status).toBe('failed');
+    if (lane.status === 'failed') {
+      expect(lane.failureArtifactHash).toBe(savedFailure.hash);
+      // The reference resolves — no dangling hash.
+      const resolved = loadInvocationFailureArtifact(totemDir, lane.failureArtifactHash!);
+      expect(resolved.terminal.kind).toBe('timeout');
+      expect(resolved).toEqual(failure);
+    }
   });
 
   it('content address excludes createdAt — identical rounds dedup across time', () => {
