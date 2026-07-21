@@ -4,6 +4,8 @@
  * templates. Import the pattern / evaluator from here; never copy the regex.
  */
 
+export type { MergeInvocation, MergeInvocationForm } from './command-matcher.js';
+export { findMergeInvocations, MERGE_COMMAND_REGEX_SOURCE } from './command-matcher.js';
 export type { AutoCloseMatch } from './matcher.js';
 export {
   AUTO_CLOSE_KEYWORDS,
