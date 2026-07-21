@@ -332,7 +332,11 @@ function fetchPr(gh: GhRunner, prNumberArg: string | undefined, repo: string): P
 }
 
 /** Re-read the PR's landing state after `gh pr merge` (codex B-5). */
-function fetchMergeState(gh: GhRunner, prNumber: number, repo: string): z.infer<typeof PrMergeStateSchema> {
+function fetchMergeState(
+  gh: GhRunner,
+  prNumber: number,
+  repo: string,
+): z.infer<typeof PrMergeStateSchema> {
   const raw = gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'state,mergedAt']);
   return PrMergeStateSchema.parse(JSON.parse(raw));
 }
@@ -430,6 +434,7 @@ export async function prMergeCommand(
   let landingState: string;
   try {
     landingState = fetchMergeState(gh, pr.number, repo).state;
+    // totem-context: the merge already returned 0 (irreversible) — an inability to CONFIRM the landing state is surfaced LOUDLY via err() and we DEFER closes (conservative), never a silent swallow (Tenet 4).
   } catch (e) {
     // The merge command already returned 0; if we cannot confirm the landing state
     // we DEFER closes (conservative) rather than closing against an unproven merge.
@@ -450,7 +455,9 @@ export async function prMergeCommand(
         'auto-merge is in effect. The PR will land when its checks pass.\n' +
         (declaredRefs.length > 0
           ? 'Declared closes are DEFERRED until it lands. After it merges, run these to close them:\n' +
-            declaredRefs.map((ref) => `  ${displayGhCommand(buildIssueCloseArgv(ref, pr.number, repo))}\n`).join('')
+            declaredRefs
+              .map((ref) => `  ${displayGhCommand(buildIssueCloseArgv(ref, pr.number, repo))}\n`)
+              .join('')
           : ''),
     );
     return { exitCode: 0 };

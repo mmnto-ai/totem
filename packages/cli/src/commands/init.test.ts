@@ -20,6 +20,7 @@ import {
 } from '../assets/universal-baseline.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
+  adoptLegacyGeminiBeforeTool,
   buildNpxCommand,
   detectEmbeddingTier,
   detectReflexStatus,
@@ -29,7 +30,6 @@ import {
   OLLAMA_FLOOR_DEFAULT_BASE_URL,
   probeOllamaFloor,
   REFLEX_VERSION,
-  adoptLegacyGeminiBeforeTool,
   scaffoldClaudeHooks,
   scaffoldClaudeMergeInterlock,
   scaffoldClaudeSessionStart,

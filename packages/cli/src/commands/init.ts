@@ -300,6 +300,7 @@ export function scaffoldGeminiBeforeToolSettings(filePath: string): {
       let j: unknown;
       try {
         j = JSON.parse(raw);
+        // totem-context: intentional — invalid JSON is surfaced as a returned Result (the err field the caller logs), the established scaffoldMcpConfig parse posture; never a silent swallow (Tenet 4).
       } catch (err) {
         return { action: 'skipped', err: `Could not parse ${name} (invalid JSON): ${msg(err)}` };
       }
@@ -347,6 +348,7 @@ export function scaffoldGeminiBeforeToolSettings(filePath: string): {
     parsed.hooks = hooks;
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
     return { action: existed ? 'merged' : 'created' };
+    // totem-context: intentional — scaffoldGeminiBeforeToolSettings is a Result-returning installer; an FS/parse failure is reported via the returned err field (the caller logs it), never thrown (Tenet 4 satisfied by reporting, not throwing — mirrors mergeClaudeHooksKey).
   } catch (err) {
     return { action: 'skipped', err: `[Totem Error] ${msg(err)}` };
   }
@@ -369,6 +371,7 @@ export function adoptLegacyGeminiBeforeTool(cwd: string): HookInstallerResult | 
   let existing: string;
   try {
     existing = fs.readFileSync(filePath, 'utf-8');
+    // totem-context: best-effort read — an unreadable BeforeTool.js means "nothing to migrate" (return null leaves it for scaffoldFile), not a silent swallow of a real fault (Tenet 4).
   } catch {
     return null;
   }
@@ -384,8 +387,13 @@ export function adoptLegacyGeminiBeforeTool(cwd: string): HookInstallerResult | 
   if (isKnownPrior) {
     try {
       fs.writeFileSync(filePath, GEMINI_BEFORE_TOOL, 'utf-8');
+      // totem-context: intentional — a write failure is surfaced as a returned Result (the err field the caller logs), the established installer posture; never a silent swallow (Tenet 4).
     } catch (err) {
-      return { file: rel, action: 'skipped', err: err instanceof Error ? err.message : String(err) };
+      return {
+        file: rel,
+        action: 'skipped',
+        err: err instanceof Error ? err.message : String(err),
+      };
     }
     return {
       file: rel,

@@ -197,7 +197,7 @@ describe('MERGE_COMMAND_REGEX_SOURCE / findMergeInvocations', () => {
   });
 
   it('does NOT fire on an unrelated `gh api graphql` read', () => {
-    expect(blocks("gh api graphql -f query='query{repository(owner:\"o\"){name}}'")).toBe(false);
+    expect(blocks('gh api graphql -f query=\'query{repository(owner:"o"){name}}\'')).toBe(false);
     expect(blocks('gh api graphql -f query=...')).toBe(false);
   });
 });

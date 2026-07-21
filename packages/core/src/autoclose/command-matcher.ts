@@ -69,7 +69,7 @@
  * is still recognized (kimi B-3). Non-capturing so the classify group indices
  * below stay stable.
  */
-const SEP = "(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)";
+const SEP = '(?:[\'"\\s]|(?:\\\\|\\^)\\r?\\n)';
 
 /**
  * A run of interspersed flag tokens between two command words — zero or more of
@@ -79,8 +79,7 @@ const SEP = "(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)";
  * + codex B-1) while a bare non-flag word (`view`, `list`) stops the run, so the
  * read-only verbs never resolve to `merge`. Non-capturing (stable group indices).
  */
-const FLAGRUN =
-  '(?:' + SEP + "+-{1,2}[\\w-]+(?:=[^\\s'\"]+|" + SEP + "+[^\\s'\"-][^\\s'\"]*)?)*";
+const FLAGRUN = '(?:' + SEP + '+-{1,2}[\\w-]+(?:=[^\\s\'"]+|' + SEP + '+[^\\s\'"-][^\\s\'"]*)?)*';
 
 /**
  * A within-one-command span char: anything EXCEPT a shell command separator
@@ -117,7 +116,7 @@ const NOSEP = '[^;|&\\r\\n]';
  *     GraphQL merge mutation (form `gh-api-merge`).
  */
 export const MERGE_COMMAND_REGEX_SOURCE =
-  "(?<![\\w-])gh(?:\\.exe)?" +
+  '(?<![\\w-])gh(?:\\.exe)?' +
   FLAGRUN +
   SEP +
   '+' +

@@ -164,12 +164,12 @@ const AUTO_CLOSE_REGEX_SOURCE =
 // inlines `JSON.stringify(<core MERGE_COMMAND_REGEX_SOURCE>)`. Update BOTH together.
 // Built from the SAME SEP + FLAGRUN fragments as core so the string value is
 // byte-identical (parity test is the backstop).
-const MERGE_SEP = "(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)";
+const MERGE_SEP = '(?:[\'"\\s]|(?:\\\\|\\^)\\r?\\n)';
 const MERGE_FLAGRUN =
-  '(?:' + MERGE_SEP + "+-{1,2}[\\w-]+(?:=[^\\s'\"]+|" + MERGE_SEP + "+[^\\s'\"-][^\\s'\"]*)?)*";
+  '(?:' + MERGE_SEP + '+-{1,2}[\\w-]+(?:=[^\\s\'"]+|' + MERGE_SEP + '+[^\\s\'"-][^\\s\'"]*)?)*';
 const MERGE_NOSEP = '[^;|&\\r\\n]';
 const MERGE_COMMAND_REGEX_SOURCE =
-  "(?<![\\w-])gh(?:\\.exe)?" +
+  '(?<![\\w-])gh(?:\\.exe)?' +
   MERGE_FLAGRUN +
   MERGE_SEP +
   '+' +
