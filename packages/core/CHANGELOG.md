@@ -1,5 +1,81 @@
 # @mmnto/totem
 
+## 1.103.0
+
+### Minor Changes
+
+- 55bdc44: feat(autoclose): GitHub auto-close enforcement-seam guard — D1 + D2-observe + C (#1762)
+
+  Adds the ruled Layer-1 slice of the GitHub auto-close guard: a defense against a
+  close-keyword adjacent to an issue reference (`Closes #NNN` — and, per the confirmed
+  #2471→#2466 incident, even a negated variant of that phrase) reaching a PR body
+  or squash merge-commit body and auto-closing a linked issue.
+  - **Core** ships `@mmnto/totem` `autoclose` — the ONE shared evaluator
+    (`AUTO_CLOSE_REGEX_SOURCE` / `findAutoCloseRefs`) plus the D1 corpus scan
+    (`scanPrCorpus`), the durable receipt (`buildReceipt`), the D2 observation-mode
+    reconciler (`reconcile`), and the merge-config posture assertion
+    (`evaluateMergeConfigPosture`). Presence invariant, zero semantics: any
+    close-keyword-adjacent ref is an anomaly (genuine, negated, quoted, emphasized
+    alike — no negation parser). Qualified `owner/repo#N` AND the issue/PR URL form
+    match too; comment bodies are never scanned. Intended closures are authorized
+    ONLY by a provenance-distinct `<!-- totem-close: #N -->` marker — GitHub's
+    `closingIssuesReferences` is derived from the same body keyword and so is
+    recorded as informational, never authorizing (breaks the self-whitelist
+    circularity).
+  - **CLI** extends the hand-written hook templates (`init-templates.ts`) — the
+    Claude PreWriteShield and the Gemini BeforeTool parity surface (which gates on
+    Gemini's real `write_file` + `replace` tools) — to block close-keyword-adjacent
+    refs in `**/*.md` writes (EXEMPT `.github/**` and `.totem/**`), sharing core's
+    `AUTO_CLOSE_REGEX_SOURCE`. No new managed session hook; the roster is unchanged.
+    The compiled-rule mirror stays frozen pending the Convergent Spine.
+
+  Also wires two workflow-only mechanisms (no package impact): a PR-time required
+  check (D1) that asserts the merge-config posture (`PR_TITLE` + `BLANK` + squash-only)
+  and fails loud on drift, then fails on any close-keyword ref not authorized by a
+  `totem-close` marker and persists the declared set as a receipt; and a
+  push-to-main reconciliation (D2) in OBSERVATION MODE that is content-scan-first +
+  body-presence-first under `BLANK` (RFC-822 attribution trailers stripped before
+  the presence test) — a marker-unauthorized anomaly / missing / ambiguous receipt
+  fails loud, a non-empty non-trailer keyword-free body surfaces as a non-failing
+  `unexpected-body` posture-drift warning — and never auto-reopens (the Tenet 9
+  sense→enforce gate).
+
+  Provenance: 1 confirmed instance (#2471→#2466) plus 4 asserted-prior
+  (undocumented). The Bash-matcher interlock (A) and `totem pr merge` wrapper (B)
+  are gated separately and not included here.
+
+- c70f3f1: thread slice-B invoke-failure kinds into the verdict lane surface (#2459)
+
+  Slice B (#2457) produces a structured `OrchestratorInvokeError` — a bounded `kind`
+  (`auth | quota | model | process-spawn | process-exit | timeout | unknown`), ordered
+  attempt evidence, and an optional content-addressed `failureArtifactHash` — but slice
+  A's verdict-lane surface collapsed every execution failure into the single coarse
+  `invoke-error`. This threads B's evidence through to the verdict and the operator.
+
+  Core (`@mmnto/totem`): `VerdictLaneFailureReason` is widened additively with the
+  execution-phase invoke kinds (`invoke-auth`, `invoke-model`, `invoke-process-spawn`,
+  `invoke-process-exit`, `invoke-timeout`); `quota` and `unknown` reuse the pre-existing
+  `quota-exhausted` / `invoke-error`, so the mapping is 1:1 and nothing collapses. A
+  `failed` lane gains an optional `failureArtifactHash` that reaches B's bounded evidence
+  one hop away, mirroring how a completed lane reaches its run artifact via
+  `runArtifactHash`; when recorded it resolves via `loadInvocationFailureArtifact`. The
+  verdict-artifact schema version bumps `1.1.0 → 1.2.0` — a minor and reader-tolerance
+  step per the 1.x F1 policy: the widening is purely additive (new enum members plus an
+  optional field), so every prior 1.x verdict still parses unchanged.
+
+  CLI (`@mmnto/cli`): `classifyRejectedLane` consumes the structured
+  `OrchestratorInvokeError` (its `kind` and `failureArtifactHash`) instead of inferring
+  the category from error prose, and records the evidence hash on the failed lane. Per
+  the #2471 gate-semantics boundary, an admission-phase `TotemConfigError` maps to
+  `config-error` — it never reached execution, so it is never mapped to a widened
+  `invoke-*` kind. The zero-completed hard-error message now names the per-lane failure
+  categories (e.g. `failed by category: invoke-auth (1), invoke-timeout (1)`) so a
+  provider-unsettled round shows the operator auth vs quota vs timeout, not just counts.
+
+  The merged slice-A zero-completed exit contract is unchanged: the five-shape exit matrix
+  still passes, and the `completed=0, abstained=N, failed=M` count line is preserved
+  verbatim.
+
 ## 1.102.0
 
 ### Minor Changes
