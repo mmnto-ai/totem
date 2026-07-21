@@ -1732,6 +1732,19 @@ describe('PreWriteShield runtime behavior', () => {
     expect(result.stderr).toMatch(/auto-close/i);
   });
 
+  it('exits 2 on the issue-URL close form (kimi BLOCKING-1)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: 'docs/x.md',
+        content: 'Fixes https://github.com/mmnto-ai/totem/issues/2466',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+    expect(result.stderr).toContain('mmnto-ai/totem#2466');
+  });
+
   it('EXEMPTS .github/** from the auto-close guard (AC-4 — keywords intentional there)', () => {
     // Qualified ref so the sealed bare-ref arm (unchanged) also stays quiet; this
     // isolates the auto-close .github exemption.
@@ -1743,6 +1756,27 @@ describe('PreWriteShield runtime behavior', () => {
       },
     });
     expect(result.exitCode).toBe(0);
+  });
+
+  it('EXEMPTS .totem/** from the auto-close guard (gemini #2 — tool/agent-authored content)', () => {
+    // Qualified ref isolates the auto-close .totem exemption from the sealed
+    // bare-ref rule (which still applies to .totem/*.md — out of this slice's scope).
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.totem/lessons/x.md', content: 'Closes mmnto-ai/totem#131' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('does NOT exempt .changeset/** (its prose is composed into the VP-PR description)', () => {
+    // gemini #2 DECLINED half: changeset prose lands in the Version-Packages PR
+    // description (an auto-close surface — verified on PR mmnto-ai/totem#2474).
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.changeset/happy-lions.md', content: 'Fixes mmnto-ai/totem#131' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
   });
 
   it('respects the suppression-directive bypass for a verbatim-quoted close keyword', () => {
@@ -1855,10 +1889,16 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
   });
 });
 
-describe('GEMINI_BEFORE_TOOL write_file/edit_file extension', () => {
-  it('extends BeforeTool with write_file/edit_file branch', () => {
-    expect(GEMINI_BEFORE_TOOL).toContain("'write_file'");
-    expect(GEMINI_BEFORE_TOOL).toContain("'edit_file'");
+describe('GEMINI_BEFORE_TOOL write_file/replace extension', () => {
+  it('gates BOTH check functions on write_file + replace (+ legacy edit_file)', () => {
+    // Gemini CLI's real write tools are `write_file` + `replace` — there is NO
+    // `edit_file` (docs.gemini file-system tools; gemini-cli#20321). Every check
+    // function must list `replace`, else surgical edits bypass the hook
+    // (gemini #1). `edit_file` is kept for backward-safety.
+    const gates = [...GEMINI_BEFORE_TOOL.matchAll(/toolName !== '([a-z_]+)'/g)].map((m) => m[1]);
+    for (const wanted of ['write_file', 'replace']) {
+      expect(gates.filter((g) => g === wanted).length).toBeGreaterThanOrEqual(2);
+    }
   });
 
   it('inlines BARE_REF_REGEX_SOURCE in write-tool branch (JSON-encoded for safe JS string-literal embedding)', () => {
@@ -1923,9 +1963,38 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     expect(r.message).toContain('#2466');
   });
 
+  it('blocks the auto-close rule via the real `replace` edit tool (gemini #1)', () => {
+    const r = runBeforeTool('replace', {
+      file_path: 'docs/x.md',
+      new_string: 'Fixes https://github.com/mmnto-ai/totem/issues/2466',
+    });
+    expect(r.threw).toBe(true);
+    expect(r.message).toContain('mmnto-ai/totem#2466');
+  });
+
+  it('blocks the xrepo bare-ref rule via `replace` too (fixes the same pre-existing gap)', () => {
+    const r = runBeforeTool('replace', { file_path: '.journal/x.md', new_string: 'see #9 above' });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/Bare PR\/issue/i);
+  });
+
+  it('uses the [totem BeforeTool] prefix, not [totem PreWriteShield] (gemini #3)', () => {
+    const r = runBeforeTool('write_file', { file_path: 'docs/x.md', content: 'Closes #5' });
+    expect(r.message).toContain('[totem BeforeTool]');
+    expect(r.message).not.toContain('PreWriteShield');
+  });
+
   it('exempts .github/** (qualified ref keeps the bare-ref arm quiet too)', () => {
     const r = runBeforeTool('write_file', {
       file_path: '.github/x.md',
+      content: 'Closes mmnto-ai/totem#5',
+    });
+    expect(r.threw).toBe(false);
+  });
+
+  it('exempts .totem/** from the auto-close rule (gemini #2)', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.totem/lessons/x.md',
       content: 'Closes mmnto-ai/totem#5',
     });
     expect(r.threw).toBe(false);
