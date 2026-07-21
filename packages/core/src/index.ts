@@ -1219,3 +1219,35 @@ export {
   ResolutionSourceSchema,
   TaskTypeSchema,
 } from './capability/schema.js';
+
+// ─── Auto-close enforcement seam (mmnto-ai/totem#1762) ───────────────────────
+// The ONE shared close-keyword evaluator consumed by D1/D2 workflow scripts and
+// C's PreWriteShield / BeforeTool hook templates. No per-surface regex copies.
+export type {
+  AutoCloseMatch,
+  AutoCloseReceipt,
+  ClosingIssueRef,
+  DeclaredIntentRef,
+  MergeConfigPosture,
+  MergeConfigStatus,
+  MergeConfigVerdict,
+  PrCorpus,
+  PrScanResult,
+  ReconcileOptions,
+  ReconcileResult,
+  ReconcileStatus,
+} from './autoclose/index.js';
+export {
+  AUTO_CLOSE_KEYWORDS,
+  AUTO_CLOSE_RECEIPT_SCHEMA_VERSION,
+  AUTO_CLOSE_REGEX_SOURCE,
+  autoCloseKeyForms,
+  buildReceipt,
+  evaluateMergeConfigPosture,
+  findAutoCloseRefs,
+  parseDeclaredCloseIntent,
+  reconcile,
+  REQUIRED_SQUASH_MERGE_MESSAGE,
+  REQUIRED_SQUASH_MERGE_TITLE,
+  scanPrCorpus,
+} from './autoclose/index.js';

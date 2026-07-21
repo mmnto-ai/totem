@@ -1,0 +1,54 @@
+# D2 — post-merge auto-close reconciliation, OBSERVATION MODE (mmnto-ai/totem#1762).
+#
+# On push-to-main, reconciles the merged HEAD commit body against the D1 receipt
+# via the ONE shared evaluator (@mmnto/totem autoclose). ALERTS loud (fails the
+# job with a precise message) on an anomaly / missing / ambiguous receipt, and
+# NEVER auto-reopens — the Tenet 9 sense→enforce gate (reopen arms only after
+# positive+negative controls). Quiet by default: a merge whose body carries no
+# close-keyword-adjacent ref is clean regardless of receipt.
+#
+# TRIAGE NOTE: an `unexpected-body` ::warning is the FINGERPRINT of the confirmed
+# vector class (a local `gh pr merge --body` override under BLANK) — it is a
+# triage item when it fires, not wallpaper. Read the step summary; verify no
+# unintended close landed. (strategy-claude 0308Z/0330Z.)
+name: Auto-close reconcile (observe)
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  autoclose-d2:
+    name: Auto-close reconciliation (D2, observe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Only the shared evaluator (core) is needed; core has no workspace deps.
+      - run: pnpm --filter @mmnto/totem build
+
+      - name: Reconcile merged body against the D1 receipt (observe)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node tools/autoclose-postmerge.mjs

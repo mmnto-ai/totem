@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
-import { LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
+import { AUTO_CLOSE_REGEX_SOURCE, LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
 
 import {
   UNIVERSAL_BASELINE_LESSONS,
@@ -1560,6 +1560,14 @@ describe('CLAUDE_PREWRITESHIELD template', () => {
   it('cites the seal at mmnto-ai/totem-strategy#145', () => {
     expect(CLAUDE_PREWRITESHIELD).toContain('mmnto-ai/totem-strategy#145');
   });
+
+  it('inlines the shared AUTO_CLOSE_REGEX_SOURCE (mmnto-ai/totem#1762, JSON-encoded)', () => {
+    expect(CLAUDE_PREWRITESHIELD).toContain(JSON.stringify(AUTO_CLOSE_REGEX_SOURCE));
+  });
+
+  it('cites the auto-close issue mmnto-ai/totem#1762', () => {
+    expect(CLAUDE_PREWRITESHIELD).toContain('mmnto-ai/totem#1762');
+  });
 });
 
 describe('PreWriteShield runtime behavior', () => {
@@ -1692,6 +1700,107 @@ describe('PreWriteShield runtime behavior', () => {
     });
     expect(result.exitCode).toBe(0);
   });
+
+  // ─── Auto-close keyword guard (mmnto-ai/totem#1762) ───────────────────────
+
+  it('exits 2 on a close keyword adjacent to an issue ref in a **/*.md write', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'docs/x.md', content: 'Closes #131' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+    expect(result.stderr).toContain('#131');
+  });
+
+  it('exits 2 even under NEGATION (presence invariant — the #2471 shape)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.journal/t.md', content: 'Does not close #2466' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+    expect(result.stderr).toContain('#2466');
+  });
+
+  it('exits 2 on a QUALIFIED close ref (owner/repo#N still auto-closes)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'docs/x.md', content: 'Closes mmnto-ai/totem#131' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+  });
+
+  it('exits 2 on the issue-URL close form (kimi BLOCKING-1)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: 'docs/x.md',
+        content: 'Fixes https://github.com/mmnto-ai/totem/issues/2466',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+    expect(result.stderr).toContain('mmnto-ai/totem#2466');
+  });
+
+  it('EXEMPTS .github/** from the auto-close guard (AC-4 — keywords intentional there)', () => {
+    // Qualified ref so the sealed bare-ref arm (unchanged) also stays quiet; this
+    // isolates the auto-close .github exemption.
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: '.github/PULL_REQUEST_TEMPLATE.md',
+        content: 'Closes mmnto-ai/totem#131',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('EXEMPTS .totem/** from the auto-close guard (gemini #2 — tool/agent-authored content)', () => {
+    // Qualified ref isolates the auto-close .totem exemption from the sealed
+    // bare-ref rule (which still applies to .totem/*.md — out of this slice's scope).
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.totem/lessons/x.md', content: 'Closes mmnto-ai/totem#131' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('does NOT exempt .changeset/** (its prose is composed into the VP-PR description)', () => {
+    // gemini #2 DECLINED half: changeset prose lands in the Version-Packages PR
+    // description (an auto-close surface — verified on PR mmnto-ai/totem#2474).
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.changeset/happy-lions.md', content: 'Fixes mmnto-ai/totem#131' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+  });
+
+  it('respects the suppression-directive bypass for a verbatim-quoted close keyword', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: 'docs/x.md',
+        content:
+          '<!-- totem-context: verbatim quotation of a historical commit -->\nThe commit said closes #131.',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 0 on a non-keyword issue reference in markdown (references/see form)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: 'docs/x.md',
+        content: 'references mmnto-ai/totem#131 and see mmnto-ai/totem#5',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
 });
 
 describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
@@ -1780,10 +1889,16 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
   });
 });
 
-describe('GEMINI_BEFORE_TOOL write_file/edit_file extension', () => {
-  it('extends BeforeTool with write_file/edit_file branch', () => {
-    expect(GEMINI_BEFORE_TOOL).toContain("'write_file'");
-    expect(GEMINI_BEFORE_TOOL).toContain("'edit_file'");
+describe('GEMINI_BEFORE_TOOL write_file/replace extension', () => {
+  it('gates BOTH check functions on write_file + replace (+ legacy edit_file)', () => {
+    // Gemini CLI's real write tools are `write_file` + `replace` — there is NO
+    // `edit_file` (docs.gemini file-system tools; gemini-cli#20321). Every check
+    // function must list `replace`, else surgical edits bypass the hook
+    // (gemini #1). `edit_file` is kept for backward-safety.
+    const gates = [...GEMINI_BEFORE_TOOL.matchAll(/toolName !== '([a-z_]+)'/g)].map((m) => m[1]);
+    for (const wanted of ['write_file', 'replace']) {
+      expect(gates.filter((g) => g === wanted).length).toBeGreaterThanOrEqual(2);
+    }
   });
 
   it('inlines BARE_REF_REGEX_SOURCE in write-tool branch (JSON-encoded for safe JS string-literal embedding)', () => {
@@ -1797,6 +1912,100 @@ describe('GEMINI_BEFORE_TOOL write_file/edit_file extension', () => {
 
   it('cites the seal at mmnto-ai/totem-strategy#145 in BeforeTool extension', () => {
     expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem-strategy#145');
+  });
+
+  it('inlines the shared AUTO_CLOSE_REGEX_SOURCE (mmnto-ai/totem#1762, parity with PreWriteShield)', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain(JSON.stringify(AUTO_CLOSE_REGEX_SOURCE));
+  });
+
+  it('wires the auto-close check into beforeTool and cites mmnto-ai/totem#1762', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain('checkAutoCloseKeywords(toolName, toolInput)');
+    expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem#1762');
+  });
+});
+
+describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)', () => {
+  let tmpDir: string;
+  let hookPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-beforetool-'));
+    hookPath = path.join(tmpDir, 'BeforeTool.js');
+    fs.writeFileSync(hookPath, GEMINI_BEFORE_TOOL, 'utf-8');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /** Require the rendered hook fresh and report whether it threw. */
+  function runBeforeTool(
+    tool: string,
+    input: Record<string, unknown>,
+  ): { threw: boolean; message: string } {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
+    try {
+      beforeTool(tool, input);
+      return { threw: false, message: '' };
+    } catch (err) {
+      return { threw: true, message: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  it('throws (blocks) on a close keyword adjacent to an issue ref in a **/*.md write, even negated', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: 'docs/x.md',
+      content: 'Does not close #2466',
+    });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/auto-close/i);
+    expect(r.message).toContain('#2466');
+  });
+
+  it('blocks the auto-close rule via the real `replace` edit tool (gemini #1)', () => {
+    const r = runBeforeTool('replace', {
+      file_path: 'docs/x.md',
+      new_string: 'Fixes https://github.com/mmnto-ai/totem/issues/2466',
+    });
+    expect(r.threw).toBe(true);
+    expect(r.message).toContain('mmnto-ai/totem#2466');
+  });
+
+  it('blocks the xrepo bare-ref rule via `replace` too (fixes the same pre-existing gap)', () => {
+    const r = runBeforeTool('replace', { file_path: '.journal/x.md', new_string: 'see #9 above' });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/Bare PR\/issue/i);
+  });
+
+  it('uses the [totem BeforeTool] prefix, not [totem PreWriteShield] (gemini #3)', () => {
+    const r = runBeforeTool('write_file', { file_path: 'docs/x.md', content: 'Closes #5' });
+    expect(r.message).toContain('[totem BeforeTool]');
+    expect(r.message).not.toContain('PreWriteShield');
+  });
+
+  it('exempts .github/** (qualified ref keeps the bare-ref arm quiet too)', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.github/x.md',
+      content: 'Closes mmnto-ai/totem#5',
+    });
+    expect(r.threw).toBe(false);
+  });
+
+  it('exempts .totem/** from the auto-close rule (gemini #2)', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.totem/lessons/x.md',
+      content: 'Closes mmnto-ai/totem#5',
+    });
+    expect(r.threw).toBe(false);
+  });
+
+  it('does not throw on a non-keyword reference form', () => {
+    const r = runBeforeTool('edit_file', {
+      file_path: 'docs/x.md',
+      new_string: 'see mmnto-ai/totem#5',
+    });
+    expect(r.threw).toBe(false);
   });
 });
 

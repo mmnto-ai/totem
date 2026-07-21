@@ -1,0 +1,70 @@
+# D1 — PR-time auto-close required check (mmnto-ai/totem#1762).
+#
+# Scans the live PR title + description AND every branch commit message (the
+# governed repos compose squash bodies from COMMIT_MESSAGES, so each branch
+# commit is a squash-seed input) for close-keyword-adjacent issue references via
+# the ONE shared evaluator (@mmnto/totem autoclose). Fails on any ref that is not
+# declared (closingIssuesReferences ∪ a `<!-- totem-close: #N -->` marker), and
+# persists the declared-intended-close set as the durable D2 receipt artifact.
+#
+# Sibling to the totem-lint (lint.yml) seam.
+name: Auto-close guard
+
+on:
+  # Explicit types: the default set omits `edited`, so a title/body change after a
+  # green run would keep the stale check (same head SHA). `edited` re-runs D1 so a
+  # late `Closes #N` in the title/description is caught (codex #2). Under PR_TITLE
+  # a later title becomes the squash subject, so a title edit must re-gate.
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  autoclose-d1:
+    name: Auto-close required check (D1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Only the shared evaluator (core) is needed; core has no workspace deps.
+      - run: pnpm --filter @mmnto/totem build
+
+      - name: Scan PR corpus + write receipt
+        # env-mapped (never inlined into the shell) to avoid template injection.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RECEIPT_PATH: ./autoclose-receipt.json
+        run: node tools/autoclose-pr.mjs
+
+      # Persist the declared-intended-close receipt for D2 to reconcile against.
+      # `always()` so the receipt lands even when the check fails — D2 can still
+      # reconcile if the PR is merged anyway. 90-day retention: D2 runs
+      # immediately at merge time, well within the window.
+      - name: Upload auto-close receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoclose-receipt
+          path: ./autoclose-receipt.json
+          retention-days: 90
+          if-no-files-found: warn
