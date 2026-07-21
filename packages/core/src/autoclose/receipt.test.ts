@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AUTO_CLOSE_RECEIPT_SCHEMA_VERSION,
   type AutoCloseReceipt,
-  buildDeclaredCloseKeys,
   buildReceipt,
   parseDeclaredCloseIntent,
   reconcile,
@@ -19,6 +18,17 @@ const B8AA74A2_BODY =
   'Three deterministic skip paths (all-generated, all-non-code, filtered-empty) no longer ' +
   'mint the reviewed-content stamp; they log a shared NON-REVIEW notice instead. ' +
   'Does not close #2466 (live exit-0 half deferred to #2473).';
+
+/**
+ * Verbatim squash body of totem-strategy#948 (dependabot, first merge under
+ * BLANK — strategy-claude 0330Z). BLANK suppresses the prose body but RFC-822
+ * attribution trailers survive; after trailer-strip the body is empty → clean.
+ */
+const STRATEGY_948_BODY =
+  'build(deps): bump actions/setup-node from 6 to 7 (#948)\n' +
+  '\n' +
+  'Signed-off-by: dependabot[bot] <support@github.com>\n' +
+  'Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>';
 
 describe('parseDeclaredCloseIntent', () => {
   it('parses an HTML-comment marker with multiple refs', () => {
@@ -37,21 +47,7 @@ describe('parseDeclaredCloseIntent', () => {
   });
 });
 
-describe('buildDeclaredCloseKeys', () => {
-  it('adds both bare and self-qualified forms for a same-repo closing ref', () => {
-    expect(buildDeclaredCloseKeys([{ number: 2466 }], [], REPO).sort()).toEqual(
-      ['#2466', 'mmnto-ai/totem#2466'].sort(),
-    );
-  });
-
-  it('merges closingIssuesReferences with structured intent', () => {
-    const keys = buildDeclaredCloseKeys([{ number: 1 }], [{ issue: 2 }], REPO);
-    expect(keys).toContain('#1');
-    expect(keys).toContain('#2');
-  });
-});
-
-describe('scanPrCorpus (D1)', () => {
+describe('scanPrCorpus (D1) — marker-only authorization (codex #3 circularity fix)', () => {
   it('FAILS on an undeclared close-keyword ref in the corpus', () => {
     const r = scanPrCorpus({
       title: 'chore: cleanup',
@@ -62,10 +58,13 @@ describe('scanPrCorpus (D1)', () => {
     });
     expect(r.ok).toBe(false);
     expect(r.undeclared).toEqual(['#2466']);
-    expect(r.declaredCloseKeys).toEqual([]);
+    expect(r.declaredByMarker).toEqual([]);
   });
 
-  it('PASSES when the ref is declared via closingIssuesReferences', () => {
+  it('FAILS even when closingIssuesReferences lists the ref (GitHub-derived => cannot authorize)', () => {
+    // The circular self-whitelist: GitHub DERIVES closingIssuesReferences from the
+    // body keyword, so it must NOT authorize the same finding (codex #3). This
+    // replaces the prior test that locked the circular pass.
     const r = scanPrCorpus({
       title: 'feat: thing',
       body: 'Closes #2466',
@@ -73,12 +72,14 @@ describe('scanPrCorpus (D1)', () => {
       closingIssuesReferences: [{ number: 2466 }],
       repo: REPO,
     });
-    expect(r.ok).toBe(true);
-    expect(r.undeclared).toEqual([]);
-    expect(r.findings).toEqual(['#2466']);
+    expect(r.ok).toBe(false);
+    expect(r.undeclared).toEqual(['#2466']);
+    // Recorded as observed GitHub state, but NOT authorizing.
+    expect(r.closingIssuesReferences).toContain('#2466');
+    expect(r.declaredByMarker).toEqual([]);
   });
 
-  it('PASSES when the ref is whitelisted via a structured-intent marker', () => {
+  it('PASSES when the ref is authorized by a provenance-distinct totem-close marker', () => {
     const r = scanPrCorpus({
       title: 'feat: thing',
       body: 'Fixes #700\n<!-- totem-close: #700 -->',
@@ -87,7 +88,23 @@ describe('scanPrCorpus (D1)', () => {
       repo: REPO,
     });
     expect(r.ok).toBe(true);
-    expect(r.declaredCloseKeys).toContain('#700');
+    expect(r.declaredByMarker).toContain('#700');
+  });
+
+  it('the totem-close marker does NOT self-flag (stripIntentMarkers runs first)', () => {
+    // `totem-close: #700` contains `close: #700` — a keyword-adjacent ref — so a
+    // marker-only body must produce ZERO findings, else the marker whitelists a
+    // finding it itself created.
+    const r = scanPrCorpus({
+      title: 't',
+      body: '<!-- totem-close: #700 -->',
+      commitMessages: [],
+      closingIssuesReferences: [],
+      repo: REPO,
+    });
+    expect(r.findings).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.declaredByMarker).toContain('#700');
   });
 
   it('scans branch COMMIT MESSAGES, not just the PR description', () => {
@@ -101,13 +118,40 @@ describe('scanPrCorpus (D1)', () => {
     expect(r.ok).toBe(false);
     expect(r.undeclared).toEqual(['#321']);
   });
+
+  it('catches the issue-URL close form (kimi BLOCKING-1)', () => {
+    const r = scanPrCorpus({
+      title: 't',
+      body: 'Fixes https://github.com/mmnto-ai/totem/issues/2466',
+      commitMessages: [],
+      closingIssuesReferences: [],
+      repo: REPO,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.undeclared).toEqual(['mmnto-ai/totem#2466']);
+  });
+
+  it('scans a >100-commit branch to exhaustion (codex #4 — no 100-cap in the scan)', () => {
+    const commitMessages = Array.from({ length: 150 }, (_, i) =>
+      i === 120 ? 'fixes #4242 in passing' : `chore: commit ${i}`,
+    );
+    const r = scanPrCorpus({
+      title: 'feat: big',
+      body: 'clean',
+      commitMessages,
+      closingIssuesReferences: [],
+      repo: REPO,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.undeclared).toEqual(['#4242']);
+  });
 });
 
 describe('buildReceipt', () => {
-  it('captures the declared set and stamps the schema version', () => {
+  it('records the marker set + informational closing refs and stamps the schema version', () => {
     const scan = scanPrCorpus({
       title: 't',
-      body: 'Closes #5',
+      body: 'Fixes #5\n<!-- totem-close: #5 -->',
       commitMessages: [],
       closingIssuesReferences: [{ number: 5 }],
       repo: REPO,
@@ -122,18 +166,20 @@ describe('buildReceipt', () => {
     expect(receipt.schemaVersion).toBe(AUTO_CLOSE_RECEIPT_SCHEMA_VERSION);
     expect(receipt.prNumber).toBe(42);
     expect(receipt.headSha).toBe('deadbeef');
-    expect(receipt.declaredCloseKeys).toContain('#5');
+    expect(receipt.declaredByMarker).toContain('#5');
+    expect(receipt.closingIssuesReferences).toContain('#5');
     expect(receipt.generatedAt).toBe('2026-07-21T00:00:00.000Z');
   });
 });
 
 describe('reconcile (D2, observation mode)', () => {
-  const receiptWith = (keys: string[]): AutoCloseReceipt => ({
+  const receiptWith = (markerKeys: string[]): AutoCloseReceipt => ({
     schemaVersion: AUTO_CLOSE_RECEIPT_SCHEMA_VERSION,
     repo: REPO,
     prNumber: 2471,
     headSha: 'abc',
-    declaredCloseKeys: keys,
+    declaredByMarker: markerKeys,
+    closingIssuesReferences: [],
     corpusFindings: [],
     generatedAt: '2026-07-21T00:00:00.000Z',
     note: '',
@@ -158,7 +204,7 @@ describe('reconcile (D2, observation mode)', () => {
 
   // ── negative controls ─────────────────────────────────────────────────────
 
-  it('NEGATIVE CONTROL: a genuinely declared close => clean', () => {
+  it('NEGATIVE CONTROL: a marker-authorized close => clean', () => {
     const r = reconcile(receiptWith(['#2466', 'mmnto-ai/totem#2466']), 'Closes #2466', {
       repo: REPO,
     });
@@ -167,14 +213,21 @@ describe('reconcile (D2, observation mode)', () => {
   });
 
   it('NEGATIVE CONTROL: an empty-body subject with NO close keyword => clean even with null receipt', () => {
-    // Under BLANK the squash message is the PR title only (empty body).
     const r = reconcile(null, 'refactor: tidy the widget (#2471)', { repo: REPO });
     expect(r.status).toBe('clean');
     expect(r.findings).toEqual([]);
     expect(r.bodyPresent).toBe(false);
   });
 
-  it('reconciles a self-qualified declaration against a bare body ref', () => {
+  it('TRAILER-STRIP: the totem-strategy#948 dependabot squash body => clean (0330Z)', () => {
+    // Attribution trailers survive BLANK; after trailer-strip the body is empty.
+    const r = reconcile(null, STRATEGY_948_BODY, { repo: 'mmnto-ai/totem-strategy' });
+    expect(r.status).toBe('clean');
+    expect(r.bodyPresent).toBe(false);
+    expect(r.findings).toEqual([]);
+  });
+
+  it('reconciles a self-qualified marker declaration against a bare body ref', () => {
     const r = reconcile(receiptWith(['mmnto-ai/totem#2466']), 'Closes #2466', { repo: REPO });
     expect(r.status).toBe('clean');
   });
@@ -182,8 +235,17 @@ describe('reconcile (D2, observation mode)', () => {
   // ── ambiguous: alert, never guess ─────────────────────────────────────────
 
   it('malformed receipt + closure-capable body => ambiguous-receipt', () => {
-    const bad = { schemaVersion: 1 } as unknown as AutoCloseReceipt;
+    const bad = { schemaVersion: 2 } as unknown as AutoCloseReceipt;
     const r = reconcile(bad, 'Closes #2466', { repo: REPO });
+    expect(r.status).toBe('ambiguous-receipt');
+  });
+
+  it('a v1-shaped receipt (declaredCloseKeys, no declaredByMarker) => ambiguous-receipt', () => {
+    const stale = {
+      schemaVersion: 1,
+      declaredCloseKeys: ['#2466'],
+    } as unknown as AutoCloseReceipt;
+    const r = reconcile(stale, 'Closes #2466', { repo: REPO });
     expect(r.status).toBe('ambiguous-receipt');
   });
 
@@ -197,7 +259,6 @@ describe('reconcile (D2, observation mode)', () => {
 
   it('never populates a side-effecting field — reopenCandidates is advisory only', () => {
     const r = reconcile(receiptWith([]), B8AA74A2_BODY, { repo: REPO });
-    // Observation mode: the candidates are reported but the caller must not act.
     expect(Array.isArray(r.reopenCandidates)).toBe(true);
   });
 
@@ -210,9 +271,6 @@ describe('reconcile (D2, observation mode)', () => {
   });
 
   it('NON-EMPTY body with NO close-keyword ref => unexpected-body (surfaced, not silent)', () => {
-    // The interpretation call: a non-empty body under BLANK is posture-drift /
-    // `--body`-override EVIDENCE — surfaced, but NOT a hard close-anomaly (no
-    // closure harm), and carries no reopen candidates.
     const r = reconcile(null, 'feat: thing (#2500)\n\nSome authored body text, no issue closed.', {
       repo: REPO,
     });
@@ -222,9 +280,7 @@ describe('reconcile (D2, observation mode)', () => {
     expect(r.message).toMatch(/posture-drift|--body/);
   });
 
-  it('an UNDECLARED close-keyword ref beats the posture signal (body-present anomaly wins)', () => {
-    // A local `--body` override carrying an undeclared close is the confirmed
-    // vector — the hard anomaly must take precedence over unexpected-body.
+  it('an UNAUTHORIZED close-keyword ref beats the posture signal (body-present anomaly wins)', () => {
     const r = reconcile(receiptWith([]), 'feat: thing (#2500)\n\nAlso closes #2466 in passing.', {
       repo: REPO,
     });
@@ -234,7 +290,6 @@ describe('reconcile (D2, observation mode)', () => {
   });
 
   it('a close keyword in the SUBJECT (PR_TITLE) with empty body still reconciles', () => {
-    // Under PR_TITLE the subject can carry a close; an undeclared one still alerts.
     const r = reconcile(receiptWith([]), 'Fix #2466: the widget', { repo: REPO });
     expect(r.status).toBe('anomaly');
     expect(r.undeclared).toEqual(['#2466']);

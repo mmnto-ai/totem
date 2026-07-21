@@ -57,6 +57,28 @@ describe('AUTO_CLOSE_REGEX_SOURCE / findAutoCloseRefs', () => {
     expect(refs('This resolves mmnto-ai/totem#2466 upstream')).toEqual(['mmnto-ai/totem#2466']);
   });
 
+  // ─── issue/PR URL form (kimi BLOCKING-1) ──────────────────────────────────
+  // GitHub's docs list only `#N` and `owner/repo#N` as closing syntaxes
+  // (docs.github.com/.../linking-a-pull-request-to-an-issue, verified: no URL
+  // form documented). The URL form is UNDOCUMENTED but EMPIRICALLY closes —
+  // isaacs/github#1731 (comment-permalink over-fire) + SAP/spartacus CONTRIBUTING
+  // (`Fixes https://github.com/SAP/spartacus/issues/<n>`). Matched
+  // presence-invariantly, normalized to the same `owner/repo#N` key.
+
+  it('matches the issue-URL form, normalized to owner/repo#N', () => {
+    expect(refs('Fixes https://github.com/mmnto-ai/totem/issues/2466')).toEqual([
+      'mmnto-ai/totem#2466',
+    ]);
+  });
+
+  it('tolerates a trailing #issuecomment- permalink fragment on the URL', () => {
+    expect(refs('Fix https://github.com/o/r/issues/123#issuecomment-999')).toEqual(['o/r#123']);
+  });
+
+  it('matches the /pull/ URL form too', () => {
+    expect(refs('closes https://github.com/o/r/pull/45')).toEqual(['o/r#45']);
+  });
+
   it('matches MULTIPLE refs including a colon separator', () => {
     expect(refs('Fixes: #55 and also Resolved #56')).toEqual(['#55', '#56']);
   });
@@ -96,6 +118,37 @@ describe('AUTO_CLOSE_REGEX_SOURCE / findAutoCloseRefs', () => {
   it('returns [] for empty / non-string input', () => {
     expect(findAutoCloseRefs('')).toEqual([]);
     expect(findAutoCloseRefs(undefined as unknown as string)).toEqual([]);
+  });
+
+  // ─── DELIBERATE pinned behavior (kimi Q1/Q2/NB-2/NB-3) ────────────────────
+  // These pin CURRENT behavior; the empirical GitHub questions are routed to the
+  // arming-phase sandbox matrix (spec §arming "open empirical questions").
+
+  it('DELIBERATE: emphasis/backtick wrapping ONLY the keyword => MISS', () => {
+    // `**`/backtick severs keyword→ref adjacency in the raw text.
+    expect(refs('**closes** #123')).toEqual([]);
+    expect(refs('`closes` #123')).toEqual([]);
+  });
+
+  it('DELIBERATE: the GH-123 autolink form => MISS (undocumented for closing)', () => {
+    expect(refs('fix GH-123')).toEqual([]);
+  });
+
+  it('DELIBERATE: a cross-paragraph span => MATCH (over-fires, invariant-consistent)', () => {
+    expect(refs('closes\n\n#123')).toEqual(['#123']);
+  });
+
+  it('DELIBERATE: a fenced code block => MATCH (over-fires; totem-context is the escape)', () => {
+    expect(refs('```\ncloses #123\n```')).toEqual(['#123']);
+  });
+
+  // ─── perf sanity (kimi NON-BLOCKING-1: the O(n²) is dead) ──────────────────
+
+  it('completes a pathological long-whitespace probe in well under 50ms', () => {
+    const probe = `fix${' '.repeat(65000)}x`; // keyword + ~64KB whitespace + non-ref
+    const t0 = performance.now();
+    findAutoCloseRefs(probe);
+    expect(performance.now() - t0).toBeLessThan(50);
   });
 
   // ─── the b8aa74a2 positive control ────────────────────────────────────────

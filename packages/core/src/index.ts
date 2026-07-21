@@ -1241,7 +1241,6 @@ export {
   AUTO_CLOSE_RECEIPT_SCHEMA_VERSION,
   AUTO_CLOSE_REGEX_SOURCE,
   autoCloseKeyForms,
-  buildDeclaredCloseKeys,
   buildReceipt,
   evaluateMergeConfigPosture,
   findAutoCloseRefs,

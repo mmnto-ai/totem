@@ -29,7 +29,6 @@ export type {
 } from './receipt.js';
 export {
   AUTO_CLOSE_RECEIPT_SCHEMA_VERSION,
-  buildDeclaredCloseKeys,
   buildReceipt,
   parseDeclaredCloseIntent,
   reconcile,
