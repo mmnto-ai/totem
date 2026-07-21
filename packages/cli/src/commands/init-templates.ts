@@ -162,12 +162,40 @@ const AUTO_CLOSE_REGEX_SOURCE =
 // cold-start / module-top-level constraint as AUTO_CLOSE_REGEX_SOURCE above), drift-
 // LOCKED by the init.test.ts assertions that render the templates and assert each
 // inlines `JSON.stringify(<core MERGE_COMMAND_REGEX_SOURCE>)`. Update BOTH together.
+// Built from the SAME SEP + FLAGRUN fragments as core so the string value is
+// byte-identical (parity test is the backstop).
+const MERGE_SEP = "(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)";
+const MERGE_FLAGRUN =
+  '(?:' + MERGE_SEP + "+-{1,2}[\\w-]+(?:=[^\\s'\"]+|" + MERGE_SEP + "+[^\\s'\"-][^\\s'\"]*)?)*";
+const MERGE_NOSEP = '[^;|&\\r\\n]';
 const MERGE_COMMAND_REGEX_SOURCE =
-  '(?<![\\w-])gh(?:\\.exe)?[\'"\\s]+' +
+  "(?<![\\w-])gh(?:\\.exe)?" +
+  MERGE_FLAGRUN +
+  MERGE_SEP +
+  '+' +
   '(?:' +
-  '(pr\\b[\'"\\s]+merge)(?![\\w-])' +
-  '|(api\\b[\\s\\S]*?/pulls/\\d+/merge)(?![\\w-])' +
-  '|(pr\\b[\'"\\s]*(?:\\$|`))' +
+  '(pr\\b' +
+  MERGE_FLAGRUN +
+  MERGE_SEP +
+  '+merge)(?![\\w-])' +
+  '|(api\\b' +
+  MERGE_NOSEP +
+  '*?/pulls/\\d+/merge)(?![\\w-])' +
+  '|(pr\\b' +
+  MERGE_SEP +
+  '*(?:\\$|`))' +
+  '|(api\\b' +
+  MERGE_SEP +
+  '*(?:\\$|`)|api\\b' +
+  MERGE_NOSEP +
+  '*?(?:\\$|`)' +
+  MERGE_NOSEP +
+  '*?/merge\\b)' +
+  '|(api\\b' +
+  MERGE_NOSEP +
+  '*?graphql' +
+  MERGE_NOSEP +
+  '*?mergePullRequest)(?![\\w-])' +
   ')';
 
 // --- Gemini CLI hook templates ---
@@ -214,19 +242,39 @@ try {
 ${TOTEM_FILE_END}
 `;
 
-export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook
-// Intercepts (Gemini CLI write tools are write_file + replace — there is NO
-// edit_file; docs.gemini file-system tools + gemini-cli#20321):
-//   Guard 1: git push/commit → run \`totem lint\` before proceeding (shield-gate)
-//   Guard 2: run_shell_command → block a raw \`gh pr merge\` / merge-API invocation
+export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook (command-style, reads JSON on stdin)
+// Official Gemini hook contract (google-gemini/gemini-cli docs/hooks/writing-hooks.md):
+// a BeforeTool hook is a COMMAND subprocess registered in .gemini/settings.json under
+// hooks.BeforeTool; it reads the tool-call JSON on stdin ({ tool_name, tool_input }),
+// BLOCKS by writing a diagnostic to stderr and exiting 2 (the doc's "Emergency Brake"),
+// and ALLOWS by exiting 0. Mirrors the Claude-side .cjs hooks (mmnto-ai/totem#1762 A-slice).
+// Gemini CLI write tools are write_file + replace — there is NO edit_file (docs.gemini
+// file-system tools + gemini-cli#20321); edit_file is kept for backward-safety.
+//   Guard 1: run_shell_command → block a raw \`gh pr merge\` / merge-API invocation
 //            and reroute to \`totem pr merge\` — auto-close enforcement seam A-slice
 //            (mmnto-ai/totem#1762). Bounded surface (condition 2): recognizable
 //            shell invocations only; D1/D2 are the loud backstop.
+//   Guard 2: run_shell_command → run \`totem lint\` before a git push/commit (shield-gate).
 //   Rule 1:  write_file/replace → block bare cross-repo refs in substrate paths —
 //            xrepo-qualify-refs, sealed in mmnto-ai/totem-strategy#145 (SHA c488888b).
 //   Rule 2:  write_file/replace → block GitHub auto-close keywords adjacent to an
 //            issue ref in **/*.md (EXEMPT .github/**, .totem/**) — design of
 //            record mmnto-ai/totem#1762; sibling seal pending its own PR.
+//
+// BOUNDED-SURFACE / RECORDED GAPS (condition 2 honesty, parity with core's matcher):
+//   - a VISIBLE-TOKEN splice a shell concatenates back into the keyword
+//     (\`gh pr me''rge\`, \`bash -c "gh \\\\"pr\\\\" merge"\`), and
+//   - a command SUBSTITUTION replacing the subcommand word (\`gh \$(echo pr) merge\`,
+//     \`gh "\$SUB" merge\`) — the pr/api token is produced by expansion the hook cannot
+//     see; note \`\$GH pr merge\` DOES block and \`gh pr \$(…)\` is denied-on-undecidable —
+//     remain unclaimed; D1 (PR-time check) + D2 (post-merge) are the loud backstop.
+//
+// NOTE: like its sibling .gemini/hooks/SessionStart.js this file is \`.js\` + CommonJS
+// \`require\`. In a consumer repo whose package.json is \`"type": "module"\` a bare
+// \`node BeforeTool.js\` resolves as ESM (a family-wide property of .gemini/hooks/*.js,
+// not introduced by this slice); a \`.cjs\` migration for the whole family is tracked
+// separately.
+'use strict';
 const { execSync } = require('child_process');
 
 const BARE_REF_REGEX_SOURCE = ${JSON.stringify(BARE_REF_REGEX_SOURCE)};
@@ -245,107 +293,260 @@ const MD_PATH_RE = /\\.md$/i;
 const GITHUB_EXEMPT_RE = /(^|[\\\\\\/])\\.(github|totem)[\\\\\\/]/i;
 const SUPPRESS_DIRECTIVE_RE = /<!--\\s*totem-context:/;
 
+// Extract the shell command from a run_shell_command tool_input. Gemini delivers
+// tool_input as a PARSED OBJECT (\`{ command }\`) on stdin — extract \`.command\` the
+// same way the Claude arm reads the \`Bash\` tool_input.command; NEVER JSON.stringify
+// the object (JSON escaping rewrites \`"\` to \`\\\\"\`, defeating the separator class so
+// every double-quoted \`gh "pr" merge\` form slips through — mmnto-ai/totem#1762
+// re-review, kimi B-1). A raw string tool_input (some deliveries) is used verbatim.
+function shellCommandOf(toolInput) {
+  if (typeof toolInput === 'string') return toolInput;
+  if (toolInput && typeof toolInput === 'object' && typeof toolInput.command === 'string') {
+    return toolInput.command;
+  }
+  return '';
+}
+
+// Drop lines carrying a totem-context suppression directive (line + preceding-line
+// window) before scanning, mirroring rule-engine.ts isSuppressed.
+function withoutSuppressed(content) {
+  const lines = content.split(/\\r?\\n/);
+  const filtered = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prev = i > 0 ? lines[i - 1] : '';
+    if (SUPPRESS_DIRECTIVE_RE.test(line) || SUPPRESS_DIRECTIVE_RE.test(prev)) continue;
+    filtered.push(line);
+  }
+  return filtered.join('\\n');
+}
+
 // mmnto-ai/totem#1762: any close-keyword (close/fix/resolve inflections) adjacent
 // to an issue ref in narrative markdown can auto-close a linked issue when the
 // text reaches a PR body / commit message — genuine OR negated. Presence
 // invariant, zero semantics (no negation parser). Scoped to **/*.md, EXEMPT
-// .github/** (PR/issue templates where close keywords are intentional).
+// .github/** (PR/issue templates where close keywords are intentional). Returns a
+// block message (string) or null (allow).
 function checkAutoCloseKeywords(toolName, toolInput) {
-  if (toolName !== 'write_file' && toolName !== 'edit_file' && toolName !== 'replace') return;
+  if (toolName !== 'write_file' && toolName !== 'edit_file' && toolName !== 'replace') return null;
   const input = (typeof toolInput === 'object' && toolInput !== null) ? toolInput : {};
   const filePath = String(input.file_path || input.path || '');
-  if (!MD_PATH_RE.test(filePath) || GITHUB_EXEMPT_RE.test(filePath)) return;
+  if (!MD_PATH_RE.test(filePath) || GITHUB_EXEMPT_RE.test(filePath)) return null;
   const content = input.content !== undefined ? input.content : input.new_string;
-  if (typeof content !== 'string') return;
+  if (typeof content !== 'string') return null;
 
-  const lines = content.split(/\\r?\\n/);
-  const filtered = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const prev = i > 0 ? lines[i - 1] : '';
-    if (SUPPRESS_DIRECTIVE_RE.test(line) || SUPPRESS_DIRECTIVE_RE.test(prev)) continue;
-    filtered.push(line);
-  }
   const re = new RegExp(AUTO_CLOSE_REGEX_SOURCE, 'gi');
-  const matches = [...filtered.join('\\n').matchAll(re)];
-  if (matches.length === 0) return;
+  const matches = [...withoutSuppressed(content).matchAll(re)];
+  if (matches.length === 0) return null;
 
   // Group layout: 1+2 = URL owner/repo+N; 3+4 = qualified owner/repo+N; 5 = bare N.
   const refs = matches.slice(0, 5).map((m) => (m[1] ? m[1] + '#' + m[2] : m[3] ? m[3] + '#' + m[4] : '#' + m[5])).join(', ');
-  throw new Error(
+  return (
     '[totem BeforeTool] GitHub auto-close keyword adjacent to issue ref in write to ' + filePath + ': ' + refs + '\\n' +
     'GitHub auto-closes linked issues from a PR body / commit message carrying this pattern (even under negation).\\n' +
     'Rephrase to a non-keyword form (\`references\` / \`see\` / \`tracks\`).\\n' +
     'For verbatim quotation, prefix with a \`<!-- totem-context: <reason> -->\` directive on the preceding line.\\n' +
-    'mmnto-ai/totem#1762.',
+    'mmnto-ai/totem#1762.'
   );
 }
 
 function checkXrepoQualifyRefs(toolName, toolInput) {
-  if (toolName !== 'write_file' && toolName !== 'edit_file' && toolName !== 'replace') return;
+  if (toolName !== 'write_file' && toolName !== 'edit_file' && toolName !== 'replace') return null;
   const input = (typeof toolInput === 'object' && toolInput !== null) ? toolInput : {};
   const filePath = String(input.file_path || input.path || '');
-  if (!SCOPED_PATH_RE.test(filePath)) return;
+  if (!SCOPED_PATH_RE.test(filePath)) return null;
   const content = input.content !== undefined ? input.content : input.new_string;
-  if (typeof content !== 'string') return;
+  if (typeof content !== 'string') return null;
 
-  const lines = content.split(/\\r?\\n/);
-  const filtered = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const prev = i > 0 ? lines[i - 1] : '';
-    if (SUPPRESS_DIRECTIVE_RE.test(line) || SUPPRESS_DIRECTIVE_RE.test(prev)) continue;
-    filtered.push(line);
-  }
   const re = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
-  const matches = [...filtered.join('\\n').matchAll(re)];
-  if (matches.length === 0) return;
+  const matches = [...withoutSuppressed(content).matchAll(re)];
+  if (matches.length === 0) return null;
 
   const refs = matches.slice(0, 5).map((m) => '#' + m[1]).join(', ');
-  throw new Error(
+  return (
     '[totem BeforeTool] Bare PR/issue reference(s) in write to ' + filePath + ': ' + refs + '. ' +
     'Qualify each as <owner>/<repo>#NNN (e.g., mmnto-ai/totem#1234). ' +
     'For verbatim quotation, prefix with a <!-- totem-context: <reason> --> directive on the preceding line. ' +
-    'Sealed in mmnto-ai/totem-strategy#145.',
+    'Sealed in mmnto-ai/totem-strategy#145.'
   );
 }
 
 // mmnto-ai/totem#1762 A-slice: a raw \`gh pr merge\` / merge-API invocation in a
 // run_shell_command bypasses the sanctioned \`totem pr merge\` actuator (which asserts
 // merge-config posture + auto-close safety before merging squash-only, no body
-// flags). Presence-invariant, deny-on-undecidable (a \`gh pr\` + substitution
-// continuation blocks too). Bounded surface — recognizable invocations only.
+// flags). Presence-invariant, deny-on-undecidable. The stderr message branches on
+// the matched arm (groups 3/4 = deny-on-undecidable; else a recognizable raw merge)
+// — the group indices live in the inlined pattern, no core import (kimi NB-4).
+// Returns a block message (string) or null (allow).
 function checkMergeInterlock(toolName, toolInput) {
-  if (toolName !== 'run_shell_command') return;
-  const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
+  if (toolName !== 'run_shell_command') return null;
+  const command = shellCommandOf(toolInput);
+  if (command.length === 0) return null;
   const re = new RegExp(MERGE_COMMAND_REGEX_SOURCE, 'gi');
-  if (!re.test(cmd)) return;
-  throw new Error(
+  const m = re.exec(command);
+  if (m === null) return null;
+  if (m[3] !== undefined || m[4] !== undefined) {
+    return (
+      '[totem BeforeTool] could not decide the gh subcommand ' +
+      '(substitution/variable after \`gh pr\` / \`gh api\`); rewrite the command plainly ' +
+      'or use \`totem pr merge [number]\`.\\n' +
+      'mmnto-ai/totem#1762.'
+    );
+  }
+  return (
     '[totem BeforeTool] raw \`gh pr merge\` / merge-API invocation blocked at the harness.\\n' +
     'Merge through the sanctioned actuator instead: \`totem pr merge [number]\` (or \`--check-only\`).\\n' +
     'It asserts the merge-config posture (E lever + squash-only) and refuses undeclared close-keyword ' +
     'refs via the totem-close marker before merging squash-only with no body flags.\\n' +
-    'mmnto-ai/totem#1762.',
+    'mmnto-ai/totem#1762.'
   );
 }
 
-module.exports = function beforeTool(toolName, toolInput) {
-  checkAutoCloseKeywords(toolName, toolInput);
-  checkXrepoQualifyRefs(toolName, toolInput);
-  checkMergeInterlock(toolName, toolInput);
-
-  if (toolName !== 'run_shell_command') return;
-  const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
-  if (!/git\\s+(push|commit)/.test(cmd) && !/["']git["'].*["'](push|commit)["']/.test(cmd)) return;
-
+let stdin = '';
+process.stdin.setEncoding('utf-8');
+process.stdin.on('data', (chunk) => {
+  stdin += chunk;
+});
+process.stdin.on('end', () => {
+  let parsed;
   try {
-    execSync('totem lint', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
+    parsed = stdin ? JSON.parse(stdin) : {};
   } catch (err) {
-    throw new Error('[Totem Error] Shield check failed. Fix violations before pushing.\\n' + err.message);
+    // Fail-soft on an unparseable envelope: an unrecognizable payload is out of
+    // the bounded claim; B + D1 + D2 remain the layered gates (mirrors the Claude arm).
+    process.stderr.write('[totem BeforeTool] could not parse stdin JSON; allowing (fail-soft)\\n');
+    process.exit(0);
   }
-};
+  if (parsed === null || typeof parsed !== 'object') {
+    process.exit(0);
+  }
+
+  const toolName = parsed.tool_name;
+  const toolInput = parsed.tool_input;
+
+  // Block on the first rule that fires (exit 2 = Emergency Brake, stderr diagnostic).
+  const blocked =
+    checkMergeInterlock(toolName, toolInput) ||
+    checkAutoCloseKeywords(toolName, toolInput) ||
+    checkXrepoQualifyRefs(toolName, toolInput);
+  if (blocked) {
+    process.stderr.write(blocked + '\\n');
+    process.exit(2);
+  }
+
+  // Guard 2: run \`totem lint\` before a git push/commit; block on failure.
+  if (toolName === 'run_shell_command') {
+    const cmd = shellCommandOf(toolInput);
+    if (/git\\s+(push|commit)/.test(cmd) || /["']git["'].*["'](push|commit)["']/.test(cmd)) {
+      try {
+        execSync('totem lint', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
+      } catch (err) {
+        process.stderr.write(
+          '[Totem Error] Shield check failed. Fix violations before pushing.\\n' +
+            (err && err.message ? err.message : String(err)) + '\\n',
+        );
+        process.exit(2);
+      }
+    }
+  }
+
+  process.exit(0);
+});
 ${TOTEM_FILE_END}
 `;
+
+/** Repo-relative command the Gemini BeforeTool settings entry registers. */
+export const GEMINI_BEFORE_TOOL_COMMAND = 'node .gemini/hooks/BeforeTool.js';
+
+/**
+ * The `.gemini/settings.json` registration for the BeforeTool command hook
+ * (mmnto-ai/totem#1762 A-slice). Per the official Gemini hook contract a hook is
+ * NOT auto-discovered from the hooks/ dir — it must be registered under
+ * `hooks.BeforeTool`. The `matcher: '*'` runs the hook on every tool call; the
+ * hook self-filters by `tool_name` (run_shell_command for the merge interlock +
+ * shield gate, write_file/replace for the write rules).
+ */
+export const GEMINI_BEFORE_TOOL_ENTRY = {
+  matcher: '*',
+  hooks: [
+    {
+      name: 'totem-before-tool',
+      type: 'command',
+      command: GEMINI_BEFORE_TOOL_COMMAND,
+    },
+  ],
+};
+
+/**
+ * Known prior totem-authored `.gemini/hooks/BeforeTool.js` template shapes, for
+ * the marker-adoption migration (mmnto-ai/totem#1762 re-review, codex B-3c). A
+ * pre-#1762 BeforeTool.js opens with a `// [totem] …` line but carries NEITHER the
+ * current managed head marker (`TOTEM_FILE_MARKER`) NOR the end marker, so
+ * `scaffoldFile`'s positional-ownership gate SKIPS it (the marker does not open the
+ * file) and it never upgrades. This registry lets `installGeminiHooks` recognize a
+ * legacy totem shape by a whitespace-insensitive compare and adopt it in place;
+ * a file that does not match is left untouched (with a warning), never clobbered.
+ *
+ * Shape 1: the ADR-063 phase-gate BeforeTool (the one shipped in this repo).
+ */
+export const LEGACY_GEMINI_BEFORE_TOOL_SHAPES: readonly string[] = [
+  `// [totem] Phase-gate enforcement — Gemini CLI BeforeTool hook (ADR-063)
+// Gate 1: Block git commit if /preflight hasn't been run
+// Gate 2: Run totem shield before git push
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+module.exports = function beforeTool(toolName, toolInput) {
+  if (toolName !== 'run_shell_command') return;
+  const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
+
+  const isCommit = /\\bgit\\b.*\\bcommit\\b/.test(cmd);
+  const isPush = /\\bgit\\b.*\\bpush\\b/.test(cmd);
+
+  if (!isCommit && !isPush) return;
+
+  // ─── Gate 1: Spec before commit (hard block) ──
+  if (isCommit) {
+    try {
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+      const gitRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+      const specFlag = path.join(gitRoot, '.totem/cache/.spec-completed');
+      const exempt = /^(main|master|HEAD)$|^(hotfix|docs)\\//.test(branch);
+      if (!exempt && !fs.existsSync(specFlag)) {
+        throw new Error(
+          \`[Totem Error] BLOCKED: /preflight has not been run on branch '\${branch}'.\\n\` +
+            'Run totem spec <issue> first. This gate enforces ADR-063.',
+        );
+      }
+    } catch (err) {
+      // Re-throw all errors — if we can't determine the branch, fail-closed
+      throw err;
+    }
+  }
+
+  // ─── Gate 2: Shield before push ──
+  if (isPush) {
+    try {
+      execSync('node packages/cli/dist/index.js shield', {
+        encoding: 'utf-8',
+        timeout: 120000,
+        stdio: 'inherit',
+      });
+    } catch (err) {
+      throw new Error(
+        '[Totem Error] Shield check failed. Fix violations before pushing.\\n' + err.message,
+      );
+    }
+  }
+};
+`,
+];
+
+/** Collapse runs of whitespace to a single space + trim, for a whitespace-insensitive template compare. */
+export function normalizeHookWhitespace(content: string): string {
+  return content.replace(/\s+/g, ' ').trim();
+}
 
 export const GEMINI_SKILL = `<!-- [totem] auto-generated — Totem Architect skill -->
 # Totem Architect
@@ -559,7 +760,9 @@ export const CLAUDE_MERGE_INTERLOCK = `${TOTEM_FILE_MARKER} — Claude Code Merg
 //   0 = allow (not a Bash tool call, no raw-merge match, OR unparseable stdin →
 //       fail-soft: A guards ONE invocation shape; an unrecognizable payload is out
 //       of its bounded claim, and B + D1 + D2 remain the layered gates)
-//   2 = block (Claude Code blocking convention; a raw-merge invocation detected)
+//   2 = block (Claude Code blocking convention) — the stderr message branches on
+//       the matched arm: a recognizable raw-merge invocation vs a deny-on-undecidable
+//       gh subcommand (substitution/variable after \`gh pr\` / \`gh api\`)
 'use strict';
 
 const MERGE_COMMAND_REGEX_SOURCE = ${JSON.stringify(MERGE_COMMAND_REGEX_SOURCE)};
@@ -589,17 +792,31 @@ process.stdin.on('end', () => {
   }
 
   const re = new RegExp(MERGE_COMMAND_REGEX_SOURCE, 'gi');
-  if (!re.test(command)) {
+  const m = re.exec(command);
+  if (m === null) {
     process.exit(0);
   }
 
-  process.stderr.write(
-    '[totem MergeInterlock] raw \`gh pr merge\` / merge-API invocation blocked at the harness.\\n' +
-    'Merge through the sanctioned actuator instead: \`totem pr merge [number]\` (or \`--check-only\`).\\n' +
-    'It asserts the merge-config posture (E lever + squash-only) and refuses undeclared close-keyword ' +
-    'refs via the totem-close marker before merging squash-only with no body flags.\\n' +
-    'mmnto-ai/totem#1762.\\n',
-  );
+  // Branch the message on which alternation matched — the group indices live in
+  // the inlined pattern (no core import at cold start). Groups 3/4 are the
+  // deny-on-undecidable arms (a substitution/variable after \`gh pr\` / \`gh api\`);
+  // everything else is a recognizable raw-merge invocation (kimi NB-4 / codex NB-4).
+  if (m[3] !== undefined || m[4] !== undefined) {
+    process.stderr.write(
+      '[totem MergeInterlock] could not decide the gh subcommand ' +
+      '(substitution/variable after \`gh pr\` / \`gh api\`); rewrite the command plainly ' +
+      'or use \`totem pr merge [number]\`.\\n' +
+      'mmnto-ai/totem#1762.\\n',
+    );
+  } else {
+    process.stderr.write(
+      '[totem MergeInterlock] raw \`gh pr merge\` / merge-API invocation blocked at the harness.\\n' +
+      'Merge through the sanctioned actuator instead: \`totem pr merge [number]\` (or \`--check-only\`).\\n' +
+      'It asserts the merge-config posture (E lever + squash-only) and refuses undeclared close-keyword ' +
+      'refs via the totem-close marker before merging squash-only with no body flags.\\n' +
+      'mmnto-ai/totem#1762.\\n',
+    );
+  }
   process.exit(2);
 });
 ${TOTEM_FILE_END}

@@ -30,11 +30,14 @@ import {
   CLAUDE_SESSION_START_ENTRY,
   DISTRIBUTED_CLAUDE_SKILLS,
   GEMINI_BEFORE_TOOL,
+  GEMINI_BEFORE_TOOL_ENTRY,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
   isBoundedOwnedFile,
+  LEGACY_GEMINI_BEFORE_TOOL_SHAPES,
   LEGACY_SENTINEL,
   markerOpensFile,
+  normalizeHookWhitespace,
   PREPARE_SCRIPT_COMMAND,
   PREPARE_SCRIPT_REL,
   PREPARE_WRAPPER,
@@ -270,8 +273,143 @@ export function wirePreparePackageJson(pkgPath: string): {
 
 // --- Gemini CLI hook installer ---
 
+/**
+ * Idempotently register the BeforeTool command hook in `.gemini/settings.json`
+ * under `hooks.BeforeTool` (mmnto-ai/totem#1762 A-slice). Per the official Gemini
+ * hook contract a hook is NOT auto-discovered from the hooks/ dir — it must be
+ * registered. User-owned config is never clobbered: a non-object root / non-object
+ * `hooks` / non-array `hooks.BeforeTool` is surfaced (`skipped` + err), never
+ * overwritten. Idempotent on the registered command path.
+ */
+export function scaffoldGeminiBeforeToolSettings(filePath: string): {
+  action: 'created' | 'merged' | 'skipped';
+  err?: string;
+} {
+  const name = path.basename(filePath);
+  const msg = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    const existed = fs.existsSync(filePath);
+    let parsed: Record<string, unknown> = {};
+    if (existed) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      let j: unknown;
+      try {
+        j = JSON.parse(raw);
+      } catch (err) {
+        return { action: 'skipped', err: `Could not parse ${name} (invalid JSON): ${msg(err)}` };
+      }
+      if (j === null || typeof j !== 'object' || Array.isArray(j)) {
+        return { action: 'skipped', err: `${name} is not a JSON object — leaving it unchanged.` };
+      }
+      parsed = j as Record<string, unknown>;
+    }
+
+    const hooksRaw = parsed.hooks;
+    if (
+      hooksRaw !== undefined &&
+      (hooksRaw === null || typeof hooksRaw !== 'object' || Array.isArray(hooksRaw))
+    ) {
+      return { action: 'skipped', err: `${name} "hooks" is not an object — leaving it unchanged.` };
+    }
+    const hooks = (hooksRaw ?? {}) as Record<string, unknown>;
+
+    const beforeToolRaw = hooks.BeforeTool;
+    if (beforeToolRaw !== undefined && !Array.isArray(beforeToolRaw)) {
+      return {
+        action: 'skipped',
+        err: `${name} "hooks.BeforeTool" is not an array — leaving it unchanged.`,
+      };
+    }
+    const beforeTool = (beforeToolRaw ?? []) as Array<Record<string, unknown>>;
+
+    const already = beforeTool.some((entry) => {
+      const hookList = Array.isArray(entry?.hooks) ? (entry.hooks as unknown[]) : [];
+      return hookList.some((h) => {
+        const cmd =
+          typeof h === 'string'
+            ? h
+            : h && typeof h === 'object'
+              ? (h as { command?: unknown }).command
+              : undefined;
+        return typeof cmd === 'string' && cmd.includes('.gemini/hooks/BeforeTool.js');
+      });
+    });
+    if (already) {
+      return { action: 'skipped' };
+    }
+
+    hooks.BeforeTool = [...beforeTool, GEMINI_BEFORE_TOOL_ENTRY];
+    parsed.hooks = hooks;
+    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    return { action: existed ? 'merged' : 'created' };
+  } catch (err) {
+    return { action: 'skipped', err: `[Totem Error] ${msg(err)}` };
+  }
+}
+
+/**
+ * Marker-adoption migration for the pre-#1762 unowned `.gemini/hooks/BeforeTool.js`
+ * (codex B-3c). A legacy totem BeforeTool opens with a `// [totem] …` line but lacks
+ * the current managed marker, so `scaffoldFile`'s positional-ownership gate SKIPS it
+ * and it never upgrades. If the on-disk file matches a KNOWN prior template shape
+ * (whitespace-insensitive), overwrite it in place with the managed template so its
+ * bounded ownership takes over; a totem file of an UNRECOGNIZED shape is left
+ * untouched with a warning; a non-totem (user) file returns null (scaffoldFile
+ * already leaves it alone). Returns a result to surface, or null (nothing to do).
+ */
+export function adoptLegacyGeminiBeforeTool(cwd: string): HookInstallerResult | null {
+  const rel = '.gemini/hooks/BeforeTool.js';
+  const filePath = path.join(cwd, rel);
+  if (!fs.existsSync(filePath)) return null;
+  let existing: string;
+  try {
+    existing = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return null;
+  }
+  // Already the managed template (marker opens it) → scaffoldFile handles refresh.
+  if (markerOpensFile(existing, TOTEM_FILE_MARKER)) return null;
+  // Only consider totem-authored legacy files (open with a `// [totem]` line).
+  if (!existing.trimStart().startsWith('// [totem]')) return null;
+
+  const norm = normalizeHookWhitespace(existing);
+  const isKnownPrior = LEGACY_GEMINI_BEFORE_TOOL_SHAPES.some(
+    (shape) => normalizeHookWhitespace(shape) === norm,
+  );
+  if (isKnownPrior) {
+    try {
+      fs.writeFileSync(filePath, GEMINI_BEFORE_TOOL, 'utf-8');
+    } catch (err) {
+      return { file: rel, action: 'skipped', err: err instanceof Error ? err.message : String(err) };
+    }
+    return {
+      file: rel,
+      action: 'merged',
+      summaryActionOverride: 'Migrated legacy unowned BeforeTool.js to the managed command hook',
+    };
+  }
+  return {
+    file: rel,
+    action: 'skipped',
+    err:
+      `${rel} is a totem hook of an unrecognized shape — left unchanged. ` +
+      'Run `totem hook install --force` to adopt the managed version.',
+  };
+}
+
 async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
   const results: HookInstallerResult[] = [];
+
+  // Marker-adoption migration FIRST: a pre-#1762 unowned BeforeTool.js is upgraded
+  // in place so the scaffold below sees the managed content (mmnto-ai/totem#1762).
+  const adopted = adoptLegacyGeminiBeforeTool(cwd);
+  if (adopted) results.push(adopted);
+
   // The two whole-file hooks carry the managed end marker (mmnto-ai/totem#2410) so a
   // drifted-but-bounded artifact self-repairs on re-init; the skill is marker-block
   // replace territory (no end marker threaded here).
@@ -308,6 +446,13 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
     });
   }
 
+  // Register the BeforeTool command hook in .gemini/settings.json (official Gemini
+  // contract: hooks are registered, not auto-discovered — mmnto-ai/totem#1762).
+  const geminiSettingsResult = scaffoldGeminiBeforeToolSettings(
+    path.join(cwd, '.gemini', 'settings.json'),
+  );
+  results.push({ file: '.gemini/settings.json (BeforeTool)', ...geminiSettingsResult });
+
   return results;
 }
 
@@ -338,10 +483,16 @@ function hasPreWriteShield(entry: z.infer<typeof HookCommandSchema>): boolean {
   return entry.command.includes('PreWriteShield');
 }
 
-/** Check whether a hook entry already contains a merge-interlock reference. */
+/**
+ * Check whether a hook entry already installs the CANONICAL merge-interlock hook.
+ * Keyed on the canonical command PATH (`.totem/hooks/merge-interlock.cjs`), NOT the
+ * bare substring `merge-interlock` (codex NB-2): a user entry such as
+ * `node tools/custom-merge-interlock-metrics.cjs` must NOT make scaffolding report
+ * "already installed" while the canonical hook is still absent.
+ */
 function hasMergeInterlock(entry: z.infer<typeof HookCommandSchema>): boolean {
-  if (typeof entry === 'string') return entry.includes('merge-interlock');
-  return entry.command.includes('merge-interlock');
+  const cmd = typeof entry === 'string' ? entry : entry.command;
+  return cmd.includes('.totem/hooks/merge-interlock.cjs');
 }
 
 /** Check whether a hook entry already contains a SessionStart.cjs reference. */

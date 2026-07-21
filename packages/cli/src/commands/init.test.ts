@@ -29,12 +29,14 @@ import {
   OLLAMA_FLOOR_DEFAULT_BASE_URL,
   probeOllamaFloor,
   REFLEX_VERSION,
+  adoptLegacyGeminiBeforeTool,
   scaffoldClaudeHooks,
   scaffoldClaudeMergeInterlock,
   scaffoldClaudeSessionStart,
   scaffoldClaudeSkill,
   scaffoldClaudeWriteShield,
   scaffoldFile,
+  scaffoldGeminiBeforeToolSettings,
   scaffoldMcpConfig,
   upgradeReflexes,
 } from './init.js';
@@ -49,8 +51,10 @@ import {
   CLAUDE_SESSION_START_ENTRY,
   DISTRIBUTED_CLAUDE_SKILLS,
   GEMINI_BEFORE_TOOL,
+  GEMINI_BEFORE_TOOL_ENTRY,
   GEMINI_SESSION_START,
   generateConfigForFormat,
+  LEGACY_GEMINI_BEFORE_TOOL_SHAPES,
   REVIEW_LOOP_SKILL_CONTENT,
   REVIEW_REPLY_SKILL_CONTENT,
   SIGNOFF_SKILL_CONTENT,
@@ -1449,6 +1453,59 @@ describe('MergeInterlock runtime behavior (mmnto-ai/totem#1762 A-slice)', () => 
     expect(r.exitCode).toBe(0);
     expect(r.stderr).toMatch(/could not parse|fail-soft/i);
   });
+
+  // ── Claude host-parity: double-quoted forms must block through the REAL stdin
+  //    entry path (mmnto-ai/totem#1762 re-review kimi B-1) ──
+  it('exits 2 on double-quoted token forms via the Claude stdin path', () => {
+    for (const command of ['gh "pr" merge 5', '& "gh" "pr" "merge" --squash', 'gh pr "$SUBCMD"']) {
+      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toContain('totem pr merge');
+    }
+  });
+
+  it('exits 2 on a flag-spliced `gh --repo o/r pr merge` (kimi B-2)', () => {
+    const r = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'gh --repo mmnto-ai/totem pr merge 5' },
+    });
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('exits 2 on a `\\`+LF line-continued merge (kimi B-3)', () => {
+    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr \\\nmerge 5 --squash' } });
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('branches the message to "could not decide" on a variable REST merge path', () => {
+    const r = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'gh api repos/o/r/pulls/$PR/merge -X PUT' },
+    });
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toMatch(/could not decide/i);
+    expect(r.stderr).not.toMatch(/raw `gh pr merge`/);
+  });
+
+  it('exits 0 on the separator false-positive `gh api /user; echo /pulls/5/merge` (Greptile P2)', () => {
+    const r = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'gh api /user; echo /pulls/5/merge' },
+    });
+    expect(r.exitCode).toBe(0);
+  });
+
+  // mmnto-ai/totem#2471 was the specimen raw `gh pr merge … --subject … --body …`
+  // that motivated this seam — the positive control the interlock must always catch.
+  it('exits 2 on the mmnto-ai/totem#2471-shaped hidden-body specimen', () => {
+    const r = runHook({
+      tool_name: 'Bash',
+      tool_input: {
+        command: 'gh pr merge 2471 --squash --subject "feat: x" --body "Closes #NNN"',
+      },
+    });
+    expect(r.exitCode).toBe(2);
+  });
 });
 
 // Phase C slice 1 — symmetric Claude SessionStart hook (mmnto-ai/totem#1845).
@@ -2095,6 +2152,11 @@ describe('GEMINI_BEFORE_TOOL write_file/replace extension', () => {
   });
 });
 
+// The rendered Gemini BeforeTool hook is a COMMAND that reads the tool-call JSON on
+// stdin and blocks via exit 2 (official Gemini contract) — so it is SPAWNED with a
+// stdin payload here, exactly as Gemini CLI runs it (mmnto-ai/totem#1762 re-review,
+// codex B-3b). Both `tool_input` deliveries (parsed object AND raw string) are
+// exercised for the merge interlock (kimi B-1 host-parity).
 describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)', () => {
   let tmpDir: string;
   let hookPath: string;
@@ -2109,22 +2171,20 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     cleanTmpDir(tmpDir);
   });
 
-  /** Require the rendered hook fresh and report whether it threw. */
+  /** Spawn the rendered hook with a stdin envelope; report exit code + stderr. */
   function runBeforeTool(
     tool: string,
-    input: Record<string, unknown>,
-  ): { threw: boolean; message: string } {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
-    try {
-      beforeTool(tool, input);
-      return { threw: false, message: '' };
-    } catch (err) {
-      return { threw: true, message: err instanceof Error ? err.message : String(err) };
-    }
+    input: unknown,
+  ): { threw: boolean; message: string; exitCode: number } {
+    const r = spawnSync(process.execPath, [hookPath], {
+      input: JSON.stringify({ tool_name: tool, tool_input: input }),
+      encoding: 'utf-8',
+    });
+    const exitCode = r.status ?? -1;
+    return { threw: exitCode === 2, message: r.stderr ?? '', exitCode };
   }
 
-  it('throws (blocks) on a close keyword adjacent to an issue ref in a **/*.md write, even negated', () => {
+  it('blocks (exit 2) on a close keyword adjacent to an issue ref in a **/*.md write, even negated', () => {
     const r = runBeforeTool('write_file', {
       file_path: 'docs/x.md',
       content: 'Does not close #2466',
@@ -2161,6 +2221,7 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
       content: 'Closes mmnto-ai/totem#5',
     });
     expect(r.threw).toBe(false);
+    expect(r.exitCode).toBe(0);
   });
 
   it('exempts .totem/** from the auto-close rule (gemini #2)', () => {
@@ -2169,14 +2230,21 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
       content: 'Closes mmnto-ai/totem#5',
     });
     expect(r.threw).toBe(false);
+    expect(r.exitCode).toBe(0);
   });
 
-  it('does not throw on a non-keyword reference form', () => {
+  it('does not block on a non-keyword reference form', () => {
     const r = runBeforeTool('edit_file', {
       file_path: 'docs/x.md',
       new_string: 'see mmnto-ai/totem#5',
     });
     expect(r.threw).toBe(false);
+    expect(r.exitCode).toBe(0);
+  });
+
+  it('fail-soft (exit 0) on unparseable stdin', () => {
+    const r = spawnSync(process.execPath, [hookPath], { input: '{ not json', encoding: 'utf-8' });
+    expect(r.status).toBe(0);
   });
 });
 
@@ -2194,34 +2262,196 @@ describe('GEMINI_BEFORE_TOOL merge-interlock runtime (mmnto-ai/totem#1762 A-slic
     cleanTmpDir(tmpDir);
   });
 
-  function runBeforeTool(tool: string, input: unknown): { threw: boolean; message: string } {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
-    try {
-      beforeTool(tool, input);
-      return { threw: false, message: '' };
-    } catch (err) {
-      return { threw: true, message: err instanceof Error ? err.message : String(err) };
-    }
+  /** Spawn with a stdin envelope; `input` is delivered as `tool_input` verbatim
+   *  (object OR string) so both Gemini deliveries are exercised. */
+  function runBeforeTool(
+    tool: string,
+    input: unknown,
+  ): { threw: boolean; message: string; exitCode: number } {
+    const r = spawnSync(process.execPath, [hookPath], {
+      input: JSON.stringify({ tool_name: tool, tool_input: input }),
+      encoding: 'utf-8',
+    });
+    const exitCode = r.status ?? -1;
+    return { threw: exitCode === 2, message: r.stderr ?? '', exitCode };
   }
 
-  it('throws (blocks) on a raw `gh pr merge` run_shell_command and names the actuator', () => {
+  it('blocks (exit 2) on a raw `gh pr merge` run_shell_command and names the actuator', () => {
     const r = runBeforeTool('run_shell_command', { command: 'gh pr merge 5 --squash' });
     expect(r.threw).toBe(true);
     expect(r.message).toContain('totem pr merge');
     expect(r.message).toContain('[totem BeforeTool]');
   });
 
-  it('throws on a raw merge-API run_shell_command', () => {
+  it('blocks a raw merge-API run_shell_command', () => {
     const r = runBeforeTool('run_shell_command', {
       command: 'gh api repos/o/r/pulls/5/merge -X PUT',
     });
     expect(r.threw).toBe(true);
   });
 
-  it('does NOT throw on a read-only `gh pr view`', () => {
+  it('does NOT block a read-only `gh pr view`', () => {
     const r = runBeforeTool('run_shell_command', { command: 'gh pr view 5' });
     expect(r.threw).toBe(false);
+    expect(r.exitCode).toBe(0);
+  });
+
+  // ── host-parity (kimi B-1): the double-quoted forms must block via BOTH Gemini
+  //    tool_input deliveries — a parsed object AND a raw string. The old
+  //    JSON.stringify(toolInput) path let every double-quoted form through. ──
+  it('blocks double-quoted forms via OBJECT tool_input delivery', () => {
+    for (const command of ['gh "pr" merge 5', '& "gh" "pr" "merge" --squash', 'gh pr "$SUBCMD"']) {
+      const r = runBeforeTool('run_shell_command', { command });
+      expect(r.exitCode).toBe(2);
+      expect(r.message).toContain('totem pr merge');
+    }
+  });
+
+  it('blocks double-quoted forms via STRING tool_input delivery', () => {
+    for (const command of ['gh "pr" merge 5', 'gh pr merge']) {
+      const r = runBeforeTool('run_shell_command', command);
+      expect(r.exitCode).toBe(2);
+      expect(r.message).toContain('totem pr merge');
+    }
+  });
+
+  it('branches the message to "could not decide" on an undecidable continuation', () => {
+    const r = runBeforeTool('run_shell_command', { command: 'gh pr "$SUBCMD"' });
+    expect(r.exitCode).toBe(2);
+    expect(r.message).toMatch(/could not decide/i);
+  });
+
+  it('blocks a `gh api graphql … mergePullRequest` mutation (kimi NB-2)', () => {
+    const r = runBeforeTool('run_shell_command', {
+      command: "gh api graphql -f query='mutation{mergePullRequest(input:{})}'",
+    });
+    expect(r.exitCode).toBe(2);
+  });
+
+  it('does NOT block the separator false-positive `gh api /user; echo /pulls/5/merge` (Greptile P2)', () => {
+    const r = runBeforeTool('run_shell_command', { command: 'gh api /user; echo /pulls/5/merge' });
+    expect(r.exitCode).toBe(0);
+  });
+});
+
+// mmnto-ai/totem#1762 A-slice — Gemini BeforeTool settings registration + the
+// marker-adoption migration for the pre-#1762 unowned BeforeTool.js (codex B-3b/c).
+describe('scaffoldGeminiBeforeToolSettings', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-settings-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('creates .gemini/settings.json with a BeforeTool command entry when none exists', () => {
+    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
+    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'created' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.BeforeTool).toHaveLength(1);
+    expect(content.hooks.BeforeTool[0].hooks[0]).toEqual({
+      name: 'totem-before-tool',
+      type: 'command',
+      command: 'node .gemini/hooks/BeforeTool.js',
+    });
+  });
+
+  it('is idempotent — a second invoke does not duplicate', () => {
+    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
+    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'created' });
+    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'skipped' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.BeforeTool).toHaveLength(1);
+  });
+
+  it('merges into an existing settings.json, preserving unrelated keys/hooks', () => {
+    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ theme: 'dark', hooks: { SessionEnd: [{ hooks: [] }] } }, null, 2),
+      'utf-8',
+    );
+    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.theme).toBe('dark');
+    expect(content.hooks.SessionEnd).toHaveLength(1);
+    expect(content.hooks.BeforeTool).toHaveLength(1);
+  });
+
+  it('declines (skipped + err) a non-object hooks value rather than clobbering', () => {
+    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify({ hooks: 'nope' }), 'utf-8');
+    const result = scaffoldGeminiBeforeToolSettings(filePath);
+    expect(result.action).toBe('skipped');
+    expect(result.err).toMatch(/hooks/);
+  });
+
+  it('the entry constant matcher runs on every tool (self-filtered by tool_name)', () => {
+    expect(GEMINI_BEFORE_TOOL_ENTRY.matcher).toBe('*');
+  });
+});
+
+describe('adoptLegacyGeminiBeforeTool (marker-adoption migration)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-adopt-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function writeBeforeTool(content: string): string {
+    const p = path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, content, 'utf-8');
+    return p;
+  }
+
+  it('returns null when no BeforeTool.js exists', () => {
+    expect(adoptLegacyGeminiBeforeTool(tmpDir)).toBeNull();
+  });
+
+  it('adopts a KNOWN prior template shape (whitespace-insensitive) in place', () => {
+    const p = writeBeforeTool(LEGACY_GEMINI_BEFORE_TOOL_SHAPES[0]!);
+    const result = adoptLegacyGeminiBeforeTool(tmpDir);
+    expect(result?.action).toBe('merged');
+    // Overwritten with the managed template (marker opens it → future drift-repair).
+    expect(fs.readFileSync(p, 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
+  });
+
+  it('adopts despite whitespace differences (modulo-whitespace compare)', () => {
+    const reflowed = LEGACY_GEMINI_BEFORE_TOOL_SHAPES[0]!.replace(/\n/g, '\n  ');
+    const p = writeBeforeTool(reflowed);
+    expect(adoptLegacyGeminiBeforeTool(tmpDir)?.action).toBe('merged');
+    expect(fs.readFileSync(p, 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
+  });
+
+  it('leaves a totem file of an UNRECOGNIZED shape untouched, with a warning', () => {
+    const custom = '// [totem] my custom hand-edited BeforeTool\nmodule.exports = () => {};\n';
+    const p = writeBeforeTool(custom);
+    const result = adoptLegacyGeminiBeforeTool(tmpDir);
+    expect(result?.action).toBe('skipped');
+    expect(result?.err).toMatch(/unrecognized shape/);
+    expect(fs.readFileSync(p, 'utf-8')).toBe(custom);
+  });
+
+  it('leaves a non-totem (user) file alone (returns null)', () => {
+    const user = 'module.exports = function () { /* mine */ };\n';
+    const p = writeBeforeTool(user);
+    expect(adoptLegacyGeminiBeforeTool(tmpDir)).toBeNull();
+    expect(fs.readFileSync(p, 'utf-8')).toBe(user);
+  });
+
+  it('returns null when the file is already the managed template', () => {
+    writeBeforeTool(GEMINI_BEFORE_TOOL);
+    expect(adoptLegacyGeminiBeforeTool(tmpDir)).toBeNull();
   });
 });
 
