@@ -24,8 +24,8 @@ optional field), so every prior 1.x verdict still parses unchanged.
 
 CLI (`@mmnto/cli`): `classifyRejectedLane` consumes the structured
 `OrchestratorInvokeError` (its `kind` and `failureArtifactHash`) instead of inferring
-the category from error prose, and records the evidence hash on the failed lane. Per the
-#2471 gate-semantics boundary, an admission-phase `TotemConfigError` maps to
+the category from error prose, and records the evidence hash on the failed lane. Per
+the #2471 gate-semantics boundary, an admission-phase `TotemConfigError` maps to
 `config-error` — it never reached execution, so it is never mapped to a widened
 `invoke-*` kind. The zero-completed hard-error message now names the per-lane failure
 categories (e.g. `failed by category: invoke-auth (1), invoke-timeout (1)`) so a
