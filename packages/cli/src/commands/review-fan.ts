@@ -34,6 +34,7 @@
 // inside an async entry point and threaded down to the sync helpers.
 import type {
   GroundingBundle,
+  InvokeFailureKind,
   LessonsConsulted,
   LineageKeyInput,
   PersistedPostCheckFinding,
@@ -45,6 +46,7 @@ import type {
   VerdictArtifact,
   VerdictDiffScope,
   VerdictLane,
+  VerdictLaneFailureReason,
   VerdictPredicateInput,
   VerdictRound,
 } from '@mmnto/totem';
@@ -436,24 +438,36 @@ export async function runLane(
 
 /**
  * Map a REJECTED lane promise to a `failed` lane record (finding 13): an invoker throw
- * is classified (quota vs generic invoke error) and lands in the verdict as a terminal
- * `failed` lane — a lane is never lost to a rejection. The laneId uses the CONFIGURED
- * lane (a rejection means no backend resolved).
+ * is classified and lands in the verdict as a terminal `failed` lane — a lane is never
+ * lost to a rejection. The laneId uses the CONFIGURED lane (a rejection means no backend
+ * resolved).
+ *
+ * The classification consumes slice-B's STRUCTURED `OrchestratorInvokeError` (its
+ * `kind` and `failureArtifactHash`) rather than inferring the category from error prose
+ * (mmnto-ai/totem#2459). When the error carries a persisted failure-evidence hash, it is
+ * recorded on the lane so the verdict reaches B's bounded evidence ONE HOP away —
+ * mirroring how a completed lane carries `runArtifactHash`.
  */
 export async function classifyRejectedLane(
   index: number,
   laneModel: string,
   reason: unknown,
 ): Promise<LaneRunResult> {
-  const typedReason = await classifyInvokeFailure(reason);
+  const classified = await classifyInvokeFailure(reason);
   return {
     // rev-6 item 3: a rejected lane resolved no backend — the laneId suffix binds to the
     // configured lane, persisted here so the schema can validate that binding.
     lane: {
       status: 'failed',
       laneId: laneId(index, laneModel),
-      typedReason,
+      typedReason: classified.typedReason,
       configuredLane: laneModel,
+      // #2459: only present when slice-B persisted the terminal failure evidence — the
+      // reference resolves via `loadInvocationFailureArtifact`. Omitted (never a dangling
+      // hash) for admission-phase / pre-invoke rejections that emit no artifact.
+      ...(classified.failureArtifactHash !== undefined
+        ? { failureArtifactHash: classified.failureArtifactHash }
+        : {}),
     },
     filteredFindings: [],
   };
@@ -476,10 +490,73 @@ function tallyFindings(findings: readonly ShieldFinding[]): {
   return { critical, warn, info };
 }
 
-/** Classify an invoke throw as a typed `failed` reason (quota vs generic invoke error). */
-async function classifyInvokeFailure(err: unknown): Promise<'quota-exhausted' | 'invoke-error'> {
-  const { isQuotaError } = await import('../orchestrators/orchestrator.js');
-  return isQuotaError(err) ? 'quota-exhausted' : 'invoke-error';
+/** A classified lane rejection: the typed reason plus B's evidence hash when one exists. */
+interface ClassifiedInvokeFailure {
+  typedReason: VerdictLaneFailureReason;
+  /** Present only for an execution-phase failure whose evidence B persisted (#2459). */
+  failureArtifactHash?: string;
+}
+
+/**
+ * Map slice-B's `InvokeFailureKind` to a distinguishable verdict-lane failure reason
+ * (mmnto-ai/totem#2459). The mapping is 1:1 and total — no two distinct kinds collapse
+ * to one reason (auth / model / spawn / exit / timeout each land on their own value).
+ * `quota` and `unknown` route to the pre-existing `quota-exhausted` / `invoke-error`
+ * (reused, not renamed), so the widening stays additive. The exhaustive `switch` makes
+ * a future `InvokeFailureKind` member a compile error here, not a silent collapse.
+ */
+function invokeFailureKindToReason(kind: InvokeFailureKind): VerdictLaneFailureReason {
+  switch (kind) {
+    case 'auth':
+      return 'invoke-auth';
+    case 'quota':
+      return 'quota-exhausted';
+    case 'model':
+      return 'invoke-model';
+    case 'process-spawn':
+      return 'invoke-process-spawn';
+    case 'process-exit':
+      return 'invoke-process-exit';
+    case 'timeout':
+      return 'invoke-timeout';
+    case 'unknown':
+      return 'invoke-error';
+  }
+}
+
+/**
+ * Classify a lane rejection into a typed `failed` reason (mmnto-ai/totem#2459).
+ *
+ * Precedence, EXECUTION-phase first:
+ *   1. `OrchestratorInvokeError` — a lane that reached invoke and terminally failed.
+ *      Its STRUCTURED `kind` maps to a distinguishable reason (no prose inference), and
+ *      its `failureArtifactHash` (present iff B persisted the bounded evidence) is
+ *      threaded onto the lane so the verdict reaches that evidence one hop away.
+ *   2. `TotemConfigError` — an ADMISSION-phase / pre-invoke denial (the #2471
+ *      gate-semantics boundary). This never reached execution, so it is NOT a lane
+ *      invoke-failure and maps to `config-error`, never a widened `invoke-*` kind.
+ *   3. Any other (unstructured) throw — the legacy prose probe stays as a defensive
+ *      fallback (production invoke failures are structured `OrchestratorInvokeError`s;
+ *      this only catches an unexpected raw throw).
+ */
+async function classifyInvokeFailure(err: unknown): Promise<ClassifiedInvokeFailure> {
+  const { OrchestratorInvokeError, isQuotaError } =
+    await import('../orchestrators/orchestrator.js');
+  if (err instanceof OrchestratorInvokeError) {
+    return {
+      typedReason: invokeFailureKindToReason(err.kind),
+      ...(err.failureArtifactHash !== undefined
+        ? { failureArtifactHash: err.failureArtifactHash }
+        : {}),
+    };
+  }
+  // Admission-phase / pre-invoke config denial (#2471): not an execution failure.
+  const { TotemConfigError } = await import('@mmnto/totem');
+  if (err instanceof TotemConfigError) {
+    return { typedReason: 'config-error' };
+  }
+  // Defensive prose fallback for an unstructured throw (never the production path).
+  return { typedReason: isQuotaError(err) ? 'quota-exhausted' : 'invoke-error' };
 }
 
 // ─── Diff scope + lineage (item 5, item 7 diffHash) ──────────────────────────
@@ -1323,8 +1400,8 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
     const failed = verdict.lanes.filter((l) => l.status === 'failed').length;
     throw new TotemError(
       'SHIELD_FAILED',
-      `Review produced no completed verdict lane (completed=0, abstained=${abstained}, failed=${failed} of ${verdict.lanes.length}) — this is a non-pass, NOT a crash: an honest verdict was written (settled=false), then the run hard-errors. A provider-unsettled round never counts as a review pass and never authorizes a push (Tenets 12/13).`,
-      'Abstained lanes invoked but their output was not extractable; failed lanes did not invoke. Check backend API keys / quota and lane output, then re-run `totem review`.',
+      `Review produced no completed verdict lane (completed=0, abstained=${abstained}, failed=${failed} of ${verdict.lanes.length}) — ${describeFanFailureCategories(verdict.lanes)} — this is a non-pass, NOT a crash: an honest verdict was written (settled=false), then the run hard-errors. A provider-unsettled round never counts as a review pass and never authorizes a push (Tenets 12/13).`,
+      'Abstained lanes invoked but their output was not extractable; failed lanes did not invoke — the categories above distinguish auth / quota / model / spawn / exit / timeout, and each failed lane carries a failureArtifactHash to B’s bounded evidence when one was persisted. Check backend API keys / quota and lane output, then re-run `totem review`.',
     );
   }
 
@@ -1547,6 +1624,33 @@ function describeFailOnFailure(
   }
   if (!cacheEligible) parts.push(describeIneligibility(verdict));
   return parts.length > 0 ? parts.join('; ') : `findings at or above ${failOn}`;
+}
+
+/**
+ * Enumerate WHY a zero-completed fan produced no verdict lane, PER CATEGORY
+ * (mmnto-ai/totem#2459) — so the operator sees `invoke-auth` vs `quota-exhausted` vs
+ * `invoke-timeout`, not just an undifferentiated `failed=M`. Failed lanes are grouped by
+ * their typed invoke-failure reason (counted); abstained lanes surface as a single
+ * extraction-failure bucket (they invoked but their output was unextractable). Reads
+ * `verdict.lanes` — the SAME validated collection the zero-completed gate keys on — so
+ * the enumerated categories can never drift from the gate predicate.
+ */
+function describeFanFailureCategories(lanes: readonly VerdictLane[]): string {
+  const parts: string[] = [];
+  const failed = lanes.filter(
+    (l): l is Extract<VerdictLane, { status: 'failed' }> => l.status === 'failed',
+  );
+  if (failed.length > 0) {
+    const counts = new Map<VerdictLaneFailureReason, number>();
+    for (const l of failed) counts.set(l.typedReason, (counts.get(l.typedReason) ?? 0) + 1);
+    const rendered = [...counts.entries()].map(([reason, n]) => `${reason} (${n})`).join(', ');
+    parts.push(`failed by category: ${rendered}`);
+  }
+  const abstained = lanes.filter((l) => l.status === 'abstained').length;
+  if (abstained > 0) {
+    parts.push(`abstained — invoked but output not extractable (${abstained})`);
+  }
+  return parts.length > 0 ? parts.join('; ') : 'no lane categories recorded';
 }
 
 /** sha256 hex of a UTF-8 string (the masked-diff payload identity). */

@@ -11,6 +11,7 @@ import {
   deriveCacheEligible,
   deriveSettled,
   findLatestVerdictForLineage,
+  type InvokeFailureKind,
   listVerdictArtifacts,
   readLedgerEvents,
   renderCovariateLine,
@@ -18,9 +19,11 @@ import {
   type TotemConfig,
   TotemConfigError,
   VERDICT_ARTIFACT_SCHEMA_VERSION,
+  type VerdictLaneFailureReason,
 } from '@mmnto/totem';
 
 import { EMPTY_SHARED } from '../exemptions/exemption-schema.js';
+import { OrchestratorInvokeError } from '../orchestrators/orchestrator.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
   assembleVerdict,
@@ -466,6 +469,71 @@ describe('runLane', () => {
     expect(classified.lane.status).toBe('failed');
     if (classified.lane.status === 'failed')
       expect(classified.lane.typedReason).toBe('invoke-error');
+  });
+});
+
+// ─── #2459: classifyRejectedLane consumes slice-B's structured OrchestratorInvokeError ──
+
+describe('classifyRejectedLane — slice-B invoke-failure kinds (mmnto-ai/totem#2459)', () => {
+  it('maps EACH OrchestratorInvokeError.kind to a DISTINGUISHABLE reason (no auth/timeout/spawn collapse)', async () => {
+    const cases: Array<[InvokeFailureKind, VerdictLaneFailureReason]> = [
+      ['auth', 'invoke-auth'],
+      ['quota', 'quota-exhausted'],
+      ['model', 'invoke-model'],
+      ['process-spawn', 'invoke-process-spawn'],
+      ['process-exit', 'invoke-process-exit'],
+      ['timeout', 'invoke-timeout'],
+      ['unknown', 'invoke-error'],
+    ];
+    for (const [kind, expected] of cases) {
+      // The structured kind is consumed directly — NOT inferred from the message prose
+      // (the message here is deliberately unrelated to the kind).
+      const err = new OrchestratorInvokeError(`lane rejected on ${kind}`, kind, []);
+      const classified = await classifyRejectedLane(0, 'anthropic:claude-x', err);
+      expect(classified.lane.status).toBe('failed');
+      if (classified.lane.status === 'failed') expect(classified.lane.typedReason).toBe(expected);
+    }
+    // The mapping is fully INJECTIVE: all seven kinds land on seven distinct reasons
+    // (quota/unknown reuse the legacy `quota-exhausted`/`invoke-error`, which are still
+    // distinct from each other and from the five `invoke-*` values) — nothing collapses.
+    expect(new Set(cases.map(([, r]) => r)).size).toBe(7);
+  });
+
+  it('threads the failureArtifactHash from the structured error onto the failed lane', async () => {
+    const hash = 'b'.repeat(64);
+    const err = new OrchestratorInvokeError('timed out', 'timeout', [], {
+      failureArtifactHash: hash,
+    });
+    const classified = await classifyRejectedLane(1, 'anthropic:claude-x', err);
+    expect(classified.lane.status).toBe('failed');
+    if (classified.lane.status === 'failed') {
+      expect(classified.lane.typedReason).toBe('invoke-timeout');
+      expect(classified.lane.failureArtifactHash).toBe(hash);
+    }
+  });
+
+  it('omits failureArtifactHash when the error carries none (never a dangling reference)', async () => {
+    const err = new OrchestratorInvokeError('auth failed', 'auth', []);
+    const classified = await classifyRejectedLane(0, 'anthropic:claude-x', err);
+    expect(classified.lane.status).toBe('failed');
+    if (classified.lane.status === 'failed')
+      expect('failureArtifactHash' in classified.lane).toBe(false);
+  });
+
+  it('an ADMISSION-phase TotemConfigError maps to config-error, NOT a widened invoke kind (#2471 boundary)', async () => {
+    // A pre-invoke admission denial never reached execution, so it is not a lane
+    // invoke-failure: it maps to config-error and carries no invoke-evidence hash.
+    const admissionErr = new TotemConfigError(
+      "Admission denied: requested backend admission class 'self_grounding_agent' is not declared.",
+      'Declare the class in your orchestrator config, or drop the request.',
+      'CONFIG_INVALID',
+    );
+    const classified = await classifyRejectedLane(0, 'anthropic:claude-x', admissionErr);
+    expect(classified.lane.status).toBe('failed');
+    if (classified.lane.status === 'failed') {
+      expect(classified.lane.typedReason).toBe('config-error');
+      expect('failureArtifactHash' in classified.lane).toBe(false);
+    }
   });
 });
 
@@ -1055,6 +1123,41 @@ describe('runReviewFan', () => {
     expect(v.completedLaneCount).toBe(0);
     expect(v.lanes.map((l) => l.status).sort()).toEqual(['abstained', 'failed']);
     expect(v.settled).toBe(false);
+  });
+
+  it('the zero-completed hard-error NAMES the per-lane failure categories, not just counts (#2459 task 4)', async () => {
+    // Two lanes fail on DISTINCT structured kinds; the operator must see auth vs timeout
+    // (the diagnosis a provider-unsettled round needs), not an undifferentiated failed=2.
+    const invoker = mapInvoker({
+      'anthropic:claude-a': async () => {
+        throw new OrchestratorInvokeError('key rejected', 'auth', []);
+      },
+      'gemini:g': async () => {
+        throw new OrchestratorInvokeError('deadline exceeded', 'timeout', []);
+      },
+    });
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], invoker);
+    let err: unknown;
+    try {
+      await runReviewFan(ctx);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(Error);
+    const msg = (err as Error).message;
+    // The slice-A count contract is preserved VERBATIM (five-shape matrix unchanged)...
+    expect(msg).toMatch(/completed=0, abstained=0, failed=2/);
+    // ...and the categories are named (task 4).
+    expect(msg).toContain('failed by category:');
+    expect(msg).toContain('invoke-auth (1)');
+    expect(msg).toContain('invoke-timeout (1)');
+    // The honest verdict written first carries the DISTINGUISHED reasons (no collapse).
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    const reasons = v.lanes
+      .map((l) => (l.status === 'failed' ? l.typedReason : ''))
+      .filter((r) => r !== '')
+      .sort();
+    expect(reasons).toEqual(['invoke-auth', 'invoke-timeout']);
   });
 
   it('completed + abstained mix (≥1 completed) still DEFAULT sensor exit 0 — the gate keys on completed lanes, not "any output" (#2452 inv 8b)', async () => {

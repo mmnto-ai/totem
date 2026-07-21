@@ -59,10 +59,16 @@ import type { GroundingBundle } from './schema.js';
 /**
  * The verdict schemaVersion WRITTEN by this code. Readers accept any 1.x (F1).
  * 1.1.0 (mmnto-ai/totem#2363): additive-optional `lessonsConsulted` — the
- * round's lesson-recall record. The minor is the observable marker; the
- * registry stays empty because the tolerant reader parses both.
+ * round's lesson-recall record.
+ * 1.2.0 (mmnto-ai/totem#2459): additive widening of {@link VERDICT_LANE_FAILURE_REASONS}
+ * with slice-B invoke-failure kinds (auth/model/spawn/exit/timeout) + the
+ * additive-optional failed-lane `failureArtifactHash`. Purely additive within the
+ * major (new enum members + an optional field), so the minor is the observable
+ * marker and the migration registry stays empty — the tolerant reader parses every
+ * prior 1.x artifact unchanged (existing `typedReason` values and absent
+ * `failureArtifactHash` remain valid).
  */
-export const VERDICT_ARTIFACT_SCHEMA_VERSION = '1.1.0';
+export const VERDICT_ARTIFACT_SCHEMA_VERSION = '1.2.0';
 
 /** The major this reader understands; other majors need a migration entry. */
 export const VERDICT_ARTIFACT_KNOWN_MAJOR = 1;
@@ -138,12 +144,33 @@ export type VerdictDiffScope = z.infer<typeof VerdictDiffScopeSchema>;
  * handed to `assemblePanelArtifact` and never stamps the cache. NOTE (Prop 302
  * lane-blindness): these classify the FAILURE, never the runner lane — none of
  * them names warm/cold.
+ *
+ * ── EXECUTION-PHASE INVOKE KINDS (mmnto-ai/totem#2459, slice-B A-side follow-up) ──
+ * The first block is the original coarse set. The `invoke-*` block widens it so an
+ * EXECUTION-phase lane failure records the exact slice-B category (from
+ * `OrchestratorInvokeError.kind`) instead of collapsing auth / model / spawn / exit /
+ * timeout into the single `invoke-error`. The mapping is 1:1 with `InvokeFailureKind`:
+ * `auth→invoke-auth`, `quota→quota-exhausted`, `model→invoke-model`,
+ * `process-spawn→invoke-process-spawn`, `process-exit→invoke-process-exit`,
+ * `timeout→invoke-timeout`, `unknown→invoke-error`. `quota-exhausted` and
+ * `invoke-error` predate this widening and are reused, so the change is purely
+ * additive (F1): every prior 1.x artifact's `typedReason` still validates.
+ *
+ * ADMISSION vs EXECUTION (the #2471 gate-semantics boundary): a pre-invoke ADMISSION
+ * denial is NOT a lane invoke-failure — it never reached execution, so it maps to
+ * `config-error`, never to one of these `invoke-*` kinds. Only execution-phase
+ * failures (a thrown `OrchestratorInvokeError`) reach the widened kinds.
  */
 export const VERDICT_LANE_FAILURE_REASONS = [
   'invoke-error',
   'quota-exhausted',
   'missing-artifact-emission',
   'config-error',
+  'invoke-auth',
+  'invoke-model',
+  'invoke-process-spawn',
+  'invoke-process-exit',
+  'invoke-timeout',
 ] as const;
 export type VerdictLaneFailureReason = (typeof VERDICT_LANE_FAILURE_REASONS)[number];
 
@@ -236,6 +263,19 @@ export const VerdictLaneSchema = z.discriminatedUnion('status', [
      * (stable at lane creation), never to this field.
      */
     resolvedBackend: z.string().min(1).optional(),
+    /**
+     * OPTIONAL (mmnto-ai/totem#2459, additive 1.2.0): the content address of slice-B's
+     * `InvocationFailureArtifact` for this lane's terminal EXECUTION-phase invoke
+     * failure. It reaches B's bounded evidence — classified `kind`, bounded
+     * stdout/stderr, exit code / signal, timeout state — ONE HOP away, mirroring how a
+     * `completed` lane reaches its run artifact via `runArtifactHash`. Present only
+     * when the orchestrator persisted the failure evidence (an `OrchestratorInvokeError`
+     * carrying a `failureArtifactHash`); ABSENT for admission-phase / pre-invoke
+     * failures that never produced one, and honest-absent on pre-1.2 artifacts. When
+     * present it MUST resolve via `loadInvocationFailureArtifact` (the reference is a
+     * real, loadable content address — never a dangling hash).
+     */
+    failureArtifactHash: Sha256HexSchema.optional(),
   }),
 ]);
 export type VerdictLane = z.infer<typeof VerdictLaneSchema>;
