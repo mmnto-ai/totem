@@ -1936,6 +1936,36 @@ describe('PreWriteShield runtime behavior', () => {
     expect(result.exitCode).toBe(2);
   });
 
+  it('exits 2 on an invalid double-quote escape ("Re: D:\\q" is not YAML)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: OUTBOX_MD, content: '---\nsubject: "Re: D:\\q"\n---\n' },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('exits 0 on YAML-legal escapes inside a quoted subject', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content: '---\nsubject: "tab \\t quote \\" backslash \\\\ ok"\n---\n',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 2 on a multi-line quoted subject (single-physical-line policy for the line-oriented lenient consumer)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content: '---\nsubject: "Re: spans\n  two lines"\n---\n',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
   it('does NOT fire outside the outbox surface (same content at a .journal path)', () => {
     const result = runHook({
       tool_name: 'Write',
@@ -2222,6 +2252,14 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     const r = runBeforeTool('write_file', {
       file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
       content: '---\nsubject: "Re: round\n---\n',
+    });
+    expect(r.threw).toBe(true);
+  });
+
+  it('throws on an invalid double-quote escape at the Gemini call site too', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
+      content: '---\nsubject: "Re: D:\\q"\n---\n',
     });
     expect(r.threw).toBe(true);
   });

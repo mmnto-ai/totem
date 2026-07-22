@@ -273,13 +273,17 @@ function checkOutboxSubjectQuoting(toolName, toolInput) {
     const value = m[2].trim();
     if (value === '') continue;
     const first = value.charAt(0);
-    // A quoted scalar is exempt ONLY when well-terminated (optional trailing
-    // comment): an unterminated or junk-tailed quote is itself invalid YAML
-    // (greptile P1 on the introducing PR). Block scalars are exempt ONLY as a
-    // bare header (>, >-, |2, ...): a header with trailing text (">note: x")
-    // is invalid YAML and falls through to the scan.
+    // A quoted scalar is exempt ONLY when well-terminated on THIS line with
+    // YAML-legal escapes (optional trailing comment): unterminated quotes,
+    // trailing junk, and invalid escapes like \\q are all strict-YAML errors
+    // (greptile P1 + CR round 2 on the introducing PR). Multi-line quoted
+    // scalars are YAML-valid but BLOCKED BY POLICY: the cohort's lenient
+    // line-oriented consumer (mmnto-ai/totem-status#123) cannot see them —
+    // single-physical-line values are the dispatch contract. Block scalars are
+    // exempt ONLY as a bare header (>, >-, |2, ...): a header with trailing
+    // text (">note: x") is invalid YAML and falls through to the scan.
     if (first === '"' || first === "'") {
-      if (first === '"' && /^"(?:[^"\\\\]|\\\\.)*"(\\s+#.*)?$/.test(value)) continue;
+      if (first === '"' && /^"(?:[^"\\\\]|\\\\(?:[0abtnvfre "/\\\\N_LP\\t]|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}))*"(\\s+#.*)?$/.test(value)) continue;
       if (first === "'" && /^'(?:[^']|'')*'(\\s+#.*)?$/.test(value)) continue;
       offenders.push(m[1]);
       continue;
@@ -292,7 +296,7 @@ function checkOutboxSubjectQuoting(toolName, toolInput) {
   throw new Error(
     '[totem BeforeTool] Unquoted ":" in dispatch frontmatter value(s) [' + offenders.join(', ') + '] in write to ' + filePath + '. ' +
     'Strict-YAML mail consumers reject the whole dispatch ("mapping values are not allowed in this context"). ' +
-    'Quote the value, e.g. subject: "Re: your round -- topic". ' +
+    'Quote the value on ONE line with YAML-legal escapes only, e.g. subject: "Re: your round -- topic". ' +
     'Sender-side guard routed from mmnto-ai/totem-status#123 (lenient consumer parsing is the fallback, not the contract).',
   );
 }
@@ -552,13 +556,17 @@ process.stdin.on('end', () => {
       const value = m[2].trim();
       if (value === '') continue;
       const first = value.charAt(0);
-      // A quoted scalar is exempt ONLY when well-terminated (optional trailing
-      // comment): an unterminated or junk-tailed quote is itself invalid YAML
-      // (greptile P1 on the introducing PR). Block scalars are exempt ONLY as a
-      // bare header (>, >-, |2, ...): a header with trailing text (">note: x")
-      // is invalid YAML and falls through to the scan.
+      // A quoted scalar is exempt ONLY when well-terminated on THIS line with
+      // YAML-legal escapes (optional trailing comment): unterminated quotes,
+      // trailing junk, and invalid escapes like \\q are all strict-YAML errors
+      // (greptile P1 + CR round 2 on the introducing PR). Multi-line quoted
+      // scalars are YAML-valid but BLOCKED BY POLICY: the cohort's lenient
+      // line-oriented consumer (mmnto-ai/totem-status#123) cannot see them —
+      // single-physical-line values are the dispatch contract. Block scalars are
+      // exempt ONLY as a bare header (>, >-, |2, ...): a header with trailing
+      // text (">note: x") is invalid YAML and falls through to the scan.
       if (first === '"' || first === "'") {
-        if (first === '"' && /^"(?:[^"\\\\]|\\\\.)*"(\\s+#.*)?$/.test(value)) continue;
+        if (first === '"' && /^"(?:[^"\\\\]|\\\\(?:[0abtnvfre "/\\\\N_LP\\t]|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}))*"(\\s+#.*)?$/.test(value)) continue;
         if (first === "'" && /^'(?:[^']|'')*'(\\s+#.*)?$/.test(value)) continue;
         offenders.push(m[1]);
         continue;
@@ -570,7 +578,7 @@ process.stdin.on('end', () => {
       process.stderr.write(
         '[totem PreWriteShield] Unquoted ":" in dispatch frontmatter value(s) [' + offenders.join(', ') + '] in write to ' + filePath + '\\n' +
         'Strict-YAML mail consumers reject the whole dispatch ("mapping values are not allowed in this context").\\n' +
-        'Quote the value, e.g. subject: "Re: your round -- topic".\\n' +
+        'Quote the value on ONE line with YAML-legal escapes only, e.g. subject: "Re: your round -- topic".\\n' +
         'Sender-side guard routed from mmnto-ai/totem-status#123 (lenient consumer parsing is the fallback, not the contract).\\n',
       );
       process.exit(2);
