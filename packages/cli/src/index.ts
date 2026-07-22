@@ -614,6 +614,47 @@ program
     }
   });
 
+// ─── `totem pr merge` — auto-close-safe squash merge actuator (mmnto-ai/totem#1762) ───
+// The sanctioned paved-road merge path (no command interception — OPTION 1
+// ruling, 2026-07-22). Custom fail-closed exit-code contract (the index
+// wrapper sets process.exitCode; the command never process.exit's mid-flow, same
+// as `mail`): 0 = merged / clean --check-only; 1 = posture drift, an undeclared
+// close-keyword ref, or ANY gh/env failure (NO merge attempted).
+const prCmd = program
+  .command('pr')
+  .description('Pull-request actuators (auto-close-safe merge — mmnto-ai/totem#1762)');
+
+prCmd
+  .command('merge [number]')
+  .description(
+    'Merge a PR squash-only after asserting merge-config posture + auto-close safety (no body flags, ever)',
+  )
+  .option('--check-only', 'Evaluate posture + auto-close safety and exit 0/1 WITHOUT merging')
+  .option(
+    '--close-declared',
+    'After a successful merge, close each totem-close-marker-declared issue (default: print the commands instead)',
+  )
+  .action(
+    async (number: string | undefined, opts: { checkOnly?: boolean; closeDeclared?: boolean }) => {
+      requireGhCli();
+      try {
+        const { assertValidPrNumberArg, prMergeCommand } = await import('./commands/pr.js');
+        // Validate at the Commander boundary too (defense in depth, codex B-2): a
+        // URL/branch positional is refused before any gh call.
+        assertValidPrNumberArg(number);
+        const { exitCode } = await prMergeCommand(number, {
+          checkOnly: opts.checkOnly === true,
+          closeDeclared: opts.closeDeclared === true,
+        });
+        if (exitCode !== 0) process.exitCode = exitCode;
+      } catch (err) {
+        handleError(err);
+        // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the mail/orient pattern.
+        throw err;
+      }
+    },
+  );
+
 program
   .command('retrospect <pr-number>')
   .description(
