@@ -200,4 +200,143 @@ describe('MERGE_COMMAND_REGEX_SOURCE / findMergeInvocations', () => {
     expect(blocks('gh api graphql -f query=\'query{repository(owner:"o"){name}}\'')).toBe(false);
     expect(blocks('gh api graphql -f query=...')).toBe(false);
   });
+
+  // ─── quoted flag-and-path forms (codex round-2 finding 2) ──────────────────
+
+  it('BLOCKS a quoted `=value` --repo spliced between gh and pr', () => {
+    expect(forms("gh --repo='mmnto-ai/totem' pr merge 2478 --squash")).toEqual(['gh-pr-merge']);
+    expect(forms('gh --repo="mmnto-ai/totem" pr merge 2478')).toEqual(['gh-pr-merge']);
+  });
+
+  it('BLOCKS a quoted `=value` --repo spliced between pr and merge', () => {
+    expect(forms('gh pr --repo="mmnto-ai/totem" merge 2478')).toEqual(['gh-pr-merge']);
+    expect(forms("gh pr --repo='mmnto-ai/totem' merge 2478 --squash")).toEqual(['gh-pr-merge']);
+  });
+
+  it('BLOCKS a quoted `=variable` --repo value (`--repo="$REPO"`)', () => {
+    expect(forms('gh --repo="$REPO" pr merge 2478')).toEqual(['gh-pr-merge']);
+  });
+
+  it('does NOT over-fire when a quoted `=value` flag precedes a read-only verb', () => {
+    expect(blocks('gh pr --repo="x" view 5')).toBe(false);
+    expect(blocks("gh pr --repo='o/r' list")).toBe(false);
+    expect(blocks('gh --repo="o/r" pr view 5')).toBe(false);
+  });
+
+  it('BLOCKS cmd.exe `%PR%` / delayed `!PR!` variable REST merge paths', () => {
+    expect(forms('gh api repos/o/r/pulls/%PR%/merge -X PUT')).toEqual(['gh-api-undecidable']);
+    expect(forms('gh api repos/o/r/pulls/!PR!/merge -X PUT')).toEqual(['gh-api-undecidable']);
+  });
+
+  it('BLOCKS a `gh api` whose entire endpoint is a variable after flags', () => {
+    expect(forms('gh api --method PUT "$ENDPOINT"')).toEqual(['gh-api-undecidable']);
+    expect(forms('gh api %ENDPOINT%')).toEqual(['gh-api-undecidable']);
+  });
+
+  // ─── separator exclusion in flag-value classes (codex round-2 finding 5) ───
+
+  it('does NOT cross a shell command separator inside a flag-value class', () => {
+    // A `;`/`|`/`&` after `gh --repo o/r` starts a NEW command — the run must not
+    // reach a `pr merge` on the far side (the changeset's no-cross-separator claim).
+    expect(blocks('gh --repo o/r; pr merge')).toBe(false);
+    expect(blocks('gh --repo o/r| pr merge')).toBe(false);
+    expect(blocks('gh --repo o/r& pr merge')).toBe(false);
+    expect(blocks('gh pr --repo=o/r; merge')).toBe(false);
+  });
+
+  // ─── glued short-flag value (kimi round-2 BLOCKING-4) ──────────────────────
+
+  it('BLOCKS a GLUED short-flag value spliced before pr/merge (`-Ro/r`)', () => {
+    expect(forms('gh pr -Rmmnto-ai/totem merge 123')).toEqual(['gh-pr-merge']);
+    expect(forms('gh -Rmmnto-ai/totem pr merge')).toEqual(['gh-pr-merge']);
+    expect(forms('gh pr -Rcli/cli merge 5')).toEqual(['gh-pr-merge']);
+    expect(forms('gh pr -Rmmnto-ai/totem merge 123 --squash --auto')).toEqual(['gh-pr-merge']);
+  });
+
+  it('does NOT over-fire when a glued short-flag precedes a read verb (`-Rfoo/bar view`)', () => {
+    expect(blocks('gh pr -Rfoo/bar view 5')).toBe(false);
+    // The glued tail is non-whitespace, so it never swallows a following `merge`.
+    expect(blocks('gh pr -Rfoo/bar list')).toBe(false);
+  });
+
+  // ─── line-continuation reaches the merge-API / graphql arms (kimi round-2 B-5) ─
+
+  it('BLOCKS a `\\`+LF continuation before the merge-API path', () => {
+    expect(forms('gh api \\\nrepos/o/r/pulls/5/merge -X PUT')).toEqual(['gh-api-merge']);
+  });
+
+  it('BLOCKS a continuation SPLICED inside the merge-API path (before `merge`)', () => {
+    expect(forms('gh api repos/o/r/pulls/5/\\\nmerge -X PUT')).toEqual(['gh-api-merge']);
+    expect(forms('gh api repos/o/r/pulls/5/^\r\nmerge')).toEqual(['gh-api-merge']);
+  });
+
+  it('BLOCKS a continuation before `merge` in a VARIABLE REST path', () => {
+    expect(forms('gh api repos/o/r/pulls/$PR/\\\nmerge')).toEqual(['gh-api-undecidable']);
+  });
+
+  it('BLOCKS a continuation (incl. mid-token splice) in the graphql merge mutation', () => {
+    expect(forms("gh api graphql \\\n-f query='mutation{mergePullRequest(input:{})}'")).toEqual([
+      'gh-api-merge',
+    ]);
+    expect(forms("gh api graph\\\nql -f query='x mergePull\\\nRequest'")).toEqual(['gh-api-merge']);
+  });
+
+  it('BLOCKS a mid-token splice inside the `pulls` path segment', () => {
+    expect(forms('gh api repos/o/r/pul\\\nls/5/merge')).toEqual(['gh-api-merge']);
+  });
+
+  // ─── recorded friction: a merge-valued flag before the subcommand (kimi round-2 NB-2) ─
+
+  it('BLOCKS `gh pr --label merge list` (deny-on-undecidable friction, recorded)', () => {
+    // Defensible false-DENY: a `merge`-valued flag before the subcommand makes the
+    // `merge`-token binding ambiguous. The natural `gh pr list --label merge` order
+    // stays clean (asserted below).
+    expect(blocks('gh pr --label merge list')).toBe(true);
+    expect(blocks('gh pr list --label merge')).toBe(false);
+  });
+
+  // ─── linearity: no catastrophic backtracking (codex round-2 BLOCKING) ──────
+  //
+  // The earlier `-{1,2}[\w-]+` flag-name gave every `--flag` two parses, so a
+  // non-matching `gh` command with N repeated flag groups backtracked 2^N times
+  // (measured: 6.46s at 26 groups; >30s at 28). The disjoint-class rebuild is
+  // linear — assert it EMPIRICALLY, not by claim.
+
+  it('scans an adversarial non-matching flag run in linear time (<50ms)', () => {
+    const mk = (n: number): string => 'gh pr ' + Array(n).fill('--foobar').join(' ') + ' zzz-end';
+    for (const n of [26, 28, 40]) {
+      const cmd = mk(n);
+      const t0 = process.hrtime.bigint();
+      const found = findMergeInvocations(cmd); // pathological input; must not blow up
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      expect(found).toEqual([]); // it is a NON-merge command
+      expect(ms).toBeLessThan(50);
+    }
+  });
+
+  it('stays linear on adversarial flag-value / glued / api-flag runs (<50ms at 40 groups)', () => {
+    const prVals = 'gh pr ' + Array(40).fill('--repo=owner/name').join(' ') + ' zzz-end';
+    const prGlued = 'gh pr ' + Array(40).fill('-Rowner/name').join(' ') + ' zzz-end';
+    const apiFlags = 'gh api ' + Array(40).fill('--method-x val').join(' ') + ' endpoint-no-var';
+    for (const cmd of [prVals, prGlued, apiFlags]) {
+      const t0 = process.hrtime.bigint();
+      const found = findMergeInvocations(cmd);
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      expect(found).toEqual([]);
+      expect(ms).toBeLessThan(50);
+    }
+  });
+
+  it('bounds the merge-API span scan on a separator-free filler (<50ms; kimi round-2 NB-1)', () => {
+    // A long separator-free string used to make the lazy NOSEP span cover the whole
+    // remainder like `[\s\S]` (measured regression). The `{0,2000}?` bound caps it.
+    for (const len of [4000, 152000]) {
+      const cmd = 'gh api ' + 'a'.repeat(len) + ' endpoint-no-merge';
+      const t0 = process.hrtime.bigint();
+      const found = findMergeInvocations(cmd);
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      expect(found).toEqual([]);
+      expect(ms).toBeLessThan(50);
+    }
+  });
 });
