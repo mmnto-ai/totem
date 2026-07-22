@@ -577,7 +577,7 @@ describe('prMergeCommand — landing-state read failure (codex round-2 BLOCKING)
     expect(h.err()).toMatch(/gh issue close 55/);
   });
 
-  it('without --close-declared: still says UNCONFIRMED (not "merged"), exit 0', async () => {
+  it('without --close-declared: still says UNCONFIRMED (not "merged"), exit 0, prints manual close commands', async () => {
     const h = makeHarness({ pr: declaredPr, throwOn: throwOnStateRead });
     const { exitCode } = await prMergeCommand(
       undefined,
@@ -588,6 +588,10 @@ describe('prMergeCommand — landing-state read failure (codex round-2 BLOCKING)
     expect(h.err()).toMatch(/UNCONFIRMED/);
     expect(h.out()).not.toContain('merged PR #5 (--squash)');
     expect(h.issueCloseCalls()).toHaveLength(0);
+    // Manual-close-guidance parity (CR B-only round): the declared command is still
+    // surfaced without --close-declared, and never as a --close-declared re-run.
+    expect(h.err()).toMatch(/gh issue close 55/);
+    expect(h.err()).not.toMatch(/re-run `totem pr merge`.*--close-declared/i);
   });
 });
 

@@ -470,8 +470,19 @@ export async function prMergeCommand(
       );
       return { exitCode: 1 };
     }
-    // No --close-declared (or nothing declared): exit 0 is acceptable — but the message
-    // above already stated the landing state is UNCONFIRMED (never "merged").
+    if (declaredRefs.length > 0) {
+      // Parity with the merge-queue DEFER and default-print branches (CR B-only round):
+      // without the manual commands the operator has zero close guidance once they
+      // confirm the merge landed — the --close-declared re-run path is impossible then.
+      err(
+        'Once you confirm the merge landed, close the declared target(s) manually:\n' +
+          declaredRefs
+            .map((ref) => `  ${displayGhCommand(buildIssueCloseArgv(ref, pr.number, repo))}\n`)
+            .join(''),
+      );
+    }
+    // No --close-declared: exit 0 is acceptable — but the message above already stated
+    // the landing state is UNCONFIRMED (never "merged").
     return { exitCode: 0 };
   }
 
