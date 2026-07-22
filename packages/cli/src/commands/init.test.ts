@@ -2701,7 +2701,10 @@ describe('registerGeminiBeforeTool (shared init + hook-install arming path)', ()
   const jsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
 
   it('registers the BeforeTool command in .gemini/settings.json', () => {
-    fs.mkdirSync(path.join(tmpDir, '.gemini'), { recursive: true });
+    // The managed `.cjs` must be present for the atomicity gate to register settings
+    // (codex round-3 finding 2 — never bless a nonexistent artifact).
+    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
+    fs.writeFileSync(cjsPath(), GEMINI_BEFORE_TOOL, 'utf-8');
     const results = registerGeminiBeforeTool(tmpDir);
     const settings = results.find((r) => r.file.includes('settings.json'));
     expect(settings?.action).toBe('created');
@@ -2745,7 +2748,8 @@ describe('registerGeminiBeforeTool (shared init + hook-install arming path)', ()
   });
 
   it('is idempotent — a second run does not duplicate the registration', () => {
-    fs.mkdirSync(path.join(tmpDir, '.gemini'), { recursive: true });
+    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
+    fs.writeFileSync(cjsPath(), GEMINI_BEFORE_TOOL, 'utf-8'); // managed `.cjs` present
     registerGeminiBeforeTool(tmpDir);
     registerGeminiBeforeTool(tmpDir);
     const content = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
@@ -2753,7 +2757,8 @@ describe('registerGeminiBeforeTool (shared init + hook-install arming path)', ()
   });
 
   it('never corrupts a malformed settings.json (surfaces skipped+err)', () => {
-    fs.mkdirSync(path.join(tmpDir, '.gemini'), { recursive: true });
+    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
+    fs.writeFileSync(cjsPath(), GEMINI_BEFORE_TOOL, 'utf-8'); // managed `.cjs` present → gate passes
     fs.writeFileSync(settingsPath(), '{ not json', 'utf-8');
     const results = registerGeminiBeforeTool(tmpDir);
     const settings = results.find((r) => r.file.includes('settings.json'));
@@ -2761,6 +2766,145 @@ describe('registerGeminiBeforeTool (shared init + hook-install arming path)', ()
     expect(settings?.err).toBeTruthy();
     // The malformed file is left byte-identical (never clobbered).
     expect(fs.readFileSync(settingsPath(), 'utf-8')).toBe('{ not json');
+  });
+});
+
+// codex round-3 finding 2 — Gemini registration must be ATOMIC: settings registration
+// is gated on a SUCCESSFULLY adopted / present managed BeforeTool.cjs artifact. It must
+// never point settings at a nonexistent, unadopted, or non-totem-owned (user allow-all /
+// zero-byte / unreadable) `.cjs` and report `Armed`. Each sub-case is a red test first.
+describe('registerGeminiBeforeTool atomicity (codex round-3 finding 2)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-atomic-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  const settingsPath = () => path.join(tmpDir, '.gemini', 'settings.json');
+  const cjsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.cjs');
+  const jsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
+  const writeManagedCjs = () => {
+    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
+    fs.writeFileSync(cjsPath(), GEMINI_BEFORE_TOOL, 'utf-8');
+  };
+  const registeredCommands = (): string[] => {
+    const c = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8')) as {
+      hooks: { BeforeTool: { hooks: { command: string }[] }[] };
+    };
+    return c.hooks.BeforeTool.flatMap((e) => e.hooks.map((h) => h.command));
+  };
+  const ALLOW_ALL_CJS = "'use strict';\nprocess.exit(0);\n"; // user-owned, no totem marker
+
+  it('sub-case 1: does NOT bless a readable user-owned allow-all `.cjs` (managed legacy `.js` present)', () => {
+    // A managed legacy `.js` + settings pointing at it + a readable user-owned allow-all
+    // `.cjs`. Adoption declines (never clobbers the `.cjs`); registration must NOT then
+    // rewrite settings to point at that unverified `.cjs` and report success.
+    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
+    fs.writeFileSync(jsPath(), GEMINI_BEFORE_TOOL, 'utf-8');
+    fs.writeFileSync(cjsPath(), ALLOW_ALL_CJS, 'utf-8');
+    fs.writeFileSync(
+      settingsPath(),
+      JSON.stringify({
+        hooks: {
+          BeforeTool: [
+            {
+              matcher: '*',
+              hooks: [
+                {
+                  name: 'totem-before-tool',
+                  type: 'command',
+                  command: 'node .gemini/hooks/BeforeTool.js',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+      'utf-8',
+    );
+    const results = registerGeminiBeforeTool(tmpDir);
+    const settings = results.find((r) => r.file.includes('settings.json'));
+    // The unverified `.cjs` is preserved AND never blessed into settings.
+    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(ALLOW_ALL_CJS);
+    expect(settings?.action).toBe('skipped');
+    expect(registeredCommands()).not.toContain('node .gemini/hooks/BeforeTool.cjs');
+  });
+
+  it('sub-case 2: empty `.gemini/` — does NOT create settings pointing at a nonexistent `.cjs`', () => {
+    fs.mkdirSync(path.join(tmpDir, '.gemini'), { recursive: true });
+    const results = registerGeminiBeforeTool(tmpDir);
+    const settings = results.find((r) => r.file.includes('settings.json'));
+    expect(settings?.action).toBe('skipped');
+    expect(settings?.err).toBeTruthy();
+    // No settings blessed against an absent artifact.
+    expect(fs.existsSync(settingsPath())).toBe(false);
+    expect(fs.existsSync(cjsPath())).toBe(false);
+  });
+
+  it('sub-case 3: a zero-byte non-marker `.cjs` is NOT overwritten (cannot verify → do not clobber)', () => {
+    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
+    fs.writeFileSync(jsPath(), GEMINI_BEFORE_TOOL, 'utf-8'); // managed legacy `.js`
+    fs.writeFileSync(cjsPath(), '', 'utf-8'); // zero-byte, no marker
+    const results = registerGeminiBeforeTool(tmpDir);
+    // The empty `.cjs` is left untouched; the legacy `.js` stays in place.
+    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe('');
+    expect(fs.existsSync(jsPath())).toBe(true);
+    const settings = results.find((r) => r.file.includes('settings.json'));
+    expect(settings?.action).toBe('skipped');
+  });
+
+  it('sub-case 4: legacy `.js` + canonical `.cjs` both registered → exactly ONE canonical registration', () => {
+    writeManagedCjs(); // managed `.cjs` present so the atomicity gate passes
+    fs.writeFileSync(
+      settingsPath(),
+      JSON.stringify({
+        hooks: {
+          BeforeTool: [
+            {
+              matcher: '*',
+              hooks: [
+                {
+                  name: 'totem-before-tool',
+                  type: 'command',
+                  command: 'node .gemini/hooks/BeforeTool.cjs',
+                },
+              ],
+            },
+            {
+              matcher: '*',
+              hooks: [
+                {
+                  name: 'totem-before-tool',
+                  type: 'command',
+                  command: 'node .gemini/hooks/BeforeTool.js',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+      'utf-8',
+    );
+    registerGeminiBeforeTool(tmpDir);
+    const commands = registeredCommands();
+    expect(commands.filter((c) => c === 'node .gemini/hooks/BeforeTool.cjs')).toHaveLength(1);
+    expect(commands).not.toContain('node .gemini/hooks/BeforeTool.js');
+    // Idempotent: a second run makes no further change.
+    registerGeminiBeforeTool(tmpDir);
+    const commands2 = registeredCommands();
+    expect(commands2.filter((c) => c === 'node .gemini/hooks/BeforeTool.cjs')).toHaveLength(1);
+  });
+
+  it('arms when a managed `.cjs` is present (positive control)', () => {
+    writeManagedCjs();
+    const results = registerGeminiBeforeTool(tmpDir);
+    const settings = results.find((r) => r.file.includes('settings.json'));
+    expect(settings?.action).toBe('created');
+    expect(registeredCommands()).toContain('node .gemini/hooks/BeforeTool.cjs');
   });
 });
 

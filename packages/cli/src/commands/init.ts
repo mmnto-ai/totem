@@ -331,11 +331,11 @@ export function scaffoldGeminiBeforeToolSettings(filePath: string): {
     }
     const beforeTool = (beforeToolRaw ?? []) as Array<Record<string, unknown>>;
 
-    // Idempotency + `.js`→`.cjs` migration (codex round-2 4a/4b). Walk the registered
-    // BeforeTool hooks: an entry pointing at the canonical `.cjs` is already installed
-    // (skip); an entry still pointing at the legacy `.js` is MIGRATED in place (rewrite
-    // its command to `.cjs`) so the registration matches the renamed hook file instead
-    // of leaving a stale entry for a deleted `.js`; otherwise append the `.cjs` entry.
+    // Idempotency + `.js`→`.cjs` migration + duplicate DEDUPE (codex round-2 4a/4b +
+    // round-3 finding 2). Walk every registered BeforeTool hook: a legacy `.js` is
+    // MIGRATED in place to `.cjs`; and EXACTLY ONE canonical `.cjs` registration is
+    // retained — a legacy+canonical coexistence (or a double canonical) collapses to a
+    // single entry instead of leaving two identical registrations.
     const cmdOf = (h: unknown): string | undefined => {
       if (typeof h === 'string') return h;
       if (h && typeof h === 'object') {
@@ -349,31 +349,62 @@ export function scaffoldGeminiBeforeToolSettings(filePath: string): {
     // must NOT suppress installation, and a stale `node …BeforeTool.js` is migrated.
     const canonicalCjs = normalizeCommandIdentity(GEMINI_BEFORE_TOOL_COMMAND);
     const canonicalJs = normalizeCommandIdentity('node ' + GEMINI_BEFORE_TOOL_LEGACY_REL);
-    let hasCjs = false;
-    let migrated = false;
+    let keptCanonical = false; // a canonical `.cjs` hook already retained
+    let changed = false;
+    const newBeforeTool: Array<Record<string, unknown>> = [];
     for (const entry of beforeTool) {
-      const hookList = Array.isArray(entry?.hooks) ? (entry.hooks as unknown[]) : [];
-      for (let i = 0; i < hookList.length; i++) {
-        const h = hookList[i];
+      const hasHooksArray = Array.isArray(entry?.hooks);
+      const hookList = hasHooksArray ? (entry.hooks as unknown[]) : [];
+      const kept: unknown[] = [];
+      for (const h of hookList) {
         const cmd = cmdOf(h);
-        if (typeof cmd !== 'string') continue;
-        const norm = normalizeCommandIdentity(cmd);
-        if (norm === canonicalCjs) {
-          hasCjs = true;
-        } else if (norm === canonicalJs) {
-          const next = cmd.replace(GEMINI_BEFORE_TOOL_LEGACY_REL, GEMINI_BEFORE_TOOL_REL);
-          if (typeof h === 'string') hookList[i] = next;
-          else (h as { command: string }).command = next;
-          migrated = true;
+        const norm = typeof cmd === 'string' ? normalizeCommandIdentity(cmd) : undefined;
+        if (norm === canonicalCjs || norm === canonicalJs) {
+          if (keptCanonical) {
+            // A second canonical `.cjs` (or a redundant legacy `.js` beside one) — drop
+            // it so exactly one canonical registration survives.
+            changed = true;
+            continue;
+          }
+          keptCanonical = true;
+          if (norm === canonicalJs) {
+            // Migrate this legacy `.js` in place to the canonical `.cjs`.
+            const next = (cmd as string).replace(
+              GEMINI_BEFORE_TOOL_LEGACY_REL,
+              GEMINI_BEFORE_TOOL_REL,
+            );
+            if (typeof h === 'string') kept.push(next);
+            else {
+              (h as { command: string }).command = next;
+              kept.push(h);
+            }
+            changed = true;
+          } else {
+            kept.push(h);
+          }
+        } else {
+          kept.push(h);
         }
       }
+      if (kept.length < hookList.length) changed = true;
+      if (!hasHooksArray) {
+        // A non-standard entry (no hooks array) — preserve verbatim.
+        newBeforeTool.push(entry);
+      } else if (kept.length > 0 || hookList.length === 0) {
+        newBeforeTool.push({ ...entry, hooks: kept });
+      } else {
+        // Entry emptied solely by dropping a duplicate — drop the whole entry.
+        changed = true;
+      }
     }
-    if (hasCjs && !migrated) {
+    if (!keptCanonical) {
+      newBeforeTool.push(GEMINI_BEFORE_TOOL_ENTRY as unknown as Record<string, unknown>);
+      changed = true;
+    }
+    if (!changed) {
       return { action: 'skipped' };
     }
-    if (!hasCjs && !migrated) {
-      hooks.BeforeTool = [...beforeTool, GEMINI_BEFORE_TOOL_ENTRY];
-    }
+    hooks.BeforeTool = newBeforeTool;
     parsed.hooks = hooks;
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
     return { action: existed ? 'merged' : 'created' };
@@ -434,11 +465,15 @@ export function adoptLegacyGeminiBeforeTool(cwd: string): HookInstallerResult | 
           err: `${cjsRel} exists but could not be read (${err instanceof Error ? err.message : String(err)}) — left ${legacyRel} in place. Resolve manually, then run \`totem hook install --force\`.`,
         };
       }
-      if (cjsExisting.length > 0 && !markerOpensFile(cjsExisting, TOTEM_FILE_MARKER)) {
+      // codex round-3 finding 2: a ZERO-BYTE (or otherwise non-marker) `.cjs` cannot
+      // be ownership-verified — treat "cannot verify" as do-not-clobber, do-not-bless
+      // (was `length > 0 && !markerOpensFile`, which let an empty file slip through and
+      // be OVERWRITTEN). markerOpensFile('') is false, so an empty file is declined here.
+      if (!markerOpensFile(cjsExisting, TOTEM_FILE_MARKER)) {
         return {
           file: cjsRel,
           action: 'skipped',
-          err: `${cjsRel} exists and is not a totem-owned file — left ${legacyRel} in place. Resolve manually, then run \`totem hook install --force\`.`,
+          err: `${cjsRel} exists but is not a totem-owned file (user-owned or empty — cannot verify) — left ${legacyRel} in place. Resolve manually, then run \`totem hook install --force\`.`,
         };
       }
     }
@@ -484,21 +519,64 @@ export function registerGeminiBeforeTool(cwd: string): HookInstallerResult[] {
   const results: HookInstallerResult[] = [];
   const adopted = adoptLegacyGeminiBeforeTool(cwd);
   if (adopted) results.push(adopted);
-  const geminiSettingsResult = scaffoldGeminiBeforeToolSettings(
-    path.join(cwd, '.gemini', 'settings.json'),
-  );
-  results.push({ file: '.gemini/settings.json (BeforeTool)', ...geminiSettingsResult });
+  results.push(registerGeminiSettingsIfArmed(cwd));
   return results;
+}
+
+/**
+ * Classify the managed Gemini BeforeTool `.cjs` artifact for the atomicity gate
+ * (codex round-3 finding 2): `owned` (present + the totem marker opens it — safe to
+ * register in settings), `foreign` (present but not totem-owned — a user allow-all, a
+ * zero-byte stub, or an UNREADABLE file we cannot verify → never bless), or `absent`.
+ */
+function classifyManagedGeminiCjs(cjsPath: string): 'owned' | 'foreign' | 'absent' {
+  if (!fs.existsSync(cjsPath)) return 'absent';
+  let content: string;
+  try {
+    content = fs.readFileSync(cjsPath, 'utf-8');
+    // totem-context: an UNREADABLE existing `.cjs` cannot be ownership-verified — classify it `foreign` (do-not-bless) and fail closed, rather than assume it is safe (Tenet 4). Builds on 66121212's fail-closed read.
+  } catch {
+    return 'foreign';
+  }
+  return markerOpensFile(content, TOTEM_FILE_MARKER) ? 'owned' : 'foreign';
+}
+
+/**
+ * Register `.gemini/settings.json` ONLY when the managed BeforeTool `.cjs` is actually
+ * present-and-owned — the ATOMICITY GATE (codex round-3 finding 2). Never points
+ * settings at an absent / foreign / unverifiable artifact and reports Armed. Callers
+ * that CREATE the `.cjs` (init's scaffold pass) run this AFTER the scaffold; the upgrade
+ * path (`totem hook install`, regenerate-only-if-present) honestly skips when the
+ * artifact was never installed instead of blessing a nonexistent hook.
+ */
+function registerGeminiSettingsIfArmed(cwd: string): HookInstallerResult {
+  const file = '.gemini/settings.json (BeforeTool)';
+  const cjsPath = path.join(cwd, ...GEMINI_BEFORE_TOOL_REL.split('/'));
+  const ownership = classifyManagedGeminiCjs(cjsPath);
+  if (ownership !== 'owned') {
+    return {
+      file,
+      action: 'skipped',
+      err:
+        ownership === 'absent'
+          ? `Not registering the Gemini BeforeTool hook: ${GEMINI_BEFORE_TOOL_REL} is not installed — run \`totem init\` to install it. Settings left unchanged (not armed).`
+          : `Not registering the Gemini BeforeTool hook: ${GEMINI_BEFORE_TOOL_REL} exists but is not a totem-owned artifact (cannot verify — user-owned, empty, or unreadable). Resolve it, then run \`totem hook install --force\`. Settings left unchanged (not armed).`,
+    };
+  }
+  const result = scaffoldGeminiBeforeToolSettings(path.join(cwd, '.gemini', 'settings.json'));
+  return { file, ...result };
 }
 
 async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
   const results: HookInstallerResult[] = [];
 
-  // Arm the BeforeTool interlock FIRST (legacy `.js`→`.cjs` migration + settings
-  // registration) — the SAME shared path `totem hook install` runs, so init and the
-  // consumer upgrade behave identically (codex round-2 4b). Migrating first means the
-  // scaffold below sees the managed `.cjs` already in place.
-  const registration = registerGeminiBeforeTool(cwd);
+  // Migrate a legacy `.js`→`.cjs` FIRST so the scaffold below sees the managed `.cjs`
+  // already in place (and a foreign/unverifiable `.cjs` is declined, never clobbered).
+  // codex round-2 4a/4b. The `.gemini/settings.json` registration is DEFERRED until
+  // AFTER the scaffold has actually put the managed `.cjs` on disk — the atomicity gate
+  // (codex round-3 finding 2) refuses to bless an artifact that is not yet present.
+  const adopted = adoptLegacyGeminiBeforeTool(cwd);
+  if (adopted) results.push(adopted);
 
   // The two whole-file hooks carry the managed end marker (mmnto-ai/totem#2410) so a
   // drifted-but-bounded artifact self-repairs on re-init; the skill is marker-block
@@ -537,9 +615,11 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
     });
   }
 
-  // The migration + settings registration ran up front via registerGeminiBeforeTool
-  // (the shared arming path). Surface its results after the file scaffolds.
-  results.push(...registration);
+  // Register `.gemini/settings.json` ONLY now the managed `.cjs` is present-and-owned
+  // (the atomicity gate — codex round-3 finding 2). The scaffold above creates the
+  // `.cjs` on a fresh repo, so init arms; a repo whose `.cjs` is user-owned honestly
+  // skips instead of blessing an unverified artifact.
+  results.push(registerGeminiSettingsIfArmed(cwd));
 
   return results;
 }
