@@ -423,11 +423,16 @@ export function adoptLegacyGeminiBeforeTool(cwd: string): HookInstallerResult | 
   if (isManaged || isKnownPrior) {
     // Never clobber a user-owned `.cjs` (marker does not open it). Leave both in place.
     if (fs.existsSync(cjsPath)) {
-      let cjsExisting = '';
+      let cjsExisting: string;
       try {
         cjsExisting = fs.readFileSync(cjsPath, 'utf-8');
-      } catch {
-        cjsExisting = '';
+        // totem-context: intentional — an unreadable existing .cjs cannot be ownership-verified; we surface the reason as a returned Result (the installer posture) and leave both files in place, never coerce to '' and fall through to overwrite (the fail-open clobber Tenet 4 forbids).
+      } catch (err) {
+        return {
+          file: cjsRel,
+          action: 'skipped',
+          err: `${cjsRel} exists but could not be read (${err instanceof Error ? err.message : String(err)}) — left ${legacyRel} in place. Resolve manually, then run \`totem hook install --force\`.`,
+        };
       }
       if (cjsExisting.length > 0 && !markerOpensFile(cjsExisting, TOTEM_FILE_MARKER)) {
         return {
