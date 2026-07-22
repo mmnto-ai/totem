@@ -436,13 +436,35 @@ export async function prMergeCommand(
     landingState = fetchMergeState(gh, pr.number, repo).state;
     // totem-context: the merge already returned 0 (irreversible) — an inability to CONFIRM the landing state is surfaced LOUDLY via err() and we DEFER closes (conservative), never a silent swallow (Tenet 4).
   } catch (e) {
-    // The merge command already returned 0; if we cannot confirm the landing state
-    // we DEFER closes (conservative) rather than closing against an unproven merge.
+    // The merge command already returned 0 (irreversible), but the landing-state read
+    // FAILED — we cannot confirm whether the PR actually merged. NEVER print the
+    // completed-merge line: that is a false all-actions-success signal (codex round-2
+    // BLOCKING — {exitCode: 0, closeCalls: 0} today masqueraded as a clean merge). Say
+    // UNCONFIRMED, and DEFER declared closes (closing against an unproven merge is worse).
+    const declaredRefs = parseDeclaredCloseIntent([pr.title, pr.body].join('\n'));
     err(
-      `[totem pr merge] merged PR #${pr.number}, but could not confirm the landing state ` +
-        `(${messageOf(e)}). Declared closes were NOT executed — confirm the merge landed, then ` +
-        'close the declared targets manually.\n',
+      `[totem pr merge] merge command accepted for PR #${pr.number} but its landing state is ` +
+        `UNCONFIRMED (state read failed: ${messageOf(e)}). Confirm the merge actually landed before ` +
+        'acting on it — do NOT assume it merged.\n',
     );
+    if (opts.closeDeclared && declaredRefs.length > 0) {
+      // --close-declared was requested but NONE of the closes ran — a PARTIAL FAILURE,
+      // not a success. Exit non-zero, name the deferred targets, and give a re-run path
+      // (automation must never read this as all-actions-success — codex round-2).
+      err(
+        `[totem pr merge] ${declaredRefs.length} declared close(s) were NOT executed (landing ` +
+          'state unconfirmed): ' +
+          declaredRefs.map((ref) => refLabel(ref)).join(', ') +
+          '. After confirming the merge landed, re-run `totem pr merge` with --close-declared, or ' +
+          'close them manually:\n' +
+          declaredRefs
+            .map((ref) => `  ${displayGhCommand(buildIssueCloseArgv(ref, pr.number, repo))}\n`)
+            .join(''),
+      );
+      return { exitCode: 1 };
+    }
+    // No --close-declared (or nothing declared): exit 0 is acceptable — but the message
+    // above already stated the landing state is UNCONFIRMED (never "merged").
     return { exitCode: 0 };
   }
 

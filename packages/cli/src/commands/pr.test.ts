@@ -540,6 +540,51 @@ describe('prMergeCommand — confused-deputy positional (codex B-2)', () => {
   });
 });
 
+describe('prMergeCommand — landing-state read failure (codex round-2 BLOCKING)', () => {
+  const declaredPr = {
+    title: 'feat: x',
+    body: '<!-- totem-close: #55 -->\nFixes #55',
+    state: 'OPEN',
+    number: 5,
+    headRefOid: 'x',
+  };
+  const throwOnStateRead = (a: string[]): Error | undefined =>
+    a[0] === 'pr' && a[1] === 'view' && a.includes('state,mergedAt')
+      ? new Error('network unreachable')
+      : undefined;
+
+  it('with --close-declared: UNCONFIRMED (never "merged"), exit 1, names deferred targets, closes none', async () => {
+    const h = makeHarness({ pr: declaredPr, throwOn: throwOnStateRead });
+    const { exitCode } = await prMergeCommand(
+      undefined,
+      { checkOnly: false, closeDeclared: true },
+      h.deps,
+    );
+    // The merge command ran (irreversible) but its landing is unconfirmed.
+    expect(h.mergeCalled()).toBe(true);
+    // Partial failure — NOT a false all-actions-success signal (codex round-2).
+    expect(exitCode).toBe(1);
+    expect(h.issueCloseCalls()).toHaveLength(0);
+    expect(h.err()).toMatch(/UNCONFIRMED/);
+    expect(h.err()).toMatch(/#55/);
+    // NEVER the completed-merge line.
+    expect(h.out()).not.toContain('merged PR #5 (--squash)');
+  });
+
+  it('without --close-declared: still says UNCONFIRMED (not "merged"), exit 0', async () => {
+    const h = makeHarness({ pr: declaredPr, throwOn: throwOnStateRead });
+    const { exitCode } = await prMergeCommand(
+      undefined,
+      { checkOnly: false, closeDeclared: false },
+      h.deps,
+    );
+    expect(exitCode).toBe(0);
+    expect(h.err()).toMatch(/UNCONFIRMED/);
+    expect(h.out()).not.toContain('merged PR #5 (--squash)');
+    expect(h.issueCloseCalls()).toHaveLength(0);
+  });
+});
+
 describe('prMergeCommand — snapshot binding / head mismatch (codex Q)', () => {
   it('exit 1 + re-evaluate instruction when the head-bound merge fails', async () => {
     const h = makeHarness({
