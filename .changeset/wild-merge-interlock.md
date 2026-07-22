@@ -51,6 +51,17 @@ as a warning and lets the merge through). The ordinary consumer upgrade path
 registration + legacy `.js`→`.cjs` migration that `totem init` runs, so an existing
 Gemini consumer is armed on upgrade rather than only after a manual re-init.
 
+Round-3 hardening: the committed, armed Claude hook
+(`.totem/hooks/merge-interlock.cjs`) is regenerated from the current template — it
+had retained the round-1 pattern (allowed glued/quoted merge forms and backtracked
+multi-second at ~26 flag groups) because every test checked the in-memory template,
+not the on-disk file; a new parity test now byte-locks both committed hosts to their
+templates so the drift fails CI. Gemini registration is also atomic: settings are
+registered only when a managed, totem-owned `BeforeTool.cjs` is actually present —
+an absent, user-owned allow-all, zero-byte, or unreadable `.cjs` is never blessed
+and reported armed — and a legacy + canonical coexistence collapses to exactly one
+registration.
+
 Notes for changelog readers: examples use digitless placeholders such as a
 `Closes #NNN` shape only; the guard blocks a close-keyword adjacent to a real
 issue reference in a PR title / squash body.
