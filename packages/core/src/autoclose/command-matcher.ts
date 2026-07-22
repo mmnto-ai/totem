@@ -102,6 +102,15 @@
  *     `gh`-less prefix and the literal `pr merge` is still present), and `gh pr $(…)`
  *     is caught by the deny-on-undecidable arm — the uncaught case is specifically a
  *     substitution standing in for the `pr`/`api` word.
+ *   - a `gh api` invocation whose PRE-PATH segment (flags + values between `api` and
+ *     the `/pulls/{n}/merge` or `graphql` literal) exceeds the {@link NOSEP} cap
+ *     (~2000 chars) is unclaimed: the bounded lazy span stops looking before the path,
+ *     so an adversarially PADDED header (`gh api -H "<2100 a's>" …/pulls/5/merge`)
+ *     ALLOWs by design while the same under-cap form BLOCKs. Keeping the cap is a
+ *     deliberate linearity trade (a stalling hook stalls the harness); a 2 KB-header
+ *     form is adversarial-only, the same practical class as the alias/function/
+ *     injected-spawn gaps above. D1/D2 are the loud backstop (codex round-3 #3 / kimi
+ *     NB — RULED record, do not raise the cap).
  * RECORDED FRICTION (kimi round-2 NB-2 — a false-DENY, defensible, not disambiguated):
  *   - `gh pr --label merge list` BLOCKS. A `merge`-valued flag placed BEFORE the
  *     subcommand makes the `merge`-token binding genuinely ambiguous, and

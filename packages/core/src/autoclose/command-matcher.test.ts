@@ -339,4 +339,30 @@ describe('MERGE_COMMAND_REGEX_SOURCE / findMergeInvocations', () => {
       expect(ms).toBeLessThan(50);
     }
   });
+
+  // ─── RECORDED GAP: NOSEP cap padding bypass (codex round-3 #3 / kimi NB) ───────
+  //
+  // RULED (coordinator round-3): RECORD, do NOT rewrite. The bounded lazy span
+  // ({@link NOSEP}, `{0,2000}?`) stops looking before a dangerous path once the
+  // pre-path segment (flags + values between `gh api` and the `/pulls/{n}/merge` or
+  // graphql literal) exceeds ~2000 chars, so an adversarially PADDED header ALLOWs by
+  // design while the same UNDER-cap form BLOCKs. Keeping the cap is a deliberate
+  // linearity trade (a stalling hook stalls the harness — the earlier nested-quantifier
+  // shape backtracked multi-second); a 2 KB-header form is adversarial-only, the same
+  // practical class as the alias/function/injected-spawn gaps. D1/D2 are the backstop.
+  // This fixture PINS the recorded behavior so a future cap change is a conscious edit.
+  it('RECORDED GAP: a gh api header padded past the NOSEP cap (~2000) is unclaimed (ALLOW by design)', () => {
+    const dangerousPath = 'repos/o/r/pulls/5/merge';
+    const padded = `gh api -H "X-Fill: ${'a'.repeat(2100)}" ${dangerousPath} -X PUT`;
+    const underCap = `gh api -H "X-Fill: ${'a'.repeat(1800)}" ${dangerousPath} -X PUT`;
+    // Padded past the cap: the span stops before the path → no match → the interlock
+    // ALLOWs (recorded gap; NOT a claimed block). Bounded-surface honesty, condition 2.
+    expect(findMergeInvocations(padded)).toEqual([]);
+    // The under-cap dangerous form is still CLAIMED and blocks.
+    expect(findMergeInvocations(underCap).map((m) => m.form)).toEqual(['gh-api-merge']);
+    // And the bare dangerous form (no padding) blocks.
+    expect(findMergeInvocations(`gh api ${dangerousPath} -X PUT`).map((m) => m.form)).toEqual([
+      'gh-api-merge',
+    ]);
+  });
 });
