@@ -16,9 +16,6 @@ const REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
 /** Files scaffolded by `totem init` that are fully owned by Totem. */
 const TOTEM_SCAFFOLDED_FILES = [
   '.gemini/hooks/SessionStart.js',
-  // BeforeTool ships as `.cjs` (codex round-2 4a); the legacy `.js` is kept in the
-  // roster so eject also cleans up a pre-migration artifact.
-  '.gemini/hooks/BeforeTool.cjs',
   '.gemini/hooks/BeforeTool.js',
   '.gemini/skills/totem.md',
   '.totem/hooks/shield-gate.cjs',

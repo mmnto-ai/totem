@@ -1,8 +1,10 @@
 // ─── `totem pr merge` — the sanctioned auto-close-safe merge actuator ────────
 //
-// The B-slice of the auto-close enforcement seam (mmnto-ai/totem#1762, A+B).
-// The A-slice PreToolUse interlock reroutes every raw `gh pr merge` here; this is
-// the ONE path that is allowed to merge. It:
+// The B-slice of the auto-close enforcement seam (mmnto-ai/totem#1762).
+// The sanctioned paved-road merge path — the A-slice command-interception was
+// stripped per the OPTION 1 ruling (2026-07-22): repo config (squash-only +
+// BLANK squash body) + D1/D2 cover the raw-merge vectors; see
+// .totem/specs/1762-ab.md. It:
 //   1. asserts the repo merge-config posture (E lever + squash-only) via GraphQL,
 //      failing closed on drift (reusing core's evaluateMergeConfigPosture);
 //   2. fetches the PR title + body ONLY (never comments — comments never

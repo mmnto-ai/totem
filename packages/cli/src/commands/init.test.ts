@@ -6,13 +6,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
-import {
-  API_ANCHOR_SOURCE,
-  AUTO_CLOSE_REGEX_SOURCE,
-  LedgerEventSchema,
-  MERGE_COMMAND_REGEX_SOURCE,
-  resolveSelfAgents,
-} from '@mmnto/totem';
+import { AUTO_CLOSE_REGEX_SOURCE, LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
 
 import {
   UNIVERSAL_BASELINE_LESSONS,
@@ -21,7 +15,6 @@ import {
 } from '../assets/universal-baseline.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
-  adoptLegacyGeminiBeforeTool,
   buildNpxCommand,
   detectEmbeddingTier,
   detectReflexStatus,
@@ -31,40 +24,31 @@ import {
   OLLAMA_FLOOR_DEFAULT_BASE_URL,
   probeOllamaFloor,
   REFLEX_VERSION,
-  registerGeminiBeforeTool,
   scaffoldClaudeHooks,
-  scaffoldClaudeMergeInterlock,
   scaffoldClaudeSessionStart,
   scaffoldClaudeSkill,
   scaffoldClaudeWriteShield,
   scaffoldFile,
-  scaffoldGeminiBeforeToolSettings,
   scaffoldMcpConfig,
   upgradeReflexes,
 } from './init.js';
 import { detectProject } from './init-detect.js';
 import {
   BARE_REF_REGEX_SOURCE,
-  CLAUDE_MERGE_INTERLOCK,
-  CLAUDE_MERGE_INTERLOCK_ENTRY,
   CLAUDE_PREWRITESHIELD,
   CLAUDE_PREWRITESHIELD_ENTRY,
   CLAUDE_SESSION_START,
   CLAUDE_SESSION_START_ENTRY,
   DISTRIBUTED_CLAUDE_SKILLS,
   GEMINI_BEFORE_TOOL,
-  GEMINI_BEFORE_TOOL_ENTRY,
   GEMINI_SESSION_START,
   generateConfigForFormat,
-  LEGACY_GEMINI_BEFORE_TOOL_SHAPES,
-  MERGE_INTERLOCK_SCANNER_JS,
   REVIEW_LOOP_SKILL_CONTENT,
   REVIEW_REPLY_SKILL_CONTENT,
   SIGNOFF_SKILL_CONTENT,
   SIGNON_SKILL_CONTENT,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
-  TOTEM_FILE_MARKER,
 } from './init-templates.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
@@ -462,7 +446,7 @@ describe('Gemini hook scaffolding', () => {
       '// [totem] auto-generated\ntest\n',
     );
     const beforeTool = scaffoldFile(
-      path.join(hooksDir, 'BeforeTool.cjs'),
+      path.join(hooksDir, 'BeforeTool.js'),
       '// [totem] auto-generated\ntest\n',
     );
     const skill = scaffoldFile(
@@ -1305,332 +1289,6 @@ describe('scaffoldClaudeWriteShield', () => {
   });
 });
 
-// mmnto-ai/totem#1762 A-slice — MergeInterlock settings-merge (Bash matcher into
-// committed .claude/settings.json, mirroring the PreWriteShield idempotency probe).
-describe('scaffoldClaudeMergeInterlock', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mergeinterlock-'));
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  it('creates settings.json with a Bash merge-interlock entry when none exists', () => {
-    const filePath = path.join(tmpDir, '.claude', 'settings.json');
-    const result = scaffoldClaudeMergeInterlock(filePath);
-
-    expect(result).toEqual({ action: 'created' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    expect(content.hooks.PreToolUse).toHaveLength(1);
-    expect(content.hooks.PreToolUse[0].matcher).toBe('Bash');
-    expect(content.hooks.PreToolUse[0].hooks[0]).toEqual({
-      type: 'command',
-      command: expect.stringContaining('merge-interlock.cjs'),
-    });
-  });
-
-  it('is idempotent — double invoke does not duplicate', () => {
-    const filePath = path.join(tmpDir, '.claude', 'settings.json');
-    expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'created' });
-    expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'skipped' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    expect(content.hooks.PreToolUse).toHaveLength(1);
-  });
-
-  it('coexists with a PreWriteShield Write|Edit entry under the same hooks object', () => {
-    const filePath = path.join(tmpDir, '.claude', 'settings.json');
-    scaffoldClaudeWriteShield(filePath);
-    const result = scaffoldClaudeMergeInterlock(filePath);
-
-    expect(result).toEqual({ action: 'merged' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const matchers = content.hooks.PreToolUse.map((e: { matcher: string }) => e.matcher).sort();
-    expect(matchers).toEqual(['Bash', 'Write|Edit']);
-  });
-
-  it('skips when the merge-interlock entry is already present', () => {
-    const dir = path.join(tmpDir, '.claude');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, 'settings.json');
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify({ hooks: { PreToolUse: [CLAUDE_MERGE_INTERLOCK_ENTRY] } }, null, 2) + '\n',
-      'utf-8',
-    );
-    expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'skipped' });
-  });
-
-  it('an inert `echo <path>` decoy does NOT count as installed — the real hook still installs (codex round-2 finding 6)', () => {
-    const dir = path.join(tmpDir, '.claude');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, 'settings.json');
-    // A Bash matcher whose command merely CONTAINS the canonical path but does not RUN it.
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify(
-        {
-          hooks: {
-            PreToolUse: [
-              {
-                matcher: 'Bash',
-                hooks: [{ type: 'command', command: 'echo .totem/hooks/merge-interlock.cjs' }],
-              },
-            ],
-          },
-        },
-        null,
-        2,
-      ),
-      'utf-8',
-    );
-    // Must NOT skip — the canonical hook is still absent.
-    expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'merged' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const commands = content.hooks.PreToolUse.flatMap((e: { hooks: { command: string }[] }) =>
-      e.hooks.map((h) => h.command),
-    );
-    expect(commands).toContain('node .totem/hooks/merge-interlock.cjs');
-  });
-});
-
-describe('CLAUDE_MERGE_INTERLOCK template (mmnto-ai/totem#1762 A-slice)', () => {
-  it('is a bounded totem-owned whole file (marker opens, end marker closes)', () => {
-    expect(CLAUDE_MERGE_INTERLOCK.trimStart().startsWith('// [totem] auto-generated')).toBe(true);
-    expect(CLAUDE_MERGE_INTERLOCK).toContain('// [totem] end auto-generated');
-  });
-
-  it('inlines the shared MERGE_COMMAND_REGEX_SOURCE (JSON-encoded, drift-locked mirror)', () => {
-    expect(CLAUDE_MERGE_INTERLOCK).toContain(JSON.stringify(MERGE_COMMAND_REGEX_SOURCE));
-  });
-
-  it('inlines the shared API_ANCHOR_SOURCE + the single-pass scanner (delta-4 padding close)', () => {
-    expect(CLAUDE_MERGE_INTERLOCK).toContain(JSON.stringify(API_ANCHOR_SOURCE));
-    expect(CLAUDE_MERGE_INTERLOCK).toContain(MERGE_INTERLOCK_SCANNER_JS);
-    // The capped `{0,2000}?` span is gone — the merge-API paths are the linear scan.
-    expect(CLAUDE_MERGE_INTERLOCK).not.toContain('{0,2000}');
-  });
-
-  it('documents the exit-code contract (0=allow/fail-soft, 2=block) and names the actuator', () => {
-    expect(CLAUDE_MERGE_INTERLOCK).toMatch(/0\s*=.*allow/i);
-    expect(CLAUDE_MERGE_INTERLOCK).toMatch(/2\s*=.*block/i);
-    expect(CLAUDE_MERGE_INTERLOCK).toContain('totem pr merge');
-  });
-
-  it('cites the auto-close issue mmnto-ai/totem#1762', () => {
-    expect(CLAUDE_MERGE_INTERLOCK).toContain('mmnto-ai/totem#1762');
-  });
-});
-
-describe('MergeInterlock runtime behavior (mmnto-ai/totem#1762 A-slice)', () => {
-  let tmpDir: string;
-  let hookPath: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mergeinterlock-runtime-'));
-    hookPath = path.join(tmpDir, 'merge-interlock.cjs');
-    fs.writeFileSync(hookPath, CLAUDE_MERGE_INTERLOCK, 'utf-8');
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  function runHook(input: unknown): { exitCode: number; stderr: string } {
-    const result = spawnSync(process.execPath, [hookPath], {
-      input: typeof input === 'string' ? input : JSON.stringify(input),
-      encoding: 'utf-8',
-    });
-    return { exitCode: result.status ?? -1, stderr: result.stderr ?? '' };
-  }
-
-  it('exits 2 and names totem pr merge on a bodyless `gh pr merge`', () => {
-    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr merge' } });
-    expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain('totem pr merge');
-  });
-
-  it('exits 2 on a hidden-body form (--body-file)', () => {
-    const r = runHook({
-      tool_name: 'Bash',
-      tool_input: { command: 'gh pr merge 5 --squash --body-file x.md' },
-    });
-    expect(r.exitCode).toBe(2);
-  });
-
-  it('exits 2 on a raw merge-API call', () => {
-    const r = runHook({
-      tool_name: 'Bash',
-      tool_input: { command: 'gh api repos/mmnto-ai/totem/pulls/5/merge -X PUT' },
-    });
-    expect(r.exitCode).toBe(2);
-  });
-
-  it('exits 2 on a `gh pr $(...)` deny-on-undecidable continuation', () => {
-    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr $(echo merge)' } });
-    expect(r.exitCode).toBe(2);
-  });
-
-  it('exits 0 on a read-only `gh pr view`', () => {
-    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr view 5 --json title' } });
-    expect(r.exitCode).toBe(0);
-  });
-
-  it('exits 0 on an unrelated Bash command', () => {
-    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'ls -la packages' } });
-    expect(r.exitCode).toBe(0);
-  });
-
-  it('exits 0 on a non-Bash tool call', () => {
-    const r = runHook({
-      tool_name: 'Write',
-      tool_input: { file_path: 'x', content: 'gh pr merge' },
-    });
-    expect(r.exitCode).toBe(0);
-  });
-
-  it('exits 0 (fail-soft) on unparseable stdin, with a stderr note', () => {
-    const r = runHook('{ not json');
-    expect(r.exitCode).toBe(0);
-    expect(r.stderr).toMatch(/could not parse|fail-soft/i);
-  });
-
-  // ── Claude host-parity: double-quoted forms must block through the REAL stdin
-  //    entry path (mmnto-ai/totem#1762 re-review kimi B-1) ──
-  it('exits 2 on double-quoted token forms via the Claude stdin path', () => {
-    for (const command of ['gh "pr" merge 5', '& "gh" "pr" "merge" --squash', 'gh pr "$SUBCMD"']) {
-      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
-      expect(r.exitCode).toBe(2);
-      expect(r.stderr).toContain('totem pr merge');
-    }
-  });
-
-  it('exits 2 on a flag-spliced `gh --repo o/r pr merge` (kimi B-2)', () => {
-    const r = runHook({
-      tool_name: 'Bash',
-      tool_input: { command: 'gh --repo mmnto-ai/totem pr merge 5' },
-    });
-    expect(r.exitCode).toBe(2);
-  });
-
-  // ── quoted flag-and-path bypass forms must BLOCK (codex round-2 finding 2) ──
-  it('exits 2 on quoted `=value` --repo splice forms', () => {
-    for (const command of [
-      "gh --repo='mmnto-ai/totem' pr merge 2478 --squash",
-      'gh pr --repo="mmnto-ai/totem" merge 2478',
-      'gh --repo="$REPO" pr merge 2478',
-    ]) {
-      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
-      expect(r.exitCode).toBe(2);
-      expect(r.stderr).toContain('totem pr merge');
-    }
-  });
-
-  it('exits 2 on cmd.exe `%PR%` / `!PR!` variable merge-API paths and a bare-variable endpoint', () => {
-    for (const command of [
-      'gh api repos/o/r/pulls/%PR%/merge -X PUT',
-      'gh api repos/o/r/pulls/!PR!/merge -X PUT',
-      'gh api --method PUT "$ENDPOINT"',
-    ]) {
-      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
-      expect(r.exitCode).toBe(2);
-      expect(r.stderr).toMatch(/could not decide/i);
-    }
-  });
-
-  it('exits 0 on a quoted `=value` flag before a read-only verb (no over-fire)', () => {
-    for (const command of ['gh pr --repo="x" view 5', "gh pr --repo='o/r' list"]) {
-      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
-      expect(r.exitCode).toBe(0);
-    }
-  });
-
-  it('exits 0 when a flag value would otherwise cross a `;` separator (finding 5)', () => {
-    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh --repo o/r; pr merge' } });
-    expect(r.exitCode).toBe(0);
-  });
-
-  // ── glued short-flag value + line-continuation splices (kimi round-2 B-4/B-5) ──
-  it('exits 2 on a glued short-flag value form (`-Ro/r`)', () => {
-    for (const command of ['gh pr -Rmmnto-ai/totem merge 123', 'gh -Rcli/cli pr merge']) {
-      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
-      expect(r.exitCode).toBe(2);
-    }
-  });
-
-  it('exits 0 on a glued short-flag before a read verb (no over-fire)', () => {
-    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr -Rfoo/bar view 5' } });
-    expect(r.exitCode).toBe(0);
-  });
-
-  it('exits 2 on a line-continuation spliced into a merge-API / graphql path', () => {
-    for (const command of [
-      'gh api repos/o/r/pulls/5/\\\nmerge -X PUT',
-      "gh api graphql \\\n-f query='mutation{mergePullRequest(input:{})}'",
-    ]) {
-      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
-      expect(r.exitCode).toBe(2);
-    }
-  });
-
-  it('exits 2 on a `\\`+LF line-continued merge (kimi B-3)', () => {
-    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr \\\nmerge 5 --squash' } });
-    expect(r.exitCode).toBe(2);
-  });
-
-  it('branches the message to "could not decide" on a variable REST merge path', () => {
-    const r = runHook({
-      tool_name: 'Bash',
-      tool_input: { command: 'gh api repos/o/r/pulls/$PR/merge -X PUT' },
-    });
-    expect(r.exitCode).toBe(2);
-    expect(r.stderr).toMatch(/could not decide/i);
-    expect(r.stderr).not.toMatch(/raw `gh pr merge`/);
-  });
-
-  it('exits 0 on the separator false-positive `gh api /user; echo /pulls/5/merge` (Greptile P2)', () => {
-    const r = runHook({
-      tool_name: 'Bash',
-      tool_input: { command: 'gh api /user; echo /pulls/5/merge' },
-    });
-    expect(r.exitCode).toBe(0);
-  });
-
-  // mmnto-ai/totem#1762 delta-4: the padding bypass close. A `gh api` header padded
-  // past the old ~2000-char cap slipped a real `…/pulls/{n}/merge` past the interlock
-  // (exit 0). The linear scanner has NO length-based allow — the padded form now
-  // BLOCKS exactly like the bare/under-cap forms, and a benign over-length filler with
-  // no merge path still allows (no over-fire).
-  it('exits 2 on a gh api merge path however far the header is padded (padding bypass closed)', () => {
-    const dangerous = 'repos/o/r/pulls/5/merge';
-    for (const pad of [1800, 2100, 4000]) {
-      const command = `gh api -H "X-Fill: ${'a'.repeat(pad)}" ${dangerous} -X PUT`;
-      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
-      expect(r.exitCode, `pad=${pad} must block`).toBe(2);
-    }
-    // A long separator-free filler with NO merge path still allows (bounded claim).
-    const benign = runHook({
-      tool_name: 'Bash',
-      tool_input: { command: `gh api ${'a'.repeat(4000)} endpoint-no-merge` },
-    });
-    expect(benign.exitCode).toBe(0);
-  });
-
-  // mmnto-ai/totem#2471 was the specimen raw `gh pr merge … --subject … --body …`
-  // that motivated this seam — the positive control the interlock must always catch.
-  it('exits 2 on the mmnto-ai/totem#2471-shaped hidden-body specimen', () => {
-    const r = runHook({
-      tool_name: 'Bash',
-      tool_input: {
-        command: 'gh pr merge 2471 --squash --subject "feat: x" --body "Closes #NNN"',
-      },
-    });
-    expect(r.exitCode).toBe(2);
-  });
-});
-
 // Phase C slice 1 — symmetric Claude SessionStart hook (mmnto-ai/totem#1845).
 // Locks the install-side parity with .gemini/hooks/SessionStart.js: scaffold
 // the .cjs script, merge a SessionStart entry into committed
@@ -2264,35 +1922,15 @@ describe('GEMINI_BEFORE_TOOL write_file/replace extension', () => {
     expect(GEMINI_BEFORE_TOOL).toContain('checkAutoCloseKeywords(toolName, toolInput)');
     expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem#1762');
   });
-
-  it('inlines the shared MERGE_COMMAND_REGEX_SOURCE (A-slice parity with the Claude interlock)', () => {
-    expect(GEMINI_BEFORE_TOOL).toContain(JSON.stringify(MERGE_COMMAND_REGEX_SOURCE));
-  });
-
-  it('inlines the shared API_ANCHOR_SOURCE + the single-pass scanner (delta-4 padding close)', () => {
-    expect(GEMINI_BEFORE_TOOL).toContain(JSON.stringify(API_ANCHOR_SOURCE));
-    expect(GEMINI_BEFORE_TOOL).toContain(MERGE_INTERLOCK_SCANNER_JS);
-    expect(GEMINI_BEFORE_TOOL).not.toContain('{0,2000}');
-  });
-
-  it('wires the merge interlock into beforeTool and names the actuator', () => {
-    expect(GEMINI_BEFORE_TOOL).toContain('checkMergeInterlock(toolName, toolInput)');
-    expect(GEMINI_BEFORE_TOOL).toContain('totem pr merge');
-  });
 });
 
-// The rendered Gemini BeforeTool hook is a COMMAND that reads the tool-call JSON on
-// stdin and blocks via exit 2 (official Gemini contract) — so it is SPAWNED with a
-// stdin payload here, exactly as Gemini CLI runs it (mmnto-ai/totem#1762 re-review,
-// codex B-3b). Both `tool_input` deliveries (parsed object AND raw string) are
-// exercised for the merge interlock (kimi B-1 host-parity).
 describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)', () => {
   let tmpDir: string;
   let hookPath: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-beforetool-'));
-    hookPath = path.join(tmpDir, 'BeforeTool.cjs');
+    hookPath = path.join(tmpDir, 'BeforeTool.js');
     fs.writeFileSync(hookPath, GEMINI_BEFORE_TOOL, 'utf-8');
   });
 
@@ -2300,20 +1938,22 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     cleanTmpDir(tmpDir);
   });
 
-  /** Spawn the rendered hook with a stdin envelope; report exit code + stderr. */
+  /** Require the rendered hook fresh and report whether it threw. */
   function runBeforeTool(
     tool: string,
-    input: unknown,
-  ): { threw: boolean; message: string; exitCode: number } {
-    const r = spawnSync(process.execPath, [hookPath], {
-      input: JSON.stringify({ tool_name: tool, tool_input: input }),
-      encoding: 'utf-8',
-    });
-    const exitCode = r.status ?? -1;
-    return { threw: exitCode === 2, message: r.stderr ?? '', exitCode };
+    input: Record<string, unknown>,
+  ): { threw: boolean; message: string } {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
+    try {
+      beforeTool(tool, input);
+      return { threw: false, message: '' };
+    } catch (err) {
+      return { threw: true, message: err instanceof Error ? err.message : String(err) };
+    }
   }
 
-  it('blocks (exit 2) on a close keyword adjacent to an issue ref in a **/*.md write, even negated', () => {
+  it('throws (blocks) on a close keyword adjacent to an issue ref in a **/*.md write, even negated', () => {
     const r = runBeforeTool('write_file', {
       file_path: 'docs/x.md',
       content: 'Does not close #2466',
@@ -2350,7 +1990,6 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
       content: 'Closes mmnto-ai/totem#5',
     });
     expect(r.threw).toBe(false);
-    expect(r.exitCode).toBe(0);
   });
 
   it('exempts .totem/** from the auto-close rule (gemini #2)', () => {
@@ -2359,626 +1998,14 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
       content: 'Closes mmnto-ai/totem#5',
     });
     expect(r.threw).toBe(false);
-    expect(r.exitCode).toBe(0);
   });
 
-  it('does not block on a non-keyword reference form', () => {
+  it('does not throw on a non-keyword reference form', () => {
     const r = runBeforeTool('edit_file', {
       file_path: 'docs/x.md',
       new_string: 'see mmnto-ai/totem#5',
     });
     expect(r.threw).toBe(false);
-    expect(r.exitCode).toBe(0);
-  });
-
-  it('fail-soft (exit 0) on unparseable stdin', () => {
-    const r = spawnSync(process.execPath, [hookPath], { input: '{ not json', encoding: 'utf-8' });
-    expect(r.status).toBe(0);
-  });
-});
-
-describe('GEMINI_BEFORE_TOOL merge-interlock runtime (mmnto-ai/totem#1762 A-slice)', () => {
-  let tmpDir: string;
-  let hookPath: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-mergeinterlock-'));
-    hookPath = path.join(tmpDir, 'BeforeTool.cjs');
-    fs.writeFileSync(hookPath, GEMINI_BEFORE_TOOL, 'utf-8');
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  /** Spawn with a stdin envelope; `input` is delivered as `tool_input` verbatim
-   *  (object OR string) so both Gemini deliveries are exercised. */
-  function runBeforeTool(
-    tool: string,
-    input: unknown,
-  ): { threw: boolean; message: string; exitCode: number } {
-    const r = spawnSync(process.execPath, [hookPath], {
-      input: JSON.stringify({ tool_name: tool, tool_input: input }),
-      encoding: 'utf-8',
-    });
-    const exitCode = r.status ?? -1;
-    return { threw: exitCode === 2, message: r.stderr ?? '', exitCode };
-  }
-
-  it('blocks (exit 2) on a raw `gh pr merge` run_shell_command and names the actuator', () => {
-    const r = runBeforeTool('run_shell_command', { command: 'gh pr merge 5 --squash' });
-    expect(r.threw).toBe(true);
-    expect(r.message).toContain('totem pr merge');
-    expect(r.message).toContain('[totem BeforeTool]');
-  });
-
-  it('blocks a raw merge-API run_shell_command', () => {
-    const r = runBeforeTool('run_shell_command', {
-      command: 'gh api repos/o/r/pulls/5/merge -X PUT',
-    });
-    expect(r.threw).toBe(true);
-  });
-
-  it('does NOT block a read-only `gh pr view`', () => {
-    const r = runBeforeTool('run_shell_command', { command: 'gh pr view 5' });
-    expect(r.threw).toBe(false);
-    expect(r.exitCode).toBe(0);
-  });
-
-  // ── host-parity (kimi B-1): the double-quoted forms must block via BOTH Gemini
-  //    tool_input deliveries — a parsed object AND a raw string. The old
-  //    JSON.stringify(toolInput) path let every double-quoted form through. ──
-  it('blocks double-quoted forms via OBJECT tool_input delivery', () => {
-    for (const command of ['gh "pr" merge 5', '& "gh" "pr" "merge" --squash', 'gh pr "$SUBCMD"']) {
-      const r = runBeforeTool('run_shell_command', { command });
-      expect(r.exitCode).toBe(2);
-      expect(r.message).toContain('totem pr merge');
-    }
-  });
-
-  it('blocks double-quoted forms via STRING tool_input delivery', () => {
-    for (const command of ['gh "pr" merge 5', 'gh pr merge']) {
-      const r = runBeforeTool('run_shell_command', command);
-      expect(r.exitCode).toBe(2);
-      expect(r.message).toContain('totem pr merge');
-    }
-  });
-
-  it('branches the message to "could not decide" on an undecidable continuation', () => {
-    const r = runBeforeTool('run_shell_command', { command: 'gh pr "$SUBCMD"' });
-    expect(r.exitCode).toBe(2);
-    expect(r.message).toMatch(/could not decide/i);
-  });
-
-  it('blocks a `gh api graphql … mergePullRequest` mutation (kimi NB-2)', () => {
-    const r = runBeforeTool('run_shell_command', {
-      command: "gh api graphql -f query='mutation{mergePullRequest(input:{})}'",
-    });
-    expect(r.exitCode).toBe(2);
-  });
-
-  it('does NOT block the separator false-positive `gh api /user; echo /pulls/5/merge` (Greptile P2)', () => {
-    const r = runBeforeTool('run_shell_command', { command: 'gh api /user; echo /pulls/5/merge' });
-    expect(r.exitCode).toBe(0);
-  });
-
-  it('blocks a gh api merge path however far the header is padded (padding bypass closed)', () => {
-    const dangerous = 'repos/o/r/pulls/5/merge';
-    for (const pad of [1800, 2100, 4000]) {
-      const r = runBeforeTool('run_shell_command', {
-        command: `gh api -H "X-Fill: ${'a'.repeat(pad)}" ${dangerous} -X PUT`,
-      });
-      expect(r.exitCode, `pad=${pad} must block`).toBe(2);
-    }
-    const benign = runBeforeTool('run_shell_command', {
-      command: `gh api ${'a'.repeat(4000)} endpoint-no-merge`,
-    });
-    expect(benign.exitCode).toBe(0);
-  });
-});
-
-// The `.cjs` extension is load-bearing: a consumer whose package.json is
-// `"type": "module"` execs a `.js` hook as ESM, which throws
-// `ReferenceError: require is not defined` BEFORE reading stdin. Gemini treats a
-// non-0/non-2 exit as a warning and lets the raw merge THROUGH — a crash-OPEN. The
-// `.cjs` artifact fails CLOSED regardless of the consumer's package `type`
-// (codex round-2 BLOCKING-4a).
-describe('GEMINI_BEFORE_TOOL crash-open regression under `type: module` (codex round-2 4a)', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-typemodule-'));
-    // A module-type consumer repo.
-    fs.writeFileSync(
-      path.join(tmpDir, 'package.json'),
-      JSON.stringify({ type: 'module' }),
-      'utf-8',
-    );
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  function runAt(basename: string): { exitCode: number; stderr: string } {
-    const p = path.join(tmpDir, basename);
-    fs.writeFileSync(p, GEMINI_BEFORE_TOOL, 'utf-8');
-    const r = spawnSync(process.execPath, [p], {
-      cwd: tmpDir,
-      input: JSON.stringify({
-        tool_name: 'run_shell_command',
-        tool_input: { command: 'gh pr merge 5 --squash' },
-      }),
-      encoding: 'utf-8',
-    });
-    return { exitCode: r.status ?? -1, stderr: r.stderr ?? '' };
-  }
-
-  it('a `.js` hook CRASH-OPENS (exit != 2 with a require ReferenceError) — the vector we close', () => {
-    const r = runAt('BeforeTool.js');
-    // The bug: it does NOT block (exit 2). It crashes before reading stdin.
-    expect(r.exitCode).not.toBe(2);
-    expect(r.stderr).toMatch(/require is not defined/i);
-  });
-
-  it('the shipped `.cjs` hook fails CLOSED (exit 2, blocks the merge) in the SAME repo', () => {
-    const r = runAt('BeforeTool.cjs');
-    expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain('totem pr merge');
-  });
-});
-
-// mmnto-ai/totem#1762 A-slice — Gemini BeforeTool settings registration + the
-// adopt-and-rename migration for the legacy BeforeTool.js (codex B-3b/c + round-2 4a).
-describe('scaffoldGeminiBeforeToolSettings', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-settings-'));
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  it('creates .gemini/settings.json with a BeforeTool command entry when none exists', () => {
-    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
-    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'created' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    expect(content.hooks.BeforeTool).toHaveLength(1);
-    expect(content.hooks.BeforeTool[0].hooks[0]).toEqual({
-      name: 'totem-before-tool',
-      type: 'command',
-      command: 'node .gemini/hooks/BeforeTool.cjs',
-    });
-  });
-
-  it('is idempotent — a second invoke does not duplicate', () => {
-    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
-    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'created' });
-    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'skipped' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    expect(content.hooks.BeforeTool).toHaveLength(1);
-  });
-
-  it('MIGRATES a stale legacy `.js` command registration to `.cjs` in place (codex round-2 4a)', () => {
-    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify(
-        {
-          hooks: {
-            BeforeTool: [
-              {
-                matcher: '*',
-                hooks: [
-                  {
-                    name: 'totem-before-tool',
-                    type: 'command',
-                    command: 'node .gemini/hooks/BeforeTool.js',
-                  },
-                ],
-              },
-            ],
-          },
-        },
-        null,
-        2,
-      ),
-      'utf-8',
-    );
-    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'merged' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    // Migrated in place — no duplicate entry, command now points at `.cjs`.
-    expect(content.hooks.BeforeTool).toHaveLength(1);
-    expect(content.hooks.BeforeTool[0].hooks[0].command).toBe('node .gemini/hooks/BeforeTool.cjs');
-    // A second invoke is now idempotent (already `.cjs`).
-    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'skipped' });
-  });
-
-  it('merges into an existing settings.json, preserving unrelated keys/hooks', () => {
-    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify({ theme: 'dark', hooks: { SessionEnd: [{ hooks: [] }] } }, null, 2),
-      'utf-8',
-    );
-    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'merged' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    expect(content.theme).toBe('dark');
-    expect(content.hooks.SessionEnd).toHaveLength(1);
-    expect(content.hooks.BeforeTool).toHaveLength(1);
-  });
-
-  it('declines (skipped + err) a non-object hooks value rather than clobbering', () => {
-    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify({ hooks: 'nope' }), 'utf-8');
-    const result = scaffoldGeminiBeforeToolSettings(filePath);
-    expect(result.action).toBe('skipped');
-    expect(result.err).toMatch(/hooks/);
-  });
-
-  it('an inert `echo <path>` decoy does NOT count as installed — the real hook still registers (codex round-2 finding 6)', () => {
-    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify({
-        hooks: {
-          BeforeTool: [
-            {
-              matcher: '*',
-              hooks: [
-                { name: 'decoy', type: 'command', command: 'echo .gemini/hooks/BeforeTool.cjs' },
-              ],
-            },
-          ],
-        },
-      }),
-      'utf-8',
-    );
-    // Must NOT skip — the canonical command is still absent; the real entry is appended.
-    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'merged' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const commands = content.hooks.BeforeTool.flatMap((e: { hooks: { command: string }[] }) =>
-      e.hooks.map((h) => h.command),
-    );
-    expect(commands).toContain('node .gemini/hooks/BeforeTool.cjs');
-  });
-
-  it('the entry constant matcher runs on every tool (self-filtered by tool_name)', () => {
-    expect(GEMINI_BEFORE_TOOL_ENTRY.matcher).toBe('*');
-  });
-});
-
-describe('adoptLegacyGeminiBeforeTool (adopt-and-rename `.js`→`.cjs`, codex round-2 4a)', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-adopt-'));
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  function writeLegacyJs(content: string): string {
-    const p = path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, content, 'utf-8');
-    return p;
-  }
-  const jsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
-  const cjsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.cjs');
-
-  it('returns null when no legacy BeforeTool.js exists', () => {
-    expect(adoptLegacyGeminiBeforeTool(tmpDir)).toBeNull();
-  });
-
-  it('adopts a KNOWN prior markerless shape AND renames it to `.cjs` (deletes the `.js`)', () => {
-    const jsP = writeLegacyJs(LEGACY_GEMINI_BEFORE_TOOL_SHAPES[0]!);
-    const result = adoptLegacyGeminiBeforeTool(tmpDir);
-    expect(result?.action).toBe('merged');
-    expect(result?.file).toBe('.gemini/hooks/BeforeTool.cjs');
-    // The stale `.js` is gone; the managed template lives at `.cjs`.
-    expect(fs.existsSync(jsP)).toBe(false);
-    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
-  });
-
-  it('adopts+renames a managed `.js` (marker opens it) to `.cjs`', () => {
-    writeLegacyJs(GEMINI_BEFORE_TOOL);
-    const result = adoptLegacyGeminiBeforeTool(tmpDir);
-    expect(result?.action).toBe('merged');
-    expect(fs.existsSync(jsPath())).toBe(false);
-    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
-  });
-
-  it('adopts despite whitespace differences (modulo-whitespace compare)', () => {
-    writeLegacyJs(LEGACY_GEMINI_BEFORE_TOOL_SHAPES[0]!.replace(/\n/g, '\n  '));
-    expect(adoptLegacyGeminiBeforeTool(tmpDir)?.action).toBe('merged');
-    expect(fs.existsSync(jsPath())).toBe(false);
-    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
-  });
-
-  it('leaves a totem file of an UNRECOGNIZED shape untouched, with a warning (no `.cjs` written)', () => {
-    const custom = '// [totem] my custom hand-edited BeforeTool\nmodule.exports = () => {};\n';
-    const jsP = writeLegacyJs(custom);
-    const result = adoptLegacyGeminiBeforeTool(tmpDir);
-    expect(result?.action).toBe('skipped');
-    expect(result?.err).toMatch(/unrecognized shape/);
-    expect(fs.readFileSync(jsP, 'utf-8')).toBe(custom);
-    expect(fs.existsSync(cjsPath())).toBe(false);
-  });
-
-  it('leaves a non-totem (user) `.js` alone (returns null, no `.cjs`)', () => {
-    const user = 'module.exports = function () { /* mine */ };\n';
-    const jsP = writeLegacyJs(user);
-    expect(adoptLegacyGeminiBeforeTool(tmpDir)).toBeNull();
-    expect(fs.readFileSync(jsP, 'utf-8')).toBe(user);
-    expect(fs.existsSync(cjsPath())).toBe(false);
-  });
-
-  it('does NOT clobber a user-owned `.cjs` (leaves both, warns)', () => {
-    writeLegacyJs(GEMINI_BEFORE_TOOL); // migratable legacy
-    const userCjs = 'module.exports = () => { /* my own cjs */ };\n';
-    fs.writeFileSync(cjsPath(), userCjs, 'utf-8');
-    const result = adoptLegacyGeminiBeforeTool(tmpDir);
-    expect(result?.action).toBe('skipped');
-    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(userCjs);
-    expect(fs.existsSync(jsPath())).toBe(true);
-  });
-});
-
-// codex round-2 4b — the SHARED Gemini arming path `totem hook install` now runs
-// (legacy `.js`→`.cjs` migration + `.gemini/settings.json` command registration), so
-// an ordinary consumer upgrade arms Gemini instead of only interactive `totem init`.
-describe('registerGeminiBeforeTool (shared init + hook-install arming path)', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-register-'));
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  const settingsPath = () => path.join(tmpDir, '.gemini', 'settings.json');
-  const cjsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.cjs');
-  const jsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
-
-  it('registers the BeforeTool command in .gemini/settings.json', () => {
-    // The managed `.cjs` must be present for the atomicity gate to register settings
-    // (codex round-3 finding 2 — never bless a nonexistent artifact).
-    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
-    fs.writeFileSync(cjsPath(), GEMINI_BEFORE_TOOL, 'utf-8');
-    const results = registerGeminiBeforeTool(tmpDir);
-    const settings = results.find((r) => r.file.includes('settings.json'));
-    expect(settings?.action).toBe('created');
-    const content = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
-    expect(content.hooks.BeforeTool[0].hooks[0].command).toBe('node .gemini/hooks/BeforeTool.cjs');
-  });
-
-  it('migrates a legacy `.js` hook AND its settings registration to `.cjs`', () => {
-    fs.mkdirSync(path.join(tmpDir, '.gemini', 'hooks'), { recursive: true });
-    fs.writeFileSync(jsPath(), GEMINI_BEFORE_TOOL, 'utf-8'); // managed legacy `.js`
-    fs.writeFileSync(
-      settingsPath(),
-      JSON.stringify({
-        hooks: {
-          BeforeTool: [
-            {
-              matcher: '*',
-              hooks: [
-                {
-                  name: 'totem-before-tool',
-                  type: 'command',
-                  command: 'node .gemini/hooks/BeforeTool.js',
-                },
-              ],
-            },
-          ],
-        },
-      }),
-      'utf-8',
-    );
-    registerGeminiBeforeTool(tmpDir);
-    // Hook file renamed `.js`→`.cjs`, and the registration now points at `.cjs`.
-    expect(fs.existsSync(jsPath())).toBe(false);
-    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
-    const content = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
-    const commands = content.hooks.BeforeTool.flatMap((e: { hooks: { command: string }[] }) =>
-      e.hooks.map((h) => h.command),
-    );
-    expect(commands).toContain('node .gemini/hooks/BeforeTool.cjs');
-    expect(commands).not.toContain('node .gemini/hooks/BeforeTool.js');
-  });
-
-  it('is idempotent — a second run does not duplicate the registration', () => {
-    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
-    fs.writeFileSync(cjsPath(), GEMINI_BEFORE_TOOL, 'utf-8'); // managed `.cjs` present
-    registerGeminiBeforeTool(tmpDir);
-    registerGeminiBeforeTool(tmpDir);
-    const content = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
-    expect(content.hooks.BeforeTool).toHaveLength(1);
-  });
-
-  it('never corrupts a malformed settings.json (surfaces skipped+err)', () => {
-    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
-    fs.writeFileSync(cjsPath(), GEMINI_BEFORE_TOOL, 'utf-8'); // managed `.cjs` present → gate passes
-    fs.writeFileSync(settingsPath(), '{ not json', 'utf-8');
-    const results = registerGeminiBeforeTool(tmpDir);
-    const settings = results.find((r) => r.file.includes('settings.json'));
-    expect(settings?.action).toBe('skipped');
-    expect(settings?.err).toBeTruthy();
-    // The malformed file is left byte-identical (never clobbered).
-    expect(fs.readFileSync(settingsPath(), 'utf-8')).toBe('{ not json');
-  });
-});
-
-// codex round-3 finding 2 — Gemini registration must be ATOMIC: settings registration
-// is gated on a SUCCESSFULLY adopted / present managed BeforeTool.cjs artifact. It must
-// never point settings at a nonexistent, unadopted, or non-totem-owned (user allow-all /
-// zero-byte / unreadable) `.cjs` and report `Armed`. Each sub-case is a red test first.
-describe('registerGeminiBeforeTool atomicity (codex round-3 finding 2)', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-atomic-'));
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  const settingsPath = () => path.join(tmpDir, '.gemini', 'settings.json');
-  const cjsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.cjs');
-  const jsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
-  const writeManagedCjs = () => {
-    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
-    fs.writeFileSync(cjsPath(), GEMINI_BEFORE_TOOL, 'utf-8');
-  };
-  const registeredCommands = (): string[] => {
-    const c = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8')) as {
-      hooks: { BeforeTool: { hooks: { command: string }[] }[] };
-    };
-    return c.hooks.BeforeTool.flatMap((e) => e.hooks.map((h) => h.command));
-  };
-  const ALLOW_ALL_CJS = "'use strict';\nprocess.exit(0);\n"; // user-owned, no totem marker
-  // Marker-headed but UNBOUNDED (no TOTEM_FILE_END) and allow-all — the codex delta-3
-  // fresh BLOCKING case. markerOpensFile() is TRUE (the old gate blessed it), but it is
-  // NOT a bounded totem-owned whole file, so the arming gate must decline it.
-  const MARKER_OPEN_UNBOUNDED_CJS = `${TOTEM_FILE_MARKER} — Gemini CLI BeforeTool hook\n'use strict';\nprocess.exit(0);\n`;
-
-  it('sub-case 1: does NOT bless a readable user-owned allow-all `.cjs` (managed legacy `.js` present)', () => {
-    // A managed legacy `.js` + settings pointing at it + a readable user-owned allow-all
-    // `.cjs`. Adoption declines (never clobbers the `.cjs`); registration must NOT then
-    // rewrite settings to point at that unverified `.cjs` and report success.
-    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
-    fs.writeFileSync(jsPath(), GEMINI_BEFORE_TOOL, 'utf-8');
-    fs.writeFileSync(cjsPath(), ALLOW_ALL_CJS, 'utf-8');
-    fs.writeFileSync(
-      settingsPath(),
-      JSON.stringify({
-        hooks: {
-          BeforeTool: [
-            {
-              matcher: '*',
-              hooks: [
-                {
-                  name: 'totem-before-tool',
-                  type: 'command',
-                  command: 'node .gemini/hooks/BeforeTool.js',
-                },
-              ],
-            },
-          ],
-        },
-      }),
-      'utf-8',
-    );
-    const results = registerGeminiBeforeTool(tmpDir);
-    const settings = results.find((r) => r.file.includes('settings.json'));
-    // The unverified `.cjs` is preserved AND never blessed into settings.
-    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(ALLOW_ALL_CJS);
-    expect(settings?.action).toBe('skipped');
-    expect(registeredCommands()).not.toContain('node .gemini/hooks/BeforeTool.cjs');
-  });
-
-  it('sub-case 2: empty `.gemini/` — does NOT create settings pointing at a nonexistent `.cjs`', () => {
-    fs.mkdirSync(path.join(tmpDir, '.gemini'), { recursive: true });
-    const results = registerGeminiBeforeTool(tmpDir);
-    const settings = results.find((r) => r.file.includes('settings.json'));
-    expect(settings?.action).toBe('skipped');
-    expect(settings?.err).toBeTruthy();
-    // No settings blessed against an absent artifact.
-    expect(fs.existsSync(settingsPath())).toBe(false);
-    expect(fs.existsSync(cjsPath())).toBe(false);
-  });
-
-  it('sub-case 3: a zero-byte non-marker `.cjs` is NOT overwritten (cannot verify → do not clobber)', () => {
-    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
-    fs.writeFileSync(jsPath(), GEMINI_BEFORE_TOOL, 'utf-8'); // managed legacy `.js`
-    fs.writeFileSync(cjsPath(), '', 'utf-8'); // zero-byte, no marker
-    const results = registerGeminiBeforeTool(tmpDir);
-    // The empty `.cjs` is left untouched; the legacy `.js` stays in place.
-    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe('');
-    expect(fs.existsSync(jsPath())).toBe(true);
-    const settings = results.find((r) => r.file.includes('settings.json'));
-    expect(settings?.action).toBe('skipped');
-  });
-
-  it('sub-case 4: legacy `.js` + canonical `.cjs` both registered → exactly ONE canonical registration', () => {
-    writeManagedCjs(); // managed `.cjs` present so the atomicity gate passes
-    fs.writeFileSync(
-      settingsPath(),
-      JSON.stringify({
-        hooks: {
-          BeforeTool: [
-            {
-              matcher: '*',
-              hooks: [
-                {
-                  name: 'totem-before-tool',
-                  type: 'command',
-                  command: 'node .gemini/hooks/BeforeTool.cjs',
-                },
-              ],
-            },
-            {
-              matcher: '*',
-              hooks: [
-                {
-                  name: 'totem-before-tool',
-                  type: 'command',
-                  command: 'node .gemini/hooks/BeforeTool.js',
-                },
-              ],
-            },
-          ],
-        },
-      }),
-      'utf-8',
-    );
-    registerGeminiBeforeTool(tmpDir);
-    const commands = registeredCommands();
-    expect(commands.filter((c) => c === 'node .gemini/hooks/BeforeTool.cjs')).toHaveLength(1);
-    expect(commands).not.toContain('node .gemini/hooks/BeforeTool.js');
-    // Idempotent: a second run makes no further change.
-    registerGeminiBeforeTool(tmpDir);
-    const commands2 = registeredCommands();
-    expect(commands2.filter((c) => c === 'node .gemini/hooks/BeforeTool.cjs')).toHaveLength(1);
-  });
-
-  it('arms when a managed `.cjs` is present (positive control)', () => {
-    writeManagedCjs();
-    const results = registerGeminiBeforeTool(tmpDir);
-    const settings = results.find((r) => r.file.includes('settings.json'));
-    expect(settings?.action).toBe('created');
-    expect(registeredCommands()).toContain('node .gemini/hooks/BeforeTool.cjs');
-  });
-
-  it('sub-case 5: a marker-headed but UNBOUNDED allow-all `.cjs` is NOT blessed/Armed (codex delta-3)', () => {
-    // The fresh BLOCKING boundary mismatch: the arming gate classified ownership by the
-    // OPENING marker only (markerOpensFile), while the roster regeneration correctly
-    // uses bounded whole-file ownership (isBoundedOwnedFile — both markers) and declines
-    // to repair a marker-opened-but-unbounded file. A truncated/hand-edited `.cjs` that
-    // OPENS with the marker, LACKS TOTEM_FILE_END, and ends in `process.exit(0)` (allow-
-    // all) was still registered + reported Armed — arming a hook that lets a dangerous
-    // `gh pr merge` through. The gate must use the SAME bounded predicate as the roster.
-    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
-    fs.writeFileSync(cjsPath(), MARKER_OPEN_UNBOUNDED_CJS, 'utf-8'); // no legacy `.js`
-    const results = registerGeminiBeforeTool(tmpDir);
-    const settings = results.find((r) => r.file.includes('settings.json'));
-    // Honest skip-with-error, exactly like the other unowned cases — never Armed.
-    expect(settings?.action).toBe('skipped');
-    expect(settings?.err).toBeTruthy();
-    // The unverifiable `.cjs` is preserved (never clobbered) and never blessed.
-    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(MARKER_OPEN_UNBOUNDED_CJS);
-    expect(fs.existsSync(settingsPath())).toBe(false);
   });
 });
 

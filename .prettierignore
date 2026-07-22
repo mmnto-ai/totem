@@ -19,7 +19,4 @@ examples/proof-kit/fixture/.totem/
 # doctor --parity content-hashes them against the canonical — prettier rewrap reads as drift
 .claude/hooks/
 .gemini/hooks/
-# The rendered MergeInterlock hook is generated verbatim from the CLAUDE_MERGE_INTERLOCK
-# template (mmnto-ai/totem#1762); prettier rewrap would drift it from the canonical
-.totem/hooks/
 cloc-results.json

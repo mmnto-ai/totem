@@ -615,8 +615,8 @@ program
   });
 
 // ─── `totem pr merge` — auto-close-safe squash merge actuator (mmnto-ai/totem#1762) ───
-// The sanctioned merge path the A-slice PreToolUse interlock reroutes every raw
-// `gh pr merge` invocation to. Custom fail-closed exit-code contract (the index
+// The sanctioned paved-road merge path (no command interception — OPTION 1
+// ruling, 2026-07-22). Custom fail-closed exit-code contract (the index
 // wrapper sets process.exitCode; the command never process.exit's mid-flow, same
 // as `mail`): 0 = merged / clean --check-only; 1 = posture drift, an undeclared
 // close-keyword ref, or ANY gh/env failure (NO merge attempted).

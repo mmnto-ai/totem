@@ -1,14 +1,23 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm view *)",
+      "Bash(gdlint *)",
+      "Bash(gh search *)",
+      "mcp__totem-dev__search_knowledge",
+      "mcp__totem-strategy__search_knowledge"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "node .claude/hooks/session-context.mjs"
           }
-        ],
-        "matcher": ""
+        ]
       }
     ],
     "PreCompact": [
@@ -32,26 +41,6 @@
           }
         ]
       }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .totem/hooks/merge-interlock.cjs"
-          }
-        ]
-      }
-    ]
-  },
-  "permissions": {
-    "allow": [
-      "Bash(npm view *)",
-      "Bash(gdlint *)",
-      "Bash(gh search *)",
-      "mcp__totem-dev__search_knowledge",
-      "mcp__totem-strategy__search_knowledge"
     ]
   }
 }
