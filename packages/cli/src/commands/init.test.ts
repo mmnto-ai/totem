@@ -2163,6 +2163,14 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     expect(r.threw).toBe(true);
     expect(r.message).toMatch(/quote/i);
   });
+
+  it('blocks the quoting guard via the legacy `edit_file` gate (backward-safety branch)', () => {
+    const r = runBeforeTool('edit_file', {
+      file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
+      new_string: 'subject: Re: legacy tool -- unquoted',
+    });
+    expect(r.threw).toBe(true);
+  });
 });
 
 describe('scaffoldClaudeSkill (mmnto-ai/totem#1890 Phase C slice 3)', () => {
