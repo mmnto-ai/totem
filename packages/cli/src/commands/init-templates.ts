@@ -244,14 +244,22 @@ function checkOutboxSubjectQuoting(toolName, toolInput) {
   if (typeof content !== 'string') return;
 
   const lines = content.split(/\\r?\\n/);
+  // Mode is TOOL-determined (CR round 1 on the introducing PR): write_file is a
+  // full-file write — scan ONLY a leading frontmatter block, and a
+  // frontmatter-less full write has nothing in scope (schema completeness is
+  // the mail consumer's concern, not this guard's). replace/edit_file are
+  // fragments: scan all lines, honoring the totem-context escape.
+  const fragment = toolName !== 'write_file';
   let start = 0;
   let end = lines.length;
-  let fragment = true;
-  if (lines.length > 0 && lines[0].trim() === '---') {
-    fragment = false;
-    start = 1;
-    end = start;
-    while (end < lines.length && lines[end].trim() !== '---') end++;
+  if (!fragment) {
+    if (lines.length > 0 && lines[0].trim() === '---') {
+      start = 1;
+      end = start;
+      while (end < lines.length && lines[end].trim() !== '---') end++;
+    } else {
+      end = 0;
+    }
   }
   const offenders = [];
   for (let i = start; i < end; i++) {
@@ -265,10 +273,17 @@ function checkOutboxSubjectQuoting(toolName, toolInput) {
     const value = m[2].trim();
     if (value === '') continue;
     const first = value.charAt(0);
-    // Quoted scalars are strict-YAML-safe as authored. Block scalars are exempt
-    // ONLY as a bare header (>, >-, |2, ...): a header with trailing text
-    // (e.g. ">note: x") is itself invalid YAML and falls through to the scan.
-    if (first === '"' || first === "'") continue;
+    // A quoted scalar is exempt ONLY when well-terminated (optional trailing
+    // comment): an unterminated or junk-tailed quote is itself invalid YAML
+    // (greptile P1 on the introducing PR). Block scalars are exempt ONLY as a
+    // bare header (>, >-, |2, ...): a header with trailing text (">note: x")
+    // is invalid YAML and falls through to the scan.
+    if (first === '"' || first === "'") {
+      if (first === '"' && /^"(?:[^"\\\\]|\\\\.)*"(\\s+#.*)?$/.test(value)) continue;
+      if (first === "'" && /^'(?:[^']|'')*'(\\s+#.*)?$/.test(value)) continue;
+      offenders.push(m[1]);
+      continue;
+    }
     if ((first === '>' || first === '|') && /^[>|][+-]?[0-9]*$/.test(value)) continue;
     if (value.indexOf(': ') !== -1 || value.charAt(value.length - 1) === ':') offenders.push(m[1]);
   }
@@ -508,14 +523,22 @@ process.stdin.on('end', () => {
   // first: a malformed dispatch is unreadable regardless of what its body says.
   if (OUTBOX_PATH_RE.test(filePath)) {
     const dLines = content.split(/\\r?\\n/);
+    // Mode is TOOL-determined (CR round 1 on the introducing PR): Write is a
+    // full-file write — scan ONLY a leading frontmatter block, and a
+    // frontmatter-less full write has nothing in scope (schema completeness is
+    // the mail consumer's concern, not this guard's). Edit is a fragment:
+    // scan all lines, honoring the totem-context escape.
+    const dFragment = toolName === 'Edit';
     let dStart = 0;
     let dEnd = dLines.length;
-    let dFragment = true;
-    if (dLines.length > 0 && dLines[0].trim() === '---') {
-      dFragment = false;
-      dStart = 1;
-      dEnd = dStart;
-      while (dEnd < dLines.length && dLines[dEnd].trim() !== '---') dEnd++;
+    if (!dFragment) {
+      if (dLines.length > 0 && dLines[0].trim() === '---') {
+        dStart = 1;
+        dEnd = dStart;
+        while (dEnd < dLines.length && dLines[dEnd].trim() !== '---') dEnd++;
+      } else {
+        dEnd = 0;
+      }
     }
     const offenders = [];
     for (let i = dStart; i < dEnd; i++) {
@@ -529,10 +552,17 @@ process.stdin.on('end', () => {
       const value = m[2].trim();
       if (value === '') continue;
       const first = value.charAt(0);
-      // Quoted scalars are strict-YAML-safe as authored. Block scalars are exempt
-      // ONLY as a bare header (>, >-, |2, ...): a header with trailing text
-      // (e.g. ">note: x") is itself invalid YAML and falls through to the scan.
-      if (first === '"' || first === "'") continue;
+      // A quoted scalar is exempt ONLY when well-terminated (optional trailing
+      // comment): an unterminated or junk-tailed quote is itself invalid YAML
+      // (greptile P1 on the introducing PR). Block scalars are exempt ONLY as a
+      // bare header (>, >-, |2, ...): a header with trailing text (">note: x")
+      // is invalid YAML and falls through to the scan.
+      if (first === '"' || first === "'") {
+        if (first === '"' && /^"(?:[^"\\\\]|\\\\.)*"(\\s+#.*)?$/.test(value)) continue;
+        if (first === "'" && /^'(?:[^']|'')*'(\\s+#.*)?$/.test(value)) continue;
+        offenders.push(m[1]);
+        continue;
+      }
       if ((first === '>' || first === '|') && /^[>|][+-]?[0-9]*$/.test(value)) continue;
       if (value.indexOf(': ') !== -1 || value.charAt(value.length - 1) === ':') offenders.push(m[1]);
     }

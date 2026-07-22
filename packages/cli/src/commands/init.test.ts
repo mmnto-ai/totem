@@ -1909,6 +1909,33 @@ describe('PreWriteShield runtime behavior', () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it('exits 0 on a frontmatter-LESS full Write (mode is tool-determined, body is never scanned)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content: 'Draft notes, no frontmatter yet.\nsubject: Re: unsafe-looking body line\n',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 2 on an UNTERMINATED quoted subject (a leading quote alone is not safety)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: OUTBOX_MD, content: '---\nsubject: "Re: round\n---\n' },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('exits 2 on trailing junk after a closed quote (also invalid YAML)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: OUTBOX_MD, content: '---\nsubject: "Re: round" oops\n---\n' },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
   it('does NOT fire outside the outbox surface (same content at a .journal path)', () => {
     const result = runHook({
       tool_name: 'Write',
@@ -2179,6 +2206,22 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     const r = runBeforeTool('edit_file', {
       file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
       new_string: 'subject: Re: legacy tool -- unquoted',
+    });
+    expect(r.threw).toBe(true);
+  });
+
+  it('does not throw on a frontmatter-less full write_file (tool-determined mode)', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
+      content: 'Draft notes, no frontmatter yet.\nsubject: Re: unsafe-looking body line\n',
+    });
+    expect(r.threw).toBe(false);
+  });
+
+  it('throws on an unterminated quoted subject (leading quote alone is not safety)', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
+      content: '---\nsubject: "Re: round\n---\n',
     });
     expect(r.threw).toBe(true);
   });
