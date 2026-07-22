@@ -265,8 +265,11 @@ function checkOutboxSubjectQuoting(toolName, toolInput) {
     const value = m[2].trim();
     if (value === '') continue;
     const first = value.charAt(0);
-    // Quoted scalars and block scalars (>- / |) are strict-YAML-safe as authored.
-    if (first === '"' || first === "'" || first === '>' || first === '|') continue;
+    // Quoted scalars are strict-YAML-safe as authored. Block scalars are exempt
+    // ONLY as a bare header (>, >-, |2, ...): a header with trailing text
+    // (e.g. ">note: x") is itself invalid YAML and falls through to the scan.
+    if (first === '"' || first === "'") continue;
+    if ((first === '>' || first === '|') && /^[>|][+-]?[0-9]*$/.test(value)) continue;
     if (value.indexOf(': ') !== -1 || value.charAt(value.length - 1) === ':') offenders.push(m[1]);
   }
   if (offenders.length === 0) return;
@@ -526,8 +529,11 @@ process.stdin.on('end', () => {
       const value = m[2].trim();
       if (value === '') continue;
       const first = value.charAt(0);
-      // Quoted scalars and block scalars (>- / |) are strict-YAML-safe as authored.
-      if (first === '"' || first === "'" || first === '>' || first === '|') continue;
+      // Quoted scalars are strict-YAML-safe as authored. Block scalars are exempt
+      // ONLY as a bare header (>, >-, |2, ...): a header with trailing text
+      // (e.g. ">note: x") is itself invalid YAML and falls through to the scan.
+      if (first === '"' || first === "'") continue;
+      if ((first === '>' || first === '|') && /^[>|][+-]?[0-9]*$/.test(value)) continue;
       if (value.indexOf(': ') !== -1 || value.charAt(value.length - 1) === ':') offenders.push(m[1]);
     }
     if (offenders.length > 0) {

@@ -1862,6 +1862,17 @@ describe('PreWriteShield runtime behavior', () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it('exits 2 on a fake block-scalar header with trailing text (">note: x" is not valid YAML)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content: '---\nsubject: >note: this is not a block scalar\n---\n',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
   it('exits 0 on a single-quoted value and on a block scalar (>-)', () => {
     const single = runHook({
       tool_name: 'Write',
