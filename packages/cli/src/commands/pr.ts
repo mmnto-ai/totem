@@ -455,8 +455,10 @@ export async function prMergeCommand(
         `[totem pr merge] ${declaredRefs.length} declared close(s) were NOT executed (landing ` +
           'state unconfirmed): ' +
           declaredRefs.map((ref) => refLabel(ref)).join(', ') +
-          '. After confirming the merge landed, re-run `totem pr merge` with --close-declared, or ' +
-          'close them manually:\n' +
+          // NOT "re-run totem pr merge --close-declared": the pre-merge guard rejects an
+          // already-MERGED PR (state !== OPEN) before the close phase, so that path is
+          // impossible once the merge has landed. Give the valid manual commands only.
+          '. After confirming the merge landed, close the declared target(s) manually:\n' +
           declaredRefs
             .map((ref) => `  ${displayGhCommand(buildIssueCloseArgv(ref, pr.number, repo))}\n`)
             .join(''),

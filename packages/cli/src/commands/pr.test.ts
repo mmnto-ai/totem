@@ -569,6 +569,12 @@ describe('prMergeCommand — landing-state read failure (codex round-2 BLOCKING)
     expect(h.err()).toMatch(/#55/);
     // NEVER the completed-merge line.
     expect(h.out()).not.toContain('merged PR #5 (--squash)');
+    // Finding 4 (codex #4 NB): the recovery text must NOT tell the operator to re-run
+    // `totem pr merge` with --close-declared — the pre-merge guard rejects an
+    // already-MERGED PR (state !== OPEN) before the close phase, so that re-run is
+    // impossible. It must give the valid manual `gh issue close` command(s) instead.
+    expect(h.err()).not.toMatch(/re-run `totem pr merge`.*--close-declared/i);
+    expect(h.err()).toMatch(/gh issue close 55/);
   });
 
   it('without --close-declared: still says UNCONFIRMED (not "merged"), exit 0', async () => {
