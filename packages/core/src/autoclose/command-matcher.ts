@@ -5,9 +5,10 @@
  * The A-slice PreToolUse interlock (Claude `Bash` + Gemini `run_shell_command`)
  * DENIES an agent's attempt to merge a PR outside the sanctioned `totem pr merge`
  * actuator, so the shared receipt evaluator (B) is never bypassed. This module is
- * the ONE shared detector both rendered hosts inline (via `JSON.stringify` — the
- * same drift-locked local-mirror shape as `AUTO_CLOSE_REGEX_SOURCE`), and that B's
- * tests read. It never authors a second copy of the pattern.
+ * the ONE shared detector both rendered hosts inline (the regex arms via
+ * `JSON.stringify` — the same drift-locked local-mirror shape as
+ * `AUTO_CLOSE_REGEX_SOURCE` — and the {@link findApiMergePaths} single-pass scanner
+ * verbatim), and that B's tests read. It never authors a second copy of the pattern.
  *
  * The input is a shell COMMAND STRING (the `Bash`/`run_shell_command` payload),
  * not a parsed argv. We do NOT tokenize a shell — that is undecidable in general
@@ -28,62 +29,60 @@
  *      (kimi B-3). Matched regardless of a `--body`/`--body-file`/`-F`/`-t` payload
  *      — the point is to reroute the WHOLE invocation, so a hidden body cannot slip
  *      a merge past.
- *   2. `gh api … /pulls/{n}/merge` — the raw merge-API vector with a LITERAL
- *      decimal PR number (`gh pr merge` under a different name).
- *   3. `gh pr` immediately followed by a command-substitution / variable
+ *   2. `gh pr` immediately followed by a command-substitution / variable
  *      continuation (`$(…)`, `${…}`, `$VAR`, a backtick) — the subcommand is
  *      UNDECIDABLE, so we deny (license condition 2: deny-on-undecidable, never
  *      guess it is safe).
- *   4. `gh api` whose endpoint is UNDECIDABLE before shell expansion, so we deny
- *      for the merge-API family exactly as arm 3 does for `gh pr`:
- *        - a `$`/backtick/`%`/`!` continuation after `gh api` and any inherited
- *          flags (`gh api $EP`, `gh api "$ENDPOINT"`, `gh api --method PUT "$EP"`,
- *          `gh api %ENDPOINT%` — the entire endpoint is a variable; codex B-1
- *          round-2), OR
- *        - a `…/merge` REST path whose PR segment is a variable/substitution —
- *          `$PR`, `${PR}`, a backtick, or the cmd.exe `%PR%` / delayed `!PR!`
- *          shapes (`…/pulls/$PR/merge`, `…/pulls/%PR%/merge`; kimi NB-1 deny
- *          direction, codex B-1 variable REST form + round-2 cmd.exe vars).
- *   5. `gh api graphql … mergePullRequest …` — the GraphQL merge mutation, a
- *      third door to the same raw merge (kimi NB-2). Presence-invariant token
- *      match; it does not fire on an unrelated `gh api graphql` read.
+ *   3. `gh api` whose ENTIRE endpoint is UNDECIDABLE before shell expansion — a
+ *      `$`/backtick/`%`/`!` continuation after `gh api` and any inherited flags
+ *      (`gh api $EP`, `gh api "$ENDPOINT"`, `gh api --method PUT "$EP"`,
+ *      `gh api %ENDPOINT%`) — so we deny for the merge-API family exactly as arm 2
+ *      does for `gh pr` (codex B-1 round-2 cmd.exe vars).
  *
- * LINE-CONTINUATION HARDENING (kimi round-2 BLOCKING-5): the `\`+LF / `^`+LF fold
- * of B-3 only reached the SEP-separated words. The merge-API / graphql arms scan
- * spans and match rigid literals (`/pulls/`, `/merge`, `graphql`,
- * `mergePullRequest`), so a continuation SPLICED into the path executed a real
- * merge while the matcher saw a broken span and allowed it. Now the span class
- * ({@link NOSEP}) admits a continuation unit AND each literal is threaded with an
- * optional continuation between characters (see {@link contLit}), so a splice
- * anywhere — `gh api \⏎…/pulls/5/merge`, `…/pulls/5/\⏎merge`, cmd.exe `^`+CRLF,
- * `…/pulls/$PR/\⏎merge`, `gh api graphql \⏎…mergePullRequest`, and mid-token
- * splices — is still recognized. The fix is at the PATTERN level (both inlined
- * hosts get it), never an in-hook pre-scan (that would fork the two-host surface).
+ * Arms 1–3 are a REGEX ({@link MERGE_COMMAND_REGEX_SOURCE}, groups 1/2/3). The
+ * raw-merge-API PATHS — a literal `…/pulls/{n}/merge`, a variable REST merge path
+ * (`…/pulls/$PR/merge`, `…/pulls/%PR%/merge`, kimi NB-1 deny direction + codex B-1),
+ * and the GraphQL `mergePullRequest` mutation (kimi NB-2) — are detected by the
+ * {@link findApiMergePaths} SINGLE-PASS SCANNER instead of the regex (see LINEARITY).
+ *
+ * LINE-CONTINUATION HARDENING (kimi round-2 BLOCKING-5): a `\`+LF / `^`+LF splice
+ * anywhere in a merge-API path or graphql literal (which the shell removes before
+ * `gh` runs) must still be recognized. The regex arms fold the continuation into
+ * their {@link SEP} class; the scanner DE-FOLDS the continuations first (removes
+ * every `\`+LF / `^`+LF), so a splice mid-path — `gh api \⏎…/pulls/5/merge`,
+ * `…/pulls/5/\⏎merge`, cmd.exe `^`+CRLF, `…/pulls/$PR/\⏎merge`,
+ * `gh api graphql \⏎…mergePullRequest`, and mid-token splices — collapses back to
+ * the contiguous literal before detection. The scanner is inlined into both hosts,
+ * never forked into an in-hook pre-scan.
  *
  * It MUST NOT over-fire on the read-only `gh pr` verbs (`view`, `checkout`,
  * `diff`, `list`, …) — even carrying a spliced quoted flag (`gh pr --repo="x"
  * view 5`; codex round-2 negative) or a glued one (`gh pr -Rfoo/bar view 5`; kimi
  * round-2) — or on `gh pr merge` embedded in a larger word (`foogh pr merge`,
  * `gh-pr-merge`). No flag-value class consumes a shell command separator (`;` `|`
- * `&`) or a newline, so a run never crosses a command boundary (`gh --repo o/r;
- * pr merge` does NOT block; codex round-2 NB).
+ * `&`) or a newline, and the scanner never crosses a `;`/`|`/`&`/bare-newline
+ * command boundary (`gh api /user; echo /pulls/5/merge` does NOT block; Greptile
+ * P2), so a run never straddles a command boundary.
  *
- * LINEARITY (codex round-2 BLOCKING — catastrophic backtracking): every nested
- * quantifier ranges over a character class DISJOINT from its neighbors — a
- * separator (`SEP`, quotes/whitespace/line-continuation) never overlaps a flag
- * lead (`-`) and neither overlaps a value head. In particular the flag NAME is
- * `-{1,2}[\w]…` (a word char is REQUIRED after the dashes; the earlier
- * `-{1,2}[\w-]+` let `[\w-]`'s first char overlap `-{1,2}`, giving every `--flag`
- * two parses → 2^N total backtracks: a non-matching command took 6.46s at 26
- * repeated flag groups). The `gh api …` span is a BOUNDED lazy quantifier
- * (`{0,2000}?`, kimi round-2 NB-1) so a separator-free filler cannot make it scan
- * the whole remainder like `[\s\S]` did. With the overlaps removed and the span
- * bounded the construction is linear; the adversarial perf fixtures in
- * command-matcher.test.ts PROVE it for BOTH shapes — repeated flag groups AND the
- * separator-free NOSEP filler — <50ms at the adversarial sizes (measured, not
- * claimed). (safe-regex2 still rejects the pattern on its conservative star-height
- * heuristic; that heuristic cannot see the disjoint-class structure that makes it
- * linear, so the timing fixtures are the authoritative gate, not safe-regex2.)
+ * LINEARITY (codex round-2 BLOCKING — catastrophic backtracking; codex delta-4 —
+ * the padding bypass): every nested quantifier in the regex ranges over a character
+ * class DISJOINT from its neighbors — a separator (`SEP`, quotes/whitespace/line-
+ * continuation) never overlaps a flag lead (`-`) and neither overlaps a value head.
+ * In particular the flag NAME is `-{1,2}[\w]…` (a word char is REQUIRED after the
+ * dashes; the earlier `-{1,2}[\w-]+` let `[\w-]`'s first char overlap `-{1,2}`,
+ * giving every `--flag` two parses → 2^N total backtracks: a non-matching command
+ * took 6.46s at 26 repeated flag groups). The merge-API path detection is NOT a
+ * regex span at all: a bounded lazy span (`{0,2000}?`) was linear but turned input
+ * length into a deterministic ALLOW — a header padded past ~2000 chars slipped a
+ * real `…/pulls/{n}/merge` past the cap (codex delta-3 #3). {@link findApiMergePaths}
+ * replaces it with a single left-to-right pass (de-fold → per-segment anchor via
+ * {@link API_ANCHOR_SOURCE} → bounded in-segment literal scan) that BLOCKS the padded
+ * form with NO length-based allow condition and NO O(k·n) rescan. The adversarial
+ * perf fixtures in command-matcher.test.ts PROVE both shapes linear — repeated flag
+ * groups AND a separator-free filler — <50ms at the adversarial sizes (measured, not
+ * claimed). (safe-regex2 still rejects the regex on its conservative star-height
+ * heuristic; it cannot see the disjoint-class structure, so the timing fixtures are
+ * the authoritative gate.)
  *
  * BOUNDED-SURFACE HONESTY (condition 2): this matcher claims exactly "block
  * recognizable raw-merge invocations in a shell command string at this harness".
@@ -102,15 +101,6 @@
  *     `gh`-less prefix and the literal `pr merge` is still present), and `gh pr $(…)`
  *     is caught by the deny-on-undecidable arm — the uncaught case is specifically a
  *     substitution standing in for the `pr`/`api` word.
- *   - a `gh api` invocation whose PRE-PATH segment (flags + values between `api` and
- *     the `/pulls/{n}/merge` or `graphql` literal) exceeds the {@link NOSEP} cap
- *     (~2000 chars) is unclaimed: the bounded lazy span stops looking before the path,
- *     so an adversarially PADDED header (`gh api -H "<2100 a's>" …/pulls/5/merge`)
- *     ALLOWs by design while the same under-cap form BLOCKs. Keeping the cap is a
- *     deliberate linearity trade (a stalling hook stalls the harness); a 2 KB-header
- *     form is adversarial-only, the same practical class as the alias/function/
- *     injected-spawn gaps above. D1/D2 are the loud backstop (codex round-3 #3 / kimi
- *     NB — RULED record, do not raise the cap).
  * RECORDED FRICTION (kimi round-2 NB-2 — a false-DENY, defensible, not disambiguated):
  *   - `gh pr --label merge list` BLOCKS. A `merge`-valued flag placed BEFORE the
  *     subcommand makes the `merge`-token binding genuinely ambiguous, and
@@ -128,37 +118,6 @@
  * below stay stable.
  */
 const SEP = '(?:[\'"\\s]|(?:\\\\|\\^)\\r?\\n)';
-
-/**
- * Zero or more shell (`\`+LF) / cmd.exe (`^`+LF) line-continuations at a single
- * splice point. Threaded between the characters of the rigid merge-path / graphql
- * literals (see {@link contLit}) so a continuation spliced mid-path — which the
- * shell removes before `gh` runs — cannot break the literal and slip a merge past
- * (kimi round-2 BLOCKING-5). Zero-width when there is no continuation, so it costs
- * nothing on ordinary input.
- */
-const CONT = '(?:(?:\\\\|\\^)\\r?\\n)*';
-
-/**
- * A within-one-command span UNIT: a line-continuation (so the `gh api …` arms see
- * across a `\`+LF / `^`+LF, kimi round-2 BLOCKING-5) OR any char EXCEPT a shell
- * command separator (`;` `|` `&`) or a bare newline. The merge-path arms scan this
- * (not `[\s\S]`) so a merge path on the far side of a separator
- * (`gh api /user; echo /pulls/5/merge`) is NOT mistaken for a reachable merge — a
- * separator inside the path breaks it for gh too, so denial coverage is preserved
- * (Greptile P2).
- */
-const NOSEP_UNIT = '(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n])';
-
-/**
- * A BOUNDED lazy span of {@link NOSEP_UNIT} (`{0,2000}?`, not `*?`). A real
- * `gh api …/merge` path segment has no business exceeding ~2 KB; bounding it stops
- * a separator-free filler from making the lazy scan cover the whole remainder like
- * the old `[\s\S]`/`*?` did (kimi round-2 NB-1 — a ~42× regression measured on a
- * 152 KB separator-free input). Part of the same linearity mandate as the FLAGRUN
- * backtracking fix; the perf fixtures cover both shapes.
- */
-const NOSEP = NOSEP_UNIT + '{0,2000}?';
 
 /**
  * An OPTIONAL `=`-joined or space-separated flag value. The `=` arm admits a
@@ -196,50 +155,50 @@ const FLAGTOKEN = '-{1,2}[\\w][^\\s\'";|&=]*' + FLAGVAL;
 const FLAGRUN = '(?:' + SEP + '+' + FLAGTOKEN + ')*';
 
 /**
- * The lead of an UNDECIDABLE continuation after `gh pr` (arm 3): a shell
+ * The lead of an UNDECIDABLE continuation after `gh pr` (arm 2): a shell
  * variable/substitution (`$`, a backtick).
  */
 const VARLEAD = '(?:\\$|`)';
 
 /**
- * The lead of an UNDECIDABLE endpoint/segment for the merge-API family (arm 4):
- * the shell forms (`$`, backtick) PLUS the cmd.exe variable shapes `%…%` and the
- * delayed-expansion `!…!` (codex B-1 round-2 — `gh api …/pulls/%PR%/merge` and the
- * `!PR!` form must deny as variable REST paths).
+ * The lead of an UNDECIDABLE endpoint for the merge-API family (arm 3): the shell
+ * forms (`$`, backtick) PLUS the cmd.exe variable shapes `%…%` and the
+ * delayed-expansion `!…!` (codex B-1 round-2 — `gh api %ENDPOINT%` and the `!EP!`
+ * form must deny as variable endpoints).
  */
 const APIVARLEAD = '(?:\\$|`|%|!)';
 
 /**
- * Thread {@link CONT} between the characters of a rigid literal so a line
- * continuation spliced anywhere inside it (which the shell removes before `gh`
- * runs) still matches (kimi round-2 BLOCKING-5). ASCII literals only.
+ * The shared `gh … api` PREFIX the {@link findApiMergePaths} scanner anchors on:
+ * a `gh` (or `gh.exe`) TOKEN (the lookbehind rejects a preceding word/dash char,
+ * so `foogh`/`gh-pr` do not anchor), then optional spliced flags ({@link FLAGRUN}),
+ * then ≥1 separator, then the `api` subcommand. Byte-identical to the prefix
+ * MERGE_COMMAND_REGEX_SOURCE uses (the same disjoint-class construction, so it is
+ * linear), and inlined verbatim into both rendered hosts (drift-locked by the
+ * init.test.ts parity assertions, like {@link MERGE_COMMAND_REGEX_SOURCE}).
  */
-function contLit(literal: string): string {
-  return literal.split('').join(CONT);
-}
+export const API_ANCHOR_SOURCE = '(?<![\\w-])gh(?:\\.exe)?' + FLAGRUN + SEP + '+api\\b';
 
 /**
  * Canonical raw-merge command pattern (apply flags `gi` when compiling). ONE
- * string, five ordered alternatives, each with a sentinel capture group so
+ * string, three ordered alternatives, each with a sentinel capture group so
  * {@link findMergeInvocations} can classify which vector matched:
  *
  *   - `(?<![\w-])gh(?:\.exe)?` + {@link FLAGRUN} + {@link SEP}`+` — a `gh` (or
- *     `gh.exe`) TOKEN (the lookbehind rejects a preceding word/dash char, so
- *     `foogh`/`gh-pr` do not match), then optional spliced flags, then ≥1
- *     separator, so individually quoted tokens (`"gh" "pr"`, `& gh pr`) and a
- *     cross-repo `--repo` flag still resolve.
+ *     `gh.exe`) TOKEN, optional spliced flags, then ≥1 separator, so individually
+ *     quoted tokens (`"gh" "pr"`, `& gh pr`) and a cross-repo `--repo` flag still
+ *     resolve.
  *   - group 1 `(pr\b` FLAGRUN SEP`+ merge)(?![\w-])` — `gh pr merge` (form
  *     `gh-pr-merge`), flags tolerated between `pr` and `merge`.
- *   - group 2 `(api\b` NOSEP `/pulls/` … `\d+` … `/merge)(?![\w-])` — a raw
- *     `/pulls/{n}/merge` API path with a LITERAL PR number (form `gh-api-merge`),
- *     continuation-tolerant via {@link contLit}.
- *   - group 3 `(pr\b` SEP`*` VARLEAD`)` — `gh pr` then a `$`/backtick
+ *   - group 2 `(pr\b` SEP`*` VARLEAD`)` — `gh pr` then a `$`/backtick
  *     continuation (form `gh-pr-undecidable`, deny-on-undecidable).
- *   - group 4 `(api\b` FLAGRUN SEP`*` APIVARLEAD` | api\b` NOSEP APIVARLEAD NOSEP `/merge\b)`
- *     — `gh api` whose endpoint is a variable (after any inherited flags), or a
- *     variable REST merge path (form `gh-api-undecidable`, deny-on-undecidable).
- *   - group 5 `(api\b` NOSEP `graphql` NOSEP `mergePullRequest)(?![\w-])` — the
- *     GraphQL merge mutation (form `gh-api-merge`), continuation-tolerant.
+ *   - group 3 `(api\b` FLAGRUN SEP`*` APIVARLEAD`)` — `gh api` whose entire endpoint
+ *     is a variable after any inherited flags (form `gh-api-undecidable`,
+ *     deny-on-undecidable).
+ *
+ * The literal `…/pulls/{n}/merge`, variable REST merge, and graphql
+ * `mergePullRequest` paths are NOT in this regex — {@link findApiMergePaths}
+ * detects them in a single linear pass (see LINEARITY in the module header).
  */
 export const MERGE_COMMAND_REGEX_SOURCE =
   '(?<![\\w-])gh(?:\\.exe)?' +
@@ -251,14 +210,6 @@ export const MERGE_COMMAND_REGEX_SOURCE =
   FLAGRUN +
   SEP +
   '+merge)(?![\\w-])' +
-  '|(api\\b' +
-  NOSEP +
-  contLit('/pulls/') +
-  CONT +
-  '\\d+' +
-  CONT +
-  contLit('/merge') +
-  ')(?![\\w-])' +
   '|(pr\\b' +
   SEP +
   '*' +
@@ -269,18 +220,7 @@ export const MERGE_COMMAND_REGEX_SOURCE =
   SEP +
   '*' +
   APIVARLEAD +
-  '|api\\b' +
-  NOSEP +
-  APIVARLEAD +
-  NOSEP +
-  contLit('/merge') +
-  '\\b)' +
-  '|(api\\b' +
-  NOSEP +
-  contLit('graphql') +
-  NOSEP +
-  contLit('mergePullRequest') +
-  ')(?![\\w-])' +
+  ')' +
   ')';
 
 /** The raw-merge vector a {@link MergeInvocation} was matched under. */
@@ -303,25 +243,135 @@ function compile(): RegExp {
   return new RegExp(MERGE_COMMAND_REGEX_SOURCE, 'gi');
 }
 
+/** Whether `ch` continues a `merge`/`mergePullRequest`/PR-number word (the `\b` /
+ *  `(?![\w-])` boundary the removed regex arms carried). `undefined` (end of the
+ *  region) is a boundary. */
+function isMergeWordChar(ch: string | undefined): boolean {
+  return (
+    ch !== undefined &&
+    ((ch >= 'a' && ch <= 'z') ||
+      (ch >= 'A' && ch <= 'Z') ||
+      (ch >= '0' && ch <= '9') ||
+      ch === '_' ||
+      ch === '-')
+  );
+}
+
+/**
+ * Classify a single command SEGMENT's post-`api` region for a raw merge-API path.
+ * `region` is `folded.slice(apiEnd, segEnd)` (continuations already removed, no
+ * `;`/`|`/`&`/newline inside); `regionLower` is its lowercase twin. Alternatives
+ * are checked in the SAME source order the removed regex arms had:
+ *   1. a literal `/pulls/<digits>/merge` (contiguous, boundary-terminated) — merge;
+ *   2. else a variable ($ ` % !) segment followed by `/merge` — undecidable;
+ *   3. else `graphql … mergePullRequest` — the GraphQL merge mutation — merge.
+ * Returns the form, or null when the segment carries no recognizable merge path.
+ */
+function classifyApiMergeRegion(region: string, regionLower: string): MergeInvocationForm | null {
+  // arm A: a literal /pulls/<digits>/merge path.
+  for (
+    let p = regionLower.indexOf('/pulls/');
+    p !== -1;
+    p = regionLower.indexOf('/pulls/', p + 1)
+  ) {
+    let q = p + 7;
+    let sawDigit = false;
+    while (q < regionLower.length && regionLower[q] >= '0' && regionLower[q] <= '9') {
+      q++;
+      sawDigit = true;
+    }
+    if (
+      sawDigit &&
+      regionLower.slice(q, q + 6) === '/merge' &&
+      !isMergeWordChar(regionLower[q + 6])
+    ) {
+      return 'gh-api-merge';
+    }
+  }
+  // arm B: a variable PR/endpoint segment then /merge — undecidable.
+  for (let v = 0; v < region.length; v++) {
+    const ch = region[v];
+    if (ch === '$' || ch === '`' || ch === '%' || ch === '!') {
+      const mIdx = regionLower.indexOf('/merge', v);
+      if (mIdx !== -1 && !isMergeWordChar(regionLower[mIdx + 6])) return 'gh-api-undecidable';
+      break;
+    }
+  }
+  // arm C: the graphql mergePullRequest mutation.
+  const gq = regionLower.indexOf('graphql');
+  if (gq !== -1) {
+    const mpr = regionLower.indexOf('mergepullrequest', gq + 7);
+    if (mpr !== -1 && !isMergeWordChar(regionLower[mpr + 16])) return 'gh-api-merge';
+  }
+  return null;
+}
+
+/**
+ * Single left-to-right pass for the raw merge-API PATHS (literal `…/pulls/{n}/merge`,
+ * variable REST merge, graphql `mergePullRequest`). Replaces the removed bounded
+ * `{0,2000}?` regex span — which turned input length into a deterministic ALLOW
+ * (a header padded past the cap slipped a real merge path past; codex delta-3 #3).
+ * PROVABLY LINEAR: de-fold once (O(n)); per command segment scan for the FIRST
+ * `gh … api` anchor and one bounded in-segment literal scan, advancing past the
+ * segment each time — no length-based allow, no O(k·n) rescan. The SAME logic is
+ * inlined verbatim into both rendered hosts (init-templates `MERGE_INTERLOCK_SCANNER_JS`).
+ */
+export function findApiMergePaths(command: string): MergeInvocation[] {
+  const out: MergeInvocation[] = [];
+  if (typeof command !== 'string' || command.length === 0) return out;
+
+  // De-fold shell (`\`+LF) / cmd.exe (`^`+LF) line-continuations so a splice inside
+  // a merge path (removed by the shell before `gh` runs) collapses to the contiguous
+  // literal; keep an index map back to the original command for reported offsets.
+  let folded = '';
+  const map: number[] = [];
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    const d = command[i + 1];
+    if ((c === '\\' || c === '^') && (d === '\n' || (d === '\r' && command[i + 2] === '\n'))) {
+      i += d === '\r' ? 2 : 1;
+      continue;
+    }
+    folded += c;
+    map.push(i);
+  }
+  const lower = folded.toLowerCase();
+
+  const anchor = new RegExp(API_ANCHOR_SOURCE, 'gi');
+  let a: RegExpExecArray | null;
+  while ((a = anchor.exec(folded)) !== null) {
+    const apiEnd = a.index + a[0].length;
+    let segEnd = apiEnd;
+    while (segEnd < folded.length && ';|&\r\n'.indexOf(folded[segEnd]) === -1) segEnd++;
+    const form = classifyApiMergeRegion(folded.slice(apiEnd, segEnd), lower.slice(apiEnd, segEnd));
+    if (form !== null) out.push({ form, index: map[a.index] ?? 0 });
+    // One anchor per segment keeps the scan linear (a later anchor's region is a
+    // subset already covered); resume after this segment's boundary.
+    anchor.lastIndex = segEnd;
+  }
+  return out;
+}
+
 /**
  * Scan a shell command string for every recognizable raw-merge invocation. Zero
- * shell semantics — presence-invariant with the deny-on-undecidable arms. An empty
- * result means the command carried no recognizable `gh pr merge` / raw merge-API /
- * `gh pr`-substitution vector; the interlock allows those (its bounded claim).
+ * shell semantics — presence-invariant with the deny-on-undecidable arms. Combines
+ * the regex arms (`gh pr merge`, `gh pr $(…)`, `gh api $EP`) with the
+ * {@link findApiMergePaths} linear scan (raw merge-API / graphql paths). An empty
+ * result means the command carried no recognizable vector; the interlock allows
+ * those (its bounded claim).
  */
 export function findMergeInvocations(command: string): MergeInvocation[] {
   if (typeof command !== 'string' || command.length === 0) return [];
   const out: MergeInvocation[] = [];
   for (const m of command.matchAll(compile())) {
-    // Group layout: 1 = gh pr merge; 2 = gh api …/pulls/N/merge (literal);
-    // 3 = gh pr $(…); 4 = gh api $(…) / variable REST merge; 5 = graphql merge.
+    // Group layout: 1 = gh pr merge; 2 = gh pr $(…); 3 = gh api $EP (variable endpoint).
     let form: MergeInvocationForm;
     if (m[1] !== undefined) form = 'gh-pr-merge';
-    else if (m[2] !== undefined) form = 'gh-api-merge';
-    else if (m[3] !== undefined) form = 'gh-pr-undecidable';
-    else if (m[4] !== undefined) form = 'gh-api-undecidable';
-    else form = 'gh-api-merge'; // group 5 — graphql mergePullRequest mutation
+    else if (m[2] !== undefined) form = 'gh-pr-undecidable';
+    else form = 'gh-api-undecidable';
     out.push({ form, index: m.index ?? 0 });
   }
+  for (const inv of findApiMergePaths(command)) out.push(inv);
+  out.sort((x, y) => x.index - y.index);
   return out;
 }

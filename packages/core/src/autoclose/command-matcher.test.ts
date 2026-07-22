@@ -327,9 +327,10 @@ describe('MERGE_COMMAND_REGEX_SOURCE / findMergeInvocations', () => {
     }
   });
 
-  it('bounds the merge-API span scan on a separator-free filler (<50ms; kimi round-2 NB-1)', () => {
-    // A long separator-free string used to make the lazy NOSEP span cover the whole
-    // remainder like `[\s\S]` (measured regression). The `{0,2000}?` bound caps it.
+  it('scans a separator-free filler in linear time (<50ms; kimi round-2 NB-1)', () => {
+    // A long separator-free string used to make the old lazy span cover the whole
+    // remainder like `[\s\S]` (measured regression). The single-pass scanner walks it
+    // once (de-fold + one bounded in-segment scan) with no length-based allow.
     for (const len of [4000, 152000]) {
       const cmd = 'gh api ' + 'a'.repeat(len) + ' endpoint-no-merge';
       const t0 = process.hrtime.bigint();
@@ -340,29 +341,40 @@ describe('MERGE_COMMAND_REGEX_SOURCE / findMergeInvocations', () => {
     }
   });
 
-  // ─── RECORDED GAP: NOSEP cap padding bypass (codex round-3 #3 / kimi NB) ───────
+  // ─── CLOSED: the padding bypass is gone (codex delta-3 #3, operator-ruled) ─────
   //
-  // RULED (coordinator round-3): RECORD, do NOT rewrite. The bounded lazy span
-  // ({@link NOSEP}, `{0,2000}?`) stops looking before a dangerous path once the
-  // pre-path segment (flags + values between `gh api` and the `/pulls/{n}/merge` or
-  // graphql literal) exceeds ~2000 chars, so an adversarially PADDED header ALLOWs by
-  // design while the same UNDER-cap form BLOCKs. Keeping the cap is a deliberate
-  // linearity trade (a stalling hook stalls the harness — the earlier nested-quantifier
-  // shape backtracked multi-second); a 2 KB-header form is adversarial-only, the same
-  // practical class as the alias/function/injected-spawn gaps. D1/D2 are the backstop.
-  // This fixture PINS the recorded behavior so a future cap change is a conscious edit.
-  it('RECORDED GAP: a gh api header padded past the NOSEP cap (~2000) is unclaimed (ALLOW by design)', () => {
+  // The bounded lazy `{0,2000}?` regex span turned INPUT LENGTH into a deterministic
+  // ALLOW: a `gh api` header padded past ~2000 chars slipped a real `…/pulls/{n}/merge`
+  // past the cap while the same under-cap form blocked. The linear single-pass scanner
+  // (findApiMergePaths) has NO length-based allow condition — the padded form now
+  // BLOCKS exactly like the bare and under-cap forms. (Replaces the round-3
+  // padded→ALLOW record; the bypass no longer exists to record.)
+  it('BLOCKS a gh api merge path however far the header is padded (no length-based allow)', () => {
     const dangerousPath = 'repos/o/r/pulls/5/merge';
-    const padded = `gh api -H "X-Fill: ${'a'.repeat(2100)}" ${dangerousPath} -X PUT`;
+    const bare = `gh api ${dangerousPath} -X PUT`;
     const underCap = `gh api -H "X-Fill: ${'a'.repeat(1800)}" ${dangerousPath} -X PUT`;
-    // Padded past the cap: the span stops before the path → no match → the interlock
-    // ALLOWs (recorded gap; NOT a claimed block). Bounded-surface honesty, condition 2.
-    expect(findMergeInvocations(padded)).toEqual([]);
-    // The under-cap dangerous form is still CLAIMED and blocks.
-    expect(findMergeInvocations(underCap).map((m) => m.form)).toEqual(['gh-api-merge']);
-    // And the bare dangerous form (no padding) blocks.
-    expect(findMergeInvocations(`gh api ${dangerousPath} -X PUT`).map((m) => m.form)).toEqual([
-      'gh-api-merge',
-    ]);
+    const padded = `gh api -H "X-Fill: ${'a'.repeat(2100)}" ${dangerousPath} -X PUT`;
+    const wayPadded = `gh api -H "X-Fill: ${'a'.repeat(4000)}" ${dangerousPath} -X PUT`;
+    for (const cmd of [bare, underCap, padded, wayPadded]) {
+      expect(findMergeInvocations(cmd).map((m) => m.form)).toEqual(['gh-api-merge']);
+    }
+  });
+
+  it('stays linear on the padded merge-path + k-repeat filler shapes (<50ms)', () => {
+    const dangerousPath = 'repos/o/r/pulls/5/merge';
+    // The padded-header dangerous form and kimi's k-repeat separator-free filler
+    // preceding a real merge path — both must BLOCK and both must scan fast.
+    const shapes = [
+      `gh api -H "X-Fill: ${'a'.repeat(2100)}" ${dangerousPath} -X PUT`,
+      `gh api ${'a'.repeat(152000)}/${dangerousPath} -X PUT`,
+      'gh api ' + Array(40).fill('--method-x val').join(' ') + ` ${dangerousPath}`,
+    ];
+    for (const cmd of shapes) {
+      const t0 = process.hrtime.bigint();
+      const found = findMergeInvocations(cmd);
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      expect(found.length).toBeGreaterThan(0); // a real merge path — must block
+      expect(ms).toBeLessThan(50);
+    }
   });
 });

@@ -525,9 +525,16 @@ export function registerGeminiBeforeTool(cwd: string): HookInstallerResult[] {
 
 /**
  * Classify the managed Gemini BeforeTool `.cjs` artifact for the atomicity gate
- * (codex round-3 finding 2): `owned` (present + the totem marker opens it — safe to
- * register in settings), `foreign` (present but not totem-owned — a user allow-all, a
- * zero-byte stub, or an UNREADABLE file we cannot verify → never bless), or `absent`.
+ * (codex round-3 finding 2, delta-3 fix): `owned` (present + a BOUNDED totem-owned
+ * whole file — the marker opens it AND the end marker closes it, safe to register in
+ * settings), `foreign` (present but not bounded-owned — a user allow-all, a zero-byte
+ * stub, a marker-headed-but-UNBOUNDED/truncated file, or an UNREADABLE file we cannot
+ * verify → never bless), or `absent`. Uses the SAME bounded whole-file predicate as
+ * the roster regeneration (`isBoundedOwnedFile`, both markers): a file that merely
+ * OPENS with the marker but lacks the end marker (e.g. a truncated hand-edit ending in
+ * `process.exit(0)` — an allow-all) is declined here exactly as the roster declines to
+ * repair it, instead of being blessed + reported "Armed" on the opening marker alone
+ * (codex delta-3 fresh BLOCKING — arming an allow-all hook that lets a merge through).
  */
 function classifyManagedGeminiCjs(cjsPath: string): 'owned' | 'foreign' | 'absent' {
   if (!fs.existsSync(cjsPath)) return 'absent';
@@ -538,7 +545,7 @@ function classifyManagedGeminiCjs(cjsPath: string): 'owned' | 'foreign' | 'absen
   } catch {
     return 'foreign';
   }
-  return markerOpensFile(content, TOTEM_FILE_MARKER) ? 'owned' : 'foreign';
+  return isBoundedOwnedFile(content, TOTEM_FILE_MARKER, TOTEM_FILE_END) ? 'owned' : 'foreign';
 }
 
 /**
@@ -560,7 +567,7 @@ function registerGeminiSettingsIfArmed(cwd: string): HookInstallerResult {
       err:
         ownership === 'absent'
           ? `Not registering the Gemini BeforeTool hook: ${GEMINI_BEFORE_TOOL_REL} is not installed — run \`totem init\` to install it. Settings left unchanged (not armed).`
-          : `Not registering the Gemini BeforeTool hook: ${GEMINI_BEFORE_TOOL_REL} exists but is not a totem-owned artifact (cannot verify — user-owned, empty, or unreadable). Resolve it, then run \`totem hook install --force\`. Settings left unchanged (not armed).`,
+          : `Not registering the Gemini BeforeTool hook: ${GEMINI_BEFORE_TOOL_REL} exists but is not a bounded totem-owned artifact (cannot verify — user-owned, empty, marker-headed-but-unbounded/truncated, or unreadable). Resolve it, then run \`totem hook install --force\`. Settings left unchanged (not armed).`,
     };
   }
   const result = scaffoldGeminiBeforeToolSettings(path.join(cwd, '.gemini', 'settings.json'));

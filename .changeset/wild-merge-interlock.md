@@ -8,10 +8,11 @@ feat(autoclose): A+B slice of the GitHub auto-close enforcement seam (mmnto-ai/t
 Adds the harness-boundary raw-merge interlock (A) and the sanctioned
 `totem pr merge` actuator (B), both consuming the ONE shared evaluator.
 
-- **core**: new `MERGE_COMMAND_REGEX_SOURCE` + `findMergeInvocations` in
-  `autoclose/command-matcher.ts` — a presence-invariant, deny-on-undecidable
-  detector for raw `gh pr merge` / `gh api …/pulls/{n}/merge` /
-  `gh pr $(…)` invocations, tolerant of common (incl. PowerShell) quoting,
+- **core**: new `MERGE_COMMAND_REGEX_SOURCE` + `API_ANCHOR_SOURCE` +
+  `findMergeInvocations` / `findApiMergePaths` in `autoclose/command-matcher.ts` — a
+  presence-invariant, deny-on-undecidable detector for raw `gh pr merge` /
+  `gh api …/pulls/{n}/merge` / `gh pr $(…)` invocations, tolerant of common (incl.
+  PowerShell) quoting,
   interspersed flags (`gh --repo o/r pr merge`), shell/cmd line continuations,
   variable/substitution merge-API paths, and the GraphQL `mergePullRequest`
   mutation — while never over-firing on `gh pr view` or across a shell separator.
@@ -33,8 +34,8 @@ Round-2 hardening of the raw-merge detector (mmnto-ai/totem#1762 re-review): the
 FLAGRUN construction was rebuilt to be provably LINEAR — the earlier flag-name
 shape let each repeated flag group parse two ways, so a non-matching `gh` command
 with ~26 flag groups backtracked catastrophically (multi-second) inside every
-shell interlock; the disjoint-class rebuild plus a bounded merge-path span scan an
-adversarial 40-group / 152 KB input in well under 50 ms (asserted by perf
+shell interlock; the disjoint-class rebuild plus a single-pass merge-path scanner
+scan an adversarial 40-group / 152 KB input in well under 50 ms (asserted by perf
 fixtures). Detection coverage also widened to close bypasses: quoted `=value`
 flags (`--repo='o/r'`, `--repo="$REPO"`), glued short-flag values
 (`-Rowner/name`), cmd.exe `%PR%` / `!PR!` variable merge-API paths, a wholly
@@ -61,6 +62,15 @@ registered only when a managed, totem-owned `BeforeTool.cjs` is actually present
 an absent, user-owned allow-all, zero-byte, or unreadable `.cjs` is never blessed
 and reported armed — and a legacy + canonical coexistence collapses to exactly one
 registration.
+
+Delta-4 hardening: the raw merge-API path detection moved from a bounded `{0,2000}?`
+regex span — whose length cap let a `gh api` header padded past ~2 KB slip a real
+`…/pulls/{n}/merge` past the interlock — to a linear single-pass scanner
+(`findApiMergePaths`, inlined verbatim into both hosts and byte-locked by the parity
+test) with no length-based allow, so the padded form now blocks like the bare form.
+The Gemini arming gate also now uses the same bounded whole-file ownership predicate
+as the roster (both markers), so a marker-headed-but-unbounded/truncated allow-all
+`.cjs` is declined instead of blessed and reported armed.
 
 Notes for changelog readers: examples use digitless placeholders such as a
 `Closes #NNN` shape only; the guard blocks a close-keyword adjacent to a real

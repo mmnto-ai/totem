@@ -449,8 +449,11 @@ export async function prMergeCommand(
     );
     if (opts.closeDeclared && declaredRefs.length > 0) {
       // --close-declared was requested but NONE of the closes ran — a PARTIAL FAILURE,
-      // not a success. Exit non-zero, name the deferred targets, and give a re-run path
-      // (automation must never read this as all-actions-success — codex round-2).
+      // not a success. Exit non-zero, name the deferred targets, and give the VALID
+      // MANUAL close commands — NOT a `--close-declared` re-run path: the pre-merge
+      // guard rejects an already-MERGED PR (state !== OPEN) before the close phase, so
+      // re-running is impossible once the merge lands (automation must never read this
+      // as all-actions-success — codex round-2).
       err(
         `[totem pr merge] ${declaredRefs.length} declared close(s) were NOT executed (landing ` +
           'state unconfirmed): ' +

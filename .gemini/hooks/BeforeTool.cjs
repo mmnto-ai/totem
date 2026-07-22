@@ -40,8 +40,116 @@ const BARE_REF_REGEX_SOURCE = "(?<!\\b[\\w-]+/[\\w-]+)#(\\d+)(?![-\\w])";
 // inlined for the rendered standalone hook the way BARE_REF_REGEX_SOURCE is.
 const AUTO_CLOSE_REGEX_SOURCE = "\\b(?:closed|closes|close|fixed|fixes|fix|resolved|resolves|resolve)\\b(?:\\s*:\\s*|\\s+)(?:https?://github\\.com/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/(?:issues|pull)/(\\d+)|([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)#(\\d+)|#(\\d+))";
 // Single-sourced from @mmnto/totem's MERGE_COMMAND_REGEX_SOURCE (mmnto-ai/totem#1762
-// A-slice); inlined the same way. The raw-merge interlock's ONE detector.
-const MERGE_COMMAND_REGEX_SOURCE = "(?<![\\w-])gh(?:\\.exe)?(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+(?:(pr\\b(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+merge)(?![\\w-])|(api\\b(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?/(?:(?:\\\\|\\^)\\r?\\n)*p(?:(?:\\\\|\\^)\\r?\\n)*u(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n)*s(?:(?:\\\\|\\^)\\r?\\n)*/(?:(?:\\\\|\\^)\\r?\\n)*\\d+(?:(?:\\\\|\\^)\\r?\\n)*/(?:(?:\\\\|\\^)\\r?\\n)*m(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*r(?:(?:\\\\|\\^)\\r?\\n)*g(?:(?:\\\\|\\^)\\r?\\n)*e)(?![\\w-])|(pr\\b(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)*(?:\\$|`))|(api\\b(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)*(?:\\$|`|%|!)|api\\b(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?(?:\\$|`|%|!)(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?/(?:(?:\\\\|\\^)\\r?\\n)*m(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*r(?:(?:\\\\|\\^)\\r?\\n)*g(?:(?:\\\\|\\^)\\r?\\n)*e\\b)|(api\\b(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?g(?:(?:\\\\|\\^)\\r?\\n)*r(?:(?:\\\\|\\^)\\r?\\n)*a(?:(?:\\\\|\\^)\\r?\\n)*p(?:(?:\\\\|\\^)\\r?\\n)*h(?:(?:\\\\|\\^)\\r?\\n)*q(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?m(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*r(?:(?:\\\\|\\^)\\r?\\n)*g(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*P(?:(?:\\\\|\\^)\\r?\\n)*u(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n)*R(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*q(?:(?:\\\\|\\^)\\r?\\n)*u(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*s(?:(?:\\\\|\\^)\\r?\\n)*t)(?![\\w-]))";
+// A-slice); inlined the same way — the regex arms (gh pr merge / gh pr $sub / gh api
+// $endpoint). The raw merge-API PATHS are the single-pass scanner below.
+const MERGE_COMMAND_REGEX_SOURCE = "(?<![\\w-])gh(?:\\.exe)?(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+(?:(pr\\b(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+merge)(?![\\w-])|(pr\\b(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)*(?:\\$|`))|(api\\b(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)*(?:\\$|`|%|!)))";
+// The gh..api anchor + the single-pass merge-API path scanner, inlined verbatim from
+// @mmnto/totem (API_ANCHOR_SOURCE + findApiMergePaths). Closes the padding bypass
+// (codex delta-3 #3): a literal /pulls/{n}/merge, a variable REST merge, and the
+// graphql mergePullRequest mutation are detected with NO length-based allow.
+const MERGE_API_ANCHOR_SOURCE = "(?<![\\w-])gh(?:\\.exe)?(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+api\\b";
+function isMergeWordChar(ch) {
+  return (
+    ch !== undefined &&
+    ((ch >= 'a' && ch <= 'z') ||
+      (ch >= 'A' && ch <= 'Z') ||
+      (ch >= '0' && ch <= '9') ||
+      ch === '_' ||
+      ch === '-')
+  );
+}
+
+// Classify one command SEGMENT's post-api region for a raw merge-API path. region /
+// regionLower are folded.slice(apiEnd, segEnd) and its lowercase twin (continuations
+// removed, no ;|& or newline inside). Source-ordered: literal /pulls/<n>/merge, else a
+// variable segment then /merge (undecidable), else graphql mergePullRequest.
+function classifyApiMergeRegion(region, regionLower) {
+  for (let p = regionLower.indexOf('/pulls/'); p !== -1; p = regionLower.indexOf('/pulls/', p + 1)) {
+    let q = p + 7;
+    let sawDigit = false;
+    while (q < regionLower.length && regionLower[q] >= '0' && regionLower[q] <= '9') {
+      q++;
+      sawDigit = true;
+    }
+    if (sawDigit && regionLower.slice(q, q + 6) === '/merge' && !isMergeWordChar(regionLower[q + 6])) {
+      return 'gh-api-merge';
+    }
+  }
+  for (let v = 0; v < region.length; v++) {
+    const ch = region[v];
+    if (ch === '$' || ch === '`' || ch === '%' || ch === '!') {
+      const mIdx = regionLower.indexOf('/merge', v);
+      if (mIdx !== -1 && !isMergeWordChar(regionLower[mIdx + 6])) return 'gh-api-undecidable';
+      break;
+    }
+  }
+  const gq = regionLower.indexOf('graphql');
+  if (gq !== -1) {
+    const mpr = regionLower.indexOf('mergepullrequest', gq + 7);
+    if (mpr !== -1 && !isMergeWordChar(regionLower[mpr + 16])) return 'gh-api-merge';
+  }
+  return null;
+}
+
+// Single left-to-right pass for the raw merge-API paths. De-fold shell (backslash+LF)
+// / cmd.exe (^+LF) continuations once, then per command segment scan the FIRST gh..api
+// anchor and one bounded in-segment literal scan — NO length-based allow, NO O(k*n)
+// rescan (mmnto-ai/totem#1762 delta-4).
+function findApiMergePaths(command) {
+  const out = [];
+  if (typeof command !== 'string' || command.length === 0) return out;
+  let folded = '';
+  const map = [];
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    const d = command[i + 1];
+    if ((c === '\\' || c === '^') && (d === '\n' || (d === '\r' && command[i + 2] === '\n'))) {
+      i += d === '\r' ? 2 : 1;
+      continue;
+    }
+    folded += c;
+    map.push(i);
+  }
+  const lower = folded.toLowerCase();
+  const anchor = new RegExp(MERGE_API_ANCHOR_SOURCE, 'gi');
+  let a;
+  while ((a = anchor.exec(folded)) !== null) {
+    const apiEnd = a.index + a[0].length;
+    let segEnd = apiEnd;
+    while (segEnd < folded.length && ';|&\r\n'.indexOf(folded[segEnd]) === -1) segEnd++;
+    const form = classifyApiMergeRegion(folded.slice(apiEnd, segEnd), lower.slice(apiEnd, segEnd));
+    if (form !== null) out.push({ form: form, index: map[a.index] == null ? 0 : map[a.index] });
+    anchor.lastIndex = segEnd;
+  }
+  return out;
+}
+
+// Every recognizable raw-merge invocation: the regex arms (gh pr merge / gh pr sub /
+// gh api var-endpoint) plus the linear merge-API path scan. Empty => allow (bounded claim).
+function findMergeInvocations(command) {
+  if (typeof command !== 'string' || command.length === 0) return [];
+  const out = [];
+  const re = new RegExp(MERGE_COMMAND_REGEX_SOURCE, 'gi');
+  for (const m of command.matchAll(re)) {
+    let form;
+    if (m[1] !== undefined) form = 'gh-pr-merge';
+    else if (m[2] !== undefined) form = 'gh-pr-undecidable';
+    else form = 'gh-api-undecidable';
+    out.push({ form: form, index: m.index == null ? 0 : m.index });
+  }
+  const paths = findApiMergePaths(command);
+  for (let j = 0; j < paths.length; j++) out.push(paths[j]);
+  out.sort(function (x, y) { return x.index - y.index; });
+  return out;
+}
+
+// True when at least one detected invocation is a RECOGNIZABLE raw merge (vs a
+// deny-on-undecidable variable/substitution) — selects the block message.
+function hasRecognizableMerge(invocations) {
+  return invocations.some(function (i) {
+    return i.form === 'gh-pr-merge' || i.form === 'gh-api-merge';
+  });
+}
 const SCOPED_PATH_RE = /(\.handoff[\\\/]|\.journal[\\\/]|\.md$)/i;
 const MD_PATH_RE = /\.md$/i;
 // EXEMPT .github/** (intentional close keywords) and .totem/** (tool/agent-authored
@@ -133,17 +241,15 @@ function checkXrepoQualifyRefs(toolName, toolInput) {
 // run_shell_command bypasses the sanctioned `totem pr merge` actuator (which asserts
 // merge-config posture + auto-close safety before merging squash-only, no body
 // flags). Presence-invariant, deny-on-undecidable. The stderr message branches on
-// the matched arm (groups 3/4 = deny-on-undecidable; else a recognizable raw merge)
-// — the group indices live in the inlined pattern, no core import (kimi NB-4).
-// Returns a block message (string) or null (allow).
+// the detected forms (all deny-on-undecidable => rewrite plainly; any recognizable
+// raw merge => reroute), no core import (kimi NB-4). Returns a block message or null.
 function checkMergeInterlock(toolName, toolInput) {
   if (toolName !== 'run_shell_command') return null;
   const command = shellCommandOf(toolInput);
   if (command.length === 0) return null;
-  const re = new RegExp(MERGE_COMMAND_REGEX_SOURCE, 'gi');
-  const m = re.exec(command);
-  if (m === null) return null;
-  if (m[3] !== undefined || m[4] !== undefined) {
+  const invocations = findMergeInvocations(command);
+  if (invocations.length === 0) return null;
+  if (!hasRecognizableMerge(invocations)) {
     return (
       '[totem BeforeTool] could not decide the gh subcommand ' +
       '(substitution/variable after `gh pr` / `gh api`); rewrite the command plainly ' +

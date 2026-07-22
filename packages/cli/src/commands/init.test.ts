@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
 import {
+  API_ANCHOR_SOURCE,
   AUTO_CLOSE_REGEX_SOURCE,
   LedgerEventSchema,
   MERGE_COMMAND_REGEX_SOURCE,
@@ -56,12 +57,14 @@ import {
   GEMINI_SESSION_START,
   generateConfigForFormat,
   LEGACY_GEMINI_BEFORE_TOOL_SHAPES,
+  MERGE_INTERLOCK_SCANNER_JS,
   REVIEW_LOOP_SKILL_CONTENT,
   REVIEW_REPLY_SKILL_CONTENT,
   SIGNOFF_SKILL_CONTENT,
   SIGNON_SKILL_CONTENT,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
+  TOTEM_FILE_MARKER,
 } from './init-templates.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
@@ -1403,6 +1406,13 @@ describe('CLAUDE_MERGE_INTERLOCK template (mmnto-ai/totem#1762 A-slice)', () => 
     expect(CLAUDE_MERGE_INTERLOCK).toContain(JSON.stringify(MERGE_COMMAND_REGEX_SOURCE));
   });
 
+  it('inlines the shared API_ANCHOR_SOURCE + the single-pass scanner (delta-4 padding close)', () => {
+    expect(CLAUDE_MERGE_INTERLOCK).toContain(JSON.stringify(API_ANCHOR_SOURCE));
+    expect(CLAUDE_MERGE_INTERLOCK).toContain(MERGE_INTERLOCK_SCANNER_JS);
+    // The capped `{0,2000}?` span is gone — the merge-API paths are the linear scan.
+    expect(CLAUDE_MERGE_INTERLOCK).not.toContain('{0,2000}');
+  });
+
   it('documents the exit-code contract (0=allow/fail-soft, 2=block) and names the actuator', () => {
     expect(CLAUDE_MERGE_INTERLOCK).toMatch(/0\s*=.*allow/i);
     expect(CLAUDE_MERGE_INTERLOCK).toMatch(/2\s*=.*block/i);
@@ -1586,6 +1596,26 @@ describe('MergeInterlock runtime behavior (mmnto-ai/totem#1762 A-slice)', () => 
       tool_input: { command: 'gh api /user; echo /pulls/5/merge' },
     });
     expect(r.exitCode).toBe(0);
+  });
+
+  // mmnto-ai/totem#1762 delta-4: the padding bypass close. A `gh api` header padded
+  // past the old ~2000-char cap slipped a real `…/pulls/{n}/merge` past the interlock
+  // (exit 0). The linear scanner has NO length-based allow — the padded form now
+  // BLOCKS exactly like the bare/under-cap forms, and a benign over-length filler with
+  // no merge path still allows (no over-fire).
+  it('exits 2 on a gh api merge path however far the header is padded (padding bypass closed)', () => {
+    const dangerous = 'repos/o/r/pulls/5/merge';
+    for (const pad of [1800, 2100, 4000]) {
+      const command = `gh api -H "X-Fill: ${'a'.repeat(pad)}" ${dangerous} -X PUT`;
+      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
+      expect(r.exitCode, `pad=${pad} must block`).toBe(2);
+    }
+    // A long separator-free filler with NO merge path still allows (bounded claim).
+    const benign = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: `gh api ${'a'.repeat(4000)} endpoint-no-merge` },
+    });
+    expect(benign.exitCode).toBe(0);
   });
 
   // mmnto-ai/totem#2471 was the specimen raw `gh pr merge … --subject … --body …`
@@ -2239,6 +2269,12 @@ describe('GEMINI_BEFORE_TOOL write_file/replace extension', () => {
     expect(GEMINI_BEFORE_TOOL).toContain(JSON.stringify(MERGE_COMMAND_REGEX_SOURCE));
   });
 
+  it('inlines the shared API_ANCHOR_SOURCE + the single-pass scanner (delta-4 padding close)', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain(JSON.stringify(API_ANCHOR_SOURCE));
+    expect(GEMINI_BEFORE_TOOL).toContain(MERGE_INTERLOCK_SCANNER_JS);
+    expect(GEMINI_BEFORE_TOOL).not.toContain('{0,2000}');
+  });
+
   it('wires the merge interlock into beforeTool and names the actuator', () => {
     expect(GEMINI_BEFORE_TOOL).toContain('checkMergeInterlock(toolName, toolInput)');
     expect(GEMINI_BEFORE_TOOL).toContain('totem pr merge');
@@ -2424,6 +2460,20 @@ describe('GEMINI_BEFORE_TOOL merge-interlock runtime (mmnto-ai/totem#1762 A-slic
   it('does NOT block the separator false-positive `gh api /user; echo /pulls/5/merge` (Greptile P2)', () => {
     const r = runBeforeTool('run_shell_command', { command: 'gh api /user; echo /pulls/5/merge' });
     expect(r.exitCode).toBe(0);
+  });
+
+  it('blocks a gh api merge path however far the header is padded (padding bypass closed)', () => {
+    const dangerous = 'repos/o/r/pulls/5/merge';
+    for (const pad of [1800, 2100, 4000]) {
+      const r = runBeforeTool('run_shell_command', {
+        command: `gh api -H "X-Fill: ${'a'.repeat(pad)}" ${dangerous} -X PUT`,
+      });
+      expect(r.exitCode, `pad=${pad} must block`).toBe(2);
+    }
+    const benign = runBeforeTool('run_shell_command', {
+      command: `gh api ${'a'.repeat(4000)} endpoint-no-merge`,
+    });
+    expect(benign.exitCode).toBe(0);
   });
 });
 
@@ -2798,6 +2848,10 @@ describe('registerGeminiBeforeTool atomicity (codex round-3 finding 2)', () => {
     return c.hooks.BeforeTool.flatMap((e) => e.hooks.map((h) => h.command));
   };
   const ALLOW_ALL_CJS = "'use strict';\nprocess.exit(0);\n"; // user-owned, no totem marker
+  // Marker-headed but UNBOUNDED (no TOTEM_FILE_END) and allow-all — the codex delta-3
+  // fresh BLOCKING case. markerOpensFile() is TRUE (the old gate blessed it), but it is
+  // NOT a bounded totem-owned whole file, so the arming gate must decline it.
+  const MARKER_OPEN_UNBOUNDED_CJS = `${TOTEM_FILE_MARKER} — Gemini CLI BeforeTool hook\n'use strict';\nprocess.exit(0);\n`;
 
   it('sub-case 1: does NOT bless a readable user-owned allow-all `.cjs` (managed legacy `.js` present)', () => {
     // A managed legacy `.js` + settings pointing at it + a readable user-owned allow-all
@@ -2905,6 +2959,26 @@ describe('registerGeminiBeforeTool atomicity (codex round-3 finding 2)', () => {
     const settings = results.find((r) => r.file.includes('settings.json'));
     expect(settings?.action).toBe('created');
     expect(registeredCommands()).toContain('node .gemini/hooks/BeforeTool.cjs');
+  });
+
+  it('sub-case 5: a marker-headed but UNBOUNDED allow-all `.cjs` is NOT blessed/Armed (codex delta-3)', () => {
+    // The fresh BLOCKING boundary mismatch: the arming gate classified ownership by the
+    // OPENING marker only (markerOpensFile), while the roster regeneration correctly
+    // uses bounded whole-file ownership (isBoundedOwnedFile — both markers) and declines
+    // to repair a marker-opened-but-unbounded file. A truncated/hand-edited `.cjs` that
+    // OPENS with the marker, LACKS TOTEM_FILE_END, and ends in `process.exit(0)` (allow-
+    // all) was still registered + reported Armed — arming a hook that lets a dangerous
+    // `gh pr merge` through. The gate must use the SAME bounded predicate as the roster.
+    fs.mkdirSync(path.dirname(cjsPath()), { recursive: true });
+    fs.writeFileSync(cjsPath(), MARKER_OPEN_UNBOUNDED_CJS, 'utf-8'); // no legacy `.js`
+    const results = registerGeminiBeforeTool(tmpDir);
+    const settings = results.find((r) => r.file.includes('settings.json'));
+    // Honest skip-with-error, exactly like the other unowned cases — never Armed.
+    expect(settings?.action).toBe('skipped');
+    expect(settings?.err).toBeTruthy();
+    // The unverifiable `.cjs` is preserved (never clobbered) and never blessed.
+    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(MARKER_OPEN_UNBOUNDED_CJS);
+    expect(fs.existsSync(settingsPath())).toBe(false);
   });
 });
 

@@ -20,7 +20,13 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { CLAUDE_MERGE_INTERLOCK, GEMINI_BEFORE_TOOL } from './init-templates.js';
+import { API_ANCHOR_SOURCE } from '@mmnto/totem';
+
+import {
+  CLAUDE_MERGE_INTERLOCK,
+  GEMINI_BEFORE_TOOL,
+  MERGE_INTERLOCK_SCANNER_JS,
+} from './init-templates.js';
 
 /**
  * Walk up from this test file until the repo root that carries the committed
@@ -56,5 +62,40 @@ describe('committed merge-interlock hook artifacts match their templates (mmnto-
       'utf-8',
     );
     expect(committed).toBe(GEMINI_BEFORE_TOOL);
+  });
+
+  // mmnto-ai/totem#1762 delta-4: the padding bypass close replaced the bounded
+  // `{0,2000}?` regex span with the single-pass MERGE_INTERLOCK_SCANNER_JS. Byte-lock
+  // the INLINED SCANNER (not just the regex) in BOTH committed artifacts, so a scanner
+  // edit without a regenerate — or a scanner that drifts between the two hosts — fails
+  // CI the way the round-3 Claude-host regex drift now does.
+  it('both committed artifacts inline the SAME MERGE_INTERLOCK_SCANNER_JS scanner block', () => {
+    const claude = fs.readFileSync(
+      path.join(REPO_ROOT, '.totem', 'hooks', 'merge-interlock.cjs'),
+      'utf-8',
+    );
+    const gemini = fs.readFileSync(
+      path.join(REPO_ROOT, '.gemini', 'hooks', 'BeforeTool.cjs'),
+      'utf-8',
+    );
+    // The single-source scanner is present verbatim in each armed host…
+    expect(claude).toContain(MERGE_INTERLOCK_SCANNER_JS);
+    expect(gemini).toContain(MERGE_INTERLOCK_SCANNER_JS);
+    // …and its detection is the linear scan, not a length-capped span.
+    expect(MERGE_INTERLOCK_SCANNER_JS).toContain('function findApiMergePaths(command)');
+    expect(MERGE_INTERLOCK_SCANNER_JS).not.toContain('{0,2000}');
+  });
+
+  it('both committed artifacts inline the core API_ANCHOR_SOURCE (drift-locked to core)', () => {
+    const claude = fs.readFileSync(
+      path.join(REPO_ROOT, '.totem', 'hooks', 'merge-interlock.cjs'),
+      'utf-8',
+    );
+    const gemini = fs.readFileSync(
+      path.join(REPO_ROOT, '.gemini', 'hooks', 'BeforeTool.cjs'),
+      'utf-8',
+    );
+    expect(claude).toContain(JSON.stringify(API_ANCHOR_SOURCE));
+    expect(gemini).toContain(JSON.stringify(API_ANCHOR_SOURCE));
   });
 });

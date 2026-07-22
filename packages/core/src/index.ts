@@ -1240,12 +1240,14 @@ export type {
   ReconcileStatus,
 } from './autoclose/index.js';
 export {
+  API_ANCHOR_SOURCE,
   AUTO_CLOSE_KEYWORDS,
   AUTO_CLOSE_RECEIPT_SCHEMA_VERSION,
   AUTO_CLOSE_REGEX_SOURCE,
   autoCloseKeyForms,
   buildReceipt,
   evaluateMergeConfigPosture,
+  findApiMergePaths,
   findAutoCloseRefs,
   findMergeInvocations,
   MERGE_COMMAND_REGEX_SOURCE,
