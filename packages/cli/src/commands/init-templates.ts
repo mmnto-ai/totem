@@ -162,12 +162,27 @@ const AUTO_CLOSE_REGEX_SOURCE =
 // cold-start / module-top-level constraint as AUTO_CLOSE_REGEX_SOURCE above), drift-
 // LOCKED by the init.test.ts assertions that render the templates and assert each
 // inlines `JSON.stringify(<core MERGE_COMMAND_REGEX_SOURCE>)`. Update BOTH together.
-// Built from the SAME SEP + FLAGRUN fragments as core so the string value is
-// byte-identical (parity test is the backstop).
+// Built from the SAME fragments as core so the string value is byte-identical
+// (parity test is the backstop). Kept in lockstep with core's command-matcher.ts:
+//   - flag NAME `-{1,2}[\w]…` (word char required after the dashes so `-{1,2}` and
+//     the name never overlap on `-` — the disjoint-class construction that removed
+//     the catastrophic backtracking, codex round-2 BLOCKING);
+//   - a GLUED short-flag tail (`-Rmmnto-ai/totem`; kimi round-2 BLOCKING-4);
+//   - quoted `=value` forms + `;|&` separator exclusion (codex round-2 findings 2+5);
+//   - `$`/backtick/`%`/`!` merge-API variable shapes (codex round-2);
+//   - a BOUNDED, continuation-aware span (`{0,2000}?`) + continuation-threaded
+//     merge-path literals (kimi round-2 BLOCKING-5 + NB-1).
 const MERGE_SEP = '(?:[\'"\\s]|(?:\\\\|\\^)\\r?\\n)';
-const MERGE_FLAGRUN =
-  '(?:' + MERGE_SEP + '+-{1,2}[\\w-]+(?:=[^\\s\'"]+|' + MERGE_SEP + '+[^\\s\'"-][^\\s\'"]*)?)*';
-const MERGE_NOSEP = '[^;|&\\r\\n]';
+const MERGE_CONT = '(?:(?:\\\\|\\^)\\r?\\n)*';
+const MERGE_NOSEP_UNIT = '(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n])';
+const MERGE_NOSEP = MERGE_NOSEP_UNIT + '{0,2000}?';
+const MERGE_FLAGVAL =
+  '(?:=(?:\'[^\']*\'|"[^"]*"|[^\\s\'";|&]*)|' + MERGE_SEP + '+[^\\s\'";|&-][^\\s\'";|&]*)?';
+const MERGE_FLAGTOKEN = '-{1,2}[\\w][^\\s\'";|&=]*' + MERGE_FLAGVAL;
+const MERGE_FLAGRUN = '(?:' + MERGE_SEP + '+' + MERGE_FLAGTOKEN + ')*';
+const MERGE_VARLEAD = '(?:\\$|`)';
+const MERGE_APIVARLEAD = '(?:\\$|`|%|!)';
+const mergeContLit = (literal: string): string => literal.split('').join(MERGE_CONT);
 const MERGE_COMMAND_REGEX_SOURCE =
   '(?<![\\w-])gh(?:\\.exe)?' +
   MERGE_FLAGRUN +
@@ -180,22 +195,34 @@ const MERGE_COMMAND_REGEX_SOURCE =
   '+merge)(?![\\w-])' +
   '|(api\\b' +
   MERGE_NOSEP +
-  '*?/pulls/\\d+/merge)(?![\\w-])' +
+  mergeContLit('/pulls/') +
+  MERGE_CONT +
+  '\\d+' +
+  MERGE_CONT +
+  mergeContLit('/merge') +
+  ')(?![\\w-])' +
   '|(pr\\b' +
   MERGE_SEP +
-  '*(?:\\$|`))' +
+  '*' +
+  MERGE_VARLEAD +
+  ')' +
   '|(api\\b' +
+  MERGE_FLAGRUN +
   MERGE_SEP +
-  '*(?:\\$|`)|api\\b' +
+  '*' +
+  MERGE_APIVARLEAD +
+  '|api\\b' +
   MERGE_NOSEP +
-  '*?(?:\\$|`)' +
+  MERGE_APIVARLEAD +
   MERGE_NOSEP +
-  '*?/merge\\b)' +
+  mergeContLit('/merge') +
+  '\\b)' +
   '|(api\\b' +
   MERGE_NOSEP +
-  '*?graphql' +
+  mergeContLit('graphql') +
   MERGE_NOSEP +
-  '*?mergePullRequest)(?![\\w-])' +
+  mergeContLit('mergePullRequest') +
+  ')(?![\\w-])' +
   ')';
 
 // --- Gemini CLI hook templates ---
@@ -269,11 +296,13 @@ export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI Befo
 //     see; note \`\$GH pr merge\` DOES block and \`gh pr \$(…)\` is denied-on-undecidable —
 //     remain unclaimed; D1 (PR-time check) + D2 (post-merge) are the loud backstop.
 //
-// NOTE: like its sibling .gemini/hooks/SessionStart.js this file is \`.js\` + CommonJS
-// \`require\`. In a consumer repo whose package.json is \`"type": "module"\` a bare
-// \`node BeforeTool.js\` resolves as ESM (a family-wide property of .gemini/hooks/*.js,
-// not introduced by this slice); a \`.cjs\` migration for the whole family is tracked
-// separately.
+// NOTE: this hook ships as \`.cjs\` (NOT \`.js\`) so a consumer repo whose package.json
+// is \`"type": "module"\` still execs it as CommonJS. A bare \`node BeforeTool.js\` in a
+// module-type repo resolves as ESM and throws \`ReferenceError: require is not defined\`
+// BEFORE reading stdin; Gemini treats a non-0/non-2 exit as a warning and lets the
+// merge THROUGH (a crash-open). The \`.cjs\` extension makes the interlock fail-CLOSED
+// regardless of the consumer's package \`type\` (codex round-2 BLOCKING-4a). Its sibling
+// .gemini/hooks/SessionStart.js is still \`.js\` (advisory briefing, not a safety gate).
 'use strict';
 const { execSync } = require('child_process');
 
@@ -455,8 +484,19 @@ process.stdin.on('end', () => {
 ${TOTEM_FILE_END}
 `;
 
+/**
+ * Repo-relative path of the managed Gemini BeforeTool hook. `.cjs` (NOT `.js`) so a
+ * consumer whose package.json is `"type": "module"` still execs it as CommonJS — an
+ * ESM-resolved `.js` throws `ReferenceError: require is not defined` before reading
+ * stdin, and Gemini lets the merge through (crash-open; codex round-2 BLOCKING-4a).
+ */
+export const GEMINI_BEFORE_TOOL_REL = '.gemini/hooks/BeforeTool.cjs';
+
+/** The pre-`.cjs` path, migrated in place by `adoptLegacyGeminiBeforeTool`. */
+export const GEMINI_BEFORE_TOOL_LEGACY_REL = '.gemini/hooks/BeforeTool.js';
+
 /** Repo-relative command the Gemini BeforeTool settings entry registers. */
-export const GEMINI_BEFORE_TOOL_COMMAND = 'node .gemini/hooks/BeforeTool.js';
+export const GEMINI_BEFORE_TOOL_COMMAND = 'node .gemini/hooks/BeforeTool.cjs';
 
 /**
  * The `.gemini/settings.json` registration for the BeforeTool command hook
@@ -1414,7 +1454,9 @@ export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
     endMarker: TOTEM_FILE_END,
   },
   {
-    rel: '.gemini/hooks/BeforeTool.js',
+    // `.cjs` (not `.js`) so a `"type": "module"` consumer execs it as CommonJS — an
+    // ESM-resolved `.js` crash-opens the merge interlock (codex round-2 BLOCKING-4a).
+    rel: '.gemini/hooks/BeforeTool.cjs',
     content: GEMINI_BEFORE_TOOL,
     marker: TOTEM_FILE_MARKER,
     endMarker: TOTEM_FILE_END,

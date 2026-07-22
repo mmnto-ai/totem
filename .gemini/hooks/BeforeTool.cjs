@@ -25,11 +25,13 @@
 //     see; note `$GH pr merge` DOES block and `gh pr $(…)` is denied-on-undecidable —
 //     remain unclaimed; D1 (PR-time check) + D2 (post-merge) are the loud backstop.
 //
-// NOTE: like its sibling .gemini/hooks/SessionStart.js this file is `.js` + CommonJS
-// `require`. In a consumer repo whose package.json is `"type": "module"` a bare
-// `node BeforeTool.js` resolves as ESM (a family-wide property of .gemini/hooks/*.js,
-// not introduced by this slice); a `.cjs` migration for the whole family is tracked
-// separately.
+// NOTE: this hook ships as `.cjs` (NOT `.js`) so a consumer repo whose package.json
+// is `"type": "module"` still execs it as CommonJS. A bare `node BeforeTool.js` in a
+// module-type repo resolves as ESM and throws `ReferenceError: require is not defined`
+// BEFORE reading stdin; Gemini treats a non-0/non-2 exit as a warning and lets the
+// merge THROUGH (a crash-open). The `.cjs` extension makes the interlock fail-CLOSED
+// regardless of the consumer's package `type` (codex round-2 BLOCKING-4a). Its sibling
+// .gemini/hooks/SessionStart.js is still `.js` (advisory briefing, not a safety gate).
 'use strict';
 const { execSync } = require('child_process');
 
@@ -39,7 +41,7 @@ const BARE_REF_REGEX_SOURCE = "(?<!\\b[\\w-]+/[\\w-]+)#(\\d+)(?![-\\w])";
 const AUTO_CLOSE_REGEX_SOURCE = "\\b(?:closed|closes|close|fixed|fixes|fix|resolved|resolves|resolve)\\b(?:\\s*:\\s*|\\s+)(?:https?://github\\.com/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/(?:issues|pull)/(\\d+)|([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)#(\\d+)|#(\\d+))";
 // Single-sourced from @mmnto/totem's MERGE_COMMAND_REGEX_SOURCE (mmnto-ai/totem#1762
 // A-slice); inlined the same way. The raw-merge interlock's ONE detector.
-const MERGE_COMMAND_REGEX_SOURCE = "(?<![\\w-])gh(?:\\.exe)?(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w-]+(?:=[^\\s'\"]+|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\"-][^\\s'\"]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+(?:(pr\\b(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w-]+(?:=[^\\s'\"]+|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\"-][^\\s'\"]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+merge)(?![\\w-])|(api\\b[^;|&\\r\\n]*?/pulls/\\d+/merge)(?![\\w-])|(pr\\b(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)*(?:\\$|`))|(api\\b(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)*(?:\\$|`)|api\\b[^;|&\\r\\n]*?(?:\\$|`)[^;|&\\r\\n]*?/merge\\b)|(api\\b[^;|&\\r\\n]*?graphql[^;|&\\r\\n]*?mergePullRequest)(?![\\w-]))";
+const MERGE_COMMAND_REGEX_SOURCE = "(?<![\\w-])gh(?:\\.exe)?(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+(?:(pr\\b(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+merge)(?![\\w-])|(api\\b(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?/(?:(?:\\\\|\\^)\\r?\\n)*p(?:(?:\\\\|\\^)\\r?\\n)*u(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n)*s(?:(?:\\\\|\\^)\\r?\\n)*/(?:(?:\\\\|\\^)\\r?\\n)*\\d+(?:(?:\\\\|\\^)\\r?\\n)*/(?:(?:\\\\|\\^)\\r?\\n)*m(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*r(?:(?:\\\\|\\^)\\r?\\n)*g(?:(?:\\\\|\\^)\\r?\\n)*e)(?![\\w-])|(pr\\b(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)*(?:\\$|`))|(api\\b(?:(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+-{1,2}[\\w][^\\s'\";|&=]*(?:=(?:'[^']*'|\"[^\"]*\"|[^\\s'\";|&]*)|(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)+[^\\s'\";|&-][^\\s'\";|&]*)?)*(?:['\"\\s]|(?:\\\\|\\^)\\r?\\n)*(?:\\$|`|%|!)|api\\b(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?(?:\\$|`|%|!)(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?/(?:(?:\\\\|\\^)\\r?\\n)*m(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*r(?:(?:\\\\|\\^)\\r?\\n)*g(?:(?:\\\\|\\^)\\r?\\n)*e\\b)|(api\\b(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?g(?:(?:\\\\|\\^)\\r?\\n)*r(?:(?:\\\\|\\^)\\r?\\n)*a(?:(?:\\\\|\\^)\\r?\\n)*p(?:(?:\\\\|\\^)\\r?\\n)*h(?:(?:\\\\|\\^)\\r?\\n)*q(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n|[^;|&\\r\\n]){0,2000}?m(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*r(?:(?:\\\\|\\^)\\r?\\n)*g(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*P(?:(?:\\\\|\\^)\\r?\\n)*u(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n)*l(?:(?:\\\\|\\^)\\r?\\n)*R(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*q(?:(?:\\\\|\\^)\\r?\\n)*u(?:(?:\\\\|\\^)\\r?\\n)*e(?:(?:\\\\|\\^)\\r?\\n)*s(?:(?:\\\\|\\^)\\r?\\n)*t)(?![\\w-]))";
 const SCOPED_PATH_RE = /(\.handoff[\\\/]|\.journal[\\\/]|\.md$)/i;
 const MD_PATH_RE = /\.md$/i;
 // EXEMPT .github/** (intentional close keywords) and .totem/** (tool/agent-authored

@@ -70,7 +70,7 @@ describe('MANAGED_SESSION_HOOKS roster invariant', () => {
         '.claude/hooks/PreWriteShield.cjs',
         '.claude/hooks/SessionStart.cjs',
         '.claude/hooks/gate-wrapper.cjs',
-        '.gemini/hooks/BeforeTool.js',
+        '.gemini/hooks/BeforeTool.cjs',
         '.gemini/hooks/SessionStart.js',
         '.totem/hooks/merge-interlock.cjs',
         '.totem/prepare.cjs',

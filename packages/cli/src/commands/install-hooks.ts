@@ -1164,6 +1164,25 @@ async function printManagedSessionHookSummary(cwd: string, force?: boolean): Pro
         break;
     }
   }
+
+  // Arm the Gemini BeforeTool interlock on the CONSUMER UPGRADE path too (codex
+  // round-2 4b): the roster regeneration above only regenerates existing hook FILES —
+  // it never runs the `.js`→`.cjs` migration or the `.gemini/settings.json` command
+  // registration, so a pre-existing Gemini consumer stayed unregistered/unmigrated
+  // unless a developer reran interactive `totem init`. `totem hook install` (the
+  // consumer prepare path) now runs the SAME shared arming path init uses. Guarded on
+  // `.gemini/` existence so a repo that never opted into Gemini is skipped silently;
+  // `registerGeminiBeforeTool` is non-corrupting when settings.json is malformed.
+  if (fs.existsSync(path.join(cwd, '.gemini'))) {
+    const { registerGeminiBeforeTool } = await import('./init.js');
+    for (const { file, action, err } of registerGeminiBeforeTool(cwd)) {
+      if (err) {
+        console.error(`[Totem] ${file}: ${err}`);
+      } else if (action === 'merged' || action === 'created') {
+        console.error(`[Totem] Armed Gemini BeforeTool interlock (${file}).`);
+      }
+    }
+  }
 }
 
 // ─── Silent hook upgrade ──────────────────────────────

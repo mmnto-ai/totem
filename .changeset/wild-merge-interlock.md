@@ -29,6 +29,28 @@ Adds the harness-boundary raw-merge interlock (A) and the sanctioned
   inline the shared regex (drift-locked by a parity test) and branch their block
   message on the recognizable-vs-undecidable arm.
 
+Round-2 hardening of the raw-merge detector (mmnto-ai/totem#1762 re-review): the
+FLAGRUN construction was rebuilt to be provably LINEAR — the earlier flag-name
+shape let each repeated flag group parse two ways, so a non-matching `gh` command
+with ~26 flag groups backtracked catastrophically (multi-second) inside every
+shell interlock; the disjoint-class rebuild plus a bounded merge-path span scan an
+adversarial 40-group / 152 KB input in well under 50 ms (asserted by perf
+fixtures). Detection coverage also widened to close bypasses: quoted `=value`
+flags (`--repo='o/r'`, `--repo="$REPO"`), glued short-flag values
+(`-Rowner/name`), cmd.exe `%PR%` / `!PR!` variable merge-API paths, a wholly
+variable `gh api` endpoint, and line-continuations spliced into a merge-API /
+GraphQL path — while a flag value no longer crosses a `;`/`|`/`&` command
+separator.
+
+The Gemini BeforeTool interlock now ships as `.gemini/hooks/BeforeTool.cjs` (was
+`.js`) so a consumer repo whose `package.json` is `"type": "module"` execs it as
+CommonJS instead of ESM-resolving it and crash-opening the merge (a `.js` threw
+`ReferenceError: require is not defined` before reading stdin, which Gemini treats
+as a warning and lets the merge through). The ordinary consumer upgrade path
+(`prepare` → `totem hook install`) now runs the same non-interactive Gemini
+registration + legacy `.js`→`.cjs` migration that `totem init` runs, so an existing
+Gemini consumer is armed on upgrade rather than only after a manual re-init.
+
 Notes for changelog readers: examples use digitless placeholders such as a
 `Closes #NNN` shape only; the guard blocks a close-keyword adjacent to a real
 issue reference in a PR title / squash body.

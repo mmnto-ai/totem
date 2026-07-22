@@ -30,7 +30,10 @@ import {
   CLAUDE_SESSION_START_ENTRY,
   DISTRIBUTED_CLAUDE_SKILLS,
   GEMINI_BEFORE_TOOL,
+  GEMINI_BEFORE_TOOL_COMMAND,
   GEMINI_BEFORE_TOOL_ENTRY,
+  GEMINI_BEFORE_TOOL_LEGACY_REL,
+  GEMINI_BEFORE_TOOL_REL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
   isBoundedOwnedFile,
@@ -328,23 +331,49 @@ export function scaffoldGeminiBeforeToolSettings(filePath: string): {
     }
     const beforeTool = (beforeToolRaw ?? []) as Array<Record<string, unknown>>;
 
-    const already = beforeTool.some((entry) => {
+    // Idempotency + `.js`→`.cjs` migration (codex round-2 4a/4b). Walk the registered
+    // BeforeTool hooks: an entry pointing at the canonical `.cjs` is already installed
+    // (skip); an entry still pointing at the legacy `.js` is MIGRATED in place (rewrite
+    // its command to `.cjs`) so the registration matches the renamed hook file instead
+    // of leaving a stale entry for a deleted `.js`; otherwise append the `.cjs` entry.
+    const cmdOf = (h: unknown): string | undefined => {
+      if (typeof h === 'string') return h;
+      if (h && typeof h === 'object') {
+        const c = (h as { command?: unknown }).command;
+        return typeof c === 'string' ? c : undefined;
+      }
+      return undefined;
+    };
+    // Normalized-identity compares (codex round-2 finding 6): only the canonical
+    // `node <path>` form counts — an inert `echo .gemini/hooks/BeforeTool.cjs` decoy
+    // must NOT suppress installation, and a stale `node …BeforeTool.js` is migrated.
+    const canonicalCjs = normalizeCommandIdentity(GEMINI_BEFORE_TOOL_COMMAND);
+    const canonicalJs = normalizeCommandIdentity('node ' + GEMINI_BEFORE_TOOL_LEGACY_REL);
+    let hasCjs = false;
+    let migrated = false;
+    for (const entry of beforeTool) {
       const hookList = Array.isArray(entry?.hooks) ? (entry.hooks as unknown[]) : [];
-      return hookList.some((h) => {
-        const cmd =
-          typeof h === 'string'
-            ? h
-            : h && typeof h === 'object'
-              ? (h as { command?: unknown }).command
-              : undefined;
-        return typeof cmd === 'string' && cmd.includes('.gemini/hooks/BeforeTool.js');
-      });
-    });
-    if (already) {
+      for (let i = 0; i < hookList.length; i++) {
+        const h = hookList[i];
+        const cmd = cmdOf(h);
+        if (typeof cmd !== 'string') continue;
+        const norm = normalizeCommandIdentity(cmd);
+        if (norm === canonicalCjs) {
+          hasCjs = true;
+        } else if (norm === canonicalJs) {
+          const next = cmd.replace(GEMINI_BEFORE_TOOL_LEGACY_REL, GEMINI_BEFORE_TOOL_REL);
+          if (typeof h === 'string') hookList[i] = next;
+          else (h as { command: string }).command = next;
+          migrated = true;
+        }
+      }
+    }
+    if (hasCjs && !migrated) {
       return { action: 'skipped' };
     }
-
-    hooks.BeforeTool = [...beforeTool, GEMINI_BEFORE_TOOL_ENTRY];
+    if (!hasCjs && !migrated) {
+      hooks.BeforeTool = [...beforeTool, GEMINI_BEFORE_TOOL_ENTRY];
+    }
     parsed.hooks = hooks;
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
     return { action: existed ? 'merged' : 'created' };
@@ -355,72 +384,121 @@ export function scaffoldGeminiBeforeToolSettings(filePath: string): {
 }
 
 /**
- * Marker-adoption migration for the pre-#1762 unowned `.gemini/hooks/BeforeTool.js`
- * (codex B-3c). A legacy totem BeforeTool opens with a `// [totem] …` line but lacks
- * the current managed marker, so `scaffoldFile`'s positional-ownership gate SKIPS it
- * and it never upgrades. If the on-disk file matches a KNOWN prior template shape
- * (whitespace-insensitive), overwrite it in place with the managed template so its
- * bounded ownership takes over; a totem file of an UNRECOGNIZED shape is left
- * untouched with a warning; a non-totem (user) file returns null (scaffoldFile
- * already leaves it alone). Returns a result to surface, or null (nothing to do).
+ * Adopt-and-RENAME migration for the legacy `.gemini/hooks/BeforeTool.js` (codex
+ * B-3c + round-2 4a). The hook now ships as `.cjs` so a `"type": "module"` consumer
+ * execs it as CommonJS (a `.js` ESM-resolves and crash-opens the merge interlock).
+ * This upgrades the OLD `.js`:
+ *   - a managed totem `.js` (the current marker opens it), OR a KNOWN prior markerless
+ *     shape (whitespace-insensitive), is ADOPTED (managed content) AND RENAMED — the
+ *     managed `.cjs` is written and the stale `.js` removed;
+ *   - a totem-authored `.js` of an UNRECOGNIZED shape is left untouched with a warning
+ *     (never clobber unknown user-adjacent content);
+ *   - a non-totem (user) `.js` returns null (the roster no longer manages `.js`, so it
+ *     is simply left alone).
+ * Guarded so an existing user-owned `.cjs` is never clobbered. Returns a result to
+ * surface, or null (nothing to do).
  */
 export function adoptLegacyGeminiBeforeTool(cwd: string): HookInstallerResult | null {
-  const rel = '.gemini/hooks/BeforeTool.js';
-  const filePath = path.join(cwd, rel);
-  if (!fs.existsSync(filePath)) return null;
+  const legacyRel = GEMINI_BEFORE_TOOL_LEGACY_REL;
+  const cjsRel = GEMINI_BEFORE_TOOL_REL;
+  const legacyPath = path.join(cwd, ...legacyRel.split('/'));
+  const cjsPath = path.join(cwd, ...cjsRel.split('/'));
+  if (!fs.existsSync(legacyPath)) return null;
   let existing: string;
   try {
-    existing = fs.readFileSync(filePath, 'utf-8');
-    // totem-context: best-effort read — an unreadable BeforeTool.js means "nothing to migrate" (return null leaves it for scaffoldFile), not a silent swallow of a real fault (Tenet 4).
+    existing = fs.readFileSync(legacyPath, 'utf-8');
+    // totem-context: best-effort read — an unreadable BeforeTool.js means "nothing to migrate" (return null leaves it alone), not a silent swallow of a real fault (Tenet 4).
   } catch {
     return null;
   }
-  // Already the managed template (marker opens it) → scaffoldFile handles refresh.
-  if (markerOpensFile(existing, TOTEM_FILE_MARKER)) return null;
-  // Only consider totem-authored legacy files (open with a `// [totem]` line).
-  if (!existing.trimStart().startsWith('// [totem]')) return null;
+  const isManaged = markerOpensFile(existing, TOTEM_FILE_MARKER);
+  const isTotemAuthored = existing.trimStart().startsWith('// [totem]');
+  // Only totem-authored legacy files are ours to migrate; leave a user file alone.
+  if (!isTotemAuthored) return null;
 
   const norm = normalizeHookWhitespace(existing);
   const isKnownPrior = LEGACY_GEMINI_BEFORE_TOOL_SHAPES.some(
     (shape) => normalizeHookWhitespace(shape) === norm,
   );
-  if (isKnownPrior) {
+  if (isManaged || isKnownPrior) {
+    // Never clobber a user-owned `.cjs` (marker does not open it). Leave both in place.
+    if (fs.existsSync(cjsPath)) {
+      let cjsExisting = '';
+      try {
+        cjsExisting = fs.readFileSync(cjsPath, 'utf-8');
+      } catch {
+        cjsExisting = '';
+      }
+      if (cjsExisting.length > 0 && !markerOpensFile(cjsExisting, TOTEM_FILE_MARKER)) {
+        return {
+          file: cjsRel,
+          action: 'skipped',
+          err: `${cjsRel} exists and is not a totem-owned file — left ${legacyRel} in place. Resolve manually, then run \`totem hook install --force\`.`,
+        };
+      }
+    }
     try {
-      fs.writeFileSync(filePath, GEMINI_BEFORE_TOOL, 'utf-8');
+      fs.mkdirSync(path.dirname(cjsPath), { recursive: true });
+      fs.writeFileSync(cjsPath, GEMINI_BEFORE_TOOL, 'utf-8');
+      fs.rmSync(legacyPath, { force: true });
       // totem-context: intentional — a write failure is surfaced as a returned Result (the err field the caller logs), the established installer posture; never a silent swallow (Tenet 4).
     } catch (err) {
       return {
-        file: rel,
+        file: cjsRel,
         action: 'skipped',
         err: err instanceof Error ? err.message : String(err),
       };
     }
     return {
-      file: rel,
+      file: cjsRel,
       action: 'merged',
-      summaryActionOverride: 'Migrated legacy unowned BeforeTool.js to the managed command hook',
+      summaryActionOverride:
+        'Migrated legacy .gemini/hooks/BeforeTool.js to the managed .cjs command hook',
     };
   }
   return {
-    file: rel,
+    file: legacyRel,
     action: 'skipped',
     err:
-      `${rel} is a totem hook of an unrecognized shape — left unchanged. ` +
-      'Run `totem hook install --force` to adopt the managed version.',
+      `${legacyRel} is a totem hook of an unrecognized shape — left unchanged (and NOT migrated to .cjs). ` +
+      'Run `totem hook install --force` after reviewing to adopt the managed version.',
   };
+}
+
+/**
+ * The SHARED Gemini BeforeTool arming path — legacy `.js`→`.cjs` migration + the
+ * `.gemini/settings.json` command registration — run by BOTH `totem init`
+ * (installGeminiHooks) and `totem hook install` (the managed-roster flow) so an
+ * ordinary consumer upgrade actually arms the Gemini interlock, not just `totem init`
+ * (codex round-2 4b). Idempotent; non-corrupting when settings.json is malformed
+ * (scaffoldGeminiBeforeToolSettings returns skipped+err, never a clobber). The caller
+ * decides whether `.gemini/` should exist — `totem init` creates it; the upgrade path
+ * only calls this when `.gemini/` is already present.
+ */
+export function registerGeminiBeforeTool(cwd: string): HookInstallerResult[] {
+  const results: HookInstallerResult[] = [];
+  const adopted = adoptLegacyGeminiBeforeTool(cwd);
+  if (adopted) results.push(adopted);
+  const geminiSettingsResult = scaffoldGeminiBeforeToolSettings(
+    path.join(cwd, '.gemini', 'settings.json'),
+  );
+  results.push({ file: '.gemini/settings.json (BeforeTool)', ...geminiSettingsResult });
+  return results;
 }
 
 async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
   const results: HookInstallerResult[] = [];
 
-  // Marker-adoption migration FIRST: a pre-#1762 unowned BeforeTool.js is upgraded
-  // in place so the scaffold below sees the managed content (mmnto-ai/totem#1762).
-  const adopted = adoptLegacyGeminiBeforeTool(cwd);
-  if (adopted) results.push(adopted);
+  // Arm the BeforeTool interlock FIRST (legacy `.js`→`.cjs` migration + settings
+  // registration) — the SAME shared path `totem hook install` runs, so init and the
+  // consumer upgrade behave identically (codex round-2 4b). Migrating first means the
+  // scaffold below sees the managed `.cjs` already in place.
+  const registration = registerGeminiBeforeTool(cwd);
 
   // The two whole-file hooks carry the managed end marker (mmnto-ai/totem#2410) so a
   // drifted-but-bounded artifact self-repairs on re-init; the skill is marker-block
-  // replace territory (no end marker threaded here).
+  // replace territory (no end marker threaded here). BeforeTool is `.cjs` (codex
+  // round-2 4a) so a `"type": "module"` consumer execs it as CommonJS.
   const files: Array<{ rel: string; content: string; marker: string; endMarker?: string }> = [
     {
       rel: '.gemini/hooks/SessionStart.js',
@@ -429,7 +507,7 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
       endMarker: TOTEM_FILE_END,
     },
     {
-      rel: '.gemini/hooks/BeforeTool.js',
+      rel: GEMINI_BEFORE_TOOL_REL,
       content: GEMINI_BEFORE_TOOL,
       marker: TOTEM_FILE_MARKER,
       endMarker: TOTEM_FILE_END,
@@ -454,12 +532,9 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
     });
   }
 
-  // Register the BeforeTool command hook in .gemini/settings.json (official Gemini
-  // contract: hooks are registered, not auto-discovered — mmnto-ai/totem#1762).
-  const geminiSettingsResult = scaffoldGeminiBeforeToolSettings(
-    path.join(cwd, '.gemini', 'settings.json'),
-  );
-  results.push({ file: '.gemini/settings.json (BeforeTool)', ...geminiSettingsResult });
+  // The migration + settings registration ran up front via registerGeminiBeforeTool
+  // (the shared arming path). Surface its results after the file scaffolds.
+  results.push(...registration);
 
   return results;
 }
@@ -492,15 +567,32 @@ function hasPreWriteShield(entry: z.infer<typeof HookCommandSchema>): boolean {
 }
 
 /**
+ * Normalize a hook command to its identity for an idempotency compare: trim + collapse
+ * internal whitespace runs to a single space (codex round-2 finding 6). Used to compare
+ * against the canonical `node <path>` form by EXACT identity, so an inert decoy that
+ * merely CONTAINS the path — `echo .totem/hooks/merge-interlock.cjs` — is NOT mistaken
+ * for the real installation and does not suppress it.
+ */
+function normalizeCommandIdentity(cmd: string): string {
+  return cmd.trim().replace(/\s+/g, ' ');
+}
+
+/** The canonical `node <path>` command the merge-interlock entry installs. */
+const CANONICAL_MERGE_INTERLOCK_COMMAND = normalizeCommandIdentity(
+  CLAUDE_MERGE_INTERLOCK_ENTRY.hooks[0]!.command,
+);
+
+/**
  * Check whether a hook entry already installs the CANONICAL merge-interlock hook.
- * Keyed on the canonical command PATH (`.totem/hooks/merge-interlock.cjs`), NOT the
- * bare substring `merge-interlock` (codex NB-2): a user entry such as
- * `node tools/custom-merge-interlock-metrics.cjs` must NOT make scaffolding report
- * "already installed" while the canonical hook is still absent.
+ * Compares NORMALIZED command IDENTITY against the canonical `node
+ * .totem/hooks/merge-interlock.cjs` form, NOT a substring (codex NB-2 + round-2
+ * finding 6): neither a user entry like `node tools/custom-merge-interlock-metrics.cjs`
+ * NOR an inert `echo .totem/hooks/merge-interlock.cjs` decoy counts as installed while
+ * the canonical hook is still absent.
  */
 function hasMergeInterlock(entry: z.infer<typeof HookCommandSchema>): boolean {
   const cmd = typeof entry === 'string' ? entry : entry.command;
-  return cmd.includes('.totem/hooks/merge-interlock.cjs');
+  return normalizeCommandIdentity(cmd) === CANONICAL_MERGE_INTERLOCK_COMMAND;
 }
 
 /** Check whether a hook entry already contains a SessionStart.cjs reference. */

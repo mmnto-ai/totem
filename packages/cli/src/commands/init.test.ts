@@ -30,6 +30,7 @@ import {
   OLLAMA_FLOOR_DEFAULT_BASE_URL,
   probeOllamaFloor,
   REFLEX_VERSION,
+  registerGeminiBeforeTool,
   scaffoldClaudeHooks,
   scaffoldClaudeMergeInterlock,
   scaffoldClaudeSessionStart,
@@ -458,7 +459,7 @@ describe('Gemini hook scaffolding', () => {
       '// [totem] auto-generated\ntest\n',
     );
     const beforeTool = scaffoldFile(
-      path.join(hooksDir, 'BeforeTool.js'),
+      path.join(hooksDir, 'BeforeTool.cjs'),
       '// [totem] auto-generated\ntest\n',
     );
     const skill = scaffoldFile(
@@ -1358,6 +1359,38 @@ describe('scaffoldClaudeMergeInterlock', () => {
     );
     expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'skipped' });
   });
+
+  it('an inert `echo <path>` decoy does NOT count as installed — the real hook still installs (codex round-2 finding 6)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    // A Bash matcher whose command merely CONTAINS the canonical path but does not RUN it.
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: 'Bash',
+                hooks: [{ type: 'command', command: 'echo .totem/hooks/merge-interlock.cjs' }],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    // Must NOT skip — the canonical hook is still absent.
+    expect(scaffoldClaudeMergeInterlock(filePath)).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const commands = content.hooks.PreToolUse.flatMap((e: { hooks: { command: string }[] }) =>
+      e.hooks.map((h) => h.command),
+    );
+    expect(commands).toContain('node .totem/hooks/merge-interlock.cjs');
+  });
 });
 
 describe('CLAUDE_MERGE_INTERLOCK template (mmnto-ai/totem#1762 A-slice)', () => {
@@ -1470,6 +1503,66 @@ describe('MergeInterlock runtime behavior (mmnto-ai/totem#1762 A-slice)', () => 
       tool_input: { command: 'gh --repo mmnto-ai/totem pr merge 5' },
     });
     expect(r.exitCode).toBe(2);
+  });
+
+  // ── quoted flag-and-path bypass forms must BLOCK (codex round-2 finding 2) ──
+  it('exits 2 on quoted `=value` --repo splice forms', () => {
+    for (const command of [
+      "gh --repo='mmnto-ai/totem' pr merge 2478 --squash",
+      'gh pr --repo="mmnto-ai/totem" merge 2478',
+      'gh --repo="$REPO" pr merge 2478',
+    ]) {
+      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toContain('totem pr merge');
+    }
+  });
+
+  it('exits 2 on cmd.exe `%PR%` / `!PR!` variable merge-API paths and a bare-variable endpoint', () => {
+    for (const command of [
+      'gh api repos/o/r/pulls/%PR%/merge -X PUT',
+      'gh api repos/o/r/pulls/!PR!/merge -X PUT',
+      'gh api --method PUT "$ENDPOINT"',
+    ]) {
+      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/could not decide/i);
+    }
+  });
+
+  it('exits 0 on a quoted `=value` flag before a read-only verb (no over-fire)', () => {
+    for (const command of ['gh pr --repo="x" view 5', "gh pr --repo='o/r' list"]) {
+      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
+      expect(r.exitCode).toBe(0);
+    }
+  });
+
+  it('exits 0 when a flag value would otherwise cross a `;` separator (finding 5)', () => {
+    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh --repo o/r; pr merge' } });
+    expect(r.exitCode).toBe(0);
+  });
+
+  // ── glued short-flag value + line-continuation splices (kimi round-2 B-4/B-5) ──
+  it('exits 2 on a glued short-flag value form (`-Ro/r`)', () => {
+    for (const command of ['gh pr -Rmmnto-ai/totem merge 123', 'gh -Rcli/cli pr merge']) {
+      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
+      expect(r.exitCode).toBe(2);
+    }
+  });
+
+  it('exits 0 on a glued short-flag before a read verb (no over-fire)', () => {
+    const r = runHook({ tool_name: 'Bash', tool_input: { command: 'gh pr -Rfoo/bar view 5' } });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it('exits 2 on a line-continuation spliced into a merge-API / graphql path', () => {
+    for (const command of [
+      'gh api repos/o/r/pulls/5/\\\nmerge -X PUT',
+      "gh api graphql \\\n-f query='mutation{mergePullRequest(input:{})}'",
+    ]) {
+      const r = runHook({ tool_name: 'Bash', tool_input: { command } });
+      expect(r.exitCode).toBe(2);
+    }
   });
 
   it('exits 2 on a `\\`+LF line-continued merge (kimi B-3)', () => {
@@ -2163,7 +2256,7 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-beforetool-'));
-    hookPath = path.join(tmpDir, 'BeforeTool.js');
+    hookPath = path.join(tmpDir, 'BeforeTool.cjs');
     fs.writeFileSync(hookPath, GEMINI_BEFORE_TOOL, 'utf-8');
   });
 
@@ -2254,7 +2347,7 @@ describe('GEMINI_BEFORE_TOOL merge-interlock runtime (mmnto-ai/totem#1762 A-slic
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-mergeinterlock-'));
-    hookPath = path.join(tmpDir, 'BeforeTool.js');
+    hookPath = path.join(tmpDir, 'BeforeTool.cjs');
     fs.writeFileSync(hookPath, GEMINI_BEFORE_TOOL, 'utf-8');
   });
 
@@ -2334,8 +2427,59 @@ describe('GEMINI_BEFORE_TOOL merge-interlock runtime (mmnto-ai/totem#1762 A-slic
   });
 });
 
+// The `.cjs` extension is load-bearing: a consumer whose package.json is
+// `"type": "module"` execs a `.js` hook as ESM, which throws
+// `ReferenceError: require is not defined` BEFORE reading stdin. Gemini treats a
+// non-0/non-2 exit as a warning and lets the raw merge THROUGH — a crash-OPEN. The
+// `.cjs` artifact fails CLOSED regardless of the consumer's package `type`
+// (codex round-2 BLOCKING-4a).
+describe('GEMINI_BEFORE_TOOL crash-open regression under `type: module` (codex round-2 4a)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-typemodule-'));
+    // A module-type consumer repo.
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({ type: 'module' }),
+      'utf-8',
+    );
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function runAt(basename: string): { exitCode: number; stderr: string } {
+    const p = path.join(tmpDir, basename);
+    fs.writeFileSync(p, GEMINI_BEFORE_TOOL, 'utf-8');
+    const r = spawnSync(process.execPath, [p], {
+      cwd: tmpDir,
+      input: JSON.stringify({
+        tool_name: 'run_shell_command',
+        tool_input: { command: 'gh pr merge 5 --squash' },
+      }),
+      encoding: 'utf-8',
+    });
+    return { exitCode: r.status ?? -1, stderr: r.stderr ?? '' };
+  }
+
+  it('a `.js` hook CRASH-OPENS (exit != 2 with a require ReferenceError) — the vector we close', () => {
+    const r = runAt('BeforeTool.js');
+    // The bug: it does NOT block (exit 2). It crashes before reading stdin.
+    expect(r.exitCode).not.toBe(2);
+    expect(r.stderr).toMatch(/require is not defined/i);
+  });
+
+  it('the shipped `.cjs` hook fails CLOSED (exit 2, blocks the merge) in the SAME repo', () => {
+    const r = runAt('BeforeTool.cjs');
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain('totem pr merge');
+  });
+});
+
 // mmnto-ai/totem#1762 A-slice — Gemini BeforeTool settings registration + the
-// marker-adoption migration for the pre-#1762 unowned BeforeTool.js (codex B-3b/c).
+// adopt-and-rename migration for the legacy BeforeTool.js (codex B-3b/c + round-2 4a).
 describe('scaffoldGeminiBeforeToolSettings', () => {
   let tmpDir: string;
 
@@ -2355,7 +2499,7 @@ describe('scaffoldGeminiBeforeToolSettings', () => {
     expect(content.hooks.BeforeTool[0].hooks[0]).toEqual({
       name: 'totem-before-tool',
       type: 'command',
-      command: 'node .gemini/hooks/BeforeTool.js',
+      command: 'node .gemini/hooks/BeforeTool.cjs',
     });
   });
 
@@ -2365,6 +2509,42 @@ describe('scaffoldGeminiBeforeToolSettings', () => {
     expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'skipped' });
     const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     expect(content.hooks.BeforeTool).toHaveLength(1);
+  });
+
+  it('MIGRATES a stale legacy `.js` command registration to `.cjs` in place (codex round-2 4a)', () => {
+    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          hooks: {
+            BeforeTool: [
+              {
+                matcher: '*',
+                hooks: [
+                  {
+                    name: 'totem-before-tool',
+                    type: 'command',
+                    command: 'node .gemini/hooks/BeforeTool.js',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    // Migrated in place — no duplicate entry, command now points at `.cjs`.
+    expect(content.hooks.BeforeTool).toHaveLength(1);
+    expect(content.hooks.BeforeTool[0].hooks[0].command).toBe('node .gemini/hooks/BeforeTool.cjs');
+    // A second invoke is now idempotent (already `.cjs`).
+    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'skipped' });
   });
 
   it('merges into an existing settings.json, preserving unrelated keys/hooks', () => {
@@ -2391,12 +2571,40 @@ describe('scaffoldGeminiBeforeToolSettings', () => {
     expect(result.err).toMatch(/hooks/);
   });
 
+  it('an inert `echo <path>` decoy does NOT count as installed — the real hook still registers (codex round-2 finding 6)', () => {
+    const filePath = path.join(tmpDir, '.gemini', 'settings.json');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        hooks: {
+          BeforeTool: [
+            {
+              matcher: '*',
+              hooks: [
+                { name: 'decoy', type: 'command', command: 'echo .gemini/hooks/BeforeTool.cjs' },
+              ],
+            },
+          ],
+        },
+      }),
+      'utf-8',
+    );
+    // Must NOT skip — the canonical command is still absent; the real entry is appended.
+    expect(scaffoldGeminiBeforeToolSettings(filePath)).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const commands = content.hooks.BeforeTool.flatMap((e: { hooks: { command: string }[] }) =>
+      e.hooks.map((h) => h.command),
+    );
+    expect(commands).toContain('node .gemini/hooks/BeforeTool.cjs');
+  });
+
   it('the entry constant matcher runs on every tool (self-filtered by tool_name)', () => {
     expect(GEMINI_BEFORE_TOOL_ENTRY.matcher).toBe('*');
   });
 });
 
-describe('adoptLegacyGeminiBeforeTool (marker-adoption migration)', () => {
+describe('adoptLegacyGeminiBeforeTool (adopt-and-rename `.js`→`.cjs`, codex round-2 4a)', () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -2407,51 +2615,152 @@ describe('adoptLegacyGeminiBeforeTool (marker-adoption migration)', () => {
     cleanTmpDir(tmpDir);
   });
 
-  function writeBeforeTool(content: string): string {
+  function writeLegacyJs(content: string): string {
     const p = path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, content, 'utf-8');
     return p;
   }
+  const jsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
+  const cjsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.cjs');
 
-  it('returns null when no BeforeTool.js exists', () => {
+  it('returns null when no legacy BeforeTool.js exists', () => {
     expect(adoptLegacyGeminiBeforeTool(tmpDir)).toBeNull();
   });
 
-  it('adopts a KNOWN prior template shape (whitespace-insensitive) in place', () => {
-    const p = writeBeforeTool(LEGACY_GEMINI_BEFORE_TOOL_SHAPES[0]!);
+  it('adopts a KNOWN prior markerless shape AND renames it to `.cjs` (deletes the `.js`)', () => {
+    const jsP = writeLegacyJs(LEGACY_GEMINI_BEFORE_TOOL_SHAPES[0]!);
     const result = adoptLegacyGeminiBeforeTool(tmpDir);
     expect(result?.action).toBe('merged');
-    // Overwritten with the managed template (marker opens it → future drift-repair).
-    expect(fs.readFileSync(p, 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
+    expect(result?.file).toBe('.gemini/hooks/BeforeTool.cjs');
+    // The stale `.js` is gone; the managed template lives at `.cjs`.
+    expect(fs.existsSync(jsP)).toBe(false);
+    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
+  });
+
+  it('adopts+renames a managed `.js` (marker opens it) to `.cjs`', () => {
+    writeLegacyJs(GEMINI_BEFORE_TOOL);
+    const result = adoptLegacyGeminiBeforeTool(tmpDir);
+    expect(result?.action).toBe('merged');
+    expect(fs.existsSync(jsPath())).toBe(false);
+    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
   });
 
   it('adopts despite whitespace differences (modulo-whitespace compare)', () => {
-    const reflowed = LEGACY_GEMINI_BEFORE_TOOL_SHAPES[0]!.replace(/\n/g, '\n  ');
-    const p = writeBeforeTool(reflowed);
+    writeLegacyJs(LEGACY_GEMINI_BEFORE_TOOL_SHAPES[0]!.replace(/\n/g, '\n  '));
     expect(adoptLegacyGeminiBeforeTool(tmpDir)?.action).toBe('merged');
-    expect(fs.readFileSync(p, 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
+    expect(fs.existsSync(jsPath())).toBe(false);
+    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
   });
 
-  it('leaves a totem file of an UNRECOGNIZED shape untouched, with a warning', () => {
+  it('leaves a totem file of an UNRECOGNIZED shape untouched, with a warning (no `.cjs` written)', () => {
     const custom = '// [totem] my custom hand-edited BeforeTool\nmodule.exports = () => {};\n';
-    const p = writeBeforeTool(custom);
+    const jsP = writeLegacyJs(custom);
     const result = adoptLegacyGeminiBeforeTool(tmpDir);
     expect(result?.action).toBe('skipped');
     expect(result?.err).toMatch(/unrecognized shape/);
-    expect(fs.readFileSync(p, 'utf-8')).toBe(custom);
+    expect(fs.readFileSync(jsP, 'utf-8')).toBe(custom);
+    expect(fs.existsSync(cjsPath())).toBe(false);
   });
 
-  it('leaves a non-totem (user) file alone (returns null)', () => {
+  it('leaves a non-totem (user) `.js` alone (returns null, no `.cjs`)', () => {
     const user = 'module.exports = function () { /* mine */ };\n';
-    const p = writeBeforeTool(user);
+    const jsP = writeLegacyJs(user);
     expect(adoptLegacyGeminiBeforeTool(tmpDir)).toBeNull();
-    expect(fs.readFileSync(p, 'utf-8')).toBe(user);
+    expect(fs.readFileSync(jsP, 'utf-8')).toBe(user);
+    expect(fs.existsSync(cjsPath())).toBe(false);
   });
 
-  it('returns null when the file is already the managed template', () => {
-    writeBeforeTool(GEMINI_BEFORE_TOOL);
-    expect(adoptLegacyGeminiBeforeTool(tmpDir)).toBeNull();
+  it('does NOT clobber a user-owned `.cjs` (leaves both, warns)', () => {
+    writeLegacyJs(GEMINI_BEFORE_TOOL); // migratable legacy
+    const userCjs = 'module.exports = () => { /* my own cjs */ };\n';
+    fs.writeFileSync(cjsPath(), userCjs, 'utf-8');
+    const result = adoptLegacyGeminiBeforeTool(tmpDir);
+    expect(result?.action).toBe('skipped');
+    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(userCjs);
+    expect(fs.existsSync(jsPath())).toBe(true);
+  });
+});
+
+// codex round-2 4b — the SHARED Gemini arming path `totem hook install` now runs
+// (legacy `.js`→`.cjs` migration + `.gemini/settings.json` command registration), so
+// an ordinary consumer upgrade arms Gemini instead of only interactive `totem init`.
+describe('registerGeminiBeforeTool (shared init + hook-install arming path)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-register-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  const settingsPath = () => path.join(tmpDir, '.gemini', 'settings.json');
+  const cjsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.cjs');
+  const jsPath = () => path.join(tmpDir, '.gemini', 'hooks', 'BeforeTool.js');
+
+  it('registers the BeforeTool command in .gemini/settings.json', () => {
+    fs.mkdirSync(path.join(tmpDir, '.gemini'), { recursive: true });
+    const results = registerGeminiBeforeTool(tmpDir);
+    const settings = results.find((r) => r.file.includes('settings.json'));
+    expect(settings?.action).toBe('created');
+    const content = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
+    expect(content.hooks.BeforeTool[0].hooks[0].command).toBe('node .gemini/hooks/BeforeTool.cjs');
+  });
+
+  it('migrates a legacy `.js` hook AND its settings registration to `.cjs`', () => {
+    fs.mkdirSync(path.join(tmpDir, '.gemini', 'hooks'), { recursive: true });
+    fs.writeFileSync(jsPath(), GEMINI_BEFORE_TOOL, 'utf-8'); // managed legacy `.js`
+    fs.writeFileSync(
+      settingsPath(),
+      JSON.stringify({
+        hooks: {
+          BeforeTool: [
+            {
+              matcher: '*',
+              hooks: [
+                {
+                  name: 'totem-before-tool',
+                  type: 'command',
+                  command: 'node .gemini/hooks/BeforeTool.js',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+      'utf-8',
+    );
+    registerGeminiBeforeTool(tmpDir);
+    // Hook file renamed `.js`→`.cjs`, and the registration now points at `.cjs`.
+    expect(fs.existsSync(jsPath())).toBe(false);
+    expect(fs.readFileSync(cjsPath(), 'utf-8')).toBe(GEMINI_BEFORE_TOOL);
+    const content = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
+    const commands = content.hooks.BeforeTool.flatMap((e: { hooks: { command: string }[] }) =>
+      e.hooks.map((h) => h.command),
+    );
+    expect(commands).toContain('node .gemini/hooks/BeforeTool.cjs');
+    expect(commands).not.toContain('node .gemini/hooks/BeforeTool.js');
+  });
+
+  it('is idempotent — a second run does not duplicate the registration', () => {
+    fs.mkdirSync(path.join(tmpDir, '.gemini'), { recursive: true });
+    registerGeminiBeforeTool(tmpDir);
+    registerGeminiBeforeTool(tmpDir);
+    const content = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
+    expect(content.hooks.BeforeTool).toHaveLength(1);
+  });
+
+  it('never corrupts a malformed settings.json (surfaces skipped+err)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.gemini'), { recursive: true });
+    fs.writeFileSync(settingsPath(), '{ not json', 'utf-8');
+    const results = registerGeminiBeforeTool(tmpDir);
+    const settings = results.find((r) => r.file.includes('settings.json'));
+    expect(settings?.action).toBe('skipped');
+    expect(settings?.err).toBeTruthy();
+    // The malformed file is left byte-identical (never clobbered).
+    expect(fs.readFileSync(settingsPath(), 'utf-8')).toBe('{ not json');
   });
 });
 
