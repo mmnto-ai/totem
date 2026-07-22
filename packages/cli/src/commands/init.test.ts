@@ -1801,6 +1801,133 @@ describe('PreWriteShield runtime behavior', () => {
     });
     expect(result.exitCode).toBe(0);
   });
+
+  // ─── Dispatch frontmatter-quoting guard (mmnto-ai/totem-status#123) ────────
+
+  const OUTBOX_MD = '.totem/orchestration/totem-claude/outbox/2026-07-22T1200Z-reply.md';
+
+  it('exits 2 on an unquoted ": " in an outbox subject: value (strict-YAML breaker)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content: '---\nschema: adr-098-v0.4\nsubject: Re: parity round -- positions\n---\nBody.',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('subject');
+    expect(result.stderr).toMatch(/quote/i);
+    expect(result.stderr).toContain('mmnto-ai/totem-status#123');
+  });
+
+  it('exits 2 on an unquoted ": " in expected-action: (and names the offending key)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content: '---\nsubject: "safe"\nexpected-action: reply by Friday: with positions\n---\n',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('expected-action');
+  });
+
+  it('exits 2 on a TRAILING colon in an unquoted subject: value', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: OUTBOX_MD, content: '---\nsubject: Re:\n---\n' },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('exits 2 at a Windows-backslash outbox path too', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: '.totem\\orchestration\\totem-claude\\outbox\\reply.md',
+        content: '---\nsubject: Re: broken -- title\n---\n',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('exits 0 on a double-quoted subject carrying colons', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content: '---\nsubject: "Re: parity round -- positions"\n---\nBody.',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 0 on a single-quoted value and on a block scalar (>-)', () => {
+    const single = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: OUTBOX_MD, content: "---\nsubject: 'Re: quoted'\n---\n" },
+    });
+    expect(single.exitCode).toBe(0);
+    const folded = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content: '---\nsubject: >-\n  Re: folded -- safe\n---\n',
+      },
+    });
+    expect(folded.exitCode).toBe(0);
+  });
+
+  it('exits 0 on a colon-free unquoted subject (plain scalars stay legal)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: OUTBOX_MD, content: '---\nsubject: parity round positions\n---\n' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('scans the leading frontmatter block ONLY on full-file writes (body prose stays writable)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        content:
+          '---\nsubject: "safe"\n---\nsubject: unquoted: colon in body prose about the schema',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('does NOT fire outside the outbox surface (same content at a .journal path)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: '.journal/test.md',
+        content: '---\nsubject: Re: not a dispatch -- out of scope\n---\n',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 2 on an Edit fragment reintroducing an unquoted subject (fragment mode)', () => {
+    const result = runHook({
+      tool_name: 'Edit',
+      tool_input: { file_path: OUTBOX_MD, new_string: 'subject: Re: sharpened -- title' },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('honors the totem-context escape in fragment mode (schema discussion in a body edit)', () => {
+    const result = runHook({
+      tool_name: 'Edit',
+      tool_input: {
+        file_path: OUTBOX_MD,
+        new_string:
+          '<!-- totem-context: verbatim quotation of the malformed specimen -->\nsubject: Re: the specimen that broke strict YAML',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
 });
 
 describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
@@ -2006,6 +2133,35 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
       new_string: 'see mmnto-ai/totem#5',
     });
     expect(r.threw).toBe(false);
+  });
+
+  // ─── Dispatch frontmatter-quoting guard (mmnto-ai/totem-status#123) ────────
+
+  it('throws on an unquoted ": " in an outbox subject: value (parity with PreWriteShield)', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
+      content: '---\nsubject: Re: parity round -- positions\n---\nBody.',
+    });
+    expect(r.threw).toBe(true);
+    expect(r.message).toContain('[totem BeforeTool]');
+    expect(r.message).toContain('mmnto-ai/totem-status#123');
+  });
+
+  it('does not throw on a quoted outbox subject', () => {
+    const r = runBeforeTool('write_file', {
+      file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
+      content: '---\nsubject: "Re: parity round -- positions"\n---\nBody.',
+    });
+    expect(r.threw).toBe(false);
+  });
+
+  it('blocks the quoting guard via the real `replace` edit tool too', () => {
+    const r = runBeforeTool('replace', {
+      file_path: '.totem/orchestration/totem-gemini/outbox/reply.md',
+      new_string: 'subject: Re: reintroduced -- unquoted',
+    });
+    expect(r.threw).toBe(true);
+    expect(r.message).toMatch(/quote/i);
   });
 });
 

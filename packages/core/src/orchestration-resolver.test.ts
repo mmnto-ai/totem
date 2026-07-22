@@ -302,11 +302,11 @@ describe('resolveSelfAgents — basename map (default precedence)', () => {
     expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
   });
 
-  it('returns single Gemini agent for `totem-status` (no Claude variant)', () => {
+  it('returns Claude + Gemini pair for `totem-status` (status-claude seated, cohort-roles §1.1)', () => {
     const statusRoot = mkDir(path.join(tmpRoot, 'totem-status'));
     const result = resolveSelfAgents(statusRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['status-gemini']);
+    expect(result.agents).toEqual(['status-claude', 'status-gemini']);
   });
 
   it("returns source: 'none' and empty list for orphan-stream repo `totem-playground`", () => {
