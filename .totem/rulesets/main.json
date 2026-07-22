@@ -1,0 +1,23 @@
+{
+  "_note": "Canonical required-checks declaration for the `main-required-checks` ruleset (mmnto-ai/totem-strategy#482 row `repo-required-checks-posture`; Q3 fork ruled totem-side 2026-07-22, recorded on mmnto-ai/totem-strategy#962). The LIVE ruleset (GitHub rulesets API) is the sensed surface; this file is the declaration the Prop 296 §14 network-read-only probe compares against, BOTH directions — a missing context re-opens a gated vector, a stale extra silently blocks merges (the mmnto-ai/totem#2479 specimen). Values re-derived from the live API at authoring (2026-07-22). Field names mirror the GitHub rulesets API so the comparison stays mechanical.",
+  "schema-version": 1,
+  "ruleset-name": "main-required-checks",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "required_status_checks": {
+    "strict_required_status_checks_policy": false,
+    "contexts": [
+      "Auto-close required check (D1)",
+      "Build & Lint (ubuntu-latest)",
+      "Build & Lint (windows-latest)",
+      "Build & Lint (macos-latest)",
+      "Totem Lint"
+    ]
+  }
+}
