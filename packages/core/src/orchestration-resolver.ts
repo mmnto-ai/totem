@@ -165,7 +165,11 @@ const COHORT_AGENT_MAP: Readonly<Record<string, readonly string[]>> = Object.fre
   'totem-strategy': Object.freeze(['strategy-claude', 'strategy-gemini']),
   'liquid-city': Object.freeze(['lc-claude', 'lc-gemini']),
   arhgap11: Object.freeze(['arhgap11-claude', 'arhgap11-gemini']),
-  'totem-status': Object.freeze(['status-gemini']),
+  // status-claude seated per the cohort-roles §1.1 roster ruling
+  // (mmnto-ai/totem-strategy#958, 2026-07-22) — without the map entry,
+  // dispatches addressed `to: status-claude` are invisible to CLI polls on
+  // checkouts where the gitignored seat dir is absent.
+  'totem-status': Object.freeze(['status-claude', 'status-gemini']),
   'totem-playground': Object.freeze([]),
 });
 

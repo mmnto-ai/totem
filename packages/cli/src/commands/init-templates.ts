@@ -206,6 +206,9 @@ export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI Befo
 //   Rule 2:  write_file/replace → block GitHub auto-close keywords adjacent to an
 //            issue ref in **/*.md (EXEMPT .github/**, .totem/**) — design of
 //            record mmnto-ai/totem#1762; sibling seal pending its own PR.
+//   Rule 3:  write_file/replace → block unquoted ': ' in dispatch frontmatter
+//            subject:/expected-action: values under .totem/orchestration/*/outbox/
+//            (strict-YAML consumers reject the dispatch; mmnto-ai/totem-status#123).
 const { execSync } = require('child_process');
 
 const BARE_REF_REGEX_SOURCE = ${JSON.stringify(BARE_REF_REGEX_SOURCE)};
@@ -220,6 +223,83 @@ const MD_PATH_RE = /\\.md$/i;
 // surface — verified on PR mmnto-ai/totem#2474); use totem-context there.
 const GITHUB_EXEMPT_RE = /(^|[\\\\\\/])\\.(github|totem)[\\\\\\/]/i;
 const SUPPRESS_DIRECTIVE_RE = /<!--\\s*totem-context:/;
+// ECL dispatch surface: .totem/orchestration/<seat>/outbox/*.md (either separator).
+const OUTBOX_PATH_RE = /(^|[\\\\\\/])\\.totem[\\\\\\/]orchestration[\\\\\\/][^\\\\\\/]+[\\\\\\/]outbox[\\\\\\/][^\\\\\\/]+\\.md$/i;
+const DISPATCH_KEY_RE = /^(subject|expected-action):\\s*(.*)$/;
+
+// Sender-side subject-quoting guard (routed ask, mmnto-ai/totem-status#123): an
+// unquoted ': ' (or trailing ':') inside a subject:/expected-action: value breaks
+// strict-YAML frontmatter parsers ("mapping values are not allowed in this
+// context") — the dispatch delivers only via lenient fallbacks, and sensor
+// parity across consumers is lost. Kill the class at write time, at the source.
+// Full-file writes scan the leading frontmatter block only (body prose about
+// the schema stays writable); fragment edits scan every line but honor the
+// totem-context escape.
+function checkOutboxSubjectQuoting(toolName, toolInput) {
+  if (toolName !== 'write_file' && toolName !== 'edit_file' && toolName !== 'replace') return;
+  const input = (typeof toolInput === 'object' && toolInput !== null) ? toolInput : {};
+  const filePath = String(input.file_path || input.path || '');
+  if (!OUTBOX_PATH_RE.test(filePath)) return;
+  const content = input.content !== undefined ? input.content : input.new_string;
+  if (typeof content !== 'string') return;
+
+  const lines = content.split(/\\r?\\n/);
+  // Mode is TOOL-determined (CR round 1 on the introducing PR): write_file is a
+  // full-file write — scan ONLY a leading frontmatter block, and a
+  // frontmatter-less full write has nothing in scope (schema completeness is
+  // the mail consumer's concern, not this guard's). replace/edit_file are
+  // fragments: scan all lines, honoring the totem-context escape.
+  const fragment = toolName !== 'write_file';
+  let start = 0;
+  let end = lines.length;
+  if (!fragment) {
+    if (lines.length > 0 && lines[0].trim() === '---') {
+      start = 1;
+      end = start;
+      while (end < lines.length && lines[end].trim() !== '---') end++;
+    } else {
+      end = 0;
+    }
+  }
+  const offenders = [];
+  for (let i = start; i < end; i++) {
+    const line = lines[i];
+    if (fragment) {
+      const prev = i > 0 ? lines[i - 1] : '';
+      if (SUPPRESS_DIRECTIVE_RE.test(line) || SUPPRESS_DIRECTIVE_RE.test(prev)) continue;
+    }
+    const m = DISPATCH_KEY_RE.exec(line);
+    if (!m) continue;
+    const value = m[2].trim();
+    if (value === '') continue;
+    const first = value.charAt(0);
+    // A quoted scalar is exempt ONLY when well-terminated on THIS line with
+    // YAML-legal escapes (optional trailing comment): unterminated quotes,
+    // trailing junk, and invalid escapes like \\q are all strict-YAML errors
+    // (greptile P1 + CR round 2 on the introducing PR). Multi-line quoted
+    // scalars are YAML-valid but BLOCKED BY POLICY: the cohort's lenient
+    // line-oriented consumer (mmnto-ai/totem-status#123) cannot see them —
+    // single-physical-line values are the dispatch contract. Block scalars are
+    // exempt ONLY as a bare header (>, >-, |2, ...): a header with trailing
+    // text (">note: x") is invalid YAML and falls through to the scan.
+    if (first === '"' || first === "'") {
+      if (first === '"' && /^"(?:[^"\\\\]|\\\\(?:[0abtnvfre "/\\\\N_LP\\t]|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}))*"(\\s+#.*)?$/.test(value)) continue;
+      if (first === "'" && /^'(?:[^']|'')*'(\\s+#.*)?$/.test(value)) continue;
+      offenders.push(m[1]);
+      continue;
+    }
+    if ((first === '>' || first === '|') && /^[>|][+-]?[0-9]*$/.test(value)) continue;
+    if (value.indexOf(': ') !== -1 || value.charAt(value.length - 1) === ':') offenders.push(m[1]);
+  }
+  if (offenders.length === 0) return;
+
+  throw new Error(
+    '[totem BeforeTool] Unquoted ":" in dispatch frontmatter value(s) [' + offenders.join(', ') + '] in write to ' + filePath + '. ' +
+    'Strict-YAML mail consumers reject the whole dispatch ("mapping values are not allowed in this context"). ' +
+    'Quote the value on ONE line with YAML-legal escapes only, e.g. subject: "Re: your round -- topic". ' +
+    'Sender-side guard routed from mmnto-ai/totem-status#123 (lenient consumer parsing is the fallback, not the contract).',
+  );
+}
 
 // mmnto-ai/totem#1762: any close-keyword (close/fix/resolve inflections) adjacent
 // to an issue ref in narrative markdown can auto-close a linked issue when the
@@ -287,6 +367,7 @@ function checkXrepoQualifyRefs(toolName, toolInput) {
 }
 
 module.exports = function beforeTool(toolName, toolInput) {
+  checkOutboxSubjectQuoting(toolName, toolInput);
   checkAutoCloseKeywords(toolName, toolInput);
   checkXrepoQualifyRefs(toolName, toolInput);
 
@@ -355,6 +436,11 @@ export const CLAUDE_PRETOOLUSE_ENTRY = {
 // invariant, zero semantics, no negation parser. Shares @mmnto/totem's
 // AUTO_CLOSE_REGEX_SOURCE (the one shared evaluator).
 //
+// ALSO enforces the ECL dispatch frontmatter-quoting guard
+// (mmnto-ai/totem-status#123): an unquoted ': ' in a subject:/expected-action:
+// value under .totem/orchestration/*/outbox/ breaks strict-YAML mail consumers;
+// the write is blocked so the class dies sender-side, cohort-wide.
+//
 // Exit-code contract is load-bearing — see hook source for details.
 //
 // Per OQ 2 of mmnto-ai/totem#1846 design: this entry installs into
@@ -369,6 +455,8 @@ export const CLAUDE_PREWRITESHIELD = `// [totem] auto-generated — Claude Code 
 //         sealed in mmnto-ai/totem-strategy#145 (seal SHA c488888b).
 // Rule 2: GitHub auto-close keyword guard —
 //         design of record mmnto-ai/totem#1762; sibling seal pending its own PR.
+// Rule 3: ECL dispatch frontmatter-quoting guard (outbox subject:/expected-action:
+//         values must be strict-YAML-safe) — routed from mmnto-ai/totem-status#123.
 //
 // Mirrors the compiled rule pattern at lessonHash "xrepo-qualify-refs"
 // in mmnto-ai/totem-strategy:.totem/compiled-rules.json.
@@ -395,6 +483,9 @@ const AUTO_CLOSE_MD_RE = /\\.md$/i;
 // verified on PR mmnto-ai/totem#2474); the totem-context directive is the escape.
 const AUTO_CLOSE_GITHUB_RE = /(^|[\\\\\\/])\\.(github|totem)[\\\\\\/]/i;
 const SUPPRESS_DIRECTIVE_RE = /<!--\\s*totem-context:/;
+// ECL dispatch surface: .totem/orchestration/<seat>/outbox/*.md (either separator).
+const OUTBOX_PATH_RE = /(^|[\\\\\\/])\\.totem[\\\\\\/]orchestration[\\\\\\/][^\\\\\\/]+[\\\\\\/]outbox[\\\\\\/][^\\\\\\/]+\\.md$/i;
+const DISPATCH_KEY_RE = /^(subject|expected-action):\\s*(.*)$/;
 
 let stdin = '';
 process.stdin.setEncoding('utf-8');
@@ -425,6 +516,73 @@ process.stdin.on('end', () => {
   if (typeof content !== 'string') {
     process.stderr.write('[totem PreWriteShield] non-string content; allowing\\n');
     process.exit(0);
+  }
+
+  // ── Rule 3: dispatch frontmatter quoting (mmnto-ai/totem-status#123) ──
+  // Unquoted ': ' (or trailing ':') in a subject:/expected-action: value breaks
+  // strict-YAML frontmatter parsers; the dispatch then delivers only via lenient
+  // fallbacks and consumer sensor parity is lost. Full-file writes scan the
+  // leading frontmatter block only (body prose about the schema stays writable);
+  // fragment edits scan every line but honor the totem-context escape. Checked
+  // first: a malformed dispatch is unreadable regardless of what its body says.
+  if (OUTBOX_PATH_RE.test(filePath)) {
+    const dLines = content.split(/\\r?\\n/);
+    // Mode is TOOL-determined (CR round 1 on the introducing PR): Write is a
+    // full-file write — scan ONLY a leading frontmatter block, and a
+    // frontmatter-less full write has nothing in scope (schema completeness is
+    // the mail consumer's concern, not this guard's). Edit is a fragment:
+    // scan all lines, honoring the totem-context escape.
+    const dFragment = toolName === 'Edit';
+    let dStart = 0;
+    let dEnd = dLines.length;
+    if (!dFragment) {
+      if (dLines.length > 0 && dLines[0].trim() === '---') {
+        dStart = 1;
+        dEnd = dStart;
+        while (dEnd < dLines.length && dLines[dEnd].trim() !== '---') dEnd++;
+      } else {
+        dEnd = 0;
+      }
+    }
+    const offenders = [];
+    for (let i = dStart; i < dEnd; i++) {
+      const dLine = dLines[i];
+      if (dFragment) {
+        const dPrev = i > 0 ? dLines[i - 1] : '';
+        if (SUPPRESS_DIRECTIVE_RE.test(dLine) || SUPPRESS_DIRECTIVE_RE.test(dPrev)) continue;
+      }
+      const m = DISPATCH_KEY_RE.exec(dLine);
+      if (!m) continue;
+      const value = m[2].trim();
+      if (value === '') continue;
+      const first = value.charAt(0);
+      // A quoted scalar is exempt ONLY when well-terminated on THIS line with
+      // YAML-legal escapes (optional trailing comment): unterminated quotes,
+      // trailing junk, and invalid escapes like \\q are all strict-YAML errors
+      // (greptile P1 + CR round 2 on the introducing PR). Multi-line quoted
+      // scalars are YAML-valid but BLOCKED BY POLICY: the cohort's lenient
+      // line-oriented consumer (mmnto-ai/totem-status#123) cannot see them —
+      // single-physical-line values are the dispatch contract. Block scalars are
+      // exempt ONLY as a bare header (>, >-, |2, ...): a header with trailing
+      // text (">note: x") is invalid YAML and falls through to the scan.
+      if (first === '"' || first === "'") {
+        if (first === '"' && /^"(?:[^"\\\\]|\\\\(?:[0abtnvfre "/\\\\N_LP\\t]|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}))*"(\\s+#.*)?$/.test(value)) continue;
+        if (first === "'" && /^'(?:[^']|'')*'(\\s+#.*)?$/.test(value)) continue;
+        offenders.push(m[1]);
+        continue;
+      }
+      if ((first === '>' || first === '|') && /^[>|][+-]?[0-9]*$/.test(value)) continue;
+      if (value.indexOf(': ') !== -1 || value.charAt(value.length - 1) === ':') offenders.push(m[1]);
+    }
+    if (offenders.length > 0) {
+      process.stderr.write(
+        '[totem PreWriteShield] Unquoted ":" in dispatch frontmatter value(s) [' + offenders.join(', ') + '] in write to ' + filePath + '\\n' +
+        'Strict-YAML mail consumers reject the whole dispatch ("mapping values are not allowed in this context").\\n' +
+        'Quote the value on ONE line with YAML-legal escapes only, e.g. subject: "Re: your round -- topic".\\n' +
+        'Sender-side guard routed from mmnto-ai/totem-status#123 (lenient consumer parsing is the fallback, not the contract).\\n',
+      );
+      process.exit(2);
+    }
   }
 
   // Suppression-directive bypass mirrors rule-engine.ts isSuppressed
@@ -1128,7 +1286,7 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
    | \`totem-strategy\`                                | \`strategy-claude\`                   | \`strategy-gemini\` | _(not seated)_    |
    | \`liquid-city\`                                   | \`lc-claude\`                         | \`lc-gemini\`       | _(not seated)_    |
    | \`arhgap11\`                                      | \`arhgap11-claude\`                   | \`arhgap11-gemini\` | _(not seated)_    |
-   | \`totem-status\`                                  | _(no Claude variant)_               | \`status-gemini\`   | _(not seated)_    |
+   | \`totem-status\`                                  | \`status-claude\`                     | \`status-gemini\`   | _(not seated)_    |
    | \`totem-playground\`                              | _(orphan stream — no native agent)_ | _(orphan stream)_ | _(orphan stream)_ |
 
    Seat discovery is dir-derived (mmnto-ai/totem#2141): any \`.totem/orchestration/<agent-id>/\` directory registers that seat for this repo, UNIONED with the basename map above so roster siblings stay visible on fresh clones where the gitignored tree is partial (precedence: \`TOTEM_SELF_AGENT\` env > \`config.json\` \`host_agents\` > seat dirs ∪ basename map). Override hook: a \`host_agents: string[]\` field in \`.totem/orchestration/config.json\` still **replaces** the derived answer — but omitting a PRESENT seat dir attaches a loud warning naming the omitted seat (the dir is the registration; config-exclusion is not a decommission mechanism). The returned list of agent-ids is used by consumers (e.g., \`totem mail\`) to filter cross-repo handoffs — messages addressed to any agent-id in the list belong to this repo's session.
