@@ -186,11 +186,16 @@ function formatResult(r: SearchResult, index: number): string {
   const labelWithTag = r.sourceRepo ? `[${r.sourceRepo}] ` + r.label : r.label;
   // mmnto-ai/totem#2463: surface the true relevance signal alongside the
   // ordering `score`. `score` stays (RRF rank artifact — drives display order);
-  // `relevance` is the vector-leg similarity, or an explicit keyword-match note
-  // when the hit had no vector leg (FTS-only), so the agent never mistakes an
-  // absent signal for a low one.
+  // `relevance` is the vector-leg similarity, so the agent never mistakes an
+  // absent signal for a low one. The "keyword match" note is reserved for
+  // fts-stamped hits — a vector/hybrid hit that (defensively) lacks relevance
+  // shows a bare "n/a" rather than being mislabeled as a keyword match.
   const relevanceField =
-    typeof r.relevance === 'number' ? r.relevance.toFixed(3) : 'n/a (keyword match)';
+    typeof r.relevance === 'number'
+      ? r.relevance.toFixed(3)
+      : r.searchMethod === 'fts'
+        ? 'n/a (keyword match)'
+        : 'n/a';
   // mmnto/totem#1295 CR MAJOR: ALWAYS display the absolute path. The whole
   // point of `absoluteFilePath` on `SearchResult` is to give agents an
   // unambiguous Read/Edit target. Falling back to the relative `filePath`
@@ -266,6 +271,7 @@ async function federatedSearch(
               maxResults: perStoreLimit,
               allowFtsFallback: true,
             });
+            // totem-context: mmnto-ai/totem#1295 — the catch below is not a silent swallow; the failure is recorded in `failures.primary` and surfaced to the agent as a per-query system warning.
           } catch (retryErr) {
             const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
             const combinedMsg = `search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`;

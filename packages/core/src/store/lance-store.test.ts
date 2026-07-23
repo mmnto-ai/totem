@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
 import type { Embedder } from '../embedders/embedder.js';
 import { TotemConfigError } from '../errors.js';
 import { cleanTmpDir } from '../test-utils.js';
@@ -327,15 +328,15 @@ describe('LanceStore', () => {
   });
 
   describe('allowFtsFallback (mmnto-ai/totem#2463)', () => {
-    /** Throws the exact no-embedder error that LazyEmbedder.doResolve raises. */
+    /**
+     * Throws the exact no-embedder error that LazyEmbedder.doResolve raises —
+     * via the shared constant, so a wording change at the throw site cannot
+     * silently decouple this suite from the detector it exercises.
+     */
     class NoEmbedder implements Embedder {
       readonly dimensions = 8;
       async embed(): Promise<number[][]> {
-        throw new TotemConfigError(
-          'No embedding provider available. The configured provider failed and Ollama is not running.',
-          'hint',
-          'CONFIG_MISSING',
-        );
+        throw new TotemConfigError(NO_EMBEDDER_AVAILABLE_MESSAGE, 'hint', 'CONFIG_MISSING');
       }
     }
 

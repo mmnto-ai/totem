@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as lancedb from '@lancedb/lancedb';
 
 import type { ContentType } from '../config-schema.js';
+import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
 import type { Embedder } from '../embedders/embedder.js';
 import { TotemConfigError } from '../errors.js';
 import type {
@@ -74,12 +75,14 @@ function closeReadSnapshot(db: lancedb.Connection, onWarn: (msg: string) => void
  * Ollama fallback probe also fails (mmnto-ai/totem#2463). This is the ONLY
  * error class the opt-in FTS fallback is allowed to catch — every other error
  * (LanceDB faults, network blips on a healthy embedder, etc.) must propagate.
- * The message match narrows past the broader `CONFIG_MISSING` code, which also
- * tags unrelated config errors; the `TotemError` constructor prepends
- * `[Totem Error] ` so we substring-match rather than compare exactly.
+ * The match keys on the shared `NO_EMBEDDER_AVAILABLE_MESSAGE` constant (single
+ * source of truth at the throw site), narrowing past the broader
+ * `CONFIG_MISSING` code, which also tags unrelated config errors; the
+ * `TotemError` constructor prepends `[Totem Error] ` so we substring-match
+ * rather than compare exactly.
  */
 function isNoEmbedderError(err: unknown): boolean {
-  return err instanceof TotemConfigError && err.message.includes('No embedding provider available');
+  return err instanceof TotemConfigError && err.message.includes(NO_EMBEDDER_AVAILABLE_MESSAGE);
 }
 
 export class LanceStore {
