@@ -189,6 +189,14 @@ export interface SearchOptions {
    * other errors propagate untouched.
    */
   allowFtsFallback?: boolean;
+  /**
+   * Invoked when the `allowFtsFallback` degradation actually engages
+   * (mmnto-ai/totem#2463 round 2). Out-of-band on purpose: a fallback that
+   * returns ZERO rows leaves no fts-stamped result to infer from, and callers
+   * (the MCP envelope) must still report the outage rather than a healthy
+   * empty search.
+   */
+  onFtsFallback?: () => void;
 }
 
 /**

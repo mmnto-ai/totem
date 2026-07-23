@@ -4,7 +4,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import type { ContentType, HealthCheckResult, SearchResult } from '@mmnto/totem';
-import { ContentTypeSchema } from '@mmnto/totem';
+import { ContentTypeSchema, DEFAULT_SEARCH_RELEVANCE_FLOOR } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
 import { logMcpCall } from '../ledger-writer.js';
@@ -241,6 +241,7 @@ async function federatedSearch(
   perStoreLimit: number,
   finalLimit: number,
   failures: FailureLog,
+  onFtsFallback: () => void,
 ): Promise<SearchResult[]> {
   const { store: primaryStore, linkedStores } = await getContext();
 
@@ -260,7 +261,13 @@ async function federatedSearch(
   const hasLinkedStores = linkedStores.size > 0;
   const primaryPromise = hasLinkedStores
     ? primaryStore
-        .search({ query, typeFilter, maxResults: perStoreLimit, allowFtsFallback: true })
+        .search({
+          query,
+          typeFilter,
+          maxResults: perStoreLimit,
+          allowFtsFallback: true,
+          onFtsFallback,
+        })
         .catch(async (err: unknown) => {
           const firstMsg = err instanceof Error ? err.message : String(err);
           try {
@@ -270,6 +277,7 @@ async function federatedSearch(
               typeFilter,
               maxResults: perStoreLimit,
               allowFtsFallback: true,
+              onFtsFallback,
             });
             // totem-context: mmnto-ai/totem#1295 — the catch below is not a silent swallow; the failure is recorded in `failures.primary` and surfaced to the agent as a per-query system warning.
           } catch (retryErr) {
@@ -287,7 +295,13 @@ async function federatedSearch(
             return [] as SearchResult[];
           }
         })
-    : primaryStore.search({ query, typeFilter, maxResults: perStoreLimit, allowFtsFallback: true });
+    : primaryStore.search({
+        query,
+        typeFilter,
+        maxResults: perStoreLimit,
+        allowFtsFallback: true,
+        onFtsFallback,
+      });
 
   // Linked stores: catch per-store failures so one broken linked index
   // doesn't break the overall query. On failure, attempt targeted
@@ -297,7 +311,13 @@ async function federatedSearch(
   // can try again (the transient issue may have cleared).
   const linkedPromises = Array.from(linkedStores.entries()).map(([name, ls]) =>
     ls
-      .search({ query, typeFilter, maxResults: perStoreLimit, allowFtsFallback: true })
+      .search({
+        query,
+        typeFilter,
+        maxResults: perStoreLimit,
+        allowFtsFallback: true,
+        onFtsFallback,
+      })
       .catch(async (err) => {
         const firstMsg = err instanceof Error ? err.message : String(err);
         try {
@@ -307,6 +327,7 @@ async function federatedSearch(
             typeFilter,
             maxResults: perStoreLimit,
             allowFtsFallback: true,
+            onFtsFallback,
           });
           // totem-context: mmnto-ai/totem#1295 — the catch below is not a silent swallow; the failure is recorded in `failures.linked` and surfaced to the agent as a per-query system warning.
         } catch (retryErr) {
@@ -388,7 +409,9 @@ function deriveSearchMethod(results: SearchResult[]): 'hybrid' | 'vector' | 'fts
  * below the `<index-meta>` line and shares its self-closing XML-attribute shape
  * so a wrapper agent can read the whole outcome with one regex. Every attribute
  * value is a closed enum or a formatted number — no user input — so no XML
- * escaping is required.
+ * escaping is required. `hits` counts RETURNED hits: 0 for `no_useful_hits`
+ * (candidates are disclosed, not returned) and the floor-exempt subset for a
+ * mixed below-floor batch.
  */
 export function formatRetrievalEnvelope(params: {
   status: 'ok' | 'no_useful_hits' | 'empty';
@@ -463,6 +486,14 @@ async function performSearch(
   // hits. The agent would think it's querying the linked repo but get
   // local results — exactly the "silent drift" pattern Tenet 4 forbids.
   // Shield AI catch on mmnto/totem#1294 Phase 2 review.
+  // Out-of-band FTS-fallback signal (greptile P1, mmnto-ai/totem#2494 round 2):
+  // a fallback that returns ZERO rows leaves no fts-stamped result to infer
+  // from, so engagement is captured via callback — the envelope must report
+  // the embedder outage even on an empty keyword result set.
+  let ftsFallbackEngaged = false;
+  const onFtsFallback = (): void => {
+    ftsFallbackEngaged = true;
+  };
   let results: SearchResult[];
   if (boundary !== undefined && config.partitions?.[boundary]) {
     // Case 1: local partition — primary only, prefix filter
@@ -473,6 +504,7 @@ async function performSearch(
       maxResults: finalLimit,
       boundary: config.partitions[boundary],
       allowFtsFallback: true,
+      onFtsFallback,
     });
   } else if (boundary !== undefined && linkedStores.has(boundary)) {
     // Case 2: linked store name — route ONLY to that linked store.
@@ -491,6 +523,7 @@ async function performSearch(
         typeFilter,
         maxResults: finalLimit,
         allowFtsFallback: true,
+        onFtsFallback,
       });
       // totem-context: mmnto-ai/totem#1295 — the catch below is not a silent swallow; a fully-failed targeted boundary (initial AND reconnect+retry throw) is surfaced to the agent as an isError ToolResult.
     } catch (err) {
@@ -502,7 +535,9 @@ async function performSearch(
           typeFilter,
           maxResults: finalLimit,
           allowFtsFallback: true,
+          onFtsFallback,
         });
+        // totem-context: mmnto-ai/totem#1295 — the catch below is not a silent swallow; the double failure (initial AND reconnect+retry) is surfaced to the agent as an isError ToolResult.
       } catch (retryErr) {
         const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
         const errorText = formatSystemWarning(
@@ -547,13 +582,21 @@ async function performSearch(
       maxResults: finalLimit,
       boundary,
       allowFtsFallback: true,
+      onFtsFallback,
     });
   } else {
     // Case 5: no boundary → federated search across primary + all linked.
     // Pass the `failures` log so the federation path can populate it on
     // store errors without mutating global state. Primary lives in a
     // dedicated slot to avoid colliding with linked-store names.
-    results = await federatedSearch(query, typeFilter, finalLimit, finalLimit, failures);
+    results = await federatedSearch(
+      query,
+      typeFilter,
+      finalLimit,
+      finalLimit,
+      failures,
+      onFtsFallback,
+    );
   }
 
   // Build the runtime-failures warning (if any) once so we can decide
@@ -629,13 +672,18 @@ async function performSearch(
   // every fused hit as noise. The envelope discloses the outcome machine-
   // readably beside the existing <index-meta> line.
   const configuredFloor =
-    typeof config.searchRelevanceFloor === 'number' ? config.searchRelevanceFloor : 0.25;
+    typeof config.searchRelevanceFloor === 'number'
+      ? config.searchRelevanceFloor
+      : DEFAULT_SEARCH_RELEVANCE_FLOOR;
   const effectiveFloor = minRelevance !== undefined ? minRelevance : configuredFloor;
-  const method = deriveSearchMethod(results);
+  // A zero-row fallback leaves nothing fts-stamped — the callback flag keeps
+  // the envelope method honest for an empty keyword-only result set
+  // (greptile P1, mmnto-ai/totem#2494 round 2).
+  const method = results.length === 0 && ftsFallbackEngaged ? 'fts' : deriveSearchMethod(results);
 
-  // Loud degradation notice (Tenet 4 — fail honest): any fts-stamped hit means
-  // a store's embedder was unavailable and search fell back to keyword-only.
-  const fallbackEngaged = results.some((r) => r.searchMethod === 'fts');
+  // Loud degradation notice (Tenet 4 — fail honest): fallback engagement is
+  // signaled out-of-band (zero-row case) OR inferred from any fts-stamped hit.
+  const fallbackEngaged = ftsFallbackEngaged || results.some((r) => r.searchMethod === 'fts');
   const fallbackWarning = fallbackEngaged
     ? formatSystemWarning(
         [
@@ -689,37 +737,72 @@ async function performSearch(
   }
 
   // Floor fires ONLY when a real relevance signal exists — a pure-FTS corpus
-  // (no vector relevance to report) is never demoted to no_useful_hits.
+  // (no vector relevance to report) is never demoted to no_useful_hits. And it
+  // judges ONLY the hits that carry a signal: keyword-only hits have no
+  // comparable relevance and are floor-EXEMPT — a mixed batch must never
+  // withhold them because their vector-leg siblings scored weak (greptile P1,
+  // mmnto-ai/totem#2494 round 2).
   if (hasRelevanceSignal && bestRelevance !== null && bestRelevance < effectiveFloor) {
-    const belowFloorEnvelope = formatRetrievalEnvelope({
-      status: 'no_useful_hits',
-      method,
-      bestRelevance,
-      floor: effectiveFloor,
-      hits: results.length,
-    });
-    // Disclose every below-floor candidate compactly (path + relevance, NO
-    // content) — exclusion is disclosed, never silently dropped (Prop 308 F1).
-    const candidateLines = results.map((r, i) => {
+    const floorExempt = results.filter((r) => typeof r.relevance !== 'number');
+    const withheld = results.filter((r) => typeof r.relevance === 'number');
+    // Disclose every withheld below-floor candidate compactly (path +
+    // relevance, NO content) — exclusion is disclosed, never silently
+    // dropped (Prop 308 F1).
+    const candidateLines = withheld.map((r, i) => {
       const rel = typeof r.relevance === 'number' ? r.relevance.toFixed(3) : 'n/a';
       const label = r.sourceRepo ? `[${r.sourceRepo}] ` + r.absoluteFilePath : r.absoluteFilePath;
       return `${i + 1}. ${label} — relevance ${rel}`;
     });
-    const body = formatXmlResponse(
-      'knowledge',
-      [
-        `No results met the relevance floor of ${effectiveFloor.toFixed(3)} (best relevance ${bestRelevance.toFixed(3)}).`,
-        '',
-        'Below-floor candidates (disclosed, not returned — path + relevance only):',
-        ...candidateLines,
-      ].join('\n'),
-    );
+    const disclosure = [
+      `Below-floor candidates (disclosed, not returned — path + relevance only; floor ${effectiveFloor.toFixed(3)}, best relevance ${bestRelevance.toFixed(3)}):`,
+      ...candidateLines,
+    ].join('\n');
+
+    if (floorExempt.length === 0) {
+      // Every hit carried a below-floor signal → honest no_useful_hits.
+      const belowFloorEnvelope = formatRetrievalEnvelope({
+        status: 'no_useful_hits',
+        method,
+        bestRelevance,
+        floor: effectiveFloor,
+        hits: 0,
+      });
+      const body = formatXmlResponse(
+        'knowledge',
+        [
+          `No results met the relevance floor of ${effectiveFloor.toFixed(3)} (best relevance ${bestRelevance.toFixed(3)}).`,
+          '',
+          disclosure,
+        ].join('\n'),
+      );
+      const text = composeResponseText({
+        fallbackWarning,
+        runtimeWarning,
+        staleWarning,
+        indexEnvelope,
+        retrievalEnvelope: belowFloorEnvelope,
+        body,
+      }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
+      return { content: [{ type: 'text' as const, text }] };
+    }
+
+    // Mixed batch: return the floor-exempt keyword hits, disclose the
+    // withheld signal-bearing ones alongside.
+    const mixedEnvelope = formatRetrievalEnvelope({
+      status: 'ok',
+      method,
+      bestRelevance,
+      floor: effectiveFloor,
+      hits: floorExempt.length,
+    });
+    const formattedExempt = floorExempt.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
+    const body = formatXmlResponse('knowledge', formattedExempt + '\n\n---\n\n' + disclosure);
     const text = composeResponseText({
       fallbackWarning,
       runtimeWarning,
       staleWarning,
       indexEnvelope,
-      retrievalEnvelope: belowFloorEnvelope,
+      retrievalEnvelope: mixedEnvelope,
       body,
     }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
     return { content: [{ type: 'text' as const, text }] };
@@ -859,6 +942,7 @@ export function registerSearchKnowledge(server: McpServer): void {
         try {
           const { projectRoot, config } = await getContext();
           setLogDir(path.join(projectRoot, config.totemDir));
+          // totem-context: best-effort log-dir init — the catch below records the failure via logSearch and must not block the tool call.
         } catch (err) {
           // Non-fatal — logging just won't write to disk. Record the failure.
           logSearch({

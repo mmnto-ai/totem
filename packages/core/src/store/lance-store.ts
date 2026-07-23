@@ -343,6 +343,7 @@ export class LanceStore {
         // than hard-erroring into zero retrieval. Any OTHER error, or a missing
         // flag / FTS index, re-throws unchanged.
         if (options.allowFtsFallback === true && snapshot.hasFtsIndex && isNoEmbedderError(err)) {
+          options.onFtsFallback?.();
           return await runFtsSearch(
             snapshot.table,
             this.onWarn,

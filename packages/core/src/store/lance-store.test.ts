@@ -373,6 +373,40 @@ describe('LanceStore', () => {
       }
     });
 
+    it('invokes onFtsFallback when the degradation engages (out-of-band signal for the zero-row case)', async () => {
+      await store.insert([makeChunk({ content: 'authentication content', label: 'auth' })]);
+      await store.createFtsIndex();
+
+      const degraded = new LanceStore(tmpDir, new NoEmbedder(), { absolutePathRoot: tmpDir });
+      await degraded.connect();
+
+      let fired = false;
+      await degraded.search({
+        query: 'authentication',
+        allowFtsFallback: true,
+        onFtsFallback: () => {
+          fired = true;
+        },
+      });
+      expect(fired).toBe(true);
+    });
+
+    it('does not invoke onFtsFallback on a healthy search', async () => {
+      await store.insert([makeChunk({ content: 'authentication content', label: 'auth' })]);
+      await store.createFtsIndex();
+
+      let fired = false;
+      const results = await store.search({
+        query: 'authentication',
+        allowFtsFallback: true,
+        onFtsFallback: () => {
+          fired = true;
+        },
+      });
+      expect(results.length).toBeGreaterThan(0);
+      expect(fired).toBe(false);
+    });
+
     it('rethrows the embedder failure when the flag is OFF (today behavior)', async () => {
       await store.insert([makeChunk({ content: 'authentication content', label: 'auth' })]);
       await store.createFtsIndex();

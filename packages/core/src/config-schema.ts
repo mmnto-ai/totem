@@ -428,6 +428,14 @@ export const ReviewConfigSchema = z
   .passthrough()
   .default({});
 
+/**
+ * Default `searchRelevanceFloor` (mmnto-ai/totem#2463). Exported as the single
+ * source shared by the schema default below and the MCP guard that re-applies
+ * it for unvalidated configs — retuning one can never silently strand the
+ * other on a stale floor.
+ */
+export const DEFAULT_SEARCH_RELEVANCE_FLOOR = 0.25;
+
 export const TotemConfigSchema = z.object({
   /** Glob patterns and chunking strategies for each ingest target */
   targets: z.array(IngestTargetSchema).min(1),
@@ -483,7 +491,7 @@ export const TotemConfigSchema = z.object({
    * per-call `min_relevance` MCP input overrides this; the retrieval-envelope
    * always discloses the effective floor. Default 0.25 (pilot-calibrated).
    */
-  searchRelevanceFloor: z.number().min(0).max(1).default(0.25),
+  searchRelevanceFloor: z.number().min(0).max(1).default(DEFAULT_SEARCH_RELEVANCE_FLOOR),
 
   /** Optional: documents to auto-update via `totem docs` */
   docs: z.array(DocTargetSchema).optional(),

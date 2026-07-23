@@ -38,6 +38,13 @@ let mockSearchThrows = false;
 let mockSearchThrowsOnce = false;
 let mockReconnectCalled = false;
 /**
+ * mmnto-ai/totem#2494 round 2: when true, the mocked primary `search` invokes
+ * `options.onFtsFallback` before returning — simulating LanceStore's keyword-
+ * only degradation engaging (including the zero-row case, where no fts-stamped
+ * result exists to infer engagement from).
+ */
+let mockSimulateFtsFallback = false;
+/**
  * mmnto/totem#1295 CR minor: number of upcoming `getContext()` calls
  * that should throw before getContext starts returning normally.
  * Decremented on each throw. The test for the one-shot flag fix sets
@@ -99,13 +106,16 @@ vi.mock('../context.js', () => ({
         partitions: { core: ['packages/core/'] },
       },
       store: {
-        search: vi.fn(async () => {
+        search: vi.fn(async (options: Record<string, unknown> = {}) => {
           if (mockSearchThrows) {
             throw new Error('LanceDB search failed');
           }
           if (mockSearchThrowsOnce) {
             mockSearchThrowsOnce = false;
             throw new Error('Stale handle error');
+          }
+          if (mockSimulateFtsFallback) {
+            (options as { onFtsFallback?: () => void }).onFtsFallback?.();
           }
           // Fill in absoluteFilePath from the fake projectRoot when the
           // test didn't set one explicitly — mirrors real LanceStore.
@@ -204,6 +214,7 @@ describe('search_knowledge', () => {
     mockSearchThrows = false;
     mockSearchThrowsOnce = false;
     mockReconnectCalled = false;
+    mockSimulateFtsFallback = false;
     mockGetContextFailuresRemaining = 0;
     mockLinkedStores = new Map();
     mockLinkedStoreInitErrors = new Map();
@@ -240,13 +251,16 @@ describe('search_knowledge', () => {
             partitions: { core: ['packages/core/'] },
           },
           store: {
-            search: vi.fn(async () => {
+            search: vi.fn(async (options: Record<string, unknown> = {}) => {
               if (mockSearchThrows) {
                 throw new Error('LanceDB search failed');
               }
               if (mockSearchThrowsOnce) {
                 mockSearchThrowsOnce = false;
                 throw new Error('Stale handle error');
+              }
+              if (mockSimulateFtsFallback) {
+                (options as { onFtsFallback?: () => void }).onFtsFallback?.();
               }
               // Fill in absoluteFilePath from the fake projectRoot when
               // the test didn't set one explicitly — mirrors LanceStore.
@@ -1644,7 +1658,7 @@ describe('search_knowledge', () => {
       const m = text.match(ENVELOPE_RE);
       expect(m![1]).toBe('no_useful_hits');
       expect(m![3]).toBe('0.200'); // best of the below-floor set
-      expect(m![5]).toBe('2');
+      expect(m![5]).toBe('0'); // hits counts RETURNED hits — candidates are disclosed, not returned
 
       // Candidates disclosed by path + relevance — never silently dropped.
       expect(text).toContain('/fake/project/src/a.ts');
@@ -1653,6 +1667,69 @@ describe('search_knowledge', () => {
       // ...but their content is withheld.
       expect(text).not.toContain('SECRET_BODY_A');
       expect(text).not.toContain('SECRET_BODY_B');
+    });
+
+    it('returns floor-exempt keyword hits from a mixed batch and discloses only the withheld signal-bearing ones', async () => {
+      // greptile P1 (mmnto-ai/totem#2494 round 2): a keyword-only hit has no
+      // comparable relevance signal — it must never be withheld because a
+      // vector-leg sibling scored below the floor.
+      mockSearchResults = [
+        {
+          label: 'Keyword hit',
+          type: 'code',
+          filePath: 'src/k.ts',
+          score: 0.016,
+          searchMethod: 'fts',
+          content: 'KEYWORD_BODY',
+        },
+        {
+          label: 'Weak vector hit',
+          type: 'code',
+          filePath: 'src/w.ts',
+          score: 0.016,
+          relevance: 0.2,
+          searchMethod: 'hybrid',
+          content: 'WEAK_VECTOR_BODY',
+        },
+      ];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const m = text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('ok'); // exempt hits ARE returned
+      expect(m![3]).toBe('0.200'); // bestRelevance still reports the below-floor max
+      expect(m![5]).toBe('1'); // hits counts RETURNED hits (the exempt subset)
+
+      // The keyword hit's content is returned...
+      expect(text).toContain('KEYWORD_BODY');
+      // ...the below-floor vector hit is disclosed (path + relevance), content withheld.
+      expect(text).toContain('/fake/project/src/w.ts');
+      expect(text).toContain('relevance 0.200');
+      expect(text).not.toContain('WEAK_VECTOR_BODY');
+    });
+
+    it('reports method="fts" + the keyword-only warning when the fallback returns zero rows', async () => {
+      // greptile P1 (mmnto-ai/totem#2494 round 2): a zero-row fallback leaves
+      // no fts-stamped hit — engagement must surface via the out-of-band
+      // callback, or an embedder outage masquerades as a healthy empty search.
+      mockSimulateFtsFallback = true;
+      mockSearchResults = [];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+      const text = result.content[0]!.text;
+
+      expect(result.isError).toBeUndefined();
+      const m = text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('empty');
+      expect(m![2]).toBe('fts'); // NOT "hybrid" — the outage is visible
+      expect(text).toContain('KEYWORD-ONLY');
+      expect(text).toContain('No results found');
     });
 
     it('never fires the floor when no hit carries a relevance signal (bestRelevance n/a)', async () => {
