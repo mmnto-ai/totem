@@ -3,6 +3,7 @@ import type {
   RuleEventCallback,
   RuleTimeoutOutcome,
   TimeoutMode,
+  TotemConfig,
   TotemFinding,
   Violation,
 } from '@mmnto/totem';
@@ -42,6 +43,16 @@ export interface RunCompiledRulesOptions {
   tag: string;
   /** Absolute path to config root — used for cache paths instead of cwd */
   configRoot?: string;
+  /**
+   * Loaded totem config (mmnto-ai/totem-strategy#971, Prop 309). Only its
+   * `targets` are consumed — the lesson-kind ingest targets whose globs decide
+   * whether a zero-compiled-rules run is a legitimate empty-corpus skip
+   * (mmnto-ai/totem#1831) or a DISARMED enforcement gate that must fail loud.
+   * A caller that omits it opts out of the corpus-bearing hard-error and keeps
+   * the unconditional empty-corpus skip (e.g. `shield estimate`, whose forecast
+   * path is not the enforcement gate).
+   */
+  config?: Pick<TotemConfig, 'targets'>;
   /** True if we are linting staged changes only */
   isStaged?: boolean;
   /**
@@ -88,6 +99,87 @@ export interface RunCompiledRulesResult {
 // ─── Constants ──────────────────────────────────────
 
 const COMPILED_RULES_FILE = 'compiled-rules.json';
+
+// ─── Corpus-bearing derivation (mmnto-ai/totem-strategy#971, Prop 309) ─
+
+/**
+ * Count the lesson-corpus files a repo carries on disk: every existing file
+ * matched by a lesson-kind ingest target's glob in the loaded totem config,
+ * deduplicated across targets.
+ *
+ * This is the discriminator {@link runCompiledRules} uses when zero compiled
+ * rules load. A count > 0 means the repo genuinely HAS lessons, so a
+ * zero-rules run has silently disarmed the enforcement gate and must fail loud
+ * (mmnto-ai/totem-strategy#971, Prop 309). A count of 0 is a legitimate
+ * empty-corpus / early-adoption repo that skips (mmnto-ai/totem#1831).
+ *
+ * Config-driven — the lesson paths come from `config.targets`, never a
+ * hardcoded `.totem/lessons` (`totem describe`'s "Lessons: N" reads the fixed
+ * dir; this derivation honors a config that relocates the corpus). Pure
+ * filesystem scan with NO git spawn, so it stays Windows-temp-dir safe under
+ * test: each target's static path prefix bounds the walk, and candidate paths
+ * are matched with the shared glob matcher.
+ */
+async function countLessonCorpusFiles(
+  config: Pick<TotemConfig, 'targets'>,
+  projectRoot: string,
+): Promise<number> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { matchesGlob } = await import('@mmnto/totem');
+
+  const WILDCARD = /[*?{}[\]]/;
+  // Bound the walk so a broad lesson glob can never blow up on heavy trees.
+  const SKIP_DIRS = new Set(['.git', 'node_modules']);
+  const toPosix = (p: string): string => p.replace(/\\/g, '/');
+  const matched = new Set<string>();
+
+  for (const target of config.targets) {
+    if (target.type !== 'lesson') continue;
+    const glob = target.glob;
+
+    // Concrete path (no wildcard) — a direct existence check (e.g. a single
+    // aggregated `.totem/lessons.md`).
+    if (!WILDCARD.test(glob)) {
+      try {
+        if (fs.statSync(path.join(projectRoot, glob)).isFile()) matched.add(toPosix(glob));
+        // totem-context: best-effort — an absent concrete lesson path is simply not counted; ENOENT here is expected, never surfaced.
+      } catch {
+        // path absent — contributes nothing
+      }
+      continue;
+    }
+
+    // Wildcard glob — walk the static prefix directory (segments before the
+    // first wildcard segment) and match each candidate against the full config
+    // glob. The prefix scopes the walk to the lessons subtree.
+    const segments = glob.split('/');
+    const firstWildcard = segments.findIndex((s) => WILDCARD.test(s));
+    const baseRel = segments.slice(0, firstWildcard).join('/');
+    const stack: string[] = [baseRel ? path.join(projectRoot, baseRel) : projectRoot];
+    while (stack.length > 0) {
+      const dir = stack.pop()!;
+      let entries: import('node:fs').Dirent[];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+        // totem-context: best-effort — an unreadable/absent lesson subtree contributes nothing rather than throwing; this cold-path scan must never crash lint.
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        const abs = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (!SKIP_DIRS.has(entry.name)) stack.push(abs);
+        } else if (entry.isFile()) {
+          const rel = toPosix(path.relative(projectRoot, abs));
+          if (matchesGlob(rel, glob)) matched.add(rel);
+        }
+      }
+    }
+  }
+
+  return matched.size;
+}
 
 // ─── Core logic ─────────────────────────────────────
 
@@ -145,21 +237,29 @@ export async function runCompiledRules(
   };
   const resolvedTotemDir = path.join(options.configRoot ?? cwd, totemDir);
 
-  // Load compiled rules
+  // Load compiled rules. Thread an `onWarn` that both RECORDS the load-time
+  // warning and RENDERS it (log.warn). The lint call site historically omitted
+  // onWarn, so a truncated / unreadable manifest dropped even the accounting
+  // line and lint passed vacuously (mmnto-ai/totem-strategy#971, Prop 309).
+  // Zod-shape errors still THROW from core (a corrupt SCHEMA is never a skip).
   const rulesPath = path.join(resolvedTotemDir, COMPILED_RULES_FILE);
-  const rules = loadCompiledRules(rulesPath);
+  let loadWarning: string | undefined;
+  const rules = loadCompiledRules(rulesPath, (msg) => {
+    loadWarning = msg;
+    log.warn(tag, msg);
+  });
 
-  // Empty corpus is a legitimate state for early-adoption / aspirational repos
-  // (mmnto-ai/totem#1831). Log + skip rather than throwing so CI does not fail
-  // on repos that have a valid lint configuration but no lessons compiled yet.
-  // Consumers that need a "rule count > 0" CI guardrail can check
-  // `compiled-rules.json` length directly in their pipeline.
   if (rules.length === 0) {
-    log.info(
-      tag,
-      `No compiled rules at ${totemDir}/${COMPILED_RULES_FILE} — skipping (empty-corpus repo). Run 'totem lesson compile' once you have lessons.`,
-    );
-    return {
+    // Zero rules can mean two very different things. An empty-corpus /
+    // early-adoption repo legitimately skips (mmnto-ai/totem#1831). But a repo
+    // that ACTUALLY carries a lesson corpus and still loads zero rules has its
+    // entire enforcement gate silently disarmed behind a green exit
+    // (mmnto-ai/totem-strategy#971, Prop 309) — a missing manifest, a
+    // truncated/unreadable one (onWarn fired above), or a manifest that
+    // filtered down to zero ACTIVE rules. Discriminate on corpus-bearing: does
+    // the config declare lesson-kind targets that match real files on disk?
+    const fs = await import('node:fs');
+    const emptyResult: RunCompiledRulesResult = {
       violations: [],
       findings: [],
       rules: [],
@@ -167,6 +267,49 @@ export async function runCompiledRules(
       regexTimeouts: [],
       astParseFailures: [],
     };
+    const lessonCount = options.config
+      ? await countLessonCorpusFiles(options.config, options.configRoot ?? cwd)
+      : 0;
+
+    if (lessonCount > 0) {
+      const manifestRel = `${totemDir}/${COMPILED_RULES_FILE}`;
+      if (!fs.existsSync(rulesPath)) {
+        throw new TotemError(
+          'LINT_LESSONS_FAILED',
+          `Enforcement disarmed: ${lessonCount} lesson file(s) present but no compiled-rules manifest at ${manifestRel} — 'totem lint' would pass every diff vacuously.`,
+          "Regenerate the manifest with 'totem lesson compile' so the compiled rules are enforced.",
+        );
+      }
+      if (loadWarning) {
+        throw new TotemError(
+          'LINT_LESSONS_FAILED',
+          `Enforcement disarmed: ${lessonCount} lesson file(s) present but the compiled-rules manifest at ${manifestRel} could not be loaded — ${loadWarning}. 'totem lint' would pass every diff vacuously.`,
+          "Repair or regenerate the manifest with 'totem lesson compile' so the compiled rules are enforced.",
+        );
+      }
+      // Manifest present and loaded validly, but every rule filtered out as
+      // inert (archived / pending-verification / untested-against-codebase).
+      // Archived-in-place rules preserve telemetry by design — a legitimate
+      // lifecycle state, NOT a disarmed gate — so this stays an info-skip, but
+      // one that NAMES the zero-active-rules condition instead of masquerading
+      // as an empty corpus.
+      log.info(
+        tag,
+        `${manifestRel} is present with zero ACTIVE rules (all archived / pending-verification / untested-against-codebase) — skipping. Legitimate lifecycle state, not a disarmed gate.`,
+      );
+      return emptyResult;
+    }
+
+    // Not corpus-bearing — preserve the mmnto-ai/totem#1831 empty-corpus skip
+    // exactly (early-adoption / aspirational repos with a valid lint config but
+    // no lessons compiled yet). Consumers that need a "rule count > 0" CI
+    // guardrail can check `compiled-rules.json` length directly in their
+    // pipeline.
+    log.info(
+      tag,
+      `No compiled rules at ${totemDir}/${COMPILED_RULES_FILE} — skipping (empty-corpus repo). Run 'totem lesson compile' once you have lessons.`,
+    );
+    return emptyResult;
   }
 
   log.info(tag, `Running ${rules.length} rules (zero LLM)...`);
