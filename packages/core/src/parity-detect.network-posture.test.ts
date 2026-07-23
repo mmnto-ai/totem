@@ -269,6 +269,66 @@ describe('repo-required-checks-posture', () => {
     expect(lines[0]?.verdict.message).toContain('Retired Check');
   });
 
+  it('returns unknown (never pass) when a contributing ruleset omits strict_required_status_checks_policy', () => {
+    const repos = [
+      snapshot(
+        'mmnto-ai/totem',
+        'totem',
+        rulesetsOk([
+          statusCheckRuleset('rs-shy', CANONICAL_CONTEXTS, {
+            rules: [
+              {
+                type: 'required_status_checks',
+                parameters: {
+                  required_status_checks: CANONICAL_CONTEXTS.map((c) => ({ context: c })),
+                },
+              },
+            ],
+          }),
+        ]),
+      ),
+    ];
+    const lines = detectNetworkPostureContract(contract, checksCtx(repos));
+    expect(lines[0]?.verdict.status).toBe('unknown');
+    expect(lines[0]?.verdict.message).toContain('strict_required_status_checks_policy');
+    expect(lines[0]?.verdict.message).toContain('auth-class');
+  });
+
+  it('returns unknown (never pass) when a contributing ruleset detail omits bypass_actors', () => {
+    const repos = [
+      snapshot(
+        'mmnto-ai/totem',
+        'totem',
+        rulesetsOk([
+          statusCheckRuleset('rs-no-bypass-field', CANONICAL_CONTEXTS, {
+            bypass_actors: undefined,
+          }),
+        ]),
+      ),
+    ];
+    const lines = detectNetworkPostureContract(contract, checksCtx(repos));
+    expect(lines[0]?.verdict.status).toBe('unknown');
+    expect(lines[0]?.verdict.message).toContain('bypass_actors');
+  });
+
+  it('observed drift OUTRANKS a field-shy sibling (warn wins over unknown)', () => {
+    const repos = [
+      snapshot(
+        'mmnto-ai/totem',
+        'totem',
+        rulesetsOk([
+          statusCheckRuleset('rs-shy', ['Totem Lint'], { bypass_actors: undefined }),
+          statusCheckRuleset('rs-evaluate', ['Build & Lint (ubuntu-latest)'], {
+            enforcement: 'evaluate',
+          }),
+        ]),
+      ),
+    ];
+    const lines = detectNetworkPostureContract(contract, checksCtx(repos));
+    expect(lines[0]?.verdict.status).toBe('warn');
+    expect(lines[0]?.verdict.message).toContain('rs-evaluate');
+  });
+
   it('warns when a contributing ruleset is EVALUATE-mode (union passes but is bypassable)', () => {
     const repos = [
       snapshot(
@@ -539,6 +599,29 @@ describe('repo-branch-protection-posture', () => {
     const rulesetLine = lines.find((l) => l.lineName.includes('rulesets'));
     expect(rulesetLine?.verdict.status).toBe('warn');
     expect(rulesetLine?.verdict.message).toContain('enforcement=evaluate');
+  });
+
+  it('returns unknown on the rulesets surface when a push/PR ruleset detail omits bypass_actors', () => {
+    const shyPr = {
+      id: 5,
+      name: 'pr-shy',
+      enforcement: 'active',
+      conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
+      rules: [{ type: 'pull_request', parameters: {} }],
+    };
+    const lines = detectNetworkPostureContract(contract, {
+      row: 'repo-branch-protection-posture',
+      repos: [
+        snapshot('mmnto-ai/totem', 'totem', {
+          branchProtection: okBranchProtection,
+          rulesets: { outcome: 'ok', data: [shyPr] },
+        }),
+      ],
+    });
+    const rulesetLine = lines.find((l) => l.lineName.includes('rulesets'));
+    expect(rulesetLine?.verdict.status).toBe('unknown');
+    expect(rulesetLine?.verdict.message).toContain('pr-shy');
+    expect(rulesetLine?.verdict.message).toContain('bypass_actors');
   });
 
   it('renders classic + rulesets independently when one surface cannot verify', () => {

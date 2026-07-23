@@ -3229,13 +3229,17 @@ function requiredChecksLine(
     drift.push(`stale extra required check(s): ${extra.join(', ')} (silent merge-block)`);
 
   // ── Per-contributing-ruleset enforcement posture ──
+  const unobserved: string[] = [];
   for (const { ruleset, contexts } of contributing) {
-    const problems = enforcementProblems(ruleset, canonical.strictPolicy);
-    if (problems.length > 0) {
-      const name = ruleset.name ?? String(ruleset.id ?? '(unnamed)');
+    const read = enforcementProblems(ruleset, canonical.strictPolicy);
+    const name = ruleset.name ?? String(ruleset.id ?? '(unnamed)');
+    if (read.problems.length > 0) {
       drift.push(
-        `contributing ruleset '${name}' (supplies ${contexts.join(', ')}) is ${problems.join(' / ')}`,
+        `contributing ruleset '${name}' (supplies ${contexts.join(', ')}) is ${read.problems.join(' / ')}`,
       );
+    }
+    if (read.unobserved.length > 0) {
+      unobserved.push(`contributing ruleset '${name}' omitted ${read.unobserved.join(', ')}`);
     }
   }
 
@@ -3250,6 +3254,18 @@ function requiredChecksLine(
       },
     };
   }
+  // Observed drift outranks an observability gap (a definite finding is never
+  // hidden behind unknown); with no drift, a field-shy contributing ruleset is
+  // auth-class — never a silent pass (§14 clause 2).
+  if (unobserved.length > 0) {
+    return {
+      lineName,
+      verdict: {
+        status: 'unknown',
+        message: `rulesets detail field-shy — cannot certify enforcement posture: ${unobserved.join('; ')} (auth-class, §14 clause 2)`,
+      },
+    };
+  }
   return {
     lineName,
     verdict: {
@@ -3259,19 +3275,32 @@ function requiredChecksLine(
   };
 }
 
-/** The enforcement-posture problems for one contributing ruleset (empty = conformant). */
+/**
+ * The enforcement-posture read for one contributing ruleset: OBSERVED problems
+ * (real drift → warn) kept separate from UNOBSERVED fields — a field-shy detail
+ * is auth-class (§14 clause 2, greptile P1 round 1) and must cap the row at
+ * `unknown`, never mint a drift verdict and never fall through to a silent pass.
+ */
+interface EnforcementRead {
+  problems: string[];
+  unobserved: string[];
+}
+
 function enforcementProblems(
   ruleset: z.infer<typeof RulesetSchema>,
   pinnedStrict: boolean,
-): string[] {
+): EnforcementRead {
   const problems: string[] = [];
-  if (ruleset.enforcement !== 'active')
-    problems.push(`enforcement=${ruleset.enforcement ?? 'unset'}`);
-  if (!bypassActorsEmpty(ruleset)) problems.push('bypassable (bypass_actors non-empty)');
+  const unobserved: string[] = [];
+  if (ruleset.enforcement === undefined) unobserved.push('enforcement');
+  else if (ruleset.enforcement !== 'active') problems.push(`enforcement=${ruleset.enforcement}`);
+  if (ruleset.bypass_actors === undefined) unobserved.push('bypass_actors');
+  else if (ruleset.bypass_actors.length > 0) problems.push('bypassable (bypass_actors non-empty)');
   const strict = strictPolicy(ruleset);
-  if (strict !== undefined && strict !== pinnedStrict)
+  if (strict === undefined) unobserved.push('strict_required_status_checks_policy');
+  else if (strict !== pinnedStrict)
     problems.push(`strict_required_status_checks_policy=${strict}≠${pinnedStrict}`);
-  return problems;
+  return { problems, unobserved };
 }
 
 // ── Row 3: repo-branch-protection-posture ──
@@ -3385,15 +3414,18 @@ function rulesetProtectionLine(
     .filter((r) => (r.rules ?? []).some((rule) => PUSH_PR_RULE_TYPES.has(rule.type)));
 
   const drift: string[] = [];
+  const unobserved: string[] = [];
   for (const ruleset of protectionRulesets) {
+    const name = ruleset.name ?? String(ruleset.id ?? '(unnamed)');
     const problems: string[] = [];
-    if (ruleset.enforcement !== 'active')
-      problems.push(`enforcement=${ruleset.enforcement ?? 'unset'}`);
-    if (!bypassActorsEmpty(ruleset)) problems.push('bypassable (bypass_actors non-empty)');
-    if (problems.length > 0) {
-      const name = ruleset.name ?? String(ruleset.id ?? '(unnamed)');
-      drift.push(`protection ruleset '${name}' is ${problems.join(' / ')}`);
-    }
+    const shy: string[] = [];
+    if (ruleset.enforcement === undefined) shy.push('enforcement');
+    else if (ruleset.enforcement !== 'active') problems.push(`enforcement=${ruleset.enforcement}`);
+    if (ruleset.bypass_actors === undefined) shy.push('bypass_actors');
+    else if (ruleset.bypass_actors.length > 0)
+      problems.push('bypassable (bypass_actors non-empty)');
+    if (problems.length > 0) drift.push(`protection ruleset '${name}' is ${problems.join(' / ')}`);
+    if (shy.length > 0) unobserved.push(`protection ruleset '${name}' omitted ${shy.join(', ')}`);
   }
 
   if (drift.length > 0) {
@@ -3404,6 +3436,17 @@ function rulesetProtectionLine(
         message: `ruleset protection drifted: ${drift.join('; ')}`,
         remediation:
           'Make every default-branch push/PR ruleset enforcement=active with no bypass actors so it cannot undercut classic protection.',
+      },
+    };
+  }
+  // Same precedence as row 2: a field-shy protection ruleset is auth-class —
+  // never certified un-bypassable without observing the field (§14 clause 2).
+  if (unobserved.length > 0) {
+    return {
+      lineName,
+      verdict: {
+        status: 'unknown',
+        message: `rulesets detail field-shy — cannot certify protection posture: ${unobserved.join('; ')} (auth-class, §14 clause 2)`,
       },
     };
   }
@@ -3452,11 +3495,6 @@ function strictPolicy(ruleset: z.infer<typeof RulesetSchema>): boolean | undefin
     if (params.success) return params.data.strict_required_status_checks_policy;
   }
   return undefined;
-}
-
-/** True when a ruleset has no bypass actors (absent or empty array = un-bypassable). */
-function bypassActorsEmpty(ruleset: z.infer<typeof RulesetSchema>): boolean {
-  return (ruleset.bypass_actors ?? []).length === 0;
 }
 
 /** Read a file through the injected seam, swallowing a throwing reader to undefined (honest-absent). */

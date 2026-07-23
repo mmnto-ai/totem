@@ -280,14 +280,38 @@ function toSnapshot(result: GhFetchResult): NetworkSurfaceSnapshot {
  * (conservative — a partial read cannot certify the union).
  */
 function fetchRulesetsSurface(slug: string, ghFetch: GhFetch, cwd: string): NetworkSurfaceSnapshot {
-  const list = ghFetch(`/repos/${slug}/rulesets?includes_parents=true`, cwd);
+  // per_page=100 (the API max). Deliberately NOT `--paginate`: paged gh output
+  // concatenates JSON documents (or needs --slurp, a newer-gh dependency); the
+  // boundary sentinel below keeps the never-silently-undercount invariant
+  // instead (CR round 1) — a repo at the cap degrades to cannot-verify, never
+  // to a partial union.
+  const list = ghFetch(`/repos/${slug}/rulesets?includes_parents=true&per_page=100`, cwd);
   if (list.outcome !== 'ok') return toSnapshot(list);
 
-  const summaries = Array.isArray(list.data) ? list.data : [];
+  // A non-array 200 payload must degrade to cannot-verify — coercing it to []
+  // would let the detector certify "no rulesets" from garbage (greptile P1).
+  if (!Array.isArray(list.data)) {
+    return { outcome: 'error', detail: 'unparseable rulesets list response' };
+  }
+  const summaries = list.data;
+  if (summaries.length >= 100) {
+    return {
+      outcome: 'error',
+      detail:
+        'rulesets list at the pagination boundary (100) — possible truncation, cannot certify the union',
+    };
+  }
   const details: unknown[] = [];
   for (const summary of summaries) {
     const id = rulesetId(summary);
-    if (id === undefined) continue;
+    if (id === undefined) {
+      // An id-less entry cannot be detail-fetched — a partial read cannot
+      // certify the union (same posture as the per-detail failure below).
+      return {
+        outcome: 'error',
+        detail: 'ruleset list entry without a usable id — cannot enumerate the union',
+      };
+    }
     const detail = ghFetch(`/repos/${slug}/rulesets/${id}`, cwd);
     if (detail.outcome === 'ok') {
       details.push(detail.data);

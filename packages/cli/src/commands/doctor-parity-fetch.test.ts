@@ -87,7 +87,7 @@ describe('resolveNetworkSnapshots', () => {
 
   it('assembles the rulesets surface from a list + per-id detail fetch', async () => {
     const { ghFetch, calls } = cannedFetch({
-      '/repos/mmnto-ai/totem/rulesets?includes_parents=true': {
+      '/repos/mmnto-ai/totem/rulesets?includes_parents=true&per_page=100': {
         outcome: 'ok',
         data: [{ id: 11 }, { id: 12 }],
       },
@@ -110,10 +110,70 @@ describe('resolveNetworkSnapshots', () => {
     expect(calls).toContain('/repos/mmnto-ai/totem/rulesets/12');
   });
 
+  it('degrades a NON-ARRAY rulesets list 200 to error (never an empty union)', async () => {
+    const { ghFetch } = cannedFetch({
+      '/repos/mmnto-ai/totem/rulesets?includes_parents=true&per_page=100': {
+        outcome: 'ok',
+        data: { message: 'not a list' },
+      },
+    });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'repo-required-checks-posture', consumers: ['totem'] }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      ghFetch,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps[0]?.surfaces.rulesets?.outcome).toBe('error');
+    expect(snaps[0]?.surfaces.rulesets?.detail).toContain('unparseable');
+  });
+
+  it('degrades an id-less list entry to error (a partial read cannot certify the union)', async () => {
+    const { ghFetch, calls } = cannedFetch({
+      '/repos/mmnto-ai/totem/rulesets?includes_parents=true&per_page=100': {
+        outcome: 'ok',
+        data: [{ name: 'no-id-entry' }, { id: 11 }],
+      },
+      '/repos/mmnto-ai/totem/rulesets/11': { outcome: 'ok', data: { id: 11 } },
+    });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'repo-required-checks-posture', consumers: ['totem'] }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      ghFetch,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps[0]?.surfaces.rulesets?.outcome).toBe('error');
+    expect(snaps[0]?.surfaces.rulesets?.detail).toContain('usable id');
+    expect(calls).not.toContain('/repos/mmnto-ai/totem/rulesets/11');
+  });
+
+  it('degrades a list at the pagination boundary (100) to error, never a silent undercount', async () => {
+    const hundred = Array.from({ length: 100 }, (_, i) => ({ id: i + 1 }));
+    const { ghFetch } = cannedFetch({
+      '/repos/mmnto-ai/totem/rulesets?includes_parents=true&per_page=100': {
+        outcome: 'ok',
+        data: hundred,
+      },
+    });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'repo-required-checks-posture', consumers: ['totem'] }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      ghFetch,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps[0]?.surfaces.rulesets?.outcome).toBe('error');
+    expect(snaps[0]?.surfaces.rulesets?.detail).toContain('pagination boundary');
+  });
+
   it('resolves the default branch from repo settings for classic branch protection (row-3)', async () => {
     const { ghFetch, calls } = cannedFetch({
       '/repos/mmnto-ai/totem': { outcome: 'ok', data: { default_branch: 'main' } },
-      '/repos/mmnto-ai/totem/rulesets?includes_parents=true': { outcome: 'ok', data: [] },
+      '/repos/mmnto-ai/totem/rulesets?includes_parents=true&per_page=100': {
+        outcome: 'ok',
+        data: [],
+      },
       '/repos/mmnto-ai/totem/branches/main/protection': {
         outcome: 'ok',
         data: { enforce_admins: { enabled: true } },
@@ -133,7 +193,10 @@ describe('resolveNetworkSnapshots', () => {
   it('marks branch protection auth-class when repo 200 omits default_branch', async () => {
     const { ghFetch } = cannedFetch({
       '/repos/mmnto-ai/totem': { outcome: 'ok', data: {} },
-      '/repos/mmnto-ai/totem/rulesets?includes_parents=true': { outcome: 'ok', data: [] },
+      '/repos/mmnto-ai/totem/rulesets?includes_parents=true&per_page=100': {
+        outcome: 'ok',
+        data: [],
+      },
     });
     const snaps = await resolveNetworkSnapshots({
       rows: [{ row: 'repo-branch-protection-posture', consumers: ['totem'] }],
@@ -148,7 +211,10 @@ describe('resolveNetworkSnapshots', () => {
   it('honors consumers scoping per-repo: a cross-repo gets only the unscoped row-1 surface', async () => {
     const { ghFetch, calls } = cannedFetch({
       '/repos/mmnto-ai/totem': { outcome: 'ok', data: { default_branch: 'main' } },
-      '/repos/mmnto-ai/totem/rulesets?includes_parents=true': { outcome: 'ok', data: [] },
+      '/repos/mmnto-ai/totem/rulesets?includes_parents=true&per_page=100': {
+        outcome: 'ok',
+        data: [],
+      },
       '/repos/mmnto-ai/totem/branches/main/protection': { outcome: 'ok', data: {} },
       '/repos/other-org/widget': { outcome: 'ok', data: { allow_squash_merge: true } },
     });
