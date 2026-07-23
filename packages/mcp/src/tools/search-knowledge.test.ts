@@ -19,6 +19,10 @@ let mockSearchResults: Array<{
   absoluteFilePath?: string;
   score: number;
   content: string;
+  // mmnto-ai/totem#2463: optional relevance + searchMethod so tests can
+  // exercise the floor / envelope / fallback paths.
+  relevance?: number;
+  searchMethod?: 'hybrid' | 'vector' | 'fts';
 }> = [];
 
 let mockHealthCheckResult: {
@@ -66,6 +70,8 @@ let mockLinkedStoreInitErrors: Map<string, string> = new Map();
  * verifies the call site fires with the correct activity_name.
  */
 let mockLogMcpCall: ReturnType<typeof vi.fn>;
+/** mmnto-ai/totem#2463: captured logSearch spy so tests can assert topRelevance. */
+let mockLogSearch: ReturnType<typeof vi.fn>;
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: class {},
@@ -89,6 +95,7 @@ vi.mock('../context.js', () => ({
         totemDir: '.totem',
         lanceDir: '.totem/.lance',
         contextWarningThreshold: 50_000,
+        searchRelevanceFloor: 0.4,
         partitions: { core: ['packages/core/'] },
       },
       store: {
@@ -201,6 +208,7 @@ describe('search_knowledge', () => {
     mockLinkedStores = new Map();
     mockLinkedStoreInitErrors = new Map();
     mockLogMcpCall = vi.fn(async () => {});
+    mockLogSearch = vi.fn();
 
     // Reset modules to clear the firstHealthCheckDone flag
     vi.resetModules();
@@ -228,6 +236,7 @@ describe('search_knowledge', () => {
             totemDir: '.totem',
             lanceDir: '.totem/.lance',
             contextWarningThreshold: 50_000,
+            searchRelevanceFloor: 0.4,
             partitions: { core: ['packages/core/'] },
           },
           store: {
@@ -285,7 +294,7 @@ describe('search_knowledge', () => {
     }));
 
     vi.doMock('../search-log.js', () => ({
-      logSearch: vi.fn(),
+      logSearch: mockLogSearch,
       setLogDir: vi.fn(),
     }));
 
@@ -1525,6 +1534,271 @@ describe('search_knowledge', () => {
       expect(result.isError).toBeUndefined();
       expect(result.content[0]!.text).toContain('<index-meta status="mocked" />');
       expect(result.content[0]!.text).toContain('No results found');
+    });
+  });
+
+  // --- Retrieval envelope + relevance floor (mmnto-ai/totem#2463) ---
+
+  describe('retrieval envelope + relevance floor (mmnto-ai/totem#2463)', () => {
+    // The whole outcome must parse from the response text with ONE regex
+    // (the wrapper-agent contract).
+    const ENVELOPE_RE =
+      /<retrieval-envelope status="(\w+)" method="(\w+)" bestRelevance="([^"]+)" floor="([^"]+)" hits="(\d+)" \/>/;
+
+    it('emits status="ok" with bestRelevance, floor, and per-hit Relevance', async () => {
+      mockSearchResults = [
+        {
+          label: 'A',
+          type: 'code',
+          filePath: 'src/a.ts',
+          score: 0.016,
+          relevance: 0.83,
+          searchMethod: 'hybrid',
+          content: 'alpha body',
+        },
+        {
+          label: 'B',
+          type: 'code',
+          filePath: 'src/b.ts',
+          score: 0.016,
+          relevance: 0.61,
+          searchMethod: 'hybrid',
+          content: 'beta body',
+        },
+      ];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const m = text.match(ENVELOPE_RE);
+      expect(m).not.toBeNull();
+      expect(m![1]).toBe('ok');
+      expect(m![2]).toBe('hybrid');
+      expect(m![3]).toBe('0.830'); // max over hit relevances
+      expect(m![4]).toBe('0.400'); // configured floor (mock config)
+      expect(m![5]).toBe('2');
+
+      // Both Score (RRF, ordering) and Relevance (true signal) are rendered.
+      expect(text).toContain('**Relevance:** 0.830');
+      expect(text).toContain('**Relevance:** 0.610');
+      // status=ok returns full content.
+      expect(text).toContain('alpha body');
+    });
+
+    it('emits the retrieval-envelope directly below the <index-meta> line', async () => {
+      mockSearchResults = [
+        {
+          label: 'A',
+          type: 'code',
+          filePath: 'src/a.ts',
+          score: 0.016,
+          relevance: 0.9,
+          searchMethod: 'hybrid',
+          content: 'body',
+        },
+      ];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const idxMeta = text.indexOf('<index-meta');
+      const idxEnv = text.indexOf('<retrieval-envelope');
+      expect(idxMeta).toBeGreaterThanOrEqual(0);
+      expect(idxEnv).toBeGreaterThan(idxMeta);
+      // Only whitespace separates the two envelope lines.
+      const between = text.slice(text.indexOf('/>', idxMeta) + 2, idxEnv);
+      expect(between.trim()).toBe('');
+    });
+
+    it('reports no_useful_hits and discloses below-floor candidates (path + relevance, NO content)', async () => {
+      mockSearchResults = [
+        {
+          label: 'Weak A',
+          type: 'code',
+          filePath: 'src/a.ts',
+          score: 0.016,
+          relevance: 0.2,
+          searchMethod: 'hybrid',
+          content: 'SECRET_BODY_A',
+        },
+        {
+          label: 'Weak B',
+          type: 'code',
+          filePath: 'src/b.ts',
+          score: 0.016,
+          relevance: 0.15,
+          searchMethod: 'hybrid',
+          content: 'SECRET_BODY_B',
+        },
+      ];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const m = text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('no_useful_hits');
+      expect(m![3]).toBe('0.200'); // best of the below-floor set
+      expect(m![5]).toBe('2');
+
+      // Candidates disclosed by path + relevance — never silently dropped.
+      expect(text).toContain('/fake/project/src/a.ts');
+      expect(text).toContain('relevance 0.200');
+      expect(text).toContain('relevance 0.150');
+      // ...but their content is withheld.
+      expect(text).not.toContain('SECRET_BODY_A');
+      expect(text).not.toContain('SECRET_BODY_B');
+    });
+
+    it('never fires the floor when no hit carries a relevance signal (bestRelevance n/a)', async () => {
+      // Low RRF score but NO relevance signal → must NOT become no_useful_hits.
+      mockSearchResults = [
+        {
+          label: 'K',
+          type: 'code',
+          filePath: 'src/k.ts',
+          score: 0.016,
+          searchMethod: 'fts',
+          content: 'keyword body',
+        },
+      ];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const m = text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('ok');
+      expect(m![3]).toBe('n/a');
+      expect(text).toContain('keyword body'); // content returned, not withheld
+    });
+
+    it('min_relevance overrides the configured floor in both directions', async () => {
+      mockSearchResults = [
+        {
+          label: 'Mid',
+          type: 'code',
+          filePath: 'src/m.ts',
+          score: 0.016,
+          relevance: 0.3,
+          searchMethod: 'hybrid',
+          content: 'mid body',
+        },
+      ];
+
+      // Config floor 0.4 → 0.3 is below → no_useful_hits, floor reported 0.400.
+      const strict = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const ms = strict.content[0]!.text.match(ENVELOPE_RE);
+      expect(ms![1]).toBe('no_useful_hits');
+      expect(ms![4]).toBe('0.400');
+
+      // Override to 0.1 → 0.3 clears the bar → ok, floor reported 0.100.
+      const loose = (await handle({ query: 'test', min_relevance: 0.1 })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const ml = loose.content[0]!.text.match(ENVELOPE_RE);
+      expect(ml![1]).toBe('ok');
+      expect(ml![4]).toBe('0.100');
+      expect(loose.content[0]!.text).toContain('mid body');
+    });
+
+    it('preserves relevance through the federation RRF merge (second fusion site)', async () => {
+      mockSearchResults = [
+        {
+          label: 'P',
+          type: 'code',
+          filePath: 'src/p.ts',
+          score: 0.95,
+          relevance: 0.88,
+          searchMethod: 'hybrid',
+          content: 'primary body',
+        },
+      ];
+      mockLinkedStores.set('strategy', {
+        search: vi.fn(async () => [
+          {
+            label: 'S',
+            type: 'spec',
+            filePath: 'adr/s.md',
+            absoluteFilePath: '/abs/strategy/adr/s.md',
+            sourceRepo: 'strategy',
+            score: 0.5,
+            relevance: 0.72,
+            searchMethod: 'hybrid',
+            content: 'strategy body',
+          },
+        ]),
+        reconnect: vi.fn(async () => {}),
+      });
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      // Federation overwrites score with RRF but must carry relevance through.
+      expect(text).toContain('**Relevance:** 0.880');
+      expect(text).toContain('**Relevance:** 0.720');
+      const m = text.match(ENVELOPE_RE);
+      expect(m![3]).toBe('0.880'); // max across federated hits
+    });
+
+    it('degraded embedder: fts-stamped hits surface a keyword-only warning and method="fts"', async () => {
+      mockSearchResults = [
+        {
+          label: 'K1',
+          type: 'code',
+          filePath: 'src/k.ts',
+          score: 1.0,
+          searchMethod: 'fts',
+          content: 'keyword hit body',
+        },
+      ];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+      const text = result.content[0]!.text;
+
+      expect(result.isError).toBeUndefined();
+      const m = text.match(ENVELOPE_RE);
+      expect(m![2]).toBe('fts');
+      // Loud, honest degradation warning.
+      expect(text).toContain('[SYSTEM WARNING]');
+      expect(text).toContain('KEYWORD-ONLY');
+      // Keyword hits render Relevance as an explicit n/a note.
+      expect(text).toContain('**Relevance:** n/a (keyword match)');
+    });
+
+    it('logs topRelevance alongside topScore', async () => {
+      mockSearchResults = [
+        {
+          label: 'A',
+          type: 'code',
+          filePath: 'src/a.ts',
+          score: 0.016,
+          relevance: 0.77,
+          searchMethod: 'hybrid',
+          content: 'body',
+        },
+      ];
+
+      await handle({ query: 'test' });
+
+      const call = mockLogSearch.mock.calls.find(
+        (c) => (c[0] as { query?: string }).query === 'test',
+      );
+      expect(call).toBeTruthy();
+      expect((call![0] as { topRelevance?: number | null }).topRelevance).toBeCloseTo(0.77, 3);
     });
   });
 });

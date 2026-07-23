@@ -93,6 +93,7 @@ function makeConfig(extendsList: readonly string[] | undefined): TotemConfig {
     indexIgnorePatterns: [],
     shieldIgnorePatterns: [],
     contextWarningThreshold: 40_000,
+    searchRelevanceFloor: 0.25,
     shieldAutoLearn: false,
     extends: extendsList ? [...extendsList] : undefined,
     review: {

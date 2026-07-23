@@ -40,7 +40,10 @@ export async function runVectorSearch(
   if (whereClause) q = q.where(whereClause);
 
   const results = await q.toArray();
-  return results.map((row) => rowToSearchResult(row, sourceContext));
+  return results.map((row) => ({
+    ...rowToSearchResult(row, sourceContext),
+    searchMethod: 'vector' as const,
+  }));
 }
 
 /**
@@ -108,6 +111,9 @@ export async function runFtsSearch(
     if (row['_score'] == null) {
       result.score = 1 / rank;
     }
+    // FTS-only path carries no vector leg — `relevance` stays absent
+    // (mmnto-ai/totem#2463); stamp the method so callers can label provenance.
+    result.searchMethod = 'fts';
     return result;
   });
 }
@@ -184,10 +190,16 @@ function rowToSearchResult(
   row: Record<string, unknown>,
   sourceContext: SourceContext,
 ): SearchResult {
-  // Vector search returns _distance (lower = better); FTS returns _score (higher = better)
+  // Vector search returns _distance (lower = better); FTS returns _score (higher = better).
+  // The vector-derived `1/(1+_distance)` similarity is ALSO the true relevance
+  // signal (mmnto-ai/totem#2463): captured into `relevance` here so it survives
+  // the RRF fusion that later overwrites `score` with a rank artifact. FTS rows
+  // (only `_score`, an incomparable BM25 magnitude) carry no `relevance`.
   let score = 0;
+  let relevance: number | undefined;
   if (row['_distance'] != null) {
-    score = 1 / (1 + (row['_distance'] as number));
+    relevance = 1 / (1 + (row['_distance'] as number));
+    score = relevance;
   } else if (row['_score'] != null) {
     score = row['_score'] as number;
   }
@@ -205,6 +217,10 @@ function rowToSearchResult(
     score,
     metadata: JSON.parse((row['metadata'] as string) || '{}') as Record<string, string>,
   };
+
+  if (relevance !== undefined) {
+    result.relevance = relevance;
+  }
 
   if (sourceContext.sourceRepo) {
     result.sourceRepo = sourceContext.sourceRepo;
@@ -233,8 +249,18 @@ function rrfMerge(
     }
   }
 
+  // `rowToSearchResult` recomputes `relevance` from the RETAINED row. Because
+  // the vector leg (listA) is iterated first, a doc present in both legs keeps
+  // its vector row here, so the spread carries the vector-leg `relevance`
+  // through untouched while `score` is overwritten with the RRF value that
+  // drives ordering (mmnto-ai/totem#2463). Ordering is byte-identical to the
+  // pre-#2463 behavior — `relevance`/`searchMethod` never enter the sort key.
   return [...scores.values()]
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
-    .map(({ score, row }) => ({ ...rowToSearchResult(row, sourceContext), score }));
+    .map(({ score, row }) => ({
+      ...rowToSearchResult(row, sourceContext),
+      score,
+      searchMethod: 'hybrid' as const,
+    }));
 }

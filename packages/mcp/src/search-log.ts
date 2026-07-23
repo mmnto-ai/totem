@@ -9,6 +9,14 @@ export interface SearchLogEntry {
   resultCount: number;
   durationMs: number;
   topScore: number | null;
+  /**
+   * Best per-hit relevance (vector-leg similarity, 0..1) for this query, or
+   * `null` when no hit carried a relevance signal (mmnto-ai/totem#2463).
+   * Recorded alongside `topScore` because `topScore` is an RRF rank artifact in
+   * hybrid/federated modes — `topRelevance` is the calibratable retrieval-quality
+   * signal the pilot floor tuning reads. Optional: absent on pre-#2463 entries.
+   */
+  topRelevance?: number | null;
   error?: string; // eslint-disable-line id-match -- interface property, not a catch binding
   /**
    * A.3.a schema extension (ADR-029 flight-readiness note; ruled in on

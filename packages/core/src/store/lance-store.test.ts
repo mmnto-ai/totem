@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Embedder } from '../embedders/embedder.js';
+import { TotemConfigError } from '../errors.js';
 import { cleanTmpDir } from '../test-utils.js';
 import type { Chunk } from '../types.js';
 import { escapeSqlString, LanceStore } from './lance-store.js';
@@ -322,6 +323,89 @@ describe('LanceStore', () => {
 
       const results = await store.search({ query: 'gamma', boundary: '', maxResults: 10 });
       expect(results.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('allowFtsFallback (mmnto-ai/totem#2463)', () => {
+    /** Throws the exact no-embedder error that LazyEmbedder.doResolve raises. */
+    class NoEmbedder implements Embedder {
+      readonly dimensions = 8;
+      async embed(): Promise<number[][]> {
+        throw new TotemConfigError(
+          'No embedding provider available. The configured provider failed and Ollama is not running.',
+          'hint',
+          'CONFIG_MISSING',
+        );
+      }
+    }
+
+    /** Throws a NON-embedder error — must always propagate, never degrade. */
+    class BrokenEmbedder implements Embedder {
+      readonly dimensions = 8;
+      async embed(): Promise<number[][]> {
+        throw new Error('LanceDB vector search exploded');
+      }
+    }
+
+    it('degrades to FTS-only when embedder is unavailable, FTS exists, and the flag is set', async () => {
+      // Seed the index + FTS with a working embedder (the outer `store`).
+      await store.insert([
+        makeChunk({ content: 'handles user authentication and login', label: 'auth' }),
+        makeChunk({ content: 'renders the dashboard component', label: 'dash' }),
+      ]);
+      await store.createFtsIndex();
+
+      // A second store over the SAME dir whose embedder cannot resolve.
+      const degraded = new LanceStore(tmpDir, new NoEmbedder(), { absolutePathRoot: tmpDir });
+      await degraded.connect();
+
+      const results = await degraded.search({
+        query: 'authentication',
+        allowFtsFallback: true,
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      // Success-shaped, method fts, and NO relevance signal on keyword hits.
+      for (const r of results) {
+        expect(r.searchMethod).toBe('fts');
+        expect(r.relevance).toBeUndefined();
+      }
+    });
+
+    it('rethrows the embedder failure when the flag is OFF (today behavior)', async () => {
+      await store.insert([makeChunk({ content: 'authentication content', label: 'auth' })]);
+      await store.createFtsIndex();
+
+      const degraded = new LanceStore(tmpDir, new NoEmbedder(), { absolutePathRoot: tmpDir });
+      await degraded.connect();
+
+      await expect(degraded.search({ query: 'authentication' })).rejects.toThrow(
+        'No embedding provider available',
+      );
+    });
+
+    it('rethrows the embedder failure when the flag is set but NO FTS index exists', async () => {
+      // Seed WITHOUT createFtsIndex → hybrid path off, vector-only, no fallback.
+      await store.insert([makeChunk({ content: 'authentication content', label: 'auth' })]);
+
+      const degraded = new LanceStore(tmpDir, new NoEmbedder(), { absolutePathRoot: tmpDir });
+      await degraded.connect();
+
+      await expect(
+        degraded.search({ query: 'authentication', allowFtsFallback: true }),
+      ).rejects.toThrow('No embedding provider available');
+    });
+
+    it('propagates a NON-embedder error even with the flag set and FTS present', async () => {
+      await store.insert([makeChunk({ content: 'authentication content', label: 'auth' })]);
+      await store.createFtsIndex();
+
+      const broken = new LanceStore(tmpDir, new BrokenEmbedder(), { absolutePathRoot: tmpDir });
+      await broken.connect();
+
+      await expect(
+        broken.search({ query: 'authentication', allowFtsFallback: true }),
+      ).rejects.toThrow('LanceDB vector search exploded');
     });
   });
 

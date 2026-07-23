@@ -184,6 +184,13 @@ function formatResult(r: SearchResult, index: number): string {
   // joined with explicit `+` rather than two adjacent template placeholders
   // (which the concat-without-delimiter lint rule flags).
   const labelWithTag = r.sourceRepo ? `[${r.sourceRepo}] ` + r.label : r.label;
+  // mmnto-ai/totem#2463: surface the true relevance signal alongside the
+  // ordering `score`. `score` stays (RRF rank artifact — drives display order);
+  // `relevance` is the vector-leg similarity, or an explicit keyword-match note
+  // when the hit had no vector leg (FTS-only), so the agent never mistakes an
+  // absent signal for a low one.
+  const relevanceField =
+    typeof r.relevance === 'number' ? r.relevance.toFixed(3) : 'n/a (keyword match)';
   // mmnto/totem#1295 CR MAJOR: ALWAYS display the absolute path. The whole
   // point of `absoluteFilePath` on `SearchResult` is to give agents an
   // unambiguous Read/Edit target. Falling back to the relative `filePath`
@@ -191,7 +198,7 @@ function formatResult(r: SearchResult, index: number): string {
   // exactly the bug that field was added to fix.
   return (
     `### ${index + 1}. ${labelWithTag} (${r.type})\n` +
-    `**File:** ${r.absoluteFilePath} | **Score:** ${r.score.toFixed(3)}\n\n` +
+    `**File:** ${r.absoluteFilePath} | **Score:** ${r.score.toFixed(3)} | **Relevance:** ${relevanceField}\n\n` +
     r.content
   );
 }
@@ -248,12 +255,17 @@ async function federatedSearch(
   const hasLinkedStores = linkedStores.size > 0;
   const primaryPromise = hasLinkedStores
     ? primaryStore
-        .search({ query, typeFilter, maxResults: perStoreLimit })
+        .search({ query, typeFilter, maxResults: perStoreLimit, allowFtsFallback: true })
         .catch(async (err: unknown) => {
           const firstMsg = err instanceof Error ? err.message : String(err);
           try {
             await primaryStore.reconnect();
-            return await primaryStore.search({ query, typeFilter, maxResults: perStoreLimit });
+            return await primaryStore.search({
+              query,
+              typeFilter,
+              maxResults: perStoreLimit,
+              allowFtsFallback: true,
+            });
           } catch (retryErr) {
             const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
             const combinedMsg = `search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`;
@@ -269,7 +281,7 @@ async function federatedSearch(
             return [] as SearchResult[];
           }
         })
-    : primaryStore.search({ query, typeFilter, maxResults: perStoreLimit });
+    : primaryStore.search({ query, typeFilter, maxResults: perStoreLimit, allowFtsFallback: true });
 
   // Linked stores: catch per-store failures so one broken linked index
   // doesn't break the overall query. On failure, attempt targeted
@@ -278,26 +290,34 @@ async function federatedSearch(
   // mutated here — the store stays in `linkedStores` so the next query
   // can try again (the transient issue may have cleared).
   const linkedPromises = Array.from(linkedStores.entries()).map(([name, ls]) =>
-    ls.search({ query, typeFilter, maxResults: perStoreLimit }).catch(async (err) => {
-      const firstMsg = err instanceof Error ? err.message : String(err);
-      try {
-        await ls.reconnect();
-        return await ls.search({ query, typeFilter, maxResults: perStoreLimit });
-      } catch (retryErr) {
-        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-        const combinedMsg = `search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`;
-        logSearch({
-          timestamp: new Date().toISOString(),
-          query: `internal:linked-store-search:${name}`,
-          resultCount: 0,
-          durationMs: 0,
-          topScore: null,
-          error: `Linked store "${name}" ${combinedMsg}`,
-        });
-        failures.linked.set(name, combinedMsg);
-        return [] as SearchResult[];
-      }
-    }),
+    ls
+      .search({ query, typeFilter, maxResults: perStoreLimit, allowFtsFallback: true })
+      .catch(async (err) => {
+        const firstMsg = err instanceof Error ? err.message : String(err);
+        try {
+          await ls.reconnect();
+          return await ls.search({
+            query,
+            typeFilter,
+            maxResults: perStoreLimit,
+            allowFtsFallback: true,
+          });
+          // totem-context: mmnto-ai/totem#1295 — the catch below is not a silent swallow; the failure is recorded in `failures.linked` and surfaced to the agent as a per-query system warning.
+        } catch (retryErr) {
+          const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+          const combinedMsg = `search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`;
+          logSearch({
+            timestamp: new Date().toISOString(),
+            query: `internal:linked-store-search:${name}`,
+            resultCount: 0,
+            durationMs: 0,
+            topScore: null,
+            error: `Linked store "${name}" ${combinedMsg}`,
+          });
+          failures.linked.set(name, combinedMsg);
+          return [] as SearchResult[];
+        }
+      }),
   );
 
   const [primaryResults, ...linkedResults] = await Promise.all([primaryPromise, ...linkedPromises]);
@@ -328,6 +348,11 @@ async function federatedSearch(
   //
   // RRF k=60 matches the constant used inside `LanceStore.rrfMerge` for
   // intra-store hybrid fusion, for consistency.
+  //
+  // mmnto-ai/totem#2463: the `{ ...r }` spread carries each hit's `relevance`
+  // and `searchMethod` through untouched — this second fusion site overwrites
+  // ONLY `score`, exactly as the intra-store `rrfMerge` does, so the true
+  // relevance signal survives federation just as it survives single-store mode.
   const RRF_K_FEDERATION = 60;
   const reranked: SearchResult[] = [];
   for (const bucket of buckets) {
@@ -339,11 +364,46 @@ async function federatedSearch(
   return reranked.slice(0, finalLimit);
 }
 
+/**
+ * Which retrieval path the returned hits came from, for the envelope's
+ * `method` attribute (mmnto-ai/totem#2463). Any fts-stamped hit means a store
+ * degraded to keyword-only, so `fts` is reported to keep the envelope method in
+ * lockstep with the loud fallback warning. All hits vector-only → `vector`;
+ * otherwise (default / mixed / empty) → `hybrid`.
+ */
+function deriveSearchMethod(results: SearchResult[]): 'hybrid' | 'vector' | 'fts' {
+  if (results.some((r) => r.searchMethod === 'fts')) return 'fts';
+  if (results.length > 0 && results.every((r) => r.searchMethod === 'vector')) return 'vector';
+  return 'hybrid';
+}
+
+/**
+ * Machine-parsable retrieval outcome line (mmnto-ai/totem#2463). Sits directly
+ * below the `<index-meta>` line and shares its self-closing XML-attribute shape
+ * so a wrapper agent can read the whole outcome with one regex. Every attribute
+ * value is a closed enum or a formatted number — no user input — so no XML
+ * escaping is required.
+ */
+export function formatRetrievalEnvelope(params: {
+  status: 'ok' | 'no_useful_hits' | 'empty';
+  method: 'hybrid' | 'vector' | 'fts';
+  bestRelevance: number | null;
+  floor: number;
+  hits: number;
+}): string {
+  const best = params.bestRelevance !== null ? params.bestRelevance.toFixed(3) : 'n/a';
+  return (
+    `<retrieval-envelope status="${params.status}" method="${params.method}" ` +
+    `bestRelevance="${best}" floor="${params.floor.toFixed(3)}" hits="${params.hits}" />`
+  );
+}
+
 async function performSearch(
   query: string,
   typeFilter?: ContentType,
   maxResults?: number,
   boundary?: string,
+  minRelevance?: number,
 ): Promise<ToolResult> {
   const { config, linkedStores, linkedStoreInitErrors, projectRoot } = await getContext();
   const finalLimit = maxResults ?? 5;
@@ -406,6 +466,7 @@ async function performSearch(
       typeFilter,
       maxResults: finalLimit,
       boundary: config.partitions[boundary],
+      allowFtsFallback: true,
     });
   } else if (boundary !== undefined && linkedStores.has(boundary)) {
     // Case 2: linked store name — route ONLY to that linked store.
@@ -419,12 +480,23 @@ async function performSearch(
     // real outage as an absence of relevant knowledge.
     const linked = linkedStores.get(boundary)!;
     try {
-      results = await linked.search({ query, typeFilter, maxResults: finalLimit });
+      results = await linked.search({
+        query,
+        typeFilter,
+        maxResults: finalLimit,
+        allowFtsFallback: true,
+      });
+      // totem-context: mmnto-ai/totem#1295 — the catch below is not a silent swallow; a fully-failed targeted boundary (initial AND reconnect+retry throw) is surfaced to the agent as an isError ToolResult.
     } catch (err) {
       const firstMsg = err instanceof Error ? err.message : String(err);
       try {
         await linked.reconnect();
-        results = await linked.search({ query, typeFilter, maxResults: finalLimit });
+        results = await linked.search({
+          query,
+          typeFilter,
+          maxResults: finalLimit,
+          allowFtsFallback: true,
+        });
       } catch (retryErr) {
         const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
         const errorText = formatSystemWarning(
@@ -468,6 +540,7 @@ async function performSearch(
       typeFilter,
       maxResults: finalLimit,
       boundary,
+      allowFtsFallback: true,
     });
   } else {
     // Case 5: no boundary → federated search across primary + all linked.
@@ -542,6 +615,40 @@ async function performSearch(
     failures.primary !== null &&
     failures.linked.size === linkedStores.size;
 
+  // ─── Retrieval envelope + relevance floor (mmnto-ai/totem#2463) ──
+  //
+  // Floor on the TRUE relevance signal (`r.relevance`, vector-leg similarity),
+  // NEVER on the displayed `score` — that is an RRF rank artifact (≈0.016 by
+  // construction in hybrid/federated modes), so a floor over it would classify
+  // every fused hit as noise. The envelope discloses the outcome machine-
+  // readably beside the existing <index-meta> line.
+  const configuredFloor =
+    typeof config.searchRelevanceFloor === 'number' ? config.searchRelevanceFloor : 0.25;
+  const effectiveFloor = minRelevance !== undefined ? minRelevance : configuredFloor;
+  const method = deriveSearchMethod(results);
+
+  // Loud degradation notice (Tenet 4 — fail honest): any fts-stamped hit means
+  // a store's embedder was unavailable and search fell back to keyword-only.
+  const fallbackEngaged = results.some((r) => r.searchMethod === 'fts');
+  const fallbackWarning = fallbackEngaged
+    ? formatSystemWarning(
+        [
+          'Embedding provider unavailable — search degraded to KEYWORD-ONLY (FTS) results.',
+          '',
+          'These matches carry NO semantic relevance signal (relevance is n/a); vector-similarity ranking is disabled until the embedder is restored. Fix the configured provider/API key or start Ollama, then retry for semantic results. (mmnto-ai/totem#2463)',
+        ].join('\n'),
+      )
+    : null;
+
+  // Best relevance = max over hits that CARRY a relevance signal. Empty-safe:
+  // only spread into Math.max when non-empty (else it yields -Infinity). `null`
+  // encodes "no hit carried a relevance signal" — the floor never fires then.
+  const relevances = results
+    .map((r) => r.relevance)
+    .filter((x): x is number => typeof x === 'number');
+  const hasRelevanceSignal = relevances.length > 0;
+  const bestRelevance = hasRelevanceSignal ? Math.max(...relevances) : null;
+
   if (results.length === 0) {
     if (allFederatedStoresFailed) {
       return {
@@ -550,26 +657,86 @@ async function performSearch(
             type: 'text' as const,
             text:
               runtimeWarning ??
-              '[Totem Error] Federated search failed: every queried store errored.', // totem-ignore #1294 — system-generated + XML-wrapped
+              '[Totem Error] Federated search failed: every queried store errored.', // totem-ignore mmnto-ai/totem#1294 — system-generated + XML-wrapped
           },
         ],
         isError: true,
       };
     }
+    const emptyEnvelope = formatRetrievalEnvelope({
+      status: 'empty',
+      method,
+      bestRelevance,
+      floor: effectiveFloor,
+      hits: 0,
+    });
     const body = formatXmlResponse('knowledge', 'No results found.');
-    const text = composeResponseText({ runtimeWarning, staleWarning, indexEnvelope, body }); // totem-ignore #1294 — composed from system-generated + XML-wrapped pieces
+    const text = composeResponseText({
+      fallbackWarning,
+      runtimeWarning,
+      staleWarning,
+      indexEnvelope,
+      retrievalEnvelope: emptyEnvelope,
+      body,
+    }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
     return { content: [{ type: 'text' as const, text }] };
   }
 
+  // Floor fires ONLY when a real relevance signal exists — a pure-FTS corpus
+  // (no vector relevance to report) is never demoted to no_useful_hits.
+  if (hasRelevanceSignal && bestRelevance !== null && bestRelevance < effectiveFloor) {
+    const belowFloorEnvelope = formatRetrievalEnvelope({
+      status: 'no_useful_hits',
+      method,
+      bestRelevance,
+      floor: effectiveFloor,
+      hits: results.length,
+    });
+    // Disclose every below-floor candidate compactly (path + relevance, NO
+    // content) — exclusion is disclosed, never silently dropped (Prop 308 F1).
+    const candidateLines = results.map((r, i) => {
+      const rel = typeof r.relevance === 'number' ? r.relevance.toFixed(3) : 'n/a';
+      const label = r.sourceRepo ? `[${r.sourceRepo}] ` + r.absoluteFilePath : r.absoluteFilePath;
+      return `${i + 1}. ${label} — relevance ${rel}`;
+    });
+    const body = formatXmlResponse(
+      'knowledge',
+      [
+        `No results met the relevance floor of ${effectiveFloor.toFixed(3)} (best relevance ${bestRelevance.toFixed(3)}).`,
+        '',
+        'Below-floor candidates (disclosed, not returned — path + relevance only):',
+        ...candidateLines,
+      ].join('\n'),
+    );
+    const text = composeResponseText({
+      fallbackWarning,
+      runtimeWarning,
+      staleWarning,
+      indexEnvelope,
+      retrievalEnvelope: belowFloorEnvelope,
+      body,
+    }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
+    return { content: [{ type: 'text' as const, text }] };
+  }
+
+  const okEnvelope = formatRetrievalEnvelope({
+    status: 'ok',
+    method,
+    bestRelevance,
+    floor: effectiveFloor,
+    hits: results.length,
+  });
   const formatted = results.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
 
   const knowledgeBody = formatXmlResponse('knowledge', formatted);
   let text = composeResponseText({
+    fallbackWarning,
     runtimeWarning,
     staleWarning,
     indexEnvelope,
+    retrievalEnvelope: okEnvelope,
     body: knowledgeBody,
-  }); // totem-ignore #1294 — composed from system-generated + XML-wrapped pieces
+  }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
 
   // Append a system warning when the payload is large enough to risk context pressure
   if (text.length > config.contextWarningThreshold) {
@@ -588,24 +755,31 @@ async function performSearch(
  * Compose the final response text by stacking diagnostics on top of the
  * knowledge body. Order (outermost → innermost):
  *
- *   1. runtime warning (per-call store failures from federatedSearch)
- *   2. STALE warning (knowledge index >7 days old; mmnto-ai/totem#2029)
- *   3. index-meta envelope (always-present freshness metadata)
- *   4. body (the wrapped `<knowledge>` block OR "no results")
+ *   1. fallback warning (embedder down → keyword-only; mmnto-ai/totem#2463)
+ *   2. runtime warning (per-call store failures from federatedSearch)
+ *   3. STALE warning (knowledge index >7 days old; mmnto-ai/totem#2029)
+ *   4. index-meta envelope (always-present freshness metadata)
+ *   5. retrieval envelope (machine-parsable outcome; mmnto-ai/totem#2463) —
+ *      emitted directly below <index-meta> so both parse as adjacent XML lines
+ *   6. body (the wrapped `<knowledge>` block OR "no results")
  *
  * Pieces are joined by blank lines so each is its own logical block in
  * the agent's view. Null pieces are omitted; the body is required.
  */
 function composeResponseText(parts: {
+  fallbackWarning: string | null;
   runtimeWarning: string | null;
   staleWarning: string | null;
   indexEnvelope: string;
+  retrievalEnvelope: string;
   body: string;
 }): string {
   const blocks: string[] = [];
+  if (parts.fallbackWarning) blocks.push(parts.fallbackWarning);
   if (parts.runtimeWarning) blocks.push(parts.runtimeWarning);
   if (parts.staleWarning) blocks.push(parts.staleWarning);
   blocks.push(parts.indexEnvelope);
+  blocks.push(parts.retrievalEnvelope);
   blocks.push(parts.body);
   return blocks.join('\n\n');
 }
@@ -641,12 +815,26 @@ export function registerSearchKnowledge(server: McpServer): void {
           .describe(
             'Partition name, linked-index name, or file path prefix to scope results. Resolution order: (1) configured partition names (e.g., "core", "cli", "mcp") → primary index, prefix-filtered; (2) linked-index names from linkedIndexes config (e.g., "strategy") → routes only to that cross-repo index; (3) raw path prefixes (e.g., "src/components/") → primary, prefix-filtered. When omitted, search federates across primary + all linked indexes, merging by semantic score. Blank or whitespace-only values are normalized to "omitted" (federated default).',
           ),
+        // mmnto-ai/totem#2463: per-call relevance floor override. Floors on the
+        // true vector-leg relevance (0..1), NOT the displayed RRF score. Below
+        // it, the tool reports status="no_useful_hits" and discloses the
+        // below-floor candidates instead of returning noise. Overrides the
+        // config `searchRelevanceFloor`; the retrieval-envelope always reports
+        // the effective floor.
+        min_relevance: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe(
+            'Minimum per-hit relevance (0..1, vector-leg similarity) to treat results as useful. Overrides the configured searchRelevanceFloor. Below it, status is "no_useful_hits" with the below-floor candidates disclosed.',
+          ),
       },
       annotations: {
         readOnlyHint: true,
       },
     },
-    async ({ query, type_filter, max_results, boundary }) => {
+    async ({ query, type_filter, max_results, boundary, min_relevance }) => {
       const start = Date.now();
       // A.3.a: emit `mcp_call` activity event to the Trap Ledger. Fire-and-forget;
       // the ledger write must not block or break the tool call (Tenet 4 + sensor
@@ -697,13 +885,14 @@ export function registerSearchKnowledge(server: McpServer): void {
 
         let result: ToolResult;
         try {
-          result = await performSearch(query, type_filter, max_results, boundary);
+          result = await performSearch(query, type_filter, max_results, boundary, min_relevance);
+          // totem-context: the catch below is not a silent swallow; a failed reconnect+retry is surfaced to the agent as an isError ToolResult.
         } catch (originalErr) {
           // Any LanceDB error could indicate a stale handle (e.g. files deleted
           // during a full sync rebuild). Reconnect and retry once before failing.
           try {
             await reconnectStore();
-            result = await performSearch(query, type_filter, max_results, boundary);
+            result = await performSearch(query, type_filter, max_results, boundary, min_relevance);
           } catch (retryErr) {
             // Retry failed — report both errors for diagnostics
             const originalMessage =
@@ -737,6 +926,18 @@ export function registerSearchKnowledge(server: McpServer): void {
         const scoreMatches = [...resultText.matchAll(/\*\*Score:\*\* ([\d.]+)/g)];
         const topScore = scoreMatches.length > 0 ? parseFloat(scoreMatches[0]![1]!) : null;
 
+        // mmnto-ai/totem#2463: record best relevance alongside topScore. Parsed
+        // from the retrieval-envelope's bestRelevance attribute (same derive-
+        // from-response-text pattern as topScore); "n/a" → null (no signal).
+        const relevanceMatch = resultText.match(
+          /<retrieval-envelope[^>]*\bbestRelevance="([^"]+)"/,
+        );
+        const bestRelevanceRaw = relevanceMatch?.[1];
+        const topRelevance =
+          bestRelevanceRaw !== undefined && bestRelevanceRaw !== 'n/a'
+            ? parseFloat(bestRelevanceRaw)
+            : null;
+
         // Log error responses (e.g., the broken-linked-boundary path at
         // performSearch Case 3) as errors instead of zero-result successes,
         // so routing failures are visible in search-log.jsonl. Without this
@@ -762,6 +963,7 @@ export function registerSearchKnowledge(server: McpServer): void {
             resultCount: scoreMatches.length,
             durationMs: Date.now() - start,
             topScore,
+            topRelevance,
           });
         }
 
