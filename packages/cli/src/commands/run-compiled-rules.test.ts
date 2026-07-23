@@ -1833,6 +1833,32 @@ describe('corpus-bearing zero-rules hard-error (mmnto-ai/totem-strategy#971)', (
     expect(JSON.parse(result.output).pass).toBe(true);
   });
 
+  it('control: a config-less caller with a truncated manifest surfaces the load warning but never hard-errors (the shield-estimate opt-out contract)', async () => {
+    writeLesson(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), '{"version":1,"rules":[');
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // No `config` option — the caller opts out of the corpus-bearing hard
+      // error (e.g. `shield estimate`). The accounting line must still render:
+      // the opt-out covers the exit code, not the disclosure.
+      const result = await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      });
+
+      expect(result.rules).toHaveLength(0);
+      expect(result.violations).toHaveLength(0);
+      const messages = stderrSpy.mock.calls.map((c) => String(c[0]));
+      expect(messages.find((m) => m.includes('Could not load compiled rules'))).toBeDefined();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
   it('hard-errors via a concrete (non-wildcard) lesson target — the aggregated .totem/lessons.md shape', async () => {
     // The production config declares BOTH a wildcard dir target and a concrete
     // aggregated-file target; this exercises the statSync existence branch (and
