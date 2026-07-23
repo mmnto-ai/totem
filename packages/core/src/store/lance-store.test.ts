@@ -4,8 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
 import type { Embedder } from '../embedders/embedder.js';
+import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
 import { TotemConfigError } from '../errors.js';
 import { cleanTmpDir } from '../test-utils.js';
 import type { Chunk } from '../types.js';

@@ -4,8 +4,8 @@ import * as fs from 'node:fs';
 import * as lancedb from '@lancedb/lancedb';
 
 import type { ContentType } from '../config-schema.js';
-import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
 import type { Embedder } from '../embedders/embedder.js';
+import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
 import { TotemConfigError } from '../errors.js';
 import type {
   Chunk,
