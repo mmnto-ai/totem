@@ -28,6 +28,7 @@ import {
   CLAUDE_SESSION_START_ENTRY,
   DISTRIBUTED_CLAUDE_SKILLS,
   GEMINI_BEFORE_TOOL,
+  GEMINI_BEFORE_TOOL_REL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
   isBoundedOwnedFile,
@@ -281,7 +282,9 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
       endMarker: TOTEM_FILE_END,
     },
     {
-      rel: '.gemini/hooks/BeforeTool.js',
+      // Ships as `.cjs` — load-bearing in `"type": "module"` consumers
+      // (mmnto-ai/totem#2481); see GEMINI_BEFORE_TOOL_REL.
+      rel: GEMINI_BEFORE_TOOL_REL,
       content: GEMINI_BEFORE_TOOL,
       marker: TOTEM_FILE_MARKER,
       endMarker: TOTEM_FILE_END,
@@ -303,6 +306,33 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
       file: rel,
       action: result.action === 'refreshed' ? 'merged' : result.action,
       ...(result.err ? { err: result.err } : {}),
+    });
+  }
+
+  // Legacy `.js`→`.cjs` migration (mmnto-ai/totem#2481). Runs on init too, not only
+  // the `totem hook install` upgrade path: a consumer re-running init after upgrading
+  // Totem carries the fail-open `.gemini/hooks/BeforeTool.js` (and possibly a
+  // `.gemini/settings.json` command pointing at it). Dynamic-imported to keep the
+  // migration co-located with the upgrade-path drift-repair machinery.
+  const { migrateGeminiHookRegistration, migrateLegacyGeminiHooks } =
+    await import('./install-hooks.js');
+  for (const { file, action } of await migrateLegacyGeminiHooks(cwd)) {
+    if (action === 'migrated') {
+      results.push({
+        file,
+        action: 'merged',
+        summaryActionOverride: 'Migrated legacy Gemini BeforeTool.js → .cjs',
+      });
+    }
+  }
+  const registration = migrateGeminiHookRegistration(cwd);
+  if (registration.err) {
+    results.push({ file: '.gemini/settings.json', action: 'merged', err: registration.err });
+  } else if (registration.changed) {
+    results.push({
+      file: '.gemini/settings.json',
+      action: 'merged',
+      summaryActionOverride: 'Migrated Gemini BeforeTool registration → .cjs',
     });
   }
 

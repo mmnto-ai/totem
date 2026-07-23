@@ -31,6 +31,9 @@ import { cleanTmpDir } from '../test-utils.js';
 import {
   CLAUDE_PREWRITESHIELD,
   CLAUDE_SESSION_START,
+  GEMINI_BEFORE_TOOL,
+  GEMINI_BEFORE_TOOL_LEGACY_REL,
+  GEMINI_BEFORE_TOOL_REL,
   GEMINI_SESSION_START,
   MANAGED_SESSION_HOOKS,
   TOTEM_FILE_END,
@@ -40,6 +43,8 @@ import {
   hooksCommand,
   installHooksCommand,
   installHooksNonInteractive,
+  migrateGeminiHookRegistration,
+  migrateLegacyGeminiHooks,
   regenerateManagedSessionHooks,
   resolveHooksDir,
   TOTEM_PREPUSH_END,
@@ -70,7 +75,9 @@ describe('MANAGED_SESSION_HOOKS roster invariant', () => {
         '.claude/hooks/PreWriteShield.cjs',
         '.claude/hooks/SessionStart.cjs',
         '.claude/hooks/gate-wrapper.cjs',
-        '.gemini/hooks/BeforeTool.js',
+        // BeforeTool ships as `.cjs` — load-bearing in `"type": "module"` consumers
+        // (mmnto-ai/totem#2481). SessionStart deliberately stays `.js` (scoped out).
+        '.gemini/hooks/BeforeTool.cjs',
         '.gemini/hooks/SessionStart.js',
         '.totem/prepare.cjs',
       ].sort(),
@@ -630,5 +637,140 @@ describe('resolveHooksDir with core.hooksPath aimed at a non-directory (#2422 ro
     fs.writeFileSync(notADir, 'not a directory\n');
     execFileSync('git', ['config', 'core.hooksPath', notADir], { cwd: tmpDir });
     expect(resolveHooksDir(tmpDir)).toBeNull();
+  });
+});
+
+// ─── Gemini BeforeTool .js→.cjs upgrade migration (mmnto-ai/totem#2481) ───
+
+describe('Gemini BeforeTool .js→.cjs migration', () => {
+  let tmpDir: string;
+
+  function writeFileRel(rel: string, content: string): void {
+    const p = path.join(tmpDir, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, content, 'utf-8');
+  }
+  function readRel(rel: string): string {
+    return fs.readFileSync(path.join(tmpDir, ...rel.split('/')), 'utf-8');
+  }
+  function existsRel(rel: string): boolean {
+    return fs.existsSync(path.join(tmpDir, ...rel.split('/')));
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2481-migrate-'));
+  });
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('converges a pre-migration consumer to exactly one .cjs registration + removes the stale .js', async () => {
+    // Fixture: a consumer that adopted the pre-#2481 hook — the fail-open `.js` file
+    // plus a `.gemini/settings.json` BeforeTool command pointing at it (nested
+    // matcher/hooks shape, alongside unrelated user keys).
+    writeFileRel(GEMINI_BEFORE_TOOL_LEGACY_REL, GEMINI_BEFORE_TOOL);
+    writeFileRel(
+      '.gemini/settings.json',
+      JSON.stringify(
+        {
+          mcpServers: { totem: { command: 'npx' } },
+          hooks: {
+            BeforeTool: [
+              {
+                matcher: '.*',
+                hooks: [
+                  { type: 'command', command: '$GEMINI_PROJECT_DIR/.gemini/hooks/BeforeTool.js' },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+
+    const fileResults = await migrateLegacyGeminiHooks(tmpDir);
+    const registration = migrateGeminiHookRegistration(tmpDir);
+
+    // Stale .js removed; .cjs successor materialized with canonical content.
+    expect(fileResults).toEqual([{ file: GEMINI_BEFORE_TOOL_LEGACY_REL, action: 'migrated' }]);
+    expect(existsRel(GEMINI_BEFORE_TOOL_LEGACY_REL)).toBe(false);
+    expect(existsRel(GEMINI_BEFORE_TOOL_REL)).toBe(true);
+    expect(readRel(GEMINI_BEFORE_TOOL_REL)).toBe(GEMINI_BEFORE_TOOL);
+
+    // Exactly one registration, now pointing at the .cjs — no `.js` ref survives
+    // anywhere in the file; unrelated user keys preserved.
+    expect(registration).toEqual({ changed: true });
+    const rawAfter = readRel('.gemini/settings.json');
+    expect(rawAfter).not.toMatch(/BeforeTool\.js(?!\w)/);
+    const settings = JSON.parse(rawAfter);
+    expect(settings.hooks.BeforeTool[0].hooks[0].command).toBe(
+      '$GEMINI_PROJECT_DIR/.gemini/hooks/BeforeTool.cjs',
+    );
+    expect(settings.mcpServers).toEqual({ totem: { command: 'npx' } });
+  });
+
+  it('is idempotent — a second pass is a no-op (flat command shape too)', async () => {
+    writeFileRel(GEMINI_BEFORE_TOOL_LEGACY_REL, GEMINI_BEFORE_TOOL);
+    writeFileRel(
+      '.gemini/settings.json',
+      JSON.stringify(
+        {
+          hooks: { BeforeTool: [{ type: 'command', command: 'node .gemini/hooks/BeforeTool.js' }] },
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+
+    await migrateLegacyGeminiHooks(tmpDir);
+    expect(migrateGeminiHookRegistration(tmpDir)).toEqual({ changed: true });
+
+    // Second pass: nothing left to migrate on either seam.
+    expect(await migrateLegacyGeminiHooks(tmpDir)).toEqual([]);
+    expect(migrateGeminiHookRegistration(tmpDir)).toEqual({ changed: false });
+    const settings = JSON.parse(readRel('.gemini/settings.json'));
+    expect(settings.hooks.BeforeTool[0].command).toBe('node .gemini/hooks/BeforeTool.cjs');
+  });
+
+  it('never creates a registration where none exists (arming stays deferred)', () => {
+    expect(migrateGeminiHookRegistration(tmpDir)).toEqual({ changed: false });
+    expect(existsRel('.gemini/settings.json')).toBe(false);
+  });
+
+  it('fail-soft on malformed settings JSON: preserves user content, reports err', () => {
+    const raw = '{ this is not valid json ';
+    writeFileRel('.gemini/settings.json', raw);
+    const res = migrateGeminiHookRegistration(tmpDir);
+    expect(res.changed).toBe(false);
+    expect(res.err).toMatch(/invalid JSON/i);
+    expect(readRel('.gemini/settings.json')).toBe(raw); // untouched
+  });
+
+  it('leaves a user-owned BeforeTool.js (no Totem marker) untouched', async () => {
+    const userJs = '// my own hook\nmodule.exports = () => {};\n';
+    writeFileRel(GEMINI_BEFORE_TOOL_LEGACY_REL, userJs);
+    const results = await migrateLegacyGeminiHooks(tmpDir);
+    expect(results).toEqual([{ file: GEMINI_BEFORE_TOOL_LEGACY_REL, action: 'skipped' }]);
+    expect(readRel(GEMINI_BEFORE_TOOL_LEGACY_REL)).toBe(userJs);
+    expect(existsRel(GEMINI_BEFORE_TOOL_REL)).toBe(false);
+  });
+
+  it('declines a drifted-unbounded legacy .js without --force, migrates it under --force', async () => {
+    // Marker opens the file, but user content trails the end marker → not bounded.
+    writeFileRel(GEMINI_BEFORE_TOOL_LEGACY_REL, `${GEMINI_BEFORE_TOOL}\n// local customization\n`);
+
+    expect(await migrateLegacyGeminiHooks(tmpDir)).toEqual([
+      { file: GEMINI_BEFORE_TOOL_LEGACY_REL, action: 'declined' },
+    ]);
+    expect(existsRel(GEMINI_BEFORE_TOOL_LEGACY_REL)).toBe(true);
+    expect(existsRel(GEMINI_BEFORE_TOOL_REL)).toBe(false);
+
+    expect(await migrateLegacyGeminiHooks(tmpDir, true)).toEqual([
+      { file: GEMINI_BEFORE_TOOL_LEGACY_REL, action: 'migrated' },
+    ]);
+    expect(existsRel(GEMINI_BEFORE_TOOL_LEGACY_REL)).toBe(false);
+    expect(readRel(GEMINI_BEFORE_TOOL_REL)).toBe(GEMINI_BEFORE_TOOL);
   });
 });

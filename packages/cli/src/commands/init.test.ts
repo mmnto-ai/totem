@@ -446,7 +446,7 @@ describe('Gemini hook scaffolding', () => {
       '// [totem] auto-generated\ntest\n',
     );
     const beforeTool = scaffoldFile(
-      path.join(hooksDir, 'BeforeTool.js'),
+      path.join(hooksDir, 'BeforeTool.cjs'),
       '// [totem] auto-generated\ntest\n',
     );
     const skill = scaffoldFile(
@@ -2262,6 +2262,58 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
       content: '---\nsubject: "Re: D:\\q"\n---\n',
     });
     expect(r.threw).toBe(true);
+  });
+});
+
+describe('GEMINI_BEFORE_TOOL ships as CJS for "type": "module" consumers (mmnto-ai/totem#2481)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2481-typemodule-'));
+    // A consumer repo whose package.json declares ESM — the environment that makes a
+    // bare `.js` hook resolve as ESM and fail-open.
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({ type: 'module' }, null, 2) + '\n',
+      'utf-8',
+    );
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('executes the distributed .cjs hook and the guard evaluates (no `require is not defined`)', () => {
+    const cjsPath = path.join(tmpDir, 'BeforeTool.cjs');
+    fs.writeFileSync(cjsPath, GEMINI_BEFORE_TOOL, 'utf-8');
+
+    // Require the shipped `.cjs` from a real node subprocess INSIDE the ESM consumer
+    // and drive the guard with a close-keyword write. A `.cjs` is CommonJS regardless
+    // of the enclosing package `type`, so `require` resolves and the guard BODY runs —
+    // proven by the guard throwing its own `[totem BeforeTool]` error rather than a
+    // `require is not defined` ReferenceError.
+    const driver = `require(${JSON.stringify(
+      cjsPath,
+    )})('write_file', { file_path: 'docs/x.md', content: 'Closes #5' })`;
+    const res = spawnSync(process.execPath, ['-e', driver], { cwd: tmpDir, encoding: 'utf-8' });
+
+    expect(res.stderr).not.toMatch(/require is not defined/);
+    expect(res.stderr).toContain('[totem BeforeTool]');
+    expect(res.status).not.toBe(0); // the guard blocked the write
+  });
+
+  it('proves the defect the .cjs fixes: the identical body as `.js` fail-opens as ESM', () => {
+    // Contrast fixture documenting WHY the extension is load-bearing. The identical
+    // hook body under a `.js` extension resolves as ESM in this consumer and throws
+    // `require is not defined` at the top-level `require('child_process')`, before it
+    // can read the tool call — the silent fail-open reported on mmnto-ai/totem#2481.
+    const jsPath = path.join(tmpDir, 'BeforeTool.js');
+    fs.writeFileSync(jsPath, GEMINI_BEFORE_TOOL, 'utf-8');
+
+    const res = spawnSync(process.execPath, [jsPath], { cwd: tmpDir, encoding: 'utf-8' });
+
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/require is not defined/);
   });
 });
 
