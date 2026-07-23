@@ -62,6 +62,25 @@ This is a simplified form of Reciprocal Rank Fusion. The textbook RRF formula su
 
 This mathematical normalization eliminates score-scale bias. It ensures that a highly relevant hit from a purely vector-based linked store isn't outranked by a mediocre hit from a hybrid-search primary store just because their absolute scoring scales differ. The visible `Score:` field in the agent's results displays this normalized RRF value.
 
+### Relevance vs. Score, and the retrieval envelope
+
+The `Score:` field is an RRF **rank** artifact — in hybrid and federated modes it is `1 / (60 + rank)` (≈ 0.016 for a rank-1 hit) **by construction**, so it encodes ordering but destroys the underlying relevance magnitude. Do not floor or threshold on it: every fused hit looks like noise.
+
+Each result therefore also carries a `Relevance:` field: the true per-hit signal `1 / (1 + distance)` (roughly 0.5–0.95) from the vector leg, carried through both RRF fusion sites untouched. A keyword-only hit (FTS leg, no vector leg) shows `Relevance: n/a (keyword match)` — an **absent** signal, distinct from a low one.
+
+Every `search_knowledge` response also emits a machine-parsable `<retrieval-envelope>` line directly below the `<index-meta>` line, e.g.:
+
+```
+<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="0.250" hits="5" />
+```
+
+- `status` is `ok`, `no_useful_hits`, or `empty`. `no_useful_hits` means results exist but the best relevance fell below the floor — the below-floor candidates are still disclosed (path + relevance, no content) rather than silently dropped; `empty` means zero rows. The two are kept programmatically distinct.
+- `method` is `hybrid`, `vector`, or `fts` (the last indicating the embedder was unavailable and search degraded to keyword-only — a loud system warning accompanies it).
+- `bestRelevance` is the max per-hit relevance (or `n/a` when no hit carried a relevance signal — in which case the floor does not fire).
+- `floor` is the effective relevance floor for the call: the config `searchRelevanceFloor` (default `0.25`), overridable per call via the `min_relevance` input.
+
+The envelope parses with a single regular expression, so wrapper agents can route on retrieval confidence without scraping the prose body.
+
 ## Targeted Queries (Boundary Routing)
 
 Agents can explicitly route queries to specific boundaries to isolate context:

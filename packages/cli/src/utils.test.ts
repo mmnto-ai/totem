@@ -556,6 +556,7 @@ describe('requireEmbedding', () => {
     shieldIgnorePatterns: [],
     shieldAutoLearn: false,
     contextWarningThreshold: 40_000,
+    searchRelevanceFloor: 0.25,
     review: { sourceExtensions: ['.ts', '.tsx', '.js', '.jsx'] },
   };
 

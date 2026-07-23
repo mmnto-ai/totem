@@ -5,6 +5,8 @@ import * as lancedb from '@lancedb/lancedb';
 
 import type { ContentType } from '../config-schema.js';
 import type { Embedder } from '../embedders/embedder.js';
+import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
+import { TotemConfigError } from '../errors.js';
 import type {
   Chunk,
   HealthCheckResult,
@@ -65,6 +67,22 @@ function closeReadSnapshot(db: lancedb.Connection, onWarn: (msg: string) => void
     const msg = err instanceof Error ? err.message : String(err);
     onWarn(`LanceDB read-snapshot close failed: ${msg}`);
   }
+}
+
+/**
+ * Recognize the specific "embedder could not resolve" failure that
+ * `LazyEmbedder.doResolve` throws when the configured provider fails and the
+ * Ollama fallback probe also fails (mmnto-ai/totem#2463). This is the ONLY
+ * error class the opt-in FTS fallback is allowed to catch — every other error
+ * (LanceDB faults, network blips on a healthy embedder, etc.) must propagate.
+ * The match keys on the shared `NO_EMBEDDER_AVAILABLE_MESSAGE` constant (single
+ * source of truth at the throw site), narrowing past the broader
+ * `CONFIG_MISSING` code, which also tags unrelated config errors; the
+ * `TotemError` constructor prepends `[Totem Error] ` so we substring-match
+ * rather than compare exactly.
+ */
+function isNoEmbedderError(err: unknown): boolean {
+  return err instanceof TotemConfigError && err.message.includes(NO_EMBEDDER_AVAILABLE_MESSAGE);
 }
 
 export class LanceStore {
@@ -295,28 +313,49 @@ export class LanceStore {
       const boundary = options.boundary;
       const useHybrid = (options.hybrid ?? true) && snapshot.hasFtsIndex;
 
-      if (useHybrid) {
-        return await runHybridSearch(
+      try {
+        if (useHybrid) {
+          return await runHybridSearch(
+            snapshot.table,
+            this.embedder,
+            this.onWarn,
+            options.query,
+            options.typeFilter as ContentType | undefined,
+            maxResults,
+            this.sourceContext,
+            boundary,
+          );
+        }
+
+        return await runVectorSearch(
           snapshot.table,
           this.embedder,
-          this.onWarn,
           options.query,
           options.typeFilter as ContentType | undefined,
           maxResults,
           this.sourceContext,
           boundary,
         );
+      } catch (err) {
+        // Opt-in keyword-only degradation (mmnto-ai/totem#2463). When the
+        // embedder cannot resolve AND the caller allowed it AND an FTS index
+        // exists, fall back to FTS-only search (which needs no embedder) rather
+        // than hard-erroring into zero retrieval. Any OTHER error, or a missing
+        // flag / FTS index, re-throws unchanged.
+        if (options.allowFtsFallback === true && snapshot.hasFtsIndex && isNoEmbedderError(err)) {
+          options.onFtsFallback?.();
+          return await runFtsSearch(
+            snapshot.table,
+            this.onWarn,
+            options.query,
+            options.typeFilter as ContentType | undefined,
+            maxResults,
+            this.sourceContext,
+            boundary,
+          );
+        }
+        throw err;
       }
-
-      return await runVectorSearch(
-        snapshot.table,
-        this.embedder,
-        options.query,
-        options.typeFilter as ContentType | undefined,
-        maxResults,
-        this.sourceContext,
-        boundary,
-      );
     } finally {
       closeReadSnapshot(snapshot.db, this.onWarn);
     }

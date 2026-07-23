@@ -97,6 +97,16 @@ export function createEmbedder(
 }
 
 /**
+ * The terminal "no embedder anywhere" failure message. Exported as the single
+ * source of truth because `LanceStore.isNoEmbedderError` keys its opt-in FTS
+ * degradation on recognizing exactly this failure (mmnto-ai/totem#2463) — a
+ * wording change here propagates to the detector instead of silently
+ * decoupling it.
+ */
+export const NO_EMBEDDER_AVAILABLE_MESSAGE =
+  'No embedding provider available. The configured provider failed and Ollama is not running.';
+
+/**
  * Lazy embedder that resolves the real provider on first embed() call.
  * If the configured provider fails (missing SDK / API key), falls back to Ollama.
  * Dimensions are optimistic — set to the configured provider's default.
@@ -136,7 +146,7 @@ class LazyEmbedder implements Embedder {
       const available = await isOllamaAvailable();
       if (!available) {
         throw new TotemConfigError(
-          'No embedding provider available. The configured provider failed and Ollama is not running.',
+          NO_EMBEDDER_AVAILABLE_MESSAGE,
           "Either: (1) Install the SDK and set the API key for your configured provider, (2) Install and start Ollama: https://ollama.com, or (3) Set provider: 'ollama' in totem.config.ts.",
           'CONFIG_MISSING',
         );

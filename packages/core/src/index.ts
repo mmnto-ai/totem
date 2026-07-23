@@ -96,6 +96,7 @@ export {
   ContentTypeSchema,
   DEFAULT_IGNORE_PATTERNS,
   DEFAULT_REVIEW_SOURCE_EXTENSIONS,
+  DEFAULT_SEARCH_RELEVANCE_FLOOR,
   DocTargetSchema,
   DoctorConfigSchema,
   EclConfigSchema,

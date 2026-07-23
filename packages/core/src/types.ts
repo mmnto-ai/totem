@@ -112,6 +112,24 @@ export interface SearchResult {
   type: ContentType;
   label: string;
   score: number;
+  /**
+   * True per-hit relevance signal in the 0..1 range — the vector-leg
+   * cosine similarity `1/(1+_distance)` (mmnto-ai/totem#2463). Distinct from
+   * `score`, which in hybrid/federated modes is an RRF rank artifact
+   * (`1/(60+rank)` ≈ 0.016) that carries ordering but destroys the relevance
+   * magnitude. Populated by `rowToSearchResult` for vector-derived rows and
+   * preserved (never overwritten) through both RRF fusion sites. ABSENT iff
+   * the hit had no vector leg (FTS-only), so downstream floor logic can tell
+   * "weak signal" from "no signal at all".
+   */
+  relevance?: number;
+  /**
+   * Which retrieval path produced this hit (mmnto-ai/totem#2463): `'hybrid'`
+   * (vector + FTS with RRF), `'vector'` (vector-only), or `'fts'` (keyword-only
+   * fallback when the embedder is unavailable). Lets agent-facing surfaces
+   * label provenance and route on it.
+   */
+  searchMethod?: 'hybrid' | 'vector' | 'fts';
   metadata: Record<string, string>;
 }
 
@@ -161,6 +179,24 @@ export interface SearchOptions {
   hybrid?: boolean;
   /** File path prefix(es) to restrict results to an architectural boundary. Accepts a single prefix or an array for multi-prefix partitions. */
   boundary?: string | string[];
+  /**
+   * Opt-in keyword-only degradation (mmnto-ai/totem#2463). When true AND the
+   * embedder cannot resolve (the no-embedder `TotemConfigError`) AND an FTS
+   * index exists, `search` degrades to the FTS-only path (results stamped
+   * `searchMethod: 'fts'`, no `relevance`) instead of throwing. When false or
+   * absent, or when no FTS index exists, the embedder failure propagates
+   * unchanged. Only the embedder-resolution failure class is caught — all
+   * other errors propagate untouched.
+   */
+  allowFtsFallback?: boolean;
+  /**
+   * Invoked when the `allowFtsFallback` degradation actually engages
+   * (mmnto-ai/totem#2463 round 2). Out-of-band on purpose: a fallback that
+   * returns ZERO rows leaves no fts-stamped result to infer from, and callers
+   * (the MCP envelope) must still report the outage rather than a healthy
+   * empty search.
+   */
+  onFtsFallback?: () => void;
 }
 
 /**

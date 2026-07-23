@@ -660,3 +660,130 @@ describe('source context tagging', () => {
     expect(results[0]!.sourceRepo).toBeUndefined();
   });
 });
+
+// ─── relevance + searchMethod (mmnto-ai/totem#2463) ───────
+//
+// `relevance` carries the true vector-leg similarity through fusion so the
+// MCP floor can distinguish weak retrieval from the RRF rank artifact in
+// `score`; `searchMethod` labels which path produced each hit. These tests
+// lock: (1) vector rows get relevance == score; (2) FTS-only rows never get
+// relevance; (3) rrfMerge PRESERVES the vector leg's relevance while still
+// overwriting score with RRF; (4) relevance NEVER perturbs the sort.
+
+describe('relevance + searchMethod (mmnto-ai/totem#2463)', () => {
+  it('runVectorSearch: relevance == 1/(1+distance) and searchMethod is "vector"', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: 0.25 }), fakeRow('b', { _distance: 1.0 })],
+    });
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(results[0]!.relevance).toBeCloseTo(1 / 1.25, 6);
+    expect(results[0]!.relevance).toBeCloseTo(results[0]!.score, 6);
+    expect(results[0]!.searchMethod).toBe('vector');
+    expect(results[1]!.relevance).toBeCloseTo(1 / 2.0, 6);
+    expect(results[1]!.searchMethod).toBe('vector');
+  });
+
+  it('runVectorSearch: a null _distance yields no relevance signal (absent, not zero)', async () => {
+    const table = mockTable({ vectorRows: [fakeRow('x', { _distance: null })] });
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+    expect(results[0]!.relevance).toBeUndefined();
+    expect(results[0]!.score).toBe(0);
+  });
+
+  it('runFtsSearch: FTS-only rows carry no relevance and searchMethod is "fts"', async () => {
+    const table = mockTable({
+      ftsRows: [
+        fakeRow('a', { _distance: undefined, _score: 3.1 }),
+        fakeRow('b', { _distance: undefined, _score: 1.4 }),
+      ],
+    });
+    const results = await runFtsSearch(
+      table as never,
+      () => {},
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(results).toHaveLength(2);
+    for (const r of results) {
+      expect(r.relevance).toBeUndefined();
+      expect(r.searchMethod).toBe('fts');
+    }
+  });
+
+  it('runHybridSearch: rrfMerge preserves the vector leg relevance and stamps "hybrid"', async () => {
+    // 'a' is in BOTH legs; the vector row (retained first) has _distance 0.9,
+    // the fts row a different _distance — the merged relevance must come from
+    // the VECTOR leg (0.9 → ~0.526), never the fts row (~0.909).
+    const vectorRows = [fakeRow('a', { _distance: 0.9 }), fakeRow('b', { _distance: 0.0 })];
+    const ftsRows = [
+      fakeRow('a', { _distance: 0.1 }),
+      fakeRow('c', { _distance: undefined, _score: 5 }),
+    ];
+    const table = mockTable({ vectorRows, ftsRows });
+
+    const results = await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      () => {},
+      'query',
+      undefined,
+      10,
+      DEFAULT_CTX,
+    );
+
+    const a = results.find((r) => r.content === 'content-a')!;
+    const c = results.find((r) => r.content === 'content-c')!;
+
+    // Vector-leg relevance survived fusion (NOT the fts row's 1/1.1 ≈ 0.909).
+    expect(a.relevance).toBeCloseTo(1 / 1.9, 6);
+    // score was still overwritten with RRF (2/61 for a doc in both legs).
+    expect(a.score).toBeCloseTo(2 / 61, 6);
+    expect(a.searchMethod).toBe('hybrid');
+    // 'c' appeared only in the FTS leg (no vector row) → no relevance.
+    expect(c.relevance).toBeUndefined();
+    expect(c.searchMethod).toBe('hybrid');
+  });
+
+  it('runHybridSearch: relevance never perturbs RRF ordering (sort is score-only)', async () => {
+    // 'a' (both legs → RRF 2/61) has LOWER relevance (~0.526) than 'b'
+    // (vector-only rank 2 → RRF 1/62) which has relevance 1.0. If relevance
+    // leaked into the sort key, 'b' would jump ahead — it must not.
+    const vectorRows = [fakeRow('a', { _distance: 0.9 }), fakeRow('b', { _distance: 0.0 })];
+    const ftsRows = [fakeRow('a', { _distance: 0.9 })];
+    const table = mockTable({ vectorRows, ftsRows });
+
+    const results = await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      () => {},
+      'query',
+      undefined,
+      10,
+      DEFAULT_CTX,
+    );
+
+    expect(results.map((r) => r.content)).toEqual(['content-a', 'content-b']);
+    expect(results[0]!.score).toBeGreaterThan(results[1]!.score);
+    // The higher-relevance doc is deliberately ranked SECOND.
+    expect(results[1]!.relevance).toBeGreaterThan(results[0]!.relevance!);
+  });
+});
