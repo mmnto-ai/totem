@@ -1,5 +1,57 @@
 # @mmnto/totem
 
+## 1.104.0
+
+### Minor Changes
+
+- c7569c3: Seat `status-claude` in the cohort roster and stop the unquoted-subject dispatch class at the sender.
+  - `COHORT_AGENT_MAP` gains `status-claude` for `totem-status` (cohort-roles §1.1 roster ruling, mmnto-ai/totem-strategy#958): dispatches addressed to the seat now resolve via CLI polls even on checkouts where the gitignored seat dir is absent. The distributed signoff skill's agent-id table follows.
+  - PreWriteShield (Claude) and BeforeTool (Gemini) gain Rule 3, the ECL dispatch frontmatter-quoting guard (routed ask from mmnto-ai/totem-status#123): an unquoted `: ` or trailing `:` in a `subject:`/`expected-action:` value under `.totem/orchestration/*/outbox/` blocks at write time, keeping strict-YAML mail consumers aligned with the lenient TS delivery path.
+
+- 367cdee: Add the Prop 296 §14 `network-read-only` parity posture-probe family: the `totem doctor --parity`
+  sensor now senses the three governed-state posture rows (`repo-merge-posture`,
+  `repo-required-checks-posture`, `repo-branch-protection-posture`) registered on the manifest
+  (mmnto-ai/totem-strategy#962 amending Prop 296, rows filed mmnto-ai/totem-strategy#482).
+  - **CLI edge owns the network** — a new `doctor-parity-fetch.ts` resolves per-repo, per-surface
+    snapshots via `gh api` read-only GETs behind an injectable transport seam, BEFORE detector
+    dispatch. Core's `parity-detect.ts` keeps its never-network + synchronous-pure invariant.
+  - **Core owns the verdict** — a new sync-pure `detectNetworkPostureContract` Zod-narrows the
+    untrusted fetched JSON and emits per-repo verdict LINES (`warn` for real drift, `skip` for
+    offline / honest-absent, `unknown` for auth-class / transient — never a drift verdict on an
+    auth/transport failure, never a manifest-wide outage). It never gates; `--strict` promotion stays
+    a CLI-edge concern.
+  - Auth is the hard edge, rendered honestly: no token / under-privileged token / a 200 without the
+    posture fields / a 404 on a governed surface / a repo-scoped CI token that cannot see siblings all
+    degrade to a per-surface cannot-verify line. Offline (gh absent) renders the honest-absent stub.
+  - The current repo (derived from the local git remote) is always probed; cross-repo reads are opt-in
+    via the additive `orient.parityProbeRepos` config. The manifest gains an optional forward-compat
+    `probe-class` field (max-tolerance boundary narrowing, never a dark manifest).
+
+### Patch Changes
+
+- bf7f883: feat(autoclose): `totem pr merge` — sanctioned auto-close-safe squash-merge actuator (mmnto-ai/totem#1762, B slice)
+  - **cli**: `totem pr merge [number]` asserts the repo merge-config posture via
+    GraphQL (reusing core's `evaluateMergeConfigPosture`), refuses undeclared
+    close-keyword refs in the PR title/body (a `totem-close` marker is the sole
+    authorizing channel), accepts only a positive-decimal PR number, binds
+    `--repo` to both lookup and merge, pins the evaluated snapshot with
+    `--match-head-commit`, treats a merge-queue landing as unsettled (declared
+    closes deferred until MERGED), and merges squash-only with no body/subject
+    flags, ever. `--check-only` evaluates without merging; `--close-declared`
+    opt-in executes the marker-declared closes (the default prints the exact
+    commands; a failed declared close exits non-zero with a summary).
+  - **core**: new `PR_MERGE_FAILED` TotemError code.
+
+  The A-slice command-interception layer (a raw `gh pr merge` shell interlock)
+  was built, review-hardened across five rounds, and then stripped per the
+  operator's OPTION 1 ruling (2026-07-22): server-side repo config (squash-only +
+  BLANK squash body) plus the D1 required check and the D2 post-merge sensor
+  already cover the accidental-close vectors, so client-side shell parsing sat at
+  the wrong altitude. The A history remains in the PR's pre-strip commits.
+
+  Changelog-reader note: examples use digitless placeholder shapes such as a
+  `Closes #NNN` form only.
+
 ## 1.103.0
 
 ### Minor Changes
