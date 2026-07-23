@@ -17,7 +17,7 @@ Totem is a **deterministic, git-native governance toolkit** — _rules you enfor
 ## Essentials
 
 - **pnpm only** (never npm/yarn). Use `pnpm dlx` (never `npx`). TypeScript strict mode.
-- `main` is protected. Feature branches + PRs. Never amend commits on feature branches. Use `Closes #NNN` in PR descriptions.
+- `main` is protected. Feature branches + PRs. Never amend commits on feature branches. Use `Closes #NNN` in PR descriptions, and declare each intended close with a `<!-- totem-close: #NNN -->` body marker — the D1 required check fails undeclared close keywords (the marker is the sole authorizing channel).
 - `kebab-case.ts` files, `err` (never `error`) in catch blocks, no empty catches.
 - Named constants for magic numbers. Zod at system boundaries only.
 - Run `pnpm run format` before committing.

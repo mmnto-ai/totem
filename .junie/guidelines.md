@@ -4,7 +4,7 @@
 
 - `main` is protected. Always use feature branches + PRs.
 - Never amend commits on feature branches — create new commits.
-- Use `Closes #NNN` in PR descriptions.
+- Use `Closes #NNN` in PR descriptions, and declare each intended close with a `<!-- totem-close: #NNN -->` body marker — the D1 required check fails undeclared close keywords.
 
 ## Environment
 

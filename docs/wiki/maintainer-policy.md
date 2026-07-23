@@ -23,7 +23,7 @@
 - All PRs must pass CI: unit tests, `totem lint`, `totem review`, format check.
 - Core package changes require Lead Maintainer review.
 - Merge policy: squash merge after approval and green CI.
-- `Closes #NNN` keyword required in PR body for auto-close.
+- `Closes #NNN` keyword required in PR body for auto-close, paired with a `<!-- totem-close: #NNN -->` body marker (the D1 required check fails undeclared close keywords).
 
 ## Security
 
