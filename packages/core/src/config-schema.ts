@@ -278,6 +278,20 @@ export const OrientConfigSchema = z.object({
    * skip — never an error (Tenet 14, honest-absent).
    */
   parityManifest: z.string().optional(),
+  /**
+   * Cross-repo read set for the `network-read-only` parity probes
+   * (Prop 296 §14, mmnto-ai/totem-strategy#962). Each entry is an `owner/repo`
+   * slug the doctor additionally issues read-only GitHub-settings/rulesets/
+   * branch-protection GETs against when sensing the posture rows
+   * (`repo-merge-posture`, `repo-required-checks-posture`,
+   * `repo-branch-protection-posture`). ADDITIVE + OPTIONAL: the CURRENT repo
+   * (derived from the git remote) is ALWAYS probed; this list only widens the
+   * roster. §14 clause 3 makes the CI/consumer default current-repo-only —
+   * cross-repo reads need a cross-repo-privileged seat token, so a repo-scoped
+   * CI token that cannot see siblings degrades each extra repo to a per-repo
+   * cannot-verify line, never a manifest-wide outage.
+   */
+  parityProbeRepos: z.array(z.string()).optional(),
 });
 
 /**

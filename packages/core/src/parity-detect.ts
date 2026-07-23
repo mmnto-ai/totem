@@ -2719,3 +2719,792 @@ function isDirectory(p: string): boolean {
     return false;
   }
 }
+
+// ─── Network-read-only posture detector family (Prop 296 §14) ─────────────────
+//
+// The parity-posture rows (`repo-merge-posture`, `repo-required-checks-posture`,
+// `repo-branch-protection-posture`; strategy#962 / strategy#482) sense
+// externally-hosted GOVERNED STATE — GitHub repo settings / rulesets / branch
+// protection — which no repo file records. Prop 296 §14 carved a named
+// `network-read-only` sub-class out of §12.5's never-network default for exactly
+// this: authenticated READ-ONLY GETs, never a mutation ([Tenet 13]).
+//
+// This module keeps its module-wide NEVER-networks + synchronous-pure invariant
+// (header :27-35): the fetches happen at the CLI EDGE (doctor-parity-fetch.ts),
+// which resolves per-repo, per-surface SNAPSHOTS BEFORE detector dispatch. The
+// detector here is the SYNC PURE verdict step — it takes the pre-fetched
+// snapshots (untrusted boundary JSON) + the canonical declaration text and emits
+// per-repo verdict LINES. The fetched JSON is Zod-narrowed max-tolerance: a
+// mis-shaped / field-shy payload degrades to auth-class `unknown` for THAT
+// surface, never a throw and never a false drift (§14 clause 2).
+//
+// Verdict vocabulary ({@link ParityContractVerdict}, :119-123):
+//   - `pass`    — the surface was read and the posture holds.
+//   - `warn`    — the surface was read and the posture DRIFTED (sensor, not gate).
+//   - `skip`    — honest-absent: no transport / offline (§14 clause 4), or the
+//                 row-2 canonical declaration is not yet committed, or no roster
+//                 repo is in the row's `consumers` scope.
+//   - `unknown` — auth-class / transient / unparseable: a 200 WITHOUT the posture
+//                 fields, a no/under-privileged token, a 404 on a governed
+//                 surface (indistinguishable from under-privilege), a 5xx/timeout,
+//                 or an unparseable payload. NEVER a drift verdict (§14 clause 2).
+
+/**
+ * Per-surface fetch outcome the CLI edge resolves for one governed-state read
+ * (Prop 296 §14 clause 2). The detector maps each to a verdict WITHOUT ever
+ * networking:
+ *   - `ok`           — a 200 with a parseable body (the detector inspects it).
+ *   - `no-transport` — `gh` unavailable / spawn failed / offline → honest-absent
+ *                      `skip` (§14 clause 4). Distinct from an auth failure.
+ *   - `auth`         — no token, an under-privileged token, or a 401/403 → `unknown`.
+ *   - `not-found`    — a 404 on the governed surface (repo/branch invisible, or a
+ *                      repo-scoped CI token that cannot see the sibling) → `unknown`.
+ *   - `error`        — a 5xx / timeout / unparseable body → `unknown` (transient).
+ */
+export type NetworkSurfaceOutcome = 'ok' | 'no-transport' | 'auth' | 'not-found' | 'error';
+
+/**
+ * One fetched governed-state surface. `data` carries the RAW parsed JSON only on
+ * an `ok` outcome — untrusted boundary input the detector Zod-narrows before
+ * trusting any field. `detail` is optional render context (e.g. `HTTP 403`).
+ */
+export interface NetworkSurfaceSnapshot {
+  outcome: NetworkSurfaceOutcome;
+  /** Raw parsed JSON payload when `outcome === 'ok'`; undefined otherwise. Untrusted — narrowed in the detector. */
+  data?: unknown;
+  /** Optional human-readable outcome detail for the rendered line (e.g. an HTTP status). */
+  detail?: string;
+}
+
+/**
+ * The three externally-hosted surfaces a network-read-only probe reads for one
+ * repo. Each is present only when the CLI edge attempted it (the fetch step
+ * fetches per repo the union of surfaces the in-scope rows need):
+ *   - `repoSettings`     — `GET /repos/{owner}/{repo}` (row-1 merge posture).
+ *   - `rulesets`         — the repo's ruleset DETAILS (rows 2 + 3).
+ *   - `branchProtection` — classic `GET …/branches/{branch}/protection` (row-3).
+ */
+export interface NetworkRepoSurfaces {
+  repoSettings?: NetworkSurfaceSnapshot;
+  rulesets?: NetworkSurfaceSnapshot;
+  branchProtection?: NetworkSurfaceSnapshot;
+}
+
+/**
+ * One repo's pre-fetched network snapshot. `repoSlug` is the `owner/repo`
+ * addressed on the API; `repoId` is the cohort id used for `consumers`
+ * applicability (the repo segment / {@link deriveCohortRepoId} result). §14
+ * clause 3: one verdict LINE is emitted per repo, never one blended verdict.
+ */
+export interface NetworkProbeRepoSnapshot {
+  repoSlug: string;
+  repoId: string;
+  surfaces: NetworkRepoSurfaces;
+}
+
+/** The posture rows the network-read-only family senses (routing key = the contract id). */
+export type NetworkPostureRow =
+  | 'repo-merge-posture'
+  | 'repo-required-checks-posture'
+  | 'repo-branch-protection-posture';
+
+/** Inputs + test seams for {@link detectNetworkPostureContract}. */
+export interface DetectNetworkPostureContext {
+  /** Which posture row to evaluate — selects the surface reads + verdict logic. */
+  row: NetworkPostureRow;
+  /**
+   * Pre-fetched per-repo snapshots (roster resolved + fetched at the CLI edge).
+   * The detector NEVER networks — it only inspects these. The row's `consumers`
+   * scope is applied PER-REPO against each snapshot's `repoId`.
+   */
+  repos: NetworkProbeRepoSnapshot[];
+  /**
+   * `repo-required-checks-posture` only: absolute path to the totem-side
+   * canonical ruleset declaration (`.totem/rulesets/main.json`). Read via
+   * {@link readFile}. Absent file → honest-absent `skip` ("declaration not yet
+   * committed"), never an error.
+   */
+  declarationPath?: string;
+  /** Test seam — override the declaration read. Production callers omit it (reads UTF-8 on disk). */
+  readFile?: (absPath: string) => string | undefined;
+}
+
+/**
+ * The pinned squash-merge body/title posture (row-1). GitHub encodes these as
+ * enums; the ruled values are a BLANK squash body + a PR_TITLE squash title.
+ */
+const EXPECTED_SQUASH_MESSAGE = 'BLANK';
+const EXPECTED_SQUASH_TITLE = 'PR_TITLE';
+
+/** The symbolic ref-name includes that mark a ruleset as targeting the default branch. */
+const DEFAULT_BRANCH_INCLUDES = new Set(['~DEFAULT_BRANCH', '~ALL']);
+
+/**
+ * The ruleset rule types that gate writes to a branch (the "push/PR-class" set,
+ * row-3). Any active ruleset carrying one of these for the default branch must
+ * itself be un-bypassable — a permissive/bypassable ruleset must not undercut
+ * classic branch protection.
+ */
+const PUSH_PR_RULE_TYPES = new Set([
+  'pull_request',
+  'non_fast_forward',
+  'deletion',
+  'creation',
+  'update',
+  'required_linear_history',
+  'required_signatures',
+  'required_status_checks',
+  'required_deployments',
+  'merge_queue',
+]);
+
+// ── Boundary Zod schemas (untrusted fetched JSON; max-tolerance) ──
+
+/** Row-1 repo-settings posture fields. A 200 missing any of these is auth-class (`unknown`). */
+const RepoMergeSettingsSchema = z.object({
+  allow_squash_merge: z.boolean(),
+  allow_merge_commit: z.boolean(),
+  allow_rebase_merge: z.boolean(),
+  squash_merge_commit_message: z.string(),
+  squash_merge_commit_title: z.string(),
+});
+
+/** One ruleset rule (`{ type, parameters }`) — parameters stay `unknown` until a per-type narrow. */
+const RulesetRuleSchema = z.object({
+  type: z.string(),
+  parameters: z.unknown().optional(),
+});
+
+/** One ruleset detail object (max-tolerance — every field optional so a slim payload still narrows). */
+const RulesetSchema = z.object({
+  id: z.union([z.number(), z.string()]).optional(),
+  name: z.string().optional(),
+  enforcement: z.string().optional(),
+  target: z.string().optional(),
+  conditions: z
+    .object({
+      ref_name: z
+        .object({
+          include: z.array(z.string()).optional(),
+          exclude: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  bypass_actors: z.array(z.unknown()).optional(),
+  rules: z.array(RulesetRuleSchema).optional(),
+});
+
+/** The rulesets surface payload is an array of ruleset details. */
+const RulesetsArraySchema = z.array(RulesetSchema);
+
+/** Parameters of a `required_status_checks` rule (row-2 union + strict-policy read). */
+const StatusCheckParamsSchema = z.object({
+  required_status_checks: z.array(z.object({ context: z.string() })).optional(),
+  strict_required_status_checks_policy: z.boolean().optional(),
+});
+
+/** A classic branch-protection `{ enabled }` toggle. */
+const ProtectionToggleSchema = z.object({ enabled: z.boolean() });
+
+/**
+ * Row-3 classic branch-protection posture. The three toggles are ALWAYS present
+ * in a full admin read, so their absence marks an under-privileged 200
+ * (auth-class `unknown`). `required_pull_request_reviews` is legitimately absent
+ * when PR review is not required — that absence is real drift, not auth-class.
+ */
+const BranchProtectionSchema = z.object({
+  required_pull_request_reviews: z
+    .object({ required_approving_review_count: z.number().optional() })
+    .optional(),
+  enforce_admins: ProtectionToggleSchema,
+  allow_force_pushes: ProtectionToggleSchema,
+  allow_deletions: ProtectionToggleSchema,
+});
+
+/**
+ * The totem-side canonical ruleset declaration (`.totem/rulesets/main.json`,
+ * schema-version 1). The canonical required-checks list + pinned strict policy
+ * come from `required_status_checks`; the surface is compared against THIS, never
+ * against itself (Tenet 20).
+ */
+const RulesetDeclarationSchema = z.object({
+  'schema-version': z.number(),
+  'ruleset-name': z.string().optional(),
+  enforcement: z.string().optional(),
+  bypass_actors: z.array(z.unknown()).optional(),
+  required_status_checks: z
+    .object({
+      strict_required_status_checks_policy: z.boolean().optional(),
+      contexts: z.array(z.string()).optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Sense the three Prop 296 §14 network-read-only posture rows against pre-fetched
+ * snapshots. Returns an ARRAY of per-repo verdict lines (the {@link LockContentLine}
+ * pattern — the CLI's flatMap render + R2 contract-counting already support
+ * multi-line rows). NEVER networks (the fetches ran at the CLI edge), NEVER
+ * throws (every read/parse failure degrades to a verdict), NEVER emits `fail`
+ * (the CLI edge owns `--strict` promotion) and NEVER a drift verdict on an
+ * auth/transport failure (§14 clause 2).
+ *
+ * Applicability: the row's `consumers` scope is applied PER-REPO against each
+ * snapshot's `repoId` (verbatim with {@link detectLockContentContract}). A row
+ * scoped `consumers: [totem]` senses only the roster repos whose id is `totem`;
+ * an empty in-scope set yields one honest-absent `skip`.
+ */
+export function detectNetworkPostureContract(
+  contract: ParityContract,
+  ctx: DetectNetworkPostureContext,
+): LockContentLine[] {
+  const inScope = ctx.repos.filter((r) => repoInConsumerScope(contract, r.repoId));
+  if (inScope.length === 0) {
+    return [
+      {
+        lineName: `Parity: ${contract.id}`,
+        verdict: {
+          status: 'skip',
+          message:
+            contract.consumers !== undefined
+              ? `cohort permits absence here (no roster repo in consumers [${contract.consumers.join(', ')}])`
+              : 'no roster repo resolved to probe (current-repo slug unresolvable)',
+        },
+      },
+    ];
+  }
+
+  switch (ctx.row) {
+    case 'repo-merge-posture':
+      return inScope.map((repo) => mergePostureLine(contract, repo));
+    case 'repo-required-checks-posture':
+      return requiredChecksLines(contract, ctx, inScope);
+    case 'repo-branch-protection-posture':
+      return inScope.flatMap((repo) => branchProtectionLines(contract, repo));
+    default:
+      // Defensive: an unrecognized row degrades to a single honest-absent skip
+      // rather than darking the sensor (mirrors the manifestation fail-loud).
+      return [
+        {
+          lineName: `Parity: ${contract.id}`,
+          verdict: { status: 'skip', message: `network-posture row unrecognized by this doctor` },
+        },
+      ];
+  }
+}
+
+/** True when `repoId` is inside the contract's `consumers` scope (undefined = applies to all). */
+function repoInConsumerScope(contract: ParityContract, repoId: string): boolean {
+  return contract.consumers === undefined || contract.consumers.includes(repoId);
+}
+
+/** Append ` (detail)` to a message when the snapshot carries render detail. */
+function detailSuffix(surface: NetworkSurfaceSnapshot): string {
+  return surface.detail !== undefined && surface.detail.length > 0 ? ` (${surface.detail})` : '';
+}
+
+/**
+ * Map a non-`ok` (or absent) surface to its cannot-verify verdict, or `undefined`
+ * when the surface is `ok` and the caller should inspect the payload. §14 clause
+ * 2/4: `no-transport` → `skip` (honest-absent), every other failure → `unknown`
+ * (never a drift verdict).
+ */
+function surfaceCannotVerify(
+  surface: NetworkSurfaceSnapshot | undefined,
+  surfaceLabel: string,
+): ParityContractVerdict | undefined {
+  if (surface === undefined) {
+    return { status: 'unknown', message: `${surfaceLabel}: not probed — cannot verify` };
+  }
+  switch (surface.outcome) {
+    case 'ok':
+      return undefined;
+    case 'no-transport':
+      return {
+        status: 'skip',
+        message: `${surfaceLabel}: no transport (gh unavailable / offline) — honest-absent per §14 clause 4${detailSuffix(surface)}`,
+      };
+    case 'auth':
+      return {
+        status: 'unknown',
+        message: `${surfaceLabel}: auth-class — cannot verify (missing / under-privileged token; never posture-false per §14 clause 2)${detailSuffix(surface)}`,
+      };
+    case 'not-found':
+      return {
+        status: 'unknown',
+        message: `${surfaceLabel}: 404 on a governed surface — indistinguishable from under-privilege; cannot verify per §14 clause 2${detailSuffix(surface)}`,
+      };
+    case 'error':
+      return {
+        status: 'unknown',
+        message: `${surfaceLabel}: transient / unreachable — cannot verify${detailSuffix(surface)}`,
+      };
+    default:
+      return {
+        status: 'unknown',
+        message: `${surfaceLabel}: unrecognized outcome — cannot verify`,
+      };
+  }
+}
+
+// ── Row 1: repo-merge-posture ──
+
+/**
+ * One repo's merge-posture line: `GET /repos/{owner}/{repo}` must report
+ * squash-only merges + a BLANK squash body + a PR_TITLE squash title. A 200
+ * missing those fields is auth-class (`unknown`); a read mismatch is drift
+ * (`warn`). Silent by choice on `delete_branch_on_merge`.
+ */
+function mergePostureLine(
+  contract: ParityContract,
+  repo: NetworkProbeRepoSnapshot,
+): LockContentLine {
+  const lineName = `Parity: ${contract.id} [${repo.repoSlug}]`;
+  const surface = repo.surfaces.repoSettings;
+  const cannot = surfaceCannotVerify(surface, 'repo settings');
+  if (cannot !== undefined) return { lineName, verdict: cannot };
+
+  const parsed = RepoMergeSettingsSchema.safeParse(surface?.data);
+  if (!parsed.success) {
+    return {
+      lineName,
+      verdict: {
+        status: 'unknown',
+        message:
+          'repo settings: 200 without the merge-posture fields — auth-class (under-privileged token), never posture-false (§14 clause 2)',
+      },
+    };
+  }
+  const s = parsed.data;
+  const drift: string[] = [];
+  if (s.allow_squash_merge !== true) drift.push('allow_squash_merge≠true');
+  if (s.allow_merge_commit !== false) drift.push('allow_merge_commit≠false');
+  if (s.allow_rebase_merge !== false) drift.push('allow_rebase_merge≠false');
+  if (s.squash_merge_commit_message !== EXPECTED_SQUASH_MESSAGE)
+    drift.push(
+      `squash_merge_commit_message=${s.squash_merge_commit_message}≠${EXPECTED_SQUASH_MESSAGE}`,
+    );
+  if (s.squash_merge_commit_title !== EXPECTED_SQUASH_TITLE)
+    drift.push(`squash_merge_commit_title=${s.squash_merge_commit_title}≠${EXPECTED_SQUASH_TITLE}`);
+
+  if (drift.length > 0) {
+    return {
+      lineName,
+      verdict: {
+        status: 'warn',
+        message: `merge posture drifted: ${drift.join(', ')}`,
+        remediation:
+          'Restore squash-only merges with a BLANK squash body + PR_TITLE title in the repo Settings → General → Pull Requests.',
+      },
+    };
+  }
+  return {
+    lineName,
+    verdict: { status: 'pass', message: 'squash-only + BLANK squash body + PR_TITLE title' },
+  };
+}
+
+// ── Row 2: repo-required-checks-posture ──
+
+/**
+ * The required-checks lines: the active-ruleset UNION of `required_status_checks`
+ * must set-equal the canonical list (BOTH directions), AND every ruleset
+ * contributing a canonical check must itself hold enforcement=active,
+ * target ~DEFAULT_BRANCH, `bypass_actors=[]`, and the pinned
+ * `strict_required_status_checks_policy` — the union must not hide a bypassable
+ * contributing ruleset. Canonical + pin come from `.totem/rulesets/main.json`;
+ * an absent declaration is honest-absent `skip`.
+ */
+function requiredChecksLines(
+  contract: ParityContract,
+  ctx: DetectNetworkPostureContext,
+  inScope: NetworkProbeRepoSnapshot[],
+): LockContentLine[] {
+  // ── Canonical declaration (read ONCE; absent → honest-absent skip) ──
+  const readFile = ctx.readFile ?? readFileText;
+  const declPath = ctx.declarationPath;
+  const declRaw = declPath !== undefined ? safeReadFile(readFile, declPath) : undefined;
+  if (declRaw === undefined) {
+    return inScope.map((repo) => ({
+      lineName: `Parity: ${contract.id} [${repo.repoSlug}]`,
+      verdict: {
+        status: 'skip' as const,
+        message:
+          'canonical ruleset declaration (.totem/rulesets/main.json) not yet committed — honest-absent (interim canonical is prose, never parser input)',
+      },
+    }));
+  }
+
+  const canonical = parseRulesetDeclaration(declRaw);
+  if (canonical === undefined) {
+    // Malformed / unsupported canonical: cannot prove drift NOR currency (the
+    // Stale-Doctor-Paradox) → unknown, never a fabricated pass/warn.
+    return inScope.map((repo) => ({
+      lineName: `Parity: ${contract.id} [${repo.repoSlug}]`,
+      verdict: {
+        status: 'unknown' as const,
+        message:
+          '.totem/rulesets/main.json is unparseable / missing required_status_checks.contexts — canonical list underivable, cannot verify',
+      },
+    }));
+  }
+
+  return inScope.map((repo) => requiredChecksLine(contract, repo, canonical));
+}
+
+/** The narrowed canonical required-checks declaration. */
+interface CanonicalRequiredChecks {
+  contexts: Set<string>;
+  strictPolicy: boolean;
+}
+
+/** Parse + narrow the declaration; undefined when unparseable / unsupported / context-less. */
+function parseRulesetDeclaration(raw: string): CanonicalRequiredChecks | undefined {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(raw);
+    // totem-context: a malformed canonical declaration is a first-class "canonical underivable" signal (→ unknown), not a throw — the sensor must never crash on a mis-authored totem-side file.
+  } catch {
+    return undefined;
+  }
+  const parsed = RulesetDeclarationSchema.safeParse(doc);
+  if (!parsed.success) return undefined;
+  if (parsed.data['schema-version'] !== 1) return undefined;
+  const contexts = parsed.data.required_status_checks?.contexts;
+  if (contexts === undefined || contexts.length === 0) return undefined;
+  return {
+    contexts: new Set(contexts),
+    // Pinned posture; the row's expected value is `false`, but the PIN is whatever
+    // the canonical declares (derive-not-hardcode, Tenet 20).
+    strictPolicy: parsed.data.required_status_checks?.strict_required_status_checks_policy ?? false,
+  };
+}
+
+/** One repo's required-checks line (union set-compare + per-contributing-ruleset enforcement). */
+function requiredChecksLine(
+  contract: ParityContract,
+  repo: NetworkProbeRepoSnapshot,
+  canonical: CanonicalRequiredChecks,
+): LockContentLine {
+  const lineName = `Parity: ${contract.id} [${repo.repoSlug}]`;
+  const surface = repo.surfaces.rulesets;
+  const cannot = surfaceCannotVerify(surface, 'rulesets');
+  if (cannot !== undefined) return { lineName, verdict: cannot };
+
+  const parsed = RulesetsArraySchema.safeParse(surface?.data);
+  if (!parsed.success) {
+    return {
+      lineName,
+      verdict: {
+        status: 'unknown',
+        message: 'rulesets: 200 with an unparseable body — cannot verify (§14 clause 2)',
+      },
+    };
+  }
+
+  // Every ruleset targeting the default branch (any enforcement mode) is
+  // considered for the union so a check supplied ONLY by an evaluate-mode ruleset
+  // still appears in the set-compare — the per-contributing-ruleset gate below is
+  // what catches the bypassable/evaluate case with a precise reason, rather than a
+  // blunt "missing" (round finding + greptile P1 on strategy#962).
+  const defaultRulesets = parsed.data.filter(rulesetTargetsDefault);
+  const union = new Set<string>();
+  const contributing: { ruleset: z.infer<typeof RulesetSchema>; contexts: string[] }[] = [];
+  for (const ruleset of defaultRulesets) {
+    const contexts = statusCheckContexts(ruleset);
+    if (contexts.length === 0) continue; // a zero-rule / copilot-class ruleset never satisfies presence
+    for (const c of contexts) union.add(c);
+    contributing.push({ ruleset, contexts });
+  }
+
+  const drift: string[] = [];
+
+  // ── Set-compare BOTH directions ──
+  const missing = [...canonical.contexts].filter((c) => !union.has(c));
+  const extra = [...union].filter((c) => !canonical.contexts.has(c));
+  if (missing.length > 0)
+    drift.push(`missing required check(s): ${missing.join(', ')} (re-opens the gated vector)`);
+  if (extra.length > 0)
+    drift.push(`stale extra required check(s): ${extra.join(', ')} (silent merge-block)`);
+
+  // ── Per-contributing-ruleset enforcement posture ──
+  const unobserved: string[] = [];
+  for (const { ruleset, contexts } of contributing) {
+    const read = enforcementProblems(ruleset, canonical.strictPolicy);
+    const name = ruleset.name ?? String(ruleset.id ?? '(unnamed)');
+    if (read.problems.length > 0) {
+      drift.push(
+        `contributing ruleset '${name}' (supplies ${contexts.join(', ')}) is ${read.problems.join(' / ')}`,
+      );
+    }
+    if (read.unobserved.length > 0) {
+      unobserved.push(`contributing ruleset '${name}' omitted ${read.unobserved.join(', ')}`);
+    }
+  }
+
+  if (drift.length > 0) {
+    return {
+      lineName,
+      verdict: {
+        status: 'warn',
+        message: `required-checks posture drifted: ${drift.join('; ')}`,
+        remediation:
+          'Align the default-branch ruleset union to the canonical required-checks list and make every contributing ruleset enforcement=active with no bypass actors.',
+      },
+    };
+  }
+  // Observed drift outranks an observability gap (a definite finding is never
+  // hidden behind unknown); with no drift, a field-shy contributing ruleset is
+  // auth-class — never a silent pass (§14 clause 2).
+  if (unobserved.length > 0) {
+    return {
+      lineName,
+      verdict: {
+        status: 'unknown',
+        message: `rulesets detail field-shy — cannot certify enforcement posture: ${unobserved.join('; ')} (auth-class, §14 clause 2)`,
+      },
+    };
+  }
+  return {
+    lineName,
+    verdict: {
+      status: 'pass',
+      message: `active-ruleset union == canonical required checks (${canonical.contexts.size}); every contributing ruleset un-bypassable`,
+    },
+  };
+}
+
+/**
+ * The enforcement-posture read for one contributing ruleset: OBSERVED problems
+ * (real drift → warn) kept separate from UNOBSERVED fields — a field-shy detail
+ * is auth-class (§14 clause 2, greptile P1 round 1) and must cap the row at
+ * `unknown`, never mint a drift verdict and never fall through to a silent pass.
+ */
+interface EnforcementRead {
+  problems: string[];
+  unobserved: string[];
+}
+
+function enforcementProblems(
+  ruleset: z.infer<typeof RulesetSchema>,
+  pinnedStrict?: boolean,
+): EnforcementRead {
+  const problems: string[] = [];
+  const unobserved: string[] = [];
+  if (ruleset.enforcement === undefined) unobserved.push('enforcement');
+  else if (ruleset.enforcement !== 'active') problems.push(`enforcement=${ruleset.enforcement}`);
+  if (ruleset.bypass_actors === undefined) unobserved.push('bypass_actors');
+  else if (ruleset.bypass_actors.length > 0) problems.push('bypassable (bypass_actors non-empty)');
+  // Row-3 callers omit the pin: protection rulesets are judged on enforcement +
+  // bypass only — the strict policy is a required-checks (row-2) concern.
+  if (pinnedStrict === undefined) return { problems, unobserved };
+  const strict = strictPolicy(ruleset);
+  if (strict === undefined) unobserved.push('strict_required_status_checks_policy');
+  else if (strict !== pinnedStrict)
+    problems.push(`strict_required_status_checks_policy=${strict}≠${pinnedStrict}`);
+  return { problems, unobserved };
+}
+
+// ── Row 3: repo-branch-protection-posture ──
+
+/**
+ * One repo's TWO branch-protection lines — classic branch protection AND the
+ * rulesets surface (reading one senses a subset). Classic: PR-required with a
+ * ruled `required_approving_review_count=0`, `enforce_admins=true`, force pushes
+ * + deletions disallowed. Rulesets: any active ruleset carrying push/PR-class
+ * rules for the default branch must be enforcement=active with `bypass_actors=[]`.
+ */
+function branchProtectionLines(
+  contract: ParityContract,
+  repo: NetworkProbeRepoSnapshot,
+): LockContentLine[] {
+  return [classicProtectionLine(contract, repo), rulesetProtectionLine(contract, repo)];
+}
+
+/** The classic-branch-protection line (row-3 surface 1). */
+function classicProtectionLine(
+  contract: ParityContract,
+  repo: NetworkProbeRepoSnapshot,
+): LockContentLine {
+  const lineName = `Parity: ${contract.id} [${repo.repoSlug} · classic]`;
+  const surface = repo.surfaces.branchProtection;
+  const cannot = surfaceCannotVerify(surface, 'classic branch protection');
+  if (cannot !== undefined) return { lineName, verdict: cannot };
+
+  const parsed = BranchProtectionSchema.safeParse(surface?.data);
+  if (!parsed.success) {
+    // The three toggles are always present in a full admin read; their absence
+    // marks an under-privileged 200 → auth-class, never posture-false.
+    return {
+      lineName,
+      verdict: {
+        status: 'unknown',
+        message:
+          'classic branch protection: 200 without the enforce_admins/force-push/deletion toggles — auth-class (§14 clause 2)',
+      },
+    };
+  }
+  const p = parsed.data;
+  const drift: string[] = [];
+  if (p.required_pull_request_reviews === undefined) {
+    drift.push('required_pull_request_reviews absent (PR not required — direct-push vector open)');
+  } else {
+    const count = p.required_pull_request_reviews.required_approving_review_count;
+    if (count === undefined) {
+      // reviews object present but count field shy → auth-class read.
+      return {
+        lineName,
+        verdict: {
+          status: 'unknown',
+          message:
+            'classic branch protection: reviews object present without required_approving_review_count — auth-class (§14 clause 2)',
+        },
+      };
+    }
+    if (count !== 0)
+      drift.push(
+        `required_approving_review_count=${count}≠0 (ruled posture — nonzero deadlocks the solo-operator merge)`,
+      );
+  }
+  if (p.enforce_admins.enabled !== true) drift.push('enforce_admins≠true');
+  if (p.allow_force_pushes.enabled !== false) drift.push('allow_force_pushes≠false');
+  if (p.allow_deletions.enabled !== false) drift.push('allow_deletions≠false');
+
+  if (drift.length > 0) {
+    return {
+      lineName,
+      verdict: {
+        status: 'warn',
+        message: `classic branch protection drifted: ${drift.join(', ')}`,
+        remediation:
+          'Restore the default-branch protection: PR required with required_approving_review_count=0, enforce_admins on, force pushes + deletions off.',
+      },
+    };
+  }
+  return {
+    lineName,
+    verdict: {
+      status: 'pass',
+      message: 'PR required (approving-count 0), enforce_admins on, force pushes + deletions off',
+    },
+  };
+}
+
+/** The rulesets-surface line for row-3 (surface 2 — a bypassable protection ruleset must not undercut classic). */
+function rulesetProtectionLine(
+  contract: ParityContract,
+  repo: NetworkProbeRepoSnapshot,
+): LockContentLine {
+  const lineName = `Parity: ${contract.id} [${repo.repoSlug} · rulesets]`;
+  const surface = repo.surfaces.rulesets;
+  const cannot = surfaceCannotVerify(surface, 'rulesets');
+  if (cannot !== undefined) return { lineName, verdict: cannot };
+
+  const parsed = RulesetsArraySchema.safeParse(surface?.data);
+  if (!parsed.success) {
+    return {
+      lineName,
+      verdict: {
+        status: 'unknown',
+        message: 'rulesets: 200 with an unparseable body — cannot verify (§14 clause 2)',
+      },
+    };
+  }
+
+  const protectionRulesets = parsed.data
+    .filter(rulesetTargetsDefault)
+    .filter((r) => (r.rules ?? []).some((rule) => PUSH_PR_RULE_TYPES.has(rule.type)));
+
+  const drift: string[] = [];
+  const unobserved: string[] = [];
+  for (const ruleset of protectionRulesets) {
+    const name = ruleset.name ?? String(ruleset.id ?? '(unnamed)');
+    const read = enforcementProblems(ruleset);
+    if (read.problems.length > 0)
+      drift.push(`protection ruleset '${name}' is ${read.problems.join(' / ')}`);
+    if (read.unobserved.length > 0)
+      unobserved.push(`protection ruleset '${name}' omitted ${read.unobserved.join(', ')}`);
+  }
+
+  if (drift.length > 0) {
+    return {
+      lineName,
+      verdict: {
+        status: 'warn',
+        message: `ruleset protection drifted: ${drift.join('; ')}`,
+        remediation:
+          'Make every default-branch push/PR ruleset enforcement=active with no bypass actors so it cannot undercut classic protection.',
+      },
+    };
+  }
+  // Same precedence as row 2: a field-shy protection ruleset is auth-class —
+  // never certified un-bypassable without observing the field (§14 clause 2).
+  if (unobserved.length > 0) {
+    return {
+      lineName,
+      verdict: {
+        status: 'unknown',
+        message: `rulesets detail field-shy — cannot certify protection posture: ${unobserved.join('; ')} (auth-class, §14 clause 2)`,
+      },
+    };
+  }
+  return {
+    lineName,
+    verdict: {
+      status: 'pass',
+      message:
+        protectionRulesets.length === 0
+          ? 'no default-branch push/PR ruleset present to undercut classic protection'
+          : `${protectionRulesets.length} default-branch push/PR ruleset(s) active + un-bypassable`,
+    },
+  };
+}
+
+// ── Shared ruleset helpers ──
+
+/** True when a ruleset's ref-name conditions target the default branch (and don't exclude it). */
+function rulesetTargetsDefault(ruleset: z.infer<typeof RulesetSchema>): boolean {
+  const refName = ruleset.conditions?.ref_name;
+  if (refName === undefined) return false;
+  const include = refName.include ?? [];
+  const exclude = refName.exclude ?? [];
+  const included = include.some((r) => DEFAULT_BRANCH_INCLUDES.has(r));
+  const excluded = exclude.some((r) => DEFAULT_BRANCH_INCLUDES.has(r));
+  return included && !excluded;
+}
+
+/** The `required_status_checks` contexts a ruleset supplies (empty when it carries no such rule). */
+function statusCheckContexts(ruleset: z.infer<typeof RulesetSchema>): string[] {
+  const contexts: string[] = [];
+  for (const rule of ruleset.rules ?? []) {
+    if (rule.type !== 'required_status_checks') continue;
+    const params = StatusCheckParamsSchema.safeParse(rule.parameters);
+    if (!params.success) continue;
+    for (const check of params.data.required_status_checks ?? []) contexts.push(check.context);
+  }
+  return contexts;
+}
+
+/** The `strict_required_status_checks_policy` a ruleset pins, or undefined when it carries no such rule. */
+function strictPolicy(ruleset: z.infer<typeof RulesetSchema>): boolean | undefined {
+  for (const rule of ruleset.rules ?? []) {
+    if (rule.type !== 'required_status_checks') continue;
+    const params = StatusCheckParamsSchema.safeParse(rule.parameters);
+    if (params.success) return params.data.strict_required_status_checks_policy;
+  }
+  return undefined;
+}
+
+/** Read a file through the injected seam, swallowing a throwing reader to undefined (honest-absent). */
+function safeReadFile(
+  readFile: (absPath: string) => string | undefined,
+  absPath: string,
+): string | undefined {
+  try {
+    return readFile(absPath);
+    // totem-context: a throwing injected reader is the honest-absent signal (declaration file unreadable → skip); rethrowing would break the never-throws contract for a routine absence.
+  } catch {
+    return undefined;
+  }
+}
