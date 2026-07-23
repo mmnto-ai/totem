@@ -129,8 +129,12 @@ async function countLessonCorpusFiles(
   const { matchesGlob } = await import('@mmnto/totem');
 
   const WILDCARD = /[*?{}[\]]/;
-  // Bound the walk so a broad lesson glob can never blow up on heavy trees.
-  const SKIP_DIRS = new Set(['.git', 'node_modules']);
+  // Bound the walk so a broad lesson glob can never blow up on heavy trees. A
+  // non-terminal wildcard (e.g. '.totem/*/lessons/*.md') collapses the static
+  // prefix to a shallow dir, so the heavy subtrees lessons never live in —
+  // embedding stores and build output — are skipped by name alongside the
+  // usual suspects.
+  const SKIP_DIRS = new Set(['.git', 'node_modules', '.lancedb', 'dist']);
   const toPosix = (p: string): string => p.replace(/\\/g, '/');
   const matched = new Set<string>();
 
