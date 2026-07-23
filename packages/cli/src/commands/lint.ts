@@ -74,6 +74,32 @@ function walkLessonMtimes(fs: FsModule, path: PathModule, lessonsDir: string): L
   return out;
 }
 
+// ─── Freeze-aware nag suppression (mmnto-ai/totem#2463 slice B) ─
+
+/**
+ * Whether an active rule-compilation freeze should SILENCE the compile-manifest
+ * staleness advisory (mmnto-ai/totem#2463 slice B).
+ *
+ * Under that freeze `totem lesson compile` sits on the freeze's do-not list, so
+ * the advisory would nag the reader toward a forbidden command. Suppression is
+ * INFO-PRESERVING by default: any failure reading freeze state resolves `false`
+ * (show the advisory) — the nag is silenced ONLY on a positive frozen=true, never
+ * on uncertainty. Freeze visibility itself lives in orient/status and the
+ * `[frozen]` help badge, not in this string.
+ *
+ * `absTotemDir` is the ABSOLUTE `.totem` path (`readEffectiveFreezes` joins it
+ * straight to the freeze-file path, so a repo-relative dir would misread).
+ */
+async function isStalenessNagFrozen(cwd: string, absTotemDir: string): Promise<boolean> {
+  try {
+    const { deriveRuleCompilationFrozen } = await import('../help-freeze.js');
+    return await deriveRuleCompilationFrozen(cwd, { totemDir: absTotemDir });
+    // totem-context: best-effort — an unreadable/corrupt freeze state degrades to showing the advisory (frozen=false), never suppresses on uncertainty (mmnto-ai/totem#2463)
+  } catch {
+    return false;
+  }
+}
+
 // ─── Types ──────────────────────────────────────────
 
 export interface LintOptions {
@@ -165,7 +191,16 @@ export async function lintCommand(options: LintOptions): Promise<void> {
       const manifest = readCompileManifest(manifestPath);
       const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
       const currentInputHash = generateInputHash(lessonsDir, cwd);
-      if (currentInputHash !== manifest.input_hash) {
+      // Short-circuit the whole advisory (naming + git provenance spawns + the
+      // warn) when a rule-compilation freeze is active — it would nag toward the
+      // do-not-listed `totem lesson compile` (mmnto-ai/totem#2463 slice B). The
+      // freeze read only runs when the manifest is actually stale (`&&` order),
+      // and a throw resolves `false` inside the helper so the advisory still
+      // shows on any freeze-state read failure (info-preserving default).
+      if (
+        currentInputHash !== manifest.input_hash &&
+        !(await isStalenessNagFrozen(cwd, path.join(cwd, config.totemDir)))
+      ) {
         // Bounded best-effort: any git failure inside these helpers degrades to
         // the mtime fallback (or the generic line) rather than killing the warn.
         // The whole block stays inside the outer never-crash try/catch below.
