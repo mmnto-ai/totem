@@ -159,6 +159,15 @@ const RawParityContractSchema = z.object({
   senses: z.unknown().optional(),
   'vendor-adapter': z.unknown().optional(),
   'repo-role-variance': z.unknown().optional(),
+  // `probe-class` (Prop 296 §14, strategy#962) — forward-compat routing tag on a
+  // capability-probe row (`network-read-only` carves the authenticated-read
+  // sub-class out of the §12.5 never-network default). Max-tolerance boundary
+  // (`z.unknown()`) for the SAME manifest-wide-outage reason as the four
+  // promoted fields above: a closed enum would take every contract dark on one
+  // future value. Narrowed per-row in `mapContract` (mis-shaped → absent on that
+  // row, never a dark manifest). Routing keys PRIMARILY on the contract-id
+  // registry; this rides as metadata, never a verdict input.
+  'probe-class': z.unknown().optional(),
 });
 
 /**
@@ -240,6 +249,14 @@ export interface ParityContract {
   vendorAdapter?: string[];
   /** Optional one-line legitimate role-based manifestation difference (§6(c)). */
   repoRoleVariance?: string;
+  /**
+   * Optional Prop 296 §14 probe sub-class tag (`network-read-only`) on a
+   * capability-probe row. Open string for the same manifest-wide-outage reason
+   * as {@link manifestation}: an unrecognized value rides verbatim, never a
+   * dark manifest. Forward-compat metadata — routing narrows on the contract-id
+   * registry (CLI edge), not on this field.
+   */
+  probeClass?: string;
 }
 
 /** A fully parsed + validated parity manifest. */
@@ -428,6 +445,7 @@ function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContra
   const senses = narrowString(raw.senses);
   const vendorAdapter = narrowStringArray(raw['vendor-adapter']);
   const repoRoleVariance = narrowString(raw['repo-role-variance']);
+  const probeClass = narrowString(raw['probe-class']);
   return {
     id: raw.id,
     dimension: raw.dimension,
@@ -446,6 +464,7 @@ function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContra
     ...(senses !== undefined ? { senses } : {}),
     ...(vendorAdapter !== undefined ? { vendorAdapter } : {}),
     ...(repoRoleVariance !== undefined ? { repoRoleVariance } : {}),
+    ...(probeClass !== undefined ? { probeClass } : {}),
   };
 }
 

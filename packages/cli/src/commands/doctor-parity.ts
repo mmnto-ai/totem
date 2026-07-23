@@ -582,6 +582,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
     detectLockContentContract,
     detectManualAttestationContract,
     detectMechanicalContract,
+    detectNetworkPostureContract,
     detectValueEqualityContract,
     detectVersionPinnedContract,
     extractManagedBlock,
@@ -609,6 +610,10 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   // at the CONFIGURED tier — a hook on disk that does not match its repo's configured
   // tier is genuine drift, which the content compare correctly surfaces.
   let hookTier: 'strict' | 'standard' = 'standard';
+  // Opt-in cross-repo read set for the §14 network-read-only probes (current repo
+  // is always probed; this only widens the roster). Captured from the SAME
+  // repo-local config load — never leaked from the global profile.
+  let probeRepos: string[] | undefined;
   try {
     const configPath = resolveConfigPath(cwd);
     // Repo-scoped by design: the manifest location is per-repo, so a config-less
@@ -623,6 +628,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const config = await loadConfig(configPath);
       configValue = config.orient?.parityManifest;
       hookTier = config.hooks?.tier ?? 'standard';
+      probeRepos = config.orient?.parityProbeRepos;
     }
     // totem-context: a missing/corrupt totem config is the honest-absent path (treated as "no parity manifest configured"), not a sensor failure — the doctor runs against config-less repos by design.
   } catch (err) {
@@ -810,6 +816,31 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         return undefined;
       };
 
+      // ── §14 network-read-only fetch step (BEFORE detector dispatch) ──
+      // The CLI edge owns the network (core's parity-detect stays never-network):
+      // resolve per-repo, per-surface snapshots for the posture rows present in
+      // the manifest ONCE, up front, so the pure detector only verdicts. An empty
+      // roster / absent rows → no fetch. The default transport spawns `gh api`;
+      // gh-absent degrades every surface to a skip (§14 clause 4). NEVER throws.
+      const { networkPostureRowFor, resolveNetworkSnapshots } =
+        await import('./doctor-parity-fetch.js');
+      const networkRowSpecs = contracts.flatMap((c) => {
+        if (c.manifestation !== 'capability-probe') return [];
+        const row = networkPostureRowFor(c.id);
+        return row === undefined
+          ? []
+          : [{ row, ...(c.consumers !== undefined ? { consumers: c.consumers } : {}) }];
+      });
+      const networkSnapshots =
+        networkRowSpecs.length > 0
+          ? await resolveNetworkSnapshots({
+              rows: networkRowSpecs,
+              gitRoot,
+              ...(repoId !== undefined ? { repoId } : {}),
+              ...(probeRepos !== undefined ? { probeRepos } : {}),
+            })
+          : [];
+
       // flatMap, not map: a mechanical contract (claude-skills) expands to one
       // line PER distributed skill, so the per-contract count can exceed the
       // contract count.
@@ -821,6 +852,33 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
         // NON-probe rungs (managed-block, version-pin, …) are informational —
         // they fall through to the existing tractability routing unchanged.
         if (c.manifestation === 'capability-probe') {
+          // ── §14 network-read-only sub-class (strategy#962) ──
+          // The three posture rows route to the network family FIRST (registry
+          // mirroring capabilityProbesFor, default undefined → the existing
+          // honest-skip stub for unregistered ids). Unregistered/other
+          // capability-probe ids fall through to the local-exec path unchanged.
+          const networkRow = networkPostureRowFor(c.id);
+          if (networkRow !== undefined) {
+            // A network posture probe reads externally-hosted governed state (#2327 R3): 'present'.
+            readoutMeta[c.id] = { coverage: 'mechanical', sensesProbed: 'present' };
+            // Consumers scope is applied PER-REPO inside the detector (like
+            // detectLockContentContract self-guards) — no CLI-side consumersSkip
+            // here, so a partially-scoped roster still emits per-repo lines.
+            let blockingDrift = false;
+            const lines = detectNetworkPostureContract(c, {
+              row: networkRow,
+              repos: networkSnapshots,
+              ...(networkRow === 'repo-required-checks-posture'
+                ? { declarationPath: path.join(gitRoot, '.totem', 'rulesets', 'main.json') }
+                : {}),
+            }).map((l) => {
+              if (l.verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
+              return lineFor(l.lineName, l.verdict);
+            });
+            if (blockingDrift) blockingDriftIds.push(c.id);
+            return lines;
+          }
+
           // Probe resolution BEFORE the scope guard is meta-only (pure switch, no
           // probe executes): a scoped-out row still classifies by whether the
           // registry implements it (#2327 R2).

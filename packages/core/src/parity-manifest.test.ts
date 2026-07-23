@@ -305,6 +305,7 @@ contracts:
     senses: usable
     vendor-adapter: [claude, gemini]
     repo-role-variance: publisher self-read skips on workspace pins (by design)
+    probe-class: network-read-only
     tracking-issue: mmnto-ai/totem#2140
 `;
 
@@ -318,6 +319,26 @@ describe('parseParityManifest — promoted 296 fields (mmnto-ai/totem#2140)', ()
     expect(row.senses).toBe('usable');
     expect(row.vendorAdapter).toEqual(['claude', 'gemini']);
     expect(row.repoRoleVariance).toBe('publisher self-read skips on workspace pins (by design)');
+    expect(row.probeClass).toBe('network-read-only');
+  });
+
+  it('narrows a mis-shaped probe-class to absent, and drops it when unset (§14, strategy#962)', () => {
+    // Same total-outage guard as the four §6 promoted fields: a numeric
+    // probe-class (authoring error) drops to absent on that row, never a
+    // manifest-wide failure. An unset probe-class simply omits the key.
+    const misShaped = PROMOTED_FIELDS_YAML.replace(
+      'probe-class: network-read-only',
+      'probe-class: 42',
+    );
+    const result = parseParityManifest(misShaped);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect('probeClass' in result.manifest.contracts[0]!).toBe(false);
+
+    const valid = parseParityManifest(VALID_MANIFEST_YAML);
+    expect(valid.status).toBe('ok');
+    if (valid.status !== 'ok') return;
+    for (const row of valid.manifest.contracts) expect('probeClass' in row).toBe(false);
   });
 
   it('respects honest-absent mapping for promoted optional fields (no keys, no defaults)', () => {
