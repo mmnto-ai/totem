@@ -3288,7 +3288,7 @@ interface EnforcementRead {
 
 function enforcementProblems(
   ruleset: z.infer<typeof RulesetSchema>,
-  pinnedStrict: boolean,
+  pinnedStrict?: boolean,
 ): EnforcementRead {
   const problems: string[] = [];
   const unobserved: string[] = [];
@@ -3296,6 +3296,9 @@ function enforcementProblems(
   else if (ruleset.enforcement !== 'active') problems.push(`enforcement=${ruleset.enforcement}`);
   if (ruleset.bypass_actors === undefined) unobserved.push('bypass_actors');
   else if (ruleset.bypass_actors.length > 0) problems.push('bypassable (bypass_actors non-empty)');
+  // Row-3 callers omit the pin: protection rulesets are judged on enforcement +
+  // bypass only — the strict policy is a required-checks (row-2) concern.
+  if (pinnedStrict === undefined) return { problems, unobserved };
   const strict = strictPolicy(ruleset);
   if (strict === undefined) unobserved.push('strict_required_status_checks_policy');
   else if (strict !== pinnedStrict)
@@ -3417,15 +3420,11 @@ function rulesetProtectionLine(
   const unobserved: string[] = [];
   for (const ruleset of protectionRulesets) {
     const name = ruleset.name ?? String(ruleset.id ?? '(unnamed)');
-    const problems: string[] = [];
-    const shy: string[] = [];
-    if (ruleset.enforcement === undefined) shy.push('enforcement');
-    else if (ruleset.enforcement !== 'active') problems.push(`enforcement=${ruleset.enforcement}`);
-    if (ruleset.bypass_actors === undefined) shy.push('bypass_actors');
-    else if (ruleset.bypass_actors.length > 0)
-      problems.push('bypassable (bypass_actors non-empty)');
-    if (problems.length > 0) drift.push(`protection ruleset '${name}' is ${problems.join(' / ')}`);
-    if (shy.length > 0) unobserved.push(`protection ruleset '${name}' omitted ${shy.join(', ')}`);
+    const read = enforcementProblems(ruleset);
+    if (read.problems.length > 0)
+      drift.push(`protection ruleset '${name}' is ${read.problems.join(' / ')}`);
+    if (read.unobserved.length > 0)
+      unobserved.push(`protection ruleset '${name}' omitted ${read.unobserved.join(', ')}`);
   }
 
   if (drift.length > 0) {
