@@ -1832,4 +1832,27 @@ describe('corpus-bearing zero-rules hard-error (mmnto-ai/totem-strategy#971)', (
     expect(result.violations).toHaveLength(0);
     expect(JSON.parse(result.output).pass).toBe(true);
   });
+
+  it('hard-errors via a concrete (non-wildcard) lesson target — the aggregated .totem/lessons.md shape', async () => {
+    // The production config declares BOTH a wildcard dir target and a concrete
+    // aggregated-file target; this exercises the statSync existence branch (and
+    // mixed-target iteration) that the wildcard-walk tests never reach.
+    fs.writeFileSync(path.join(tmpDir, TOTEM_DIR, 'lessons.md'), '# Lessons\n\n## One\n\nBody.\n');
+
+    await expect(
+      runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+        config: {
+          targets: [
+            { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
+            { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
+          ],
+        },
+      }),
+    ).rejects.toThrow(/enforcement disarmed/i);
+  });
 });
