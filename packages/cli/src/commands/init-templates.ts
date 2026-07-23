@@ -1194,6 +1194,22 @@ export interface ManagedSessionHook {
   endMarker: string;
 }
 
+// The Gemini BeforeTool guard ships as `.cjs` (mmnto-ai/totem#2481). Its body is
+// CommonJS (top-level `require('child_process')`); a consumer `package.json` with
+// `"type": "module"` makes Node resolve a bare `.js` as ESM, so the guard throws
+// `ReferenceError: require is not defined` before it reads the tool call — and
+// Gemini CLI treats the crash as a non-fatal warning, so the write-time guard
+// fail-opens SILENTLY. The `.cjs` extension is load-bearing (CommonJS regardless of
+// the consumer's package `type`), mirroring the Claude-side `.cjs` session hooks.
+// SessionStart stays `.js` — the #2481 slice scopes to BeforeTool.
+export const GEMINI_BEFORE_TOOL_REL = '.gemini/hooks/BeforeTool.cjs';
+
+// The pre-#2481 path. A consumer upgraded from an earlier Totem still carries this
+// fail-open `.js` (and, if it registered the hook, a `.gemini/settings.json` command
+// pointing at it). The upgrade path migrates it to GEMINI_BEFORE_TOOL_REL via
+// LEGACY_MANAGED_SESSION_HOOKS below.
+export const GEMINI_BEFORE_TOOL_LEGACY_REL = '.gemini/hooks/BeforeTool.js';
+
 export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
   {
     rel: '.claude/hooks/PreWriteShield.cjs',
@@ -1220,7 +1236,7 @@ export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
     endMarker: TOTEM_FILE_END,
   },
   {
-    rel: '.gemini/hooks/BeforeTool.js',
+    rel: GEMINI_BEFORE_TOOL_REL,
     content: GEMINI_BEFORE_TOOL,
     marker: TOTEM_FILE_MARKER,
     endMarker: TOTEM_FILE_END,
@@ -1232,6 +1248,42 @@ export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
     // whole-file semantics apply.
     rel: PREPARE_SCRIPT_REL,
     content: PREPARE_WRAPPER,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+];
+
+// ─── Legacy managed-artifact migration roster (mmnto-ai/totem#2481) ───
+//
+// Whole-file artifacts an EARLIER Totem distributed under a path this version has
+// since renamed. `migrateLegacyGeminiHooks` (install-hooks.ts) runs on the upgrade
+// path (`totem hook install`) and `totem init`: it materializes `successorRel` from
+// canonical `content` and removes the bounded totem-owned `legacyRel`. The SAME
+// ownership gate as the drift-repair path applies (markerOpensFile / isBoundedOwnedFile
+// — no NEW predicate), so a user-owned file that merely shares the legacy name is
+// never touched. `regenerateManagedSessionHooks` is regenerate-only-if-present and
+// would not create the renamed successor on upgrade; a PRESENT legacy artifact is
+// proof the repo already adopted the hook, so the successor is materialized here
+// rather than left for a fresh `totem init` (which the consumer may never re-run).
+
+export interface LegacyManagedHook {
+  /** Pre-rename repo-relative path, removed once migrated (POSIX separators). */
+  legacyRel: string;
+  /** Current repo-relative path, materialized from `content`. */
+  successorRel: string;
+  /** Canonical successor content — embeds `marker` at head and `endMarker` at tail. */
+  content: string;
+  /** Ownership/presence marker that must OPEN the legacy file to migrate it. */
+  marker: string;
+  /** End marker bounding the totem-owned region in the legacy file. */
+  endMarker: string;
+}
+
+export const LEGACY_MANAGED_SESSION_HOOKS: ReadonlyArray<LegacyManagedHook> = [
+  {
+    legacyRel: GEMINI_BEFORE_TOOL_LEGACY_REL,
+    successorRel: GEMINI_BEFORE_TOOL_REL,
+    content: GEMINI_BEFORE_TOOL,
     marker: TOTEM_FILE_MARKER,
     endMarker: TOTEM_FILE_END,
   },

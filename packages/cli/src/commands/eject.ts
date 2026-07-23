@@ -16,6 +16,9 @@ const REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
 /** Files scaffolded by `totem init` that are fully owned by Totem. */
 const TOTEM_SCAFFOLDED_FILES = [
   '.gemini/hooks/SessionStart.js',
+  // Current (mmnto-ai/totem#2481) + the pre-migration `.js` it renamed — eject
+  // removes both so an upgraded-then-ejected consumer leaves no fail-open artifact.
+  '.gemini/hooks/BeforeTool.cjs',
   '.gemini/hooks/BeforeTool.js',
   '.gemini/skills/totem.md',
   '.totem/hooks/shield-gate.cjs',

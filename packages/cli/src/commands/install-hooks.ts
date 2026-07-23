@@ -1041,6 +1041,12 @@ export async function hooksCommand(opts: {
   // and not-a-git-repo paths already returned above, so this never fires for the
   // read-only verify or the honest-skip. Regenerate-only-if-present: creation stays
   // with `totem init`; this verb repairs drift in artifacts the repo already adopted.
+  //
+  // The Gemini `.js`→`.cjs` migration (mmnto-ai/totem#2481) runs FIRST so the renamed
+  // successor is materialized before drift-repair walks the roster — a pre-migration
+  // consumer would otherwise be skipped by regenerate-only-if-present and keep its
+  // fail-open `.js`.
+  await printGeminiHookMigrationSummary(gitRoot, opts.force);
   await printManagedSessionHookSummary(gitRoot, opts.force);
 }
 
@@ -1163,6 +1169,188 @@ async function printManagedSessionHookSummary(cwd: string, force?: boolean): Pro
         console.error(`[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`);
         break;
     }
+  }
+}
+
+// ─── Gemini BeforeTool .js→.cjs migration (mmnto-ai/totem#2481) ───
+//
+// A pre-#2481 Totem distributed the write-time guard as `.gemini/hooks/BeforeTool.js`.
+// In a `"type": "module"` consumer Node resolves that `.js` as ESM and the guard
+// throws `require is not defined` before reading the tool call — Gemini CLI treats
+// the crash as a warning, so the guard fail-opens SILENTLY. These two functions
+// migrate an upgraded consumer to the `.cjs` successor on the upgrade path
+// (`totem hook install`, which the prepare wrapper invokes) and on `totem init`.
+// Deliberately bounded (the #2478 OPTION 1 ruling routed the adoption/arming slice
+// OUT): rename + registration migration + legacy cleanup only — no arming-verification
+// and no NEW ownership predicate (reuses markerOpensFile / isBoundedOwnedFile).
+
+export interface GeminiHookMigrationResult {
+  /** Repo-relative legacy path acted on. */
+  file: string;
+  /** `migrated` — successor materialized + legacy removed; `declined` — drifted
+   *  unbounded, awaits `--force`; `skipped` — user-owned file, never touched. */
+  action: 'migrated' | 'declined' | 'skipped';
+}
+
+/**
+ * Rename-migrate the whole-file artifacts in {@link LEGACY_MANAGED_SESSION_HOOKS}:
+ * materialize each `successorRel` from canonical content and remove the bounded
+ * totem-owned `legacyRel`. Ownership gate mirrors {@link regenerateManagedSessionHooks}:
+ *
+ *   - Legacy missing                     → nothing to migrate (omitted from results).
+ *   - Marker does not OPEN the file      → `skipped` even under `--force` (a user file
+ *                                          that merely shares the name is never touched).
+ *   - Marker + bounded totem-owned whole file, OR `--force` → materialize successor +
+ *                                          remove legacy → `migrated`.
+ *   - Marker + drifted/unbounded (trailing user content), no `--force` → `declined`.
+ *
+ * A write/remove failure PROPAGATES (Tenet 4 — a migration the tool cannot complete
+ * fails loud, never silently reports success), matching the drift-repair path.
+ */
+export async function migrateLegacyGeminiHooks(
+  cwd: string,
+  force?: boolean,
+): Promise<GeminiHookMigrationResult[]> {
+  const { LEGACY_MANAGED_SESSION_HOOKS, isBoundedOwnedFile, markerOpensFile } =
+    await import('./init-templates.js');
+
+  const results: GeminiHookMigrationResult[] = [];
+  for (const {
+    legacyRel,
+    successorRel,
+    content,
+    marker,
+    endMarker,
+  } of LEGACY_MANAGED_SESSION_HOOKS) {
+    const legacyPath = path.join(cwd, ...legacyRel.split('/'));
+    if (!fs.existsSync(legacyPath)) continue;
+
+    const existing = fs.readFileSync(legacyPath, 'utf-8');
+    if (!markerOpensFile(existing, marker)) {
+      results.push({ file: legacyRel, action: 'skipped' });
+      continue;
+    }
+    if (!force && !isBoundedOwnedFile(existing, marker, endMarker)) {
+      results.push({ file: legacyRel, action: 'declined' });
+      continue;
+    }
+
+    // Materialize the successor (idempotent — canonical content) then remove the
+    // stale fail-open legacy file. Regenerate-only-if-present would not create the
+    // renamed successor on upgrade, but a present legacy artifact is proof of adoption.
+    const successorPath = path.join(cwd, ...successorRel.split('/'));
+    fs.mkdirSync(path.dirname(successorPath), { recursive: true });
+    fs.writeFileSync(successorPath, content, 'utf-8');
+    fs.rmSync(legacyPath);
+    results.push({ file: legacyRel, action: 'migrated' });
+  }
+  return results;
+}
+
+const GEMINI_LEGACY_HOOK_BASENAME_RE = /BeforeTool\.js(?!\w)/g;
+
+/**
+ * Idempotently rewrite an existing `.gemini/settings.json` hook registration whose
+ * command references the legacy `BeforeTool.js` basename to the `.cjs` successor.
+ *
+ * Rewrite-if-present ONLY: never CREATES a registration (arming the hook is the
+ * deferred adoption slice — #2478 OPTION 1), and fail-soft on unreadable/malformed
+ * JSON (preserve user content, mirroring `scaffoldMcpConfig`). Basename matching is
+ * separator- and prefix-agnostic, so `$GEMINI_PROJECT_DIR/.gemini/hooks/BeforeTool.js`,
+ * `node .gemini/hooks/BeforeTool.js`, and an absolute path all migrate. The rewrite is
+ * scoped to the `hooks` subtree, and the file is only rewritten when a change occurred
+ * (no churn / reformat on a no-op).
+ */
+export function migrateGeminiHookRegistration(cwd: string): { changed: boolean; err?: string } {
+  const settingsPath = path.join(cwd, '.gemini', 'settings.json');
+  if (!fs.existsSync(settingsPath)) return { changed: false };
+
+  let raw: string;
+  // Fail-soft is the contract (mmnto-ai/totem#2481): a settings file the tool cannot
+  // read/parse is user content and is never clobbered — the read/parse failure is
+  // surfaced as a returned `err`, mirroring scaffoldMcpConfig's IO posture.
+  try {
+    raw = fs.readFileSync(settingsPath, 'utf-8');
+    // totem-context: intentional cleanup — surface a read failure as a returned `err`, never a silent swallow.
+  } catch (err) {
+    return { changed: false, err: err instanceof Error ? err.message : String(err) };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+    // totem-context: intentional cleanup — a malformed settings file is user-owned content, preserved; surface the parse failure as a returned `err`.
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      changed: false,
+      err: `Could not parse .gemini/settings.json (invalid JSON): ${message}`,
+    };
+  }
+  if (typeof parsed !== 'object' || parsed === null) return { changed: false };
+
+  const settings = parsed as Record<string, unknown>;
+  const hooks = settings.hooks;
+  if (typeof hooks !== 'object' || hooks === null) return { changed: false };
+
+  let changed = false;
+  const rewrite = (node: unknown): unknown => {
+    if (typeof node === 'string') {
+      const next = node.replace(GEMINI_LEGACY_HOOK_BASENAME_RE, 'BeforeTool.cjs');
+      if (next !== node) changed = true;
+      return next;
+    }
+    if (Array.isArray(node)) return node.map(rewrite);
+    if (typeof node === 'object' && node !== null) {
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+        out[key] = rewrite(value);
+      }
+      return out;
+    }
+    return node;
+  };
+
+  settings.hooks = rewrite(hooks);
+  if (!changed) return { changed: false };
+
+  try {
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+    // totem-context: intentional cleanup — surface a write failure as a returned `err` for the caller to log; must not abort the hook-install lifecycle.
+  } catch (err) {
+    return { changed: false, err: err instanceof Error ? err.message : String(err) };
+  }
+  return { changed: true };
+}
+
+/**
+ * Run the Gemini `.js`→`.cjs` migration on the upgrade path and print one summary
+ * line per action. Runs BEFORE {@link printManagedSessionHookSummary} so the freshly
+ * materialized `.cjs` successor is reported as already-current by drift-repair.
+ */
+async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Promise<void> {
+  for (const { file, action } of await migrateLegacyGeminiHooks(cwd, force)) {
+    switch (action) {
+      case 'migrated':
+        console.error(`[Totem] Migrated ${file} → .cjs (ESM fail-open fix, mmnto-ai/totem#2481).`);
+        break;
+      case 'declined':
+        console.error(
+          `[Totem] ${file} has drifted but is not a bounded totem-owned region — run \`totem hook install --force\` to migrate it to .cjs.`,
+        );
+        break;
+      case 'skipped':
+        console.error(`[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`);
+        break;
+    }
+  }
+  const registration = migrateGeminiHookRegistration(cwd);
+  if (registration.err) {
+    console.error(
+      `[Totem] .gemini/settings.json BeforeTool registration not migrated: ${registration.err}`,
+    );
+  } else if (registration.changed) {
+    console.error('[Totem] Migrated .gemini/settings.json BeforeTool registration → .cjs.');
   }
 }
 
