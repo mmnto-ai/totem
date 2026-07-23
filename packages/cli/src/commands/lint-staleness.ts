@@ -197,8 +197,10 @@ const REMEDIATION = "Run 'totem lesson compile' to update.";
  *   `(untracked)`, then "…and K more" when over the cap, then the remediation.
  *
  * The remediation intentionally points public consumers at `totem lesson
- * compile`; the cohort-side compile freeze is overlay-governed, not this
- * string's concern.
+ * compile`. This formatter stays freeze-agnostic — it always includes the
+ * remediation; the caller (`lint.ts`) suppresses the whole advisory while a
+ * rule-compilation freeze is active, since `totem lesson compile` is on that
+ * freeze's do-not list (mmnto-ai/totem#2463 slice B).
  */
 export function formatStalenessWarning(delta: LessonDelta, opts: FormatStalenessOptions): string {
   const total = delta.entries.length;

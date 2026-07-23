@@ -57,6 +57,22 @@ vi.mock('../utils/bootstrap-engine.js', () => ({
     bootstrapEngineMock(config, projectRoot),
 }));
 
+// ─── Mock help-freeze (mmnto-ai/totem#2463 slice B) ─────
+// deriveRuleCompilationFrozen decides whether the staleness advisory is
+// silenced under an active rule-compilation freeze. Default `false` so every
+// pre-existing staleness test keeps its exact behavior; the freeze-suppression
+// block below drives it per-test (true / throw). Spread the real module so the
+// other export (isRootHelpInvocation) is untouched.
+
+const deriveRuleCompilationFrozenMock = vi.fn(async (..._args: unknown[]) => false);
+vi.mock('../help-freeze.js', async () => {
+  const actual = await vi.importActual<typeof import('../help-freeze.js')>('../help-freeze.js');
+  return {
+    ...actual,
+    deriveRuleCompilationFrozen: (...args: unknown[]) => deriveRuleCompilationFrozenMock(...args),
+  };
+});
+
 // ─── Helpers ────────────────────────────────────────────
 
 function makeTmpDir(): string {
@@ -179,6 +195,90 @@ describe('lintCommand staleness check', () => {
 
     // Should not throw — staleness check is wrapped in try/catch
     await expect(lintCommand({})).resolves.toBeUndefined();
+  });
+});
+
+// ─── Freeze-nag suppression (mmnto-ai/totem#2463 slice B) ──────
+// Under an active rule-compilation freeze, `totem lesson compile` is on the
+// freeze's do-not list, so the staleness advisory (which points there) must be
+// silenced. Info-preserving default: suppression fires ONLY on a positive
+// frozen=true — a freeze-state read failure still shows the advisory.
+
+describe('lintCommand staleness freeze suppression (mmnto-ai/totem#2463)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {};', 'utf-8');
+    deriveRuleCompilationFrozenMock.mockReset();
+    deriveRuleCompilationFrozenMock.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    deriveRuleCompilationFrozenMock.mockReset();
+    deriveRuleCompilationFrozenMock.mockResolvedValue(false);
+    vi.restoreAllMocks();
+  });
+
+  // Scaffold a manifest, then add a second lesson so the aggregate input hash
+  // disagrees (stale) — the only state in which the advisory would fire.
+  function scaffoldStaleManifest(): void {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+    fs.writeFileSync(
+      path.join(lessonsDir, 'lesson-2.md'),
+      '# Lesson — New lesson\n\n**Tags:** new\n\nSomething new.\n',
+    );
+  }
+
+  it('suppresses the staleness advisory while the rule-compilation freeze is active', async () => {
+    scaffoldStaleManifest();
+    deriveRuleCompilationFrozenMock.mockResolvedValue(true);
+
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { lintCommand } = await import('./lint.js');
+    await lintCommand({});
+
+    const staleWarning = warnSpy.mock.calls.find((call) =>
+      String(call[0]).includes('Compile manifest is stale'),
+    );
+    expect(staleWarning).toBeUndefined();
+  });
+
+  it('shows the staleness advisory when no freeze is active', async () => {
+    scaffoldStaleManifest();
+    deriveRuleCompilationFrozenMock.mockResolvedValue(false);
+
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { lintCommand } = await import('./lint.js');
+    await lintCommand({});
+
+    const staleWarning = warnSpy.mock.calls.find((call) =>
+      String(call[0]).includes('Compile manifest is stale'),
+    );
+    expect(staleWarning).toBeDefined();
+  });
+
+  it('shows the staleness advisory when the freeze-state read throws', async () => {
+    scaffoldStaleManifest();
+    deriveRuleCompilationFrozenMock.mockRejectedValue(new Error('freeze.json corrupt'));
+
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { lintCommand } = await import('./lint.js');
+    await lintCommand({});
+
+    const staleWarning = warnSpy.mock.calls.find((call) =>
+      String(call[0]).includes('Compile manifest is stale'),
+    );
+    expect(staleWarning).toBeDefined();
   });
 });
 
