@@ -277,6 +277,11 @@ export async function runCompiledRules(
 
     if (lessonCount > 0) {
       const manifestRel = `${totemDir}/${COMPILED_RULES_FILE}`;
+      // This existsSync re-derives what loadCompiledRules saw internally
+      // (compiler.ts checks the same path). A manifest CREATED between the two
+      // reads would fall through to the zero-active-rules info-skip — an
+      // accepted single-shot-CLI race (mmnto-ai/totem#2499 review): the window
+      // is microseconds and a concurrent compile implies an imminent re-lint.
       if (!fs.existsSync(rulesPath)) {
         throw new TotemError(
           'LINT_LESSONS_FAILED',

@@ -1808,7 +1808,9 @@ describe('corpus-bearing zero-rules hard-error (mmnto-ai/totem-strategy#971)', (
 
       expect(result.rules).toHaveLength(0);
       expect(result.violations).toHaveLength(0);
-      const messages = stderrSpy.mock.calls.map((c) => c[0] as string);
+      // Join ALL args per call — coupling to log.info's internal arity would
+      // silently break this assertion if the tag and message ever split.
+      const messages = stderrSpy.mock.calls.map((c) => c.join(' '));
       expect(messages.find((m) => m.includes('zero ACTIVE rules'))).toBeDefined();
     } finally {
       stderrSpy.mockRestore();
@@ -1852,7 +1854,8 @@ describe('corpus-bearing zero-rules hard-error (mmnto-ai/totem-strategy#971)', (
 
       expect(result.rules).toHaveLength(0);
       expect(result.violations).toHaveLength(0);
-      const messages = stderrSpy.mock.calls.map((c) => String(c[0]));
+      // Join ALL args per call — see the arity note in the archived-rules control.
+      const messages = stderrSpy.mock.calls.map((c) => c.join(' '));
       expect(messages.find((m) => m.includes('Could not load compiled rules'))).toBeDefined();
     } finally {
       stderrSpy.mockRestore();
