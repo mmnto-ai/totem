@@ -325,6 +325,11 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     ignorePatterns: allIgnore,
     tag: TAG,
     configRoot,
+    // Pass the loaded config so runCompiledRules can hard-error a corpus-bearing
+    // repo whose compiled-rules manifest is missing / unloadable, instead of
+    // passing vacuously behind a green exit (mmnto-ai/totem-strategy#971,
+    // Prop 309). Its lesson-kind targets drive the corpus-bearing check.
+    config,
     isStaged: !!options.staged,
     regexTimeoutMode: timeoutMode,
     astParseMode,

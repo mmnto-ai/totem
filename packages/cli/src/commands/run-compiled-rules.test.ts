@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CompiledRule } from '@mmnto/totem';
+import type { CompiledRule, TotemConfig } from '@mmnto/totem';
 import * as totem from '@mmnto/totem';
 import { readLedgerEvents, saveCompiledRules, TotemError, TotemParseError } from '@mmnto/totem';
 
@@ -1671,5 +1671,217 @@ describe('--ast-parse-mode lenient', () => {
 
     expect(result.violations).toHaveLength(1);
     expect(result.output).not.toContain('Frozen-lesson');
+  });
+});
+
+// ─── Corpus-bearing zero-rules hard-error (mmnto-ai/totem-strategy#971, Prop 309) ──
+//
+// A repo that carries a lesson corpus but loads ZERO compiled rules has its
+// entire enforcement gate silently disarmed behind a green exit. `totem lint`
+// must fail loud in that case (induced-failure triple below), while still
+// preserving the legitimate empty-corpus skip (mmnto-ai/totem#1831) and the
+// archived-in-place zero-active-rules lifecycle state (the controls).
+describe('corpus-bearing zero-rules hard-error (mmnto-ai/totem-strategy#971)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-rcr-corpus-'));
+    fs.mkdirSync(path.join(tmpDir, TOTEM_DIR), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /** Write a real lesson `.md` under `.totem/lessons/` so the repo is corpus-bearing. */
+  function writeLesson(dir: string, name = 'baseline.md'): void {
+    const lessonsDir = path.join(dir, TOTEM_DIR, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    fs.writeFileSync(path.join(lessonsDir, name), '# A lesson\n\nBody.\n');
+  }
+
+  /** A config whose only lesson-kind target matches `.totem/lessons/*.md`. */
+  function lessonConfig(glob = '.totem/lessons/*.md'): Pick<TotemConfig, 'targets'> {
+    return { targets: [{ glob, type: 'lesson', strategy: 'markdown-heading' }] };
+  }
+
+  const cleanDiff = (): string => makeDiff('src/app.ts', '  const x = 1;');
+
+  // ── Induced-failure triple ──────────────────────────
+
+  it('hard-errors when the manifest is missing but the repo carries lessons', async () => {
+    writeLesson(tmpDir); // corpus-bearing; no compiled-rules.json written
+
+    await expect(
+      runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+        config: lessonConfig(),
+      }),
+    ).rejects.toThrow(/enforcement disarmed/i);
+  });
+
+  it('hard-errors on a truncated manifest instead of passing vacuously', async () => {
+    writeLesson(tmpDir);
+    // Truncated mid-array — JSON.parse throws SyntaxError, which core reports via
+    // onWarn and returns []. Unmodified code passes vacuously here; the fix throws.
+    fs.writeFileSync(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), '{"version":1,"rules":[');
+
+    await expect(
+      runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+        config: lessonConfig(),
+      }),
+    ).rejects.toThrow(/enforcement disarmed/i);
+  });
+
+  it('hard-errors on an EISDIR I/O fault and surfaces the load-warning accounting text', async () => {
+    writeLesson(tmpDir);
+    // Replace the manifest with a DIRECTORY at the same path — the portable,
+    // Windows-safe I/O fault (readFileSync throws EISDIR on win32 and posix).
+    fs.mkdirSync(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), { recursive: true });
+
+    let message = '';
+    try {
+      await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+        config: lessonConfig(),
+      });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+
+    expect(message).toMatch(/enforcement disarmed/i);
+    // The onWarn accounting text (dropped before the fix) is surfaced in the throw.
+    expect(message).toContain('Could not load compiled rules');
+  });
+
+  // ── Controls ────────────────────────────────────────
+
+  it('control: an empty-corpus repo (no lesson files) with a missing manifest still exits clean (mmnto-ai/totem#1831)', async () => {
+    // Config DECLARES a lesson target, but no lesson files exist on disk, so the
+    // discriminator treats the repo as empty-corpus — the info-skip is preserved.
+    const result = await runCompiledRules({
+      diff: cleanDiff(),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+      config: lessonConfig(),
+    });
+
+    expect(result.violations).toHaveLength(0);
+    expect(result.rules).toHaveLength(0);
+    expect(result.output).toBe('');
+  });
+
+  it('control: a corpus-bearing repo whose manifest holds only archived rules exits clean with a zero-active-rules message', async () => {
+    writeLesson(tmpDir);
+    // Valid manifest, present and parseable, but every rule is inert (archived).
+    // loadCompiledRules filters it to [] with no warning — a legitimate lifecycle
+    // state, NOT a disarmed gate.
+    writeRules(tmpDir, [
+      makeRule('console\\.log', 'No console', 'No console', { status: 'archived' }),
+    ]);
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+        config: lessonConfig(),
+      });
+
+      expect(result.rules).toHaveLength(0);
+      expect(result.violations).toHaveLength(0);
+      // Join ALL args per call — coupling to log.info's internal arity would
+      // silently break this assertion if the tag and message ever split.
+      const messages = stderrSpy.mock.calls.map((c) => c.join(' '));
+      expect(messages.find((m) => m.includes('zero ACTIVE rules'))).toBeDefined();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('control: a repo with valid active rules is unaffected by the corpus-bearing gate', async () => {
+    writeLesson(tmpDir);
+    writeRules(tmpDir, [makeRule('neverMatchXYZ123', 'no match', 'No match rule')]);
+
+    const result = await runCompiledRules({
+      diff: cleanDiff(),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+      config: lessonConfig(),
+    });
+
+    expect(result.rules).toHaveLength(1);
+    expect(result.violations).toHaveLength(0);
+    expect(JSON.parse(result.output).pass).toBe(true);
+  });
+
+  it('control: a config-less caller with a truncated manifest surfaces the load warning but never hard-errors (the shield-estimate opt-out contract)', async () => {
+    writeLesson(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), '{"version":1,"rules":[');
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // No `config` option — the caller opts out of the corpus-bearing hard
+      // error (e.g. `shield estimate`). The accounting line must still render:
+      // the opt-out covers the exit code, not the disclosure.
+      const result = await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      });
+
+      expect(result.rules).toHaveLength(0);
+      expect(result.violations).toHaveLength(0);
+      // Join ALL args per call — see the arity note in the archived-rules control.
+      const messages = stderrSpy.mock.calls.map((c) => c.join(' '));
+      expect(messages.find((m) => m.includes('Could not load compiled rules'))).toBeDefined();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('hard-errors via a concrete (non-wildcard) lesson target — the aggregated .totem/lessons.md shape', async () => {
+    // The production config declares BOTH a wildcard dir target and a concrete
+    // aggregated-file target; this exercises the statSync existence branch (and
+    // mixed-target iteration) that the wildcard-walk tests never reach.
+    fs.writeFileSync(path.join(tmpDir, TOTEM_DIR, 'lessons.md'), '# Lessons\n\n## One\n\nBody.\n');
+
+    await expect(
+      runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+        config: {
+          targets: [
+            { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
+            { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
+          ],
+        },
+      }),
+    ).rejects.toThrow(/enforcement disarmed/i);
   });
 });
