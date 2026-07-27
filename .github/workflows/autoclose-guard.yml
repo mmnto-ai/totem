@@ -62,7 +62,7 @@ jobs:
       # immediately at merge time, well within the window.
       - name: Upload auto-close receipt
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: autoclose-receipt
           path: ./autoclose-receipt.json
