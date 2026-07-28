@@ -1,0 +1,10 @@
+name: CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: rm -rf tmp || true
+      - name: Upload telemetry
+        continue-on-error: true
+        run: ./scripts/telemetry.sh

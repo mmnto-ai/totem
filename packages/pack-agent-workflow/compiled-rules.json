@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "lessonHash": "bddfbd2ec1c75eaf",
+      "lessonHeading": "GitHub auto-close keyword adjacent to an issue reference",
+      "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
+      "message": "A closing keyword next to #N auto-closes that issue on merge — and it still fires when the sentence NEGATES it (\"does not close #456\"). Backtick-wrapping suppresses registration silently, so a quoted example reads as safe but a bare one is live. Rephrase so the keyword is not adjacent to the reference, or wrap the example in backticks deliberately. Warn-tier: this is a line-oriented regex with no fenced-code-block awareness, so prose explaining the hazard can trip it.",
+      "engine": "regex",
+      "severity": "warning",
+      "category": "style",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": ["**/*.md", "!**/CHANGELOG.md"],
+      "badExample": "This change closes #123 and ships the fix.",
+      "goodExample": "Write `Closes #123` in the body.\nThis PR fixes the layout. Refer to #432 for tracking."
+    },
+    {
+      "lessonHash": "028ffa125ce65b8c",
+      "lessonHeading": "Empty catch block silently swallows a failure",
+      "pattern": "",
+      "message": "An empty catch turns a failure into a silent success — the fail-open shape that lets a broken gate report PASS. Handle the error, log it, rethrow, or alter control flow; if the swallow is deliberate, say why in a // totem-context: comment. A catch that logs or redirects control flow is not this defect and does not fire.",
+      "engine": "ast-grep",
+      "severity": "error",
+      "category": "architecture",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": ["packages/**/*.ts", "packages/**/*.js", "!**/*.test.*", "!**/*.spec.*"],
+      "badExample": "try { risky(); } catch (e) { }",
+      "goodExample": "try { risky(); } catch (e) { console.warn(e); }\ntry { risky(); } catch (e) { return; }",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "try { $$$B } catch { }"
+            },
+            {
+              "pattern": "try { $$$B } catch ($E) { }"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "lessonHash": "e64911592b774cc6",
+      "lessonHeading": "Declared CI gate masked with || true in a workflow step",
+      "pattern": "(?:lint|test|typecheck|audit|verify|gate|check)[^|]*\\|\\|\\s*true",
+      "message": "Appending || true to a lint/test/audit/verify command makes the step report success no matter what the gate found — the workflow advertises enforcement it is not performing. Remove the mask, or drop the step if the gate is genuinely not wanted. Scoped to same-line forms where the gate intent is observable; bare continue-on-error is deliberately NOT flagged, because one line carries no context separating a declared gate from legitimate best-effort cleanup.",
+      "engine": "regex",
+      "severity": "error",
+      "category": "architecture",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+      "badExample": "        run: pnpm lint || true",
+      "goodExample": "        run: rm -rf tmp || true\n          continue-on-error: true"
+    },
+    {
+      "lessonHash": "49fc9ce5b1e35362",
+      "lessonHeading": "Inlined credential in an agent configuration surface",
+      "pattern": "(?:api[_-]?[Kk]ey|apiKey|[Tt]oken|[Ss]ecret|[Pp]assword)[\"']?\\s*[:=]\\s*[\"'][^\"'$]{16,}[\"']",
+      "message": "A literal key, token or password committed into an agent config surface is readable by every agent with repo access and survives in git history after removal. Reference an environment variable instead. Env-interpolated values are not flagged.",
+      "engine": "regex",
+      "severity": "error",
+      "category": "security",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": [
+        "**/.claude/settings.json",
+        "**/.gemini/settings.json",
+        "**/AGENTS.md",
+        "**/CLAUDE.md",
+        "**/GEMINI.md"
+      ],
+      "badExample": "  \"apiKey\": \"EXAMPLE-NOT-A-REAL-KEY-0000\"",
+      "goodExample": "  \"apiKey\": \"${ANTHROPIC_API_KEY}\"\n  \"apiKeyEnv\": \"ANTHROPIC_API_KEY\""
+    },
+    {
+      "lessonHash": "7371b48e4e7ff9cf",
+      "lessonHeading": "Competing agent-instruction authority claim without an AGENTS.md pointer",
+      "pattern": "^(?!.*AGENTS\\.md).*(?:canonical agent instructions|[Ss]ource of truth)",
+      "message": "ADR-038 makes AGENTS.md the single source of truth for agent instructions; vendor entry files redirect to it. A line claiming canonical authority or source-of-truth status without pointing at AGENTS.md sets up a second authority that will drift. Add the pointer, or drop the claim. Under-approximation by design: this catches an explicit competing claim, it does not prove every tool file carries a redirect — that whole-document contract lives on the doctor lane.",
+      "engine": "regex",
+      "severity": "warning",
+      "category": "architecture",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": ["**/CLAUDE.md", "**/GEMINI.md"],
+      "badExample": "This file is the source of truth for agent behavior.",
+      "goodExample": "The canonical agent instructions live in AGENTS.md."
+    },
+    {
+      "lessonHash": "372539b90e1e6e87",
+      "lessonHeading": "Committed universal agent permission bypass",
+      "pattern": "\"(?:defaultMode|permissionMode)\"\\s*:\\s*\"(?:bypassPermissions|yolo|acceptEdits)\"|\"Bash\\(\\*\\)\"",
+      "message": "A committed universal bypass grants every agent unbounded authority on every clone, with no paired deny or hook control. Review it and pair it with an explicit control, or scope the grant. Command-scoped wildcards such as Bash(gh search *) are bounded grants and are not flagged. Advisory intent: this is a narrow bypass sensor, not proof the repository is unprotected.",
+      "engine": "regex",
+      "severity": "warning",
+      "category": "security",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": ["**/.claude/settings.json", "**/.gemini/settings.json"],
+      "badExample": "  \"defaultMode\": \"bypassPermissions\"",
+      "goodExample": "  \"allow\": [\"Bash(gh search *)\"]"
+    },
+    {
+      "lessonHash": "f742b565a5c1a30c",
+      "lessonHeading": "Governance directive in a governed file without a provenance reference",
+      "pattern": "^(?!.*(?:#\\d+|ADR-\\d+)).*\\b(?:MUST|NEVER|ALWAYS)\\b",
+      "message": "A MUST/NEVER/ALWAYS directive added to the .totem governance tree without an issue or ADR reference on the same line cannot be traced to the decision that created it, so nobody can tell later whether it still holds. Cite the issue or ADR inline. Per-line by construction: the marker must be on the added line itself, because a \"file contains a marker somewhere\" invariant is not representable in this runtime.",
+      "engine": "regex",
+      "severity": "warning",
+      "category": "style",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": [".totem/**/*.md", "!**/*.test.*"],
+      "badExample": "Agents MUST re-verify the contract before merging.",
+      "goodExample": "Agents MUST re-verify the contract before merging (mmnto-ai/totem#123)."
+    },
+    {
+      "lessonHash": "67ec1598a0a8ef6a",
+      "lessonHeading": "New dependency introduced without disclosure",
+      "pattern": "^\\s*\"[@a-z][^\"]*\"\\s*:\\s*\"[\\^~]\\d+\\.\\d+",
+      "message": "A newly pinned dependency expands the trust boundary and the supply-chain surface. Disclose it in the change description: what it is for, why an existing dependency does not cover it, and what it pulls in transitively. Warn-tier disclosure rule — it fires on legitimate additions by design; the point is that the addition is stated, not that it is wrong.",
+      "engine": "regex",
+      "severity": "warning",
+      "category": "architecture",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": ["**/package.json", "!**/node_modules/**"],
+      "badExample": "    \"lodash\": \"^4.17.21\",",
+      "goodExample": "  \"version\": \"1.105.0\",\n  \"@mmnto/totem\": \"workspace:*\","
+    },
+    {
+      "lessonHash": "404b8c8dabcbd1af",
+      "lessonHeading": "Optional dependency declared without a fail-loud consumer check",
+      "pattern": "\"optionalDependencies\"\\s*:",
+      "message": "An optional dependency that fails to resolve leaves the consumer running in a silently degraded state — and a failed fetch can uninstall a previously working pin at exit 0. Pair the declaration with a load-time assert or doctor check that fails loudly when the dependency is absent, and disclose the degraded behaviour. This is a disclosure rule on a high-risk declaration class, NOT a detector for the silent-uninstall event: that event is a removal and cross-file, unreachable from an additions-only per-line runtime (see mmnto-ai/totem#2504).",
+      "engine": "regex",
+      "severity": "warning",
+      "category": "architecture",
+      "manual": true,
+      "immutable": true,
+      "compiledAt": "2026-07-24T19:09:40.771Z",
+      "fileGlobs": ["**/package.json", "!**/node_modules/**"],
+      "badExample": "  \"optionalDependencies\": {",
+      "goodExample": "  \"dependencies\": {"
+    }
+  ]
+}

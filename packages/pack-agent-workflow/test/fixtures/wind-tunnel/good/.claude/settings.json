@@ -1,0 +1,5 @@
+{
+  "apiKey": "${ANTHROPIC_API_KEY}",
+  "apiKeyEnv": "ANTHROPIC_API_KEY",
+  "allow": ["Bash(gh search *)"]
+}

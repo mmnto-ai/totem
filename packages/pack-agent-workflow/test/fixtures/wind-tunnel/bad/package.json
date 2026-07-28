@@ -1,0 +1,6 @@
+{
+  "name": "wind-tunnel-bad",
+  "optionalDependencies": {
+    "lodash": "^4.17.21"
+  }
+}

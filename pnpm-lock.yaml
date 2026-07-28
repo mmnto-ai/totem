@@ -220,6 +220,15 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.13)(jiti@2.6.1)(yaml@2.8.2)
 
+  packages/pack-agent-workflow:
+    devDependencies:
+      '@mmnto/totem':
+        specifier: workspace:*
+        version: link:../core
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.13)(jiti@2.6.1)(yaml@2.8.2)
+
   packages/pack-rust-architecture:
     dependencies:
       '@ast-grep/lang-rust':

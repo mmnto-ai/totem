@@ -135,6 +135,11 @@ const config: TotemConfig = {
     // shapes its own rule blocks (incident repro = Stage-4 positive control).
     // Same class as the lesson-corpus exclusion above.
     'examples/proof-kit/fixture/**',
+    // The agent-workflow pack's wind tunnel is the same class: every file under
+    // bad/ is a deliberately-defective specimen its own rules must fire on, and
+    // the good/ files are adversarial near-misses. Linting them reports the
+    // pack's own positive controls as repo defects.
+    'packages/pack-agent-workflow/test/fixtures/**',
   ],
 };
 
