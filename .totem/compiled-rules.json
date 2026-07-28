@@ -2229,7 +2229,9 @@
         "**/mcp*.json",
         "**/.cursor/mcp.json"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Target-mismatched verification: engine ast-grep with all-.json fileGlobs, but no Tree-sitter language registration exists for .json — the rule can never execute and instead aborts lint at first contact with a matching diff file. Enforcement of the class lives in the regex twin 5bc302726128eceb (same heading, severity error). Archived under the operator-confirmed narrow hand-edit + --refresh-manifest freeze exception (2026-07-28, recorded mmnto-ai/totem-strategy#974; adjudicated exception class per #2343)."
     },
     {
       "lessonHash": "3bb96274aa5aca93",
@@ -4814,7 +4816,9 @@
       "fileGlobs": [
         "packages/pack-agent-security/turbo.json"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Target-mismatched verification, specimen 2 of the class: engine ast-grep with a sole .json fileGlob (packages/pack-agent-security/turbo.json) — no Tree-sitter language registration exists for .json, so the rule can never execute and instead aborts the whole lint (rule-engine.ts TotemParseError, run-wide) at first contact with a diff touching that path. Found by the mechanical target-mismatch sweep run before building the Prop 309 Class 7 load-time guard; sibling of 1a7080ebf6162de3. Archived under the same operator-confirmed narrow hand-edit + --refresh-manifest freeze exception (ruled in-class + per-specimen operator confirm 2026-07-28, recorded mmnto-ai/totem-strategy#974; adjudicated exception class per #2343)."
     },
     {
       "lessonHash": "2f09502117f56a77",
