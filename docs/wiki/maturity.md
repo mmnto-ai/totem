@@ -48,7 +48,7 @@ The legacy lesson→rule compiler has been parked under a standing freeze since 
 
 <!-- docs LINT_RECEIPT -->
 
-A real merged diff of this repository (`c14e90ab..ba8c591d`, 41 files) linted in **3570 ms** with **zero LLM calls** — the run executed with every provider API key stripped from the environment, so there was nothing to silently call. 387 rules evaluated; 0 errors, 20 warnings. Environment: win32-x64, node 24.16.0, CLI 1.96.0, generated 2026-07-15. CI recomputes this receipt on every pull request — the counts must match; timing is environment-labeled, never gated.
+A real merged diff of this repository (`c14e90ab..ba8c591d`, 41 files) linted in **3598 ms** with **zero LLM calls** — the run executed with every provider API key stripped from the environment, so there was nothing to silently call. 387 rules evaluated; 0 errors, 20 warnings. Environment: win32-x64, node 24.16.0, CLI 1.105.0, generated 2026-07-28. CI recomputes this receipt on every pull request — the counts must match; timing is environment-labeled, never gated. The replay runs with `--ast-parse-mode lenient` — the pinned corpus predates the current target-mismatch load guard — and the receipt records that posture (`astParseMode`) plus whether the guard fired (`targetMismatchGuardWarning: true`).
 
 <!-- /docs -->
 

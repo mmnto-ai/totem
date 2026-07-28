@@ -332,13 +332,24 @@ function renderLintReceipt(receiptPath) {
     );
   }
   const range = `${r.baseSha.slice(0, 8)}..${r.headSha.slice(0, 8)}`;
+  // ADR-115 §2 envelope: a downgraded validation posture must be visible on the
+  // rendered surface, not only inside the receipt JSON. Pure function of the
+  // receipt fields — absent fields (pre-posture receipts) render nothing.
+  const posture =
+    r.astParseMode === 'lenient'
+      ? ` The replay runs with \`--ast-parse-mode lenient\` — the pinned corpus predates the ` +
+        `current target-mismatch load guard — and the receipt records that posture ` +
+        `(\`astParseMode\`) plus whether the guard fired (\`targetMismatchGuardWarning: ` +
+        `${r.targetMismatchGuardWarning}\`).`
+      : '';
   return (
     `A real merged diff of this repository (\`${range}\`, ${r.filesChanged} files) linted in ` +
     `**${r.elapsedMs} ms** with **zero LLM calls** — the run executed with every provider API key ` +
     `stripped from the environment, so there was nothing to silently call. ${r.rules} rules evaluated; ` +
     `${r.errors} errors, ${r.warnings} warnings. Environment: ${r.platform}, node ${r.node}, ` +
     `CLI ${r.cliVersion}, generated ${String(r.generatedAt).slice(0, 10)}. CI recomputes this receipt ` +
-    `on every pull request — the counts must match; timing is environment-labeled, never gated.`
+    `on every pull request — the counts must match; timing is environment-labeled, never gated.` +
+    posture
   );
 }
 
