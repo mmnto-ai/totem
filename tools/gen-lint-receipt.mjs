@@ -86,9 +86,29 @@ function computeReceipt() {
     }
 
     const started = process.hrtime.bigint();
+    // --ast-parse-mode lenient: this is a REPLAY of a pinned historical tree,
+    // and the current CLI's load-time target-mismatch guard (Prop 309 Class 7)
+    // judges that tree's committed .totem/compiled-rules.json by present-day
+    // rules — the pinned corpus predates the archive of two target-mismatched
+    // specimens, so the strict default would hard-error before lint emits JSON.
+    // Lenient degrades the guard to a stderr accounting warning without
+    // touching any pinned count, which is the honest posture for an archival
+    // reproduction: the receipt attests what that range linted to, not that
+    // the historical corpus passes current load validation.
     const run = spawnSync(
       process.execPath,
-      [CLI_DIST, 'lint', '--base', BASE_SHA, '--format', 'json', '--out', outFile],
+      [
+        CLI_DIST,
+        'lint',
+        '--base',
+        BASE_SHA,
+        '--format',
+        'json',
+        '--out',
+        outFile,
+        '--ast-parse-mode',
+        'lenient',
+      ],
       { cwd: WORKTREE, env, encoding: 'utf-8' },
     );
     const elapsedMs = Number((process.hrtime.bigint() - started) / 1_000_000n);
