@@ -246,8 +246,13 @@ async function assertRulesCanTargetTheirGlobs(
   astParseMode: TimeoutMode,
   onWarn: (msg: string) => void,
 ): Promise<void> {
-  const { extensionToLanguage, registeredExtensions, TotemError, TRAILING_EXT_RE } =
-    await import('@mmnto/totem');
+  const {
+    extensionToLanguage,
+    registeredExtensions,
+    sanitizeForTerminal,
+    TotemError,
+    TRAILING_EXT_RE,
+  } = await import('@mmnto/totem');
 
   const offenders: Array<{ rule: CompiledRule; globs: string[]; extensions: string[] }> = [];
 
@@ -294,7 +299,14 @@ async function assertRulesCanTargetTheirGlobs(
     )
     .join('; ');
 
-  const summary = `${offenders.length} active AST rule(s) declare fileGlobs whose extensions have no registered Tree-sitter language, so they can never match and instead abort the entire lint on first contact with a file they claim — ${detail}.`;
+  // Manifest-derived fields (lessonHash, lessonHeading, fileGlobs) are
+  // repo-controlled text reaching operator terminals and CI logs — sanitize the
+  // whole rendered summary so a corrupted or hostile manifest cannot inject
+  // control sequences through the guard's own report. The remedy line is
+  // engine-derived only and needs no sanitizing.
+  const summary = sanitizeForTerminal(
+    `${offenders.length} active AST rule(s) declare fileGlobs whose extensions have no registered Tree-sitter language, so they can never match and instead abort the entire lint on first contact with a file they claim — ${detail}.`,
+  );
   // Three remedies, deliberately un-ranked: the manifest alone cannot tell a
   // permanently-broken rule (`.json`, which no pack will ever register) from an
   // incomplete environment (`.rs`, which a pack provides but which has not been
