@@ -185,6 +185,138 @@ async function countLessonCorpusFiles(
   return matched.size;
 }
 
+// ─── Target-mismatch derivation (mmnto-ai/totem-strategy#971, Prop 309 Class 7) ─
+
+/**
+ * Hard-error when a loaded AST rule can never execute because NONE of its
+ * declared `fileGlobs` targets an extension the engine has a registered
+ * Tree-sitter language for (mmnto-ai/totem-strategy#971, Prop 309 Class 7).
+ *
+ * The failure this closes: `resolveAstGrepLangs` (ast-grep-query.ts) silently
+ * falls back to `Lang.Tsx` when no glob resolves, so a target-mismatched rule
+ * looks healthy at load. It then detonates at RUN time — `rule-engine.ts`'s
+ * language check throws `TotemParseError` the first time a diff happens to
+ * contain a file the rule's globs match, and that throw escapes the per-file
+ * loop and aborts the WHOLE lint. The observed specimen was an `ast-grep` rule
+ * whose four globs all pointed at `.json` files, which no language registration
+ * covers. Diff-dependent detonation is the worst property: the gate is green on
+ * every run until the one run where it isn't.
+ *
+ * The guard converts that into a deterministic load-time failure. It runs on
+ * EVERY invocation regardless of the diff, and — unlike the corpus-bearing gate
+ * above — it is deliberately NOT gated on `options.config`. That opt-out exists
+ * because zero-rules is genuinely ambiguous (empty-corpus repo vs disarmed gate)
+ * and the config is the only discriminator. Target-mismatch is unambiguous from
+ * the manifest alone: no discriminator is needed, so there is nothing to opt out
+ * of and `shield estimate` gets the same protection. The one escape is the
+ * pre-existing `--ast-parse-mode lenient` operator flag (see the branch below),
+ * which is opt-in and leaves the strict default fail-closed.
+ *
+ * Scope matches the abort seam exactly. `rule-engine.ts` searches the
+ * `allAstRules` union (Tree-sitter `'ast'` ∪ `'ast-grep'`) for a rule whose
+ * globs claim the unparseable file, so BOTH engines are validated here.
+ *
+ * Two shapes stay permitted:
+ *
+ *   - **Globless rules** (`fileGlobs` absent or empty). The documented
+ *     `Lang.Tsx` fallback is their intended behavior — many pre-1.16 rules ship
+ *     unscoped — and `rule-engine.ts` only throws for a rule with non-empty
+ *     `fileGlobs`, so a globless rule cannot arm the landmine.
+ *   - **Extensionless positive globs** — a recursive `src/**`, a bare-star
+ *     leaf, or a brace-set leaf like `.{ts,json}` (glob literals are omitted
+ *     here because a star-slash pair would close this comment).
+ *     `TRAILING_EXT_RE` extracts nothing from these, but at run time they can
+ *     and do match `.ts` files and dispatch correctly. Absence of a trailing
+ *     extension is absence of evidence, not proof of mismatch — treating it as
+ *     unresolvable would hard-error legitimately broad rules. A rule is only
+ *     condemned when EVERY positive glob names a concrete extension and NOT ONE
+ *     of those extensions resolves.
+ *
+ * Lifecycle status needs no filtering here: `loadCompiledRules` has already
+ * dropped `archived` / `untested-against-codebase` / `pending-verification`
+ * (compiler.ts), so an archived specimen never reaches this function — which is
+ * exactly why archiving is the offered remedy.
+ *
+ * Pack-contributed languages are honored: CLI commands call `bootstrapEngine`
+ * (→ `loadInstalledPacks`) before this point, so a pack that registers `.rs`
+ * has already populated the registry when the check reads it.
+ */
+async function assertRulesCanTargetTheirGlobs(
+  rules: readonly CompiledRule[],
+  astParseMode: TimeoutMode,
+  onWarn: (msg: string) => void,
+): Promise<void> {
+  const { extensionToLanguage, registeredExtensions, TotemError, TRAILING_EXT_RE } =
+    await import('@mmnto/totem');
+
+  const offenders: Array<{ rule: CompiledRule; globs: string[]; extensions: string[] }> = [];
+
+  for (const rule of rules) {
+    if (rule.engine !== 'ast-grep' && rule.engine !== 'ast') continue;
+    const globs = rule.fileGlobs;
+    if (!globs || globs.length === 0) continue;
+
+    // Negations describe files the rule must NOT match, so they never carry a
+    // dispatch target — same skip `resolveAstGrepLangs` performs.
+    const positive = globs.filter((g) => typeof g === 'string' && !g.startsWith('!'));
+    // An all-negation glob list matches every file (see the zero-match
+    // derivation below, where `positive.length === 0` matches unconditionally),
+    // so it necessarily reaches resolvable files. Permitted.
+    if (positive.length === 0) continue;
+
+    const extensions: string[] = [];
+    let resolvable = false;
+    for (const glob of positive) {
+      const match = glob.match(TRAILING_EXT_RE);
+      if (!match) {
+        // Extensionless positive glob — unprovable, therefore permitted.
+        resolvable = true;
+        break;
+      }
+      const ext = `.${match[1]!.toLowerCase()}`;
+      if (extensionToLanguage(ext)) {
+        resolvable = true;
+        break;
+      }
+      if (!extensions.includes(ext)) extensions.push(ext);
+    }
+    if (!resolvable) offenders.push({ rule, globs: positive, extensions });
+  }
+
+  if (offenders.length === 0) return;
+
+  // Deterministic detail line per offender — corpus order, every field the
+  // operator needs to act without opening the manifest.
+  const detail = offenders
+    .map(
+      (o) =>
+        `'${o.rule.lessonHash}' (${o.rule.lessonHeading}) engine '${o.rule.engine}' fileGlobs [${o.globs.join(', ')}] → unregistered extension(s) ${o.extensions.join(', ')}`,
+    )
+    .join('; ');
+
+  const summary = `${offenders.length} active AST rule(s) declare fileGlobs whose extensions have no registered Tree-sitter language, so they can never match and instead abort the entire lint on first contact with a file they claim — ${detail}.`;
+  // Three remedies, deliberately un-ranked: the manifest alone cannot tell a
+  // permanently-broken rule (`.json`, which no pack will ever register) from an
+  // incomplete environment (`.rs`, which a pack provides but which has not been
+  // installed/synced here). Leading with "archive it" would misdiagnose the
+  // second case, which `rule-engine.ts`'s STALE_MANIFEST path handles well.
+  const remedy = `Install or sync the pack that provides the language ('totem sync --packs-only'), archive each rule (set status: 'archived'), or correct its fileGlobs/engine so at least one positive glob targets a registered extension. Registered now: ${registeredExtensions().join(', ')}.`;
+
+  if (astParseMode === 'lenient') {
+    // Honor the operator escape (mmnto-ai/totem#1982). `--ast-parse-mode lenient`
+    // already means "an AST language the engine cannot parse degrades this run
+    // instead of failing it", and a target-mismatched rule is exactly that class
+    // — it simply fails at load rather than at dispatch. Without this branch the
+    // guard would REMOVE the only escape for a repo whose rules target a pack
+    // language it has not installed, leaving the operator no way to lint at all.
+    // The rules stay inert either way, so lenient loses no enforcement it had.
+    onWarn(`AST rules target-mismatched (--ast-parse-mode lenient): ${summary} ${remedy}`);
+    return;
+  }
+
+  throw new TotemError('LINT_LESSONS_FAILED', `Enforcement disarmed: ${summary}`, remedy);
+}
+
 // ─── Core logic ─────────────────────────────────────
 
 /**
@@ -320,6 +452,20 @@ export async function runCompiledRules(
     );
     return emptyResult;
   }
+
+  // mmnto-ai/totem#1982. Resolved here rather than at the AST dispatch site
+  // because the rule-load guard below shares the mode (CLI flag > env > strict).
+  const effectiveAstParseMode: TimeoutMode =
+    astParseMode ??
+    // totem-context: reading Node's process.env (cleaned by the runtime), not parsing a custom .env file; CRLF/quote-stripping rule doesn't apply.
+    (process.env['TOTEM_LINT_AST_PARSE_MODE'] === 'lenient' ? 'lenient' : 'strict');
+
+  // Rule-LOAD validation (mmnto-ai/totem-strategy#971, Prop 309 Class 7). Runs
+  // before any diff is touched so a rule whose engine cannot process ANY of its
+  // declared globs fails on every run, not on the unlucky run whose diff happens
+  // to contain a file it claims. Ordered AFTER the corpus-bearing block so a
+  // missing/unloadable manifest still reports its own (more fundamental) cause.
+  await assertRulesCanTargetTheirGlobs(rules, effectiveAstParseMode, (msg) => log.warn(tag, msg));
 
   log.info(tag, `Running ${rules.length} rules (zero LLM)...`);
 
@@ -480,12 +626,8 @@ export async function runCompiledRules(
   const astRules = rules.filter((r) => r.engine === 'ast' || r.engine === 'ast-grep');
   let astViolations: Violation[] = [];
   const astParseFailures: AstParseFailureOutcome[] = [];
-  // mmnto-ai/totem#1982. Resolve effective mode with env override (matches
-  // the operator escape pattern: CLI flag > env var > default 'strict').
-  const effectiveAstParseMode: TimeoutMode =
-    astParseMode ??
-    // totem-context: reading Node's process.env (cleaned by the runtime), not parsing a custom .env file; CRLF/quote-stripping rule doesn't apply.
-    (process.env['TOTEM_LINT_AST_PARSE_MODE'] === 'lenient' ? 'lenient' : 'strict');
+  // `effectiveAstParseMode` (mmnto-ai/totem#1982) is resolved above the rule-load
+  // guard, which shares the same operator escape.
   if (astRules.length > 0) {
     log.dim(tag, `Running ${astRules.length} AST rule(s)...`);
     try {

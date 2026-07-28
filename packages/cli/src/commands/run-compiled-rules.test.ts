@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1359,10 +1360,18 @@ describe('--ast-parse-mode lenient', () => {
 
   // totem-context: helper has no OrExit suffix; the rule misclassifies test-fixture builders that return literal objects
   function makeAstRuleAndDiff() {
+    // fileGlobs target a REGISTERED extension on purpose. These tests mock
+    // `applyAstRulesToAdditions` wholesale — the fixture rule exists only to make
+    // `astRules.length > 0` so the mocked pipeline is reached, and the rust
+    // wording lives in the mocked error, not the rule. A `**/*.rs` glob would now
+    // be condemned by the rule-load target-mismatch guard
+    // (mmnto-ai/totem-strategy#971, Prop 309 Class 7) before the mock is ever
+    // consulted, which would test the guard instead of the parse-mode routing
+    // these cases exist for. The guard's own coverage lives in its describe block.
     const astRule = makeRule('', 'rust pattern', 'No unsafe', {
       engine: 'ast-grep',
       astGrepPattern: 'unsafe { $$$ }',
-      fileGlobs: ['**/*.rs'],
+      fileGlobs: ['**/*.ts'],
     });
     saveCompiledRules(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), [astRule]);
 
@@ -1883,5 +1892,365 @@ describe('corpus-bearing zero-rules hard-error (mmnto-ai/totem-strategy#971)', (
         },
       }),
     ).rejects.toThrow(/enforcement disarmed/i);
+  });
+});
+
+// ─── Target-mismatched rule hard-error (mmnto-ai/totem-strategy#971, Prop 309 Class 7) ──
+//
+// An AST rule whose declared `fileGlobs` ALL target extensions with no
+// registered Tree-sitter language can never execute. Worse, it does not fail
+// quietly: `rule-engine.ts` throws the moment a diff contains a file the rule's
+// globs claim, and that throw aborts the entire lint. Before this guard the
+// failure was diff-dependent — green on every run until the unlucky one. The
+// guard moves it to rule-LOAD time so it fires deterministically.
+describe('target-mismatched rule hard-error (mmnto-ai/totem-strategy#971, Prop 309 Class 7)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-rcr-target-'));
+    fs.mkdirSync(path.join(tmpDir, TOTEM_DIR), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /** The observed specimen's shape: ast-grep scoped entirely to `.json` files. */
+  function mismatchedAstGrepRule(overrides: Partial<CompiledRule> = {}): CompiledRule {
+    return makeRule('', 'No inline secrets in agent config', 'No inline secrets', {
+      lessonHash: 'target-mismatch-astgrep',
+      engine: 'ast-grep',
+      astGrepPattern: 'pair($KEY, $VALUE)',
+      fileGlobs: ['**/.mcp.json', '**/.cursor/mcp.json'],
+      ...overrides,
+    });
+  }
+
+  const cleanDiff = (): string => makeDiff('src/app.ts', '  const x = 1;');
+
+  // ── Induced failure ─────────────────────────────────
+
+  it('hard-errors at load when every positive glob of an ast-grep rule targets an unregistered extension', async () => {
+    writeRules(tmpDir, [mismatchedAstGrepRule()]);
+
+    await expect(
+      runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow(/enforcement disarmed/i);
+  });
+
+  it('names the lessonHash, the engine, every glob, the unregistered extension, and the archive-or-fix remedy', async () => {
+    writeRules(tmpDir, [mismatchedAstGrepRule()]);
+
+    let message = '';
+    let hint = '';
+    try {
+      await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+      hint = err instanceof TotemError ? err.recoveryHint : '';
+    }
+
+    // Everything the operator needs to act without opening the manifest.
+    expect(message).toContain('target-mismatch-astgrep');
+    expect(message).toContain('No inline secrets');
+    expect(message).toContain("engine 'ast-grep'");
+    expect(message).toContain('**/.mcp.json');
+    expect(message).toContain('**/.cursor/mcp.json');
+    expect(message).toContain('.json');
+    // The detonation mechanism is named, not just the mismatch.
+    expect(message).toContain('abort the entire lint');
+    // Both remedies, plus the registry snapshot that makes "fix the globs" actionable.
+    expect(hint).toContain("status: 'archived'");
+    expect(hint).toContain('fileGlobs');
+    expect(hint).toContain('.tsx');
+  });
+
+  it("hard-errors for the engine:'ast' variant — the abort seam unions both AST engines", async () => {
+    // rule-engine.ts searches `allAstRules` (Tree-sitter 'ast' ∪ 'ast-grep') for
+    // a rule claiming the unparseable file, so an 'ast' rule arms the identical
+    // landmine and must be validated identically.
+    writeRules(tmpDir, [
+      makeRule('', 'No secrets in settings', 'No secrets in settings', {
+        lessonHash: 'target-mismatch-ast',
+        engine: 'ast',
+        astQuery: '(pair) @p',
+        fileGlobs: ['**/settings.json'],
+      }),
+    ]);
+
+    let message = '';
+    try {
+      await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+
+    expect(message).toMatch(/enforcement disarmed/i);
+    expect(message).toContain('target-mismatch-ast');
+    expect(message).toContain("engine 'ast'");
+  });
+
+  it("fires on a diff that touches NONE of the rule's globs — deterministic at load, not on first contact", async () => {
+    // The whole point of the hardening. The diff is a .ts file; the broken rule
+    // is scoped to .json. Pre-guard this run was green and the landmine stayed
+    // armed for whichever future diff happened to touch a .json file.
+    writeRules(tmpDir, [mismatchedAstGrepRule()]);
+
+    await expect(
+      runCompiledRules({
+        diff: makeDiff('src/unrelated.ts', '  const unrelated = true;'),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow(/enforcement disarmed/i);
+  });
+
+  it('reports every offender in one deterministic failure rather than stopping at the first', async () => {
+    writeRules(tmpDir, [
+      mismatchedAstGrepRule({ lessonHash: 'offender-one' }),
+      mismatchedAstGrepRule({ lessonHash: 'offender-two', fileGlobs: ['config/*.yaml'] }),
+    ]);
+
+    let message = '';
+    try {
+      await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+
+    expect(message).toContain('2 active AST rule(s)');
+    expect(message).toContain('offender-one');
+    expect(message).toContain('offender-two');
+    expect(message).toContain('.yaml');
+  });
+
+  // ── Operator escape (mmnto-ai/totem#1982) ───────────
+
+  it('degrades to a warning under --ast-parse-mode lenient instead of hard-erroring', async () => {
+    // Without this, the guard would remove the ONLY escape for a repo whose
+    // rules target a pack language it has not installed — `.rs` here, exactly
+    // the shape @mmnto/pack-rust-architecture provides.
+    writeRules(tmpDir, [
+      mismatchedAstGrepRule({ lessonHash: 'pack-language-rule', fileGlobs: ['**/*.rs'] }),
+    ]);
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+        astParseMode: 'lenient',
+      });
+
+      expect(result.rules).toHaveLength(1);
+      expect(JSON.parse(result.output).pass).toBe(true);
+      // The disclosure survives the exit-code escape: lenient covers the failure,
+      // never the accounting.
+      const messages = stderrSpy.mock.calls.map((c) => c.join(' '));
+      const warning = messages.find((m) => m.includes('target-mismatched'));
+      expect(warning).toBeDefined();
+      expect(warning).toContain('pack-language-rule');
+      expect(warning).toContain('.rs');
+      expect(warning).toContain('totem sync --packs-only');
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('strict mode is the default — an omitted astParseMode still hard-errors', async () => {
+    writeRules(tmpDir, [mismatchedAstGrepRule({ fileGlobs: ['**/*.rs'] })]);
+
+    await expect(
+      runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow(/enforcement disarmed/i);
+  });
+
+  // ── Negative controls ───────────────────────────────
+
+  it('control: the same rule with status:archived loads clean — archiving is the offered remedy', async () => {
+    // Closes the loop on the offered fix: loadCompiledRules drops inert rules
+    // before the guard ever sees them, so following the hint actually works.
+    writeRules(tmpDir, [mismatchedAstGrepRule({ status: 'archived' })]);
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      });
+      expect(result.rules).toHaveLength(0);
+      expect(result.violations).toHaveLength(0);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('control: a globless ast-grep rule loads clean — the documented Lang.Tsx fallback stays permitted', async () => {
+    // Unscoped pre-1.16 rules legitimately carry no fileGlobs, and
+    // rule-engine.ts only throws for a rule with non-empty globs, so a globless
+    // rule cannot arm the landmine.
+    writeRules(tmpDir, [
+      makeRule('', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+      }),
+    ]);
+
+    const result = await runCompiledRules({
+      diff: cleanDiff(),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.rules).toHaveLength(1);
+    expect(JSON.parse(result.output).pass).toBe(true);
+  });
+
+  it('control: one resolvable glob among unresolvable ones loads clean', async () => {
+    // The rule CAN execute — the condemnation requires that not one positive
+    // glob resolves.
+    writeRules(tmpDir, [mismatchedAstGrepRule({ fileGlobs: ['**/*.json', '**/*.ts'] })]);
+
+    const result = await runCompiledRules({
+      diff: cleanDiff(),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.rules).toHaveLength(1);
+    expect(JSON.parse(result.output).pass).toBe(true);
+  });
+
+  it('control: extensionless positive globs (src/**) load clean — absence of evidence is not proof of mismatch', async () => {
+    // TRAILING_EXT_RE extracts nothing from `src/**` or `**/*.{ts,json}`, but at
+    // run time both match .ts files and dispatch fine. Condemning them would
+    // hard-error legitimately broad rules.
+    writeRules(tmpDir, [
+      mismatchedAstGrepRule({ lessonHash: 'broad-one', fileGlobs: ['src/**'] }),
+      mismatchedAstGrepRule({ lessonHash: 'broad-two', fileGlobs: ['**/*.{ts,json}'] }),
+      mismatchedAstGrepRule({ lessonHash: 'broad-three', fileGlobs: ['packages/**/*'] }),
+    ]);
+
+    const result = await runCompiledRules({
+      diff: cleanDiff(),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.rules).toHaveLength(3);
+    expect(JSON.parse(result.output).pass).toBe(true);
+  });
+
+  it('control: a REGEX rule scoped entirely to .json is untouched — the guard is AST-only', async () => {
+    // Regex rules never dispatch through the Tree-sitter language registry, so
+    // .json scoping is completely legitimate for them.
+    writeRules(tmpDir, [
+      makeRule('"apiKey"', 'No inline keys', 'No inline keys', {
+        fileGlobs: ['**/.mcp.json'],
+      }),
+    ]);
+
+    const result = await runCompiledRules({
+      diff: cleanDiff(),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.rules).toHaveLength(1);
+    expect(JSON.parse(result.output).pass).toBe(true);
+  });
+
+  it('control: an all-negation glob list loads clean — it matches every file, including resolvable ones', async () => {
+    writeRules(tmpDir, [mismatchedAstGrepRule({ fileGlobs: ['!**/*.json'] })]);
+
+    const result = await runCompiledRules({
+      diff: cleanDiff(),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.rules).toHaveLength(1);
+    expect(JSON.parse(result.output).pass).toBe(true);
+  });
+
+  // ── The real corpus ─────────────────────────────────
+
+  it("the repository's own .totem/compiled-rules.json loads clean through the guard", async () => {
+    // Regression anchor for the corpus itself: both known specimens are archived,
+    // so the live manifest must pass. Copied into the tmp dir so the run's metric
+    // and ledger writes never touch the real .totem.
+    const realManifest = fileURLToPath(
+      new URL('../../../../.totem/compiled-rules.json', import.meta.url),
+    );
+    // A missing fixture would make every assertion below vacuous — fail loudly
+    // instead of silently skipping.
+    expect(fs.existsSync(realManifest)).toBe(true);
+    fs.copyFileSync(realManifest, path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'));
+
+    // A .txt path no compiled rule scopes to, so the run exercises rule LOAD
+    // (where the guard lives) without dispatching AST rules against fixtures
+    // that do not exist in the tmp dir.
+    const result = await runCompiledRules({
+      diff: makeDiff('docs/example.txt', 'A plain note.'),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    // Non-vacuity: the guard actually had globbed AST rules to inspect.
+    const globbedAstRules = result.rules.filter(
+      (r) =>
+        (r.engine === 'ast-grep' || r.engine === 'ast') && r.fileGlobs && r.fileGlobs.length > 0,
+    );
+    expect(globbedAstRules.length).toBeGreaterThan(0);
   });
 });
