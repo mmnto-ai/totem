@@ -8,17 +8,17 @@ Design record: `.totem/specs/ask1-micro-pack.md` (operator design ruling 2026-07
 
 ## Rules
 
-| #   | Heading                                                                  | Engine   | Target                | Severity |
-| --- | ------------------------------------------------------------------------ | -------- | --------------------- | -------- |
-| 1   | GitHub auto-close keyword adjacent to an issue reference                 | regex    | markdown              | warning  |
-| 2   | Empty catch block silently swallows a failure                            | ast-grep | TS / JS               | error    |
-| 3   | Declared CI gate masked with `\|\| true` in a workflow step              | regex    | workflow YAML         | error    |
-| 4   | Inlined credential in an agent configuration surface                     | regex    | agent config          | error    |
-| 5   | Competing agent-instruction authority claim without an AGENTS.md pointer | regex    | CLAUDE.md / GEMINI.md | warning  |
-| 6   | Committed universal agent permission bypass                              | regex    | settings JSON         | warning  |
-| 7   | Governance directive in a governed file without a provenance reference   | regex    | `.totem/**` markdown  | warning  |
-| 8   | New dependency introduced without disclosure                             | regex    | package.json          | warning  |
-| 9   | Optional dependency declared without a fail-loud consumer check          | regex    | package.json          | warning  |
+| #   | Heading                                                      | Engine   | Target                | Severity |
+| --- | ------------------------------------------------------------ | -------- | --------------------- | -------- |
+| 1   | GitHub auto-close keyword adjacent to an issue reference     | regex    | markdown              | warning  |
+| 2   | Empty catch block silently swallows a failure                | ast-grep | TS / JS               | error    |
+| 3   | Declared CI gate masked with `\|\| true` in a workflow step  | regex    | workflow YAML         | error    |
+| 4   | Inlined credential in an agent configuration surface         | regex    | agent config          | error    |
+| 5   | Competing agent-instruction authority without AGENTS.md link | regex    | CLAUDE.md / GEMINI.md | warning  |
+| 6   | Committed universal agent permission bypass                  | regex    | settings JSON         | warning  |
+| 7   | Governance directive in governed file lacks provenance ref   | regex    | `.totem/**` markdown  | warning  |
+| 8   | New dependency introduced without disclosure                 | regex    | package.json          | warning  |
+| 9   | Optional dependency without a fail-loud consumer check       | regex    | package.json          | warning  |
 
 Rules 2 and 3 are the two halves of one governed concept (the fail-open-gate family). They ship as separate entries with separate hashes, headings and messages because they cannot share an `engine` field — see below. A developer who hits one must not receive remediation for the other.
 

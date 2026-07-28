@@ -80,8 +80,8 @@
       "goodExample": "  \"apiKey\": \"${ANTHROPIC_API_KEY}\"\n  \"apiKeyEnv\": \"ANTHROPIC_API_KEY\""
     },
     {
-      "lessonHash": "7371b48e4e7ff9cf",
-      "lessonHeading": "Competing agent-instruction authority claim without an AGENTS.md pointer",
+      "lessonHash": "ef5c7099fef91bd3",
+      "lessonHeading": "Competing agent-instruction authority without AGENTS.md link",
       "pattern": "^(?!.*AGENTS\\.md).*(?:canonical agent instructions|[Ss]ource of truth)",
       "message": "ADR-038 makes AGENTS.md the single source of truth for agent instructions; vendor entry files redirect to it. A line claiming canonical authority or source-of-truth status without pointing at AGENTS.md sets up a second authority that will drift. Add the pointer, or drop the claim. Under-approximation by design: this catches an explicit competing claim, it does not prove every tool file carries a redirect — that whole-document contract lives on the doctor lane.",
       "engine": "regex",
@@ -110,8 +110,8 @@
       "goodExample": "  \"allow\": [\"Bash(gh search *)\"]"
     },
     {
-      "lessonHash": "f742b565a5c1a30c",
-      "lessonHeading": "Governance directive in a governed file without a provenance reference",
+      "lessonHash": "bede17a0c5940393",
+      "lessonHeading": "Governance directive in governed file lacks provenance ref",
       "pattern": "^(?!.*(?:#\\d+|ADR-\\d+)).*\\b(?:MUST|NEVER|ALWAYS)\\b",
       "message": "A MUST/NEVER/ALWAYS directive added to the .totem governance tree without an issue or ADR reference on the same line cannot be traced to the decision that created it, so nobody can tell later whether it still holds. Cite the issue or ADR inline. Per-line by construction: the marker must be on the added line itself, because a \"file contains a marker somewhere\" invariant is not representable in this runtime.",
       "engine": "regex",
@@ -140,8 +140,8 @@
       "goodExample": "  \"version\": \"1.105.0\",\n  \"@mmnto/totem\": \"workspace:*\","
     },
     {
-      "lessonHash": "404b8c8dabcbd1af",
-      "lessonHeading": "Optional dependency declared without a fail-loud consumer check",
+      "lessonHash": "e12c9c71f8e0aa5b",
+      "lessonHeading": "Optional dependency without a fail-loud consumer check",
       "pattern": "\"optionalDependencies\"\\s*:",
       "message": "An optional dependency that fails to resolve leaves the consumer running in a silently degraded state — and a failed fetch can uninstall a previously working pin at exit 0. Pair the declaration with a load-time assert or doctor check that fails loudly when the dependency is absent, and disclose the degraded behaviour. This is a disclosure rule on a high-risk declaration class, NOT a detector for the silent-uninstall event: that event is a removal and cross-file, unreachable from an additions-only per-line runtime (see mmnto-ai/totem#2504).",
       "engine": "regex",

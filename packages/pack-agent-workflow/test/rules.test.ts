@@ -66,7 +66,7 @@ const CASES: {
     negativeProofs: {},
   },
   {
-    hash: '7371b48e4e7ff9cf',
+    hash: 'ef5c7099fef91bd3',
     key: 'competing-authority',
     badSite: 'CLAUDE.md',
     ext: '.md',
@@ -80,7 +80,7 @@ const CASES: {
     negativeProofs: {},
   },
   {
-    hash: 'f742b565a5c1a30c',
+    hash: 'bede17a0c5940393',
     key: 'governed-directive-provenance',
     badSite: '.totem/specs/policy.md',
     ext: '.md',
@@ -94,7 +94,7 @@ const CASES: {
     negativeProofs: { '!**/node_modules/**': 'node_modules/dep/package.json' },
   },
   {
-    hash: '404b8c8dabcbd1af',
+    hash: 'e12c9c71f8e0aa5b',
     key: 'optional-dep-disclosure',
     badSite: 'package.json',
     ext: '.json',
