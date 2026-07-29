@@ -1,0 +1,7 @@
+{
+  "name": "wind-tunnel-good",
+  "version": "1.105.0",
+  "dependencies": {
+    "@mmnto/totem": "workspace:*"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@mmnto/pack-agent-workflow",
+  "version": "1.105.0",
+  "private": true,
+  "description": "Agent-workflow governance pack for Totem (Ask 1, micro-pack v1). Ships hand-authored rules covering agent-instruction authority, fail-open gates, agent-context secret exposure, and dependency-introduction discipline.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmnto-ai/totem.git",
+    "directory": "packages/pack-agent-workflow"
+  },
+  "homepage": "https://github.com/mmnto-ai/totem#readme",
+  "bugs": "https://github.com/mmnto-ai/totem/issues",
+  "files": [
+    "compiled-rules.json",
+    ".totemignore",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./package.json",
+    "./compiled-rules.json": "./compiled-rules.json",
+    "./.totemignore": "./.totemignore"
+  },
+  "scripts": {
+    "build": "echo '[pack-agent-workflow] no build step (data-only pack)'",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=24",
+    "@mmnto/totem": "^1.26.0"
+  },
+  "devDependencies": {
+    "@mmnto/totem": "workspace:*",
+    "vitest": "^3.0.0"
+  }
+}

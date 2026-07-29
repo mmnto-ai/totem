@@ -12,6 +12,10 @@ pnpm-lock.yaml
 .totem/compile-manifest.json
 # Proof-kit fixture .totem mirrors both concerns above (lesson regex + hash seal)
 examples/proof-kit/fixture/.totem/
+# Pack wind-tunnel specimens are byte-exact rule inputs. Prettier would reflow
+# `catch (e) { }` onto multiple lines and break the ast-grep patterns that must
+# match them — the same hazard pack-agent-security documents for quote styles.
+packages/pack-agent-workflow/test/fixtures/
 # Spine artifacts are canonicalStringify-emitted; the freeze proof compares raw file
 # bytes to the committed blob (spine-freeze-proof.ts) — prettier rewrap reads as tamper
 .totem/spine/

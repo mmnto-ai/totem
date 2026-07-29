@@ -8,6 +8,7 @@
       "@mmnto/cli",
       "@mmnto/mcp",
       "@mmnto/pack-agent-security",
+      "@mmnto/pack-agent-workflow",
       "@mmnto/pack-rust-architecture"
     ]
   ],

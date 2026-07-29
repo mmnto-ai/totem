@@ -1,0 +1,8 @@
+name: CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm lint || true
+      - run: pnpm lint | tee log.txt || true

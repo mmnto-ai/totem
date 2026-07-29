@@ -1,0 +1,4 @@
+{
+  "token": "${GEMINI_API_TOKEN}",
+  "allow": ["Bash(gh pr view *)"]
+}
