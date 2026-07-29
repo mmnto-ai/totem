@@ -46,7 +46,7 @@
     {
       "lessonHash": "e64911592b774cc6",
       "lessonHeading": "Declared CI gate masked with || true in a workflow step",
-      "pattern": "(?:lint|test|typecheck|audit|verify|gate|check)[^|]*\\|\\|\\s*true",
+      "pattern": "(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\|\\|).)*\\|\\|\\s*true",
       "message": "Appending || true to a lint/test/audit/verify command makes the step report success no matter what the gate found — the workflow advertises enforcement it is not performing. Remove the mask, or drop the step if the gate is genuinely not wanted. Scoped to same-line forms where the gate intent is observable; bare continue-on-error is deliberately NOT flagged, because one line carries no context separating a declared gate from legitimate best-effort cleanup.",
       "engine": "regex",
       "severity": "error",
@@ -127,7 +127,7 @@
     {
       "lessonHash": "67ec1598a0a8ef6a",
       "lessonHeading": "New dependency introduced without disclosure",
-      "pattern": "^\\s*\"[@a-z][^\"]*\"\\s*:\\s*\"[\\^~]\\d+\\.\\d+",
+      "pattern": "^\\s*\"[@a-z0-9][^\"]*\"\\s*:\\s*\"[\\^~]\\d+\\.\\d+",
       "message": "A newly pinned dependency expands the trust boundary and the supply-chain surface. Disclose it in the change description: what it is for, why an existing dependency does not cover it, and what it pulls in transitively. Warn-tier disclosure rule — it fires on legitimate additions by design; the point is that the addition is stated, not that it is wrong.",
       "engine": "regex",
       "severity": "warning",
