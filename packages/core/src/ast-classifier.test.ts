@@ -34,6 +34,20 @@ describe('extensionToLanguage', () => {
     expect(extensionToLanguage('.jsx')).toBe('tsx');
   });
 
+  // mmnto-ai/totem#2513 — `.mts` (TypeScript ESM) and `.cts` (TypeScript
+  // CommonJS) are the same grammar as `.ts`; their absence from the original
+  // six-extension registry armed a diff-dependent run-wide abort at
+  // `rule-engine.ts`'s unmapped-extension guard for any rule globbing them
+  // (specimen: compiled rule fea10369daa04c98).
+  it('resolves .mts and .cts to the typescript grammar (mmnto-ai/totem#2513)', () => {
+    expect(extensionToLanguage('.mts')).toBe('typescript');
+    expect(extensionToLanguage('.cts')).toBe('typescript');
+    expect(registeredExtensions()).toContain('.mts');
+    expect(registeredExtensions()).toContain('.cts');
+    expect(isBuiltinExtension('.mts')).toBe(true);
+    expect(isBuiltinExtension('.cts')).toBe(true);
+  });
+
   it('returns undefined for unsupported extensions', () => {
     expect(extensionToLanguage('.py')).toBeUndefined();
     expect(extensionToLanguage('.rs')).toBeUndefined();
@@ -49,8 +63,17 @@ describe('extensionToLanguage', () => {
 // ─── Language registry surface (mmnto-ai/totem#1653 + #1768) ──
 
 describe('language registry built-ins', () => {
-  it('exposes all six built-in extensions from registeredExtensions()', () => {
-    expect(registeredExtensions()).toEqual(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']);
+  it('exposes all eight built-in extensions from registeredExtensions()', () => {
+    expect(registeredExtensions()).toEqual([
+      '.cjs',
+      '.cts',
+      '.js',
+      '.jsx',
+      '.mjs',
+      '.mts',
+      '.ts',
+      '.tsx',
+    ]);
   });
 
   it('exposes all three built-in languages from registeredLanguages()', () => {
@@ -61,6 +84,16 @@ describe('language registry built-ins', () => {
     expect(isBuiltinExtension('.ts')).toBe(true);
     expect(isBuiltinExtension('.tsx')).toBe(true);
     expect(isBuiltinExtension('.rs')).toBe(false);
+  });
+
+  // The shared-loader invariant: every extension mapping to a given language
+  // MUST pass the SAME loader instance to `registerLang`, or the second
+  // registration trips the "already registered with a WASM loader" guard.
+  // Re-running the built-in registration from scratch is the cheapest way to
+  // prove it — a fresh-arrow-per-extension regression throws here.
+  it('re-registers every built-in without tripping the shared-loader guard', () => {
+    expect(() => __resetLangRegistryForTests()).not.toThrow();
+    expect(registeredExtensions()).toHaveLength(8);
   });
 });
 

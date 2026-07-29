@@ -2185,6 +2185,54 @@ describe('target-mismatched rule hard-error (mmnto-ai/totem-strategy#971, Prop 3
     expect(JSON.parse(result.output).pass).toBe(true);
   });
 
+  // ── .mts/.cts registration (mmnto-ai/totem#2513) ────
+
+  it('control: an ast-grep rule scoped entirely to .mts/.cts loads clean — both are registered built-ins', async () => {
+    // Before #2513 registered them, `.mts`/`.cts` were TOTAL mismatches and this
+    // guard condemned an all-.mts rule at load. They resolve to the typescript
+    // grammar now, so the guard must let them through.
+    writeRules(tmpDir, [
+      mismatchedAstGrepRule({ lessonHash: 'mts-only', fileGlobs: ['**/*.mts'] }),
+      mismatchedAstGrepRule({ lessonHash: 'cts-only', fileGlobs: ['**/*.cts'] }),
+    ]);
+
+    const result = await runCompiledRules({
+      diff: cleanDiff(),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.rules).toHaveLength(2);
+    expect(JSON.parse(result.output).pass).toBe(true);
+  });
+
+  it('still condemns a rule scoped entirely to a dead dummy extension — registration did not soften the guard', async () => {
+    // The partial-permit semantics this guard ships with are unchanged by
+    // #2513: an extension NO language covers is still a load-time hard error.
+    writeRules(tmpDir, [
+      mismatchedAstGrepRule({ lessonHash: 'dead-ext-only', fileGlobs: ['**/*.zzznotalang'] }),
+    ]);
+
+    let message = '';
+    try {
+      await runCompiledRules({
+        diff: cleanDiff(),
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+
+    expect(message).toMatch(/enforcement disarmed/i);
+    expect(message).toContain('dead-ext-only');
+    expect(message).toContain('.zzznotalang');
+  });
+
   it('control: a REGEX rule scoped entirely to .json is untouched — the guard is AST-only', async () => {
     // Regex rules never dispatch through the Tree-sitter language registry, so
     // .json scoping is completely legitimate for them.

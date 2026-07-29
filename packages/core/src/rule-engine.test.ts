@@ -1300,6 +1300,106 @@ describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/tot
   });
 });
 
+// ─── .mts/.cts dispatch (mmnto-ai/totem#2513) ──────────────────────
+//
+// The residual left by the Class 7 load-time guard (#2512): that guard only
+// condemns TOTAL target mismatch, so compiled rule fea10369daa04c98 —
+// fileGlobs ['**/*.ts', '**/*.js', '**/*.mts', '**/*.mjs'], three of four
+// resolvable — loaded clean while still arming the run-wide abort above for
+// any diff touching a `.mts` file. These are the induced form of that
+// detonation: pre-registration each case throws TotemParseError out of the
+// per-file loop, which strict mode rethrows and which aborts the whole lint.
+describe('ast-grep dispatch on .mts/.cts files (mmnto-ai/totem#2513)', () => {
+  const CONSOLE_LOG_PATTERN = 'console.log($$$)';
+
+  // totem-context: test fixture genuinely awaits async API (`applyAstRulesToAdditions`)
+  it('executes rules against .mts diff files instead of aborting', async () => {
+    // totem-context: seed the manifest with a fresh cohort so the mmnto-ai/totem#1811 STALE_MANIFEST nudge cannot mask the TotemParseError this case is about
+    seedFreshManifest(tmpDir);
+    // totem-context: writing a TypeScript-ESM source fixture under tmpDir, not a git hook
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.mts'), 'console.log("hi");\n');
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: CONSOLE_LOG_PATTERN,
+      fileGlobs: ['**/*.mts'],
+      lessonHash: 'mts-rule-hash',
+      lessonHeading: 'No console.log',
+    });
+    const additions = [makeAddition('src/app.mts', 'console.log("hi");', 1)];
+
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.rule.lessonHash).toBe('mts-rule-hash');
+  });
+
+  // totem-context: test fixture genuinely awaits async API (`applyAstRulesToAdditions`)
+  it('executes rules against .cts diff files instead of aborting', async () => {
+    // totem-context: seed the manifest with a fresh cohort so the mmnto-ai/totem#1811 STALE_MANIFEST nudge cannot mask the TotemParseError this case is about
+    seedFreshManifest(tmpDir);
+    // totem-context: writing a TypeScript-CommonJS source fixture under tmpDir, not a git hook
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.cts'), 'console.log("hi");\n');
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: CONSOLE_LOG_PATTERN,
+      fileGlobs: ['**/*.cts'],
+      lessonHash: 'cts-rule-hash',
+      lessonHeading: 'No console.log',
+    });
+    const additions = [makeAddition('src/app.cts', 'console.log("hi");', 1)];
+
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.rule.lessonHash).toBe('cts-rule-hash');
+  });
+
+  // totem-context: test fixture genuinely awaits async API (`applyAstRulesToAdditions`)
+  it("reproduces rule fea10369daa04c98's partial-mismatch glob set against a .mts file", async () => {
+    // The live corpus specimen verbatim: the three resolvable globs let the
+    // Class 7 guard permit the rule at load, and the .mts file in the diff is
+    // exactly the input that detonated at run time.
+    // totem-context: seed the manifest with a fresh cohort so the mmnto-ai/totem#1811 STALE_MANIFEST nudge cannot mask the TotemParseError this case is about
+    seedFreshManifest(tmpDir);
+    // totem-context: writing a TypeScript-ESM source fixture under tmpDir, not a git hook
+    fs.writeFileSync(path.join(tmpDir, 'src', 'release.mts'), 'console.log("release");\n');
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: CONSOLE_LOG_PATTERN,
+      fileGlobs: ['**/*.ts', '**/*.js', '**/*.mts', '**/*.mjs'],
+      lessonHash: 'fea10369daa04c98',
+      lessonHeading: 'Changesets interactive CLI',
+    });
+    const additions = [makeAddition('src/release.mts', 'console.log("release");', 1)];
+
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+    expect(violations).toHaveLength(1);
+  });
+
+  // totem-context: test fixture genuinely awaits async API (`applyAstRulesToAdditions`)
+  it('still fails loud for a genuinely unregistrable extension', async () => {
+    // Registration repairs `.mts`/`.cts` WITHOUT softening the #1653 fail-loud
+    // contract: an extension no language covers must still throw.
+    // totem-context: seed the manifest with a fresh cohort so the mmnto-ai/totem#1811 STALE_MANIFEST nudge stays silent and the original install-hint path stays under test
+    seedFreshManifest(tmpDir);
+    // totem-context: writing a dead-extension source fixture under tmpDir, not a git hook
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.zzznotalang'), 'noop\n');
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: CONSOLE_LOG_PATTERN,
+      fileGlobs: ['**/*.zzznotalang'],
+      lessonHash: 'dead-ext-rule',
+    });
+    const additions = [makeAddition('src/app.zzznotalang', 'noop', 1)];
+
+    await expect(applyAstRulesToAdditions(ctx, [rule], additions, tmpDir)).rejects.toBeInstanceOf(
+      TotemParseError,
+    );
+  });
+});
+
 // ─── Rust Inline Test Module Exemption (#2397) ─────────────────────
 
 describe('Rust Inline Test Module Exemption (#2397)', () => {
