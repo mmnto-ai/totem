@@ -43,10 +43,18 @@ const PACKAGES_DIR = join(REPO_ROOT, 'packages');
 
 // Topological order: @mmnto/totem (packages/core) has no workspace deps among
 // published packages; cli + mcp depend on it; pack-rust-architecture is
-// independent. Private packages (pack-agent-security) are skipped at runtime
-// by the `pkg.private` check, but must still appear in PKG_ORDER so the
-// "new unknown package" guard below trips when packages are added.
-const PKG_ORDER = ['core', 'cli', 'mcp', 'pack-agent-security', 'pack-rust-architecture'];
+// independent. Private packages (pack-agent-security, pack-agent-workflow) are
+// skipped at runtime by the `pkg.private` check, but must still appear in
+// PKG_ORDER so the "new unknown package" guard below trips when packages are
+// added.
+const PKG_ORDER = [
+  'core',
+  'cli',
+  'mcp',
+  'pack-agent-security',
+  'pack-agent-workflow',
+  'pack-rust-architecture',
+];
 
 // Guard: fail loudly if a new package is added to packages/ but not listed
 // above, so the publish order is reviewed instead of silently fallen-through.
