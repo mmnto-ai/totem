@@ -207,9 +207,13 @@ describe('E4 fault 2 — own-broadcast suppression is never silent (mmnto-ai/tot
       writeOutbox('totem', 'totem-claude', [
         { name: BCAST, to: 'broadcast', subject: 'cohort note' },
       ]);
-      // Sanity: the fixture resolves BOTH resident seats on the default path.
+      // No sanity assertion in this body, deliberately: `test.fails` is
+      // satisfied by ANY failure, so an extra assertion here would let an
+      // unrelated seat-resolution regression keep the marker green without
+      // the #2509 assertion ever running (CR round-1 catch). The two-seat
+      // resolution is asserted by the positive control below on the same
+      // fixture shape, where a regression fails loudly as a real failure.
       const result = pollTwoSeat();
-      expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini']);
 
       // Pack 1 + 2 — accounting fires / degraded envelope: the poll must
       // either render the dispatch (to the non-sender seat) or name the
