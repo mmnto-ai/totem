@@ -209,9 +209,9 @@ export async function classifyLines(
  * Map file extension to a registered Tree-sitter language.
  *
  * Registry-backed per ADR-097 § 10 + mmnto-ai/totem#1653. Built-in entries
- * (`.ts`/`.tsx`/`.jsx`/`.js`/`.mjs`/`.cjs`) self-register at module load
- * (bottom of this file). Pack callbacks add entries during boot via
- * `PackRegistrationAPI.registerLanguage`.
+ * (`.ts`/`.mts`/`.cts`/`.tsx`/`.jsx`/`.js`/`.mjs`/`.cjs`) self-register at
+ * module load (bottom of this file). Pack callbacks add entries during boot
+ * via `PackRegistrationAPI.registerLanguage`.
  *
  * Returns undefined when the extension isn't registered. The dispatch
  * path in `rule-engine.ts` treats undefined as fail-loud per #1653 — the
@@ -345,6 +345,15 @@ function registerBuiltinLanguages(): void {
   const jsLoader = () => require.resolve('tree-sitter-javascript/tree-sitter-javascript.wasm');
 
   registerBuiltinLang('.ts', 'typescript', tsLoader);
+  // TypeScript ESM (`.mts`) and CommonJS (`.cts`) are the same grammar as
+  // `.ts` — module resolution differs, syntax does not — so they share the
+  // '.ts' loader INSTANCE (mmnto-ai/totem#2513). Their absence from the
+  // original registry left rules globbing them (compiled rule
+  // fea10369daa04c98) able to load but not to run: `extensionToLanguage`
+  // returned undefined and `rule-engine.ts` aborted the whole lint the first
+  // time a diff carried a `.mts` file.
+  registerBuiltinLang('.mts', 'typescript', tsLoader);
+  registerBuiltinLang('.cts', 'typescript', tsLoader);
   registerBuiltinLang('.tsx', 'tsx', tsxLoader);
   // TSX grammar handles JSX — same loader instance as '.tsx'.
   registerBuiltinLang('.jsx', 'tsx', tsxLoader);
