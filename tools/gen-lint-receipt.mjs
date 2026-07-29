@@ -33,6 +33,9 @@ const PINNED_FIELDS = [
   'errors',
   'warnings',
   'llmCalls',
+  // The parse mode the counts were produced under is part of the attestation
+  // contract — a receipt that silently changed modes is not a reproduction.
+  'astParseMode',
 ];
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,6 +46,24 @@ const WORKTREE = path.join(ROOT, '.totem', 'temp', 'a3-receipt-worktree');
 function fail(message) {
   console.error(`[Totem Error] gen-lint-receipt: ${message}`);
   process.exit(1);
+}
+
+/**
+ * Best-effort worktree dir removal. On Windows the just-exited lint child (or
+ * an AV scanner) can hold a lingering handle that EPERMs rmSync — and a
+ * cleanup failure must never fail a receipt run whose real work already
+ * succeeded. The leftover lives under gitignored .totem/temp/ and the next
+ * run's pre-clean sweeps it.
+ */
+function removeWorktreeDir() {
+  try {
+    fs.rmSync(WORKTREE, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch (err) {
+    console.error(
+      `[gen-lint-receipt] warning: could not remove temp worktree (${err.code ?? err.message}); ` +
+        `leftover at ${WORKTREE} is gitignored and swept by the next run.`,
+    );
+  }
 }
 
 function git(args, opts = {}) {
@@ -70,7 +91,7 @@ function computeReceipt() {
   // tree (including its own .totem/compiled-rules.json as of that commit).
   if (fs.existsSync(WORKTREE)) {
     spawnSync('git', ['worktree', 'remove', '--force', WORKTREE], { cwd: ROOT });
-    fs.rmSync(WORKTREE, { recursive: true, force: true });
+    removeWorktreeDir();
   }
   fs.mkdirSync(path.dirname(WORKTREE), { recursive: true });
   git(['worktree', 'add', '--detach', WORKTREE, HEAD_SHA]);
@@ -86,9 +107,29 @@ function computeReceipt() {
     }
 
     const started = process.hrtime.bigint();
+    // --ast-parse-mode lenient: this is a REPLAY of a pinned historical tree,
+    // and the current CLI's load-time target-mismatch guard (Prop 309 Class 7)
+    // judges that tree's committed .totem/compiled-rules.json by present-day
+    // rules — the pinned corpus predates the archive of two target-mismatched
+    // specimens, so the strict default would hard-error before lint emits JSON.
+    // Lenient degrades the guard to a stderr accounting warning without
+    // touching any pinned count, which is the honest posture for an archival
+    // reproduction: the receipt attests what that range linted to, not that
+    // the historical corpus passes current load validation.
     const run = spawnSync(
       process.execPath,
-      [CLI_DIST, 'lint', '--base', BASE_SHA, '--format', 'json', '--out', outFile],
+      [
+        CLI_DIST,
+        'lint',
+        '--base',
+        BASE_SHA,
+        '--format',
+        'json',
+        '--out',
+        outFile,
+        '--ast-parse-mode',
+        'lenient',
+      ],
       { cwd: WORKTREE, env, encoding: 'utf-8' },
     );
     const elapsedMs = Number((process.hrtime.bigint() - started) / 1_000_000n);
@@ -114,6 +155,15 @@ function computeReceipt() {
       fs.readFileSync(path.join(ROOT, 'packages', 'cli', 'package.json'), 'utf-8'),
     ).version;
 
+    // The lenient downgrade must be visible IN the artifact, not only on
+    // stderr — a receipt that renders indistinguishably from a strict pass
+    // while validation was relaxed is the ADR-115 §2 defect class. The guard
+    // warning is detected from the child's output streams; lint's JSON
+    // carries load-time warnings nowhere today.
+    const targetMismatchGuardWarning = /target-mismatched/.test(
+      `${run.stdout ?? ''}${run.stderr ?? ''}`,
+    );
+
     return {
       baseSha: BASE_SHA,
       headSha: HEAD_SHA,
@@ -122,6 +172,8 @@ function computeReceipt() {
       errors: lint.errors,
       warnings: lint.warnings,
       llmCalls,
+      astParseMode: 'lenient',
+      targetMismatchGuardWarning,
       apiKeysStripped: true,
       elapsedMs,
       platform: `${os.platform()}-${os.arch()}`,
@@ -131,7 +183,7 @@ function computeReceipt() {
     };
   } finally {
     spawnSync('git', ['worktree', 'remove', '--force', WORKTREE], { cwd: ROOT });
-    fs.rmSync(WORKTREE, { recursive: true, force: true });
+    removeWorktreeDir();
   }
 }
 

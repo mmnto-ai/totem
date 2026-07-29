@@ -6,10 +6,12 @@
   "errors": 0,
   "warnings": 20,
   "llmCalls": 0,
+  "astParseMode": "lenient",
+  "targetMismatchGuardWarning": true,
   "apiKeysStripped": true,
-  "elapsedMs": 3570,
+  "elapsedMs": 3598,
   "platform": "win32-x64",
   "node": "24.16.0",
-  "cliVersion": "1.96.0",
-  "generatedAt": "2026-07-15T02:58:15.223Z"
+  "cliVersion": "1.105.0",
+  "generatedAt": "2026-07-28T23:05:49.001Z"
 }

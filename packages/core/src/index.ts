@@ -347,7 +347,17 @@ export { matchAstQueriesBatch, matchAstQuery } from './ast-query.js';
 
 // ast-grep query engine
 export type { AstGrepMatch, AstGrepRule } from './ast-grep-query.js';
-export { matchAstGrepPattern, matchAstGrepPatternsBatch } from './ast-grep-query.js';
+// `TRAILING_EXT_RE` is the single source of truth for extracting a target
+// extension out of a `fileGlobs` entry. Exported at the package boundary
+// (mmnto-ai/totem-strategy#971, Prop 309 Class 7) so the CLI's rule-load
+// target-mismatch guard extracts extensions EXACTLY the way
+// `resolveAstGrepLangs` does — a divergent copy of this regex would make the
+// guard disagree with the dispatcher it is protecting.
+export {
+  matchAstGrepPattern,
+  matchAstGrepPatternsBatch,
+  TRAILING_EXT_RE,
+} from './ast-grep-query.js';
 
 // Exporter
 export {

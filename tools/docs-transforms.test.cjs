@@ -266,6 +266,56 @@ test('LINT_RECEIPT renders the zero-LLM claim only from an attesting receipt', (
   assert.throws(() => transforms._renderLintReceipt(undefinedField), /missing platform/);
 });
 
+test('LINT_RECEIPT posture fields render disclosed, absent, or fail loud — never undefined', () => {
+  const base = {
+    baseSha: 'a'.repeat(40),
+    headSha: 'b'.repeat(40),
+    filesChanged: 1,
+    rules: 1,
+    errors: 0,
+    warnings: 0,
+    elapsedMs: 1,
+    llmCalls: 0,
+    apiKeysStripped: true,
+    platform: 'test-x64',
+    node: '24.0.0',
+    cliVersion: '0.0.0',
+    generatedAt: '2026-07-15T00:00:00.000Z',
+  };
+  // Legacy receipt (no posture fields): renders, with no posture sentence.
+  const legacy = transforms._renderLintReceipt(writeTmpJson('legacy-receipt.json', base));
+  assert.ok(!legacy.includes('ast-parse-mode'), 'legacy receipt must not render a posture clause');
+  // Lenient + boolean: posture disclosed on the page, value interpolated.
+  const lenient = transforms._renderLintReceipt(
+    writeTmpJson('lenient-receipt.json', {
+      ...base,
+      astParseMode: 'lenient',
+      targetMismatchGuardWarning: true,
+    }),
+  );
+  assert.ok(
+    lenient.includes('--ast-parse-mode lenient') &&
+      lenient.includes('targetMismatchGuardWarning: true'),
+    'lenient receipt must disclose the posture and the guard outcome',
+  );
+  // Unknown mode: fail loud, never silently hide the posture.
+  assert.throws(
+    () =>
+      transforms._renderLintReceipt(
+        writeTmpJson('badmode-receipt.json', { ...base, astParseMode: 'permissive' }),
+      ),
+    /invalid astParseMode/,
+  );
+  // Lenient without the guard boolean: fail loud, never interpolate undefined.
+  assert.throws(
+    () =>
+      transforms._renderLintReceipt(
+        writeTmpJson('noflag-receipt.json', { ...base, astParseMode: 'lenient' }),
+      ),
+    /missing boolean targetMismatchGuardWarning/,
+  );
+});
+
 test('maturity asOf rejects impossible calendar dates without consulting the clock', () => {
   const badDate = writeTmpJson('bad-date.json', {
     asOf: '2026-02-31',
