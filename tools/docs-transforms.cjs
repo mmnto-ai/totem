@@ -335,6 +335,19 @@ function renderLintReceipt(receiptPath) {
   // ADR-115 §2 envelope: a downgraded validation posture must be visible on the
   // rendered surface, not only inside the receipt JSON. Pure function of the
   // receipt fields — absent fields (pre-posture receipts) render nothing.
+  // Posture fields fail loud like every other rendered field: an unknown mode
+  // must not silently hide the posture, and a lenient receipt without the
+  // guard boolean must not interpolate `undefined` into the page.
+  if (r.astParseMode !== undefined && r.astParseMode !== 'strict' && r.astParseMode !== 'lenient') {
+    throw new Error(
+      `[Totem Error] LINT_RECEIPT transform failed: invalid astParseMode: ${String(r.astParseMode)}`,
+    );
+  }
+  if (r.astParseMode === 'lenient' && typeof r.targetMismatchGuardWarning !== 'boolean') {
+    throw new Error(
+      '[Totem Error] LINT_RECEIPT transform failed: lenient receipt missing boolean targetMismatchGuardWarning.',
+    );
+  }
   const posture =
     r.astParseMode === 'lenient'
       ? ` The replay runs with \`--ast-parse-mode lenient\` — the pinned corpus predates the ` +
