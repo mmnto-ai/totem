@@ -12,9 +12,16 @@
  *   3. a recovery / control assertion — with the fault removed the same call
  *      returns to green, and a healthy control never warns.
  *
- * Failures are induced with real errnos (a file where a directory belongs) or
- * real on-disk state (a hand-written pointer), never by mocking the module under
- * test.
+ * **The two ADR-115 § 2 packs** induce their failures with real errnos (a file
+ * where a directory belongs) or real on-disk state (a hand-written pointer),
+ * never by mocking the module under test — that is what makes them evidence
+ * rather than assertion.
+ *
+ * Other tests in this file DO stamp errnos onto `fs` via `vi.spyOn` (EACCES,
+ * ENOSPC). That is deliberate and scoped: ENOSPC is not inducible on a real
+ * filesystem, and those tests cover accounting branches rather than the
+ * degraded-path contract. The blanket "never by mocking" claim used to sit at
+ * file level and overstated what four of these tests do.
  */
 
 import * as os from 'node:os';

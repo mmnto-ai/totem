@@ -167,11 +167,17 @@ export async function doctorQbdComplianceCommand(
     );
   }
 
+  // Every DERIVED line carries the qualifier, not just the headline figure.
+  // The verdict line is the one that carries the pre-registered consequence —
+  // rendering `verdict: PASS` unqualified beside an UNVERIFIED number is the
+  // same indistinguishability the envelope exists to prevent. Trend too: it is
+  // computed from the same untrusted rows.
+  const unverified = report.degraded ? ' (UNVERIFIED)' : '';
+
   // ── The number ──
-  const label = report.degraded ? 'compliance (UNVERIFIED)' : 'compliance';
   log.info(
     TAG,
-    `${label}: ${formatQbdRate(report.window)} over ${report.evaluatedSessions} instrumented session(s)`,
+    `compliance${unverified}: ${formatQbdRate(report.window)} over ${report.evaluatedSessions} instrumented session(s)`,
   );
 
   // ── Pre-registration, verbatim (charter requirement) ──
@@ -180,24 +186,27 @@ export async function doctorQbdComplianceCommand(
   if (report.verdict === 'PENDING') {
     log.dim(
       TAG,
-      `verdict: PENDING — ${report.instrumentedSessions}/${QBD_PRE_REGISTERED_WINDOW_SESSIONS} instrumented sessions recorded; the threshold is not evaluable until the window fills`,
+      `verdict${unverified}: PENDING — ${report.instrumentedSessions}/${QBD_PRE_REGISTERED_WINDOW_SESSIONS} instrumented sessions recorded; the threshold is not evaluable until the window fills`,
     );
   } else if (report.verdict === 'PASS') {
-    log.success(TAG, `verdict: PASS — at or above the pre-registered floor over the window`);
+    log.success(
+      TAG,
+      `verdict${unverified}: PASS — at or above the pre-registered floor over the window`,
+    );
   } else {
     log.warn(
       TAG,
-      `verdict: FAIL — below the pre-registered floor over the window. Per the #2510 pre-registration the adherence claims' Goal: prefixes are recorded as FALSIFIED for this window, and this number leads the next signoff.`,
+      `verdict${unverified}: FAIL — below the pre-registered floor over the window. Per the #2510 pre-registration the adherence claims' Goal: prefixes are recorded as FALSIFIED for this window, and this number leads the next signoff.`,
     );
   }
 
   // ── Trend ──
   if (report.trend === null) {
-    log.dim(TAG, 'trend: insufficient data (needs at least 4 instrumented sessions)');
+    log.dim(TAG, `trend${unverified}: insufficient data (needs at least 4 instrumented sessions)`);
   } else {
     log.dim(
       TAG,
-      `trend: earlier ${formatQbdRate(report.trend.earlier)} → recent ${formatQbdRate(report.trend.recent)}`,
+      `trend${unverified}: earlier ${formatQbdRate(report.trend.earlier)} → recent ${formatQbdRate(report.trend.recent)}`,
     );
   }
 

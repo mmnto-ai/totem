@@ -98,7 +98,11 @@ describe('resolveQbdLedgerDirDetailed', () => {
       fs.mkdirSync(subdir, { recursive: true });
 
       const detailed = await resolveQbdLedgerDirDetailed(subdir, home);
-      const oldBuggyAnswer = path.join(subdir, '.totem');
+      // What the old cwd-joined logic would have answered, computed from the
+      // SAME `totemDir` this fixture's profile sets (`.`) — so it is `subdir`
+      // itself, not `subdir/.totem`. Hard-coding `.totem` here made the
+      // assertion pass under both implementations, i.e. pinned nothing.
+      const oldBuggyAnswer = path.join(subdir, '.');
 
       expect(detailed.dir).toBeDefined();
       expect(detailed.dir).not.toBe(oldBuggyAnswer);
@@ -212,9 +216,15 @@ describe('review seam placement', () => {
    * Mutations it catches: moving the record call out of `handleVerdictResult`
    * (structural and standard would both stop recording); deleting the fan's own
    * call (the fan path would stop recording); the structural branch no longer
-   * routing through the shared handler before it returns. Mutations it does NOT
-   * catch: reordering within the handler, or a call present but unreachable —
-   * accepted, because the alternative here is no coverage at all.
+   * routing through the shared handler before it returns.
+   *
+   * Mutations it does NOT catch, stated so the pin is not read as stronger than
+   * it is: reordering within the handler; a call that is present but
+   * unreachable; and — because these are substring matches, not parsed
+   * statements — a *comment* mentioning `recordQbdDerive(` would satisfy them
+   * just as well as the real call. Accepted, because the alternative at unit
+   * scope is no coverage at all, and building an AST harness for one call site
+   * is machinery this slice does not need.
    */
   const source = fs.readFileSync(path.join(__dirname, 'shield.ts'), 'utf-8');
 

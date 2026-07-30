@@ -484,6 +484,39 @@ describe('doctorQbdComplianceCommand — real on-disk read', () => {
     expect(process.exitCode).toBe(before);
   });
 
+  it('qualifies the VERDICT and TREND lines too when the scan is degraded', async () => {
+    // The verdict line carries the pre-registered consequence, so rendering a
+    // bare `verdict: PASS` beside an UNVERIFIED number reproduces exactly the
+    // indistinguishability the envelope exists to prevent. Trend is derived from
+    // the same untrusted rows and gets the same treatment.
+    await writeLedger(20, true);
+    const ledgerFile = path.join(cwd, '.totem', 'ledger', 'events.ndjson');
+    fs.appendFileSync(ledgerFile, '{ torn\n', 'utf-8');
+
+    const before = process.exitCode;
+    await doctorQbdComplianceCommand({ cwdForTest: cwd, homeDirForTest: emptyHome });
+
+    const out = output();
+    expect(out).toContain('DEGRADED');
+    expect(out).toContain('verdict (UNVERIFIED): PASS');
+    expect(out).toContain('trend (UNVERIFIED):');
+    expect(out).toContain('compliance (UNVERIFIED):');
+    // No unqualified verdict or trend line may survive alongside the envelope.
+    expect(out).not.toMatch(/verdict: (PASS|FAIL|PENDING)/);
+    expect(out).not.toMatch(/trend: /);
+    // Still a pure sensor.
+    expect(process.exitCode).toBe(before);
+  });
+
+  it('leaves verdict and trend UNqualified on a clean scan (control)', async () => {
+    await writeLedger(20, true);
+    await doctorQbdComplianceCommand({ cwdForTest: cwd, homeDirForTest: emptyHome });
+
+    const out = output();
+    expect(out).toContain('verdict: PASS');
+    expect(out).not.toContain('UNVERIFIED');
+  });
+
   it('renders FAIL below the floor and STILL leaves the exit code alone', async () => {
     // The sensor-not-actuator contract matters most on the failing branch:
     // this is the one a reader would expect to gate, and it must not.
