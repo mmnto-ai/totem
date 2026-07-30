@@ -1,5 +1,23 @@
 # @mmnto/totem
 
+## 1.107.0
+
+### Minor Changes
+
+- ea04a68: Query-before-derive compliance — one falsifying number wired end-to-end (mmnto-ai/totem#2510). Of the derive-class actions in an agent session (`totem spec` synthesis, `totem orient` derivation, `totem review` grounding), what fraction was preceded by a corpus query correlated to that action?
+
+  **Schema.** The Trap Ledger gains two event types — `corpus_query` and `derive_action` — joined by a new `qbd_correlation_id`, kept deliberately separate from ADR-014's `correlation_id` trace ID because this slice is not chartered to build that stack. The correlation ID is **self-dating**: it encodes the instant it was minted, and `LedgerEventSchema` cross-checks that instant against the timestamp of the row carrying it. A query row whose ID was not minted at its own write instant, or a derive row citing an ID minted after the derive or older than the correlation window, fails to parse — so "minted at event-write time" is a schema constraint rather than a convention, and a backfilled ID is a schema violation rather than a data point. That check fires on **any** event type, so a forged ID cannot be smuggled in under a non-QBD `type`.
+
+  **Correlation semantics.** One query grounds exactly **one** derive: the pointer is consumed on use, and the scanner independently refuses to credit a second derive citing an already-spent ID (a write-side rule needs a read-side check). Correlation is scoped to one session and one seat, fail-closed — both sides must carry a session id and agree on it. Two unseated sides compare equal, which is the right default for solo repos; seating exactly one side stops correlation entirely, so the scanner emits a seat-mismatch hint rather than letting that read as a truthful 0.00. MCP seat plumbing is tracked separately in mmnto-ai/totem#2530. The 2-hour correlation window borrows ADR-029 § 2's value so the slice carries one time constant, but treating that span as a _grounding-validity_ window is this slice's own design decision, not something the ADR authorises.
+
+  **Seams.** Query events come from the `totem search` CLI path and the MCP `search_knowledge` tool — the latter minted only after the search has actually run, so a search blocked by the health gate or one that threw never leaves a groundable ID. Derive events come from `spec`, `orient`, and `review`, the last covering `--mode structural` and the multi-lane fan. Each records once the review actually produced a verdict — parsed, for the standard and structural paths; artifact address on disk, for the fan (an identical re-run dedups to the existing address and still records — each invocation is a derive) — so a FAIL verdict and a fan round that writes an honest `settled=false` verdict before hard-erroring both count, while `--raw`, an unparsable verdict, and a fan that throws before writing an artifact do not. The four CLI surfaces and the doctor reader resolve their ledger through one shared helper, from the **config root** rather than the invocation cwd, so a command run from a subdirectory no longer drops its derive; landing in the global profile is announced rather than silent.
+
+  **Render.** `totem doctor --compliance` shows the number, its trend, and the pre-registered threshold and window verbatim: compliance ≥ 0.50 over the first 20 instrumented sessions carrying ≥1 derive-class event, regardless of query count. The verdict stays `PENDING` until that window fills. The denominator is every derive-class event in those sessions, including sessions that fired zero queries.
+
+  **Sensor, not actuator (Tenet 13):** nothing gates on this number, no exit code changes, and an instrumentation write failure never breaks the instrumented command — it surfaces as a named warning. Degraded reads announce themselves: the scanner parses the NDJSON itself and counts every rejected line by class, so a torn, tampered, or backdated ledger renders under an explicit `DEGRADED` / `UNVERIFIED` envelope with a remediation pointer instead of a confident 100% or 0%. Append-only monotonicity is measured against every row in the file, so backdated appends cannot quietly seize the evaluation window. An unknown event type is reported as version skew, not tampering.
+
+  Known limit, stated rather than solved: this senses query-before-derive _adjacency_, not influence. A query fired to satisfy the metric whose results the following derive never reads is indistinguishable here from one that genuinely grounded it.
+
 ## 1.106.0
 
 ### Minor Changes
