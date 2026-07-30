@@ -42,7 +42,9 @@ export type TotemErrorCode =
   | 'PARITY_DRIFT_DETECTED'
   | 'MAIL_SEND_FAILED'
   | 'PR_MERGE_FAILED'
-  | 'BASH_RESOLUTION_FAILED';
+  | 'BASH_RESOLUTION_FAILED'
+  /** Query-before-derive correlation contract breach (mmnto-ai/totem#2510). */
+  | 'QBD_CORRELATION_CONTRACT';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

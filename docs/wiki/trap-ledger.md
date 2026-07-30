@@ -66,6 +66,42 @@ The canonical schema (with field-level descriptions, optionality, and discrimina
 
 Per ADR-078 § Event Attribution: agent attribution lives in `agent_source`; `source` identifies which Totem subsystem fired the event. Pre-A.3.a events have no `agent_source` field and are forward-compatible (the field is optional).
 
+### Query-before-derive events (mmnto-ai/totem#2510)
+
+Two event types measure one thing: of the derive-class actions in an agent session, what fraction was preceded by a corpus query correlated to that action?
+
+- `corpus_query` — a corpus query fired. Written by the `totem search` CLI path and the MCP `search_knowledge` tool. Mints a fresh `qbd_correlation_id`.
+- `derive_action` — a derive-class action ran (`totem spec` synthesis, `totem orient` derivation, `totem review` grounding). Carries the `qbd_correlation_id` of the query that grounded it, or **no** ID when nothing did.
+
+```json
+{
+  "timestamp": "2026-07-28T12:00:01.000Z",
+  "type": "derive_action",
+  "source": "lint",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "activity_name": "spec",
+  "qbd_correlation_id": "qbd1-2h1s4kbqr-9f2c0a7e51d34b60"
+}
+```
+
+`qbd_correlation_id` is distinct from `correlation_id` (ADR-014's orchestrator → MCP trace ID) and is **self-dating**: it encodes the instant it was minted, and `LedgerEventSchema` cross-checks that instant against the row's own `timestamp`. A query row whose ID was not minted at its own write instant, and a derive row citing an ID minted after the derive or older than the correlation window, both fail to parse. Minted-at-write-time is therefore a schema constraint, not a convention — a backfilled ID is a schema violation rather than a data point.
+
+Semantics worth knowing before reading the number:
+
+- **One query grounds ONE derive.** The correlation pointer is consumed on use, _and_ the scanner refuses to credit a second derive citing an already-spent ID. Both halves are needed: consumption is a write-time rule, and a write-time rule with no read-side check is unenforced the moment the consume fails, races, or is bypassed. Without it, one query credits every derive for the rest of the window — "queried at least once per two hours", not "queried before deriving".
+- **Correlation window** — two hours. The value is borrowed from ADR-029 § 2 so the slice carries one time constant, but treating that span as a _grounding-validity_ window is this slice's own design decision; ADR-029 § 2 defines a session-grouping heuristic for the recall metric, a different question.
+- **Correlation is scoped to one seat and one session, fail-closed.** Both sides must carry a session id and agree on it, and the seats must match. Cohort seats share one working tree per repo, so a pointer left by another seat is reachable. Two _unseated_ sides compare equal — the right default for a solo repo — but seating exactly one side (a seated CLI against an unseated MCP server) stops correlation entirely and produces a truthful-looking `0.00`. The render emits a seat-mismatch hint on that shape; seat plumbing itself is tracked in mmnto-ai/totem#2530.
+- **The denominator is every derive-class event**, including those in sessions that fired zero queries. An uncorrelated derive is the observation the metric exists to make.
+- **All review modes count** — the standard path, `--mode structural`, and the multi-lane fan. The rule in each case is that the review actually produced a verdict, expressed in that path's own terms: for the standard and structural paths, once a verdict has **parsed**; for the fan, the instant the **verdict artifact's address is on disk** (newly written, or the existing address when an identical round dedups — a re-run still records, deliberately: each review invocation is a derive-class action, and suppressing dedup'd re-runs would shrink the denominator). A **FAIL** verdict records, because a failing review is a completed derive and excluding it would shrink the denominator — and so does a fan round that persists an honest `settled=false` verdict and then hard-errors on its exit policy. Nothing records for `--raw` (a context dump with no verdict), for an unparsable verdict, or for a fan that throws before writing an artifact. This matches `spec`, which records only after synthesis produced content. Structural mode is context-blind and builds no grounding bundle, so "review grounding" is loose for it: what is counted is the agent-initiated review action.
+- **Where rows land.** The CLI surfaces and the doctor reader resolve the ledger from the resolved **config root**, not the invocation cwd. `resolveConfigPath` does not walk up, so from a subdirectory with no local config the row lands in the global `~/.totem/` profile — announced in the output, never silently. The MCP server resolves its own project root independently, so a CLI derive run from a subdirectory and an MCP query can land in different ledgers.
+- Session identity comes from the existing `.session-id` primitive, with a per-seat rolling-window fallback for hookless runs.
+- **The SessionStart hook's `orient --session` render is not instrumented.** It is machine-initiated and fires before an agent could have queried anything; counting it would measure the hook's scheduling rather than an agent's adherence. No session is excluded by this, and no agent-initiated derive is dropped.
+- **Adjacency, not influence.** A query fired to satisfy the metric whose results the following derive never reads is indistinguishable here from one that genuinely grounded it. Named, not solved.
+- **Backdated appends are detected, whole-file rewrites are not.** The scanner degrades a read whose timestamps regress in an append-only file, measured against **every** row — a ledger whose history is entirely non-QBD still provides the baseline. An internally consistent rewrite of the entire file, or a file authored wholesale from empty, defeats it; nothing short of signing would not.
+- **DEGRADED is sticky, and actionable.** One untrustworthy row degrades the whole read and neither the row nor the verdict expires, which is the honest posture for a file whose integrity is in question. So the envelope names the offending line numbers and says what to do: repair an append-only ledger by appending corrections, never by rewriting history.
+
+Read it with `totem doctor --compliance`, which renders the rate, its trend, the pre-registered threshold and window, and — when the ledger scan hit rows it could not trust — an explicit `DEGRADED` / `UNVERIFIED` envelope with per-item counts. Nothing gates on the number (Tenet 13).
+
 ---
 
 ## 2. The Rule-Tuning Loop (`totem doctor --pr`)

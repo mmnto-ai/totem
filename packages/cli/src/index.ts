@@ -1468,7 +1468,7 @@ program
   )
   .option(
     '--compliance',
-    'Run only the ADR-029 recall-compliance sensor (search-before-commit rate from .totem/.search-log.jsonl + git history). Sensor-only readout — never gates (mmnto-ai/totem#2362)',
+    'Run only the compliance sensors: the ADR-029 recall-compliance rate (search-before-commit, from .totem/.search-log.jsonl + git history) and query-before-derive compliance (correlated query→derive rows from the Trap Ledger). Sensor-only readout — never gates (mmnto-ai/totem#2362, mmnto-ai/totem#2510)',
   )
   .option(
     '--json',
@@ -1538,6 +1538,13 @@ program
           // is intentionally not threaded here.
           const { doctorComplianceCliCommand } = await import('./commands/doctor-compliance.js');
           await doctorComplianceCliCommand();
+          // Query-before-derive compliance (mmnto-ai/totem#2510) — a second,
+          // independent section under the same flag. Invoked here rather than
+          // from inside doctorComplianceCliCommand because that function returns
+          // early when `.search-log.jsonl` is absent, which would silently skip
+          // this metric on repos that have a ledger but no search log.
+          const { doctorQbdComplianceCommand } = await import('./commands/doctor-qbd.js');
+          await doctorQbdComplianceCommand();
           return;
         }
         const results = await doctorCommand(opts);

@@ -796,6 +796,29 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
 
   const report = await deriveOrientReport(cwd);
 
+  // Query-before-derive instrumentation (mmnto-ai/totem#2510): orientation
+  // derivation is a derive-class action. Recorded after the derivation and
+  // before the `--json` fork, so both render paths count.
+  //
+  // Deliberately NOT recorded on the `--session` branch above: that path is the
+  // SessionStart hook's boot render, fired by the machine before any agent could
+  // have queried anything. Counting it would guarantee one uncorrelated derive
+  // per session and measure the hook's scheduling rather than an agent's
+  // adherence. This is a scope decision about which ACTIONS are agent-initiated,
+  // not a filter on which sessions count — the #2510 falsifier-1 denominator
+  // rule (all derive-class events, including in zero-query sessions) is
+  // untouched: no session is excluded, and no agent-initiated derive is dropped.
+  {
+    const { recordQbdDerive } = await import('./qbd-seam.js');
+    // `seamReport`, not `report` — the orientation report is bound eleven lines
+    // above and read again below; shadowing it here reads like a reassignment.
+    const seamReport = await recordQbdDerive(cwd, 'orient', (msg) => {
+      process.stderr.write(`[orient] ${msg}\n`);
+    });
+    // Never a silent no-op: if nothing was recorded, say so and name the reason.
+    if (seamReport.note !== undefined) process.stderr.write(`[orient] ${seamReport.note}\n`);
+  }
+
   if (json) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     return;

@@ -15,6 +15,15 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
+/** Read the ledger as parsed rows. */
+function readRows(ledgerPath: string): Array<Record<string, unknown>> {
+  return fs
+    .readFileSync(ledgerPath, 'utf-8')
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
 function mockContext(): void {
   // Mock getContext to return our tmp project root + minimal config.
   vi.doMock('./context.js', () => ({
@@ -34,17 +43,27 @@ describe('logMcpCall', () => {
     const ledgerPath = path.join(tmpDir, '.totem', 'ledger', 'events.ndjson');
     expect(fs.existsSync(ledgerPath)).toBe(true);
 
-    const lines = fs
-      .readFileSync(ledgerPath, 'utf-8')
-      .split('\n')
-      .filter((l) => l.trim());
-    expect(lines).toHaveLength(1);
+    const rows = readRows(ledgerPath);
+    // Exactly one row, and it is the mcp_call. `logMcpCall` fires at handler
+    // ENTRY — before the health gate and before the search — so it must NOT
+    // mint a query-before-derive correlation ID here (mmnto-ai/totem#2510):
+    // a search that was blocked or threw grounded nothing.
+    expect(rows).toHaveLength(1);
 
-    const parsed = JSON.parse(lines[0]!);
+    const parsed = rows[0]!;
     expect(parsed.type).toBe('mcp_call');
     expect(parsed.activity_name).toBe('search_knowledge');
     expect(parsed.source).toBe('bot');
     expect(parsed.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it('does NOT mint a corpus_query row — that is the post-search seam', async () => {
+    mockContext();
+    const { logMcpCall } = await import('./ledger-writer.js');
+    await logMcpCall('search_knowledge');
+
+    const rows = readRows(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'));
+    expect(rows.some((r) => r.type === 'corpus_query')).toBe(false);
   });
 
   it('includes session_id when .session-id is present and within TTL', async () => {
@@ -95,12 +114,40 @@ describe('logMcpCall', () => {
     await logMcpCall('search_knowledge');
     await logMcpCall('describe_project');
 
-    const lines = fs
-      .readFileSync(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'), 'utf-8')
-      .split('\n')
-      .filter((l) => l.trim());
-    expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0]!).activity_name).toBe('search_knowledge');
-    expect(JSON.parse(lines[1]!).activity_name).toBe('describe_project');
+    const rows = readRows(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'));
+    // Pin the TOTAL row multiset, not just the type-filtered view: a filtered
+    // assertion alone would still pass if an extra unexpected row appeared.
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.type)).toEqual(['mcp_call', 'mcp_call']);
+    expect(rows[0]!.activity_name).toBe('search_knowledge');
+    expect(rows[1]!.activity_name).toBe('describe_project');
+  });
+});
+
+describe('logCorpusQuery (mmnto-ai/totem#2510)', () => {
+  it('writes a corpus_query row carrying a correlation ID', async () => {
+    // The QBD writer only records inside an instrumented project, so the
+    // `.totem` directory must exist — as it does in any real repo.
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    mockContext();
+    const { logCorpusQuery } = await import('./ledger-writer.js');
+    await logCorpusQuery();
+
+    const rows = readRows(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.type).toBe('corpus_query');
+    expect(rows[0]!.activity_name).toBe('search_knowledge');
+    expect(rows[0]!.source).toBe('bot');
+    expect(typeof rows[0]!.qbd_correlation_id).toBe('string');
+  });
+
+  it('does not throw when getContext fails', async () => {
+    vi.doMock('./context.js', () => ({
+      getContext: async () => {
+        throw new Error('context load failed');
+      },
+    }));
+    const { logCorpusQuery } = await import('./ledger-writer.js');
+    await expect(logCorpusQuery()).resolves.toBeUndefined();
   });
 });

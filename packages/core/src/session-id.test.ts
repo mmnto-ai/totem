@@ -140,6 +140,25 @@ describe('readSessionId', () => {
     }
   });
 
+  it('returns undefined on ENOTDIR (a path component is a file)', () => {
+    // POSIX raises ENOTDIR where Windows raises ENOENT for the SAME on-disk
+    // state — `<totemDir>/ledger` occupied by a file. Both mean "no session id
+    // here, and there cannot be one", so both must read as absent. Mocked
+    // rather than staged on disk so the assertion is identical on every
+    // platform; the un-mocked divergence is precisely what passed on Windows
+    // and failed on ubuntu/macos.
+    const spy = vi.spyOn(fs, 'statSync').mockImplementation(() => {
+      const err = new Error('not a directory') as NodeJS.ErrnoException;
+      err.code = 'ENOTDIR';
+      throw err;
+    });
+    try {
+      expect(readSessionId(tmpDir)).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('rethrows when caught value is not an object (defensive type guard)', () => {
     const spy = vi.spyOn(fs, 'statSync').mockImplementation(() => {
       throw 'string-thrown-not-an-error';
@@ -191,6 +210,22 @@ describe('writeSessionId fail-loud behavior', () => {
     const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
       const err = new Error('permission denied') as NodeJS.ErrnoException;
       err.code = 'EACCES';
+      throw err;
+    });
+    try {
+      writeSessionId(tmpDir, mintSessionId(), onWarn);
+      expect(onWarn).toHaveBeenCalledOnce();
+      expect(onWarn.mock.calls[0]![0]).toContain('Session-ID write failed');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('invokes onWarn and returns silently on ENOTDIR (parity with readSessionId)', () => {
+    const onWarn = vi.fn();
+    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+      const err = new Error('not a directory') as NodeJS.ErrnoException;
+      err.code = 'ENOTDIR';
       throw err;
     });
     try {

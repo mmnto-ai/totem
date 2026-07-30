@@ -410,6 +410,22 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   });
   if (content == null) return;
 
+  // Query-before-derive instrumentation (mmnto-ai/totem#2510): spec synthesis is
+  // a derive-class action. Recorded here — after synthesis actually produced
+  // content, before the write forks three ways (stdout / --out / derived path) —
+  // so every successful synthesis is counted exactly once.
+  //
+  // This row is written whether or not a query preceded it. An uncorrelated
+  // derive is the observation the metric exists to make, so it must land in the
+  // denominator (#2510 falsifier 1: denominator gaming).
+  {
+    const { recordQbdDerive } = await import('./qbd-seam.js');
+    const report = await recordQbdDerive(cwd, 'spec', (msg) => {
+      log.warn(TAG, msg);
+    });
+    if (report.note !== undefined) log.dim(TAG, report.note);
+  }
+
   if (options.stdout) {
     writeOutput(content);
     return;

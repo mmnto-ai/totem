@@ -544,10 +544,58 @@ export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secr
 
 // Trap Ledger (suppression/override audit trail)
 export type { LedgerEvent } from './ledger.js';
-export { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger.js';
+export {
+  appendLedgerEvent,
+  LEDGER_EVENT_TYPES,
+  LedgerEventSchema,
+  QBD_EVENT_TYPES,
+  readLedgerEvents,
+} from './ledger.js';
 
 // Session ID — A.3.a SessionStart hook + MCP correlation
 export { mintSessionId, readSessionId, writeSessionId } from './session-id.js';
+
+// Query-before-derive compliance (mmnto-ai/totem#2510)
+export type {
+  QbdAnomalies,
+  QbdComplianceReport,
+  QbdEventType,
+  QbdRateStat,
+  QbdRow,
+  QbdScanResult,
+  QbdSession,
+  QbdVerdict,
+} from './qbd/compliance.js';
+export {
+  computeQbdCompliance,
+  formatQbdRate,
+  groupQbdSessions,
+  QBD_PRE_REGISTERED_THRESHOLD,
+  QBD_PRE_REGISTERED_WINDOW_SESSIONS,
+  QBD_PRE_REGISTRATION_STATEMENT,
+  scanQbdLedger,
+} from './qbd/compliance.js';
+export type { QbdIdCheckResult, QbdIdViolation } from './qbd/correlation-id.js';
+export {
+  checkQbdCorrelationId,
+  decodeQbdMintInstant,
+  mintQbdCorrelationId,
+  QBD_CORRELATION_WINDOW_MS,
+  QBD_MINT_TOLERANCE_MS,
+} from './qbd/correlation-id.js';
+export type {
+  QbdDeriveSurface,
+  QbdQuerySurface,
+  QbdRecordInput,
+  QbdRecordResult,
+} from './qbd/record.js';
+export {
+  recordCorpusQuery,
+  recordDeriveAction,
+  resolveQbdAgentSource,
+  senseCorpusQuery,
+  senseDeriveAction,
+} from './qbd/record.js';
 
 // Pack rule merge primitive (ADR-085 + ADR-089, mmnto-ai/totem#1485)
 export type { ImmutableOverrideBlock, MergeRulesResult } from './pack-merge.js';

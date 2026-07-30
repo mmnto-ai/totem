@@ -7,7 +7,7 @@ import type { ContentType, HealthCheckResult, SearchResult } from '@mmnto/totem'
 import { ContentTypeSchema, DEFAULT_SEARCH_RELEVANCE_FLOOR } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
-import { logMcpCall } from '../ledger-writer.js';
+import { logCorpusQuery, logMcpCall } from '../ledger-writer.js';
 import { logSearch, setLogDir } from '../search-log.js';
 import { extractIndexState } from '../state-extractors.js';
 import { formatIndexEnvelope, formatSystemWarning, formatXmlResponse } from '../xml-format.js';
@@ -1055,6 +1055,20 @@ export function registerSearchKnowledge(server: McpServer): void {
             topScore,
             topRelevance,
           });
+
+          // Query-before-derive (mmnto-ai/totem#2510): the search actually RAN.
+          // Sited here, not beside the entry-time `logMcpCall`, so a search
+          // blocked by the health gate, one that returned isError, or one that
+          // threw never mints a correlation ID a later derive could claim
+          // grounding from. Zero hits still counts — the query executed.
+          //
+          // AWAITED, not fire-and-forget: the correlation pointer this writes is
+          // what a following derive reads, and that derive arrives in a separate
+          // process after this tool responds. Letting the write race the response
+          // means the agent can act on the result before the pointer exists.
+          // `logCorpusQuery` swallows its own failures, so awaiting adds a write,
+          // never a failure mode.
+          await logCorpusQuery();
         }
 
         // Prepend health warning and linked-stores warning to the first search
