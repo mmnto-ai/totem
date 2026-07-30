@@ -379,6 +379,31 @@ describe('seat-mismatch diagnostic', () => {
     expect(report.degraded).toBe(false);
   });
 
+  it('does NOT hint when a same-seat query is also in the window', () => {
+    // Mixed-seat window. The derive has a same-seat query available, so its
+    // being uncorrelated has an ordinary explanation (spent pointer, different
+    // session) and seat plumbing is not implicated. Flagging on the first
+    // different-seat query found — which both this walk and the `.some()` it
+    // replaced did — reported a config problem that was not there.
+    const own = queryLine(T0, sid(1), 'seat-a');
+    const other = queryLine(T0 + 500, sid(2), 'seat-b');
+    const content = [own.line, other.line, deriveLine(T0 + 1000, sid(1), undefined, 'seat-a')].join(
+      '\n',
+    );
+
+    const report = computeQbdCompliance(scanQbdLedger(content));
+    expect(report.anomalies.seatMismatchHints).toBe(0);
+  });
+
+  it('hints when the ONLY in-window queries are from another seat', () => {
+    // Same fixture minus the same-seat query — the genuine one-sided signature.
+    const other = queryLine(T0 + 500, sid(2), 'seat-b');
+    const content = [other.line, deriveLine(T0 + 1000, sid(1), undefined, 'seat-a')].join('\n');
+
+    const report = computeQbdCompliance(scanQbdLedger(content));
+    expect(report.anomalies.seatMismatchHints).toBe(1);
+  });
+
   it('does not hint when both sides are unseated (the solo default)', () => {
     const q = queryLine(T0, sid(1));
     const content = [q.line, deriveLine(T0 + 1000, sid(1))].join('\n');

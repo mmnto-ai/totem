@@ -1380,6 +1380,35 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   // the existing address).
   const verdictHash = saveVerdictArtifact(ctx.totemDirAbs, verdict).hash;
 
+  // Query-before-derive instrumentation (mmnto-ai/totem#2510): the fan's derive
+  // is recorded HERE — the instant the verdict artifact is on disk — and not at
+  // the `runReviewFan` call site in `shield.ts`.
+  //
+  // The call site is unreachable for the two exit-policy paths below: a
+  // zero-completed-lane round and a `--fail-on` failure both PERSIST an honest
+  // verdict (including `settled=false` states, which `totem review --covariate`
+  // reads back) and only then throw. Recording after the call therefore skipped
+  // exactly those reviews — a completed derive escaping the denominator, and
+  // worse, leaving the query's correlation still consumable by a later derive.
+  //
+  // Placement keeps the other half true by construction: a fan that throws
+  // BEFORE reaching this line — a lane-assembly or invocation failure, with no
+  // artifact written — records nothing. Persisted verdict ⇔ recorded derive.
+  //
+  // Writes to `ctx.totemDirAbs` — the very directory the artifact above was
+  // saved into — rather than re-resolving from `ctx.cwd` through the seam
+  // helper. Two reasons, one correctness and one safety: the derive row belongs
+  // in the same ledger as the verdict it accompanies, and re-resolving from a
+  // cwd with no local config would fall back to the user's global `~/.totem/`
+  // profile. Routing through the helper here did exactly that, appending real
+  // rows to the maintainer's live ledger during this package's tests.
+  {
+    const { senseDeriveAction } = await import('@mmnto/totem');
+    senseDeriveAction({ totemDir: ctx.totemDirAbs, source: 'lint', surface: 'review' }, (msg) =>
+      log.warn(DISPLAY_TAG, msg),
+    );
+  }
+
   // ── ZERO completed verdict lanes (Gate G3, mmnto-ai/totem#2452): the honest verdict
   // is now WRITTEN — hard-error ──
   // Keyed on `hasNoCompletedLane` (⇔ `verdict.completedLaneCount === 0`, superRefine-bound):

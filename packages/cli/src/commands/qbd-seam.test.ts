@@ -323,10 +323,52 @@ describe('review seam placement', () => {
     expect(handlerIdx).toBeLessThan(returnIdx);
   });
 
-  it('gives the multi-lane fan its own record call, since it bypasses the handler', () => {
+  it('does NOT record the fan derive at the runReviewFan call site', () => {
+    // The call site is unreachable for the two exit-policy paths: a
+    // zero-completed-lane round and a `--fail-on` failure both PERSIST an honest
+    // verdict and only then throw, so a record placed after the call skipped
+    // exactly those reviews — completed derives escaping the denominator, with
+    // the query correlation left consumable by a later derive.
     const body = functionBody('shieldCommand');
     const fanIdx = body.indexOf('runReviewFan(');
     expect(fanIdx).toBeGreaterThan(-1);
-    expect(body.slice(fanIdx)).toContain('recordQbdDerive(');
+    // Between the fan call and the branch's `return`, nothing records.
+    const afterFan = body.slice(fanIdx);
+    const returnIdx = afterFan.indexOf('\n    return;');
+    expect(returnIdx).toBeGreaterThan(-1);
+    expect(afterFan.slice(0, returnIdx)).not.toContain('await recordQbdDerive(');
+  });
+
+  it('writes the fan derive to the SAME totemDir the artifact was saved into', () => {
+    // Not re-resolved from cwd: a cwd with no local config falls back to the
+    // user's global `~/.totem/` profile, which appended real rows to the
+    // maintainer's live ledger during this package's tests. The artifact's own
+    // directory is both authoritative and incapable of wandering.
+    expect(fanSource).toContain('senseDeriveAction({ totemDir: ctx.totemDirAbs');
+  });
+
+  const fanSource = fs.readFileSync(path.join(__dirname, 'review-fan.ts'), 'utf-8');
+
+  it('records the fan derive the instant the verdict artifact is PERSISTED', () => {
+    // Persisted verdict ⇔ recorded derive. Ordering is the invariant, so it is
+    // pinned by ordering: the record must sit after the save and before both
+    // exit-policy throws.
+    const saveIdx = fanSource.indexOf('saveVerdictArtifact(ctx.totemDirAbs, verdict)');
+    const recordIdx = fanSource.indexOf('senseDeriveAction({ totemDir: ctx.totemDirAbs');
+    const zeroLaneThrowIdx = fanSource.indexOf('hasNoCompletedLane(verdict.lanes)');
+    const failOnIdx = fanSource.indexOf('const failOn = ctx.options.failOn;');
+
+    expect(saveIdx).toBeGreaterThan(-1);
+    expect(recordIdx).toBeGreaterThan(-1);
+    expect(zeroLaneThrowIdx).toBeGreaterThan(-1);
+    expect(failOnIdx).toBeGreaterThan(-1);
+
+    // After persistence: a fan that throws BEFORE writing an artifact records
+    // nothing, which keeps the other half of the invariant true.
+    expect(recordIdx).toBeGreaterThan(saveIdx);
+    // Before both exit-policy throws: a persisted-then-policy-throw round is a
+    // completed derive and still records.
+    expect(recordIdx).toBeLessThan(zeroLaneThrowIdx);
+    expect(recordIdx).toBeLessThan(failOnIdx);
   });
 });

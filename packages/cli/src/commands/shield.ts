@@ -1996,15 +1996,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       continues: options.continues,
     });
     // Query-before-derive (mmnto-ai/totem#2510): the fan does not route through
-    // `handleVerdictResult`, so it records its own derive — after the fan has
-    // actually converged on a verdict. A fan that threw records nothing.
-    {
-      const { recordQbdDerive } = await import('./qbd-seam.js');
-      const report = await recordQbdDerive(cwd, 'review', (msg) => {
-        log.warn(DISPLAY_TAG, msg);
-      });
-      if (report.note !== undefined) log.dim(DISPLAY_TAG, report.note);
-    }
+    // `handleVerdictResult`, and its derive is NOT recorded here. It is recorded
+    // inside `runReviewFan`, the instant the verdict artifact is persisted —
+    // because the zero-completed-lane and `--fail-on` exit policies both write an
+    // honest verdict and THEN throw, so a record placed after this call would
+    // never run for them. See the rationale at the save site in `review-fan.ts`.
     return;
   }
 
