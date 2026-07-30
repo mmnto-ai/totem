@@ -35,8 +35,6 @@
  * well outside this slice. Scoped out deliberately, not overlooked.
  */
 
-import * as path from 'node:path';
-
 /**
  * Resolve the ledger directory QBD rows belong in, for a given cwd.
  *
@@ -65,6 +63,10 @@ export async function resolveQbdLedgerDirDetailed(
   homeDir?: string,
 ): Promise<{ dir?: string; reason?: string; global?: boolean }> {
   try {
+    // Lazy, like every sibling command module: a top-level import here is on the
+    // CLI's cold-start path for every invocation, including ones that never
+    // touch this seam.
+    const path = await import('node:path');
     const { isGlobalConfigPath, loadConfig, resolveConfigPath } = await import('../utils.js');
     // `homeDir` is threaded through so tests can point the global-profile lookup
     // at a temp home. Without it, a test running in a directory with no config
@@ -105,30 +107,6 @@ export interface QbdSeamReport {
  * declines to measure is indistinguishable from one measuring zero, which is
  * the ADR-115 § 2 defect class.
  */
-export async function recordQbdDerive(
-  cwd: string,
-  surface: 'spec' | 'orient' | 'review',
-  onWarn: (msg: string) => void,
-  homeDir?: string,
-): Promise<QbdSeamReport> {
-  const { dir: totemDir, reason, global } = await resolveQbdLedgerDirDetailed(cwd, homeDir);
-  if (totemDir === undefined) {
-    return {
-      recorded: false,
-      note: `query-before-derive: ${reason ?? 'unresolved'} — not recording`,
-    };
-  }
-  const { senseDeriveAction } = await import('@mmnto/totem');
-  const result = senseDeriveAction({ totemDir, source: 'lint', surface }, onWarn);
-  if (result.skipped === true) {
-    return {
-      recorded: false,
-      note: `query-before-derive: no ledger at ${totemDir} — not recording`,
-    };
-  }
-  return { recorded: result.written, ...(global === true && { note: globalNote(totemDir) }) };
-}
-
 /**
  * Landing in the global profile is legitimate but must never be silent: the
  * row goes somewhere other than the project the user is looking at, and a
@@ -140,12 +118,19 @@ function globalNote(totemDir: string): string {
 }
 
 /**
- * Record a corpus query from a CLI command. Same contract as `recordQbdDerive`.
+ * The one resolve-then-record body both public seams share.
+ *
+ * The two used to carry six duplicated statements and three byte-identical note
+ * strings. Those strings are load-bearing — the doctor render and the tests
+ * match on them — so a reworded note had to be changed in two places or the
+ * surfaces silently drifted apart. Single-sourced here.
+ *
+ * `sense` is the only real difference: which core writer runs.
  */
-export async function recordQbdQuery(
+async function recordThrough(
   cwd: string,
-  onWarn: (msg: string) => void,
-  homeDir?: string,
+  homeDir: string | undefined,
+  sense: (totemDir: string) => { written: boolean; skipped?: boolean },
 ): Promise<QbdSeamReport> {
   const { dir: totemDir, reason, global } = await resolveQbdLedgerDirDetailed(cwd, homeDir);
   if (totemDir === undefined) {
@@ -154,8 +139,7 @@ export async function recordQbdQuery(
       note: `query-before-derive: ${reason ?? 'unresolved'} — not recording`,
     };
   }
-  const { senseCorpusQuery } = await import('@mmnto/totem');
-  const result = senseCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search' }, onWarn);
+  const result = sense(totemDir);
   if (result.skipped === true) {
     return {
       recorded: false,
@@ -163,4 +147,38 @@ export async function recordQbdQuery(
     };
   }
   return { recorded: result.written, ...(global === true && { note: globalNote(totemDir) }) };
+}
+
+/**
+ * Record a derive-class action from a CLI command.
+ *
+ * Never throws, never fails the instrumented command. Returns a note whenever
+ * nothing was recorded, so the caller can surface it — a sensor that quietly
+ * declines to measure is indistinguishable from one measuring zero, which is
+ * the ADR-115 § 2 defect class.
+ */
+export async function recordQbdDerive(
+  cwd: string,
+  surface: 'spec' | 'orient' | 'review',
+  onWarn: (msg: string) => void,
+  homeDir?: string,
+): Promise<QbdSeamReport> {
+  const { senseDeriveAction } = await import('@mmnto/totem');
+  return recordThrough(cwd, homeDir, (totemDir) =>
+    senseDeriveAction({ totemDir, source: 'lint', surface }, onWarn),
+  );
+}
+
+/**
+ * Record a corpus query from a CLI command. Same contract as `recordQbdDerive`.
+ */
+export async function recordQbdQuery(
+  cwd: string,
+  onWarn: (msg: string) => void,
+  homeDir?: string,
+): Promise<QbdSeamReport> {
+  const { senseCorpusQuery } = await import('@mmnto/totem');
+  return recordThrough(cwd, homeDir, (totemDir) =>
+    senseCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search' }, onWarn),
+  );
 }

@@ -64,9 +64,23 @@ export async function doctorQbdComplianceCommand(
   // reader can never look somewhere the writers do not write (they diverged
   // once already: seams joined `cwd`, which misses the project ledger whenever
   // a command runs from a subdirectory).
-  const { resolveQbdLedgerDir } = await import('./qbd-seam.js');
-  const totemDir =
-    (await resolveQbdLedgerDir(cwd, options.homeDirForTest)) ?? path.join(cwd, '.totem');
+  //
+  // There is deliberately NO `?? path.join(cwd, '.totem')` fallback. The writers
+  // SKIP when config is unresolved, so a reader that fell back to `<cwd>/.totem`
+  // would read a ledger no writer ever writes — reviving the exact divergence
+  // the comment above claims is closed, and letting a stale directory render as
+  // if it were this project's data. Unresolved is its own honest state.
+  const { resolveQbdLedgerDirDetailed } = await import('./qbd-seam.js');
+  const resolved = await resolveQbdLedgerDirDetailed(cwd, options.homeDirForTest);
+  if (resolved.dir === undefined) {
+    log.info(TAG, bold('Query-before-derive compliance'));
+    log.dim(
+      TAG,
+      `SKIP — ${resolved.reason ?? 'no ledger could be resolved'}. Nothing is recorded from here either, so there is nothing to read.`,
+    );
+    return;
+  }
+  const totemDir = resolved.dir;
 
   const ledgerPath = path.join(totemDir, ...LEDGER_RELATIVE_PATH);
   // totemDir is repo-controlled config — sanitize before it reaches a terminal.
@@ -88,8 +102,16 @@ export async function doctorQbdComplianceCommand(
     try {
       content = fs.readFileSync(ledgerPath, 'utf-8');
       // totem-context: an unreadable ledger is the honest-absent path for this read-only sensor — degrade to the skip idiom, never crash the doctor pipeline.
-    } catch {
-      log.dim(TAG, `SKIP — ${displayPath} present but unreadable.`);
+    } catch (err) {
+      // Name the errno. EACCES (permissions), EISDIR (a directory where the
+      // file belongs), and ENOTDIR (a component is a file) are three different
+      // problems with three different fixes; collapsing them into "unreadable"
+      // tells the reader nothing actionable.
+      const code =
+        typeof err === 'object' && err !== null
+          ? ((err as NodeJS.ErrnoException).code ?? 'unknown')
+          : 'unknown';
+      log.dim(TAG, `SKIP — ${displayPath} present but unreadable (${code}).`);
       return;
     }
   }

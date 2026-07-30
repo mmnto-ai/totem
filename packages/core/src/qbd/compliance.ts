@@ -376,9 +376,17 @@ export function scanQbdLedger(content: string): QbdScanResult {
 
 // ─── Session grouping ───────────────────────────────────
 
-interface QbdSession {
+/**
+ * One instrumented session: the unit the pre-registered evaluation window
+ * counts in. Exported because `groupQbdSessions` returns it through the package
+ * barrel — a consumer could call that function but not name its return type.
+ */
+export interface QbdSession {
+  /** Stable identity: `sid:<agent>:<session_id>` or `win:<agent>:<n>`. */
   key: string;
+  /** Earliest row instant in the session; sessions are ordered by this. */
   firstMs: number;
+  /** The session's rows, in time order. */
   rows: QbdRow[];
 }
 
@@ -496,12 +504,21 @@ function creditDerives(
       // signature of one-sided seating — e.g. a seated CLI and an unseated MCP
       // server — which silently drives the number to 0.00 with no other tell.
       // A config smell, not tampering, so it never degrades the read.
-      const mismatch = queries.some(
-        (q) =>
-          q.ms <= row.ms &&
-          row.ms - q.ms <= QBD_CORRELATION_WINDOW_MS &&
-          q.agentSource !== row.agentSource,
-      );
+      // Bounded reverse walk, not a full scan. `queries` is time-sorted, so
+      // stepping back from the newest and stopping at the window edge visits
+      // only the queries that could possibly be in scope — the previous
+      // `.some()` was O(derives x queries) over the whole ledger for the same
+      // answer, which on a long-lived ledger is the render's dominant cost.
+      let mismatch = false;
+      for (let q = queries.length - 1; q >= 0; q--) {
+        const query = queries[q]!;
+        if (query.ms > row.ms) continue;
+        if (row.ms - query.ms > QBD_CORRELATION_WINDOW_MS) break;
+        if (query.agentSource !== row.agentSource) {
+          mismatch = true;
+          break;
+        }
+      }
       if (mismatch) anomalies.seatMismatchHints++;
       continue;
     }

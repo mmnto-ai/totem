@@ -530,6 +530,41 @@ describe('doctorQbdComplianceCommand — real on-disk read', () => {
     expect(process.exitCode).toBe(before);
   });
 
+  it('SKIPs on unresolved config even when a stale cwd/.totem ledger exists', async () => {
+    // The reader must not fall back to `<cwd>/.totem`. The WRITERS skip when
+    // config is unresolved, so a reader that fell back would render a ledger no
+    // writer ever writes — reviving the divergence, and presenting a stale
+    // directory as if it were this project's data.
+    const orphan = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-noconf-')));
+    try {
+      // A stale ledger sitting exactly where the removed fallback pointed.
+      const staleDir = path.join(orphan, '.totem', 'ledger');
+      fs.mkdirSync(staleDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(staleDir, 'events.ndjson'),
+        JSON.stringify({
+          timestamp: new Date(T0).toISOString(),
+          type: 'derive_action',
+          activity_name: 'spec',
+          source: 'lint',
+          justification: '',
+          session_id: sid(1),
+        }) + '\n',
+        'utf-8',
+      );
+
+      await doctorQbdComplianceCommand({ cwdForTest: orphan, homeDirForTest: emptyHome });
+
+      const out = output();
+      expect(out).toContain('SKIP');
+      expect(out).toContain('no Totem config found');
+      // The stale row must NOT have been read into a rendered number.
+      expect(out).not.toMatch(/compliance.*: \d/);
+    } finally {
+      cleanTmpDir(orphan);
+    }
+  });
+
   it('SKIPs honestly when the ledger path is unreadable', async () => {
     // Induce a real errno: a DIRECTORY where events.ndjson should be, so the
     // read throws EISDIR rather than ENOENT.
@@ -540,6 +575,9 @@ describe('doctorQbdComplianceCommand — real on-disk read', () => {
     const out = output();
     expect(out).toContain('SKIP');
     expect(out).toContain('unreadable');
+    // The errno is named: EACCES, EISDIR and ENOTDIR are different problems
+    // with different fixes, and a bare "unreadable" is unactionable.
+    expect(out).toMatch(/unreadable \((EISDIR|EACCES|ENOTDIR|EPERM|unknown)\)/);
     expect(out).not.toContain('0.00');
   });
 });

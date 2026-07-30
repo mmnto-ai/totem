@@ -22,6 +22,7 @@ import type { LedgerEvent } from '@mmnto/totem';
 import { appendLedgerEvent, readSessionId, senseCorpusQuery } from '@mmnto/totem';
 
 import { getContext } from './context.js';
+import { logSearch } from './search-log.js';
 
 /**
  * Emit a single `mcp_call` ledger event for the given activity.
@@ -84,9 +85,19 @@ export async function logCorpusQuery(): Promise<void> {
     const { projectRoot, config } = await getContext();
     const totemDir = path.join(projectRoot, config.totemDir);
     senseCorpusQuery({ totemDir, source: 'bot', surface: 'search_knowledge' }, (msg) => {
-      // The MCP server has no user-facing log channel; stderr is the visible
-      // accounting surface, and a sensor failure must never be silent.
-      process.stderr.write(`[totem-mcp] ${msg}\n`);
+      // NOT stderr. This package speaks MCP over stdio, so any direct stdout or
+      // stderr write corrupts the transport — the styleguide bans them outright.
+      // The visible accounting surface here is the search log on disk, using the
+      // same `internal:` synthetic-entry idiom `search-knowledge.ts` already
+      // uses to record its own set-log-dir failures. Visible, not swallowed.
+      logSearch({
+        timestamp: new Date().toISOString(),
+        query: 'internal:qbd-corpus-query',
+        resultCount: 0,
+        durationMs: 0,
+        topScore: null,
+        error: msg,
+      });
     });
     // totem-context: fire-and-forget telemetry; failure must not propagate
   } catch (err) {

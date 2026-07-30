@@ -563,6 +563,7 @@ export type {
   QbdRateStat,
   QbdRow,
   QbdScanResult,
+  QbdSession,
   QbdVerdict,
 } from './qbd/compliance.js';
 export {

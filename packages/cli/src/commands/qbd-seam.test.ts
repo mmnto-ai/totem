@@ -20,7 +20,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { cleanTmpDir } from '../test-utils.js';
-import { recordQbdDerive, resolveQbdLedgerDirDetailed } from './qbd-seam.js';
+import { recordQbdDerive, recordQbdQuery, resolveQbdLedgerDirDetailed } from './qbd-seam.js';
 
 /** A minimal VALID config — `targets` requires at least one entry. */
 const TOTEM_YAML = [
@@ -200,6 +200,33 @@ describe('recordQbdDerive', () => {
   });
 });
 
+describe('recordQbdQuery', () => {
+  it('writes a corpus_query row carrying a correlation ID into the project ledger', async () => {
+    const report = await recordQbdQuery(projectRoot, () => {}, emptyHome);
+    expect(report.recorded).toBe(true);
+
+    const rows = ledgerRows(path.join(projectRoot, '.totem'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.type).toBe('corpus_query');
+    expect(rows[0]!.activity_name).toBe('totem_search');
+    expect(typeof rows[0]!.qbd_correlation_id).toBe('string');
+  });
+
+  it('shares the derive seam’s not-recording contract', async () => {
+    // Both seams route through one internal body, so the note strings cannot
+    // drift apart — this pins that they really are the same contract.
+    const orphan = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-orphan-')));
+    try {
+      const queryReport = await recordQbdQuery(orphan, () => {}, emptyHome);
+      const deriveReport = await recordQbdDerive(orphan, 'orient', () => {}, emptyHome);
+      expect(queryReport.recorded).toBe(false);
+      expect(queryReport.note).toBe(deriveReport.note);
+    } finally {
+      cleanTmpDir(orphan);
+    }
+  });
+});
+
 describe('review seam placement', () => {
   /**
    * Source pin, and an honest account of why it is one.
@@ -242,6 +269,45 @@ describe('review seam placement', () => {
     // fires exactly once per review and only after a verdict exists.
     const body = functionBody('handleVerdictResult');
     expect(body).toContain('recordQbdDerive(');
+  });
+
+  it('records only AFTER a verdict has parsed — never for --raw or unparsable', () => {
+    // The recording used to be the handler's first statement, which put it
+    // ahead of BOTH `if (options.raw) return` and the unparsable-verdict throw:
+    // a raw context dump recorded a derive (and could consume a query's
+    // grounding), and so did a run whose verdict never parsed.
+    //
+    // The invariant is positional, so pin it positionally: the record call must
+    // sit after the raw exit AND after the point where a verdict is parsed.
+    const body = functionBody('handleVerdictResult');
+    const rawExitIdx = body.indexOf('if (options.raw) return;');
+    const laneDeriveIdx = body.indexOf('deriveLaneOutcome(');
+    const structuralBranchIdx = body.indexOf('if (outcome.structuredVerdict)');
+    const v1BranchIdx = body.indexOf('const verdict = parseVerdict(content);');
+    const firstRecordIdx = body.indexOf('await recordReviewDerive()');
+
+    expect(rawExitIdx).toBeGreaterThan(-1);
+    expect(laneDeriveIdx).toBeGreaterThan(-1);
+    expect(firstRecordIdx).toBeGreaterThan(-1);
+
+    // After the raw exit: `--raw` returns before any record can fire.
+    expect(firstRecordIdx).toBeGreaterThan(rawExitIdx);
+    // After the verdict is derived: nothing records before parsing is attempted.
+    expect(firstRecordIdx).toBeGreaterThan(laneDeriveIdx);
+    // And the call sites are the two PARSED-verdict branches, not the body.
+    expect(firstRecordIdx).toBeGreaterThan(structuralBranchIdx);
+    expect(body.indexOf('await recordReviewDerive()', v1BranchIdx)).toBeGreaterThan(v1BranchIdx);
+  });
+
+  it('records on a FAIL verdict too — a failing review is a completed derive', () => {
+    // Excluding FAIL would shrink the denominator, which is the falsifier-1
+    // failure mode. The record sits at the TOP of the structured branch, ahead
+    // of the pass/fail split and ahead of the SHIELD_FAILED throw.
+    const body = functionBody('handleVerdictResult');
+    const recordIdx = body.indexOf('await recordReviewDerive()');
+    const failThrowIdx = body.indexOf("'SHIELD_FAILED'");
+    expect(failThrowIdx).toBeGreaterThan(-1);
+    expect(recordIdx).toBeLessThan(failThrowIdx);
   });
 
   it('routes the structural branch through that shared handler before returning', () => {

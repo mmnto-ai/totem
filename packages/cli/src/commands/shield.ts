@@ -1227,25 +1227,6 @@ async function handleVerdictResult(
 ): Promise<void> {
   const { TotemError } = await import('@mmnto/totem');
 
-  // Query-before-derive instrumentation (mmnto-ai/totem#2510): a review is a
-  // derive-class action, recorded HERE — the shared verdict handler both the
-  // structural and the standard paths call — so it fires exactly once per
-  // review, and only once a verdict actually exists.
-  //
-  // It sat above the structural fork for one round, which fixed structural
-  // escaping the denominator but broadened the class by accident: a review that
-  // THREW still recorded a derive, unlike `spec`, which records only after
-  // synthesis produced content. After-success discipline is restored here. The
-  // multi-lane fan does not route through this function and records separately,
-  // after `runReviewFan` resolves; the three paths are mutually exclusive.
-  {
-    const { recordQbdDerive } = await import('./qbd-seam.js');
-    const report = await recordQbdDerive(cwd, 'review', (msg) => {
-      log.warn(DISPLAY_TAG, msg);
-    });
-    if (report.note !== undefined) log.dim(DISPLAY_TAG, report.note);
-  }
-
   writeOutput(content, options.out);
   if (options.out) log.success(DISPLAY_TAG, `Written to ${options.out}`);
 
@@ -1288,8 +1269,35 @@ async function handleVerdictResult(
   // Pure lane derivation: extract → exemption filter → conformance.
   const outcome = await deriveLaneOutcome(content, shared);
 
+  /**
+   * Query-before-derive instrumentation (mmnto-ai/totem#2510): a review is a
+   * derive-class action.
+   *
+   * The true invariant, after two corrections: record once a verdict has
+   * actually been PARSED. Earlier placements each broadened the class —
+   * above the structural fork, a review that THREW recorded; as the first
+   * statement of this function, `--raw` (a context dump with no verdict at
+   * all) recorded, and so did a run whose verdict never parsed, because both
+   * of those exits sit below that point.
+   *
+   * So this is called from inside each parsed-verdict branch, and from neither
+   * the raw exit nor the unparsable one. It fires for PASS *and* FAIL: a
+   * failing review is a completed derive, and excluding it would quietly
+   * shrink the denominator. The branches are mutually exclusive, so exactly
+   * once. The multi-lane fan bypasses this function entirely and records for
+   * itself after `runReviewFan` converges.
+   */
+  const recordReviewDerive = async (): Promise<void> => {
+    const { recordQbdDerive } = await import('./qbd-seam.js');
+    const seamReport = await recordQbdDerive(cwd, 'review', (msg) => {
+      log.warn(DISPLAY_TAG, msg);
+    });
+    if (seamReport.note !== undefined) log.dim(DISPLAY_TAG, seamReport.note);
+  };
+
   // Try structured parsing first (V2)
   if (outcome.structuredVerdict) {
+    await recordReviewDerive();
     const structured = outcome.structuredVerdict;
     const filtered = outcome.filteredFindings;
     const exempted = outcome.exemptedFindings;
@@ -1387,6 +1395,7 @@ async function handleVerdictResult(
   // Fallback: V1 regex parsing (custom prompt overrides)
   const verdict = parseVerdict(content);
   if (verdict) {
+    await recordReviewDerive();
     const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
     const reason = verdict.reason ? ` — ${verdict.reason}` : '';
     // totem-context: reason is either empty string or pre-prefixed with ' — ', so direct concat is intentional

@@ -111,6 +111,20 @@ export const QBD_MINT_TOLERANCE_MS = 2000;
 /** Structural shape of a QBD correlation ID. */
 const QBD_ID_PATTERN = /^qbd1-([0-9a-z]{1,11})-[0-9a-f]{16}$/;
 
+/**
+ * Largest instant a `Date` can represent (±8.64e15 ms). The ID pattern admits
+ * up to 11 base36 digits, i.e. ~1.3e17 — comfortably past this bound.
+ *
+ * That gap was a crash, not a cosmetic issue: an ID like
+ * `qbd1-zzzzzzzzzzz-<16 hex>` decoded to a finite, non-negative number, passed
+ * every guard, and then reached `new Date(mintedAtMs).toISOString()` in a
+ * violation-detail string, which throws `RangeError`. Those details are built
+ * inside `LedgerEventSchema`'s refinement, and Zod does NOT trap throws from
+ * refinements — so `safeParse` threw rather than returning a failure, and one
+ * forged line killed the entire scan. Reject the ID before any `Date` sees it.
+ */
+const MAX_TIME_VALUE_MS = 8.64e15;
+
 // ─── Types ──────────────────────────────────────────────
 
 /** Why a correlation ID failed validation. Rendered verbatim in accounting. */
@@ -140,7 +154,7 @@ export interface QbdIdCheckResult {
  * in this slice goes through that module precisely so the two cannot drift.
  */
 export function mintQbdCorrelationId(mintedAtMs: number): string {
-  if (!Number.isFinite(mintedAtMs) || mintedAtMs < 0) {
+  if (!Number.isFinite(mintedAtMs) || mintedAtMs < 0 || mintedAtMs > MAX_TIME_VALUE_MS) {
     throw new RangeError(`mintQbdCorrelationId: invalid mint instant ${String(mintedAtMs)}`);
   }
   const stamp = Math.floor(mintedAtMs).toString(MINT_RADIX);
@@ -156,7 +170,11 @@ export function decodeQbdMintInstant(id: string): number | undefined {
   const match = QBD_ID_PATTERN.exec(id);
   if (match === null) return undefined;
   const decoded = parseInt(match[1]!, MINT_RADIX);
-  if (!Number.isFinite(decoded) || decoded < 0) return undefined;
+  // The upper bound is load-bearing, not defensive: past it, every downstream
+  // `new Date(...)` throws. Returning `undefined` routes such an ID to
+  // `undecodable-mint-instant`, which is counted and degrades the read — a data
+  // point rather than a crash.
+  if (!Number.isFinite(decoded) || decoded < 0 || decoded > MAX_TIME_VALUE_MS) return undefined;
   return decoded;
 }
 
@@ -179,6 +197,18 @@ export function checkQbdCorrelationId(
   eventType: string,
   eventMs: number,
 ): QbdIdCheckResult {
+  // Self-contained on its own argument: callers inside this package already
+  // validate `eventMs`, but this is public API and the detail strings below
+  // feed it straight to `new Date(...)`. An unusable instant is a violation to
+  // report, never a throw to leak out of a validation function.
+  if (!Number.isFinite(eventMs) || Math.abs(eventMs) > MAX_TIME_VALUE_MS) {
+    return {
+      ok: false,
+      violation: 'undecodable-mint-instant',
+      detail: `event timestamp ${String(eventMs)} is not a usable instant`,
+    };
+  }
+
   if (QBD_ID_PATTERN.exec(id) === null) {
     return {
       ok: false,

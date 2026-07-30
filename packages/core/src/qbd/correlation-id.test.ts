@@ -33,6 +33,17 @@ describe('mintQbdCorrelationId', () => {
     expect(decodeQbdMintInstant('not-an-id')).toBeUndefined();
     expect(decodeQbdMintInstant('550e8400-e29b-41d4-a716-446655440000')).toBeUndefined();
   });
+
+  it('returns undefined for an instant past the max Date value', () => {
+    // The ID pattern admits 11 base36 digits (~1.3e17), well past 8.64e15.
+    // Decoding must refuse rather than hand a poison number downstream, where
+    // every `new Date(...)` would throw.
+    expect(decodeQbdMintInstant(`qbd1-zzzzzzzzzzz-${'a'.repeat(16)}`)).toBeUndefined();
+  });
+
+  it('refuses to MINT an instant past the max Date value', () => {
+    expect(() => mintQbdCorrelationId(8.64e15 + 1)).toThrow(RangeError);
+  });
 });
 
 describe('checkQbdCorrelationId — the minted-at-write-time contract', () => {
@@ -72,6 +83,18 @@ describe('checkQbdCorrelationId — the minted-at-write-time contract', () => {
   it('tolerates sub-tolerance clock jitter on a query row', () => {
     const id = mintQbdCorrelationId(T0 - (QBD_MINT_TOLERANCE_MS - 1));
     expect(checkQbdCorrelationId(id, 'corpus_query', T0).ok).toBe(true);
+  });
+
+  it('reports an out-of-range ID as undecodable rather than throwing', () => {
+    const result = checkQbdCorrelationId(`qbd1-zzzzzzzzzzz-${'a'.repeat(16)}`, 'derive_action', T0);
+    expect(result.ok).toBe(false);
+    expect(result.violation).toBe('undecodable-mint-instant');
+  });
+
+  it('reports an unusable EVENT timestamp rather than throwing (public API)', () => {
+    const id = mintQbdCorrelationId(T0);
+    expect(checkQbdCorrelationId(id, 'derive_action', Number.NaN).ok).toBe(false);
+    expect(checkQbdCorrelationId(id, 'derive_action', Number.POSITIVE_INFINITY).ok).toBe(false);
   });
 
   it('REJECTS a malformed ID', () => {

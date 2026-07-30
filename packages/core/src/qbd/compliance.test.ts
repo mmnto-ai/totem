@@ -104,6 +104,34 @@ describe('scanQbdLedger', () => {
     expect(scan.degraded).toBe(true);
   });
 
+  it('does not CRASH on an out-of-range mint instant — counts it instead', () => {
+    // `qbd1-zzzzzzzzzzz-<hex>` decodes to ~1.3e17, past the max Date value.
+    // It used to pass the finite/non-negative guards, then reach
+    // `new Date(...).toISOString()` while building a violation detail INSIDE
+    // `LedgerEventSchema`'s refinement. Zod does not trap refinement throws, so
+    // `safeParse` threw and one forged line killed the whole scan.
+    const forged = `qbd1-zzzzzzzzzzz-${'a'.repeat(16)}`;
+    const content = [
+      JSON.stringify({
+        timestamp: new Date(T0).toISOString(),
+        type: 'derive_action',
+        activity_name: 'spec',
+        source: 'lint',
+        justification: '',
+        qbd_correlation_id: forged,
+        session_id: sid(1),
+      }),
+      // A clean row after it: the scan must survive to reach this.
+      deriveLine(T0 + 1000, sid(1)),
+    ].join('\n');
+
+    const scan = scanQbdLedger(content);
+    expect(scan.anomalies.correlationContractViolations).toBe(1);
+    expect(scan.degraded).toBe(true);
+    // The following row was still scanned — the failure was contained.
+    expect(scan.rows).toHaveLength(1);
+  });
+
   it('is clean on an empty ledger', () => {
     const scan = scanQbdLedger('');
     expect(scan.rows).toHaveLength(0);

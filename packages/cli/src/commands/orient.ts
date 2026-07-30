@@ -810,11 +810,13 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
   // untouched: no session is excluded, and no agent-initiated derive is dropped.
   {
     const { recordQbdDerive } = await import('./qbd-seam.js');
-    const report = await recordQbdDerive(cwd, 'orient', (msg) => {
+    // `seamReport`, not `report` — the orientation report is bound eleven lines
+    // above and read again below; shadowing it here reads like a reassignment.
+    const seamReport = await recordQbdDerive(cwd, 'orient', (msg) => {
       process.stderr.write(`[orient] ${msg}\n`);
     });
     // Never a silent no-op: if nothing was recorded, say so and name the reason.
-    if (report.note !== undefined) process.stderr.write(`[orient] ${report.note}\n`);
+    if (seamReport.note !== undefined) process.stderr.write(`[orient] ${seamReport.note}\n`);
   }
 
   if (json) {
