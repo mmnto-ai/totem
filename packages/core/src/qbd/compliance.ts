@@ -514,9 +514,12 @@ function creditDerives(
       // had the same false-positive semantics, so this corrects the semantic,
       // not just the rewrite.
       //
-      // Bounded reverse walk: `queries` is time-sorted, so stepping back from
-      // the newest and stopping at the window edge visits only the queries that
-      // could be in scope, rather than the whole ledger per derive.
+      // Reverse walk: `queries` is time-sorted, so the walk stops at the window
+      // edge once it is below the derive's timestamp. Bounded for interleaved
+      // ledgers; when a run of derives precedes a run of queries, the `continue`
+      // over newer queries makes it O(derives × queries) worst-case again —
+      // measured 83ms at 5k×5k, accepted. Both arrays are time-sorted, so a
+      // two-pointer sweep can tighten this if ledgers outgrow that.
       let sawSameSeat = false;
       let sawDifferentSeat = false;
       for (let q = queries.length - 1; q >= 0; q--) {
