@@ -18,6 +18,22 @@ const SESSION_ID_FILE = '.session-id';
 const LEDGER_DIR = 'ledger';
 const DEFAULT_TTL_HOURS = 24;
 
+/**
+ * Filesystem errnos that mean "there is no session id here" rather than
+ * "something surprising happened". Anything outside this set is rethrown as a
+ * TotemError so a genuinely unexpected failure still fails loud (Tenet 4).
+ *
+ * `ENOTDIR` is in the set because a path COMPONENT being a file is the same
+ * semantic as the file being absent — there is no session id at that path, and
+ * there cannot be. It also closes a real cross-platform divergence: when
+ * `<totemDir>/ledger` is occupied by a file, POSIX reports `ENOTDIR` while
+ * Windows reports `ENOENT` for the identical probe. Omitting `ENOTDIR` made
+ * this module throw on Linux/macOS and succeed on Windows for the same
+ * on-disk state, which is exactly how it reached CI green locally and red
+ * on two other platforms.
+ */
+const BENIGN_FS_ERRNOS = new Set(['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'EROFS']);
+
 /** Mint a fresh session UUID. */
 export function mintSessionId(): string {
   return crypto.randomUUID();
@@ -42,7 +58,7 @@ export function writeSessionId(
     const msg = err instanceof Error ? err.message : String(err);
     // Known fs failure classes are fire-and-forget — SessionStart must not
     // block on telemetry write (sensors-not-actuators per lesson-b1bae311).
-    if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
+    if (code !== undefined && BENIGN_FS_ERRNOS.has(code)) {
       onWarn?.(`Session-ID write failed: ${msg}`);
       return;
     }
@@ -94,8 +110,9 @@ export function readSessionId(totemDir: string, ttlHours = DEFAULT_TTL_HOURS): s
     // hookless agent, stale file outside TTL). Treat as "no session ID
     // available" — same downstream behavior as the TTL-expired branch.
     // EPERM + EROFS added for parity with writeSessionId's fs-failure-class
-    // discrimination (CR + GCA Round-1 catch).
-    if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
+    // discrimination (CR + GCA Round-1 catch); ENOTDIR added for the
+    // cross-platform divergence documented on BENIGN_FS_ERRNOS.
+    if (code !== undefined && BENIGN_FS_ERRNOS.has(code)) {
       return undefined;
     }
     // Unexpected error class — wrap with TotemError per styleguide cause-chains

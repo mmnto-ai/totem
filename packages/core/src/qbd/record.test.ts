@@ -17,11 +17,19 @@
  * test.
  */
 
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock node:fs so spyOn works in ESM — same pattern as session-id.test.ts.
+// Spreads the real module, so every unmocked call is the genuine one.
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return { ...actual, default: actual };
+});
+
+import * as fs from 'node:fs';
 
 import { TotemError } from '../errors.js';
 import { cleanTmpDir } from '../test-utils.js';
@@ -489,6 +497,69 @@ describe('induced failure — unwritable ledger (ADR-115 § 2)', () => {
     );
     expect(recovered.written).toBe(true);
     expect(recoveredWarnings).toEqual([]);
+  });
+
+  it('reports the derive write failure ONCE, on every platform', () => {
+    // Cross-platform pin. Probing `<blocked>/ledger/.qbd-correlation` when
+    // `ledger` is a file raises ENOTDIR on POSIX and ENOENT on Windows. Both
+    // mean "no pointer here", so the pointer read must stay silent on both and
+    // the ONLY warning is the ledger write failure. Counting warnings (rather
+    // than matching one) is what makes a platform-specific extra warning fail.
+    const blocked = blockedProject();
+
+    const warnings: string[] = [];
+    const result = senseDeriveAction(
+      { totemDir: blocked, source: 'lint', surface: 'spec', nowMs: T0, env: env() },
+      (msg) => warnings.push(msg),
+    );
+
+    expect(result.written).toBe(false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('query-before-derive');
+    expect(warnings[0]).not.toContain('pointer unreadable');
+    // And never the session-id layer throwing before the write path is reached.
+    expect(warnings[0]).not.toContain('Unexpected error reading session ID');
+  });
+
+  it('survives a POSIX-style ENOTDIR from the session-id probe (CI reproduction)', () => {
+    // This IS the ubuntu/macos CI failure, reproduced on any platform.
+    //
+    // With `ledger` occupied by a file, POSIX raises ENOTDIR when statting
+    // `<blocked>/ledger/.session-id`. `session-id.ts` did not list ENOTDIR as a
+    // benign errno, so it threw "Unexpected error reading session ID" from the
+    // session-id layer BEFORE the ledger write path — and its errno-bearing
+    // accounting — ever ran. Windows raises ENOENT for the identical state, so
+    // the whole suite passed locally and failed on two other platforms.
+    //
+    // Only the `.session-id` probe is faked: `isInstrumentedProject` also uses
+    // statSync, and faking that too would make the writer skip and prove
+    // nothing.
+    const blocked = blockedProject();
+    const realStatSync = fs.statSync.bind(fs);
+    const spy = vi.spyOn(fs, 'statSync').mockImplementation(((target: fs.PathLike) => {
+      if (String(target).endsWith('.session-id')) {
+        const err = new Error('not a directory') as NodeJS.ErrnoException;
+        err.code = 'ENOTDIR';
+        throw err;
+      }
+      return realStatSync(target);
+    }) as typeof fs.statSync);
+
+    try {
+      const warnings: string[] = [];
+      const result = senseCorpusQuery(
+        { totemDir: blocked, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() },
+        (msg) => warnings.push(msg),
+      );
+
+      expect(result.written).toBe(false);
+      expect(warnings).toHaveLength(1);
+      // The ledger write's real errno, NOT the session-id layer throwing.
+      expect(warnings[0]).toMatch(/ENOTDIR|EEXIST|ENOENT/);
+      expect(warnings[0]).not.toContain('Unexpected error reading session ID');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('does not park a correlation pointer when the query row failed to write', () => {

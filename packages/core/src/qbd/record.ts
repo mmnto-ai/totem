@@ -214,7 +214,12 @@ function readPointer(totemDir: string, warnings: string[]): QbdPointer | undefin
     // totem-context: intentional cleanup — an absent pointer (ENOENT) is a normal state, not a failure; every OTHER errno is recorded on the `warnings` accounting channel rather than thrown, because telemetry must not fail the instrumented command (Tenet 13).
     const code =
       typeof err === 'object' && err !== null ? (err as NodeJS.ErrnoException).code : undefined;
-    if (code !== 'ENOENT') {
+    // ENOTDIR alongside ENOENT: a path COMPONENT being a file means there is no
+    // pointer here, same as the file being absent. Same cross-platform
+    // divergence `session-id.ts` documents — POSIX says ENOTDIR where Windows
+    // says ENOENT for the identical on-disk state — so both must read as
+    // "absent", or the derive path warns on one platform and not the other.
+    if (code !== 'ENOENT' && code !== 'ENOTDIR') {
       const msg = err instanceof Error ? err.message : String(err);
       warnings.push(`query-before-derive: correlation pointer unreadable: ${msg}`);
     }
