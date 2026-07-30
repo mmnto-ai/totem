@@ -3,7 +3,7 @@
  * SessionStart hook V2 — combines static filesystem context with
  * LanceDB vector search for relevant knowledge injection.
  *
- * stdout → agent context (JSON with additionalContext field)
+ * stdout → agent context (JSON: hookSpecificOutput.additionalContext envelope)
  * stderr → diagnostics only
  *
  * Budget: ~2-3k tokens max (ADR-013).
@@ -386,8 +386,13 @@ async function main() {
       ? combined.slice(0, MAX_TOTAL_CHARS) + '\n...(truncated)'
       : combined;
 
-  // Claude Code hook protocol: JSON with additionalContext field
-  const output = JSON.stringify({ additionalContext: fullContext });
+  // Claude Code hook protocol: SessionStart context is ingested ONLY from the
+  // hookSpecificOutput envelope. A top-level additionalContext key is not part
+  // of the protocol — the harness records hook_success, then silently injects
+  // nothing (mmnto-ai/totem#2522: every session 2026-07-17 → 07-29 booted cold).
+  const output = JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: fullContext },
+  });
   process.stdout.write(output);
 }
 
