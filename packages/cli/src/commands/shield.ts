@@ -1925,6 +1925,20 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const { buildRetrievalGroundingBundle } = await import('../utils.js');
   const groundingBundle = buildRetrievalGroundingBundle(context);
 
+  // Query-before-derive instrumentation (mmnto-ai/totem#2510): review grounding
+  // is a derive-class action. Recorded here — the one point BOTH the multi-lane
+  // fan (which returns below) and the single-lane path pass through, so a
+  // review is counted exactly once regardless of which path runs.
+  {
+    const { senseDeriveAction } = await import('@mmnto/totem');
+    senseDeriveAction(
+      { totemDir: path.join(cwd, config.totemDir), source: 'lint', surface: 'review' },
+      (msg) => {
+        log.warn(TAG, msg);
+      },
+    );
+  }
+
   // ── Multi-lane review fan (Prop 304 R2, mmnto-ai/totem#2106) ──
   // When `review.lanes` is configured (and neither --model nor structural mode
   // opts out), fan the IDENTICAL assembled prompt across every lane, converge on

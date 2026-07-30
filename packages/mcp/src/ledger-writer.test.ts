@@ -15,6 +15,15 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
+/** Read the ledger as parsed rows. */
+function readRows(ledgerPath: string): Array<Record<string, unknown>> {
+  return fs
+    .readFileSync(ledgerPath, 'utf-8')
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
 function mockContext(): void {
   // Mock getContext to return our tmp project root + minimal config.
   vi.doMock('./context.js', () => ({
@@ -34,17 +43,38 @@ describe('logMcpCall', () => {
     const ledgerPath = path.join(tmpDir, '.totem', 'ledger', 'events.ndjson');
     expect(fs.existsSync(ledgerPath)).toBe(true);
 
-    const lines = fs
-      .readFileSync(ledgerPath, 'utf-8')
-      .split('\n')
-      .filter((l) => l.trim());
-    expect(lines).toHaveLength(1);
+    const rows = readRows(ledgerPath);
+    // A search_knowledge call now writes TWO rows: the unchanged ADR-029
+    // `mcp_call` row, plus the #2510 `corpus_query` row. Assert by type rather
+    // than by position so neither can drift silently.
+    expect(rows.map((r) => r.type).sort()).toEqual(['corpus_query', 'mcp_call']);
 
-    const parsed = JSON.parse(lines[0]!);
-    expect(parsed.type).toBe('mcp_call');
+    const parsed = rows.find((r) => r.type === 'mcp_call')!;
     expect(parsed.activity_name).toBe('search_knowledge');
     expect(parsed.source).toBe('bot');
     expect(parsed.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it('writes a corpus_query row for search_knowledge (mmnto-ai/totem#2510)', async () => {
+    mockContext();
+    const { logMcpCall } = await import('./ledger-writer.js');
+    await logMcpCall('search_knowledge');
+
+    const rows = readRows(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'));
+    const query = rows.find((r) => r.type === 'corpus_query')!;
+    expect(query.activity_name).toBe('search_knowledge');
+    expect(query.source).toBe('bot');
+    // The correlation ID must be present and minted at this row's own instant.
+    expect(typeof query.qbd_correlation_id).toBe('string');
+  });
+
+  it('does NOT write a corpus_query row for non-query tools', async () => {
+    mockContext();
+    const { logMcpCall } = await import('./ledger-writer.js');
+    await logMcpCall('describe_project');
+
+    const rows = readRows(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'));
+    expect(rows.map((r) => r.type)).toEqual(['mcp_call']);
   });
 
   it('includes session_id when .session-id is present and within TTL', async () => {
@@ -95,12 +125,11 @@ describe('logMcpCall', () => {
     await logMcpCall('search_knowledge');
     await logMcpCall('describe_project');
 
-    const lines = fs
-      .readFileSync(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'), 'utf-8')
-      .split('\n')
-      .filter((l) => l.trim());
-    expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0]!).activity_name).toBe('search_knowledge');
-    expect(JSON.parse(lines[1]!).activity_name).toBe('describe_project');
+    const mcpCalls = readRows(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson')).filter(
+      (r) => r.type === 'mcp_call',
+    );
+    expect(mcpCalls).toHaveLength(2);
+    expect(mcpCalls[0]!.activity_name).toBe('search_knowledge');
+    expect(mcpCalls[1]!.activity_name).toBe('describe_project');
   });
 });

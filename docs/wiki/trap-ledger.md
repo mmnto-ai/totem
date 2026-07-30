@@ -66,6 +66,35 @@ The canonical schema (with field-level descriptions, optionality, and discrimina
 
 Per ADR-078 § Event Attribution: agent attribution lives in `agent_source`; `source` identifies which Totem subsystem fired the event. Pre-A.3.a events have no `agent_source` field and are forward-compatible (the field is optional).
 
+### Query-before-derive events (mmnto-ai/totem#2510)
+
+Two event types measure one thing: of the derive-class actions in an agent session, what fraction was preceded by a corpus query correlated to that action?
+
+- `corpus_query` — a corpus query fired. Written by the `totem search` CLI path and the MCP `search_knowledge` tool. Mints a fresh `qbd_correlation_id`.
+- `derive_action` — a derive-class action ran (`totem spec` synthesis, `totem orient` derivation, `totem review` grounding). Carries the `qbd_correlation_id` of the query that grounded it, or **no** ID when nothing did.
+
+```json
+{
+  "timestamp": "2026-07-28T12:00:01.000Z",
+  "type": "derive_action",
+  "source": "lint",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "activity_name": "spec",
+  "qbd_correlation_id": "qbd1-2h1s4kbqr-9f2c0a7e51d34b60"
+}
+```
+
+`qbd_correlation_id` is distinct from `correlation_id` (ADR-014's orchestrator → MCP trace ID) and is **self-dating**: it encodes the instant it was minted, and `LedgerEventSchema` cross-checks that instant against the row's own `timestamp`. A query row whose ID was not minted at its own write instant, and a derive row citing an ID minted after the derive or older than the correlation window, both fail to parse. Minted-at-write-time is therefore a schema constraint, not a convention — a backfilled ID is a schema violation rather than a data point.
+
+Semantics worth knowing before reading the number:
+
+- **Correlation window** — two hours, the same ADR-029 § 2 session window used elsewhere, rather than a new constant. Session identity comes from the existing `.session-id` primitive, with the same rolling-window fallback for hookless runs.
+- **The denominator is every derive-class event**, including those in sessions that fired zero queries. An uncorrelated derive is the observation the metric exists to make.
+- **The SessionStart hook's `orient --session` render is not instrumented.** It is machine-initiated and fires before an agent could have queried anything; counting it would measure the hook's scheduling rather than an agent's adherence. No session is excluded by this, and no agent-initiated derive is dropped.
+- **Adjacency, not influence.** A query fired to satisfy the metric whose results the following derive never reads is indistinguishable here from one that genuinely grounded it. Named, not solved.
+
+Read it with `totem doctor --compliance`, which renders the rate, its trend, the pre-registered threshold and window, and — when the ledger scan hit rows it could not trust — an explicit `DEGRADED` / `UNVERIFIED` envelope with per-item counts. Nothing gates on the number (Tenet 13).
+
 ---
 
 ## 2. The Rule-Tuning Loop (`totem doctor --pr`)

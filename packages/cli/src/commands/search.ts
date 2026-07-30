@@ -82,6 +82,23 @@ export async function searchCommand(
     maxResults,
   });
 
+  // Query-before-derive instrumentation (mmnto-ai/totem#2510). Placed after the
+  // search actually succeeded — a query that threw grounded nothing and must not
+  // mint a correlation ID a later derive could claim credit for.
+  //
+  // Sensor, not actuator: `senseCorpusQuery` never throws, and a write failure
+  // surfaces as a warning here rather than failing the search (Tenet 13). The
+  // warning is the accounting channel — the failure is visible, not swallowed.
+  {
+    const { senseCorpusQuery } = await import('@mmnto/totem');
+    senseCorpusQuery(
+      { totemDir: path.join(cwd, config.totemDir), source: 'lint', surface: 'totem_search' },
+      (msg) => {
+        log.warn(TAG, msg);
+      },
+    );
+  }
+
   // Query linked stores in parallel
   const linkedResults: Array<{
     result: (typeof results)[number];

@@ -19,9 +19,12 @@
 import * as path from 'node:path';
 
 import type { LedgerEvent } from '@mmnto/totem';
-import { appendLedgerEvent, readSessionId } from '@mmnto/totem';
+import { appendLedgerEvent, readSessionId, senseCorpusQuery } from '@mmnto/totem';
 
 import { getContext } from './context.js';
+
+/** The one MCP tool that is a corpus query for #2510 purposes. */
+const QUERY_ACTIVITY_NAME = 'search_knowledge';
 
 /**
  * Emit a single `mcp_call` ledger event for the given activity.
@@ -54,6 +57,21 @@ export async function logMcpCall(activityName: string): Promise<void> {
     };
 
     appendLedgerEvent(totemDir, event);
+
+    // Query-before-derive instrumentation (mmnto-ai/totem#2510). `search_knowledge`
+    // is a corpus query; the other MCP tools are not, so only it emits a
+    // `corpus_query` row. This is the shared core seam the CLI `totem search`
+    // path also writes through, so both query surfaces mint IDs identically.
+    //
+    // The `mcp_call` row above is untouched and still feeds the ADR-029 metric —
+    // the two rows carry different types and answer different questions.
+    if (activityName === QUERY_ACTIVITY_NAME) {
+      senseCorpusQuery({ totemDir, source: 'bot', surface: 'search_knowledge' }, (msg) => {
+        // The MCP server has no user-facing log channel; stderr is the visible
+        // accounting surface here, and a sensor failure must never be silent.
+        process.stderr.write(`[totem-mcp] ${msg}\n`);
+      });
+    }
     // totem-context: fire-and-forget telemetry; failure must not propagate
   } catch (err) {
     // intentional swallow — telemetry is a sensor (lesson-b1bae311),

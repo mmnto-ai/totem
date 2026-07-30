@@ -3,9 +3,11 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
+import { checkQbdCorrelationId } from './qbd/correlation-id.js';
+
 // ─── Schema ─────────────────────────────────────────
 
-export const LedgerEventSchema = z.object({
+const LedgerEventShape = z.object({
   /** ISO 8601 timestamp */
   timestamp: z.string().datetime(),
   /**
@@ -34,6 +36,16 @@ export const LedgerEventSchema = z.object({
    *                                    `cache_miss_fingerprint_changed` / `cache_miss_force` /
    *                                    `cache_miss_no_prior_record`) per Proposal 281.
    *
+   *  Query-before-derive events (mmnto-ai/totem#2510; see `qbd/`):
+   *  - `corpus_query`  — a corpus query fired (`totem search` CLI or the MCP `search_knowledge`
+   *                      tool); `activity_name` carries which surface. Mints a fresh
+   *                      `qbd_correlation_id` at write time.
+   *  - `derive_action` — a derive-class action ran (`totem spec` synthesis, `totem orient`
+   *                      derivation, `totem review` grounding); `activity_name` carries which.
+   *                      Carries the `qbd_correlation_id` of the query that grounded it, or
+   *                      NO id when nothing grounded it — an uncorrelated derive is a real,
+   *                      countable data point, never a dropped row (#2510 falsifier 1).
+   *
    *  Schema-level: `ruleId` + `file` are optional to accommodate activity events. Writer-side
    *  discipline enforces required-by-type. Promotion to `z.discriminatedUnion` deferred to A.3.c
    *  per design doc OQ-1 (.handoff/_shared/2026-05-15-a3a-schema-extension-design.md).
@@ -49,6 +61,8 @@ export const LedgerEventSchema = z.object({
     'compile_run',
     'claim_discipline_finding',
     'compile_cache_decision',
+    'corpus_query',
+    'derive_action',
   ]),
   /** Rule ID (lessonHash) for override events. Optional; required by writer for suppress/override/exemption. */
   ruleId: z.string().trim().min(1).optional(),
@@ -125,6 +139,59 @@ export const LedgerEventSchema = z.object({
    * writer convention even though the field lives on the base schema.
    */
   addressed_in_pr: z.boolean().optional(),
+  /**
+   * Query-before-derive correlation ID (mmnto-ai/totem#2510) — the join key
+   * between a `corpus_query` row and the `derive_action` rows that query
+   * grounded. Distinct from `correlation_id` (ADR-014 orchestrator→MCP trace),
+   * which this slice is explicitly not chartered to build on.
+   *
+   * Self-dating by construction: the ID embeds its own mint instant, and
+   * `LedgerEventSchema`'s refinement below cross-checks that instant against
+   * this row's `timestamp`. That is what makes "minted at event-write time" a
+   * schema constraint rather than a convention — see `qbd/correlation-id.ts`
+   * for the exact contract and its honest limits.
+   *
+   * Absent on a `derive_action` = that derive was not grounded by a query. That
+   * is the metric's most important signal, not a gap: it must be counted in the
+   * denominator (#2510 falsifier 1, denominator gaming).
+   */
+  qbd_correlation_id: z.string().trim().min(1).optional(),
+});
+
+/**
+ * The Trap Ledger event schema.
+ *
+ * The refinement enforces the #2510 minted-at-write-time contract structurally:
+ * a row whose `qbd_correlation_id` could not have been minted when the row was
+ * written fails to parse. Per the charter, "a backfilled ID is a schema
+ * violation, not a data point" — so such a row is never counted as compliant by
+ * anyone reading through this schema.
+ *
+ * Note for readers: `readLedgerEvents` SKIPS schema-invalid lines, so a
+ * violating row silently disappears from generic consumers. The compliance
+ * scanner (`qbd/compliance.ts`) therefore does NOT read through that helper —
+ * it counts every rejected row per-item so a tampered or torn ledger renders as
+ * DEGRADED instead of as a clean number (ADR-115 § 2).
+ */
+export const LedgerEventSchema = LedgerEventShape.superRefine((event, ctx) => {
+  if (event.qbd_correlation_id === undefined) return;
+  const eventMs = Date.parse(event.timestamp);
+  if (!Number.isFinite(eventMs)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['qbd_correlation_id'],
+      message: 'qbd_correlation_id present on a row with an unparseable timestamp',
+    });
+    return;
+  }
+  const check = checkQbdCorrelationId(event.qbd_correlation_id, event.type, eventMs);
+  if (!check.ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['qbd_correlation_id'],
+      message: `${check.violation ?? 'invalid'}: ${check.detail ?? 'invalid qbd_correlation_id'}`,
+    });
+  }
 });
 
 export type LedgerEvent = z.infer<typeof LedgerEventSchema>;

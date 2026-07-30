@@ -796,6 +796,37 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
 
   const report = await deriveOrientReport(cwd);
 
+  // Query-before-derive instrumentation (mmnto-ai/totem#2510): orientation
+  // derivation is a derive-class action. Recorded after the derivation and
+  // before the `--json` fork, so both render paths count.
+  //
+  // Deliberately NOT recorded on the `--session` branch above: that path is the
+  // SessionStart hook's boot render, fired by the machine before any agent could
+  // have queried anything. Counting it would guarantee one uncorrelated derive
+  // per session and measure the hook's scheduling rather than an agent's
+  // adherence. This is a scope decision about which ACTIONS are agent-initiated,
+  // not a filter on which sessions count — the #2510 falsifier-1 denominator
+  // rule (all derive-class events, including in zero-query sessions) is
+  // untouched: no session is excluded, and no agent-initiated derive is dropped.
+  {
+    const path = await import('node:path');
+    const { senseDeriveAction } = await import('@mmnto/totem');
+    // orient is deliberately config-optional, so resolve totemDir best-effort
+    // and fall back to the `.totem` default rather than failing the command.
+    let totemDir = path.join(cwd, '.totem');
+    try {
+      const { loadConfig, resolveConfigPath } = await import('../utils.js');
+      const config = await loadConfig(resolveConfigPath(cwd));
+      totemDir = path.join(cwd, config.totemDir);
+      // totem-context: orient runs against config-less repos by design — the `.totem` default is the honest-absent path, not a sensor failure.
+    } catch (err) {
+      if (err instanceof Error && err.message.length === 0) throw err;
+    }
+    senseDeriveAction({ totemDir, source: 'lint', surface: 'orient' }, (msg) => {
+      process.stderr.write(`[orient] ${msg}\n`);
+    });
+  }
+
   if (json) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     return;
