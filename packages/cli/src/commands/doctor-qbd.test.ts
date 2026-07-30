@@ -16,6 +16,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { doctorQbdComplianceCommand } from './doctor-qbd.js';
 
 const T0 = Date.parse('2026-07-28T12:00:00.000Z');
@@ -41,7 +42,7 @@ beforeEach(() => {
 
 afterEach(() => {
   spy.mockRestore();
-  fs.rmSync(cwd, { recursive: true, force: true });
+  cleanTmpDir(cwd);
 });
 
 function output(): string {

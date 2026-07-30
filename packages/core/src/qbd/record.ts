@@ -150,7 +150,9 @@ function writePointer(totemDir: string, pointer: QbdPointer, warnings: string[])
   try {
     fs.mkdirSync(path.join(totemDir, LEDGER_DIR), { recursive: true });
     fs.writeFileSync(pointerPath(totemDir), JSON.stringify(pointer), 'utf-8');
+    // totem-context: intentional cleanup — the correlation pointer is telemetry; a sensor must never fail the command it instruments (Tenet 13). NOT swallowed: recorded on the `warnings` accounting channel and surfaced by the caller.
   } catch (err) {
+    // totem-context: intentional cleanup — the correlation pointer is telemetry; a sensor must never fail the command it instruments (Tenet 13). NOT swallowed: recorded on the `warnings` accounting channel and surfaced by the caller.
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(`query-before-derive: correlation pointer write failed: ${msg}`);
   }
@@ -168,7 +170,9 @@ function readPointer(totemDir: string, warnings: string[]): QbdPointer | undefin
   let raw: string;
   try {
     raw = fs.readFileSync(pointerPath(totemDir), 'utf-8');
+    // totem-context: intentional cleanup — an absent pointer (ENOENT) is a normal state, not a failure; every OTHER errno is recorded on the `warnings` accounting channel rather than thrown, because telemetry must not fail the instrumented command (Tenet 13).
   } catch (err) {
+    // totem-context: intentional cleanup — an absent pointer (ENOENT) is a normal state, not a failure; every OTHER errno is recorded on the `warnings` accounting channel rather than thrown, because telemetry must not fail the instrumented command (Tenet 13).
     const code =
       typeof err === 'object' && err !== null ? (err as NodeJS.ErrnoException).code : undefined;
     if (code !== 'ENOENT') {
@@ -194,7 +198,9 @@ function readPointer(totemDir: string, warnings: string[]): QbdPointer | undefin
       mintedAtMs: rec.mintedAtMs,
       sessionId: typeof rec.sessionId === 'string' ? rec.sessionId : null,
     };
+    // totem-context: intentional cleanup — a corrupt pointer degrades to "no correlation in scope" and is reported on the `warnings` accounting channel; throwing would let a hand-edited telemetry file break `totem spec` / `orient` / `review`.
   } catch (err) {
+    // totem-context: intentional cleanup — a corrupt pointer degrades to "no correlation in scope" and is reported on the `warnings` accounting channel; throwing would let a hand-edited telemetry file break `totem spec` / `orient` / `review`.
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(`query-before-derive: correlation pointer is not valid JSON (${msg}) — ignoring`);
     return undefined;

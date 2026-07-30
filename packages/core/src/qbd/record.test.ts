@@ -24,6 +24,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { TotemError } from '../errors.js';
+import { cleanTmpDir } from '../test-utils.js';
 import { mintQbdCorrelationId, QBD_CORRELATION_WINDOW_MS } from './correlation-id.js';
 import {
   recordCorpusQuery,
@@ -42,7 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(totemDir, { recursive: true, force: true });
+  cleanTmpDir(totemDir);
 });
 
 function ledgerLines(): Array<Record<string, unknown>> {
