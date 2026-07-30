@@ -27,10 +27,16 @@
  *
  * A derive counts as correlated only when its `qbd_correlation_id` resolves to
  * a `corpus_query` row that actually appears earlier in the ledger, in the same
- * session. Three ways that check fails, all counted as anomalies and none as
- * compliant: a schema-rejected ID (see `correlation-id.ts`), an ID with no
- * matching query row (orphan — a truncated or tampered ledger), and an ID whose
- * query row belongs to a different session.
+ * session and from the same seat. Ways that check fails, all counted as
+ * anomalies and none as compliant: a schema-rejected ID (see
+ * `correlation-id.ts`), an ID with no matching query row (orphan — a truncated
+ * or tampered ledger), an ID whose query row belongs to a different session or
+ * a different seat, and a row whose timestamp regresses in an append-only file
+ * (a backdated append trying to seize the evaluation window).
+ *
+ * One query grounds exactly ONE derive — the pointer is consumed on use (see
+ * `record.ts`). Without that, a single query would credit every derive for the
+ * rest of the correlation window.
  *
  * ## What this metric CANNOT see (#2510 falsifier 4, ritual query)
  *
@@ -51,7 +57,7 @@
  * that rather than print a bare number.
  */
 
-import { LedgerEventSchema } from '../ledger.js';
+import { LEDGER_EVENT_TYPES, LedgerEventSchema, QBD_EVENT_TYPES } from '../ledger.js';
 import { QBD_CORRELATION_WINDOW_MS } from './correlation-id.js';
 
 // ─── Pre-registration (fixed before the sensor first emitted) ───
@@ -73,8 +79,10 @@ export const QBD_PRE_REGISTRATION_STATEMENT =
   'compliance ≥ 0.50, evaluated over the first 20 instrumented sessions carrying ≥1 derive-class event, regardless of query count';
 
 /**
- * Sessions grouped by the rolling-window fallback need a window; reuse the
- * ADR-029 § 2 session window, the same constant the correlation window uses.
+ * Window for the id-less rolling-window session fallback. Same span as the
+ * correlation window so the slice carries one time constant rather than two;
+ * see `correlation-id.ts` for why that value is this slice's design call and
+ * not something ADR-029 § 2 authorises.
  */
 const SESSION_ROLLUP_WINDOW_MS = QBD_CORRELATION_WINDOW_MS;
 
@@ -110,6 +118,17 @@ export interface QbdAnomalies {
   orphanCorrelations: number;
   /** Derive rows whose correlated query row belongs to a different session. */
   crossSessionCorrelations: number;
+  /**
+   * Rows whose timestamp regresses behind the newest already seen in this
+   * append-only file — the backdated-append attack on the evaluation window.
+   */
+  backdatedRows: number;
+  /**
+   * Rows carrying an event type this build does not know. An ADVISORY, not an
+   * integrity anomaly: the ordinary cause is version skew, and it deliberately
+   * does NOT flip `degraded`.
+   */
+  unknownTypeRows: number;
   /** Human-readable detail lines, capped, for the render. */
   details: string[];
 }
@@ -159,19 +178,29 @@ export interface QbdComplianceReport {
 
 // ─── Scan ───────────────────────────────────────────────
 
-/** Event types that exist in the ledger and are not part of this metric. */
-const NON_QBD_TYPES = new Set([
-  'suppress',
-  'override',
-  'exemption',
-  'mcp_call',
-  'tool_call_first_significant',
-  'hook_fire',
-  'session_start',
-  'compile_run',
-  'claim_discipline_finding',
-  'compile_cache_decision',
-]);
+/**
+ * Event types that exist in the ledger and are not part of this metric.
+ *
+ * DERIVED from the ledger schema's own type list, never hand-mirrored: a copied
+ * list rots the moment a type is added to `ledger.ts`, and here that rot is not
+ * cosmetic — an unrecognised type used to flip the whole scan to DEGRADED.
+ * `ledger-type-parity` in the tests pins this to the schema.
+ */
+const NON_QBD_TYPES: ReadonlySet<string> = new Set(
+  LEDGER_EVENT_TYPES.filter((t) => !(QBD_EVENT_TYPES as readonly string[]).includes(t)),
+);
+
+/**
+ * How far a row's timestamp may regress behind the newest timestamp seen so far
+ * before the scan calls it backdated.
+ *
+ * The ledger is append-only, so timestamps should march forward. Small
+ * regressions are legitimate — concurrent writers in one repo, sub-second clock
+ * jitter, a cohort seat whose clock drifts slightly — so the tolerance is
+ * generous. What it catches is the real attack: APPENDING rows stamped far in
+ * the past to seize the pre-registered first-20-session window.
+ */
+const BACKDATE_TOLERANCE_MS = 5 * 60 * 1000;
 
 /** Cap on stored detail strings so a pathological ledger cannot balloon memory. */
 const MAX_ANOMALY_DETAILS = 20;
@@ -183,6 +212,8 @@ function emptyAnomalies(): QbdAnomalies {
     unclassifiedInvalid: 0,
     orphanCorrelations: 0,
     crossSessionCorrelations: 0,
+    backdatedRows: 0,
+    unknownTypeRows: 0,
     details: [],
   };
 }
@@ -203,6 +234,8 @@ export function scanQbdLedger(content: string): QbdScanResult {
   const rows: QbdRow[] = [];
   const anomalies = emptyAnomalies();
   let linesScanned = 0;
+  /** Newest QBD timestamp seen so far, in FILE order — the monotonicity baseline. */
+  let maxSeenMs: number | undefined;
 
   const lines = content.split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -220,36 +253,52 @@ export function scanQbdLedger(content: string): QbdScanResult {
       continue;
     }
 
-    const rawType =
+    const rawObject =
       typeof parsed === 'object' && parsed !== null
-        ? (parsed as Record<string, unknown>).type
+        ? (parsed as Record<string, unknown>)
         : undefined;
-
-    // Fast path: a well-formed row from another subsystem is none of our
-    // business and is not an anomaly.
-    const isKnownNonQbd = typeof rawType === 'string' && NON_QBD_TYPES.has(rawType);
+    const rawType = rawObject?.type;
 
     const result = LedgerEventSchema.safeParse(parsed);
     if (!result.success) {
-      if (isKnownNonQbd) {
-        // Another subsystem's row failed its own schema. Not this metric's
-        // integrity problem, and not counted against it.
-        continue;
-      }
+      // ORDER IS LOAD-BEARING. The QBD-marker test must run BEFORE the
+      // "belongs to another subsystem" fast path. A row can carry a forged
+      // `qbd_correlation_id` while claiming a non-QBD `type` — and if the
+      // fast path ran first, that row would be dropped with zero anomalies
+      // and the ledger would render clean. That is exactly the tampering
+      // ADR-115 § 2 exists to make impossible to miss, so a qbd-field-bearing
+      // schema failure is a contract violation on ANY type.
       const looksQbd =
         rawType === 'corpus_query' ||
         rawType === 'derive_action' ||
-        (typeof parsed === 'object' &&
-          parsed !== null &&
-          'qbd_correlation_id' in (parsed as Record<string, unknown>));
+        (rawObject !== undefined && 'qbd_correlation_id' in rawObject);
       const reason = result.error.issues.map((issue) => issue.message).join('; ');
       if (looksQbd) {
         anomalies.correlationContractViolations++;
         pushDetail(anomalies, `line ${i + 1}: correlation contract violation — ${reason}`);
-      } else {
-        anomalies.unclassifiedInvalid++;
-        pushDetail(anomalies, `line ${i + 1}: unclassifiable invalid row — ${reason}`);
+        continue;
       }
+      if (typeof rawType === 'string' && NON_QBD_TYPES.has(rawType)) {
+        // Another subsystem's row failed its OWN schema and carries no QBD
+        // markers. Not this metric's integrity problem, not counted against it.
+        continue;
+      }
+      if (typeof rawType === 'string' && rawType.length > 0) {
+        // A type this build does not know. The benign cause is version skew —
+        // a newer writer in the same repo emitting an event type this binary
+        // predates — which is emphatically NOT evidence that the ledger was
+        // tampered with. Report it as a named advisory; do NOT flip DEGRADED,
+        // or routine skew would drown the signal that real tampering produces.
+        anomalies.unknownTypeRows++;
+        pushDetail(
+          anomalies,
+          `line ${i + 1}: unknown event type '${rawType}' (this build predates it — version skew, not tampering)`,
+        );
+        continue;
+      }
+      // No usable type at all — this is structural corruption, not skew.
+      anomalies.unclassifiedInvalid++;
+      pushDetail(anomalies, `line ${i + 1}: unclassifiable invalid row — ${reason}`);
       continue;
     }
 
@@ -263,6 +312,22 @@ export function scanQbdLedger(content: string): QbdScanResult {
       continue;
     }
 
+    // Append-only monotonicity. The ledger only ever grows at the end, so a row
+    // stamped far behind the newest one already seen was APPENDED with a
+    // backdated timestamp. That is the cheap attack on a "first N sessions"
+    // window — no whole-file rewrite required, just `>> events.ndjson` with old
+    // stamps — so it must degrade the read. The row is still counted (dropping
+    // it would shrink the denominator, which is the other failure mode); the
+    // scan simply refuses to call the resulting number verified.
+    if (maxSeenMs !== undefined && ms < maxSeenMs - BACKDATE_TOLERANCE_MS) {
+      anomalies.backdatedRows++;
+      pushDetail(
+        anomalies,
+        `line ${i + 1}: timestamp ${new Date(ms).toISOString()} regresses behind ${new Date(maxSeenMs).toISOString()} in an append-only ledger`,
+      );
+    }
+    if (maxSeenMs === undefined || ms > maxSeenMs) maxSeenMs = ms;
+
     rows.push({
       ms,
       type: event.type,
@@ -275,10 +340,12 @@ export function scanQbdLedger(content: string): QbdScanResult {
 
   rows.sort((a, b) => a.ms - b.ms);
 
+  // `unknownTypeRows` is deliberately absent: version skew is not tampering.
   const degraded =
     anomalies.malformedJson > 0 ||
     anomalies.correlationContractViolations > 0 ||
-    anomalies.unclassifiedInvalid > 0;
+    anomalies.unclassifiedInvalid > 0 ||
+    anomalies.backdatedRows > 0;
 
   return { rows, linesScanned, anomalies, degraded };
 }
@@ -294,10 +361,21 @@ interface QbdSession {
 /**
  * Group rows into sessions.
  *
- * Rows carrying a `session_id` group by it — the explicit primitive wins, per
- * ADR-029 § Session Heuristic. Rows without one (hookless agents, pre-hook
- * runs) fall back to the same rolling-window roll-up ADR-029 specifies, applied
- * among themselves. Both are "instrumented sessions"; neither is privileged.
+ * Rows carrying a `session_id` group by it. Rows without one (hookless agents,
+ * pre-hook runs) fall back to a rolling-window roll-up, applied among
+ * themselves and PARTITIONED BY `agent_source`. Both are "instrumented
+ * sessions"; neither is privileged.
+ *
+ * The agent partition matters concretely: cohort seats share one working tree
+ * per repo, so two seats writing to the same ledger inside the same two-hour
+ * span would otherwise be rolled into a single "session", letting one seat's
+ * query sit in the same session as another seat's derive. Sessions are
+ * per-agent, so the fallback is too.
+ *
+ * Note on provenance: preferring an explicit session id over a time heuristic
+ * follows the `.session-id` primitive's own documented contract
+ * (`session-id.ts`), not ADR-029 § 2 — that section defines a session-GROUPING
+ * heuristic for the recall metric, which is a different question.
  */
 export function groupQbdSessions(rows: QbdRow[]): QbdSession[] {
   const byId = new Map<string, QbdSession>();
@@ -308,7 +386,9 @@ export function groupQbdSessions(rows: QbdRow[]): QbdSession[] {
       idless.push(row);
       continue;
     }
-    const key = `sid:${row.sessionId}`;
+    // Key on the agent too: a session id is only unique within the agent that
+    // minted it, and two seats must never share a session bucket.
+    const key = `sid:${row.agentSource ?? ''}:${row.sessionId}`;
     const existing = byId.get(key);
     if (existing === undefined) {
       byId.set(key, { key, firstMs: row.ms, rows: [row] });
@@ -320,18 +400,24 @@ export function groupQbdSessions(rows: QbdRow[]): QbdSession[] {
 
   const sessions = [...byId.values()];
 
-  // Rolling-window fallback for id-less rows (rows are already time-sorted).
-  let current: QbdSession | undefined;
-  let lastMs = 0;
+  // Rolling-window fallback for id-less rows, PER AGENT (rows are time-sorted).
+  const openByAgent = new Map<string, { session: QbdSession; lastMs: number }>();
   let windowIndex = 0;
   for (const row of idless) {
-    if (current === undefined || row.ms - lastMs > SESSION_ROLLUP_WINDOW_MS) {
-      current = { key: `win:${windowIndex++}`, firstMs: row.ms, rows: [row] };
-      sessions.push(current);
+    const agent = row.agentSource ?? '';
+    const open = openByAgent.get(agent);
+    if (open === undefined || row.ms - open.lastMs > SESSION_ROLLUP_WINDOW_MS) {
+      const session: QbdSession = {
+        key: `win:${agent}:${windowIndex++}`,
+        firstMs: row.ms,
+        rows: [row],
+      };
+      sessions.push(session);
+      openByAgent.set(agent, { session, lastMs: row.ms });
     } else {
-      current.rows.push(row);
+      open.session.rows.push(row);
+      open.lastMs = row.ms;
     }
-    lastMs = row.ms;
   }
 
   sessions.sort((a, b) => a.firstMs - b.firstMs);
@@ -372,11 +458,13 @@ function scoreSession(
       );
       continue;
     }
-    if (grounding.sessionId !== row.sessionId) {
+    if (grounding.sessionId !== row.sessionId || grounding.agentSource !== row.agentSource) {
+      // Different session OR different seat. Both are the same defect from the
+      // metric's side: a query that cannot have grounded this derive.
       anomalies.crossSessionCorrelations++;
       pushDetail(
         anomalies,
-        `derive at ${new Date(row.ms).toISOString()} correlates to a query from a different session`,
+        `derive at ${new Date(row.ms).toISOString()} correlates to a query from a different session or seat`,
       );
       continue;
     }

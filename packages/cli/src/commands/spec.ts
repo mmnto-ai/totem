@@ -419,13 +419,11 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // derive is the observation the metric exists to make, so it must land in the
   // denominator (#2510 falsifier 1: denominator gaming).
   {
-    const { senseDeriveAction } = await import('@mmnto/totem');
-    senseDeriveAction(
-      { totemDir: path.join(cwd, config.totemDir), source: 'lint', surface: 'spec' },
-      (msg) => {
-        log.warn(TAG, msg);
-      },
-    );
+    const { recordQbdDerive } = await import('./qbd-seam.js');
+    const report = await recordQbdDerive(cwd, 'spec', (msg) => {
+      log.warn(TAG, msg);
+    });
+    if (report.note !== undefined) log.dim(TAG, report.note);
   }
 
   if (options.stdout) {

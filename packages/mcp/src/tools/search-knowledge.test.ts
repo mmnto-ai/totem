@@ -77,6 +77,8 @@ let mockLinkedStoreInitErrors: Map<string, string> = new Map();
  * verifies the call site fires with the correct activity_name.
  */
 let mockLogMcpCall: ReturnType<typeof vi.fn>;
+/** mmnto-ai/totem#2510: the query-before-derive corpus_query writer. */
+let mockLogCorpusQuery: ReturnType<typeof vi.fn>;
 /** mmnto-ai/totem#2463: captured logSearch spy so tests can assert topRelevance. */
 let mockLogSearch: ReturnType<typeof vi.fn>;
 
@@ -174,6 +176,7 @@ vi.mock('../search-log.js', () => ({
 
 vi.mock('../ledger-writer.js', () => ({
   logMcpCall: vi.fn(async () => {}),
+  logCorpusQuery: vi.fn(async () => {}),
 }));
 
 // ---------------------------------------------------------------------------
@@ -219,6 +222,7 @@ describe('search_knowledge', () => {
     mockLinkedStores = new Map();
     mockLinkedStoreInitErrors = new Map();
     mockLogMcpCall = vi.fn(async () => {});
+    mockLogCorpusQuery = vi.fn(async () => {});
     mockLogSearch = vi.fn();
 
     // Reset modules to clear the firstHealthCheckDone flag
@@ -314,6 +318,7 @@ describe('search_knowledge', () => {
 
     vi.doMock('../ledger-writer.js', () => ({
       logMcpCall: mockLogMcpCall,
+      logCorpusQuery: mockLogCorpusQuery,
     }));
 
     handle = await setupFresh();
@@ -339,6 +344,32 @@ describe('search_knowledge', () => {
     };
     await handle({ query: 'test' });
     expect(mockLogMcpCall).toHaveBeenCalledWith('search_knowledge');
+  });
+
+  // --- mmnto-ai/totem#2510 — query-before-derive mint timing ---
+
+  it('mints a corpus_query row once the search has actually run', async () => {
+    mockSearchResults = [];
+    await handle({ query: 'test' });
+    // Zero hits still counts: the query EXECUTED, which is what is measured.
+    expect(mockLogCorpusQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT mint a corpus_query row when the health gate blocks the search', async () => {
+    // The whole point of decoupling this from `logMcpCall`, which fires at
+    // handler entry: a search blocked before it ran grounded nothing, so it must
+    // not leave a correlation ID a later derive could claim credit from. The
+    // `mcp_call` row still fires (asserted above) — ADR-029 is unchanged.
+    mockHealthCheckResult = {
+      healthy: false,
+      dimensionMatch: false,
+      storedDimensions: 384,
+      expectedDimensions: 1536,
+      issues: [],
+    };
+    await handle({ query: 'test' });
+    expect(mockLogMcpCall).toHaveBeenCalledWith('search_knowledge');
+    expect(mockLogCorpusQuery).not.toHaveBeenCalled();
   });
 
   // --- Successful search returning results ---

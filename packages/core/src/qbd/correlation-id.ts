@@ -25,8 +25,9 @@
  * ## What the validation actually catches — and what it does not
  *
  * Catches (mechanically, at parse time, for every reader and writer):
- *  - a query row whose ID predates or postdates its own write instant — i.e. an
- *    ID minted anywhere other than at the moment the row was written;
+ *  - a query row whose ID predates or postdates its own write instant beyond
+ *    `QBD_MINT_TOLERANCE_MS` — i.e. an ID minted anywhere other than at the
+ *    moment the row was written;
  *  - a derive row carrying an ID minted *after* the derive happened (an ID that
  *    did not exist when the derive ran cannot have grounded it);
  *  - a derive row carrying an ID minted longer ago than the correlation window
@@ -34,12 +35,32 @@
  *  - `qbd_correlation_id` stamped on an event type that has no query→derive
  *    semantics at all.
  *
- * Does NOT catch: an adversary who rewrites the whole ledger file, minting a
- * coherent fake query row and a coherent fake derive row together. Nothing
- * short of signing or an append-only server would. The threat model here is
- * the realistic one — a well-meaning script or agent attaching correlation IDs
- * to rows that were already written — not ledger forgery. Stated plainly per
- * the #2510 discipline of naming a limitation rather than claiming it solved.
+ * On the tolerance: the checks are "beyond tolerance", NOT categorical. A
+ * mismatch inside `QBD_MINT_TOLERANCE_MS` passes in both directions, including
+ * a mint instant slightly in the future of its row. That window exists for
+ * clock granularity between two reads of the same clock, and it is small
+ * relative to the correlation window — but it is a real gap, and calling these
+ * checks categorical would overstate them.
+ *
+ * ## What this does NOT catch, stated precisely
+ *
+ * This is a per-row consistency check, so it cannot see relationships BETWEEN
+ * rows. Two attacks live in that gap:
+ *
+ *  1. **Backdated appends.** `mintQbdCorrelationId` takes its instant as an
+ *     argument and is public API, and the ledger is append-only — so coherent
+ *     query/derive pairs stamped in the past can simply be appended. No
+ *     whole-file rewrite is needed. Each row passes this check individually.
+ *     That attack is caught one layer up, by the append-only monotonicity check
+ *     in `compliance.ts`, which degrades a scan whose timestamps regress.
+ *  2. **A coherent whole-file rewrite.** Rewriting the entire ledger with
+ *     internally consistent, monotonically increasing fake rows defeats both
+ *     this check and the monotonicity check. Nothing short of signing or an
+ *     append-only server would stop it, and neither is in scope for v1.
+ *
+ * The realistic threat — a script or agent attaching correlation IDs to rows
+ * already on disk — is caught here. The other two are named rather than
+ * claimed solved, per the #2510 discipline.
  */
 
 import * as crypto from 'node:crypto';
@@ -59,11 +80,18 @@ const MINT_RADIX = 36;
  * Correlation window: a derive-class action counts as grounded by a query only
  * if that query was minted within this window before it.
  *
- * Deliberately the SAME 2-hour window ADR-029 § 2 already uses for session
- * roll-up, rather than a new invented constant — #2510 says to design session
- * semantics from what the codebase already has. A shorter window would be a
- * strictly harder test of the same claim; the value is pinned here so the
- * pre-registered threshold is evaluated against a fixed rule.
+ * The VALUE is borrowed from ADR-029 § 2's two-hour session window so this
+ * slice does not invent a second time constant. The DECISION to treat that
+ * span as a grounding-validity window is this slice's own, not the ADR's —
+ * ADR-029 § 2 defines a session-GROUPING heuristic for the recall metric, which
+ * is a different question, and it should not be cited as authority for this
+ * choice. Owned here as a design call: a shorter window would be a strictly
+ * harder test of the same claim, and the value is pinned so the pre-registered
+ * threshold is evaluated against a fixed rule rather than a tunable one.
+ *
+ * Note that consume-on-use (see `record.ts`) does most of the real work: the
+ * window bounds how STALE a grounding may be, but a query grounds only one
+ * derive regardless, so a generous window cannot inflate the numerator.
  */
 export const QBD_CORRELATION_WINDOW_MS = 2 * 60 * 60 * 1000;
 

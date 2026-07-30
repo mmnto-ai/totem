@@ -36,6 +36,18 @@ import {
 
 const T0 = Date.parse('2026-07-28T12:00:00.000Z');
 
+const SESSION_A = '550e8400-e29b-41d4-a716-446655440000';
+const SESSION_B = '550e8400-e29b-41d4-a716-446655440001';
+
+/**
+ * Correlation is fail-closed: it requires a session id on BOTH sides and a
+ * matching seat. So the ordinary "a query grounded this derive" fixture must
+ * supply both, exactly as a real instrumented session does.
+ */
+function env(sessionId: string = SESSION_A, agent = 'seat-a'): NodeJS.ProcessEnv {
+  return { TOTEM_SESSION_ID: sessionId, TOTEM_SELF_AGENT: agent };
+}
+
 let totemDir: string;
 
 beforeEach(() => {
@@ -60,9 +72,18 @@ function pointerFile(): string {
   return path.join(totemDir, 'ledger', '.qbd-correlation');
 }
 
+/**
+ * Park a hand-written pointer. Session + seat MATCH the fixture env on purpose:
+ * correlation is fail-closed, so a mismatched pointer would be ignored before
+ * the contract check ever runs and the induced failure would never fire.
+ */
 function writeForgedPointer(id: string, mintedAtMs: number): void {
   fs.mkdirSync(path.join(totemDir, 'ledger'), { recursive: true });
-  fs.writeFileSync(pointerFile(), JSON.stringify({ id, mintedAtMs, sessionId: null }), 'utf-8');
+  fs.writeFileSync(
+    pointerFile(),
+    JSON.stringify({ id, mintedAtMs, sessionId: SESSION_A, agentSource: 'seat-a' }),
+    'utf-8',
+  );
 }
 
 describe('recordCorpusQuery', () => {
@@ -72,7 +93,7 @@ describe('recordCorpusQuery', () => {
       source: 'lint',
       surface: 'totem_search',
       nowMs: T0,
-      env: {},
+      env: env(),
     });
 
     expect(result.written).toBe(true);
@@ -92,7 +113,7 @@ describe('recordCorpusQuery', () => {
       source: 'lint',
       surface: 'totem_search',
       nowMs: T0,
-      env: {},
+      env: env(),
     });
     const pointer = JSON.parse(fs.readFileSync(pointerFile(), 'utf-8')) as Record<string, unknown>;
     expect(pointer.id).toBe(result.correlationId);
@@ -118,14 +139,14 @@ describe('recordDeriveAction', () => {
       source: 'lint',
       surface: 'totem_search',
       nowMs: T0,
-      env: {},
+      env: env(),
     });
     const derive = recordDeriveAction({
       totemDir,
       source: 'lint',
       surface: 'spec',
       nowMs: T0 + 60_000,
-      env: {},
+      env: env(),
     });
 
     expect(derive.correlationId).toBe(query.correlationId);
@@ -142,7 +163,7 @@ describe('recordDeriveAction', () => {
       source: 'lint',
       surface: 'orient',
       nowMs: T0,
-      env: {},
+      env: env(),
     });
 
     expect(derive.written).toBe(true);
@@ -154,13 +175,13 @@ describe('recordDeriveAction', () => {
   });
 
   it('does not correlate to a query older than the window', () => {
-    recordCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: {} });
+    recordCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() });
     const derive = recordDeriveAction({
       totemDir,
       source: 'lint',
       surface: 'review',
       nowMs: T0 + QBD_CORRELATION_WINDOW_MS + 1000,
-      env: {},
+      env: env(),
     });
 
     expect(derive.correlationId).toBeUndefined();
@@ -169,36 +190,137 @@ describe('recordDeriveAction', () => {
   });
 
   it('does not correlate across sessions', () => {
-    const sessionA = '550e8400-e29b-41d4-a716-446655440000';
-    const sessionB = '550e8400-e29b-41d4-a716-446655440001';
     recordCorpusQuery({
       totemDir,
       source: 'lint',
       surface: 'totem_search',
       nowMs: T0,
-      env: { TOTEM_SESSION_ID: sessionA },
+      env: env(SESSION_A),
     });
     const derive = recordDeriveAction({
       totemDir,
       source: 'lint',
       surface: 'spec',
       nowMs: T0 + 60_000,
-      env: { TOTEM_SESSION_ID: sessionB },
+      env: env(SESSION_B),
     });
     expect(derive.correlationId).toBeUndefined();
+  });
+
+  it('does not correlate across SEATS sharing one working tree', () => {
+    // Cohort seats share one tree per repo, so seat B can reach the pointer
+    // seat A parked. `agent_source` was recorded but never consulted.
+    recordCorpusQuery({
+      totemDir,
+      source: 'lint',
+      surface: 'totem_search',
+      nowMs: T0,
+      env: env(SESSION_A, 'seat-a'),
+    });
+    const derive = recordDeriveAction({
+      totemDir,
+      source: 'lint',
+      surface: 'spec',
+      nowMs: T0 + 60_000,
+      env: env(SESSION_A, 'seat-b'),
+    });
+    expect(derive.correlationId).toBeUndefined();
+    expect(ledgerLines()[1]!.agent_source).toBe('seat-b');
+  });
+
+  it('is fail-CLOSED when either side carries no session id', () => {
+    // A hookless run must not inherit whatever pointer is lying around.
+    recordCorpusQuery({
+      totemDir,
+      source: 'lint',
+      surface: 'totem_search',
+      nowMs: T0,
+      env: { TOTEM_SELF_AGENT: 'seat-a' },
+    });
+    const derive = recordDeriveAction({
+      totemDir,
+      source: 'lint',
+      surface: 'spec',
+      nowMs: T0 + 1000,
+      env: { TOTEM_SELF_AGENT: 'seat-a' },
+    });
+    expect(derive.correlationId).toBeUndefined();
+  });
+});
+
+describe('consume-on-use — one query grounds ONE derive', () => {
+  it('does not let a single query credit an unbounded run of derives', () => {
+    const query = recordCorpusQuery({
+      totemDir,
+      source: 'lint',
+      surface: 'totem_search',
+      nowMs: T0,
+      env: env(),
+    });
+
+    const first = recordDeriveAction({
+      totemDir,
+      source: 'lint',
+      surface: 'spec',
+      nowMs: T0 + 1000,
+      env: env(),
+    });
+    expect(first.correlationId).toBe(query.correlationId);
+
+    // Every subsequent derive is uncorrelated — the query was already spent.
+    for (let i = 2; i <= 5; i++) {
+      const next = recordDeriveAction({
+        totemDir,
+        source: 'lint',
+        surface: 'spec',
+        nowMs: T0 + i * 1000,
+        env: env(),
+      });
+      expect(next.correlationId).toBeUndefined();
+    }
+
+    const derives = ledgerLines().filter((r) => r.type === 'derive_action');
+    expect(derives).toHaveLength(5);
+    expect(derives.filter((r) => r.qbd_correlation_id !== undefined)).toHaveLength(1);
+  });
+
+  it('re-arms after a fresh query', () => {
+    recordCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() });
+    recordDeriveAction({
+      totemDir,
+      source: 'lint',
+      surface: 'spec',
+      nowMs: T0 + 1000,
+      env: env(),
+    });
+    const second = recordCorpusQuery({
+      totemDir,
+      source: 'lint',
+      surface: 'totem_search',
+      nowMs: T0 + 2000,
+      env: env(),
+    });
+    const derive = recordDeriveAction({
+      totemDir,
+      source: 'lint',
+      surface: 'spec',
+      nowMs: T0 + 3000,
+      env: env(),
+    });
+    expect(derive.correlationId).toBe(second.correlationId);
   });
 });
 
 describe('induced failure — forged correlation pointer (ADR-115 § 2)', () => {
   it('throws the loud backstop, still records the derive, and recovers', () => {
     // ── Control: a healthy run correlates cleanly and warns about nothing.
-    recordCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: {} });
+    recordCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() });
     const healthy = senseDeriveAction({
       totemDir,
       source: 'lint',
       surface: 'spec',
       nowMs: T0 + 1000,
-      env: {},
+      env: env(),
     });
     expect(healthy.correlationId).toBeDefined();
     expect(healthy.warnings).toEqual([]);
@@ -212,7 +334,13 @@ describe('induced failure — forged correlation pointer (ADR-115 § 2)', () => 
     // Pack 2 — the loud backstop THROWS on the mutating path.
     let thrown: unknown;
     try {
-      recordDeriveAction({ totemDir, source: 'lint', surface: 'spec', nowMs: T0 + 2000, env: {} });
+      recordDeriveAction({
+        totemDir,
+        source: 'lint',
+        surface: 'spec',
+        nowMs: T0 + 2000,
+        env: env(),
+      });
     } catch (err) {
       thrown = err;
     }
@@ -233,7 +361,7 @@ describe('induced failure — forged correlation pointer (ADR-115 § 2)', () => 
     // and the instrumented command is NOT broken (no throw).
     const warnings: string[] = [];
     const sensed = senseDeriveAction(
-      { totemDir, source: 'lint', surface: 'spec', nowMs: T0 + 3000, env: {} },
+      { totemDir, source: 'lint', surface: 'spec', nowMs: T0 + 3000, env: env() },
       (msg) => warnings.push(msg),
     );
     expect(sensed.written).toBe(true);
@@ -247,11 +375,11 @@ describe('induced failure — forged correlation pointer (ADR-115 § 2)', () => 
       source: 'lint',
       surface: 'totem_search',
       nowMs: T0 + 4000,
-      env: {},
+      env: env(),
     });
     const recoveredWarnings: string[] = [];
     const recovered = senseDeriveAction(
-      { totemDir, source: 'lint', surface: 'spec', nowMs: T0 + 5000, env: {} },
+      { totemDir, source: 'lint', surface: 'spec', nowMs: T0 + 5000, env: env() },
       (msg) => recoveredWarnings.push(msg),
     );
     expect(recovered.correlationId).toBeDefined();
@@ -264,7 +392,7 @@ describe('induced failure — forged correlation pointer (ADR-115 § 2)', () => 
 
     const warnings: string[] = [];
     const result = senseDeriveAction(
-      { totemDir, source: 'lint', surface: 'orient', nowMs: T0, env: {} },
+      { totemDir, source: 'lint', surface: 'orient', nowMs: T0, env: env() },
       (msg) => warnings.push(msg),
     );
 
@@ -283,7 +411,7 @@ describe('not an instrumented project', () => {
 
     const warnings: string[] = [];
     const result = senseDeriveAction(
-      { totemDir: absent, source: 'lint', surface: 'orient', nowMs: T0, env: {} },
+      { totemDir: absent, source: 'lint', surface: 'orient', nowMs: T0, env: env() },
       (msg) => warnings.push(msg),
     );
 
@@ -302,7 +430,7 @@ describe('not an instrumented project', () => {
       source: 'lint',
       surface: 'totem_search',
       nowMs: T0,
-      env: {},
+      env: env(),
     });
     expect(result.skipped).toBe(true);
   });
@@ -327,14 +455,18 @@ describe('induced failure — unwritable ledger (ADR-115 § 2)', () => {
 
     const warnings: string[] = [];
     const result = senseCorpusQuery(
-      { totemDir: blocked, source: 'lint', surface: 'totem_search', nowMs: T0, env: {} },
+      { totemDir: blocked, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() },
       (msg) => warnings.push(msg),
     );
 
-    // Pack 1 — accounting fires and names the failing subsystem.
+    // Pack 1 — accounting fires and names the failing subsystem AND the real
+    // underlying errno. Asserting only the unconditional `query-before-derive:`
+    // prefix would pass even if the message carried no diagnosis at all, so pin
+    // the errno the OS actually raised (ENOTDIR on POSIX, EEXIST on Windows).
     expect(result.written).toBe(false);
-    expect(warnings.length).toBeGreaterThan(0);
-    expect(warnings.some((w) => w.includes('query-before-derive'))).toBe(true);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('query-before-derive');
+    expect(warnings[0]).toMatch(/ENOTDIR|EEXIST|ENOENT/);
 
     // Pack 2 — for this sensor the "backstop" contract is that the failure is
     // LOUD (surfaced above) while the instrumented command survives: sensor
@@ -345,14 +477,14 @@ describe('induced failure — unwritable ledger (ADR-115 § 2)', () => {
         source: 'lint',
         surface: 'totem_search',
         nowMs: T0,
-        env: {},
+        env: env(),
       }),
     ).not.toThrow();
 
     // Pack 3 — recovery: a writable totemDir records cleanly again.
     const recoveredWarnings: string[] = [];
     const recovered = senseCorpusQuery(
-      { totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: {} },
+      { totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() },
       (msg) => recoveredWarnings.push(msg),
     );
     expect(recovered.written).toBe(true);
@@ -369,7 +501,7 @@ describe('induced failure — unwritable ledger (ADR-115 § 2)', () => {
       source: 'lint',
       surface: 'totem_search',
       nowMs: T0,
-      env: {},
+      env: env(),
     });
     expect(fs.existsSync(path.join(blocked, 'ledger', '.qbd-correlation'))).toBe(false);
   });

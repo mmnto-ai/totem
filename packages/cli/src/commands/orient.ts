@@ -809,22 +809,12 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
   // rule (all derive-class events, including in zero-query sessions) is
   // untouched: no session is excluded, and no agent-initiated derive is dropped.
   {
-    const path = await import('node:path');
-    const { senseDeriveAction } = await import('@mmnto/totem');
-    // orient is deliberately config-optional, so resolve totemDir best-effort
-    // and fall back to the `.totem` default rather than failing the command.
-    let totemDir = path.join(cwd, '.totem');
-    try {
-      const { loadConfig, resolveConfigPath } = await import('../utils.js');
-      const config = await loadConfig(resolveConfigPath(cwd));
-      totemDir = path.join(cwd, config.totemDir);
-      // totem-context: orient runs against config-less repos by design — the `.totem` default is the honest-absent path, not a sensor failure.
-    } catch (err) {
-      if (err instanceof Error && err.message.length === 0) throw err;
-    }
-    senseDeriveAction({ totemDir, source: 'lint', surface: 'orient' }, (msg) => {
+    const { recordQbdDerive } = await import('./qbd-seam.js');
+    const report = await recordQbdDerive(cwd, 'orient', (msg) => {
       process.stderr.write(`[orient] ${msg}\n`);
     });
+    // Never a silent no-op: if nothing was recorded, say so and name the reason.
+    if (report.note !== undefined) process.stderr.write(`[orient] ${report.note}\n`);
   }
 
   if (json) {

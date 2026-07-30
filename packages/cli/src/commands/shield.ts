@@ -1823,6 +1823,24 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     config.review.sourceExtensions,
   );
 
+  // Query-before-derive instrumentation (mmnto-ai/totem#2510): review grounding
+  // is a derive-class action.
+  //
+  // Placed ABOVE the structural fork deliberately. Structural mode is still an
+  // agent-initiated review derive, and it `return`s from inside its own branch —
+  // so a seam sited after that branch (as this one first was) recorded the
+  // standard and fan paths while structural escaped the denominator entirely.
+  // This is the last point every review path provably passes through, so the
+  // "counted exactly once, whichever path runs" claim is true here and was not
+  // true where it started.
+  {
+    const { recordQbdDerive } = await import('./qbd-seam.js');
+    const report = await recordQbdDerive(cwd, 'review', (msg) => {
+      log.warn(DISPLAY_TAG, msg);
+    });
+    if (report.note !== undefined) log.dim(DISPLAY_TAG, report.note);
+  }
+
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
   if (options.mode === 'structural') {
     log.info(DISPLAY_TAG, 'Running structural review (context-blind, no Totem knowledge)...');
@@ -1924,20 +1942,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     await import('@mmnto/totem');
   const { buildRetrievalGroundingBundle } = await import('../utils.js');
   const groundingBundle = buildRetrievalGroundingBundle(context);
-
-  // Query-before-derive instrumentation (mmnto-ai/totem#2510): review grounding
-  // is a derive-class action. Recorded here — the one point BOTH the multi-lane
-  // fan (which returns below) and the single-lane path pass through, so a
-  // review is counted exactly once regardless of which path runs.
-  {
-    const { senseDeriveAction } = await import('@mmnto/totem');
-    senseDeriveAction(
-      { totemDir: path.join(cwd, config.totemDir), source: 'lint', surface: 'review' },
-      (msg) => {
-        log.warn(TAG, msg);
-      },
-    );
-  }
 
   // ── Multi-lane review fan (Prop 304 R2, mmnto-ai/totem#2106) ──
   // When `review.lanes` is configured (and neither --model nor structural mode

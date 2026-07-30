@@ -8,10 +8,27 @@
  *    and the row are born together. Then parks the ID in a pointer file for the
  *    derives that follow.
  *  - `recordDeriveAction` — a derive-class action ran. Reads the parked ID and
- *    attaches it *only if* it is still inside the correlation window and belongs
- *    to this session. Otherwise the row is written with NO correlation ID — an
- *    uncorrelated derive is the metric's most important observation, so it is
- *    always recorded, never dropped (#2510 falsifier 1).
+ *    attaches it *only if* it is still inside the correlation window, from this
+ *    session, and from this seat. Otherwise the row is written with NO
+ *    correlation ID — an uncorrelated derive is the metric's most important
+ *    observation, so it is always recorded, never dropped (#2510 falsifier 1).
+ *
+ * ## Consumption semantics: one query grounds ONE derive
+ *
+ * The pointer is CONSUMED by the first derive that correlates to it. Without
+ * that, a single query would credit every derive for the rest of the
+ * correlation window — one query, ten derives, compliance 1.00 — which measures
+ * "queried at least once per two hours", not "queried before deriving". The
+ * strict 1:1 reading is the one that can actually be falsified, so it is the
+ * one implemented. A second derive after a single query is UNCORRELATED, and
+ * that is the correct reading, not a miss.
+ *
+ * ## Correlation is scoped to one seat AND one session, fail-closed
+ *
+ * Both sides must carry a session id and agree on it, and the seats must match.
+ * Cohort seats share one working tree per repo, so a pointer left by another
+ * seat is reachable; treating a missing id as a match would let it ground this
+ * seat's derive.
  *
  * ## Why minting lives here and nowhere else
  *
@@ -140,6 +157,8 @@ interface QbdPointer {
   id: string;
   mintedAtMs: number;
   sessionId: string | null;
+  /** Seat that fired the query. Correlation requires the derive match it. */
+  agentSource: string | null;
 }
 
 function pointerPath(totemDir: string): string {
@@ -155,6 +174,26 @@ function writePointer(totemDir: string, pointer: QbdPointer, warnings: string[])
     // totem-context: intentional cleanup — the correlation pointer is telemetry; a sensor must never fail the command it instruments (Tenet 13). NOT swallowed: recorded on the `warnings` accounting channel and surfaced by the caller.
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(`query-before-derive: correlation pointer write failed: ${msg}`);
+  }
+}
+
+/**
+ * Consume the parked pointer, so one query grounds exactly one derive.
+ *
+ * Best-effort: if the pointer cannot be removed, the failure is reported on the
+ * accounting channel. A surviving pointer would over-credit, so this is a real
+ * degradation and is never silent.
+ */
+function clearPointer(totemDir: string, warnings: string[]): void {
+  try {
+    fs.rmSync(pointerPath(totemDir), { force: true });
+    // totem-context: intentional cleanup — consuming the correlation pointer is telemetry bookkeeping; a failure is reported on the `warnings` accounting channel rather than thrown, because it must not fail the instrumented command (Tenet 13).
+  } catch (err) {
+    // totem-context: intentional cleanup — consuming the correlation pointer is telemetry bookkeeping; a failure is reported on the `warnings` accounting channel rather than thrown, because it must not fail the instrumented command (Tenet 13).
+    const msg = err instanceof Error ? err.message : String(err);
+    warnings.push(
+      `query-before-derive: could not consume the correlation pointer (${msg}) — it may over-credit until removed`,
+    );
   }
 }
 
@@ -197,6 +236,7 @@ function readPointer(totemDir: string, warnings: string[]): QbdPointer | undefin
       id: rec.id,
       mintedAtMs: rec.mintedAtMs,
       sessionId: typeof rec.sessionId === 'string' ? rec.sessionId : null,
+      agentSource: typeof rec.agentSource === 'string' ? rec.agentSource : null,
     };
     // totem-context: intentional cleanup — a corrupt pointer degrades to "no correlation in scope" and is reported on the `warnings` accounting channel; throwing would let a hand-edited telemetry file break `totem spec` / `orient` / `review`.
   } catch (err) {
@@ -301,7 +341,12 @@ export function recordCorpusQuery(
   if (written) {
     writePointer(
       input.totemDir,
-      { id: correlationId, mintedAtMs: nowMs, sessionId: sessionId ?? null },
+      {
+        id: correlationId,
+        mintedAtMs: nowMs,
+        sessionId: sessionId ?? null,
+        agentSource: agentSource ?? null,
+      },
       warnings,
     );
   }
@@ -337,12 +382,20 @@ function buildAndWriteDerive(input: QbdRecordInput & { surface: QbdDeriveSurface
   let breach: TotemError | undefined;
 
   if (pointer !== undefined) {
+    // Same session, fail-CLOSED. Correlation requires BOTH sides to carry a
+    // session id and for them to be equal. The previous "either side missing
+    // counts as a match" reading was a fail-open: a hookless run with no session
+    // id would inherit any pointer lying around, including another seat's.
     const sameSession =
-      pointer.sessionId === null || sessionId === undefined || pointer.sessionId === sessionId;
+      pointer.sessionId !== null && sessionId !== undefined && pointer.sessionId === sessionId;
+    // Same seat. Cohort seats share ONE working tree per repo, so without this
+    // an agent-A query would ground an agent-B derive — a live scenario here,
+    // not a theoretical one. `agent_source` was recorded but never consulted.
+    const sameAgent = (pointer.agentSource ?? undefined) === agentSource;
     const withinWindow = nowMs - pointer.mintedAtMs <= QBD_CORRELATION_WINDOW_MS;
     // A stale or foreign pointer is not an error — it simply did not ground
     // this derive. The row is still written, uncorrelated, into the denominator.
-    if (sameSession && withinWindow) {
+    if (sameSession && sameAgent && withinWindow) {
       const check = checkQbdCorrelationId(pointer.id, 'derive_action', nowMs);
       if (check.ok) {
         correlationId = pointer.id;
@@ -374,6 +427,16 @@ function buildAndWriteDerive(input: QbdRecordInput & { surface: QbdDeriveSurface
   };
 
   const { written } = validateAndAppend(input.totemDir, event, warnings);
+
+  // Consume-on-use: a query grounds exactly ONE derive. Without this the parked
+  // ID stays live for the whole correlation window, so a single query could
+  // credit an unbounded run of derives (measured: 1 query, 10 derives,
+  // compliance 1.00). That reading is not "query before derive", it is "query
+  // once per two hours", which is precisely the shape the metric exists to
+  // detect. Consuming only after a SUCCESSFUL correlated write means a failed
+  // append cannot silently burn the query's grounding.
+  if (written && correlationId !== undefined) clearPointer(input.totemDir, warnings);
+
   const result: QbdRecordResult = {
     written,
     ...(correlationId !== undefined && { correlationId }),

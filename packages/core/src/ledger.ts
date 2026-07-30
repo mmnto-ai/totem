@@ -7,6 +7,33 @@ import { checkQbdCorrelationId } from './qbd/correlation-id.js';
 
 // ─── Schema ─────────────────────────────────────────
 
+/**
+ * Every ledger event type, in one place.
+ *
+ * Consumers that need to partition the type space (e.g. the query-before-derive
+ * scanner, which must tell "another subsystem's row" from "a row that concerns
+ * me") MUST derive their sets from this constant rather than hand-mirroring it.
+ * A hand-copied list silently rots the moment a type is added here, and for the
+ * QBD scanner that rot changes a DEGRADED verdict — see `qbd/compliance.ts`.
+ */
+export const LEDGER_EVENT_TYPES = [
+  'suppress',
+  'override',
+  'exemption',
+  'mcp_call',
+  'tool_call_first_significant',
+  'hook_fire',
+  'session_start',
+  'compile_run',
+  'claim_discipline_finding',
+  'compile_cache_decision',
+  'corpus_query',
+  'derive_action',
+] as const;
+
+/** Ledger event types that belong to the query-before-derive metric (#2510). */
+export const QBD_EVENT_TYPES = ['corpus_query', 'derive_action'] as const;
+
 const LedgerEventShape = z.object({
   /** ISO 8601 timestamp */
   timestamp: z.string().datetime(),
@@ -50,20 +77,7 @@ const LedgerEventShape = z.object({
    *  discipline enforces required-by-type. Promotion to `z.discriminatedUnion` deferred to A.3.c
    *  per design doc OQ-1 (.handoff/_shared/2026-05-15-a3a-schema-extension-design.md).
    */
-  type: z.enum([
-    'suppress',
-    'override',
-    'exemption',
-    'mcp_call',
-    'tool_call_first_significant',
-    'hook_fire',
-    'session_start',
-    'compile_run',
-    'claim_discipline_finding',
-    'compile_cache_decision',
-    'corpus_query',
-    'derive_action',
-  ]),
+  type: z.enum(LEDGER_EVENT_TYPES),
   /** Rule ID (lessonHash) for override events. Optional; required by writer for suppress/override/exemption. */
   ruleId: z.string().trim().min(1).optional(),
   /** File where the suppression/override occurred. Optional; required by writer for suppress/override/exemption. */

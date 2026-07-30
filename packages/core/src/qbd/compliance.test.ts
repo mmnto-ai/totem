@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { LEDGER_EVENT_TYPES, QBD_EVENT_TYPES } from '../ledger.js';
 import {
   computeQbdCompliance,
   formatQbdRate,
+  groupQbdSessions,
   QBD_PRE_REGISTERED_THRESHOLD,
   QBD_PRE_REGISTERED_WINDOW_SESSIONS,
   QBD_PRE_REGISTRATION_STATEMENT,
@@ -17,7 +19,11 @@ function sid(n: number): string {
   return `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 }
 
-function queryLine(ms: number, sessionId?: string): { line: string; id: string } {
+function queryLine(
+  ms: number,
+  sessionId?: string,
+  agentSource?: string,
+): { line: string; id: string } {
   const id = mintQbdCorrelationId(ms);
   return {
     id,
@@ -29,11 +35,17 @@ function queryLine(ms: number, sessionId?: string): { line: string; id: string }
       justification: '',
       qbd_correlation_id: id,
       ...(sessionId !== undefined && { session_id: sessionId }),
+      ...(agentSource !== undefined && { agent_source: agentSource }),
     }),
   };
 }
 
-function deriveLine(ms: number, sessionId?: string, correlationId?: string): string {
+function deriveLine(
+  ms: number,
+  sessionId?: string,
+  correlationId?: string,
+  agentSource?: string,
+): string {
   return JSON.stringify({
     timestamp: new Date(ms).toISOString(),
     type: 'derive_action',
@@ -42,6 +54,7 @@ function deriveLine(ms: number, sessionId?: string, correlationId?: string): str
     justification: '',
     ...(correlationId !== undefined && { qbd_correlation_id: correlationId }),
     ...(sessionId !== undefined && { session_id: sessionId }),
+    ...(agentSource !== undefined && { agent_source: agentSource }),
   });
 }
 
@@ -95,6 +108,117 @@ describe('scanQbdLedger', () => {
     const scan = scanQbdLedger('');
     expect(scan.rows).toHaveLength(0);
     expect(scan.degraded).toBe(false);
+  });
+
+  it('CATCHES a forged correlation ID smuggled onto a non-QBD event type', () => {
+    // The scanner used to short-circuit on "this type belongs to another
+    // subsystem" BEFORE testing for QBD markers, so a row that claimed
+    // type `mcp_call` while carrying a `qbd_correlation_id` was dropped with
+    // zero anomalies — a tampered ledger rendering perfectly clean. The QBD
+    // marker test must win.
+    const content = JSON.stringify({
+      timestamp: new Date(T0).toISOString(),
+      type: 'mcp_call',
+      source: 'bot',
+      justification: '',
+      qbd_correlation_id: mintQbdCorrelationId(T0),
+      session_id: sid(1),
+    });
+
+    const scan = scanQbdLedger(content);
+    expect(scan.anomalies.correlationContractViolations).toBe(1);
+    expect(scan.degraded).toBe(true);
+  });
+
+  it('leaves a schema-failed non-QBD row alone when it carries no QBD markers', () => {
+    // Control for the test above: another subsystem's row failing its OWN
+    // schema is not this metric's integrity problem.
+    const content = JSON.stringify({
+      timestamp: new Date(T0).toISOString(),
+      type: 'suppress',
+      source: 'lint',
+      justification: '',
+      ruleId: '', // invalid: min(1)
+    });
+
+    const scan = scanQbdLedger(content);
+    expect(scan.anomalies.correlationContractViolations).toBe(0);
+    expect(scan.anomalies.unclassifiedInvalid).toBe(0);
+    expect(scan.degraded).toBe(false);
+  });
+
+  it('treats an unknown event type as ADVISORY version skew, not tampering', () => {
+    // Polarity check: benign skew must not flip DEGRADED, or routine skew
+    // drowns the signal that real tampering produces.
+    const content = JSON.stringify({
+      timestamp: new Date(T0).toISOString(),
+      type: 'some_future_event_type',
+      source: 'lint',
+      justification: '',
+    });
+
+    const scan = scanQbdLedger(content);
+    expect(scan.anomalies.unknownTypeRows).toBe(1);
+    expect(scan.degraded).toBe(false);
+    expect(scan.anomalies.details.some((d) => d.includes('version skew'))).toBe(true);
+  });
+
+  it('DEGRADES on backdated appends into an append-only ledger', () => {
+    // The cheap attack on a "first N sessions" window: append rows stamped in
+    // the past. Each row is individually contract-valid, so only cross-row
+    // monotonicity can see it.
+    const recent = queryLine(T0, sid(1));
+    const backdatedMs = Date.parse('2019-01-01T00:00:00.000Z');
+    const content = [
+      recent.line,
+      deriveLine(T0 + 1000, sid(1), recent.id),
+      deriveLine(backdatedMs, sid(2)),
+    ].join('\n');
+
+    const scan = scanQbdLedger(content);
+    expect(scan.anomalies.backdatedRows).toBe(1);
+    expect(scan.degraded).toBe(true);
+    // The backdated row is still COUNTED — dropping it would shrink the
+    // denominator, which is the other failure mode.
+    expect(scan.rows).toHaveLength(3);
+  });
+
+  it('tolerates small out-of-order jitter from concurrent writers', () => {
+    const q = queryLine(T0, sid(1));
+    const content = [
+      q.line,
+      deriveLine(T0 + 1000, sid(1), q.id),
+      deriveLine(T0 + 500, sid(1)),
+    ].join('\n');
+    const scan = scanQbdLedger(content);
+    expect(scan.anomalies.backdatedRows).toBe(0);
+    expect(scan.degraded).toBe(false);
+  });
+});
+
+describe('ledger type parity', () => {
+  it('derives the non-QBD type set from the schema instead of hand-mirroring it', () => {
+    // A hand-copied list rots the moment a type is added to ledger.ts, and here
+    // that rot changes a DEGRADED verdict. Pin the partition to the schema.
+    const qbd = new Set<string>(QBD_EVENT_TYPES);
+    const expectedNonQbd = LEDGER_EVENT_TYPES.filter((t) => !qbd.has(t));
+
+    // Every non-QBD type must scan clean (no unknown-type advisory).
+    for (const type of expectedNonQbd) {
+      const row = JSON.stringify({
+        timestamp: new Date(T0).toISOString(),
+        type,
+        source: 'lint',
+        justification: '',
+        ruleId: 'r',
+        file: 'a.ts',
+      });
+      const scan = scanQbdLedger(row);
+      expect(scan.anomalies.unknownTypeRows, `type '${type}' should be known`).toBe(0);
+    }
+
+    // And the two QBD types are exactly the metric's own.
+    expect([...QBD_EVENT_TYPES].sort()).toEqual(['corpus_query', 'derive_action']);
   });
 });
 
@@ -233,6 +357,22 @@ describe('computeQbdCompliance — the pre-registered threshold and window', () 
     expect(report.verdict).toBe('FAIL');
   });
 
+  it('pins first-20 ordering from the other direction', () => {
+    // Mirror image: 20 GOOD sessions first, then a bad 21st. Under a
+    // `slice(-20)` bug this reads 19/20 instead of 20/20, so the two tests
+    // together pin the window's direction rather than just its size.
+    const lines = sessionsWith(20, true).split('\n');
+    const lateMs = T0 + 100 * 86_400_000;
+    lines.push(deriveLine(lateMs, sid(999)));
+
+    const report = computeQbdCompliance(scanQbdLedger(lines.join('\n')));
+    expect(report.instrumentedSessions).toBe(21);
+    expect(report.evaluatedSessions).toBe(20);
+    expect(report.window).toEqual({ derives: 20, correlated: 20 });
+    expect(report.compliance).toBe(1);
+    expect(report.verdict).toBe('PASS');
+  });
+
   it('reports a trend once there are enough sessions on both sides', () => {
     const lines: string[] = [];
     // Two bad sessions, then two good ones.
@@ -256,6 +396,28 @@ describe('computeQbdCompliance — the pre-registered threshold and window', () 
 });
 
 describe('session grouping', () => {
+  it('never merges two SEATS into one rolling-window session', () => {
+    // Cohort seats share one working tree, so both write to the same ledger
+    // inside the same span. Merging them would put seat A's query in the same
+    // session as seat B's derive.
+    const rows = [
+      { ms: T0, type: 'corpus_query' as const, agentSource: 'seat-a' },
+      { ms: T0 + 1000, type: 'derive_action' as const, agentSource: 'seat-b' },
+    ];
+    const sessions = groupQbdSessions(rows);
+    expect(sessions).toHaveLength(2);
+  });
+
+  it('refuses to credit a derive correlated to another SEAT’s query', () => {
+    const q = queryLine(T0, sid(1), 'seat-a');
+    const content = [q.line, deriveLine(T0 + 1000, sid(1), q.id, 'seat-b')].join('\n');
+
+    const report = computeQbdCompliance(scanQbdLedger(content));
+    expect(report.window.correlated).toBe(0);
+    expect(report.anomalies.crossSessionCorrelations).toBe(1);
+    expect(report.degraded).toBe(true);
+  });
+
   it('rolls id-less rows into windows rather than dropping them', () => {
     const q = queryLine(T0);
     const content = [

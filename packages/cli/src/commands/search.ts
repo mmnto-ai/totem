@@ -90,13 +90,11 @@ export async function searchCommand(
   // surfaces as a warning here rather than failing the search (Tenet 13). The
   // warning is the accounting channel — the failure is visible, not swallowed.
   {
-    const { senseCorpusQuery } = await import('@mmnto/totem');
-    senseCorpusQuery(
-      { totemDir: path.join(cwd, config.totemDir), source: 'lint', surface: 'totem_search' },
-      (msg) => {
-        log.warn(TAG, msg);
-      },
-    );
+    const { recordQbdQuery } = await import('./qbd-seam.js');
+    const report = await recordQbdQuery(cwd, (msg) => {
+      log.warn(TAG, msg);
+    });
+    if (report.note !== undefined) log.dim(TAG, report.note);
   }
 
   // Query linked stores in parallel

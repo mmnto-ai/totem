@@ -7,7 +7,7 @@ import type { ContentType, HealthCheckResult, SearchResult } from '@mmnto/totem'
 import { ContentTypeSchema, DEFAULT_SEARCH_RELEVANCE_FLOOR } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
-import { logMcpCall } from '../ledger-writer.js';
+import { logCorpusQuery, logMcpCall } from '../ledger-writer.js';
 import { logSearch, setLogDir } from '../search-log.js';
 import { extractIndexState } from '../state-extractors.js';
 import { formatIndexEnvelope, formatSystemWarning, formatXmlResponse } from '../xml-format.js';
@@ -1054,6 +1054,15 @@ export function registerSearchKnowledge(server: McpServer): void {
             durationMs: Date.now() - start,
             topScore,
             topRelevance,
+          });
+
+          // Query-before-derive (mmnto-ai/totem#2510): the search actually RAN.
+          // Sited here, not beside the entry-time `logMcpCall`, so a search
+          // blocked by the health gate, one that returned isError, or one that
+          // threw never mints a correlation ID a later derive could claim
+          // grounding from. Zero hits still counts — the query executed.
+          logCorpusQuery().catch((err) => {
+            void err;
           });
         }
 

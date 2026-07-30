@@ -544,7 +544,13 @@ export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secr
 
 // Trap Ledger (suppression/override audit trail)
 export type { LedgerEvent } from './ledger.js';
-export { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger.js';
+export {
+  appendLedgerEvent,
+  LEDGER_EVENT_TYPES,
+  LedgerEventSchema,
+  QBD_EVENT_TYPES,
+  readLedgerEvents,
+} from './ledger.js';
 
 // Session ID — A.3.a SessionStart hook + MCP correlation
 export { mintSessionId, readSessionId, writeSessionId } from './session-id.js';

@@ -54,19 +54,14 @@ export async function doctorQbdComplianceCommand(
 
   const cwd = options.cwdForTest ?? process.cwd();
 
-  // Resolve totemDir best-effort; default `.totem` (mirrors the sibling doctor
-  // sections, which never hard-fail on a config-less repo).
-  let totemDir = '.totem';
-  try {
-    const { loadConfig, resolveConfigPath } = await import('../utils.js');
-    const config = await loadConfig(resolveConfigPath(cwd));
-    totemDir = config.totemDir;
-    // totem-context: a missing/corrupt config is the honest-absent path (default `.totem`), not a sensor failure — the doctor runs against config-less repos by design.
-  } catch (err) {
-    if (err instanceof Error && err.message.length === 0) throw err;
-  }
+  // Resolve the ledger through the SAME helper the write seams use, so the
+  // reader can never look somewhere the writers do not write (they diverged
+  // once already: seams joined `cwd`, which misses the project ledger whenever
+  // a command runs from a subdirectory).
+  const { resolveQbdLedgerDir } = await import('./qbd-seam.js');
+  const totemDir = (await resolveQbdLedgerDir(cwd)) ?? path.join(cwd, '.totem');
 
-  const ledgerPath = path.join(cwd, totemDir, ...LEDGER_RELATIVE_PATH);
+  const ledgerPath = path.join(totemDir, ...LEDGER_RELATIVE_PATH);
   // totemDir is repo-controlled config — sanitize before it reaches a terminal.
   const displayPath = sanitizeForTerminal(path.join(totemDir, ...LEDGER_RELATIVE_PATH));
 
@@ -121,10 +116,25 @@ export async function doctorQbdComplianceCommand(
     if (a.crossSessionCorrelations > 0) {
       log.warn(
         TAG,
-        `  ${a.crossSessionCorrelations} derive(s) correlated to a query from another session`,
+        `  ${a.crossSessionCorrelations} derive(s) correlated to a query from another session or seat`,
+      );
+    }
+    if (a.backdatedRows > 0) {
+      log.warn(
+        TAG,
+        `  ${a.backdatedRows} row(s) with timestamps regressing in an append-only ledger (backdated append)`,
       );
     }
     for (const detail of a.details) log.dim(TAG, `  · ${sanitizeForTerminal(detail)}`);
+  }
+
+  // Advisory — deliberately OUTSIDE the degraded envelope: an event type this
+  // build does not know is ordinary version skew, not evidence of tampering.
+  if (report.anomalies.unknownTypeRows > 0) {
+    log.dim(
+      TAG,
+      `note: ${report.anomalies.unknownTypeRows} row(s) carry an event type this build does not know (version skew — not counted against integrity)`,
+    );
   }
 
   // ── The number ──

@@ -88,10 +88,14 @@ Two event types measure one thing: of the derive-class actions in an agent sessi
 
 Semantics worth knowing before reading the number:
 
-- **Correlation window** — two hours, the same ADR-029 § 2 session window used elsewhere, rather than a new constant. Session identity comes from the existing `.session-id` primitive, with the same rolling-window fallback for hookless runs.
+- **One query grounds ONE derive.** The correlation pointer is consumed on use. Without that, a single query would credit every derive for the rest of the window — measuring "queried at least once per two hours" rather than "queried before deriving".
+- **Correlation window** — two hours. The value is borrowed from ADR-029 § 2 so the slice carries one time constant, but treating that span as a _grounding-validity_ window is this slice's own design decision; ADR-029 § 2 defines a session-grouping heuristic for the recall metric, a different question.
+- **Correlation is scoped to one seat and one session, fail-closed.** Both sides must carry a session id and agree on it, and the seats must match. Cohort seats share one working tree per repo, so a pointer left by another seat is reachable.
 - **The denominator is every derive-class event**, including those in sessions that fired zero queries. An uncorrelated derive is the observation the metric exists to make.
+- **All review modes count**, including `--mode structural`. Session identity comes from the existing `.session-id` primitive, with a per-seat rolling-window fallback for hookless runs.
 - **The SessionStart hook's `orient --session` render is not instrumented.** It is machine-initiated and fires before an agent could have queried anything; counting it would measure the hook's scheduling rather than an agent's adherence. No session is excluded by this, and no agent-initiated derive is dropped.
 - **Adjacency, not influence.** A query fired to satisfy the metric whose results the following derive never reads is indistinguishable here from one that genuinely grounded it. Named, not solved.
+- **Backdated appends are detected, whole-file rewrites are not.** The scanner degrades a read whose timestamps regress in an append-only file. An internally consistent rewrite of the entire ledger would defeat it; nothing short of signing would not.
 
 Read it with `totem doctor --compliance`, which renders the rate, its trend, the pre-registered threshold and window, and — when the ledger scan hit rows it could not trust — an explicit `DEGRADED` / `UNVERIFIED` envelope with per-item counts. Nothing gates on the number (Tenet 13).
 
