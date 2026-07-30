@@ -30,6 +30,19 @@
  * seat is reachable; treating a missing id as a match would let it ground this
  * seat's derive.
  *
+ * **Seat comparison is equality including "both unknown".** When neither side
+ * is seated (`TOTEM_SELF_AGENT` unset), they compare equal and correlation
+ * proceeds. That is the deliberate default for the solo/unseated case, which is
+ * the common one — requiring a seat would make the metric unusable for anyone
+ * not running a cohort. The cost is disclosed rather than hidden: seat exactly
+ * ONE side and correlation stops entirely. That is a live configuration today —
+ * the CLI can be seated while the MCP server is not — and it produces a
+ * truthful-looking 0.00 whose pre-registered consequence is falsified adherence
+ * claims. The scanner therefore emits a seat-mismatch hint (see
+ * `compliance.ts`) so the config smell is visible instead of silent. Wiring the
+ * MCP server's seat is out of this slice's scope and tracked in
+ * mmnto-ai/totem#2530.
+ *
  * ## Why minting lives here and nowhere else
  *
  * `mintQbdCorrelationId(now)` takes the instant as an argument, which would let

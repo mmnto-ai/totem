@@ -1227,6 +1227,25 @@ async function handleVerdictResult(
 ): Promise<void> {
   const { TotemError } = await import('@mmnto/totem');
 
+  // Query-before-derive instrumentation (mmnto-ai/totem#2510): a review is a
+  // derive-class action, recorded HERE — the shared verdict handler both the
+  // structural and the standard paths call — so it fires exactly once per
+  // review, and only once a verdict actually exists.
+  //
+  // It sat above the structural fork for one round, which fixed structural
+  // escaping the denominator but broadened the class by accident: a review that
+  // THREW still recorded a derive, unlike `spec`, which records only after
+  // synthesis produced content. After-success discipline is restored here. The
+  // multi-lane fan does not route through this function and records separately,
+  // after `runReviewFan` resolves; the three paths are mutually exclusive.
+  {
+    const { recordQbdDerive } = await import('./qbd-seam.js');
+    const report = await recordQbdDerive(cwd, 'review', (msg) => {
+      log.warn(DISPLAY_TAG, msg);
+    });
+    if (report.note !== undefined) log.dim(DISPLAY_TAG, report.note);
+  }
+
   writeOutput(content, options.out);
   if (options.out) log.success(DISPLAY_TAG, `Written to ${options.out}`);
 
@@ -1823,24 +1842,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     config.review.sourceExtensions,
   );
 
-  // Query-before-derive instrumentation (mmnto-ai/totem#2510): review grounding
-  // is a derive-class action.
-  //
-  // Placed ABOVE the structural fork deliberately. Structural mode is still an
-  // agent-initiated review derive, and it `return`s from inside its own branch —
-  // so a seam sited after that branch (as this one first was) recorded the
-  // standard and fan paths while structural escaped the denominator entirely.
-  // This is the last point every review path provably passes through, so the
-  // "counted exactly once, whichever path runs" claim is true here and was not
-  // true where it started.
-  {
-    const { recordQbdDerive } = await import('./qbd-seam.js');
-    const report = await recordQbdDerive(cwd, 'review', (msg) => {
-      log.warn(DISPLAY_TAG, msg);
-    });
-    if (report.note !== undefined) log.dim(DISPLAY_TAG, report.note);
-  }
-
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
   if (options.mode === 'structural') {
     log.info(DISPLAY_TAG, 'Running structural review (context-blind, no Totem knowledge)...');
@@ -1985,6 +1986,16 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       preFanContentHash,
       continues: options.continues,
     });
+    // Query-before-derive (mmnto-ai/totem#2510): the fan does not route through
+    // `handleVerdictResult`, so it records its own derive — after the fan has
+    // actually converged on a verdict. A fan that threw records nothing.
+    {
+      const { recordQbdDerive } = await import('./qbd-seam.js');
+      const report = await recordQbdDerive(cwd, 'review', (msg) => {
+        log.warn(DISPLAY_TAG, msg);
+      });
+      if (report.note !== undefined) log.dim(DISPLAY_TAG, report.note);
+    }
     return;
   }
 

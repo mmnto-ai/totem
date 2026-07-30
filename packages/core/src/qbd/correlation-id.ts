@@ -52,11 +52,16 @@
  *     query/derive pairs stamped in the past can simply be appended. No
  *     whole-file rewrite is needed. Each row passes this check individually.
  *     That attack is caught one layer up, by the append-only monotonicity check
- *     in `compliance.ts`, which degrades a scan whose timestamps regress.
- *  2. **A coherent whole-file rewrite.** Rewriting the entire ledger with
- *     internally consistent, monotonically increasing fake rows defeats both
- *     this check and the monotonicity check. Nothing short of signing or an
- *     append-only server would stop it, and neither is in scope for v1.
+ *     in `compliance.ts`, which degrades a scan whose timestamps regress. That
+ *     check takes its reference from EVERY row in the file, not just QBD rows,
+ *     so an adopted ledger's existing history is the baseline.
+ *  2. **A coherent whole-file rewrite** — and its degenerate case, an EMPTY or
+ *     QBD-only ledger authored wholesale. With no prior history there is no
+ *     monotonicity reference to violate, so internally consistent fake rows
+ *     read clean. This is the same adversary as the rewrite: whoever authors
+ *     the entire file controls its whole timeline. Conceded scope for v1 —
+ *     nothing short of signing or an append-only server addresses it, and
+ *     neither is chartered here.
  *
  * The realistic threat — a script or agent attaching correlation IDs to rows
  * already on disk — is caught here. The other two are named rather than

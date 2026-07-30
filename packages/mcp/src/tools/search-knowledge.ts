@@ -1061,9 +1061,14 @@ export function registerSearchKnowledge(server: McpServer): void {
           // blocked by the health gate, one that returned isError, or one that
           // threw never mints a correlation ID a later derive could claim
           // grounding from. Zero hits still counts — the query executed.
-          logCorpusQuery().catch((err) => {
-            void err;
-          });
+          //
+          // AWAITED, not fire-and-forget: the correlation pointer this writes is
+          // what a following derive reads, and that derive arrives in a separate
+          // process after this tool responds. Letting the write race the response
+          // means the agent can act on the result before the pointer exists.
+          // `logCorpusQuery` swallows its own failures, so awaiting adds a write,
+          // never a failure mode.
+          await logCorpusQuery();
         }
 
         // Prepend health warning and linked-stores warning to the first search

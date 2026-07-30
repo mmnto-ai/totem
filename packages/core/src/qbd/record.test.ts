@@ -33,6 +33,7 @@ import * as fs from 'node:fs';
 
 import { TotemError } from '../errors.js';
 import { cleanTmpDir } from '../test-utils.js';
+import { computeQbdCompliance, scanQbdLedger } from './compliance.js';
 import { mintQbdCorrelationId, QBD_CORRELATION_WINDOW_MS } from './correlation-id.js';
 import {
   recordCorpusQuery,
@@ -575,6 +576,126 @@ describe('induced failure — unwritable ledger (ADR-115 § 2)', () => {
       env: env(),
     });
     expect(fs.existsSync(path.join(blocked, 'ledger', '.qbd-correlation'))).toBe(false);
+  });
+});
+
+describe('accounting branches fire (positive coverage)', () => {
+  it('reports a failure to CONSUME the pointer', () => {
+    // The over-credit path the read-side duplicate check backstops: if the
+    // pointer survives, one query can ground several derives.
+    recordCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() });
+
+    const spy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {
+      const err = new Error('permission denied') as NodeJS.ErrnoException;
+      err.code = 'EACCES';
+      throw err;
+    });
+    try {
+      const warnings: string[] = [];
+      const result = senseDeriveAction(
+        { totemDir, source: 'lint', surface: 'spec', nowMs: T0 + 1000, env: env() },
+        (msg) => warnings.push(msg),
+      );
+      expect(result.correlationId).toBeDefined();
+      expect(warnings.some((w) => w.includes('could not consume'))).toBe(true);
+      expect(warnings.some((w) => w.includes('over-credit'))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('reports a correlation-pointer WRITE failure', () => {
+    const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation(((target: fs.PathLike) => {
+      if (String(target).endsWith('.qbd-correlation')) {
+        const err = new Error('disk full') as NodeJS.ErrnoException;
+        err.code = 'ENOSPC';
+        throw err;
+      }
+    }) as typeof fs.writeFileSync);
+    try {
+      const warnings: string[] = [];
+      senseCorpusQuery(
+        { totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() },
+        (msg) => warnings.push(msg),
+      );
+      expect(warnings.some((w) => w.includes('correlation pointer write failed'))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('reports an UNREADABLE correlation pointer (errno other than absent)', () => {
+    recordCorpusQuery({ totemDir, source: 'lint', surface: 'totem_search', nowMs: T0, env: env() });
+
+    const realRead = fs.readFileSync.bind(fs);
+    const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(((
+      target: fs.PathOrFileDescriptor,
+      opts?: unknown,
+    ) => {
+      if (String(target).endsWith('.qbd-correlation')) {
+        const err = new Error('permission denied') as NodeJS.ErrnoException;
+        err.code = 'EACCES';
+        throw err;
+      }
+      return realRead(target, opts as never);
+    }) as typeof fs.readFileSync);
+    try {
+      const warnings: string[] = [];
+      senseDeriveAction(
+        { totemDir, source: 'lint', surface: 'spec', nowMs: T0 + 1000, env: env() },
+        (msg) => warnings.push(msg),
+      );
+      expect(warnings.some((w) => w.includes('correlation pointer unreadable'))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('concurrent derives on one query (best-effort)', () => {
+  it('cannot both be credited once the ledger is read back', () => {
+    // `readPointer` then `clearPointer` is not atomic, so two derives racing in
+    // separate processes can both read the same pointer. The write side cannot
+    // prevent that without a lock; the READ side is where it is caught, which is
+    // why the race is accepted rather than papered over. Simulated by
+    // suppressing the consume between the two derives.
+    const query = recordCorpusQuery({
+      totemDir,
+      source: 'lint',
+      surface: 'totem_search',
+      nowMs: T0,
+      env: env(),
+    });
+
+    const spy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {});
+    try {
+      const a = recordDeriveAction({
+        totemDir,
+        source: 'lint',
+        surface: 'spec',
+        nowMs: T0 + 1000,
+        env: env(),
+      });
+      const b = recordDeriveAction({
+        totemDir,
+        source: 'lint',
+        surface: 'spec',
+        nowMs: T0 + 1001,
+        env: env(),
+      });
+      // Both wrote the same ID — the race really is reachable.
+      expect(a.correlationId).toBe(query.correlationId);
+      expect(b.correlationId).toBe(query.correlationId);
+    } finally {
+      spy.mockRestore();
+    }
+
+    // And the scanner refuses to credit both, so the number stays honest.
+    const raw = fs.readFileSync(path.join(totemDir, 'ledger', 'events.ndjson'), 'utf-8');
+    const report = computeQbdCompliance(scanQbdLedger(raw));
+    expect(report.window).toEqual({ derives: 2, correlated: 1 });
+    expect(report.anomalies.duplicateCorrelations).toBe(1);
+    expect(report.degraded).toBe(true);
   });
 });
 

@@ -2,9 +2,15 @@
  * Seam-resolution tests for the query-before-derive instrumentation
  * (mmnto-ai/totem#2510).
  *
- * These pin the two defects that made the seams silently stop measuring:
- * resolving the ledger from the invocation cwd instead of the config root, and
- * siting the review seam below a branch that returns before reaching it.
+ * ## Test isolation is load-bearing here, not hygiene
+ *
+ * Every test passes an explicit temp `homeDir`. `resolveConfigPath` falls back
+ * to the global `~/.totem/` profile when the cwd has no config, so a test that
+ * omits it resolves the DEVELOPER'S REAL profile — and on a machine whose
+ * global config sets `totemDir: '.'`, the writer then appends real derive rows
+ * to their live `~/.totem/ledger/events.ndjson`. An earlier version of this
+ * file did exactly that on every suite run. No test here may be *able* to reach
+ * the real profile.
  */
 
 import * as fs from 'node:fs';
@@ -16,11 +22,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 import { recordQbdDerive, resolveQbdLedgerDirDetailed } from './qbd-seam.js';
 
-/**
- * A minimal VALID config. `targets` requires at least one entry, so an empty
- * list would fail schema validation and the helper would report "config could
- * not be loaded" rather than resolving.
- */
+/** A minimal VALID config — `targets` requires at least one entry. */
 const TOTEM_YAML = [
   'targets:',
   '  - glob: "src/**/*.ts"',
@@ -30,20 +32,44 @@ const TOTEM_YAML = [
 ].join('\n');
 
 let projectRoot: string;
+/** A temp home with NO global profile — the "no config anywhere" case. */
+let emptyHome: string;
 
 beforeEach(() => {
   projectRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-seam-')));
-  // YAML, not .ts — a TypeScript config would need transpilation to load.
   fs.writeFileSync(path.join(projectRoot, 'totem.yaml'), TOTEM_YAML, 'utf-8');
   fs.mkdirSync(path.join(projectRoot, '.totem'), { recursive: true });
+
+  emptyHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-home-')));
 });
 
 afterEach(() => {
   cleanTmpDir(projectRoot);
+  cleanTmpDir(emptyHome);
 });
 
-function ledgerRows(root: string): Array<Record<string, unknown>> {
-  const file = path.join(root, '.totem', 'ledger', 'events.ndjson');
+/**
+ * Build a temp home that DOES carry a global profile.
+ *
+ * `totemDir: '.'` mirrors the real-world shape (it is what this machine's
+ * `~/.totem/totem.config.ts` sets), so the profile's ledger lives at
+ * `<home>/.totem/ledger/` — the layout the silent-landing finding was about.
+ */
+function homeWithGlobalProfile(): string {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-ghome-')));
+  const globalDir = path.join(home, '.totem');
+  fs.mkdirSync(globalDir, { recursive: true });
+  fs.writeFileSync(path.join(globalDir, 'totem.yaml'), `totemDir: "."\n${TOTEM_YAML}`, 'utf-8');
+  return home;
+}
+
+/** Where a `homeWithGlobalProfile` home keeps its ledger. */
+function globalTotemDir(home: string): string {
+  return path.join(home, '.totem');
+}
+
+function ledgerRows(totemDir: string): Array<Record<string, unknown>> {
+  const file = path.join(totemDir, 'ledger', 'events.ndjson');
   if (!fs.existsSync(file)) return [];
   return fs
     .readFileSync(file, 'utf-8')
@@ -52,93 +78,179 @@ function ledgerRows(root: string): Array<Record<string, unknown>> {
     .map((l) => JSON.parse(l) as Record<string, unknown>);
 }
 
-describe('resolveQbdLedgerDir', () => {
-  it('resolves from the config root, not the invocation cwd', async () => {
-    const detailed = await resolveQbdLedgerDirDetailed(projectRoot);
+describe('resolveQbdLedgerDirDetailed', () => {
+  it('resolves from the config root', async () => {
+    const detailed = await resolveQbdLedgerDirDetailed(projectRoot, emptyHome);
     expect(detailed.reason ?? 'resolved').toBe('resolved');
     expect(detailed.dir).toBe(path.join(projectRoot, '.totem'));
-  });
-});
-
-describe('recordQbdDerive from a subdirectory', () => {
-  it('never creates a stray ledger under the subdirectory', async () => {
-    // The original seams did `path.join(cwd, config.totemDir)`. Run from a
-    // subdirectory that targets `<subdir>/.totem`, which does not exist — so the
-    // writer skipped and the derive vanished from the denominator. That is the
-    // #2510 falsifier-1 failure arrived at by accident. (Before the guard landed
-    // it was worse: the writer CREATED that stray directory.)
-    const subdir = path.join(projectRoot, 'packages', 'thing');
-    fs.mkdirSync(subdir, { recursive: true });
-
-    const notes: string[] = [];
-    const report = await recordQbdDerive(subdir, 'spec', (msg) => notes.push(msg));
-
-    expect(fs.existsSync(path.join(subdir, '.totem'))).toBe(false);
-    // Never a silent no-op: not recording always carries a reason.
-    if (!report.recorded) expect(report.note).toBeDefined();
+    expect(detailed.global).toBe(false);
   });
 
-  it('writes where the READER will look — writer and reader cannot diverge', async () => {
-    // The load-bearing invariant. `resolveConfigPath` does NOT walk up, so from
-    // a subdirectory it resolves whatever config the COMMAND itself resolved
-    // (a global `~/.totem/` profile, on a machine that has one) rather than the
-    // enclosing project. That residual is documented in `qbd-seam.ts`; what must
-    // never happen again is the writer and the doctor reader resolving to
-    // DIFFERENT places, which is how rows went missing in the first place.
-    const subdir = path.join(projectRoot, 'packages', 'thing');
-    fs.mkdirSync(subdir, { recursive: true });
+  it('resolves a cwd that is NOT the config root to the CONFIG ROOT ledger', async () => {
+    // The discriminating case. From a subdirectory with a global profile in
+    // play, the old `path.join(cwd, config.totemDir)` would answer
+    // `<subdir>/.totem`; the correct answer is the resolved config's own root.
+    // At the project root the two agree, which is why a root-only assertion
+    // proves nothing about the bug it is supposed to pin.
+    const home = homeWithGlobalProfile();
+    try {
+      const subdir = path.join(projectRoot, 'packages', 'thing');
+      fs.mkdirSync(subdir, { recursive: true });
 
-    const resolved = await resolveQbdLedgerDirDetailed(subdir);
-    const report = await recordQbdDerive(subdir, 'spec', () => {});
+      const detailed = await resolveQbdLedgerDirDetailed(subdir, home);
+      const oldBuggyAnswer = path.join(subdir, '.totem');
 
-    if (report.recorded) {
-      expect(resolved.dir).toBeDefined();
-      const rows = ledgerRows(path.dirname(resolved.dir!));
-      expect(rows.length).toBeGreaterThan(0);
-      expect(rows[rows.length - 1]!.type).toBe('derive_action');
-    } else {
-      expect(report.note).toBeDefined();
+      expect(detailed.dir).toBeDefined();
+      expect(detailed.dir).not.toBe(oldBuggyAnswer);
+      expect(detailed.dir).toBe(globalTotemDir(home));
+      expect(detailed.global).toBe(true);
+    } finally {
+      cleanTmpDir(home);
     }
   });
 
-  it('records into the project ledger when run from the project root', async () => {
-    const report = await recordQbdDerive(projectRoot, 'review', () => {});
-    expect(report.recorded).toBe(true);
+  it('gives two different cwds under one config root the SAME ledger dir', async () => {
+    const home = homeWithGlobalProfile();
+    try {
+      const a = path.join(projectRoot, 'packages', 'alpha');
+      const b = path.join(projectRoot, 'docs', 'deep', 'nested');
+      fs.mkdirSync(a, { recursive: true });
+      fs.mkdirSync(b, { recursive: true });
 
-    const rows = ledgerRows(projectRoot);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.type).toBe('derive_action');
-    expect(rows[0]!.activity_name).toBe('review');
+      const fromA = await resolveQbdLedgerDirDetailed(a, home);
+      const fromB = await resolveQbdLedgerDirDetailed(b, home);
+
+      // Resolution is a function of the resolved config root, so two cwds that
+      // resolve the same config cannot disagree about where rows land. Under
+      // the old cwd-joined logic these two answers differed.
+      expect(fromA.dir).toBe(fromB.dir);
+      expect(fromA.dir).not.toBe(path.join(a, '.totem'));
+      expect(fromB.dir).not.toBe(path.join(b, '.totem'));
+    } finally {
+      cleanTmpDir(home);
+    }
   });
 
-  it('never no-ops silently when there is no project at all', async () => {
-    const orphan = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-orphan-'));
+  it('reports CONFIG_MISSING when neither cwd nor home carries a config', async () => {
+    const orphan = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-orphan-')));
     try {
-      const report = await recordQbdDerive(orphan, 'orient', () => {});
-      if (!report.recorded) {
-        expect(report.note).toBeDefined();
-        expect(report.note).toContain('query-before-derive');
-      }
+      const detailed = await resolveQbdLedgerDirDetailed(orphan, emptyHome);
+      expect(detailed.dir).toBeUndefined();
+      expect(detailed.reason).toContain('no Totem config found');
     } finally {
       cleanTmpDir(orphan);
     }
   });
 });
 
-describe('review seam placement (structural mode)', () => {
-  it('records the derive ABOVE the structural-mode branch', () => {
-    // Structural mode `return`s from inside its own branch, so a seam sited
-    // after that branch records the standard and fan paths while structural
-    // escapes the denominator entirely — which is exactly what happened. A
-    // source-order pin is the honest regression test here: the defect IS the
-    // ordering, and driving a full structural review in a unit test would
-    // require mocking the orchestrator, the index, and git.
-    const source = fs.readFileSync(path.join(__dirname, 'shield.ts'), 'utf-8');
-    const seamIdx = source.indexOf('recordQbdDerive');
-    const structuralIdx = source.indexOf("options.mode === 'structural'");
+describe('recordQbdDerive', () => {
+  it('records into the project ledger when run from the project root', async () => {
+    const report = await recordQbdDerive(projectRoot, 'review', () => {}, emptyHome);
+    expect(report.recorded).toBe(true);
+    expect(report.note).toBeUndefined();
 
-    expect(seamIdx).toBeGreaterThan(-1);
+    const rows = ledgerRows(path.join(projectRoot, '.totem'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.type).toBe('derive_action');
+    expect(rows[0]!.activity_name).toBe('review');
+  });
+
+  it('never creates a stray ledger under a subdirectory', async () => {
+    const subdir = path.join(projectRoot, 'packages', 'thing');
+    fs.mkdirSync(subdir, { recursive: true });
+
+    const report = await recordQbdDerive(subdir, 'spec', () => {}, emptyHome);
+
+    expect(fs.existsSync(path.join(subdir, '.totem'))).toBe(false);
+    if (!report.recorded) expect(report.note).toBeDefined();
+  });
+
+  it('ANNOUNCES a landing in the global profile instead of doing it silently', async () => {
+    // Legitimate, but the row goes somewhere other than the project the user is
+    // looking at — so it must say so. This was the silent half of the finding.
+    const home = homeWithGlobalProfile();
+    const orphan = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-orphan-')));
+    try {
+      const report = await recordQbdDerive(orphan, 'orient', () => {}, home);
+      expect(report.recorded).toBe(true);
+      expect(report.note).toBeDefined();
+      expect(report.note).toContain('global profile ledger');
+      // And it landed in the global profile's ledger, not the orphan cwd.
+      expect(ledgerRows(globalTotemDir(home))).toHaveLength(1);
+      expect(fs.existsSync(path.join(orphan, '.totem'))).toBe(false);
+    } finally {
+      cleanTmpDir(orphan);
+      cleanTmpDir(home);
+    }
+  });
+
+  it('never no-ops silently when there is no project at all', async () => {
+    const orphan = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-orphan-')));
+    try {
+      const report = await recordQbdDerive(orphan, 'orient', () => {}, emptyHome);
+      expect(report.recorded).toBe(false);
+      expect(report.note).toContain('query-before-derive');
+    } finally {
+      cleanTmpDir(orphan);
+    }
+  });
+});
+
+describe('review seam placement', () => {
+  /**
+   * Source pin, and an honest account of why it is one.
+   *
+   * `handleVerdictResult` is module-private and `shieldCommand` needs the
+   * orchestrator, the Lance index, git, and the exemption store before it
+   * reaches a verdict, so driving the structural branch executably is not
+   * feasible at unit scope. The previous version of this test was worse than
+   * useless: it indexed the IMPORT of `recordQbdDerive` rather than the call,
+   * never read the enclosing control flow, and would have passed after a
+   * comment edit.
+   *
+   * This one anchors to the CALL EXPRESSION inside the enclosing function body.
+   * Mutations it catches: moving the record call out of `handleVerdictResult`
+   * (structural and standard would both stop recording); deleting the fan's own
+   * call (the fan path would stop recording); the structural branch no longer
+   * routing through the shared handler before it returns. Mutations it does NOT
+   * catch: reordering within the handler, or a call present but unreachable —
+   * accepted, because the alternative here is no coverage at all.
+   */
+  const source = fs.readFileSync(path.join(__dirname, 'shield.ts'), 'utf-8');
+
+  /** Slice out one top-level function body by declaration name. */
+  function functionBody(name: string): string {
+    const start = source.indexOf(`async function ${name}(`);
+    expect(start, `${name} should exist`).toBeGreaterThan(-1);
+    const rest = source.slice(start + 1);
+    const end = rest.search(/\n(?:export )?(?:async )?function /);
+    return end === -1 ? rest : rest.slice(0, end);
+  }
+
+  it('records the derive INSIDE the shared verdict handler', () => {
+    // Structural and standard both route through this function, so a call here
+    // fires exactly once per review and only after a verdict exists.
+    const body = functionBody('handleVerdictResult');
+    expect(body).toContain('recordQbdDerive(');
+  });
+
+  it('routes the structural branch through that shared handler before returning', () => {
+    const body = functionBody('shieldCommand');
+    const structuralIdx = body.indexOf("options.mode === 'structural'");
     expect(structuralIdx).toBeGreaterThan(-1);
-    expect(seamIdx).toBeLessThan(structuralIdx);
+
+    const afterStructural = body.slice(structuralIdx);
+    const handlerIdx = afterStructural.indexOf('handleVerdictResult(');
+    const returnIdx = afterStructural.indexOf('\n    return;');
+    expect(handlerIdx).toBeGreaterThan(-1);
+    expect(returnIdx).toBeGreaterThan(-1);
+    expect(handlerIdx).toBeLessThan(returnIdx);
+  });
+
+  it('gives the multi-lane fan its own record call, since it bypasses the handler', () => {
+    const body = functionBody('shieldCommand');
+    const fanIdx = body.indexOf('runReviewFan(');
+    expect(fanIdx).toBeGreaterThan(-1);
+    expect(body.slice(fanIdx)).toContain('recordQbdDerive(');
   });
 });

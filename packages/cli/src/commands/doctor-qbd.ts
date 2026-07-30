@@ -26,6 +26,12 @@ export interface QbdComplianceCliOptions {
   cwdForTest?: string;
   /** Test seam — inject raw ledger NDJSON instead of reading from disk. */
   ledgerContentForTest?: string;
+  /**
+   * Test seam — point global-profile resolution at a temp home. Without it a
+   * test in a config-less directory resolves the developer's REAL `~/.totem/`
+   * profile and reads (or, on the write side, writes) their live ledger.
+   */
+  homeDirForTest?: string;
 }
 
 /**
@@ -59,7 +65,8 @@ export async function doctorQbdComplianceCommand(
   // once already: seams joined `cwd`, which misses the project ledger whenever
   // a command runs from a subdirectory).
   const { resolveQbdLedgerDir } = await import('./qbd-seam.js');
-  const totemDir = (await resolveQbdLedgerDir(cwd)) ?? path.join(cwd, '.totem');
+  const totemDir =
+    (await resolveQbdLedgerDir(cwd, options.homeDirForTest)) ?? path.join(cwd, '.totem');
 
   const ledgerPath = path.join(totemDir, ...LEDGER_RELATIVE_PATH);
   // totemDir is repo-controlled config — sanitize before it reaches a terminal.
@@ -119,6 +126,12 @@ export async function doctorQbdComplianceCommand(
         `  ${a.crossSessionCorrelations} derive(s) correlated to a query from another session or seat`,
       );
     }
+    if (a.duplicateCorrelations > 0) {
+      log.warn(
+        TAG,
+        `  ${a.duplicateCorrelations} derive(s) re-citing a correlation ID an earlier derive already spent (one query grounds one derive)`,
+      );
+    }
     if (a.backdatedRows > 0) {
       log.warn(
         TAG,
@@ -126,6 +139,23 @@ export async function doctorQbdComplianceCommand(
       );
     }
     for (const detail of a.details) log.dim(TAG, `  · ${sanitizeForTerminal(detail)}`);
+
+    // Remediation. Degraded is sticky by design — one bad row degrades the whole
+    // read, and neither the row nor the verdict expires — so without this the
+    // envelope is a permanent unactionable banner. Say which file to open.
+    log.dim(
+      TAG,
+      `  to clear: inspect the cited line numbers in ${displayPath} (append-only — repair by appending corrections, never by rewriting history), then re-run.`,
+    );
+  }
+
+  // Seat-plumbing hint — deliberately OUTSIDE the degraded envelope: one-sided
+  // seat plumbing is a config smell, not evidence of tampering.
+  if (report.anomalies.seatMismatchHints > 0) {
+    log.dim(
+      TAG,
+      `note: ${report.anomalies.seatMismatchHints} uncorrelated derive(s) had an in-window query from a DIFFERENT seat — likely one-sided seat plumbing (e.g. a seated CLI and an unseated MCP server), which drives this number down with no other tell. Seat plumbing is tracked separately in mmnto-ai/totem#2530.`,
+    );
   }
 
   // Advisory — deliberately OUTSIDE the degraded envelope: an event type this

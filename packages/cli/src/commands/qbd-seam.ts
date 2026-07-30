@@ -44,8 +44,11 @@ import * as path from 'node:path';
  * project to instrument, which is a normal state for a general-purpose command
  * like `orient` run outside a repo.
  */
-export async function resolveQbdLedgerDir(cwd: string): Promise<string | undefined> {
-  return (await resolveQbdLedgerDirDetailed(cwd)).dir;
+export async function resolveQbdLedgerDir(
+  cwd: string,
+  homeDir?: string,
+): Promise<string | undefined> {
+  return (await resolveQbdLedgerDirDetailed(cwd, homeDir)).dir;
 }
 
 /**
@@ -59,13 +62,20 @@ export async function resolveQbdLedgerDir(cwd: string): Promise<string | undefin
  */
 export async function resolveQbdLedgerDirDetailed(
   cwd: string,
-): Promise<{ dir?: string; reason?: string }> {
+  homeDir?: string,
+): Promise<{ dir?: string; reason?: string; global?: boolean }> {
   try {
-    const { loadConfig, resolveConfigPath } = await import('../utils.js');
-    const configPath = resolveConfigPath(cwd);
+    const { isGlobalConfigPath, loadConfig, resolveConfigPath } = await import('../utils.js');
+    // `homeDir` is threaded through so tests can point the global-profile lookup
+    // at a temp home. Without it, a test running in a directory with no config
+    // resolves the DEVELOPER'S REAL `~/.totem/` profile and writes telemetry
+    // into their live ledger — which is exactly what happened: this suite wrote
+    // real derive rows into the maintainer's global ledger on every run.
+    const configPath = resolveConfigPath(cwd, homeDir);
     const config = await loadConfig(configPath);
+    const global = isGlobalConfigPath(configPath, homeDir);
     // configRoot, NOT cwd — see the header. Mirrors the sibling ledger writes.
-    return { dir: path.join(path.dirname(configPath), config.totemDir) };
+    return { dir: path.join(path.dirname(configPath), config.totemDir), global };
     // totem-context: intentional cleanup — a sensor must not fail the command it instruments (Tenet 13); the reason is returned to the caller and surfaced, never discarded.
   } catch (err) {
     // totem-context: intentional cleanup — a sensor must not fail the command it instruments (Tenet 13); the reason is returned to the caller and surfaced, never discarded.
@@ -99,8 +109,9 @@ export async function recordQbdDerive(
   cwd: string,
   surface: 'spec' | 'orient' | 'review',
   onWarn: (msg: string) => void,
+  homeDir?: string,
 ): Promise<QbdSeamReport> {
-  const { dir: totemDir, reason } = await resolveQbdLedgerDirDetailed(cwd);
+  const { dir: totemDir, reason, global } = await resolveQbdLedgerDirDetailed(cwd, homeDir);
   if (totemDir === undefined) {
     return {
       recorded: false,
@@ -115,7 +126,17 @@ export async function recordQbdDerive(
       note: `query-before-derive: no ledger at ${totemDir} — not recording`,
     };
   }
-  return { recorded: result.written };
+  return { recorded: result.written, ...(global === true && { note: globalNote(totemDir) }) };
+}
+
+/**
+ * Landing in the global profile is legitimate but must never be silent: the
+ * row goes somewhere other than the project the user is looking at, and a
+ * reader comparing `doctor --compliance` in the project against these rows
+ * would otherwise see an unexplained gap.
+ */
+function globalNote(totemDir: string): string {
+  return `query-before-derive: recorded to the global profile ledger at ${totemDir} — no project config found from this cwd`;
 }
 
 /**
@@ -124,8 +145,9 @@ export async function recordQbdDerive(
 export async function recordQbdQuery(
   cwd: string,
   onWarn: (msg: string) => void,
+  homeDir?: string,
 ): Promise<QbdSeamReport> {
-  const { dir: totemDir, reason } = await resolveQbdLedgerDirDetailed(cwd);
+  const { dir: totemDir, reason, global } = await resolveQbdLedgerDirDetailed(cwd, homeDir);
   if (totemDir === undefined) {
     return {
       recorded: false,
@@ -140,5 +162,5 @@ export async function recordQbdQuery(
       note: `query-before-derive: no ledger at ${totemDir} — not recording`,
     };
   }
-  return { recorded: result.written };
+  return { recorded: result.written, ...(global === true && { note: globalNote(totemDir) }) };
 }

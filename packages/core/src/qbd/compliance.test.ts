@@ -183,6 +183,46 @@ describe('scanQbdLedger', () => {
     expect(scan.rows).toHaveLength(3);
   });
 
+  it('DEGRADES on backdated QBD rows appended after NON-QBD-only history', () => {
+    // The fresh-adopter state, which is exactly the state the pre-registered
+    // first-20 window is filled from. The monotonicity reference used to advance
+    // only on QBD rows, so a ledger whose history is all `suppress`/`mcp_call`
+    // offered no baseline and 20 backdated pairs read PASS, degraded=false.
+    // Existing non-QBD history IS the baseline.
+    const suppressRow = JSON.stringify({
+      timestamp: new Date(T0).toISOString(),
+      type: 'suppress',
+      ruleId: 'abc',
+      file: 'a.ts',
+      source: 'lint',
+      justification: '',
+    });
+    const backdatedMs = Date.parse('2019-01-01T00:00:00.000Z');
+    const q = queryLine(backdatedMs, sid(1));
+    const content = [suppressRow, q.line, deriveLine(backdatedMs + 1000, sid(1), q.id)].join('\n');
+
+    const scan = scanQbdLedger(content);
+    expect(scan.anomalies.backdatedRows).toBeGreaterThan(0);
+    expect(scan.degraded).toBe(true);
+  });
+
+  it('stays clean when QBD rows follow non-QBD history in order (control)', () => {
+    const suppressRow = JSON.stringify({
+      timestamp: new Date(T0).toISOString(),
+      type: 'suppress',
+      ruleId: 'abc',
+      file: 'a.ts',
+      source: 'lint',
+      justification: '',
+    });
+    const q = queryLine(T0 + 1000, sid(1));
+    const content = [suppressRow, q.line, deriveLine(T0 + 2000, sid(1), q.id)].join('\n');
+
+    const scan = scanQbdLedger(content);
+    expect(scan.anomalies.backdatedRows).toBe(0);
+    expect(scan.degraded).toBe(false);
+  });
+
   it('tolerates small out-of-order jitter from concurrent writers', () => {
     const q = queryLine(T0, sid(1));
     const content = [
@@ -200,25 +240,123 @@ describe('ledger type parity', () => {
   it('derives the non-QBD type set from the schema instead of hand-mirroring it', () => {
     // A hand-copied list rots the moment a type is added to ledger.ts, and here
     // that rot changes a DEGRADED verdict. Pin the partition to the schema.
+    //
+    // The fixtures MUST be schema-INVALID (`ruleId: ''` fails `min(1)`).
+    // `NON_QBD_TYPES` is consulted only inside the `!result.success` branch, so
+    // rows that parse never reach it — an earlier version of this test used
+    // valid rows and would have passed with the set emptied entirely.
     const qbd = new Set<string>(QBD_EVENT_TYPES);
     const expectedNonQbd = LEDGER_EVENT_TYPES.filter((t) => !qbd.has(t));
 
-    // Every non-QBD type must scan clean (no unknown-type advisory).
     for (const type of expectedNonQbd) {
       const row = JSON.stringify({
         timestamp: new Date(T0).toISOString(),
         type,
         source: 'lint',
         justification: '',
-        ruleId: 'r',
+        ruleId: '',
         file: 'a.ts',
       });
       const scan = scanQbdLedger(row);
+      // Recognised as another subsystem's row: skipped silently, NOT counted as
+      // an unknown type and NOT counted as unclassifiable.
       expect(scan.anomalies.unknownTypeRows, `type '${type}' should be known`).toBe(0);
+      expect(scan.anomalies.unclassifiedInvalid, `type '${type}' should be skipped`).toBe(0);
+      expect(scan.degraded, `type '${type}' must not degrade`).toBe(false);
     }
 
     // And the two QBD types are exactly the metric's own.
     expect([...QBD_EVENT_TYPES].sort()).toEqual(['corpus_query', 'derive_action']);
+  });
+
+  it('flags a schema-invalid row whose type is NOT in the schema list', () => {
+    // The discriminating control: if NON_QBD_TYPES were empty, the loop above
+    // would still pass only if this also changed — pinning both directions.
+    const row = JSON.stringify({
+      timestamp: new Date(T0).toISOString(),
+      type: 'not_a_real_type',
+      source: 'lint',
+      justification: '',
+      ruleId: '',
+    });
+    const scan = scanQbdLedger(row);
+    expect(scan.anomalies.unknownTypeRows).toBe(1);
+  });
+});
+
+describe('read-side 1:1 enforcement (consume-on-use)', () => {
+  it('refuses to credit several derives citing ONE query', () => {
+    // The leg's exact probe. Before this, one query and three derives read as
+    // compliance 1.00, degraded=false — because 1:1 was enforced only at write
+    // time, where a failed/raced/bypassed pointer consume leaves it unenforced.
+    const q = queryLine(T0, sid(1));
+    const content = [
+      q.line,
+      deriveLine(T0 + 1000, sid(1), q.id),
+      deriveLine(T0 + 2000, sid(1), q.id),
+      deriveLine(T0 + 3000, sid(1), q.id),
+    ].join('\n');
+
+    const report = computeQbdCompliance(scanQbdLedger(content));
+    // First derive earns the credit; the other two are anomalies.
+    expect(report.window).toEqual({ derives: 3, correlated: 1 });
+    expect(report.compliance).toBeCloseTo(1 / 3);
+    expect(report.anomalies.duplicateCorrelations).toBe(2);
+    expect(report.degraded).toBe(true);
+  });
+
+  it('credits the EARLIEST citation, not an arbitrary one', () => {
+    const q = queryLine(T0, sid(1));
+    const content = [
+      q.line,
+      deriveLine(T0 + 5000, sid(1), q.id),
+      deriveLine(T0 + 1000, sid(1), q.id),
+    ].join('\n');
+
+    const report = computeQbdCompliance(scanQbdLedger(content));
+    expect(report.window).toEqual({ derives: 2, correlated: 1 });
+    expect(
+      report.anomalies.details.some((d) => d.includes(new Date(T0 + 5000).toISOString())),
+    ).toBe(true);
+  });
+
+  it('leaves a clean 1:1 ledger uncounted as duplicate (control)', () => {
+    const q1 = queryLine(T0, sid(1));
+    const q2 = queryLine(T0 + 2000, sid(1));
+    const content = [
+      q1.line,
+      deriveLine(T0 + 1000, sid(1), q1.id),
+      q2.line,
+      deriveLine(T0 + 3000, sid(1), q2.id),
+    ].join('\n');
+
+    const report = computeQbdCompliance(scanQbdLedger(content));
+    expect(report.window).toEqual({ derives: 2, correlated: 2 });
+    expect(report.anomalies.duplicateCorrelations).toBe(0);
+    expect(report.degraded).toBe(false);
+  });
+});
+
+describe('seat-mismatch diagnostic', () => {
+  it('hints when an uncorrelated derive had an in-window query from another seat', () => {
+    // One-sided seat plumbing (seated CLI, unseated MCP server) produces a
+    // truthful-looking 0.00 with no other tell. Surface it as a config smell.
+    const q = queryLine(T0, sid(1), 'seat-a');
+    const content = [q.line, deriveLine(T0 + 1000, sid(1), undefined, 'seat-b')].join('\n');
+
+    const report = computeQbdCompliance(scanQbdLedger(content));
+    expect(report.compliance).toBe(0);
+    expect(report.anomalies.seatMismatchHints).toBe(1);
+    // A config smell is NOT tampering — it must not degrade the read.
+    expect(report.degraded).toBe(false);
+  });
+
+  it('does not hint when both sides are unseated (the solo default)', () => {
+    const q = queryLine(T0, sid(1));
+    const content = [q.line, deriveLine(T0 + 1000, sid(1))].join('\n');
+
+    const report = computeQbdCompliance(scanQbdLedger(content));
+    expect(report.anomalies.seatMismatchHints).toBe(0);
   });
 });
 

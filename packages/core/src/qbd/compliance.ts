@@ -119,6 +119,18 @@ export interface QbdAnomalies {
   /** Derive rows whose correlated query row belongs to a different session. */
   crossSessionCorrelations: number;
   /**
+   * Derive rows citing a correlation ID an earlier derive already spent. One
+   * query grounds one derive; a re-citation means the write-side consume
+   * failed, raced, or was bypassed.
+   */
+  duplicateCorrelations: number;
+  /**
+   * Uncorrelated derives that had an in-window query from a DIFFERENT seat —
+   * the signature of one-sided seat plumbing. A diagnostic hint, never an
+   * integrity anomaly, so it does not degrade the read.
+   */
+  seatMismatchHints: number;
+  /**
    * Rows whose timestamp regresses behind the newest already seen in this
    * append-only file — the backdated-append attack on the evaluation window.
    */
@@ -212,6 +224,8 @@ function emptyAnomalies(): QbdAnomalies {
     unclassifiedInvalid: 0,
     orphanCorrelations: 0,
     crossSessionCorrelations: 0,
+    duplicateCorrelations: 0,
+    seatMismatchHints: 0,
     backdatedRows: 0,
     unknownTypeRows: 0,
     details: [],
@@ -303,9 +317,19 @@ export function scanQbdLedger(content: string): QbdScanResult {
     }
 
     const event = result.data;
-    if (event.type !== 'corpus_query' && event.type !== 'derive_action') continue;
-
     const ms = Date.parse(event.timestamp);
+
+    if (event.type !== 'corpus_query' && event.type !== 'derive_action') {
+      // Not our row — but its timestamp still advances the monotonicity
+      // reference. This is load-bearing: on a ledger adopted mid-life, the
+      // EXISTING non-QBD history is the only baseline a backdated QBD append
+      // can be measured against. Referencing QBD rows alone left the check
+      // blind in exactly the fresh-adopter state the pre-registered first-20
+      // window is filled from — 20 backdated pairs read PASS, degraded=false.
+      if (Number.isFinite(ms) && (maxSeenMs === undefined || ms > maxSeenMs)) maxSeenMs = ms;
+      continue;
+    }
+
     if (!Number.isFinite(ms)) {
       anomalies.unclassifiedInvalid++;
       pushDetail(anomalies, `line ${i + 1}: QBD row with an unparseable timestamp`);
@@ -323,7 +347,7 @@ export function scanQbdLedger(content: string): QbdScanResult {
       anomalies.backdatedRows++;
       pushDetail(
         anomalies,
-        `line ${i + 1}: timestamp ${new Date(ms).toISOString()} regresses behind ${new Date(maxSeenMs).toISOString()} in an append-only ledger`,
+        `line ${i + 1}: timestamp ${new Date(ms).toISOString()} regresses more than BACKDATE_TOLERANCE_MS (${BACKDATE_TOLERANCE_MS}ms) behind ${new Date(maxSeenMs).toISOString()} in an append-only ledger`,
       );
     }
     if (maxSeenMs === undefined || ms > maxSeenMs) maxSeenMs = ms;
@@ -427,26 +451,60 @@ export function groupQbdSessions(rows: QbdRow[]): QbdSession[] {
 // ─── Compute ────────────────────────────────────────────
 
 /**
- * Score one session's derive rows against the query rows visible to it.
+ * Decide which derive rows earn credit, across the WHOLE scan at once.
  *
- * `queryIndex` maps correlation ID → the query rows carrying it, across the
- * WHOLE scan: a query row that failed to join its own session is a
- * cross-session anomaly, and detecting that requires looking outside the
- * session. Mutates `anomalies` with per-item counts.
+ * Runs globally rather than per-session for two reasons: a correlation ID's
+ * query row may live outside the session being scored, and — the important one
+ * — **the 1:1 rule has to be enforced against every derive in the file**, not
+ * within one session's slice.
+ *
+ * ## Why the read side re-enforces a write-side rule
+ *
+ * `record.ts` consumes the pointer so one query grounds one derive. That is a
+ * write-time rule with no read-time check, which is the same shape as the
+ * tampering the scanner already exists to catch — and it is reachable without
+ * any adversary: the documented `clearPointer` failure ("may over-credit until
+ * removed"), the non-atomic read-then-clear between concurrent derives, or a
+ * duplicated line all produce several derives citing one ID. Before this, three
+ * derives on one query read as `compliance 1.00, degraded=false`.
+ *
+ * So: the FIRST derive (in time order) citing an ID takes the credit, and every
+ * later citation of that same ID is a named anomaly that degrades the read. The
+ * non-atomic read-then-clear race in `record.ts` is accepted *because* this
+ * check catches its result rather than silently inflating the number.
+ *
+ * Mutates `anomalies` with per-item counts. Returns the set of credited rows.
  */
-function scoreSession(
-  session: QbdSession,
+function creditDerives(
+  rows: readonly QbdRow[],
   queryIndex: Map<string, QbdRow[]>,
   anomalies: QbdAnomalies,
-): QbdRateStat {
-  const stat: QbdRateStat = { derives: 0, correlated: 0 };
+): Set<QbdRow> {
+  const credited = new Set<QbdRow>();
+  /** Correlation IDs already spent. One query grounds one derive. */
+  const consumed = new Set<string>();
+  // Query rows in time order, for the seat-mismatch diagnostic below.
+  const queries = rows.filter((r) => r.type === 'corpus_query');
 
-  for (const row of session.rows) {
+  // `rows` is time-sorted by the scanner, so "first" is unambiguous.
+  for (const row of rows) {
     if (row.type !== 'derive_action') continue;
-    // Every derive counts, correlated or not (falsifier 1).
-    stat.derives++;
 
-    if (row.correlationId === undefined) continue;
+    if (row.correlationId === undefined) {
+      // Seat-plumbing diagnostic (NOT an integrity anomaly). An uncorrelated
+      // derive whose in-window candidate query carries a DIFFERENT seat is the
+      // signature of one-sided seating — e.g. a seated CLI and an unseated MCP
+      // server — which silently drives the number to 0.00 with no other tell.
+      // A config smell, not tampering, so it never degrades the read.
+      const mismatch = queries.some(
+        (q) =>
+          q.ms <= row.ms &&
+          row.ms - q.ms <= QBD_CORRELATION_WINDOW_MS &&
+          q.agentSource !== row.agentSource,
+      );
+      if (mismatch) anomalies.seatMismatchHints++;
+      continue;
+    }
 
     const candidates = queryIndex.get(row.correlationId);
     const grounding = candidates?.find((q) => q.ms <= row.ms);
@@ -468,9 +526,30 @@ function scoreSession(
       );
       continue;
     }
-    stat.correlated++;
+    if (consumed.has(row.correlationId)) {
+      anomalies.duplicateCorrelations++;
+      pushDetail(
+        anomalies,
+        `derive at ${new Date(row.ms).toISOString()} re-cites correlation ID ${row.correlationId}, already spent by an earlier derive (one query grounds one derive)`,
+      );
+      continue;
+    }
+    consumed.add(row.correlationId);
+    credited.add(row);
   }
 
+  return credited;
+}
+
+/** Tally one session against the globally-decided credit set. */
+function scoreSession(session: QbdSession, credited: ReadonlySet<QbdRow>): QbdRateStat {
+  const stat: QbdRateStat = { derives: 0, correlated: 0 };
+  for (const row of session.rows) {
+    if (row.type !== 'derive_action') continue;
+    // Every derive counts, correlated or not (falsifier 1).
+    stat.derives++;
+    if (credited.has(row)) stat.correlated++;
+  }
   return stat;
 }
 
@@ -505,7 +584,9 @@ export function computeQbdCompliance(scan: QbdScanResult): QbdComplianceReport {
   const sessions = groupQbdSessions(scan.rows);
   const instrumented = sessions.filter((s) => s.rows.some((r) => r.type === 'derive_action'));
 
-  const perSession = instrumented.map((s) => scoreSession(s, queryIndex, anomalies));
+  // Credit is decided globally FIRST — the 1:1 rule spans sessions.
+  const credited = creditDerives(scan.rows, queryIndex, anomalies);
+  const perSession = instrumented.map((s) => scoreSession(s, credited));
 
   const evaluated = perSession.slice(0, QBD_PRE_REGISTERED_WINDOW_SESSIONS);
   const window = sumStats(evaluated);
@@ -526,8 +607,13 @@ export function computeQbdCompliance(scan: QbdScanResult): QbdComplianceReport {
     };
   }
 
+  // `seatMismatchHints` is deliberately absent: one-sided seat plumbing is a
+  // config smell, not evidence the ledger cannot be trusted.
   const degraded =
-    scan.degraded || anomalies.orphanCorrelations > 0 || anomalies.crossSessionCorrelations > 0;
+    scan.degraded ||
+    anomalies.orphanCorrelations > 0 ||
+    anomalies.crossSessionCorrelations > 0 ||
+    anomalies.duplicateCorrelations > 0;
 
   return {
     instrumentedSessions: instrumented.length,

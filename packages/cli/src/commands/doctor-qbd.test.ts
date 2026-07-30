@@ -38,6 +38,12 @@ const TOTEM_YAML = [
 ].join('\n');
 
 let cwd: string;
+/**
+ * A temp home with NO global profile. Passed to EVERY invocation so the reader
+ * can never fall back to the developer's real `~/.totem/` profile — which on
+ * this machine resolves to a live ledger the tests would otherwise read.
+ */
+let emptyHome: string;
 let lines: string[];
 let spy: ReturnType<typeof vi.spyOn>;
 
@@ -47,6 +53,7 @@ beforeEach(() => {
   // global `~/.totem/` profile wins the lookup and the reader would resolve a
   // ledger outside the fixture entirely.
   fs.writeFileSync(path.join(cwd, 'totem.yaml'), TOTEM_YAML, 'utf-8');
+  emptyHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-qbd-cli-home-')));
   lines = [];
   spy = vi.spyOn(console, 'error').mockImplementation((msg?: unknown) => {
     lines.push(String(msg).replace(ANSI, ''));
@@ -56,6 +63,7 @@ beforeEach(() => {
 afterEach(() => {
   spy.mockRestore();
   cleanTmpDir(cwd);
+  cleanTmpDir(emptyHome);
 });
 
 function output(): string {
@@ -103,6 +111,7 @@ describe('doctorQbdComplianceCommand — clean render', () => {
   it('renders the number with its raw counts', async () => {
     await doctorQbdComplianceCommand({
       cwdForTest: cwd,
+      homeDirForTest: emptyHome,
       ledgerContentForTest: await correlatedLedger(),
     });
     // One correlated derive of two → 0.50.
@@ -112,6 +121,7 @@ describe('doctorQbdComplianceCommand — clean render', () => {
   it('states the pre-registered threshold and window VERBATIM', async () => {
     await doctorQbdComplianceCommand({
       cwdForTest: cwd,
+      homeDirForTest: emptyHome,
       ledgerContentForTest: await correlatedLedger(),
     });
     expect(output()).toContain(
@@ -122,6 +132,7 @@ describe('doctorQbdComplianceCommand — clean render', () => {
   it('holds the verdict at PENDING until the window fills', async () => {
     await doctorQbdComplianceCommand({
       cwdForTest: cwd,
+      homeDirForTest: emptyHome,
       ledgerContentForTest: await correlatedLedger(),
     });
     expect(output()).toContain('verdict: PENDING');
@@ -131,6 +142,7 @@ describe('doctorQbdComplianceCommand — clean render', () => {
   it('names the ritual-query limitation instead of claiming it solved', async () => {
     await doctorQbdComplianceCommand({
       cwdForTest: cwd,
+      homeDirForTest: emptyHome,
       ledgerContentForTest: await correlatedLedger(),
     });
     expect(output()).toContain('ADJACENCY, not influence');
@@ -140,6 +152,7 @@ describe('doctorQbdComplianceCommand — clean render', () => {
   it('renders NO degraded envelope on a clean ledger (control)', async () => {
     await doctorQbdComplianceCommand({
       cwdForTest: cwd,
+      homeDirForTest: emptyHome,
       ledgerContentForTest: await correlatedLedger(),
     });
     expect(output()).not.toContain('DEGRADED');
@@ -150,6 +163,7 @@ describe('doctorQbdComplianceCommand — clean render', () => {
     const before = process.exitCode;
     await doctorQbdComplianceCommand({
       cwdForTest: cwd,
+      homeDirForTest: emptyHome,
       ledgerContentForTest: await correlatedLedger(),
     });
     expect(process.exitCode).toBe(before);
@@ -182,7 +196,11 @@ describe('doctorQbdComplianceCommand — degraded render (ADR-115 § 2)', () => 
       }),
     ].join('\n');
 
-    await doctorQbdComplianceCommand({ cwdForTest: cwd, ledgerContentForTest: content });
+    await doctorQbdComplianceCommand({
+      cwdForTest: cwd,
+      homeDirForTest: emptyHome,
+      ledgerContentForTest: content,
+    });
 
     const out = output();
     // The envelope itself.
@@ -227,7 +245,11 @@ describe('doctorQbdComplianceCommand — degraded render (ADR-115 § 2)', () => 
       '{ also torn',
     ].join('\n');
 
-    await doctorQbdComplianceCommand({ cwdForTest: cwd, ledgerContentForTest: content });
+    await doctorQbdComplianceCommand({
+      cwdForTest: cwd,
+      homeDirForTest: emptyHome,
+      ledgerContentForTest: content,
+    });
 
     const out = output();
     expect(out).toContain('DEGRADED');
@@ -260,8 +282,95 @@ describe('doctorQbdComplianceCommand — degraded render (ADR-115 § 2)', () => 
       }),
     ].join('\n');
 
-    await doctorQbdComplianceCommand({ cwdForTest: cwd, ledgerContentForTest: content });
+    await doctorQbdComplianceCommand({
+      cwdForTest: cwd,
+      homeDirForTest: emptyHome,
+      ledgerContentForTest: content,
+    });
     expect(output()).toContain('backdated append');
+  });
+
+  it('names duplicate correlations and offers a remediation path', async () => {
+    const { mintQbdCorrelationId } = await import('@mmnto/totem');
+    const id = mintQbdCorrelationId(T0);
+    const content = [
+      JSON.stringify({
+        timestamp: new Date(T0).toISOString(),
+        type: 'corpus_query',
+        activity_name: 'totem_search',
+        source: 'lint',
+        justification: '',
+        qbd_correlation_id: id,
+        session_id: sid(1),
+      }),
+      JSON.stringify({
+        timestamp: new Date(T0 + 1000).toISOString(),
+        type: 'derive_action',
+        activity_name: 'spec',
+        source: 'lint',
+        justification: '',
+        qbd_correlation_id: id,
+        session_id: sid(1),
+      }),
+      JSON.stringify({
+        timestamp: new Date(T0 + 2000).toISOString(),
+        type: 'derive_action',
+        activity_name: 'spec',
+        source: 'lint',
+        justification: '',
+        qbd_correlation_id: id,
+        session_id: sid(1),
+      }),
+    ].join('\n');
+
+    await doctorQbdComplianceCommand({
+      cwdForTest: cwd,
+      homeDirForTest: emptyHome,
+      ledgerContentForTest: content,
+    });
+
+    const out = output();
+    expect(out).toContain('1 derive(s) re-citing a correlation ID');
+    // Degraded is sticky, so the envelope must say what to do about it.
+    expect(out).toContain('to clear:');
+    expect(out).toContain('events.ndjson');
+  });
+
+  it('surfaces a seat-mismatch hint WITHOUT degrading the read', async () => {
+    const { mintQbdCorrelationId } = await import('@mmnto/totem');
+    const content = [
+      JSON.stringify({
+        timestamp: new Date(T0).toISOString(),
+        type: 'corpus_query',
+        activity_name: 'search_knowledge',
+        source: 'bot',
+        justification: '',
+        qbd_correlation_id: mintQbdCorrelationId(T0),
+        session_id: sid(1),
+        agent_source: 'seat-a',
+      }),
+      JSON.stringify({
+        timestamp: new Date(T0 + 1000).toISOString(),
+        type: 'derive_action',
+        activity_name: 'spec',
+        source: 'lint',
+        justification: '',
+        session_id: sid(1),
+        agent_source: 'seat-b',
+      }),
+    ].join('\n');
+
+    await doctorQbdComplianceCommand({
+      cwdForTest: cwd,
+      homeDirForTest: emptyHome,
+      ledgerContentForTest: content,
+    });
+
+    const out = output();
+    expect(out).toContain('one-sided seat plumbing');
+    expect(out).toContain('mmnto-ai/totem#2530');
+    // A config smell is not tampering.
+    expect(out).not.toContain('DEGRADED');
   });
 
   it('reports an unknown event type as an advisory, NOT as DEGRADED', async () => {
@@ -272,7 +381,11 @@ describe('doctorQbdComplianceCommand — degraded render (ADR-115 § 2)', () => 
       justification: '',
     });
 
-    await doctorQbdComplianceCommand({ cwdForTest: cwd, ledgerContentForTest: content });
+    await doctorQbdComplianceCommand({
+      cwdForTest: cwd,
+      homeDirForTest: emptyHome,
+      ledgerContentForTest: content,
+    });
     const out = output();
     expect(out).toContain('version skew');
     expect(out).not.toContain('DEGRADED');
@@ -291,7 +404,11 @@ describe('doctorQbdComplianceCommand — degraded render (ADR-115 § 2)', () => 
       session_id: sid(1),
     });
 
-    await doctorQbdComplianceCommand({ cwdForTest: cwd, ledgerContentForTest: content });
+    await doctorQbdComplianceCommand({
+      cwdForTest: cwd,
+      homeDirForTest: emptyHome,
+      ledgerContentForTest: content,
+    });
 
     const out = output();
     expect(out).toContain('DEGRADED');
@@ -351,7 +468,7 @@ describe('doctorQbdComplianceCommand — real on-disk read', () => {
     // No `ledgerContentForTest` — this exercises the actual file read, which
     // every other test in this file stubs past.
     await writeLedger(2, true);
-    await doctorQbdComplianceCommand({ cwdForTest: cwd });
+    await doctorQbdComplianceCommand({ cwdForTest: cwd, homeDirForTest: emptyHome });
 
     const out = output();
     expect(out).toContain('compliance: 1.00 (2/2)');
@@ -361,7 +478,7 @@ describe('doctorQbdComplianceCommand — real on-disk read', () => {
   it('renders PASS on a filled window at or above the floor, exit code untouched', async () => {
     await writeLedger(20, true);
     const before = process.exitCode;
-    await doctorQbdComplianceCommand({ cwdForTest: cwd });
+    await doctorQbdComplianceCommand({ cwdForTest: cwd, homeDirForTest: emptyHome });
 
     expect(output()).toContain('verdict: PASS');
     expect(process.exitCode).toBe(before);
@@ -372,7 +489,7 @@ describe('doctorQbdComplianceCommand — real on-disk read', () => {
     // this is the one a reader would expect to gate, and it must not.
     await writeLedger(20, false);
     const before = process.exitCode;
-    await doctorQbdComplianceCommand({ cwdForTest: cwd });
+    await doctorQbdComplianceCommand({ cwdForTest: cwd, homeDirForTest: emptyHome });
 
     const out = output();
     expect(out).toContain('verdict: FAIL');
@@ -386,7 +503,7 @@ describe('doctorQbdComplianceCommand — real on-disk read', () => {
     const dir = path.join(cwd, '.totem', 'ledger', 'events.ndjson');
     fs.mkdirSync(dir, { recursive: true });
 
-    await doctorQbdComplianceCommand({ cwdForTest: cwd });
+    await doctorQbdComplianceCommand({ cwdForTest: cwd, homeDirForTest: emptyHome });
     const out = output();
     expect(out).toContain('SKIP');
     expect(out).toContain('unreadable');
@@ -396,7 +513,7 @@ describe('doctorQbdComplianceCommand — real on-disk read', () => {
 
 describe('doctorQbdComplianceCommand — absent and empty states', () => {
   it('SKIPs on a missing ledger — not a fail, and emphatically not 0%', async () => {
-    await doctorQbdComplianceCommand({ cwdForTest: cwd });
+    await doctorQbdComplianceCommand({ cwdForTest: cwd, homeDirForTest: emptyHome });
     const out = output();
     expect(out).toContain('SKIP');
     expect(out).not.toContain('0.00');
@@ -415,7 +532,11 @@ describe('doctorQbdComplianceCommand — absent and empty states', () => {
       session_id: sid(1),
     });
 
-    await doctorQbdComplianceCommand({ cwdForTest: cwd, ledgerContentForTest: content });
+    await doctorQbdComplianceCommand({
+      cwdForTest: cwd,
+      homeDirForTest: emptyHome,
+      ledgerContentForTest: content,
+    });
     expect(output()).toContain('n/a (0 derive-class events)');
   });
 });
