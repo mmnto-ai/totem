@@ -1307,9 +1307,9 @@ export const LEGACY_MANAGED_SESSION_HOOKS: ReadonlyArray<LegacyManagedHook> = [
 // the CLI reports the round settled; all loop state stays CLI-owned.
 //
 // Source-of-truth is `mmnto-ai/totem:.claude/skills/<name>/SKILL.md`. The
-// `installed-skills-match-source.test.ts` invariant locks these constants
-// against the source files so canonical drift fails CI rather than
-// silently propagating stale skill content to consumers.
+// "Distributed skill constants match source-of-truth" suite in `init.test.ts`
+// locks these constants against those files byte-for-byte, so canonical drift
+// fails CI rather than silently propagating stale skill content to consumers.
 
 export const SKILL_MARKER_START = '<!-- totem:skill-start -->';
 export const SKILL_MARKER_END = '<!-- totem:skill-end -->';

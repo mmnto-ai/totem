@@ -39,6 +39,8 @@ const FILE_EXTENSIONS = new Set([
   '.jsx',
   '.mjs',
   '.cjs',
+  '.mts',
+  '.cts',
   '.json',
   '.md',
   '.mdx',

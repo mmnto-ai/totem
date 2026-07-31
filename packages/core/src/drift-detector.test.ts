@@ -347,6 +347,26 @@ See \`src/index.ts\` (exists) and \`src/gone.ts\` (deleted).
     expect(drift).toHaveLength(1);
     expect(drift[0]!.orphanedRefs).toEqual(['src/gone.ts']);
   });
+
+  it('detects orphaned .mts and .cts references', () => {
+    // `.mts`/`.cts` are TypeScript source like `.ts` (mmnto-ai/totem#2519).
+    // Absent from FILE_EXTENSIONS they were dropped by the extension filter in
+    // extractFileReferences, so lessons citing them were never drift-checked.
+    const lessons = parseLessonsFile(`# Header
+
+---
+
+## Lesson — Module variants
+
+**Tags:** test
+
+The files \`src/gone.mts\` and \`src/gone.cts\` were removed.
+`);
+
+    const drift = detectDrift(lessons, tmpDir);
+    expect(drift).toHaveLength(1);
+    expect(drift[0]!.orphanedRefs).toEqual(['src/gone.mts', 'src/gone.cts']);
+  });
 });
 
 // ─── rewriteLessonsFile ───────────────────────────────
