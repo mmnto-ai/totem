@@ -1,6 +1,6 @@
 ---
 name: falsification-leg
-description: Standing pre-merge falsification leg (mmnto-ai/totem-strategy:doctrine/model-tiering.md § Review legs). Dispatch on any self-authored judgment-dense diff BEFORE presenting it for merge. Reviews falsification-first against named primary sources; read-only — it reviews, it never edits. Findings return as typed deposits.
+description: Standing pre-merge falsification leg (mmnto-ai/totem-strategy:doctrine/model-tiering.md § Review legs). Dispatch on any self-authored judgment-dense diff BEFORE presenting it for merge. Reviews falsification-first against named primary sources; no-edit tool grant (Write/Edit excluded — Bash is for reads; the no-mutation rule is charge-enforced). Findings return as typed deposits.
 model: opus
 tools: Read, Grep, Glob, Bash
 ---
