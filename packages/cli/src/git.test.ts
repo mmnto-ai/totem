@@ -803,6 +803,37 @@ describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)',
     expect(warned).toMatch(/NOT examined/);
   });
 
+  it('leads with the BRANCH scope under --branch (the working tree was never examined)', async () => {
+    // `--branch` bypasses the working tree entirely, so claiming "no committed
+    // or staged changes" misstates what this run looked at: staged changes may
+    // exist and were not examined.
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('scratch.ts');
+
+    await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    const warned = lastWarn();
+    expect(warned).toContain('branch-vs-base');
+    expect(warned).toMatch(/examined NOTHING/);
+    expect(warned).not.toMatch(/No committed or staged changes detected/);
+    // The untracked disclosure still rides along unchanged.
+    expect(warned).toContain('scratch.ts');
+    expect(warned).toMatch(/NOT examined/);
+  });
+
+  it('names the branch scope on the auto-fallback path too (its final scope is branch-vs-base)', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('scratch.ts');
+
+    await getDiffForReview({}, config, '/tmp', 'Lint');
+
+    // This site is only reachable AFTER the working-tree diff came back empty
+    // and the branch-vs-base fallback ran — so the branch scope is what the
+    // verdict line must describe.
+    expect(lastWarn()).toContain('branch-vs-base');
+  });
+
   it('leaves the message byte-identical when there are no untracked files', async () => {
     mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
     mockSafeExec.mockReturnValue('');

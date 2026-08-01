@@ -19,6 +19,7 @@ import {
   TOTEM_PRECOMMIT_MARKER,
   TOTEM_PREPUSH_MARKER,
 } from './install-hooks.js';
+import { SYSTEM_PROMPT as SPEC_SYSTEM_PROMPT } from './spec-templates.js';
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
@@ -125,6 +126,20 @@ describe('product surfaces bill `totem review` as an advisory sensor', () => {
   it('no internal review-process vocabulary reaches the consumer template', () => {
     for (const term of ['review-leg', 'cohort', 'falsification']) {
       expect(AI_PROMPT_BLOCK.toLowerCase()).not.toContain(term);
+    }
+  });
+
+  // The spec prompt is the strongest stale surface: every generated spec hands
+  // an executing agent a MANDATORY Verification block. lint stays the mandatory
+  // deterministic step; review is billed as the supplementary lane it is.
+  it('the spec system-prompt Verification block bills review as a supplementary advisory lane', () => {
+    expect(SPEC_SYSTEM_PROMPT).toContain('deterministic rule check');
+    expect(SPEC_SYSTEM_PROMPT).toContain('supplementary AI lanes over the diff');
+    expect(SPEC_SYSTEM_PROMPT).toContain('advisory');
+    expect(SPEC_SYSTEM_PROMPT).toContain('review of record');
+    expect(SPEC_SYSTEM_PROMPT).not.toContain('AI-powered architectural review');
+    for (const term of ['review-leg', 'cohort', 'falsification']) {
+      expect(SPEC_SYSTEM_PROMPT.toLowerCase()).not.toContain(term);
     }
   });
 

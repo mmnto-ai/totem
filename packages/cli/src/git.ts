@@ -213,6 +213,19 @@ export const MAX_DISCLOSED_UNTRACKED_FILES = 8;
 const NO_CHANGES_MESSAGE = 'No changes detected. Nothing to review.';
 
 /**
+ * Lead clause for the untracked disclosure on a branch-scoped empty diff.
+ *
+ * Both empty-diff exits below are branch-scoped by the time they fire: the
+ * forced path (`--branch`/`--base`) never consults the working tree at all, and
+ * the auto path only reaches its exit after the branch-vs-base fallback ALSO
+ * came back empty. A working-tree lead would misstate what was examined on the
+ * forced path (staged changes may exist, unexamined), so the lead names the
+ * scope the run actually evaluated.
+ */
+const BRANCH_SCOPE_EMPTY_LEAD =
+  'No changes detected in the branch-vs-base diff — this run examined NOTHING.';
+
+/**
  * Shared diff-fetching logic used by both `shield` and `lint` commands.
  *
  * Resolution order:
@@ -331,7 +344,11 @@ export async function getDiffForReview(
   // routine during a legitimate push, so a non-zero exit would mint a
   // false-block class; the loud declaration is the Tenet-4 satisfaction
   // (mmnto-ai/totem#2473 precedent).
-  const noChangesMessage = (): string => {
+  //
+  // `lead` is supplied by the call site so the first clause states the scope
+  // THAT site actually evaluated — a scope-blind lead is how the disclosure came
+  // to claim the working tree was clean on a run that never looked at it.
+  const noChangesMessage = (lead: string): string => {
     let untracked: string[];
     try {
       untracked = safeExec('git', ['ls-files', '--others', '--exclude-standard'], { cwd })
@@ -348,7 +365,7 @@ export async function getDiffForReview(
       .map((file) => sanitizeForTerminal(file));
     const more =
       untracked.length > shown.length ? ` (+${untracked.length - shown.length} more)` : '';
-    return `No committed or staged changes detected — this run examined NOTHING. ${untracked.length} untracked file(s) are invisible to every lint/review diff source and were NOT examined: ${shown.join(', ')}${more}. Run \`git add <file>\` to put them in scope.`;
+    return `${lead} ${untracked.length} untracked file(s) are invisible to every lint/review diff source and were NOT examined: ${shown.join(', ')}${more}. Run \`git add <file>\` to put them in scope.`;
   };
 
   // Definite-assignment asserted: every branch assigns both before use — the
@@ -389,7 +406,7 @@ export async function getDiffForReview(
     );
     resolveBranchScope(base);
     if (!diff.trim()) {
-      log.warn(tag, noChangesMessage());
+      log.warn(tag, noChangesMessage(BRANCH_SCOPE_EMPTY_LEAD));
       return null;
     }
   } else if (options.diff !== undefined) {
@@ -426,7 +443,7 @@ export async function getDiffForReview(
     }
 
     if (!diff.trim()) {
-      log.warn(tag, noChangesMessage());
+      log.warn(tag, noChangesMessage(BRANCH_SCOPE_EMPTY_LEAD));
       return null;
     }
   }

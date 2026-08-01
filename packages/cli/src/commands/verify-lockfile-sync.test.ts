@@ -59,6 +59,50 @@ index aaaaaa..bbbbbb 100644
    }
 `;
 
+// The workspace at HEAD for the pin-add branch: importers `.`, `apps/web`, and
+// `packages/cli`. Key forms match real pnpm emission — only scoped names are
+// quoted; unscoped `packages:`/`snapshots:` keys are bare.
+const HEAD_LOCKFILE_WORKSPACE = `lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+
+importers:
+
+  .:
+    dependencies:
+      '@mmnto/cli':
+        specifier: ^1.43.2
+        version: 1.43.2
+
+  apps/web:
+    dependencies:
+      foo:
+        specifier: ^1.2.3
+        version: 1.2.3
+
+  packages/cli:
+    dependencies:
+      commander:
+        specifier: ^11.0.0
+        version: 11.0.0
+
+packages:
+
+  '@mmnto/cli@1.43.2':
+    resolution: {integrity: sha512-aaaa}
+  commander@11.0.0:
+    resolution: {integrity: sha512-bbbb}
+  foo@1.2.3:
+    resolution: {integrity: sha512-cccc}
+
+snapshots:
+
+  '@mmnto/cli@1.43.2': {}
+  commander@11.0.0: {}
+  foo@1.2.3: {}
+`;
+
 // ─── Removed-pin fixtures (mmnto-ai/totem-strategy#630) ───
 //
 // Provenance: live-fire 2026-08-01, mmnto-ai/totem-strategy#630 comment
@@ -114,8 +158,35 @@ snapshots:
   '@mmnto/cli@1.60.0': {}
 `;
 
+// Same drop, but the workspace also has a `packages/app` importer.
+const HEAD_LOCKFILE_WITH_APP_IMPORTER = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      '@mmnto/cli':
+        specifier: workspace:*
+        version: link:packages/cli
+
+  packages/app:
+    dependencies:
+      '@mmnto/cli':
+        specifier: workspace:*
+        version: link:packages/cli
+
+packages:
+
+  '@mmnto/cli@1.60.0':
+    resolution: {integrity: sha512-aaaa}
+
+snapshots:
+
+  '@mmnto/cli@1.60.0': {}
+`;
+
 // A pure version bump: the old key is removed and a new key for the SAME name is
-// added in the same diff.
+// added in the same diff. The HEAD lockfile still resolves the name.
 const DOCTRINE_VERSION_BUMP_DIFF = `diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
 index aaaaaa..bbbbbb 100644
 --- a/pnpm-lock.yaml
@@ -138,35 +209,157 @@ index aaaaaa..bbbbbb 100644
 +    optional: true
 `;
 
+const HEAD_LOCKFILE_WITH_DOCTRINE_29 = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    optionalDependencies:
+      '@mmnto/strategy-doctrine':
+        specifier: 0.1.29
+        version: 0.1.29
+
+packages:
+
+  '@mmnto/strategy-doctrine@0.1.29':
+    resolution: {integrity: sha512-bbbb}
+
+snapshots:
+
+  '@mmnto/strategy-doctrine@0.1.29': {}
+`;
+
 // A dedupe: one version's keys go away while the package still resolves at HEAD
-// under another version.
+// under another version. Unscoped keys are BARE — real pnpm quotes only names
+// that need it.
 const DEDUPE_DIFF = `diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
 index aaaaaa..bbbbbb 100644
 --- a/pnpm-lock.yaml
 +++ b/pnpm-lock.yaml
 @@ -1200,4 +1200,1 @@ packages:
--  'ajv@6.15.0':
+-  ajv@6.15.0:
 -    resolution: {integrity: sha512-aaaa}
 -
 @@ -4100,4 +4097,1 @@ snapshots:
--  'ajv@6.15.0': {}
+-  ajv@6.15.0: {}
 -
 `;
 
 const HEAD_LOCKFILE_WITH_AJV_8 = `lockfileVersion: '9.0'
 
+importers:
+
+  .:
+    dependencies:
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
+
 packages:
 
-  'ajv@8.18.0':
+  ajv@8.18.0:
     resolution: {integrity: sha512-bbbb}
 
 snapshots:
 
-  'ajv@8.18.0': {}
+  ajv@8.18.0: {}
 `;
 
-// package.json contents at HEAD, keyed by tracked path — the `git grep` mock
-// below searches these exactly as `git grep -F '"<name>":' HEAD` would.
+// ── Metadata-laundering fixtures (falsification round 2) ──
+// `zod` is dropped outright, but survives at HEAD ONLY as a peer-metadata child
+// of another package. Those children are valueless key lines at a DEEPER indent
+// than a `packages:` entry — the shape that made a shape-only harvest report
+// "still resolves" and pass the #630 class through.
+
+const ZOD_PIN_REMOVAL_DIFF = `diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -44,9 +44,6 @@ importers:
+     dependencies:
+-      zod:
+-        specifier: ^3.25.76
+-        version: 3.25.76
+@@ -862,4 +859,1 @@ packages:
+-  zod@3.25.76:
+-    resolution: {integrity: sha512-aaaa}
+-
+@@ -3694,4 +3688,1 @@ snapshots:
+-  zod@3.25.76: {}
+-
+`;
+
+// Same drop, plus an ADDED peer-metadata child naming the dropped package — the
+// second laundering vector (an added-name subtraction excluded the candidate).
+const ZOD_PIN_REMOVAL_WITH_ADDED_PEER_META_DIFF = `${ZOD_PIN_REMOVAL_DIFF}@@ -900,3 +900,5 @@ packages:
+   ajv@8.18.0:
+     resolution: {integrity: sha512-bbbb}
++    peerDependenciesMeta:
++      zod:
++        optional: true
+`;
+
+const HEAD_LOCKFILE_ZOD_ONLY_IN_PEER_META = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
+
+packages:
+
+  ajv@8.18.0:
+    resolution: {integrity: sha512-bbbb}
+    peerDependencies:
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
+snapshots:
+
+  ajv@8.18.0: {}
+`;
+
+// ── Transitive-drop fixture (falsification round 2) ──
+// A transitive dep leaves the lockfile as a consequence of bumping its parent.
+// A NON-importer manifest (a separately-deployed service) still declares it.
+
+const HONO_DROP_DIFF = `diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -862,4 +859,1 @@ packages:
+-  hono@4.12.3:
+-    resolution: {integrity: sha512-aaaa}
+-
+@@ -3694,4 +3688,1 @@ snapshots:
+-  hono@4.12.3: {}
+-
+`;
+
+const HEAD_LOCKFILE_WITHOUT_HONO = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.28.0
+        version: 1.28.0
+
+packages:
+
+  '@modelcontextprotocol/sdk@1.28.0':
+    resolution: {integrity: sha512-bbbb}
+
+snapshots:
+
+  '@modelcontextprotocol/sdk@1.28.0': {}
+`;
+
+/** package.json contents at HEAD, keyed by tracked path. */
 const HEAD_PACKAGE_JSONS: Record<string, string> = {
   'package.json': `{
   "name": "totem",
@@ -186,28 +379,13 @@ const HEAD_PACKAGE_JSONS: Record<string, string> = {
 function showAtHead(
   args: string[],
   headLockfile: string,
-  manifests: Record<string, string>,
+  manifests: Record<string, string> = {},
 ): string {
   const ref = args[1] ?? '';
   if (ref === 'HEAD:pnpm-lock.yaml') return headLockfile;
   const content = manifests[ref.slice('HEAD:'.length)];
   if (content === undefined) throw new Error(`fatal: ${ref} does not exist in HEAD`);
   return content;
-}
-
-/**
- * Emulates `git grep -l -F` for the quoted key form over the tracked
- * package.json set at HEAD: prints the matching `HEAD:<path>` lines, and throws
- * on no match (git grep exits 1, which `safeExec` surfaces as a throw).
- */
-function grepHeadPackageJsons(args: string[], sources: Record<string, string>): string {
-  const pattern = args.find((arg) => arg.startsWith('"'));
-  if (pattern === undefined) throw new Error('git grep called without a quoted-key pattern');
-  const hits = Object.entries(sources)
-    .filter(([, content]) => content.includes(pattern))
-    .map(([file]) => `HEAD:${file}`);
-  if (hits.length === 0) throw new Error('exit 1: no match');
-  return hits.join('\n');
 }
 
 describe('verifyLockfileSyncCommand', () => {
@@ -217,6 +395,7 @@ describe('verifyLockfileSyncCommand', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   it('passes when not inside a git repo', async () => {
@@ -259,6 +438,7 @@ describe('verifyLockfileSyncCommand', () => {
             return 'package.json\npnpm-lock.yaml';
           }
           if (args[0] === 'diff') return CARET_BUMP_DIFF;
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
           throw new Error('unexpected');
         },
       };
@@ -281,6 +461,7 @@ describe('verifyLockfileSyncCommand', () => {
             return 'apps/web/package.json';
           }
           if (args[0] === 'diff') return NESTED_PKG_BUMP_DIFF;
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
           throw new Error('unexpected');
         },
       };
@@ -290,6 +471,60 @@ describe('verifyLockfileSyncCommand', () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/Tracked lockfile detected/);
     expect(result.reason).toMatch(/pnpm-lock\.yaml/);
+  });
+
+  it('passes when the pin is added to a NON-importer manifest (test fixture, not a workspace package)', async () => {
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) {
+            return 'tests/fixtures/sample/package.json';
+          }
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
+          // Reaching the unified-diff pull would mean the non-importer manifest
+          // was still in scope.
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(true);
+  });
+
+  it('still fails when a WORKSPACE importer manifest adds a pin without the lockfile', async () => {
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) {
+            // One importer manifest, one fixture manifest: only the importer
+            // may reach the pin scan.
+            return 'tests/fixtures/sample/package.json\napps/web/package.json';
+          }
+          if (args[0] === 'diff') {
+            expect(args).toContain('apps/web/package.json');
+            expect(args).not.toContain('tests/fixtures/sample/package.json');
+            return NESTED_PKG_BUMP_DIFF;
+          }
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/Tracked lockfile detected/);
   });
 
   it('passes when package.json diff contains only deletions', async () => {
@@ -303,6 +538,7 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
           if (args[0] === 'diff' && args.includes('--name-only')) return 'package.json';
           if (args[0] === 'diff') return DELETIONS_ONLY_DIFF;
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
           throw new Error('unexpected');
         },
       };
@@ -325,6 +561,7 @@ describe('verifyLockfileSyncCommand', () => {
             return 'packages/cli/package.json';
           }
           if (args[0] === 'diff') return VERSION_FIELD_ONLY_DIFF;
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
           throw new Error('unexpected');
         },
       };
@@ -347,6 +584,7 @@ describe('verifyLockfileSyncCommand', () => {
             return 'packages/cli/package.json';
           }
           if (args[0] === 'diff') return WORKSPACE_REF_DIFF;
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
           throw new Error('unexpected');
         },
       };
@@ -388,6 +626,7 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
           if (args[0] === 'diff' && args.includes('--name-only')) return 'package.json';
           if (args[0] === 'diff') return CARET_BUMP_DIFF;
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
           throw new Error('unexpected');
         },
       };
@@ -422,7 +661,7 @@ describe('verifyLockfileSyncCommand', () => {
   // ─── Removed-pin gate (mmnto-ai/totem-strategy#630) ───
 
   it('fails when the lockfile diff drops every entry for a package still pinned at HEAD (live-fire positive control)', async () => {
-    const grepCalls: string[][] = [];
+    const showRefs: string[] = [];
     vi.doMock('@mmnto/totem', async () => {
       const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
       return {
@@ -434,11 +673,8 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
           if (args[0] === 'diff') return DOCTRINE_PIN_REMOVAL_DIFF;
           if (args[0] === 'show') {
+            showRefs.push(args[1] ?? '');
             return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, HEAD_PACKAGE_JSONS);
-          }
-          if (args[0] === 'grep') {
-            grepCalls.push(args);
-            return grepHeadPackageJsons(args, HEAD_PACKAGE_JSONS);
           }
           throw new Error('unexpected');
         },
@@ -448,17 +684,15 @@ describe('verifyLockfileSyncCommand', () => {
     const result = await verifyLockfileSyncCommand();
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/@mmnto\/strategy-doctrine/);
-    // The declaration probe searches the QUOTED KEY form at HEAD, across the
-    // root and every nested package.json.
-    expect(grepCalls.length).toBeGreaterThan(0);
-    expect(grepCalls[0]).toContain('"@mmnto/strategy-doctrine":');
-    expect(grepCalls[0]).toContain('HEAD');
-    expect(grepCalls[0]).toContain('package.json');
-    expect(grepCalls[0]).toContain('**/package.json');
+    // The declaration probe reads the ROOT importer's manifest at HEAD — the
+    // lockfile's own answer to "which manifests do I resolve?".
+    expect(showRefs).toContain('HEAD:pnpm-lock.yaml');
+    expect(showRefs).toContain('HEAD:package.json');
   });
 
-  it('counts an optionalDependencies declaration in a NESTED package.json as declared', async () => {
+  it('counts an optionalDependencies declaration in a NESTED importer manifest as declared', async () => {
     const nestedOnly = {
+      'package.json': `{ "name": "totem" }`,
       'packages/app/package.json': `{
   "name": "@acme/app",
   "optionalDependencies": {
@@ -476,9 +710,9 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
           if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
           if (args[0] === 'diff') return DOCTRINE_PIN_REMOVAL_DIFF;
-          if (args[0] === 'show')
-            return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, nestedOnly);
-          if (args[0] === 'grep') return grepHeadPackageJsons(args, nestedOnly);
+          if (args[0] === 'show') {
+            return showAtHead(args, HEAD_LOCKFILE_WITH_APP_IMPORTER, nestedOnly);
+          }
           throw new Error('unexpected');
         },
       };
@@ -489,7 +723,150 @@ describe('verifyLockfileSyncCommand', () => {
     expect(result.reason).toMatch(/@mmnto\/strategy-doctrine/);
   });
 
-  it('passes on a pure version bump (old key removed, new key for the same name added)', async () => {
+  it('passes when a NON-importer manifest declares a dropped transitive dep (services/ repro)', async () => {
+    const showRefs: string[] = [];
+    const manifests = {
+      'package.json': `{
+  "name": "totem",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0"
+  }
+}`,
+      // Not a workspace importer: this lockfile never resolved its pins.
+      'services/compile-worker/package.json': `{
+  "name": "compile-worker",
+  "dependencies": {
+    "hono": "^4.12.3"
+  }
+}`,
+    };
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
+          if (args[0] === 'diff') return HONO_DROP_DIFF;
+          if (args[0] === 'show') {
+            showRefs.push(args[1] ?? '');
+            return showAtHead(args, HEAD_LOCKFILE_WITHOUT_HONO, manifests);
+          }
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(true);
+    // The non-importer manifest is never even consulted.
+    expect(showRefs).not.toContain('HEAD:services/compile-worker/package.json');
+  });
+
+  it('fires when the dropped package survives at HEAD only as a peer-metadata child', async () => {
+    const manifests = {
+      'package.json': `{
+  "name": "totem",
+  "dependencies": {
+    "zod": "^3.25.76",
+    "ajv": "^8.18.0"
+  }
+}`,
+    };
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
+          if (args[0] === 'diff') return ZOD_PIN_REMOVAL_DIFF;
+          if (args[0] === 'show') {
+            return showAtHead(args, HEAD_LOCKFILE_ZOD_ONLY_IN_PEER_META, manifests);
+          }
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/zod/);
+  });
+
+  it('fires even when the diff ADDS a peer-metadata line naming the dropped package', async () => {
+    const manifests = {
+      'package.json': `{
+  "name": "totem",
+  "dependencies": {
+    "zod": "^3.25.76",
+    "ajv": "^8.18.0"
+  }
+}`,
+    };
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
+          if (args[0] === 'diff') return ZOD_PIN_REMOVAL_WITH_ADDED_PEER_META_DIFF;
+          if (args[0] === 'show') {
+            return showAtHead(args, HEAD_LOCKFILE_ZOD_ONLY_IN_PEER_META, manifests);
+          }
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/zod/);
+  });
+
+  it('declares a skip and passes when the candidate count exceeds the cap (format migration)', async () => {
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+    const bulkRemoval = [
+      'diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml',
+      '--- a/pnpm-lock.yaml',
+      '+++ b/pnpm-lock.yaml',
+      '@@ -1,120 +1,1 @@ packages:',
+      ...Array.from({ length: 30 }, (_v, i) => `-  pkg-${i}@1.0.0:`),
+    ].join('\n');
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
+          if (args[0] === 'diff') return bulkRemoval;
+          // Over the cap the check must not read anything further.
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(true);
+    const declared = stderr.join('\n');
+    expect(declared).toMatch(/30/);
+    expect(declared).toMatch(/skipping the removed-pin check/i);
+  });
+
+  it('passes on a pure version bump (the name still resolves at HEAD)', async () => {
     vi.doMock('@mmnto/totem', async () => {
       const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
       return {
@@ -500,7 +877,9 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
           if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
           if (args[0] === 'diff') return DOCTRINE_VERSION_BUMP_DIFF;
-          // Reaching either probe would mean the added-key filter failed.
+          if (args[0] === 'show') {
+            return showAtHead(args, HEAD_LOCKFILE_WITH_DOCTRINE_29, HEAD_PACKAGE_JSONS);
+          }
           throw new Error('unexpected');
         },
       };
@@ -510,7 +889,8 @@ describe('verifyLockfileSyncCommand', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('passes on a legitimate removal (the declaration is gone from package.json at HEAD)', async () => {
+  it('passes on a legitimate removal (the declaration is gone from the importer manifest at HEAD)', async () => {
+    const withoutDeclaration = { 'package.json': `{ "name": "totem", "dependencies": {} }` };
     vi.doMock('@mmnto/totem', async () => {
       const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
       return {
@@ -521,9 +901,9 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
           if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
           if (args[0] === 'diff') return DOCTRINE_PIN_REMOVAL_DIFF;
-          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, {});
-          // No package.json at HEAD declares the package any more.
-          if (args[0] === 'grep') return grepHeadPackageJsons(args, {});
+          if (args[0] === 'show') {
+            return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, withoutDeclaration);
+          }
           throw new Error('unexpected');
         },
       };
@@ -544,10 +924,9 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
           if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
           if (args[0] === 'diff') return DEDUPE_DIFF;
+          // Still declared — only the HEAD-lockfile resolution saves this case.
           if (args[0] === 'show')
             return showAtHead(args, HEAD_LOCKFILE_WITH_AJV_8, HEAD_PACKAGE_JSONS);
-          // Still declared — only the HEAD-lockfile resolution saves this case.
-          if (args[0] === 'grep') return grepHeadPackageJsons(args, HEAD_PACKAGE_JSONS);
           throw new Error('unexpected');
         },
       };
@@ -558,10 +937,8 @@ describe('verifyLockfileSyncCommand', () => {
   });
 
   it('passes when the removed name only collides with a MANIFEST key (`type` vs "type": "module")', async () => {
-    // `type` is a real npm package AND a package.json manifest key. A quoted-key
-    // grep alone reports it "declared" from `"type": "module"` in every
-    // manifest — a false block on a legitimate removal (mmnto-ai/totem#2473
-    // class). Membership must be decided inside the dependency blocks.
+    // `type` is a real npm package AND a package.json manifest key: membership
+    // must be decided inside the dependency blocks, never by a text match.
     const typeRemovalDiff = `diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
 --- a/pnpm-lock.yaml
 +++ b/pnpm-lock.yaml
@@ -581,13 +958,6 @@ describe('verifyLockfileSyncCommand', () => {
     "ajv": "^8.18.0"
   }
 }`,
-      'packages/cli/package.json': `{
-  "name": "@mmnto/cli",
-  "type": "module",
-  "devDependencies": {
-    "vitest": "^4.0.0"
-  }
-}`,
     };
     vi.doMock('@mmnto/totem', async () => {
       const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
@@ -602,7 +972,6 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'show') {
             return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, manifestsWithTypeField);
           }
-          if (args[0] === 'grep') return grepHeadPackageJsons(args, manifestsWithTypeField);
           throw new Error('unexpected');
         },
       };
@@ -613,9 +982,6 @@ describe('verifyLockfileSyncCommand', () => {
   });
 
   it('does not count an `overrides`-only pin as a dependency declaration', async () => {
-    // An overrides entry constrains how some OTHER package's dependency
-    // resolves; it is not itself an install-resolvable declaration, so its
-    // disappearance from the lockfile is not the #630 class.
     const overridesOnly = {
       'package.json': `{
   "name": "totem",
@@ -639,7 +1005,6 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'show') {
             return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, overridesOnly);
           }
-          if (args[0] === 'grep') return grepHeadPackageJsons(args, overridesOnly);
           throw new Error('unexpected');
         },
       };
@@ -649,7 +1014,11 @@ describe('verifyLockfileSyncCommand', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('skips a prefilter hit whose manifest cannot be parsed at HEAD (per-file best-effort)', async () => {
+  it('declares a skip for an importer manifest that cannot be parsed at HEAD', async () => {
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
     const brokenManifest = {
       'package.json': `{ "optionalDependencies": { "@mmnto/strategy-doctrine": "0.1.28" `,
     };
@@ -666,7 +1035,6 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'show') {
             return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, brokenManifest);
           }
-          if (args[0] === 'grep') return grepHeadPackageJsons(args, brokenManifest);
           throw new Error('unexpected');
         },
       };
@@ -674,12 +1042,11 @@ describe('verifyLockfileSyncCommand', () => {
     const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
     const result = await verifyLockfileSyncCommand();
     expect(result.valid).toBe(true);
+    // The skip is DECLARED — never silent.
+    expect(stderr.join('\n')).toMatch(/package\.json/);
   });
 
   it('passes when the diff removes a lockfile GRAMMAR key (last devDependency dropped)', async () => {
-    // `devDependencies:` is valueless like a package key and would otherwise
-    // become a candidate: absent from the HEAD lockfile, yet "declared" because
-    // package.json still carries an (empty) devDependencies block.
     const lastDevDepDiff = `diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
 --- a/pnpm-lock.yaml
 +++ b/pnpm-lock.yaml
@@ -709,7 +1076,6 @@ describe('verifyLockfileSyncCommand', () => {
           if (args[0] === 'show') {
             return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, headPkgKeepsEmptyBlock);
           }
-          if (args[0] === 'grep') return grepHeadPackageJsons(args, headPkgKeepsEmptyBlock);
           throw new Error('unexpected');
         },
       };
@@ -719,7 +1085,7 @@ describe('verifyLockfileSyncCommand', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('falls through to pass when the lockfile diff read fails (best-effort probe)', async () => {
+  it('falls through to pass when the lockfile diff read fails (declared skip)', async () => {
     vi.doMock('@mmnto/totem', async () => {
       const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
       return {
@@ -739,7 +1105,7 @@ describe('verifyLockfileSyncCommand', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('falls through to pass when the HEAD-lockfile probe fails (best-effort probe)', async () => {
+  it('falls through to pass when the HEAD-lockfile probe fails (declared skip)', async () => {
     vi.doMock('@mmnto/totem', async () => {
       const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
       return {
@@ -796,6 +1162,7 @@ describe('verifyLockfileSyncCliCommand', () => {
           if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
           if (args[0] === 'diff' && args.includes('--name-only')) return 'package.json';
           if (args[0] === 'diff') return CARET_BUMP_DIFF;
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
           throw new Error('unexpected');
         },
       };
@@ -827,7 +1194,6 @@ describe('verifyLockfileSyncCliCommand', () => {
           if (args[0] === 'show') {
             return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, HEAD_PACKAGE_JSONS);
           }
-          if (args[0] === 'grep') return grepHeadPackageJsons(args, HEAD_PACKAGE_JSONS);
           throw new Error('unexpected');
         },
       };

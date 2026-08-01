@@ -104,4 +104,30 @@ describe('`totem review` run-start self-description (#2536)', () => {
 
     expect(emitted.join('\n')).not.toMatch(/not a merge gate/i);
   });
+
+  it('does not fire under --raw (zero-LLM context dump, not an AI review lane)', async () => {
+    const { shieldCommand } = await import('./shield.js');
+    try {
+      await shieldCommand({ raw: true } as Parameters<typeof shieldCommand>[0]);
+    } catch {
+      // totem-context: the raw path continues past the banner site into retrieval work that this harness does not stub; the assertion is about what was PRINTED before that, so the downstream failure is irrelevant here
+    }
+
+    expect(emitted.join('\n')).not.toMatch(/not a merge gate/i);
+  });
+
+  it('does not fire under --estimate (deterministic pre-flight returns before the banner)', async () => {
+    // Pinned deliberately: --estimate exits on an earlier branch, so its silence
+    // is a property of ORDER, not of a flag check. A refactor that moves the
+    // banner earlier must fail here rather than start billing the deterministic
+    // estimator as an AI review lane.
+    const { shieldCommand } = await import('./shield.js');
+    try {
+      await shieldCommand({ estimate: true } as Parameters<typeof shieldCommand>[0]);
+    } catch {
+      // totem-context: the estimator path runs the deterministic engine against a diff this harness stubs as null; any downstream failure is irrelevant to the printed-output assertion
+    }
+
+    expect(emitted.join('\n')).not.toMatch(/not a merge gate/i);
+  });
 });
