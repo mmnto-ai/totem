@@ -544,7 +544,10 @@ configCmd
 registerExcluded('sync', 'Re-index project files into the local vector store');
 registerExcluded('search <query>', 'Search the knowledge index');
 registerExcluded('stats', 'Show index statistics');
-registerExcluded('review', 'AI-powered code review');
+registerExcluded(
+  'review',
+  'Supplementary AI review lanes over your diff (advisory — not a merge gate)',
+);
 registerExcluded('spec <inputs...>', 'Generate a pre-work spec briefing');
 registerExcluded('handoff', 'Generate an end-of-session handoff snapshot');
 registerExcluded('triage-pr <pr-number>', 'Categorized triage view of bot review comments');

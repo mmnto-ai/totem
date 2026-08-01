@@ -199,6 +199,20 @@ export const REVIEW_DIFF_TRUNCATION_THRESHOLD = 50_000;
 export const MAX_DISCLOSED_FILTERED_FILES = 8;
 
 /**
+ * Cap on untracked file names printed by the empty-diff disclosure
+ * (mmnto-ai/totem#2535). Sibling of {@link MAX_DISCLOSED_FILTERED_FILES} with
+ * the same shown/`+N more` shape; kept separate so tuning one disclosure's
+ * verbosity never silently retunes the other.
+ */
+export const MAX_DISCLOSED_UNTRACKED_FILES = 8;
+
+/**
+ * The empty-diff verdict line when nothing else is in play — preserved
+ * byte-for-byte (mmnto-ai/totem#2535 changes only the untracked-present case).
+ */
+const NO_CHANGES_MESSAGE = 'No changes detected. Nothing to review.';
+
+/**
  * Shared diff-fetching logic used by both `shield` and `lint` commands.
  *
  * Resolution order:
@@ -307,6 +321,36 @@ export async function getDiffForReview(
     return filtered;
   };
 
+  // Empty-diff verdict line, shared by both no-changes exits below
+  // (mmnto-ai/totem#2535). A working tree whose only change is untracked
+  // otherwise reports a clean "nothing to review" from a run that examined
+  // NOTHING: untracked paths are invisible to every diff source this resolver
+  // can reach (staged, working-tree, branch-vs-base, explicit range). Exit
+  // behavior is deliberately unchanged — both callers still return null (exit
+  // 0). The pre-push hook runs `totem lint`, and untracked scratch files are
+  // routine during a legitimate push, so a non-zero exit would mint a
+  // false-block class; the loud declaration is the Tenet-4 satisfaction
+  // (mmnto-ai/totem#2473 precedent).
+  const noChangesMessage = (): string => {
+    let untracked: string[];
+    try {
+      untracked = safeExec('git', ['ls-files', '--others', '--exclude-standard'], { cwd })
+        .split('\n')
+        .map((file) => file.trim())
+        .filter(Boolean);
+      // totem-context: best-effort untracked probe — a git failure (no repo, index lock, degraded state) leaves the historical verdict line byte-identical instead of degrading it; the probe informs a disclosure, never the verdict or the exit code (mmnto-ai/totem#2535 failure table)
+    } catch {
+      return NO_CHANGES_MESSAGE;
+    }
+    if (untracked.length === 0) return NO_CHANGES_MESSAGE;
+    const shown = untracked
+      .slice(0, MAX_DISCLOSED_UNTRACKED_FILES)
+      .map((file) => sanitizeForTerminal(file));
+    const more =
+      untracked.length > shown.length ? ` (+${untracked.length - shown.length} more)` : '';
+    return `No committed or staged changes detected — this run examined NOTHING. ${untracked.length} untracked file(s) are invisible to every lint/review diff source and were NOT examined: ${shown.join(', ')}${more}. Run \`git add <file>\` to put them in scope.`;
+  };
+
   // Definite-assignment asserted: every branch assigns both before use — the
   // shared `resolveBranchScope` closure hides that from TS2454's flow analysis.
   let diff!: string;
@@ -345,7 +389,7 @@ export async function getDiffForReview(
     );
     resolveBranchScope(base);
     if (!diff.trim()) {
-      log.warn(tag, 'No changes detected. Nothing to review.');
+      log.warn(tag, noChangesMessage());
       return null;
     }
   } else if (options.diff !== undefined) {
@@ -382,7 +426,7 @@ export async function getDiffForReview(
     }
 
     if (!diff.trim()) {
-      log.warn(tag, 'No changes detected. Nothing to review.');
+      log.warn(tag, noChangesMessage());
       return null;
     }
   }

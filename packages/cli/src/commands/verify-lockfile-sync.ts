@@ -32,12 +32,242 @@ const AUX_LOOKUP_TIMEOUT_MS = 10_000;
 //                   rejects `workspace:^` references (no leading digit).
 const DEP_BUMP_RE = /^\+\s*"(?!version")[^"]+"\s*:\s*"[\^~]?\d+\.\d+/m;
 
+// Match a QUOTED pnpm-lockfile key line (sign already stripped when the line
+// comes from a diff). Anchors, left to right:
+//   `^\s+`   — required indent. Every key that names a package is nested (an
+//              importer's dependency block, `packages:`, `snapshots:`), so the
+//              document-level keys (`lockfileVersion:`, `importers:`) never match.
+//   `'([^']+)'`
+//            — the quoted key. pnpm quotes any key containing `@` or another
+//              YAML-special char, which is every scoped name and every
+//              `name@version` packages/snapshots key.
+//   `:`      — the key terminator. A quoted key is accepted with or without a
+//              scalar value: pnpm only quotes package names, so there is no
+//              metadata-key collision to exclude here.
+const LOCKFILE_QUOTED_KEY_RE = /^\s+'([^']+)':/;
+
+// Match a BARE pnpm-lockfile key line (sign already stripped). Same indent
+// anchor as above, plus:
+//   `([^'\s:]+)`
+//            — the unquoted key (`ajv@8.18.0`, `commander`, `packages/cli`).
+//   `:(?:\s*\{\})?\s*$`
+//            — the key must carry NO scalar value (`foo@1.0.0:`) or the empty
+//              mapping (`foo@1.0.0: {}`). That is what pnpm emits for package
+//              keys, and it structurally excludes the scalar metadata keys
+//              (`resolution:`, `specifier:`, `version:`, `engines:`, `optional:`)
+//              without maintaining a blocklist. A package that disappears from
+//              the lockfile always loses its valueless `packages:`/`snapshots:`
+//              key line, so the restriction costs no detection.
+const LOCKFILE_BARE_KEY_RE = /^\s+([^'\s:]+):(?:\s*\{\})?\s*$/;
+
+// pnpm-lockfile GRAMMAR keys that are valueless like a package key but never
+// name a package. Without this, removing a repo's last devDependency would make
+// `devDependencies` a candidate — absent from the HEAD lockfile, and "declared"
+// because package.json still carries a `"devDependencies": {}` key — a false
+// block on a legitimate push. The cost is that a dependency named EXACTLY one of
+// these strings is invisible to the gate; a false block on a real push is the
+// worse failure (mmnto-ai/totem#2473 class).
+const LOCKFILE_STRUCTURAL_KEYS = new Set([
+  'catalogs',
+  'dependencies',
+  'devDependencies',
+  'importers',
+  'optionalDependencies',
+  'overrides',
+  'packages',
+  'patchedDependencies',
+  'peerDependencies',
+  'peerDependenciesMeta',
+  'settings',
+  'snapshots',
+  'transitivePeerDependencies',
+]);
+
+// The manifest blocks whose keys are install-resolvable dependency
+// declarations — the only blocks that answer "is this pin still declared?".
+// `overrides` / `resolutions` are excluded by design (see isDeclaredAtHead).
+const MANIFEST_DEPENDENCY_BLOCKS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+] as const;
+
+// `git show` / `git grep -l` blob-ref prefix for the HEAD revision. Named once
+// so the ref built here and the ref parsed out of grep's output cannot drift.
+const HEAD_REF_PREFIX = 'HEAD:';
+
+// The reason-string discriminant for the removed-pin failure class
+// (mmnto-ai/totem-strategy#630). `VerifyLockfileSyncResult` carries no class
+// field by contract, so the CLI wrapper keys its recovery hint off this prefix —
+// the two failure classes must never share a remedy.
+const REMOVED_PIN_REASON_PREFIX = `${LOCKFILE_PATH} no longer contains any entry for a package whose pin is still declared in a tracked package.json at HEAD`;
+
 // ─── Types ──────────────────────────────────────────────
+
+/** The `safeExec` surface this command uses (core's signature, narrowed). */
+type SafeExecFn = (
+  command: string,
+  args: string[],
+  options: { cwd: string; timeout: number },
+) => string;
+
+/** The `log` surface the best-effort probes use for their declared skips. */
+type SkipLogger = { info: (tag: string, msg: string) => void };
 
 export interface VerifyLockfileSyncResult {
   valid: boolean;
   /** Set only when valid === false; describes the detected failure. The recovery action lives on the TotemError's recoveryHint at the CLI layer. */
   reason?: string;
+}
+
+// ─── Removed-pin predicate (mmnto-ai/totem-strategy#630) ─
+
+/**
+ * The package NAME a lockfile key denotes, or `null` when the line is not a key
+ * line. Strips a peer parenthetical (`pkg@1.0.0(react@19.0.0)`) and the trailing
+ * `@<version>` suffix: npm forbids `@` inside a package name except the leading
+ * scope marker, so the last `@` past index 0 always opens the version.
+ */
+function lockfileKeyName(line: string): string | null {
+  const match = LOCKFILE_QUOTED_KEY_RE.exec(line) ?? LOCKFILE_BARE_KEY_RE.exec(line);
+  if (match === null) return null;
+  if (LOCKFILE_STRUCTURAL_KEYS.has(match[1]!)) return null;
+  const key = match[1]!.split('(')[0]!;
+  const versionAt = key.lastIndexOf('@');
+  return versionAt > 0 ? key.slice(0, versionAt) : key;
+}
+
+/**
+ * Whether `name` is still declared as a dependency of a tracked package.json at
+ * HEAD.
+ *
+ * The quoted-key `git grep` is only a cheap PREFILTER, never the answer: the
+ * manifest key namespace overlaps the npm name namespace, so `"<name>":` also
+ * matches a manifest FIELD. A repo legitimately removing the real npm package
+ * `type` would match `"type": "module"` in every manifest and be told its pin is
+ * still declared — a false block on a legitimate push (mmnto-ai/totem#2473
+ * class). Membership is therefore decided by parsing each prefilter hit and
+ * testing the install-resolvable dependency blocks.
+ *
+ * `overrides` / `resolutions` are deliberately NOT counted: a name appearing
+ * only there constrains how some OTHER package's dependency resolves and is not
+ * itself a declaration that must resolve. The #630 class is about declared
+ * dependencies that silently stop resolving.
+ */
+function isDeclaredAtHead(safeExec: SafeExecFn, repoRoot: string, name: string): boolean {
+  let hits: string[];
+  try {
+    hits = safeExec(
+      'git',
+      [
+        'grep',
+        '-l',
+        '--fixed-strings',
+        `"${name}":`,
+        'HEAD',
+        '--',
+        'package.json',
+        '**/package.json',
+      ],
+      { cwd: repoRoot, timeout: AUX_LOOKUP_TIMEOUT_MS },
+    )
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    // totem-context: git grep exits 1 on NO MATCH, which safeExec surfaces as a throw — indistinguishable here from a genuine probe failure, and both answer "not declared" so the gate passes (mmnto/totem#1440 Tenet 4 init-class: a probe that cannot answer never blocks a push)
+  } catch {
+    return false;
+  }
+
+  for (const hit of hits) {
+    // `git grep -l <rev>` prints `<rev>:<path>`; read that exact blob back.
+    const file = hit.startsWith(HEAD_REF_PREFIX) ? hit.slice(HEAD_REF_PREFIX.length) : hit;
+    let manifest: unknown;
+    try {
+      manifest = JSON.parse(
+        safeExec('git', ['show', `${HEAD_REF_PREFIX}${file}`], {
+          cwd: repoRoot,
+          timeout: AUX_LOOKUP_TIMEOUT_MS,
+        }),
+      );
+      // totem-context: per-file best-effort — a manifest that cannot be read or parsed at HEAD cannot answer the membership question, so this hit is skipped rather than counted as a declaration (mmnto/totem#1440 Tenet 4 init-class: a probe that cannot answer never blocks a push)
+    } catch {
+      continue;
+    }
+    if (typeof manifest !== 'object' || manifest === null) continue;
+    for (const block of MANIFEST_DEPENDENCY_BLOCKS) {
+      const declared = (manifest as Record<string, unknown>)[block];
+      if (typeof declared !== 'object' || declared === null) continue;
+      if (Object.hasOwn(declared, name)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Packages the diff range removes from the lockfile entirely while their pin
+ * stays declared — the mmnto-ai/totem-strategy#630 live-fire class, where a
+ * failed optional-dependency fetch drops every importer/packages/snapshots entry
+ * for a working dep and `pnpm install` still exits 0.
+ *
+ * Candidate generation deliberately over-generates (any removed key line whose
+ * name is not re-added in the same diff); the decisive predicate below filters:
+ * a candidate fails only when it resolves NOWHERE in the lockfile at HEAD AND is
+ * still declared in a tracked package.json at HEAD. Every git read is
+ * best-effort — a probe that cannot answer logs a skip and passes the gate, per
+ * the file's #1440 carve-out.
+ */
+function findRemovedPins(
+  safeExec: SafeExecFn,
+  log: SkipLogger,
+  repoRoot: string,
+  resolvedRef: string,
+): string[] {
+  let lockfileDiff: string;
+  try {
+    lockfileDiff = safeExec('git', ['diff', `${resolvedRef}...HEAD`, '--', LOCKFILE_PATH], {
+      cwd: repoRoot,
+      timeout: AUX_LOOKUP_TIMEOUT_MS,
+    });
+    // totem-context: best-effort lockfile-diff lookup — failure means the removed-pin check cannot evaluate, so it declares the skip and passes rather than blocking (mmnto/totem#1440 Tenet 4 init-class)
+  } catch {
+    log.info(TAG, `Could not read the ${LOCKFILE_PATH} diff — skipping the removed-pin check.`);
+    return [];
+  }
+
+  const removed = new Set<string>();
+  const added = new Set<string>();
+  for (const line of lockfileDiff.split('\n')) {
+    const sign = line[0];
+    if (sign !== '-' && sign !== '+') continue;
+    const name = lockfileKeyName(line.slice(1));
+    if (name === null) continue;
+    (sign === '-' ? removed : added).add(name);
+  }
+  const candidates = [...removed].filter((name) => !added.has(name));
+  if (candidates.length === 0) return [];
+
+  let headLockfile: string;
+  try {
+    headLockfile = safeExec('git', ['show', `${HEAD_REF_PREFIX}${LOCKFILE_PATH}`], {
+      cwd: repoRoot,
+      timeout: AUX_LOOKUP_TIMEOUT_MS,
+    });
+    // totem-context: best-effort HEAD-lockfile probe — without it a dedupe is indistinguishable from a full removal, so the check declares the skip and passes (mmnto/totem#1440 Tenet 4 init-class)
+  } catch {
+    log.info(TAG, `Could not read ${LOCKFILE_PATH} at HEAD — skipping the removed-pin check.`);
+    return [];
+  }
+  const headNames = new Set<string>();
+  for (const line of headLockfile.split('\n')) {
+    const name = lockfileKeyName(line);
+    if (name !== null) headNames.add(name);
+  }
+
+  return candidates.filter(
+    (name) => !headNames.has(name) && isDeclaredAtHead(safeExec, repoRoot, name),
+  );
 }
 
 // ─── Main command ───────────────────────────────────────
@@ -128,6 +358,17 @@ export async function verifyLockfileSyncCommand(): Promise<VerifyLockfileSyncRes
   // alongside it. Most cohort-sync PRs and all Version Packages PRs land
   // here.
   if (files.includes(LOCKFILE_PATH)) {
+    // A present lockfile is not a synced lockfile: the diff can also REMOVE a
+    // package outright while package.json keeps its pin
+    // (mmnto-ai/totem-strategy#630). Checked before the pass so the fast-pass
+    // cannot launder that shape.
+    const removedPins = findRemovedPins(safeExec, log, repoRoot, resolvedRef);
+    if (removedPins.length > 0) {
+      return {
+        valid: false,
+        reason: `${REMOVED_PIN_REASON_PREFIX}: ${removedPins.join(', ')}. The diff range removes every lockfile entry for the package(s), so the declared dependency cannot resolve.`,
+      };
+    }
     const label = successColor(bold('PASS'));
     log.success(TAG, `${label} — ${LOCKFILE_PATH} present in diff range.`);
     return { valid: true };
@@ -175,10 +416,11 @@ export async function verifyLockfileSyncCliCommand(): Promise<void> {
 
   const result = await verifyLockfileSyncCommand();
   if (!result.valid) {
-    throw new TotemError(
-      'CHECK_FAILED',
-      result.reason!,
-      `Run \`pnpm install\` from the repo root to regenerate ${LOCKFILE_PATH}, then stage and commit it before re-pushing. CI runs with \`--frozen-lockfile\` and rejects pushes where a tracked package.json declares dependency pins that the lockfile does not reflect.`,
-    );
+    // Two failure classes, two remedies. The removed-pin class is NOT fixed by a
+    // plain `pnpm install` — that is precisely the command that produced it.
+    const recoveryHint = result.reason!.startsWith(REMOVED_PIN_REASON_PREFIX)
+      ? `A failed optional-dependency fetch (an expired or missing registry token) silently removes every ${LOCKFILE_PATH} entry for a package while its pin stays declared in package.json — exit 0, no warning (mmnto-ai/totem-strategy#630 class). Verify registry auth with \`npm whoami\`, regenerate with \`pnpm update <pkg>\` (NOT \`pnpm install --lockfile-only\`, which false-reports "Already up to date" on an optional-dependency drop), then commit the regenerated ${LOCKFILE_PATH}.`
+      : `Run \`pnpm install\` from the repo root to regenerate ${LOCKFILE_PATH}, then stage and commit it before re-pushing. CI runs with \`--frozen-lockfile\` and rejects pushes where a tracked package.json declares dependency pins that the lockfile does not reflect.`;
+    throw new TotemError('CHECK_FAILED', result.reason!, recoveryHint);
   }
 }

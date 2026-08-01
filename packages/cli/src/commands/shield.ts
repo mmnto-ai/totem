@@ -1625,6 +1625,15 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     return;
   }
 
+  // Run-start self-description (mmnto-ai/totem#2536): the command states its own
+  // role and known limits at the point of invocation, where stale "run review for
+  // THE review" muscle memory actually gets corrected. Emitted after the
+  // read-only `--covariate` short-circuit so that transport verb stays quiet.
+  log.info(
+    DISPLAY_TAG,
+    'Supplementary AI review lanes (advisory — not a merge gate). Limits disclosed in output: LLM window truncation on large diffs; non-code files skipped.',
+  );
+
   // Engine boot (mmnto-ai/totem#1794) — see lint.ts wiring for context.
   const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
   await bootstrapEngine(config, configRoot);

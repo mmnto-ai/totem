@@ -19,6 +19,7 @@ import {
   getTagDate,
   isAncestor,
   isFileDirty,
+  MAX_DISCLOSED_UNTRACKED_FILES,
   resolveGitRoot,
 } from './git.js';
 
@@ -742,5 +743,99 @@ describe('getDiffForReview narrow-scope warning (#2090)', () => {
     expect(withFailure).toEqual(baseline);
     expect(withFailure!.source).toBe('uncommitted');
     expect(findNarrowScopeWarning()).toBeUndefined();
+  });
+});
+
+// ─── getDiffForReview untracked-file disclosure (#2535) ──
+
+describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)', () => {
+  const config = { ignorePatterns: [] as string[] };
+  /** The historical (and still byte-exact) no-untracked verdict line. */
+  const PLAIN_NO_CHANGES = 'No changes detected. Nothing to review.';
+
+  function lastWarn(): string {
+    const calls = mockLog.warn.mock.calls;
+    return String(calls[calls.length - 1]?.[1] ?? '');
+  }
+
+  beforeEach(() => {
+    mockGetGitDiffRange.mockReset();
+    mockGetGitDiff.mockReset();
+    mockGetGitBranchDiff.mockReset();
+    mockGetGitBranchDiffResult.mockReset();
+    mockSafeExec.mockReset();
+    mockGetDefaultBranch.mockClear();
+    mockLog.info.mockClear();
+    mockLog.warn.mockClear();
+  });
+
+  it('names the untracked files and states nothing was examined — forced branch scope', async () => {
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('scratch.ts\ndocs/notes.md');
+
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    // Exit path unchanged: still null → the caller still exits 0.
+    expect(result).toBeNull();
+    expect(mockSafeExec).toHaveBeenCalledWith(
+      'git',
+      ['ls-files', '--others', '--exclude-standard'],
+      { cwd: '/tmp' },
+    );
+    const warned = lastWarn();
+    expect(warned).toContain('scratch.ts');
+    expect(warned).toContain('docs/notes.md');
+    expect(warned).toMatch(/untracked/i);
+    expect(warned).toMatch(/NOT examined/);
+    expect(warned).toMatch(/git add/);
+  });
+
+  it('discloses on the auto-fallback empty-diff path too (one shared helper, both sites)', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('scratch.ts');
+
+    const result = await getDiffForReview({}, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    const warned = lastWarn();
+    expect(warned).toContain('scratch.ts');
+    expect(warned).toMatch(/NOT examined/);
+  });
+
+  it('leaves the message byte-identical when there are no untracked files', async () => {
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('');
+
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    expect(lastWarn()).toBe(PLAIN_NO_CHANGES);
+  });
+
+  it('leaves the message byte-identical when the untracked probe fails (best-effort)', async () => {
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockImplementation(() => {
+      // totem-context: throw inside a vitest mock simulating a git failure (no repo / index lock) to prove the probe is best-effort and never alters the verdict line; sentinel message is test-only
+      throw new Error('fatal: not a git repository');
+    });
+
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    expect(lastWarn()).toBe(PLAIN_NO_CHANGES);
+  });
+
+  it('bounds the named list and counts the overflow', async () => {
+    const many = Array.from({ length: 11 }, (_v, i) => `scratch-${i}.ts`);
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue(many.join('\n'));
+
+    await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    const warned = lastWarn();
+    expect(warned).toContain('scratch-0.ts');
+    expect(warned).toContain(`(+${many.length - MAX_DISCLOSED_UNTRACKED_FILES} more)`);
+    expect(warned).not.toContain(`scratch-${many.length - 1}.ts`);
   });
 });
