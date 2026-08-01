@@ -1,5 +1,20 @@
 # @mmnto/cli
 
+## 1.107.1
+
+### Patch Changes
+
+- a1f4f62: Qualify `totem mail`'s verdict line when the scan is degraded (mmnto-ai/totem#2516). `formatTextResult` already rendered a `Warning:` line per entry in the `warnings` channel, then closed with the same verdict sentence a clean poll produces — so a scan that resolved zero repos (ENOTDIR on the workspace root) or skipped one (EACCES on its orchestration dir) still ended on "No unread mail addressed to …", the reassuring sentence being the part that actually gets read while the warnings scroll past above it. The verdict now carries the degradation: the empty-inbox arm renders `Scan INCOMPLETE (N warning(s) above) — no unread mail found in the scanned locations; unread mail may exist in the unscanned ones.`, and the non-empty arm renders `M unread — scan INCOMPLETE (N warning(s) above); more may exist in unscanned locations.` over its list. `INCOMPLETE` is the single greppable discriminator and appears iff `warnings.length > 0`, so a healthy poll can never cry wolf. Word order is part of the contract, not incidental phrasing: the degraded-empty verdict LEADS with the qualifier, because the defect class is a reassuring lead with the fine print after.
+
+  Both clean paths are byte-identical to before — no new noise on the healthy path — and the unresolved-self arm (`source: 'none'`) is untouched, since it already refuses to render an inbox verdict at all. Exit codes are unchanged: a degraded scan is still exit 0 with a DEGRADED-style envelope per ADR-115 § 2, never a silent clean. Pinned red-first in the E4 degraded-mode pack, which now treats that one line as contract rather than human-only prose.
+
+- d7a0297: Register `.mts` and `.cts` in the two hand-maintained extension sets that the central AST registry work missed (mmnto-ai/totem#2519). `drift-detector.ts`'s `FILE_EXTENSIONS` gates which backticked candidates in a lesson body survive `extractFileReferences`, so a lesson citing a `.mts`/`.cts` path was silently dropped before `detectDrift` ever resolved it against disk — those references could rot indefinitely without `totem drift` reporting a thing. That is a behavior fix, now pinned by a red-first test. The companion change to `shield-classify.ts`'s `CODE_EXTENSIONS` is hardening with no behavior delta: `classifyFile` fail-closes unknown extensions to `CODE`, so a `.mts`-only diff already classified as code and was already ineligible for the non-code shield path. Explicit membership makes that intent legible and keeps the classification correct if the fail-closed default ever changes; a regression test pins it either way. As in mmnto-ai/totem#2513, the premise is that `.mts` (TypeScript ESM) and `.cts` (TypeScript CommonJS) are the same grammar as `.ts` — module resolution differs, syntax does not.
+
+  Also corrects a comment in `init-templates.ts` that credited the distributed-skill parity invariant to `installed-skills-match-source.test.ts`, a file that does not exist. The invariant is real and does fail CI — it lives in the "Distributed skill constants match source-of-truth" suite in `init.test.ts` — so the comment now names where it actually is. Documents the `totem init` managed-skill marker contract for consumers in the Claude Code wiki page: content through the end marker is canonical and replaced on every refresh, content after it is user territory and survives, and a marker-less file is preserved untouched unless `--force-skill-refresh` is passed.
+
+- Updated dependencies [d7a0297]
+  - @mmnto/totem@1.107.1
+
 ## 1.107.0
 
 ### Minor Changes
