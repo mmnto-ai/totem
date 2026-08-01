@@ -426,9 +426,10 @@ describe('E4 fault 3 addendum — qualified verdict line (mmnto-ai/totem#2516)',
 
     const verdict = verdictLine(formatTextResult(degraded));
     // Invariant 1 (positive arm, empty case): the token is present, with
-    // the warning COUNT — token + count, not prose.
+    // the paren-delimited count clause — the leading `(` pins the number's
+    // left edge so a wrong multi-digit count cannot substring-match.
     expect(verdict).toContain('INCOMPLETE');
-    expect(verdict).toContain(`${degraded.warnings.length} warning`);
+    expect(verdict).toContain(`(${degraded.warnings.length} warning(s) above)`);
     // Invariant 2: the qualifier LEADS — not a reassuring lead with fine
     // print after — and the clean-empty sentence is not a substring.
     expect(verdict.startsWith('Scan INCOMPLETE')).toBe(true);
@@ -467,7 +468,7 @@ describe('E4 fault 3 addendum — qualified verdict line (mmnto-ai/totem#2516)',
       // Token + count + the unread figure, qualified — the render must not
       // present a bare `1 unread:` over an incomplete scan.
       expect(verdict).toContain('INCOMPLETE');
-      expect(verdict).toContain(`${degraded.warnings.length} warning`);
+      expect(verdict).toContain(`(${degraded.warnings.length} warning(s) above)`);
       expect(verdict.startsWith('1 unread')).toBe(true);
       expect(resolveMailExitCode(degraded)).toBe(0);
     } finally {
