@@ -18,6 +18,8 @@ const CODE_EXTENSIONS = new Set<string>([
   '.jsx',
   '.mjs',
   '.cjs',
+  '.mts',
+  '.cts',
   '.py',
   '.rs',
   '.go',

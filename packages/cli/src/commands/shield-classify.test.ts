@@ -17,6 +17,13 @@ describe('classifyFile', () => {
     expect(classifyFile(filePath)).toBe('CODE');
   });
 
+  // CODE: TypeScript module variants. These reach 'CODE' via explicit
+  // CODE_EXTENSIONS membership rather than the fail-closed default, so the
+  // classification survives a change to that default (mmnto-ai/totem#2519).
+  it.each(['foo.mts', 'foo.cts'])('classifies %s as CODE', (filePath) => {
+    expect(classifyFile(filePath)).toBe('CODE');
+  });
+
   // CODE: Python, Rust, Go
   it.each(['main.py', 'lib.rs', 'server.go'])('classifies %s as CODE', (filePath) => {
     expect(classifyFile(filePath)).toBe('CODE');
@@ -200,6 +207,13 @@ describe('classifyChangedFiles', () => {
     expect(result.allNonCode).toBe(false);
     expect(result.codeFiles).toEqual(['src/app.tsx']);
     expect(result.nonCodeFiles).toEqual([]);
+  });
+
+  it('treats a .mts-only diff as code (not shield-eligible)', () => {
+    const result = classifyChangedFiles(['src/loader.mts']);
+    expect(result.allNonCode).toBe(false);
+    expect(result.allCode).toBe(true);
+    expect(result.codeFiles).toEqual(['src/loader.mts']);
   });
 
   it('handles single non-code file', () => {
