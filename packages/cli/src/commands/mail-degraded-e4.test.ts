@@ -37,7 +37,11 @@
  *
  * Filesystem-driven, hermetic (fresh tmp workspace per test), same fixture
  * idiom as mail.test.ts. Assertions target the structured `MailPollResult`
- * (the durable hook contract); the text formatter is human-only.
+ * (the durable hook contract); the text formatter is human-only EXCEPT the
+ * verdict line's `INCOMPLETE` token invariant, a pinned contract since
+ * mmnto-ai/totem#2516 — a degraded scan whose verdict sentence is
+ * indistinguishable from a clean scan's IS the silent-narrowing class this
+ * pack exists to catch, so that one line is asserted like any other contract.
  */
 
 import * as os from 'node:os';
@@ -56,7 +60,7 @@ vi.mock('node:fs', async () => {
 import * as fs from 'node:fs';
 
 import { cleanTmpDir } from '../test-utils.js';
-import { pollMail, resolveMailExitCode } from './mail.js';
+import { formatTextResult, pollMail, resolveMailExitCode } from './mail.js';
 
 // ─── Fixture helpers ────────────────────────────────────
 
@@ -364,5 +368,142 @@ describe('E4 fault 3 — scan failure announces itself, never a silent clean inb
     const recovered = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: {} });
     expect(recovered.mail.map((m) => m.file).sort()).toEqual([MAIL_A, MAIL_B].sort());
     expect(recovered.warnings).toEqual([]);
+  });
+});
+
+// ─── Fault 3 addendum: qualified verdict (mmnto-ai/totem#2516) ──
+// A degraded scan must never produce a verdict sentence identical to a
+// clean scan's — the discriminator is the single greppable token
+// INCOMPLETE, so the assertion pins an invariant, not fragile prose.
+// Ruled wording (#2516 comment, operator-greenlit 2026-07-31; N = scan-
+// warning count, M = unread count):
+//   clean empty:     `No unread mail addressed to <agents>.`   (unchanged)
+//   degraded empty:  `Scan INCOMPLETE (N warning(s) above) — no unread mail
+//                     found in the scanned locations; unread mail may exist
+//                     in the unscanned ones.`
+//   clean non-empty: `M unread:`                                (unchanged)
+//   degraded non-empty: `M unread — scan INCOMPLETE (N warning(s) above);
+//                     more may exist in unscanned locations.`
+// The word ORDER is asserted, not just word presence: the class defect
+// (#2505 vacuous-green) was a reassuring lead followed by fine print, so
+// the degraded-empty verdict must LEAD with the qualifier and must not
+// contain the clean-empty sentence as a substring.
+
+describe('E4 fault 3 addendum — qualified verdict line (mmnto-ai/totem#2516)', () => {
+  const SEATS = ['totem-claude', 'totem-gemini'];
+  const CLEAN_EMPTY_VERDICT =
+    'No unread mail addressed to totem-claude, totem-gemini or broadcast.';
+
+  /** The verdict is the single output line that asserts inbox state. */
+  function verdictLine(text: string): string {
+    const line = text.split('\n').find((l) => l.includes('INCOMPLETE') || l.includes('unread'));
+    expect(line, 'a verdict line is always rendered').toBeDefined();
+    return line!;
+  }
+
+  /** Two-seat fixture so the clean-empty sentence names real seats — making
+   *  the substring-exclusion assertion (invariant 2) load-bearing. */
+  function pollTwoSeat(opts: Parameters<typeof pollMail>[0] = {}) {
+    return pollMail({
+      repoRoot: selfRepoRootWithSeats(SEATS),
+      workspace,
+      env: {},
+      ...opts,
+    });
+  }
+
+  it('degraded empty-inbox verdict leads with the qualifier, carries the count, and excludes the clean sentence (invariants 1+2)', () => {
+    // Induce: workspace scan root is a FILE (ENOTDIR) — zero repos scanned
+    // while self resolves from the two-seat repoRoot. Same inducement as
+    // fault 3's ENOTDIR arm; real errno, no mocks.
+    const brokenRoot = path.join(tmpRoot, 'workspace-as-file');
+    fs.writeFileSync(brokenRoot, 'not a directory', 'utf-8');
+    const degraded = pollTwoSeat({ workspace: brokenRoot });
+
+    // Pack 1 — accounting fires (precondition for the verdict assertion).
+    expect(degraded.warnings.length).toBeGreaterThan(0);
+    expect(degraded.mail).toEqual([]);
+
+    const verdict = verdictLine(formatTextResult(degraded));
+    // Invariant 1 (positive arm, empty case): the token is present, with
+    // the warning COUNT — token + count, not prose.
+    expect(verdict).toContain('INCOMPLETE');
+    expect(verdict).toContain(`${degraded.warnings.length} warning`);
+    // Invariant 2: the qualifier LEADS — not a reassuring lead with fine
+    // print after — and the clean-empty sentence is not a substring.
+    expect(verdict.startsWith('Scan INCOMPLETE')).toBe(true);
+    expect(verdict.includes('No unread mail addressed')).toBe(false);
+    // Pack 2 — exit-0-with-envelope contract unchanged (ADR-115 § 2).
+    expect(resolveMailExitCode(degraded)).toBe(0);
+  });
+
+  it('degraded non-empty verdict qualifies the unread count (invariant 1, non-empty positive arm)', () => {
+    // Induce: one repo's orchestration scan fails (EACCES) while the
+    // sibling repo's dispatch surfaces — fault 3's partial-scan arm.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-07-20T1800Z-totem-claude-from-strategy.md', to: 'totem-claude' },
+    ]);
+    writeOutbox('liquid-city', 'lc-claude', [
+      { name: '2026-07-20T1801Z-totem-claude-from-lc.md', to: 'totem-claude' },
+    ]);
+    const brokenMarker = path.join('totem-strategy', '.totem', 'orchestration');
+    const realReaddirSync = fs.readdirSync;
+    const spy = vi.spyOn(fs, 'readdirSync').mockImplementation((target, options) => {
+      if (String(target).endsWith(brokenMarker)) {
+        const err = new Error(
+          `EACCES: permission denied, scandir '${String(target)}'`,
+        ) as NodeJS.ErrnoException;
+        err.code = 'EACCES';
+        throw err;
+      }
+      return realReaddirSync(target, options as never) as never;
+    });
+    try {
+      const degraded = pollTwoSeat();
+      expect(degraded.warnings.length).toBeGreaterThan(0);
+      expect(degraded.mail).toHaveLength(1);
+
+      const verdict = verdictLine(formatTextResult(degraded));
+      // Token + count + the unread figure, qualified — the render must not
+      // present a bare `1 unread:` over an incomplete scan.
+      expect(verdict).toContain('INCOMPLETE');
+      expect(verdict).toContain(`${degraded.warnings.length} warning`);
+      expect(verdict.startsWith('1 unread')).toBe(true);
+      expect(resolveMailExitCode(degraded)).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('clean-path control: empty-inbox verdict byte-identical to today, no INCOMPLETE (invariant 3 + invariant 1 negative arm)', () => {
+    const clean = pollTwoSeat();
+    expect(clean.mail).toEqual([]);
+    expect(clean.warnings).toEqual([]);
+
+    const text = formatTextResult(clean);
+    // Byte-identical clean-empty sentence (acceptance 3 — no noise on the
+    // healthy path), and the token is ABSENT: with zero warnings an
+    // INCOMPLETE verdict would be a false-degraded cry-wolf.
+    expect(text).toContain(CLEAN_EMPTY_VERDICT);
+    expect(verdictLine(text)).toBe(CLEAN_EMPTY_VERDICT);
+    expect(verdictLine(text).includes('INCOMPLETE')).toBe(false);
+    expect(resolveMailExitCode(clean)).toBe(0);
+  });
+
+  it('clean-path control: non-empty verdict byte-identical to today, no INCOMPLETE (invariant 3 + invariant 1 negative arm)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-07-20T1800Z-totem-claude-from-strategy.md', to: 'totem-claude' },
+    ]);
+    writeOutbox('liquid-city', 'lc-claude', [
+      { name: '2026-07-20T1801Z-totem-claude-from-lc.md', to: 'totem-claude' },
+    ]);
+    const clean = pollTwoSeat();
+    expect(clean.mail).toHaveLength(2);
+    expect(clean.warnings).toEqual([]);
+
+    const verdict = verdictLine(formatTextResult(clean));
+    expect(verdict).toBe('2 unread:');
+    expect(verdict.includes('INCOMPLETE')).toBe(false);
+    expect(resolveMailExitCode(clean)).toBe(0);
   });
 });

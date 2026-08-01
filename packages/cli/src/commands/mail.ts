@@ -839,7 +839,7 @@ export function resolveMailExitCode(result: MailPollResult): 0 | 2 {
   return result.selfAgents.source === 'none' ? 2 : 0;
 }
 
-function formatTextResult(result: MailPollResult): string {
+export function formatTextResult(result: MailPollResult): string {
   const lines: string[] = [];
   const selfList =
     result.selfAgents.agents.length > 0 ? result.selfAgents.agents.join(', ') : '(none)';
@@ -864,9 +864,26 @@ function formatTextResult(result: MailPollResult): string {
       `Inbox state NOT DERIVED — no self agent resolved; cannot assert an empty inbox.${broadcastHint} Set TOTEM_SELF_AGENT or declare host_agents in .totem/orchestration/config.json.`,
     );
   } else if (result.mail.length === 0) {
-    lines.push(`No unread mail addressed to ${selfList} or broadcast.`);
+    // A degraded scan must not close with the verdict a clean scan produces
+    // (mmnto-ai/totem#2516): the `Warning:` lines above are scrollback, the
+    // verdict is what gets read. The empty-inbox arm LEADS with the qualifier
+    // — the class defect is a reassuring lead with the fine print after — and
+    // `INCOMPLETE` is the single greppable discriminator, present iff the
+    // warnings channel is non-empty. Clean paths stay byte-identical.
+    lines.push(
+      result.warnings.length > 0
+        ? `Scan INCOMPLETE (${result.warnings.length} warning(s) above) — no unread mail found in the scanned locations; unread mail may exist in the unscanned ones.`
+        : `No unread mail addressed to ${selfList} or broadcast.`,
+    );
   } else {
-    lines.push(`${result.mail.length} unread:`);
+    // Non-empty degraded arm: the count leads (it is derived and true), but it
+    // is qualified in the same breath — a bare `N unread:` over an incomplete
+    // scan asserts a completeness the poll cannot back.
+    lines.push(
+      result.warnings.length > 0
+        ? `${result.mail.length} unread — scan INCOMPLETE (${result.warnings.length} warning(s) above); more may exist in unscanned locations.`
+        : `${result.mail.length} unread:`,
+    );
     for (const m of result.mail) {
       lines.push(`  - ${m.file} (from ${m.from} @ ${m.repo}, to: ${m.to})`);
       lines.push(`      subject: ${m.subject}`);
