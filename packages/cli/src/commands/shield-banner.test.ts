@@ -81,8 +81,9 @@ describe('`totem review` run-start self-description (#2536)', () => {
     vi.restoreAllMocks();
     try {
       cleanTmpDir(tmpDir);
+      // totem-context: test-harness temp-dir cleanup — Windows can hold a handle under the temp tree after the command run, and a failed rmdir must not fail a suite whose assertions are all about printed output; the OS reclaims the directory
     } catch {
-      // Best-effort cleanup; the OS reclaims the temp dir.
+      // Best-effort cleanup; see the totem-context justification above.
     }
   });
 
@@ -109,8 +110,9 @@ describe('`totem review` run-start self-description (#2536)', () => {
     const { shieldCommand } = await import('./shield.js');
     try {
       await shieldCommand({ raw: true } as Parameters<typeof shieldCommand>[0]);
+      // totem-context: the raw path continues past the banner site into retrieval work this harness does not stub; the assertion is about what was PRINTED before that point, so a downstream failure is irrelevant here
     } catch {
-      // totem-context: the raw path continues past the banner site into retrieval work that this harness does not stub; the assertion is about what was PRINTED before that, so the downstream failure is irrelevant here
+      // Intentionally swallowed — see the totem-context justification above.
     }
 
     expect(emitted.join('\n')).not.toMatch(/not a merge gate/i);
@@ -124,8 +126,9 @@ describe('`totem review` run-start self-description (#2536)', () => {
     const { shieldCommand } = await import('./shield.js');
     try {
       await shieldCommand({ estimate: true } as Parameters<typeof shieldCommand>[0]);
-    } catch {
       // totem-context: the estimator path runs the deterministic engine against a diff this harness stubs as null; any downstream failure is irrelevant to the printed-output assertion
+    } catch {
+      // Intentionally swallowed — see the totem-context justification above.
     }
 
     expect(emitted.join('\n')).not.toMatch(/not a merge gate/i);

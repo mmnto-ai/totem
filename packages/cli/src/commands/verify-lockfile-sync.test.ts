@@ -372,17 +372,28 @@ const HEAD_PACKAGE_JSONS: Record<string, string> = {
 }`,
 };
 
+/** The workspace definition most fixtures assume at HEAD. */
+const DEFAULT_WORKSPACE_YAML = `packages:
+  - 'packages/*'
+`;
+
 /**
- * Emulates `git show HEAD:<path>`: the lockfile blob, or a tracked manifest.
- * A path absent from `manifests` throws, exactly as git does.
+ * Emulates `git show HEAD:<path>`: the lockfile blob, the workspace definition,
+ * or a tracked manifest. A path absent from `manifests` throws, as git does.
  */
 function showAtHead(
   args: string[],
   headLockfile: string,
   manifests: Record<string, string> = {},
+  workspaceYaml: string | null = DEFAULT_WORKSPACE_YAML,
 ): string {
   const ref = args[1] ?? '';
   if (ref === 'HEAD:pnpm-lock.yaml') return headLockfile;
+  if (ref === 'HEAD:pnpm-workspace.yaml') {
+    // `null` models a repo with no workspace file (git exits non-zero).
+    if (workspaceYaml === null) throw new Error(`fatal: ${ref} does not exist in HEAD`);
+    return workspaceYaml;
+  }
   const content = manifests[ref.slice('HEAD:'.length)];
   if (content === undefined) throw new Error(`fatal: ${ref} does not exist in HEAD`);
   return content;
@@ -469,6 +480,7 @@ describe('verifyLockfileSyncCommand', () => {
     const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
     const result = await verifyLockfileSyncCommand();
     expect(result.valid).toBe(false);
+    expect(result.failureClass).toBe('missing-lockfile');
     expect(result.reason).toMatch(/Tracked lockfile detected/);
     expect(result.reason).toMatch(/pnpm-lock\.yaml/);
   });
@@ -525,6 +537,130 @@ describe('verifyLockfileSyncCommand', () => {
     const result = await verifyLockfileSyncCommand();
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/Tracked lockfile detected/);
+  });
+
+  it('fails when a NEW workspace-glob manifest adds a pin without the lockfile', async () => {
+    // `packages/new` is not yet an importer at HEAD (that is exactly the shape
+    // of a branch adding a package) but its directory matches the workspace
+    // `packages:` glob, so the lockfile companion is still required.
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) {
+            return 'packages/new/package.json';
+          }
+          if (args[0] === 'diff') {
+            expect(args).toContain('packages/new/package.json');
+            return NESTED_PKG_BUMP_DIFF;
+          }
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE);
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(false);
+    expect(result.failureClass).toBe('missing-lockfile');
+  });
+
+  it('honors `!` negations in the workspace globs (an excluded directory is not admitted)', async () => {
+    const workspaceWithNegation = `packages:
+  - 'packages/*'
+  - '!packages/legacy'
+`;
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) {
+            return 'packages/legacy/package.json';
+          }
+          if (args[0] === 'show') {
+            return showAtHead(args, HEAD_LOCKFILE_WORKSPACE, {}, workspaceWithNegation);
+          }
+          // Reaching the unified-diff pull would mean the excluded directory
+          // was admitted.
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(true);
+  });
+
+  it('admits the ROOT manifest even when the lockfile lists no root importer', async () => {
+    const noRootImporter = `lockfileVersion: '9.0'
+
+importers:
+
+  packages/cli:
+    dependencies:
+      commander:
+        specifier: ^11.0.0
+        version: 11.0.0
+
+packages:
+
+  commander@11.0.0:
+    resolution: {integrity: sha512-bbbb}
+`;
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) return 'package.json';
+          if (args[0] === 'diff') return CARET_BUMP_DIFF;
+          if (args[0] === 'show') return showAtHead(args, noRootImporter);
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(false);
+  });
+
+  it('declares a skip of the glob admission when pnpm-workspace.yaml is unreadable at HEAD', async () => {
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) {
+            return 'packages/new/package.json';
+          }
+          // No workspace file at HEAD → importer-set-only admission.
+          if (args[0] === 'show') return showAtHead(args, HEAD_LOCKFILE_WORKSPACE, {}, null);
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(true);
+    expect(stderr.join('\n')).toMatch(/pnpm-workspace\.yaml/);
   });
 
   it('passes when package.json diff contains only deletions', async () => {
@@ -683,6 +819,7 @@ describe('verifyLockfileSyncCommand', () => {
     const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
     const result = await verifyLockfileSyncCommand();
     expect(result.valid).toBe(false);
+    expect(result.failureClass).toBe('removed-pin');
     expect(result.reason).toMatch(/@mmnto\/strategy-doctrine/);
     // The declaration probe reads the ROOT importer's manifest at HEAD — the
     // lockfile's own answer to "which manifests do I resolve?".
@@ -831,18 +968,28 @@ describe('verifyLockfileSyncCommand', () => {
     expect(result.reason).toMatch(/zod/);
   });
 
-  it('declares a skip and passes when the candidate count exceeds the cap (format migration)', async () => {
-    const stderr: string[] = [];
-    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-      stderr.push(args.map(String).join(' '));
-    });
-    const bulkRemoval = [
+  it('fires on a MASS removal that hides one genuinely dropped, still-declared pin', async () => {
+    // The old candidate cap waived the gate on any large diff, so a real drop
+    // could ride in behind an ordinary big update. Per-candidate cost is now an
+    // O(1) lookup against one lockfile index, so volume buys nothing but false
+    // negatives.
+    const massRemoval = [
       'diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml',
       '--- a/pnpm-lock.yaml',
       '+++ b/pnpm-lock.yaml',
-      '@@ -1,120 +1,1 @@ packages:',
-      ...Array.from({ length: 30 }, (_v, i) => `-  pkg-${i}@1.0.0:`),
+      '@@ -1,2000 +1,1 @@ packages:',
+      ...Array.from({ length: 900 }, (_v, i) => `-  pkg-${i}@1.0.0:`),
+      "-  '@acme/dropped@2.0.0':",
+      '-    resolution: {integrity: sha512-aaaa}',
     ].join('\n');
+    const manifests = {
+      'package.json': `{
+  "name": "totem",
+  "dependencies": {
+    "@acme/dropped": "^2.0.0"
+  }
+}`,
+    };
     vi.doMock('@mmnto/totem', async () => {
       const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
       return {
@@ -852,18 +999,67 @@ describe('verifyLockfileSyncCommand', () => {
         safeExec: (_cmd: string, args: string[]) => {
           if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
           if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
-          if (args[0] === 'diff') return bulkRemoval;
-          // Over the cap the check must not read anything further.
+          if (args[0] === 'diff') return massRemoval;
+          if (args[0] === 'show') {
+            return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, manifests);
+          }
           throw new Error('unexpected');
         },
       };
     });
     const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
     const result = await verifyLockfileSyncCommand();
-    expect(result.valid).toBe(true);
-    const declared = stderr.join('\n');
-    expect(declared).toMatch(/30/);
-    expect(declared).toMatch(/skipping the removed-pin check/i);
+    expect(result.valid).toBe(false);
+    expect(result.failureClass).toBe('removed-pin');
+    expect(result.reason).toMatch(/@acme\/dropped/);
+    // The 900 undeclared removals are not named — only the declared one is.
+    expect(result.reason).not.toMatch(/pkg-500/);
+  });
+
+  it('canonicalizes leading-slash keys emitted by old-vintage (v5/v6) lockfiles', async () => {
+    const v6FormRemoval = `diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -1200,6 +1200,1 @@ packages:
+-  /ajv@8.18.0:
+-    resolution: {integrity: sha512-aaaa}
+-  '/@scope/name@1.0.0':
+-    resolution: {integrity: sha512-bbbb}
+`;
+    const manifests = {
+      'package.json': `{
+  "name": "totem",
+  "dependencies": {
+    "ajv": "^8.18.0",
+    "@scope/name": "^1.0.0"
+  }
+}`,
+    };
+    vi.doMock('@mmnto/totem', async () => {
+      const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+      return {
+        ...actual,
+        resolveGitRoot: () => '/repo',
+        getDefaultBranch: () => 'main',
+        safeExec: (_cmd: string, args: string[]) => {
+          if (args[0] === 'ls-files') return 'pnpm-lock.yaml';
+          if (args[0] === 'diff' && args.includes('--name-only')) return 'pnpm-lock.yaml';
+          if (args[0] === 'diff') return v6FormRemoval;
+          if (args[0] === 'show') {
+            return showAtHead(args, HEAD_LOCKFILE_WITHOUT_DOCTRINE, manifests);
+          }
+          throw new Error('unexpected');
+        },
+      };
+    });
+    const { verifyLockfileSyncCommand } = await import('./verify-lockfile-sync.js');
+    const result = await verifyLockfileSyncCommand();
+    expect(result.valid).toBe(false);
+    // Both key forms canonicalize to the manifest's own spelling.
+    expect(result.reason).toMatch(/(^|[^/])ajv/);
+    expect(result.reason).toMatch(/@scope\/name/);
+    expect(result.reason).not.toMatch(/\/ajv/);
+    expect(result.reason).not.toMatch(/\/@scope/);
   });
 
   it('passes on a pure version bump (the name still resolves at HEAD)', async () => {

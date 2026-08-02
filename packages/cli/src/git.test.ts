@@ -857,6 +857,43 @@ describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)',
     expect(lastWarn()).toBe(PLAIN_NO_CHANGES);
   });
 
+  it('discloses untracked files on the EXPLICIT-RANGE empty path, still naming the range', async () => {
+    mockGetGitDiffRange.mockReturnValue('');
+    mockSafeExec.mockReturnValue('scratch.ts');
+
+    const result = await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    const warned = lastWarn();
+    expect(warned).toContain("Explicit range 'main..HEAD'");
+    expect(warned).toMatch(/examined NOTHING/);
+    expect(warned).toContain('scratch.ts');
+    expect(warned).toMatch(/NOT examined/);
+    expect(warned).toMatch(/git add/);
+  });
+
+  it('leaves the explicit-range message byte-identical when there are no untracked files', async () => {
+    mockGetGitDiffRange.mockReturnValue('');
+    mockSafeExec.mockReturnValue('');
+
+    const result = await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    expect(lastWarn()).toBe("Explicit range 'main..HEAD' produced no diff. Nothing to review.");
+  });
+
+  it('leaves the explicit-range message byte-identical when the untracked probe fails', async () => {
+    mockGetGitDiffRange.mockReturnValue('');
+    mockSafeExec.mockImplementation(() => {
+      // totem-context: throw inside a vitest mock simulating a git failure to prove the probe is best-effort on the explicit-range path too; sentinel message is test-only
+      throw new Error('fatal: not a git repository');
+    });
+
+    await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Lint');
+
+    expect(lastWarn()).toBe("Explicit range 'main..HEAD' produced no diff. Nothing to review.");
+  });
+
   it('bounds the named list and counts the overflow', async () => {
     const many = Array.from({ length: 11 }, (_v, i) => `scratch-${i}.ts`);
     mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
