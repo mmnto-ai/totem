@@ -545,7 +545,7 @@ async function runReview(opts: {
 reviewOptions(
   program
     .command('review')
-    .description('AI-powered code review: analyze your diff against Totem knowledge'),
+    .description('Supplementary AI review lanes over your diff (advisory — not a merge gate)'),
 ).action(async (opts) => {
   try {
     await runReview(opts);

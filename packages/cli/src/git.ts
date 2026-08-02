@@ -199,6 +199,36 @@ export const REVIEW_DIFF_TRUNCATION_THRESHOLD = 50_000;
 export const MAX_DISCLOSED_FILTERED_FILES = 8;
 
 /**
+ * Cap on untracked file names printed by the empty-diff disclosure
+ * (mmnto-ai/totem#2535). Sibling of {@link MAX_DISCLOSED_FILTERED_FILES} with
+ * the same shown/`+N more` shape; kept separate so tuning one disclosure's
+ * verbosity never silently retunes the other.
+ */
+export const MAX_DISCLOSED_UNTRACKED_FILES = 8;
+
+/**
+ * The empty-diff verdict line when nothing else is in play — preserved
+ * byte-for-byte (mmnto-ai/totem#2535 changes only the untracked-present case).
+ */
+const NO_CHANGES_MESSAGE = 'No changes detected. Nothing to review.';
+
+/**
+ * Verdict strings for a branch-scoped empty diff: the lead used when untracked
+ * files are disclosed, and the historical message used when there are none.
+ *
+ * Both empty-diff exits below are branch-scoped by the time they fire: the
+ * forced path (`--branch`/`--base`) never consults the working tree at all, and
+ * the auto path only reaches its exit after the branch-vs-base fallback ALSO
+ * came back empty. A working-tree lead would misstate what was examined on the
+ * forced path (staged changes may exist, unexamined), so the lead names the
+ * scope the run actually evaluated.
+ */
+const BRANCH_SCOPE_EMPTY = {
+  lead: 'No changes detected in the branch-vs-base diff — this run examined NOTHING.',
+  whenClean: NO_CHANGES_MESSAGE,
+};
+
+/**
  * Shared diff-fetching logic used by both `shield` and `lint` commands.
  *
  * Resolution order:
@@ -307,6 +337,42 @@ export async function getDiffForReview(
     return filtered;
   };
 
+  // Empty-diff verdict line, shared by both no-changes exits below
+  // (mmnto-ai/totem#2535). A working tree whose only change is untracked
+  // otherwise reports a clean "nothing to review" from a run that examined
+  // NOTHING: untracked paths are invisible to every diff source this resolver
+  // can reach (staged, working-tree, branch-vs-base, explicit range). Exit
+  // behavior is deliberately unchanged — both callers still return null (exit
+  // 0). The pre-push hook runs `totem lint`, and untracked scratch files are
+  // routine during a legitimate push, so a non-zero exit would mint a
+  // false-block class; the loud declaration is the Tenet-4 satisfaction
+  // (mmnto-ai/totem#2473 precedent).
+  //
+  // Both strings are supplied by the call site so the verdict states the scope
+  // THAT site actually evaluated — a scope-blind lead is how the disclosure came
+  // to claim the working tree was clean on a run that never looked at it.
+  // `whenClean` is each site's historical message, preserved byte-for-byte for
+  // the no-untracked case.
+  const noChangesMessage = (scope: { lead: string; whenClean: string }): string => {
+    let untracked: string[];
+    try {
+      untracked = safeExec('git', ['ls-files', '--others', '--exclude-standard'], { cwd })
+        .split('\n')
+        .map((file) => file.trim())
+        .filter(Boolean);
+      // totem-context: best-effort untracked probe — a git failure (no repo, index lock, degraded state) leaves the historical verdict line byte-identical instead of degrading it; the probe informs a disclosure, never the verdict or the exit code (mmnto-ai/totem#2535 failure table)
+    } catch {
+      return scope.whenClean;
+    }
+    if (untracked.length === 0) return scope.whenClean;
+    const shown = untracked
+      .slice(0, MAX_DISCLOSED_UNTRACKED_FILES)
+      .map((file) => sanitizeForTerminal(file));
+    const more =
+      untracked.length > shown.length ? ` (+${untracked.length - shown.length} more)` : '';
+    return `${scope.lead} ${untracked.length} untracked file(s) are invisible to every lint/review diff source and were NOT examined: ${shown.join(', ')}${more}. Run \`git add <file>\` to put them in scope.`;
+  };
+
   // Definite-assignment asserted: every branch assigns both before use — the
   // shared `resolveBranchScope` closure hides that from TS2454's flow analysis.
   let diff!: string;
@@ -345,20 +411,31 @@ export async function getDiffForReview(
     );
     resolveBranchScope(base);
     if (!diff.trim()) {
-      log.warn(tag, 'No changes detected. Nothing to review.');
+      log.warn(tag, noChangesMessage(BRANCH_SCOPE_EMPTY));
       return null;
     }
   } else if (options.diff !== undefined) {
     // Explicit-range path — no fallback. getGitDiffRange rejects flag-injection
     // (leading `-`) and empty values; ignore patterns still apply per repo policy.
-    log.info(tag, `Diff source: explicit range (${options.diff})`);
+    // The range is user-supplied text — sanitize before echoing, matching the
+    // disclosure lines below (terminal-injection hardening).
+    log.info(tag, `Diff source: explicit range (${sanitizeForTerminal(options.diff)})`);
     diff = filterDiffWithDisclosure(getGitDiffRange(cwd, options.diff));
     source = 'explicit-range';
     // Finding 10: the raw selector form distinguishes `--diff main` from `--diff main..HEAD`.
     selectorForm = options.diff;
     ({ base: scopeBase, head: scopeHead } = resolveExplicitRangeRefs(options.diff));
     if (!diff.trim()) {
-      log.warn(tag, `Explicit range '${options.diff}' produced no diff. Nothing to review.`);
+      // Third #2535-class site. The range is echoed back either way; only the
+      // untracked-present branch changes what the line claims was examined.
+      const safeRange = sanitizeForTerminal(options.diff);
+      log.warn(
+        tag,
+        noChangesMessage({
+          lead: `Explicit range '${safeRange}' produced no diff — this run examined NOTHING.`,
+          whenClean: `Explicit range '${safeRange}' produced no diff. Nothing to review.`,
+        }),
+      );
       return null;
     }
   } else {
@@ -382,7 +459,7 @@ export async function getDiffForReview(
     }
 
     if (!diff.trim()) {
-      log.warn(tag, 'No changes detected. Nothing to review.');
+      log.warn(tag, noChangesMessage(BRANCH_SCOPE_EMPTY));
       return null;
     }
   }

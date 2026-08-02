@@ -12,12 +12,14 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { AI_PROMPT_BLOCK, buildNpxCommand, REFLEX_VERSION } from '../commands/init.js';
+import { DOCS_SYSTEM_PROMPT } from './docs.js';
 import {
   buildPreCommitHook,
   buildPrePushHook,
   TOTEM_PRECOMMIT_MARKER,
   TOTEM_PREPUSH_MARKER,
 } from './install-hooks.js';
+import { SYSTEM_PROMPT as SPEC_SYSTEM_PROMPT } from './spec-templates.js';
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
@@ -97,6 +99,60 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
   it('AI_PROMPT_BLOCK has a valid reflex version', () => {
     expect(REFLEX_VERSION).toBeGreaterThanOrEqual(1); // totem-ignore — version floor check, not a set count
     expect(AI_PROMPT_BLOCK).toContain(`totem:reflexes:version:${REFLEX_VERSION}`);
+  });
+});
+
+// ─── `totem review` billing honesty (mmnto-ai/totem#2536) ─
+
+describe('product surfaces bill `totem review` as an advisory sensor', () => {
+  // The Rituals text told agents `totem review` was "a full AI-powered code
+  // review" — read as THE review of record, which is what sent an agent at a
+  // ~100k-char diff straight into the truncation class (mmnto-ai/totem#2524).
+  // lint is the gate verb; review is a supplementary sensor whose limits are
+  // disclosed at the point of instruction.
+  it('the Rituals step names lint as the enforcement floor and review as advisory', () => {
+    expect(AI_PROMPT_BLOCK).toContain('the deterministic enforcement floor');
+    expect(AI_PROMPT_BLOCK).toContain('supplementary AI lanes');
+    expect(AI_PROMPT_BLOCK).toContain('advisory sensors, not a merge gate');
+    // The known limits ride the instruction itself, not just the run output.
+    expect(AI_PROMPT_BLOCK).toContain('truncation');
+    expect(AI_PROMPT_BLOCK).toContain('non-code files skipped');
+    // The superseded billing must be gone, not merely supplemented.
+    expect(AI_PROMPT_BLOCK).not.toContain('full AI-powered code review');
+  });
+
+  // Sterilization (mmnto-ai/totem-strategy#619): the internal review-process
+  // vocabulary is T1 and never ships in a consumer-facing template.
+  it('no internal review-process vocabulary reaches the consumer template', () => {
+    for (const term of ['review-leg', 'cohort', 'falsification']) {
+      expect(AI_PROMPT_BLOCK.toLowerCase()).not.toContain(term);
+    }
+  });
+
+  // The spec prompt is the strongest stale surface: every generated spec hands
+  // an executing agent a MANDATORY Verification block. lint stays the mandatory
+  // deterministic step; review is billed as the supplementary lane it is.
+  it('the spec system-prompt Verification block bills review as a supplementary advisory lane', () => {
+    expect(SPEC_SYSTEM_PROMPT).toContain('deterministic rule check');
+    expect(SPEC_SYSTEM_PROMPT).toContain('supplementary AI lanes over the diff');
+    expect(SPEC_SYSTEM_PROMPT).toContain('advisory');
+    expect(SPEC_SYSTEM_PROMPT).toContain('review of record');
+    expect(SPEC_SYSTEM_PROMPT).not.toContain('AI-powered architectural review');
+    for (const term of ['review-leg', 'cohort', 'falsification']) {
+      expect(SPEC_SYSTEM_PROMPT.toLowerCase()).not.toContain(term);
+    }
+  });
+
+  it('the docs system-prompt glossary bills review as advisory while keeping its mechanics', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('not a merge gate');
+    // Factual mechanics must survive the rewording.
+    expect(DOCS_SYSTEM_PROMPT).toContain('LanceDB');
+    expect(DOCS_SYSTEM_PROMPT).toContain('~18s');
+    expect(DOCS_SYSTEM_PROMPT).toContain('Requires API keys');
+    expect(DOCS_SYSTEM_PROMPT).toContain('Full configuration tier');
+    for (const term of ['review-leg', 'cohort', 'falsification']) {
+      expect(DOCS_SYSTEM_PROMPT.toLowerCase()).not.toContain(term);
+    }
   });
 });
 

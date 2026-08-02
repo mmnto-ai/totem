@@ -32,12 +32,493 @@ const AUX_LOOKUP_TIMEOUT_MS = 10_000;
 //                   rejects `workspace:^` references (no leading digit).
 const DEP_BUMP_RE = /^\+\s*"(?!version")[^"]+"\s*:\s*"[\^~]?\d+\.\d+/m;
 
+// Match a QUOTED pnpm-lockfile key line (sign already stripped when the line
+// comes from a diff). Anchors, left to right:
+//   `^\s+`   — required indent. Every key that names a package is nested (an
+//              importer's dependency block, `packages:`, `snapshots:`), so the
+//              document-level keys (`lockfileVersion:`, `importers:`) never match.
+//   `'([^']+)'`
+//            — the quoted key. pnpm quotes any key containing `@` or another
+//              YAML-special char, which is every scoped name and every
+//              `name@version` packages/snapshots key.
+//   `:`      — the key terminator. A quoted key is accepted with or without a
+//              scalar value: pnpm only quotes package names, so there is no
+//              metadata-key collision to exclude here.
+const LOCKFILE_QUOTED_KEY_RE = /^\s+'([^']+)':/;
+
+// Match a BARE pnpm-lockfile key line (sign already stripped). Same indent
+// anchor as above, plus:
+//   `([^'\s:]+)`
+//            — the unquoted key (`ajv@8.18.0`, `commander`, `packages/cli`).
+//   `:(?:\s*\{\})?\s*$`
+//            — the key must carry NO scalar value (`foo@1.0.0:`) or the empty
+//              mapping (`foo@1.0.0: {}`). That is what pnpm emits for package
+//              keys, and it structurally excludes the scalar metadata keys
+//              (`resolution:`, `specifier:`, `version:`, `engines:`, `optional:`)
+//              without maintaining a blocklist. A package that disappears from
+//              the lockfile always loses its valueless `packages:`/`snapshots:`
+//              key line, so the restriction costs no detection.
+const LOCKFILE_BARE_KEY_RE = /^\s+([^'\s:]+):(?:\s*\{\})?\s*$/;
+
+// Parse ONE lockfile line into its indent and key. Anchors, left to right:
+//   `^( *)`  — the indent, CAPTURED: YAML nesting is the only structure signal
+//              the lockfile gives, and the section walker needs the depth, not
+//              just the key.
+//   `(?:'([^']+)'|([^'\s:]+))`
+//            — the key, quoted (pnpm quotes scoped names and any key holding a
+//              YAML-special char) or bare (`ajv@8.18.0`, `packages/cli`, `.`).
+//   `:(?:\s.*)?$`
+//            — the key terminator plus an optional value. A value is NOT
+//              disqualifying here, unlike the candidate-side regexes: the walker
+//              decides membership by section and depth, so it needs no
+//              value-shape proxy for structure.
+const LOCKFILE_KEY_LINE_RE = /^( *)(?:'([^']+)'|([^'\s:]+)):(?:\s.*)?$/;
+
+// pnpm-lockfile GRAMMAR keys that are valueless like a package key but never
+// name a package. Candidate parsing works line-by-line off a DIFF, which carries
+// no section context, so the guard is still needed there (the HEAD-side harvest
+// is section-aware and needs no blocklist). Without it, removing a repo's last
+// devDependency would make `devDependencies` a candidate — absent from the HEAD
+// lockfile, and "declared" because package.json still carries a
+// `"devDependencies": {}` key — a false block on a legitimate push. The cost is
+// that a dependency named EXACTLY one of these strings is invisible to the gate;
+// a false block on a real push is the worse failure (mmnto-ai/totem#2473 class).
+const LOCKFILE_STRUCTURAL_KEYS = new Set([
+  'catalogs',
+  'dependencies',
+  'devDependencies',
+  'importers',
+  'optionalDependencies',
+  'overrides',
+  'packages',
+  'patchedDependencies',
+  'peerDependencies',
+  'peerDependenciesMeta',
+  'settings',
+  'snapshots',
+  'transitivePeerDependencies',
+]);
+
+// The manifest blocks whose keys are install-resolvable dependency
+// declarations — the only blocks that answer "is this pin still declared?".
+// `overrides` / `resolutions` are excluded by design (see
+// collectImporterDeclarations). Doubles as the importer-side dependency-block
+// set for the lockfile walker: the lockfile mirrors these manifest blocks.
+const MANIFEST_DEPENDENCY_BLOCKS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+] as const;
+
+// `git show` blob-ref prefix for the HEAD revision. Named once so every
+// HEAD-blob read in this file builds the same ref shape.
+const HEAD_REF_PREFIX = 'HEAD:';
+
+// The workspace definition, read at HEAD. Its `packages:` globs are what admit a
+// manifest this branch ADDS — such a package is not yet an importer of the
+// lockfile at HEAD, so the importer set alone cannot see it.
+const WORKSPACE_FILE_PATH = 'pnpm-workspace.yaml';
+
+// A `packages:` list entry in pnpm-workspace.yaml: `  - 'packages/*'`. Anchors:
+//   `^\s*-\s*` — the YAML sequence dash at any indent.
+//   `(?:'([^']*)'|"([^"]*)"|(\S+))` — the glob, single-quoted, double-quoted, or
+//                bare (all three occur in the wild).
+//   `\s*$`     — nothing else on the line; a trailing comment or an inline map
+//                is not a plain glob entry and is skipped rather than guessed at.
+const WORKSPACE_PACKAGES_ENTRY_RE = /^\s*-\s*(?:'([^']*)'|"([^"]*)"|(\S+))\s*$/;
+
+// Any top-level (indent-0) key line — used only to detect that the `packages:`
+// block has ended.
+const WORKSPACE_TOP_LEVEL_KEY_RE = /^\S.*:/;
+
+// Opening prose of the removed-pin failure message
+// (mmnto-ai/totem-strategy#630). REASON TEXT ONLY — the failure CLASS travels in
+// `VerifyLockfileSyncResult.failureClass`, so editing this sentence can no
+// longer change which remedy a user is handed.
+const REMOVED_PIN_REASON_PREFIX = `${LOCKFILE_PATH} no longer contains any entry for a package whose pin is still declared in a tracked package.json at HEAD`;
+
 // ─── Types ──────────────────────────────────────────────
+
+/** The `safeExec` surface this command uses (core's signature, narrowed). */
+type SafeExecFn = (
+  command: string,
+  args: string[],
+  options: { cwd: string; timeout: number },
+) => string;
+
+/** The `log` surface the best-effort probes use for their declared skips. */
+type SkipLogger = { info: (tag: string, msg: string) => void };
+
+/** What the lockfile at HEAD says about itself. */
+interface HeadLockfileIndex {
+  /** Package names this lockfile RESOLVES at HEAD. */
+  resolved: Set<string>;
+  /** Workspace importer paths — `.` for the repo root, else a directory path. */
+  importers: string[];
+}
 
 export interface VerifyLockfileSyncResult {
   valid: boolean;
   /** Set only when valid === false; describes the detected failure. The recovery action lives on the TotemError's recoveryHint at the CLI layer. */
   reason?: string;
+  /**
+   * Which failure this is, when `valid === false`. The two classes have
+   * different remedies (`missing-lockfile` regenerates; `removed-pin` is caused
+   * BY a regenerate against a broken registry auth), so the CLI layer selects
+   * its recovery hint from this field. Additive and optional: existing consumers
+   * reading only `valid`/`reason` are unaffected.
+   *
+   * It exists because the alternative — matching the reason PROSE — makes an
+   * editorial change to a message silently swap a user's remedy.
+   */
+  failureClass?: 'removed-pin' | 'missing-lockfile';
+}
+
+// ─── Removed-pin predicate (mmnto-ai/totem-strategy#630) ─
+
+/**
+ * The package NAME a lockfile key denotes. Strips a peer parenthetical
+ * (`pkg@1.0.0(react@19.0.0)`) and the trailing `@<version>` suffix: npm forbids
+ * `@` inside a package name except the leading scope marker, so the last `@`
+ * past index 0 always opens the version.
+ */
+function packageNameFromKey(key: string): string {
+  // Leading-slash canonicalization. lockfileVersion 9 — what pnpm emits today —
+  // uses NO leading slash, so this is not a v9 defect; but v5/v6-vintage
+  // lockfiles wrote `/ajv@8.18.0:` and `/@scope/name@1.0.0:`, and this gate
+  // ships to consumer repos through the distributed pre-push hook. Without the
+  // strip, an old-vintage repo's `packages:`/`snapshots:` keys all parse as
+  // `/name`, match nothing in any manifest, and the gate silently degrades to
+  // importer-only coverage.
+  const withoutLeadingSlash = key.startsWith('/') ? key.slice(1) : key;
+  const withoutPeers = withoutLeadingSlash.split('(')[0]!;
+  const versionAt = withoutPeers.lastIndexOf('@');
+  return versionAt > 0 ? withoutPeers.slice(0, versionAt) : withoutPeers;
+}
+
+/**
+ * The package NAME a REMOVED diff line denotes, or `null` when the line is not a
+ * key line. Diff-side only: a hunk carries no section context, so this leans on
+ * key shape plus the structural-key blocklist.
+ */
+function lockfileKeyName(line: string): string | null {
+  const match = LOCKFILE_QUOTED_KEY_RE.exec(line) ?? LOCKFILE_BARE_KEY_RE.exec(line);
+  if (match === null) return null;
+  if (LOCKFILE_STRUCTURAL_KEYS.has(match[1]!)) return null;
+  return packageNameFromKey(match[1]!);
+}
+
+/**
+ * Index the lockfile at HEAD by SECTION and DEPTH, not by key-line shape.
+ *
+ * A shape-only harvest laundered the very class this gate exists to catch:
+ * `peerDependenciesMeta:` children (`      zod:` / `optional: true`) are
+ * valueless key lines that SURVIVE a package's total removal, so a fully dropped
+ * package still answered "resolves at HEAD" and the gate passed — 21 such blocks
+ * in this repo's own lockfile. Only two things prove resolution: a
+ * `packages:`/`snapshots:` entry, and a workspace importer's dependency-block
+ * key (a workspace link has no `packages:` entry). Peer metadata, catalogs and
+ * settings are commentary ABOUT resolution, not resolution.
+ *
+ * The same pass collects the importer paths — the lockfile's own answer to
+ * "which manifests do I resolve?" — which scopes the declaration probe below.
+ *
+ * Child indents are learned from the file rather than hardcoded: the first line
+ * deeper than a section header defines that level's indent.
+ */
+function indexHeadLockfile(content: string): HeadLockfileIndex {
+  const resolved = new Set<string>();
+  const importers: string[] = [];
+
+  let section: string | null = null;
+  let sectionChildIndent: number | null = null;
+  let dependencyBlockIndent: number | null = null;
+  let declarationIndent: number | null = null;
+  let inDependencyBlock = false;
+
+  for (const line of content.split('\n')) {
+    const match = LOCKFILE_KEY_LINE_RE.exec(line);
+    if (match === null) continue;
+    const indent = match[1]!.length;
+    const key = match[2] ?? match[3]!;
+
+    if (indent === 0) {
+      section = key;
+      sectionChildIndent = null;
+      dependencyBlockIndent = null;
+      declarationIndent = null;
+      inDependencyBlock = false;
+      continue;
+    }
+    if (section === null) continue;
+
+    if (section === 'packages' || section === 'snapshots') {
+      sectionChildIndent ??= indent;
+      if (indent === sectionChildIndent) resolved.add(packageNameFromKey(key));
+      continue;
+    }
+    if (section !== 'importers') continue;
+
+    sectionChildIndent ??= indent;
+    if (indent === sectionChildIndent) {
+      importers.push(key);
+      dependencyBlockIndent = null;
+      declarationIndent = null;
+      inDependencyBlock = false;
+      continue;
+    }
+    dependencyBlockIndent ??= indent;
+    if (indent === dependencyBlockIndent) {
+      inDependencyBlock = (MANIFEST_DEPENDENCY_BLOCKS as readonly string[]).includes(key);
+      declarationIndent = null;
+      continue;
+    }
+    if (!inDependencyBlock) continue;
+    declarationIndent ??= indent;
+    if (indent === declarationIndent) resolved.add(packageNameFromKey(key));
+  }
+
+  return { resolved, importers };
+}
+
+/** The manifest an importer path owns (`.` is the repo root). */
+function importerManifestPath(importer: string): string {
+  return importer === '.' ? 'package.json' : `${importer}/package.json`;
+}
+
+/**
+ * Compile one pnpm workspace glob into a whole-string directory matcher.
+ *
+ * Deliberately minimal, and narrower than a full globbing library: every regex
+ * metacharacter is escaped first, then exactly two wildcards are re-expanded —
+ * `**` to `.*` (crosses path separators) and `*` to `[^/]*` (one segment). No
+ * brace expansion, no character classes, no `?`. A glob using those forms simply
+ * fails to match, which costs coverage on an exotic workspace layout; it never
+ * mints a false block, and it keeps a push gate free of a glob dependency.
+ */
+function workspaceGlobToRegExp(glob: string): RegExp {
+  const escaped = glob.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = escaped.replace(/\\\*\\\*|\\\*/g, (match) =>
+    match === '\\*\\*' ? '.*' : '[^/]*',
+  );
+  return new RegExp(`^${pattern}$`);
+}
+
+/**
+ * The `packages:` globs declared in pnpm-workspace.yaml, split into includes and
+ * `!`-negated excludes. A hand parse of one list, not a YAML implementation:
+ * anything that is not a plain sequence entry inside the `packages:` block is
+ * ignored.
+ */
+function parseWorkspaceGlobs(content: string): { include: RegExp[]; exclude: RegExp[] } {
+  const include: RegExp[] = [];
+  const exclude: RegExp[] = [];
+  let inPackagesBlock = false;
+
+  for (const line of content.split('\n')) {
+    if (/^packages:\s*$/.test(line)) {
+      inPackagesBlock = true;
+      continue;
+    }
+    if (!inPackagesBlock) continue;
+    // A new top-level key closes the block; blank lines and comments do not.
+    if (WORKSPACE_TOP_LEVEL_KEY_RE.test(line)) break;
+
+    const match = WORKSPACE_PACKAGES_ENTRY_RE.exec(line);
+    if (match === null) continue;
+    const raw = match[1] ?? match[2] ?? match[3] ?? '';
+    if (raw.length === 0) continue;
+    if (raw.startsWith('!')) {
+      exclude.push(workspaceGlobToRegExp(raw.slice(1)));
+    } else {
+      include.push(workspaceGlobToRegExp(raw));
+    }
+  }
+
+  return { include, exclude };
+}
+
+/**
+ * The workspace globs at HEAD, or `null` with a declared skip when they cannot
+ * be read or carry no usable `packages:` entry. `null` degrades admission to the
+ * importer set alone — the pre-existing, narrower behavior.
+ */
+function readWorkspaceGlobs(
+  safeExec: SafeExecFn,
+  log: SkipLogger,
+  repoRoot: string,
+): { include: RegExp[]; exclude: RegExp[] } | null {
+  let globs: { include: RegExp[]; exclude: RegExp[] };
+  try {
+    globs = parseWorkspaceGlobs(
+      safeExec('git', ['show', `${HEAD_REF_PREFIX}${WORKSPACE_FILE_PATH}`], {
+        cwd: repoRoot,
+        timeout: AUX_LOOKUP_TIMEOUT_MS,
+      }),
+    );
+    // totem-context: declared-skip probe — a repo with no workspace file (or an unreadable one) simply has no glob admission, so the gate falls back to the importer set rather than guessing at workspace membership (mmnto/totem#1440 Tenet 4 init-class)
+  } catch {
+    log.info(
+      TAG,
+      `Could not read ${WORKSPACE_FILE_PATH} at HEAD — admitting workspace importers only; a package.json this branch ADDS will not be checked for a lockfile companion.`,
+    );
+    return null;
+  }
+  if (globs.include.length === 0) {
+    log.info(
+      TAG,
+      `No usable \`packages:\` globs in ${WORKSPACE_FILE_PATH} at HEAD — admitting workspace importers only.`,
+    );
+    return null;
+  }
+  return globs;
+}
+
+/**
+ * The lockfile at HEAD, indexed — or `null` with a declared skip when it cannot
+ * be read. Both the resolves-at-HEAD test and the importer scope derive from it,
+ * so a failed read means neither question can be answered honestly.
+ */
+function readHeadLockfileIndex(
+  safeExec: SafeExecFn,
+  log: SkipLogger,
+  repoRoot: string,
+): HeadLockfileIndex | null {
+  try {
+    return indexHeadLockfile(
+      safeExec('git', ['show', `${HEAD_REF_PREFIX}${LOCKFILE_PATH}`], {
+        cwd: repoRoot,
+        timeout: AUX_LOOKUP_TIMEOUT_MS,
+      }),
+    );
+    // totem-context: declared-skip probe — without the HEAD lockfile the gate cannot tell a dedupe from a full removal, nor a workspace manifest from a stray one, so it announces the skip and passes (mmnto/totem#1440 Tenet 4 init-class)
+  } catch {
+    log.info(
+      TAG,
+      `Could not read ${LOCKFILE_PATH} at HEAD — skipping the workspace-scoped checks.`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Every package name declared in an install-resolvable dependency block of a
+ * WORKSPACE IMPORTER manifest at HEAD.
+ *
+ * Scoped to importers deliberately. A tracked manifest that is NOT an importer —
+ * a separately-deployed service, a test fixture — declares pins this lockfile
+ * never resolves, so counting it converts a legitimate transitive-dependency
+ * drop into a hard block with an unusable remedy. Reproduced against the built
+ * CLI: a `@modelcontextprotocol/sdk` bump dropped transitive `hono`, which
+ * `services/compile-worker/package.json` declares, and the gate blocked the
+ * push. The importer set is the lockfile's own definition of the manifests it
+ * resolves, so it is the only sound scope for the question.
+ *
+ * `overrides` / `resolutions` are not counted: a name appearing only there
+ * constrains how some OTHER package's dependency resolves and is not itself a
+ * declaration that must resolve.
+ */
+function collectImporterDeclarations(
+  safeExec: SafeExecFn,
+  log: SkipLogger,
+  repoRoot: string,
+  importers: string[],
+): Set<string> {
+  const declared = new Set<string>();
+  const unreadable: string[] = [];
+
+  for (const importer of importers) {
+    const file = importerManifestPath(importer);
+    let manifest: unknown;
+    try {
+      manifest = JSON.parse(
+        safeExec('git', ['show', `${HEAD_REF_PREFIX}${file}`], {
+          cwd: repoRoot,
+          timeout: AUX_LOOKUP_TIMEOUT_MS,
+        }),
+      );
+      // totem-context: per-manifest skip, DECLARED once below — an unreadable or unparseable importer manifest at HEAD cannot answer the membership question; the paths are collected and reported in a single log line rather than silently dropped or spammed per file (mmnto/totem#1440 Tenet 4 init-class)
+    } catch {
+      unreadable.push(file);
+      continue;
+    }
+    if (typeof manifest !== 'object' || manifest === null) {
+      unreadable.push(file);
+      continue;
+    }
+    for (const block of MANIFEST_DEPENDENCY_BLOCKS) {
+      const deps = (manifest as Record<string, unknown>)[block];
+      if (typeof deps !== 'object' || deps === null) continue;
+      for (const name of Object.keys(deps)) declared.add(name);
+    }
+  }
+
+  if (unreadable.length > 0) {
+    log.info(
+      TAG,
+      `Could not read ${unreadable.length} importer manifest(s) at HEAD (${unreadable.join(', ')}) — their declarations are not counted.`,
+    );
+  }
+  return declared;
+}
+
+/**
+ * Packages the diff range removes from the lockfile entirely while their pin
+ * stays declared by a workspace importer — the mmnto-ai/totem-strategy#630
+ * live-fire class, where a failed optional-dependency fetch drops every
+ * importer/packages/snapshots entry for a working dep and `pnpm install` still
+ * exits 0.
+ *
+ * Candidates are every name on a REMOVED key line, with no added-side
+ * subtraction: that subtraction was an optimization the corrected
+ * resolves-at-HEAD test already subsumes, and it was itself a laundering vector
+ * (an ADDED `peerDependenciesMeta` child naming the dropped package excluded it
+ * from the candidate set entirely). Over-generation stays safe because the
+ * decisive predicate is sound: a candidate fails only when it resolves NOWHERE
+ * at HEAD AND a workspace importer still declares it. Every git read is
+ * best-effort with a DECLARED skip — this feature has no silent skips.
+ *
+ * Candidate volume is deliberately UNBOUNDED. An earlier cap was costed against
+ * a per-candidate `git grep`; the decisive predicate is now an O(1) lookup
+ * against one lockfile index plus at most one manifest read per importer, so a
+ * cap would only buy false negatives — a real drop riding in behind an ordinary
+ * large update is exactly the shape this gate exists to catch.
+ */
+function findRemovedPins(
+  safeExec: SafeExecFn,
+  log: SkipLogger,
+  repoRoot: string,
+  resolvedRef: string,
+): string[] {
+  let lockfileDiff: string;
+  try {
+    lockfileDiff = safeExec('git', ['diff', `${resolvedRef}...HEAD`, '--', LOCKFILE_PATH], {
+      cwd: repoRoot,
+      timeout: AUX_LOOKUP_TIMEOUT_MS,
+    });
+    // totem-context: declared-skip probe — failure means the removed-pin check cannot evaluate, so it announces the skip and passes rather than blocking (mmnto/totem#1440 Tenet 4 init-class)
+  } catch {
+    log.info(TAG, `Could not read the ${LOCKFILE_PATH} diff — skipping the removed-pin check.`);
+    return [];
+  }
+
+  const candidates = new Set<string>();
+  for (const line of lockfileDiff.split('\n')) {
+    if (line[0] !== '-') continue;
+    const name = lockfileKeyName(line.slice(1));
+    if (name !== null) candidates.add(name);
+  }
+  if (candidates.size === 0) return [];
+
+  const index = readHeadLockfileIndex(safeExec, log, repoRoot);
+  if (index === null) return [];
+
+  const unresolved = [...candidates].filter((name) => !index.resolved.has(name));
+  if (unresolved.length === 0) return [];
+
+  const declared = collectImporterDeclarations(safeExec, log, repoRoot, index.importers);
+  return unresolved.filter((name) => declared.has(name));
 }
 
 // ─── Main command ───────────────────────────────────────
@@ -128,6 +609,18 @@ export async function verifyLockfileSyncCommand(): Promise<VerifyLockfileSyncRes
   // alongside it. Most cohort-sync PRs and all Version Packages PRs land
   // here.
   if (files.includes(LOCKFILE_PATH)) {
+    // A present lockfile is not a synced lockfile: the diff can also REMOVE a
+    // package outright while package.json keeps its pin
+    // (mmnto-ai/totem-strategy#630). Checked before the pass so the fast-pass
+    // cannot launder that shape.
+    const removedPins = findRemovedPins(safeExec, log, repoRoot, resolvedRef);
+    if (removedPins.length > 0) {
+      return {
+        valid: false,
+        failureClass: 'removed-pin',
+        reason: `${REMOVED_PIN_REASON_PREFIX}: ${removedPins.join(', ')}. The diff range removes every lockfile entry for the package(s), so the declared dependency cannot resolve.`,
+      };
+    }
     const label = successColor(bold('PASS'));
     log.success(TAG, `${label} — ${LOCKFILE_PATH} present in diff range.`);
     return { valid: true };
@@ -139,15 +632,52 @@ export async function verifyLockfileSyncCommand(): Promise<VerifyLockfileSyncRes
     return { valid: true };
   }
 
+  // Narrow to WORKSPACE IMPORTER manifests. A tracked manifest this lockfile
+  // does not resolve — a test fixture, a separately-deployed service — needs no
+  // lockfile companion when it gains a pin, so counting it hard-fails a correct
+  // push (reproduced against the built CLI). The importer set is the lockfile's
+  // own answer, so it is derived from the lockfile at HEAD here too.
+  const headIndex = readHeadLockfileIndex(safeExec, log, repoRoot);
+  if (headIndex === null) {
+    return { valid: true };
+  }
+  const importerManifests = new Set(headIndex.importers.map(importerManifestPath));
+  // A manifest this branch ADDS is not an importer at HEAD, so the importer set
+  // alone would let a new package ship pins with no lockfile companion. The
+  // workspace globs at HEAD close that hole; the root manifest is always in
+  // scope. (The removed-pin branch needs none of this: the lockfile is in the
+  // diff there, so its own importer list already includes any new package.)
+  const workspaceGlobs = readWorkspaceGlobs(safeExec, log, repoRoot);
+  const isWorkspaceManifest = (file: string): boolean => {
+    if (file === 'package.json') return true;
+    if (importerManifests.has(file)) return true;
+    if (workspaceGlobs === null) return false;
+    const dir = file.slice(0, -'/package.json'.length);
+    if (!workspaceGlobs.include.some((re) => re.test(dir))) return false;
+    return !workspaceGlobs.exclude.some((re) => re.test(dir));
+  };
+  const workspacePkgJsonPaths = pkgJsonPaths.filter(isWorkspaceManifest);
+  if (workspacePkgJsonPaths.length === 0) {
+    log.info(
+      TAG,
+      `Changed package.json file(s) are not workspace importers of ${LOCKFILE_PATH} — no lockfile companion is required.`,
+    );
+    return { valid: true };
+  }
+
   // Pull the unified diff for the package.json files and scan for
   // dependency-pin additions. `safeExec`'s arg-array form handles quoting,
   // so multiple paths pass safely with no shell metacharacter risk.
   let unifiedDiff = '';
   try {
-    unifiedDiff = safeExec('git', ['diff', `${resolvedRef}...HEAD`, '--', ...pkgJsonPaths], {
-      cwd: repoRoot,
-      timeout: AUX_LOOKUP_TIMEOUT_MS,
-    });
+    unifiedDiff = safeExec(
+      'git',
+      ['diff', `${resolvedRef}...HEAD`, '--', ...workspacePkgJsonPaths],
+      {
+        cwd: repoRoot,
+        timeout: AUX_LOOKUP_TIMEOUT_MS,
+      },
+    );
     // totem-context: best-effort unified-diff lookup — failure here means the gate cannot evaluate confidently, so fall through to pass rather than block (mmnto/totem#1440 Tenet 4 init-class)
   } catch {
     return { valid: true };
@@ -156,6 +686,7 @@ export async function verifyLockfileSyncCommand(): Promise<VerifyLockfileSyncRes
   if (DEP_BUMP_RE.test(unifiedDiff)) {
     return {
       valid: false,
+      failureClass: 'missing-lockfile',
       reason: `Tracked lockfile detected, but ${LOCKFILE_PATH} is missing from the diff range while a package.json adds a dependency pin.`,
     };
   }
@@ -175,10 +706,14 @@ export async function verifyLockfileSyncCliCommand(): Promise<void> {
 
   const result = await verifyLockfileSyncCommand();
   if (!result.valid) {
-    throw new TotemError(
-      'CHECK_FAILED',
-      result.reason!,
-      `Run \`pnpm install\` from the repo root to regenerate ${LOCKFILE_PATH}, then stage and commit it before re-pushing. CI runs with \`--frozen-lockfile\` and rejects pushes where a tracked package.json declares dependency pins that the lockfile does not reflect.`,
-    );
+    // Two failure classes, two remedies. The removed-pin class is NOT fixed by a
+    // plain `pnpm install` — that is precisely the command that produced it.
+    // Selected from the structured discriminant, never from the reason prose: a
+    // wording edit must not be able to downgrade a user's remedy.
+    const recoveryHint =
+      result.failureClass === 'removed-pin'
+        ? `A failed optional-dependency fetch (an expired or missing registry token) silently removes every ${LOCKFILE_PATH} entry for a package while its pin stays declared in package.json — exit 0, no warning (mmnto-ai/totem-strategy#630 class). Verify registry auth with \`npm whoami\`, regenerate with \`pnpm update <pkg>\` (NOT \`pnpm install --lockfile-only\`, which false-reports "Already up to date" on an optional-dependency drop), then commit the regenerated ${LOCKFILE_PATH}.`
+        : `Run \`pnpm install\` from the repo root to regenerate ${LOCKFILE_PATH}, then stage and commit it before re-pushing. CI runs with \`--frozen-lockfile\` and rejects pushes where a tracked package.json declares dependency pins that the lockfile does not reflect.`;
+    throw new TotemError('CHECK_FAILED', result.reason!, recoveryHint);
   }
 }

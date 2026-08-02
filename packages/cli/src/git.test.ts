@@ -19,6 +19,7 @@ import {
   getTagDate,
   isAncestor,
   isFileDirty,
+  MAX_DISCLOSED_UNTRACKED_FILES,
   resolveGitRoot,
 } from './git.js';
 
@@ -742,5 +743,167 @@ describe('getDiffForReview narrow-scope warning (#2090)', () => {
     expect(withFailure).toEqual(baseline);
     expect(withFailure!.source).toBe('uncommitted');
     expect(findNarrowScopeWarning()).toBeUndefined();
+  });
+});
+
+// ─── getDiffForReview untracked-file disclosure (#2535) ──
+
+describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)', () => {
+  const config = { ignorePatterns: [] as string[] };
+  /** The historical (and still byte-exact) no-untracked verdict line. */
+  const PLAIN_NO_CHANGES = 'No changes detected. Nothing to review.';
+
+  function lastWarn(): string {
+    const calls = mockLog.warn.mock.calls;
+    return String(calls[calls.length - 1]?.[1] ?? '');
+  }
+
+  beforeEach(() => {
+    mockGetGitDiffRange.mockReset();
+    mockGetGitDiff.mockReset();
+    mockGetGitBranchDiff.mockReset();
+    mockGetGitBranchDiffResult.mockReset();
+    mockSafeExec.mockReset();
+    mockGetDefaultBranch.mockClear();
+    mockLog.info.mockClear();
+    mockLog.warn.mockClear();
+  });
+
+  it('names the untracked files and states nothing was examined — forced branch scope', async () => {
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('scratch.ts\ndocs/notes.md');
+
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    // Exit path unchanged: still null → the caller still exits 0.
+    expect(result).toBeNull();
+    expect(mockSafeExec).toHaveBeenCalledWith(
+      'git',
+      ['ls-files', '--others', '--exclude-standard'],
+      { cwd: '/tmp' },
+    );
+    const warned = lastWarn();
+    expect(warned).toContain('scratch.ts');
+    expect(warned).toContain('docs/notes.md');
+    expect(warned).toMatch(/untracked/i);
+    expect(warned).toMatch(/NOT examined/);
+    expect(warned).toMatch(/git add/);
+  });
+
+  it('discloses on the auto-fallback empty-diff path too (one shared helper, both sites)', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('scratch.ts');
+
+    const result = await getDiffForReview({}, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    const warned = lastWarn();
+    expect(warned).toContain('scratch.ts');
+    expect(warned).toMatch(/NOT examined/);
+  });
+
+  it('leads with the BRANCH scope under --branch (the working tree was never examined)', async () => {
+    // `--branch` bypasses the working tree entirely, so claiming "no committed
+    // or staged changes" misstates what this run looked at: staged changes may
+    // exist and were not examined.
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('scratch.ts');
+
+    await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    const warned = lastWarn();
+    expect(warned).toContain('branch-vs-base');
+    expect(warned).toMatch(/examined NOTHING/);
+    expect(warned).not.toMatch(/No committed or staged changes detected/);
+    // The untracked disclosure still rides along unchanged.
+    expect(warned).toContain('scratch.ts');
+    expect(warned).toMatch(/NOT examined/);
+  });
+
+  it('names the branch scope on the auto-fallback path too (its final scope is branch-vs-base)', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('scratch.ts');
+
+    await getDiffForReview({}, config, '/tmp', 'Lint');
+
+    // This site is only reachable AFTER the working-tree diff came back empty
+    // and the branch-vs-base fallback ran — so the branch scope is what the
+    // verdict line must describe.
+    expect(lastWarn()).toContain('branch-vs-base');
+  });
+
+  it('leaves the message byte-identical when there are no untracked files', async () => {
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue('');
+
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    expect(lastWarn()).toBe(PLAIN_NO_CHANGES);
+  });
+
+  it('leaves the message byte-identical when the untracked probe fails (best-effort)', async () => {
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockImplementation(() => {
+      // totem-context: throw inside a vitest mock simulating a git failure (no repo / index lock) to prove the probe is best-effort and never alters the verdict line; sentinel message is test-only
+      throw new Error('fatal: not a git repository');
+    });
+
+    const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    expect(lastWarn()).toBe(PLAIN_NO_CHANGES);
+  });
+
+  it('discloses untracked files on the EXPLICIT-RANGE empty path, still naming the range', async () => {
+    mockGetGitDiffRange.mockReturnValue('');
+    mockSafeExec.mockReturnValue('scratch.ts');
+
+    const result = await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    const warned = lastWarn();
+    expect(warned).toContain("Explicit range 'main..HEAD'");
+    expect(warned).toMatch(/examined NOTHING/);
+    expect(warned).toContain('scratch.ts');
+    expect(warned).toMatch(/NOT examined/);
+    expect(warned).toMatch(/git add/);
+  });
+
+  it('leaves the explicit-range message byte-identical when there are no untracked files', async () => {
+    mockGetGitDiffRange.mockReturnValue('');
+    mockSafeExec.mockReturnValue('');
+
+    const result = await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Lint');
+
+    expect(result).toBeNull();
+    expect(lastWarn()).toBe("Explicit range 'main..HEAD' produced no diff. Nothing to review.");
+  });
+
+  it('leaves the explicit-range message byte-identical when the untracked probe fails', async () => {
+    mockGetGitDiffRange.mockReturnValue('');
+    mockSafeExec.mockImplementation(() => {
+      // totem-context: throw inside a vitest mock simulating a git failure to prove the probe is best-effort on the explicit-range path too; sentinel message is test-only
+      throw new Error('fatal: not a git repository');
+    });
+
+    await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Lint');
+
+    expect(lastWarn()).toBe("Explicit range 'main..HEAD' produced no diff. Nothing to review.");
+  });
+
+  it('bounds the named list and counts the overflow', async () => {
+    const many = Array.from({ length: 11 }, (_v, i) => `scratch-${i}.ts`);
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+    mockSafeExec.mockReturnValue(many.join('\n'));
+
+    await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
+
+    const warned = lastWarn();
+    expect(warned).toContain('scratch-0.ts');
+    expect(warned).toContain(`(+${many.length - MAX_DISCLOSED_UNTRACKED_FILES} more)`);
+    expect(warned).not.toContain(`scratch-${many.length - 1}.ts`);
   });
 });

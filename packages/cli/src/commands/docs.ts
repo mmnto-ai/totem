@@ -58,7 +58,7 @@ Updated content here...
 
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.
-- **\`totem review\`**: AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Used before opening PRs. Lives in the Full configuration tier.
+- **\`totem review\`**: Supplementary AI review lanes over the diff — advisory sensors, not a merge gate. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Run before opening PRs, alongside (never instead of) the team's own review. Lives in the Full configuration tier.
 - These are DIFFERENT commands with DIFFERENT purposes. Never describe \`review\` as "deterministic" or \`lint\` as "AI-powered."
 
 ## Writing Style (MANDATORY)

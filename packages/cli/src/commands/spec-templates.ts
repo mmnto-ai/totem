@@ -68,7 +68,7 @@ digraph workflow {
 ### Verification (MANDATORY — do not skip)
 Every implementation MUST end with these steps:
 1. \`totem lint\` — deterministic rule check (zero LLM, ~2s). Fixes any violations.
-2. \`totem review\` — AI-powered architectural review (~18s). Addresses any critical findings.
+2. \`totem review\` — supplementary AI lanes over the diff (~18s, advisory). Address critical findings; your team's review discipline decides the review of record.
 3. If using MCP, call \`verify_execution\` to confirm compliance before declaring the task done.
 
 ### Test Plan

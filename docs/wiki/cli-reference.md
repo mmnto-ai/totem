@@ -146,7 +146,10 @@ Verifies the shields.io badges in `README.md` resolve and match project state (a
 
 ### `totem verify-lockfile-sync`
 
-Verifies `pnpm-lock.yaml` is in the diff range when a `package.json` adds a dependency pin (cohort-sync gate, mmnto-ai/totem#1961).
+Two deterministic checks on the branch-vs-base diff (cohort-sync gate, mmnto-ai/totem#1961). Zero network; git reads only.
+
+1. **Missing lockfile:** fails when a `package.json` adds a dependency pin but `pnpm-lock.yaml` is absent from the diff range.
+2. **Silent pin removal:** fails when the diff removes every lockfile entry for a package that a workspace manifest still declares (declarations are read from the lockfile's own `importers:` set — plus `pnpm-workspace.yaml` coverage for manifests added on the branch — so tracked non-workspace manifests such as test fixtures never trigger it). This catches a real `pnpm` hazard: a failed fetch of an `optionalDependencies` entry (for example, an expired registry token for a restricted package) makes `pnpm install` silently drop the package's lockfile entries while exiting 0 — and because the resulting lockfile is internally consistent, `--frozen-lockfile` CI installs pass it. Recovery: verify registry auth with `npm whoami`, regenerate with `pnpm update <pkg>` (`pnpm install --lockfile-only` false-reports "Already up to date" on optional-dependency drops), and commit the regenerated lockfile.
 
 ### `totem explain <hash>`
 
