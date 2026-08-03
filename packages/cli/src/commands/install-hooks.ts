@@ -183,10 +183,14 @@ if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then
   # WHICH binary resolved — the shell search order includes cwd on Windows, so
   # a stale checkout-local exe can shadow the installed one) and hand the child
   # the same log, so the verb's own success line lands after the stamp; a stamp
-  # with nothing after it means the child never finished. If the log is not
-  # writable, fall back to the previous blind firing.
-  TS_REFRESH_LOG="../.totem-status-refresh-hook.log"
-  if printf '[%s] post-merge spawn cwd=%s bin=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd)" "$(command -v totem-status)" >> "$TS_REFRESH_LOG" 2>/dev/null; then
+  # with nothing after it means the child never finished. Repo-local inside
+  # .git (never tracked, per-repo, writable wherever git itself writes); 1 MiB
+  # self-cap. If the log is not writable, fall back to the previous blind
+  # firing — the 2>/dev/null PRECEDES the append so the open failure itself
+  # stays silent (redirections apply left to right).
+  TS_REFRESH_LOG=".git/totem-status-refresh-hook.log"
+  if [ -f "$TS_REFRESH_LOG" ] && [ "$(wc -c < "$TS_REFRESH_LOG" 2>/dev/null || echo 0)" -gt 1048576 ]; then : > "$TS_REFRESH_LOG"; fi
+  if printf '[%s] post-merge spawn cwd=%s bin=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd)" "$(command -v totem-status)" 2>/dev/null >> "$TS_REFRESH_LOG"; then
     (totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)
   else
     (totem-status refresh-gh >/dev/null 2>&1 &)

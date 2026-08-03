@@ -18,6 +18,7 @@ import {
   readdirSync,
   readFileSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -45,10 +46,17 @@ try {
     // Each firing stamps a workspace-root log and hands the child the same
     // fd; a stamp with nothing after it means the child never finished. Log
     // failures degrade to the previous blind firing.
-    const logPath = join(process.cwd(), '..', '.totem-status-refresh-hook.log');
+    // Repo-local inside .git (falsification round): never tracked, per-repo,
+    // writable wherever git itself writes; 1 MiB self-cap.
+    const logPath = join(process.cwd(), '.git', 'totem-status-refresh-hook.log');
     let stdio = 'ignore';
     let logFd = null;
     try {
+      try {
+        if (statSync(logPath).size > 1048576) writeFileSync(logPath, '');
+      } catch {
+        // no log yet — nothing to cap
+      }
       appendFileSync(
         logPath,
         '[' +

@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -1134,12 +1134,16 @@ describe('post-merge hook fires totem-status refresh-gh', () => {
   it('#2570: stamps each firing and hands the child the same log (observability leg)', () => {
     const hook = buildHookContent('pnpm dlx @mmnto/cli');
 
-    // Workspace-root log; the stamp carries the firing site, cwd, and WHICH
-    // binary resolved (shell search order can be shadowed by a checkout-local
-    // exe on Windows).
-    expect(hook).toContain('TS_REFRESH_LOG="../.totem-status-refresh-hook.log"');
+    // Repo-local log inside .git; the stamp carries the firing site, cwd, and
+    // WHICH binary resolved (shell search order can be shadowed by a
+    // checkout-local exe on Windows).
+    expect(hook).toContain('TS_REFRESH_LOG=".git/totem-status-refresh-hook.log"');
     expect(hook).toContain('post-merge spawn cwd=%s bin=%s');
     expect(hook).toContain('$(command -v totem-status)');
+    // The 2>/dev/null PRECEDES the append: redirections apply left to right,
+    // so the open failure of an unwritable log is itself silent (falsification
+    // round, MAJOR 1).
+    expect(hook).toContain('2>/dev/null >> "$TS_REFRESH_LOG"');
     // The child appends to the SAME log so its success line lands after the
     // stamp; a stamp with nothing after it = the child never finished.
     expect(hook).toContain('(totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)');
@@ -1198,13 +1202,40 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
       expect(await markerAppears(5000)).toBe(true);
       expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
 
-      // #2570 observability leg: the firing left a stamp in the workspace-root
-      // log (tmpDir is the workspace parent of repo/) before the child ran.
-      const logPath = path.join(tmpDir, '.totem-status-refresh-hook.log');
+      // #2570 observability leg: the firing left a stamp in the repo-local
+      // .git log before the child ran, and bin= carries the RESOLVED path.
+      const logPath = path.join(repo, '.git', 'totem-status-refresh-hook.log');
       expect(fs.existsSync(logPath)).toBe(true);
       const logText = fs.readFileSync(logPath, 'utf-8');
       expect(logText).toContain('post-merge spawn cwd=');
-      expect(logText).toContain('bin=');
+      expect(logText).toMatch(/bin=\S*totem-status/);
+    },
+  );
+
+  it(
+    '#2570: an unwritable log falls back to blind firing with zero stderr noise',
+    { timeout: 15000 },
+    async () => {
+      const repo = path.join(tmpDir, 'repo');
+      fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+      // A DIRECTORY at the log path makes both the stamp and the child
+      // redirect fail — the sidecar must still fire (else branch) and the
+      // open failure itself must stay silent (2>/dev/null precedes the
+      // append; falsification round, MAJOR 1).
+      fs.mkdirSync(path.join(repo, '.git', 'totem-status-refresh-hook.log'), { recursive: true });
+      const hookPath = path.join(repo, 'post-merge');
+      fs.writeFileSync(hookPath, buildHookContent('pnpm dlx @mmnto/cli'), { mode: 0o755 });
+
+      const result = spawnSync('sh', ['./post-merge'], {
+        cwd: repo,
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` },
+        encoding: 'utf-8',
+      });
+      expect(result.status).toBe(0);
+      expect(result.stderr ?? '').not.toContain('totem-status-refresh-hook.log');
+
+      expect(await markerAppears(5000)).toBe(true);
+      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
     },
   );
 

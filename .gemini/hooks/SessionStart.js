@@ -43,11 +43,24 @@ try {
     // lands after the stamp; a stamp with nothing after it means the child
     // never finished. Log failures degrade to the previous blind firing —
     // the stamp must never block or break the spawn.
-    const { openSync, closeSync, appendFileSync, existsSync } = require('fs');
-    const logPath = nodePath.join(process.cwd(), '..', '.totem-status-refresh-hook.log');
+    const { openSync, closeSync, appendFileSync, existsSync, writeFileSync } = require('fs');
+    // REPO-LOCAL log, inside .git (falsification round: the primary-checkout
+    // gate just proved .git is a directory; never tracked, dies with the
+    // clone, writable wherever git itself writes, and per-repo so concurrent
+    // firings from sibling repos never interleave). A workspace-parent path
+    // would grow an un-gitignorable file OUTSIDE the repo tree for every
+    // consumer of these published templates — including non-adopters, whose
+    // ENOENT firing still stamps.
+    const logPath = nodePath.join(process.cwd(), '.git', 'totem-status-refresh-hook.log');
     let stdio = 'ignore';
     let logFd = null;
     try {
+      try {
+        // 1 MiB self-cap: the log truncates rather than growing forever.
+        if (statSync(logPath).size > 1048576) writeFileSync(logPath, '');
+      } catch {
+        // no log yet — nothing to cap
+      }
       appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn cwd=' + process.cwd() + ' path-has-go-bin=' + /go[\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + '\n');
       logFd = openSync(logPath, 'a');
       stdio = ['ignore', logFd, logFd];

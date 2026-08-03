@@ -31,9 +31,21 @@ past deadline+WaitDelay. Safe to fire blind.
 
 - Never block: #2059 measured ~3s sync-gh SessionStart cost. Node surfaces use
   detached+unref `spawn` with `stdio: 'ignore'`; sh surface uses a backgrounded
-  subshell with output discarded.
+  subshell with output discarded. _[Amended by #2570: when the repo-local log
+  at `.git/totem-status-refresh-hook.log` is writable, the child inherits its
+  fd (Node) / appends to it (sh) instead — each firing stamps the log first,
+  so a stamp with no verb line after it discriminates a harness reap from a
+  child failure (the status seat's observed silent no-write). Log-unwritable
+  degrades to the blind form above; 1 MiB self-cap; same-repo concurrent
+  firings pair stamp↔verb by time window, not adjacency (single-flight keeps
+  this rare). The log lives INSIDE .git deliberately — a workspace-parent path
+  would grow an un-gitignorable file outside the repo tree for every consumer
+  of the published templates, including non-adopters, whose ENOENT firing
+  still stamps.]_
 - Presence-gated, zero-noise when absent: `command -v totem-status` (sh);
   ENOENT-silent `error` handler (Node), non-ENOENT keeps a stderr breadcrumb.
+  _[#2570: ENOENT additionally leaves a `spawn-error code=ENOENT` line in the
+  repo-local log — silent on stderr, visible to diagnosis.]_
 - PRIMARY-checkout-gated (`.git` must be a DIRECTORY; build-time discovery
   2026-08-03): a detached child inherits its parent's cwd, and on Windows that
   holds a directory lock for the child's lifetime. In a linked worktree
