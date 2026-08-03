@@ -651,6 +651,40 @@ describe('full-sync crash recovery (#2562)', () => {
   );
 
   it(
+    'ROUND 4: a RESOLVABLE identity mismatch restarts even with zero work remaining',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      // The zero-work exemption is for RESOLUTION FAILURE only. A resolvable
+      // mismatch with nothing left to embed must still restart: clearing the
+      // marker would rewrite index-meta to the new identity and launder the
+      // DATABASE_MISMATCH evidence over a store built in the old space.
+      const first = await run(new ScriptedEmbedder(), false);
+      expect(first.totalChunks).toBe(TOTAL_CHUNKS);
+      const headSha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+      fs.writeFileSync(
+        checkpointPath(),
+        JSON.stringify({
+          startedHeadSha: headSha,
+          startedAt: Date.now(),
+          indexExclusionHash: 'whatever',
+          embedder: { provider: 'ollama', model: 'nomic-embed-text', dimensions: 4 },
+          completedFiles: ALL_FILES,
+        }),
+        'utf-8',
+      );
+
+      // Plain resolvable embedder — falls back to the config (gemini)
+      // fingerprint, which mismatches the stamped ollama identity.
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true);
+
+      expect(result.filesProcessed).toBe(3); // restarted, not cleared
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
+
+  it(
     'MAJOR 4: a non-git project resumes via the mtime arm instead of restarting every run',
     { timeout: HEAVY_TIMEOUT_MS },
     async () => {

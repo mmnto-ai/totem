@@ -236,10 +236,13 @@ Parses your codebase, chunks the AST, and builds the local LanceDB vector index.
   records the EFFECTIVE identity, so a silent Ollama fallback restarts
   instead of mixing vector spaces, while a persistent fallback resumes as
   itself (a resume with nothing left to embed clears the marker without
-  needing an embedder at all). Gemini ingest embeds are paced by default (4s
-  between multi-text batches, derived from the default 2,000/min per-minute
-  quota window; query embeds are never paced), so with no quota configuration
-  at all a corpus of any size converges in minutes; tune or disable via
+  needing an embedder — unless the embedder resolves to a DIFFERENT identity
+  than the epoch's, which still restarts). Gemini ingest embeds are paced by
+  default (4s between multi-text batches, derived from the default 2,000/min
+  per-minute quota window; query embeds are never paced), so with no quota
+  configuration at all a re-index completes instead of dying at ~2k chunks —
+  a few minutes for a few-thousand-chunk corpus, proportionally longer for
+  larger ones; tune or disable via
   `embedding.throttleMs`. Note the pacing makes a full re-index take minutes
   on large corpora — bounded-budget callers should check for a live
   checkpoint rather than racing it (the MCP `add_lesson` tool defers its

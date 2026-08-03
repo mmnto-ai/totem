@@ -19,10 +19,11 @@ export default {
     // window (Vertex `online_prediction_requests_per_base_model`, 2,000/min
     // default for gemini-embedding-2; observed accounting behaves per content
     // item). GEMINI DEFAULTS TO 4000: multi-text sync batches pace at 4s
-    // apart, keeping a re-index safely under the window so a corpus of any
-    // size completes in minutes; single-text QUERY embeds (search / MCP) are
-    // never paced. Explicit 0 disables pacing. openai defaults to 0; ollama
-    // is local and ignores it.
+    // apart, keeping a re-index safely under the window so it completes
+    // instead of dying at ~2k chunks (minutes for a few-thousand-chunk
+    // corpus, proportionally longer for larger ones); single-text QUERY
+    // embeds (search / MCP) are never paced. Explicit 0 disables pacing.
+    // openai defaults to 0; ollama is local and ignores it.
     throttleMs: 4000,
   },
 

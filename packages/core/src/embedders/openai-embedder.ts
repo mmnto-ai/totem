@@ -39,11 +39,16 @@ export class OpenAIEmbedder implements Embedder {
   async embed(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
 
+    // Pace only multi-text (ingest-shaped) calls, mirroring the gemini
+    // embedder (#2562 round 4): a configured throttle must not tax
+    // single-text query embeds from a process-lifetime MCP embedder.
+    const paceThisCall = texts.length > 1;
+
     const results: number[][] = [];
 
     for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
       const batch = texts.slice(i, i + MAX_BATCH_SIZE);
-      const response = await this.embedWithRetry(batch);
+      const response = await this.embedWithRetry(batch, paceThisCall);
 
       const sorted = response.data.sort((a, b) => a.index - b.index);
       for (const item of sorted) {
@@ -56,13 +61,14 @@ export class OpenAIEmbedder implements Embedder {
 
   private async embedWithRetry(
     batch: string[],
+    paceThisCall: boolean,
   ): Promise<OpenAI.Embeddings.CreateEmbeddingResponse> {
     let lastErr: unknown;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         // Pace every attempt (mmnto-ai/totem#2562): the throttle exists for
         // per-minute limits, and retries count against them like any request.
-        await this.pace();
+        if (paceThisCall) await this.pace();
         return await this.client.embeddings.create({
           model: this.model,
           input: batch,

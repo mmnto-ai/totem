@@ -159,11 +159,13 @@ export class GeminiEmbedder implements Embedder {
     const { GoogleGenAI } = await importGeminiSdk();
     const ai = new GoogleGenAI({ apiKey: this.apiKey });
 
-    // Pace only ingest-shaped calls (falsification round 3, MAJOR 3): sync
-    // flushes arrive as multi-text batches and are what burns the per-minute
-    // window; a single-text call is a QUERY (search / MCP retrieval, whose
-    // embedder is process-lifetime cached) and pacing it would tax every
-    // interactive lookup for quota it cannot meaningfully consume.
+    // Pace only multi-text (ingest-shaped) calls (falsification round 3,
+    // MAJOR 3): sync flushes arrive as multi-text batches and are what burns
+    // the per-minute window. Single-text calls stay unpaced — queries
+    // (search / MCP retrieval, whose embedder is process-lifetime cached) and
+    // the per-candidate semantic-dedup probes, both of which are
+    // sequential-RTT-bound far below the window; pacing them would tax every
+    // interactive lookup for quota they cannot meaningfully consume.
     const paceThisCall = texts.length > 1;
 
     const results: number[][] = [];

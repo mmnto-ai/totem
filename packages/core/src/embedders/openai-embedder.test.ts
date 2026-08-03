@@ -104,19 +104,25 @@ describe('OpenAIEmbedder', () => {
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as never);
 
-    mockCreate.mockResolvedValue(embedResponse(1));
+    mockCreate.mockResolvedValue(embedResponse(2));
 
     const unpaced = new OpenAIEmbedder();
-    await unpaced.embed(['a']);
-    await unpaced.embed(['b']);
+    await unpaced.embed(['a', 'b']);
+    await unpaced.embed(['c', 'd']);
     expect(delays).toHaveLength(0);
 
     const paced = new OpenAIEmbedder(undefined, undefined, 5_000);
-    await paced.embed(['a']);
-    await paced.embed(['b']); // within 5s of the first call — must wait
+    await paced.embed(['a', 'b']);
+    await paced.embed(['c', 'd']); // within 5s of the first call — must wait
     expect(delays.length).toBeGreaterThanOrEqual(1);
     const wait = delays[delays.length - 1]!;
     expect(wait).toBeGreaterThan(0);
     expect(wait).toBeLessThanOrEqual(5_000);
+
+    // Single-text (query-shaped) calls never pace, even with a throttle set.
+    const queryDelays = delays.length;
+    await paced.embed(['a lone query']);
+    await paced.embed(['another query']);
+    expect(delays.length).toBe(queryDelays);
   });
 });

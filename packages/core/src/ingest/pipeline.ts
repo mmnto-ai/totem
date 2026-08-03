@@ -588,18 +588,30 @@ async function runSyncInner(
       );
       filesToProcess = allFiles.filter((f) => !completed.has(normalizeRel(f.relativePath)));
 
-      // EFFECTIVE-vs-effective identity gate (falsification rounds 2–3). The
+      // EFFECTIVE-vs-effective identity gate (falsification rounds 2–4). The
       // epoch may only continue under the embedder identity that will
       // ACTUALLY serve this run's embeds — config-vs-stamped is wrong in both
       // directions (a silent fallback would mix vector spaces at the first
-      // insert; a persistent fallback would restart-loop forever). The gate
-      // runs ONLY when files remain: a zero-work resume embeds nothing, so no
-      // mixing is possible, and forcing resolution there would wedge an epoch
-      // that merely needs its marker cleared behind a missing embedder
-      // (round 3, MINOR 10).
+      // insert; a persistent fallback would restart-loop forever). The
+      // exemption is RESOLUTION FAILURE with zero work remaining (round 3
+      // MINOR 10: an epoch that merely needs its marker cleared must not
+      // wedge behind a missing embedder) — NOT zero work itself: a resolvable
+      // mismatch must restart even with nothing left, or clearing the marker
+      // would rewrite index-meta to the new identity and launder the
+      // DATABASE_MISMATCH evidence the next incremental needs (round 4,
+      // MAJOR 1 — probed: dimension change + zero-work resume ⇒ silent mixed
+      // store).
       let identityOk = true;
-      if (filesToProcess.length > 0) {
-        const effectiveNow = (await embedder.resolveEffective?.()) ?? embedderFingerprint;
+      let effectiveNow: { provider: string; model: string; dimensions: number } | null = null;
+      try {
+        effectiveNow = (await embedder.resolveEffective?.()) ?? embedderFingerprint;
+      } catch (err) {
+        if (filesToProcess.length > 0) throw err; // work remains ⇒ fail loud, state intact
+        log(
+          `Nothing left to embed and no embedder resolved (${err instanceof Error ? err.message : String(err)}) — clearing the marker unverified.`,
+        );
+      }
+      if (effectiveNow !== null) {
         const fp = resumeFrom.embedder;
         if (
           fp.provider !== effectiveNow.provider ||
