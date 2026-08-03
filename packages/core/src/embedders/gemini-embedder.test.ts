@@ -299,7 +299,7 @@ describe('GeminiEmbedder', () => {
 
   // ─── Request pacing (#2562) ────────────────────────
 
-  it('throttleMs paces successive API calls; explicit 0 disables pacing', async () => {
+  it('throttleMs paces successive ingest-shaped calls; explicit 0 disables pacing', async () => {
     const delays: (number | undefined)[] = [];
     vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
       delays.push(ms);
@@ -307,16 +307,16 @@ describe('GeminiEmbedder', () => {
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as never);
 
-    mockEmbedContent.mockResolvedValue(embedResponse(1));
+    mockEmbedContent.mockResolvedValue(embedResponse(2));
 
     const unpaced = new GeminiEmbedder(undefined, undefined, 0);
-    await unpaced.embed(['a']);
-    await unpaced.embed(['b']);
+    await unpaced.embed(['a', 'b']);
+    await unpaced.embed(['c', 'd']);
     expect(delays).toHaveLength(0);
 
     const paced = new GeminiEmbedder(undefined, undefined, 5_000);
-    await paced.embed(['a']);
-    await paced.embed(['b']); // within 5s of the first call — must wait
+    await paced.embed(['a', 'b']);
+    await paced.embed(['c', 'd']); // within 5s of the first call — must wait
     expect(delays.length).toBeGreaterThanOrEqual(1);
     const wait = delays[delays.length - 1]!;
     expect(wait).toBeGreaterThan(0);
@@ -331,17 +331,37 @@ describe('GeminiEmbedder', () => {
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as never);
 
-    mockEmbedContent.mockResolvedValue(embedResponse(1));
+    mockEmbedContent.mockResolvedValue(embedResponse(2));
 
     // No throttleMs given — the gemini default (4s between batches ≈ 1,500
-    // items/min at 100-item batches) must pace the second call.
+    // items/min at 100-item batches) must pace the second ingest-shaped call
+    // at close to the full constant (the magnitude IS the convergence claim).
     const embedder = new GeminiEmbedder();
-    await embedder.embed(['a']);
-    await embedder.embed(['b']);
+    await embedder.embed(['a', 'b']);
+    await embedder.embed(['c', 'd']);
     expect(delays.length).toBeGreaterThanOrEqual(1);
     const wait = delays[delays.length - 1]!;
-    expect(wait).toBeGreaterThan(0);
+    expect(wait).toBeGreaterThan(3_900);
     expect(wait).toBeLessThanOrEqual(4_000);
+  });
+
+  it('single-text (query-shaped) calls are never paced, even at the default throttle (#2562 round 3)', async () => {
+    const delays: (number | undefined)[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      delays.push(ms);
+      fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as never);
+
+    mockEmbedContent.mockResolvedValue(embedResponse(1));
+
+    // A process-lifetime embedder (the MCP server) serves sequential search
+    // queries — pacing those would tax every interactive lookup.
+    const embedder = new GeminiEmbedder();
+    await embedder.embed(['query one']);
+    await embedder.embed(['query two']);
+    await embedder.embed(['query three']);
+    expect(delays).toHaveLength(0);
   });
 });
 

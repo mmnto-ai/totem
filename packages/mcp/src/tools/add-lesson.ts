@@ -8,6 +8,7 @@ import { z } from 'zod';
 import {
   acquireLock,
   generateLessonHeading,
+  hasFullSyncCheckpoint,
   LessonRoleSchema,
   sanitize,
   writeLessonFileAsync,
@@ -258,6 +259,26 @@ export function registerAddLesson(server: McpServer): void {
           sessionLessonCount++;
         } finally {
           releaseLock();
+        }
+
+        // #2562 (falsification round 3, MAJOR 1): while a full re-index epoch
+        // is in progress, ANY sync is promoted to the paced full resume — a
+        // corpus-sized job this tool's 60s kill-timer can never wait out. The
+        // lesson is already written; skip the convenience sync and let the
+        // running epoch (or the next `totem sync`) index it, instead of
+        // deterministically reporting a spurious timeout failure.
+        if (hasFullSyncCheckpoint(totemDir)) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: formatXmlResponse(
+                  'lesson_added',
+                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: a full re-index is in progress — the lesson will be indexed when it completes (or on the next \`totem sync\`).`,
+                ),
+              },
+            ],
+          };
         }
 
         const isJoining = activeSyncPromise !== null;

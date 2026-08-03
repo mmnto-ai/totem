@@ -13,14 +13,15 @@ export default {
   embedding: {
     provider: 'gemini', // 'openai', 'gemini', 'ollama'
     model: 'gemini-embedding-2-preview',
-    // Minimum interval between embedding API requests, in milliseconds
+    // Minimum interval between INGEST embedding requests, in milliseconds
     // (mmnto-ai/totem#2562). Paces `totem sync` under per-minute provider
-    // quotas — the wall that kills unthrottled full re-indexes is a rolling
-    // per-minute window (Vertex `online_prediction_requests_per_base_model`,
-    // 2,000/min default for gemini-embedding-2). GEMINI DEFAULTS TO 4000
-    // (100-item batches every 4s ≈ 1,500 items/min — under the window with
-    // margin; a corpus of any size converges in ~corpus/1500 minutes).
-    // Explicit 0 disables pacing. openai defaults to 0 (no pacing); ollama
+    // quotas — the wall that kills full re-indexes is a rolling per-minute
+    // window (Vertex `online_prediction_requests_per_base_model`, 2,000/min
+    // default for gemini-embedding-2; observed accounting behaves per content
+    // item). GEMINI DEFAULTS TO 4000: multi-text sync batches pace at 4s
+    // apart, keeping a re-index safely under the window so a corpus of any
+    // size completes in minutes; single-text QUERY embeds (search / MCP) are
+    // never paced. Explicit 0 disables pacing. openai defaults to 0; ollama
     // is local and ignores it.
     throttleMs: 4000,
   },

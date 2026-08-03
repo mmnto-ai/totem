@@ -199,6 +199,7 @@ export {
   getChangedFiles,
   getChangedFilesDetailed,
   getHeadSha,
+  hasFullSyncCheckpoint,
   INDEX_MANIFEST_SCHEMA,
   resolveFiles,
   runSync,

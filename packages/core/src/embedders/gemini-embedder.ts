@@ -159,25 +159,36 @@ export class GeminiEmbedder implements Embedder {
     const { GoogleGenAI } = await importGeminiSdk();
     const ai = new GoogleGenAI({ apiKey: this.apiKey });
 
+    // Pace only ingest-shaped calls (falsification round 3, MAJOR 3): sync
+    // flushes arrive as multi-text batches and are what burns the per-minute
+    // window; a single-text call is a QUERY (search / MCP retrieval, whose
+    // embedder is process-lifetime cached) and pacing it would tax every
+    // interactive lookup for quota it cannot meaningfully consume.
+    const paceThisCall = texts.length > 1;
+
     const results: number[][] = [];
 
     for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
       const batch = texts.slice(i, i + MAX_BATCH_SIZE);
-      const embeddings = await this.embedWithRetry(ai, batch);
+      const embeddings = await this.embedWithRetry(ai, batch, paceThisCall);
       results.push(...embeddings);
     }
 
     return results;
   }
 
-  private async embedWithRetry(ai: GeminiAI, batch: string[]): Promise<number[][]> {
+  private async embedWithRetry(
+    ai: GeminiAI,
+    batch: string[],
+    paceThisCall: boolean,
+  ): Promise<number[][]> {
     let lastErr: unknown;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         // Pace every attempt (mmnto-ai/totem#2562): the throttle exists for
         // per-minute quotas, and retries count against them like any request.
-        await this.pace();
+        if (paceThisCall) await this.pace();
         const response = await ai.models.embedContent({
           model: this.model,
           contents: batch.map((text: string) => ({ parts: [{ text }] })),

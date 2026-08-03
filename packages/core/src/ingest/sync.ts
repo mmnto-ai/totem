@@ -6,4 +6,10 @@ export {
   resolveFiles,
 } from './file-resolver.js';
 export type { IndexManifest, ManifestDocument } from './pipeline.js';
-export { buildIndexManifest, INDEX_MANIFEST_SCHEMA, runSync, verifyIndexMeta } from './pipeline.js';
+export {
+  buildIndexManifest,
+  hasFullSyncCheckpoint,
+  INDEX_MANIFEST_SCHEMA,
+  runSync,
+  verifyIndexMeta,
+} from './pipeline.js';

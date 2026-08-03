@@ -179,6 +179,18 @@ function writeFullSyncCheckpoint(totemDir: string, checkpoint: FullSyncCheckpoin
 }
 
 /**
+ * Whether a full re-index epoch is in progress (its dirty marker exists) for
+ * the given totem dir (#2562). Exposed for callers that spawn or gate syncs
+ * under bounded budgets — e.g. the MCP add-lesson tool's 60s-killed
+ * convenience sync, which a promoted paced resume can never finish
+ * (falsification round 3, MAJOR 1): such callers should skip and defer to the
+ * running epoch instead of timing out against it.
+ */
+export function hasFullSyncCheckpoint(totemDir: string): boolean {
+  return fs.existsSync(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE));
+}
+
+/**
  * Best-effort marker delete at successful completion. A failed delete is loud
  * but non-fatal: the next run resumes-full as a near-noop and retries the
  * delete, so correctness converges (#2562).
@@ -392,33 +404,9 @@ async function runSyncInner(
   if (fs.existsSync(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE))) {
     incremental = false;
     resumeFrom = readFullSyncCheckpoint(totemDir, log);
-    if (resumeFrom) {
-      // EFFECTIVE-vs-effective comparison (falsification round 2, F1/F2): the
-      // epoch may only continue under the embedder identity that will ACTUALLY
-      // serve this run's embeds. Comparing the checkpoint against the CONFIG
-      // fingerprint is wrong in both directions — a run silently falling back
-      // to Ollama would pass a config match and mix vector spaces at the first
-      // insert, while a PERSISTENT fallback (stamped ollama, config gemini)
-      // would restart-and-reset on every attempt and never converge. Forcing
-      // resolution here moves it moments ahead of the first insert, where it
-      // would happen anyway; a resolution failure (no embedder at all) throws
-      // loud with the store and marker intact.
-      const effectiveNow = (await embedder.resolveEffective?.()) ?? embedderFingerprint;
-      const fp = resumeFrom.embedder;
-      if (
-        fp.provider !== effectiveNow.provider ||
-        fp.model !== effectiveNow.model ||
-        fp.dimensions !== effectiveNow.dimensions
-      ) {
-        log(
-          `The embedder serving this run (${effectiveNow.provider}/${effectiveNow.model}) differs from the interrupted epoch's (${fp.provider}/${fp.model}) — its progress is unusable.`,
-        );
-        resumeFrom = null;
-      }
-    }
     log(
       resumeFrom
-        ? `Previous full re-index did not complete — resuming it (${resumeFrom.completedFiles.length} file(s) already embedded).`
+        ? `Previous full re-index did not complete — resuming it (${resumeFrom.completedFiles.length} file(s) checkpointed).`
         : 'Previous full re-index did not complete — restarting it from zero.',
     );
   }
@@ -569,7 +557,7 @@ async function runSyncInner(
       let indexedRaw: string[] | null = null;
       try {
         indexedRaw = await store.getDistinctPaths();
-        // totem-context: intentional warn+degrade on a getDistinctPaths failure (mmnto-ai/totem#2562, falsification round 2 F7) — the completed set collapses to EMPTY below (every file re-embeds via delete-first, same cost as a reset-restart) but the table is NOT destroyed over a possibly-transient read failure, so prior rows stay searchable if this attempt also dies.
+        // totem-context: intentional warn+degrade on a getDistinctPaths failure (mmnto-ai/totem#2562, falsification round 2 F7 + round 3 MINOR 9a) — the completed set collapses to EMPTY below (every file re-embeds via delete-first, same cost as a reset-restart) but the table is NOT destroyed over a possibly-transient read failure, and the checkpoint's paper progress is RETAINED untrusted so a second crash does not erase a prior epoch's flushed work.
       } catch (err) {
         log(
           `Warning: cannot verify the checkpoint against the store (getDistinctPaths failed: ${err instanceof Error ? err.message : String(err)}) — re-embedding everything without trusting the checkpoint.`,
@@ -599,19 +587,56 @@ async function runSyncInner(
               .filter((rel) => byRel.has(rel) && indexed.has(rel) && !movedSinceEpoch(rel)),
       );
       filesToProcess = allFiles.filter((f) => !completed.has(normalizeRel(f.relativePath)));
-      // Carry forward only verified entries, re-keyed to the current run's
-      // resolved paths. startedHeadSha stays the ORIGINAL epoch SHA so every
-      // later resume re-diffs the full window (superset-safe).
-      const carried = allFiles
-        .map((f) => f.relativePath)
-        .filter((rel) => completed.has(normalizeRel(rel)));
-      checkpoint = { ...resumeFrom, indexExclusionHash, completedFiles: carried };
-      writeFullSyncCheckpoint(totemDir, checkpoint);
-      resumedWithoutReset = true;
-      log(
-        `Resuming full re-index: ${filesToProcess.length} file(s) remaining of ${allFiles.length} ` +
-          `(${carried.length} already embedded). Delete ${config.totemDir}/${FULL_SYNC_CHECKPOINT_FILE} to restart from scratch.`,
-      );
+
+      // EFFECTIVE-vs-effective identity gate (falsification rounds 2–3). The
+      // epoch may only continue under the embedder identity that will
+      // ACTUALLY serve this run's embeds — config-vs-stamped is wrong in both
+      // directions (a silent fallback would mix vector spaces at the first
+      // insert; a persistent fallback would restart-loop forever). The gate
+      // runs ONLY when files remain: a zero-work resume embeds nothing, so no
+      // mixing is possible, and forcing resolution there would wedge an epoch
+      // that merely needs its marker cleared behind a missing embedder
+      // (round 3, MINOR 10).
+      let identityOk = true;
+      if (filesToProcess.length > 0) {
+        const effectiveNow = (await embedder.resolveEffective?.()) ?? embedderFingerprint;
+        const fp = resumeFrom.embedder;
+        if (
+          fp.provider !== effectiveNow.provider ||
+          fp.model !== effectiveNow.model ||
+          fp.dimensions !== effectiveNow.dimensions
+        ) {
+          log(
+            `The embedder serving this run (${effectiveNow.provider}/${effectiveNow.model}) differs from the interrupted epoch's (${fp.provider}/${fp.model}) — its progress is unusable; restarting from zero.`,
+          );
+          identityOk = false;
+        }
+      }
+
+      if (!identityOk) {
+        await beginFullSync(freshCheckpoint());
+        filesToProcess = allFiles;
+        log(`Full sync: ${filesToProcess.length} files to process`);
+      } else {
+        // Carry forward the verified entries, re-keyed to the current run's
+        // resolved paths — EXCEPT when the store was unreadable: then the
+        // paper progress is retained untrusted (round 3, MINOR 9a) so a
+        // second crash does not erase a prior epoch's flushed work; the next
+        // resume re-verifies it against a hopefully-readable store.
+        // startedHeadSha stays the ORIGINAL epoch SHA so every later resume
+        // re-diffs the full window (superset-safe).
+        const carried =
+          indexed === null
+            ? [...resumeFrom.completedFiles]
+            : allFiles.map((f) => f.relativePath).filter((rel) => completed.has(normalizeRel(rel)));
+        checkpoint = { ...resumeFrom, indexExclusionHash, completedFiles: carried };
+        writeFullSyncCheckpoint(totemDir, checkpoint);
+        resumedWithoutReset = true;
+        log(
+          `Resuming full re-index: ${filesToProcess.length} file(s) remaining of ${allFiles.length} ` +
+            `(${completed.size} verified already embedded). Delete ${config.totemDir}/${FULL_SYNC_CHECKPOINT_FILE} to restart from scratch.`,
+        );
+      }
     }
   } else {
     await beginFullSync(freshCheckpoint());

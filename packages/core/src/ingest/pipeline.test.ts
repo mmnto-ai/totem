@@ -617,6 +617,40 @@ describe('full-sync crash recovery (#2562)', () => {
   );
 
   it(
+    'MINOR 10: a zero-work resume clears the marker WITHOUT requiring an embedder',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      // Epoch crashed between its final flush and the marker delete: the
+      // store is complete but the marker survives. The resume has nothing to
+      // embed, so the identity gate must not force embedder resolution — a
+      // missing embedder would otherwise wedge the epoch closed forever.
+      const first = await run(new ScriptedEmbedder(), false);
+      expect(first.totalChunks).toBe(TOTAL_CHUNKS);
+      const headSha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+      fs.writeFileSync(
+        checkpointPath(),
+        JSON.stringify({
+          startedHeadSha: headSha,
+          startedAt: Date.now(),
+          indexExclusionHash: 'whatever',
+          embedder: { provider: 'gemini', model: 'test-model', dimensions: 4 },
+          completedFiles: ALL_FILES,
+        }),
+        'utf-8',
+      );
+
+      const unresolvable = new ScriptedEmbedder();
+      unresolvable.resolveEffective = () => Promise.reject(new Error('no embedder available'));
+      const result = await run(unresolvable, true);
+
+      expect(result.filesProcessed).toBe(0);
+      expect(unresolvable.embedCalls).toHaveLength(0);
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
+
+  it(
     'MAJOR 4: a non-git project resumes via the mtime arm instead of restarting every run',
     { timeout: HEAVY_TIMEOUT_MS },
     async () => {

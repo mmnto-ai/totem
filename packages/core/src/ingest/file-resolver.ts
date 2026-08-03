@@ -139,12 +139,13 @@ const SAFE_GIT_REF = /^[a-zA-Z0-9_./:~^{}\-]+$/;
 
 /**
  * Files changed since a git ref, with the tracked-diff and untracked sets kept
- * SEPARATE (mmnto-ai/totem#2562). The distinction matters to full-sync resume:
- * "tracked and in the diff" means the file moved since the ref, but "untracked"
- * only means git has no history for it — an untracked file is a permanent
- * member of this set, so a consumer that treats membership as "changed since
- * the epoch" would evict it from a resume's completed set on every run and
- * re-spend embedding quota on it forever.
+ * SEPARATE (mmnto-ai/totem#2562). The semantics differ: "tracked and in the
+ * diff" means the file moved since the ref, but "untracked" only means git has
+ * no history for it — an untracked file is a PERMANENT member of that set, so
+ * treating membership as "changed since the ref" would re-classify it forever.
+ * The full-sync resume consumes only the `tracked` half (its moved-since-epoch
+ * signal for everything else is mtime); `getChangedFiles` below unions both
+ * for the incremental diff, where "new file ⇒ index it" is exactly right.
  */
 export function getChangedFilesDetailed(
   projectRoot: string,
