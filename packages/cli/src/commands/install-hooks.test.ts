@@ -1124,10 +1124,25 @@ describe('post-merge hook fires totem-status refresh-gh', () => {
     // linked worktree .git is a pointer FILE and a backgrounded child inheriting
     // the worktree cwd holds a Windows directory lock that breaks worktree removal.
     expect(hook).toContain('if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then');
-    // Spawn-and-forget: backgrounded subshell, output discarded — the merge never waits.
+    // Spawn-and-forget: backgrounded subshell — the merge never waits. The
+    // blind-firing form survives as the fallback when the log is unwritable.
     expect(hook).toContain('(totem-status refresh-gh >/dev/null 2>&1 &)');
     // The bounded owned region stays intact: end marker still terminates the file.
     expect(hook.trimEnd().endsWith(`# ${TOTEM_HOOK_END}`)).toBe(true);
+  });
+
+  it('#2570: stamps each firing and hands the child the same log (observability leg)', () => {
+    const hook = buildHookContent('pnpm dlx @mmnto/cli');
+
+    // Workspace-root log; the stamp carries the firing site, cwd, and WHICH
+    // binary resolved (shell search order can be shadowed by a checkout-local
+    // exe on Windows).
+    expect(hook).toContain('TS_REFRESH_LOG="../.totem-status-refresh-hook.log"');
+    expect(hook).toContain('post-merge spawn cwd=%s bin=%s');
+    expect(hook).toContain('$(command -v totem-status)');
+    // The child appends to the SAME log so its success line lands after the
+    // stamp; a stamp with nothing after it = the child never finished.
+    expect(hook).toContain('(totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)');
   });
 });
 
@@ -1182,6 +1197,14 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
 
       expect(await markerAppears(5000)).toBe(true);
       expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
+
+      // #2570 observability leg: the firing left a stamp in the workspace-root
+      // log (tmpDir is the workspace parent of repo/) before the child ran.
+      const logPath = path.join(tmpDir, '.totem-status-refresh-hook.log');
+      expect(fs.existsSync(logPath)).toBe(true);
+      const logText = fs.readFileSync(logPath, 'utf-8');
+      expect(logText).toContain('post-merge spawn cwd=');
+      expect(logText).toContain('bin=');
     },
   );
 

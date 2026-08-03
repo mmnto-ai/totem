@@ -179,7 +179,18 @@ ${buildResolveBlock(fallbackCmd)}
 # breaks worktree removal; the primary's hooks + the daemon cover the workspace-level
 # snapshot, and the verb's single-flight makes extra fires redundant anyway.
 if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then
-  (totem-status refresh-gh >/dev/null 2>&1 &)
+  # Observability leg (mmnto-ai/totem#2570): stamp each firing (time, cwd, and
+  # WHICH binary resolved — the shell search order includes cwd on Windows, so
+  # a stale checkout-local exe can shadow the installed one) and hand the child
+  # the same log, so the verb's own success line lands after the stamp; a stamp
+  # with nothing after it means the child never finished. If the log is not
+  # writable, fall back to the previous blind firing.
+  TS_REFRESH_LOG="../.totem-status-refresh-hook.log"
+  if printf '[%s] post-merge spawn cwd=%s bin=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd)" "$(command -v totem-status)" >> "$TS_REFRESH_LOG" 2>/dev/null; then
+    (totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)
+  else
+    (totem-status refresh-gh >/dev/null 2>&1 &)
+  fi
 fi
 
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing).

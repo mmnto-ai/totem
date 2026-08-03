@@ -1522,6 +1522,27 @@ describe('CLAUDE_SESSION_START template', () => {
     expect(CLAUDE_SESSION_START).toContain("err.code === 'ENOENT'");
     expect(CLAUDE_SESSION_START).toContain('refresh-gh spawn failed (non-fatal)');
   });
+
+  it('#2570: stamps a workspace-root log and hands the child the same fd (observability leg)', () => {
+    // Routed from the status seat's 2026-08-03 silent no-write: under
+    // stdio:'ignore' + exit-0-or-nothing, a reaped or dying child left NO
+    // trace. The stamp carries the discriminating fields; the child inherits
+    // the SAME fd so the verb's success line lands after the stamp — a stamp
+    // with nothing after it = the child never finished.
+    expect(CLAUDE_SESSION_START).toContain('.totem-status-refresh-hook.log');
+    expect(CLAUDE_SESSION_START).toContain("'] claude spawn cwd='");
+    expect(CLAUDE_SESSION_START).toContain('path-has-go-bin=');
+    expect(CLAUDE_SESSION_START).toContain('cwd-shadow-exe=');
+    expect(CLAUDE_SESSION_START).toContain("stdio = ['ignore', logFd, logFd]");
+    // A spawn error stamps too (discriminates reap from spawn failure)…
+    expect(CLAUDE_SESSION_START).toContain("'] claude spawn-error code='");
+    // …the log must never gate the spawn (blind fallback precedes it)…
+    expect(CLAUDE_SESSION_START.indexOf("let stdio = 'ignore'")).toBeLessThan(
+      CLAUDE_SESSION_START.indexOf("spawn('totem-status'"),
+    );
+    // …and the parent releases its fd copy after spawn (the child holds its own).
+    expect(CLAUDE_SESSION_START).toContain('closeSync(logFd)');
+  });
 });
 
 describe('GEMINI_SESSION_START template', () => {
@@ -1585,6 +1606,19 @@ describe('GEMINI_SESSION_START template', () => {
     expect(GEMINI_SESSION_START.indexOf("spawn('totem-status'")).toBeLessThan(
       GEMINI_SESSION_START.indexOf("'totem describe'"),
     );
+  });
+
+  it('#2570: stamps a workspace-root log and hands the child the same fd, matching the Claude twin', () => {
+    expect(GEMINI_SESSION_START).toContain('.totem-status-refresh-hook.log');
+    expect(GEMINI_SESSION_START).toContain("'] gemini spawn cwd='");
+    expect(GEMINI_SESSION_START).toContain('path-has-go-bin=');
+    expect(GEMINI_SESSION_START).toContain('cwd-shadow-exe=');
+    expect(GEMINI_SESSION_START).toContain("stdio = ['ignore', logFd, logFd]");
+    expect(GEMINI_SESSION_START).toContain("'] gemini spawn-error code='");
+    expect(GEMINI_SESSION_START.indexOf("let stdio = 'ignore'")).toBeLessThan(
+      GEMINI_SESSION_START.indexOf("spawn('totem-status'"),
+    );
+    expect(GEMINI_SESSION_START).toContain('closeSync(logFd)');
   });
 });
 
