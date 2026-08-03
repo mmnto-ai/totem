@@ -63,6 +63,37 @@ describe('createEmbedder', () => {
     const embedder = createEmbedder(config);
     expect(embedder.dimensions).toBe(1536);
   });
+
+  it('describeEffective is null before resolution, the configured identity after (#2562)', async () => {
+    process.env['OPENAI_API_KEY'] = 'test-key';
+    const config: EmbeddingProvider = { provider: 'openai', model: 'text-embedding-3-small' };
+    const embedder = createEmbedder(config);
+
+    expect(embedder.describeEffective?.()).toBeNull();
+    await embedder.embed(['x']); // resolves the mocked OpenAIEmbedder
+    expect(embedder.describeEffective?.()).toEqual({
+      provider: 'openai',
+      model: 'text-embedding-3-small',
+      dimensions: 1536,
+    });
+  });
+
+  it('resolveEffective() forces resolution ahead of any embed (#2569 bot round)', async () => {
+    process.env['OPENAI_API_KEY'] = 'test-key';
+    const config: EmbeddingProvider = { provider: 'openai', model: 'text-embedding-3-small' };
+    const embedder = createEmbedder(config);
+
+    // No embed() has run — the resume gate calls this to learn the identity
+    // that WILL serve the run before trusting checkpointed progress.
+    expect(embedder.describeEffective?.()).toBeNull();
+    const effective = await embedder.resolveEffective?.();
+    expect(effective).toEqual({
+      provider: 'openai',
+      model: 'text-embedding-3-small',
+      dimensions: 1536,
+    });
+    expect(embedder.describeEffective?.()).toEqual(effective);
+  });
 });
 
 describe('LazyEmbedder concurrency', () => {
@@ -197,6 +228,36 @@ describe('LazyEmbedder fallback chain — regression contract (mmnto-ai/totem#18
     const allWarns = warns.join('\n');
     expect(allWarns).toContain('Falling back to Ollama');
     expect(allWarns).toContain('Using Ollama fallback embedder');
+
+    // #2562: consumers that persist an embedder fingerprint (the full-sync
+    // checkpoint) must see the EFFECTIVE post-fallback identity, not the
+    // configured one — or a resume would mix vector spaces.
+    expect(embedder.describeEffective?.()).toEqual({
+      provider: 'ollama',
+      model: 'nomic-embed-text',
+      dimensions: 768,
+    });
+  });
+
+  it('resolveEffective() reports the Ollama fallback identity without any embed (#2569 bot round)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ models: [{ name: 'nomic-embed-text' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const config: EmbeddingProvider = { provider: 'gemini', model: 'gemini-embedding-2-preview' };
+    const embedder = createEmbedder(config, () => {});
+
+    // Forced resolution takes the fallback branch (SDK mocked absent) and
+    // reports the identity that would actually serve embeds — no embed runs.
+    const effective = await embedder.resolveEffective?.();
+    expect(effective).toEqual({
+      provider: 'ollama',
+      model: 'nomic-embed-text',
+      dimensions: 768,
+    });
   });
 
   // mmnto-ai/totem#1859: the SDK-missing trigger (distinct from missing-key above).

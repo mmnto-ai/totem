@@ -14,6 +14,29 @@ export interface Embedder {
    * Implementations should handle batching/rate-limiting internally.
    */
   embed(texts: string[]): Promise<number[][]>;
+
+  /**
+   * Optional: the provider identity ACTUALLY serving embeds, once known
+   * (mmnto-ai/totem#2562). `LazyEmbedder` reports its post-resolution —
+   * possibly Ollama-fallback — identity here, and `null` before the first
+   * embed resolves. Absent means the constructed identity is the effective
+   * one. Consumers that persist an embedder fingerprint (the full-sync
+   * checkpoint) must prefer this over the configured identity, or a silent
+   * fallback would mix vector spaces across a resume.
+   */
+  describeEffective?(): { provider: string; model: string; dimensions: number } | null;
+
+  /**
+   * Optional: FORCE resolution and return the identity that will serve this
+   * run's embeds (mmnto-ai/totem#2562, falsification round 2). A resume
+   * decision must compare effective-vs-effective — the configured identity is
+   * unknowably wrong in both directions before resolution: a run silently
+   * falling back would pass a config match and mix vector spaces at the first
+   * insert, and a persistent fallback would spuriously restart every attempt.
+   * Throws when no embedder is available at all (same failure the first
+   * embed would hit, just earlier and with state intact).
+   */
+  resolveEffective?(): Promise<{ provider: string; model: string; dimensions: number }>;
 }
 
 const OLLAMA_DEFAULTS = {
@@ -52,7 +75,7 @@ export async function isOllamaAvailable(
 async function tryBuildEmbedder(config: EmbeddingProvider): Promise<Embedder> {
   if (config.provider === 'openai') {
     const { OpenAIEmbedder } = await import('./openai-embedder.js');
-    return new OpenAIEmbedder(config.model, config.dimensions);
+    return new OpenAIEmbedder(config.model, config.dimensions, config.throttleMs);
   }
   if (config.provider === 'gemini') {
     const { GeminiEmbedder, importGeminiSdk } = await import('./gemini-embedder.js');
@@ -66,7 +89,7 @@ async function tryBuildEmbedder(config: EmbeddingProvider): Promise<Embedder> {
     // the key are absent, the SDK-missing error surfaces first, exactly as openai's
     // static import fails ahead of its own key check.
     await importGeminiSdk();
-    return new GeminiEmbedder(config.model, config.dimensions);
+    return new GeminiEmbedder(config.model, config.dimensions, config.throttleMs);
   }
   throw new TotemConfigError(
     `Unknown embedding provider: ${config.provider}`,
@@ -117,12 +140,26 @@ class LazyEmbedder implements Embedder {
   private initPromise: Promise<Embedder> | null = null;
   private config: EmbeddingProvider;
   private warn: (msg: string) => void;
+  private effective: { provider: string; model: string; dimensions: number } | null = null;
 
   constructor(config: EmbeddingProvider, onWarn?: (msg: string) => void) {
     this.config = config;
     this.warn = onWarn ?? (() => {});
     // Use configured dimensions or provider defaults
     this.dimensions = config.dimensions ?? (config.provider === 'gemini' ? 768 : 1536);
+  }
+
+  /** The identity actually serving embeds — null until the first embed resolves (#2562). */
+  describeEffective(): { provider: string; model: string; dimensions: number } | null {
+    return this.effective;
+  }
+
+  /** Force resolution and report the identity that will serve embeds (#2562). */
+  async resolveEffective(): Promise<{ provider: string; model: string; dimensions: number }> {
+    await this.resolve();
+    // Both doResolve paths set `effective` before returning; a resolution
+    // failure throws out of resolve() above and never reaches here.
+    return this.effective!;
   }
 
   /** Resolve the real embedder once. Concurrent callers share the same promise. */
@@ -135,7 +172,13 @@ class LazyEmbedder implements Embedder {
 
   private async doResolve(): Promise<Embedder> {
     try {
-      return await tryBuildEmbedder(this.config);
+      const inner = await tryBuildEmbedder(this.config);
+      this.effective = {
+        provider: this.config.provider,
+        model: this.config.model ?? 'default',
+        dimensions: inner.dimensions,
+      };
+      return inner;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.warn(
@@ -156,6 +199,11 @@ class LazyEmbedder implements Embedder {
         `[Totem] Using Ollama fallback embedder (${OLLAMA_DEFAULTS.model}, ${OLLAMA_DEFAULTS.dimensions}d).\n` +
           '[Totem] If your index was built with a different provider, run `totem sync --full` to rebuild.',
       );
+      this.effective = {
+        provider: 'ollama',
+        model: OLLAMA_DEFAULTS.model,
+        dimensions: OLLAMA_DEFAULTS.dimensions,
+      };
       return new OllamaEmbedder(
         OLLAMA_DEFAULTS.model,
         OLLAMA_DEFAULTS.baseUrl,

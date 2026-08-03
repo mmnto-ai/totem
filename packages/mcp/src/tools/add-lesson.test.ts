@@ -15,6 +15,9 @@ vi.mock('@mmnto/totem', async () => {
   return {
     acquireLock: vi.fn(async () => vi.fn()),
     generateLessonHeading: vi.fn((body: string) => body.slice(0, 40)),
+    // No live full-sync epoch in these tests — the convenience sync runs
+    // (the #2562 deferral path has its own dedicated tests below).
+    hasFullSyncCheckpoint: vi.fn(() => false),
     sanitize: vi.fn((t: string) => t),
     writeLessonFileAsync: vi.fn(async (_dir: string, entry: string) => {
       lastWrittenEntry = entry;
@@ -245,6 +248,28 @@ describe('add_lesson auth model (#844)', () => {
     expect(env).toBeDefined();
     expect(Object.keys(env).some((k) => k.toLowerCase() === 'path')).toBe(true);
     expect(typeof opts.shell).toBe('boolean');
+  });
+
+  // --- Live full-sync epoch deferral (#2562, falsification round 3 MAJOR 1) ---
+
+  it('defers the convenience sync while a full re-index checkpoint is live', async () => {
+    const { spawn } = await import('node:child_process');
+    const { hasFullSyncCheckpoint } = await import('@mmnto/totem');
+    vi.mocked(hasFullSyncCheckpoint).mockReturnValueOnce(true);
+    const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
+
+    const result = (await handle({
+      lesson: 'Written during a live epoch',
+      context_tags: ['test'],
+    })) as { isError?: boolean; content: Array<{ text: string }> };
+
+    // The lesson is written, the 60s-killed sync is NOT spawned (a promoted
+    // paced resume can never finish inside its timeout), and the response
+    // says so honestly instead of reporting a spurious timeout failure.
+    expect(result.isError).toBeUndefined();
+    expect(lastWrittenEntry).toContain('Written during a live epoch');
+    expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore);
+    expect(result.content[0]!.text).toContain('Sync deferred');
   });
 });
 

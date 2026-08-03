@@ -61,6 +61,9 @@ export const OpenAIProviderSchema = z.object({
   provider: z.literal('openai'),
   model: z.string().default('text-embedding-3-small'),
   dimensions: z.number().int().positive().optional(),
+  // Minimum interval between embedding API requests, in milliseconds — paces
+  // syncs under per-minute provider quotas (mmnto-ai/totem#2562). Absent/0 = off.
+  throttleMs: z.number().int().min(0).optional(),
 });
 
 export const OllamaProviderSchema = z.object({
@@ -74,6 +77,9 @@ export const GeminiProviderSchema = z.object({
   provider: z.literal('gemini'),
   model: z.string().default('gemini-embedding-2-preview'),
   dimensions: z.number().int().positive().optional(),
+  // Minimum interval between embedding API requests, in milliseconds — paces
+  // syncs under per-minute provider quotas (mmnto-ai/totem#2562). Absent/0 = off.
+  throttleMs: z.number().int().min(0).optional(),
 });
 
 export const EmbeddingProviderSchema = z.discriminatedUnion('provider', [

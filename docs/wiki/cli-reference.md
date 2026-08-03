@@ -207,11 +207,48 @@ Parses your codebase, chunks the AST, and builds the local LanceDB vector index.
 
 - **Flags:**
   - `--incremental`: (Default) Only indexes files changed since the last sync.
-  - `--full`: Drops the existing index and rebuilds it entirely from scratch.
+  - `--full`: Drops the existing index and rebuilds it entirely from scratch. If a
+    previous full re-index was interrupted, this resumes it instead — see
+    **Crash recovery** below for the restart escape hatch.
   - `--prune`: Interactively detects and removes stale lessons that reference deleted files.
   - `--packs-only`: Run only the deterministic pack manifest write (no API key required); skips embedding sync, prune, and the global registry update.
   - `--index-only`: Run only the embedding sync; skip the pack manifest write.
   - `-q, --quiet`: Suppress output (for background or hook usage).
+
+- **Crash recovery (mmnto-ai/totem#2562):** a full re-index checkpoints its
+  progress per file (`.totem/cache/full-sync-checkpoint.json`). If the run is
+  interrupted (e.g. an embedding-quota 429), the **next `totem sync` — plain or
+  `--full` — resumes from the checkpoint** instead of reporting a false
+  "complete" over the partial index or re-spending quota on already-embedded
+  files. The checkpoint is verified against the store itself before it is
+  trusted — files no longer present in the index re-embed regardless of what
+  the checkpoint claims. Files that moved since the interrupted run started
+  are re-embedded: anything in git's tracked diff since the epoch, plus
+  anything whose modification time postdates the epoch start (the only signal
+  for untracked files and non-git projects; a restore tool that preserves old
+  mtimes can defeat this arm — delete the checkpoint to force a full restart).
+  Chunks of files deleted in the meantime are purged by the next incremental
+  reconciliation. While a checkpoint is live, EVERY sync (including the
+  incremental syncs commands like `lesson extract` run internally) is promoted
+  to the resume — an incremental pass over a partial index cannot be trusted,
+  so completing the epoch comes first. Delete the checkpoint file to force a
+  restart from scratch. Progress is discarded (with a loud log) if the
+  checkpoint is unreadable or if the embedder identity that will actually
+  serve this run differs from the one that served the epoch — the checkpoint
+  records the EFFECTIVE identity, so a silent Ollama fallback restarts
+  instead of mixing vector spaces, while a persistent fallback resumes as
+  itself (a resume with nothing left to embed clears the marker without
+  needing an embedder — unless the embedder resolves to a DIFFERENT identity
+  than the epoch's, which still restarts). Gemini ingest embeds are paced by
+  default (4s between multi-text batches, derived from the default 2,000/min
+  per-minute quota window; query embeds are never paced), so with no quota
+  configuration at all a re-index completes instead of dying at ~2k chunks —
+  a few minutes for a few-thousand-chunk corpus, proportionally longer for
+  larger ones; tune or disable via
+  `embedding.throttleMs`. Note the pacing makes a full re-index take minutes
+  on large corpora — bounded-budget callers should check for a live
+  checkpoint rather than racing it (the MCP `add_lesson` tool defers its
+  convenience sync for exactly this reason).
 
 ### `totem search <query>`
 

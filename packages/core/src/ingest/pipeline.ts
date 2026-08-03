@@ -11,13 +11,19 @@ import { withLock } from '../lock.js';
 import { sanitizeForIngestion } from '../sanitize.js';
 import { LanceStore } from '../store/lance-store.js';
 import { sanitizeForTerminal } from '../terminal-sanitize.js';
-import type { Chunk, SyncOptions, SyncState } from '../types.js';
+import type { Chunk, FullSyncCheckpoint, SyncOptions, SyncState } from '../types.js';
 import type { ResolvedFile } from './file-resolver.js';
-import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
+import {
+  getChangedFiles,
+  getChangedFilesDetailed,
+  getHeadSha,
+  resolveFiles,
+} from './file-resolver.js';
 
 const EMBED_BATCH_SIZE = 100;
 const SYNC_STATE_FILE = 'cache/sync-state.json';
 const INDEX_META_FILE = 'cache/index-meta.json';
+const FULL_SYNC_CHECKPOINT_FILE = 'cache/full-sync-checkpoint.json';
 
 interface IndexMeta {
   provider: string;
@@ -113,11 +119,91 @@ function readSyncState(totemDir: string, onProgress?: (msg: string) => void): Sy
   }
 }
 
+/**
+ * Atomic JSON write (tmp + rename): a crash mid-write must never leave a torn
+ * state file — sync state and the full-sync checkpoint are both trusted by the
+ * NEXT run's control flow (#2562), matching the index-manifest write pattern.
+ */
+function writeJsonAtomic(filePath: string, value: unknown): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  // PID-unique tmp name: two writers racing under a stolen stale lock must
+  // not interleave through one tmp path (falsification round 1, MINOR 6).
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(value, null, 2) + '\n', 'utf-8');
+  fs.renameSync(tmpPath, filePath);
+}
+
 function writeSyncState(totemDir: string, state: SyncState): void {
-  const statePath = path.join(totemDir, SYNC_STATE_FILE);
-  const dir = path.dirname(statePath);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf-8');
+  writeJsonAtomic(path.join(totemDir, SYNC_STATE_FILE), state);
+}
+
+/**
+ * Read the full-sync checkpoint (#2562). The caller has already established
+ * the file EXISTS (existence = the dirty marker); a parse/shape failure here
+ * means "dirty but unusable" — the caller restarts the full re-index from
+ * zero. A present-but-corrupt checkpoint is never treated as a clean state.
+ */
+function readFullSyncCheckpoint(
+  totemDir: string,
+  onProgress?: (msg: string) => void,
+): FullSyncCheckpoint | null {
+  const cpPath = path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE);
+  try {
+    const parsed = JSON.parse(fs.readFileSync(cpPath, 'utf-8')) as FullSyncCheckpoint;
+    if (
+      parsed &&
+      (parsed.startedHeadSha === null || typeof parsed.startedHeadSha === 'string') &&
+      typeof parsed.startedAt === 'number' &&
+      typeof parsed.indexExclusionHash === 'string' &&
+      typeof parsed.embedder?.provider === 'string' &&
+      typeof parsed.embedder?.model === 'string' &&
+      typeof parsed.embedder?.dimensions === 'number' &&
+      Array.isArray(parsed.completedFiles) &&
+      parsed.completedFiles.every((f) => typeof f === 'string')
+    ) {
+      return parsed;
+    }
+    onProgress?.(`Warning: malformed full-sync checkpoint at ${cpPath} — ignoring its progress.`);
+    return null;
+    // totem-context: intentional warn+null on an unreadable checkpoint (mmnto-ai/totem#2562) — dirty-but-unusable restarts the full re-index from zero; failing the sync over a torn checkpoint would wedge every subsequent run.
+  } catch (err) {
+    onProgress?.(
+      `Warning: failed to read full-sync checkpoint: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
+}
+
+function writeFullSyncCheckpoint(totemDir: string, checkpoint: FullSyncCheckpoint): void {
+  writeJsonAtomic(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE), checkpoint);
+}
+
+/**
+ * Whether a full re-index epoch is in progress (its dirty marker exists) for
+ * the given totem dir (#2562). Exposed for callers that spawn or gate syncs
+ * under bounded budgets — e.g. the MCP add-lesson tool's 60s-killed
+ * convenience sync, which a promoted paced resume can never finish
+ * (falsification round 3, MAJOR 1): such callers should skip and defer to the
+ * running epoch instead of timing out against it.
+ */
+export function hasFullSyncCheckpoint(totemDir: string): boolean {
+  return fs.existsSync(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE));
+}
+
+/**
+ * Best-effort marker delete at successful completion. A failed delete is loud
+ * but non-fatal: the next run resumes-full as a near-noop and retries the
+ * delete, so correctness converges (#2562).
+ */
+function deleteFullSyncCheckpoint(totemDir: string, onProgress?: (msg: string) => void): void {
+  try {
+    fs.rmSync(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE), { force: true });
+    // totem-context: intentional best-effort delete (mmnto-ai/totem#2562) — a failed marker delete only makes the next run resume-full as a near-noop and retry it; aborting a fully-successful sync over it would be the drift.
+  } catch (err) {
+    onProgress?.(
+      `Warning: failed to delete full-sync checkpoint: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**
@@ -287,17 +373,45 @@ async function runSyncInner(
   // 0. Capture HEAD SHA early — before any async work that might race with new commits
   const headSha = getHeadSha(projectRoot, log);
 
-  // 1. Create embedder
+  // 1. Create embedder (or take the injected one — tests / embedding hosts).
+  // `log` is threaded through so a LazyEmbedder Ollama fallback is AUDIBLE —
+  // a silent vector-space switch mid-sync is sensor degradation (#2562).
   const embedding = requireEmbedding(config);
   log('Initializing embedding provider...');
-  const embedder = createEmbedder(embedding);
+  const embedder = options.embedder ?? createEmbedder(embedding, log);
+
+  // Resume-compatibility fingerprint (#2562): a checkpointed epoch may only
+  // continue under the embedder configuration that started it — vectors from
+  // two configurations must never mix in one store. Mirrors writeIndexMeta.
+  const embedderFingerprint = {
+    provider: embedding.provider,
+    model: embedding.model ?? 'default',
+    dimensions: embedder.dimensions,
+  };
 
   // 2. Connect to store
   const storePath = path.join(projectRoot, config.lanceDir);
   const store = new LanceStore(storePath, embedder, { absolutePathRoot: projectRoot });
   await store.connect();
 
-  // 2b. Auto-heal: force full sync when incremental is requested but DB is empty
+  const totemDir = path.join(projectRoot, config.totemDir);
+
+  // 2b (#2562). A live checkpoint marks an unfinished full re-index. It takes
+  // precedence over the requested mode — the partial store must complete
+  // before any incremental diff can be trusted again — and it subsumes the
+  // empty-store heal below (an interrupted full that never flushed).
+  let resumeFrom: FullSyncCheckpoint | null = null;
+  if (hasFullSyncCheckpoint(totemDir)) {
+    incremental = false;
+    resumeFrom = readFullSyncCheckpoint(totemDir, log);
+    log(
+      resumeFrom
+        ? `Previous full re-index did not complete — resuming it (${resumeFrom.completedFiles.length} file(s) checkpointed).`
+        : 'Previous full re-index did not complete — restarting it from zero.',
+    );
+  }
+
+  // 2c. Auto-heal: force full sync when incremental is requested but DB is empty
   if (incremental && (await store.isEmpty())) {
     log('Empty database detected. Forcing full sync...');
     incremental = false;
@@ -306,7 +420,6 @@ async function runSyncInner(
   // 3. Resolve files to process. Index exclusion unions both keys:
   // `ignorePatterns` (legacy dual-scope) + `indexIgnorePatterns` (index-only,
   // mmnto-ai/totem#1748) — only the former also gates lint/shield scope.
-  const totemDir = path.join(projectRoot, config.totemDir);
   const exclusionPatterns = [...config.ignorePatterns, ...config.indexIgnorePatterns];
   const allFiles = resolveFiles(config.targets, projectRoot, exclusionPatterns, log);
   // Order-normalized hash of the effective exclusion set — persisted below and
@@ -314,6 +427,29 @@ async function runSyncInner(
   const indexExclusionHash = hashIndexExclusionSet(exclusionPatterns);
   let filesToProcess: ResolvedFile[];
   let deletedPaths: string[] = [];
+
+  // #2562: active-epoch checkpoint (full mode only) — written before the store
+  // is destroyed, appended after each successful flush, deleted on success.
+  let checkpoint: FullSyncCheckpoint | null = null;
+  let resumedWithoutReset = false;
+
+  const freshCheckpoint = (): FullSyncCheckpoint => ({
+    startedHeadSha: headSha,
+    startedAt: Date.now(),
+    indexExclusionHash,
+    embedder: embedderFingerprint,
+    completedFiles: [],
+  });
+
+  // The dirty marker MUST hit disk before the store is destroyed: a marker
+  // write failure aborts loudly with the store intact, so no window exists in
+  // which a reset store is unmarked (#2562).
+  async function beginFullSync(cp: FullSyncCheckpoint): Promise<void> {
+    writeFullSyncCheckpoint(totemDir, cp);
+    checkpoint = cp;
+    log('Full sync: resetting index...');
+    await store.reset();
+  }
 
   if (incremental) {
     // Persisted sync state carries both the diff baseline (lastSyncSha) and the
@@ -330,7 +466,7 @@ async function runSyncInner(
     const changedPaths = options.changedFiles ?? getChangedFiles(projectRoot, sinceRef, log);
     if (changedPaths === null) {
       log('Git diff failed, falling back to full sync...');
-      await store.reset();
+      await beginFullSync(freshCheckpoint());
       filesToProcess = allFiles;
       log(`Full sync (fallback): ${filesToProcess.length} files to process`);
     } else {
@@ -388,9 +524,134 @@ async function runSyncInner(
           ` (of ${allFiles.length} total)`,
       );
     }
+  } else if (resumeFrom) {
+    // #2562 resume: NO reset — the interrupted epoch continues. Already-done
+    // derives from FOUR signals, not the checkpoint alone:
+    //   1. checkpointed (the epoch flushed it);
+    //   2. ∩ live (still resolved by the current target set);
+    //   3. ∩ actually-in-the-store — the store is ground truth: a store
+    //      healed/nuked under a live checkpoint must not be trusted from
+    //      paper (falsification round 1, MAJOR 1);
+    //   4. − moved-since-epoch: anything in git's tracked diff against
+    //      startedHeadSha, PLUS anything whose mtime postdates the epoch
+    //      start. The mtime arm applies to EVERY file, not only untracked
+    //      ones (falsification round 2, F3: submodule and assume-unchanged
+    //      files appear in neither git list, so an untracked-only mtime arm
+    //      silently kept them stale) — a false-positive eviction is just a
+    //      harmless re-embed. Untracked files are deliberately NOT evicted by
+    //      git-list membership (it is permanent — round 1, MAJOR 2), and a
+    //      non-git epoch (null startedHeadSha) has an empty tracked set, so
+    //      the mtime arm carries it alone (MAJOR 4).
+    // The epoch diff never derives from options.changedFiles — a caller's
+    // diff window says nothing about what the crashed epoch covered.
+    const detailed: { tracked: string[]; untracked: string[] } | null = resumeFrom.startedHeadSha
+      ? getChangedFilesDetailed(projectRoot, resumeFrom.startedHeadSha, log)
+      : { tracked: [], untracked: [] };
+
+    if (detailed === null) {
+      log('Cannot diff against the interrupted epoch — restarting the full re-index from zero.');
+      await beginFullSync(freshCheckpoint());
+      filesToProcess = allFiles;
+      log(`Full sync: ${filesToProcess.length} files to process`);
+    } else {
+      let indexedRaw: string[] | null = null;
+      try {
+        indexedRaw = await store.getDistinctPaths();
+        // totem-context: intentional warn+degrade on a getDistinctPaths failure (mmnto-ai/totem#2562, falsification round 2 F7 + round 3 MINOR 9a) — the completed set collapses to EMPTY below (every file re-embeds via delete-first, same cost as a reset-restart) but the table is NOT destroyed over a possibly-transient read failure, and the checkpoint's paper progress is RETAINED untrusted so a second crash does not erase a prior epoch's flushed work.
+      } catch (err) {
+        log(
+          `Warning: cannot verify the checkpoint against the store (getDistinctPaths failed: ${err instanceof Error ? err.message : String(err)}) — re-embedding everything without trusting the checkpoint.`,
+        );
+      }
+
+      const epochStart = resumeFrom.startedAt;
+      const byRel = new Map(allFiles.map((f) => [normalizeRel(f.relativePath), f]));
+      const tracked = new Set(detailed.tracked.map(normalizeRel));
+      const movedSinceEpoch = (rel: string): boolean => {
+        if (tracked.has(rel)) return true;
+        const file = byRel.get(rel);
+        if (!file) return true;
+        try {
+          return fs.statSync(file.absolutePath).mtimeMs > epochStart;
+          // totem-context: intentional treat-as-moved on a stat failure (mmnto-ai/totem#2562) — the file re-embeds (idempotent via delete-first) or the read site skips a vanished file loudly.
+        } catch {
+          return true;
+        }
+      };
+      const indexed = indexedRaw === null ? null : new Set(indexedRaw.map(normalizeRel));
+      const completed = new Set(
+        indexed === null
+          ? []
+          : resumeFrom.completedFiles
+              .map(normalizeRel)
+              .filter((rel) => byRel.has(rel) && indexed.has(rel) && !movedSinceEpoch(rel)),
+      );
+      filesToProcess = allFiles.filter((f) => !completed.has(normalizeRel(f.relativePath)));
+
+      // EFFECTIVE-vs-effective identity gate (falsification rounds 2–4). The
+      // epoch may only continue under the embedder identity that will
+      // ACTUALLY serve this run's embeds — config-vs-stamped is wrong in both
+      // directions (a silent fallback would mix vector spaces at the first
+      // insert; a persistent fallback would restart-loop forever). The
+      // exemption is RESOLUTION FAILURE with zero work remaining (round 3
+      // MINOR 10: an epoch that merely needs its marker cleared must not
+      // wedge behind a missing embedder) — NOT zero work itself: a resolvable
+      // mismatch must restart even with nothing left, or clearing the marker
+      // would rewrite index-meta to the new identity and launder the
+      // DATABASE_MISMATCH evidence the next incremental needs (round 4,
+      // MAJOR 1 — probed: dimension change + zero-work resume ⇒ silent mixed
+      // store).
+      let identityOk = true;
+      let effectiveNow: { provider: string; model: string; dimensions: number } | null = null;
+      try {
+        effectiveNow = (await embedder.resolveEffective?.()) ?? embedderFingerprint;
+      } catch (err) {
+        if (filesToProcess.length > 0) throw err; // work remains ⇒ fail loud, state intact
+        log(
+          `Nothing left to embed and no embedder resolved (${err instanceof Error ? err.message : String(err)}) — clearing the marker unverified.`,
+        );
+      }
+      if (effectiveNow !== null) {
+        const fp = resumeFrom.embedder;
+        if (
+          fp.provider !== effectiveNow.provider ||
+          fp.model !== effectiveNow.model ||
+          fp.dimensions !== effectiveNow.dimensions
+        ) {
+          log(
+            `The embedder serving this run (${effectiveNow.provider}/${effectiveNow.model}) differs from the interrupted epoch's (${fp.provider}/${fp.model}) — its progress is unusable; restarting from zero.`,
+          );
+          identityOk = false;
+        }
+      }
+
+      if (!identityOk) {
+        await beginFullSync(freshCheckpoint());
+        filesToProcess = allFiles;
+        log(`Full sync: ${filesToProcess.length} files to process`);
+      } else {
+        // Carry forward the verified entries, re-keyed to the current run's
+        // resolved paths — EXCEPT when the store was unreadable: then the
+        // paper progress is retained untrusted (round 3, MINOR 9a) so a
+        // second crash does not erase a prior epoch's flushed work; the next
+        // resume re-verifies it against a hopefully-readable store.
+        // startedHeadSha stays the ORIGINAL epoch SHA so every later resume
+        // re-diffs the full window (superset-safe).
+        const carried =
+          indexed === null
+            ? [...resumeFrom.completedFiles]
+            : allFiles.map((f) => f.relativePath).filter((rel) => completed.has(normalizeRel(rel)));
+        checkpoint = { ...resumeFrom, indexExclusionHash, completedFiles: carried };
+        writeFullSyncCheckpoint(totemDir, checkpoint);
+        resumedWithoutReset = true;
+        log(
+          `Resuming full re-index: ${filesToProcess.length} file(s) remaining of ${allFiles.length} ` +
+            `(${completed.size} verified already embedded). Delete ${config.totemDir}/${FULL_SYNC_CHECKPOINT_FILE} to restart from scratch.`,
+        );
+      }
+    }
   } else {
-    log('Full sync: resetting index...');
-    await store.reset();
+    await beginFullSync(freshCheckpoint());
     filesToProcess = allFiles;
     log(`Full sync: ${filesToProcess.length} files to process`);
   }
@@ -418,6 +679,7 @@ async function runSyncInner(
   // 4. Chunk files and stream to LanceDB in batches (bounded memory)
   let totalChunks = 0;
   let buffer: Chunk[] = [];
+  let pendingFiles: string[] = [];
 
   async function flushBuffer(): Promise<void> {
     if (buffer.length === 0) return;
@@ -425,23 +687,76 @@ async function runSyncInner(
     totalChunks += buffer.length;
     log(`  Embedded ${totalChunks} chunks so far`);
     buffer = [];
+    // #2562: chunks buffer at whole-file boundaries and store.insert embeds
+    // before any row lands, so a successful flush means every pending file is
+    // complete in the store — checkpoint them. An append failure is
+    // survivable: the file re-embeds on resume via the delete-first path.
+    const cp = checkpoint;
+    if (cp && pendingFiles.length > 0) {
+      cp.completedFiles.push(...pendingFiles);
+      // Persist the EFFECTIVE embedder identity once known (falsification
+      // round 1, MAJOR 3): a LazyEmbedder that silently fell back to Ollama
+      // must not leave a checkpoint fingerprinted as the configured provider,
+      // or the next resume would mix vector spaces across the epoch.
+      const effective = embedder.describeEffective?.();
+      if (effective) cp.embedder = effective;
+      try {
+        writeFullSyncCheckpoint(totemDir, cp);
+        // totem-context: intentional warn+continue on a checkpoint-append failure (mmnto-ai/totem#2562) — the flushed chunks are safe in the store; worst case the file re-embeds on resume via the delete-first path.
+      } catch (err) {
+        log(
+          `  Warning: failed to update full-sync checkpoint: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    pendingFiles = [];
   }
 
   for (const file of filesToProcess) {
     const safeRel = sanitizeForTerminal(file.relativePath);
     log(`Chunking ${safeRel}...`);
 
+    // A file whose CURRENT state legitimately yields no rows (emptied of
+    // chunkable content, or swapped to a symlink the guard refuses) must
+    // still purge its OLD rows when re-processing in place — the baseline
+    // advances past the change at the end of this run, so no later
+    // incremental diff revisits it and the stale rows would be searchable
+    // forever (#2569 Greptile round: stale-rows-on-skip). The transient
+    // read-error skip below deliberately does NOT purge: deleting on a
+    // maybe-transient failure would LOSE good rows, worse than stale ones.
+    const purgeStaleRows = async (): Promise<void> => {
+      if (incremental || resumedWithoutReset) {
+        await store.deleteByFile(file.relativePath);
+      }
+    };
+
+    // Symlink guard at the READ site (mmnto-ai/totem#2354, #2356 review):
+    // resolveFiles skips symlinks at discovery, but this read happens later,
+    // so a path swapped to a symlink after resolution would still be followed
+    // by readFileSync. Re-check here and skip — closes the discovery→read
+    // TOCTOU gap. The purge runs OUTSIDE the read-error catches (#2569 CR
+    // round 2): caught there, a purge failure would be mislabeled a read
+    // error and silently downgraded to a skip — permanent staleness. Outside
+    // them it fails loud and CONVERGES: the marker/stale baseline makes the
+    // next run re-evict the file and retry the delete.
+    let isSymlink: boolean;
+    try {
+      isSymlink = fs.lstatSync(file.absolutePath).isSymbolicLink();
+      // totem-context: intentional skip — a per-file stat failure (vanished/raced file, permission) logs and skips just that file so sync continues over the rest; aborting the whole sync over one unreadable file would be the drift, not the skip.
+    } catch (err) {
+      log(
+        `  Skipping (read error: ${sanitizeForTerminal(err instanceof Error ? err.message : String(err))}): ${safeRel}`,
+      );
+      continue;
+    }
+    if (isSymlink) {
+      log(`  Skipping symlink (not indexed): ${safeRel}`);
+      await purgeStaleRows();
+      continue;
+    }
+
     let content: string;
     try {
-      // Symlink guard at the READ site (mmnto-ai/totem#2354, #2356 review):
-      // resolveFiles skips symlinks at discovery, but this read happens later,
-      // so a path swapped to a symlink after resolution would still be followed
-      // by readFileSync. Re-check here and skip — closes the discovery→read
-      // TOCTOU gap.
-      if (fs.lstatSync(file.absolutePath).isSymbolicLink()) {
-        log(`  Skipping symlink (not indexed): ${safeRel}`);
-        continue;
-      }
       content = fs.readFileSync(file.absolutePath, 'utf-8');
       // totem-context: intentional skip — a per-file read failure (vanished/raced file, permission, decode) logs and skips just that file so sync continues over the rest; aborting the whole sync over one unreadable file would be the drift, not the skip.
     } catch (err) {
@@ -456,13 +771,15 @@ async function runSyncInner(
 
     if (chunks.length === 0) {
       log(`  No chunks extracted from ${file.relativePath}`);
+      await purgeStaleRows();
       continue;
     }
 
-    // For incremental: delete old chunks for this file before inserting new ones
-    if (incremental) {
-      await store.deleteByFile(file.relativePath);
-    }
+    // Delete old chunks for this file before inserting new ones — incremental
+    // re-embeds in place, and a #2562 resume (no reset) can hold this file's
+    // chunks already (changed-since-epoch, or a flush whose checkpoint append
+    // failed). Idempotent either way.
+    await purgeStaleRows();
 
     // Sanitize chunk content before embedding (adversarial ingestion scrubbing)
     // Deduplicate warnings per file to avoid log spam on files with widespread issues
@@ -484,6 +801,7 @@ async function runSyncInner(
     }
 
     buffer.push(...chunks);
+    pendingFiles.push(file.relativePath);
     log(`  ${chunks.length} chunks from ${file.relativePath}`);
 
     // Flush when buffer reaches batch size to keep memory bounded
@@ -518,6 +836,14 @@ async function runSyncInner(
     writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now(), indexExclusionHash });
   }
 
+  // #2562: the epoch is complete — clear the dirty marker only AFTER the fresh
+  // baseline is on disk. A crash between the two writes leaves marker + fresh
+  // baseline, which the next run resumes as a near-noop; the reverse order
+  // would leave a clean-claiming baseline over a still-marked store.
+  if (checkpoint) {
+    deleteFullSyncCheckpoint(totemDir, log);
+  }
+
   // Persist index metadata for dimension mismatch detection
   writeIndexMeta(totemDir, {
     provider: embedding.provider,
@@ -533,10 +859,7 @@ async function runSyncInner(
     const writtenAt = new Date();
     const docs = await store.manifestDocuments(writtenAt);
     const manifest = buildIndexManifest({ documents: docs, headSha, writtenAt });
-    const manifestPath = path.join(totemDir, 'index-manifest.json');
-    const tmpManifestPath = manifestPath + '.tmp';
-    fs.writeFileSync(tmpManifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
-    fs.renameSync(tmpManifestPath, manifestPath);
+    writeJsonAtomic(path.join(totemDir, 'index-manifest.json'), manifest);
   } catch (err) {
     const detail =
       err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error';

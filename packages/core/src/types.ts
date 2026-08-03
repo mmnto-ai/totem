@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { ChunkStrategy, ContentType } from './config-schema.js';
+import type { Embedder } from './embedders/embedder.js';
 
 /**
  * A single chunk produced by any chunker.
@@ -148,6 +149,12 @@ export interface SyncOptions {
 
   /** Callback for progress reporting */
   onProgress?: (message: string) => void;
+
+  /**
+   * Injection seam for the embedder (tests / embedding hosts). When absent,
+   * the pipeline builds one from `config.embedding` via `createEmbedder`.
+   */
+  embedder?: Embedder;
 }
 
 /**
@@ -166,6 +173,44 @@ export interface SyncState {
    * near-empty for an up-to-date index).
    */
   indexExclusionHash?: string;
+}
+
+/**
+ * Persisted checkpoint for a full re-index in progress (mmnto-ai/totem#2562).
+ *
+ * The file's EXISTENCE is the dirty marker: it is written (atomically) before
+ * `store.reset()` and deleted only on successful completion, so a crashed
+ * `--full` leaves a detectable, resumable state instead of a partial store
+ * behind a stale `SyncState` baseline — the lying "Sync complete: 0 files"
+ * sensor. `SyncState` itself keeps its clean "last successful sync" semantics.
+ */
+export interface FullSyncCheckpoint {
+  /** HEAD at epoch start; resume re-diffs against it so changed files re-embed. Null when git is unavailable. */
+  startedHeadSha: string | null;
+
+  /** Epoch start time (ms since Unix epoch) — provenance only */
+  startedAt: number;
+
+  /** Exclusion-set hash at epoch start — provenance; resume re-resolves the live set */
+  indexExclusionHash: string;
+
+  /**
+   * Resume-compatibility fingerprint. A mismatch with the current embedding
+   * config restarts the full sync from zero — vectors from two embedder
+   * configurations must never mix in one store.
+   */
+  embedder: {
+    provider: string;
+    model: string;
+    dimensions: number;
+  };
+
+  /**
+   * Relative paths whose chunks are FULLY flushed to the store. Appended only
+   * after a successful flush; flushes happen at whole-file boundaries, so
+   * membership here means the file is complete in the store for this epoch.
+   */
+  completedFiles: string[];
 }
 
 /**

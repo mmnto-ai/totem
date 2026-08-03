@@ -138,21 +138,32 @@ export function resolveFiles(
 const SAFE_GIT_REF = /^[a-zA-Z0-9_./:~^{}\-]+$/;
 
 /**
- * Get files changed since a given git ref (e.g., HEAD~1 or a commit SHA).
- * Also includes untracked files so new files are picked up on incremental sync.
- * Uses -z for null-delimited output consistent with getGitNonIgnoredFiles.
+ * Files changed since a git ref, with the tracked-diff and untracked sets kept
+ * SEPARATE (mmnto-ai/totem#2562). The semantics differ: "tracked and in the
+ * diff" means the file moved since the ref, but "untracked" only means git has
+ * no history for it — an untracked file is a PERMANENT member of that set, so
+ * treating membership as "changed since the ref" would re-classify it forever.
+ * The full-sync resume consumes only the `tracked` half (its moved-since-epoch
+ * signal for everything else is mtime); `getChangedFiles` below unions both
+ * for the incremental diff, where "new file ⇒ index it" is exactly right.
  */
-export function getChangedFiles(
+export function getChangedFilesDetailed(
   projectRoot: string,
   sinceRef: string = 'HEAD~1',
   onWarn?: (msg: string) => void,
-): string[] | null {
+): { tracked: string[]; untracked: string[] } | null {
   if (!SAFE_GIT_REF.test(sinceRef)) {
     if (onWarn) {
       onWarn(`Invalid git ref "${sinceRef}" — falling back to full sync.`);
     }
     return null;
   }
+
+  const splitZ = (out: string): string[] =>
+    out
+      .split('\0')
+      .map((p) => p.replace(/\\/g, '/'))
+      .filter(Boolean);
 
   try {
     const diffOutput = safeExec('git', ['diff', '-z', '--name-only', sinceRef], {
@@ -171,14 +182,9 @@ export function getChangedFiles(
       }
     }
 
-    const paths = new Set(
-      (diffOutput + untrackedOutput)
-        .split('\0')
-        .map((p) => p.replace(/\\/g, '/'))
-        .filter(Boolean),
-    );
-
-    return [...paths];
+    const tracked = new Set(splitZ(diffOutput));
+    const untracked = new Set(splitZ(untrackedOutput));
+    return { tracked: [...tracked], untracked: [...untracked] };
   } catch (err) {
     const msg = `Failed to get changed files from git. Error: ${describeSafeExecError(err)}`;
     if (onWarn) {
@@ -186,6 +192,21 @@ export function getChangedFiles(
     }
     return null;
   }
+}
+
+/**
+ * Get files changed since a given git ref (e.g., HEAD~1 or a commit SHA).
+ * Also includes untracked files so new files are picked up on incremental sync.
+ * Uses -z for null-delimited output consistent with getGitNonIgnoredFiles.
+ */
+export function getChangedFiles(
+  projectRoot: string,
+  sinceRef: string = 'HEAD~1',
+  onWarn?: (msg: string) => void,
+): string[] | null {
+  const detailed = getChangedFilesDetailed(projectRoot, sinceRef, onWarn);
+  if (detailed === null) return null;
+  return [...new Set([...detailed.tracked, ...detailed.untracked])];
 }
 
 /**
