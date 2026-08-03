@@ -1114,6 +1114,99 @@ describe('post-checkout hook content', () => {
 
 // ─── worktree-safe sync-log path (mmnto-ai/totem#2376) ─
 
+// ─── totem-status refresh-gh wiring (mmnto-ai/totem#2556) ─
+
+describe('post-merge hook fires totem-status refresh-gh', () => {
+  it('invokes refresh-gh presence-gated and backgrounded (mmnto-ai/totem-status#127 C3)', () => {
+    const hook = buildHookContent('pnpm dlx @mmnto/cli');
+
+    // Presence gate (absent binary = zero noise) AND primary-checkout gate: in a
+    // linked worktree .git is a pointer FILE and a backgrounded child inheriting
+    // the worktree cwd holds a Windows directory lock that breaks worktree removal.
+    expect(hook).toContain('if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then');
+    // Spawn-and-forget: backgrounded subshell, output discarded — the merge never waits.
+    expect(hook).toContain('(totem-status refresh-gh >/dev/null 2>&1 &)');
+    // The bounded owned region stays intact: end marker still terminates the file.
+    expect(hook.trimEnd().endsWith(`# ${TOTEM_HOOK_END}`)).toBe(true);
+  });
+});
+
+// Behavioral coverage of BOTH gate branches (falsification-leg round 1: the string
+// assertions above are satisfiable without the behavior). POSIX-only: the stub
+// sidecar is a shell script on PATH, which Windows CreateProcess cannot resolve —
+// the ubuntu/macos CI legs carry this coverage.
+describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (POSIX)', () => {
+  let tmpDir: string;
+  let binDir: string;
+  let markerPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-refresh-sh-'));
+    binDir = path.join(tmpDir, 'stub-bin');
+    fs.mkdirSync(binDir);
+    markerPath = path.join(tmpDir, 'refresh-fired.marker');
+    fs.writeFileSync(
+      path.join(binDir, 'totem-status'),
+      `#!/bin/sh\necho "$1" > "${markerPath}"\n`,
+      { mode: 0o755 },
+    );
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  async function markerAppears(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (fs.existsSync(markerPath)) return true;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return fs.existsSync(markerPath);
+  }
+
+  it(
+    'fires the stub sidecar in a primary checkout (backgrounded child lands the marker)',
+    { timeout: 15000 },
+    async () => {
+      const repo = path.join(tmpDir, 'repo');
+      fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+      const hookPath = path.join(repo, 'post-merge');
+      fs.writeFileSync(hookPath, buildHookContent('pnpm dlx @mmnto/cli'), { mode: 0o755 });
+
+      execSync('sh ./post-merge', {
+        cwd: repo,
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` },
+        stdio: 'ignore',
+      });
+
+      expect(await markerAppears(5000)).toBe(true);
+      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
+    },
+  );
+
+  it(
+    'skips the sidecar when .git is not a directory (worktree/non-git guard)',
+    { timeout: 15000 },
+    async () => {
+      const repo = path.join(tmpDir, 'repo');
+      fs.mkdirSync(repo, { recursive: true });
+      // Linked-worktree shape: .git is a pointer FILE, not a directory.
+      fs.writeFileSync(path.join(repo, '.git'), 'gitdir: /elsewhere/.git/worktrees/x\n');
+      const hookPath = path.join(repo, 'post-merge');
+      fs.writeFileSync(hookPath, buildHookContent('pnpm dlx @mmnto/cli'), { mode: 0o755 });
+
+      execSync('sh ./post-merge', {
+        cwd: repo,
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` },
+        stdio: 'ignore',
+      });
+
+      expect(await markerAppears(500)).toBe(false);
+    },
+  );
+});
+
 describe('sync-log redirect resolves the git dir (worktree-safe)', () => {
   it('post-merge hook derives the log path from git rev-parse --git-dir', () => {
     const hook = buildHookContent('pnpm dlx @mmnto/cli');

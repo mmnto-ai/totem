@@ -9,10 +9,49 @@
  * Budget: ~2-3k tokens max (ADR-013).
  */
 
-import { execSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { execSync, spawn } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+// ─── totem-status refresh-gh — GH-federation snapshot refresh ───
+// (mmnto-ai/totem-status#127 C3; tracking mmnto-ai/totem#2556.) This repo does
+// NOT run the managed SessionStart.cjs template (this bespoke V2 hook is the
+// sole SessionStart entry in .claude/settings.json), so the C3 session-start
+// moment is wired here directly — the same spawn-and-forget block the managed
+// templates carry: detached+unref (never blocks the briefing), presence-gated
+// (ENOENT = sidecar not adopted, silent), primary-checkout-gated (a detached
+// child inheriting a linked-worktree cwd holds a Windows directory lock that
+// breaks worktree removal).
+try {
+  let primaryCheckout = false;
+  try {
+    primaryCheckout = statSync(join(process.cwd(), '.git')).isDirectory();
+  } catch {
+    // not a git checkout — no refresh moment here
+  }
+  if (primaryCheckout) {
+    const refresh = spawn('totem-status', ['refresh-gh'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    refresh.on('error', (err) => {
+      if (err && err.code === 'ENOENT') return;
+      process.stderr.write(
+        '[SessionStart] totem-status refresh-gh spawn failed (non-fatal): ' +
+          (err instanceof Error ? err.message : String(err)) +
+          '\n',
+      );
+    });
+    refresh.unref();
+  }
+} catch (err) {
+  process.stderr.write(
+    '[SessionStart] totem-status refresh-gh unavailable (non-fatal): ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\n',
+  );
+}
 
 // Workspace-relative dynamic import for the @mmnto/totem resolvers.
 // Mirrors the auto-context import pattern below — this hook ships in the

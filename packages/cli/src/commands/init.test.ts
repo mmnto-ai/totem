@@ -1492,6 +1492,36 @@ describe('CLAUDE_SESSION_START template', () => {
       CLAUDE_SESSION_START.indexOf("'--session'"),
     );
   });
+
+  it('fires totem-status refresh-gh spawn-and-forget BEFORE the briefings (mmnto-ai/totem#2556)', () => {
+    // Routed C3 residual from mmnto-ai/totem-status#127: detached+unref spawn so
+    // session start never blocks on the refresh (#2059 latency caveat), fired
+    // before the synchronous describe/orient calls so it overlaps them.
+    expect(CLAUDE_SESSION_START).toContain("spawn('totem-status', ['refresh-gh']");
+    expect(CLAUDE_SESSION_START).toContain('detached: true');
+    expect(CLAUDE_SESSION_START).toContain('refresh.unref()');
+    // Anchor the ordering on the CODE, not the comment banner: a mutant that
+    // relocates the executable block after the briefings but leaves the comment
+    // in place must FAIL here (falsification-leg round 1, mutant-proven).
+    expect(CLAUDE_SESSION_START.indexOf("spawn('totem-status'")).toBeLessThan(
+      CLAUDE_SESSION_START.indexOf("'describe'"),
+    );
+  });
+
+  it('gates refresh-gh to a PRIMARY checkout (.git directory) — worktree/non-git cwds skip', () => {
+    // A detached child inheriting a linked-worktree cwd holds a Windows directory
+    // lock that breaks worktree removal (.git is a pointer FILE there); a non-git
+    // cwd (e.g. the runtime-test tmpdirs below) has no refresh moment at all.
+    expect(CLAUDE_SESSION_START).toContain('.isDirectory()');
+    expect(CLAUDE_SESSION_START).toContain('if (primaryCheckout)');
+  });
+
+  it('skips refresh-gh with zero noise when the sidecar binary is absent (ENOENT)', () => {
+    // Non-cohort consumers receive these templates too — an absent totem-status
+    // must not print a per-session warning; other spawn failures keep a breadcrumb.
+    expect(CLAUDE_SESSION_START).toContain("err.code === 'ENOENT'");
+    expect(CLAUDE_SESSION_START).toContain('refresh-gh spawn failed (non-fatal)');
+  });
 });
 
 describe('GEMINI_SESSION_START template', () => {
@@ -1538,6 +1568,22 @@ describe('GEMINI_SESSION_START template', () => {
     expect(GEMINI_SESSION_START).toContain("'totem orient --session'");
     expect(GEMINI_SESSION_START.indexOf("'totem describe'")).toBeLessThan(
       GEMINI_SESSION_START.indexOf("'totem orient --session'"),
+    );
+  });
+
+  it('fires totem-status refresh-gh spawn-and-forget BEFORE describe, matching the Claude twin (mmnto-ai/totem#2556)', () => {
+    // Vehicle parity: the mmnto-ai/totem-status#127 C3 moment is "session start",
+    // not a vendor. Same detached+unref + ENOENT-silent + primary-checkout-gated
+    // shape as CLAUDE_SESSION_START.
+    expect(GEMINI_SESSION_START).toContain("spawn('totem-status', ['refresh-gh']");
+    expect(GEMINI_SESSION_START).toContain('detached: true');
+    expect(GEMINI_SESSION_START).toContain('refresh.unref()');
+    expect(GEMINI_SESSION_START).toContain("err.code === 'ENOENT'");
+    expect(GEMINI_SESSION_START).toContain('.isDirectory()');
+    expect(GEMINI_SESSION_START).toContain('if (primaryCheckout)');
+    // Code-anchored ordering (see the Claude twin above for the mutant rationale).
+    expect(GEMINI_SESSION_START.indexOf("spawn('totem-status'")).toBeLessThan(
+      GEMINI_SESSION_START.indexOf("'totem describe'"),
     );
   });
 });
@@ -2045,6 +2091,46 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
     expect(event.type).toBe('session_start');
     expect(typeof event.session_id).toBe('string');
   });
+
+  // POSIX-only: the stub sidecar is a shell script on PATH (Windows CreateProcess
+  // resolves only .exe). Positive-branch behavior of the refresh-gh gate — the
+  // string assertions in the template suite are satisfiable without the behavior
+  // (falsification-leg round 1). The negative branch is exercised by every OTHER
+  // test in this describe: tmpDir has no .git, so a spawned child would hold the
+  // Windows/POSIX cwd and the EPERM cleanup failure would resurface in afterEach.
+  it.skipIf(process.platform === 'win32')(
+    'fires the stub sidecar spawn-and-forget in a primary checkout',
+    { timeout: 15000 },
+    async () => {
+      fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+      const binDir = path.join(tmpDir, 'stub-bin');
+      fs.mkdirSync(binDir);
+      const markerPath = path.join(tmpDir, 'refresh-fired.marker');
+      fs.writeFileSync(
+        path.join(binDir, 'totem-status'),
+        `#!/bin/sh\necho "$1" > "${markerPath}"\n`,
+        { mode: 0o755 },
+      );
+
+      const env = { ...process.env };
+      delete env['TOTEM_SELF_AGENT'];
+      env['PATH'] = `${binDir}:${env['PATH'] ?? ''}`;
+      const result = spawnSync(process.execPath, [hookPath], {
+        cwd: tmpDir,
+        env,
+        encoding: 'utf-8',
+        timeout: HOOK_SPAWN_TIMEOUT_MS,
+      });
+      expect(result.status).toBe(0);
+
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline && !fs.existsSync(markerPath)) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(fs.existsSync(markerPath)).toBe(true);
+      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
+    },
+  );
 
   it('omits agent_source when TOTEM_SELF_AGENT is empty or comma/whitespace noise', () => {
     for (const value of ['', '   ', ' , ,']) {

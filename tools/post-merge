@@ -18,6 +18,19 @@ else
   TOTEM_CMD=""
 fi
 
+# totem-status refresh-gh — GH-federation snapshot refresh (mmnto-ai/totem-status#127
+# C3 residual; tracking mmnto-ai/totem#2556). Spawn-and-forget: the verb's
+# exit-0-or-nothing contract (single-flight, atomic rename, no-clobber when gh is
+# missing) makes blind firing safe, and the merge must never wait on it. An absent
+# binary means the sidecar is not adopted here (non-cohort consumer) — skip silently.
+# PRIMARY checkout only ([ -d .git ]): in a linked worktree .git is a FILE, and a
+# detached child inheriting the worktree cwd holds a Windows directory lock that
+# breaks worktree removal; the primary's hooks + the daemon cover the workspace-level
+# snapshot, and the verb's single-flight makes extra fires redundant anyway.
+if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then
+  (totem-status refresh-gh >/dev/null 2>&1 &)
+fi
+
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing).
 # The trailing -- terminates the revision list so a ref/path ambiguity can never
 # reinterpret ORIG_HEAD/HEAD as pathspecs.
