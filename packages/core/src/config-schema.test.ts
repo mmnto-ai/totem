@@ -56,6 +56,29 @@ describe('TotemConfigSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts embedding.throttleMs on gemini and openai providers (#2562)', () => {
+    for (const provider of ['gemini', 'openai'] as const) {
+      const result = TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        embedding: { provider, throttleMs: 1500 },
+      });
+      expect(result.success).toBe(true);
+      if (result.success && result.data.embedding?.provider !== 'ollama') {
+        expect(result.data.embedding?.throttleMs).toBe(1500);
+      }
+    }
+  });
+
+  it('rejects a negative or fractional embedding.throttleMs (#2562)', () => {
+    for (const throttleMs of [-1, 10.5]) {
+      const result = TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        embedding: { provider: 'gemini', throttleMs },
+      });
+      expect(result.success).toBe(false);
+    }
+  });
+
   it('rejects config with no targets', () => {
     const result = TotemConfigSchema.safeParse({ targets: [] });
     expect(result.success).toBe(false);

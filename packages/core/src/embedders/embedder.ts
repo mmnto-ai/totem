@@ -52,7 +52,7 @@ export async function isOllamaAvailable(
 async function tryBuildEmbedder(config: EmbeddingProvider): Promise<Embedder> {
   if (config.provider === 'openai') {
     const { OpenAIEmbedder } = await import('./openai-embedder.js');
-    return new OpenAIEmbedder(config.model, config.dimensions);
+    return new OpenAIEmbedder(config.model, config.dimensions, config.throttleMs);
   }
   if (config.provider === 'gemini') {
     const { GeminiEmbedder, importGeminiSdk } = await import('./gemini-embedder.js');
@@ -66,7 +66,7 @@ async function tryBuildEmbedder(config: EmbeddingProvider): Promise<Embedder> {
     // the key are absent, the SDK-missing error surfaces first, exactly as openai's
     // static import fails ahead of its own key check.
     await importGeminiSdk();
-    return new GeminiEmbedder(config.model, config.dimensions);
+    return new GeminiEmbedder(config.model, config.dimensions, config.throttleMs);
   }
   throw new TotemConfigError(
     `Unknown embedding provider: ${config.provider}`,

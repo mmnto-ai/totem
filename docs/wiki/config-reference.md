@@ -13,6 +13,12 @@ export default {
   embedding: {
     provider: 'gemini', // 'openai', 'gemini', 'ollama'
     model: 'gemini-embedding-2-preview',
+    // Minimum interval between embedding API requests, in milliseconds
+    // (mmnto-ai/totem#2562). Paces `totem sync` under per-minute provider
+    // quotas (e.g. Vertex `online_prediction_requests_per_base_model`).
+    // Honored by the gemini and openai providers; ollama is local and
+    // ignores it. Omit or 0 = no pacing.
+    throttleMs: 0,
   },
 
   // AI Orchestrator Settings

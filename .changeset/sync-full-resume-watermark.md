@@ -1,0 +1,5 @@
+---
+'@mmnto/totem': minor
+---
+
+Crash-safe full re-index (mmnto-ai/totem#2562, sensor-degradation class): `totem sync --full` now writes a dirty-marker checkpoint before resetting the store and checkpoints progress per flushed file, so an interrupted run (e.g. embedding-quota 429) is detected and **resumed** by the next `totem sync` instead of yielding a false `Sync complete: 0 files` over a partial index. Resume re-diffs files changed since the interrupted epoch, discards progress on embedder-config change or checkpoint corruption, and clears the marker only after a successful completion writes the fresh baseline. New optional `embedding.throttleMs` paces embedding API requests under per-minute quotas (gemini + openai); Gemini 429 retries now honor the server-advised RetryInfo delay (capped at 60s), and the terminal quota error's recovery hint names the resume behavior and the throttle knob instead of misdirecting to key/network checks. `sync-state.json` writes are now atomic (tmp + rename).

@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -6,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { TotemConfig } from '../config-schema.js';
 import { TotemConfigSchema } from '../config-schema.js';
+import type { Embedder } from '../embedders/embedder.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
   buildIndexManifest,
@@ -193,6 +195,253 @@ describe('runSync embedding guard', () => {
       'No embedding provider configured',
     );
   });
+});
+
+// ─── Full-sync crash recovery (#2562, ADR-115 Train-1 induced regression) ───
+//
+// The defect: `--full` reset the store, crashed mid-embed, and left the
+// previous SUCCESSFUL sync's baseline behind — so the next plain `totem sync`
+// diffed from the old SHA, saw 0 changed files, and reported "Sync complete:
+// 0 files" over the gutted store. These tests reproduce that state with a
+// crash-at-flush-K embedder and lock in the checkpoint/resume contract.
+
+const FULL_SYNC_CHECKPOINT_FILE = 'cache/full-sync-checkpoint.json';
+const HEAVY_TIMEOUT_MS = 60_000;
+
+/** Embeds deterministically; throws a quota-shaped 429 from call N onward. */
+class ScriptedEmbedder implements Embedder {
+  readonly dimensions: number;
+  embedCalls: string[][] = [];
+  failFromCall: number | null = null;
+  onCall: (() => void) | undefined;
+  private calls = 0;
+
+  constructor(dimensions: number = 4) {
+    this.dimensions = dimensions;
+  }
+
+  embed(texts: string[]): Promise<number[][]> {
+    this.calls++;
+    this.onCall?.();
+    if (this.failFromCall !== null && this.calls >= this.failFromCall) {
+      return Promise.reject(
+        Object.assign(new Error('quota exceeded: RESOURCE_EXHAUSTED'), { status: 429 }),
+      );
+    }
+    this.embedCalls.push([...texts]);
+    return Promise.resolve(texts.map((_, i) => new Array(this.dimensions).fill(i % 7)));
+  }
+
+  /** All text embedded across every call, joined for content assertions. */
+  allText(): string {
+    return this.embedCalls.flat().join('\n');
+  }
+}
+
+describe('full-sync crash recovery (#2562)', () => {
+  let tmpDir: string;
+  let config: TotemConfig;
+
+  const run = (embedder: Embedder, incremental: boolean) =>
+    runSync(config, { projectRoot: tmpDir, incremental, embedder });
+
+  const checkpointPath = () => path.join(tmpDir, '.totem', FULL_SYNC_CHECKPOINT_FILE);
+  const syncStatePath = () => path.join(tmpDir, '.totem', 'cache/sync-state.json');
+  const git = (cmd: string) => execSync(`git ${cmd}`, { cwd: tmpDir, stdio: 'pipe' });
+
+  /** ~80 chunks per file — two files overflow EMBED_BATCH_SIZE (100), so the
+   *  first flush lands at the b.md file boundary and the crash-at-flush-2
+   *  embedder dies on c.md's flush with a+b already in the store. */
+  const writeCorpusFile = (name: string, stem: string) => {
+    const sections = Array.from(
+      { length: 80 },
+      (_, i) => `## ${stem} ${i}\n\n${stem}-content-${i}\n`,
+    ).join('\n');
+    fs.writeFileSync(path.join(tmpDir, name), `# ${stem}\n\n${sections}`, 'utf-8');
+  };
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-fullsync-'));
+    config = TotemConfigSchema.parse({
+      targets: [{ glob: '*.md', type: 'spec', strategy: 'markdown-heading' }],
+      embedding: { provider: 'gemini', model: 'test-model', dimensions: 4 },
+    });
+    writeCorpusFile('a.md', 'alpha');
+    writeCorpusFile('b.md', 'bravo');
+    writeCorpusFile('c.md', 'charlie');
+    git('init');
+    git('config user.email "test@test.com"');
+    git('config user.name "Test"');
+    git('add a.md b.md c.md');
+    git('commit -m init');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  const ALL_FILES = ['a.md', 'b.md', 'c.md'];
+  const STEM: Record<string, string> = { 'a.md': 'alpha', 'b.md': 'bravo', 'c.md': 'charlie' };
+
+  const readCheckpoint = () =>
+    JSON.parse(fs.readFileSync(checkpointPath(), 'utf-8')) as { completedFiles: string[] };
+
+  /** The one file the crashed epoch never flushed (glob order is not guaranteed,
+   *  so which file that is must be READ from the checkpoint, not assumed). */
+  const unflushedFile = () => {
+    const { completedFiles } = readCheckpoint();
+    const missing = ALL_FILES.filter((f) => !completedFiles.includes(f));
+    expect(missing).toHaveLength(1);
+    return missing[0]!;
+  };
+
+  /** Crash a full sync at the second flush: two files land, the third does not. */
+  async function crashFullSync(): Promise<ScriptedEmbedder> {
+    const crasher = new ScriptedEmbedder();
+    crasher.failFromCall = 2;
+    await expect(run(crasher, false)).rejects.toThrow('RESOURCE_EXHAUSTED');
+    return crasher;
+  }
+
+  it(
+    'a crashed --full leaves the dirty marker with only fully-flushed files checkpointed',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      const crasher = new ScriptedEmbedder();
+      crasher.failFromCall = 2;
+      let markerSeenDuringEmbed = false;
+      crasher.onCall = () => {
+        markerSeenDuringEmbed ||= fs.existsSync(checkpointPath());
+      };
+
+      await expect(run(crasher, false)).rejects.toThrow('RESOURCE_EXHAUSTED');
+
+      // The marker was already on disk when the first embed call ran — no
+      // window exists where the store is reset but unmarked.
+      expect(markerSeenDuringEmbed).toBe(true);
+
+      // Exactly the two fully-flushed files are checkpointed; the file whose
+      // flush crashed is not (whole-file flush boundaries).
+      const cp = JSON.parse(fs.readFileSync(checkpointPath(), 'utf-8'));
+      expect(cp.completedFiles).toHaveLength(2);
+      expect(ALL_FILES.filter((f: string) => !cp.completedFiles.includes(f))).toHaveLength(1);
+      expect(cp.embedder).toEqual({ provider: 'gemini', model: 'test-model', dimensions: 4 });
+      expect(typeof cp.startedHeadSha).toBe('string');
+      // No successful sync ever completed — no baseline may exist.
+      expect(fs.existsSync(syncStatePath())).toBe(false);
+    },
+  );
+
+  it(
+    'INDUCED REGRESSION: the next plain sync resumes the full re-index instead of reporting complete over a partial store',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      await crashFullSync();
+      const missing = unflushedFile();
+      const flushed = ALL_FILES.filter((f) => f !== missing);
+
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true); // plain `totem sync`
+
+      // Pre-fix this reported 0 files processed over a partial store.
+      expect(result.filesProcessed).toBe(1);
+      expect(resumer.allText()).toContain(`${STEM[missing]}-content-1`);
+      for (const kept of flushed) {
+        expect(resumer.allText()).not.toContain(`${STEM[kept]}-content-1`);
+      }
+
+      // The store now holds the whole corpus, the marker is gone, and the
+      // baseline points at HEAD — the epoch completed for real.
+      const perFile = 81; // 80 sections + the h1 preamble section
+      expect(result.totalChunks).toBeGreaterThanOrEqual(3 * (perFile - 2));
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+      const state = JSON.parse(fs.readFileSync(syncStatePath(), 'utf-8'));
+      const headSha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+      expect(state.lastSyncSha).toBe(headSha);
+    },
+  );
+
+  it(
+    'a file changed since the crashed epoch re-embeds on resume',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      await crashFullSync();
+      const missing = unflushedFile();
+      const [mutated, untouched] = ALL_FILES.filter((f) => f !== missing);
+
+      fs.appendFileSync(
+        path.join(tmpDir, mutated!),
+        `\n## ${STEM[mutated!]} extra\n\n${STEM[mutated!]}-mutated\n`,
+        'utf-8',
+      );
+      git(`add ${mutated}`);
+      git('commit -m "mutate a flushed file"');
+
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true);
+
+      // The changed-since-epoch flushed file re-embeds alongside the
+      // never-flushed one; the untouched flushed file stays skipped.
+      expect(result.filesProcessed).toBe(2);
+      expect(resumer.allText()).toContain(`${STEM[mutated!]}-mutated`);
+      expect(resumer.allText()).toContain(`${STEM[missing]}-content-1`);
+      expect(resumer.allText()).not.toContain(`${STEM[untouched!]}-content-1`);
+    },
+  );
+
+  it(
+    'a corrupt checkpoint is dirty-but-unusable: the full re-index restarts from zero',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      await crashFullSync();
+      fs.writeFileSync(checkpointPath(), '{ not json !!', 'utf-8');
+
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true);
+
+      expect(result.filesProcessed).toBe(3);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
+
+  it(
+    'an embedder-config change makes checkpointed progress unusable — restart from zero',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      await crashFullSync();
+
+      const differentDims = new ScriptedEmbedder(8);
+      const result = await run(differentDims, true);
+
+      expect(result.filesProcessed).toBe(3);
+      expect(differentDims.allText()).toContain('alpha-content-1');
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
+
+  it(
+    'a marker-write failure aborts BEFORE the store is destroyed',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      const healthy = new ScriptedEmbedder();
+      const first = await run(healthy, false);
+      expect(first.totalChunks).toBeGreaterThan(0);
+
+      // Occupy the checkpoint path with a directory: the atomic rename in the
+      // marker write must fail, and the reset must never run.
+      fs.mkdirSync(checkpointPath(), { recursive: true });
+      await expect(run(new ScriptedEmbedder(), false)).rejects.toThrow();
+
+      fs.rmSync(checkpointPath(), { recursive: true, force: true });
+      fs.rmSync(checkpointPath() + '.tmp', { force: true });
+
+      // The store survived the aborted run: a plain incremental sync sees a
+      // clean baseline and the full chunk count, not an empty or partial store.
+      const after = await run(new ScriptedEmbedder(), true);
+      expect(after.filesProcessed).toBe(0);
+      expect(after.totalChunks).toBe(first.totalChunks);
+    },
+  );
 });
 
 describe('buildIndexManifest', () => {

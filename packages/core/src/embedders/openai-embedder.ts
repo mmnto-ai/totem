@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 
 import { TotemConfigError, TotemError } from '../errors.js';
 import type { Embedder } from './embedder.js';
+import { createRequestPacer } from './pacing.js';
 
 const MAX_BATCH_SIZE = 2048;
 const DEFAULT_DIMENSIONS = 1536;
@@ -12,10 +13,16 @@ export class OpenAIEmbedder implements Embedder {
   readonly dimensions: number;
   private client: OpenAI;
   private model: string;
+  private pace: () => Promise<void>;
 
-  constructor(model: string = 'text-embedding-3-small', dimensions?: number) {
+  constructor(
+    model: string = 'text-embedding-3-small',
+    dimensions?: number,
+    throttleMs: number = 0,
+  ) {
     this.model = model;
     this.dimensions = dimensions ?? DEFAULT_DIMENSIONS;
+    this.pace = createRequestPacer(throttleMs);
 
     const apiKey = process.env['OPENAI_API_KEY'];
     if (!apiKey) {
@@ -53,6 +60,9 @@ export class OpenAIEmbedder implements Embedder {
     let lastErr: unknown;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
+        // Pace every attempt (mmnto-ai/totem#2562): the throttle exists for
+        // per-minute limits, and retries count against them like any request.
+        await this.pace();
         return await this.client.embeddings.create({
           model: this.model,
           input: batch,
@@ -67,10 +77,17 @@ export class OpenAIEmbedder implements Embedder {
       }
     }
     const detail = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    // Rate-limit exhaustion gets its own recovery hint (mmnto-ai/totem#2562):
+    // the key-and-network hint is wrong there, and an interrupted full
+    // re-index now resumes from its checkpoint on the next `totem sync`.
+    const hint =
+      lastErr instanceof OpenAI.APIError && lastErr.status === 429
+        ? 'Embedding rate limit exhausted. Re-run `totem sync` — an interrupted full re-index resumes from its checkpoint instead of restarting. To stay under per-minute limits, set `embedding.throttleMs` in totem.config.ts to pace requests.'
+        : 'Check your OPENAI_API_KEY and network connection, then retry with `totem sync`.';
     throw new TotemError(
       'EMBEDDING_UNAVAILABLE',
       `OpenAI embedding failed after ${MAX_RETRIES + 1} attempts: ${detail}`,
-      'Check your OPENAI_API_KEY and network connection, then retry with `totem sync`.',
+      hint,
     );
   }
 }

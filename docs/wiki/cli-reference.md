@@ -213,6 +213,19 @@ Parses your codebase, chunks the AST, and builds the local LanceDB vector index.
   - `--index-only`: Run only the embedding sync; skip the pack manifest write.
   - `-q, --quiet`: Suppress output (for background or hook usage).
 
+- **Crash recovery (mmnto-ai/totem#2562):** a full re-index checkpoints its
+  progress per file (`.totem/cache/full-sync-checkpoint.json`). If the run is
+  interrupted (e.g. an embedding-quota 429), the **next `totem sync` — plain or
+  `--full` — resumes from the checkpoint** instead of reporting a false
+  "complete" over the partial index or re-spending quota on already-embedded
+  files. Files that changed since the interrupted run started are re-embedded;
+  chunks of files deleted in the meantime are purged by the next incremental
+  reconciliation. Delete the checkpoint file to force a restart from scratch.
+  Progress is discarded (with a loud log) if the checkpoint is unreadable or
+  the embedding provider/model/dimensions changed. Pair with
+  `embedding.throttleMs` (see the configuration reference) to stay under
+  per-minute quotas.
+
 ### `totem search <query>`
 
 Searches the local knowledge index for lessons, code snippets, or rules relevant to a query.

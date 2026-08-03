@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TotemConfigError, TotemError } from '../errors.js';
-import { GeminiEmbedder } from './gemini-embedder.js';
+import { extractRetryDelayMs, GeminiEmbedder, isQuotaError } from './gemini-embedder.js';
 
 // ─── Mock the @google/genai SDK ───────────────────────
 
@@ -208,5 +208,133 @@ describe('GeminiEmbedder', () => {
     await embedder.embed(['test']);
 
     expect(mockEmbedContent.mock.calls[0]![0].model).toBe('custom-model');
+  });
+
+  // ─── Quota recovery hint (#2562) ───────────────────
+
+  it('terminal 429 failure carries the quota hint naming resume and throttleMs', async () => {
+    const rateLimitErr = Object.assign(new Error('rate limited'), { status: 429 });
+    mockEmbedContent.mockRejectedValue(rateLimitErr);
+
+    const embedder = new GeminiEmbedder();
+    await expect(embedder.embed(['test'])).rejects.toMatchObject({
+      recoveryHint: expect.stringMatching(/resumes from its checkpoint.*throttleMs/s),
+    });
+  });
+
+  it('terminal non-quota failure keeps the key-and-network hint', async () => {
+    const badErr = Object.assign(new Error('service unavailable'), { status: 503 });
+    mockEmbedContent.mockRejectedValue(badErr);
+
+    const embedder = new GeminiEmbedder();
+    await expect(embedder.embed(['test'])).rejects.toMatchObject({
+      recoveryHint: expect.stringContaining('GEMINI_API_KEY'),
+    });
+  });
+
+  // ─── Server-advised retry delay (#2562) ────────────
+
+  it('waits the server-advised retryDelay instead of exponential backoff on 429', async () => {
+    const delays: (number | undefined)[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      delays.push(ms);
+      fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as never);
+
+    const quotaErr = Object.assign(new Error('rate limited'), {
+      status: 429,
+      errorDetails: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '18s' }],
+    });
+    mockEmbedContent.mockRejectedValueOnce(quotaErr).mockResolvedValueOnce(embedResponse(1));
+
+    const embedder = new GeminiEmbedder();
+    await embedder.embed(['test']);
+
+    expect(delays).toContain(18_000);
+  });
+
+  // ─── Request pacing (#2562) ────────────────────────
+
+  it('throttleMs paces successive API calls; 0 adds no waits', async () => {
+    const delays: (number | undefined)[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      delays.push(ms);
+      fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as never);
+
+    mockEmbedContent.mockResolvedValue(embedResponse(1));
+
+    const unpaced = new GeminiEmbedder();
+    await unpaced.embed(['a']);
+    await unpaced.embed(['b']);
+    expect(delays).toHaveLength(0);
+
+    const paced = new GeminiEmbedder(undefined, undefined, 5_000);
+    await paced.embed(['a']);
+    await paced.embed(['b']); // within 5s of the first call — must wait
+    expect(delays.length).toBeGreaterThanOrEqual(1);
+    const wait = delays[delays.length - 1]!;
+    expect(wait).toBeGreaterThan(0);
+    expect(wait).toBeLessThanOrEqual(5_000);
+  });
+});
+
+// ─── Quota-error classification (#2562) ──────────────
+
+describe('isQuotaError', () => {
+  it.each([
+    ['status 429', Object.assign(new Error('x'), { status: 429 }), true],
+    ['code 429', Object.assign(new Error('x'), { code: 429 }), true],
+    ['RESOURCE_EXHAUSTED in message', new Error('got RESOURCE_EXHAUSTED from upstream'), true],
+    [
+      'RESOURCE_EXHAUSTED name',
+      Object.assign(new Error('x'), { name: 'RESOURCE_EXHAUSTED' }),
+      true,
+    ],
+    ['503 unavailable', Object.assign(new Error('unavailable'), { status: 503 }), false],
+    ['401 auth', Object.assign(new Error('unauthorized'), { status: 401 }), false],
+    ['non-error', 'RESOURCE_EXHAUSTED', false],
+  ])('%s', (_label, err, expected) => {
+    expect(isQuotaError(err)).toBe(expected);
+  });
+});
+
+// ─── RetryInfo extraction (#2562) ────────────────────
+
+describe('extractRetryDelayMs', () => {
+  it('reads a structured errorDetails RetryInfo entry', () => {
+    const err = Object.assign(new Error('quota'), {
+      errorDetails: [
+        { '@type': 'type.googleapis.com/google.rpc.BadRequest' },
+        { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '18s' },
+      ],
+    });
+    expect(extractRetryDelayMs(err)).toBe(18_000);
+  });
+
+  it('falls back to a retryDelay embedded in the message JSON', () => {
+    const err = new Error('429 {"error":{"details":[{"retryDelay":"7s"}]}}');
+    expect(extractRetryDelayMs(err)).toBe(7_000);
+  });
+
+  it('supports fractional seconds', () => {
+    const err = Object.assign(new Error('quota'), {
+      errorDetails: [{ retryDelay: '2.5s' }],
+    });
+    expect(extractRetryDelayMs(err)).toBe(2_500);
+  });
+
+  it('caps a pathological delay at 60s', () => {
+    const err = Object.assign(new Error('quota'), {
+      errorDetails: [{ retryDelay: '3600s' }],
+    });
+    expect(extractRetryDelayMs(err)).toBe(60_000);
+  });
+
+  it('returns null when no delay is present (caller uses exponential backoff)', () => {
+    expect(extractRetryDelayMs(new Error('plain rate limited'))).toBeNull();
+    expect(extractRetryDelayMs('not an error')).toBeNull();
   });
 });

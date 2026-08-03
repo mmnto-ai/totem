@@ -11,13 +11,14 @@ import { withLock } from '../lock.js';
 import { sanitizeForIngestion } from '../sanitize.js';
 import { LanceStore } from '../store/lance-store.js';
 import { sanitizeForTerminal } from '../terminal-sanitize.js';
-import type { Chunk, SyncOptions, SyncState } from '../types.js';
+import type { Chunk, FullSyncCheckpoint, SyncOptions, SyncState } from '../types.js';
 import type { ResolvedFile } from './file-resolver.js';
 import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
 
 const EMBED_BATCH_SIZE = 100;
 const SYNC_STATE_FILE = 'cache/sync-state.json';
 const INDEX_META_FILE = 'cache/index-meta.json';
+const FULL_SYNC_CHECKPOINT_FILE = 'cache/full-sync-checkpoint.json';
 
 interface IndexMeta {
   provider: string;
@@ -113,11 +114,77 @@ function readSyncState(totemDir: string, onProgress?: (msg: string) => void): Sy
   }
 }
 
+/**
+ * Atomic JSON write (tmp + rename): a crash mid-write must never leave a torn
+ * state file — sync state and the full-sync checkpoint are both trusted by the
+ * NEXT run's control flow (#2562), matching the index-manifest write pattern.
+ */
+function writeJsonAtomic(filePath: string, value: unknown): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmpPath = filePath + '.tmp';
+  fs.writeFileSync(tmpPath, JSON.stringify(value, null, 2) + '\n', 'utf-8');
+  fs.renameSync(tmpPath, filePath);
+}
+
 function writeSyncState(totemDir: string, state: SyncState): void {
-  const statePath = path.join(totemDir, SYNC_STATE_FILE);
-  const dir = path.dirname(statePath);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf-8');
+  writeJsonAtomic(path.join(totemDir, SYNC_STATE_FILE), state);
+}
+
+/**
+ * Read the full-sync checkpoint (#2562). The caller has already established
+ * the file EXISTS (existence = the dirty marker); a parse/shape failure here
+ * means "dirty but unusable" — the caller restarts the full re-index from
+ * zero. A present-but-corrupt checkpoint is never treated as a clean state.
+ */
+function readFullSyncCheckpoint(
+  totemDir: string,
+  onProgress?: (msg: string) => void,
+): FullSyncCheckpoint | null {
+  const cpPath = path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE);
+  try {
+    const parsed = JSON.parse(fs.readFileSync(cpPath, 'utf-8')) as FullSyncCheckpoint;
+    if (
+      parsed &&
+      (parsed.startedHeadSha === null || typeof parsed.startedHeadSha === 'string') &&
+      typeof parsed.startedAt === 'number' &&
+      typeof parsed.indexExclusionHash === 'string' &&
+      typeof parsed.embedder?.provider === 'string' &&
+      typeof parsed.embedder?.model === 'string' &&
+      typeof parsed.embedder?.dimensions === 'number' &&
+      Array.isArray(parsed.completedFiles) &&
+      parsed.completedFiles.every((f) => typeof f === 'string')
+    ) {
+      return parsed;
+    }
+    onProgress?.(`Warning: malformed full-sync checkpoint at ${cpPath} — ignoring its progress.`);
+    return null;
+    // totem-context: intentional warn+null on an unreadable checkpoint (mmnto-ai/totem#2562) — dirty-but-unusable restarts the full re-index from zero; failing the sync over a torn checkpoint would wedge every subsequent run.
+  } catch (err) {
+    onProgress?.(
+      `Warning: failed to read full-sync checkpoint: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
+}
+
+function writeFullSyncCheckpoint(totemDir: string, checkpoint: FullSyncCheckpoint): void {
+  writeJsonAtomic(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE), checkpoint);
+}
+
+/**
+ * Best-effort marker delete at successful completion. A failed delete is loud
+ * but non-fatal: the next run resumes-full as a near-noop and retries the
+ * delete, so correctness converges (#2562).
+ */
+function deleteFullSyncCheckpoint(totemDir: string, onProgress?: (msg: string) => void): void {
+  try {
+    fs.rmSync(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE), { force: true });
+    // totem-context: intentional best-effort delete (mmnto-ai/totem#2562) — a failed marker delete only makes the next run resume-full as a near-noop and retry it; aborting a fully-successful sync over it would be the drift.
+  } catch (err) {
+    onProgress?.(
+      `Warning: failed to delete full-sync checkpoint: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**
@@ -287,17 +354,58 @@ async function runSyncInner(
   // 0. Capture HEAD SHA early — before any async work that might race with new commits
   const headSha = getHeadSha(projectRoot, log);
 
-  // 1. Create embedder
+  // 1. Create embedder (or take the injected one — tests / embedding hosts)
   const embedding = requireEmbedding(config);
   log('Initializing embedding provider...');
-  const embedder = createEmbedder(embedding);
+  const embedder = options.embedder ?? createEmbedder(embedding);
+
+  // Resume-compatibility fingerprint (#2562): a checkpointed epoch may only
+  // continue under the embedder configuration that started it — vectors from
+  // two configurations must never mix in one store. Mirrors writeIndexMeta.
+  const embedderFingerprint = {
+    provider: embedding.provider,
+    model: embedding.model ?? 'default',
+    dimensions: embedder.dimensions,
+  };
 
   // 2. Connect to store
   const storePath = path.join(projectRoot, config.lanceDir);
   const store = new LanceStore(storePath, embedder, { absolutePathRoot: projectRoot });
   await store.connect();
 
-  // 2b. Auto-heal: force full sync when incremental is requested but DB is empty
+  const totemDir = path.join(projectRoot, config.totemDir);
+
+  // 2b (#2562). A live checkpoint marks an unfinished full re-index. It takes
+  // precedence over the requested mode — the partial store must complete
+  // before any incremental diff can be trusted again — and it subsumes the
+  // empty-store heal below (an interrupted full that never flushed).
+  let fullResume = false;
+  let resumeFrom: FullSyncCheckpoint | null = null;
+  if (fs.existsSync(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE))) {
+    fullResume = true;
+    incremental = false;
+    resumeFrom = readFullSyncCheckpoint(totemDir, log);
+    if (resumeFrom) {
+      const fp = resumeFrom.embedder;
+      if (
+        fp.provider !== embedderFingerprint.provider ||
+        fp.model !== embedderFingerprint.model ||
+        fp.dimensions !== embedderFingerprint.dimensions
+      ) {
+        log(
+          'Embedding config changed since the interrupted full re-index — its progress is unusable.',
+        );
+        resumeFrom = null;
+      }
+    }
+    log(
+      resumeFrom
+        ? `Previous full re-index did not complete — resuming it (${resumeFrom.completedFiles.length} file(s) already embedded).`
+        : 'Previous full re-index did not complete — restarting it from zero.',
+    );
+  }
+
+  // 2c. Auto-heal: force full sync when incremental is requested but DB is empty
   if (incremental && (await store.isEmpty())) {
     log('Empty database detected. Forcing full sync...');
     incremental = false;
@@ -306,7 +414,6 @@ async function runSyncInner(
   // 3. Resolve files to process. Index exclusion unions both keys:
   // `ignorePatterns` (legacy dual-scope) + `indexIgnorePatterns` (index-only,
   // mmnto-ai/totem#1748) — only the former also gates lint/shield scope.
-  const totemDir = path.join(projectRoot, config.totemDir);
   const exclusionPatterns = [...config.ignorePatterns, ...config.indexIgnorePatterns];
   const allFiles = resolveFiles(config.targets, projectRoot, exclusionPatterns, log);
   // Order-normalized hash of the effective exclusion set — persisted below and
@@ -314,6 +421,29 @@ async function runSyncInner(
   const indexExclusionHash = hashIndexExclusionSet(exclusionPatterns);
   let filesToProcess: ResolvedFile[];
   let deletedPaths: string[] = [];
+
+  // #2562: active-epoch checkpoint (full mode only) — written before the store
+  // is destroyed, appended after each successful flush, deleted on success.
+  let checkpoint: FullSyncCheckpoint | null = null;
+  let resumedWithoutReset = false;
+
+  const freshCheckpoint = (): FullSyncCheckpoint => ({
+    startedHeadSha: headSha,
+    startedAt: Date.now(),
+    indexExclusionHash,
+    embedder: embedderFingerprint,
+    completedFiles: [],
+  });
+
+  // The dirty marker MUST hit disk before the store is destroyed: a marker
+  // write failure aborts loudly with the store intact, so no window exists in
+  // which a reset store is unmarked (#2562).
+  async function beginFullSync(cp: FullSyncCheckpoint): Promise<void> {
+    writeFullSyncCheckpoint(totemDir, cp);
+    checkpoint = cp;
+    log('Full sync: resetting index...');
+    await store.reset();
+  }
 
   if (incremental) {
     // Persisted sync state carries both the diff baseline (lastSyncSha) and the
@@ -330,7 +460,7 @@ async function runSyncInner(
     const changedPaths = options.changedFiles ?? getChangedFiles(projectRoot, sinceRef, log);
     if (changedPaths === null) {
       log('Git diff failed, falling back to full sync...');
-      await store.reset();
+      await beginFullSync(freshCheckpoint());
       filesToProcess = allFiles;
       log(`Full sync (fallback): ${filesToProcess.length} files to process`);
     } else {
@@ -388,9 +518,42 @@ async function runSyncInner(
           ` (of ${allFiles.length} total)`,
       );
     }
+  } else if (resumeFrom) {
+    // #2562 resume: NO reset — the interrupted epoch continues. Already-done =
+    // checkpointed ∩ live, minus files changed since the epoch started (those
+    // re-embed; the per-file delete below keeps that idempotent). The epoch
+    // diff derives from git, never from options.changedFiles — a caller's
+    // diff window says nothing about what the crashed epoch covered.
+    const changedSinceEpoch = resumeFrom.startedHeadSha
+      ? getChangedFiles(projectRoot, resumeFrom.startedHeadSha, log)
+      : null;
+    if (changedSinceEpoch === null) {
+      log('Cannot diff against the interrupted epoch — restarting the full re-index from zero.');
+      await beginFullSync(freshCheckpoint());
+      filesToProcess = allFiles;
+      log(`Full sync: ${filesToProcess.length} files to process`);
+    } else {
+      const changed = new Set(changedSinceEpoch.map(normalizeRel));
+      const completed = new Set(
+        resumeFrom.completedFiles.map(normalizeRel).filter((rel) => !changed.has(rel)),
+      );
+      filesToProcess = allFiles.filter((f) => !completed.has(normalizeRel(f.relativePath)));
+      // Carry forward only entries still live and unchanged, re-keyed to the
+      // current run's resolved paths. startedHeadSha stays the ORIGINAL epoch
+      // SHA so every later resume re-diffs the full window (superset-safe).
+      const carried = allFiles
+        .map((f) => f.relativePath)
+        .filter((rel) => completed.has(normalizeRel(rel)));
+      checkpoint = { ...resumeFrom, indexExclusionHash, completedFiles: carried };
+      writeFullSyncCheckpoint(totemDir, checkpoint);
+      resumedWithoutReset = true;
+      log(
+        `Resuming full re-index: ${filesToProcess.length} file(s) remaining of ${allFiles.length} ` +
+          `(${carried.length} already embedded). Delete ${config.totemDir}/${FULL_SYNC_CHECKPOINT_FILE} to restart from scratch.`,
+      );
+    }
   } else {
-    log('Full sync: resetting index...');
-    await store.reset();
+    await beginFullSync(freshCheckpoint());
     filesToProcess = allFiles;
     log(`Full sync: ${filesToProcess.length} files to process`);
   }
@@ -418,6 +581,7 @@ async function runSyncInner(
   // 4. Chunk files and stream to LanceDB in batches (bounded memory)
   let totalChunks = 0;
   let buffer: Chunk[] = [];
+  let pendingFiles: string[] = [];
 
   async function flushBuffer(): Promise<void> {
     if (buffer.length === 0) return;
@@ -425,6 +589,23 @@ async function runSyncInner(
     totalChunks += buffer.length;
     log(`  Embedded ${totalChunks} chunks so far`);
     buffer = [];
+    // #2562: chunks buffer at whole-file boundaries and store.insert embeds
+    // before any row lands, so a successful flush means every pending file is
+    // complete in the store — checkpoint them. An append failure is
+    // survivable: the file re-embeds on resume via the delete-first path.
+    const cp = checkpoint;
+    if (cp && pendingFiles.length > 0) {
+      cp.completedFiles.push(...pendingFiles);
+      try {
+        writeFullSyncCheckpoint(totemDir, cp);
+        // totem-context: intentional warn+continue on a checkpoint-append failure (mmnto-ai/totem#2562) — the flushed chunks are safe in the store; worst case the file re-embeds on resume via the delete-first path.
+      } catch (err) {
+        log(
+          `  Warning: failed to update full-sync checkpoint: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    pendingFiles = [];
   }
 
   for (const file of filesToProcess) {
@@ -459,8 +640,11 @@ async function runSyncInner(
       continue;
     }
 
-    // For incremental: delete old chunks for this file before inserting new ones
-    if (incremental) {
+    // Delete old chunks for this file before inserting new ones — incremental
+    // re-embeds in place, and a #2562 resume (no reset) can hold this file's
+    // chunks already (changed-since-epoch, or a flush whose checkpoint append
+    // failed). Idempotent either way.
+    if (incremental || resumedWithoutReset) {
       await store.deleteByFile(file.relativePath);
     }
 
@@ -484,6 +668,7 @@ async function runSyncInner(
     }
 
     buffer.push(...chunks);
+    pendingFiles.push(file.relativePath);
     log(`  ${chunks.length} chunks from ${file.relativePath}`);
 
     // Flush when buffer reaches batch size to keep memory bounded
@@ -516,6 +701,14 @@ async function runSyncInner(
   // can detect an ignore-pattern change (including a removal) via the hash (#2366).
   if (headSha) {
     writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now(), indexExclusionHash });
+  }
+
+  // #2562: the epoch is complete — clear the dirty marker only AFTER the fresh
+  // baseline is on disk. A crash between the two writes leaves marker + fresh
+  // baseline, which the next run resumes as a near-noop; the reverse order
+  // would leave a clean-claiming baseline over a still-marked store.
+  if (checkpoint) {
+    deleteFullSyncCheckpoint(totemDir, log);
   }
 
   // Persist index metadata for dimension mismatch detection

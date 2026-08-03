@@ -1,12 +1,16 @@
 import { TotemConfigError, TotemError } from '../errors.js';
 import { buildMissingSdkHint } from '../missing-sdk.js';
 import type { Embedder } from './embedder.js';
+import { createRequestPacer } from './pacing.js';
 
 const DEFAULT_DIMENSIONS = 768;
 const DEFAULT_MODEL = 'gemini-embedding-2-preview';
 const MAX_BATCH_SIZE = 100; // Gemini supports up to 100 texts per batch
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
+// Cap on a server-advised retry delay — a pathological RetryInfo hint must not
+// stall the run; bounds worst-case retry wall-clock at ~MAX_RETRIES minutes.
+const MAX_SERVER_RETRY_DELAY_MS = 60_000;
 
 /** Status codes / error names that are safe to retry. */
 const RETRYABLE_STATUS_CODES = new Set([429, 503]);
@@ -26,6 +30,44 @@ function isRetryableGeminiError(err: unknown): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Quota-class failure (429 / RESOURCE_EXHAUSTED): the one retryable class
+ * where "check your API key and network" is the WRONG recovery hint
+ * (mmnto-ai/totem#2562) — the key works; the per-minute allowance is spent.
+ */
+export function isQuotaError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const errObj = err as unknown as Record<string, unknown>;
+  if (errObj['status'] === 429 || errObj['code'] === 429) return true;
+  return /RESOURCE_EXHAUSTED|TOO_MANY_REQUESTS/.test(`${String(errObj['name'])} ${err.message}`);
+}
+
+/**
+ * Extract a server-advised retry delay from a Gemini SDK error, if present.
+ * 429s carry google.rpc.RetryInfo either as a structured `errorDetails` entry
+ * (`retryDelay: "18s"`) or embedded in the message JSON. Against a per-minute
+ * quota this is the difference between the retry budget being real and being
+ * decorative — 1–4s exponential backoff never outlives the window. Capped at
+ * MAX_SERVER_RETRY_DELAY_MS; returns null when absent (caller falls back to
+ * exponential backoff).
+ */
+export function extractRetryDelayMs(err: unknown): number | null {
+  if (!(err instanceof Error)) return null;
+  const details = (err as unknown as Record<string, unknown>)['errorDetails'];
+  if (Array.isArray(details)) {
+    for (const entry of details) {
+      const delay = (entry as Record<string, unknown>)['retryDelay'];
+      if (typeof delay === 'string') {
+        const seconds = delay.match(/^(\d+(?:\.\d+)?)s$/);
+        if (seconds) return Math.min(Number(seconds[1]) * 1000, MAX_SERVER_RETRY_DELAY_MS);
+      }
+    }
+  }
+  const inMessage = err.message.match(/["']?retryDelay["']?\s*:\s*["'](\d+(?:\.\d+)?)s["']/);
+  if (inMessage) return Math.min(Number(inMessage[1]) * 1000, MAX_SERVER_RETRY_DELAY_MS);
+  return null;
 }
 
 /** Minimal interface for the subset of @google/genai SDK we use. */
@@ -76,10 +118,12 @@ export class GeminiEmbedder implements Embedder {
   readonly dimensions: number;
   private model: string;
   private apiKey: string;
+  private pace: () => Promise<void>;
 
-  constructor(model: string = DEFAULT_MODEL, dimensions?: number) {
+  constructor(model: string = DEFAULT_MODEL, dimensions?: number, throttleMs: number = 0) {
     this.model = model;
     this.dimensions = dimensions ?? DEFAULT_DIMENSIONS;
+    this.pace = createRequestPacer(throttleMs);
 
     const apiKey = process.env['GEMINI_API_KEY'] ?? process.env['GOOGLE_API_KEY'];
     if (!apiKey) {
@@ -115,6 +159,9 @@ export class GeminiEmbedder implements Embedder {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
+        // Pace every attempt (mmnto-ai/totem#2562): the throttle exists for
+        // per-minute quotas, and retries count against them like any request.
+        await this.pace();
         const response = await ai.models.embedContent({
           model: this.model,
           contents: batch.map((text: string) => ({ parts: [{ text }] })),
@@ -141,19 +188,31 @@ export class GeminiEmbedder implements Embedder {
             );
           return e.values;
         });
+        // totem-context: intentional capture — the retry loop stores the error and EVERY exit path rethrows it as the terminal TotemError below (mmnto-ai/totem#2562); nothing is swallowed.
       } catch (err) {
         lastErr = err;
         if (!isRetryableGeminiError(err) || attempt === MAX_RETRIES) break;
-        const delay = INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
+        // Server-advised delay (RetryInfo) wins over exponential backoff —
+        // against a per-minute quota, 1–4s backoff burns retries into the
+        // same closed window (mmnto-ai/totem#2562).
+        const delay =
+          extractRetryDelayMs(err) ?? INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
     const detail = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    // Quota exhaustion gets its own recovery hint (mmnto-ai/totem#2562): the
+    // key-and-network hint is actively wrong there, and since #2562 a plain
+    // `totem sync` after an interrupted full re-index RESUMES from the
+    // checkpoint — that recovery is now true, so name it.
+    const hint = isQuotaError(lastErr)
+      ? 'Embedding quota exhausted (e.g. per-minute request quota). Re-run `totem sync` — an interrupted full re-index resumes from its checkpoint instead of restarting. To stay under per-minute quotas, set `embedding.throttleMs` in totem.config.ts to pace requests.'
+      : 'Check your GEMINI_API_KEY and network connection, then retry with `totem sync`.';
     throw new TotemError(
       'EMBEDDING_UNAVAILABLE',
       `Gemini embedding failed after ${MAX_RETRIES + 1} attempts: ${detail}`,
-      'Check your GEMINI_API_KEY and network connection, then retry with `totem sync`.',
+      hint,
     );
   }
 }
