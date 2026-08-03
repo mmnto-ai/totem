@@ -218,6 +218,10 @@ try {
     // consumer of these published templates — including non-adopters, whose
     // ENOENT firing still stamps.
     const logPath = nodePath.join(process.cwd(), '.git', 'totem-status-refresh-hook.log');
+    // Control characters are scrubbed from path-derived fields before they
+    // reach the log (terminal-injection guideline: a crafted checkout path
+    // must not forge stamp lines or inject terminal controls).
+    const scrub = (v) => String(v).replace(/[\\x00-\\x1f\\x7f]/g, '?');
     let stdio = 'ignore';
     let logFd = null;
     try {
@@ -227,7 +231,7 @@ try {
       } catch {
         // no log yet — nothing to cap
       }
-      appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn cwd=' + process.cwd() + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + '\\n');
+      appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + '\\n');
       logFd = openSync(logPath, 'a');
       stdio = ['ignore', logFd, logFd];
     } catch {
@@ -863,6 +867,10 @@ try {
     // consumer of these published templates — including non-adopters, whose
     // ENOENT firing still stamps.
     const logPath = nodePath.join(process.cwd(), '.git', 'totem-status-refresh-hook.log');
+    // Control characters are scrubbed from path-derived fields before they
+    // reach the log (terminal-injection guideline: a crafted checkout path
+    // must not forge stamp lines or inject terminal controls).
+    const scrub = (v) => String(v).replace(/[\\x00-\\x1f\\x7f]/g, '?');
     let stdio = 'ignore';
     let logFd = null;
     try {
@@ -872,7 +880,7 @@ try {
       } catch {
         // no log yet — nothing to cap
       }
-      appendFileSync(logPath, '[' + new Date().toISOString() + '] claude spawn cwd=' + process.cwd() + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + '\\n');
+      appendFileSync(logPath, '[' + new Date().toISOString() + '] claude spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + '\\n');
       logFd = openSync(logPath, 'a');
       stdio = ['ignore', logFd, logFd];
     } catch {

@@ -47,8 +47,10 @@ try {
     // fd; a stamp with nothing after it means the child never finished. Log
     // failures degrade to the previous blind firing.
     // Repo-local inside .git (falsification round): never tracked, per-repo,
-    // writable wherever git itself writes; 1 MiB self-cap.
+    // writable wherever git itself writes; 1 MiB self-cap. Control characters
+    // are scrubbed from path-derived fields (terminal-injection guideline).
     const logPath = join(process.cwd(), '.git', 'totem-status-refresh-hook.log');
+    const scrub = (v) => String(v).replace(/[\x00-\x1f\x7f]/g, '?');
     let stdio = 'ignore';
     let logFd = null;
     try {
@@ -62,7 +64,7 @@ try {
         '[' +
           new Date().toISOString() +
           '] claude spawn cwd=' +
-          process.cwd() +
+          scrub(process.cwd()) +
           ' path-has-go-bin=' +
           /go[\\/]bin/i.test(process.env.PATH || '') +
           ' cwd-shadow-exe=' +

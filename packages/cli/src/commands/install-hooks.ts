@@ -189,8 +189,12 @@ if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then
   # firing — the 2>/dev/null PRECEDES the append so the open failure itself
   # stays silent (redirections apply left to right).
   TS_REFRESH_LOG=".git/totem-status-refresh-hook.log"
-  if [ -f "$TS_REFRESH_LOG" ] && [ "$(wc -c < "$TS_REFRESH_LOG" 2>/dev/null || echo 0)" -gt 1048576 ]; then : > "$TS_REFRESH_LOG"; fi
-  if printf '[%s] post-merge spawn cwd=%s bin=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd)" "$(command -v totem-status)" 2>/dev/null >> "$TS_REFRESH_LOG"; then
+  # Arithmetic expansion normalizes wc output (BSD/macOS wc pads with leading
+  # spaces) into a clean integer for -gt on every POSIX sh. Path-derived
+  # fields pass through tr -d '[:cntrl:]' so a crafted checkout path cannot
+  # forge stamp lines or inject terminal controls into the log.
+  if [ -f "$TS_REFRESH_LOG" ] && [ "$(( $(wc -c < "$TS_REFRESH_LOG" 2>/dev/null || echo 0) ))" -gt 1048576 ]; then : > "$TS_REFRESH_LOG"; fi
+  if printf '[%s] post-merge spawn cwd=%s bin=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd | tr -d '[:cntrl:]')" "$(command -v totem-status | tr -d '[:cntrl:]')" 2>/dev/null >> "$TS_REFRESH_LOG"; then
     (totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)
   else
     (totem-status refresh-gh >/dev/null 2>&1 &)

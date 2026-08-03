@@ -1139,7 +1139,9 @@ describe('post-merge hook fires totem-status refresh-gh', () => {
     // checkout-local exe on Windows).
     expect(hook).toContain('TS_REFRESH_LOG=".git/totem-status-refresh-hook.log"');
     expect(hook).toContain('post-merge spawn cwd=%s bin=%s');
-    expect(hook).toContain('$(command -v totem-status)');
+    // Path-derived fields are control-character-scrubbed before logging
+    // (terminal-injection guideline, #2572 CR round).
+    expect(hook).toContain("$(command -v totem-status | tr -d '[:cntrl:]')");
     // The 2>/dev/null PRECEDES the append: redirections apply left to right,
     // so the open failure of an unwritable log is itself silent (falsification
     // round, MAJOR 1).
