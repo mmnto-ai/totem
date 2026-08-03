@@ -1177,13 +1177,25 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
     cleanTmpDir(tmpDir);
   });
 
+  /** Wait for the marker to exist AND carry content — existence alone races
+   *  the stub's open-truncate-then-write window (observed as a CI flake:
+   *  `expected '' to be 'refresh-gh'`). */
+  function markerReady(): boolean {
+    try {
+      return fs.existsSync(markerPath) && fs.readFileSync(markerPath, 'utf-8').trim() !== '';
+      // totem-context: intentional false on a read race (marker mid-write) — the poll loop retries
+    } catch {
+      return false;
+    }
+  }
+
   async function markerAppears(timeoutMs: number): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      if (fs.existsSync(markerPath)) return true;
+      if (markerReady()) return true;
       await new Promise((r) => setTimeout(r, 50));
     }
-    return fs.existsSync(markerPath);
+    return markerReady();
   }
 
   it(

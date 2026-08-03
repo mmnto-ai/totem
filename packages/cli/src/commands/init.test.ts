@@ -2160,11 +2160,15 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       });
       expect(result.status).toBe(0);
 
+      // Wait for CONTENT, not existence — existence alone races the stub's
+      // open-truncate-then-write window (observed CI flake).
       const deadline = Date.now() + 5000;
-      while (Date.now() < deadline && !fs.existsSync(markerPath)) {
+      while (
+        Date.now() < deadline &&
+        !(fs.existsSync(markerPath) && fs.readFileSync(markerPath, 'utf-8').trim() !== '')
+      ) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      expect(fs.existsSync(markerPath)).toBe(true);
       expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
     },
   );
