@@ -1114,6 +1114,23 @@ describe('post-checkout hook content', () => {
 
 // ─── worktree-safe sync-log path (mmnto-ai/totem#2376) ─
 
+// ─── totem-status refresh-gh wiring (mmnto-ai/totem#2556) ─
+
+describe('post-merge hook fires totem-status refresh-gh', () => {
+  it('invokes refresh-gh presence-gated and backgrounded (mmnto-ai/totem-status#127 C3)', () => {
+    const hook = buildHookContent('pnpm dlx @mmnto/cli');
+
+    // Presence gate (absent binary = zero noise) AND primary-checkout gate: in a
+    // linked worktree .git is a pointer FILE and a backgrounded child inheriting
+    // the worktree cwd holds a Windows directory lock that breaks worktree removal.
+    expect(hook).toContain('if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then');
+    // Spawn-and-forget: backgrounded subshell, output discarded — the merge never waits.
+    expect(hook).toContain('(totem-status refresh-gh >/dev/null 2>&1 &)');
+    // The bounded owned region stays intact: end marker still terminates the file.
+    expect(hook.trimEnd().endsWith(`# ${TOTEM_HOOK_END}`)).toBe(true);
+  });
+});
+
 describe('sync-log redirect resolves the git dir (worktree-safe)', () => {
   it('post-merge hook derives the log path from git rev-parse --git-dir', () => {
     const hook = buildHookContent('pnpm dlx @mmnto/cli');

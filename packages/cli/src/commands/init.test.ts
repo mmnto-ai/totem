@@ -1492,6 +1492,33 @@ describe('CLAUDE_SESSION_START template', () => {
       CLAUDE_SESSION_START.indexOf("'--session'"),
     );
   });
+
+  it('fires totem-status refresh-gh spawn-and-forget BEFORE the briefings (mmnto-ai/totem#2556)', () => {
+    // Routed C3 residual from mmnto-ai/totem-status#127: detached+unref spawn so
+    // session start never blocks on the refresh (#2059 latency caveat), fired
+    // before the synchronous describe/orient calls so it overlaps them.
+    expect(CLAUDE_SESSION_START).toContain("spawn('totem-status', ['refresh-gh']");
+    expect(CLAUDE_SESSION_START).toContain('detached: true');
+    expect(CLAUDE_SESSION_START).toContain('refresh.unref()');
+    expect(CLAUDE_SESSION_START.indexOf('refresh-gh')).toBeLessThan(
+      CLAUDE_SESSION_START.indexOf("'describe'"),
+    );
+  });
+
+  it('gates refresh-gh to a PRIMARY checkout (.git directory) — worktree/non-git cwds skip', () => {
+    // A detached child inheriting a linked-worktree cwd holds a Windows directory
+    // lock that breaks worktree removal (.git is a pointer FILE there); a non-git
+    // cwd (e.g. the runtime-test tmpdirs below) has no refresh moment at all.
+    expect(CLAUDE_SESSION_START).toContain('.isDirectory()');
+    expect(CLAUDE_SESSION_START).toContain('if (primaryCheckout)');
+  });
+
+  it('skips refresh-gh with zero noise when the sidecar binary is absent (ENOENT)', () => {
+    // Non-cohort consumers receive these templates too — an absent totem-status
+    // must not print a per-session warning; other spawn failures keep a breadcrumb.
+    expect(CLAUDE_SESSION_START).toContain("err.code === 'ENOENT'");
+    expect(CLAUDE_SESSION_START).toContain('refresh-gh spawn failed (non-fatal)');
+  });
 });
 
 describe('GEMINI_SESSION_START template', () => {
@@ -1538,6 +1565,21 @@ describe('GEMINI_SESSION_START template', () => {
     expect(GEMINI_SESSION_START).toContain("'totem orient --session'");
     expect(GEMINI_SESSION_START.indexOf("'totem describe'")).toBeLessThan(
       GEMINI_SESSION_START.indexOf("'totem orient --session'"),
+    );
+  });
+
+  it('fires totem-status refresh-gh spawn-and-forget BEFORE describe, matching the Claude twin (mmnto-ai/totem#2556)', () => {
+    // Vehicle parity: the mmnto-ai/totem-status#127 C3 moment is "session start",
+    // not a vendor. Same detached+unref + ENOENT-silent + primary-checkout-gated
+    // shape as CLAUDE_SESSION_START.
+    expect(GEMINI_SESSION_START).toContain("spawn('totem-status', ['refresh-gh']");
+    expect(GEMINI_SESSION_START).toContain('detached: true');
+    expect(GEMINI_SESSION_START).toContain('refresh.unref()');
+    expect(GEMINI_SESSION_START).toContain("err.code === 'ENOENT'");
+    expect(GEMINI_SESSION_START).toContain('.isDirectory()');
+    expect(GEMINI_SESSION_START).toContain('if (primaryCheckout)');
+    expect(GEMINI_SESSION_START.indexOf('refresh-gh')).toBeLessThan(
+      GEMINI_SESSION_START.indexOf("'totem describe'"),
     );
   });
 });
