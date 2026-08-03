@@ -215,6 +215,7 @@ class ScriptedEmbedder implements Embedder {
   failFromCall: number | null = null;
   onCall: (() => void) | undefined;
   describeEffective?: () => { provider: string; model: string; dimensions: number } | null;
+  resolveEffective?: () => Promise<{ provider: string; model: string; dimensions: number }>;
   private calls = 0;
 
   constructor(dimensions: number = 4) {
@@ -564,6 +565,54 @@ describe('full-sync crash recovery (#2562)', () => {
       const result = await run(resumer, true);
       expect(result.filesProcessed).toBe(3);
       expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+    },
+  );
+
+  it(
+    'F2: a PERSISTENT fallback resumes as itself instead of restart-looping',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      const ollamaId = { provider: 'ollama', model: 'nomic-embed-text', dimensions: 4 };
+      const crasher = new ScriptedEmbedder();
+      crasher.failFromCall = 2;
+      crasher.describeEffective = () => ollamaId;
+      await expect(run(crasher, false)).rejects.toThrow('RESOURCE_EXHAUSTED');
+      const missing = unflushedFile();
+
+      // The fallback persists into the next run: it resolves to the SAME
+      // effective identity, so the epoch continues. Pre-fold, the gate
+      // compared the stamped ollama identity against the CONFIG (gemini)
+      // fingerprint and restart-looped forever, resetting the store on
+      // every attempt — a corpus needing more than one run never completed.
+      const resumer = new ScriptedEmbedder();
+      resumer.resolveEffective = () => Promise.resolve(ollamaId);
+      const result = await run(resumer, true);
+
+      expect(result.filesProcessed).toBe(1);
+      expect(resumer.allText()).toContain(`${STEM[missing]}-content-1`);
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
+
+  it(
+    'F1: a run falling back mid-resume restarts BEFORE inserting into the genuine epoch',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      await crashFullSync(); // checkpoint carries the genuine (gemini) fingerprint
+
+      // This run's embedder RESOLVES to an ollama fallback. The gate must
+      // compare effective-vs-effective and restart — pre-fold it compared
+      // config-vs-stamped (gemini vs gemini → match) and ollama vectors were
+      // inserted beside the epoch's gemini rows, mixing vector spaces.
+      const resumer = new ScriptedEmbedder();
+      resumer.resolveEffective = () =>
+        Promise.resolve({ provider: 'ollama', model: 'nomic-embed-text', dimensions: 4 });
+      const result = await run(resumer, true);
+
+      expect(result.filesProcessed).toBe(3);
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
     },
   );
 

@@ -25,6 +25,18 @@ export interface Embedder {
    * fallback would mix vector spaces across a resume.
    */
   describeEffective?(): { provider: string; model: string; dimensions: number } | null;
+
+  /**
+   * Optional: FORCE resolution and return the identity that will serve this
+   * run's embeds (mmnto-ai/totem#2562, falsification round 2). A resume
+   * decision must compare effective-vs-effective — the configured identity is
+   * unknowably wrong in both directions before resolution: a run silently
+   * falling back would pass a config match and mix vector spaces at the first
+   * insert, and a persistent fallback would spuriously restart every attempt.
+   * Throws when no embedder is available at all (same failure the first
+   * embed would hit, just earlier and with state intact).
+   */
+  resolveEffective?(): Promise<{ provider: string; model: string; dimensions: number }>;
 }
 
 const OLLAMA_DEFAULTS = {
@@ -140,6 +152,14 @@ class LazyEmbedder implements Embedder {
   /** The identity actually serving embeds — null until the first embed resolves (#2562). */
   describeEffective(): { provider: string; model: string; dimensions: number } | null {
     return this.effective;
+  }
+
+  /** Force resolution and report the identity that will serve embeds (#2562). */
+  async resolveEffective(): Promise<{ provider: string; model: string; dimensions: number }> {
+    await this.resolve();
+    // Both doResolve paths set `effective` before returning; a resolution
+    // failure throws out of resolve() above and never reaches here.
+    return this.effective!;
   }
 
   /** Resolve the real embedder once. Concurrent callers share the same promise. */

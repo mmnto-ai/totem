@@ -197,6 +197,7 @@ export type { IndexManifest, ManifestDocument, ResolvedFile } from './ingest/syn
 export {
   buildIndexManifest,
   getChangedFiles,
+  getChangedFilesDetailed,
   getHeadSha,
   INDEX_MANIFEST_SCHEMA,
   resolveFiles,

@@ -11,6 +11,18 @@ const INITIAL_BACKOFF_MS = 1000;
 // Cap on a server-advised retry delay — a pathological RetryInfo hint must not
 // stall the run; bounds worst-case retry wall-clock at ~MAX_RETRIES minutes.
 const MAX_SERVER_RETRY_DELAY_MS = 60_000;
+// The Vertex quota that kills unthrottled syncs is a PER-MINUTE window
+// (ground-read 2026-08-03, mmnto-ai/totem#2562: online_prediction_requests_
+// per_base_model = 2,000/min default for gemini-embedding-2, accounting
+// consistent with per-content-item). Derived default pacing: 100-item batches
+// every 4s = 1,500 items/min — under the window with margin. A run that never
+// throttles converges on a corpus of ANY size in corpus/1500 minutes instead
+// of dying at ~2k. Explicit `throttleMs: 0` disables pacing.
+const DEFAULT_THROTTLE_MS = 4_000;
+// Quota retries without a server-advised delay must back off PAST the minute
+// boundary — 1–4s backoff burns the whole retry budget inside the same closed
+// window that produced the 429.
+const QUOTA_WINDOW_BACKOFF_MS = 60_000;
 
 /** Status codes / error names that are safe to retry. */
 const RETRYABLE_STATUS_CODES = new Set([429, 503]);
@@ -120,7 +132,11 @@ export class GeminiEmbedder implements Embedder {
   private apiKey: string;
   private pace: () => Promise<void>;
 
-  constructor(model: string = DEFAULT_MODEL, dimensions?: number, throttleMs: number = 0) {
+  constructor(
+    model: string = DEFAULT_MODEL,
+    dimensions?: number,
+    throttleMs: number = DEFAULT_THROTTLE_MS,
+  ) {
     this.model = model;
     this.dimensions = dimensions ?? DEFAULT_DIMENSIONS;
     this.pace = createRequestPacer(throttleMs);
@@ -192,16 +208,20 @@ export class GeminiEmbedder implements Embedder {
       } catch (err) {
         lastErr = err;
         if (!isRetryableGeminiError(err) || attempt === MAX_RETRIES) break;
-        // Server-advised delay (RetryInfo) wins over exponential backoff —
-        // against a per-minute quota, 1–4s backoff burns retries into the
-        // same closed window (mmnto-ai/totem#2562). A "0s" advisory is
-        // treated as absent: taking it literally would collapse the whole
-        // retry budget into a zero-delay burst.
+        // Delay selection (mmnto-ai/totem#2562, falsification round 2 F4 +
+        // the per-minute ground-read): a server-advised RetryInfo delay wins
+        // when it is LONGER than the exponential backoff (never shorter — a
+        // "0s"/"0.001s" advisory must not collapse the budget into a burst);
+        // a quota 429 with NO advisory waits out the minute window instead of
+        // burning all retries inside the window that produced it.
+        const backoff = INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
         const advised = extractRetryDelayMs(err);
         const delay =
-          advised !== null && advised > 0
-            ? advised
-            : INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
+          advised !== null
+            ? Math.max(advised, backoff)
+            : isQuotaError(err)
+              ? Math.max(backoff, QUOTA_WINDOW_BACKOFF_MS)
+              : backoff;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

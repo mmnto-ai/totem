@@ -248,13 +248,37 @@ describe('GeminiEmbedder', () => {
     });
     mockEmbedContent.mockRejectedValueOnce(quotaErr).mockResolvedValueOnce(embedResponse(1));
 
-    const embedder = new GeminiEmbedder();
+    const embedder = new GeminiEmbedder(undefined, undefined, 0);
     await embedder.embed(['test']);
 
     expect(delays).toContain(18_000);
   });
 
-  it('a server-advised "0s" retryDelay falls back to exponential backoff (no zero-delay storm)', async () => {
+  it.each(['0s', '0.5s'])(
+    'a sub-backoff server advisory ("%s") never undercuts the exponential floor',
+    async (advisory) => {
+      const delays: (number | undefined)[] = [];
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+        delays.push(ms);
+        fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }) as never);
+
+      const quotaErr = Object.assign(new Error('rate limited'), {
+        status: 429,
+        errorDetails: [{ retryDelay: advisory }],
+      });
+      mockEmbedContent.mockRejectedValueOnce(quotaErr).mockResolvedValueOnce(embedResponse(1));
+
+      const embedder = new GeminiEmbedder(undefined, undefined, 0);
+      await embedder.embed(['test']);
+
+      expect(delays).toHaveLength(1);
+      expect(delays[0]!).toBeGreaterThanOrEqual(1000); // INITIAL_BACKOFF_MS floor
+    },
+  );
+
+  it('a quota 429 with NO advisory backs off past the minute window', async () => {
     const delays: (number | undefined)[] = [];
     vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
       delays.push(ms);
@@ -262,22 +286,20 @@ describe('GeminiEmbedder', () => {
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as never);
 
-    const quotaErr = Object.assign(new Error('rate limited'), {
-      status: 429,
-      errorDetails: [{ retryDelay: '0s' }],
-    });
+    const quotaErr = Object.assign(new Error('quota exceeded RESOURCE_EXHAUSTED'), { status: 429 });
     mockEmbedContent.mockRejectedValueOnce(quotaErr).mockResolvedValueOnce(embedResponse(1));
 
-    const embedder = new GeminiEmbedder();
+    const embedder = new GeminiEmbedder(undefined, undefined, 0);
     await embedder.embed(['test']);
 
-    expect(delays).toHaveLength(1);
-    expect(delays[0]!).toBeGreaterThanOrEqual(1000); // INITIAL_BACKOFF_MS floor
+    // The 2,000/min quota is a rolling 60s window — fast retries die inside
+    // the window that produced the 429 (ground-read 2026-08-03).
+    expect(delays.some((d) => d !== undefined && d >= 60_000)).toBe(true);
   });
 
   // ─── Request pacing (#2562) ────────────────────────
 
-  it('throttleMs paces successive API calls; 0 adds no waits', async () => {
+  it('throttleMs paces successive API calls; explicit 0 disables pacing', async () => {
     const delays: (number | undefined)[] = [];
     vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
       delays.push(ms);
@@ -287,7 +309,7 @@ describe('GeminiEmbedder', () => {
 
     mockEmbedContent.mockResolvedValue(embedResponse(1));
 
-    const unpaced = new GeminiEmbedder();
+    const unpaced = new GeminiEmbedder(undefined, undefined, 0);
     await unpaced.embed(['a']);
     await unpaced.embed(['b']);
     expect(delays).toHaveLength(0);
@@ -299,6 +321,27 @@ describe('GeminiEmbedder', () => {
     const wait = delays[delays.length - 1]!;
     expect(wait).toBeGreaterThan(0);
     expect(wait).toBeLessThanOrEqual(5_000);
+  });
+
+  it('pacing defaults ON at the derived per-minute-window constant (#2562 ground-read)', async () => {
+    const delays: (number | undefined)[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      delays.push(ms);
+      fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as never);
+
+    mockEmbedContent.mockResolvedValue(embedResponse(1));
+
+    // No throttleMs given — the gemini default (4s between batches ≈ 1,500
+    // items/min at 100-item batches) must pace the second call.
+    const embedder = new GeminiEmbedder();
+    await embedder.embed(['a']);
+    await embedder.embed(['b']);
+    expect(delays.length).toBeGreaterThanOrEqual(1);
+    const wait = delays[delays.length - 1]!;
+    expect(wait).toBeGreaterThan(0);
+    expect(wait).toBeLessThanOrEqual(4_000);
   });
 });
 

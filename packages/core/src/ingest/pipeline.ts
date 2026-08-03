@@ -393,14 +393,25 @@ async function runSyncInner(
     incremental = false;
     resumeFrom = readFullSyncCheckpoint(totemDir, log);
     if (resumeFrom) {
+      // EFFECTIVE-vs-effective comparison (falsification round 2, F1/F2): the
+      // epoch may only continue under the embedder identity that will ACTUALLY
+      // serve this run's embeds. Comparing the checkpoint against the CONFIG
+      // fingerprint is wrong in both directions — a run silently falling back
+      // to Ollama would pass a config match and mix vector spaces at the first
+      // insert, while a PERSISTENT fallback (stamped ollama, config gemini)
+      // would restart-and-reset on every attempt and never converge. Forcing
+      // resolution here moves it moments ahead of the first insert, where it
+      // would happen anyway; a resolution failure (no embedder at all) throws
+      // loud with the store and marker intact.
+      const effectiveNow = (await embedder.resolveEffective?.()) ?? embedderFingerprint;
       const fp = resumeFrom.embedder;
       if (
-        fp.provider !== embedderFingerprint.provider ||
-        fp.model !== embedderFingerprint.model ||
-        fp.dimensions !== embedderFingerprint.dimensions
+        fp.provider !== effectiveNow.provider ||
+        fp.model !== effectiveNow.model ||
+        fp.dimensions !== effectiveNow.dimensions
       ) {
         log(
-          'Embedding config changed since the interrupted full re-index — its progress is unusable.',
+          `The embedder serving this run (${effectiveNow.provider}/${effectiveNow.model}) differs from the interrupted epoch's (${fp.provider}/${fp.model}) — its progress is unusable.`,
         );
         resumeFrom = null;
       }
@@ -533,46 +544,43 @@ async function runSyncInner(
     //   3. ∩ actually-in-the-store — the store is ground truth: a store
     //      healed/nuked under a live checkpoint must not be trusted from
     //      paper (falsification round 1, MAJOR 1);
-    //   4. − moved-since-epoch: tracked files via git diff against
-    //      startedHeadSha; UNTRACKED files via mtime vs the epoch start,
-    //      because untracked membership in git's changed-union is permanent
-    //      and would evict them every round — quota re-spent forever, never
-    //      converging (MAJOR 2). A non-git epoch (null startedHeadSha) has no
-    //      diff signal and takes the mtime arm for every file (MAJOR 4).
+    //   4. − moved-since-epoch: anything in git's tracked diff against
+    //      startedHeadSha, PLUS anything whose mtime postdates the epoch
+    //      start. The mtime arm applies to EVERY file, not only untracked
+    //      ones (falsification round 2, F3: submodule and assume-unchanged
+    //      files appear in neither git list, so an untracked-only mtime arm
+    //      silently kept them stale) — a false-positive eviction is just a
+    //      harmless re-embed. Untracked files are deliberately NOT evicted by
+    //      git-list membership (it is permanent — round 1, MAJOR 2), and a
+    //      non-git epoch (null startedHeadSha) has an empty tracked set, so
+    //      the mtime arm carries it alone (MAJOR 4).
     // The epoch diff never derives from options.changedFiles — a caller's
     // diff window says nothing about what the crashed epoch covered.
-    const detailed: { tracked: string[]; untracked: string[] | null } | null =
-      resumeFrom.startedHeadSha
-        ? getChangedFilesDetailed(projectRoot, resumeFrom.startedHeadSha, log)
-        : { tracked: [], untracked: null };
+    const detailed: { tracked: string[]; untracked: string[] } | null = resumeFrom.startedHeadSha
+      ? getChangedFilesDetailed(projectRoot, resumeFrom.startedHeadSha, log)
+      : { tracked: [], untracked: [] };
 
-    let indexedRaw: string[] | null = null;
-    if (detailed !== null) {
-      try {
-        indexedRaw = await store.getDistinctPaths();
-        // totem-context: intentional warn+restart on a getDistinctPaths failure (mmnto-ai/totem#2562) — an unverifiable checkpoint restarts the full re-index from zero below; progress is discarded, correctness kept.
-      } catch (err) {
-        log(
-          `Warning: cannot verify the checkpoint against the store (getDistinctPaths failed: ${err instanceof Error ? err.message : String(err)}).`,
-        );
-      }
-    }
-
-    if (detailed === null || indexedRaw === null) {
-      log('Cannot verify the interrupted epoch — restarting the full re-index from zero.');
+    if (detailed === null) {
+      log('Cannot diff against the interrupted epoch — restarting the full re-index from zero.');
       await beginFullSync(freshCheckpoint());
       filesToProcess = allFiles;
       log(`Full sync: ${filesToProcess.length} files to process`);
     } else {
+      let indexedRaw: string[] | null = null;
+      try {
+        indexedRaw = await store.getDistinctPaths();
+        // totem-context: intentional warn+degrade on a getDistinctPaths failure (mmnto-ai/totem#2562, falsification round 2 F7) — the completed set collapses to EMPTY below (every file re-embeds via delete-first, same cost as a reset-restart) but the table is NOT destroyed over a possibly-transient read failure, so prior rows stay searchable if this attempt also dies.
+      } catch (err) {
+        log(
+          `Warning: cannot verify the checkpoint against the store (getDistinctPaths failed: ${err instanceof Error ? err.message : String(err)}) — re-embedding everything without trusting the checkpoint.`,
+        );
+      }
+
       const epochStart = resumeFrom.startedAt;
       const byRel = new Map(allFiles.map((f) => [normalizeRel(f.relativePath), f]));
       const tracked = new Set(detailed.tracked.map(normalizeRel));
-      // untracked === null ⇔ non-git epoch: every file takes the mtime arm.
-      const mtimeChecked =
-        detailed.untracked === null ? null : new Set(detailed.untracked.map(normalizeRel));
       const movedSinceEpoch = (rel: string): boolean => {
         if (tracked.has(rel)) return true;
-        if (mtimeChecked !== null && !mtimeChecked.has(rel)) return false;
         const file = byRel.get(rel);
         if (!file) return true;
         try {
@@ -582,11 +590,13 @@ async function runSyncInner(
           return true;
         }
       };
-      const indexed = new Set(indexedRaw.map(normalizeRel));
+      const indexed = indexedRaw === null ? null : new Set(indexedRaw.map(normalizeRel));
       const completed = new Set(
-        resumeFrom.completedFiles
-          .map(normalizeRel)
-          .filter((rel) => byRel.has(rel) && indexed.has(rel) && !movedSinceEpoch(rel)),
+        indexed === null
+          ? []
+          : resumeFrom.completedFiles
+              .map(normalizeRel)
+              .filter((rel) => byRel.has(rel) && indexed.has(rel) && !movedSinceEpoch(rel)),
       );
       filesToProcess = allFiles.filter((f) => !completed.has(normalizeRel(f.relativePath)));
       // Carry forward only verified entries, re-keyed to the current run's
@@ -783,10 +793,7 @@ async function runSyncInner(
     const writtenAt = new Date();
     const docs = await store.manifestDocuments(writtenAt);
     const manifest = buildIndexManifest({ documents: docs, headSha, writtenAt });
-    const manifestPath = path.join(totemDir, 'index-manifest.json');
-    const tmpManifestPath = manifestPath + '.tmp';
-    fs.writeFileSync(tmpManifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
-    fs.renameSync(tmpManifestPath, manifestPath);
+    writeJsonAtomic(path.join(totemDir, 'index-manifest.json'), manifest);
   } catch (err) {
     const detail =
       err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error';
