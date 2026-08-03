@@ -166,6 +166,12 @@ interface MechanicalArtifact {
   markers: ManagedBlockMarkers;
   canonicalBlock: string | undefined;
   lineName: string;
+  /**
+   * Remediation command override for surfaces `totem init` does not write yet
+   * (core defaults to `totem init` when omitted) — an inert remedy is worse
+   * than none (#2532 slice-1 falsification round).
+   */
+  installHint?: string;
 }
 
 /**
@@ -207,6 +213,31 @@ function mechanicalArtifactsFor(
         markers,
         canonicalBlock: extract(s.content, markers),
         lineName: `Parity: claude-skills (${s.name})`,
+      }));
+    case 'agents-skills':
+      // The vendor-neutral `.agents/skills/` surface (mmnto-ai/totem#2532): the
+      // 2026-07/08 censuses proved gemini (live probe, CLI 0.53.0), agy and kimi
+      // (executed 2026-07-23 probes) all discover `.agents/skills/<name>/SKILL.md`;
+      // codex is ruled at the same shape (probe owed). Content contract is
+      // byte-identical to the Claude skills — SAME canonical constants, SAME
+      // markers — so the artifact map differs from `claude-skills` only in the
+      // consumer directory. Absence stays `skip` (a repo adopts the surface per
+      // vehicle roster, never by default).
+      return templates.distributedSkills.map((s) => ({
+        consumerPath: path.join(gitRoot, '.agents', 'skills', s.name, 'SKILL.md'),
+        markers,
+        canonicalBlock: extract(s.content, markers),
+        lineName: `Parity: agents-skills (${s.name})`,
+        // totem init does not write this surface until #2532 slice 2 — the
+        // honest remedy today is the byte-copy from the Claude twin. Descriptive
+        // prose, not a literal command (#2559 cross-bot round): `cp` is not
+        // cmd.exe-portable, the skip state means the destination dir does not
+        // exist yet, the twin itself can be absent, and doctor may run from a
+        // subdirectory of gitRoot.
+        installHint:
+          `a byte-copy of .claude/skills/${s.name}/SKILL.md into .agents/skills/${s.name}/ ` +
+          `(create the directory first; totem init materializes the twin if absent, ` +
+          `and learns this surface in mmnto-ai/totem#2532 slice 2)`,
       }));
     case 'review-reply-skill-content':
       return [
@@ -1158,6 +1189,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
               consumerPath: a.consumerPath,
               markers: a.markers,
               ...(binary !== undefined ? { binary } : {}),
+              ...(a.installHint !== undefined ? { installHint: a.installHint } : {}),
             });
             if (verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
             return lineFor(a.lineName, verdict);

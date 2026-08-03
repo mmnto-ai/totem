@@ -714,6 +714,111 @@ describe('checkParity — mechanical skills wiring (#2073)', () => {
   });
 });
 
+// ─── mechanical agents-skills detection wiring (mmnto-ai/totem#2532 slice 1) ─
+
+/** A manifest with the vendor-neutral agents-skills mechanical contract. */
+const AGENTS_SKILLS_MANIFEST_YAML = `schema-version: 1
+status: scaffold
+contracts:
+  - id: agents-skills
+    dimension: skills
+    canonical-source: mmnto-ai/totem:packages/cli/src/commands/init-templates.ts#DISTRIBUTED_CLAUDE_SKILLS
+    detection-method: managed-block content equality per distributed skill at .agents/skills/
+    expected-value-or-derivation: consumer skill managed-blocks match distributed source
+    tractability: mechanical
+    tracking-issue: mmnto-ai/totem#2532
+`;
+
+/** Write a consumer skill artifact at the vendor-neutral `.agents/skills/<name>/SKILL.md`. */
+function writeAgentsSkill(name: string, content: string): void {
+  const abs = path.join(tmpDir, '.agents', 'skills', name, 'SKILL.md');
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, content, 'utf-8');
+}
+
+describe('checkParity — mechanical agents-skills wiring (#2532 slice 1)', () => {
+  it('emits one line per distributed skill against .agents/skills/; PASS on byte-identical instances', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', AGENTS_SKILLS_MANIFEST_YAML);
+    // The #2532 contract: the vendor-neutral instances are byte-copies of the
+    // Claude canonical, so the SAME constants must verdict them.
+    for (const s of DISTRIBUTED_CLAUDE_SKILLS) writeAgentsSkill(s.name, s.content);
+
+    const { results } = await checkParity(tmpDir);
+    const skillLines = results.filter((r) => r.name.startsWith('Parity: agents-skills'));
+    expect(skillLines).toHaveLength(DISTRIBUTED_CLAUDE_SKILLS.length);
+    expect(skillLines.every((r) => r.status === 'pass')).toBe(true);
+  });
+
+  it('WARN on drift inside the managed block; the .claude twin stays independent', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', AGENTS_SKILLS_MANIFEST_YAML);
+    const first = DISTRIBUTED_CLAUDE_SKILLS[0]!;
+    writeAgentsSkill(
+      first.name,
+      first.content.replace(SKILL_MARKER_START, `${SKILL_MARKER_START}\nDRIFT INJECTED`),
+    );
+    // A pristine .claude twin must NOT satisfy the .agents row (distinct paths).
+    writeSkill(first.name, first.content);
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === `Parity: agents-skills (${first.name})`)!;
+    expect(line.status).toBe('warn');
+    expect(line.message).toMatch(/drift/i);
+    // The remedy must be one that actually touches this surface AND holds in
+    // the states it is prescribed for (slice-1 falsification F2 + the #2559
+    // cross-bot round): descriptive byte-copy prose naming directory creation
+    // and the twin fallback — never a bare platform-bound command, and never
+    // "via totem init" (which does not write .agents/skills until slice 2).
+    expect(line.remediation).toContain(
+      `a byte-copy of .claude/skills/${first.name}/SKILL.md into .agents/skills/${first.name}/`,
+    );
+    expect(line.remediation).toContain('create the directory first');
+    expect(line.remediation).not.toContain('via totem init');
+  });
+
+  it('SKIP when the surface is not adopted (no .agents/skills at all), never fail', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', AGENTS_SKILLS_MANIFEST_YAML);
+
+    const { results } = await checkParity(tmpDir);
+    const skillLines = results.filter((r) => r.name.startsWith('Parity: agents-skills'));
+    // Exactly one skip PER distributed skill (CR on #2559): a single aggregate
+    // line would satisfy a bare non-empty check while dropping per-skill rows.
+    expect(skillLines).toHaveLength(DISTRIBUTED_CLAUDE_SKILLS.length);
+    expect(skillLines.every((r) => r.status === 'skip')).toBe(true);
+    expect(results.some((r) => r.status === 'fail')).toBe(false);
+    // The skip branch threads the SAME installHint as drift (CR re-review on
+    // #2559): the not-yet-adopted state is where the remedy is read most, and
+    // the two branches must not regress independently.
+    const first = skillLines.find((r) => r.name === `Parity: agents-skills (signon)`)!;
+    expect(first.remediation).toContain(
+      'a byte-copy of .claude/skills/signon/SKILL.md into .agents/skills/signon/',
+    );
+    expect(first.remediation).toContain('create the directory first');
+    expect(first.remediation).not.toContain('via totem init');
+  });
+
+  it('WARN with the byte-copy restore remedy when markers are stripped (third installHint branch)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', AGENTS_SKILLS_MANIFEST_YAML);
+    const first = DISTRIBUTED_CLAUDE_SKILLS[0]!;
+    // An existing artifact with NO managed-block markers at all (unmanaged /
+    // marker-stripped) exercises the markers-absent remediation branch.
+    writeAgentsSkill(first.name, 'unmanaged content with no totem markers\n');
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === `Parity: agents-skills (${first.name})`)!;
+    expect(line.status).toBe('warn');
+    expect(line.message).toMatch(/markers absent/i);
+    expect(line.remediation).toContain('Restore the managed block via');
+    expect(line.remediation).toContain(
+      `a byte-copy of .claude/skills/${first.name}/SKILL.md into .agents/skills/${first.name}/`,
+    );
+    expect(line.remediation).not.toContain('via totem init');
+  });
+});
+
 // ─── mechanical review-loop-skill-content detection wiring (Prop 304 R2, #2106) ──
 
 /** A manifest with the single-skill review-loop-skill-content mechanical contract. */

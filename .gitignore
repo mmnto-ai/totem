@@ -71,8 +71,23 @@ scratchpad/
 design/
 .journal/
 
-# Agent & tool artifacts
-.agents/
+# Agent & tool artifacts. `.agents/` stays machine-local EXCEPT the four
+# distributed baseline skills (mmnto-ai/totem#2532 slice 1, operator-ruled
+# scoped negation 2026-08-03): the vendor-neutral `.agents/skills/<name>/`
+# surface is read by gemini/agy/kimi (census-proven) + codex (ruled), so those
+# four dirs are tracked; everything else under .agents/ remains local.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/signon/
+!.agents/skills/signoff/
+!.agents/skills/review-reply/
+!.agents/skills/review-loop/
+# The four names above hand-mirror DISTRIBUTED_CLAUDE_SKILLS (gitignore cannot
+# derive); a lock test in init.test.ts fails the build if the lists drift.
+# Root-anchored `.agents/*` no longer matches NESTED .agents/ dirs the old
+# `.agents/` pattern caught — re-ignore those at depth >= 1:
+*/**/.agents/
 .continue/
 .code-review/
 skills-lock.json
