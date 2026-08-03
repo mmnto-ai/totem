@@ -1,5 +1,16 @@
 # @mmnto/cli
 
+## 1.109.0
+
+### Minor Changes
+
+- be3c9fe: `totem doctor --parity` gains the `agents-skills` mechanical contract detector: managed-block content equality of the four distributed baseline skills at the vendor-neutral `.agents/skills/<name>/SKILL.md` surface (mmnto-ai/totem#2532 slice 1). The censuses proved gemini (live probe, CLI 0.53.0), agy, and kimi (executed 2026-07-23 probes) all discover that surface natively; codex is ruled at the same shape. Content contract is byte-identical to the Claude skills — same canonical constants, same markers — and absence stays `skip` (honest-absent; a repo adopts the surface per vehicle roster). The row renders once the `agents-skills` contract lands in the strategy-doctrine parity manifest; until then the detector is dormant, and an init.test.ts byte-lock keeps the `.agents` copies from rotting in the meantime. Boundary honesty: a `pass` means the bytes match the canonical — it never asserts a vehicle can see them (gemini and agy gate workspace skills on folder trust; kimi snapshots its listing at session start). Remediation strings name the honest remedy per surface (`cp` from the Claude twin until `totem init` learns this surface in slice 2).
+- 3ef61fc: The managed hook templates — Claude SessionStart (`.claude/hooks/SessionStart.cjs`), Gemini SessionStart (`.gemini/hooks/SessionStart.js`), and the git `post-merge` hook — now fire `totem-status refresh-gh` spawn-and-forget (routed C3 residual from mmnto-ai/totem-status#127, tracked in mmnto-ai/totem#2556). Two gates, both required: the sidecar binary must be on PATH (absent = zero noise), and the cwd must be a PRIMARY checkout (`.git` is a directory — in a linked worktree a detached child inheriting the cwd holds a Windows directory lock that breaks worktree removal, so worktrees skip and the primary's hooks cover the workspace-level snapshot). The invocation is fully asynchronous: session start and merge completion never wait on it. Distributes through the existing drift-repair path (`totem hook install` via the consumer `prepare` wrapper).
+
+### Patch Changes
+
+- @mmnto/totem@1.109.0
+
 ## 1.108.0
 
 ### Minor Changes
