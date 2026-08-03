@@ -36,7 +36,10 @@ past deadline+WaitDelay. Safe to fire blind.
   fd (Node) / appends to it (sh) instead — each firing stamps the log first,
   so a stamp with no verb line after it discriminates a harness reap from a
   child failure (the status seat's observed silent no-write). Log-unwritable
-  degrades to the blind form above; 1 MiB self-cap; same-repo concurrent
+  degrades to the blind form above; SOFT 1 MiB self-cap (the pre-append size
+  check means a boundary firing can leave the file one record over the
+  threshold — the next firing truncates; exact enforcement would buy a
+  ~0.03% bound tightening at four sites); same-repo concurrent
   firings pair stamp↔verb by time window, not adjacency (single-flight keeps
   this rare). Accepted residual (#2572 bot round, Greptile P2): at the cap
   boundary, same-instant same-repo firings can truncate away one fresh stamp —
