@@ -28,7 +28,26 @@ fi
 # breaks worktree removal; the primary's hooks + the daemon cover the workspace-level
 # snapshot, and the verb's single-flight makes extra fires redundant anyway.
 if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then
-  (totem-status refresh-gh >/dev/null 2>&1 &)
+  # Observability leg (mmnto-ai/totem#2570): stamp each firing (time, cwd, and
+  # WHICH binary resolved — the shell search order includes cwd on Windows, so
+  # a stale checkout-local exe can shadow the installed one) and hand the child
+  # the same log, so the verb's own success line lands after the stamp; a stamp
+  # with nothing after it means the child never finished. Repo-local inside
+  # .git (never tracked, per-repo, writable wherever git itself writes); 1 MiB
+  # self-cap. If the log is not writable, fall back to the previous blind
+  # firing — the 2>/dev/null PRECEDES the append so the open failure itself
+  # stays silent (redirections apply left to right).
+  TS_REFRESH_LOG=".git/totem-status-refresh-hook.log"
+  # Arithmetic expansion normalizes wc output (BSD/macOS wc pads with leading
+  # spaces) into a clean integer for -gt on every POSIX sh. Path-derived
+  # fields pass through tr -d '[:cntrl:]' so a crafted checkout path cannot
+  # forge stamp lines or inject terminal controls into the log.
+  if [ -f "$TS_REFRESH_LOG" ] && [ "$(( $(wc -c < "$TS_REFRESH_LOG" 2>/dev/null || echo 0) ))" -gt 1048576 ]; then : > "$TS_REFRESH_LOG"; fi
+  if printf '[%s] post-merge spawn cwd=%s bin=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd | tr -d '[:cntrl:]')" "$(command -v totem-status | tr -d '[:cntrl:]')" 2>/dev/null >> "$TS_REFRESH_LOG"; then
+    (totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)
+  else
+    (totem-status refresh-gh >/dev/null 2>&1 &)
+  fi
 fi
 
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing).

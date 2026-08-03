@@ -10,7 +10,16 @@
  */
 
 import { execSync, spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -31,11 +40,59 @@ try {
     // not a git checkout — no refresh moment here
   }
   if (primaryCheckout) {
+    // Observability leg (mmnto-ai/totem#2570, routed from the status seat's
+    // 2026-08-03 silent no-write): under stdio:'ignore' plus the verb's
+    // exit-0-or-nothing contract, a reaped or dying child leaves NO trace.
+    // Each firing stamps a workspace-root log and hands the child the same
+    // fd; a stamp with nothing after it means the child never finished. Log
+    // failures degrade to the previous blind firing.
+    // Repo-local inside .git (falsification round): never tracked, per-repo,
+    // writable wherever git itself writes; 1 MiB self-cap. Control characters
+    // are scrubbed from path-derived fields (terminal-injection guideline).
+    const logPath = join(process.cwd(), '.git', 'totem-status-refresh-hook.log');
+    const scrub = (v) => String(v).replace(/[\x00-\x1f\x7f]/g, '?');
+    let stdio = 'ignore';
+    let logFd = null;
+    try {
+      try {
+        if (statSync(logPath).size > 1048576) writeFileSync(logPath, '');
+      } catch {
+        // no log yet — nothing to cap
+      }
+      appendFileSync(
+        logPath,
+        '[' +
+          new Date().toISOString() +
+          '] claude spawn cwd=' +
+          scrub(process.cwd()) +
+          ' path-has-go-bin=' +
+          /go[\\/]bin/i.test(process.env.PATH || '') +
+          ' cwd-shadow-exe=' +
+          existsSync(join(process.cwd(), 'totem-status.exe')) +
+          '\n',
+      );
+      logFd = openSync(logPath, 'a');
+      stdio = ['ignore', logFd, logFd];
+    } catch {
+      // log unavailable — refresh still fires blind, as before
+    }
     const refresh = spawn('totem-status', ['refresh-gh'], {
       detached: true,
-      stdio: 'ignore',
+      stdio,
     });
     refresh.on('error', (err) => {
+      try {
+        appendFileSync(
+          logPath,
+          '[' +
+            new Date().toISOString() +
+            '] claude spawn-error code=' +
+            ((err && err.code) || 'unknown') +
+            '\n',
+        );
+      } catch {
+        // log write failed — fall through to the stderr breadcrumb
+      }
       if (err && err.code === 'ENOENT') return;
       process.stderr.write(
         '[SessionStart] totem-status refresh-gh spawn failed (non-fatal): ' +
@@ -44,6 +101,14 @@ try {
       );
     });
     refresh.unref();
+    // The child holds its own copy of the fd from spawn time; release the parent's.
+    if (logFd !== null) {
+      try {
+        closeSync(logFd);
+      } catch {
+        // nothing to release
+      }
+    }
   }
 } catch (err) {
   process.stderr.write(

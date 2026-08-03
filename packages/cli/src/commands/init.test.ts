@@ -1522,6 +1522,30 @@ describe('CLAUDE_SESSION_START template', () => {
     expect(CLAUDE_SESSION_START).toContain("err.code === 'ENOENT'");
     expect(CLAUDE_SESSION_START).toContain('refresh-gh spawn failed (non-fatal)');
   });
+
+  it('#2570: stamps a repo-local log and hands the child the same fd (observability leg)', () => {
+    // Routed from the status seat's 2026-08-03 silent no-write: under
+    // stdio:'ignore' + exit-0-or-nothing, a reaped or dying child left NO
+    // trace. The stamp carries the discriminating fields; the child inherits
+    // the SAME fd so the verb's success line lands after the stamp — a stamp
+    // with nothing after it = the child never finished.
+    // Repo-local pin: the log must live INSIDE .git — a workspace-parent path
+    // would grow an un-gitignorable file outside the repo tree for every
+    // consumer of the published template (falsification round, MAJOR 2/4).
+    expect(CLAUDE_SESSION_START).toContain("'.git', 'totem-status-refresh-hook.log'");
+    expect(CLAUDE_SESSION_START).toContain("'] claude spawn cwd='");
+    expect(CLAUDE_SESSION_START).toContain('path-has-go-bin=');
+    expect(CLAUDE_SESSION_START).toContain('cwd-shadow-exe=');
+    expect(CLAUDE_SESSION_START).toContain("stdio = ['ignore', logFd, logFd]");
+    // A spawn error stamps too (discriminates reap from spawn failure)…
+    expect(CLAUDE_SESSION_START).toContain("'] claude spawn-error code='");
+    // …the log must never gate the spawn (blind fallback precedes it)…
+    expect(CLAUDE_SESSION_START.indexOf("let stdio = 'ignore'")).toBeLessThan(
+      CLAUDE_SESSION_START.indexOf("spawn('totem-status'"),
+    );
+    // …and the parent releases its fd copy after spawn (the child holds its own).
+    expect(CLAUDE_SESSION_START).toContain('closeSync(logFd)');
+  });
 });
 
 describe('GEMINI_SESSION_START template', () => {
@@ -1585,6 +1609,19 @@ describe('GEMINI_SESSION_START template', () => {
     expect(GEMINI_SESSION_START.indexOf("spawn('totem-status'")).toBeLessThan(
       GEMINI_SESSION_START.indexOf("'totem describe'"),
     );
+  });
+
+  it('#2570: stamps a repo-local log and hands the child the same fd, matching the Claude twin', () => {
+    expect(GEMINI_SESSION_START).toContain("'.git', 'totem-status-refresh-hook.log'");
+    expect(GEMINI_SESSION_START).toContain("'] gemini spawn cwd='");
+    expect(GEMINI_SESSION_START).toContain('path-has-go-bin=');
+    expect(GEMINI_SESSION_START).toContain('cwd-shadow-exe=');
+    expect(GEMINI_SESSION_START).toContain("stdio = ['ignore', logFd, logFd]");
+    expect(GEMINI_SESSION_START).toContain("'] gemini spawn-error code='");
+    expect(GEMINI_SESSION_START.indexOf("let stdio = 'ignore'")).toBeLessThan(
+      GEMINI_SESSION_START.indexOf("spawn('totem-status'"),
+    );
+    expect(GEMINI_SESSION_START).toContain('closeSync(logFd)');
   });
 });
 
@@ -2123,12 +2160,101 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       });
       expect(result.status).toBe(0);
 
+      // Wait for CONTENT, not existence — existence alone races the stub's
+      // open-truncate-then-write window (observed CI flake).
+      const deadline = Date.now() + 5000;
+      while (
+        Date.now() < deadline &&
+        !(fs.existsSync(markerPath) && fs.readFileSync(markerPath, 'utf-8').trim() !== '')
+      ) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
+    },
+  );
+
+  // #2570 observability-leg behavioral cells (falsification round, MAJOR 3: the
+  // string assertions are satisfiable by mutants that break the runtime
+  // contract — an unguarded stamp or a close-before-spawn both kill the spawn).
+  it.skipIf(process.platform === 'win32')(
+    '#2570: the stamp precedes the child verb line in the repo-local log; stderr stays silent',
+    { timeout: 15000 },
+    async () => {
+      fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+      const binDir = path.join(tmpDir, 'stub-bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const markerPath = path.join(tmpDir, 'refresh-fired.marker');
+      fs.writeFileSync(
+        path.join(binDir, 'totem-status'),
+        `#!/bin/sh\necho "$1" > "${markerPath}"\necho "refresh-done"\n`,
+        { mode: 0o755 },
+      );
+
+      const env = { ...process.env };
+      delete env['TOTEM_SELF_AGENT'];
+      env['PATH'] = `${binDir}:${env['PATH'] ?? ''}`;
+      const result = spawnSync(process.execPath, [hookPath], {
+        cwd: tmpDir,
+        env,
+        encoding: 'utf-8',
+        timeout: HOOK_SPAWN_TIMEOUT_MS,
+      });
+      expect(result.status).toBe(0);
+      expect(result.stderr).not.toContain('refresh-gh');
+
+      // The child inherits the SAME fd, so its stdout lands after the stamp —
+      // a close-before-spawn mutant dies here (EBADF, no verb line).
+      const logPath = path.join(tmpDir, '.git', 'totem-status-refresh-hook.log');
+      const deadline = Date.now() + 5000;
+      while (
+        Date.now() < deadline &&
+        !(fs.existsSync(logPath) && fs.readFileSync(logPath, 'utf-8').includes('refresh-done'))
+      ) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      const log = fs.readFileSync(logPath, 'utf-8');
+      expect(log).toContain('] claude spawn cwd=');
+      expect(log.indexOf('claude spawn cwd=')).toBeLessThan(log.indexOf('refresh-done'));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    '#2570: an unwritable log never gates the spawn and never leaks to stderr (blind fallback)',
+    { timeout: 15000 },
+    async () => {
+      // A DIRECTORY at the log path makes every log write fail — the spawn
+      // must still fire (blind, as before the leg) with zero stderr noise. An
+      // unguarded-stamp mutant dies here (EISDIR aborts the block and prints
+      // the unavailable breadcrumb).
+      fs.mkdirSync(path.join(tmpDir, '.git', 'totem-status-refresh-hook.log'), {
+        recursive: true,
+      });
+      const binDir = path.join(tmpDir, 'stub-bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const markerPath = path.join(tmpDir, 'refresh-fired.marker');
+      fs.writeFileSync(
+        path.join(binDir, 'totem-status'),
+        `#!/bin/sh\necho "$1" > "${markerPath}"\n`,
+        { mode: 0o755 },
+      );
+
+      const env = { ...process.env };
+      delete env['TOTEM_SELF_AGENT'];
+      env['PATH'] = `${binDir}:${env['PATH'] ?? ''}`;
+      const result = spawnSync(process.execPath, [hookPath], {
+        cwd: tmpDir,
+        env,
+        encoding: 'utf-8',
+        timeout: HOOK_SPAWN_TIMEOUT_MS,
+      });
+      expect(result.status).toBe(0);
+      expect(result.stderr).not.toContain('refresh-gh');
+
       const deadline = Date.now() + 5000;
       while (Date.now() < deadline && !fs.existsSync(markerPath)) {
         await new Promise((r) => setTimeout(r, 50));
       }
       expect(fs.existsSync(markerPath)).toBe(true);
-      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
     },
   );
 

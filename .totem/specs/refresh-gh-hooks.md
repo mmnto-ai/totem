@@ -31,9 +31,34 @@ past deadline+WaitDelay. Safe to fire blind.
 
 - Never block: #2059 measured ~3s sync-gh SessionStart cost. Node surfaces use
   detached+unref `spawn` with `stdio: 'ignore'`; sh surface uses a backgrounded
-  subshell with output discarded.
+  subshell with output discarded. _[Amended by #2570: when the repo-local log
+  at `.git/totem-status-refresh-hook.log` is writable, the child inherits its
+  fd (Node) / appends to it (sh) instead — each firing stamps the log first,
+  so a stamp with no verb line after it discriminates a harness reap from a
+  child failure (the status seat's observed silent no-write). Log-unwritable
+  degrades to the blind form above; SOFT 1 MiB self-cap (the pre-append size
+  check means a boundary firing can leave the file one record over the
+  threshold — the next firing truncates; exact enforcement would buy a
+  ~0.03% bound tightening at four sites); same-repo concurrent
+  firings pair stamp↔verb by time window, not adjacency (single-flight keeps
+  this rare). Accepted residual (#2572 bot round, Greptile P2): at the cap
+  boundary, same-instant same-repo firings can truncate away one fresh stamp —
+  lock-free truncation cannot be atomic, the loss is one diagnostic line once
+  per MiB, and it self-heals on the next firing. Second residual, observed
+  live on Windows: Git-Bash's `>>` is not kernel-append there, so a
+  same-second cross-site double-fire can let one child's verb line overwrite
+  a concurrent stamp's prefix (POSIX `>>` is O_APPEND-atomic; serialized
+  firings — the normal single-flight case — are unaffected on all
+  platforms). Path-derived stamp fields are
+  control-character-scrubbed (terminal-injection guideline; #2572 CR round).
+  The log lives INSIDE .git deliberately — a workspace-parent path
+  would grow an un-gitignorable file outside the repo tree for every consumer
+  of the published templates, including non-adopters, whose ENOENT firing
+  still stamps.]_
 - Presence-gated, zero-noise when absent: `command -v totem-status` (sh);
   ENOENT-silent `error` handler (Node), non-ENOENT keeps a stderr breadcrumb.
+  _[#2570: ENOENT additionally leaves a `spawn-error code=ENOENT` line in the
+  repo-local log — silent on stderr, visible to diagnosis.]_
 - PRIMARY-checkout-gated (`.git` must be a DIRECTORY; build-time discovery
   2026-08-03): a detached child inherits its parent's cwd, and on Windows that
   holds a directory lock for the child's lifetime. In a linked worktree

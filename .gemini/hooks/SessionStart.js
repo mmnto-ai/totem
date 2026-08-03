@@ -34,15 +34,65 @@ try {
   }
   if (primaryCheckout) {
     const { spawn } = require('child_process');
+    // Observability leg (mmnto-ai/totem#2570, routed from the status seat's
+    // 2026-08-03 silent no-write): under stdio:'ignore' plus the verb's
+    // exit-0-or-nothing contract, a reaped or dying child leaves NO trace
+    // (Windows detached is not job-object breakaway — a hook-harness
+    // tree-kill takes the child mid-run). Each firing stamps a workspace-root
+    // log and hands the child the same fd, so the verb's own success line
+    // lands after the stamp; a stamp with nothing after it means the child
+    // never finished. Log failures degrade to the previous blind firing —
+    // the stamp must never block or break the spawn.
+    const { openSync, closeSync, appendFileSync, existsSync, writeFileSync } = require('fs');
+    // REPO-LOCAL log, inside .git (falsification round: the primary-checkout
+    // gate just proved .git is a directory; never tracked, dies with the
+    // clone, writable wherever git itself writes, and per-repo so concurrent
+    // firings from sibling repos never interleave). A workspace-parent path
+    // would grow an un-gitignorable file OUTSIDE the repo tree for every
+    // consumer of these published templates — including non-adopters, whose
+    // ENOENT firing still stamps.
+    const logPath = nodePath.join(process.cwd(), '.git', 'totem-status-refresh-hook.log');
+    // Control characters are scrubbed from path-derived fields before they
+    // reach the log (terminal-injection guideline: a crafted checkout path
+    // must not forge stamp lines or inject terminal controls).
+    const scrub = (v) => String(v).replace(/[\x00-\x1f\x7f]/g, '?');
+    let stdio = 'ignore';
+    let logFd = null;
+    try {
+      try {
+        // 1 MiB self-cap: the log truncates rather than growing forever.
+        if (statSync(logPath).size > 1048576) writeFileSync(logPath, '');
+      } catch {
+        // no log yet — nothing to cap
+      }
+      appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + '\n');
+      logFd = openSync(logPath, 'a');
+      stdio = ['ignore', logFd, logFd];
+    } catch {
+      // log unavailable — refresh still fires blind, as before
+    }
     const refresh = spawn('totem-status', ['refresh-gh'], {
       detached: true,
-      stdio: 'ignore',
+      stdio,
     });
     refresh.on('error', (err) => {
+      try {
+        appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn-error code=' + ((err && err.code) || 'unknown') + '\n');
+      } catch {
+        // log write failed — fall through to the stderr breadcrumb
+      }
       if (err && err.code === 'ENOENT') return;
       process.stderr.write('[SessionStart] totem-status refresh-gh spawn failed (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\n');
     });
     refresh.unref();
+    // The child holds its own copy of the fd from spawn time; release the parent's.
+    if (logFd !== null) {
+      try {
+        closeSync(logFd);
+      } catch {
+        // nothing to release
+      }
+    }
   }
 } catch (err) {
   process.stderr.write('[SessionStart] totem-status refresh-gh unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\n');
