@@ -59,7 +59,7 @@ Enforcement stack per ADR-105: skill instructions → **this AGENTS.md** (baseli
 
 ## Skills
 
-Claude Code skills live under `.claude/skills/` (invoke `/<name>`); Gemini CLI equivalents (when present) under `.gemini/skills/`. Each `SKILL.md` is authoritative.
+Skills: `.claude/skills/` (`/<name>`); baseline four also in `.agents/skills/` for gemini/agy/kimi (kimi: `/skill:<name>`; mmnto-ai/totem#2532). Each `SKILL.md` is authoritative.
 
 - `/preflight <issue>` — spec + search before coding
 - `/prepush` — format + lint + review before push

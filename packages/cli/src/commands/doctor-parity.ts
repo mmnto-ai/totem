@@ -208,6 +208,21 @@ function mechanicalArtifactsFor(
         canonicalBlock: extract(s.content, markers),
         lineName: `Parity: claude-skills (${s.name})`,
       }));
+    case 'agents-skills':
+      // The vendor-neutral `.agents/skills/` surface (mmnto-ai/totem#2532): the
+      // 2026-07/08 censuses proved gemini (live probe, CLI 0.53.0), agy and kimi
+      // (executed 2026-07-23 probes) all discover `.agents/skills/<name>/SKILL.md`;
+      // codex is ruled at the same shape (probe owed). Content contract is
+      // byte-identical to the Claude skills — SAME canonical constants, SAME
+      // markers — so the artifact map differs from `claude-skills` only in the
+      // consumer directory. Absence stays `skip` (a repo adopts the surface per
+      // vehicle roster, never by default).
+      return templates.distributedSkills.map((s) => ({
+        consumerPath: path.join(gitRoot, '.agents', 'skills', s.name, 'SKILL.md'),
+        markers,
+        canonicalBlock: extract(s.content, markers),
+        lineName: `Parity: agents-skills (${s.name})`,
+      }));
     case 'review-reply-skill-content':
       return [
         {

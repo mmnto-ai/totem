@@ -71,8 +71,18 @@ scratchpad/
 design/
 .journal/
 
-# Agent & tool artifacts
-.agents/
+# Agent & tool artifacts. `.agents/` stays machine-local EXCEPT the four
+# distributed baseline skills (mmnto-ai/totem#2532 slice 1, operator-ruled
+# scoped negation 2026-08-03): the vendor-neutral `.agents/skills/<name>/`
+# surface is read by gemini/agy/kimi (census-proven) + codex (ruled), so those
+# four dirs are tracked; everything else under .agents/ remains local.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/signon/
+!.agents/skills/signoff/
+!.agents/skills/review-reply/
+!.agents/skills/review-loop/
 .continue/
 .code-review/
 skills-lock.json
