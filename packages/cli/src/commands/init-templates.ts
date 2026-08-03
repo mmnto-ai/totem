@@ -185,7 +185,10 @@ const { execSync } = require('child_process');
 // pointer FILE, and a detached child inheriting the worktree cwd holds a Windows
 // directory lock that breaks worktree removal; the primary's hooks + the daemon
 // cover the workspace-level snapshot (single-flight makes extra fires redundant).
-// A non-git cwd has no refresh moment at all.
+// A non-git cwd has no refresh moment at all. The stat is cwd-anchored, not a
+// walk-up: both host runtimes launch session hooks with cwd = project root, so a
+// subdirectory cwd (which would skip) does not occur in practice — and adding a
+// git walk would cost a synchronous process on the very path this block keeps free.
 try {
   const nodePath = require('path');
   const { statSync } = require('fs');
@@ -200,7 +203,6 @@ try {
     const refresh = spawn('totem-status', ['refresh-gh'], {
       detached: true,
       stdio: 'ignore',
-      windowsHide: true,
     });
     refresh.on('error', (err) => {
       if (err && err.code === 'ENOENT') return;
@@ -782,7 +784,10 @@ try {
 // pointer FILE, and a detached child inheriting the worktree cwd holds a Windows
 // directory lock that breaks worktree removal; the primary's hooks + the daemon
 // cover the workspace-level snapshot (single-flight makes extra fires redundant).
-// A non-git cwd has no refresh moment at all.
+// A non-git cwd has no refresh moment at all. The stat is cwd-anchored, not a
+// walk-up: both host runtimes launch session hooks with cwd = project root, so a
+// subdirectory cwd (which would skip) does not occur in practice — and adding a
+// git walk would cost a synchronous process on the very path this block keeps free.
 try {
   const nodePath = require('path');
   const { statSync } = require('fs');
@@ -797,7 +802,6 @@ try {
     const refresh = spawn('totem-status', ['refresh-gh'], {
       detached: true,
       stdio: 'ignore',
-      windowsHide: true,
     });
     refresh.on('error', (err) => {
       if (err && err.code === 'ENOENT') return;

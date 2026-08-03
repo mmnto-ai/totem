@@ -1131,6 +1131,82 @@ describe('post-merge hook fires totem-status refresh-gh', () => {
   });
 });
 
+// Behavioral coverage of BOTH gate branches (falsification-leg round 1: the string
+// assertions above are satisfiable without the behavior). POSIX-only: the stub
+// sidecar is a shell script on PATH, which Windows CreateProcess cannot resolve —
+// the ubuntu/macos CI legs carry this coverage.
+describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (POSIX)', () => {
+  let tmpDir: string;
+  let binDir: string;
+  let markerPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-refresh-sh-'));
+    binDir = path.join(tmpDir, 'stub-bin');
+    fs.mkdirSync(binDir);
+    markerPath = path.join(tmpDir, 'refresh-fired.marker');
+    fs.writeFileSync(
+      path.join(binDir, 'totem-status'),
+      `#!/bin/sh\necho "$1" > "${markerPath}"\n`,
+      { mode: 0o755 },
+    );
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  async function markerAppears(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (fs.existsSync(markerPath)) return true;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return fs.existsSync(markerPath);
+  }
+
+  it(
+    'fires the stub sidecar in a primary checkout (backgrounded child lands the marker)',
+    { timeout: 15000 },
+    async () => {
+      const repo = path.join(tmpDir, 'repo');
+      fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+      const hookPath = path.join(repo, 'post-merge');
+      fs.writeFileSync(hookPath, buildHookContent('pnpm dlx @mmnto/cli'), { mode: 0o755 });
+
+      execSync('sh ./post-merge', {
+        cwd: repo,
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` },
+        stdio: 'ignore',
+      });
+
+      expect(await markerAppears(5000)).toBe(true);
+      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
+    },
+  );
+
+  it(
+    'skips the sidecar when .git is not a directory (worktree/non-git guard)',
+    { timeout: 15000 },
+    async () => {
+      const repo = path.join(tmpDir, 'repo');
+      fs.mkdirSync(repo, { recursive: true });
+      // Linked-worktree shape: .git is a pointer FILE, not a directory.
+      fs.writeFileSync(path.join(repo, '.git'), 'gitdir: /elsewhere/.git/worktrees/x\n');
+      const hookPath = path.join(repo, 'post-merge');
+      fs.writeFileSync(hookPath, buildHookContent('pnpm dlx @mmnto/cli'), { mode: 0o755 });
+
+      execSync('sh ./post-merge', {
+        cwd: repo,
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` },
+        stdio: 'ignore',
+      });
+
+      expect(await markerAppears(500)).toBe(false);
+    },
+  );
+});
+
 describe('sync-log redirect resolves the git dir (worktree-safe)', () => {
   it('post-merge hook derives the log path from git rev-parse --git-dir', () => {
     const hook = buildHookContent('pnpm dlx @mmnto/cli');

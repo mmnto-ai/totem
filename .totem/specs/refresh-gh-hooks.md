@@ -62,6 +62,19 @@ past deadline+WaitDelay. Safe to fire blind.
   sidecar owns all of that (measurement-or-nothing is their contract line).
 - No pre-push/pre-commit wiring: C3 names SessionStart + post-merge only.
 
+## Round 2 (falsification-leg findings, 2026-08-03)
+
+Accepted: F1 ordering asserts were comment-anchored (mutant-proven) → re-anchored
+on `spawn('totem-status'`; F2 this repo runs neither managed SessionStart template
+→ block added to the bespoke `.claude/hooks/session-context.mjs`; F3 changeset +
+wiki now name the primary-checkout gate; F5 POSIX behavioral tests for both gate
+branches (sh + Node surfaces); F7 `windowsHide` dropped (inert with `detached` —
+CreateProcess ignores CREATE_NO_WINDOW under DETACHED_PROCESS).
+Declined (falsifiable): F4 subdir-of-primary walk-up (both host runtimes launch
+session hooks at project root; comment now states the assumption — a real host
+launching hooks in a subdir reopens); F6 PATH-only resolution (the sidecar's only
+observed install shape is go/bin on PATH; a workspace-local ship shape reopens).
+
 ## Release
 
 Changeset: `@mmnto/cli` minor. Docs: `docs/wiki/hook-integration.md` gains the
