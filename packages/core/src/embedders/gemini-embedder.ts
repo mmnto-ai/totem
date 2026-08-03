@@ -194,9 +194,14 @@ export class GeminiEmbedder implements Embedder {
         if (!isRetryableGeminiError(err) || attempt === MAX_RETRIES) break;
         // Server-advised delay (RetryInfo) wins over exponential backoff —
         // against a per-minute quota, 1–4s backoff burns retries into the
-        // same closed window (mmnto-ai/totem#2562).
+        // same closed window (mmnto-ai/totem#2562). A "0s" advisory is
+        // treated as absent: taking it literally would collapse the whole
+        // retry budget into a zero-delay burst.
+        const advised = extractRetryDelayMs(err);
         const delay =
-          extractRetryDelayMs(err) ?? INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
+          advised !== null && advised > 0
+            ? advised
+            : INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

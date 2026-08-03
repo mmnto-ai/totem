@@ -13,7 +13,12 @@ import { LanceStore } from '../store/lance-store.js';
 import { sanitizeForTerminal } from '../terminal-sanitize.js';
 import type { Chunk, FullSyncCheckpoint, SyncOptions, SyncState } from '../types.js';
 import type { ResolvedFile } from './file-resolver.js';
-import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
+import {
+  getChangedFiles,
+  getChangedFilesDetailed,
+  getHeadSha,
+  resolveFiles,
+} from './file-resolver.js';
 
 const EMBED_BATCH_SIZE = 100;
 const SYNC_STATE_FILE = 'cache/sync-state.json';
@@ -121,7 +126,9 @@ function readSyncState(totemDir: string, onProgress?: (msg: string) => void): Sy
  */
 function writeJsonAtomic(filePath: string, value: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const tmpPath = filePath + '.tmp';
+  // PID-unique tmp name: two writers racing under a stolen stale lock must
+  // not interleave through one tmp path (falsification round 1, MINOR 6).
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(value, null, 2) + '\n', 'utf-8');
   fs.renameSync(tmpPath, filePath);
 }
@@ -354,10 +361,12 @@ async function runSyncInner(
   // 0. Capture HEAD SHA early — before any async work that might race with new commits
   const headSha = getHeadSha(projectRoot, log);
 
-  // 1. Create embedder (or take the injected one — tests / embedding hosts)
+  // 1. Create embedder (or take the injected one — tests / embedding hosts).
+  // `log` is threaded through so a LazyEmbedder Ollama fallback is AUDIBLE —
+  // a silent vector-space switch mid-sync is sensor degradation (#2562).
   const embedding = requireEmbedding(config);
   log('Initializing embedding provider...');
-  const embedder = options.embedder ?? createEmbedder(embedding);
+  const embedder = options.embedder ?? createEmbedder(embedding, log);
 
   // Resume-compatibility fingerprint (#2562): a checkpointed epoch may only
   // continue under the embedder configuration that started it — vectors from
@@ -379,10 +388,8 @@ async function runSyncInner(
   // precedence over the requested mode — the partial store must complete
   // before any incremental diff can be trusted again — and it subsumes the
   // empty-store heal below (an interrupted full that never flushed).
-  let fullResume = false;
   let resumeFrom: FullSyncCheckpoint | null = null;
   if (fs.existsSync(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE))) {
-    fullResume = true;
     incremental = false;
     resumeFrom = readFullSyncCheckpoint(totemDir, log);
     if (resumeFrom) {
@@ -519,28 +526,72 @@ async function runSyncInner(
       );
     }
   } else if (resumeFrom) {
-    // #2562 resume: NO reset — the interrupted epoch continues. Already-done =
-    // checkpointed ∩ live, minus files changed since the epoch started (those
-    // re-embed; the per-file delete below keeps that idempotent). The epoch
-    // diff derives from git, never from options.changedFiles — a caller's
+    // #2562 resume: NO reset — the interrupted epoch continues. Already-done
+    // derives from FOUR signals, not the checkpoint alone:
+    //   1. checkpointed (the epoch flushed it);
+    //   2. ∩ live (still resolved by the current target set);
+    //   3. ∩ actually-in-the-store — the store is ground truth: a store
+    //      healed/nuked under a live checkpoint must not be trusted from
+    //      paper (falsification round 1, MAJOR 1);
+    //   4. − moved-since-epoch: tracked files via git diff against
+    //      startedHeadSha; UNTRACKED files via mtime vs the epoch start,
+    //      because untracked membership in git's changed-union is permanent
+    //      and would evict them every round — quota re-spent forever, never
+    //      converging (MAJOR 2). A non-git epoch (null startedHeadSha) has no
+    //      diff signal and takes the mtime arm for every file (MAJOR 4).
+    // The epoch diff never derives from options.changedFiles — a caller's
     // diff window says nothing about what the crashed epoch covered.
-    const changedSinceEpoch = resumeFrom.startedHeadSha
-      ? getChangedFiles(projectRoot, resumeFrom.startedHeadSha, log)
-      : null;
-    if (changedSinceEpoch === null) {
-      log('Cannot diff against the interrupted epoch — restarting the full re-index from zero.');
+    const detailed: { tracked: string[]; untracked: string[] | null } | null =
+      resumeFrom.startedHeadSha
+        ? getChangedFilesDetailed(projectRoot, resumeFrom.startedHeadSha, log)
+        : { tracked: [], untracked: null };
+
+    let indexedRaw: string[] | null = null;
+    if (detailed !== null) {
+      try {
+        indexedRaw = await store.getDistinctPaths();
+        // totem-context: intentional warn+restart on a getDistinctPaths failure (mmnto-ai/totem#2562) — an unverifiable checkpoint restarts the full re-index from zero below; progress is discarded, correctness kept.
+      } catch (err) {
+        log(
+          `Warning: cannot verify the checkpoint against the store (getDistinctPaths failed: ${err instanceof Error ? err.message : String(err)}).`,
+        );
+      }
+    }
+
+    if (detailed === null || indexedRaw === null) {
+      log('Cannot verify the interrupted epoch — restarting the full re-index from zero.');
       await beginFullSync(freshCheckpoint());
       filesToProcess = allFiles;
       log(`Full sync: ${filesToProcess.length} files to process`);
     } else {
-      const changed = new Set(changedSinceEpoch.map(normalizeRel));
+      const epochStart = resumeFrom.startedAt;
+      const byRel = new Map(allFiles.map((f) => [normalizeRel(f.relativePath), f]));
+      const tracked = new Set(detailed.tracked.map(normalizeRel));
+      // untracked === null ⇔ non-git epoch: every file takes the mtime arm.
+      const mtimeChecked =
+        detailed.untracked === null ? null : new Set(detailed.untracked.map(normalizeRel));
+      const movedSinceEpoch = (rel: string): boolean => {
+        if (tracked.has(rel)) return true;
+        if (mtimeChecked !== null && !mtimeChecked.has(rel)) return false;
+        const file = byRel.get(rel);
+        if (!file) return true;
+        try {
+          return fs.statSync(file.absolutePath).mtimeMs > epochStart;
+          // totem-context: intentional treat-as-moved on a stat failure (mmnto-ai/totem#2562) — the file re-embeds (idempotent via delete-first) or the read site skips a vanished file loudly.
+        } catch {
+          return true;
+        }
+      };
+      const indexed = new Set(indexedRaw.map(normalizeRel));
       const completed = new Set(
-        resumeFrom.completedFiles.map(normalizeRel).filter((rel) => !changed.has(rel)),
+        resumeFrom.completedFiles
+          .map(normalizeRel)
+          .filter((rel) => byRel.has(rel) && indexed.has(rel) && !movedSinceEpoch(rel)),
       );
       filesToProcess = allFiles.filter((f) => !completed.has(normalizeRel(f.relativePath)));
-      // Carry forward only entries still live and unchanged, re-keyed to the
-      // current run's resolved paths. startedHeadSha stays the ORIGINAL epoch
-      // SHA so every later resume re-diffs the full window (superset-safe).
+      // Carry forward only verified entries, re-keyed to the current run's
+      // resolved paths. startedHeadSha stays the ORIGINAL epoch SHA so every
+      // later resume re-diffs the full window (superset-safe).
       const carried = allFiles
         .map((f) => f.relativePath)
         .filter((rel) => completed.has(normalizeRel(rel)));
@@ -596,6 +647,12 @@ async function runSyncInner(
     const cp = checkpoint;
     if (cp && pendingFiles.length > 0) {
       cp.completedFiles.push(...pendingFiles);
+      // Persist the EFFECTIVE embedder identity once known (falsification
+      // round 1, MAJOR 3): a LazyEmbedder that silently fell back to Ollama
+      // must not leave a checkpoint fingerprinted as the configured provider,
+      // or the next resume would mix vector spaces across the epoch.
+      const effective = embedder.describeEffective?.();
+      if (effective) cp.embedder = effective;
       try {
         writeFullSyncCheckpoint(totemDir, cp);
         // totem-context: intentional warn+continue on a checkpoint-append failure (mmnto-ai/totem#2562) — the flushed chunks are safe in the store; worst case the file re-embeds on resume via the delete-first path.

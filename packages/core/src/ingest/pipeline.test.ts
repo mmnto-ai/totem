@@ -214,6 +214,7 @@ class ScriptedEmbedder implements Embedder {
   embedCalls: string[][] = [];
   failFromCall: number | null = null;
   onCall: (() => void) | undefined;
+  describeEffective?: () => { provider: string; model: string; dimensions: number } | null;
   private calls = 0;
 
   constructor(dimensions: number = 4) {
@@ -249,16 +250,20 @@ describe('full-sync crash recovery (#2562)', () => {
   const syncStatePath = () => path.join(tmpDir, '.totem', 'cache/sync-state.json');
   const git = (cmd: string) => execSync(`git ${cmd}`, { cwd: tmpDir, stdio: 'pipe' });
 
-  /** ~80 chunks per file — two files overflow EMBED_BATCH_SIZE (100), so the
-   *  first flush lands at the b.md file boundary and the crash-at-flush-2
-   *  embedder dies on c.md's flush with a+b already in the store. */
-  const writeCorpusFile = (name: string, stem: string) => {
+  /** Exactly 80 chunks per file (one per `##` section; the `#` preamble has
+   *  no body text, so it yields no chunk) — 240 total. Two files overflow
+   *  EMBED_BATCH_SIZE (100), so the first flush lands at a file boundary and
+   *  the crash-at-flush-2 embedder dies on the third file's flush with two
+   *  files already in the store. */
+  const TOTAL_CHUNKS = 240;
+  const writeCorpusFileTo = (dir: string, name: string, stem: string) => {
     const sections = Array.from(
       { length: 80 },
       (_, i) => `## ${stem} ${i}\n\n${stem}-content-${i}\n`,
     ).join('\n');
-    fs.writeFileSync(path.join(tmpDir, name), `# ${stem}\n\n${sections}`, 'utf-8');
+    fs.writeFileSync(path.join(dir, name), `# ${stem}\n\n${sections}`, 'utf-8');
   };
+  const writeCorpusFile = (name: string, stem: string) => writeCorpusFileTo(tmpDir, name, stem);
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-fullsync-'));
@@ -336,9 +341,23 @@ describe('full-sync crash recovery (#2562)', () => {
     'INDUCED REGRESSION: the next plain sync resumes the full re-index instead of reporting complete over a partial store',
     { timeout: HEAVY_TIMEOUT_MS },
     async () => {
+      // The lying sensor NEEDS a surviving baseline from a previous
+      // SUCCESSFUL sync: pre-fix, the crashed --full left this state file
+      // intact over the reset store, the next plain sync diffed
+      // lastSyncSha..HEAD, saw 0 changed files, and reported "Sync
+      // complete: 0 files" (falsification round 1, MAJOR 5 — without this
+      // baseline the pre-fix code fails via the git-diff fallback instead).
+      const first = await run(new ScriptedEmbedder(), false);
+      expect(first.totalChunks).toBe(TOTAL_CHUNKS);
+      const staleState = fs.readFileSync(syncStatePath(), 'utf-8');
+
       await crashFullSync();
       const missing = unflushedFile();
       const flushed = ALL_FILES.filter((f) => f !== missing);
+
+      // The crash left the stale baseline byte-identical — the defect's
+      // exact precondition.
+      expect(fs.readFileSync(syncStatePath(), 'utf-8')).toBe(staleState);
 
       const resumer = new ScriptedEmbedder();
       const result = await run(resumer, true); // plain `totem sync`
@@ -352,8 +371,7 @@ describe('full-sync crash recovery (#2562)', () => {
 
       // The store now holds the whole corpus, the marker is gone, and the
       // baseline points at HEAD — the epoch completed for real.
-      const perFile = 81; // 80 sections + the h1 preamble section
-      expect(result.totalChunks).toBeGreaterThanOrEqual(3 * (perFile - 2));
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
       expect(fs.existsSync(checkpointPath())).toBe(false);
       const state = JSON.parse(fs.readFileSync(syncStatePath(), 'utf-8'));
       const headSha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
@@ -425,21 +443,166 @@ describe('full-sync crash recovery (#2562)', () => {
     async () => {
       const healthy = new ScriptedEmbedder();
       const first = await run(healthy, false);
-      expect(first.totalChunks).toBeGreaterThan(0);
+      expect(first.totalChunks).toBe(TOTAL_CHUNKS);
 
-      // Occupy the checkpoint path with a directory: the atomic rename in the
-      // marker write must fail, and the reset must never run.
+      // Occupy the checkpoint path with a directory. The run first reads it
+      // as a checkpoint (EISDIR → dirty-but-unusable), then the restart's
+      // marker write fails at the atomic rename — and the reset never runs.
       fs.mkdirSync(checkpointPath(), { recursive: true });
       await expect(run(new ScriptedEmbedder(), false)).rejects.toThrow();
 
       fs.rmSync(checkpointPath(), { recursive: true, force: true });
-      fs.rmSync(checkpointPath() + '.tmp', { force: true });
+      fs.rmSync(`${checkpointPath()}.${process.pid}.tmp`, { force: true });
 
       // The store survived the aborted run: a plain incremental sync sees a
       // clean baseline and the full chunk count, not an empty or partial store.
       const after = await run(new ScriptedEmbedder(), true);
       expect(after.filesProcessed).toBe(0);
       expect(after.totalChunks).toBe(first.totalChunks);
+    },
+  );
+
+  // ─── Falsification round 1 regressions ───
+
+  it(
+    'MAJOR 1: a store emptied under a live checkpoint is re-embedded in full, not trusted from paper',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      const first = await run(new ScriptedEmbedder(), false);
+      expect(first.totalChunks).toBe(TOTAL_CHUNKS);
+      await crashFullSync();
+
+      // Simulate the heal-by-nuke path (LanceStore.connect on a corrupt
+      // dataset): the store vanishes while the checkpoint still claims two
+      // files are embedded.
+      fs.rmSync(path.join(tmpDir, config.lanceDir), { recursive: true, force: true });
+
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true);
+
+      // Pre-fold this embedded ONLY the unflushed file over an empty store
+      // and wrote a clean baseline — the #2562 lying sensor by another door.
+      expect(result.filesProcessed).toBe(3);
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
+
+  it(
+    'MAJOR 2: untracked corpus files stay checkpointed across a resume (quota convergence)',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      // Make the corpus untracked-but-live: git has no history for it, so it
+      // is a PERMANENT member of git's changed-union. Pre-fold that union
+      // evicted these files from the completed set on every resume — quota
+      // re-spent on the same files forever, never converging.
+      git('rm --cached a.md b.md c.md');
+      git('commit -m "untrack corpus"');
+
+      await crashFullSync();
+      const missing = unflushedFile();
+
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true);
+
+      expect(result.filesProcessed).toBe(1);
+      expect(resumer.allText()).toContain(`${STEM[missing]}-content-1`);
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
+
+  it(
+    'MAJOR 2: an untracked completed file MODIFIED after the crash still re-embeds (mtime arm)',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      git('rm --cached a.md b.md c.md');
+      git('commit -m "untrack corpus"');
+
+      await crashFullSync();
+      const missing = unflushedFile();
+      const [mutated] = ALL_FILES.filter((f) => f !== missing);
+
+      // Ensure the edit's mtime lands measurably after the epoch start.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      fs.appendFileSync(
+        path.join(tmpDir, mutated!),
+        `\n## ${STEM[mutated!]} extra\n\n${STEM[mutated!]}-mutated\n`,
+        'utf-8',
+      );
+
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true);
+
+      expect(result.filesProcessed).toBe(2); // mutated (mtime > epoch) + never-flushed
+      expect(resumer.allText()).toContain(`${STEM[mutated!]}-mutated`);
+      expect(resumer.allText()).toContain(`${STEM[missing]}-content-1`);
+    },
+  );
+
+  it(
+    'MAJOR 3: a checkpoint stamped with a fallback embedder identity restarts instead of resuming',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      // The crashing run's embedder reports an EFFECTIVE identity (the
+      // LazyEmbedder Ollama-fallback shape) that differs from the configured
+      // gemini fingerprint — the checkpoint must record the effective one.
+      const crasher = new ScriptedEmbedder();
+      crasher.failFromCall = 2;
+      crasher.describeEffective = () => ({
+        provider: 'ollama',
+        model: 'nomic-embed-text',
+        dimensions: 4,
+      });
+      await expect(run(crasher, false)).rejects.toThrow('RESOURCE_EXHAUSTED');
+      const cp = JSON.parse(fs.readFileSync(checkpointPath(), 'utf-8'));
+      expect(cp.embedder.provider).toBe('ollama');
+
+      // The resume runs under the configured gemini fingerprint — the
+      // stamped ollama progress is unusable: vector spaces must not mix.
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true);
+      expect(result.filesProcessed).toBe(3);
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+    },
+  );
+
+  it(
+    'MAJOR 4: a non-git project resumes via the mtime arm instead of restarting every run',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-nongit-'));
+      try {
+        writeCorpusFileTo(dir, 'a.md', 'alpha');
+        writeCorpusFileTo(dir, 'b.md', 'bravo');
+        writeCorpusFileTo(dir, 'c.md', 'charlie');
+
+        const crasher = new ScriptedEmbedder();
+        crasher.failFromCall = 2;
+        await expect(
+          runSync(config, { projectRoot: dir, incremental: false, embedder: crasher }),
+        ).rejects.toThrow('RESOURCE_EXHAUSTED');
+
+        const cpPath = path.join(dir, '.totem', FULL_SYNC_CHECKPOINT_FILE);
+        const cp = JSON.parse(fs.readFileSync(cpPath, 'utf-8'));
+        expect(cp.startedHeadSha).toBeNull();
+        expect(cp.completedFiles).toHaveLength(2);
+
+        const resumer = new ScriptedEmbedder();
+        const result = await runSync(config, {
+          projectRoot: dir,
+          incremental: true,
+          embedder: resumer,
+        });
+
+        // Pre-fold, null startedHeadSha mapped to restart-from-zero on every
+        // run — the population with no diff signal could never converge.
+        expect(result.filesProcessed).toBe(1);
+        expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+        expect(fs.existsSync(cpPath)).toBe(false);
+      } finally {
+        cleanTmpDir(dir);
+      }
     },
   );
 });

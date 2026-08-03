@@ -63,6 +63,20 @@ describe('createEmbedder', () => {
     const embedder = createEmbedder(config);
     expect(embedder.dimensions).toBe(1536);
   });
+
+  it('describeEffective is null before resolution, the configured identity after (#2562)', async () => {
+    process.env['OPENAI_API_KEY'] = 'test-key';
+    const config: EmbeddingProvider = { provider: 'openai', model: 'text-embedding-3-small' };
+    const embedder = createEmbedder(config);
+
+    expect(embedder.describeEffective?.()).toBeNull();
+    await embedder.embed(['x']); // resolves the mocked OpenAIEmbedder
+    expect(embedder.describeEffective?.()).toEqual({
+      provider: 'openai',
+      model: 'text-embedding-3-small',
+      dimensions: 1536,
+    });
+  });
 });
 
 describe('LazyEmbedder concurrency', () => {
@@ -197,6 +211,15 @@ describe('LazyEmbedder fallback chain — regression contract (mmnto-ai/totem#18
     const allWarns = warns.join('\n');
     expect(allWarns).toContain('Falling back to Ollama');
     expect(allWarns).toContain('Using Ollama fallback embedder');
+
+    // #2562: consumers that persist an embedder fingerprint (the full-sync
+    // checkpoint) must see the EFFECTIVE post-fallback identity, not the
+    // configured one — or a resume would mix vector spaces.
+    expect(embedder.describeEffective?.()).toEqual({
+      provider: 'ollama',
+      model: 'nomic-embed-text',
+      dimensions: 768,
+    });
   });
 
   // mmnto-ai/totem#1859: the SDK-missing trigger (distinct from missing-key above).

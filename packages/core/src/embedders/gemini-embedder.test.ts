@@ -254,6 +254,27 @@ describe('GeminiEmbedder', () => {
     expect(delays).toContain(18_000);
   });
 
+  it('a server-advised "0s" retryDelay falls back to exponential backoff (no zero-delay storm)', async () => {
+    const delays: (number | undefined)[] = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      delays.push(ms);
+      fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as never);
+
+    const quotaErr = Object.assign(new Error('rate limited'), {
+      status: 429,
+      errorDetails: [{ retryDelay: '0s' }],
+    });
+    mockEmbedContent.mockRejectedValueOnce(quotaErr).mockResolvedValueOnce(embedResponse(1));
+
+    const embedder = new GeminiEmbedder();
+    await embedder.embed(['test']);
+
+    expect(delays).toHaveLength(1);
+    expect(delays[0]!).toBeGreaterThanOrEqual(1000); // INITIAL_BACKOFF_MS floor
+  });
+
   // ─── Request pacing (#2562) ────────────────────────
 
   it('throttleMs paces successive API calls; 0 adds no waits', async () => {

@@ -14,6 +14,17 @@ export interface Embedder {
    * Implementations should handle batching/rate-limiting internally.
    */
   embed(texts: string[]): Promise<number[][]>;
+
+  /**
+   * Optional: the provider identity ACTUALLY serving embeds, once known
+   * (mmnto-ai/totem#2562). `LazyEmbedder` reports its post-resolution —
+   * possibly Ollama-fallback — identity here, and `null` before the first
+   * embed resolves. Absent means the constructed identity is the effective
+   * one. Consumers that persist an embedder fingerprint (the full-sync
+   * checkpoint) must prefer this over the configured identity, or a silent
+   * fallback would mix vector spaces across a resume.
+   */
+  describeEffective?(): { provider: string; model: string; dimensions: number } | null;
 }
 
 const OLLAMA_DEFAULTS = {
@@ -117,12 +128,18 @@ class LazyEmbedder implements Embedder {
   private initPromise: Promise<Embedder> | null = null;
   private config: EmbeddingProvider;
   private warn: (msg: string) => void;
+  private effective: { provider: string; model: string; dimensions: number } | null = null;
 
   constructor(config: EmbeddingProvider, onWarn?: (msg: string) => void) {
     this.config = config;
     this.warn = onWarn ?? (() => {});
     // Use configured dimensions or provider defaults
     this.dimensions = config.dimensions ?? (config.provider === 'gemini' ? 768 : 1536);
+  }
+
+  /** The identity actually serving embeds — null until the first embed resolves (#2562). */
+  describeEffective(): { provider: string; model: string; dimensions: number } | null {
+    return this.effective;
   }
 
   /** Resolve the real embedder once. Concurrent callers share the same promise. */
@@ -135,7 +152,13 @@ class LazyEmbedder implements Embedder {
 
   private async doResolve(): Promise<Embedder> {
     try {
-      return await tryBuildEmbedder(this.config);
+      const inner = await tryBuildEmbedder(this.config);
+      this.effective = {
+        provider: this.config.provider,
+        model: this.config.model ?? 'default',
+        dimensions: inner.dimensions,
+      };
+      return inner;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.warn(
@@ -156,6 +179,11 @@ class LazyEmbedder implements Embedder {
         `[Totem] Using Ollama fallback embedder (${OLLAMA_DEFAULTS.model}, ${OLLAMA_DEFAULTS.dimensions}d).\n` +
           '[Totem] If your index was built with a different provider, run `totem sync --full` to rebuild.',
       );
+      this.effective = {
+        provider: 'ollama',
+        model: OLLAMA_DEFAULTS.model,
+        dimensions: OLLAMA_DEFAULTS.dimensions,
+      };
       return new OllamaEmbedder(
         OLLAMA_DEFAULTS.model,
         OLLAMA_DEFAULTS.baseUrl,

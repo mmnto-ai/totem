@@ -218,13 +218,21 @@ Parses your codebase, chunks the AST, and builds the local LanceDB vector index.
   interrupted (e.g. an embedding-quota 429), the **next `totem sync` — plain or
   `--full` — resumes from the checkpoint** instead of reporting a false
   "complete" over the partial index or re-spending quota on already-embedded
-  files. Files that changed since the interrupted run started are re-embedded;
+  files. The checkpoint is verified against the store itself before it is
+  trusted — files no longer present in the index re-embed regardless of what
+  the checkpoint claims. Files that moved since the interrupted run started
+  are re-embedded (tracked files via git diff; untracked files — and every
+  file in a non-git project — via modification time against the epoch start);
   chunks of files deleted in the meantime are purged by the next incremental
-  reconciliation. Delete the checkpoint file to force a restart from scratch.
-  Progress is discarded (with a loud log) if the checkpoint is unreadable or
-  the embedding provider/model/dimensions changed. Pair with
-  `embedding.throttleMs` (see the configuration reference) to stay under
-  per-minute quotas.
+  reconciliation. While a checkpoint is live, EVERY sync (including the
+  incremental syncs commands like `lesson extract` run internally) is promoted
+  to the resume — an incremental pass over a partial index cannot be trusted,
+  so completing the epoch comes first. Delete the checkpoint file to force a
+  restart from scratch. Progress is discarded (with a loud log) if the
+  checkpoint is unreadable or the embedding provider/model/dimensions changed
+  — including a silent fallback to Ollama mid-epoch, which the checkpoint
+  records by its actual identity. Pair with `embedding.throttleMs` (see the
+  configuration reference) to stay under per-minute quotas.
 
 ### `totem search <query>`
 
