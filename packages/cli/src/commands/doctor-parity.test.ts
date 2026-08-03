@@ -788,6 +788,34 @@ describe('checkParity — mechanical agents-skills wiring (#2532 slice 1)', () =
     expect(skillLines).toHaveLength(DISTRIBUTED_CLAUDE_SKILLS.length);
     expect(skillLines.every((r) => r.status === 'skip')).toBe(true);
     expect(results.some((r) => r.status === 'fail')).toBe(false);
+    // The skip branch threads the SAME installHint as drift (CR re-review on
+    // #2559): the not-yet-adopted state is where the remedy is read most, and
+    // the two branches must not regress independently.
+    const first = skillLines.find((r) => r.name === `Parity: agents-skills (signon)`)!;
+    expect(first.remediation).toContain(
+      'a byte-copy of .claude/skills/signon/SKILL.md into .agents/skills/signon/',
+    );
+    expect(first.remediation).toContain('create the directory first');
+    expect(first.remediation).not.toContain('via totem init');
+  });
+
+  it('WARN with the byte-copy restore remedy when markers are stripped (third installHint branch)', async () => {
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', AGENTS_SKILLS_MANIFEST_YAML);
+    const first = DISTRIBUTED_CLAUDE_SKILLS[0]!;
+    // An existing artifact with NO managed-block markers at all (unmanaged /
+    // marker-stripped) exercises the markers-absent remediation branch.
+    writeAgentsSkill(first.name, 'unmanaged content with no totem markers\n');
+
+    const { results } = await checkParity(tmpDir);
+    const line = results.find((r) => r.name === `Parity: agents-skills (${first.name})`)!;
+    expect(line.status).toBe('warn');
+    expect(line.message).toMatch(/markers absent/i);
+    expect(line.remediation).toContain('Restore the managed block via');
+    expect(line.remediation).toContain(
+      `a byte-copy of .claude/skills/${first.name}/SKILL.md into .agents/skills/${first.name}/`,
+    );
+    expect(line.remediation).not.toContain('via totem init');
   });
 });
 
