@@ -138,7 +138,7 @@ export function registerAddLesson(server: McpServer): void {
     'add_lesson',
     {
       description:
-        'Persist a lesson learned to .totem/lessons/. An incremental re-index runs automatically and the result is returned.',
+        'Persist a lesson learned to .totem/lessons/. An incremental re-index runs automatically and the result is returned — unless a full re-index is already in progress, in which case the sync is deferred (the response says so) and the lesson indexes on the next sync.',
       inputSchema: {
         lesson: z.string().describe('The lesson text to persist'),
         context_tags: z

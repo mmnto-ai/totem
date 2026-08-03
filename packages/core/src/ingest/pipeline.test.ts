@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -249,7 +249,7 @@ describe('full-sync crash recovery (#2562)', () => {
 
   const checkpointPath = () => path.join(tmpDir, '.totem', FULL_SYNC_CHECKPOINT_FILE);
   const syncStatePath = () => path.join(tmpDir, '.totem', 'cache/sync-state.json');
-  const git = (cmd: string) => execSync(`git ${cmd}`, { cwd: tmpDir, stdio: 'pipe' });
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: tmpDir, stdio: 'pipe' });
 
   /** Exactly 80 chunks per file (one per `##` section; the `#` preamble has
    *  no body text, so it yields no chunk) — 240 total. Two files overflow
@@ -276,10 +276,10 @@ describe('full-sync crash recovery (#2562)', () => {
     writeCorpusFile('b.md', 'bravo');
     writeCorpusFile('c.md', 'charlie');
     git('init');
-    git('config user.email "test@test.com"');
-    git('config user.name "Test"');
-    git('add a.md b.md c.md');
-    git('commit -m init');
+    git('config', 'user.email', 'test@test.com');
+    git('config', 'user.name', 'Test');
+    git('add', '--', 'a.md', 'b.md', 'c.md');
+    git('commit', '-m', 'init');
   });
 
   afterEach(() => {
@@ -375,7 +375,10 @@ describe('full-sync crash recovery (#2562)', () => {
       expect(result.totalChunks).toBe(TOTAL_CHUNKS);
       expect(fs.existsSync(checkpointPath())).toBe(false);
       const state = JSON.parse(fs.readFileSync(syncStatePath(), 'utf-8'));
-      const headSha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+      const headSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+      }).trim();
       expect(state.lastSyncSha).toBe(headSha);
     },
   );
@@ -393,8 +396,8 @@ describe('full-sync crash recovery (#2562)', () => {
         `\n## ${STEM[mutated!]} extra\n\n${STEM[mutated!]}-mutated\n`,
         'utf-8',
       );
-      git(`add ${mutated}`);
-      git('commit -m "mutate a flushed file"');
+      git('add', '--', mutated!);
+      git('commit', '-m', 'mutate a flushed file');
 
       const resumer = new ScriptedEmbedder();
       const result = await run(resumer, true);
@@ -405,6 +408,32 @@ describe('full-sync crash recovery (#2562)', () => {
       expect(resumer.allText()).toContain(`${STEM[mutated!]}-mutated`);
       expect(resumer.allText()).toContain(`${STEM[missing]}-content-1`);
       expect(resumer.allText()).not.toContain(`${STEM[untouched!]}-content-1`);
+    },
+  );
+
+  it(
+    'GT round: a completed file EMPTIED since the epoch purges its stale rows on resume',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      await crashFullSync();
+      const missing = unflushedFile();
+      const [emptied] = ALL_FILES.filter((f) => f !== missing);
+
+      // The file now yields ZERO chunks. Its old rows must still purge —
+      // after this run the baseline advances past the change, so no later
+      // incremental diff revisits it and stale rows would be searchable
+      // forever (#2569 Greptile P1).
+      fs.writeFileSync(path.join(tmpDir, emptied!), `# ${STEM[emptied!]}\n`, 'utf-8');
+      git('add', '--', emptied!);
+      git('commit', '-m', 'empty a flushed file');
+
+      const resumer = new ScriptedEmbedder();
+      const result = await run(resumer, true);
+
+      // The emptied file's 80 rows are gone; the never-flushed file's 80 landed.
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS - 80);
+      expect(resumer.allText()).not.toContain(`${STEM[emptied!]}-content-1`);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
     },
   );
 
@@ -497,8 +526,8 @@ describe('full-sync crash recovery (#2562)', () => {
       // is a PERMANENT member of git's changed-union. Pre-fold that union
       // evicted these files from the completed set on every resume — quota
       // re-spent on the same files forever, never converging.
-      git('rm --cached a.md b.md c.md');
-      git('commit -m "untrack corpus"');
+      git('rm', '--cached', '--', 'a.md', 'b.md', 'c.md');
+      git('commit', '-m', 'untrack corpus');
 
       await crashFullSync();
       const missing = unflushedFile();
@@ -517,8 +546,8 @@ describe('full-sync crash recovery (#2562)', () => {
     'MAJOR 2: an untracked completed file MODIFIED after the crash still re-embeds (mtime arm)',
     { timeout: HEAVY_TIMEOUT_MS },
     async () => {
-      git('rm --cached a.md b.md c.md');
-      git('commit -m "untrack corpus"');
+      git('rm', '--cached', '--', 'a.md', 'b.md', 'c.md');
+      git('commit', '-m', 'untrack corpus');
 
       await crashFullSync();
       const missing = unflushedFile();
@@ -626,7 +655,10 @@ describe('full-sync crash recovery (#2562)', () => {
       // missing embedder would otherwise wedge the epoch closed forever.
       const first = await run(new ScriptedEmbedder(), false);
       expect(first.totalChunks).toBe(TOTAL_CHUNKS);
-      const headSha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+      const headSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+      }).trim();
       fs.writeFileSync(
         checkpointPath(),
         JSON.stringify({
@@ -660,7 +692,10 @@ describe('full-sync crash recovery (#2562)', () => {
       // DATABASE_MISMATCH evidence over a store built in the old space.
       const first = await run(new ScriptedEmbedder(), false);
       expect(first.totalChunks).toBe(TOTAL_CHUNKS);
-      const headSha = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
+      const headSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+      }).trim();
       fs.writeFileSync(
         checkpointPath(),
         JSON.stringify({

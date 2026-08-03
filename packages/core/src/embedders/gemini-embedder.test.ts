@@ -24,6 +24,17 @@ function embedResponse(count: number, dims: number = 768): { embeddings: { value
   };
 }
 
+/** Capture every setTimeout delay while resolving waits immediately (mirrors pacing.test.ts). */
+function captureDelays(): (number | undefined)[] {
+  const delays: (number | undefined)[] = [];
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+    delays.push(ms);
+    fn();
+    return 0 as unknown as ReturnType<typeof setTimeout>;
+  }) as never);
+  return delays;
+}
+
 // ─── Tests ────────────────────────────────────────────
 
 describe('GeminiEmbedder', () => {
@@ -235,12 +246,7 @@ describe('GeminiEmbedder', () => {
   // ─── Server-advised retry delay (#2562) ────────────
 
   it('waits the server-advised retryDelay instead of exponential backoff on 429', async () => {
-    const delays: (number | undefined)[] = [];
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
-      delays.push(ms);
-      fn();
-      return 0 as unknown as ReturnType<typeof setTimeout>;
-    }) as never);
+    const delays = captureDelays();
 
     const quotaErr = Object.assign(new Error('rate limited'), {
       status: 429,
@@ -257,12 +263,7 @@ describe('GeminiEmbedder', () => {
   it.each(['0s', '0.5s'])(
     'a sub-backoff server advisory ("%s") never undercuts the exponential floor',
     async (advisory) => {
-      const delays: (number | undefined)[] = [];
-      vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
-        delays.push(ms);
-        fn();
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }) as never);
+      const delays = captureDelays();
 
       const quotaErr = Object.assign(new Error('rate limited'), {
         status: 429,
@@ -279,12 +280,7 @@ describe('GeminiEmbedder', () => {
   );
 
   it('a quota 429 with NO advisory backs off past the minute window', async () => {
-    const delays: (number | undefined)[] = [];
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
-      delays.push(ms);
-      fn();
-      return 0 as unknown as ReturnType<typeof setTimeout>;
-    }) as never);
+    const delays = captureDelays();
 
     const quotaErr = Object.assign(new Error('quota exceeded RESOURCE_EXHAUSTED'), { status: 429 });
     mockEmbedContent.mockRejectedValueOnce(quotaErr).mockResolvedValueOnce(embedResponse(1));
@@ -300,12 +296,7 @@ describe('GeminiEmbedder', () => {
   // ─── Request pacing (#2562) ────────────────────────
 
   it('throttleMs paces successive ingest-shaped calls; explicit 0 disables pacing', async () => {
-    const delays: (number | undefined)[] = [];
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
-      delays.push(ms);
-      fn();
-      return 0 as unknown as ReturnType<typeof setTimeout>;
-    }) as never);
+    const delays = captureDelays();
 
     mockEmbedContent.mockResolvedValue(embedResponse(2));
 
@@ -324,12 +315,7 @@ describe('GeminiEmbedder', () => {
   });
 
   it('pacing defaults ON at the derived per-minute-window constant (#2562 ground-read)', async () => {
-    const delays: (number | undefined)[] = [];
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
-      delays.push(ms);
-      fn();
-      return 0 as unknown as ReturnType<typeof setTimeout>;
-    }) as never);
+    const delays = captureDelays();
 
     mockEmbedContent.mockResolvedValue(embedResponse(2));
 
@@ -346,12 +332,7 @@ describe('GeminiEmbedder', () => {
   });
 
   it('single-text (query-shaped) calls are never paced, even at the default throttle (#2562 round 3)', async () => {
-    const delays: (number | undefined)[] = [];
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
-      delays.push(ms);
-      fn();
-      return 0 as unknown as ReturnType<typeof setTimeout>;
-    }) as never);
+    const delays = captureDelays();
 
     mockEmbedContent.mockResolvedValue(embedResponse(1));
 

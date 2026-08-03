@@ -401,7 +401,7 @@ async function runSyncInner(
   // before any incremental diff can be trusted again — and it subsumes the
   // empty-store heal below (an interrupted full that never flushed).
   let resumeFrom: FullSyncCheckpoint | null = null;
-  if (fs.existsSync(path.join(totemDir, FULL_SYNC_CHECKPOINT_FILE))) {
+  if (hasFullSyncCheckpoint(totemDir)) {
     incremental = false;
     resumeFrom = readFullSyncCheckpoint(totemDir, log);
     log(
@@ -716,6 +716,20 @@ async function runSyncInner(
     const safeRel = sanitizeForTerminal(file.relativePath);
     log(`Chunking ${safeRel}...`);
 
+    // A file whose CURRENT state legitimately yields no rows (emptied of
+    // chunkable content, or swapped to a symlink the guard refuses) must
+    // still purge its OLD rows when re-processing in place — the baseline
+    // advances past the change at the end of this run, so no later
+    // incremental diff revisits it and the stale rows would be searchable
+    // forever (#2569 Greptile round: stale-rows-on-skip). The transient
+    // read-error skip below deliberately does NOT purge: deleting on a
+    // maybe-transient failure would LOSE good rows, worse than stale ones.
+    const purgeStaleRows = async (): Promise<void> => {
+      if (incremental || resumedWithoutReset) {
+        await store.deleteByFile(file.relativePath);
+      }
+    };
+
     let content: string;
     try {
       // Symlink guard at the READ site (mmnto-ai/totem#2354, #2356 review):
@@ -725,6 +739,7 @@ async function runSyncInner(
       // TOCTOU gap.
       if (fs.lstatSync(file.absolutePath).isSymbolicLink()) {
         log(`  Skipping symlink (not indexed): ${safeRel}`);
+        await purgeStaleRows();
         continue;
       }
       content = fs.readFileSync(file.absolutePath, 'utf-8');
@@ -741,6 +756,7 @@ async function runSyncInner(
 
     if (chunks.length === 0) {
       log(`  No chunks extracted from ${file.relativePath}`);
+      await purgeStaleRows();
       continue;
     }
 
@@ -748,9 +764,7 @@ async function runSyncInner(
     // re-embeds in place, and a #2562 resume (no reset) can hold this file's
     // chunks already (changed-since-epoch, or a flush whose checkpoint append
     // failed). Idempotent either way.
-    if (incremental || resumedWithoutReset) {
-      await store.deleteByFile(file.relativePath);
-    }
+    await purgeStaleRows();
 
     // Sanitize chunk content before embedding (adversarial ingestion scrubbing)
     // Deduplicate warnings per file to avoid log spam on files with widespread issues

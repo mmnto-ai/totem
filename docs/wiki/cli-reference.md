@@ -207,7 +207,9 @@ Parses your codebase, chunks the AST, and builds the local LanceDB vector index.
 
 - **Flags:**
   - `--incremental`: (Default) Only indexes files changed since the last sync.
-  - `--full`: Drops the existing index and rebuilds it entirely from scratch.
+  - `--full`: Drops the existing index and rebuilds it entirely from scratch. If a
+    previous full re-index was interrupted, this resumes it instead — see
+    **Crash recovery** below for the restart escape hatch.
   - `--prune`: Interactively detects and removes stale lessons that reference deleted files.
   - `--packs-only`: Run only the deterministic pack manifest write (no API key required); skips embedding sync, prune, and the global registry update.
   - `--index-only`: Run only the embedding sync; skip the pack manifest write.

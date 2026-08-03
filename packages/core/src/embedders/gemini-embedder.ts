@@ -70,6 +70,7 @@ export function extractRetryDelayMs(err: unknown): number | null {
   const details = (err as unknown as Record<string, unknown>)['errorDetails'];
   if (Array.isArray(details)) {
     for (const entry of details) {
+      if (entry === null || typeof entry !== 'object') continue;
       const delay = (entry as Record<string, unknown>)['retryDelay'];
       if (typeof delay === 'string') {
         const seconds = delay.match(/^(\d+(?:\.\d+)?)s$/);
