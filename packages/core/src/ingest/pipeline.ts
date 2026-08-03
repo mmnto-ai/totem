@@ -730,18 +730,33 @@ async function runSyncInner(
       }
     };
 
+    // Symlink guard at the READ site (mmnto-ai/totem#2354, #2356 review):
+    // resolveFiles skips symlinks at discovery, but this read happens later,
+    // so a path swapped to a symlink after resolution would still be followed
+    // by readFileSync. Re-check here and skip — closes the discovery→read
+    // TOCTOU gap. The purge runs OUTSIDE the read-error catches (#2569 CR
+    // round 2): caught there, a purge failure would be mislabeled a read
+    // error and silently downgraded to a skip — permanent staleness. Outside
+    // them it fails loud and CONVERGES: the marker/stale baseline makes the
+    // next run re-evict the file and retry the delete.
+    let isSymlink: boolean;
+    try {
+      isSymlink = fs.lstatSync(file.absolutePath).isSymbolicLink();
+      // totem-context: intentional skip — a per-file stat failure (vanished/raced file, permission) logs and skips just that file so sync continues over the rest; aborting the whole sync over one unreadable file would be the drift, not the skip.
+    } catch (err) {
+      log(
+        `  Skipping (read error: ${sanitizeForTerminal(err instanceof Error ? err.message : String(err))}): ${safeRel}`,
+      );
+      continue;
+    }
+    if (isSymlink) {
+      log(`  Skipping symlink (not indexed): ${safeRel}`);
+      await purgeStaleRows();
+      continue;
+    }
+
     let content: string;
     try {
-      // Symlink guard at the READ site (mmnto-ai/totem#2354, #2356 review):
-      // resolveFiles skips symlinks at discovery, but this read happens later,
-      // so a path swapped to a symlink after resolution would still be followed
-      // by readFileSync. Re-check here and skip — closes the discovery→read
-      // TOCTOU gap.
-      if (fs.lstatSync(file.absolutePath).isSymbolicLink()) {
-        log(`  Skipping symlink (not indexed): ${safeRel}`);
-        await purgeStaleRows();
-        continue;
-      }
       content = fs.readFileSync(file.absolutePath, 'utf-8');
       // totem-context: intentional skip — a per-file read failure (vanished/raced file, permission, decode) logs and skips just that file so sync continues over the rest; aborting the whole sync over one unreadable file would be the drift, not the skip.
     } catch (err) {
