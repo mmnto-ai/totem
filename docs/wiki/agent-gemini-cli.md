@@ -8,7 +8,7 @@ The Gemini CLI is a terminal agent for breadth analysis, code review, and cross-
 - **Project Settings:** `.gemini/settings.json`. Local configuration for UI, defaults, and model choices.
 - **Global Context:** `~/.gemini/`. Global configuration and instructions. **Warning:** Watch out for `~/.gemini/GEMINI.md` accumulating cross-project bleed and duplicates.
 - **Hooks:** `.gemini/hooks/`, registered via `settings.json` entries (entries must match the current CLI hook schema — an invalid entry is silently discarded at boot, see [mmnto-ai/totem#2558](https://github.com/mmnto-ai/totem/issues/2558)).
-- **Skills:** the vendor-neutral `.agents/skills/<name>/SKILL.md` surface ([mmnto-ai/totem#2532](https://github.com/mmnto-ai/totem/issues/2532)). Gemini CLI ≥0.53 does **not** load `.gemini/skills/*.md` — files there are legacy artifacts (probe-verified 2026-08-03).
+- **Skills:** Gemini CLI ≥0.53 loads **directory-form** skills — `<name>/SKILL.md` with `name` + `description` frontmatter — from both `.gemini/skills/` and the vendor-neutral `.agents/skills/` (trust-gated: untrusted folders load no workspace skills). Flat `*.md` files load from **neither** directory, so this repo's flat `.gemini/skills/{totem,signoff}.md` are dead weight (probe-verified 2026-08-03, both forms). Cohort standard is `.agents/skills/` — one surface serves gemini/agy/kimi ([mmnto-ai/totem#2532](https://github.com/mmnto-ai/totem/issues/2532)).
 
 ## 2. Keeping Configs Lean
 

@@ -166,6 +166,12 @@ interface MechanicalArtifact {
   markers: ManagedBlockMarkers;
   canonicalBlock: string | undefined;
   lineName: string;
+  /**
+   * Remediation command override for surfaces `totem init` does not write yet
+   * (core defaults to `totem init` when omitted) — an inert remedy is worse
+   * than none (#2532 slice-1 falsification round).
+   */
+  installHint?: string;
 }
 
 /**
@@ -222,6 +228,9 @@ function mechanicalArtifactsFor(
         markers,
         canonicalBlock: extract(s.content, markers),
         lineName: `Parity: agents-skills (${s.name})`,
+        // totem init does not write this surface until #2532 slice 2 — the
+        // honest remedy today is the byte-copy from the Claude twin.
+        installHint: `cp .claude/skills/${s.name}/SKILL.md .agents/skills/${s.name}/SKILL.md`,
       }));
     case 'review-reply-skill-content':
       return [
@@ -1173,6 +1182,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
               consumerPath: a.consumerPath,
               markers: a.markers,
               ...(binary !== undefined ? { binary } : {}),
+              ...(a.installHint !== undefined ? { installHint: a.installHint } : {}),
             });
             if (verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
             return lineFor(a.lineName, verdict);

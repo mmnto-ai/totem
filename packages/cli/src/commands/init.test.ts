@@ -2678,6 +2678,34 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(REVIEW_LOOP_SKILL_CONTENT).toBe(source);
   });
 
+  // ── vendor-neutral .agents/skills mirror (mmnto-ai/totem#2532 slice 1) ──
+  // Until `totem init` learns the surface (slice 2) and the agents-skills
+  // parity-manifest row arms, THIS lock is the only CI sensor keeping the
+  // .agents byte-copies from rotting when a skill's canonical content changes
+  // (slice-1 falsification round, F3).
+  it('every DISTRIBUTED_CLAUDE_SKILLS constant matches its .agents/skills byte-copy', () => {
+    for (const s of DISTRIBUTED_CLAUDE_SKILLS) {
+      const mirror = fs.readFileSync(
+        path.join(repoRoot, '.agents', 'skills', s.name, 'SKILL.md'),
+        'utf-8',
+      );
+      expect(mirror, `.agents/skills/${s.name}/SKILL.md must stay a byte-copy`).toBe(s.content);
+    }
+  });
+
+  // The .gitignore negation list hand-mirrors DISTRIBUTED_CLAUDE_SKILLS
+  // (gitignore cannot derive; slice-1 falsification round, F5): a fifth
+  // distributed skill without its negation line would be silently
+  // untrackable at the vendor-neutral surface.
+  it('.gitignore carries a negation line for every distributed skill', () => {
+    const gitignore = fs.readFileSync(path.join(repoRoot, '.gitignore'), 'utf-8');
+    for (const s of DISTRIBUTED_CLAUDE_SKILLS) {
+      expect(gitignore, `missing !.agents/skills/${s.name}/ negation`).toContain(
+        `!.agents/skills/${s.name}/`,
+      );
+    }
+  });
+
   // The covariate PR-line is a versioned contract (format v1) consumed by a
   // measurement pilot (Prop 304 R2, mmnto-ai/totem#2106). Its shape is grep-able
   // and MUST NOT drift without a spec amendment — lock the exact template string

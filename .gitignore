@@ -83,6 +83,11 @@ design/
 !.agents/skills/signoff/
 !.agents/skills/review-reply/
 !.agents/skills/review-loop/
+# The four names above hand-mirror DISTRIBUTED_CLAUDE_SKILLS (gitignore cannot
+# derive); a lock test in init.test.ts fails the build if the lists drift.
+# Root-anchored `.agents/*` no longer matches NESTED .agents/ dirs the old
+# `.agents/` pattern caught — re-ignore those at depth >= 1:
+*/**/.agents/
 .continue/
 .code-review/
 skills-lock.json

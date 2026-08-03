@@ -1022,6 +1022,14 @@ export interface DetectMechanicalContext {
    * the detector reads `<consumerPath>` (UTF-8); a read failure is honest-absent.
    */
   readFile?: (absPath: string) => string | undefined;
+  /**
+   * Command named by the remediation strings. Defaults to `totem init` (the
+   * Claude-surface installer). Threaded per-artifact because a contract's
+   * consumer surface may not be one `totem init` writes yet — naming a remedy
+   * that does not touch the surface ships an inert instruction (mmnto-ai/totem#2532
+   * slice-1 falsification round; kin of the #2082 per-class installCommand).
+   */
+  installHint?: string;
 }
 
 /**
@@ -1126,6 +1134,7 @@ export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityCo
   // Append the binary self-report (req #5) by concatenation (not interpolation)
   // so the provenance suffix never reads as a jammed token in a message.
   const tag = (msg: string): string => msg + provenance;
+  const install = ctx.installHint ?? 'totem init';
 
   // ── Canonical unresolvable → unknown (Stale-Doctor-Paradox guard) ──
   // `undefined` = the CLI could not extract the canonical (a build/marker bug);
@@ -1151,8 +1160,7 @@ export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityCo
     return {
       status: 'skip',
       message: `artifact not installed at ${ctx.consumerPath} — cohort permits absence`,
-      remediation:
-        'Run totem init to install the distributed artifact, or ignore if this repo intentionally omits it.',
+      remediation: `Run ${install} to install the distributed artifact, or ignore if this repo intentionally omits it.`,
     };
   }
 
@@ -1174,8 +1182,7 @@ export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityCo
     return {
       status: 'warn',
       message: `managed-block markers absent in ${ctx.consumerPath} — file is unmanaged or marker-stripped`,
-      remediation:
-        'Re-run totem init to restore the managed block, or add a totem:fork marker if this divergence is intentional.',
+      remediation: `Re-run ${install} to restore the managed block, or add a totem:fork marker if this divergence is intentional.`,
     };
   }
 
@@ -1206,8 +1213,7 @@ export function detectMechanicalContract(ctx: DetectMechanicalContext): ParityCo
     message: tag(
       `drift — consumer ${hashManagedBlock(consumerNorm)} != canonical ${hashManagedBlock(canonicalNorm)}`,
     ),
-    remediation:
-      'Reconcile the artifact to the canonical (re-run totem init), or add a totem:fork marker if the divergence is intentional.',
+    remediation: `Reconcile the artifact to the canonical (re-run ${install}), or add a totem:fork marker if the divergence is intentional.`,
   };
 }
 

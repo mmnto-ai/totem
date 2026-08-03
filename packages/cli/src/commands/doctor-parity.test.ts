@@ -765,6 +765,11 @@ describe('checkParity — mechanical agents-skills wiring (#2532 slice 1)', () =
     const line = results.find((r) => r.name === `Parity: agents-skills (${first.name})`)!;
     expect(line.status).toBe('warn');
     expect(line.message).toMatch(/drift/i);
+    // The remedy must be one that actually touches this surface: totem init
+    // does not write .agents/skills until #2532 slice 2, so the remediation
+    // names the byte-copy from the Claude twin (slice-1 falsification F2).
+    expect(line.remediation).toContain(`cp .claude/skills/${first.name}/SKILL.md`);
+    expect(line.remediation).not.toContain('totem init');
   });
 
   it('SKIP when the surface is not adopted (no .agents/skills at all), never fail', async () => {
