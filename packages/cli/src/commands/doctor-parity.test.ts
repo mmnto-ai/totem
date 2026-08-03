@@ -765,11 +765,16 @@ describe('checkParity — mechanical agents-skills wiring (#2532 slice 1)', () =
     const line = results.find((r) => r.name === `Parity: agents-skills (${first.name})`)!;
     expect(line.status).toBe('warn');
     expect(line.message).toMatch(/drift/i);
-    // The remedy must be one that actually touches this surface: totem init
-    // does not write .agents/skills until #2532 slice 2, so the remediation
-    // names the byte-copy from the Claude twin (slice-1 falsification F2).
-    expect(line.remediation).toContain(`cp .claude/skills/${first.name}/SKILL.md`);
-    expect(line.remediation).not.toContain('totem init');
+    // The remedy must be one that actually touches this surface AND holds in
+    // the states it is prescribed for (slice-1 falsification F2 + the #2559
+    // cross-bot round): descriptive byte-copy prose naming directory creation
+    // and the twin fallback — never a bare platform-bound command, and never
+    // "via totem init" (which does not write .agents/skills until slice 2).
+    expect(line.remediation).toContain(
+      `a byte-copy of .claude/skills/${first.name}/SKILL.md into .agents/skills/${first.name}/`,
+    );
+    expect(line.remediation).toContain('create the directory first');
+    expect(line.remediation).not.toContain('via totem init');
   });
 
   it('SKIP when the surface is not adopted (no .agents/skills at all), never fail', async () => {
@@ -778,7 +783,9 @@ describe('checkParity — mechanical agents-skills wiring (#2532 slice 1)', () =
 
     const { results } = await checkParity(tmpDir);
     const skillLines = results.filter((r) => r.name.startsWith('Parity: agents-skills'));
-    expect(skillLines.length).toBeGreaterThan(0);
+    // Exactly one skip PER distributed skill (CR on #2559): a single aggregate
+    // line would satisfy a bare non-empty check while dropping per-skill rows.
+    expect(skillLines).toHaveLength(DISTRIBUTED_CLAUDE_SKILLS.length);
     expect(skillLines.every((r) => r.status === 'skip')).toBe(true);
     expect(results.some((r) => r.status === 'fail')).toBe(false);
   });

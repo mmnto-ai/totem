@@ -2697,13 +2697,17 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
   // (gitignore cannot derive; slice-1 falsification round, F5): a fifth
   // distributed skill without its negation line would be silently
   // untrackable at the vendor-neutral surface.
-  it('.gitignore carries a negation line for every distributed skill', () => {
+  it('.gitignore negation set matches DISTRIBUTED_CLAUDE_SKILLS exactly', () => {
+    // Exact-set, not per-entry contains (CR on #2559): a stray negation for a
+    // non-distributed name is drift in the other direction — the allowlist
+    // must equal the derived list, no more, no less.
     const gitignore = fs.readFileSync(path.join(repoRoot, '.gitignore'), 'utf-8');
-    for (const s of DISTRIBUTED_CLAUDE_SKILLS) {
-      expect(gitignore, `missing !.agents/skills/${s.name}/ negation`).toContain(
-        `!.agents/skills/${s.name}/`,
-      );
-    }
+    const actual = gitignore
+      .split(/\r?\n/)
+      .filter((line) => /^!\.agents\/skills\/[^/]+\/$/.test(line))
+      .sort();
+    const expected = DISTRIBUTED_CLAUDE_SKILLS.map((s) => `!.agents/skills/${s.name}/`).sort();
+    expect(actual).toEqual(expected);
   });
 
   // The covariate PR-line is a versioned contract (format v1) consumed by a
