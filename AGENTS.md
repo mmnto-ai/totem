@@ -8,7 +8,7 @@ Totem is a **deterministic, git-native governance toolkit** — _rules you enfor
 
 ## Session Start Protocol (MANDATORY)
 
-1. Run `totem status` for health; read the active milestone for momentum.
+1. Run `totem status` for health.
 2. **NEVER GUESS ARCHITECTURE.** Before modifying any core system, run `totem search <system_name>`.
 3. Before writing code, call `search_knowledge` describing what you're changing.
 4. Before planning, query `totem-strategy:search_knowledge` for ADRs.
@@ -20,7 +20,6 @@ Totem is a **deterministic, git-native governance toolkit** — _rules you enfor
 - `main` is protected. Feature branches + PRs. Never amend commits on feature branches. Use `Closes #NNN` in PR descriptions.
 - `kebab-case.ts` files, `err` (never `error`) in catch blocks, no empty catches.
 - Named constants for magic numbers. Zod at system boundaries only.
-- Run `pnpm run format` before committing.
 - **NEVER put secrets in config files.** `.env` only.
 - **Totem is NOT zero-user.** Ships in production for downstream consumers beyond this repo's dogfood. Breaking changes need migration paths, not just "fix in next major."
 
@@ -30,7 +29,7 @@ Not mechanically enforced. Follow because they reduce PR bot noise.
 
 - **Before coding:** `/preflight <issue>`. Create a feature branch.
 - **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
-- **After merging a PR:** `totem lesson extract <pr> --yes`, then `totem docs` if releasing.
+- **After merging a PR:** `totem lesson extract <pr> --yes`.
 - **NEVER bypass quality gates without a ticket.** No `--no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or CI-pacifying ignore patterns. Suppressions need a ticket-ref comment.
 - **Open PRs Ready, not Draft.** Ready signals review-readiness for the operator's trigger word (strategy#622).
 - **Vendor routing.** Claude is the default code executor; Gemini stays strategic (proposals, ADRs, audits). Cross-vendor second-opinion fine both ways; "Gemini implement" is not the default.
@@ -59,7 +58,7 @@ Enforcement stack per ADR-105: skill instructions → **this AGENTS.md** (baseli
 
 ## Skills
 
-Skills: `.claude/skills/` (`/<name>`); signon/signoff/review-reply/review-loop also in `.agents/skills/` (gemini/agy/kimi; kimi: `/skill:<name>`; mmnto-ai/totem#2532).
+Skills: `.claude/skills/` (`/<name>`); signon/signoff/review-reply/review-loop also in `.agents/skills/` (gemini/agy/kimi; kimi: `/skill:<name>`; #2532).
 
 - `/preflight <issue>` — spec + search before coding
 - `/prepush` — format + lint + review before push
@@ -79,7 +78,7 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 <!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" -->
 
-Role `bus` → seat `totem-claude`; judgment-density file classes: cohort defaults + `AGENTS.md` · `docs/wiki/**` · `.claude/skills/**`. Lane table: mmnto-ai/totem-strategy#697 (pointer, not a copy). Duties + fail-closed succession: Prop 305 §3 + the mmnto-ai/totem-strategy#639 operating spec. The `agent-bus` parity row senses declaration presence only; duty execution is adherence-class (Tenet 19).
+Role `bus` → seat `totem-claude`; judgment-density file classes: cohort defaults + `AGENTS.md` · `docs/wiki/**` · `.claude/skills/**`. Lane table: mmnto-ai/totem-strategy#697 (pointer, not a copy). Duties + fail-closed succession: Prop 305 §3 + the mmnto-ai/totem-strategy#639 operating spec. The `agent-bus` parity row senses declaration presence only; duty execution is adherence-class (Tenet 19). Cold-start fallback (crown-round A3): a session without the SessionStart hook derives orientation via `totem orient`.
 
 ## Detailed Docs
 
