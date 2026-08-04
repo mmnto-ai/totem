@@ -22,6 +22,9 @@ import { formatXmlResponse } from '../xml-format.js';
 // Rate limiting (#844) — simple in-memory session counter
 // ---------------------------------------------------------------------------
 const MAX_LESSONS_PER_SESSION = 25;
+// Bounded lock-acquisition budget (#2564 leg MAJOR-R1): 4 retries ≈ 7.5s
+// worst-case backoff before falling back to the lockless write.
+const MAX_LESSON_LOCK_RETRIES = 4;
 let sessionLessonCount = 0;
 
 /** Exported for testing — reset the rate-limit counter between test runs. */
@@ -249,16 +252,72 @@ export function registerAddLesson(server: McpServer): void {
           `${bodyContent}\n` +
           provenance;
 
-        // Acquire lock before writing lesson, release before spawning sync
-        // (the spawned sync process acquires its own lock via runSync/withLock)
-        const releaseLock = await acquireLock(totemDir);
+        // #2564 (leg MAJOR-2): a live full re-index holds the sync lock
+        // unstealably for corpus-sized wall-clock, so contending on it here
+        // is a deterministic multi-minute block ending in SYNC_FAILED — the
+        // lesson would be LOST. Under a live epoch, write WITHOUT the lock:
+        // the filename is content-hash unique and the epoch holder only
+        // READS this directory; indexing defers to the epoch either way
+        // (#2562 deferral below).
+        // Leg MAJOR-R1: the checkpoint marker is a proxy — a long paced
+        // INCREMENTAL hold never writes one, and the fresh-full prelude holds
+        // the lock before writing it. So the marker check is only the fast
+        // path; the acquisition itself is BOUNDED (~7.5s worst case), and a
+        // timeout falls back to the same lockless write. A timeout USUALLY
+        // means a live long sync, but not provably (leg MINOR-S1: an
+        // undeletable corrupt lock or sustained short-hold churn also
+        // exhausts the budget) — the fallback is safe regardless: no lock
+        // holder mutates this directory, and the next sync indexes the file.
         let fileName: string;
-        try {
+        let lockTimedOut = false;
+        if (hasFullSyncCheckpoint(totemDir)) {
           const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
           fileName = path.basename(writtenPath);
           sessionLessonCount++;
-        } finally {
-          releaseLock();
+        } else {
+          let releaseLock: (() => void) | null = null;
+          try {
+            releaseLock = await acquireLock(totemDir, undefined, {
+              maxRetries: MAX_LESSON_LOCK_RETRIES,
+            });
+          } catch (err) {
+            if ((err as { code?: string }).code !== 'SYNC_FAILED') throw err;
+            lockTimedOut = true;
+          }
+          if (releaseLock) {
+            // Acquired: write under the lock, release before spawning sync
+            // (the spawned sync process takes its own lock via runSync/withLock)
+            try {
+              const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
+              fileName = path.basename(writtenPath);
+              sessionLessonCount++;
+            } finally {
+              releaseLock();
+            }
+          } else {
+            const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
+            fileName = path.basename(writtenPath);
+            sessionLessonCount++;
+          }
+        }
+
+        // Whatever exhausted the budget also blocks a convenience sync (it
+        // would contend on the same lock and die by its kill-timer) — defer.
+        // The message claims neither a cause nor that the running sync will
+        // index this file (its file list predates our write — leg NIT-S1):
+        // the next sync picks it up via the untracked-files union.
+        if (lockTimedOut) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: formatXmlResponse(
+                  'lesson_added',
+                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: the sync lock could not be acquired within the bounded budget (usually another running sync) — the lesson will be indexed on the next \`totem sync\`.`,
+                ),
+              },
+            ],
+          };
         }
 
         // #2562 (falsification round 3, MAJOR 1): while a full re-index epoch
@@ -266,7 +325,10 @@ export function registerAddLesson(server: McpServer): void {
         // corpus-sized job this tool's 60s kill-timer can never wait out. The
         // lesson is already written; skip the convenience sync and let the
         // running epoch (or the next `totem sync`) index it, instead of
-        // deterministically reporting a spurious timeout failure.
+        // deterministically reporting a spurious timeout failure. Re-derived
+        // here (not reused from the lock bypass above) so an epoch that began
+        // while we held the lock still defers, and one that completed while
+        // we wrote locklessly falls through to a now-uncontended sync.
         if (hasFullSyncCheckpoint(totemDir)) {
           return {
             content: [

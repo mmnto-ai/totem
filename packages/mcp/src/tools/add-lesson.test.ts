@@ -254,9 +254,12 @@ describe('add_lesson auth model (#844)', () => {
 
   it('defers the convenience sync while a full re-index checkpoint is live', async () => {
     const { spawn } = await import('node:child_process');
-    const { hasFullSyncCheckpoint } = await import('@mmnto/totem');
-    vi.mocked(hasFullSyncCheckpoint).mockReturnValueOnce(true);
+    const { acquireLock, hasFullSyncCheckpoint } = await import('@mmnto/totem');
+    // Consulted twice on the live path (#2564 leg MAJOR-2): once for the
+    // lock bypass, once (re-derived) for the sync deferral.
+    vi.mocked(hasFullSyncCheckpoint).mockReturnValueOnce(true).mockReturnValueOnce(true);
     const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
+    const lockCallsBefore = vi.mocked(acquireLock).mock.calls.length;
 
     const result = (await handle({
       lesson: 'Written during a live epoch',
@@ -270,6 +273,69 @@ describe('add_lesson auth model (#844)', () => {
     expect(lastWrittenEntry).toContain('Written during a live epoch');
     expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore);
     expect(result.content[0]!.text).toContain('Sync deferred');
+    // #2564 (leg MAJOR-2): under a live epoch the lock is held unstealably
+    // for corpus-sized wall-clock — the write must NOT contend on it, or the
+    // tool blocks for the full acquisition budget and the lesson is lost.
+    expect(vi.mocked(acquireLock).mock.calls.length).toBe(lockCallsBefore);
+  });
+
+  it('takes the sync lock (bounded) on the normal path', async () => {
+    // Leg NIT-R2: the live-path cell asserts the lock is NOT taken; without
+    // this inverse cell a mutant removing locking entirely stays green.
+    const { acquireLock } = await import('@mmnto/totem');
+    const lockCallsBefore = vi.mocked(acquireLock).mock.calls.length;
+
+    await handle({ lesson: 'Normal path locks', context_tags: ['test'] });
+
+    expect(vi.mocked(acquireLock).mock.calls.length).toBe(lockCallsBefore + 1);
+    // The acquisition is bounded (leg MAJOR-R1): a long-held lock must not
+    // block this tool for the full ~255s default budget.
+    const lastLockCall = vi.mocked(acquireLock).mock.calls.at(-1)!;
+    expect(lastLockCall[2]).toMatchObject({ maxRetries: 4 });
+  });
+
+  it('falls back to a lockless write when the lock is held by a live long sync (leg MAJOR-R1)', async () => {
+    const { spawn } = await import('node:child_process');
+    const { acquireLock } = await import('@mmnto/totem');
+    // No checkpoint marker (a long paced INCREMENTAL hold writes none), and
+    // the bounded acquisition times out against the live holder.
+    vi.mocked(acquireLock).mockRejectedValueOnce(
+      Object.assign(new Error('Could not acquire sync lock after 4 attempts.'), {
+        code: 'SYNC_FAILED',
+      }),
+    );
+    const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
+
+    const result = (await handle({
+      lesson: 'Written past a held lock',
+      context_tags: ['test'],
+    })) as { isError?: boolean; content: Array<{ text: string }> };
+
+    // The lesson is WRITTEN (not lost), the convenience sync is deferred
+    // (it would contend on the same lock and die by its kill-timer), and the
+    // response claims neither an unproven cause nor indexing-by-the-holder
+    // (leg MINOR-S1 / NIT-S1).
+    expect(result.isError).toBeUndefined();
+    expect(lastWrittenEntry).toContain('Written past a held lock');
+    expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore);
+    expect(result.content[0]!.text).toContain('Sync deferred');
+    expect(result.content[0]!.text).toContain('could not be acquired');
+    expect(result.content[0]!.text).not.toContain('indexed by it');
+  });
+
+  it('a non-SYNC_FAILED acquisition error still fails loud (no silent lockless write)', async () => {
+    const { acquireLock } = await import('@mmnto/totem');
+    vi.mocked(acquireLock).mockRejectedValueOnce(
+      Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' }),
+    );
+
+    const result = (await handle({
+      lesson: 'Should not be written',
+      context_tags: ['test'],
+    })) as { isError?: boolean; content: Array<{ text: string }> };
+
+    expect(result.isError).toBe(true);
+    expect(lastWrittenEntry).not.toContain('Should not be written');
   });
 });
 

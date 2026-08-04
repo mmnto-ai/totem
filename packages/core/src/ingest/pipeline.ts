@@ -6,7 +6,8 @@ import { createChunker } from '../chunkers/chunker.js';
 import type { TotemConfig } from '../config-schema.js';
 import { requireEmbedding } from '../config-schema.js';
 import { createEmbedder } from '../embedders/embedder.js';
-import { TotemDatabaseError } from '../errors.js';
+import { TotemDatabaseError, TotemError } from '../errors.js';
+import type { LockRelease } from '../lock.js';
 import { withLock } from '../lock.js';
 import { sanitizeForIngestion } from '../sanitize.js';
 import { LanceStore } from '../store/lance-store.js';
@@ -294,9 +295,27 @@ export async function runSync(
 
   return withLock(
     totemDir,
-    () => runSyncInner(config, options),
+    (lock) => runSyncInner(config, options, lock),
     (msg) => log(msg),
+    options.lockOptions,
   );
+}
+
+/**
+ * #2564: the checkpoint invariant stands on mutual exclusion. Once the
+ * heartbeat observed the lock stolen, another sync may be mutating the store
+ * or the checkpoint under its own epoch — abort loudly before writing
+ * anything more. The marker stays on disk, so the next sync resumes this
+ * epoch (ADR-115: a mutating degraded path fails loud and preserves state).
+ */
+function assertLockHeld(lock: LockRelease | undefined): void {
+  if (lock?.isLost() === true) {
+    throw new TotemError(
+      'SYNC_FAILED',
+      'Sync lock was lost mid-run — another process took it over.',
+      'The interrupted re-index resumes from its checkpoint on the next totem sync.',
+    );
+  }
 }
 
 /**
@@ -360,6 +379,7 @@ export function computeNewlyEligiblePaths(
 async function runSyncInner(
   config: TotemConfig,
   options: SyncOptions,
+  lock?: LockRelease,
 ): Promise<{
   chunksProcessed: number;
   filesProcessed: number;
@@ -445,6 +465,10 @@ async function runSyncInner(
   // write failure aborts loudly with the store intact, so no window exists in
   // which a reset store is unmarked (#2562).
   async function beginFullSync(cp: FullSyncCheckpoint): Promise<void> {
+    // #2564 (leg MAJOR-3): never overwrite the marker or reset the store
+    // after this hold's exclusion is known-lost — both would destroy the
+    // thief's epoch, the exact mutation #2564 names.
+    assertLockHeld(lock);
     writeFullSyncCheckpoint(totemDir, cp);
     checkpoint = cp;
     log('Full sync: resetting index...');
@@ -642,6 +666,9 @@ async function runSyncInner(
             ? [...resumeFrom.completedFiles]
             : allFiles.map((f) => f.relativePath).filter((rel) => completed.has(normalizeRel(rel)));
         checkpoint = { ...resumeFrom, indexExclusionHash, completedFiles: carried };
+        // #2564 (leg MINOR-R2): same class as the beginFullSync probe — never
+        // overwrite a marker that may belong to a thief's epoch.
+        assertLockHeld(lock);
         writeFullSyncCheckpoint(totemDir, checkpoint);
         resumedWithoutReset = true;
         log(
@@ -682,8 +709,15 @@ async function runSyncInner(
   let pendingFiles: string[] = [];
 
   async function flushBuffer(): Promise<void> {
+    // Probe BEFORE the empty-buffer return so the final flush always checks
+    // mutual exclusion, even when nothing is left to write (#2564).
+    assertLockHeld(lock);
     if (buffer.length === 0) return;
     await store.insert(buffer);
+    // Re-probe after the insert: the embed inside it is exactly the
+    // multi-minute paced/throttled window a theft happens in (#2564), and
+    // the next entry probe may be a whole batch away.
+    assertLockHeld(lock);
     totalChunks += buffer.length;
     log(`  Embedded ${totalChunks} chunks so far`);
     buffer = [];
@@ -832,6 +866,9 @@ async function runSyncInner(
 
   // Persist sync state so the next incremental sync knows where to diff from and
   // can detect an ignore-pattern change (including a removal) via the hash (#2366).
+  // #2564: not under a lost lock — a completion-claiming baseline must not land
+  // while another process's epoch owns the store.
+  assertLockHeld(lock);
   if (headSha) {
     writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now(), indexExclusionHash });
   }
@@ -841,10 +878,18 @@ async function runSyncInner(
   // baseline, which the next run resumes as a near-noop; the reverse order
   // would leave a clean-claiming baseline over a still-marked store.
   if (checkpoint) {
+    // #2564: after a theft, the on-disk marker may already belong to the
+    // thief's epoch — deleting it would erase THAT run's crash safety.
+    assertLockHeld(lock);
     deleteFullSyncCheckpoint(totemDir, log);
   }
 
-  // Persist index metadata for dimension mismatch detection
+  // Persist index metadata for dimension mismatch detection.
+  // #2564 (leg MINOR-R3): index-meta is DATABASE_MISMATCH evidence, not a
+  // freely-regenerable cache — writing it under a thief running a different
+  // embedder identity would launder the very signal the next incremental
+  // needs (the #2562 round-4 reasoning).
+  assertLockHeld(lock);
   writeIndexMeta(totemDir, {
     provider: embedding.provider,
     model: embedding.model ?? 'default',

@@ -214,6 +214,8 @@ class ScriptedEmbedder implements Embedder {
   embedCalls: string[][] = [];
   failFromCall: number | null = null;
   onCall: (() => void) | undefined;
+  /** Awaited at embed entry — lets a cell hold the embed open while timers fire (#2564). */
+  onCallAsync: (() => Promise<void>) | undefined;
   describeEffective?: () => { provider: string; model: string; dimensions: number } | null;
   resolveEffective?: () => Promise<{ provider: string; model: string; dimensions: number }>;
   private calls = 0;
@@ -222,16 +224,15 @@ class ScriptedEmbedder implements Embedder {
     this.dimensions = dimensions;
   }
 
-  embed(texts: string[]): Promise<number[][]> {
+  async embed(texts: string[]): Promise<number[][]> {
     this.calls++;
     this.onCall?.();
+    if (this.onCallAsync) await this.onCallAsync();
     if (this.failFromCall !== null && this.calls >= this.failFromCall) {
-      return Promise.reject(
-        Object.assign(new Error('quota exceeded: RESOURCE_EXHAUSTED'), { status: 429 }),
-      );
+      throw Object.assign(new Error('quota exceeded: RESOURCE_EXHAUSTED'), { status: 429 });
     }
     this.embedCalls.push([...texts]);
-    return Promise.resolve(texts.map((_, i) => new Array(this.dimensions).fill(i % 7)));
+    return texts.map((_, i) => new Array(this.dimensions).fill(i % 7));
   }
 
   /** All text embedded across every call, joined for content assertions. */
@@ -308,6 +309,72 @@ describe('full-sync crash recovery (#2562)', () => {
     await expect(run(crasher, false)).rejects.toThrow('RESOURCE_EXHAUSTED');
     return crasher;
   }
+
+  it(
+    '#2564: a lock stolen mid-embed aborts loudly at the flush boundary, keeps the marker, and leaves the thief lock intact',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      const lockFile = path.join(tmpDir, '.totem', 'sync.lock');
+      const foreign = {
+        pid: 424242,
+        timestamp: Date.now(),
+        createdAt: Date.now(),
+        holderId: 'thief-holder',
+      };
+
+      const embedder = new ScriptedEmbedder();
+      let swapped = false;
+      embedder.onCallAsync = async () => {
+        // First flush (two files) lands clean; the theft hits during the
+        // second flush's embed — the paced multi-minute window from the issue.
+        if (embedder.embedCalls.length >= 1 && !swapped) {
+          swapped = true;
+          fs.writeFileSync(lockFile, JSON.stringify(foreign));
+          // Idle long enough for a 25ms heartbeat to observe and latch.
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      };
+
+      await expect(
+        runSync(config, {
+          projectRoot: tmpDir,
+          incremental: false,
+          embedder,
+          lockOptions: { heartbeatIntervalMs: 25 },
+        }),
+      ).rejects.toThrow('Sync lock was lost');
+      expect(swapped).toBe(true);
+
+      // The mutating degraded path preserved crash safety: the marker is
+      // intact...
+      expect(fs.existsSync(checkpointPath())).toBe(true);
+      // ...and the abort came from the flush EXIT probe, BEFORE the
+      // post-theft checkpoint append: only the two pre-theft files are
+      // checkpointed. Deleting the exit probe lets the last flush append the
+      // third file and fails here (leg MAJOR-1 — an existsSync check alone
+      // cannot tell WHICH probe fired). The ENTRY probe is not inducible
+      // in-process on the full path — no await exists between one flush's
+      // exit probe and the next flush's entry probe for a beat to latch in
+      // (leg MINOR-R1, disclosed); its marginal window is the incremental
+      // purge gap, and a miss converges at the next probe.
+      expect(readCheckpoint().completedFiles).toHaveLength(2);
+      // ...no completion-claiming baseline was written...
+      expect(fs.existsSync(syncStatePath())).toBe(false);
+      // ...and the thief's lock survived our release (no cascade theft).
+      expect(JSON.parse(fs.readFileSync(lockFile, 'utf-8'))).toEqual(foreign);
+
+      // Recovery control: with the thief gone, the next sync resumes the
+      // epoch and completes the full corpus — and actually re-embeds the
+      // un-checkpointed file (store.count() alone would pass on a zero-work
+      // resume, leg MAJOR-1).
+      fs.unlinkSync(lockFile);
+      const finisher = new ScriptedEmbedder();
+      const result = await run(finisher, false);
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+      expect(finisher.embedCalls.length).toBeGreaterThan(0);
+      expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
 
   it(
     'a crashed --full leaves the dirty marker with only fully-flushed files checkpointed',
