@@ -207,6 +207,7 @@ export {
 } from './ingest/sync.js';
 
 // Concurrency lock
+export type { AcquireLockOptions, LockRelease } from './lock.js';
 export { acquireLock, withLock } from './lock.js';
 
 // Drift detection

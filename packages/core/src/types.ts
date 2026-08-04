@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { ChunkStrategy, ContentType } from './config-schema.js';
 import type { Embedder } from './embedders/embedder.js';
+import type { AcquireLockOptions } from './lock.js';
 
 /**
  * A single chunk produced by any chunker.
@@ -155,6 +156,12 @@ export interface SyncOptions {
    * the pipeline builds one from `config.embedding` via `createEmbedder`.
    */
   embedder?: Embedder;
+
+  /**
+   * Lock timing seam (tests — #2564). When absent, the production heartbeat
+   * and staleness defaults apply.
+   */
+  lockOptions?: AcquireLockOptions;
 }
 
 /**
