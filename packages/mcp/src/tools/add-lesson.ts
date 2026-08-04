@@ -22,6 +22,9 @@ import { formatXmlResponse } from '../xml-format.js';
 // Rate limiting (#844) — simple in-memory session counter
 // ---------------------------------------------------------------------------
 const MAX_LESSONS_PER_SESSION = 25;
+// Bounded lock-acquisition budget (#2564 leg MAJOR-R1): 4 retries ≈ 7.5s
+// worst-case backoff before falling back to the lockless write.
+const MAX_LESSON_LOCK_RETRIES = 4;
 let sessionLessonCount = 0;
 
 /** Exported for testing — reset the rate-limit counter between test runs. */
@@ -274,7 +277,9 @@ export function registerAddLesson(server: McpServer): void {
         } else {
           let releaseLock: (() => void) | null = null;
           try {
-            releaseLock = await acquireLock(totemDir, undefined, { maxRetries: 4 });
+            releaseLock = await acquireLock(totemDir, undefined, {
+              maxRetries: MAX_LESSON_LOCK_RETRIES,
+            });
           } catch (err) {
             if ((err as { code?: string }).code !== 'SYNC_FAILED') throw err;
             lockTimedOut = true;

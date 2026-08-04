@@ -231,7 +231,7 @@ export async function acquireLock(
   throw new TotemError(
     'SYNC_FAILED',
     `Could not acquire sync lock after ${maxRetries} attempts.`,
-    `Another totem process may be running. A crashed holder's lock clears itself within ~${Math.round(STALE_THRESHOLD_MS / 60_000)} minutes; delete ${file} manually ONLY if its timestamp has stopped advancing — deleting a live-heartbeat lock aborts that process's sync.`,
+    `Another totem process may be running. A crashed holder's lock clears itself within ~${Math.ceil(staleThresholdMs / 60_000)} minute(s); delete ${file} manually ONLY if its timestamp has stopped advancing — deleting a live-heartbeat lock aborts that process's sync.`,
   );
 }
 
@@ -284,6 +284,14 @@ function startHold(
         // any competitor that took the open window.
         fs.writeFileSync(file, payload, { flag: 'wx' });
       } else {
+        // Irreducible residual (#2576 GT round, declined-with-analysis): a
+        // peer that deletes-and-wx-reacquires inside this synchronous
+        // read→rename gap gets clobbered by the rename. Reaching it requires
+        // an already-degraded holder — healthy beats keep the lock present
+        // and fresh, and wx cannot succeed over a present file — plus sub-ms
+        // cross-process preemption. The clobbered peer's next beat reads a
+        // foreign holderId and latches, so double-ownership converges within
+        // one beat interval; no filesystem CAS exists to close it fully.
         fs.writeFileSync(tmpFile, payload);
         fs.renameSync(tmpFile, file);
       }
