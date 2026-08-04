@@ -317,7 +317,20 @@ describe('lock heartbeat (#2564)', () => {
     release();
     expect(fs.existsSync(lockFile)).toBe(true);
     expect(release.isLost()).toBe(true);
-    expect(warnings.some((w) => w.includes('taken over'))).toBe(true);
+    // Named as unreadable, NOT as theft — a transient read failure on our
+    // own file must not be misattributed (leg MINOR-R4).
+    expect(warnings.some((w) => w.includes('unreadable at release'))).toBe(true);
+  });
+
+  it('maxRetries bounds the acquisition budget (leg MAJOR-R1 seam)', async () => {
+    const release = await acquireLock(tmpDir, undefined, { heartbeatIntervalMs: 25 });
+    const started = Date.now();
+    await expect(acquireLock(tmpDir, undefined, { maxRetries: 2 })).rejects.toThrow(
+      'after 2 attempts',
+    );
+    // Two backoff waits (500 + 1000), not the ~255s default budget.
+    expect(Date.now() - started).toBeLessThan(10_000);
+    release();
   });
 
   it('a fresh legacy-shape lock (pre-#2564) blocks, then ages into stealable', async () => {

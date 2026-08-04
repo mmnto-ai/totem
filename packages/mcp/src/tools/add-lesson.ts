@@ -256,22 +256,58 @@ export function registerAddLesson(server: McpServer): void {
         // the filename is content-hash unique and the epoch holder only
         // READS this directory; indexing defers to the epoch either way
         // (#2562 deferral below).
+        // Leg MAJOR-R1: the checkpoint marker is a proxy — a long paced
+        // INCREMENTAL hold never writes one, and the fresh-full prelude holds
+        // the lock before writing it. So the marker check is only the fast
+        // path; the acquisition itself is BOUNDED (~7.5s worst case), and a
+        // timeout falls back to the same lockless write — the holder is then
+        // provably a live long sync (a dead or stale holder would have been
+        // reclaimed inside those retries), which only READS this directory.
         let fileName: string;
+        let lockTimedOut = false;
         if (hasFullSyncCheckpoint(totemDir)) {
           const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
           fileName = path.basename(writtenPath);
           sessionLessonCount++;
         } else {
-          // Acquire lock before writing lesson, release before spawning sync
-          // (the spawned sync process acquires its own lock via runSync/withLock)
-          const releaseLock = await acquireLock(totemDir);
+          let releaseLock: (() => void) | null = null;
           try {
+            releaseLock = await acquireLock(totemDir, undefined, { maxRetries: 4 });
+          } catch (err) {
+            if ((err as { code?: string }).code !== 'SYNC_FAILED') throw err;
+            lockTimedOut = true;
+          }
+          if (releaseLock) {
+            // Acquired: write under the lock, release before spawning sync
+            // (the spawned sync process takes its own lock via runSync/withLock)
+            try {
+              const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
+              fileName = path.basename(writtenPath);
+              sessionLessonCount++;
+            } finally {
+              releaseLock();
+            }
+          } else {
             const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
             fileName = path.basename(writtenPath);
             sessionLessonCount++;
-          } finally {
-            releaseLock();
           }
+        }
+
+        // A live long-holder means any convenience sync would contend on the
+        // same lock and die by its kill-timer — defer to the running sync.
+        if (lockTimedOut) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: formatXmlResponse(
+                  'lesson_added',
+                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: another sync currently holds the lock — the lesson will be indexed by it or on the next \`totem sync\`.`,
+                ),
+              },
+            ],
+          };
         }
 
         // #2562 (falsification round 3, MAJOR 1): while a full re-index epoch

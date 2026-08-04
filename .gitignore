@@ -45,6 +45,9 @@ packages/pack-rust-architecture/tree-sitter-rust.wasm
 # Totem runtime artifacts
 .totem/ledger/
 .totem/sync.lock
+# Heartbeat temp (#2564): sync.lock.<pid>.hb can survive a crash between its
+# write and the rename; keep leftovers out of git status in the shared tree
+.totem/sync.lock.*
 .totem/temp/
 # Agent draft scratch (dispatch/verdict drafts staged before ECL delivery); local-only, never tracked
 .totem/drafts/

@@ -50,10 +50,16 @@ export interface LockRelease {
   isLost(): boolean;
 }
 
-/** Timing seams for tests — production callers omit and get the defaults above. */
+/**
+ * Acquisition tuning. The timing fields are test seams; `maxRetries` is also
+ * a production surface — a caller with its own fallback (MCP add_lesson under
+ * a long-held lock, #2564 leg MAJOR-R1) bounds its blocking instead of
+ * waiting out the full ~255s default budget.
+ */
 export interface AcquireLockOptions {
   staleThresholdMs?: number;
   heartbeatIntervalMs?: number;
+  maxRetries?: number;
 }
 
 /**
@@ -147,8 +153,9 @@ export async function acquireLock(
   const file = lockPath(totemDir);
   const staleThresholdMs = opts?.staleThresholdMs ?? STALE_THRESHOLD_MS;
   const heartbeatIntervalMs = opts?.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS;
+  const maxRetries = opts?.maxRetries ?? MAX_RETRIES;
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     const existing = readLock(file);
 
     // Corrupted lockfile (empty, bad JSON) — remove if not mid-write
@@ -223,7 +230,7 @@ export async function acquireLock(
 
   throw new TotemError(
     'SYNC_FAILED',
-    `Could not acquire sync lock after ${MAX_RETRIES} attempts.`,
+    `Could not acquire sync lock after ${maxRetries} attempts.`,
     `Another totem process may be running. A crashed holder's lock clears itself within ~${Math.round(STALE_THRESHOLD_MS / 60_000)} minutes; delete ${file} manually ONLY if its timestamp has stopped advancing — deleting a live-heartbeat lock aborts that process's sync.`,
   );
 }
@@ -309,10 +316,16 @@ function startHold(
     const current = readLock(file);
     if (current === null && fs.existsSync(file)) {
       // Present but unreadable — a thief's wx-created-not-yet-written file,
-      // or corrupt junk. Never delete bytes we cannot attribute (leg
-      // MINOR-1): a thief's finished write reads as foreign, and corrupt
-      // junk clears via the acquirer's corrupt-file arm.
-      markLost();
+      // corrupt junk, or a transient read failure on our OWN file. Never
+      // delete bytes we cannot attribute (leg MINOR-1). Named as its own
+      // condition, not via markLost, so the warning does not misattribute a
+      // transient read failure as theft (leg MINOR-R4): an exited holder's
+      // leftover reclaims immediately via the dead-PID arm; a still-alive
+      // holder's ages out at the stale threshold.
+      lost = true;
+      onWarn?.(
+        'sync.lock is present but unreadable at release — leaving it in place (an orphaned leftover clears via the dead-PID or staleness arm).',
+      );
       return;
     }
     if (current !== null && current.holderId !== lockData.holderId) {

@@ -278,6 +278,63 @@ describe('add_lesson auth model (#844)', () => {
     // tool blocks for the full acquisition budget and the lesson is lost.
     expect(vi.mocked(acquireLock).mock.calls.length).toBe(lockCallsBefore);
   });
+
+  it('takes the sync lock (bounded) on the normal path', async () => {
+    // Leg NIT-R2: the live-path cell asserts the lock is NOT taken; without
+    // this inverse cell a mutant removing locking entirely stays green.
+    const { acquireLock } = await import('@mmnto/totem');
+    const lockCallsBefore = vi.mocked(acquireLock).mock.calls.length;
+
+    await handle({ lesson: 'Normal path locks', context_tags: ['test'] });
+
+    expect(vi.mocked(acquireLock).mock.calls.length).toBe(lockCallsBefore + 1);
+    // The acquisition is bounded (leg MAJOR-R1): a long-held lock must not
+    // block this tool for the full ~255s default budget.
+    const lastLockCall = vi.mocked(acquireLock).mock.calls.at(-1)!;
+    expect(lastLockCall[2]).toMatchObject({ maxRetries: 4 });
+  });
+
+  it('falls back to a lockless write when the lock is held by a live long sync (leg MAJOR-R1)', async () => {
+    const { spawn } = await import('node:child_process');
+    const { acquireLock } = await import('@mmnto/totem');
+    // No checkpoint marker (a long paced INCREMENTAL hold writes none), and
+    // the bounded acquisition times out against the live holder.
+    vi.mocked(acquireLock).mockRejectedValueOnce(
+      Object.assign(new Error('Could not acquire sync lock after 4 attempts.'), {
+        code: 'SYNC_FAILED',
+      }),
+    );
+    const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
+
+    const result = (await handle({
+      lesson: 'Written past a held lock',
+      context_tags: ['test'],
+    })) as { isError?: boolean; content: Array<{ text: string }> };
+
+    // The lesson is WRITTEN (not lost), the convenience sync is deferred
+    // (it would contend on the same lock and die by its kill-timer), and the
+    // response says so honestly.
+    expect(result.isError).toBeUndefined();
+    expect(lastWrittenEntry).toContain('Written past a held lock');
+    expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore);
+    expect(result.content[0]!.text).toContain('Sync deferred');
+    expect(result.content[0]!.text).toContain('holds the lock');
+  });
+
+  it('a non-SYNC_FAILED acquisition error still fails loud (no silent lockless write)', async () => {
+    const { acquireLock } = await import('@mmnto/totem');
+    vi.mocked(acquireLock).mockRejectedValueOnce(
+      Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' }),
+    );
+
+    const result = (await handle({
+      lesson: 'Should not be written',
+      context_tags: ['test'],
+    })) as { isError?: boolean; content: Array<{ text: string }> };
+
+    expect(result.isError).toBe(true);
+    expect(lastWrittenEntry).not.toContain('Should not be written');
+  });
 });
 
 // ---------------------------------------------------------------------------

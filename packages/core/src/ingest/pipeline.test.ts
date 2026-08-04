@@ -348,13 +348,16 @@ describe('full-sync crash recovery (#2562)', () => {
       // The mutating degraded path preserved crash safety: the marker is
       // intact...
       expect(fs.existsSync(checkpointPath())).toBe(true);
-      // ...and the abort came from the flush-boundary probe pair, BEFORE the
+      // ...and the abort came from the flush EXIT probe, BEFORE the
       // post-theft checkpoint append: only the two pre-theft files are
-      // checkpointed. Deleting either flushBuffer probe lets the last flush
-      // append the third file and fails here (leg MAJOR-1 — an existsSync
-      // check alone cannot tell WHICH probe fired).
+      // checkpointed. Deleting the exit probe lets the last flush append the
+      // third file and fails here (leg MAJOR-1 — an existsSync check alone
+      // cannot tell WHICH probe fired). The ENTRY probe is not inducible
+      // in-process on the full path — no await exists between one flush's
+      // exit probe and the next flush's entry probe for a beat to latch in
+      // (leg MINOR-R1, disclosed); its marginal window is the incremental
+      // purge gap, and a miss converges at the next probe.
       expect(readCheckpoint().completedFiles).toHaveLength(2);
-      expect(readCheckpoint().completedFiles).not.toContain(unflushedFile());
       // ...no completion-claiming baseline was written...
       expect(fs.existsSync(syncStatePath())).toBe(false);
       // ...and the thief's lock survived our release (no cascade theft).

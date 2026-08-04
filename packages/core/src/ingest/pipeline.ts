@@ -666,6 +666,9 @@ async function runSyncInner(
             ? [...resumeFrom.completedFiles]
             : allFiles.map((f) => f.relativePath).filter((rel) => completed.has(normalizeRel(rel)));
         checkpoint = { ...resumeFrom, indexExclusionHash, completedFiles: carried };
+        // #2564 (leg MINOR-R2): same class as the beginFullSync probe — never
+        // overwrite a marker that may belong to a thief's epoch.
+        assertLockHeld(lock);
         writeFullSyncCheckpoint(totemDir, checkpoint);
         resumedWithoutReset = true;
         log(
@@ -881,7 +884,12 @@ async function runSyncInner(
     deleteFullSyncCheckpoint(totemDir, log);
   }
 
-  // Persist index metadata for dimension mismatch detection
+  // Persist index metadata for dimension mismatch detection.
+  // #2564 (leg MINOR-R3): index-meta is DATABASE_MISMATCH evidence, not a
+  // freely-regenerable cache — writing it under a thief running a different
+  // embedder identity would launder the very signal the next incremental
+  // needs (the #2562 round-4 reasoning).
+  assertLockHeld(lock);
   writeIndexMeta(totemDir, {
     provider: embedding.provider,
     model: embedding.model ?? 'default',
