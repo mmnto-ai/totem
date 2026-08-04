@@ -260,9 +260,11 @@ export function registerAddLesson(server: McpServer): void {
         // INCREMENTAL hold never writes one, and the fresh-full prelude holds
         // the lock before writing it. So the marker check is only the fast
         // path; the acquisition itself is BOUNDED (~7.5s worst case), and a
-        // timeout falls back to the same lockless write — the holder is then
-        // provably a live long sync (a dead or stale holder would have been
-        // reclaimed inside those retries), which only READS this directory.
+        // timeout falls back to the same lockless write. A timeout USUALLY
+        // means a live long sync, but not provably (leg MINOR-S1: an
+        // undeletable corrupt lock or sustained short-hold churn also
+        // exhausts the budget) — the fallback is safe regardless: no lock
+        // holder mutates this directory, and the next sync indexes the file.
         let fileName: string;
         let lockTimedOut = false;
         if (hasFullSyncCheckpoint(totemDir)) {
@@ -294,8 +296,11 @@ export function registerAddLesson(server: McpServer): void {
           }
         }
 
-        // A live long-holder means any convenience sync would contend on the
-        // same lock and die by its kill-timer — defer to the running sync.
+        // Whatever exhausted the budget also blocks a convenience sync (it
+        // would contend on the same lock and die by its kill-timer) — defer.
+        // The message claims neither a cause nor that the running sync will
+        // index this file (its file list predates our write — leg NIT-S1):
+        // the next sync picks it up via the untracked-files union.
         if (lockTimedOut) {
           return {
             content: [
@@ -303,7 +308,7 @@ export function registerAddLesson(server: McpServer): void {
                 type: 'text' as const,
                 text: formatXmlResponse(
                   'lesson_added',
-                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: another sync currently holds the lock — the lesson will be indexed by it or on the next \`totem sync\`.`,
+                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: the sync lock could not be acquired within the bounded budget (usually another running sync) — the lesson will be indexed on the next \`totem sync\`.`,
                 ),
               },
             ],

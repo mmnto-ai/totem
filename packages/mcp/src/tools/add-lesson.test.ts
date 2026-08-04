@@ -313,12 +313,14 @@ describe('add_lesson auth model (#844)', () => {
 
     // The lesson is WRITTEN (not lost), the convenience sync is deferred
     // (it would contend on the same lock and die by its kill-timer), and the
-    // response says so honestly.
+    // response claims neither an unproven cause nor indexing-by-the-holder
+    // (leg MINOR-S1 / NIT-S1).
     expect(result.isError).toBeUndefined();
     expect(lastWrittenEntry).toContain('Written past a held lock');
     expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore);
     expect(result.content[0]!.text).toContain('Sync deferred');
-    expect(result.content[0]!.text).toContain('holds the lock');
+    expect(result.content[0]!.text).toContain('could not be acquired');
+    expect(result.content[0]!.text).not.toContain('indexed by it');
   });
 
   it('a non-SYNC_FAILED acquisition error still fails loud (no silent lockless write)', async () => {
