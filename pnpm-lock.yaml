@@ -46,8 +46,8 @@ importers:
         specifier: workspace:*
         version: link:packages/cli
       '@mmnto/strategy-doctrine':
-        specifier: 0.1.30
-        version: 0.1.30
+        specifier: 0.1.31
+        version: 0.1.31
 
   packages/cli:
     dependencies:
@@ -862,8 +862,8 @@ packages:
   '@manypkg/get-packages@1.1.3':
     resolution: {integrity: sha512-fo+QhuU3qE/2TQMQmbVMqaQ6EWbMhi4ABWP+O4AM1NqPBuy0OrApV5LO6BrrgnhtAHS2NH6RrVk9OL181tTi8A==}
 
-  '@mmnto/strategy-doctrine@0.1.30':
-    resolution: {integrity: sha512-AGdsPLnm6pBJtSP3jZNSZFJ+Kck3t4K1HIGsw9rXBCI6ga4mZ+egnskMmqP8PRhalcsuyw0EtIRLcejg1sw2Hg==}
+  '@mmnto/strategy-doctrine@0.1.31':
+    resolution: {integrity: sha512-lv/OPjifBdj3CKTdG0+AnUWPxQIBi16DgdhSyTo62ANz7CbJoM5dZEsRpxxI0r6LitRFv95iEOQf455j9zmHmw==}
 
   '@modelcontextprotocol/sdk@1.27.1':
     resolution: {integrity: sha512-sr6GbP+4edBwFndLbM60gf07z0FQ79gaExpnsjMGePXqFcSSb7t6iscpjk9DhFhwd+mTEQrzNafGP8/iGGFYaA==}
@@ -3694,7 +3694,7 @@ snapshots:
       globby: 11.1.0
       read-yaml-file: 1.1.0
 
-  '@mmnto/strategy-doctrine@0.1.30':
+  '@mmnto/strategy-doctrine@0.1.31':
     optional: true
 
   '@modelcontextprotocol/sdk@1.27.1(zod@3.25.76)':
