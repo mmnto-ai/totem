@@ -204,6 +204,21 @@ describe('lock heartbeat (#2564)', () => {
     deleteLockIfUnchanged(lockFile, stale);
     expect(fs.existsSync(lockFile)).toBe(true);
     expect(readLockFile().holderId).toBe('thief');
+
+    // Per-field discrimination (leg MINOR-2): a comparison mutant checking
+    // only a field subset must die. Same pid+timestamp, new holderId — the
+    // same-process re-acquisition shape lesson-b813e60b protects against.
+    const rehold = { ...stale, holderId: 'new-hold' };
+    fs.writeFileSync(lockFile, JSON.stringify(rehold));
+    deleteLockIfUnchanged(lockFile, stale);
+    expect(fs.existsSync(lockFile)).toBe(true);
+
+    // Same pid+holderId, timestamp advanced — a heartbeat landed after the
+    // judgment; the judged-stale snapshot no longer describes the file.
+    const beaten = { ...stale, timestamp: stale.timestamp + 1 };
+    fs.writeFileSync(lockFile, JSON.stringify(beaten));
+    deleteLockIfUnchanged(lockFile, stale);
+    expect(fs.existsSync(lockFile)).toBe(true);
   });
 
   it('theft latches isLost, stops all writes, and warns loudly', async () => {
@@ -285,7 +300,24 @@ describe('lock heartbeat (#2564)', () => {
     const before = fs.readFileSync(lockFile, 'utf-8');
     await sleep(200);
     expect(fs.readFileSync(lockFile, 'utf-8')).toBe(before);
+    // A ghost beat surviving release would see the successor's foreign
+    // holderId and latch lost on the DEAD handle — so this distinguishes a
+    // cleared timer from a merely-write-suppressed one (leg MINOR-3).
+    expect(release.isLost()).toBe(false);
     release2();
+  });
+
+  it('release leaves an unreadable (mid-write) lock in place (leg MINOR-1)', async () => {
+    const warnings: string[] = [];
+    const release = await acquireLock(tmpDir, (m) => warnings.push(m), {
+      heartbeatIntervalMs: 60_000,
+    });
+    // A thief's wx-created file whose payload has not landed yet: zero bytes.
+    fs.writeFileSync(lockFile, '');
+    release();
+    expect(fs.existsSync(lockFile)).toBe(true);
+    expect(release.isLost()).toBe(true);
+    expect(warnings.some((w) => w.includes('taken over'))).toBe(true);
   });
 
   it('a fresh legacy-shape lock (pre-#2564) blocks, then ages into stealable', async () => {
@@ -294,10 +326,15 @@ describe('lock heartbeat (#2564)', () => {
     fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, timestamp: Date.now() }));
 
     const warnings: string[] = [];
+    const started = Date.now();
     const release = await acquireLock(tmpDir, (m) => warnings.push(m), {
       staleThresholdMs: 300,
     });
-    // It had to wait out the threshold (blocked while fresh), then steal.
+    // Both halves of the contract (leg MINOR-4): it BLOCKED while the legacy
+    // lock was fresh (waited at least the threshold, warning it was waiting),
+    // then stole once stale.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(300);
+    expect(warnings.some((w) => w.includes('Waiting for sync lock'))).toBe(true);
     expect(warnings.some((w) => w.includes('stale'))).toBe(true);
     expect(typeof readLockFile().holderId).toBe('string');
     release();

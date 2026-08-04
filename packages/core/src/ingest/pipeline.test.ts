@@ -346,19 +346,29 @@ describe('full-sync crash recovery (#2562)', () => {
       expect(swapped).toBe(true);
 
       // The mutating degraded path preserved crash safety: the marker is
-      // intact (NOT clobbered by our post-theft checkpoint append)...
+      // intact...
       expect(fs.existsSync(checkpointPath())).toBe(true);
+      // ...and the abort came from the flush-boundary probe pair, BEFORE the
+      // post-theft checkpoint append: only the two pre-theft files are
+      // checkpointed. Deleting either flushBuffer probe lets the last flush
+      // append the third file and fails here (leg MAJOR-1 — an existsSync
+      // check alone cannot tell WHICH probe fired).
+      expect(readCheckpoint().completedFiles).toHaveLength(2);
+      expect(readCheckpoint().completedFiles).not.toContain(unflushedFile());
       // ...no completion-claiming baseline was written...
       expect(fs.existsSync(syncStatePath())).toBe(false);
       // ...and the thief's lock survived our release (no cascade theft).
       expect(JSON.parse(fs.readFileSync(lockFile, 'utf-8'))).toEqual(foreign);
 
       // Recovery control: with the thief gone, the next sync resumes the
-      // epoch and completes the full corpus.
+      // epoch and completes the full corpus — and actually re-embeds the
+      // un-checkpointed file (store.count() alone would pass on a zero-work
+      // resume, leg MAJOR-1).
       fs.unlinkSync(lockFile);
       const finisher = new ScriptedEmbedder();
       const result = await run(finisher, false);
       expect(result.totalChunks).toBe(TOTAL_CHUNKS);
+      expect(finisher.embedCalls.length).toBeGreaterThan(0);
       expect(fs.existsSync(checkpointPath())).toBe(false);
     },
   );

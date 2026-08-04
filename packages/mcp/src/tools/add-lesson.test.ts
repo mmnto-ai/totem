@@ -254,9 +254,12 @@ describe('add_lesson auth model (#844)', () => {
 
   it('defers the convenience sync while a full re-index checkpoint is live', async () => {
     const { spawn } = await import('node:child_process');
-    const { hasFullSyncCheckpoint } = await import('@mmnto/totem');
-    vi.mocked(hasFullSyncCheckpoint).mockReturnValueOnce(true);
+    const { acquireLock, hasFullSyncCheckpoint } = await import('@mmnto/totem');
+    // Consulted twice on the live path (#2564 leg MAJOR-2): once for the
+    // lock bypass, once (re-derived) for the sync deferral.
+    vi.mocked(hasFullSyncCheckpoint).mockReturnValueOnce(true).mockReturnValueOnce(true);
     const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
+    const lockCallsBefore = vi.mocked(acquireLock).mock.calls.length;
 
     const result = (await handle({
       lesson: 'Written during a live epoch',
@@ -270,6 +273,10 @@ describe('add_lesson auth model (#844)', () => {
     expect(lastWrittenEntry).toContain('Written during a live epoch');
     expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore);
     expect(result.content[0]!.text).toContain('Sync deferred');
+    // #2564 (leg MAJOR-2): under a live epoch the lock is held unstealably
+    // for corpus-sized wall-clock — the write must NOT contend on it, or the
+    // tool blocks for the full acquisition budget and the lesson is lost.
+    expect(vi.mocked(acquireLock).mock.calls.length).toBe(lockCallsBefore);
   });
 });
 

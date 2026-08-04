@@ -249,16 +249,29 @@ export function registerAddLesson(server: McpServer): void {
           `${bodyContent}\n` +
           provenance;
 
-        // Acquire lock before writing lesson, release before spawning sync
-        // (the spawned sync process acquires its own lock via runSync/withLock)
-        const releaseLock = await acquireLock(totemDir);
+        // #2564 (leg MAJOR-2): a live full re-index holds the sync lock
+        // unstealably for corpus-sized wall-clock, so contending on it here
+        // is a deterministic multi-minute block ending in SYNC_FAILED — the
+        // lesson would be LOST. Under a live epoch, write WITHOUT the lock:
+        // the filename is content-hash unique and the epoch holder only
+        // READS this directory; indexing defers to the epoch either way
+        // (#2562 deferral below).
         let fileName: string;
-        try {
+        if (hasFullSyncCheckpoint(totemDir)) {
           const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
           fileName = path.basename(writtenPath);
           sessionLessonCount++;
-        } finally {
-          releaseLock();
+        } else {
+          // Acquire lock before writing lesson, release before spawning sync
+          // (the spawned sync process acquires its own lock via runSync/withLock)
+          const releaseLock = await acquireLock(totemDir);
+          try {
+            const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
+            fileName = path.basename(writtenPath);
+            sessionLessonCount++;
+          } finally {
+            releaseLock();
+          }
         }
 
         // #2562 (falsification round 3, MAJOR 1): while a full re-index epoch
@@ -266,7 +279,10 @@ export function registerAddLesson(server: McpServer): void {
         // corpus-sized job this tool's 60s kill-timer can never wait out. The
         // lesson is already written; skip the convenience sync and let the
         // running epoch (or the next `totem sync`) index it, instead of
-        // deterministically reporting a spurious timeout failure.
+        // deterministically reporting a spurious timeout failure. Re-derived
+        // here (not reused from the lock bypass above) so an epoch that began
+        // while we held the lock still defers, and one that completed while
+        // we wrote locklessly falls through to a now-uncontended sync.
         if (hasFullSyncCheckpoint(totemDir)) {
           return {
             content: [

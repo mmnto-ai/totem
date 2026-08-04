@@ -465,6 +465,10 @@ async function runSyncInner(
   // write failure aborts loudly with the store intact, so no window exists in
   // which a reset store is unmarked (#2562).
   async function beginFullSync(cp: FullSyncCheckpoint): Promise<void> {
+    // #2564 (leg MAJOR-3): never overwrite the marker or reset the store
+    // after this hold's exclusion is known-lost — both would destroy the
+    // thief's epoch, the exact mutation #2564 names.
+    assertLockHeld(lock);
     writeFullSyncCheckpoint(totemDir, cp);
     checkpoint = cp;
     log('Full sync: resetting index...');

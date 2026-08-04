@@ -224,7 +224,7 @@ export async function acquireLock(
   throw new TotemError(
     'SYNC_FAILED',
     `Could not acquire sync lock after ${MAX_RETRIES} attempts.`,
-    `Another totem process may be running. Check ${file} or delete it manually.`,
+    `Another totem process may be running. A crashed holder's lock clears itself within ~${Math.round(STALE_THRESHOLD_MS / 60_000)} minutes; delete ${file} manually ONLY if its timestamp has stopped advancing — deleting a live-heartbeat lock aborts that process's sync.`,
   );
 }
 
@@ -307,6 +307,14 @@ function startHold(
       // Best-effort temp cleanup (e.g. a test replaced it with a directory)
     }
     const current = readLock(file);
+    if (current === null && fs.existsSync(file)) {
+      // Present but unreadable — a thief's wx-created-not-yet-written file,
+      // or corrupt junk. Never delete bytes we cannot attribute (leg
+      // MINOR-1): a thief's finished write reads as foreign, and corrupt
+      // junk clears via the acquirer's corrupt-file arm.
+      markLost();
+      return;
+    }
     if (current !== null && current.holderId !== lockData.holderId) {
       // Stolen while we ran — the thief's lock is valid; leave it in place.
       markLost();
