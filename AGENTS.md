@@ -79,7 +79,7 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 <!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" -->
 
-Role `bus` → seat `totem-claude`; judgment-density file classes: cohort defaults + `AGENTS.md` · `docs/wiki/**` · `.claude/skills/**`. Lane table: mmnto-ai/totem-strategy#697 (pointer, not a copy). Duties + fail-closed succession: Prop 305 §3 + the mmnto-ai/totem-strategy#639 operating spec. The `agent-bus` parity row senses declaration presence only; duty execution is adherence-class (Tenet 19).
+Role `bus` → seat `totem-claude`; judgment-density file classes: cohort defaults + `AGENTS.md` · `docs/wiki/**` · `.claude/skills/**`. Lane table: mmnto-ai/totem-strategy#697 (pointer, not a copy). Duties + fail-closed succession: Prop 305 §3 + the mmnto-ai/totem-strategy#639 operating spec. The `agent-bus` parity row senses declaration presence only; duty execution is adherence-class (Tenet 19). Cold-start fallback (vehicle-neutral, crown-round A3): a session without the SessionStart hook derives orientation via `totem orient`, so no vehicle depends on a skill it cannot load.
 
 ## Detailed Docs
 
