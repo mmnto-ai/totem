@@ -129,6 +129,7 @@ export function deleteLockIfUnchanged(filePath: string, snapshot: LockData): voi
   }
   try {
     fs.unlinkSync(filePath);
+    // totem-context: intentional cleanup — the judged-dead lock may already be removed by a peer; the acquisition loop just retries (mmnto-ai/totem#2564)
   } catch {
     // Another process may have cleaned it up
   }
@@ -279,12 +280,12 @@ function startHold(
         fs.writeFileSync(tmpFile, payload);
         fs.renameSync(tmpFile, file);
       }
+      // totem-context: intentional warn-once on a heartbeat write failure (mmnto-ai/totem#2564) — a beat must never throw; the lock ages toward stealable until a beat succeeds, and theft is caught by the beat self-verify + the pipeline's loud flush-boundary abort
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
         markLost();
         return;
       }
-      // totem-context: intentional warn-once on a heartbeat write failure (mmnto-ai/totem#2564) — the lock ages toward stealable until a beat succeeds; theft, if it happens, is caught by the beat self-verify and surfaces as a loud abort at the pipeline flush boundary.
       if (!warnedWriteFailure) {
         warnedWriteFailure = true;
         onWarn?.(
@@ -301,6 +302,7 @@ function startHold(
     clearInterval(timer);
     try {
       fs.rmSync(tmpFile, { force: true });
+      // totem-context: intentional cleanup — best-effort heartbeat temp-file removal on release (mmnto-ai/totem#2564)
     } catch {
       // Best-effort temp cleanup (e.g. a test replaced it with a directory)
     }
@@ -312,6 +314,7 @@ function startHold(
     }
     try {
       fs.unlinkSync(file);
+      // totem-context: intentional cleanup — the lock may already be removed; release is idempotent (mmnto-ai/totem#2564)
     } catch {
       // Already cleaned up
     }
