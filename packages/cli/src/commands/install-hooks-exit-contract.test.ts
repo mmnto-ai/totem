@@ -895,6 +895,28 @@ describe('Gemini SessionStart .js→.cjs migration', () => {
     expect(readRel(GEMINI_SESSION_START_REL)).toBe(GEMINI_SESSION_START);
   });
 
+  it('declines a marker-headed drifted-unbounded successor without --force, overwrites it under --force', async () => {
+    // Same bar as the legacy arm and as regenerateManagedSessionHooks: a bare run
+    // repairs only bounded totem-owned files; `--force` overwrites any marker-headed
+    // one. Without this arm the successor gate would be strictly MORE destructive
+    // than the function it mirrors (falsification round 2, mmnto-ai/totem#2488).
+    const drifted = `${GEMINI_SESSION_START}\n// my customization past the end marker\n`;
+    writeFileRel(GEMINI_SESSION_START_LEGACY_REL, GEMINI_SESSION_START);
+    writeFileRel(GEMINI_SESSION_START_REL, drifted);
+
+    expect(await migrateLegacyGeminiHooks(tmpDir)).toEqual([
+      { file: GEMINI_SESSION_START_LEGACY_REL, action: 'declined', reason: 'drifted-successor' },
+    ]);
+    expect(readRel(GEMINI_SESSION_START_REL)).toBe(drifted);
+    expect(readRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(GEMINI_SESSION_START);
+
+    expect(await migrateLegacyGeminiHooks(tmpDir, true)).toEqual([
+      { file: GEMINI_SESSION_START_LEGACY_REL, action: 'migrated' },
+    ]);
+    expect(existsRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(false);
+    expect(readRel(GEMINI_SESSION_START_REL)).toBe(GEMINI_SESSION_START);
+  });
+
   it('migrates BOTH Gemini artifacts in one pass when a consumer carries both legacy files', async () => {
     writeFileRel(GEMINI_SESSION_START_LEGACY_REL, GEMINI_SESSION_START);
     writeFileRel(GEMINI_BEFORE_TOOL_LEGACY_REL, GEMINI_BEFORE_TOOL);

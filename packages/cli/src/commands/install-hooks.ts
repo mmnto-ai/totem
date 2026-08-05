@@ -1229,11 +1229,14 @@ export interface GeminiHookMigrationResult {
   /** `migrated` — successor materialized + legacy removed; `declined` — drifted
    *  unbounded, awaits `--force`; `skipped` — user-owned file, never touched. */
   action: 'migrated' | 'declined' | 'skipped';
-  /** Present only on `skipped` when the block was a USER-OWNED file at the
-   *  SUCCESSOR path: the legacy file is totem-owned, but the migration never
-   *  overwrites a user's successor (even under `--force`) — both files are
-   *  left in place and the skip is disclosed (mmnto-ai/totem#2488). */
-  reason?: 'user-owned-successor';
+  /** Present when the block was caused by the file at the SUCCESSOR path
+   *  (mmnto-ai/totem#2488). `user-owned-successor` — no Totem marker there; the
+   *  migration never overwrites a user's successor (even under `--force`), both
+   *  files stay. `drifted-successor` — marker-headed but unbounded (user content
+   *  past the end marker); awaits `--force`, both files stay. Disclosure happens
+   *  on the `totem hook install` summary path (what `prepare` runs); the `totem
+   *  init` path surfaces only `migrated` results, like every non-migrated action. */
+  reason?: 'user-owned-successor' | 'drifted-successor';
 }
 
 /**
@@ -1253,6 +1256,12 @@ export interface GeminiHookMigrationResult {
  *                                          hand-authored successor (e.g. an ESM rewrite
  *                                          of the briefing) is never clobbered by the
  *                                          canonical write; both files stay in place.
+ *   - Marker-headed but DRIFTED-UNBOUNDED file at `successorRel`, no `--force`
+ *                                        → `declined` + `reason: 'drifted-successor'`
+ *                                          (same bar as the legacy arm and as
+ *                                          regenerateManagedSessionHooks: a bare run
+ *                                          repairs only bounded totem-owned files;
+ *                                          `--force` overwrites any marker-headed one).
  *
  * A write/remove failure PROPAGATES (Tenet 4 — a migration the tool cannot complete
  * fails loud, never silently reports success), matching the drift-repair path.
@@ -1285,16 +1294,21 @@ export async function migrateLegacyGeminiHooks(
       continue;
     }
 
-    // The ownership gate protects the SUCCESSOR path too (mmnto-ai/totem#2488): a
-    // user-authored file already sitting at successorRel must not be clobbered by
-    // the canonical write — refused even under `--force`, mirroring
-    // regenerateManagedSessionHooks. A totem-owned successor (marker opens it) is
-    // fair game: the write below is an idempotent repair to canonical.
+    // The ownership gate protects the SUCCESSOR path too (mmnto-ai/totem#2488),
+    // mirroring regenerateManagedSessionHooks arm for arm: a user-authored file
+    // (no marker) is refused even under `--force`; a marker-headed-but-unbounded
+    // one (user content past the end marker) is declined until `--force`; only a
+    // bounded totem-owned successor — or `--force` on a marker-headed one — takes
+    // the canonical write below as an idempotent repair.
     const successorPath = path.join(cwd, ...successorRel.split('/'));
     if (fs.existsSync(successorPath)) {
       const successorExisting = fs.readFileSync(successorPath, 'utf-8');
       if (!markerOpensFile(successorExisting, marker)) {
         results.push({ file: legacyRel, action: 'skipped', reason: 'user-owned-successor' });
+        continue;
+      }
+      if (!force && !isBoundedOwnedFile(successorExisting, marker, endMarker)) {
+        results.push({ file: legacyRel, action: 'declined', reason: 'drifted-successor' });
         continue;
       }
     }
@@ -1401,7 +1415,9 @@ async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Pr
         break;
       case 'declined':
         console.error(
-          `[Totem] ${file} has drifted but is not a bounded totem-owned region — run \`totem hook install --force\` to migrate it to .cjs.`,
+          reason === 'drifted-successor'
+            ? `[Totem] ${file}: its .cjs successor is marker-headed but has drifted past the bounded region — run \`totem hook install --force\` to overwrite it with canonical.`
+            : `[Totem] ${file} has drifted but is not a bounded totem-owned region — run \`totem hook install --force\` to migrate it to .cjs.`,
         );
         break;
       case 'skipped':

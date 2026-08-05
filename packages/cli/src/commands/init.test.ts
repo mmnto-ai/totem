@@ -2594,8 +2594,9 @@ describe('GEMINI_SESSION_START ships as CJS for "type": "module" consumers (mmnt
     // Contrast fixture documenting WHY the extension is load-bearing. The identical
     // hook body under a `.js` extension resolves as ESM in this consumer and throws
     // `require is not defined` at the top-level `require('child_process')`, before it
-    // emits any briefing — and Gemini CLI degrades that crash to a warning, so the
-    // session-start context injection fail-opens SILENTLY (mmnto-ai/totem#2488).
+    // emits any briefing — so on the host/plain-node paths that actually execute this
+    // file (no Gemini CLI registration exists — mmnto-ai/totem#2558), the session-start
+    // briefing fail-opens SILENTLY (mmnto-ai/totem#2488).
     const jsPath = path.join(tmpDir, 'SessionStart.js');
     fs.writeFileSync(jsPath, GEMINI_SESSION_START, 'utf-8');
 
