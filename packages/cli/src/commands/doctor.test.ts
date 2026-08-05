@@ -432,6 +432,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Stale Rules',
   'Grandfathered Rules',
   'Freeze state',
+  'Estate',
 ] as const;
 
 describe('doctorCommand', () => {

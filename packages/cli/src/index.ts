@@ -1471,8 +1471,18 @@ program
     'Run only the compliance sensors: the ADR-029 recall-compliance rate (search-before-commit, from .totem/.search-log.jsonl + git history) and query-before-derive compliance (correlated query→derive rows from the Trap Ledger). Sensor-only readout — never gates (mmnto-ai/totem#2362, mmnto-ai/totem#2510)',
   )
   .option(
+    '--estate',
+    'Run only the worktree-estate sensor: registered worktrees classified from local git evidence plus unregistered worktree-shaped residue (husks). Report-only, never gates (mmnto-ai/totem#2580)',
+  )
+  .option(
+    '--root <dir>',
+    'Additional directory to sweep for husk candidates (repeatable). Only meaningful with --estate; the derived roots (the parents of registered repos and their worktrees) are always swept',
+    (val: string, prev: string[]) => [...prev, val],
+    [] as string[], // totem-context: Commander accumulator default — not untrusted input
+  )
+  .option(
     '--json',
-    'With --parity: emit the trust-readout as a diffable JSON verdict artifact on stdout (mmnto-ai/totem#2327)',
+    'With --parity: emit the trust-readout as a diffable JSON verdict artifact on stdout (mmnto-ai/totem#2327). With --estate: emit the estate scan as the estate-schema-version 1 artifact (mmnto-ai/totem#2580)',
   )
   .action(
     async (
@@ -1483,6 +1493,8 @@ program
         scopeToDiff?: boolean;
         parity?: boolean;
         compliance?: boolean;
+        estate?: boolean;
+        root?: string[];
         json?: boolean;
       },
       cmd: Command,
@@ -1503,6 +1515,7 @@ program
           opts.claimDiscipline && '--claim-discipline',
           opts.parity && '--parity',
           opts.compliance && '--compliance',
+          opts.estate && '--estate',
         ].filter((m): m is string => typeof m === 'string');
         if (specializedModes.length > 1) {
           const { TotemConfigError } = await import('@mmnto/totem');
@@ -1511,11 +1524,11 @@ program
             'Choose exactly one specialized doctor mode.',
           );
         }
-        if (opts.json && !opts.parity) {
+        if (opts.json && !opts.parity && !opts.estate) {
           const { TotemConfigError } = await import('@mmnto/totem');
           throw new TotemConfigError(
-            '--json is the --parity trust-readout artifact (mmnto-ai/totem#2327).',
-            'Run totem doctor --parity --json.',
+            '--json is the --parity trust-readout artifact (mmnto-ai/totem#2327) or the --estate scan artifact (mmnto-ai/totem#2580).',
+            'Run totem doctor --parity --json or totem doctor --estate --json.',
           );
         }
         if (opts.claimDiscipline) {
@@ -1530,6 +1543,14 @@ program
         if (opts.parity) {
           const { doctorParityCliCommand } = await import('./commands/doctor-parity.js');
           await doctorParityCliCommand({ strict: strictTier !== undefined, json: opts.json });
+          return;
+        }
+        if (opts.estate) {
+          // Sensor-only (Tenet 13): classifies the worktree estate and returns.
+          // Never gates — a husk or a stale worktree is a finding to show, not
+          // an exit code — so `--strict` is intentionally not threaded here.
+          const { doctorEstateCliCommand } = await import('./commands/doctor-estate.js');
+          await doctorEstateCliCommand({ json: opts.json, roots: opts.root });
           return;
         }
         if (opts.compliance) {

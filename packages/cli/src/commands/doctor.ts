@@ -4,6 +4,8 @@ import * as path from 'node:path';
 
 import pc from 'picocolors';
 
+import type { EstateExecFn, TotemRegistry } from '@mmnto/totem';
+
 import { resolveGitRoot } from '../git.js';
 import { CONFIG_FILES } from '../utils.js';
 
@@ -1940,6 +1942,76 @@ export async function checkFreezes(cwd: string, totemDir = '.totem'): Promise<Di
   }
 }
 
+/**
+ * Ambient worktree-estate row (mmnto-ai/totem#2580, open question 1 ruled (a)).
+ * Quiet when the estate is clean, a named SKIP when nothing is registered, and
+ * a `warn` — never a `fail` — when husks or stale worktrees exist: this is a
+ * sensor, and the detail lives behind `totem doctor --estate`.
+ *
+ * `@mmnto/totem` is dynamic-imported INSIDE the check, per the ruling's
+ * constraint: a static core-barrel import here would pull core onto the CLI
+ * cold-start path for every command.
+ */
+export async function checkEstate(
+  seams: {
+    registry?: TotemRegistry;
+    safeExec?: EstateExecFn;
+    now?: number;
+  } = {},
+): Promise<DiagnosticResult> {
+  const name = 'Estate';
+  try {
+    const { readRegistry, safeExec, scanEstate } = await import('@mmnto/totem');
+    const registry = seams.registry ?? readRegistry();
+    const entries = Object.values(registry).map((entry) => ({
+      path: entry.path,
+      lastSync: entry.lastSync,
+    }));
+    if (entries.length === 0) {
+      return {
+        name,
+        status: 'skip',
+        message: 'No registered repos — nothing to scan for worktree residue.',
+      };
+    }
+
+    const result = scanEstate({
+      registry: entries,
+      safeExec: seams.safeExec ?? safeExec,
+      now: seams.now ?? Date.now(),
+    });
+    const s = result.summary;
+    // Named even on a pass row: a probe that failed is a hole in the scan, and
+    // hiding it inside a green line would be exactly the silent degradation the
+    // sensor exists to prevent. It does not promote the status — only husks and
+    // stale worktrees do (the ruling).
+    const probes = s.unscannable > 0 ? ` ${s.unscannable} probe(s) unscannable.` : '';
+
+    if (s.huskCandidates > 0 || s.stale > 0) {
+      return {
+        name,
+        status: 'warn',
+        message: `${s.stale} stale worktree(s), ${s.huskCandidates} husk candidate(s) across ${s.repos} registered repo(s).${probes}`,
+        remediation:
+          'Run `totem doctor --estate` for the per-row evidence (report-only — this row never gates).',
+      };
+    }
+    return {
+      name,
+      status: 'pass',
+      message: `${s.worktrees} linked worktree(s) across ${s.repos} registered repo(s); no stale worktrees or husk candidates.${probes}`,
+    };
+    // totem-context: a scan failure is reported as a warn row — the estate sensor must never take `totem doctor` down with it (report-only, Tenet 13)
+  } catch (err) {
+    return {
+      name,
+      status: 'warn',
+      message: `Estate scan failed: ${err instanceof Error ? err.message : String(err)}`,
+      remediation: 'Run `totem doctor --estate` to see which probe failed.',
+    };
+  }
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export async function doctorCommand(options: DoctorOptions = {}): Promise<DiagnosticResult[]> {
@@ -1998,6 +2070,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkStaleRules(cwd, '.totem', doctorThresholds),
     await checkGrandfatheredRules(cwd),
     await checkFreezes(cwd),
+    await checkEstate(),
   ];
 
   for (const result of results) {
