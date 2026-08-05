@@ -141,6 +141,37 @@ describe('ejectCommand', () => {
     expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(true);
   });
 
+  it('leaves a user-owned hook that merely QUOTES the totem marker in its body', async () => {
+    // Ownership = marker in the FIRST LINE. A hand-written hook citing the managed
+    // version it replaced would die under a whole-body substring gate (CR review on
+    // mmnto-ai/totem#2488's PR).
+    const hookDir = path.join(cwd, '.gemini', 'hooks');
+    fs.mkdirSync(hookDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(hookDir, 'SessionStart.cjs'),
+      '// my own session hook\n// replaces the "[totem] auto-generated" managed version\nconsole.log("mine");\n',
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(true);
+  });
+
+  it('still removes a scaffolded skill whose marker opens in HTML-comment shape', async () => {
+    // The markdown skills open `<!-- [totem] auto-generated … -->`, not `// …` —
+    // the first-line gate must match both shapes.
+    const skillDir = path.join(cwd, '.gemini', 'skills');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, 'totem.md'),
+      '<!-- [totem] auto-generated — Totem Architect skill -->\n# Totem\nbody\n',
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(skillDir, 'totem.md'))).toBe(false);
+  });
+
   it('scrubs AI reflex block from CLAUDE.md', async () => {
     const claudePath = path.join(cwd, 'CLAUDE.md');
     fs.writeFileSync(

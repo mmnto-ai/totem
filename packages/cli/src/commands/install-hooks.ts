@@ -1209,9 +1209,11 @@ async function printManagedSessionHookSummary(cwd: string, force?: boolean): Pro
 // A pre-#2481 Totem distributed the write-time guard as `.gemini/hooks/BeforeTool.js`,
 // and a pre-#2488 Totem the session briefing as `.gemini/hooks/SessionStart.js`.
 // In a `"type": "module"` consumer Node resolves either `.js` as ESM and the hook
-// throws `require is not defined` at its top-level `require` — Gemini CLI treats
-// the crash as a warning, so the guard (and the session-start context injection)
-// fail-open SILENTLY. These functions migrate an upgraded consumer to the `.cjs`
+// throws `require is not defined` at its top-level `require`. For BeforeTool —
+// which IS registered in `.gemini/settings.json` — Gemini CLI degrades the crash
+// to a warning, so the write-time guard fail-opens SILENTLY; SessionStart has no
+// registration at all (mmnto-ai/totem#2558), so its break bites the host/plain-node
+// paths that actually execute it. These functions migrate an upgraded consumer to the `.cjs`
 // successors on the upgrade path (`totem hook install`, which the prepare wrapper
 // invokes) and on `totem init`. The roster of pairs is data —
 // LEGACY_MANAGED_SESSION_HOOKS in init-templates.ts.
