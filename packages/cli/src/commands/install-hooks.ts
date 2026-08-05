@@ -1204,17 +1204,26 @@ async function printManagedSessionHookSummary(cwd: string, force?: boolean): Pro
   }
 }
 
-// ─── Gemini BeforeTool .js→.cjs migration (mmnto-ai/totem#2481) ───
+// ─── Gemini hook .js→.cjs migration (mmnto-ai/totem#2481 + #2488) ───
 //
-// A pre-#2481 Totem distributed the write-time guard as `.gemini/hooks/BeforeTool.js`.
-// In a `"type": "module"` consumer Node resolves that `.js` as ESM and the guard
-// throws `require is not defined` before reading the tool call — Gemini CLI treats
-// the crash as a warning, so the guard fail-opens SILENTLY. These two functions
-// migrate an upgraded consumer to the `.cjs` successor on the upgrade path
-// (`totem hook install`, which the prepare wrapper invokes) and on `totem init`.
+// A pre-#2481 Totem distributed the write-time guard as `.gemini/hooks/BeforeTool.js`,
+// and a pre-#2488 Totem the session briefing as `.gemini/hooks/SessionStart.js`.
+// In a `"type": "module"` consumer Node resolves either `.js` as ESM and the hook
+// throws `require is not defined` at its top-level `require`. For BeforeTool —
+// which IS registered in `.gemini/settings.json` — Gemini CLI degrades the crash
+// to a warning, so the write-time guard fail-opens SILENTLY; SessionStart has no
+// registration at all (mmnto-ai/totem#2558), so its break bites the host/plain-node
+// paths that actually execute it. These functions migrate an upgraded consumer to the `.cjs`
+// successors on the upgrade path (`totem hook install`, which the prepare wrapper
+// invokes) and on `totem init`. The roster of pairs is data —
+// LEGACY_MANAGED_SESSION_HOOKS in init-templates.ts.
+//
 // Deliberately bounded (the #2478 OPTION 1 ruling routed the adoption/arming slice
 // OUT): rename + registration migration + legacy cleanup only — no arming-verification
 // and no NEW ownership predicate (reuses markerOpensFile / isBoundedOwnedFile).
+// The registration seam is BeforeTool-only by construction: `totem init` emits no
+// `.gemini/settings.json` SessionStart command (mmnto-ai/totem#2558), so the
+// SessionStart migration is a pure file rename with nothing to rewrite.
 
 export interface GeminiHookMigrationResult {
   /** Repo-relative legacy path acted on. */
@@ -1222,6 +1231,14 @@ export interface GeminiHookMigrationResult {
   /** `migrated` — successor materialized + legacy removed; `declined` — drifted
    *  unbounded, awaits `--force`; `skipped` — user-owned file, never touched. */
   action: 'migrated' | 'declined' | 'skipped';
+  /** Present when the block was caused by the file at the SUCCESSOR path
+   *  (mmnto-ai/totem#2488). `user-owned-successor` — no Totem marker there; the
+   *  migration never overwrites a user's successor (even under `--force`), both
+   *  files stay. `drifted-successor` — marker-headed but unbounded (user content
+   *  past the end marker); awaits `--force`, both files stay. Disclosure happens
+   *  on the `totem hook install` summary path (what `prepare` runs); the `totem
+   *  init` path surfaces only `migrated` results, like every non-migrated action. */
+  reason?: 'user-owned-successor' | 'drifted-successor';
 }
 
 /**
@@ -1235,6 +1252,18 @@ export interface GeminiHookMigrationResult {
  *   - Marker + bounded totem-owned whole file, OR `--force` → materialize successor +
  *                                          remove legacy → `migrated`.
  *   - Marker + drifted/unbounded (trailing user content), no `--force` → `declined`.
+ *   - USER-OWNED file at `successorRel`  → `skipped` + `reason: 'user-owned-successor'`,
+ *                                          even under `--force`: the ownership gate
+ *                                          protects the successor path too, so a
+ *                                          hand-authored successor (e.g. an ESM rewrite
+ *                                          of the briefing) is never clobbered by the
+ *                                          canonical write; both files stay in place.
+ *   - Marker-headed but DRIFTED-UNBOUNDED file at `successorRel`, no `--force`
+ *                                        → `declined` + `reason: 'drifted-successor'`
+ *                                          (same bar as the legacy arm and as
+ *                                          regenerateManagedSessionHooks: a bare run
+ *                                          repairs only bounded totem-owned files;
+ *                                          `--force` overwrites any marker-headed one).
  *
  * A write/remove failure PROPAGATES (Tenet 4 — a migration the tool cannot complete
  * fails loud, never silently reports success), matching the drift-repair path.
@@ -1267,10 +1296,28 @@ export async function migrateLegacyGeminiHooks(
       continue;
     }
 
+    // The ownership gate protects the SUCCESSOR path too (mmnto-ai/totem#2488),
+    // mirroring regenerateManagedSessionHooks arm for arm: a user-authored file
+    // (no marker) is refused even under `--force`; a marker-headed-but-unbounded
+    // one (user content past the end marker) is declined until `--force`; only a
+    // bounded totem-owned successor — or `--force` on a marker-headed one — takes
+    // the canonical write below as an idempotent repair.
+    const successorPath = path.join(cwd, ...successorRel.split('/'));
+    if (fs.existsSync(successorPath)) {
+      const successorExisting = fs.readFileSync(successorPath, 'utf-8');
+      if (!markerOpensFile(successorExisting, marker)) {
+        results.push({ file: legacyRel, action: 'skipped', reason: 'user-owned-successor' });
+        continue;
+      }
+      if (!force && !isBoundedOwnedFile(successorExisting, marker, endMarker)) {
+        results.push({ file: legacyRel, action: 'declined', reason: 'drifted-successor' });
+        continue;
+      }
+    }
+
     // Materialize the successor (idempotent — canonical content) then remove the
     // stale fail-open legacy file. Regenerate-only-if-present would not create the
     // renamed successor on upgrade, but a present legacy artifact is proof of adoption.
-    const successorPath = path.join(cwd, ...successorRel.split('/'));
     fs.mkdirSync(path.dirname(successorPath), { recursive: true });
     fs.writeFileSync(successorPath, content, 'utf-8');
     fs.rmSync(legacyPath);
@@ -1361,18 +1408,26 @@ export function migrateGeminiHookRegistration(cwd: string): { changed: boolean; 
  * materialized `.cjs` successor is reported as already-current by drift-repair.
  */
 async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Promise<void> {
-  for (const { file, action } of await migrateLegacyGeminiHooks(cwd, force)) {
+  for (const { file, action, reason } of await migrateLegacyGeminiHooks(cwd, force)) {
     switch (action) {
       case 'migrated':
-        console.error(`[Totem] Migrated ${file} → .cjs (ESM fail-open fix, mmnto-ai/totem#2481).`);
+        console.error(
+          `[Totem] Migrated ${file} → .cjs (ESM fail-open fix, mmnto-ai/totem#2481 + #2488).`,
+        );
         break;
       case 'declined':
         console.error(
-          `[Totem] ${file} has drifted but is not a bounded totem-owned region — run \`totem hook install --force\` to migrate it to .cjs.`,
+          reason === 'drifted-successor'
+            ? `[Totem] ${file}: its .cjs successor is marker-headed but has drifted past the bounded region — run \`totem hook install --force\` to overwrite it with canonical.`
+            : `[Totem] ${file} has drifted but is not a bounded totem-owned region — run \`totem hook install --force\` to migrate it to .cjs.`,
         );
         break;
       case 'skipped':
-        console.error(`[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`);
+        console.error(
+          reason === 'user-owned-successor'
+            ? `[Totem] ${file}: its .cjs successor already exists and is user-owned — left both files untouched (remove the legacy .js manually if unwanted).`
+            : `[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`,
+        );
         break;
     }
   }

@@ -13,7 +13,7 @@
  *         `.git/hooks/*` (package-manager + tier parameterized) via
  *         `detectGeneratedArtifactContract` — catches stale-version drift (#1854).
  *       · **session-start-orientation**: STATIC whole-file equality of the
- *         `.claude/hooks/SessionStart.cjs` + `.gemini/hooks/SessionStart.js` templates,
+ *         `.claude/hooks/SessionStart.cjs` + `.gemini/hooks/SessionStart.cjs` templates,
  *         also via `detectGeneratedArtifactContract` (no parameterization).
  *   - **manual-attestation** (mmnto-ai/totem#2080): the no-mechanical-sensor class —
  *     `detectManualAttestationContract` surfaces the doctrine-currency row / vendor-SDK
@@ -449,11 +449,17 @@ interface SessionStartTemplateSource {
 /**
  * Resolve the two whole-file SessionStart hook artifacts the `session-start-orientation`
  * contract checks: `.claude/hooks/SessionStart.cjs` (canonical `CLAUDE_SESSION_START`)
- * and `.gemini/hooks/SessionStart.js` (canonical `GEMINI_SESSION_START`). Whole-file
+ * and `.gemini/hooks/SessionStart.cjs` (canonical `GEMINI_SESSION_START`). Whole-file
  * static canonical, no end marker, no regeneration. A vendor file absent here is
  * honest-absent `skip` (cohort permits absence) via the detector's presence semantics;
  * a present file whose marker opens it but whose body drifted is `warn` (the orientation
  * slice generalized `isOwnedGeneratedFile` to treat a marker-at-start JS file as owned).
+ *
+ * The gemini path is `.cjs` (mmnto-ai/totem#2488) — the extension is load-bearing in a
+ * `"type": "module"` consumer. A consumer that has not yet run the `.js`→`.cjs`
+ * migration therefore has NOTHING at the checked path and reads as honest-absent
+ * `skip`, never as drift; `totem hook install` migrates it (and removes the legacy
+ * `.js`), after which the row goes back to pass/warn.
  */
 function sessionStartArtifactsFor(
   gitRoot: string,
@@ -467,7 +473,7 @@ function sessionStartArtifactsFor(
       lineName: 'Parity: session-start-orientation (claude)',
     },
     {
-      consumerPath: path.join(gitRoot, '.gemini', 'hooks', 'SessionStart.js'),
+      consumerPath: path.join(gitRoot, '.gemini', 'hooks', 'SessionStart.cjs'),
       canonicalContent: templates.gemini,
       ownershipMarker: templates.marker,
       lineName: 'Parity: session-start-orientation (gemini)',

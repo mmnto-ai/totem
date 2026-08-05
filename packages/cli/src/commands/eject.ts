@@ -8,16 +8,20 @@ const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
 const TOTEM_HOOK_END = '[totem] end post-merge';
 const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
 const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
-const TOTEM_FILE_MARKER = '// [totem] auto-generated';
+// Comment-shape-agnostic: hooks open `// [totem] auto-generated …`, markdown
+// skills `<!-- [totem] auto-generated … -->` — the first-line gate matches both.
+const TOTEM_FILE_MARKER = '[totem] auto-generated';
 
 /** Files that may have AI reflex blocks appended by `totem init`. */
 const REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
 
 /** Files scaffolded by `totem init` that are fully owned by Totem. */
 const TOTEM_SCAFFOLDED_FILES = [
+  // Current (BeforeTool: mmnto-ai/totem#2481; SessionStart: mmnto-ai/totem#2488) +
+  // the pre-migration `.js` each one renamed — eject removes both shapes so an
+  // upgraded-then-ejected consumer leaves no fail-open artifact behind.
+  '.gemini/hooks/SessionStart.cjs',
   '.gemini/hooks/SessionStart.js',
-  // Current (mmnto-ai/totem#2481) + the pre-migration `.js` it renamed — eject
-  // removes both so an upgraded-then-ejected consumer leaves no fail-open artifact.
   '.gemini/hooks/BeforeTool.cjs',
   '.gemini/hooks/BeforeTool.js',
   '.gemini/skills/totem.md',
@@ -195,7 +199,12 @@ export function scrubPostCheckoutHook(hooksDir: string, summary: EjectSummary): 
 
 /**
  * Remove scaffolded files that are fully owned by Totem.
- * Only removes files that contain the Totem marker to avoid deleting user files.
+ * Only removes files whose first line IS a generated header — prefix-anchored
+ * in both comment shapes (`// [totem] auto-generated …` hooks,
+ * `<!-- [totem] auto-generated … -->` markdown skills). A file that merely
+ * QUOTES the marker — later in its body or in a first-line sentence (a
+ * user-authored hook citing the managed version it replaced) — is not
+ * totem-owned and must survive eject (mmnto-ai/totem#2488 review, rounds 1–2).
  */
 function removeScaffoldedFiles(cwd: string, summary: EjectSummary): void {
   for (const rel of TOTEM_SCAFFOLDED_FILES) {
@@ -203,7 +212,13 @@ function removeScaffoldedFiles(cwd: string, summary: EjectSummary): void {
     if (!fs.existsSync(filePath)) continue;
 
     const content = fs.readFileSync(filePath, 'utf-8');
-    if (content.includes(TOTEM_FILE_MARKER) || content.includes('[totem] auto-generated')) {
+    const newline = content.indexOf('\n');
+    const firstLine = newline === -1 ? content : content.slice(0, newline);
+    const normalizedFirstLine = firstLine.trimStart();
+    if (
+      normalizedFirstLine.startsWith(`// ${TOTEM_FILE_MARKER}`) ||
+      normalizedFirstLine.startsWith(`<!-- ${TOTEM_FILE_MARKER}`)
+    ) {
       fs.unlinkSync(filePath);
       summary.removed.push(rel);
     } else {

@@ -35,6 +35,8 @@ import {
   GEMINI_BEFORE_TOOL_LEGACY_REL,
   GEMINI_BEFORE_TOOL_REL,
   GEMINI_SESSION_START,
+  GEMINI_SESSION_START_LEGACY_REL,
+  GEMINI_SESSION_START_REL,
   MANAGED_SESSION_HOOKS,
   TOTEM_FILE_END,
   TOTEM_FILE_MARKER,
@@ -75,10 +77,10 @@ describe('MANAGED_SESSION_HOOKS roster invariant', () => {
         '.claude/hooks/PreWriteShield.cjs',
         '.claude/hooks/SessionStart.cjs',
         '.claude/hooks/gate-wrapper.cjs',
-        // BeforeTool ships as `.cjs` — load-bearing in `"type": "module"` consumers
-        // (mmnto-ai/totem#2481). SessionStart deliberately stays `.js` (scoped out).
+        // Both Gemini hooks ship as `.cjs` — load-bearing in `"type": "module"`
+        // consumers (BeforeTool: mmnto-ai/totem#2481; SessionStart: mmnto-ai/totem#2488).
         '.gemini/hooks/BeforeTool.cjs',
-        '.gemini/hooks/SessionStart.js',
+        '.gemini/hooks/SessionStart.cjs',
         '.totem/prepare.cjs',
       ].sort(),
     );
@@ -195,7 +197,7 @@ describe('regenerateManagedSessionHooks — bounded drift-repair matrix', () => 
       '.claude/hooks/PreWriteShield.cjs',
       `${TOTEM_FILE_MARKER}\nstale\n${TOTEM_FILE_END}\n`,
     );
-    writeHook('.gemini/hooks/SessionStart.js', GEMINI_SESSION_START); // already current
+    writeHook('.gemini/hooks/SessionStart.cjs', GEMINI_SESSION_START); // already current
     const results = await regenerateManagedSessionHooks(tmpDir);
 
     expect(results.find((x) => x.file === '.claude/hooks/PreWriteShield.cjs')!.action).toBe(
@@ -204,7 +206,7 @@ describe('regenerateManagedSessionHooks — bounded drift-repair matrix', () => 
     expect(
       fs.readFileSync(path.join(tmpDir, '.claude', 'hooks', 'PreWriteShield.cjs'), 'utf-8'),
     ).toBe(CLAUDE_PREWRITESHIELD);
-    expect(results.find((x) => x.file === '.gemini/hooks/SessionStart.js')!.action).toBe('exists');
+    expect(results.find((x) => x.file === '.gemini/hooks/SessionStart.cjs')!.action).toBe('exists');
   });
 });
 
@@ -772,5 +774,160 @@ describe('Gemini BeforeTool .js→.cjs migration', () => {
     ]);
     expect(existsRel(GEMINI_BEFORE_TOOL_LEGACY_REL)).toBe(false);
     expect(readRel(GEMINI_BEFORE_TOOL_REL)).toBe(GEMINI_BEFORE_TOOL);
+  });
+});
+
+// ─── Gemini SessionStart .js→.cjs upgrade migration (mmnto-ai/totem#2488) ───
+//
+// The BeforeTool sibling above (mmnto-ai/totem#2481) built the machinery; this
+// describe locks the SAME ownership gate for the SessionStart artifact.
+// NO registration analog: `totem init` never emits a `.gemini/settings.json`
+// SessionStart command, and Gemini CLI has no filename-convention discovery (the
+// #2558 posture — the file executes only via host/plain-node paths), so
+// `migrateGeminiHookRegistration` stays BeforeTool-scoped and there is nothing
+// to rewrite here.
+
+describe('Gemini SessionStart .js→.cjs migration', () => {
+  let tmpDir: string;
+
+  function writeFileRel(rel: string, content: string): void {
+    const p = path.join(tmpDir, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, content, 'utf-8');
+  }
+  function readRel(rel: string): string {
+    return fs.readFileSync(path.join(tmpDir, ...rel.split('/')), 'utf-8');
+  }
+  function existsRel(rel: string): boolean {
+    return fs.existsSync(path.join(tmpDir, ...rel.split('/')));
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2488-migrate-'));
+  });
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('migratesLegacySessionStartJsToCjs — materializes the .cjs successor and removes the stale .js', async () => {
+    // Fixture: a consumer that adopted the pre-#2488 briefing hook — the fail-open
+    // `.js` file carrying canonical (marker-headed, end-marker-bounded) content.
+    writeFileRel(GEMINI_SESSION_START_LEGACY_REL, GEMINI_SESSION_START);
+
+    const results = await migrateLegacyGeminiHooks(tmpDir);
+
+    expect(results).toEqual([{ file: GEMINI_SESSION_START_LEGACY_REL, action: 'migrated' }]);
+    expect(existsRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(false);
+    expect(existsRel(GEMINI_SESSION_START_REL)).toBe(true);
+    expect(readRel(GEMINI_SESSION_START_REL)).toBe(GEMINI_SESSION_START);
+  });
+
+  it('is idempotent — a second pass is a no-op', async () => {
+    writeFileRel(GEMINI_SESSION_START_LEGACY_REL, GEMINI_SESSION_START);
+    await migrateLegacyGeminiHooks(tmpDir);
+
+    expect(await migrateLegacyGeminiHooks(tmpDir)).toEqual([]);
+    expect(readRel(GEMINI_SESSION_START_REL)).toBe(GEMINI_SESSION_START);
+  });
+
+  it('leaves a user-owned SessionStart.js (no Totem marker) untouched', async () => {
+    const userJs = '// my own session hook\nconsole.log("mine");\n';
+    writeFileRel(GEMINI_SESSION_START_LEGACY_REL, userJs);
+    const results = await migrateLegacyGeminiHooks(tmpDir);
+    expect(results).toEqual([{ file: GEMINI_SESSION_START_LEGACY_REL, action: 'skipped' }]);
+    expect(readRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(userJs);
+    expect(existsRel(GEMINI_SESSION_START_REL)).toBe(false);
+  });
+
+  it('declines a drifted-unbounded legacy .js without --force, migrates it under --force', async () => {
+    // Marker opens the file, but user content trails the end marker → not bounded.
+    writeFileRel(
+      GEMINI_SESSION_START_LEGACY_REL,
+      `${GEMINI_SESSION_START}\n// local customization\n`,
+    );
+
+    expect(await migrateLegacyGeminiHooks(tmpDir)).toEqual([
+      { file: GEMINI_SESSION_START_LEGACY_REL, action: 'declined' },
+    ]);
+    expect(existsRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(true);
+    expect(existsRel(GEMINI_SESSION_START_REL)).toBe(false);
+
+    expect(await migrateLegacyGeminiHooks(tmpDir, true)).toEqual([
+      { file: GEMINI_SESSION_START_LEGACY_REL, action: 'migrated' },
+    ]);
+    expect(existsRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(false);
+    expect(readRel(GEMINI_SESSION_START_REL)).toBe(GEMINI_SESSION_START);
+  });
+
+  it('never clobbers a user-owned file at the successor path — both files stay, skip disclosed (spec 2488 dual-presence)', async () => {
+    // The consumer adopted totem's briefing hook (bounded legacy `.js`) and then
+    // hand-authored its own `.cjs` at the successor path — exactly the shape of a
+    // user-owned ESM rewrite. The ownership gate must protect the successor even
+    // under `--force`, mirroring regenerateManagedSessionHooks.
+    const userCjs = '// my own ESM-safe briefing\nconsole.log("mine");\n';
+    writeFileRel(GEMINI_SESSION_START_LEGACY_REL, GEMINI_SESSION_START);
+    writeFileRel(GEMINI_SESSION_START_REL, userCjs);
+
+    for (const force of [undefined, true] as const) {
+      const results = await migrateLegacyGeminiHooks(tmpDir, force);
+      expect(results).toEqual([
+        {
+          file: GEMINI_SESSION_START_LEGACY_REL,
+          action: 'skipped',
+          reason: 'user-owned-successor',
+        },
+      ]);
+      expect(readRel(GEMINI_SESSION_START_REL)).toBe(userCjs);
+      expect(readRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(GEMINI_SESSION_START);
+    }
+  });
+
+  it('repairs a totem-owned successor to canonical while removing the legacy', async () => {
+    // A stale-but-marker-owned `.cjs` at the successor path is totem territory:
+    // the migration's canonical write is an idempotent repair, not a clobber.
+    writeFileRel(GEMINI_SESSION_START_LEGACY_REL, GEMINI_SESSION_START);
+    writeFileRel(GEMINI_SESSION_START_REL, `${TOTEM_FILE_MARKER}\nstale\n${TOTEM_FILE_END}\n`);
+
+    const results = await migrateLegacyGeminiHooks(tmpDir);
+
+    expect(results).toEqual([{ file: GEMINI_SESSION_START_LEGACY_REL, action: 'migrated' }]);
+    expect(existsRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(false);
+    expect(readRel(GEMINI_SESSION_START_REL)).toBe(GEMINI_SESSION_START);
+  });
+
+  it('declines a marker-headed drifted-unbounded successor without --force, overwrites it under --force', async () => {
+    // Same bar as the legacy arm and as regenerateManagedSessionHooks: a bare run
+    // repairs only bounded totem-owned files; `--force` overwrites any marker-headed
+    // one. Without this arm the successor gate would be strictly MORE destructive
+    // than the function it mirrors (falsification round 2, mmnto-ai/totem#2488).
+    const drifted = `${GEMINI_SESSION_START}\n// my customization past the end marker\n`;
+    writeFileRel(GEMINI_SESSION_START_LEGACY_REL, GEMINI_SESSION_START);
+    writeFileRel(GEMINI_SESSION_START_REL, drifted);
+
+    expect(await migrateLegacyGeminiHooks(tmpDir)).toEqual([
+      { file: GEMINI_SESSION_START_LEGACY_REL, action: 'declined', reason: 'drifted-successor' },
+    ]);
+    expect(readRel(GEMINI_SESSION_START_REL)).toBe(drifted);
+    expect(readRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(GEMINI_SESSION_START);
+
+    expect(await migrateLegacyGeminiHooks(tmpDir, true)).toEqual([
+      { file: GEMINI_SESSION_START_LEGACY_REL, action: 'migrated' },
+    ]);
+    expect(existsRel(GEMINI_SESSION_START_LEGACY_REL)).toBe(false);
+    expect(readRel(GEMINI_SESSION_START_REL)).toBe(GEMINI_SESSION_START);
+  });
+
+  it('migrates BOTH Gemini artifacts in one pass when a consumer carries both legacy files', async () => {
+    writeFileRel(GEMINI_SESSION_START_LEGACY_REL, GEMINI_SESSION_START);
+    writeFileRel(GEMINI_BEFORE_TOOL_LEGACY_REL, GEMINI_BEFORE_TOOL);
+
+    const results = await migrateLegacyGeminiHooks(tmpDir);
+
+    expect([...results].sort((a, b) => a.file.localeCompare(b.file))).toEqual([
+      { file: GEMINI_BEFORE_TOOL_LEGACY_REL, action: 'migrated' },
+      { file: GEMINI_SESSION_START_LEGACY_REL, action: 'migrated' },
+    ]);
+    expect(existsRel(GEMINI_BEFORE_TOOL_REL)).toBe(true);
+    expect(existsRel(GEMINI_SESSION_START_REL)).toBe(true);
   });
 });

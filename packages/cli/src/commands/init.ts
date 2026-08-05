@@ -30,6 +30,7 @@ import {
   GEMINI_BEFORE_TOOL,
   GEMINI_BEFORE_TOOL_REL,
   GEMINI_SESSION_START,
+  GEMINI_SESSION_START_REL,
   GEMINI_SKILL,
   isBoundedOwnedFile,
   LEGACY_SENTINEL,
@@ -276,7 +277,9 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
   // replace territory (no end marker threaded here).
   const files: Array<{ rel: string; content: string; marker: string; endMarker?: string }> = [
     {
-      rel: '.gemini/hooks/SessionStart.js',
+      // Ships as `.cjs` — load-bearing in `"type": "module"` consumers
+      // (mmnto-ai/totem#2488); see GEMINI_SESSION_START_REL.
+      rel: GEMINI_SESSION_START_REL,
       content: GEMINI_SESSION_START,
       marker: TOTEM_FILE_MARKER,
       endMarker: TOTEM_FILE_END,
@@ -309,11 +312,13 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
     });
   }
 
-  // Legacy `.js`→`.cjs` migration (mmnto-ai/totem#2481). Runs on init too, not only
-  // the `totem hook install` upgrade path: a consumer re-running init after upgrading
-  // Totem carries the fail-open `.gemini/hooks/BeforeTool.js` (and possibly a
-  // `.gemini/settings.json` command pointing at it). Dynamic-imported to keep the
-  // migration co-located with the upgrade-path drift-repair machinery.
+  // Legacy `.js`→`.cjs` migration (mmnto-ai/totem#2481 BeforeTool, #2488 SessionStart).
+  // Runs on init too, not only the `totem hook install` upgrade path: a consumer
+  // re-running init after upgrading Totem carries the fail-open
+  // `.gemini/hooks/BeforeTool.js` / `.gemini/hooks/SessionStart.js` (and, for
+  // BeforeTool only, possibly a `.gemini/settings.json` command pointing at it).
+  // Dynamic-imported to keep the migration co-located with the upgrade-path
+  // drift-repair machinery.
   const { migrateGeminiHookRegistration, migrateLegacyGeminiHooks } =
     await import('./install-hooks.js');
   for (const { file, action } of await migrateLegacyGeminiHooks(cwd)) {
@@ -321,7 +326,9 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
       results.push({
         file,
         action: 'merged',
-        summaryActionOverride: 'Migrated legacy Gemini BeforeTool.js → .cjs',
+        // Named from the migrated artifact, not hardcoded — the legacy roster now
+        // carries more than one pair.
+        summaryActionOverride: `Migrated legacy Gemini ${path.basename(file)} → .cjs`,
       });
     }
   }
@@ -408,7 +415,7 @@ export function scaffoldClaudeWriteShield(filePath: string): ScaffoldOutcome {
 /**
  * Merge the Claude SessionStart hook entry into .claude/settings.json
  * (committed, team-level) without overwriting existing user-defined
- * hooks. Symmetric with the Gemini-side .gemini/hooks/SessionStart.js
+ * hooks. Symmetric with the Gemini-side .gemini/hooks/SessionStart.cjs
  * install (mmnto-ai/totem#1845 slice 1) — orientation IS a team-level
  * guarantee, so it shares the committed settings.json placement with
  * Phase B's PreWriteShield.
@@ -448,7 +455,7 @@ async function installClaudeHooks(
   });
 
   // 2. Scaffold the SessionStart hook script (committed to .claude/hooks/).
-  //    Symmetric with .gemini/hooks/SessionStart.js — Tenet 16 parity.
+  //    Symmetric with .gemini/hooks/SessionStart.cjs — Tenet 16 parity.
   const sessionStartPath = path.join(cwd, '.claude', 'hooks', 'SessionStart.cjs');
   const sessionStartResult = scaffoldFile(
     sessionStartPath,
