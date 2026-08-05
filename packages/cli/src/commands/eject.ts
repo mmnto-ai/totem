@@ -199,12 +199,12 @@ export function scrubPostCheckoutHook(hooksDir: string, summary: EjectSummary): 
 
 /**
  * Remove scaffolded files that are fully owned by Totem.
- * Only removes files whose FIRST LINE carries the Totem marker — how every
- * scaffold opens, in both comment shapes (`// [totem] auto-generated …` hooks,
+ * Only removes files whose first line IS a generated header — prefix-anchored
+ * in both comment shapes (`// [totem] auto-generated …` hooks,
  * `<!-- [totem] auto-generated … -->` markdown skills). A file that merely
- * QUOTES the marker later in its body (a user-authored hook citing the managed
- * version it replaced) is not totem-owned and must survive eject
- * (mmnto-ai/totem#2488 review).
+ * QUOTES the marker — later in its body or in a first-line sentence (a
+ * user-authored hook citing the managed version it replaced) — is not
+ * totem-owned and must survive eject (mmnto-ai/totem#2488 review, rounds 1–2).
  */
 function removeScaffoldedFiles(cwd: string, summary: EjectSummary): void {
   for (const rel of TOTEM_SCAFFOLDED_FILES) {
@@ -214,7 +214,11 @@ function removeScaffoldedFiles(cwd: string, summary: EjectSummary): void {
     const content = fs.readFileSync(filePath, 'utf-8');
     const newline = content.indexOf('\n');
     const firstLine = newline === -1 ? content : content.slice(0, newline);
-    if (firstLine.includes(TOTEM_FILE_MARKER)) {
+    const normalizedFirstLine = firstLine.trimStart();
+    if (
+      normalizedFirstLine.startsWith(`// ${TOTEM_FILE_MARKER}`) ||
+      normalizedFirstLine.startsWith(`<!-- ${TOTEM_FILE_MARKER}`)
+    ) {
       fs.unlinkSync(filePath);
       summary.removed.push(rel);
     } else {

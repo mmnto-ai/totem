@@ -141,6 +141,21 @@ describe('ejectCommand', () => {
     expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(true);
   });
 
+  it('leaves a user-owned hook whose FIRST line quotes the marker mid-sentence', async () => {
+    // Prefix-anchored ownership: the first line must BE a generated header, not
+    // merely mention the marker (CR round 2 on mmnto-ai/totem#2488's PR).
+    const hookDir = path.join(cwd, '.gemini', 'hooks');
+    fs.mkdirSync(hookDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(hookDir, 'SessionStart.cjs'),
+      '// my hook, replaces the "[totem] auto-generated" managed version\nconsole.log("mine");\n',
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(true);
+  });
+
   it('leaves a user-owned hook that merely QUOTES the totem marker in its body', async () => {
     // Ownership = marker in the FIRST LINE. A hand-written hook citing the managed
     // version it replaced would die under a whole-body substring gate (CR review on
