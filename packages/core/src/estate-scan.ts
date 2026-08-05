@@ -545,7 +545,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     repoPath: string,
     ref: string,
     target: string,
-  ): boolean | { error: string } => {
+  ): boolean | { probeFailure: string } => {
     // totem-context: intentional cleanup — `merge-base --is-ancestor` ANSWERS by exit code, so a non-zero exit is the result, not a failure; exit 1 is returned as `false` and every other status is surfaced to the caller as a named unscannable reason.
     try {
       git(repoPath, ['merge-base', '--is-ancestor', ref, target]);
@@ -554,7 +554,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     } catch (err) {
       const status = (err as Error & SafeExecErrorFields).status;
       if (status === NOT_AN_ANCESTOR_EXIT) return false;
-      return { error: describe(err) };
+      return { probeFailure: describe(err) };
     }
   };
 
@@ -628,7 +628,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
 
     const ancestry = isAncestor(repoPath, entry.branch, target);
     if (typeof ancestry !== 'boolean') {
-      const reason = `merge-base --is-ancestor failed: ${ancestry.error}`;
+      const reason = `merge-base --is-ancestor failed: ${ancestry.probeFailure}`;
       addUnscannable(wtPath, reason, 'worktree');
       return {
         ...base,
