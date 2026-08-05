@@ -14,6 +14,7 @@ import {
   checkCompiledRules,
   checkConfig,
   checkEmbeddingConfig,
+  checkEstate,
   checkFreezes,
   checkGitHooks,
   checkGrandfatheredRules,
@@ -435,6 +436,14 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Estate',
 ] as const;
 
+/**
+ * The ambient `Estate` row reads the real user-level registry and shells git at
+ * every repo listed there. Every `doctorCommand` call in this suite passes an
+ * EMPTY registry through the seam so the suite stays hermetic — same reason the
+ * Ollama probe's `fetch` is mocked above.
+ */
+const HERMETIC = { estateSeamsForTest: { registry: {} } } as const;
+
 describe('doctorCommand', () => {
   let tmpDir: string;
   let originalCwd: string;
@@ -469,13 +478,13 @@ describe('doctorCommand', () => {
   });
 
   it('runs without throwing', async () => {
-    const results = await doctorCommand();
+    const results = await doctorCommand(HERMETIC);
     expect(results).toBeDefined();
     expect(results).toHaveLength(EXPECTED_DIAGNOSTIC_NAMES.length);
   });
 
   it('returns correct check names', async () => {
-    const results = await doctorCommand();
+    const results = await doctorCommand(HERMETIC);
     const names = results.map((r: DiagnosticResult) => r.name);
     expect(names).toEqual(expect.arrayContaining([...EXPECTED_DIAGNOSTIC_NAMES]));
   });
@@ -516,7 +525,7 @@ describe('doctorCommand output', () => {
   });
 
   it('outputs all check names in console output', async () => {
-    await doctorCommand();
+    await doctorCommand(HERMETIC);
     const output = stderrSpy.mock.calls.map((args: unknown[]) => String(args[0])).join('\n');
     expect(output).toContain('Config');
     expect(output).toContain('Compiled Rules');
@@ -532,7 +541,7 @@ describe('doctorCommand output', () => {
   });
 
   it('outputs summary line with pass/warn/fail counts', async () => {
-    await doctorCommand();
+    await doctorCommand(HERMETIC);
     const output = stderrSpy.mock.calls.map((args: unknown[]) => String(args[0])).join('\n');
     expect(output).toMatch(/\d+ passed/);
     expect(output).toMatch(/\d+ warnings/);
@@ -587,7 +596,7 @@ describe('doctorCommand strict mode contract', () => {
     fs.unlinkSync(path.join(tmpDir, 'totem.config.ts'));
     process.exitCode = undefined;
 
-    const results = await doctorCommand({ strict: true });
+    const results = await doctorCommand({ ...HERMETIC, strict: true });
 
     expect(results.some((r: DiagnosticResult) => r.status === 'fail')).toBe(true);
     expect(process.exitCode).toBeUndefined();
@@ -598,16 +607,16 @@ describe('doctorCommand strict mode contract', () => {
       throw new Error('process.exit should not be called by doctorCommand');
     }) as never);
 
-    await doctorCommand({ strict: true });
-    await doctorCommand({ strict: false });
-    await doctorCommand();
+    await doctorCommand({ ...HERMETIC, strict: true });
+    await doctorCommand({ ...HERMETIC, strict: false });
+    await doctorCommand(HERMETIC);
 
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
   it('returns the same DiagnosticResult[] shape regardless of strict flag', async () => {
-    const resultsStrict = await doctorCommand({ strict: true });
-    const resultsLoose = await doctorCommand({ strict: false });
+    const resultsStrict = await doctorCommand({ ...HERMETIC, strict: true });
+    const resultsLoose = await doctorCommand({ ...HERMETIC, strict: false });
 
     expect(resultsStrict.map((r: DiagnosticResult) => r.name)).toEqual(
       resultsLoose.map((r: DiagnosticResult) => r.name),
@@ -666,6 +675,150 @@ describe('doctorGateFailed', () => {
     const onlySkip: DiagnosticResult[] = [{ name: 'S', status: 'skip', message: '' }];
     expect(doctorGateFailed(onlySkip, 'fail')).toBe(false);
     expect(doctorGateFailed(onlySkip, 'warn')).toBe(false);
+  });
+
+  // Sensor-class rows report but never gate (mmnto-ai/totem#2580 ruled scope).
+  // The exemption rides the ROW, so widening the tier later cannot give a
+  // sensor teeth by accident.
+  it('a gateExempt warn row does not gate even under the warn tier', () => {
+    const estateWarn: DiagnosticResult[] = [
+      ...clean,
+      { name: 'Estate', status: 'warn', message: '', gateExempt: true },
+    ];
+    expect(doctorGateFailed(estateWarn, 'warn')).toBe(false);
+    expect(doctorGateFailed(estateWarn, 'fail')).toBe(false);
+  });
+
+  it('a non-exempt warn row alongside an exempt one still gates under the warn tier', () => {
+    const mixed: DiagnosticResult[] = [
+      { name: 'Estate', status: 'warn', message: '', gateExempt: true },
+      { name: 'C', status: 'warn', message: '' },
+    ];
+    expect(doctorGateFailed(mixed, 'warn')).toBe(true);
+    expect(doctorGateFailed(mixed, 'fail')).toBe(false);
+  });
+
+  it('a gateExempt fail row does not gate in either tier', () => {
+    const exemptFail: DiagnosticResult[] = [
+      ...clean,
+      { name: 'Sensor', status: 'fail', message: '', gateExempt: true },
+    ];
+    expect(doctorGateFailed(exemptFail, 'fail')).toBe(false);
+    expect(doctorGateFailed(exemptFail, 'warn')).toBe(false);
+  });
+});
+
+// ─── Ambient estate row (mmnto-ai/totem#2580) ───────────
+
+describe('checkEstate', () => {
+  const registryOf = (...paths: string[]): Record<string, unknown> =>
+    Object.fromEntries(
+      paths.map((p) => [
+        p,
+        { path: p, chunkCount: 1, lastSync: '2026-08-01T00:00:00.000Z', embedder: 'test' },
+      ]),
+    );
+
+  let estateDir: string;
+
+  beforeEach(() => {
+    estateDir = fs.realpathSync(makeTmpDir());
+  });
+
+  afterEach(() => {
+    cleanTmpDir(estateDir);
+  });
+
+  /** Canned git for a repo whose container root holds `count` residue dirs. */
+  function seams(repo: string, opts: { throws?: boolean } = {}) {
+    const listing = [
+      `worktree ${repo.split(path.sep).join('/')}`,
+      `HEAD ${'a'.repeat(40)}`,
+      'branch refs/heads/main',
+      '',
+    ].join('\n');
+    return {
+      registry: registryOf(repo) as never,
+      now: Date.parse('2026-08-05T12:00:00.000Z'),
+      safeExec: ((_command: string, args: string[] = []): string => {
+        if (opts.throws === true) throw new Error('git exploded');
+        const verb = args.slice(3);
+        if (verb[0] === 'worktree') return listing;
+        if (verb[0] === 'rev-parse' && verb[1] === '--show-toplevel') {
+          return repo.split(path.sep).join('/');
+        }
+        if (verb[0] === 'rev-parse') return 'origin/main';
+        return '';
+      }) as never,
+    };
+  }
+
+  it('skips when nothing is registered', async () => {
+    const result = await checkEstate({ registry: {} });
+    expect(result.status).toBe('skip');
+    expect(result.message).toContain('No registered repos');
+  });
+
+  it('passes quietly on a clean estate, naming missing and unscannable counts', async () => {
+    const repo = path.join(estateDir, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    const gone = path.join(estateDir, 'vanished');
+    const base = seams(repo);
+    const result = await checkEstate({
+      ...base,
+      registry: registryOf(repo, gone) as never,
+    });
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('1 scannable repo(s)');
+    expect(result.message).toContain('(1 registry path(s) missing)');
+    expect(result.message).toContain('0 linked worktree(s)');
+  });
+
+  it('warns with counts and the --estate remediation when husks exist', async () => {
+    const repo = path.join(estateDir, 'repo');
+    fs.mkdirSync(path.join(repo, '.claude', 'worktrees', 'agent-a'), { recursive: true });
+    fs.mkdirSync(path.join(repo, '.claude', 'worktrees', 'agent-b'), { recursive: true });
+    const result = await checkEstate(seams(repo));
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('2 husk candidate(s)');
+    expect(result.remediation).toContain('totem doctor --estate');
+  });
+
+  // A git that fails on every invocation is NOT a scan crash: the scan is
+  // fail-soft per probe, so this lands as unscannable rows and the row still
+  // reports. Asserted so the two failure classes stay distinguishable.
+  it('keeps reporting when every git probe fails, naming the unscannable count', async () => {
+    const repo = path.join(estateDir, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    const result = await checkEstate(seams(repo, { throws: true }));
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('1 probe(s) unscannable');
+  });
+
+  it('warns (never throws) on a crash-class scan failure', async () => {
+    const repo = path.join(estateDir, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    // A malformed registry is the reachable crash class: EVERY exec call site
+    // inside the scan is wrapped, so even a broken git seam degrades to
+    // unscannable rows (asserted above) rather than throwing. What the catch
+    // exists for is a crash BEFORE or AROUND the probes — a bad registry
+    // shape, or the dynamic core import failing.
+    const result = await checkEstate({ ...seams(repo), registry: { bad: null } as never });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('Estate scan failed');
+  });
+
+  it('marks every row gateExempt so the sensor can never gate', async () => {
+    const repo = path.join(estateDir, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    const rows = [
+      await checkEstate({ registry: {} }),
+      await checkEstate(seams(repo)),
+      await checkEstate({ ...seams(repo), registry: { bad: null } as never }),
+    ];
+    expect(rows.map((r) => r.status)).toEqual(['skip', 'pass', 'warn']);
+    for (const row of rows) expect(row.gateExempt).toBe(true);
+    expect(doctorGateFailed(rows, 'warn')).toBe(false);
   });
 });
 

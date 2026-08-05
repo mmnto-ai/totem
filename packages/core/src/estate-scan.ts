@@ -11,17 +11,34 @@
  *     squash-merged branch leaves no ancestry edge, and this sensor has no
  *     merged-facts source (the status-lane snapshot extension is a later
  *     slice), so it declines to claim either way.
- *   - **husk sweep**: the dirname of every registry path and every listed
- *     worktree path (plus caller-supplied roots) is swept one level for
- *     worktree-shaped residue. Positive, typed evidence is REQUIRED — an
- *     unclassifiable directory is not reported at all rather than guessed at.
+ *   - **husk sweep**: candidate roots are swept one level for worktree-shaped
+ *     residue. Roots come in two kinds, and the kind decides what counts as
+ *     evidence. A CONTAINER root exists solely to hold worktrees
+ *     (`<repo>/.claude/worktrees`, or any `--root` the operator names), so an
+ *     untracked directory there is residue BY LOCATION. A STANDARD root (the
+ *     parent of a registry path or of a listed worktree) is an ordinary
+ *     working directory, so residue there needs the older positive evidence —
+ *     a dangling `.git` pointer, or a repo-name prefix plus a leftover
+ *     `node_modules`. Either way an unclassifiable directory is not reported
+ *     at all rather than guessed at.
+ *
+ * Registry membership is NOT protection from candidacy. Git's own worktree
+ * list is what protects a path (cohort-overlay §2), and a genuine repo
+ * checkout is already protected by the `.git`-DIRECTORY rule; a registry entry
+ * only records that something was synced from a path once. Registry accounting
+ * and disk residue are different axes — the same path can carry both a repo
+ * row and a husk row.
  *
  * Sensor, never actuator: the only git verbs invoked are `worktree list`,
- * `status`, `merge-base --is-ancestor`, `log -1`, and `rev-parse`; nothing is
- * written, no registry entry is mutated, and nothing is cached across calls.
- * Every probe failure lands as an `unscannable` row (or a class-`unscannable`
- * worktree row naming the failed step) so a degraded scan can never read as a
- * clean one.
+ * `status`, `merge-base --is-ancestor`, `log -1`, and `rev-parse`, and every
+ * invocation carries `--no-optional-locks`. That flag is what makes the
+ * read-only claim true rather than aspirational: `git status` otherwise
+ * refreshes and WRITES the index, taking `index.lock` (git-status(1) §
+ * BACKGROUND REFRESH), which in a cohort's shared worktrees would collide with
+ * a seat's live `git add`. No registry entry is mutated and nothing is cached
+ * across calls. Every probe failure lands as an `unscannable` row (or a
+ * class-`unscannable` worktree row naming the failed step) so a degraded scan
+ * can never read as a clean one.
  *
  * `safeExec` is injected rather than imported so the scan stays testable
  * without a real git tree (the author-sandbox.ts:21 idiom).
@@ -78,7 +95,12 @@ export type WorktreeClass =
   | 'registered-detached'
   | 'unscannable';
 
-export type HuskEvidence = 'dangling-gitdir-pointer' | 'residue-shape' | 'deregistered-intact';
+export type HuskEvidence =
+  | 'dangling-gitdir-pointer'
+  | 'residue-shape'
+  | 'deregistered-intact'
+  /** Untracked directory under a CONTAINER root — the location is the evidence. */
+  | 'container-residue';
 
 export interface EstateWorktreeRow {
   path: string;
@@ -122,7 +144,15 @@ export interface EstateRepoRow {
   lastSync?: string;
   /** Registry entry whose path no longer exists — reported, never probed. */
   missing?: boolean;
-  /** Short default-branch name, absent when underivable (never guessed). */
+  /**
+   * Registry entry that exists but is NOT a git toplevel: git discovered an
+   * ANCESTOR repo from it. Such an entry is never enumerated as a repo (its
+   * worktree list would be the ancestor's), and nothing is derived from it.
+   */
+  notGitRoot?: boolean;
+  /** The ancestor repo git discovered — set with `notGitRoot`. */
+  enclosingRepo?: string;
+  /** Short default-branch name in remote-tracking form (`origin/<name>`), absent when underivable (never guessed). */
   defaultBranch?: string;
   /** Count of LINKED worktrees (the main worktree is the repo itself). */
   worktrees: number;
@@ -293,9 +323,18 @@ function lstatSafe(p: string): fs.Stats | undefined {
 function homeRepoFromGitdir(target: string): string | undefined {
   const parts = target.split(/[\\/]/);
   const idx = parts.lastIndexOf('worktrees');
-  if (idx < 1 || parts[idx - 1] !== '.git') return undefined;
-  const home = parts.slice(0, idx - 1).join(path.sep);
-  return home.length > 0 ? home : undefined;
+  if (idx < 1) return undefined;
+  const parent = parts[idx - 1]!;
+  // Standard layout: `<repo>/.git/worktrees/<n>` — the repo is above `.git`.
+  // Bare layout: `<repo>.git/worktrees/<n>` — the `.git`-suffixed directory IS
+  // the repo, so it stays in the path.
+  const home =
+    parent === '.git'
+      ? parts.slice(0, idx - 1).join(path.sep)
+      : parent.endsWith('.git')
+        ? parts.slice(0, idx).join(path.sep)
+        : undefined;
+  return home !== undefined && home.length > 0 ? home : undefined;
 }
 
 function shortBranchName(ref: string): string {
@@ -323,9 +362,8 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
 
   /** Every path git has named as a worktree — invariant 1's never-a-husk set. */
   const gitKnownPaths = new Set<string>();
-  const registryKeys = new Set<string>();
-  /** Folded key → display path, so a root is swept once regardless of casing. */
-  const sweepRoots = new Map<string, string>();
+  /** Folded key → root, so a root is swept once regardless of casing. */
+  const sweepRoots = new Map<string, { path: string; container: boolean }>();
   /** Suppressed roots, filtered at the end against what actually got swept. */
   const excludedRootCandidates = new Map<string, EstateExcludedRoot>();
   const classifiedKeys = new Set<string>();
@@ -336,39 +374,89 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     unscannable.push({ path: p, reason });
   };
 
-  const addSweepRoot = (dir: string): void => {
+  /**
+   * Register a sweep root. `container` marks a root that exists SOLELY to hold
+   * worktrees, which is what licenses the by-location `container-residue`
+   * class. A root reached by both kinds is a container: the more specific
+   * declaration wins.
+   */
+  const addSweepRoot = (dir: string, container: boolean): void => {
     const resolved = path.resolve(dir);
     const key = foldCase(resolved);
-    if (!sweepRoots.has(key)) sweepRoots.set(key, resolved);
+    const existing = sweepRoots.get(key);
+    if (existing === undefined) sweepRoots.set(key, { path: resolved, container });
+    else if (container) existing.container = true;
   };
 
   /**
-   * Sweep roots derived from a REGISTRY entry's parent, which is the weakest
-   * of the three derivations: a registry entry only proves a repo was synced
-   * from that path, not that its parent is a place worktrees live. The OS temp
-   * dir is excluded on that basis — registry entries there are near-always
-   * fixture pollution, and sweeping it mints `residue-shape` rows for any
-   * tool's `<repo>-*` scratch dir that happens to carry a `node_modules`.
+   * True for the OS temp dir. Compared against both the reported path and its
+   * realpath, because macOS reports `/var/folders/...` while every real path
+   * under it resolves through `/private/var` (either form must match).
+   */
+  const isOsTmpdir = (resolved: string): boolean => {
+    const folded = foldCase(resolved);
+    if (folded === foldCase(path.resolve(os.tmpdir()))) return true;
+    // totem-context: intentional cleanup — a temp dir that cannot be realpath'd (unusual TMPDIR, permissions) simply falls back to the lexical comparison above; the exclusion is a heuristic narrowing, not a correctness gate.
+    try {
+      return folded === foldCase(fs.realpathSync(os.tmpdir()));
+      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    } catch {
+      return false;
+    }
+  };
+
+  const TMPDIR_SUPPRESSION =
+    'os tmpdir — derived only from a registry entry path; pass --root to sweep it';
+
+  /**
+   * Record a root the derivation declined to produce, so the narrowing is
+   * disclosed rather than silent. One row per root: the tmpdir reason outranks
+   * the others (it names the `--root` escape hatch), and otherwise the first
+   * suppression to reach a root keeps it. The end-filter drops any root that
+   * some OTHER derivation did produce — a swept root is never reported here.
+   */
+  const noteSuppressedRoot = (dir: string, reason: string): void => {
+    const resolved = path.resolve(dir);
+    const key = foldCase(resolved);
+    if (isOsTmpdir(resolved)) {
+      excludedRootCandidates.set(key, { path: resolved, reason: TMPDIR_SUPPRESSION });
+      return;
+    }
+    if (!excludedRootCandidates.has(key)) {
+      excludedRootCandidates.set(key, { path: resolved, reason });
+    }
+  };
+
+  /**
+   * Sweep roots derived from a REGISTRY entry's parent — the weakest of the
+   * derivations: a registry entry only proves a repo was synced from that path,
+   * not that its parent is a place worktrees live. The OS temp dir is excluded
+   * on that basis; entries there are near-always fixture pollution, and
+   * sweeping it mints `residue-shape` rows for any tool's `<repo>-*` scratch
+   * dir that happens to carry a `node_modules`.
    *
    * The exclusion is scoped to THIS derivation. A listed worktree's parent is
    * positive evidence that worktrees live there, and `--root` is an explicit
    * instruction; either one sweeps the temp dir, and the suppression is then
-   * dropped from the disclosure (a swept root is never reported as excluded).
+   * dropped from the disclosure.
    */
   const addRegistryDerivedRoot = (dir: string): void => {
     const resolved = path.resolve(dir);
-    if (foldCase(resolved) === foldCase(path.resolve(os.tmpdir()))) {
-      excludedRootCandidates.set(foldCase(resolved), {
-        path: resolved,
-        reason: 'os tmpdir — derived only from a registry entry path; pass --root to sweep it',
-      });
+    if (isOsTmpdir(resolved)) {
+      noteSuppressedRoot(resolved, TMPDIR_SUPPRESSION);
       return;
     }
-    addSweepRoot(resolved);
+    addSweepRoot(resolved, false);
   };
 
+  // `--no-optional-locks` on EVERY invocation: `git status` otherwise refreshes
+  // and writes the index, taking `index.lock` (git-status(1) § BACKGROUND
+  // REFRESH). A sensor that runs from the ambient `totem doctor` row must not
+  // race a seat's live `git add` in a shared worktree.
   const git = (cwd: string, args: string[]): string =>
-    safeExec('git', ['-C', cwd, ...args], { timeout: GIT_COMMAND_TIMEOUT_MS });
+    safeExec('git', ['--no-optional-locks', '-C', cwd, ...args], {
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+    });
 
   const listWorktrees = (repoPath: string): WorktreeListEntry[] => {
     const entries = parseWorktreeListPorcelain(git(repoPath, ['worktree', 'list', '--porcelain']));
@@ -533,7 +621,6 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
 
   for (const entry of registry) {
     const repoPath = path.resolve(entry.path);
-    registryKeys.add(pathKey(repoPath));
     const lastSyncField = entry.lastSync === undefined ? {} : { lastSync: entry.lastSync };
 
     // A missing entry contributes its `missing: true` row and nothing else: a
@@ -542,10 +629,52 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     // unrelated directories into the sweep.
     if (!isRealDirectory(repoPath)) {
       repos.push({ path: repoPath, ...lastSyncField, missing: true, worktrees: 0 });
+      noteSuppressedRoot(
+        path.dirname(repoPath),
+        'derived only from missing registry entry path(s)',
+      );
+      continue;
+    }
+
+    // Toplevel verification before anything is derived FROM the entry. `git -C
+    // <dir>` silently discovers an ANCESTOR repo, so a registry path that is
+    // merely INSIDE a repo would otherwise report the ancestor's worktree list
+    // as its own and drag the ancestor's neighbourhood into the sweep.
+    let toplevel: string;
+    // totem-context: intentional cleanup — a failed toplevel probe is recorded as a named unscannable row and the remaining registry entries still scan, matching the worktree-list failure path below.
+    try {
+      toplevel = git(repoPath, ['rev-parse', '--show-toplevel']).trim();
+      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    } catch (err) {
+      addRegistryDerivedRoot(path.dirname(repoPath));
+      repos.push({ path: repoPath, ...lastSyncField, worktrees: 0 });
+      addUnscannable(repoPath, `rev-parse --show-toplevel failed: ${describe(err)}`);
+      continue;
+    }
+
+    if (pathKey(toplevel) !== pathKey(repoPath)) {
+      // Nothing is derived from this entry — not its dirname, and above all not
+      // git's answer, which describes the ancestor rather than the entry.
+      repos.push({
+        path: repoPath,
+        ...lastSyncField,
+        notGitRoot: true,
+        enclosingRepo: path.resolve(toplevel),
+        worktrees: 0,
+      });
+      noteSuppressedRoot(
+        path.dirname(repoPath),
+        'derived only from non-git-root registry entry path(s)',
+      );
       continue;
     }
 
     addRegistryDerivedRoot(path.dirname(repoPath));
+
+    // A CONTAINER root: this directory exists solely to hold worktrees, so an
+    // untracked directory inside it is residue by location alone.
+    const container = path.join(repoPath, '.claude', 'worktrees');
+    if (isRealDirectory(container)) addSweepRoot(container, true);
 
     let listed: WorktreeListEntry[];
     // totem-context: intentional cleanup — one unreadable repo (moved, corrupt, not a git tree) is recorded as a named unscannable row and the remaining registry entries still scan; a throw here would make one bad entry hide the whole estate.
@@ -566,7 +695,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       // that worktrees live in that parent.
       const parent = path.dirname(path.resolve(wt.path));
       if (pathKey(wt.path) === pathKey(repoPath)) addRegistryDerivedRoot(parent);
-      else addSweepRoot(parent);
+      else addSweepRoot(parent, false);
     }
 
     // Git lists the main worktree first; it IS the repo, not estate residue, so
@@ -594,7 +723,9 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
 
   // ─── Husk sweep ───────────────────────────────────────
 
-  for (const extra of inputs.extraRoots ?? []) addSweepRoot(extra);
+  // An operator naming a root with `--root` is DECLARING a worktree location,
+  // which is the same claim `<repo>/.claude/worktrees` makes structurally.
+  for (const extra of inputs.extraRoots ?? []) addSweepRoot(extra, true);
 
   /**
    * Registered repo basenames, for the residue-shape prefix match. Sorted
@@ -632,12 +763,17 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     return listed;
   };
 
-  const classifyHusk = (dir: string, root: string): EstateHuskRow | undefined => {
+  const classifyHusk = (
+    dir: string,
+    root: string,
+    container: boolean,
+  ): EstateHuskRow | undefined => {
     const gitEntry = lstatSafe(path.join(dir, '.git'));
     const ageDays = huskAgeDays(dir);
     const ageField = ageDays === undefined ? {} : { ageDays };
 
-    // A `.git` DIRECTORY is an ordinary repo checkout — never a husk.
+    // A `.git` DIRECTORY is an ordinary repo checkout — never a husk, under any
+    // root kind.
     if (gitEntry?.isDirectory() === true) return undefined;
 
     if (gitEntry?.isFile() === true) {
@@ -678,9 +814,25 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       };
     }
 
-    // No `.git` at all (a symlinked `.git` lands here too and yields no typed
-    // evidence): residue-shape needs BOTH a registered-repo name prefix and a
-    // leftover `node_modules`.
+    // No `.git` at all, or a `.git` that is neither file nor directory.
+    if (gitEntry === undefined && !isRealDirectory(dir)) {
+      // The directory readdir named is gone or unreadable by the time we probe
+      // it — a raced scan must report the hole, not silently drop the entry.
+      addUnscannable(dir, 'vanished or turned unreadable mid-sweep');
+      return undefined;
+    }
+
+    // Under a CONTAINER root the location IS the evidence: these roots exist
+    // solely to hold worktrees, so a directory git does not track is residue
+    // without needing a name or a `node_modules`. The stronger `.git`-FILE
+    // classes above still win when they apply.
+    if (container) {
+      return { path: dir, sweptRoot: root, evidence: 'container-residue', ...ageField };
+    }
+
+    // Under a STANDARD root — an ordinary working directory — residue-shape
+    // needs BOTH a registered-repo name prefix and a leftover `node_modules`.
+    // A symlinked `.git` yields no typed evidence here.
     if (gitEntry !== undefined) return undefined;
     const name = foldCase(path.basename(dir));
     const matched = repoBasenames.find((r) => r.name.length > 0 && name.startsWith(r.name));
@@ -695,8 +847,9 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     };
   };
 
-  const sweptRoots = [...sweepRoots.values()].sort();
-  for (const root of sweptRoots) {
+  const roots = [...sweepRoots.values()].sort(byPath);
+  const sweptRoots = roots.map((r) => r.path);
+  for (const { path: root, container } of roots) {
     let dirents: fs.Dirent[];
     // totem-context: intentional cleanup — an unreadable sweep root (EACCES, raced deletion) is recorded as a named unscannable row so the omission is visible, and the sibling roots still sweep.
     try {
@@ -712,13 +865,16 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       if (!dirent.isDirectory()) continue;
       if (dirent.name.startsWith('.') || dirent.name === 'node_modules') continue;
       const dir = path.join(root, dirent.name);
-      const key = pathKey(dir);
-      // Invariant 1: anything git named as a worktree, and any registry repo
-      // itself, is never husk-candidate material.
-      if (gitKnownPaths.has(key) || registryKeys.has(key)) continue;
+      // Invariant 1: what protects a path from candidacy is GIT's worktree
+      // list (cohort-overlay §2) — plus the `.git`-DIRECTORY rule inside
+      // classifyHusk, which covers every genuine repo checkout. Registry
+      // membership is deliberately NOT protection: registry accounting and
+      // disk residue are different axes, so one path may carry both a repo row
+      // and a husk row.
+      if (gitKnownPaths.has(pathKey(dir))) continue;
       // totem-context: intentional cleanup — a directory that vanishes or turns unreadable mid-sweep (TOCTOU) is recorded as a named unscannable row; one raced entry must not abort the sweep of its siblings.
       try {
-        const husk = classifyHusk(dir, root);
+        const husk = classifyHusk(dir, root, container);
         if (husk !== undefined) huskCandidates.push(husk);
         // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
       } catch (err) {

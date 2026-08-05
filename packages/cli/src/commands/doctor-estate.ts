@@ -74,6 +74,8 @@ function estateJsonArtifact(
       path: r.path,
       ...(r.lastSync !== undefined ? { 'last-sync': r.lastSync } : {}),
       ...(r.missing === true ? { missing: true } : {}),
+      ...(r.notGitRoot === true ? { 'not-git-root': true } : {}),
+      ...(r.enclosingRepo !== undefined ? { 'enclosing-repo': r.enclosingRepo } : {}),
       ...(r.defaultBranch !== undefined ? { 'default-branch': r.defaultBranch } : {}),
       worktrees: r.worktrees,
     })),
@@ -232,6 +234,13 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
       log.info(
         TAG,
         `${warnColor(bold('[MISSING]  '))} ${render(repo.path)} — registry path does not exist`,
+      );
+      continue;
+    }
+    if (repo.notGitRoot === true) {
+      log.info(
+        TAG,
+        `${warnColor(bold('[NOT GIT ROOT]'))} ${render(repo.path)} — inside ${render(repo.enclosingRepo ?? 'an enclosing repo')}, not a git toplevel; not enumerated`,
       );
       continue;
     }

@@ -174,13 +174,17 @@ may promote), and any new config file/field.
   `execForTest`, `nowForTest`.
 - `packages/cli/src/index.ts` — `--estate` option (:1465 block), membership in `specializedModes`
   (:1502-1506), widen the `--json` guard (:1514-1520) to admit `--estate --json`, dispatch branch.
-- `packages/pack-agent-security/test/repo-sweep.test.ts` — allowlist entry for the new exec sites.
+- ~~`packages/pack-agent-security/test/repo-sweep.test.ts` — allowlist entry for the new exec sites.~~
+  STRUCK (verified unnecessary, NIT-4): the pack rule matches the `exec(...)` call-shape identifier,
+  and the injected seam is named `safeExec`, so the sweep sees zero new sites (the sweep's own
+  count-drift test confirms the delta is nil).
 - Changeset: minor, `@mmnto/totem` + `@mmnto/cli` (fixed group).
 
 ### Data model deltas (all new, all in estate-scan.ts; no existing type touched)
 
 - `WorktreeClass = 'registered-active' | 'registered-stale' | 'registered-indeterminate' | 'registered-detached' | 'unscannable'`
-- `HuskEvidence = 'dangling-gitdir-pointer' | 'residue-shape' | 'deregistered-intact'`
+- `HuskEvidence = 'dangling-gitdir-pointer' | 'residue-shape' | 'deregistered-intact' | 'container-residue'`
+  (`container-residue` added by the falsification fold — see § Evidence model as built)
 - `EstateWorktreeRow { path, repoPath, branch?, head?, class, dirty?, ancestryMerged: boolean|'unknown', ageDays?, locked?, prunable?, evidence: string }`
 - `EstateHuskRow { path, sweptRoot, evidence: HuskEvidence, matchedRepo?, ageDays? }`
 - `EstateUnscannableRow { path, reason }` — every failed probe lands here; total accounting invariant below.
@@ -199,14 +203,36 @@ ancestry-merged → **indeterminate** (the squash-merge gap, named in output; up
 status-lane merged-facts snapshot exists). Detached HEAD → **detached** (classified by dirty/age
 only). Any probe failure → **unscannable**, scan continues.
 
-Husk arm (per swept root; roots = union of dirname(registry paths) ∪ dirname(registered worktree
-paths), extendable via repeatable `--root`; swept roots disclosed in output — no silent caps):
-directories only, skip dot-dirs/node_modules, no-follow symlinks/junctions (mail.ts:435-451 idiom).
-Positive evidence required: `.git` FILE with nonexistent `gitdir:` target → **dangling-gitdir-pointer**;
-no `.git` + name prefix-matches a registered repo + `node_modules` present → **residue-shape**;
-`.git` file, target exists, but absent from home repo's worktree list → **deregistered-intact**.
-A dir with a `.git` DIRECTORY is never a husk. The registered-worktree join is case-folded on win32
-only (GCA #2293, author-sandbox.ts:121) so a registered worktree never double-reports as a husk.
+Husk arm (per swept root; directories only, skip dot-dirs/node_modules, no-follow symlinks/junctions
+(mail.ts:435-451 idiom); swept roots disclosed in output — no silent caps).
+
+### Evidence model as built (falsification fold, 2026-08-05)
+
+The as-drafted husk arm found 0 of 24 real husks on the author's host. Three suppressors were ruled
+out, and the model is now **root-kind-typed**:
+
+- **Root kinds.** CONTAINER = `<repo>/.claude/worktrees` (for every toplevel-verified registered
+  repo) and every `--root` the operator names — a location whose whole purpose is holding worktrees.
+  STANDARD = dirname(registry path) ∪ dirname(each LISTED worktree) — an ordinary working directory.
+  A root reached as both is CONTAINER (the more specific declaration wins).
+- **Evidence by kind.** Under CONTAINER, an untracked dir with no `.git` DIRECTORY is
+  **container-residue** — location IS the evidence, no name convention or `node_modules` needed;
+  the `.git`-FILE classes still win when they apply. Under STANDARD the drafted classes are
+  unchanged: `.git` FILE with nonexistent `gitdir:` → **dangling-gitdir-pointer**; no `.git` + name
+  prefix-matches a registered repo (LONGEST match) + `node_modules` → **residue-shape**; `.git` file
+  whose target exists but is absent from its home repo's worktree list → **deregistered-intact**
+  (home resolution accepts both `<repo>/.git/worktrees/<n>` and bare `<repo>.git/worktrees/<n>`).
+- **What protects a path.** GIT's worktree list (cohort-overlay §2) plus the `.git`-DIRECTORY rule.
+  Totem-registry membership is NOT protection — registry accounting and disk residue are different
+  axes, so one path may carry both a repo row and a husk row. The git join is case-folded on win32
+  only (GCA #2293, author-sandbox.ts:121); on POSIX two case-divergent paths stay distinct.
+- **Toplevel verification.** A registry entry is enumerated only if `rev-parse --show-toplevel`
+  equals it; otherwise it is a `notGitRoot` row naming its `enclosingRepo`, and NOTHING is derived
+  from it (not its dirname, and above all not git's ancestor answer).
+- **Derivation disclosure.** A root suppressed by any rule — os tmpdir reached only from a registry
+  dirname, or a dirname reachable only from missing / not-git-root entries — lands in
+  `excludedRoots` with its reason. A root some other derivation reached is swept and never reported
+  excluded.
 
 ### State lifecycle
 
@@ -216,34 +242,47 @@ no registry mutation, no caching. The `--json` artifact is the only cross-bounda
 
 ### Failure modes
 
-| Failure                                           | Category  | Agent-facing surface                                                                                                            | Recovery                        |
-| ------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| Registry absent/unreadable/malformed              | init      | SKIP row "no registered repos" (readRegistry warn passed through); `--json` emits degenerate artifact (parity :1528 precedent)  | run `totem sync` in a repo      |
-| Registry entry path missing                       | runtime   | repo row `missing: true` (list.ts [MISSING] parity), no scan of it                                                              | re-sync or stale entry ages out |
-| `git worktree list` fails / not a repo / timeout  | runtime   | repo-level `unscannable` row + warn line                                                                                        | fix repo, re-run                |
-| `git status`/ancestry probe fails in one worktree | runtime   | worktree `class: unscannable`, evidence names the errno/step                                                                    | re-run                          |
-| Sweep root unreadable                             | runtime   | root listed in `unscannable`, other roots proceed                                                                               | permissions                     |
-| Dir vanishes mid-scan (TOCTOU)                    | transient | per-entry catch → `unscannable`                                                                                                 | re-run                          |
-| Default branch underivable                        | runtime   | `ancestryMerged: 'unknown'` → indeterminate                                                                                     | —                               |
-| Unclassifiable worktree-shaped dir                | runtime   | NOT listed as husk (no evidence) — by design; the sweep reports evidence-bearing rows only, disclosure line states the criteria | slice-2+ may widen              |
+| Failure                                           | Category  | Agent-facing surface                                                                                                                          | Recovery                        |
+| ------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Registry absent/unreadable/malformed              | init      | SKIP row "no registered repos" (readRegistry warn passed through); `--json` emits degenerate artifact (parity :1528 precedent)                | run `totem sync` in a repo      |
+| Registry entry path missing                       | runtime   | repo row `missing: true` (list.ts [MISSING] parity), no scan of it                                                                            | re-sync or stale entry ages out |
+| `git worktree list` fails / not a repo / timeout  | runtime   | repo-level `unscannable` row + warn line                                                                                                      | fix repo, re-run                |
+| `git status`/ancestry probe fails in one worktree | runtime   | worktree `class: unscannable`, evidence names the errno/step                                                                                  | re-run                          |
+| Sweep root unreadable                             | runtime   | root listed in `unscannable`, other roots proceed                                                                                             | permissions                     |
+| Dir vanishes mid-scan (TOCTOU)                    | transient | per-entry catch → `unscannable`; a dir readdir named but that is gone at probe time → `unscannable` "vanished or turned unreadable mid-sweep" | re-run                          |
+| Registry entry exists but is not a git toplevel   | runtime   | repo row `notGitRoot: true` + `enclosingRepo`; never enumerated, derives no sweep root (its dirname is disclosed in `excludedRoots`)          | re-sync from the repo root      |
+| Default branch underivable                        | runtime   | `ancestryMerged: 'unknown'` → indeterminate                                                                                                   | —                               |
+| Unclassifiable worktree-shaped dir                | runtime   | NOT listed as husk (no evidence) — by design; the sweep reports evidence-bearing rows only, disclosure line states the criteria               | slice-2+ may widen              |
 
 No silent-degradation rows: every probe failure is an `unscannable` entry or a named skip (Tenet 4).
 Exit code is 0 in all cases (report-only sensor; crash-class errors still throw normally).
 
 ### Invariants to lock in via tests
 
-1. A path present in any repo's `worktree list` is NEVER a husk-candidate — including when git and
-   Node disagree on drive-letter case (win32 fold; POSIX unfolded).
+1. A path present in any repo's GIT `worktree list` is NEVER a husk-candidate — including when git
+   and Node disagree on drive-letter case (win32 fold). On POSIX the join is unfolded, so two
+   case-divergent paths stay distinct and a listed `/A/wt` does not protect `/a/wt`. Totem-registry
+   membership grants no such protection (falsification fold).
 2. Clean + not-ancestry-merged is `indeterminate`, never `stale` (squash honesty); clean + merged is
    `stale`; dirty is `active` regardless of merge state.
 3. A husk row exists only with a typed evidence class; a `.git`-DIRECTORY dir is never reported.
 4. A dangling `.git` pointer file is a husk-candidate even when its name matches no convention.
 5. Total accounting: every enumerated candidate lands in exactly one of {classified, huskCandidates,
-   unscannable} — nothing dropped silently; summary counts equal row counts.
-6. Empty/unreadable registry → SKIP surface + valid degenerate `--json` artifact, exit 0.
+   unscannable} — nothing dropped silently; summary counts equal row counts. Tested by enumerating
+   the swept roots' children independently and accounting for each, with the exempt shapes (dot-dirs,
+   `node_modules`, `.git`-DIRECTORY dirs, git-known paths, no-evidence STANDARD-root dirs) asserted
+   as an EXPLICIT list — so a silent cap or a dropped candidate fails the test.
+6. Empty/unreadable registry → SKIP surface + valid degenerate `--json` artifact, exit 0. The
+   artifact's `registry-status` distinguishes `empty` from `unreadable`.
 7. The scan invokes only read verbs (exec-fn spy asserts the allowlist: worktree list / status /
-   merge-base / log / rev-parse); zero fs writes.
+   merge-base / log / rev-parse --abbrev-ref / rev-parse --show-toplevel) and EVERY invocation
+   begins with `--no-optional-locks`, which is what makes the read-only claim true: `git status`
+   otherwise refreshes and writes the index, taking `index.lock` (git-status(1) § BACKGROUND
+   REFRESH) and racing a seat's live `git add` in a shared worktree. Zero fs writes.
 8. `--json` owns stdout wholesale; human lines never interleave.
+9. The ambient `doctor` row is `gateExempt` on every path: it reports through doctor but never gates
+   under any `--strict` tier, and its pass/warn messages name the missing-registry-path and
+   unscannable-probe counts whenever nonzero.
 
 ### Open questions — ALL RESOLVED (operator-ruled 2026-08-05, design approved as drafted)
 

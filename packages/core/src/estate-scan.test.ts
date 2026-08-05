@@ -8,6 +8,13 @@
  * porcelain, so the tests assert the CLASSIFIER, not the local git install.
  * The filesystem side (husk sweep) uses real temp trees, because the evidence
  * classes are literally fs shapes.
+ *
+ * Known untested arm: the mid-sweep TOCTOU path in `classifyHusk` (a directory
+ * that readdir named and that vanishes before the `.git` probe, recorded as
+ * `vanished or turned unreadable mid-sweep`). Reaching it needs a race between
+ * two fs syscalls, which is not portably schedulable without an fs seam the
+ * scan does not have. Recorded as a gap rather than covered by a test that
+ * would assert nothing.
  */
 
 import * as fs from 'node:fs';
@@ -109,6 +116,14 @@ interface EstateFixture {
   failStatus?: string[];
   /** Refs whose `merge-base` throws a real error (not the exit-1 "not ancestor"). */
   failAncestry?: string[];
+  /**
+   * Registry path → the toplevel git discovers from it. Defaults to the path
+   * itself (the entry IS a git root); set it to an ANCESTOR to fixture the
+   * not-git-root case.
+   */
+  toplevels?: Record<string, string>;
+  /** Paths whose `rev-parse --show-toplevel` throws. */
+  failToplevel?: string[];
 }
 
 function execFailure(message: string, status: number): Error {
@@ -123,17 +138,25 @@ function makeExec(fixture: EstateFixture, calls: string[][]): EstateExecFn {
   const merged = new Set(fixture.merged ?? []);
   const failStatus = new Set((fixture.failStatus ?? []).map(fold));
   const failAncestry = new Set(fixture.failAncestry ?? []);
+  const toplevels = new Map(Object.entries(fixture.toplevels ?? {}).map(([k, v]) => [fold(k), v]));
+  const failToplevel = new Set((fixture.failToplevel ?? []).map(fold));
 
   return (command: string, args: string[] = []): string => {
     calls.push([command, ...args]);
-    const cwd = args[1] ?? '';
-    const verb = args.slice(2);
+    // Production argv is `git --no-optional-locks -C <cwd> <verb…>`.
+    const cwd = args[2] ?? '';
+    const verb = args.slice(3);
     const key = fold(cwd);
 
     if (verb[0] === 'worktree') {
       const listed = lists.get(key);
       if (listed === undefined) throw execFailure(`not a git repository: ${cwd}`, 128);
       return listed;
+    }
+    if (verb[0] === 'rev-parse' && verb[1] === '--show-toplevel') {
+      if (failToplevel.has(key)) throw execFailure(`not a git repository: ${cwd}`, 128);
+      // Default: the probed path IS the git root.
+      return gitPath(toplevels.get(key) ?? path.resolve(cwd));
     }
     if (verb[0] === 'rev-parse') {
       const ref = refs.get(key);
@@ -250,45 +273,62 @@ describe('parseWorktreeListPorcelain', () => {
 // ─── Invariant 1 ────────────────────────────────────────
 
 describe('invariant 1 — a path in any repo worktree list is NEVER a husk candidate', () => {
-  it('joins registered worktrees case-folded on win32 so a drive-case disagreement cannot double-report', () => {
+  /**
+   * The fold is platform-conditional, so BOTH arms are exercised by stubbing
+   * `process.platform` — otherwise the POSIX assertion is a tautology on a
+   * Windows host and vice versa. The fixture is identical in both runs: a
+   * container root holding a directory whose on-disk name differs from the
+   * listed worktree path only in case.
+   */
+  function foldFixture(platform: string): EstateScanResult {
     const repo = mkdir('repo');
-    const wt = mkdir('repo-2580');
-    // The worktree carries a DANGLING pointer, so it would be a husk on
-    // evidence alone — only the registered-worktree join keeps it out.
-    writeGitdirPointer(wt, path.join(root, 'repo', '.git', 'worktrees', 'repo-2580'));
-
-    // Git and Node disagreeing on drive-letter case is the win32 hazard the
-    // fold exists for (GCA #2293); on POSIX the same path is passed through
-    // unfolded, since folding there would conflate genuinely distinct paths.
-    const asGitPrintsIt =
-      process.platform === 'win32'
-        ? wt.charAt(0).toLowerCase() === wt.charAt(0)
-          ? wt.charAt(0).toUpperCase() + wt.slice(1)
-          : wt.charAt(0).toLowerCase() + wt.slice(1)
-        : wt;
-
-    const calls: string[][] = [];
-    const result = scanEstate({
-      registry: [{ path: repo }],
-      now: NOW,
-      safeExec: makeExec(
-        {
-          lists: {
-            [repo]: porcelain([
-              { path: repo, branch: 'refs/heads/main' },
-              { path: asGitPrintsIt, branch: 'refs/heads/2580' },
-            ]),
+    mkdir('repo', '.claude', 'worktrees');
+    const onDisk = mkdir('repo', '.claude', 'worktrees', 'agent-x');
+    const asGitPrintsIt = path.join(root, 'repo', '.claude', 'worktrees', 'AGENT-X');
+    const original = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+    try {
+      const calls: string[][] = [];
+      const result = scanEstate({
+        registry: [{ path: repo }],
+        now: NOW,
+        safeExec: makeExec(
+          {
+            lists: {
+              [repo]: porcelain([
+                { path: repo, branch: 'refs/heads/main' },
+                { path: asGitPrintsIt, branch: 'refs/heads/2580' },
+              ]),
+            },
+            defaultRefs: { [repo]: 'origin/main' },
+            merged: ['refs/heads/2580'],
           },
-          defaultRefs: { [repo]: 'origin/main' },
-          merged: ['refs/heads/2580'],
-        },
-        calls,
-      ),
-    });
+          calls,
+        ),
+      });
+      expect(path.basename(onDisk)).toBe('agent-x');
+      return result;
+    } finally {
+      Object.defineProperty(process, 'platform', original);
+    }
+  }
 
+  it('win32: a drive/case disagreement between git and Node cannot double-report a live worktree', () => {
+    const result = foldFixture('win32');
+    // Folded join: git's `AGENT-X` and the on-disk `agent-x` are the SAME path,
+    // so the live worktree is never also a husk candidate (GCA #2293).
     expect(result.huskCandidates).toEqual([]);
     expect(result.worktrees).toHaveLength(1);
     expect(result.worktrees[0]!.class).toBe('registered-stale');
+  });
+
+  it('POSIX: two case-divergent paths stay DISTINCT — a listed /A/wt does not protect /a/wt', () => {
+    const result = foldFixture('linux');
+    // Unfolded join: `AGENT-X` protects only itself. The on-disk `agent-x` is a
+    // genuinely different path on a case-sensitive filesystem and stays a
+    // candidate — folding here would conflate real paths.
+    expect(result.huskCandidates.map((h) => path.basename(h.path))).toEqual(['agent-x']);
+    expect(result.huskCandidates[0]!.evidence).toBe('container-residue');
   });
 
   it('never husks the main worktree (the repo itself) even though it is swept', () => {
@@ -632,7 +672,10 @@ describe('sweep-root derivation — evidence-ranked, disclosed when narrowed', (
     });
     expect(result.sweptRoots).toContain(root);
     expect(result.sweptRoots).not.toContain(nested);
-    expect(result.excludedRoots).toEqual([]);
+    // Suppressed, not silently dropped (the disclosure covers every narrowing).
+    expect(result.excludedRoots).toEqual([
+      { path: nested, reason: 'derived only from missing registry entry path(s)' },
+    ]);
     expect(result.repos.find((r) => r.missing === true)!.path).toBe(path.join(nested, 'gone'));
   });
 
@@ -697,6 +740,167 @@ describe('sweep-root derivation — evidence-ranked, disclosed when narrowed', (
   });
 });
 
+// ─── Toplevel verification ──────────────────────────────
+
+describe('registered arm — a registry entry must be a git TOPLEVEL to be enumerated', () => {
+  it('reports a not-git-root entry with its enclosing repo and derives nothing from it', () => {
+    const repo = mkdir('repo');
+    const inside = mkdir('repo', 'packages', 'core');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }, { path: inside }],
+      now: NOW,
+      safeExec: makeExec(
+        {
+          lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) },
+          // git -C <repo>/packages/core discovers the ANCESTOR repo.
+          toplevels: { [inside]: repo },
+        },
+        calls,
+      ),
+    });
+
+    const row = result.repos.find((r) => r.path === inside)!;
+    expect(row.notGitRoot).toBe(true);
+    expect(row.enclosingRepo).toBe(repo);
+    expect(row.worktrees).toBe(0);
+    // Neither its dirname nor git's ancestor answer may feed the sweep.
+    expect(result.sweptRoots).not.toContain(path.join(repo, 'packages'));
+    expect(result.excludedRoots.map((r) => r.path)).toContain(path.join(repo, 'packages'));
+    expect(result.excludedRoots.find((r) => r.path === path.join(repo, 'packages'))!.reason).toBe(
+      'derived only from non-git-root registry entry path(s)',
+    );
+    // The ancestor's worktree list is never requested on its behalf.
+    expect(calls.filter((c) => c.includes('worktree'))).toHaveLength(1);
+  });
+
+  it('keeps the unscannable-repo path when the toplevel probe itself fails', () => {
+    const repo = mkdir('repo');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec({ lists: {}, failToplevel: [repo] }, calls),
+    });
+    expect(result.repos).toHaveLength(1);
+    expect(result.repos[0]!.notGitRoot).toBeUndefined();
+    expect(result.unscannable).toHaveLength(1);
+    expect(result.unscannable[0]!.reason).toContain('rev-parse --show-toplevel failed');
+    expect(calls.some((c) => c.includes('worktree'))).toBe(false);
+  });
+});
+
+// ─── Container roots ────────────────────────────────────
+
+describe('container roots — location is the evidence', () => {
+  function containerEstate(extraRoots?: string[]): EstateScanResult {
+    const repo = mkdir('repo');
+    mkdir('repo', '.claude', 'worktrees', 'agent-abc');
+    mkdir('repo', '.claude', 'worktrees', 'kimi-2385');
+    const live = path.join(root, 'repo', '.claude', 'worktrees', 'agent-live');
+    fs.mkdirSync(live, { recursive: true });
+
+    const calls: string[][] = [];
+    return scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      ...(extraRoots === undefined ? {} : { extraRoots }),
+      safeExec: makeExec(
+        {
+          lists: {
+            [repo]: porcelain([
+              { path: repo, branch: 'refs/heads/main' },
+              { path: live, branch: 'refs/heads/live' },
+            ]),
+          },
+          defaultRefs: { [repo]: 'origin/main' },
+        },
+        calls,
+      ),
+    });
+  }
+
+  it('sweeps <repo>/.claude/worktrees and reports untracked dirs as container-residue', () => {
+    const result = containerEstate();
+    expect(result.sweptRoots).toContain(path.join(root, 'repo', '.claude', 'worktrees'));
+    const husks = Object.fromEntries(
+      result.huskCandidates.map((h) => [path.basename(h.path), h.evidence]),
+    );
+    // No name convention, no node_modules, no `.git` at all — the location
+    // alone qualifies them.
+    expect(husks).toEqual({ 'agent-abc': 'container-residue', 'kimi-2385': 'container-residue' });
+  });
+
+  it('never husks a LIVE worktree inside a container root', () => {
+    const result = containerEstate();
+    expect(result.huskCandidates.map((h) => path.basename(h.path))).not.toContain('agent-live');
+    expect(result.worktrees.map((w) => path.basename(w.path))).toContain('agent-live');
+  });
+
+  it('treats a --root as a container declaration too', () => {
+    const scratch = mkdir('scratch');
+    fs.mkdirSync(path.join(scratch, 'leftover-wt'));
+    const result = containerEstate([scratch]);
+    const leftover = result.huskCandidates.find(
+      (h) => h.path === path.join(scratch, 'leftover-wt'),
+    )!;
+    expect(leftover.evidence).toBe('container-residue');
+  });
+
+  it('still refuses a `.git`-DIRECTORY dir under a container root', () => {
+    const repo = mkdir('repo');
+    mkdir('repo', '.claude', 'worktrees', 'real-clone', '.git');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    expect(result.huskCandidates).toEqual([]);
+  });
+
+  it('prefers the stronger dangling-pointer class over container-residue', () => {
+    const repo = mkdir('repo');
+    const dangling = mkdir('repo', '.claude', 'worktrees', 'agent-dangling');
+    writeGitdirPointer(dangling, path.join(root, 'gone', '.git', 'worktrees', 'agent-dangling'));
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    expect(result.huskCandidates).toHaveLength(1);
+    expect(result.huskCandidates[0]!.evidence).toBe('dangling-gitdir-pointer');
+  });
+
+  it('reports a registry-registered directory that is also disk residue on BOTH axes', () => {
+    // Registry membership is not protection: `totem sync` having touched a path
+    // once says nothing about whether the worktree still exists.
+    const repo = mkdir('repo');
+    const residue = mkdir('repo', '.claude', 'worktrees', 'agent-registered');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }, { path: residue }],
+      now: NOW,
+      safeExec: makeExec(
+        {
+          lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) },
+          toplevels: { [residue]: repo },
+        },
+        calls,
+      ),
+    });
+    expect(result.repos.find((r) => r.path === residue)!.notGitRoot).toBe(true);
+    expect(result.huskCandidates.map((h) => h.path)).toContain(residue);
+  });
+});
+
 // ─── Residue attribution ────────────────────────────────
 
 describe('residue-shape attribution takes the most specific repo name', () => {
@@ -724,6 +928,115 @@ describe('residue-shape attribution takes the most specific repo name', () => {
     expect(result.huskCandidates[0]!.path).toBe(husk);
     expect(result.huskCandidates[0]!.evidence).toBe('residue-shape');
     expect(result.huskCandidates[0]!.matchedRepo).toBe(strategy);
+  });
+});
+
+// ─── Multi-husk totality ────────────────────────────────
+
+describe('accounting totality across a multi-husk estate', () => {
+  it('reports every husk and accounts for EVERY enumerated candidate dir', () => {
+    const repo = mkdir('repo');
+    const container = mkdir('repo', '.claude', 'worktrees');
+    const agentA = mkdir('repo', '.claude', 'worktrees', 'agent-a');
+    const agentB = mkdir('repo', '.claude', 'worktrees', 'agent-b');
+    const liveWt = mkdir('repo', '.claude', 'worktrees', 'live-wt');
+    const dangling = mkdir('zzz-dangling');
+    writeGitdirPointer(dangling, path.join(root, 'gone', '.git', 'worktrees', 'zzz'));
+    const residue = mkdir('repo-residue');
+    fs.mkdirSync(path.join(residue, 'node_modules'));
+    const plain = mkdir('plain-dir');
+    const otherCheckout = mkdir('other-checkout');
+    fs.mkdirSync(path.join(otherCheckout, '.git'));
+    const nodeModules = mkdir('node_modules');
+    const hidden = mkdir('.hidden');
+
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        {
+          lists: {
+            [repo]: porcelain([
+              { path: repo, branch: 'refs/heads/main' },
+              { path: liveWt, branch: 'refs/heads/live' },
+            ]),
+          },
+          defaultRefs: { [repo]: 'origin/main' },
+        },
+        calls,
+      ),
+    });
+
+    // (i) every husk is reported — a one-husk cap would fail this outright.
+    expect(Object.fromEntries(result.huskCandidates.map((h) => [h.path, h.evidence]))).toEqual({
+      [agentA]: 'container-residue',
+      [agentB]: 'container-residue',
+      [dangling]: 'dangling-gitdir-pointer',
+      [residue]: 'residue-shape',
+    });
+
+    // (ii) totality: enumerate the swept roots' children independently and
+    // account for each one. Buckets first — they must be pairwise disjoint.
+    const classified = new Set(result.worktrees.map((w) => w.path));
+    const husks = new Set(result.huskCandidates.map((h) => h.path));
+    const failed = new Set(result.unscannable.map((u) => u.path));
+    for (const p of classified) expect(husks.has(p) || failed.has(p)).toBe(false);
+    for (const p of husks) expect(failed.has(p)).toBe(false);
+
+    const enumerated: string[] = [];
+    for (const sweptRoot of result.sweptRoots) {
+      for (const dirent of fs.readdirSync(sweptRoot, { withFileTypes: true })) {
+        if (dirent.isDirectory()) enumerated.push(path.join(sweptRoot, dirent.name));
+      }
+    }
+    const unaccounted = enumerated
+      .filter((p) => !classified.has(p) && !husks.has(p) && !failed.has(p))
+      .sort();
+
+    // Every remaining dir is one of the NAMED exempt shapes, listed explicitly
+    // so a newly-dropped candidate fails here instead of vanishing:
+    //   .hidden       — dot-dir, never swept
+    //   node_modules  — name-excluded
+    //   other-checkout— carries a `.git` DIRECTORY (a real checkout)
+    //   plain-dir     — no evidence under a STANDARD root
+    //   repo          — git-known (its own worktree list names it)
+    // `live-wt` is NOT exempt: it is git-known AND lands in the worktrees
+    // bucket as a classified row, which the assertion below pins.
+    expect(classified.has(liveWt)).toBe(true);
+    expect(unaccounted).toEqual([hidden, nodeModules, otherCheckout, plain, repo].sort());
+    expect(result.sweptRoots).toEqual([container, root].sort());
+  });
+});
+
+// ─── Bare-repo gitdir layout ────────────────────────────
+
+describe('homeRepoFromGitdir accepts the bare-repo worktree layout', () => {
+  it('resolves `<repo>.git/worktrees/<n>` to the `.git`-suffixed repo dir', () => {
+    const repo = mkdir('repo');
+    const bare = mkdir('bare-mirror.git');
+    const gitdir = mkdir('bare-mirror.git', 'worktrees', 'orphan');
+    const orphan = mkdir('orphan-wt');
+    writeGitdirPointer(orphan, gitdir);
+
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        {
+          lists: {
+            [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]),
+            // The bare mirror still answers, and no longer lists the orphan.
+            [bare]: porcelain([{ path: bare, branch: 'refs/heads/main' }]),
+          },
+        },
+        calls,
+      ),
+    });
+    const row = result.huskCandidates.find((h) => h.path === orphan)!;
+    expect(row.evidence).toBe('deregistered-intact');
+    expect(row.matchedRepo).toBe(bare);
   });
 });
 
@@ -770,6 +1083,7 @@ describe('invariant 7 — read verbs only, zero filesystem writes', () => {
     'merge-base --is-ancestor',
     'log -1 --format=%ct',
     'rev-parse --abbrev-ref',
+    'rev-parse --show-toplevel',
   ];
 
   it('invokes no git verb outside the read allowlist across a full mixed scan', () => {
@@ -805,10 +1119,16 @@ describe('invariant 7 — read verbs only, zero filesystem writes', () => {
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) {
       expect(call[0]).toBe('git');
-      // Every invocation is `git -C <path> <verb…>`; the verb is what the
-      // allowlist constrains.
-      expect(call[1]).toBe('-C');
-      const verb = call.slice(3).join(' ');
+      // `--no-optional-locks` is what makes the read-only claim true rather
+      // than aspirational: without it `git status` refreshes and WRITES the
+      // index, taking index.lock (git-status(1) § BACKGROUND REFRESH). Asserted
+      // on EVERY invocation, not just the status ones — a future verb must not
+      // be able to opt out silently.
+      expect(call[1]).toBe('--no-optional-locks');
+      // Every invocation is `git --no-optional-locks -C <path> <verb…>`; the
+      // verb is what the allowlist constrains.
+      expect(call[2]).toBe('-C');
+      const verb = call.slice(4).join(' ');
       expect(
         READ_VERBS.some((allowed) => verb.startsWith(allowed)),
         `non-read git verb invoked: ${verb}`,

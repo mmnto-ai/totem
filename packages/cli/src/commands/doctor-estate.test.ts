@@ -99,11 +99,16 @@ function fixtureEstate(): { repo: string; exec: EstateExecFn } {
   ].join('\n');
 
   const exec: EstateExecFn = (command: string, args: string[] = []): string => {
-    const cwd = fold(args[1] ?? '');
-    const verb = args.slice(2);
+    // Production argv is `git --no-optional-locks -C <cwd> <verb…>`.
+    const cwd = fold(args[2] ?? '');
+    const verb = args.slice(3);
     if (verb[0] === 'worktree') {
       if (cwd !== fold(repo)) throw Object.assign(new Error('not a repo'), { status: 128 });
       return listing;
+    }
+    // Every fixture path is its own git toplevel unless a test says otherwise.
+    if (verb[0] === 'rev-parse' && verb[1] === '--show-toplevel') {
+      return cwd.split(path.sep).join('/');
     }
     if (verb[0] === 'rev-parse') return 'origin/main';
     if (verb[0] === 'status') return '';
