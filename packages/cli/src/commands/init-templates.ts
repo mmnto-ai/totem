@@ -766,7 +766,7 @@ export const CLAUDE_PREWRITESHIELD_ENTRY = {
 // runtime when Claude execs them.
 export const CLAUDE_SESSION_START = `// [totem] auto-generated — Claude Code SessionStart hook
 // Runs \`@mmnto/cli describe\` at the start of every Claude Code session.
-// Mirrors \`.gemini/hooks/SessionStart.js\`. \`.cjs\` extension because
+// Mirrors \`.gemini/hooks/SessionStart.cjs\`. \`.cjs\` extension because
 // package.json may have "type": "module" — Claude Code execs hooks via
 // plain \`node\`, which would otherwise treat \`.js\` as ESM.
 //
@@ -1396,12 +1396,13 @@ export const GEMINI_BEFORE_TOOL_LEGACY_REL = '.gemini/hooks/BeforeTool.js';
 // (mmnto-ai/totem#2488, closing the #2481 slice's deliberate scope-out). Its body is
 // CommonJS too (top-level `require('child_process')` for the describe/orient briefings
 // and the totem-status refresh spawn), so in a `"type": "module"` consumer Node resolves
-// a bare `.js` as ESM and the hook throws `ReferenceError: require is not defined` before
-// it emits anything — and Gemini CLI degrades the crashed hook to a warning, so the
-// session-start context injection fail-opens SILENTLY (the agent boots cold believing it
-// was briefed). No `.gemini/settings.json` registration exists for SessionStart (Gemini
-// CLI discovers the session hook by path — the mmnto-ai/totem#2558 posture), so unlike
-// BeforeTool there is no registration seam to migrate; the file rename is the whole fix.
+// a bare `.js` as ESM and the hook throws `ReferenceError: require is not defined`
+// before it emits anything — the session-start briefing fail-opens SILENTLY. Per
+// mmnto-ai/totem#2558, `totem init` emits no `.gemini/settings.json` SessionStart
+// registration and Gemini CLI has no filename-convention discovery, so this file only
+// ever executes via host/plain-node paths (exactly where the live break surfaced, on
+// totem-status) — and unlike BeforeTool there is no registration seam to migrate; the
+// file rename is the whole fix. Arming the hook in Gemini CLI stays #2558's scope.
 export const GEMINI_SESSION_START_REL = '.gemini/hooks/SessionStart.cjs';
 
 // The pre-#2488 path, migrated to GEMINI_SESSION_START_REL via

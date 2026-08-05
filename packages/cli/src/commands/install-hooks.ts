@@ -1229,6 +1229,11 @@ export interface GeminiHookMigrationResult {
   /** `migrated` — successor materialized + legacy removed; `declined` — drifted
    *  unbounded, awaits `--force`; `skipped` — user-owned file, never touched. */
   action: 'migrated' | 'declined' | 'skipped';
+  /** Present only on `skipped` when the block was a USER-OWNED file at the
+   *  SUCCESSOR path: the legacy file is totem-owned, but the migration never
+   *  overwrites a user's successor (even under `--force`) — both files are
+   *  left in place and the skip is disclosed (mmnto-ai/totem#2488). */
+  reason?: 'user-owned-successor';
 }
 
 /**
@@ -1242,6 +1247,12 @@ export interface GeminiHookMigrationResult {
  *   - Marker + bounded totem-owned whole file, OR `--force` → materialize successor +
  *                                          remove legacy → `migrated`.
  *   - Marker + drifted/unbounded (trailing user content), no `--force` → `declined`.
+ *   - USER-OWNED file at `successorRel`  → `skipped` + `reason: 'user-owned-successor'`,
+ *                                          even under `--force`: the ownership gate
+ *                                          protects the successor path too, so a
+ *                                          hand-authored successor (e.g. an ESM rewrite
+ *                                          of the briefing) is never clobbered by the
+ *                                          canonical write; both files stay in place.
  *
  * A write/remove failure PROPAGATES (Tenet 4 — a migration the tool cannot complete
  * fails loud, never silently reports success), matching the drift-repair path.
@@ -1274,10 +1285,23 @@ export async function migrateLegacyGeminiHooks(
       continue;
     }
 
+    // The ownership gate protects the SUCCESSOR path too (mmnto-ai/totem#2488): a
+    // user-authored file already sitting at successorRel must not be clobbered by
+    // the canonical write — refused even under `--force`, mirroring
+    // regenerateManagedSessionHooks. A totem-owned successor (marker opens it) is
+    // fair game: the write below is an idempotent repair to canonical.
+    const successorPath = path.join(cwd, ...successorRel.split('/'));
+    if (fs.existsSync(successorPath)) {
+      const successorExisting = fs.readFileSync(successorPath, 'utf-8');
+      if (!markerOpensFile(successorExisting, marker)) {
+        results.push({ file: legacyRel, action: 'skipped', reason: 'user-owned-successor' });
+        continue;
+      }
+    }
+
     // Materialize the successor (idempotent — canonical content) then remove the
     // stale fail-open legacy file. Regenerate-only-if-present would not create the
     // renamed successor on upgrade, but a present legacy artifact is proof of adoption.
-    const successorPath = path.join(cwd, ...successorRel.split('/'));
     fs.mkdirSync(path.dirname(successorPath), { recursive: true });
     fs.writeFileSync(successorPath, content, 'utf-8');
     fs.rmSync(legacyPath);
@@ -1368,7 +1392,7 @@ export function migrateGeminiHookRegistration(cwd: string): { changed: boolean; 
  * materialized `.cjs` successor is reported as already-current by drift-repair.
  */
 async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Promise<void> {
-  for (const { file, action } of await migrateLegacyGeminiHooks(cwd, force)) {
+  for (const { file, action, reason } of await migrateLegacyGeminiHooks(cwd, force)) {
     switch (action) {
       case 'migrated':
         console.error(
@@ -1381,7 +1405,11 @@ async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Pr
         );
         break;
       case 'skipped':
-        console.error(`[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`);
+        console.error(
+          reason === 'user-owned-successor'
+            ? `[Totem] ${file}: its .cjs successor already exists and is user-owned — left both files untouched (remove the legacy .js manually if unwanted).`
+            : `[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`,
+        );
         break;
     }
   }

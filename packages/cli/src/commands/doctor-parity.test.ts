@@ -1246,8 +1246,15 @@ describe('checkParity — session-start-orientation wiring', () => {
     // `detectGeneratedArtifactContract`'s absent-consumer branch reports as honest
     // `skip` ("cohort permits absence") — NOT drift. The stale `.js` it still carries
     // is simply no longer a parity surface; `totem hook install` is what removes it.
+    // The manifest is marked blocking so the blockingDriftIds assertion below can
+    // actually fail: only a `warn` on a `blocking: true` contract enters the set, so
+    // on a non-blocking manifest the assertion would pass vacuously even on `warn`.
+    const blocking = SESSION_START_MANIFEST_YAML.replace(
+      'tracking-issue: mmnto-ai/totem-strategy#438\n',
+      'tracking-issue: mmnto-ai/totem-strategy#438\n    blocking: true\n',
+    );
     writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
-    writeManifest('m.yaml', SESSION_START_MANIFEST_YAML);
+    writeManifest('m.yaml', blocking);
     writeRepoFile('.gemini/hooks/SessionStart.js', GEMINI_SESSION_START);
 
     const { results, blockingDriftIds } = await checkParity(tmpDir);
