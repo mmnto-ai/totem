@@ -541,6 +541,26 @@ export {
 export type { RegistryEntry, TotemRegistry } from './registry.js';
 export { readRegistry, updateRegistryEntry } from './registry.js';
 
+// Worktree-estate sensor (mmnto-ai/totem#2580 — read-only scan behind `doctor --estate`)
+export type {
+  EstateExcludedRoot,
+  EstateExecFn,
+  EstateHuskRow,
+  EstateRegistryEntry,
+  EstateRepoRow,
+  EstateScanInputs,
+  EstateScanResult,
+  EstateSummary,
+  EstateSweptRoot,
+  EstateUnscannableRow,
+  EstateUnscannableSource,
+  EstateWorktreeRow,
+  HuskEvidence,
+  WorktreeClass,
+  WorktreeListEntry,
+} from './estate-scan.js';
+export { ESTATE_SCHEMA_VERSION, parseWorktreeListPorcelain, scanEstate } from './estate-scan.js';
+
 // Secrets (user-defined DLP patterns)
 export type { CustomSecret, SecretsFile } from './secrets.js';
 export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secrets.js';

@@ -4,6 +4,8 @@ import * as path from 'node:path';
 
 import pc from 'picocolors';
 
+import type { EstateExecFn, TotemRegistry } from '@mmnto/totem';
+
 import { resolveGitRoot } from '../git.js';
 import { CONFIG_FILES } from '../utils.js';
 
@@ -16,6 +18,14 @@ export interface DiagnosticResult {
   status: CheckStatus;
   message: string;
   remediation?: string;
+  /**
+   * Sensor-class row: its ADVISORY statuses never gate, under any `--strict`
+   * tier (ruled scope, mmnto-ai/totem#2580). The exemption is a property of the
+   * row rather than of the tier, so a sensor cannot acquire teeth by someone
+   * widening the tier later — and it deliberately does NOT cover `fail`, which
+   * always gates (see `doctorGateFailed`).
+   */
+  gateExempt?: true;
 }
 
 // ─── Strict-gate tiers (mmnto-ai/totem#2385) ────────────
@@ -60,9 +70,17 @@ export async function resolveStrictTier(
  * The gate predicate the CLI edge applies to `doctorCommand` results. Kept
  * pure and exported so the edge stays thin and the semantics stay unit-tested
  * (the exit-code decision itself lives at the CLI edge — see DoctorOptions).
+ *
+ * The exemption is scoped to ADVISORY statuses. A `fail` gates regardless of
+ * `gateExempt`: a fail-class diagnostic is a wiring failure, and no row may be
+ * allowed to hide one. Sensor rows never emit `fail` in the first place, so the
+ * narrowing costs them nothing and closes the hole where a mislabelled row
+ * could suppress a real gate.
  */
 export function doctorGateFailed(results: readonly DiagnosticResult[], tier: StrictTier): boolean {
-  return results.some((r) => r.status === 'fail' || (tier === 'warn' && r.status === 'warn'));
+  return results.some(
+    (r) => r.status === 'fail' || (tier === 'warn' && r.status === 'warn' && r.gateExempt !== true),
+  );
 }
 
 // ─── Secret leak patterns ───────────────────────────────
@@ -1474,6 +1492,13 @@ export interface DoctorOptions {
    * row 5); mmnto-ai/totem#2385 (warn tier — the all-wiring oracle).
    */
   strict?: boolean | string;
+  /**
+   * Test seam for the ambient `Estate` row. Production callers omit it and the
+   * row reads the real user-level registry; tests pass an empty registry so the
+   * suite never shells git at whatever repos this machine happens to have
+   * synced (same hermeticity reason as the mocked `fetch` for the Ollama probe).
+   */
+  estateSeamsForTest?: Parameters<typeof checkEstate>[0];
 }
 
 // ─── Self-healing flow ──────────────────────────────────
@@ -1940,6 +1965,110 @@ export async function checkFreezes(cwd: string, totemDir = '.totem'): Promise<Di
   }
 }
 
+/**
+ * Ambient worktree-estate row (mmnto-ai/totem#2580, open question 1 ruled (a)).
+ * Quiet when the estate is clean, a named SKIP when nothing is registered, and
+ * a `warn` — never a `fail` — when husks or stale worktrees exist: this is a
+ * sensor, and the detail lives behind `totem doctor --estate`.
+ *
+ * `@mmnto/totem` is dynamic-imported INSIDE the check, per the ruling's
+ * constraint: a static core-barrel import here would pull core onto the CLI
+ * cold-start path for every command.
+ *
+ * Every return carries `gateExempt: true`: this row is sensor-class and must
+ * not gate under any `--strict` tier (mmnto-ai/totem#2580 ruled scope —
+ * removal verbs and gating are later slices).
+ */
+export async function checkEstate(
+  seams: {
+    registry?: TotemRegistry;
+    safeExec?: EstateExecFn;
+    now?: number;
+  } = {},
+): Promise<DiagnosticResult> {
+  const name = 'Estate';
+  try {
+    const { readRegistry, safeExec, scanEstate } = await import('@mmnto/totem');
+    const registryWarnings: string[] = [];
+    const registry = seams.registry ?? readRegistry((msg: string) => registryWarnings.push(msg));
+    const entries = Object.values(registry).map((entry) => ({
+      path: entry.path,
+      lastSync: entry.lastSync,
+    }));
+    if (entries.length === 0) {
+      // `readRegistry` warns only when it swallowed a non-ENOENT read/parse
+      // failure and returned `{}` — a broken registry must not read as the
+      // clean "nothing registered" skip (the same collapse `doctor --estate`
+      // already refuses in its registry-status derivation).
+      if (registryWarnings.length > 0) {
+        return {
+          name,
+          status: 'warn',
+          message: `Registry unreadable — no repos scanned: ${registryWarnings.join(' | ')}`,
+          remediation: 'Repair ~/.totem/registry.json, then run `totem doctor --estate`.',
+          gateExempt: true,
+        };
+      }
+      return {
+        name,
+        status: 'skip',
+        message: 'No registered repos — nothing to scan for worktree residue.',
+        gateExempt: true,
+      };
+    }
+
+    const result = scanEstate({
+      registry: entries,
+      safeExec: seams.safeExec ?? safeExec,
+      now: seams.now ?? Date.now(),
+    });
+    const s = result.summary;
+    // Named on EVERY row, pass included: a failed probe is a hole in the scan
+    // and a missing registry path is a repo this row never looked at. Hiding
+    // either inside a green line would be the silent degradation the sensor
+    // exists to prevent. Neither promotes the status — only husks and stale
+    // worktrees do (the ruling); registry hygiene is `totem list`'s charge.
+    const probes = s.unscannable > 0 ? ` ${s.unscannable} probe(s) unscannable.` : '';
+    // Only the registry entries this scan actually enumerated are the
+    // denominator — an entry that is missing, not a git root, or unprobeable
+    // was never looked inside, and folding it into a "repos scanned" count
+    // would overstate the coverage.
+    const enumerated = s.repos - s.reposMissing - s.reposNotGitRoot - s.reposUnscannable;
+    const caveats = [
+      s.reposMissing > 0 ? `${s.reposMissing} missing` : '',
+      s.reposNotGitRoot > 0 ? `${s.reposNotGitRoot} not-git-root` : '',
+      s.reposUnscannable > 0 ? `${s.reposUnscannable} unprobeable` : '',
+    ].filter((c) => c.length > 0);
+    const skipped = caveats.length > 0 ? ` (${caveats.join(', ')})` : '';
+
+    if (s.huskCandidates > 0 || s.stale > 0) {
+      return {
+        name,
+        status: 'warn',
+        message: `${s.stale} stale worktree(s), ${s.huskCandidates} husk candidate(s) across ${enumerated} enumerated repo(s)${skipped}.${probes}`,
+        remediation:
+          'Run `totem doctor --estate` for the per-row evidence (report-only — this row never gates).',
+        gateExempt: true,
+      };
+    }
+    return {
+      name,
+      status: 'pass',
+      message: `${enumerated} enumerated repo(s)${skipped} · ${s.worktrees} linked worktree(s); no stale worktrees or husk candidates.${probes}`,
+      gateExempt: true,
+    };
+    // totem-context: a scan failure is reported as a warn row — the estate sensor must never take `totem doctor` down with it (report-only, Tenet 13)
+  } catch (err) {
+    return {
+      name,
+      status: 'warn',
+      message: `Estate scan failed: ${err instanceof Error ? err.message : String(err)}`,
+      remediation: 'Run `totem doctor --estate` to see which probe failed.',
+      gateExempt: true,
+    };
+  }
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export async function doctorCommand(options: DoctorOptions = {}): Promise<DiagnosticResult[]> {
@@ -1998,6 +2127,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkStaleRules(cwd, '.totem', doctorThresholds),
     await checkGrandfatheredRules(cwd),
     await checkFreezes(cwd),
+    await checkEstate(options.estateSeamsForTest ?? {}),
   ];
 
   for (const result of results) {
