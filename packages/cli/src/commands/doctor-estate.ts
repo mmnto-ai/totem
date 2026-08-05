@@ -65,7 +65,10 @@ function estateJsonArtifact(
     'estate-schema-version': result.schemaVersion,
     'registry-status': registryStatus,
     'derived-at': result.derivedAt,
-    'swept-roots': result.sweptRoots,
+    // Each root carries its KIND: the kind is what decided the evidence bar
+    // inside it, so a consumer reading a husk row can tell which bar produced
+    // it without re-deriving the roots.
+    'swept-roots': result.sweptRoots.map((r) => ({ path: r.path, kind: r.kind })),
     // Additive under schema-version 1: the contract has no consumer yet, and a
     // narrowed sweep that nothing discloses is the silent degradation the
     // swept-roots disclosure exists to prevent.
@@ -99,10 +102,16 @@ function estateJsonArtifact(
       ...(h.matchedRepo !== undefined ? { 'matched-repo': h.matchedRepo } : {}),
       ...(h.ageDays !== undefined ? { 'age-days': h.ageDays } : {}),
     })),
-    unscannable: result.unscannable.map((u) => ({ path: u.path, reason: u.reason })),
+    unscannable: result.unscannable.map((u) => ({
+      path: u.path,
+      reason: u.reason,
+      source: u.source,
+    })),
     summary: {
       repos: result.summary.repos,
       'repos-missing': result.summary.reposMissing,
+      'repos-not-git-root': result.summary.reposNotGitRoot,
+      'repos-unscannable': result.summary.reposUnscannable,
       worktrees: result.summary.worktrees,
       active: result.summary.active,
       stale: result.summary.stale,
@@ -129,12 +138,15 @@ function degenerateArtifact(now: number, registryStatus: RegistryStatus): Record
       sweptRoots: [],
       excludedRoots: [],
       repos: [],
+
       worktrees: [],
       huskCandidates: [],
       unscannable: [],
       summary: {
         repos: 0,
         reposMissing: 0,
+        reposNotGitRoot: 0,
+        reposUnscannable: 0,
         worktrees: 0,
         active: 0,
         stale: 0,
@@ -223,7 +235,9 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   log.info(TAG, bold('── worktree estate ──'));
   log.info(
     TAG,
-    `${s.repos} registered repo(s) · ${s.worktrees} linked worktree(s) · swept ${result.sweptRoots.length} root(s): ${result.sweptRoots.map(render).join(', ')}`,
+    `${s.repos} registered repo(s) · ${s.worktrees} linked worktree(s) · swept ${result.sweptRoots.length} root(s): ${result.sweptRoots
+      .map((r) => `${render(r.path)} (${r.kind})`)
+      .join(', ')}`,
   );
   for (const excluded of result.excludedRoots) {
     log.dim(TAG, `not swept: ${render(excluded.path)} — ${render(excluded.reason)}`);
@@ -296,6 +310,6 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   );
   log.dim(
     TAG,
-    'husk criteria (evidence-bearing rows only): dangling `.git` pointer · no `.git` + registered-repo name prefix + node_modules · intact pointer absent from its home repo worktree list. Report-only — nothing is removed.',
+    'husk criteria by root kind — container roots (`<repo>/.claude/worktrees` and any --root) use LOCATION as evidence: any directory git tracks no worktree for and that has no `.git` directory is container-residue. Standard roots (parents of registry paths and of listed worktrees) require SHAPE evidence: a dangling `.git` pointer · no `.git` + verified-repo name prefix + node_modules · an intact pointer absent from its home repo worktree list. Report-only — nothing is removed.',
   );
 }

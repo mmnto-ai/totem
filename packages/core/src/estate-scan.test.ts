@@ -189,6 +189,16 @@ function classesOf(result: EstateScanResult): Record<string, string> {
   return Object.fromEntries(result.worktrees.map((w) => [path.basename(w.path), w.class]));
 }
 
+/** Swept-root paths only — the kind is asserted separately where it matters. */
+function rootPaths(result: EstateScanResult): string[] {
+  return result.sweptRoots.map((r) => r.path);
+}
+
+/** The sweep-axis failure ledger — the only axis the candidate partition covers. */
+function sweepFailures(result: EstateScanResult): string[] {
+  return result.unscannable.filter((u) => u.source === 'sweep').map((u) => u.path);
+}
+
 /** Every entry under `dir` with its kind, size, and mtime — a write-detector. */
 function treeSnapshot(dir: string, prefix = ''): string[] {
   const out: string[] = [];
@@ -454,6 +464,39 @@ describe('invariant 2 — clean+unmerged is indeterminate, never stale (squash h
 // ─── Invariant 3 ────────────────────────────────────────
 
 describe('invariant 3 — husks require typed evidence; a `.git` DIRECTORY is never one', () => {
+  it('gives a shapeless `.git` pointer NO evidence under a STANDARD root', () => {
+    const repo = mkdir('repo');
+    const shapeless = mkdir('repo-shapeless');
+    fs.writeFileSync(path.join(shapeless, '.git'), 'no gitdir line here\n', 'utf-8');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    expect(result.huskCandidates).toEqual([]);
+  });
+
+  it('gives an unresolvable pointer target NO evidence under a STANDARD root', () => {
+    const repo = mkdir('repo');
+    const target = mkdir('somewhere-else');
+    const odd = mkdir('repo-odd');
+    writeGitdirPointer(odd, target);
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    expect(result.huskCandidates).toEqual([]);
+  });
+
   it('reports residue-shape and skips both the real checkout and the shapeless dir', () => {
     const repo = mkdir('repo');
     mkdir('repo-residue', 'node_modules');
@@ -598,21 +641,35 @@ describe('invariant 5 — total accounting: nothing is dropped, counts equal row
     });
   }
 
-  it('lands every enumerated candidate in exactly one bucket', () => {
+  it('lands every enumerated candidate in exactly one bucket ON THE SWEEP AXIS', () => {
     const result = mixedEstate();
+    // The partition is defined over the SWEEP axis: worktree rows, husk rows,
+    // and sweep-source failures. Registry- and worktree-source ledger rows are
+    // a different axis (registry accounting) and MAY share a path with a husk
+    // row — the two-axes rule.
     const classified = result.worktrees.filter((w) => w.class !== 'unscannable').map((w) => w.path);
     const husks = result.huskCandidates.map((h) => h.path);
-    const failed = result.unscannable.map((u) => u.path);
-    const all = [...classified, ...husks, ...failed];
+    const sweepFailed = sweepFailures(result);
+    const all = [...classified, ...husks, ...sweepFailed];
     expect(new Set(all).size).toBe(all.length);
 
     // A worktree whose probe failed is class-unscannable AND carries a named
-    // failure row — the degraded state is never silent.
+    // worktree-source failure row — the degraded state is never silent.
     const unscannableWorktrees = result.worktrees.filter((w) => w.class === 'unscannable');
     expect(unscannableWorktrees).toHaveLength(1);
+    const worktreeFailed = result.unscannable
+      .filter((u) => u.source === 'worktree')
+      .map((u) => u.path);
     for (const w of unscannableWorktrees) {
-      expect(failed).toContain(w.path);
+      expect(worktreeFailed).toContain(w.path);
       expect(w.evidence).toContain('status --porcelain failed');
+    }
+  });
+
+  it('tags every ledger row with its axis', () => {
+    const result = mixedEstate();
+    for (const row of result.unscannable) {
+      expect(['registry', 'worktree', 'sweep']).toContain(row.source);
     }
   });
 
@@ -632,7 +689,7 @@ describe('invariant 5 — total accounting: nothing is dropped, counts equal row
 
   it('discloses every swept root and never scans a missing registry path', () => {
     const result = mixedEstate();
-    expect(result.sweptRoots).toContain(root);
+    expect(rootPaths(result)).toContain(root);
     expect(result.repos.find((r) => r.missing === true)!.worktrees).toBe(0);
   });
 
@@ -649,7 +706,7 @@ describe('invariant 5 — total accounting: nothing is dropped, counts equal row
         calls,
       ),
     });
-    expect(result.sweptRoots).toContain(missingRoot);
+    expect(rootPaths(result)).toContain(missingRoot);
     expect(result.unscannable.map((u) => u.path)).toContain(missingRoot);
     expect(result.unscannable[0]!.reason).toContain('sweep root unreadable');
   });
@@ -670,8 +727,8 @@ describe('sweep-root derivation — evidence-ranked, disclosed when narrowed', (
         calls,
       ),
     });
-    expect(result.sweptRoots).toContain(root);
-    expect(result.sweptRoots).not.toContain(nested);
+    expect(rootPaths(result)).toContain(root);
+    expect(rootPaths(result)).not.toContain(nested);
     // Suppressed, not silently dropped (the disclosure covers every narrowing).
     expect(result.excludedRoots).toEqual([
       { path: nested, reason: 'derived only from missing registry entry path(s)' },
@@ -690,7 +747,7 @@ describe('sweep-root derivation — evidence-ranked, disclosed when narrowed', (
         calls,
       ),
     });
-    expect(result.sweptRoots).not.toContain(path.resolve(os.tmpdir()));
+    expect(rootPaths(result)).not.toContain(path.resolve(os.tmpdir()));
     expect(result.excludedRoots).toHaveLength(1);
     expect(result.excludedRoots[0]!.path).toBe(path.resolve(os.tmpdir()));
     expect(result.excludedRoots[0]!.reason).toBe(
@@ -719,7 +776,7 @@ describe('sweep-root derivation — evidence-ranked, disclosed when narrowed', (
       ),
     });
     // A live worktree in the temp dir IS evidence that worktrees live there.
-    expect(result.sweptRoots).toContain(path.resolve(os.tmpdir()));
+    expect(rootPaths(result)).toContain(path.resolve(os.tmpdir()));
     expect(result.excludedRoots).toEqual([]);
   });
 
@@ -735,7 +792,7 @@ describe('sweep-root derivation — evidence-ranked, disclosed when narrowed', (
         calls,
       ),
     });
-    expect(result.sweptRoots).toContain(path.resolve(os.tmpdir()));
+    expect(rootPaths(result)).toContain(path.resolve(os.tmpdir()));
     expect(result.excludedRoots).toEqual([]);
   });
 });
@@ -765,7 +822,7 @@ describe('registered arm — a registry entry must be a git TOPLEVEL to be enume
     expect(row.enclosingRepo).toBe(repo);
     expect(row.worktrees).toBe(0);
     // Neither its dirname nor git's ancestor answer may feed the sweep.
-    expect(result.sweptRoots).not.toContain(path.join(repo, 'packages'));
+    expect(rootPaths(result)).not.toContain(path.join(repo, 'packages'));
     expect(result.excludedRoots.map((r) => r.path)).toContain(path.join(repo, 'packages'));
     expect(result.excludedRoots.find((r) => r.path === path.join(repo, 'packages'))!.reason).toBe(
       'derived only from non-git-root registry entry path(s)',
@@ -786,7 +843,91 @@ describe('registered arm — a registry entry must be a git TOPLEVEL to be enume
     expect(result.repos[0]!.notGitRoot).toBeUndefined();
     expect(result.unscannable).toHaveLength(1);
     expect(result.unscannable[0]!.reason).toContain('rev-parse --show-toplevel failed');
+    expect(result.unscannable[0]!.source).toBe('registry');
+    expect(result.summary.reposUnscannable).toBe(1);
     expect(calls.some((c) => c.includes('worktree'))).toBe(false);
+  });
+
+  it('derives NOTHING from an entry whose toplevel could not be verified', () => {
+    // The unverifiable entry sits next to a node_modules-bearing sibling that
+    // would qualify as residue-shape if its parent were swept on its account.
+    const unverifiable = mkdir('nested', 'maybe-repo');
+    const sibling = mkdir('nested', 'maybe-repo-residue');
+    fs.mkdirSync(path.join(sibling, 'node_modules'));
+
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: unverifiable }],
+      now: NOW,
+      safeExec: makeExec({ lists: {}, failToplevel: [unverifiable] }, calls),
+    });
+
+    expect(rootPaths(result)).not.toContain(path.join(root, 'nested'));
+    expect(result.huskCandidates).toEqual([]);
+    expect(result.excludedRoots).toEqual([
+      {
+        path: path.join(root, 'nested'),
+        reason: 'derived only from unverifiable registry entry path(s)',
+      },
+    ]);
+  });
+
+  it('lets a VERIFIED sibling derive the same root — both axes then coexist', () => {
+    // Same tree, but a verified repo shares the parent, so the root IS swept.
+    const unverifiable = mkdir('nested', 'maybe-repo');
+    fs.mkdirSync(path.join(unverifiable, 'node_modules'));
+    const verified = mkdir('nested', 'maybe');
+
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: unverifiable }, { path: verified }],
+      now: NOW,
+      safeExec: makeExec(
+        {
+          lists: { [verified]: porcelain([{ path: verified, branch: 'refs/heads/main' }]) },
+          failToplevel: [unverifiable],
+        },
+        calls,
+      ),
+    });
+
+    expect(rootPaths(result)).toContain(path.join(root, 'nested'));
+    // The unverifiable entry's path carries BOTH a registry-source ledger row
+    // and a husk row — different axes, so this is not a partition violation.
+    expect(result.unscannable.filter((u) => u.path === unverifiable)[0]!.source).toBe('registry');
+    expect(result.huskCandidates.map((h) => h.path)).toContain(unverifiable);
+    // The sweep-axis partition still holds.
+    const classified = result.worktrees.map((w) => w.path);
+    const all = [
+      ...classified,
+      ...result.huskCandidates.map((h) => h.path),
+      ...sweepFailures(result),
+    ];
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it('never lets an unverified entry attribute a residue-shape row to itself', () => {
+    const unverifiable = mkdir('nested', 'maybe-repo');
+    fs.mkdirSync(path.join(unverifiable, 'node_modules'));
+    const verified = mkdir('nested', 'maybe');
+
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: unverifiable }, { path: verified }],
+      now: NOW,
+      safeExec: makeExec(
+        {
+          lists: { [verified]: porcelain([{ path: verified, branch: 'refs/heads/main' }]) },
+          failToplevel: [unverifiable],
+        },
+        calls,
+      ),
+    });
+    const husk = result.huskCandidates.find((h) => h.path === unverifiable)!;
+    expect(husk.evidence).toBe('residue-shape');
+    // Attribution names the VERIFIED repo, never the husk's own registry entry.
+    expect(husk.matchedRepo).toBe(verified);
+    expect(husk.matchedRepo).not.toBe(unverifiable);
   });
 });
 
@@ -822,7 +963,7 @@ describe('container roots — location is the evidence', () => {
 
   it('sweeps <repo>/.claude/worktrees and reports untracked dirs as container-residue', () => {
     const result = containerEstate();
-    expect(result.sweptRoots).toContain(path.join(root, 'repo', '.claude', 'worktrees'));
+    expect(rootPaths(result)).toContain(path.join(root, 'repo', '.claude', 'worktrees'));
     const husks = Object.fromEntries(
       result.huskCandidates.map((h) => [path.basename(h.path), h.evidence]),
     );
@@ -877,6 +1018,66 @@ describe('container roots — location is the evidence', () => {
     });
     expect(result.huskCandidates).toHaveLength(1);
     expect(result.huskCandidates[0]!.evidence).toBe('dangling-gitdir-pointer');
+  });
+
+  it('withdraws the container root when the repo worktree list failed', () => {
+    // Without the repo's live-worktree list, container-residue cannot tell a
+    // live worktree from residue — a degraded scan must not read DIRTIER.
+    const repo = mkdir('repo');
+    mkdir('repo', '.claude', 'worktrees', 'agent-a');
+    mkdir('repo', '.claude', 'worktrees', 'agent-b');
+    const container = path.join(root, 'repo', '.claude', 'worktrees');
+
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      // `lists` is empty, so `worktree list` throws for this repo.
+      safeExec: makeExec({ lists: {} }, calls),
+    });
+
+    expect(rootPaths(result)).not.toContain(container);
+    expect(result.excludedRoots.map((r) => r.path)).toContain(container);
+    expect(result.excludedRoots.find((r) => r.path === container)!.reason).toBe(
+      'container of a repo whose worktree list failed',
+    );
+    expect(result.huskCandidates.filter((h) => h.evidence === 'container-residue')).toEqual([]);
+    expect(result.summary.reposUnscannable).toBe(1);
+  });
+
+  it('falls through to container-residue for a shapeless `.git` pointer', () => {
+    const repo = mkdir('repo');
+    const shapeless = mkdir('repo', '.claude', 'worktrees', 'agent-shapeless');
+    fs.writeFileSync(path.join(shapeless, '.git'), 'this file has no gitdir line\n', 'utf-8');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    expect(result.huskCandidates).toHaveLength(1);
+    expect(result.huskCandidates[0]!.evidence).toBe('container-residue');
+  });
+
+  it('falls through to container-residue when the pointer target is not worktree-shaped', () => {
+    const repo = mkdir('repo');
+    const oddTarget = mkdir('somewhere-else');
+    const odd = mkdir('repo', '.claude', 'worktrees', 'agent-odd');
+    writeGitdirPointer(odd, oddTarget);
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    const husk = result.huskCandidates.find((h) => h.path === odd)!;
+    expect(husk.evidence).toBe('container-residue');
   });
 
   it('reports a registry-registered directory that is also disk residue on BOTH axes', () => {
@@ -985,7 +1186,7 @@ describe('accounting totality across a multi-husk estate', () => {
     for (const p of husks) expect(failed.has(p)).toBe(false);
 
     const enumerated: string[] = [];
-    for (const sweptRoot of result.sweptRoots) {
+    for (const { path: sweptRoot } of result.sweptRoots) {
       for (const dirent of fs.readdirSync(sweptRoot, { withFileTypes: true })) {
         if (dirent.isDirectory()) enumerated.push(path.join(sweptRoot, dirent.name));
       }
@@ -1005,7 +1206,7 @@ describe('accounting totality across a multi-husk estate', () => {
     // bucket as a classified row, which the assertion below pins.
     expect(classified.has(liveWt)).toBe(true);
     expect(unaccounted).toEqual([hidden, nodeModules, otherCheckout, plain, repo].sort());
-    expect(result.sweptRoots).toEqual([container, root].sort());
+    expect(rootPaths(result)).toEqual([container, root].sort());
   });
 });
 
@@ -1062,6 +1263,8 @@ describe('invariant 6 — an empty registry yields a valid, degenerate result', 
     expect(result.summary).toEqual({
       repos: 0,
       reposMissing: 0,
+      reposNotGitRoot: 0,
+      reposUnscannable: 0,
       worktrees: 0,
       active: 0,
       stale: 0,

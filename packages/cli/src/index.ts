@@ -1476,7 +1476,7 @@ program
   )
   .option(
     '--root <dir>',
-    'Additional directory to sweep for husk candidates (repeatable). Only meaningful with --estate; the derived roots (the parents of registered repos and their worktrees) are always swept',
+    'Directory to sweep as a DECLARED worktree location (repeatable; --estate only). Any directory there that git tracks no worktree for and that has no .git directory is reported as container-residue; naming an already-derived root raises it to these container semantics',
     (val: string, prev: string[]) => [...prev, val],
     [] as string[], // totem-context: Commander accumulator default — not untrusted input
   )

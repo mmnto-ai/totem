@@ -134,9 +134,19 @@ export interface EstateHuskRow {
   ageDays?: number;
 }
 
+/**
+ * Which AXIS a probe failure belongs to. The sweep axis is the one the
+ * candidate partition is defined over; `registry` and `worktree` rows are
+ * accounting for the registered arm and may legitimately share a path with a
+ * husk row (the two-axes rule — a directory can be both a stale registry entry
+ * and disk residue).
+ */
+export type EstateUnscannableSource = 'registry' | 'worktree' | 'sweep';
+
 export interface EstateUnscannableRow {
   path: string;
   reason: string;
+  source: EstateUnscannableSource;
 }
 
 export interface EstateRepoRow {
@@ -161,6 +171,10 @@ export interface EstateRepoRow {
 export interface EstateSummary {
   repos: number;
   reposMissing: number;
+  /** Registry entries that exist but are not a git toplevel. */
+  reposNotGitRoot: number;
+  /** Registry entries whose own probes failed (registry-source ledger rows). */
+  reposUnscannable: number;
   worktrees: number;
   active: number;
   stale: number;
@@ -177,11 +191,25 @@ export interface EstateExcludedRoot {
   reason: string;
 }
 
+/**
+ * A swept root and its KIND, which is what decides the evidence bar inside it:
+ * a `container` root is a declared worktree location (location is evidence), a
+ * `standard` root is an ordinary working directory (shape is evidence).
+ * Disclosed so a consumer can tell which bar produced a given husk row.
+ */
+export interface EstateSweptRoot {
+  path: string;
+  kind: 'container' | 'standard';
+}
+
 export interface EstateScanResult {
   schemaVersion: typeof ESTATE_SCHEMA_VERSION;
   derivedAt: string;
-  /** Every root actually swept — disclosed so no cap or omission is silent. */
-  sweptRoots: string[];
+  /**
+   * Every root actually swept, with its kind — disclosed so no cap, omission,
+   * or evidence-bar difference is silent.
+   */
+  sweptRoots: EstateSweptRoot[];
   /**
    * Roots the derivation suppressed, so the narrowing is visible rather than
    * silent. A root that any other derivation path also produced is SWEPT and
@@ -370,8 +398,12 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   const defaultRefCache = new Map<string, string | undefined>();
   const homeListCache = new Map<string, WorktreeListEntry[] | undefined>();
 
-  const addUnscannable = (p: string, reason: string): void => {
-    unscannable.push({ path: p, reason });
+  /** Registry entries that probed clean AND enumerated — the attribution targets. */
+  const verifiedRepos: string[] = [];
+  let reposUnscannable = 0;
+
+  const addUnscannable = (p: string, reason: string, source: EstateUnscannableSource): void => {
+    unscannable.push({ path: p, reason, source });
   };
 
   /**
@@ -539,7 +571,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
       const reason = `status --porcelain failed: ${describe(err)}`;
-      addUnscannable(wtPath, reason);
+      addUnscannable(wtPath, reason, 'worktree');
       return { ...base, class: 'unscannable', ancestryMerged: 'unknown', evidence: reason };
     }
 
@@ -588,7 +620,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     const ancestry = isAncestor(repoPath, entry.branch, target);
     if (typeof ancestry !== 'boolean') {
       const reason = `merge-base --is-ancestor failed: ${ancestry.error}`;
-      addUnscannable(wtPath, reason);
+      addUnscannable(wtPath, reason, 'worktree');
       return {
         ...base,
         ...ageField,
@@ -646,9 +678,17 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       toplevel = git(repoPath, ['rev-parse', '--show-toplevel']).trim();
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
-      addRegistryDerivedRoot(path.dirname(repoPath));
+      // An entry that cannot be VERIFIED derives nothing, exactly as an entry
+      // verified to be a non-root derives nothing: without the toplevel answer
+      // there is no evidence this path is a repo at all, so its parent is a
+      // guess. Suppressed and disclosed rather than swept.
       repos.push({ path: repoPath, ...lastSyncField, worktrees: 0 });
-      addUnscannable(repoPath, `rev-parse --show-toplevel failed: ${describe(err)}`);
+      addUnscannable(repoPath, `rev-parse --show-toplevel failed: ${describe(err)}`, 'registry');
+      reposUnscannable += 1;
+      noteSuppressedRoot(
+        path.dirname(repoPath),
+        'derived only from unverifiable registry entry path(s)',
+      );
       continue;
     }
 
@@ -671,10 +711,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
 
     addRegistryDerivedRoot(path.dirname(repoPath));
 
-    // A CONTAINER root: this directory exists solely to hold worktrees, so an
-    // untracked directory inside it is residue by location alone.
     const container = path.join(repoPath, '.claude', 'worktrees');
-    if (isRealDirectory(container)) addSweepRoot(container, true);
 
     let listed: WorktreeListEntry[];
     // totem-context: intentional cleanup — one unreadable repo (moved, corrupt, not a git tree) is recorded as a named unscannable row and the remaining registry entries still scan; a throw here would make one bad entry hide the whole estate.
@@ -683,9 +720,24 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
       repos.push({ path: repoPath, ...lastSyncField, worktrees: 0 });
-      addUnscannable(repoPath, `worktree list --porcelain failed: ${describe(err)}`);
+      addUnscannable(repoPath, `worktree list --porcelain failed: ${describe(err)}`, 'registry');
+      reposUnscannable += 1;
+      // The container root is WITHDRAWN when the repo's worktree list failed.
+      // Container-residue is a by-location claim that only holds against a
+      // known set of live worktrees; without that list every live worktree in
+      // the container would read as residue. A degraded scan must never report
+      // DIRTIER than a healthy one.
+      if (isRealDirectory(container)) {
+        noteSuppressedRoot(container, 'container of a repo whose worktree list failed');
+      }
       continue;
     }
+
+    // A CONTAINER root, added only once the repo's live worktrees are known:
+    // this directory exists solely to hold worktrees, so an untracked directory
+    // inside it is residue by location alone.
+    if (isRealDirectory(container)) addSweepRoot(container, true);
+    verifiedRepos.push(repoPath);
 
     for (const wt of listed) {
       // The listed entry that IS the registry path carries no evidence beyond
@@ -728,14 +780,15 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   for (const extra of inputs.extraRoots ?? []) addSweepRoot(extra, true);
 
   /**
-   * Registered repo basenames, for the residue-shape prefix match. Sorted
-   * longest-name first so attribution takes the most specific repo: with both
-   * `totem` and `totem-strategy` registered, `totem-strategy-claude-x` must
-   * name `totem-strategy`, not whichever shorter prefix happened to be
-   * enumerated first.
+   * Attribution targets for the residue-shape prefix match: VERIFIED repos
+   * only. A missing, not-git-root, or unprobeable entry is not a repo this scan
+   * can vouch for, and letting one attribute would let a husk name ITSELF as
+   * the repo it is residue of. Sorted longest-name first so attribution takes
+   * the most specific repo: with both `totem` and `totem-strategy` verified,
+   * `totem-strategy-claude-x` must name `totem-strategy`.
    */
-  const repoBasenames = repos
-    .map((r) => ({ repoPath: r.path, name: foldCase(path.basename(r.path)) }))
+  const repoBasenames = verifiedRepos
+    .map((repoPath) => ({ repoPath, name: foldCase(path.basename(repoPath)) }))
     .sort((a, b) => b.name.length - a.name.length);
 
   const huskAgeDays = (dir: string): number | undefined => {
@@ -772,6 +825,19 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     const ageDays = huskAgeDays(dir);
     const ageField = ageDays === undefined ? {} : { ageDays };
 
+    /**
+     * Under a CONTAINER root the by-location claim still stands when the
+     * `.git`-FILE arm produces no TYPED outcome (a pointer with no `gitdir:`
+     * line, or a target that is not worktree-shaped): git tracks no worktree
+     * here and the directory sits in a place that exists only to hold
+     * worktrees. Under a STANDARD root the same shapelessness means no
+     * evidence at all.
+     */
+    const containerFallback = (): EstateHuskRow | undefined =>
+      container
+        ? { path: dir, sweptRoot: root, evidence: 'container-residue', ...ageField }
+        : undefined;
+
     // A `.git` DIRECTORY is an ordinary repo checkout — never a husk, under any
     // root kind.
     if (gitEntry?.isDirectory() === true) return undefined;
@@ -785,21 +851,22 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
         pointer = match === null ? undefined : path.resolve(dir, match[1]!.trim());
         // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
       } catch (err) {
-        addUnscannable(dir, `.git pointer unreadable: ${describe(err)}`);
+        addUnscannable(dir, `.git pointer unreadable: ${describe(err)}`, 'sweep');
         return undefined;
       }
-      // A `.git` file with no `gitdir:` line is shapeless — no typed evidence.
-      if (pointer === undefined) return undefined;
+      // A `.git` file with no `gitdir:` line is shapeless — no typed evidence
+      // under a STANDARD root; under a CONTAINER root the location still is.
+      if (pointer === undefined) return containerFallback();
 
       if (!fs.existsSync(pointer)) {
         return { path: dir, sweptRoot: root, evidence: 'dangling-gitdir-pointer', ...ageField };
       }
 
       const home = homeRepoFromGitdir(pointer);
-      if (home === undefined) return undefined;
+      if (home === undefined) return containerFallback();
       const listed = homeWorktreeList(home);
       if (listed === undefined) {
-        addUnscannable(dir, `home repo worktree list failed (${home})`);
+        addUnscannable(dir, `home repo worktree list failed (${home})`, 'sweep');
         return undefined;
       }
       // The home repo still tracks it: a live worktree of an unregistered repo,
@@ -818,7 +885,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     if (gitEntry === undefined && !isRealDirectory(dir)) {
       // The directory readdir named is gone or unreadable by the time we probe
       // it — a raced scan must report the hole, not silently drop the entry.
-      addUnscannable(dir, 'vanished or turned unreadable mid-sweep');
+      addUnscannable(dir, 'vanished or turned unreadable mid-sweep', 'sweep');
       return undefined;
     }
 
@@ -848,7 +915,10 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   };
 
   const roots = [...sweepRoots.values()].sort(byPath);
-  const sweptRoots = roots.map((r) => r.path);
+  const sweptRoots: EstateSweptRoot[] = roots.map((r) => ({
+    path: r.path,
+    kind: r.container ? 'container' : 'standard',
+  }));
   for (const { path: root, container } of roots) {
     let dirents: fs.Dirent[];
     // totem-context: intentional cleanup — an unreadable sweep root (EACCES, raced deletion) is recorded as a named unscannable row so the omission is visible, and the sibling roots still sweep.
@@ -856,7 +926,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       dirents = fs.readdirSync(root, { withFileTypes: true });
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
-      addUnscannable(root, `sweep root unreadable: ${describe(err)}`);
+      addUnscannable(root, `sweep root unreadable: ${describe(err)}`, 'sweep');
       continue;
     }
     for (const dirent of dirents) {
@@ -878,7 +948,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
         if (husk !== undefined) huskCandidates.push(husk);
         // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
       } catch (err) {
-        addUnscannable(dir, `husk probe failed: ${describe(err)}`);
+        addUnscannable(dir, `husk probe failed: ${describe(err)}`, 'sweep');
       }
     }
   }
@@ -913,6 +983,8 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     summary: {
       repos: repos.length,
       reposMissing: repos.filter((r) => r.missing === true).length,
+      reposNotGitRoot: repos.filter((r) => r.notGitRoot === true).length,
+      reposUnscannable,
       worktrees: worktrees.length,
       active: countClass('registered-active'),
       stale: countClass('registered-stale'),

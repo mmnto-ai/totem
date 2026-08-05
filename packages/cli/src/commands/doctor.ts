@@ -19,10 +19,11 @@ export interface DiagnosticResult {
   message: string;
   remediation?: string;
   /**
-   * Sensor-class row: reports through doctor but NEVER gates, under any
-   * `--strict` tier (ruled scope, mmnto-ai/totem#2580). The exemption is a
-   * property of the row rather than of the tier, so a sensor cannot acquire
-   * teeth by someone widening the tier later.
+   * Sensor-class row: its ADVISORY statuses never gate, under any `--strict`
+   * tier (ruled scope, mmnto-ai/totem#2580). The exemption is a property of the
+   * row rather than of the tier, so a sensor cannot acquire teeth by someone
+   * widening the tier later — and it deliberately does NOT cover `fail`, which
+   * always gates (see `doctorGateFailed`).
    */
   gateExempt?: true;
 }
@@ -70,13 +71,15 @@ export async function resolveStrictTier(
  * pure and exported so the edge stays thin and the semantics stay unit-tested
  * (the exit-code decision itself lives at the CLI edge — see DoctorOptions).
  *
- * `gateExempt` rows are skipped at every tier: a sensor-class row reports its
- * finding and never converts it into an exit code.
+ * The exemption is scoped to ADVISORY statuses. A `fail` gates regardless of
+ * `gateExempt`: a fail-class diagnostic is a wiring failure, and no row may be
+ * allowed to hide one. Sensor rows never emit `fail` in the first place, so the
+ * narrowing costs them nothing and closes the hole where a mislabelled row
+ * could suppress a real gate.
  */
 export function doctorGateFailed(results: readonly DiagnosticResult[], tier: StrictTier): boolean {
   return results.some(
-    (r) =>
-      r.gateExempt !== true && (r.status === 'fail' || (tier === 'warn' && r.status === 'warn')),
+    (r) => r.status === 'fail' || (tier === 'warn' && r.status === 'warn' && r.gateExempt !== true),
   );
 }
 
@@ -2012,14 +2015,23 @@ export async function checkEstate(
     // exists to prevent. Neither promotes the status — only husks and stale
     // worktrees do (the ruling); registry hygiene is `totem list`'s charge.
     const probes = s.unscannable > 0 ? ` ${s.unscannable} probe(s) unscannable.` : '';
-    const missing = s.reposMissing > 0 ? ` (${s.reposMissing} registry path(s) missing)` : '';
-    const scannable = s.repos - s.reposMissing;
+    // Only the registry entries this scan actually enumerated are the
+    // denominator — an entry that is missing, not a git root, or unprobeable
+    // was never looked inside, and folding it into a "repos scanned" count
+    // would overstate the coverage.
+    const enumerated = s.repos - s.reposMissing - s.reposNotGitRoot - s.reposUnscannable;
+    const caveats = [
+      s.reposMissing > 0 ? `${s.reposMissing} missing` : '',
+      s.reposNotGitRoot > 0 ? `${s.reposNotGitRoot} not-git-root` : '',
+      s.reposUnscannable > 0 ? `${s.reposUnscannable} unprobeable` : '',
+    ].filter((c) => c.length > 0);
+    const skipped = caveats.length > 0 ? ` (${caveats.join(', ')})` : '';
 
     if (s.huskCandidates > 0 || s.stale > 0) {
       return {
         name,
         status: 'warn',
-        message: `${s.stale} stale worktree(s), ${s.huskCandidates} husk candidate(s) across ${scannable} scannable repo(s)${missing}.${probes}`,
+        message: `${s.stale} stale worktree(s), ${s.huskCandidates} husk candidate(s) across ${enumerated} enumerated repo(s)${skipped}.${probes}`,
         remediation:
           'Run `totem doctor --estate` for the per-row evidence (report-only — this row never gates).',
         gateExempt: true,
@@ -2028,7 +2040,7 @@ export async function checkEstate(
     return {
       name,
       status: 'pass',
-      message: `${scannable} scannable repo(s)${missing} · ${s.worktrees} linked worktree(s); no stale worktrees or husk candidates.${probes}`,
+      message: `${enumerated} enumerated repo(s)${skipped} · ${s.worktrees} linked worktree(s); no stale worktrees or husk candidates.${probes}`,
       gateExempt: true,
     };
     // totem-context: a scan failure is reported as a warn row — the estate sensor must never take `totem doctor` down with it (report-only, Tenet 13)

@@ -257,6 +257,118 @@ describe('doctorEstateCliCommand — human render', () => {
   });
 });
 
+describe('doctorEstateCliCommand — evidence-model disclosure', () => {
+  /** A repo with a container root holding one untracked dir, plus a nested entry. */
+  function containerFixture(): { repo: string; inside: string; exec: EstateExecFn } {
+    const repo = mkdir('repo');
+    mkdir('repo', '.claude', 'worktrees', 'agent-residue');
+    const inside = mkdir('repo', 'packages');
+    const listing = [
+      `worktree ${repo.split(path.sep).join('/')}`,
+      `HEAD ${'a'.repeat(40)}`,
+      'branch refs/heads/main',
+      '',
+    ].join('\n');
+    const exec: EstateExecFn = (command: string, args: string[] = []): string => {
+      const cwd = fold(args[2] ?? '');
+      const verb = args.slice(3);
+      if (verb[0] === 'rev-parse' && verb[1] === '--show-toplevel') {
+        // The nested entry resolves to its ANCESTOR repo.
+        return (cwd === fold(inside) ? repo : cwd).split(path.sep).join('/');
+      }
+      if (verb[0] === 'worktree') {
+        if (cwd !== fold(repo)) throw Object.assign(new Error('not a repo'), { status: 128 });
+        return listing;
+      }
+      if (verb[0] === 'rev-parse') return 'origin/main';
+      return '';
+    };
+    return { repo, inside, exec };
+  }
+
+  it('renders the NOT GIT ROOT row, a container-residue husk, and kind-annotated roots', async () => {
+    const { repo, inside, exec } = containerFixture();
+    await doctorEstateCliCommand({
+      registryForTest: registryOf(repo, inside),
+      execForTest: exec,
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+    const text = output();
+    expect(text).toContain('[NOT GIT ROOT]');
+    expect(text).toContain(inside);
+    expect(text).toContain(repo);
+    expect(text).toContain('[container-residue]');
+    expect(text).toContain('agent-residue');
+    // A2: each swept root is annotated with the kind that set its evidence bar.
+    expect(text).toContain(`${path.join(repo, '.claude', 'worktrees')} (container)`);
+    expect(text).toContain(`${root} (standard)`);
+  });
+
+  it('names all four evidence classes by root kind in the criteria line', async () => {
+    const { repo, exec } = containerFixture();
+    await doctorEstateCliCommand({
+      registryForTest: registryOf(repo),
+      execForTest: exec,
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+    const text = output();
+    expect(text).toContain('container roots');
+    expect(text).toContain('LOCATION as evidence');
+    expect(text).toContain('container-residue');
+    expect(text).toContain('SHAPE evidence');
+    expect(text).toContain('dangling `.git` pointer');
+    expect(text).toContain('node_modules');
+    expect(text).toContain('home repo worktree list');
+    expect(text).toContain('Report-only');
+  });
+
+  it('carries not-git-root, enclosing-repo, swept-root kinds and ledger sources in the artifact', async () => {
+    const { repo, inside, exec } = containerFixture();
+    const chunks: string[] = [];
+    const stdout = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((chunk: unknown): boolean => {
+        chunks.push(String(chunk));
+        return true;
+      });
+    try {
+      await doctorEstateCliCommand({
+        json: true,
+        registryForTest: registryOf(repo, inside),
+        execForTest: exec,
+        nowForTest: NOW,
+        cwdForTest: root,
+      });
+    } finally {
+      stdout.mockRestore();
+    }
+    const artifact = JSON.parse(chunks.join('')) as Record<string, unknown>;
+
+    const repos = artifact['repos'] as Array<Record<string, unknown>>;
+    const nested = repos.find((r) => r['path'] === inside)!;
+    expect(nested['not-git-root']).toBe(true);
+    expect(nested['enclosing-repo']).toBe(repo);
+    // Presence-only: a verified repo carries neither key.
+    expect('not-git-root' in repos.find((r) => r['path'] === repo)!).toBe(false);
+
+    const roots = artifact['swept-roots'] as Array<Record<string, unknown>>;
+    expect(roots.find((r) => r['path'] === path.join(repo, '.claude', 'worktrees'))!['kind']).toBe(
+      'container',
+    );
+    expect(roots.find((r) => r['path'] === root)!['kind']).toBe('standard');
+
+    const husks = artifact['husk-candidates'] as Array<Record<string, unknown>>;
+    expect(husks.map((h) => h['evidence'])).toContain('container-residue');
+
+    for (const row of artifact['unscannable'] as Array<Record<string, unknown>>) {
+      expect(['registry', 'worktree', 'sweep']).toContain(row['source']);
+    }
+    expect(artifact['summary']).toMatchObject({ 'repos-not-git-root': 1, 'repos-unscannable': 0 });
+  });
+});
+
 describe('doctorEstateCliCommand — the --json artifact owns stdout (invariant 8)', () => {
   it('writes exactly one JSON document and renders no human line', async () => {
     const { repo, exec } = fixtureEstate();

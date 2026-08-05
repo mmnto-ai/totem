@@ -698,13 +698,16 @@ describe('doctorGateFailed', () => {
     expect(doctorGateFailed(mixed, 'fail')).toBe(false);
   });
 
-  it('a gateExempt fail row does not gate in either tier', () => {
+  // The exemption is scoped to ADVISORY statuses. A fail is a wiring failure
+  // and no row may hide one — sensor rows never emit `fail`, so the narrowing
+  // costs them nothing and closes the mislabelled-row hole.
+  it('a gateExempt FAIL row still gates in both tiers', () => {
     const exemptFail: DiagnosticResult[] = [
       ...clean,
       { name: 'Sensor', status: 'fail', message: '', gateExempt: true },
     ];
-    expect(doctorGateFailed(exemptFail, 'fail')).toBe(false);
-    expect(doctorGateFailed(exemptFail, 'warn')).toBe(false);
+    expect(doctorGateFailed(exemptFail, 'fail')).toBe(true);
+    expect(doctorGateFailed(exemptFail, 'warn')).toBe(true);
   });
 });
 
@@ -729,23 +732,35 @@ describe('checkEstate', () => {
     cleanTmpDir(estateDir);
   });
 
-  /** Canned git for a repo whose container root holds `count` residue dirs. */
-  function seams(repo: string, opts: { throws?: boolean } = {}) {
+  /** Canned git for `repo`; every other path answers as its own toplevel. */
+  function seams(
+    repo: string,
+    opts: { throws?: boolean; toplevels?: Record<string, string>; failToplevel?: string[] } = {},
+  ) {
     const listing = [
       `worktree ${repo.split(path.sep).join('/')}`,
       `HEAD ${'a'.repeat(40)}`,
       'branch refs/heads/main',
       '',
     ].join('\n');
+    const fold = (p: string): string =>
+      process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
+    const toplevels = new Map(Object.entries(opts.toplevels ?? {}).map(([k, v]) => [fold(k), v]));
+    const failToplevel = new Set((opts.failToplevel ?? []).map(fold));
     return {
       registry: registryOf(repo) as never,
       now: Date.parse('2026-08-05T12:00:00.000Z'),
       safeExec: ((_command: string, args: string[] = []): string => {
         if (opts.throws === true) throw new Error('git exploded');
+        const cwd = args[2] ?? '';
         const verb = args.slice(3);
-        if (verb[0] === 'worktree') return listing;
         if (verb[0] === 'rev-parse' && verb[1] === '--show-toplevel') {
-          return repo.split(path.sep).join('/');
+          if (failToplevel.has(fold(cwd))) throw new Error('not a git repository');
+          return (toplevels.get(fold(cwd)) ?? path.resolve(cwd)).split(path.sep).join('/');
+        }
+        if (verb[0] === 'worktree') {
+          if (fold(cwd) !== fold(repo)) throw new Error('not a git repository');
+          return listing;
         }
         if (verb[0] === 'rev-parse') return 'origin/main';
         return '';
@@ -769,9 +784,29 @@ describe('checkEstate', () => {
       registry: registryOf(repo, gone) as never,
     });
     expect(result.status).toBe('pass');
-    expect(result.message).toContain('1 scannable repo(s)');
-    expect(result.message).toContain('(1 registry path(s) missing)');
+    // The denominator is what was ENUMERATED — an entry that was missing, not a
+    // git root, or unprobeable was never looked inside and must not inflate it.
+    expect(result.message).toContain('1 enumerated repo(s)');
+    expect(result.message).toContain('(1 missing)');
     expect(result.message).toContain('0 linked worktree(s)');
+    expect(result.gateExempt).toBe(true);
+  });
+
+  it('names the not-git-root and unprobeable counts too', async () => {
+    const repo = path.join(estateDir, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    const inside = path.join(repo, 'packages');
+    fs.mkdirSync(inside, { recursive: true });
+    const broken = path.join(estateDir, 'broken');
+    fs.mkdirSync(broken, { recursive: true });
+    const result = await checkEstate({
+      ...seams(repo, { toplevels: { [inside]: repo }, failToplevel: [broken] }),
+      registry: registryOf(repo, inside, broken) as never,
+    });
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('1 enumerated repo(s)');
+    expect(result.message).toContain('1 not-git-root');
+    expect(result.message).toContain('1 unprobeable');
   });
 
   it('warns with counts and the --estate remediation when husks exist', async () => {
@@ -782,6 +817,7 @@ describe('checkEstate', () => {
     expect(result.status).toBe('warn');
     expect(result.message).toContain('2 husk candidate(s)');
     expect(result.remediation).toContain('totem doctor --estate');
+    expect(result.gateExempt).toBe(true);
   });
 
   // A git that fails on every invocation is NOT a scan crash: the scan is
@@ -811,12 +847,17 @@ describe('checkEstate', () => {
   it('marks every row gateExempt so the sensor can never gate', async () => {
     const repo = path.join(estateDir, 'repo');
     fs.mkdirSync(repo, { recursive: true });
+    const huskRepo = path.join(estateDir, 'husk-repo');
+    fs.mkdirSync(path.join(huskRepo, '.claude', 'worktrees', 'agent-a'), { recursive: true });
+    // All FOUR real paths: skip / pass / husk-warn / crash-warn.
     const rows = [
       await checkEstate({ registry: {} }),
       await checkEstate(seams(repo)),
+      await checkEstate(seams(huskRepo)),
       await checkEstate({ ...seams(repo), registry: { bad: null } as never }),
     ];
-    expect(rows.map((r) => r.status)).toEqual(['skip', 'pass', 'warn']);
+    expect(rows.map((r) => r.status)).toEqual(['skip', 'pass', 'warn', 'warn']);
+    expect(rows[2]!.message).toContain('husk candidate(s)');
     for (const row of rows) expect(row.gateExempt).toBe(true);
     expect(doctorGateFailed(rows, 'warn')).toBe(false);
   });
