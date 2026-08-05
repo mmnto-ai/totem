@@ -1204,7 +1204,7 @@ describe('checkParity — session-start-orientation wiring', () => {
     writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
     writeManifest('m.yaml', SESSION_START_MANIFEST_YAML);
     // Gemini hook installed verbatim → pass; Claude hook absent here → skip.
-    writeRepoFile('.gemini/hooks/SessionStart.js', GEMINI_SESSION_START);
+    writeRepoFile('.gemini/hooks/SessionStart.cjs', GEMINI_SESSION_START);
 
     const { results } = await checkParity(tmpDir);
     const perContract = results.slice(1);
@@ -1229,7 +1229,7 @@ describe('checkParity — session-start-orientation wiring', () => {
     writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
     writeManifest('m.yaml', blocking);
     // Still owned (the marker opens the file), but the body drifted → warn, not unknown.
-    writeRepoFile('.gemini/hooks/SessionStart.js', `${GEMINI_SESSION_START}\n// local drift\n`);
+    writeRepoFile('.gemini/hooks/SessionStart.cjs', `${GEMINI_SESSION_START}\n// local drift\n`);
 
     const { results, blockingDriftIds } = await checkParity(tmpDir);
     const gemini = results.find((r) => r.name === 'Parity: session-start-orientation (gemini)')!;
@@ -1238,6 +1238,23 @@ describe('checkParity — session-start-orientation wiring', () => {
     expect(blockingDriftIds).toContain('session-start-orientation');
 
     await expect(doctorParityCliCommand({ strict: true, cwdForTest: tmpDir })).rejects.toThrow();
+  });
+
+  it('an un-migrated consumer carrying ONLY the legacy .js is skip, never warn (mmnto-ai/totem#2488)', async () => {
+    // The sensor now points at `.gemini/hooks/SessionStart.cjs`. A consumer that has
+    // not yet run the `.js`→`.cjs` migration has no file at the checked path, which
+    // `detectGeneratedArtifactContract`'s absent-consumer branch reports as honest
+    // `skip` ("cohort permits absence") — NOT drift. The stale `.js` it still carries
+    // is simply no longer a parity surface; `totem hook install` is what removes it.
+    writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\n`);
+    writeManifest('m.yaml', SESSION_START_MANIFEST_YAML);
+    writeRepoFile('.gemini/hooks/SessionStart.js', GEMINI_SESSION_START);
+
+    const { results, blockingDriftIds } = await checkParity(tmpDir);
+    const gemini = results.find((r) => r.name === 'Parity: session-start-orientation (gemini)')!;
+    expect(gemini.status).toBe('skip');
+    expect(gemini.message).toContain('cohort permits absence');
+    expect(blockingDriftIds).not.toContain('session-start-orientation');
   });
 });
 

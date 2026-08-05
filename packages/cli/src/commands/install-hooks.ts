@@ -1204,17 +1204,24 @@ async function printManagedSessionHookSummary(cwd: string, force?: boolean): Pro
   }
 }
 
-// ─── Gemini BeforeTool .js→.cjs migration (mmnto-ai/totem#2481) ───
+// ─── Gemini hook .js→.cjs migration (mmnto-ai/totem#2481 + #2488) ───
 //
-// A pre-#2481 Totem distributed the write-time guard as `.gemini/hooks/BeforeTool.js`.
-// In a `"type": "module"` consumer Node resolves that `.js` as ESM and the guard
-// throws `require is not defined` before reading the tool call — Gemini CLI treats
-// the crash as a warning, so the guard fail-opens SILENTLY. These two functions
-// migrate an upgraded consumer to the `.cjs` successor on the upgrade path
-// (`totem hook install`, which the prepare wrapper invokes) and on `totem init`.
+// A pre-#2481 Totem distributed the write-time guard as `.gemini/hooks/BeforeTool.js`,
+// and a pre-#2488 Totem the session briefing as `.gemini/hooks/SessionStart.js`.
+// In a `"type": "module"` consumer Node resolves either `.js` as ESM and the hook
+// throws `require is not defined` at its top-level `require` — Gemini CLI treats
+// the crash as a warning, so the guard (and the session-start context injection)
+// fail-open SILENTLY. These functions migrate an upgraded consumer to the `.cjs`
+// successors on the upgrade path (`totem hook install`, which the prepare wrapper
+// invokes) and on `totem init`. The roster of pairs is data —
+// LEGACY_MANAGED_SESSION_HOOKS in init-templates.ts.
+//
 // Deliberately bounded (the #2478 OPTION 1 ruling routed the adoption/arming slice
 // OUT): rename + registration migration + legacy cleanup only — no arming-verification
 // and no NEW ownership predicate (reuses markerOpensFile / isBoundedOwnedFile).
+// The registration seam is BeforeTool-only by construction: `totem init` emits no
+// `.gemini/settings.json` SessionStart command (mmnto-ai/totem#2558), so the
+// SessionStart migration is a pure file rename with nothing to rewrite.
 
 export interface GeminiHookMigrationResult {
   /** Repo-relative legacy path acted on. */
@@ -1364,7 +1371,9 @@ async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Pr
   for (const { file, action } of await migrateLegacyGeminiHooks(cwd, force)) {
     switch (action) {
       case 'migrated':
-        console.error(`[Totem] Migrated ${file} → .cjs (ESM fail-open fix, mmnto-ai/totem#2481).`);
+        console.error(
+          `[Totem] Migrated ${file} → .cjs (ESM fail-open fix, mmnto-ai/totem#2481 + #2488).`,
+        );
         break;
       case 'declined':
         console.error(

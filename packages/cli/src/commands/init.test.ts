@@ -442,7 +442,7 @@ describe('Gemini hook scaffolding', () => {
     const skillsDir = path.join(tmpDir, '.gemini', 'skills');
 
     const sessionStart = scaffoldFile(
-      path.join(hooksDir, 'SessionStart.js'),
+      path.join(hooksDir, 'SessionStart.cjs'),
       '// [totem] auto-generated\ntest\n',
     );
     const beforeTool = scaffoldFile(
@@ -461,7 +461,7 @@ describe('Gemini hook scaffolding', () => {
 
     // Second run — idempotent
     const sessionStart2 = scaffoldFile(
-      path.join(hooksDir, 'SessionStart.js'),
+      path.join(hooksDir, 'SessionStart.cjs'),
       '// [totem] auto-generated\ntest\n',
     );
     expect(sessionStart2).toEqual({ action: 'exists' });
@@ -471,13 +471,13 @@ describe('Gemini hook scaffolding', () => {
     const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
     fs.writeFileSync(
-      path.join(hooksDir, 'SessionStart.js'),
+      path.join(hooksDir, 'SessionStart.cjs'),
       '// my custom session hook\nconsole.log("custom");\n',
       'utf-8',
     );
 
     const result = scaffoldFile(
-      path.join(hooksDir, 'SessionStart.js'),
+      path.join(hooksDir, 'SessionStart.cjs'),
       '// [totem] auto-generated\ntest\n',
     );
     expect(result).toEqual({ action: 'skipped' });
@@ -1290,7 +1290,7 @@ describe('scaffoldClaudeWriteShield', () => {
 });
 
 // Phase C slice 1 — symmetric Claude SessionStart hook (mmnto-ai/totem#1845).
-// Locks the install-side parity with .gemini/hooks/SessionStart.js: scaffold
+// Locks the install-side parity with .gemini/hooks/SessionStart.cjs: scaffold
 // the .cjs script, merge a SessionStart entry into committed
 // .claude/settings.json, idempotency on re-run, preserve user hooks +
 // coexist with Phase B's PreWriteShield entry under the same hooks object.
@@ -2526,6 +2526,88 @@ describe('GEMINI_BEFORE_TOOL ships as CJS for "type": "module" consumers (mmnto-
 
     expect(res.status).not.toBe(0);
     expect(res.stderr).toMatch(/require is not defined/);
+  });
+});
+
+describe('GEMINI_SESSION_START ships as CJS for "type": "module" consumers (mmnto-ai/totem#2488)', () => {
+  let tmpDir: string;
+  let emptyBinDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-2488-typemodule-'));
+    // A consumer repo whose package.json declares ESM — the environment that makes a
+    // bare `.js` hook resolve as ESM and fail-open.
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({ type: 'module' }, null, 2) + '\n',
+      'utf-8',
+    );
+    // An EMPTY search path for the subprocess: the hook shells out to `totem describe`
+    // / `totem orient --session`, and a resolvable CLI would make this test spawn (and
+    // wait on) real work. With nothing on PATH both execSync calls fail fast into the
+    // hook's OWN try/catch — which is exactly the boot-safe branch we want to observe.
+    emptyBinDir = path.join(tmpDir, 'empty-bin');
+    fs.mkdirSync(emptyBinDir, { recursive: true });
+    // No `.git` directory is created: the hook's refresh-gh spawn is gated on
+    // `.git` being a DIRECTORY in cwd, so it never fires here.
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /**
+   * process.env minus every PATH-cased key (Windows env keys are case-insensitive —
+   * leaving the original `Path` alongside a new `PATH` would be ambiguous), with a
+   * single empty directory as the search path. ComSpec/PATHEXT are preserved so the
+   * Windows shell itself still resolves.
+   */
+  function envWithNothingOnPath(): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (/^path$/i.test(key)) continue;
+      env[key] = value;
+    }
+    env['PATH'] = emptyBinDir;
+    return env;
+  }
+
+  it('executesSessionStartCjsInTypeModule — the .cjs briefing hook evaluates (no `require is not defined`)', () => {
+    const cjsPath = path.join(tmpDir, 'SessionStart.cjs');
+    fs.writeFileSync(cjsPath, GEMINI_SESSION_START, 'utf-8');
+
+    const res = spawnSync(process.execPath, [cjsPath], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+      env: envWithNothingOnPath(),
+    });
+
+    // A `.cjs` is CommonJS regardless of the enclosing package `type`, so the
+    // top-level `require('child_process')` resolves and the hook BODY runs — proven
+    // by its own boot-safe fallback breadcrumb rather than a ReferenceError.
+    expect(res.stderr).not.toMatch(/require is not defined/);
+    expect(res.stdout).toContain('[Totem] Briefing unavailable');
+    expect(res.status).toBe(0); // boot-safe: a missing CLI never fails session start
+  });
+
+  it('proves the defect the .cjs fixes: the identical body as `.js` fail-opens as ESM', () => {
+    // Contrast fixture documenting WHY the extension is load-bearing. The identical
+    // hook body under a `.js` extension resolves as ESM in this consumer and throws
+    // `require is not defined` at the top-level `require('child_process')`, before it
+    // emits any briefing — and Gemini CLI degrades that crash to a warning, so the
+    // session-start context injection fail-opens SILENTLY (mmnto-ai/totem#2488).
+    const jsPath = path.join(tmpDir, 'SessionStart.js');
+    fs.writeFileSync(jsPath, GEMINI_SESSION_START, 'utf-8');
+
+    const res = spawnSync(process.execPath, [jsPath], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+      env: envWithNothingOnPath(),
+    });
+
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/require is not defined/);
+    expect(res.stdout).not.toContain('[Totem] Briefing unavailable');
   });
 });
 

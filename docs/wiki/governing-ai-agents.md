@@ -18,7 +18,7 @@ Wire `totem status` into your agent's startup hook so the agent receives the pro
 [Status] Shield: stale (code changed since last pass)
 ```
 
-Example hook for Gemini (`.gemini/hooks/SessionStart.js`):
+Example hook for Gemini (`.gemini/hooks/SessionStart.cjs` — the `.cjs` extension is load-bearing: the body is CommonJS, and a repo whose `package.json` declares `"type": "module"` would otherwise resolve a bare `.js` as ESM and crash the hook, which Gemini CLI degrades to a warning):
 
 ```javascript
 const { execSync } = require('child_process');

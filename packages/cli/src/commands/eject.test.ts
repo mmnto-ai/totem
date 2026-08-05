@@ -115,6 +115,32 @@ describe('ejectCommand', () => {
     expect(fs.existsSync(path.join(hookDir, 'SessionStart.js'))).toBe(true);
   });
 
+  it('ejectsSessionStartCjsCorrectly — removes both the .cjs successor and the legacy .js (mmnto-ai/totem#2488)', async () => {
+    // An upgraded-then-ejected consumer can carry BOTH: the `.cjs` this version
+    // distributes and a pre-#2488 `.js` a partial migration left behind. Eject must
+    // leave no fail-open artifact of either shape.
+    const hookDir = path.join(cwd, '.gemini', 'hooks');
+    fs.mkdirSync(hookDir, { recursive: true });
+    const owned = '// [totem] auto-generated — Gemini CLI SessionStart hook\nconsole.log("hi");';
+    fs.writeFileSync(path.join(hookDir, 'SessionStart.cjs'), owned);
+    fs.writeFileSync(path.join(hookDir, 'SessionStart.js'), owned);
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(false);
+    expect(fs.existsSync(path.join(hookDir, 'SessionStart.js'))).toBe(false);
+  });
+
+  it('leaves a user-owned SessionStart.cjs (no Totem marker) in place', async () => {
+    const hookDir = path.join(cwd, '.gemini', 'hooks');
+    fs.mkdirSync(hookDir, { recursive: true });
+    fs.writeFileSync(path.join(hookDir, 'SessionStart.cjs'), 'console.log("user hook");');
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(true);
+  });
+
   it('scrubs AI reflex block from CLAUDE.md', async () => {
     const claudePath = path.join(cwd, 'CLAUDE.md');
     fs.writeFileSync(

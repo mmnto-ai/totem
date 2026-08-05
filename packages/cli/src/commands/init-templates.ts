@@ -740,7 +740,7 @@ export const CLAUDE_PREWRITESHIELD_ENTRY = {
 
 // --- Claude Code SessionStart hook (mmnto-ai/totem#1845 slice 1) ---
 //
-// Symmetric to .gemini/hooks/SessionStart.js: runs the Totem CLI's
+// Symmetric to .gemini/hooks/SessionStart.cjs: runs the Totem CLI's
 // `describe` at session start so Claude boots with project orientation
 // (project name, tier, lessons count, targets list) instead of starting
 // cold. Wires into committed `.claude/settings.json` (team-level
@@ -1384,7 +1384,6 @@ export interface ManagedSessionHook {
 // Gemini CLI treats the crash as a non-fatal warning, so the write-time guard
 // fail-opens SILENTLY. The `.cjs` extension is load-bearing (CommonJS regardless of
 // the consumer's package `type`), mirroring the Claude-side `.cjs` session hooks.
-// SessionStart stays `.js` — the #2481 slice scopes to BeforeTool.
 export const GEMINI_BEFORE_TOOL_REL = '.gemini/hooks/BeforeTool.cjs';
 
 // The pre-#2481 path. A consumer upgraded from an earlier Totem still carries this
@@ -1392,6 +1391,22 @@ export const GEMINI_BEFORE_TOOL_REL = '.gemini/hooks/BeforeTool.cjs';
 // pointing at it). The upgrade path migrates it to GEMINI_BEFORE_TOOL_REL via
 // LEGACY_MANAGED_SESSION_HOOKS below.
 export const GEMINI_BEFORE_TOOL_LEGACY_REL = '.gemini/hooks/BeforeTool.js';
+
+// The Gemini SessionStart briefing ships as `.cjs` for the SAME reason
+// (mmnto-ai/totem#2488, closing the #2481 slice's deliberate scope-out). Its body is
+// CommonJS too (top-level `require('child_process')` for the describe/orient briefings
+// and the totem-status refresh spawn), so in a `"type": "module"` consumer Node resolves
+// a bare `.js` as ESM and the hook throws `ReferenceError: require is not defined` before
+// it emits anything — and Gemini CLI degrades the crashed hook to a warning, so the
+// session-start context injection fail-opens SILENTLY (the agent boots cold believing it
+// was briefed). No `.gemini/settings.json` registration exists for SessionStart (Gemini
+// CLI discovers the session hook by path — the mmnto-ai/totem#2558 posture), so unlike
+// BeforeTool there is no registration seam to migrate; the file rename is the whole fix.
+export const GEMINI_SESSION_START_REL = '.gemini/hooks/SessionStart.cjs';
+
+// The pre-#2488 path, migrated to GEMINI_SESSION_START_REL via
+// LEGACY_MANAGED_SESSION_HOOKS below.
+export const GEMINI_SESSION_START_LEGACY_REL = '.gemini/hooks/SessionStart.js';
 
 export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
   {
@@ -1413,7 +1428,7 @@ export const MANAGED_SESSION_HOOKS: ReadonlyArray<ManagedSessionHook> = [
     endMarker: TOTEM_FILE_END,
   },
   {
-    rel: '.gemini/hooks/SessionStart.js',
+    rel: GEMINI_SESSION_START_REL,
     content: GEMINI_SESSION_START,
     marker: TOTEM_FILE_MARKER,
     endMarker: TOTEM_FILE_END,
@@ -1467,6 +1482,14 @@ export const LEGACY_MANAGED_SESSION_HOOKS: ReadonlyArray<LegacyManagedHook> = [
     legacyRel: GEMINI_BEFORE_TOOL_LEGACY_REL,
     successorRel: GEMINI_BEFORE_TOOL_REL,
     content: GEMINI_BEFORE_TOOL,
+    marker: TOTEM_FILE_MARKER,
+    endMarker: TOTEM_FILE_END,
+  },
+  {
+    // mmnto-ai/totem#2488 — same fail-open class as the BeforeTool entry above.
+    legacyRel: GEMINI_SESSION_START_LEGACY_REL,
+    successorRel: GEMINI_SESSION_START_REL,
+    content: GEMINI_SESSION_START,
     marker: TOTEM_FILE_MARKER,
     endMarker: TOTEM_FILE_END,
   },
