@@ -21,6 +21,14 @@ import type { EstateExecFn, EstateScanResult, TotemRegistry } from '@mmnto/totem
 
 const TAG = 'Estate';
 
+/**
+ * How the registry read went. `unreadable` is kept distinct from `empty`
+ * because `readRegistry` warns and returns `{}` on a corrupt or unreadable
+ * file — collapsing that into "nothing registered" would report a broken
+ * registry as a clean estate.
+ */
+type RegistryStatus = 'ok' | 'empty' | 'unreadable';
+
 export interface EstateCliOptions {
   /**
    * Emit the scan as the JSON artifact on stdout INSTEAD of the human render.
@@ -51,13 +59,17 @@ function classLabel(cls: string): string {
  */
 function estateJsonArtifact(
   result: EstateScanResult,
-  registryStatus: 'ok' | 'empty',
+  registryStatus: RegistryStatus,
 ): Record<string, unknown> {
   return {
     'estate-schema-version': result.schemaVersion,
     'registry-status': registryStatus,
     'derived-at': result.derivedAt,
     'swept-roots': result.sweptRoots,
+    // Additive under schema-version 1: the contract has no consumer yet, and a
+    // narrowed sweep that nothing discloses is the silent degradation the
+    // swept-roots disclosure exists to prevent.
+    'excluded-roots': result.excludedRoots.map((r) => ({ path: r.path, reason: r.reason })),
     repos: result.repos.map((r) => ({
       path: r.path,
       ...(r.lastSync !== undefined ? { 'last-sync': r.lastSync } : {}),
@@ -102,16 +114,18 @@ function estateJsonArtifact(
 }
 
 /**
- * The degenerate artifact for an empty/unreadable registry: the same shape with
- * the honest `registry-status`, so a consumer can tell "nothing registered"
- * from "scanned and found nothing" (doctor-parity.ts:1528 precedent).
+ * The degenerate artifact for an empty or unreadable registry: the same shape
+ * carrying the computed `registry-status`, so a consumer can tell "nothing
+ * registered" from "registry unreadable" from "scanned and found nothing"
+ * (doctor-parity.ts:1528 precedent).
  */
-function degenerateArtifact(now: number): Record<string, unknown> {
+function degenerateArtifact(now: number, registryStatus: RegistryStatus): Record<string, unknown> {
   return estateJsonArtifact(
     {
       schemaVersion: 1,
       derivedAt: new Date(now).toISOString(),
       sweptRoots: [],
+      excludedRoots: [],
       repos: [],
       worktrees: [],
       huskCandidates: [],
@@ -129,7 +143,7 @@ function degenerateArtifact(now: number): Record<string, unknown> {
         unscannable: 0,
       },
     },
-    'empty',
+    registryStatus,
   );
 }
 
@@ -164,15 +178,27 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
     lastSync: entry.lastSync,
   }));
 
+  // `readRegistry` warns only when it swallowed a non-ENOENT read/parse failure
+  // and returned `{}`, so a warning always implies zero entries — and means
+  // "unreadable", not "empty".
+  const registryStatus: RegistryStatus =
+    registryWarnings.length > 0 ? 'unreadable' : entries.length === 0 ? 'empty' : 'ok';
+
+  // Warnings ride stderr in EVERY mode, ahead of the artifact write: stderr is
+  // not the artifact, and dropping the one signal that the registry is broken
+  // would be exactly the silent degradation this sensor exists to surface.
+  for (const warning of registryWarnings) log.warn(TAG, render(warning));
+
   if (entries.length === 0) {
     if (options.json) {
-      process.stdout.write(JSON.stringify(degenerateArtifact(now), null, 2) + '\n');
+      process.stdout.write(JSON.stringify(degenerateArtifact(now, registryStatus), null, 2) + '\n');
       return;
     }
-    for (const warning of registryWarnings) log.warn(TAG, render(warning));
     log.dim(
       TAG,
-      'SKIP — no registered repos in ~/.totem/registry.json; run `totem sync` in a repo to register it',
+      registryStatus === 'unreadable'
+        ? 'SKIP — ~/.totem/registry.json could not be read; no repos to scan'
+        : 'SKIP — no registered repos in ~/.totem/registry.json; run `totem sync` in a repo to register it',
     );
     return;
   }
@@ -185,11 +211,11 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   });
 
   if (options.json) {
-    process.stdout.write(JSON.stringify(estateJsonArtifact(result, 'ok'), null, 2) + '\n');
+    process.stdout.write(
+      JSON.stringify(estateJsonArtifact(result, registryStatus), null, 2) + '\n',
+    );
     return;
   }
-
-  for (const warning of registryWarnings) log.warn(TAG, render(warning));
 
   const s = result.summary;
   log.info(TAG, bold('── worktree estate ──'));
@@ -197,6 +223,9 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
     TAG,
     `${s.repos} registered repo(s) · ${s.worktrees} linked worktree(s) · swept ${result.sweptRoots.length} root(s): ${result.sweptRoots.map(render).join(', ')}`,
   );
+  for (const excluded of result.excludedRoots) {
+    log.dim(TAG, `not swept: ${render(excluded.path)} — ${render(excluded.reason)}`);
+  }
 
   for (const repo of result.repos) {
     if (repo.missing === true) {

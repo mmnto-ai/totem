@@ -151,8 +151,48 @@ describe('doctorEstateCliCommand — degenerate registry', () => {
     expect(artifact['registry-status']).toBe('empty');
     expect(artifact['derived-at']).toBe('2026-08-05T12:00:00.000Z');
     expect(artifact['swept-roots']).toEqual([]);
+    expect(artifact['excluded-roots']).toEqual([]);
     expect(artifact['summary']).toMatchObject({ repos: 0, worktrees: 0, 'husk-candidates': 0 });
     expect(lines).toEqual([]);
+  });
+
+  it('reports an unreadable registry as `unreadable`, warning on stderr only (T6)', async () => {
+    // The registry is read through `os.homedir()`, so the fixture is a temp
+    // HOME carrying a corrupt registry file — the one path that makes
+    // `readRegistry` warn and return {} rather than silently returning {} on a
+    // missing file.
+    const home = path.join(root, 'home');
+    fs.mkdirSync(path.join(home, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.totem', 'registry.json'), '{ not json', 'utf-8');
+    const originalHome = process.env['HOME'];
+    const originalUserProfile = process.env['USERPROFILE'];
+
+    const chunks: string[] = [];
+    const stdout = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((chunk: unknown): boolean => {
+        chunks.push(String(chunk));
+        return true;
+      });
+    try {
+      process.env['HOME'] = home;
+      process.env['USERPROFILE'] = home;
+      await doctorEstateCliCommand({ json: true, nowForTest: NOW, cwdForTest: root });
+    } finally {
+      stdout.mockRestore();
+      if (originalHome === undefined) delete process.env['HOME'];
+      else process.env['HOME'] = originalHome;
+      if (originalUserProfile === undefined) delete process.env['USERPROFILE'];
+      else process.env['USERPROFILE'] = originalUserProfile;
+    }
+
+    const artifact = JSON.parse(chunks.join('')) as Record<string, unknown>;
+    expect(artifact['registry-status']).toBe('unreadable');
+    expect(artifact['summary']).toMatchObject({ repos: 0, worktrees: 0 });
+    // The warning rides stderr; stdout carries the artifact and nothing else.
+    expect(output()).toContain('Cannot read registry');
+    expect(chunks).toHaveLength(1);
+    expect(() => JSON.parse(chunks[0]!)).not.toThrow();
   });
 });
 
@@ -244,6 +284,7 @@ describe('doctorEstateCliCommand — the --json artifact owns stdout (invariant 
       'registry-status',
       'derived-at',
       'swept-roots',
+      'excluded-roots',
       'repos',
       'worktrees',
       'husk-candidates',

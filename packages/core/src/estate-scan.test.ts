@@ -28,14 +28,30 @@ const NOW = Date.parse('2026-08-05T12:00:00.000Z');
 const COMMIT_10_DAYS_AGO = Math.floor((NOW - 10 * 86_400_000) / 1000);
 
 let root: string;
+/** Fixture dirs outside `root` (e.g. directly under os.tmpdir()) to clean up. */
+let extraDirs: string[];
 
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-estate-')));
+  extraDirs = [];
 });
 
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
+  for (const dir of extraDirs) fs.rmSync(dir, { recursive: true, force: true });
 });
+
+/**
+ * A directory whose parent is EXACTLY `os.tmpdir()` — not realpath'd, because
+ * the exclusion compares against `os.tmpdir()` as Node reports it (on macOS
+ * `realpathSync` resolves /var → /private/var and the parent would no longer
+ * match).
+ */
+function mkTmpdirChild(prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  extraDirs.push(dir);
+  return dir;
+}
 
 // ─── Fixture helpers ────────────────────────────────────
 
@@ -599,6 +615,118 @@ describe('invariant 5 — total accounting: nothing is dropped, counts equal row
   });
 });
 
+// ─── Sweep-root derivation ──────────────────────────────
+
+describe('sweep-root derivation — evidence-ranked, disclosed when narrowed', () => {
+  it('does not derive a root from a MISSING registry entry (T1)', () => {
+    const repo = mkdir('repo');
+    const nested = path.join(root, 'nested');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }, { path: path.join(nested, 'gone') }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    expect(result.sweptRoots).toContain(root);
+    expect(result.sweptRoots).not.toContain(nested);
+    expect(result.excludedRoots).toEqual([]);
+    expect(result.repos.find((r) => r.missing === true)!.path).toBe(path.join(nested, 'gone'));
+  });
+
+  it('excludes os.tmpdir() when only a registry entry derives it, and says so (T2)', () => {
+    const repo = mkTmpdirChild('totem-estate-tmproot-');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    expect(result.sweptRoots).not.toContain(path.resolve(os.tmpdir()));
+    expect(result.excludedRoots).toHaveLength(1);
+    expect(result.excludedRoots[0]!.path).toBe(path.resolve(os.tmpdir()));
+    expect(result.excludedRoots[0]!.reason).toBe(
+      'os tmpdir — derived only from a registry entry path; pass --root to sweep it',
+    );
+  });
+
+  it('sweeps os.tmpdir() when a LISTED WORKTREE parent derives it (T3)', () => {
+    const repo = mkTmpdirChild('totem-estate-tmproot-');
+    const wt = mkTmpdirChild('totem-estate-tmpwt-');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        {
+          lists: {
+            [repo]: porcelain([
+              { path: repo, branch: 'refs/heads/main' },
+              { path: wt, branch: 'refs/heads/side' },
+            ]),
+          },
+          defaultRefs: { [repo]: 'origin/main' },
+        },
+        calls,
+      ),
+    });
+    // A live worktree in the temp dir IS evidence that worktrees live there.
+    expect(result.sweptRoots).toContain(path.resolve(os.tmpdir()));
+    expect(result.excludedRoots).toEqual([]);
+  });
+
+  it('sweeps os.tmpdir() when --root names it explicitly (T4)', () => {
+    const repo = mkTmpdirChild('totem-estate-tmproot-');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      extraRoots: [os.tmpdir()],
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    expect(result.sweptRoots).toContain(path.resolve(os.tmpdir()));
+    expect(result.excludedRoots).toEqual([]);
+  });
+});
+
+// ─── Residue attribution ────────────────────────────────
+
+describe('residue-shape attribution takes the most specific repo name', () => {
+  it('attributes a husk to the LONGEST matching registered basename (T5)', () => {
+    const totem = mkdir('totem');
+    const strategy = mkdir('totem-strategy');
+    const husk = mkdir('totem-strategy-claude-x');
+    fs.mkdirSync(path.join(husk, 'node_modules'));
+
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: totem }, { path: strategy }],
+      now: NOW,
+      safeExec: makeExec(
+        {
+          lists: {
+            [totem]: porcelain([{ path: totem, branch: 'refs/heads/main' }]),
+            [strategy]: porcelain([{ path: strategy, branch: 'refs/heads/main' }]),
+          },
+        },
+        calls,
+      ),
+    });
+    expect(result.huskCandidates).toHaveLength(1);
+    expect(result.huskCandidates[0]!.path).toBe(husk);
+    expect(result.huskCandidates[0]!.evidence).toBe('residue-shape');
+    expect(result.huskCandidates[0]!.matchedRepo).toBe(strategy);
+  });
+});
+
 // ─── Invariant 6 ────────────────────────────────────────
 
 describe('invariant 6 — an empty registry yields a valid, degenerate result', () => {
@@ -617,6 +745,7 @@ describe('invariant 6 — an empty registry yields a valid, degenerate result', 
     expect(result.huskCandidates).toEqual([]);
     expect(result.unscannable).toEqual([]);
     expect(result.sweptRoots).toEqual([]);
+    expect(result.excludedRoots).toEqual([]);
     expect(result.summary).toEqual({
       repos: 0,
       reposMissing: 0,

@@ -28,6 +28,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import type { SafeExecErrorFields, SafeExecOptions } from './sys/exec.js';
@@ -140,11 +141,23 @@ export interface EstateSummary {
   unscannable: number;
 }
 
+/** A root the derivation declined to sweep, with the reason it was declined. */
+export interface EstateExcludedRoot {
+  path: string;
+  reason: string;
+}
+
 export interface EstateScanResult {
   schemaVersion: typeof ESTATE_SCHEMA_VERSION;
   derivedAt: string;
   /** Every root actually swept — disclosed so no cap or omission is silent. */
   sweptRoots: string[];
+  /**
+   * Roots the derivation suppressed, so the narrowing is visible rather than
+   * silent. A root that any other derivation path also produced is SWEPT and
+   * never appears here.
+   */
+  excludedRoots: EstateExcludedRoot[];
   repos: EstateRepoRow[];
   worktrees: EstateWorktreeRow[];
   huskCandidates: EstateHuskRow[];
@@ -313,6 +326,8 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   const registryKeys = new Set<string>();
   /** Folded key → display path, so a root is swept once regardless of casing. */
   const sweepRoots = new Map<string, string>();
+  /** Suppressed roots, filtered at the end against what actually got swept. */
+  const excludedRootCandidates = new Map<string, EstateExcludedRoot>();
   const classifiedKeys = new Set<string>();
   const defaultRefCache = new Map<string, string | undefined>();
   const homeListCache = new Map<string, WorktreeListEntry[] | undefined>();
@@ -325,6 +340,31 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     const resolved = path.resolve(dir);
     const key = foldCase(resolved);
     if (!sweepRoots.has(key)) sweepRoots.set(key, resolved);
+  };
+
+  /**
+   * Sweep roots derived from a REGISTRY entry's parent, which is the weakest
+   * of the three derivations: a registry entry only proves a repo was synced
+   * from that path, not that its parent is a place worktrees live. The OS temp
+   * dir is excluded on that basis — registry entries there are near-always
+   * fixture pollution, and sweeping it mints `residue-shape` rows for any
+   * tool's `<repo>-*` scratch dir that happens to carry a `node_modules`.
+   *
+   * The exclusion is scoped to THIS derivation. A listed worktree's parent is
+   * positive evidence that worktrees live there, and `--root` is an explicit
+   * instruction; either one sweeps the temp dir, and the suppression is then
+   * dropped from the disclosure (a swept root is never reported as excluded).
+   */
+  const addRegistryDerivedRoot = (dir: string): void => {
+    const resolved = path.resolve(dir);
+    if (foldCase(resolved) === foldCase(path.resolve(os.tmpdir()))) {
+      excludedRootCandidates.set(foldCase(resolved), {
+        path: resolved,
+        reason: 'os tmpdir — derived only from a registry entry path; pass --root to sweep it',
+      });
+      return;
+    }
+    addSweepRoot(resolved);
   };
 
   const git = (cwd: string, args: string[]): string =>
@@ -494,13 +534,18 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   for (const entry of registry) {
     const repoPath = path.resolve(entry.path);
     registryKeys.add(pathKey(repoPath));
-    addSweepRoot(path.dirname(repoPath));
     const lastSyncField = entry.lastSync === undefined ? {} : { lastSync: entry.lastSync };
 
+    // A missing entry contributes its `missing: true` row and nothing else: a
+    // path that no longer exists is no evidence at all about its parent, and
+    // deriving a sweep root from it would let stale registry entries drag
+    // unrelated directories into the sweep.
     if (!isRealDirectory(repoPath)) {
       repos.push({ path: repoPath, ...lastSyncField, missing: true, worktrees: 0 });
       continue;
     }
+
+    addRegistryDerivedRoot(path.dirname(repoPath));
 
     let listed: WorktreeListEntry[];
     // totem-context: intentional cleanup — one unreadable repo (moved, corrupt, not a git tree) is recorded as a named unscannable row and the remaining registry entries still scan; a throw here would make one bad entry hide the whole estate.
@@ -513,7 +558,16 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       continue;
     }
 
-    for (const wt of listed) addSweepRoot(path.dirname(path.resolve(wt.path)));
+    for (const wt of listed) {
+      // The listed entry that IS the registry path carries no evidence beyond
+      // the registry entry itself, so its parent stays on the registry-derived
+      // path (otherwise the weakest derivation would launder itself through
+      // git's own output). Every OTHER listed worktree is positive evidence
+      // that worktrees live in that parent.
+      const parent = path.dirname(path.resolve(wt.path));
+      if (pathKey(wt.path) === pathKey(repoPath)) addRegistryDerivedRoot(parent);
+      else addSweepRoot(parent);
+    }
 
     // Git lists the main worktree first; it IS the repo, not estate residue, so
     // only the linked worktrees are classified. Its path still joined the
@@ -542,11 +596,16 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
 
   for (const extra of inputs.extraRoots ?? []) addSweepRoot(extra);
 
-  /** Registered repo basenames, for the residue-shape prefix match. */
-  const repoBasenames = repos.map((r) => ({
-    repoPath: r.path,
-    name: foldCase(path.basename(r.path)),
-  }));
+  /**
+   * Registered repo basenames, for the residue-shape prefix match. Sorted
+   * longest-name first so attribution takes the most specific repo: with both
+   * `totem` and `totem-strategy` registered, `totem-strategy-claude-x` must
+   * name `totem-strategy`, not whichever shorter prefix happened to be
+   * enumerated first.
+   */
+  const repoBasenames = repos
+    .map((r) => ({ repoPath: r.path, name: foldCase(path.basename(r.path)) }))
+    .sort((a, b) => b.name.length - a.name.length);
 
   const huskAgeDays = (dir: string): number | undefined => {
     // totem-context: intentional cleanup — a husk has no commit history, so mtime is the only available age; an unreadable stat drops the field rather than reporting a fabricated age.
@@ -674,6 +733,15 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   huskCandidates.sort(byPath);
   unscannable.sort(byPath);
 
+  // A suppression only stands if NO other derivation reached the same root:
+  // worktree-parent and `--root` both outrank the registry-dirname exclusion,
+  // and a swept root must never also be reported as excluded. Excluded roots
+  // are a derivation disclosure, not part of the candidate partition.
+  const excludedRoots = [...excludedRootCandidates]
+    .filter(([key]) => !sweepRoots.has(key))
+    .map(([, row]) => row)
+    .sort(byPath);
+
   const countClass = (cls: WorktreeClass): number =>
     worktrees.filter((w) => w.class === cls).length;
 
@@ -681,6 +749,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     schemaVersion: ESTATE_SCHEMA_VERSION,
     derivedAt: new Date(now).toISOString(),
     sweptRoots,
+    excludedRoots,
     repos,
     worktrees,
     huskCandidates,

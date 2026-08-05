@@ -543,6 +543,7 @@ export { readRegistry, updateRegistryEntry } from './registry.js';
 
 // Worktree-estate sensor (mmnto-ai/totem#2580 — read-only scan behind `doctor --estate`)
 export type {
+  EstateExcludedRoot,
   EstateExecFn,
   EstateHuskRow,
   EstateRegistryEntry,
