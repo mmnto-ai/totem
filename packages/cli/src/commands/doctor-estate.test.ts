@@ -305,6 +305,32 @@ describe('doctorEstateCliCommand — evidence-model disclosure', () => {
     expect(text).toContain(`${root} (standard)`);
   });
 
+  it('labels each ledger row with its axis in the human render', async () => {
+    const { repo, exec } = containerFixture();
+    const broken = mkdir('broken-entry');
+    // This entry's toplevel probe fails, producing a registry-source row.
+    const wrapped: EstateExecFn = (command: string, args: string[] = []): string => {
+      const verb = args.slice(3);
+      if (
+        verb[0] === 'rev-parse' &&
+        verb[1] === '--show-toplevel' &&
+        fold(args[2] ?? '') === fold(broken)
+      ) {
+        throw Object.assign(new Error('not a git repository'), { status: 128 });
+      }
+      return exec(command, args);
+    };
+    await doctorEstateCliCommand({
+      registryForTest: registryOf(repo, broken),
+      execForTest: wrapped,
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+    const text = output();
+    expect(text).toContain(`[registry] ${broken}`);
+    expect(text).toContain('rev-parse --show-toplevel failed');
+  });
+
   it('names all four evidence classes by root kind in the criteria line', async () => {
     const { repo, exec } = containerFixture();
     await doctorEstateCliCommand({

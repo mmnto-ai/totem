@@ -247,8 +247,10 @@ out, and the model is now **root-kind-typed**:
   FAILS derives nothing either — unverifiable is not verified.
 - **Derivation disclosure.** A root suppressed by any rule — os tmpdir reached only from a registry
   dirname, or a dirname reachable only from missing / not-git-root / unverifiable entries, or a
-  withdrawn container — lands in `excludedRoots` with its reason. A root some other derivation
-  reached is swept and never reported excluded.
+  withdrawn container — lands in `excludedRoots`. Reasons AGGREGATE: a root declined by several
+  derivations carries every one (`not derived: <reason>; <reason>`, sorted), because reporting only
+  the first would under-state why it is not swept. The tmpdir reason stands alone since it names the
+  `--root` escape hatch. A root some other derivation reached is swept and never reported excluded.
 - **Two axes, one partition.** `EstateUnscannableRow` carries `source: 'registry' | 'worktree' |
 'sweep'`. The candidate partition is defined over the SWEEP axis only; registry- and
   worktree-source ledger rows are registered-arm accounting and MAY share a path with a husk row
@@ -290,13 +292,19 @@ Exit code is 0 in all cases (report-only sensor; crash-class errors still throw 
 3. A husk row exists only with a typed evidence class; a `.git`-DIRECTORY dir is never reported.
 4. A dangling `.git` pointer file is a husk-candidate even when its name matches no convention.
 5. Total accounting on the SWEEP AXIS: every enumerated candidate lands in exactly one of
-   {worktree rows, huskCandidates, sweep-source unscannable} — nothing dropped silently; summary
-   counts equal row counts. Registry- and worktree-source ledger rows are a DIFFERENT axis and may
-   share a path with a husk row (the two-axes rule), so they are excluded from the partition and
-   asserted separately. Tested by enumerating the swept roots' children independently and accounting
-   for each, with the exempt shapes (dot-dirs, `node_modules`, `.git`-DIRECTORY dirs, git-known
-   paths, no-evidence STANDARD-root dirs) asserted as an EXPLICIT list — so a silent cap or a
-   dropped candidate fails the test.
+   {worktree rows, huskCandidates, CANDIDATE-keyed sweep-source unscannable} — nothing dropped
+   silently; summary counts equal row counts. Two namespaces sit outside that partition and are
+   asserted separately:
+   - **Different axis.** Registry- and worktree-source ledger rows are registered-arm accounting and
+     may share a path with a husk row (the two-axes rule).
+   - **Different namespace.** Sweep-source rows keyed by a swept ROOT (an unreadable root) are keyed
+     by the root, not by a candidate. The same path can legitimately be a failed root AND a
+     candidate row under its own parent when that parent is also swept, so partition assertions
+     exclude ledger rows whose path equals a swept root.
+     Tested by enumerating the swept roots' children independently and accounting for each, with the
+     exempt shapes (dot-dirs, `node_modules`, `.git`-DIRECTORY dirs, git-known paths, no-evidence
+     STANDARD-root dirs) asserted as an EXPLICIT list — so a silent cap or a dropped candidate fails
+     the test.
 6. Empty/unreadable registry → SKIP surface + valid degenerate `--json` artifact, exit 0. The
    artifact's `registry-status` distinguishes `empty` from `unreadable`.
 7. The scan invokes only read verbs (exec-fn spy asserts the allowlist: worktree list / status /

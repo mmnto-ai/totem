@@ -196,7 +196,20 @@ function rootPaths(result: EstateScanResult): string[] {
 
 /** The sweep-axis failure ledger — the only axis the candidate partition covers. */
 function sweepFailures(result: EstateScanResult): string[] {
-  return result.unscannable.filter((u) => u.source === 'sweep').map((u) => u.path);
+  const rootPaths = new Set(result.sweptRoots.map((r) => r.path));
+  // Root-level failures are keyed by the ROOT, not by a candidate, so they sit
+  // OUTSIDE the candidate partition: the same path can be a failed root here
+  // and a candidate row under its own parent. Excluded from every partition
+  // assertion for that reason.
+  return result.unscannable
+    .filter((u) => u.source === 'sweep' && !rootPaths.has(u.path))
+    .map((u) => u.path);
+}
+
+/** Sweep-source rows keyed by a swept ROOT — the namespace the partition excludes. */
+function rootFailures(result: EstateScanResult): EstateScanResult['unscannable'] {
+  const rootPathSet = new Set(result.sweptRoots.map((r) => r.path));
+  return result.unscannable.filter((u) => u.source === 'sweep' && rootPathSet.has(u.path));
 }
 
 /** Every entry under `dir` with its kind, size, and mtime — a write-detector. */
@@ -731,7 +744,7 @@ describe('sweep-root derivation — evidence-ranked, disclosed when narrowed', (
     expect(rootPaths(result)).not.toContain(nested);
     // Suppressed, not silently dropped (the disclosure covers every narrowing).
     expect(result.excludedRoots).toEqual([
-      { path: nested, reason: 'derived only from missing registry entry path(s)' },
+      { path: nested, reason: 'not derived: derived from missing registry entry path(s)' },
     ]);
     expect(result.repos.find((r) => r.missing === true)!.path).toBe(path.join(nested, 'gone'));
   });
@@ -825,7 +838,7 @@ describe('registered arm — a registry entry must be a git TOPLEVEL to be enume
     expect(rootPaths(result)).not.toContain(path.join(repo, 'packages'));
     expect(result.excludedRoots.map((r) => r.path)).toContain(path.join(repo, 'packages'));
     expect(result.excludedRoots.find((r) => r.path === path.join(repo, 'packages'))!.reason).toBe(
-      'derived only from non-git-root registry entry path(s)',
+      'not derived: derived from non-git-root registry entry path(s)',
     );
     // The ancestor's worktree list is never requested on its behalf.
     expect(calls.filter((c) => c.includes('worktree'))).toHaveLength(1);
@@ -867,7 +880,7 @@ describe('registered arm — a registry entry must be a git TOPLEVEL to be enume
     expect(result.excludedRoots).toEqual([
       {
         path: path.join(root, 'nested'),
-        reason: 'derived only from unverifiable registry entry path(s)',
+        reason: 'not derived: derived from unverifiable registry entry path(s)',
       },
     ]);
   });
@@ -1039,7 +1052,7 @@ describe('container roots — location is the evidence', () => {
     expect(rootPaths(result)).not.toContain(container);
     expect(result.excludedRoots.map((r) => r.path)).toContain(container);
     expect(result.excludedRoots.find((r) => r.path === container)!.reason).toBe(
-      'container of a repo whose worktree list failed',
+      'not derived: container of a repo whose worktree list failed',
     );
     expect(result.huskCandidates.filter((h) => h.evidence === 'container-residue')).toEqual([]);
     expect(result.summary.reposUnscannable).toBe(1);
@@ -1178,12 +1191,21 @@ describe('accounting totality across a multi-husk estate', () => {
     });
 
     // (ii) totality: enumerate the swept roots' children independently and
-    // account for each one. Buckets first — they must be pairwise disjoint.
+    // account for each one. The partition is a SWEEP-AXIS property, so the
+    // failure set is built from sweep-source, candidate-keyed rows only — a
+    // registry- or worktree-source row lives on a different axis and must never
+    // be what satisfies `unaccounted`.
     const classified = new Set(result.worktrees.map((w) => w.path));
     const husks = new Set(result.huskCandidates.map((h) => h.path));
-    const failed = new Set(result.unscannable.map((u) => u.path));
+    const failed = new Set(sweepFailures(result));
     for (const p of classified) expect(husks.has(p) || failed.has(p)).toBe(false);
     for (const p of husks) expect(failed.has(p)).toBe(false);
+
+    // This fixture probes cleanly, so the other two axes are empty — asserted
+    // rather than assumed, so a future fixture change cannot quietly start
+    // leaning on them.
+    expect(result.unscannable.filter((u) => u.source !== 'sweep')).toEqual([]);
+    expect(rootFailures(result)).toEqual([]);
 
     const enumerated: string[] = [];
     for (const { path: sweptRoot } of result.sweptRoots) {
@@ -1207,6 +1229,137 @@ describe('accounting totality across a multi-husk estate', () => {
     expect(classified.has(liveWt)).toBe(true);
     expect(unaccounted).toEqual([hidden, nodeModules, otherCheckout, plain, repo].sort());
     expect(rootPaths(result)).toEqual([container, root].sort());
+  });
+});
+
+// ─── Root vs candidate namespace ────────────────────────
+
+/**
+ * Can this platform make a directory unreadable via chmod? POSIX yes; Windows
+ * maps chmod to the read-only attribute, which does not block `readdir`.
+ */
+function canBlockReaddir(): boolean {
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-estate-perm-'));
+  try {
+    fs.chmodSync(probe, 0o000);
+    fs.readdirSync(probe);
+    return false;
+    // totem-context: intentional cleanup — a throw here is the POSITIVE result (the platform blocked the read); the probe dir is removed in the finally below either way.
+  } catch {
+    return true;
+  } finally {
+    // totem-context: intentional cleanup — restore permissions before removing the probe dir; a failure to chmod back would only leak one temp dir and must not fail the suite.
+    try {
+      fs.chmodSync(probe, 0o700);
+      fs.rmSync(probe, { recursive: true, force: true });
+      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    } catch {
+      /* probe dir leak is harmless */
+    }
+  }
+}
+
+describe('root-level failures live outside the candidate partition', () => {
+  it('keys an unreadable root by the ROOT while its parent still yields a candidate row', () => {
+    const parent = mkdir('sweep-parent');
+    const child = path.join(parent, 'child-wt');
+    fs.mkdirSync(child);
+
+    const blocked = canBlockReaddir();
+    if (blocked) fs.chmodSync(child, 0o000);
+    try {
+      const calls: string[][] = [];
+      const result = scanEstate({
+        registry: [],
+        now: NOW,
+        // Both the parent and the child are declared roots. The child is swept
+        // as a ROOT (and fails when the platform can block it) while ALSO being
+        // an enumerable candidate under the parent.
+        extraRoots: [parent, child],
+        safeExec: makeExec({ lists: {} }, calls),
+      });
+
+      expect(rootPaths(result)).toEqual([child, parent].sort());
+      // The candidate row: the child is untracked under a container root.
+      expect(result.huskCandidates.map((h) => h.path)).toEqual([child]);
+
+      if (blocked) {
+        // The root-failure row is keyed by the same path, on the root namespace.
+        const rootRows = rootFailures(result);
+        expect(rootRows.map((r) => r.path)).toEqual([child]);
+        expect(rootRows[0]!.reason).toContain('sweep root unreadable');
+        // Distinguishable from a candidate failure, and EXCLUDED from the
+        // partition — otherwise this fixture would read as a double-report.
+        expect(sweepFailures(result)).toEqual([]);
+      }
+
+      const classified = new Set(result.worktrees.map((w) => w.path));
+      const husks = new Set(result.huskCandidates.map((h) => h.path));
+      const failed = new Set(sweepFailures(result));
+      const all = [...classified, ...husks, ...failed];
+      expect(new Set(all).size).toBe(all.length);
+    } finally {
+      if (blocked) fs.chmodSync(child, 0o700);
+    }
+  });
+
+  it('keys a nonexistent declared root by the root path, with no candidate row', () => {
+    // The portable half of the same property: a root that cannot be read at all
+    // produces a root-keyed ledger row and nothing on the candidate axis.
+    const gone = path.join(root, 'no-such-root');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [],
+      now: NOW,
+      extraRoots: [gone],
+      safeExec: makeExec({ lists: {} }, calls),
+    });
+    expect(rootFailures(result).map((r) => r.path)).toEqual([gone]);
+    expect(sweepFailures(result)).toEqual([]);
+    expect(result.huskCandidates).toEqual([]);
+  });
+});
+
+// ─── Suppression-reason aggregation ─────────────────────
+
+describe('suppressed roots carry EVERY reason that declined them', () => {
+  it('aggregates missing and unverifiable reasons into one disclosure row', () => {
+    const nested = path.join(root, 'nested');
+    const missing = path.join(nested, 'gone');
+    const unverifiable = mkdir('nested', 'maybe-repo');
+
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: missing }, { path: unverifiable }],
+      now: NOW,
+      safeExec: makeExec({ lists: {}, failToplevel: [unverifiable] }, calls),
+    });
+
+    expect(result.excludedRoots).toHaveLength(1);
+    expect(result.excludedRoots[0]!.path).toBe(nested);
+    // Both derivations declined this root; reporting only the first would
+    // under-state why it is not swept.
+    expect(result.excludedRoots[0]!.reason).toBe(
+      'not derived: derived from missing registry entry path(s); derived from unverifiable registry entry path(s)',
+    );
+  });
+
+  it('keeps the tmpdir reason standing alone — it names the escape hatch', () => {
+    const underTmp = mkTmpdirChild('totem-estate-tmproot-');
+    const missingUnderTmp = path.join(path.resolve(os.tmpdir()), 'totem-estate-not-here');
+    const calls: string[][] = [];
+    const result = scanEstate({
+      registry: [{ path: underTmp }, { path: missingUnderTmp }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [underTmp]: porcelain([{ path: underTmp, branch: 'refs/heads/main' }]) } },
+        calls,
+      ),
+    });
+    const row = result.excludedRoots.find((r) => r.path === path.resolve(os.tmpdir()))!;
+    expect(row.reason).toBe(
+      'os tmpdir — derived only from a registry entry path; pass --root to sweep it',
+    );
   });
 });
 

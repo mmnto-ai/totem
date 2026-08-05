@@ -393,7 +393,6 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   /** Folded key → root, so a root is swept once regardless of casing. */
   const sweepRoots = new Map<string, { path: string; container: boolean }>();
   /** Suppressed roots, filtered at the end against what actually got swept. */
-  const excludedRootCandidates = new Map<string, EstateExcludedRoot>();
   const classifiedKeys = new Set<string>();
   const defaultRefCache = new Map<string, string | undefined>();
   const homeListCache = new Map<string, WorktreeListEntry[] | undefined>();
@@ -440,22 +439,32 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   const TMPDIR_SUPPRESSION =
     'os tmpdir — derived only from a registry entry path; pass --root to sweep it';
 
+  /** Every reason that suppressed a given root, folded key → reason set. */
+  const suppressionReasons = new Map<string, { path: string; reasons: Set<string> }>();
+
   /**
    * Record a root the derivation declined to produce, so the narrowing is
-   * disclosed rather than silent. One row per root: the tmpdir reason outranks
-   * the others (it names the `--root` escape hatch), and otherwise the first
-   * suppression to reach a root keeps it. The end-filter drops any root that
-   * some OTHER derivation did produce — a swept root is never reported here.
+   * disclosed rather than silent. Reasons AGGREGATE: a root can be reached (and
+   * declined) by several derivations, and reporting only the first would
+   * under-state why it is not swept. The tmpdir reason still stands alone
+   * because it names the `--root` escape hatch, which the others do not. The
+   * end-filter drops any root that some OTHER derivation did produce — a swept
+   * root is never reported here.
    */
   const noteSuppressedRoot = (dir: string, reason: string): void => {
     const resolved = path.resolve(dir);
     const key = foldCase(resolved);
     if (isOsTmpdir(resolved)) {
-      excludedRootCandidates.set(key, { path: resolved, reason: TMPDIR_SUPPRESSION });
+      suppressionReasons.set(key, { path: resolved, reasons: new Set([TMPDIR_SUPPRESSION]) });
       return;
     }
-    if (!excludedRootCandidates.has(key)) {
-      excludedRootCandidates.set(key, { path: resolved, reason });
+    const existing = suppressionReasons.get(key);
+    // A tmpdir suppression already recorded for this root outranks the rest.
+    if (existing?.reasons.has(TMPDIR_SUPPRESSION) === true) return;
+    if (existing === undefined) {
+      suppressionReasons.set(key, { path: resolved, reasons: new Set([reason]) });
+    } else {
+      existing.reasons.add(reason);
     }
   };
 
@@ -661,10 +670,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
     // unrelated directories into the sweep.
     if (!isRealDirectory(repoPath)) {
       repos.push({ path: repoPath, ...lastSyncField, missing: true, worktrees: 0 });
-      noteSuppressedRoot(
-        path.dirname(repoPath),
-        'derived only from missing registry entry path(s)',
-      );
+      noteSuppressedRoot(path.dirname(repoPath), 'derived from missing registry entry path(s)');
       continue;
     }
 
@@ -687,7 +693,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       reposUnscannable += 1;
       noteSuppressedRoot(
         path.dirname(repoPath),
-        'derived only from unverifiable registry entry path(s)',
+        'derived from unverifiable registry entry path(s)',
       );
       continue;
     }
@@ -704,7 +710,7 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       });
       noteSuppressedRoot(
         path.dirname(repoPath),
-        'derived only from non-git-root registry entry path(s)',
+        'derived from non-git-root registry entry path(s)',
       );
       continue;
     }
@@ -926,6 +932,11 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
       dirents = fs.readdirSync(root, { withFileTypes: true });
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
+      // Keyed by the ROOT, not by a candidate. Root-level failures live outside
+      // the candidate partition: the same path can legitimately be a failed
+      // root here AND a candidate row under its own parent when that parent is
+      // also swept. Partition assertions therefore exclude ledger rows whose
+      // path equals a swept root.
       addUnscannable(root, `sweep root unreadable: ${describe(err)}`, 'sweep');
       continue;
     }
@@ -962,10 +973,21 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   // A suppression only stands if NO other derivation reached the same root:
   // worktree-parent and `--root` both outrank the registry-dirname exclusion,
   // and a swept root must never also be reported as excluded. Excluded roots
-  // are a derivation disclosure, not part of the candidate partition.
-  const excludedRoots = [...excludedRootCandidates]
+  // are a derivation disclosure, not part of the candidate partition. Every
+  // reason that declined the root is carried, sorted so the disclosure is
+  // stable across runs.
+  const excludedRoots: EstateExcludedRoot[] = [...suppressionReasons]
     .filter(([key]) => !sweepRoots.has(key))
-    .map(([, row]) => row)
+    .map(([, row]) => {
+      const reasons = [...row.reasons].sort();
+      return {
+        path: row.path,
+        reason:
+          reasons.length === 1 && reasons[0] === TMPDIR_SUPPRESSION
+            ? TMPDIR_SUPPRESSION
+            : `not derived: ${reasons.join('; ')}`,
+      };
+    })
     .sort(byPath);
 
   const countClass = (cls: WorktreeClass): number =>

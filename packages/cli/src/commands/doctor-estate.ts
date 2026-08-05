@@ -294,9 +294,12 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   }
 
   for (const row of result.unscannable) {
+    // The axis is printed: a registry-source row is registered-arm accounting
+    // and may share a path with a husk row, while a sweep-source row is a hole
+    // in the candidate scan. Collapsing them would hide which is which.
     log.info(
       TAG,
-      `${warnColor(bold('unscannable  '))} ${render(row.path)} — ${render(row.reason)}`,
+      `${warnColor(bold('unscannable  '))} [${row.source}] ${render(row.path)} — ${render(row.reason)}`,
     );
   }
 
@@ -310,6 +313,6 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   );
   log.dim(
     TAG,
-    'husk criteria by root kind — container roots (`<repo>/.claude/worktrees` and any --root) use LOCATION as evidence: any directory git tracks no worktree for and that has no `.git` directory is container-residue. Standard roots (parents of registry paths and of listed worktrees) require SHAPE evidence: a dangling `.git` pointer · no `.git` + verified-repo name prefix + node_modules · an intact pointer absent from its home repo worktree list. Report-only — nothing is removed.',
+    'husk criteria by root kind — container roots (`<repo>/.claude/worktrees` and any --root) use LOCATION as evidence: ANY directory git tracks no worktree for and that has no `.git` directory is reported there, typed as dangling-gitdir-pointer or deregistered-intact when a `.git` pointer supplies stronger evidence and container-residue otherwise. Standard roots (parents of registry paths and of listed worktrees) require SHAPE evidence: a dangling `.git` pointer · no `.git` + verified-repo name prefix + node_modules · an intact pointer absent from its home repo worktree list. Report-only — nothing is removed.',
   );
 }
