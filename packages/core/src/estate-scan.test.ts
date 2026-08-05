@@ -538,6 +538,26 @@ describe('invariant 3 — husks require typed evidence; a `.git` DIRECTORY is ne
     }
   });
 
+  // The prefix is hyphen-BOUNDED: `<repo>-…` is the worktree naming
+  // convention's own shape, while a name that merely BEGINS with a repo's
+  // (`repoville` vs `repo`) is an ordinary project, not residue.
+  it('does not husk a `.git`-less project whose name merely begins with a repo name', () => {
+    const repo = mkdir('repo');
+    mkdir('repoville', 'node_modules');
+    mkdir('repo-ville', 'node_modules');
+
+    const result = scanEstate({
+      registry: [{ path: repo }],
+      now: NOW,
+      safeExec: makeExec(
+        { lists: { [repo]: porcelain([{ path: repo, branch: 'refs/heads/main' }]) } },
+        [],
+      ),
+    });
+
+    expect(result.huskCandidates.map((h) => path.basename(h.path))).toEqual(['repo-ville']);
+  });
+
   it('does not husk a live worktree of an UNREGISTERED repo (its home repo still lists it)', () => {
     const repo = mkdir('repo');
     const otherRepo = mkdir('other');

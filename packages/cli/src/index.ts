@@ -1531,6 +1531,16 @@ program
             'Run totem doctor --parity --json or totem doctor --estate --json.',
           );
         }
+        // Same misuse class as the `--json` guard above: silently discarding a
+        // flag the operator typed would be a silent no-op on a sweep they asked
+        // for.
+        if (opts.root !== undefined && opts.root.length > 0 && !opts.estate) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            '--root declares a sweep root for the estate sensor only (mmnto-ai/totem#2580).',
+            'Run totem doctor --estate --root <dir>.',
+          );
+        }
         if (opts.claimDiscipline) {
           const { doctorClaimDisciplineCliCommand } =
             await import('./commands/doctor-claim-discipline.js');

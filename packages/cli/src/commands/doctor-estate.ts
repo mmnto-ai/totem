@@ -47,6 +47,9 @@ export interface EstateCliOptions {
   nowForTest?: number;
 }
 
+/** Gutter width for row labels, so every row family aligns on one column. */
+const LABEL_WIDTH = 13;
+
 /** Row labels are the class names with the `registered-` scope prefix dropped. */
 function classLabel(cls: string): string {
   return cls.startsWith('registered-') ? cls.slice('registered-'.length) : cls;
@@ -130,10 +133,16 @@ function estateJsonArtifact(
  * registered" from "registry unreadable" from "scanned and found nothing"
  * (doctor-parity.ts:1528 precedent).
  */
-function degenerateArtifact(now: number, registryStatus: RegistryStatus): Record<string, unknown> {
+function degenerateArtifact(
+  now: number,
+  registryStatus: RegistryStatus,
+  // The core constant, passed in from the command's dynamic import so this
+  // helper stays synchronous and the literal has one source of truth.
+  schemaVersion: EstateScanResult['schemaVersion'],
+): Record<string, unknown> {
   return estateJsonArtifact(
     {
-      schemaVersion: 1,
+      schemaVersion,
       derivedAt: new Date(now).toISOString(),
       sweptRoots: [],
       excludedRoots: [],
@@ -163,7 +172,8 @@ function degenerateArtifact(now: number, registryStatus: RegistryStatus): Record
 
 export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Promise<void> {
   const path = await import('node:path');
-  const { readRegistry, safeExec, sanitizeForTerminal, scanEstate } = await import('@mmnto/totem');
+  const { ESTATE_SCHEMA_VERSION, readRegistry, safeExec, sanitizeForTerminal, scanEstate } =
+    await import('@mmnto/totem');
   const {
     bold,
     dim: dimColor,
@@ -203,9 +213,18 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   // would be exactly the silent degradation this sensor exists to surface.
   for (const warning of registryWarnings) log.warn(TAG, render(warning));
 
-  if (entries.length === 0) {
+  const extraRoots = (options.roots ?? []).map((root) => path.resolve(cwd, root));
+
+  // The empty-registry short-circuit yields ONLY when there is also nothing to
+  // sweep: `--root` declares a worktree location independently of the registry,
+  // and `scanEstate` sweeps `extraRoots` with `registry: []` — dropping them
+  // here would kill the flag exactly when the registry is useless.
+  if (entries.length === 0 && extraRoots.length === 0) {
     if (options.json) {
-      process.stdout.write(JSON.stringify(degenerateArtifact(now, registryStatus), null, 2) + '\n');
+      process.stdout.write(
+        JSON.stringify(degenerateArtifact(now, registryStatus, ESTATE_SCHEMA_VERSION), null, 2) +
+          '\n',
+      );
       return;
     }
     log.dim(
@@ -221,7 +240,7 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
     registry: entries,
     safeExec: options.execForTest ?? safeExec,
     now,
-    extraRoots: (options.roots ?? []).map((root) => path.resolve(cwd, root)),
+    extraRoots,
   });
 
   if (options.json) {
@@ -266,7 +285,7 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   }
 
   for (const row of result.worktrees) {
-    const label = classLabel(row.class).padEnd(13);
+    const label = classLabel(row.class).padEnd(LABEL_WIDTH);
     const color =
       row.class === 'registered-active'
         ? successColor
@@ -289,7 +308,7 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
     const matched = husk.matchedRepo === undefined ? '' : ` · matches ${render(husk.matchedRepo)}`;
     log.info(
       TAG,
-      `${warnColor(bold('husk         '))} ${render(husk.path)} [${husk.evidence}] under ${render(husk.sweptRoot)}${matched}${age}`,
+      `${warnColor(bold('husk'.padEnd(LABEL_WIDTH)))} ${render(husk.path)} [${husk.evidence}] under ${render(husk.sweptRoot)}${matched}${age}`,
     );
   }
 
@@ -299,7 +318,7 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
     // in the candidate scan. Collapsing them would hide which is which.
     log.info(
       TAG,
-      `${warnColor(bold('unscannable  '))} [${row.source}] ${render(row.path)} — ${render(row.reason)}`,
+      `${warnColor(bold('unscannable'.padEnd(LABEL_WIDTH)))} [${row.source}] ${render(row.path)} — ${render(row.reason)}`,
     );
   }
 

@@ -182,6 +182,11 @@ export interface EstateSummary {
   detached: number;
   unscannableWorktrees: number;
   huskCandidates: number;
+  /**
+   * EVERY `unscannable` ledger row, across all three axes — `reposUnscannable`
+   * and `unscannableWorktrees` are subsets of this total, not addends beside
+   * it. The sweep-axis count is the remainder.
+   */
   unscannable: number;
 }
 
@@ -905,10 +910,13 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
 
     // Under a STANDARD root — an ordinary working directory — residue-shape
     // needs BOTH a registered-repo name prefix and a leftover `node_modules`.
+    // The prefix is hyphen-BOUNDED (`<repo>-`), the worktree naming convention's
+    // own shape: a bare `startsWith` would husk any ordinary `.git`-less project
+    // whose name merely begins with a repo's (`totemville` vs `totem`).
     // A symlinked `.git` yields no typed evidence here.
     if (gitEntry !== undefined) return undefined;
     const name = foldCase(path.basename(dir));
-    const matched = repoBasenames.find((r) => r.name.length > 0 && name.startsWith(r.name));
+    const matched = repoBasenames.find((r) => r.name.length > 0 && name.startsWith(r.name + '-'));
     if (matched === undefined) return undefined;
     if (!isRealDirectory(path.join(dir, 'node_modules'))) return undefined;
     return {

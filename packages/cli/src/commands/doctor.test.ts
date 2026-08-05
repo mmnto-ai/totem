@@ -5,6 +5,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { EstateExecFn, TotemRegistry } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import type { DiagnosticResult } from './doctor.js';
 import {
@@ -714,7 +716,7 @@ describe('doctorGateFailed', () => {
 // ─── Ambient estate row (mmnto-ai/totem#2580) ───────────
 
 describe('checkEstate', () => {
-  const registryOf = (...paths: string[]): Record<string, unknown> =>
+  const registryOf = (...paths: string[]): TotemRegistry =>
     Object.fromEntries(
       paths.map((p) => [
         p,
@@ -748,7 +750,7 @@ describe('checkEstate', () => {
     const toplevels = new Map(Object.entries(opts.toplevels ?? {}).map(([k, v]) => [fold(k), v]));
     const failToplevel = new Set((opts.failToplevel ?? []).map(fold));
     return {
-      registry: registryOf(repo) as never,
+      registry: registryOf(repo),
       now: Date.parse('2026-08-05T12:00:00.000Z'),
       safeExec: ((_command: string, args: string[] = []): string => {
         if (opts.throws === true) throw new Error('git exploded');
@@ -764,7 +766,7 @@ describe('checkEstate', () => {
         }
         if (verb[0] === 'rev-parse') return 'origin/main';
         return '';
-      }) as never,
+      }) as EstateExecFn,
     };
   }
 
@@ -774,6 +776,32 @@ describe('checkEstate', () => {
     expect(result.message).toContain('No registered repos');
   });
 
+  // A corrupt registry must not collapse into the clean "nothing registered"
+  // skip — the ambient row is the surface operators actually see, and it is
+  // the one that would hide the failure. Drives the REAL readRegistry (no
+  // registry seam) against a temp home holding an unparseable registry.json.
+  it('warns (not skip) when the registry exists but cannot be read', async () => {
+    const home = fs.realpathSync(makeTmpDir());
+    fs.mkdirSync(path.join(home, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.totem', 'registry.json'), '{ not json', 'utf-8');
+    const prevHome = process.env['HOME'];
+    const prevProfile = process.env['USERPROFILE'];
+    process.env['HOME'] = home;
+    process.env['USERPROFILE'] = home;
+    try {
+      const result = await checkEstate();
+      expect(result.status).toBe('warn');
+      expect(result.message).toContain('Registry unreadable');
+      expect(result.gateExempt).toBe(true);
+    } finally {
+      if (prevHome === undefined) delete process.env['HOME'];
+      else process.env['HOME'] = prevHome;
+      if (prevProfile === undefined) delete process.env['USERPROFILE'];
+      else process.env['USERPROFILE'] = prevProfile;
+      cleanTmpDir(home);
+    }
+  });
+
   it('passes quietly on a clean estate, naming missing and unscannable counts', async () => {
     const repo = path.join(estateDir, 'repo');
     fs.mkdirSync(repo, { recursive: true });
@@ -781,7 +809,7 @@ describe('checkEstate', () => {
     const base = seams(repo);
     const result = await checkEstate({
       ...base,
-      registry: registryOf(repo, gone) as never,
+      registry: registryOf(repo, gone),
     });
     expect(result.status).toBe('pass');
     // The denominator is what was ENUMERATED — an entry that was missing, not a
@@ -801,7 +829,7 @@ describe('checkEstate', () => {
     fs.mkdirSync(broken, { recursive: true });
     const result = await checkEstate({
       ...seams(repo, { toplevels: { [inside]: repo }, failToplevel: [broken] }),
-      registry: registryOf(repo, inside, broken) as never,
+      registry: registryOf(repo, inside, broken),
     });
     expect(result.status).toBe('pass');
     expect(result.message).toContain('1 enumerated repo(s)');

@@ -1989,12 +1989,26 @@ export async function checkEstate(
   const name = 'Estate';
   try {
     const { readRegistry, safeExec, scanEstate } = await import('@mmnto/totem');
-    const registry = seams.registry ?? readRegistry();
+    const registryWarnings: string[] = [];
+    const registry = seams.registry ?? readRegistry((msg: string) => registryWarnings.push(msg));
     const entries = Object.values(registry).map((entry) => ({
       path: entry.path,
       lastSync: entry.lastSync,
     }));
     if (entries.length === 0) {
+      // `readRegistry` warns only when it swallowed a non-ENOENT read/parse
+      // failure and returned `{}` — a broken registry must not read as the
+      // clean "nothing registered" skip (the same collapse `doctor --estate`
+      // already refuses in its registry-status derivation).
+      if (registryWarnings.length > 0) {
+        return {
+          name,
+          status: 'warn',
+          message: `Registry unreadable — no repos scanned: ${registryWarnings.join(' | ')}`,
+          remediation: 'Repair ~/.totem/registry.json, then run `totem doctor --estate`.',
+          gateExempt: true,
+        };
+      }
       return {
         name,
         status: 'skip',

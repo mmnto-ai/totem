@@ -161,6 +161,45 @@ describe('doctorEstateCliCommand — degenerate registry', () => {
     expect(lines).toEqual([]);
   });
 
+  // `--root` declares a worktree location independently of the registry: an
+  // empty registry must not swallow the sweep the operator explicitly asked
+  // for. No git call is expected — an empty registry probes nothing and a
+  // `.git`-less candidate needs no git.
+  it('still sweeps a --root when the registry is empty', async () => {
+    const declared = path.join(root, 'declared-root');
+    fs.mkdirSync(path.join(declared, 'left-behind', 'node_modules'), { recursive: true });
+
+    const chunks: string[] = [];
+    const stdout = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((chunk: unknown): boolean => {
+        chunks.push(String(chunk));
+        return true;
+      });
+    try {
+      await doctorEstateCliCommand({
+        json: true,
+        registryForTest: {},
+        roots: [declared],
+        execForTest: () => {
+          throw new Error('no git call expected for an empty registry');
+        },
+        nowForTest: NOW,
+        cwdForTest: root,
+      });
+    } finally {
+      stdout.mockRestore();
+    }
+
+    const artifact = JSON.parse(chunks.join('')) as Record<string, unknown>;
+    expect(artifact['registry-status']).toBe('empty');
+    expect(artifact['swept-roots']).toEqual([{ path: declared, kind: 'container' }]);
+    const husks = artifact['husk-candidates'] as { path: string; evidence: string }[];
+    expect(husks).toHaveLength(1);
+    expect(husks[0]!.evidence).toBe('container-residue');
+    expect(path.basename(husks[0]!.path)).toBe('left-behind');
+  });
+
   it('reports an unreadable registry as `unreadable`, warning on stderr only (T6)', async () => {
     // The registry is read through `os.homedir()`, so the fixture is a temp
     // HOME carrying a corrupt registry file — the one path that makes
