@@ -54,6 +54,13 @@ jobs:
     if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Serialize alert jobs (CR round 1): two overlapping runs must not both
+    # observe "no existing issue" and double-create. Classic group syntax only —
+    # an invalid concurrency key would not fail this job, it would invalidate
+    # the WHOLE workflow file and take the smoke itself dark. A replaced-pending
+    # alert needs >=3 simultaneous runs of a once-daily schedule; accepted.
+    concurrency:
+      group: ci-integration-file-on-red-alert
     permissions:
       issues: write
     steps:
