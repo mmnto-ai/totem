@@ -40,7 +40,7 @@ Three claims we would rather prove than assert.
 
 <!-- docs DAYS_UNDER_FREEZE -->
 
-The legacy lesson→rule compiler has been parked under a standing freeze since **2026-05-17** — **59 days** as of this page's last data refresh (2026-07-15). Rather than keep running a compiler we no longer trust, the rule corpus is enforced read-only until its replacement passes held-out validation. We hold our own line the way we ask your repo to hold its own.
+The legacy lesson→rule compiler has been parked under a standing freeze since **2026-05-17** — **81 days** as of this page's last data refresh (2026-08-06). Rather than keep running a compiler we no longer trust, the rule corpus is enforced read-only until its replacement passes held-out validation. We hold our own line the way we ask your repo to hold its own.
 
 <!-- /docs -->
 
@@ -48,7 +48,7 @@ The legacy lesson→rule compiler has been parked under a standing freeze since 
 
 <!-- docs LINT_RECEIPT -->
 
-A real merged diff of this repository (`c14e90ab..ba8c591d`, 41 files) linted in **3598 ms** with **zero LLM calls** — the run executed with every provider API key stripped from the environment, so there was nothing to silently call. 387 rules evaluated; 0 errors, 20 warnings. Environment: win32-x64, node 24.16.0, CLI 1.105.0, generated 2026-07-28. CI recomputes this receipt on every pull request — the counts must match; timing is environment-labeled, never gated. The replay runs with `--ast-parse-mode lenient` — the pinned corpus predates the current target-mismatch load guard — and the receipt records that posture (`astParseMode`) plus whether the guard fired (`targetMismatchGuardWarning: true`).
+A real merged diff of this repository (`c14e90ab..ba8c591d`, 41 files) linted in **3908 ms** with **zero LLM calls** — the run executed with every provider API key stripped from the environment, so there was nothing to silently call. 387 rules evaluated; 0 errors, 20 warnings. Environment: win32-x64, node 24.16.0, CLI 1.112.0, generated 2026-08-06. CI recomputes this receipt on every pull request — the counts must match; timing is environment-labeled, never gated. The replay runs with `--ast-parse-mode lenient` — the pinned corpus predates the current target-mismatch load guard — and the receipt records that posture (`astParseMode`) plus whether the guard fired (`targetMismatchGuardWarning: true`).
 
 <!-- /docs -->
 
