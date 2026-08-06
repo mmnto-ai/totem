@@ -41,3 +41,73 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  # File-on-red (mmnto-ai/totem#2582): a red smoke must land in the triage
+  # surface the cohort already reads — the issue queue — not wait for someone
+  # to open the Actions tab (six consecutive scheduled reds went unseen,
+  # 2026-07-30 → 2026-08-04). One open issue deduped by exact title, a comment
+  # per subsequent red, and an auto-close comment on the next green. Runs on
+  # manual dispatches too, so a post-fix dispatch green closes the alert.
+  alert:
+    name: File-on-red alert
+    needs: smoke
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Serialize alert jobs (CR round 1): two overlapping runs must not both
+    # observe "no existing issue" and double-create. Classic group syntax only —
+    # an invalid concurrency key would not fail this job, it would invalidate
+    # the WHOLE workflow file and take the smoke itself dark. A replaced-pending
+    # alert needs >=3 simultaneous runs of a once-daily schedule; accepted.
+    concurrency:
+      group: ci-integration-file-on-red-alert
+    permissions:
+      issues: write
+    steps:
+      - name: File, bump, or close the alert issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ needs.smoke.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          TITLE: 'ci(smoke): Integration Smoke is red (file-on-red alert)'
+        run: |
+          set -euo pipefail
+          # Failures here are LOUD by design: nothing swallows an API error —
+          # a red alert job is visible in exactly the place a silent one is not.
+          # Exact-title match; `--search in:title` is fuzzy AND its open-state
+          # filter rides GitHub's eventually-consistent search index, so both
+          # title and state are re-checked precisely on the fresh JSON objects.
+          EXISTING="$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title,state \
+            --jq 'map(select(.title == env.TITLE and .state == "OPEN")) | map(.number) | join(" ")')"
+
+          if [ "$RESULT" = 'success' ]; then
+            # Close EVERY open alert, not just the first — a duplicate born of
+            # a race must not leak a permanently-open "red" issue that trains
+            # everyone to ignore the alert.
+            for n in $EXISTING; do
+              gh issue comment "$n" --body "Green again: $EVENT run $RUN_URL — closing."
+              gh issue close "$n"
+            done
+          elif [ "$RESULT" = 'skipped' ]; then
+            # The smoke never ran; nothing to claim in either direction.
+            :
+          else
+            # failure, cancelled, or any future state: anything that is not a
+            # proven green is RED for alerting purposes. `cancelled` is
+            # deliberately red — GitHub maps a `timeout-minutes` expiry (a hung
+            # provider API, the most characteristic smoke failure) to
+            # cancellation, and a mute arm there would be the silent-green
+            # delivery gap this job exists to close.
+            FIRST="${EXISTING%% *}"
+            if [ -n "$FIRST" ]; then
+              gh issue comment "$FIRST" --body "Still red ($RESULT): $EVENT run $RUN_URL"
+            else
+              gh issue create --title "$TITLE" --body "$(printf '%s\n\n%s\n\n%s' \
+                "The Integration Smoke matrix finished '$RESULT' on a $EVENT run: $RUN_URL" \
+                "This alert is filed automatically (mmnto-ai/totem#2582, permanently-red-sensor class): a red smoke that only lives in the Actions tab reads as coverage while delivering nothing. Subsequent reds comment here; the next green closes this issue automatically." \
+                "Triage: open the run, identify the failing provider leg, and check secret vintage first (the 2026-08 incident was an org-level key drained of credit — see mmnto-ai/totem#1956).")"
+            fi
+          fi
