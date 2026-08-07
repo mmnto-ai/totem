@@ -1995,8 +1995,14 @@ export async function checkEstate(
 ): Promise<DiagnosticResult> {
   const name = 'Estate';
   try {
-    const { existingWorktreeRoots, readRegistry, readWorktreeRegistry, safeExec, scanEstate } =
-      await import('@mmnto/totem');
+    const {
+      existingWorktreeRoots,
+      partitionWorktreeRoots,
+      readRegistry,
+      readWorktreeRegistry,
+      safeExec,
+      scanEstate,
+    } = await import('@mmnto/totem');
     const registryWarnings: string[] = [];
     const registry = seams.registry ?? readRegistry((msg: string) => registryWarnings.push(msg));
     const entries = Object.values(registry).map((entry) => ({
@@ -2004,17 +2010,29 @@ export async function checkEstate(
       lastSync: entry.lastSync,
     }));
 
-    // The wt-registry's recorded container roots (mmnto-ai/totem#2580 slice 2):
-    // the ambient row sweeps exactly what `--estate` sweeps, or it would report
-    // a clean estate that the explicit command reports dirty. Unreadable file →
-    // disclosed in the message, scan proceeds (a degraded scan may report LESS,
-    // never more); a recorded root that no longer exists is filtered out — an
-    // absent root is an empty sweep, not a scan hole.
+    // The wt-registry's recorded roots (mmnto-ai/totem#2580 slice 2): the
+    // ambient row sweeps exactly what `--estate` sweeps, or it would report a
+    // clean estate that the explicit command reports dirty. Only the DEFAULT
+    // `~/.totem/worktrees` location sweeps with container semantics; every
+    // other recorded root sweeps as a STANDARD root, where husk-ness needs
+    // shape evidence. Unreadable file → disclosed in the message, scan
+    // proceeds (a degraded scan may report LESS, never more); a recorded root
+    // that no longer exists is filtered out — an absent root is an empty
+    // sweep, not a scan hole.
     const wtWarnings: string[] = [];
     const wtRoots =
       seams.wtRoots ??
       existingWorktreeRoots(readWorktreeRegistry((msg: string) => wtWarnings.push(msg)));
+    const wtPartition = partitionWorktreeRoots(wtRoots);
     const wtNote = wtWarnings.length === 0 ? '' : ` ${wtWarnings.join(' | ')}.`;
+    // The sync-registry disclosure must ride EVERY arm, not just the
+    // short-circuit: with recorded wt roots the scan proceeds on zero repo
+    // entries, and a green row would hide the one signal that the sensor is
+    // blind to every registered repo (#2580 slice-2 falsification, finding 1).
+    const registryNote =
+      registryWarnings.length === 0
+        ? ''
+        : ` Sync registry unreadable — no repos enumerated: ${registryWarnings.join(' | ')}.`;
 
     if (entries.length === 0 && wtRoots.length === 0) {
       // `readRegistry` warns only when it swallowed a non-ENOENT read/parse
@@ -2042,7 +2060,8 @@ export async function checkEstate(
       registry: entries,
       safeExec: seams.safeExec ?? safeExec,
       now: seams.now ?? Date.now(),
-      extraRoots: wtRoots,
+      extraRoots: wtPartition.container,
+      extraStandardRoots: wtPartition.standard,
     });
     const s = result.summary;
     // Named on EVERY row, pass included: a failed probe is a hole in the scan
@@ -2067,16 +2086,21 @@ export async function checkEstate(
       return {
         name,
         status: 'warn',
-        message: `${s.stale} stale worktree(s), ${s.huskCandidates} husk candidate(s) across ${enumerated} enumerated repo(s)${skipped}.${probes}${wtNote}`,
+        message: `${s.stale} stale worktree(s), ${s.huskCandidates} husk candidate(s) across ${enumerated} enumerated repo(s)${skipped}.${probes}${registryNote}${wtNote}`,
         remediation:
           'Run `totem doctor --estate` for the per-row evidence (report-only — this row never gates).',
         gateExempt: true,
       };
     }
+    // An unreadable sync registry demotes the clean arm to warn: the row DID
+    // scan the recorded roots, but it saw zero of the registered repos.
     return {
       name,
-      status: 'pass',
-      message: `${enumerated} enumerated repo(s)${skipped} · ${s.worktrees} linked worktree(s); no stale worktrees or husk candidates.${probes}${wtNote}`,
+      status: registryWarnings.length > 0 ? 'warn' : 'pass',
+      message: `${enumerated} enumerated repo(s)${skipped} · ${s.worktrees} linked worktree(s); no stale worktrees or husk candidates.${probes}${registryNote}${wtNote}`,
+      ...(registryWarnings.length > 0
+        ? { remediation: 'Repair ~/.totem/registry.json, then run `totem doctor --estate`.' }
+        : {}),
       gateExempt: true,
     };
     // totem-context: a scan failure is reported as a warn row — the estate sensor must never take `totem doctor` down with it (report-only, Tenet 13)

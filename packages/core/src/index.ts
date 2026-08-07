@@ -565,10 +565,12 @@ export { ESTATE_SCHEMA_VERSION, parseWorktreeListPorcelain, scanEstate } from '.
 export type { WorktreeEntry, WorktreeFile } from './worktree-registry.js';
 export {
   addWorktreeEntry,
+  defaultWorktreeRoot,
   deleteWorktreeEntry,
   emptyWorktreeFile,
   existingWorktreeRoots,
   findWorktreeEntry,
+  partitionWorktreeRoots,
   readWorktreeRegistry,
   WORKTREE_REGISTRY_SCHEMA_VERSION,
   WorktreeEntrySchema,

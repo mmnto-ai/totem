@@ -241,6 +241,13 @@ export interface EstateScanInputs {
   now: number;
   /** Extra sweep roots (`--root`, repeatable), unioned with the derived ones. */
   extraRoots?: string[];
+  /**
+   * Extra STANDARD sweep roots — locations worktrees are known to live in but
+   * that also hold other things (a recorded non-default `totem wt` root, e.g.
+   * a shared tmp dir). Swept with shape-evidence husk criteria, never the
+   * by-location `container-residue` class.
+   */
+  extraStandardRoots?: string[];
 }
 
 // ─── Porcelain parser ───────────────────────────────────
@@ -789,6 +796,11 @@ export function scanEstate(inputs: EstateScanInputs): EstateScanResult {
   // An operator naming a root with `--root` is DECLARING a worktree location,
   // which is the same claim `<repo>/.claude/worktrees` makes structurally.
   for (const extra of inputs.extraRoots ?? []) addSweepRoot(extra, true);
+
+  // A recorded NON-default `totem wt` root proves worktrees live there, not
+  // that the location holds nothing else — standard semantics, shape evidence
+  // required (a container upgrade from another derivation still wins).
+  for (const extra of inputs.extraStandardRoots ?? []) addSweepRoot(extra, false);
 
   /**
    * Attribution targets for the residue-shape prefix match: VERIFIED repos

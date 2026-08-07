@@ -73,6 +73,11 @@ export function worktreeRegistryPath(): string {
   return path.join(worktreeRegistryDir(), 'worktrees.json');
 }
 
+/** The zero-config container root (`~/.totem/worktrees`) — the ruling's Q1 default. */
+export function defaultWorktreeRoot(): string {
+  return path.join(worktreeRegistryDir(), 'worktrees');
+}
+
 /** A fresh, valid, empty registry — the first-run and degraded-read value. */
 export function emptyWorktreeFile(): WorktreeFile {
   return { schemaVersion: WORKTREE_REGISTRY_SCHEMA_VERSION, roots: [], worktrees: {} };
@@ -169,6 +174,29 @@ export function existingWorktreeRoots(file: WorktreeFile): string[] {
     if (isRealDirectory(resolved)) roots.push(resolved);
   }
   return roots;
+}
+
+/**
+ * Partition recorded roots into the sweep classes the estate consumers hand to
+ * `scanEstate`. Only the DEFAULT root (`~/.totem/worktrees`) carries container
+ * semantics — it exists solely to hold worktrees, so location alone is husk
+ * evidence there. Every other recorded root is a location the operator also
+ * uses for other things (a shared tmp, a scratch dir); those sweep as STANDARD
+ * roots, where husk-ness needs shape evidence — so one `wt create --root`
+ * against a scratch dir can never permanently arm by-location residue rows for
+ * every unrelated directory in it (#2580 slice-2 falsification, finding 11).
+ */
+export function partitionWorktreeRoots(roots: string[]): {
+  container: string[];
+  standard: string[];
+} {
+  const defaultKey = foldCase(path.resolve(defaultWorktreeRoot()));
+  const container: string[] = [];
+  const standard: string[] = [];
+  for (const root of roots) {
+    (foldCase(path.resolve(root)) === defaultKey ? container : standard).push(root);
+  }
+  return { container, standard };
 }
 
 /**

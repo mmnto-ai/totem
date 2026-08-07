@@ -2872,8 +2872,10 @@ describe('checkEstate — wt-registry roots', () => {
 
   // Invariant 8 on the AMBIENT row: the sensor row must sweep what `--estate`
   // sweeps, or a clean ambient line would contradict the explicit command.
-  it('sweeps a recorded root with an EMPTY sync registry, finding the husk', async () => {
-    const recorded = path.join(estateHome, 'recorded-root');
+  it('sweeps the recorded DEFAULT root with an EMPTY sync registry, finding the husk', async () => {
+    // The default `~/.totem/worktrees` is the one recorded root that carries
+    // container semantics — it exists solely to hold worktrees.
+    const recorded = path.join(estateHome, '.totem', 'worktrees');
     fs.mkdirSync(path.join(recorded, 'left-behind'), { recursive: true });
     writeWtRegistry(JSON.stringify({ schemaVersion: 1, roots: [recorded], worktrees: {} }));
 
@@ -2881,6 +2883,36 @@ describe('checkEstate — wt-registry roots', () => {
     expect(result.status).toBe('warn');
     expect(result.message).toContain('1 husk candidate(s)');
     expect(result.gateExempt).toBe(true);
+  });
+
+  it('sweeps a NON-default recorded root with shape evidence only — no by-location husks', async () => {
+    // A recorded scratch root holds other things beside worktrees; an
+    // arbitrary directory there is NOT residue-by-location (finding 11).
+    const recorded = path.join(estateHome, 'scratch-root');
+    fs.mkdirSync(path.join(recorded, 'unrelated-project'), { recursive: true });
+    writeWtRegistry(JSON.stringify({ schemaVersion: 1, roots: [recorded], worktrees: {} }));
+
+    const result = await checkEstate({ registry: {} });
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('no stale worktrees or husk candidates');
+  });
+
+  it('surfaces the unreadable sync registry even when recorded roots keep the scan alive', async () => {
+    // Finding 1: a live recorded root routes AROUND the empty-registry
+    // short-circuit — the unreadable-registry disclosure must ride the live
+    // row, never vanish into a clean pass.
+    fs.mkdirSync(path.join(estateHome, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(estateHome, '.totem', 'registry.json'), '{ not json', 'utf-8');
+    const recorded = path.join(estateHome, '.totem', 'worktrees');
+    fs.mkdirSync(recorded, { recursive: true });
+    writeWtRegistry(JSON.stringify({ schemaVersion: 1, roots: [recorded], worktrees: {} }));
+
+    const result = await checkEstate({});
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('Sync registry unreadable');
+    // The scan itself still ran — the disclosure rides a live row, not a skip.
+    expect(result.message).toContain('no stale worktrees or husk candidates');
+    expect(result.remediation).toContain('registry.json');
   });
 
   it('still skips when the recorded root no longer exists (empty sweep, not a hole)', async () => {
@@ -2902,7 +2934,9 @@ describe('checkEstate — wt-registry roots', () => {
   });
 
   it('honours the wtRoots seam without reading the home file', async () => {
-    const seamRoot = path.join(estateHome, 'seam-root');
+    // The seam value flows through the same default-vs-standard partition as
+    // production roots, so container semantics need the default location.
+    const seamRoot = path.join(estateHome, '.totem', 'worktrees');
     fs.mkdirSync(path.join(seamRoot, 'residue'), { recursive: true });
     writeWtRegistry('{ not json');
     const result = await checkEstate({ registry: {}, wtRoots: [seamRoot] });

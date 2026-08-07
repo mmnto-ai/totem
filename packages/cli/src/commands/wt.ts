@@ -29,13 +29,11 @@
  */
 
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
 import type { ResidueRemovalResult, WorktreeEntry } from '@mmnto/totem';
 
 import { bold, log, success as successColor, warn as warnColor } from '../ui.js';
-import { resolveSelfSender } from './mail.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -72,10 +70,11 @@ const ECL_PATHSPEC = '.totem/orchestration';
 // ─── Types ──────────────────────────────────────────────
 
 /**
- * The core barrel, imported dynamically inside each command: a static VALUE
- * import from '@mmnto/totem' pulls LanceDB and other heavy deps into every CLI
- * startup, `--help` included (mmnto-ai/totem#2339). Only types cross the
- * module boundary statically — they are erased at build.
+ * The core barrel, imported dynamically inside each command (mmnto-ai/totem#2339).
+ * The `--help` cold-start protection is index.ts's lazy per-action
+ * `await import('./commands/wt.js')`; the dynamic imports HERE (core, and
+ * `./mail.js` for seat resolution) keep this module itself light so that lazy
+ * load stays cheap. Only types cross the boundary statically — erased at build.
  */
 type Core = typeof import('@mmnto/totem');
 
@@ -158,6 +157,18 @@ function coreHelpers(core: Core) {
   } = core;
 
   /**
+   * True when `child` lies strictly UNDER `base` (case-folded on win32). The
+   * trailing separator keeps sibling names apart — `totemville` is not under
+   * `totem` (#2580 slice-2 falsification, finding 3's containment shape).
+   */
+  function pathIsUnder(child: string, base: string): boolean {
+    const baseKey = worktreePathKey(base);
+    return worktreePathKey(child).startsWith(
+      baseKey.endsWith(path.sep) ? baseKey : baseKey + path.sep,
+    );
+  }
+
+  /**
    * Paths, branch names, and git stderr all originate outside this process:
    * sanitize + flatten before any terminal write so embedded ANSI or newlines
    * cannot forge extra log lines (the doctor-estate.ts:186 render helper).
@@ -188,6 +199,48 @@ function coreHelpers(core: Core) {
         `wt: ${render(cwd)} is not inside a readable git repository: ${render(describe(err))}`,
         'Run the command from inside the home repository the worktree belongs to.',
         err,
+      );
+    }
+  }
+
+  /**
+   * `wt create` runs from the PRIMARY checkout only (cohort-overlay §2 — the
+   * same convention that keeps mail on the primary): inside a linked worktree,
+   * `rev-parse --show-toplevel` answers with the WORKTREE, so the entry would
+   * record a home repo that vanishes with it and every later removal of its
+   * children would resolve against nothing (#2580 slice-2 falsification,
+   * finding 10). The discriminator is git's own: the common dir of a primary
+   * checkout is `<toplevel>/.git`; a linked worktree's points elsewhere.
+   */
+  function assertPrimaryCheckout(exec: WtExecFn, cwd: string, repoRoot: string): void {
+    let commonDir: string;
+    // totem-context: intentional cleanup — a probe that cannot answer is re-thrown as a named TotemGitError; the catch attaches the recovery hint, nothing is swallowed.
+    try {
+      commonDir = exec(
+        'git',
+        [
+          '--no-optional-locks',
+          '-C',
+          cwd,
+          'rev-parse',
+          '--path-format=absolute',
+          '--git-common-dir',
+        ],
+        { timeout: GIT_READ_TIMEOUT_MS },
+      ).trim();
+      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    } catch (err) {
+      throw new TotemGitError(
+        `wt create: cannot determine whether ${render(cwd)} is the primary checkout: ${render(describe(err))}`,
+        'Run `totem wt create` from the primary checkout of the home repository.',
+        err,
+      );
+    }
+    if (worktreePathKey(commonDir) !== worktreePathKey(path.join(repoRoot, '.git'))) {
+      throw new TotemConfigError(
+        `wt create: ${render(cwd)} is inside a linked worktree, not the primary checkout`,
+        'Run `totem wt create` from the primary checkout (cohort-overlay §2 — worktrees are minted from the primary, the same convention that keeps mail there).',
+        'CONFIG_INVALID',
       );
     }
   }
@@ -255,7 +308,12 @@ function coreHelpers(core: Core) {
    * blocks removal. `--ignored` is deliberate: an ignored ECL file is still
    * ECL, and the whole point of the refusal is that consolidation is cheap
    * while a silently deleted dispatch is not recoverable. No bypass flag
-   * exists (ruling).
+   * exists (ruling). `-uall` is load-bearing twice over (#2580 slice-2
+   * falsification, finding 2): it names the exact FILES rather than one
+   * collapsed `?? .totem/orchestration/` row, and it overrides a
+   * `status.showUntrackedFiles=no` in the shared repo config — which would
+   * otherwise silence the probe entirely and turn the no-bypass ruling into a
+   * config-reachable bypass with unrecoverable loss.
    *
    * When the probe itself cannot run (a husk whose `.git` pointer is dangling
    * is not a git worktree at all), the fallback is conservative: refuse if the
@@ -275,6 +333,7 @@ function coreHelpers(core: Core) {
           'status',
           '--porcelain',
           '--ignored',
+          '-uall',
           '--',
           ECL_PATHSPEC,
         ],
@@ -312,7 +371,9 @@ function coreHelpers(core: Core) {
 
   return {
     render,
+    pathIsUnder,
     requireGitRoot,
+    assertPrimaryCheckout,
     gitListedPaths,
     rollbackCreateEntry,
     resolveRemoveTarget,
@@ -335,6 +396,7 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
   const core = await import('@mmnto/totem');
   const {
     addWorktreeEntry,
+    defaultWorktreeRoot,
     isPathSafeAgentId,
     TotemConfigError,
     TotemGitError,
@@ -342,7 +404,8 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
     worktreePathKey,
     worktreeRegistryPath,
   } = core;
-  const { render, requireGitRoot, rollbackCreateEntry } = coreHelpers(core);
+  const { render, pathIsUnder, requireGitRoot, assertPrimaryCheckout, rollbackCreateEntry } =
+    coreHelpers(core);
 
   const cwd = options.cwdForTest ?? process.cwd();
   const env = options.envForTest ?? process.env;
@@ -366,9 +429,26 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
   }
 
   const repoRoot = requireGitRoot(exec, cwd);
+  assertPrimaryCheckout(exec, cwd, repoRoot);
   const repoName = path.basename(repoRoot);
 
-  const seat = options.seat?.trim() ?? resolveSelfSender(repoRoot, env);
+  let seat: string;
+  if (options.seat !== undefined) {
+    seat = options.seat.trim();
+  } else {
+    const { resolveSelfSender } = await import('./mail.js');
+    // totem-context: intentional cleanup — the resolver's failure is re-thrown as a wt-scoped error; the catch exists to swap the mail verb's `--from` hint for this verb's `--seat`, and nothing is swallowed.
+    try {
+      seat = resolveSelfSender(repoRoot, env);
+      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    } catch (err) {
+      throw new TotemConfigError(
+        `wt create: cannot derive the creating seat: ${render(describe(err).replace(/--from/g, '--seat'))} — pass --seat <agent-id> or set TOTEM_SELF_AGENT`,
+        'Pass --seat <agent-id> (e.g. totem-claude) or set TOTEM_SELF_AGENT.',
+        'CONFIG_INVALID',
+      );
+    }
+  }
   if (!isPathSafeAgentId(seat)) {
     throw new TotemConfigError(
       `wt create: invalid seat ${JSON.stringify(seat)}`,
@@ -378,7 +458,15 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
   }
 
   const branch = options.branch?.trim() ?? defaultBranchName(slug, options.ticket);
-  if (!BRANCH_PATTERN.test(branch) || branch.includes('..') || branch.endsWith('/')) {
+  // Trailing `.` and a `.lock` suffix are `git check-ref-format` refusals that
+  // would otherwise surface AFTER the record-first write, via the rollback path.
+  if (
+    !BRANCH_PATTERN.test(branch) ||
+    branch.includes('..') ||
+    branch.endsWith('/') ||
+    branch.endsWith('.') ||
+    branch.endsWith('.lock')
+  ) {
     throw new TotemConfigError(
       `wt create: invalid branch name ${JSON.stringify(branch)}`,
       'Use a plain ref name such as feat/2580-wt-verbs.',
@@ -396,16 +484,16 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
         : 'default';
   const rawRoot =
     options.root ??
-    (envRoot !== undefined && envRoot.trim().length > 0
-      ? envRoot.trim()
-      : path.join(os.homedir(), '.totem', 'worktrees'));
+    (envRoot !== undefined && envRoot.trim().length > 0 ? envRoot.trim() : defaultWorktreeRoot());
   const root = path.resolve(cwd, rawRoot);
 
   // The location class the estate audit indicts (cohort-overlay §2): a
   // worktree beside its own repo, or inside it. Checked against the RESOLVED
-  // root, so no flag/env combination reaches either one.
+  // root with CONTAINMENT, not just equality — `<repo>/.claude/worktrees` is
+  // still inside the repo (#2580 slice-2 falsification, finding 3) — so no
+  // flag/env combination reaches any of the three.
   const workspaceRoot = path.dirname(repoRoot);
-  if (worktreePathKey(root) === worktreePathKey(repoRoot)) {
+  if (worktreePathKey(root) === worktreePathKey(repoRoot) || pathIsUnder(root, repoRoot)) {
     throw new TotemConfigError(
       `wt create: refusing to create a worktree inside the repo itself (${render(root)})`,
       `Use the default root (~/.totem/worktrees) or set ${ROOT_ENV_VAR} to a dedicated container directory (cohort-overlay §2).`,
@@ -445,19 +533,25 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
   try {
     exec('git', ['-C', repoRoot, 'worktree', 'add', '-b', branch, target], {});
   } catch (err) {
-    const rollbackError = await rollbackCreateEntry(target);
+    // A partial directory left by the failed add means the record must STAY:
+    // deleting it would convert a VISIBLE phantom into exactly the invisible
+    // unrecorded-worktree class this verb exists to prevent (#2580 slice-2
+    // falsification, finding 6). Rollback only when nothing landed on disk.
+    const partialLeft = worktreePathExists(target);
+    const rollbackError = partialLeft ? undefined : await rollbackCreateEntry(target);
     if (rollbackError !== undefined) {
       log.error(
         TAG,
         `PHANTOM ENTRY — ${render(target)} is recorded in ${render(worktreeRegistryPath())} but was never created, and the rollback failed: ${render(rollbackError)}`,
       );
     }
+    const disposition = partialLeft
+      ? ` (a partial directory was left on disk; the registry entry is RETAINED — clean up with \`totem wt remove ${render(target)}\`)`
+      : rollbackError === undefined
+        ? ' (registry entry rolled back)'
+        : ` (registry entry NOT rolled back — remove it with \`totem wt remove ${render(target)}\`)`;
     throw new TotemGitError(
-      `wt create: git worktree add failed for ${render(target)}: ${render(describe(err))}${
-        rollbackError === undefined
-          ? ' (registry entry rolled back)'
-          : ` (registry entry NOT rolled back — remove it with \`totem wt remove ${render(target)}\`)`
-      }`,
+      `wt create: git worktree add failed for ${render(target)}: ${render(describe(err))}${disposition}`,
       `The branch ${branch} must not already exist and ${render(root)} must be writable.`,
       err,
     );
@@ -519,8 +613,14 @@ export async function wtRemoveCommand(options: WtRemoveOptions): Promise<void> {
     worktreePathKey,
     worktreeRegistryPath,
   } = core;
-  const { render, requireGitRoot, gitListedPaths, resolveRemoveTarget, assertEclClear } =
-    coreHelpers(core);
+  const {
+    render,
+    pathIsUnder,
+    requireGitRoot,
+    gitListedPaths,
+    resolveRemoveTarget,
+    assertEclClear,
+  } = coreHelpers(core);
 
   const cwd = options.cwdForTest ?? process.cwd();
   const exec = options.execForTest ?? core.safeExec;
@@ -550,20 +650,30 @@ export async function wtRemoveCommand(options: WtRemoveOptions): Promise<void> {
   // directory that exists can hold orchestration content.
   if (onDisk) assertEclClear(exec, resolvedPath, notes);
 
-  // Check-first. An unanswerable worktree list is a hard error, never a
-  // fall-open: without git's answer we cannot tell a live worktree (whose
-  // metadata a raw delete would strand) from residue.
-  let listed: Set<string>;
+  // Check-first. An unanswerable worktree list is a hard error WHEN the
+  // directory exists — without git's answer we cannot tell a live worktree
+  // (whose metadata a raw delete would strand) from residue. With nothing on
+  // disk there is nothing to strand and nothing to delete, and the ruled
+  // idempotent recovery (verified-absent + entry present ⇒ delete entry) must
+  // not be blocked by a home repo that is itself gone (#2580 slice-2
+  // falsification, finding 7).
+  let listed: Set<string> | undefined;
   try {
     listed = gitListedPaths(exec, homeRepo);
   } catch (err) {
-    throw new TotemGitError(
-      `wt remove: cannot enumerate worktrees in ${render(homeRepo)}: ${render(describe(err))}`,
-      `Check that the home repository still exists and is a readable git repo, then re-run. If the home repo itself is gone, the recorded entry has no removal to perform — delete it from ${render(worktreeRegistryPath())} by hand.`,
-      err,
+    if (onDisk) {
+      throw new TotemGitError(
+        `wt remove: cannot enumerate worktrees in ${render(homeRepo)}: ${render(describe(err))}`,
+        `Check that the home repository still exists and is a readable git repo, then re-run. If the home repo itself is gone, the recorded entry has no removal to perform — delete it from ${render(worktreeRegistryPath())} by hand.`,
+        err,
+      );
+    }
+    listed = undefined;
+    notes.push(
+      `home repo ${render(homeRepo)} could not enumerate worktrees (${render(describe(err))}); nothing is on disk at ${render(resolvedPath)}, so no removal was owed`,
     );
   }
-  const gitListed = listed.has(worktreePathKey(resolvedPath));
+  const gitListed = listed !== undefined && listed.has(worktreePathKey(resolvedPath));
 
   if (!gitListed && resolved.entry === undefined) {
     throw new TotemConfigError(
@@ -589,7 +699,20 @@ export async function wtRemoveCommand(options: WtRemoveOptions): Promise<void> {
     outcome = 'git-removed';
   } else if (onDisk) {
     // Registry-known but git-unlisted: git has nothing to remove, so the
-    // finish runs directly. `git worktree remove` is never invoked here.
+    // finish runs directly. `git worktree remove` is never invoked here — and
+    // because the finish is an unconditional recursive delete, it only runs
+    // where the registry itself proves worktrees live: strictly under a
+    // recorded root. An entry OUTSIDE every recorded root is a hand-edit
+    // anomaly, and handing it to a recursive delete would make a corrupted
+    // worktrees.json an arbitrary-delete primitive (#2580 slice-2
+    // falsification, finding 14).
+    if (!file.roots.some((recorded) => pathIsUnder(resolvedPath, recorded))) {
+      throw new TotemConfigError(
+        `wt remove: ${render(resolvedPath)} is recorded but lies under none of the recorded roots — refusing the residue delete`,
+        `Recorded roots: ${file.roots.map((r) => render(r)).join(', ') || '(none)'}. If the entry is a stale hand-edit, remove it from ${render(worktreeRegistryPath())} by hand.`,
+        'CONFIG_INVALID',
+      );
+    }
     outcome = 'residue-removed';
   } else {
     outcome = 'already-gone';
@@ -646,7 +769,9 @@ export async function wtRemoveCommand(options: WtRemoveOptions): Promise<void> {
       repo: homeRepo,
       outcome,
       'git-listed': gitListed,
-      'verified-absent': true,
+      // Re-derived at write time — the artifact carries evidence, not a
+      // control-flow assumption (a literal `true` would survive a race).
+      'verified-absent': !worktreePathExists(resolvedPath),
       'registry-entry-deleted': entryDeleted,
       ...(residue === undefined ? {} : { 'stripped-links': residue.strippedLinks }),
       ...(notes.length === 0 ? {} : { notes }),

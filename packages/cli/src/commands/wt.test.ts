@@ -18,6 +18,7 @@
  * is reachable.
  */
 
+import { execSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -109,8 +110,8 @@ async function captureStdout(fn: () => Promise<unknown>): Promise<string> {
 interface FakeGitOptions {
   /** Paths git already lists as linked worktrees. */
   listed?: string[];
-  /** `worktree add` behaviour: create the dir, or fail like a branch clash. */
-  add?: 'create' | 'throw';
+  /** `worktree add` behaviour: create the dir, fail like a branch clash, or fail leaving a partial dir. */
+  add?: 'create' | 'throw' | 'throw-after-create';
   /** `worktree remove` behaviour: delete it, exit 0 leaving a husk, or fail. */
   remove?: 'delete' | 'husk' | 'throw';
   /** Rows the ECL `status --porcelain --ignored` probe answers with. */
@@ -119,6 +120,8 @@ interface FakeGitOptions {
   statusThrows?: boolean;
   /** Make `worktree list` fail (an unreadable home repo). */
   listThrows?: boolean;
+  /** Answer for `rev-parse --git-common-dir` (default: the primary's `.git`). */
+  commonDir?: string;
 }
 
 interface FakeGit {
@@ -143,6 +146,10 @@ function fakeGit(options: FakeGitOptions = {}): FakeGit {
         return repo.split(path.sep).join('/');
       }
       throw new Error('fatal: not a git repository');
+    }
+
+    if (verbs[0] === 'rev-parse' && verbs.includes('--git-common-dir')) {
+      return (options.commonDir ?? path.join(repo, '.git')).split(path.sep).join('/');
     }
 
     if (verbs[0] === 'status') {
@@ -174,6 +181,12 @@ function fakeGit(options: FakeGitOptions = {}): FakeGit {
       state.registryAtAdd = readWorktreeRegistry();
       if (options.add === 'throw') {
         throw new Error("fatal: a branch named 'wt/demo' already exists");
+      }
+      if (options.add === 'throw-after-create') {
+        // Git failed MID-POPULATE: the target directory landed, the checkout
+        // did not — the partial-directory arm of the create rollback.
+        fs.mkdirSync(args[args.length - 1]!, { recursive: true });
+        throw new Error('fatal: disk exploded mid-checkout');
       }
       const target = args[args.length - 1]!;
       fs.mkdirSync(target, { recursive: true });
@@ -329,6 +342,49 @@ describe('wt create', () => {
     }
     expect(callsMatching(git, 'worktree', 'add')).toHaveLength(0);
   });
+
+  it('rejects branch names git check-ref-format would bounce AFTER the record', async () => {
+    const git = fakeGit();
+    for (const branch of ['wt/demo.', 'wt/demo.lock', 'wt/../demo']) {
+      await expect(createOne(git, { branch })).rejects.toThrow(/invalid branch name/);
+    }
+    expect(callsMatching(git, 'worktree', 'add')).toHaveLength(0);
+    expect(readWorktreeRegistry().worktrees).toEqual({});
+  });
+
+  it('refuses to run from inside a linked worktree (primary checkout only)', async () => {
+    const git = fakeGit({ commonDir: path.join(root, 'elsewhere', '.git') });
+    await expect(createOne(git)).rejects.toThrow(/primary checkout/);
+    // Refused BEFORE anything landed: no record, no git mutation.
+    expect(callsMatching(git, 'worktree', 'add')).toHaveLength(0);
+    expect(readWorktreeRegistry().worktrees).toEqual({});
+  });
+
+  it('rewords a failed seat resolution to --seat, never the mail verb’s --from', async () => {
+    const git = fakeGit();
+    // Two orchestration seats and no TOTEM_SELF_AGENT: the resolver's
+    // ambiguity arm — the default outcome on a real multi-seat repo.
+    fs.mkdirSync(path.join(repo, '.totem', 'orchestration', 'totem-claude'), { recursive: true });
+    fs.mkdirSync(path.join(repo, '.totem', 'orchestration', 'totem-codex'), { recursive: true });
+
+    let message = '';
+    try {
+      await wtCreateCommand({
+        slug: 'demo',
+        root: container,
+        cwdForTest: repo,
+        envForTest: {},
+        execForTest: git.exec,
+        nowForTest: CREATED_AT,
+      });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message).toContain('--seat');
+    expect(message).not.toContain('--from');
+    // Seat resolution precedes the record-first write: nothing recorded.
+    expect(readWorktreeRegistry().worktrees).toEqual({});
+  });
 });
 
 // ─── Invariant 6 ────────────────────────────────────────
@@ -353,6 +409,18 @@ describe('invariant 6: the entry is written BEFORE git runs, and rolls back', ()
     expect(file.roots).toEqual([path.resolve(container)]);
   });
 
+  it('KEEPS the entry when git failed but left a partial directory', async () => {
+    const git = fakeGit({ add: 'throw-after-create' });
+    await expect(createOne(git)).rejects.toThrow(/registry entry is RETAINED/);
+
+    // Rolling back here would convert a visible phantom into the invisible
+    // unrecorded-worktree class — the record must outlive the partial dir.
+    const target = path.join(container, 'repo-totem-claude-demo');
+    expect(fs.existsSync(target)).toBe(true);
+    expect(Object.keys(readWorktreeRegistry().worktrees)).toContain(target);
+    expect(output()).not.toContain('PHANTOM ENTRY');
+  });
+
   it('names the phantom entry loudly when the rollback itself fails', async () => {
     const git = fakeGit({ add: 'throw' });
     // Make the registry unreadable AFTER the record-first write, so the
@@ -373,13 +441,27 @@ describe('invariant 6: the entry is written BEFORE git runs, and rolls back', ()
 
 // ─── Invariant 10 ───────────────────────────────────────
 
-describe('invariant 10: no worktree under the workspace root or the repo root', () => {
+describe('invariant 10: the root is never the repo, under the repo, or the workspace root itself', () => {
   const workspace = (): string => path.dirname(repo);
 
   it('refuses --root pointing at the repo itself', async () => {
     const git = fakeGit();
     await expect(createOne(git, { root: repo })).rejects.toThrow(/inside the repo itself/);
     expect(callsMatching(git, 'worktree', 'add')).toHaveLength(0);
+  });
+
+  it('refuses --root UNDER the repo — containment, not just equality', async () => {
+    const git = fakeGit();
+    // `<repo>/.claude/worktrees` is the known in-repo worktree location shape;
+    // an equality-only guard would wave it through (falsification finding 3).
+    await expect(createOne(git, { root: path.join(repo, '.claude', 'worktrees') })).rejects.toThrow(
+      /inside the repo itself/,
+    );
+    expect(callsMatching(git, 'worktree', 'add')).toHaveLength(0);
+    expect(readWorktreeRegistry().worktrees).toEqual({});
+    // A SIBLING whose name merely extends the repo's is NOT under it.
+    await createOne(git, { root: `${repo}-ville` });
+    expect(fs.existsSync(path.join(`${repo}-ville`, 'repo-totem-claude-demo'))).toBe(true);
   });
 
   it('refuses --root pointing at the workspace root', async () => {
@@ -470,6 +552,22 @@ describe('invariant 4: check-first — only a git-listed path reaches `worktree 
     expect(fs.existsSync(target)).toBe(true);
     expect(callsMatching(broken, 'worktree', 'remove')).toHaveLength(0);
   });
+
+  it('recovers idempotently when the home repo is gone and nothing is on disk', async () => {
+    const git = fakeGit();
+    const target = await createOne(git);
+    fs.rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    const broken = fakeGit({ listThrows: true });
+
+    // The ruled recovery (verified-absent + entry present ⇒ delete entry) must
+    // not be blocked by an unanswerable list when there is nothing to strand.
+    await wtRemoveCommand({ target, cwdForTest: repo, execForTest: broken.exec });
+
+    expect(readWorktreeRegistry().worktrees).toEqual({});
+    expect(output()).toContain('already-gone');
+    expect(output()).toContain('could not enumerate worktrees');
+    expect(callsMatching(broken, 'worktree', 'remove')).toHaveLength(0);
+  });
 });
 
 // ─── remove: invariants 1 + 2 ───────────────────────────
@@ -499,6 +597,8 @@ describe('invariants 1 + 2: exit 0 requires verified absence; the entry survives
         attempts: 3,
       });
 
+    // The failure names the survivors AND renders the finish's last error —
+    // the manual-cleanup hint is only actionable with both.
     await expect(
       wtRemoveCommand({
         target,
@@ -506,7 +606,7 @@ describe('invariants 1 + 2: exit 0 requires verified absence; the entry survives
         execForTest: git.exec,
         residueForTest: stubbornResidue,
       }),
-    ).rejects.toThrow(/still exists after the residue finish/);
+    ).rejects.toThrow(/still exists after the residue finish[\s\S]*EBUSY: resource busy or locked/);
 
     // Invariant 2: every removal failure retains the entry, so the husk stays
     // visible in `wt list` instead of becoming untracked residue.
@@ -531,6 +631,26 @@ describe('invariants 1 + 2: exit 0 requires verified absence; the entry survives
           }),
       }),
     ).rejects.toThrow(/node_modules/);
+  });
+
+  it('throws even when the residue finish LIES about removal', async () => {
+    const git = fakeGit({ remove: 'husk' });
+    const target = await createOne(git);
+
+    // A reporter claiming success while the directory stands must not buy
+    // exit 0 — the re-probe disjunct, not the report, is the authority.
+    await expect(
+      wtRemoveCommand({
+        target,
+        cwdForTest: repo,
+        execForTest: git.exec,
+        residueForTest: async () =>
+          Promise.resolve({ removed: true, strippedLinks: [], survivors: [], attempts: 1 }),
+      }),
+    ).rejects.toThrow(/still exists after the residue finish/);
+
+    expect(fs.existsSync(target)).toBe(true);
+    expect(Object.keys(readWorktreeRegistry().worktrees)).toContain(target);
   });
 
   it('retains the entry when `git worktree remove` itself fails', async () => {
@@ -588,6 +708,29 @@ describe('wt remove resolution', () => {
     // Nothing removed while the ambiguity stands.
     expect(fs.existsSync(path.join(container, 'repo-totem-claude-demo'))).toBe(true);
     expect(fs.existsSync(path.join(other, 'repo-totem-claude-demo'))).toBe(true);
+  });
+
+  it('refuses the residue delete for a recorded entry OUTSIDE every recorded root', async () => {
+    const git = fakeGit();
+    const target = await createOne(git);
+    // Hand-edit the registry: an entry pointing outside all recorded roots is
+    // exactly the shape that would turn a corrupted worktrees.json into an
+    // arbitrary-recursive-delete primitive (falsification finding 14).
+    const stray = path.join(root, 'stray-location', 'repo-totem-claude-demo');
+    fs.mkdirSync(stray, { recursive: true });
+    const raw = JSON.parse(fs.readFileSync(worktreeRegistryPath(), 'utf-8')) as {
+      worktrees: Record<string, unknown>;
+    };
+    raw.worktrees[stray] = raw.worktrees[target]!;
+    fs.writeFileSync(worktreeRegistryPath(), JSON.stringify(raw, null, 2), 'utf-8');
+    const unlisted = fakeGit({ listed: [] });
+
+    await expect(
+      wtRemoveCommand({ target: stray, cwdForTest: repo, execForTest: unlisted.exec }),
+    ).rejects.toThrow(/none of the recorded roots/);
+
+    expect(fs.existsSync(stray)).toBe(true);
+    expect(callsMatching(unlisted, 'worktree', 'remove')).toHaveLength(0);
   });
 
   it('accepts a git-listed worktree with NO registry entry (legacy estate)', async () => {
@@ -649,15 +792,25 @@ describe('invariant 5: untracked ECL content blocks removal', () => {
     expect(fs.existsSync(target)).toBe(false);
   });
 
-  it('runs the probe with the ruled pathspec', async () => {
+  it('runs the probe with the ruled pathspec, -uall included', async () => {
     const git = fakeGit();
     const target = await createOne(git);
     await wtRemoveCommand({ target, cwdForTest: repo, execForTest: git.exec });
     const status = callsMatching(git, 'status');
     expect(status).toHaveLength(1);
     expect(status[0]).toEqual(
-      expect.arrayContaining(['status', '--porcelain', '--ignored', '--', '.totem/orchestration']),
+      expect.arrayContaining([
+        'status',
+        '--porcelain',
+        '--ignored',
+        '-uall',
+        '--',
+        '.totem/orchestration',
+      ]),
     );
+    // `-uall` is load-bearing on its own: without it a shared
+    // `status.showUntrackedFiles=no` silences the probe (finding 2).
+    expect(status[0]).toContain('-uall');
   });
 
   it('refuses when the probe cannot run AND orchestration content is on disk', async () => {
@@ -682,6 +835,52 @@ describe('invariant 5: untracked ECL content blocks removal', () => {
     expect(fs.existsSync(target)).toBe(false);
     expect(output()).toContain('ECL probe could not run');
   });
+});
+
+// ─── Invariant 5 against REAL git (finding 2) ───────────
+
+describe('ECL probe against real git', () => {
+  it('names the exact untracked file and defeats status.showUntrackedFiles=no', async () => {
+    const realRepo = path.join(root, 'real-repo');
+    fs.mkdirSync(realRepo, { recursive: true });
+    const run = (cmd: string): void => {
+      execSync(cmd, { cwd: realRepo, stdio: 'ignore' });
+    };
+    run('git init');
+    run('git config user.email "wt-test@totem.invalid"');
+    run('git config user.name "wt-test"');
+    fs.writeFileSync(path.join(realRepo, 'a.txt'), 'seed', 'utf-8');
+    run('git add a.txt');
+    run('git commit -m seed');
+    // The bypass shape (finding 2, arm a): the HOME repo's config is shared
+    // by every linked worktree, and `showUntrackedFiles=no` silences a
+    // default `git status` completely — only `-uall` still answers.
+    run('git config status.showUntrackedFiles no');
+
+    const wt = path.join(root, 'real-wt');
+    const added = spawnSync('git', ['worktree', 'add', '-b', 'wt/real', wt], {
+      cwd: realRepo,
+      stdio: 'ignore',
+    });
+    expect(added.status).toBe(0);
+
+    const dispatch = path.join(wt, '.totem', 'orchestration', 'totem-claude', 'outbox');
+    fs.mkdirSync(dispatch, { recursive: true });
+    fs.writeFileSync(path.join(dispatch, 'dispatch.md'), 'ecl content', 'utf-8');
+
+    // Real safeExec, real git. The refusal must name the FILE — not one
+    // collapsed `?? .totem/orchestration/` row (finding 2, arm b) — and must
+    // fire despite the config bypass. Nothing may be deleted.
+    let message = '';
+    try {
+      await wtRemoveCommand({ target: wt, cwdForTest: realRepo });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message).toContain('refusing');
+    expect(message).toContain('dispatch.md');
+    expect(fs.existsSync(path.join(dispatch, 'dispatch.md'))).toBe(true);
+  }, 30_000);
 });
 
 // ─── Invariant 9 ────────────────────────────────────────

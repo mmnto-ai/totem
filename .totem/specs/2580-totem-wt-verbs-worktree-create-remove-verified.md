@@ -222,7 +222,7 @@ No silent-degradation rows.
 7. No wt verb ever writes `registry.json` (schema-collision guard); its read path is untouched.
 8. Recorded roots survive entry removal, and `scanEstate` receives them as container roots — the `%TEMP%\claude` class stays reachable with zero live entries.
 9. Path comparisons case-fold on win32 only (author-sandbox precedent).
-10. `create` mints no worktree under the workspace root or repo root, under any flag combination.
+10. `create`'s resolved root is never the repo, never UNDER the repo, and never the workspace root itself, under any flag combination (containment semantics — post-falsification amendment).
 
 ### Open questions
 
@@ -239,6 +239,33 @@ No silent-degradation rows.
 - **Q1 → (a):** default root `~/.totem/worktrees`, `TOTEM_WORKTREE_ROOT` override (user-level env). Doctrine-twin "shared tmp root" wording amendment routes to the strategy lane coupled with this PR.
 - **Q2 → no bypass flag in v1.** The ECL refusal lists the exact files; consolidate-then-re-run is the only path.
 - **Q3 → sensor coupling ships in this PR.** Derived wt-registry roots are filtered to directories that exist (an absent recorded root is an empty sweep, not a scan hole — mirrors the missing-registry-entry precedent); explicit `--root` behavior unchanged (a named root that fails to read stays an unscannable row).
-- Design approved at the same word. Additional bound contract details settled at ruling time: `create` uses `git worktree add -b` (always a NEW branch; an existing branch is a hard error in v1); default branch name `feat/<ticket>-<slug>` when `--ticket` is given, else `wt/<slug>`, overridable `--branch`; ECL check runs `git -C <wt> status --porcelain --ignored -- .totem/orchestration` and blocks on ANY row (ignored ECL files are still ECL); `remove` accepts a git-listed worktree with no registry entry (legacy estate) — registry deletion just no-ops.
+- Design approved at the same word. Additional bound contract details settled at ruling time: `create` uses `git worktree add -b` (always a NEW branch; an existing branch is a hard error in v1); default branch name `feat/<ticket>-<slug>` when `--ticket` is given, else `wt/<slug>`, overridable `--branch`; ECL check runs `git -C <wt> status --porcelain --ignored -uall -- .totem/orchestration` and blocks on ANY row (ignored ECL files are still ECL; `-uall` added post-falsification — it names exact files and defeats a `status.showUntrackedFiles=no` config bypass); `remove` accepts a git-listed worktree with no registry entry (legacy estate) — registry deletion just no-ops.
+
+### Post-falsification dispositions (2026-08-07)
+
+Standing pre-merge falsification leg ran against the full branch diff; verdict MERGEABLE-WITH-FIXES. Dispositions:
+
+**Required fixes (all taken):**
+
+1. **Finding 1 (doctor.ts):** the unreadable-sync-registry disclosure now rides every arm of the `Estate` row, not just the empty short-circuit — with recorded wt roots the scan proceeds and the clean arm demotes to `warn` with the disclosure and remediation. Test added for `registryWarnings ≠ [] ∧ wtRoots ≠ []`.
+2. **Finding 2 (wt.ts):** ECL probe carries `-uall` — closes the `status.showUntrackedFiles=no` config bypass and makes the refusal name exact files instead of one collapsed directory row. Argv token asserted, plus a REAL-git test (per-file naming + config-bypass defeat in one fixture).
+3. **Finding 3 (wt.ts):** create's root guard is containment, not equality — refuses the repo, anything UNDER the repo (trailing-separator prefix, win32-only fold, sibling names safe), and the workspace root itself. Invariant 10's text and test title amended to the enforced semantics; root-under-repo case added.
+
+**Recommended fixes (all taken):** lying-residue-reporter test (pins the re-probe disjunct); create rollback gated on target absence (a partial directory keeps its entry, loudly — rolling back would mint the invisible unrecorded class); unanswerable `worktree list` hard-errors only when the directory exists (nothing on disk ⇒ already-gone with a disclosed note, preserving the ruled idempotent recovery); the residue-`rmSync` suppression rationale rewritten honestly (the rules are ast-grep patterns that cannot express "options lacking maxRetries" — not line-anchoring); seat-resolution failure rethrown wt-scoped naming `--seat`/`TOTEM_SELF_AGENT` (never the mail verb's `--from`), with a multi-seat test.
+
+**Owner dispositions (taken):**
+
+- **Finding 10:** `wt create` refuses a linked-worktree cwd (`rev-parse --git-common-dir` vs `<toplevel>/.git`) — primary-checkout only, matching the cohort mail convention.
+- **Finding 11:** recorded roots partition at consumption — only the default `~/.totem/worktrees` sweeps as CONTAINER; every other recorded root sweeps as STANDARD via the new additive `extraStandardRoots` scan input (shape evidence required; JSON artifact schema unchanged, `swept-roots` already carries `kind`). A recorded scratch root can no longer permanently arm by-location residue rows.
+- **Finding 12:** changeset reworded to prospective honesty — recorded locations make FUTURE roots derivable; the three pre-existing `%TEMP%\claude` husk locations stay `--root`-only until a create records that root.
+- **Finding 13:** the git-unlisted residue arm requires the resolved path to lie strictly under a recorded root; a recorded entry outside every recorded root is a hand-edit anomaly and is refused with nothing deleted.
+- **Finding 14 + nits:** `wt.ts` imports core AND `./mail.js` dynamically (module genuinely light; the `--help` protection is index.ts's lazy action import, and the comment now says so); JSON `verified-absent` re-derived at write time; `lastError` rendering asserted; `BRANCH_PATTERN` refuses trailing `.` and `.lock`.
+
+**Declined / deferred:**
+
+- **Finding 5 (existence-probe errno tri-state):** `worktreePathExists` reports any lstat failure as absence, so the exit-0 claim's boundary is "as observable via lstat" — a non-ENOENT errno (denied parent, offline share) can read as absent. Errno discrimination (non-ENOENT ⇒ unknown, never absent) is DEFERRED to a follow-up issue pending operator word; invariant 1 below is scoped accordingly.
+- **`worktree` alias for the `wt` group:** absent by issue wording; no ruling requested.
+
+Invariant 1 is accordingly read as: `wt remove` can never exit 0 while the directory is observably present via lstat; invariant 10 as: the resolved root is never the repo, never under the repo, and never the workspace root itself.
 
 Releasable slice: one PR, `feat(cli,core)`, changeset minor for `@mmnto/totem` + `@mmnto/cli`.

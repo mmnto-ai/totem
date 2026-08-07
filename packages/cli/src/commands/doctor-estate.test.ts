@@ -544,9 +544,10 @@ describe('doctorEstateCliCommand — wt-registry roots', () => {
 
   // Invariant 8: a recorded root stays swept with ZERO live entries under it —
   // the round-3 MINOR-3 remedy. Every husk's own registry entry can be gone
-  // and the location is still reachable.
-  it('sweeps a recorded root as a CONTAINER root with no registry entries at all', async () => {
-    const recorded = path.join(root, 'recorded-root');
+  // and the location is still reachable. Only the DEFAULT `~/.totem/worktrees`
+  // carries container semantics (it exists solely to hold worktrees).
+  it('sweeps the recorded DEFAULT root as a CONTAINER root with no registry entries at all', async () => {
+    const recorded = path.join(root, 'home', '.totem', 'worktrees');
     fs.mkdirSync(path.join(recorded, 'left-behind'), { recursive: true });
     writeWtRegistry(
       JSON.stringify({ schemaVersion: 1, roots: [recorded], worktrees: {} }, null, 2),
@@ -566,6 +567,29 @@ describe('doctorEstateCliCommand — wt-registry roots', () => {
     const husks = artifact['husk-candidates'] as { path: string; evidence: string }[];
     expect(husks).toHaveLength(1);
     expect(husks[0]!.evidence).toBe('container-residue');
+  });
+
+  // A recorded NON-default root proves worktrees live there, not that the
+  // location holds nothing else — STANDARD semantics, shape evidence required,
+  // so unrelated directories beside the worktrees never read as residue
+  // (falsification finding 11).
+  it('sweeps a NON-default recorded root as STANDARD — no by-location residue rows', async () => {
+    const recorded = path.join(root, 'scratch-root');
+    fs.mkdirSync(path.join(recorded, 'unrelated-project'), { recursive: true });
+    writeWtRegistry(JSON.stringify({ schemaVersion: 1, roots: [recorded], worktrees: {} }));
+
+    const artifact = await artifactFor({
+      json: true,
+      registryForTest: {},
+      execForTest: () => {
+        throw new Error('no git call expected for an empty registry');
+      },
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+
+    expect(artifact['swept-roots']).toEqual([{ path: recorded, kind: 'standard' }]);
+    expect(artifact['husk-candidates']).toEqual([]);
   });
 
   // A recorded root that no longer exists is an EMPTY SWEEP, not a scan hole
@@ -620,9 +644,11 @@ describe('doctorEstateCliCommand — wt-registry roots', () => {
       cwdForTest: root,
     });
 
+    // The operator's per-invocation --root stays a container declaration; the
+    // recorded non-default root sweeps standard (shape evidence required).
     expect(artifact['swept-roots']).toEqual([
       { path: declared, kind: 'container' },
-      { path: recorded, kind: 'container' },
+      { path: recorded, kind: 'standard' },
     ]);
   });
 
@@ -636,6 +662,8 @@ describe('doctorEstateCliCommand — wt-registry roots', () => {
       nowForTest: NOW,
       cwdForTest: root,
     });
-    expect(artifact['swept-roots']).toEqual([{ path: seamRoot, kind: 'container' }]);
+    // Seam values flow through the same default-vs-standard partition as
+    // production roots — an arbitrary seam root sweeps standard.
+    expect(artifact['swept-roots']).toEqual([{ path: seamRoot, kind: 'standard' }]);
   });
 });
