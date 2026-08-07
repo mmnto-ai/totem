@@ -258,6 +258,13 @@ const ALLOWLIST: AllowEntry[] = [
   },
   {
     hash: 'c2c09301bb56a02b',
+    file: 'packages/cli/src/commands/wt.ts',
+    expectedCount: 6,
+    reason:
+      '`totem wt` shells to git through the injected safeExec seam (default `safeExec`) for worktree plumbing: rev-parse --show-toplevel, worktree list --porcelain, worktree add, status --porcelain (the ECL probe), worktree remove, worktree prune. Literal git subcommands; slug/branch/ticket args are pattern-validated and paths resolved before use (mmnto-ai/totem#2580 slice 2).',
+  },
+  {
+    hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/extract-pr.ts',
     expectedCount: 1,
     reason: 'Same safeExec alias pattern for PR-backed lesson extraction.',

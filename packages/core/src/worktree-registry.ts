@@ -121,8 +121,10 @@ function isRealDirectory(p: string): boolean {
  * corrupt file can never take a read-only verb down with it.
  */
 export function readWorktreeRegistry(onWarn?: (msg: string) => void): WorktreeFile {
+  // totem-context: intentional cleanup — warn-not-throw is the ruled read contract (mirrors readRegistry): a corrupt registry file must never take a read-only verb down with it; the onWarn callback is the loud path, and a missing file is the expected first-run case.
   try {
     return readJsonSafe(worktreeRegistryPath(), WorktreeFileSchema);
+    // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
   } catch (err) {
     if (err instanceof TotemParseError && err.message.includes('File not found')) {
       // Expected until the first `wt create` — silently return empty

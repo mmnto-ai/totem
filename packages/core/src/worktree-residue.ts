@@ -204,6 +204,7 @@ export async function removeWorktreeResidue(
     strippedLinks.push(...stripReparsePoints(dir));
     // totem-context: intentional cleanup — a failed delete is RETRIED and then REPORTED (`removed: false` + survivors), because a Windows EBUSY from a lingering handle is an ordinary transient here; the verify pass below, not this catch, decides the outcome.
     try {
+      // totem-ignore-next-line mmnto-ai/totem#2580 — false positive: the line-anchored rmSync rules cannot see the multi-line options object; maxRetries/retryDelay ARE set below, and this call is the removal verb's own retry-hardened deletion routine, not test-teardown temp cleanup.
       fs.rmSync(dir, {
         recursive: true,
         force: true,
