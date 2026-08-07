@@ -444,7 +444,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
  * EMPTY registry through the seam so the suite stays hermetic — same reason the
  * Ollama probe's `fetch` is mocked above.
  */
-const HERMETIC = { estateSeamsForTest: { registry: {} } } as const;
+const HERMETIC = { estateSeamsForTest: { registry: {}, wtRoots: [] as string[] } } as const;
 
 describe('doctorCommand', () => {
   let tmpDir: string;
@@ -752,6 +752,9 @@ describe('checkEstate', () => {
     return {
       registry: registryOf(repo),
       now: Date.parse('2026-08-05T12:00:00.000Z'),
+      // Pinned so a machine that has actually run `totem wt create` cannot
+      // drag its real recorded roots into these assertions (#2580 slice 2).
+      wtRoots: [] as string[],
       safeExec: ((_command: string, args: string[] = []): string => {
         if (opts.throws === true) throw new Error('git exploded');
         const cwd = args[2] ?? '';
@@ -771,7 +774,7 @@ describe('checkEstate', () => {
   }
 
   it('skips when nothing is registered', async () => {
-    const result = await checkEstate({ registry: {} });
+    const result = await checkEstate({ registry: {}, wtRoots: [] });
     expect(result.status).toBe('skip');
     expect(result.message).toContain('No registered repos');
   });
@@ -879,7 +882,7 @@ describe('checkEstate', () => {
     fs.mkdirSync(path.join(huskRepo, '.claude', 'worktrees', 'agent-a'), { recursive: true });
     // All FOUR real paths: skip / pass / husk-warn / crash-warn.
     const rows = [
-      await checkEstate({ registry: {} }),
+      await checkEstate({ registry: {}, wtRoots: [] }),
       await checkEstate(seams(repo)),
       await checkEstate(seams(huskRepo)),
       await checkEstate({ ...seams(repo), registry: { bad: null } as never }),
@@ -2836,5 +2839,75 @@ describe('checkFreezes', () => {
     const result = await checkFreezes(tmpDir);
     expect(result.status).toBe('warn');
     expect(result.message).toContain('underivable');
+  });
+});
+
+// ─── Estate row × wt-registry coupling (#2580 slice 2) ──
+
+describe('checkEstate — wt-registry roots', () => {
+  let estateHome: string;
+  let prevHome: string | undefined;
+  let prevProfile: string | undefined;
+
+  beforeEach(() => {
+    estateHome = fs.realpathSync(makeTmpDir());
+    prevHome = process.env['HOME'];
+    prevProfile = process.env['USERPROFILE'];
+    process.env['HOME'] = estateHome;
+    process.env['USERPROFILE'] = estateHome;
+  });
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env['HOME'];
+    else process.env['HOME'] = prevHome;
+    if (prevProfile === undefined) delete process.env['USERPROFILE'];
+    else process.env['USERPROFILE'] = prevProfile;
+    cleanTmpDir(estateHome);
+  });
+
+  function writeWtRegistry(contents: string): void {
+    fs.mkdirSync(path.join(estateHome, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(estateHome, '.totem', 'worktrees.json'), contents, 'utf-8');
+  }
+
+  // Invariant 8 on the AMBIENT row: the sensor row must sweep what `--estate`
+  // sweeps, or a clean ambient line would contradict the explicit command.
+  it('sweeps a recorded root with an EMPTY sync registry, finding the husk', async () => {
+    const recorded = path.join(estateHome, 'recorded-root');
+    fs.mkdirSync(path.join(recorded, 'left-behind'), { recursive: true });
+    writeWtRegistry(JSON.stringify({ schemaVersion: 1, roots: [recorded], worktrees: {} }));
+
+    const result = await checkEstate({ registry: {} });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('1 husk candidate(s)');
+    expect(result.gateExempt).toBe(true);
+  });
+
+  it('still skips when the recorded root no longer exists (empty sweep, not a hole)', async () => {
+    writeWtRegistry(
+      JSON.stringify({ schemaVersion: 1, roots: [path.join(estateHome, 'gone')], worktrees: {} }),
+    );
+    const result = await checkEstate({ registry: {} });
+    expect(result.status).toBe('skip');
+    expect(result.message).toContain('No registered repos');
+  });
+
+  it('discloses an unreadable worktrees.json in the row message', async () => {
+    writeWtRegistry('{ not json');
+    const result = await checkEstate({ registry: {} });
+    expect(result.message).toContain('Cannot read worktree registry');
+    // Degraded, but never a fail: the row is sensor-class.
+    expect(result.gateExempt).toBe(true);
+    expect(result.status).not.toBe('fail');
+  });
+
+  it('honours the wtRoots seam without reading the home file', async () => {
+    const seamRoot = path.join(estateHome, 'seam-root');
+    fs.mkdirSync(path.join(seamRoot, 'residue'), { recursive: true });
+    writeWtRegistry('{ not json');
+    const result = await checkEstate({ registry: {}, wtRoots: [seamRoot] });
+    expect(result.message).not.toContain('Cannot read worktree registry');
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('1 husk candidate(s)');
   });
 });

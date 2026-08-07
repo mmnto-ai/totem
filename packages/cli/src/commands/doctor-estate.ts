@@ -45,6 +45,11 @@ export interface EstateCliOptions {
   execForTest?: EstateExecFn;
   /** Test seam — pins `derivedAt` and every `age-days` value. */
   nowForTest?: number;
+  /**
+   * Test seam — bypasses the user-level `~/.totem/worktrees.json` read that
+   * supplies the wt-registry's recorded container roots.
+   */
+  wtRootsForTest?: string[];
 }
 
 /** Gutter width for row labels, so every row family aligns on one column. */
@@ -172,8 +177,15 @@ function degenerateArtifact(
 
 export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Promise<void> {
   const path = await import('node:path');
-  const { ESTATE_SCHEMA_VERSION, readRegistry, safeExec, sanitizeForTerminal, scanEstate } =
-    await import('@mmnto/totem');
+  const {
+    ESTATE_SCHEMA_VERSION,
+    existingWorktreeRoots,
+    readRegistry,
+    readWorktreeRegistry,
+    safeExec,
+    sanitizeForTerminal,
+    scanEstate,
+  } = await import('@mmnto/totem');
   const {
     bold,
     dim: dimColor,
@@ -213,12 +225,30 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   // would be exactly the silent degradation this sensor exists to surface.
   for (const warning of registryWarnings) log.warn(TAG, render(warning));
 
-  const extraRoots = (options.roots ?? []).map((root) => path.resolve(cwd, root));
+  // The wt-registry's recorded roots (mmnto-ai/totem#2580 slice 2, round-3
+  // MINOR-3): every container root `totem wt create` has ever minted under,
+  // swept with the same CONTAINER semantics an operator's `--root` confers.
+  // This is what keeps a recorded location reachable once the last live entry
+  // under it is gone — with only the derived roots, an emptied container is
+  // invisible to the sweep and every husk in it goes unreported.
+  //
+  // Unreadable file: warn and proceed with the derived roots (the
+  // container-withdrawal precedent — a degraded scan may report LESS, never
+  // more). Recorded roots that no longer exist are filtered out inside
+  // `existingWorktreeRoots`: an absent root is an empty sweep, not a hole.
+  const wtWarnings: string[] = [];
+  const wtRoots =
+    options.wtRootsForTest ??
+    existingWorktreeRoots(readWorktreeRegistry((msg: string) => wtWarnings.push(msg)));
+  for (const warning of wtWarnings) log.warn(TAG, render(warning));
+
+  const extraRoots = [...(options.roots ?? []).map((root) => path.resolve(cwd, root)), ...wtRoots];
 
   // The empty-registry short-circuit yields ONLY when there is also nothing to
   // sweep: `--root` declares a worktree location independently of the registry,
-  // and `scanEstate` sweeps `extraRoots` with `registry: []` — dropping them
-  // here would kill the flag exactly when the registry is useless.
+  // the wt-registry's recorded roots do the same, and `scanEstate` sweeps
+  // `extraRoots` with `registry: []` — dropping them here would kill both
+  // exactly when the registry is useless.
   if (entries.length === 0 && extraRoots.length === 0) {
     if (options.json) {
       process.stdout.write(

@@ -971,6 +971,81 @@ mailCmd
     }
   });
 
+// Worktree lifecycle verbs (mmnto-ai/totem#2580 slice 2). The removal half is
+// the reason the group exists: `git worktree remove` exits 0 on a removal that
+// leaves the directory standing, so `wt remove` removes, VERIFIES absence,
+// finishes any residue without following junctions out of the tree,
+// re-verifies, and only then deletes the `~/.totem/worktrees.json` record.
+// Classification stays in `doctor --estate` — `wt list` is accounting only.
+const wtCmd = program
+  .command('wt')
+  .description(
+    'Worktree lifecycle: create on a new branch, remove with verified absence, list what is recorded (mmnto-ai/totem#2580)',
+  );
+
+wtCmd
+  .command('create <slug>')
+  .description(
+    'Create a worktree at <root>/<repo>-<seat>-<slug> on a NEW branch, recorded in ~/.totem/worktrees.json before git runs',
+  )
+  .option(
+    '--root <dir>',
+    'Container root for the worktree (default: $TOTEM_WORKTREE_ROOT, else ~/.totem/worktrees). The repo itself and the workspace root are refused',
+  )
+  .option('--seat <id>', 'Creating seat id (default: the resolved self agent)')
+  .option(
+    '--ticket <ref>',
+    'Issue this worktree is cut for; makes the default branch feat/<ticket>-<slug>',
+  )
+  .option('--branch <name>', 'Branch to create (default: feat/<ticket>-<slug>, else wt/<slug>)')
+  .option('--json', 'Emit the created worktree as a JSON artifact on stdout')
+  .action(
+    async (
+      slug: string,
+      opts: { root?: string; seat?: string; ticket?: string; branch?: string; json?: boolean },
+    ) => {
+      try {
+        const { wtCreateCommand } = await import('./commands/wt.js');
+        await wtCreateCommand({ slug, ...opts });
+        // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
+wtCmd
+  .command('remove <path-or-name>')
+  .description(
+    'Remove a worktree and PROVE it is gone — exit 0 only on verified absence; untracked .totem/orchestration content refuses the removal (no bypass)',
+  )
+  .option('--json', 'Emit the removal outcome as a JSON artifact on stdout')
+  .action(async (target: string, opts: { json?: boolean }) => {
+    try {
+      const { wtRemoveCommand } = await import('./commands/wt.js');
+      await wtRemoveCommand({ target, ...opts });
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+wtCmd
+  .command('list')
+  .description(
+    'List recorded worktrees with seat/branch/ticket/age and on-disk presence (accounting only — classification is `totem doctor --estate`)',
+  )
+  .option('--json', 'Emit the listing as a JSON artifact on stdout')
+  .action(async (opts: { json?: boolean }) => {
+    try {
+      const { wtListCommand } = await import('./commands/wt.js');
+      await wtListCommand(opts);
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 // ECL outbox retention prune (mmnto-ai/totem#2279; parent mmnto-ai/totem-strategy#700;
 // doctrine/ecl-discipline.md § 4.4). The binary-guaranteed cohort-wide replacement
 // for `scripts/prune-outbox.mjs` — self-resolves the caller's agent so a seat can

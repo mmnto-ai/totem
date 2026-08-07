@@ -31,10 +31,22 @@ const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 let root: string;
 let lines: string[];
 let errSpy: ReturnType<typeof vi.spyOn>;
+let prevHome: string | undefined;
+let prevProfile: string | undefined;
 
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-estate-cli-')));
   lines = [];
+  // The wt-registry coupling (mmnto-ai/totem#2580 slice 2) reads
+  // `~/.totem/worktrees.json` through `os.homedir()`, so HOME/USERPROFILE are
+  // pinned at an empty temp home for EVERY test here — otherwise a machine
+  // that has actually run `totem wt create` would drag its real recorded roots
+  // into these assertions. Tests that need their own home override this and
+  // restore to the temp one.
+  prevHome = process.env['HOME'];
+  prevProfile = process.env['USERPROFILE'];
+  process.env['HOME'] = path.join(root, 'home');
+  process.env['USERPROFILE'] = path.join(root, 'home');
   errSpy = vi.spyOn(console, 'error').mockImplementation((msg?: unknown) => {
     lines.push(String(msg).replace(ANSI, ''));
   });
@@ -42,6 +54,10 @@ beforeEach(() => {
 
 afterEach(() => {
   errSpy.mockRestore();
+  if (prevHome === undefined) delete process.env['HOME'];
+  else process.env['HOME'] = prevHome;
+  if (prevProfile === undefined) delete process.env['USERPROFILE'];
+  else process.env['USERPROFILE'] = prevProfile;
   cleanTmpDir(root);
 });
 
@@ -497,5 +513,129 @@ describe('doctorEstateCliCommand — the --json artifact owns stdout (invariant 
       indeterminate: 1,
       'husk-candidates': 1,
     });
+  });
+});
+
+// ─── wt-registry coupling (mmnto-ai/totem#2580 slice 2) ─
+
+describe('doctorEstateCliCommand — wt-registry roots', () => {
+  /** Write a worktrees.json into the pinned temp HOME. */
+  function writeWtRegistry(contents: string): void {
+    const dir = path.join(root, 'home', '.totem');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'worktrees.json'), contents, 'utf-8');
+  }
+
+  async function artifactFor(options: Parameters<typeof doctorEstateCliCommand>[0]) {
+    const chunks: string[] = [];
+    const stdout = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((chunk: unknown): boolean => {
+        chunks.push(String(chunk));
+        return true;
+      });
+    try {
+      await doctorEstateCliCommand(options);
+    } finally {
+      stdout.mockRestore();
+    }
+    return JSON.parse(chunks.join('')) as Record<string, unknown>;
+  }
+
+  // Invariant 8: a recorded root stays swept with ZERO live entries under it —
+  // the round-3 MINOR-3 remedy. Every husk's own registry entry can be gone
+  // and the location is still reachable.
+  it('sweeps a recorded root as a CONTAINER root with no registry entries at all', async () => {
+    const recorded = path.join(root, 'recorded-root');
+    fs.mkdirSync(path.join(recorded, 'left-behind'), { recursive: true });
+    writeWtRegistry(
+      JSON.stringify({ schemaVersion: 1, roots: [recorded], worktrees: {} }, null, 2),
+    );
+
+    const artifact = await artifactFor({
+      json: true,
+      registryForTest: {},
+      execForTest: () => {
+        throw new Error('no git call expected for an empty registry');
+      },
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+
+    expect(artifact['swept-roots']).toEqual([{ path: recorded, kind: 'container' }]);
+    const husks = artifact['husk-candidates'] as { path: string; evidence: string }[];
+    expect(husks).toHaveLength(1);
+    expect(husks[0]!.evidence).toBe('container-residue');
+  });
+
+  // A recorded root that no longer exists is an EMPTY SWEEP, not a scan hole
+  // (the ruling's Q3 filter) — it must not mint an unscannable row.
+  it('drops a recorded root that no longer exists, without an unscannable row', async () => {
+    const gone = path.join(root, 'vanished-root');
+    writeWtRegistry(JSON.stringify({ schemaVersion: 1, roots: [gone], worktrees: {} }));
+
+    const artifact = await artifactFor({
+      json: true,
+      registryForTest: {},
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+
+    expect(artifact['swept-roots']).toEqual([]);
+    expect(artifact['unscannable']).toEqual([]);
+    // Nothing to scan and nothing recorded → the degenerate artifact.
+    expect(artifact['summary']).toMatchObject({ repos: 0, worktrees: 0 });
+  });
+
+  it('discloses an unreadable worktrees.json on stderr and scans anyway', async () => {
+    writeWtRegistry('{ not json');
+    const declared = path.join(root, 'declared-root');
+    fs.mkdirSync(path.join(declared, 'residue'), { recursive: true });
+
+    const artifact = await artifactFor({
+      json: true,
+      registryForTest: {},
+      roots: [declared],
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+
+    // Disclosed, not swallowed — and the explicit --root sweep still ran.
+    expect(output()).toContain('Cannot read worktree registry');
+    expect(artifact['swept-roots']).toEqual([{ path: declared, kind: 'container' }]);
+  });
+
+  it('unions recorded roots with an explicit --root, leaving --root behavior unchanged', async () => {
+    const recorded = path.join(root, 'recorded-root');
+    const declared = path.join(root, 'declared-root');
+    fs.mkdirSync(recorded, { recursive: true });
+    fs.mkdirSync(declared, { recursive: true });
+    writeWtRegistry(JSON.stringify({ schemaVersion: 1, roots: [recorded], worktrees: {} }));
+
+    const artifact = await artifactFor({
+      json: true,
+      registryForTest: {},
+      roots: [declared],
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+
+    expect(artifact['swept-roots']).toEqual([
+      { path: declared, kind: 'container' },
+      { path: recorded, kind: 'container' },
+    ]);
+  });
+
+  it('honours the wtRootsForTest seam without touching the real home', async () => {
+    const seamRoot = path.join(root, 'seam-root');
+    fs.mkdirSync(path.join(seamRoot, 'residue'), { recursive: true });
+    const artifact = await artifactFor({
+      json: true,
+      registryForTest: {},
+      wtRootsForTest: [seamRoot],
+      nowForTest: NOW,
+      cwdForTest: root,
+    });
+    expect(artifact['swept-roots']).toEqual([{ path: seamRoot, kind: 'container' }]);
   });
 });
