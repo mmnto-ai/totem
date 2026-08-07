@@ -66,15 +66,22 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** No-follow existence probe: a dangling link still counts as PRESENT. */
+/**
+ * No-follow existence probe: a dangling link still counts as PRESENT, and the
+ * probe FAILS CLOSED — only ENOENT/ENOTDIR mean "absent"; any other errno
+ * reports the path as present, so an unknowable path reads as a survivor and
+ * the caller fails loud instead of claiming a verified removal (#2580 bot
+ * round, CR findings 8 + 9 — retires the errno-tri-state deferral).
+ */
 export function residuePathExists(p: string): boolean {
-  // totem-context: intentional cleanup — an ENOENT/EACCES lstat is exactly the "absent" answer this probe reports; the caller re-verifies and fails loud on a survivor rather than acting on a throw.
+  // totem-context: intentional cleanup — the catch IS the answer, not a swallow: ENOENT/ENOTDIR are the two errnos that PROVE absence, and every other lstat failure deliberately reports "present" so the finish reports a survivor rather than a false verified-removal.
   try {
     fs.lstatSync(p);
     return true;
     // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
-  } catch {
-    return false;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    return code !== 'ENOENT' && code !== 'ENOTDIR';
   }
 }
 

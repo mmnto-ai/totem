@@ -13,7 +13,18 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Module-namespace exports are not spyable under ESM, so `node:fs` is mocked
+// ONCE with pass-through fns whose implementations individual tests override
+// via `mockImplementationOnce` (the ecl-gc.test.ts house pattern); every other
+// fs call, and every unconsumed call, is the real thing.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  const lstatSync = vi.fn(actual.lstatSync);
+  const rmSync = vi.fn(actual.rmSync);
+  return { ...actual, default: { ...actual, lstatSync, rmSync }, lstatSync, rmSync };
+});
 
 import {
   removeWorktreeResidue,
@@ -157,5 +168,38 @@ describe('removeWorktreeResidue', () => {
     const result = await removeWorktreeResidue({ dir: wt, attempts: 1, retryDelayMs: 1 });
     expect(result.attempts).toBe(1);
     expect(result.removed).toBe(true);
+  });
+
+  // The zero-attempt case above never ENTERS the loop, so the retry counter
+  // and `lastError` — a real contract, rendered by `wt remove`'s hard error —
+  // need a delete that genuinely throws (bot round, CR finding 7).
+  it('retries and reports lastError when the recursive delete keeps failing', async () => {
+    const wt = path.join(root, 'busy');
+    fs.mkdirSync(wt, { recursive: true });
+    const boom = (): never => {
+      throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+    };
+    // Exactly the attempt budget: both throws are consumed in-test, and the
+    // afterEach cleanup gets the real `rmSync` back.
+    vi.mocked(fs.rmSync).mockImplementationOnce(boom).mockImplementationOnce(boom);
+
+    const result = await removeWorktreeResidue({ dir: wt, attempts: 2, retryDelayMs: 1 });
+    expect(result.attempts).toBe(2);
+    expect(result.removed).toBe(false);
+    expect(result.lastError).toContain('EBUSY');
+  });
+
+  it('fails CLOSED: a non-ENOENT probe failure reads as a survivor, never a removal', () => {
+    vi.mocked(fs.lstatSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    });
+    expect(residuePathExists(path.join(root, 'denied'))).toBe(true);
+  });
+
+  it('reads ENOENT as absent through the same mock seam', () => {
+    vi.mocked(fs.lstatSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+    });
+    expect(residuePathExists(path.join(root, 'missing'))).toBe(false);
   });
 });

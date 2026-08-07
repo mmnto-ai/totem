@@ -97,15 +97,23 @@ export function worktreePathKey(p: string): string {
   return foldCase(path.resolve(p));
 }
 
-/** No-follow existence probe: a dangling symlink/junction still EXISTS here. */
+/**
+ * No-follow existence probe: a dangling symlink/junction still EXISTS here,
+ * and the probe FAILS CLOSED — only ENOENT/ENOTDIR mean "absent". Any other
+ * errno (EACCES on a denied parent, EIO, an offline share) reports the path as
+ * PRESENT: a caller that cannot KNOW must fail loud, never delete a registry
+ * entry for a directory that may still stand (#2580 bot round, CR findings
+ * 8 + 9 — this retires the errno-tri-state deferral).
+ */
 export function worktreePathExists(p: string): boolean {
-  // totem-context: intentional cleanup — an ENOENT/EACCES lstat is the "absent" answer this probe exists to give; every caller treats a throw-free `false` as absence and re-verifies before acting (estate-scan.ts:331 idiom).
+  // totem-context: intentional cleanup — the catch IS the answer, not a swallow: ENOENT/ENOTDIR are the two errnos that PROVE absence, and every other lstat failure deliberately reports "present" so removal fails closed instead of reading an unknowable path as gone.
   try {
     fs.lstatSync(p);
     return true;
     // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
-  } catch {
-    return false;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    return code !== 'ENOENT' && code !== 'ENOTDIR';
   }
 }
 
@@ -263,10 +271,21 @@ export async function addWorktreeEntry(args: {
  * keeps an emptied container root reachable for the estate sweep.
  *
  * Callers must only reach this AFTER verifying the directory is absent.
- * Returns whether an entry was actually present (a git-listed worktree with no
+ * Returns whether an entry was actually deleted (a git-listed worktree with no
  * registry entry — the legacy estate — is a no-op, not an error).
+ *
+ * `expectCreatedAt` is an identity guard for the verify→delete window: a
+ * concurrent `wt create` can re-record the SAME path between a removal's
+ * absence check and this lock acquisition, and an unguarded delete-by-path
+ * would erase the replacement's durable record — the invisible-unrecorded
+ * class this registry exists to prevent (#2580 bot round, Greptile P1). When
+ * the stored entry's `createdAt` differs from the expected one, the entry is
+ * left in place and `false` is returned.
  */
-export async function deleteWorktreeEntry(worktreePath: string): Promise<boolean> {
+export async function deleteWorktreeEntry(
+  worktreePath: string,
+  opts?: { expectCreatedAt?: string },
+): Promise<boolean> {
   const dir = worktreeRegistryDir();
   const filePath = worktreeRegistryPath();
   if (!fs.existsSync(filePath)) return false;
@@ -277,6 +296,9 @@ export async function deleteWorktreeEntry(worktreePath: string): Promise<boolean
     const file = loadForMutation(filePath);
     const found = findWorktreeEntry(file, worktreePath);
     if (found === undefined) return false;
+    if (opts?.expectCreatedAt !== undefined && found.entry.createdAt !== opts.expectCreatedAt) {
+      return false;
+    }
     delete file.worktrees[found.key];
     writeAtomic(filePath, file);
     return true;

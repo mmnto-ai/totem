@@ -29,6 +29,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import type { ResidueRemovalResult, WorktreeEntry } from '@mmnto/totem';
@@ -268,12 +269,17 @@ function coreHelpers(core: Core) {
    * Best-effort rollback of the record-first entry after a failed
    * `git worktree add`. Returns the failure text when the rollback ITSELF
    * failed — the caller names the phantom entry loudly rather than letting the
-   * operator discover it later from `wt list`.
+   * operator discover it later from `wt list`. Guarded by the entry's own
+   * `createdAt` so a concurrent create that re-recorded the path is never the
+   * one rolled back (bot round, Greptile P1).
    */
-  async function rollbackCreateEntry(target: string): Promise<string | undefined> {
+  async function rollbackCreateEntry(
+    target: string,
+    expectCreatedAt: string,
+  ): Promise<string | undefined> {
     // totem-context: intentional cleanup — a failed ROLLBACK must not replace the git failure that caused it; the outcome is RETURNED to the caller, which reports the phantom entry loudly and folds it into the thrown error (nothing is swallowed).
     try {
-      await deleteWorktreeEntry(target);
+      await deleteWorktreeEntry(target, { expectCreatedAt });
       return undefined;
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
@@ -495,7 +501,15 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
   const rawRoot =
     options.root ??
     (envRoot !== undefined && envRoot.trim().length > 0 ? envRoot.trim() : defaultWorktreeRoot());
-  const root = path.resolve(cwd, rawRoot);
+  // A shell-quoted `--root '~/x'` or an env-carried `~` reaches this process
+  // unexpanded, and `path.resolve` would mint a literal `~` directory that
+  // then accretes into the recorded roots FOREVER (roots survive entry
+  // removal) — expand it against the home dir first (bot round, CR finding 6).
+  const expandedRoot =
+    rawRoot === '~' || rawRoot.startsWith('~/') || rawRoot.startsWith(`~${path.sep}`)
+      ? path.join(os.homedir(), rawRoot.slice(1))
+      : rawRoot;
+  const root = path.resolve(cwd, expandedRoot);
 
   // The location class the estate audit indicts (cohort-overlay §2): a
   // worktree beside its own repo, or inside it. Checked against the RESOLVED
@@ -548,10 +562,12 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
     // unrecorded-worktree class this verb exists to prevent (#2580 slice-2
     // falsification, finding 6). Rollback only when nothing landed on disk.
     const partialLeft = worktreePathExists(target);
-    const rollbackError = partialLeft ? undefined : await rollbackCreateEntry(target);
+    const rollbackError = partialLeft ? undefined : await rollbackCreateEntry(target, createdAt);
     if (rollbackError !== undefined) {
+      // `log.error` carries the 'Totem Error' tag — the packages/cli path
+      // instruction (styleguide Rule 129), not this command's own TAG.
       log.error(
-        TAG,
+        'Totem Error',
         `PHANTOM ENTRY — ${render(target)} is recorded in ${render(worktreeRegistryPath())} but was never created, and the rollback failed: ${render(rollbackError)}`,
       );
     }
@@ -746,14 +762,36 @@ export async function wtRemoveCommand(options: WtRemoveOptions): Promise<void> {
     }
   }
 
-  // Verified absent from here down: the entry may go.
+  // Verified absent from here down: the entry may go — but only the ENTRY THIS
+  // RUN FOUND. A concurrent `wt create` can re-record the same path inside the
+  // verify→delete window, and an unguarded delete-by-path would erase the
+  // replacement's durable record (bot round, Greptile P1) — the `createdAt`
+  // guard makes the delete conditional on identity.
   let entryDeleted = false;
-  if (resolved.entryKey !== undefined) {
+  let entryDisposition = 'not recorded (nothing to delete)';
+  if (resolved.entryKey !== undefined && resolved.entry !== undefined) {
     // totem-context: intentional cleanup — the directory is verifiably gone, so a failed registry delete is a stale RECORD, not a failed removal; it warns and the exit stays 0 (re-running the verb is idempotent and clears it).
     try {
-      entryDeleted = await deleteWorktreeEntry(resolved.entryKey);
+      entryDeleted = await deleteWorktreeEntry(resolved.entryKey, {
+        expectCreatedAt: resolved.entry.createdAt,
+      });
+      if (entryDeleted) {
+        entryDisposition = 'deleted';
+      } else if (findWorktreeEntry(readWorktreeRegistry(), resolvedPath) !== undefined) {
+        // The guard refused: a fresh entry now stands at the path, and it
+        // belongs to the replacement — leaving it is the correct outcome, but
+        // never a silent one.
+        entryDisposition = 'replaced concurrently — left in place';
+        log.warn(
+          TAG,
+          `${render(resolvedPath)}: the registry entry was replaced concurrently (a fresh \`wt create\` re-recorded the path) — left in place for the replacement`,
+        );
+      } else {
+        entryDisposition = 'already cleared (concurrent removal)';
+      }
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
+      entryDisposition = 'retained (delete failed)';
       log.warn(
         TAG,
         `${render(resolvedPath)} is gone but its registry entry could not be deleted (${render(describe(err))}) — re-run \`totem wt remove\` to clear it`,
@@ -797,10 +835,7 @@ export async function wtRemoveCommand(options: WtRemoveOptions): Promise<void> {
     );
   }
   for (const note of notes) log.dim(TAG, note);
-  log.dim(
-    TAG,
-    `registry entry ${entryDeleted ? 'deleted' : 'not recorded (nothing to delete)'} · verified absent`,
-  );
+  log.dim(TAG, `registry entry ${entryDisposition} · verified absent`);
 }
 
 // ─── list ───────────────────────────────────────────────

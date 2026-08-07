@@ -263,10 +263,10 @@ Standing pre-merge falsification leg ran against the full branch diff; verdict M
 
 **Declined / deferred:**
 
-- **Finding 5 (existence-probe errno tri-state):** `worktreePathExists` reports any lstat failure as absence, so the exit-0 claim's boundary is "as observable via lstat" — a non-ENOENT errno (denied parent, offline share) can read as absent. Errno discrimination (non-ENOENT ⇒ unknown, never absent) is DEFERRED to a follow-up issue pending operator word; invariant 1 below is scoped accordingly.
+- **Finding 5 (existence-probe errno tri-state):** `worktreePathExists` reports any lstat failure as absence, so the exit-0 claim's boundary is "as observable via lstat" — a non-ENOENT errno (denied parent, offline share) can read as absent. Errno discrimination (non-ENOENT ⇒ unknown, never absent) is DEFERRED to a follow-up issue pending operator word; invariant 1 below is scoped accordingly. _(Deferral RETIRED at the bot round — see "Bot-round dispositions" below: taken in the simpler fail-closed shape.)_
 - **`worktree` alias for the `wt` group:** absent by issue wording; no ruling requested.
 
-Invariant 1 is accordingly read as: `wt remove` can never exit 0 while the directory is observably present via lstat; invariant 10 as: the resolved root is never the repo, never under the repo, and never the workspace root itself.
+Invariant 1 is accordingly read as: `wt remove` can never exit 0 while the directory is observably present via lstat — and since the bot round the probes FAIL CLOSED: only ENOENT/ENOTDIR read as absent, so an unknowable path (denied parent, offline share) counts as present and the removal fails loud. Invariant 10 reads as: the resolved root is never the repo, never under the repo, and never the workspace root itself.
 
 ### Re-verification dispositions (2026-08-07, round 2 — scoped to the fold)
 
@@ -280,6 +280,20 @@ The falsification leg re-ran scoped to the fold commit; verdict FIXES-NEEDED (no
 6. **Finding 6 (wt.ts):** the dead `--from`→`--seat` rewrite deleted — mail's `--from` guidance lives in the recovery-hint field this wrapper never surfaces; the wrapper's own message already carries `--seat`.
 7. **Finding 9 (wt.ts):** the `.lock` / trailing-dot branch guard applies per path component, matching `git check-ref-format`.
 
-**Declined:** lexical-only containment vs a symlinked `--root` under the repo (finding 7) — deliberate-operator-action class; `realpath` is undefined for a root that does not exist yet; revisit on a specimen. **Noted:** the onDisk-gated worktree-list arm (finding 8) adds one reachable path to the deferred lstat errno-tri-state follow-up — fold that into the follow-up issue's text when filed.
+**Declined:** lexical-only containment vs a symlinked `--root` under the repo (finding 7) — deliberate-operator-action class; `realpath` is undefined for a root that does not exist yet; revisit on a specimen. **Noted:** the onDisk-gated worktree-list arm (finding 8) adds one reachable path to the deferred lstat errno-tri-state follow-up — fold that into the follow-up issue's text when filed. _(Resolved at the bot round — the fail-closed probes close that arm; no follow-up issue owed.)_
+
+### Bot-round dispositions (2026-08-07)
+
+Operator invoked all three bots on PR #2592 (Gemini Code Assist, CodeRabbit, Greptile); 11 findings after dedup, all verified against source and ALL FIXED — no declines this round:
+
+1. **Greptile P1 (wt.ts / worktree-registry.ts):** the verify→delete race — a concurrent `wt create` re-recording the same path inside the removal's verify→delete window would have its fresh entry deleted by path. `deleteWorktreeEntry` gains an `expectCreatedAt` identity guard; the remove path and the create rollback both pass the entry identity they hold, and a guard refusal on remove warns "replaced concurrently — left in place" (exit stays 0 — the directory is verifiably gone; the entry belongs to the replacement).
+2. **CR findings 8+9 (worktree-registry.ts / worktree-residue.ts) — retires the errno tri-state DEFERRAL:** both existence probes now FAIL CLOSED — only ENOENT/ENOTDIR read as absent; every other errno reads as PRESENT, so removal fails loud on an unknowable path instead of deleting its record. Independent confirmation by CodeRabbit upgraded the deferred falsification finding 5 to taken, in this simpler shape (no tri-state API needed); no follow-up issue is owed, and the round-2 "widened arm" note resolves with it. EACCES/ENOENT spy tests added in both modules.
+3. **CR finding 2 (doctor.ts):** every `checkEstate` warning interpolation now sanitizes + flattens (core `sanitizeForTerminal` captured after the dynamic import, flatten always) — registry-controlled bytes in a parse error can no longer forge doctor rows.
+4. **CR finding 3 (doctor.ts):** `wtWarnings`/`wtNote()` hoisted above the try exactly like the sync-registry pair — the worktree-registry disclosure now also rides the catch arm; wt-unreadable × scan-throw test added.
+5. **CR finding 6 (wt.ts):** a leading `~` in `--root`/`TOTEM_WORKTREE_ROOT` expands against the home dir before resolution — a quoted tilde can no longer mint a literal `~` directory that accretes into `roots[]` forever.
+6. **GCA high / CR minor (wt.ts):** the phantom-entry `log.error` carries the `'Totem Error'` tag per the packages/cli path instruction (styleguide Rule 129).
+7. **CR finding 4 (wt.test.ts):** `createOne` derives its returned path from the effective options, so overridden slug/seat/root can no longer return a path for a worktree that was not created.
+8. **CR finding 5 (wt.test.ts):** the real-git fixture setup uses `spawnSync` argv arrays with status assertions (no shell strings; the standing OpenGrep error clears).
+9. **CR finding 7 (worktree-residue.test.ts):** an rmSync-throw retry case pins the retry counter and the `lastError` contract the CLI's hard error renders (the zero-attempt case never entered the loop).
 
 Releasable slice: one PR, `feat(cli,core)`, changeset minor for `@mmnto/totem` + `@mmnto/cli`.

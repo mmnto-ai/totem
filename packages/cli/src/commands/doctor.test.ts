@@ -2913,6 +2913,9 @@ describe('checkEstate — wt-registry roots', () => {
     // The scan itself still ran — the disclosure rides a live row, not a skip.
     expect(result.message).toContain('no stale worktrees or husk candidates');
     expect(result.remediation).toContain('registry.json');
+    // Warning text is flattened at interpolation (bot round, CR finding 2):
+    // a multi-line parse error must never forge extra doctor rows.
+    expect(result.message).not.toContain('\n');
   });
 
   it('keeps the unreadable-registry disclosure when the scan itself throws', async () => {
@@ -2937,6 +2940,39 @@ describe('checkEstate — wt-registry roots', () => {
     expect(result.status).toBe('warn');
     expect(result.message).toContain('Estate scan failed: scan-side failure');
     expect(result.message).toContain('Sync registry unreadable');
+  });
+
+  it('keeps the WORKTREE-registry disclosure when the scan itself throws', async () => {
+    // The wt-side symmetry of the catch-arm fix (bot round, CR finding 3):
+    // `wtWarnings` is hoisted with `registryWarnings`, so an unreadable
+    // worktrees.json survives into the scan-failed row instead of silently
+    // vanishing with the throw.
+    writeWtRegistry('{ not json');
+
+    // One registry entry keeps the scan off the empty short-circuit; the
+    // throwing `safeExec` getter fires AFTER the worktree-registry read has
+    // populated its warnings, landing the row in the catch arm.
+    const seams: Parameters<typeof checkEstate>[0] = {
+      registry: {
+        [path.join(estateHome, 'repo')]: {
+          path: path.join(estateHome, 'repo'),
+          chunkCount: 0,
+          lastSync: '2026-08-01T00:00:00.000Z',
+          embedder: 'x',
+        },
+      },
+    };
+    Object.defineProperty(seams, 'safeExec', {
+      get(): never {
+        throw new Error('scan-side failure');
+      },
+      enumerable: true,
+    });
+
+    const result = await checkEstate(seams);
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('Estate scan failed: scan-side failure');
+    expect(result.message).toContain('Cannot read worktree registry');
   });
 
   it('still skips when the recorded root no longer exists (empty sweep, not a hole)', async () => {

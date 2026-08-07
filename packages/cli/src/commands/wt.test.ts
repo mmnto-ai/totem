@@ -18,7 +18,7 @@
  * is reachable.
  */
 
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -234,7 +234,7 @@ async function createOne(
   git: FakeGit,
   overrides: Partial<Parameters<typeof wtCreateCommand>[0]> = {},
 ): Promise<string> {
-  await wtCreateCommand({
+  const opts = {
     slug: 'demo',
     root: container,
     seat: 'totem-claude',
@@ -243,8 +243,14 @@ async function createOne(
     execForTest: git.exec,
     nowForTest: CREATED_AT,
     ...overrides,
-  });
-  return path.join(container, 'repo-totem-claude-demo');
+  };
+  await wtCreateCommand(opts);
+  // Derived from the EFFECTIVE options: an override of slug/seat/root must
+  // return the path that was actually created (bot round, CR finding 4).
+  return path.join(
+    opts.root ?? container,
+    `repo-${opts.seat ?? 'totem-claude'}-${opts.slug ?? 'demo'}`,
+  );
 }
 
 // ─── create ─────────────────────────────────────────────
@@ -317,6 +323,34 @@ describe('wt create', () => {
     expect(
       fs.existsSync(path.join(home, '.totem', 'worktrees', 'repo-totem-claude-defaulted')),
     ).toBe(true);
+  });
+
+  it('expands a leading ~ in --root and TOTEM_WORKTREE_ROOT against the home dir', async () => {
+    const git = fakeGit();
+    // A quoted `--root '~/x'` reaches the process unexpanded; resolving it
+    // cwd-relative would mint a literal `~` dir and record it as a root
+    // FOREVER (bot round, CR finding 6).
+    await createOne(git, { root: '~/tilde-root' });
+    expect(fs.existsSync(path.join(home, 'tilde-root', 'repo-totem-claude-demo'))).toBe(true);
+
+    await wtCreateCommand({
+      slug: 'tilde-env',
+      seat: 'totem-claude',
+      cwdForTest: repo,
+      envForTest: { TOTEM_WORKTREE_ROOT: '~/tilde-env-root' },
+      execForTest: git.exec,
+      nowForTest: CREATED_AT,
+    });
+    expect(fs.existsSync(path.join(home, 'tilde-env-root', 'repo-totem-claude-tilde-env'))).toBe(
+      true,
+    );
+    // No literal `~` directory was minted anywhere, and no recorded root
+    // carries one.
+    expect(fs.existsSync(path.join(repo, '~'))).toBe(false);
+    for (const recorded of readWorktreeRegistry().roots) {
+      expect(path.basename(recorded)).not.toBe('~');
+      expect(recorded.includes(`${path.sep}~${path.sep}`)).toBe(false);
+    }
   });
 
   it('emits a --json artifact naming the root source', async () => {
@@ -756,6 +790,38 @@ describe('wt remove resolution', () => {
     expect(callsMatching(unlisted, 'worktree', 'remove')).toHaveLength(0);
   });
 
+  it('leaves a CONCURRENTLY REPLACED entry in place, loudly (Greptile P1)', async () => {
+    const git = fakeGit();
+    const target = await createOne(git);
+    const unlisted = fakeGit({ listed: [] });
+    const replacedAt = '2026-08-07T18:00:00.000Z';
+
+    // The residue seam models the race window: the directory really goes, and
+    // a concurrent `wt create` re-records the SAME path before this removal's
+    // registry delete acquires the lock.
+    const racingResidue = async (dir: string): Promise<ResidueRemovalResult> => {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      const raw = JSON.parse(fs.readFileSync(worktreeRegistryPath(), 'utf-8')) as {
+        worktrees: Record<string, { createdAt: string }>;
+      };
+      raw.worktrees[target]!.createdAt = replacedAt;
+      fs.writeFileSync(worktreeRegistryPath(), JSON.stringify(raw, null, 2), 'utf-8');
+      return { removed: true, strippedLinks: [], survivors: [], attempts: 1 };
+    };
+
+    // Exit 0: the directory IS verifiably gone. But the fresh entry belongs to
+    // the replacement — deleting it would strand the new worktree unrecorded.
+    await wtRemoveCommand({
+      target,
+      cwdForTest: repo,
+      execForTest: unlisted.exec,
+      residueForTest: racingResidue,
+    });
+
+    expect(readWorktreeRegistry().worktrees[target]?.createdAt).toBe(replacedAt);
+    expect(output()).toContain('replaced concurrently');
+  });
+
   it('accepts a git-listed worktree with NO registry entry (legacy estate)', async () => {
     const legacy = path.join(container, 'legacy-worktree');
     fs.mkdirSync(legacy, { recursive: true });
@@ -866,19 +932,23 @@ describe('ECL probe against real git', () => {
   it('names the exact untracked file and defeats status.showUntrackedFiles=no', async () => {
     const realRepo = path.join(root, 'real-repo');
     fs.mkdirSync(realRepo, { recursive: true });
-    const run = (cmd: string): void => {
-      execSync(cmd, { cwd: realRepo, stdio: 'ignore' });
+    // Argv arrays, never a shell string (the repo's exec guidance) — and the
+    // status assertion means a failed setup step fails HERE, not three
+    // assertions later (bot round, CR finding 5).
+    const run = (...args: string[]): void => {
+      const done = spawnSync('git', args, { cwd: realRepo, stdio: 'ignore' });
+      expect(done.status).toBe(0);
     };
-    run('git init');
-    run('git config user.email "wt-test@totem.invalid"');
-    run('git config user.name "wt-test"');
+    run('init');
+    run('config', 'user.email', 'wt-test@totem.invalid');
+    run('config', 'user.name', 'wt-test');
     fs.writeFileSync(path.join(realRepo, 'a.txt'), 'seed', 'utf-8');
-    run('git add a.txt');
-    run('git commit -m seed');
+    run('add', '--', 'a.txt');
+    run('commit', '-m', 'seed');
     // The bypass shape (finding 2, arm a): the HOME repo's config is shared
     // by every linked worktree, and `showUntrackedFiles=no` silences a
     // default `git status` completely — only `-uall` still answers.
-    run('git config status.showUntrackedFiles no');
+    run('config', 'status.showUntrackedFiles', 'no');
 
     const wt = path.join(root, 'real-wt');
     const added = spawnSync('git', ['worktree', 'add', '-b', 'wt/real', wt], {
@@ -962,8 +1032,8 @@ describe('wt list', () => {
   it('reports recorded entries with disk presence and age, never a classification', async () => {
     const git = fakeGit();
     const present = await createOne(git);
-    await createOne(git, { slug: 'ghost' });
-    fs.rmSync(path.join(container, 'repo-totem-claude-ghost'), { recursive: true, force: true });
+    const ghost = await createOne(git, { slug: 'ghost' });
+    fs.rmSync(ghost, { recursive: true, force: true });
 
     await wtListCommand({ nowForTest: NOW });
 

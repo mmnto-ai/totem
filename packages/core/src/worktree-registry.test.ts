@@ -12,7 +12,17 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Module-namespace exports are not spyable under ESM, so `node:fs` is mocked
+// ONCE with a pass-through `lstatSync` whose implementation individual tests
+// override via `mockImplementationOnce` (the ecl-gc.test.ts house pattern);
+// every other fs call, and every unconsumed call, is the real thing.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  const lstatSync = vi.fn(actual.lstatSync);
+  return { ...actual, default: { ...actual, lstatSync }, lstatSync };
+});
 
 import {
   addWorktreeEntry,
@@ -191,6 +201,32 @@ describe('deleteWorktreeEntry', () => {
   it('is a no-op when the file does not exist at all', async () => {
     expect(await deleteWorktreeEntry(path.join(home, 'anything'))).toBe(false);
   });
+
+  // The verify→delete window guard (bot round, Greptile P1): a concurrent
+  // `wt create` can re-record the same path between a removal's absence check
+  // and this delete — the identity guard must leave the replacement's record.
+  it('refuses the delete and RETAINS the entry when expectCreatedAt differs', async () => {
+    const root = path.join(home, 'container');
+    const target = path.join(root, 'repo-totem-claude-demo');
+    await addWorktreeEntry({ worktreePath: target, entry: entryFor(), root });
+
+    expect(await deleteWorktreeEntry(target, { expectCreatedAt: '2026-08-07T23:59:59.000Z' })).toBe(
+      false,
+    );
+    // The (replacement-shaped) entry survives untouched.
+    expect(findWorktreeEntry(readWorktreeRegistry(), target)?.entry.createdAt).toBe(
+      entryFor().createdAt,
+    );
+  });
+
+  it('deletes normally when expectCreatedAt matches the stored entry', async () => {
+    const root = path.join(home, 'container');
+    const target = path.join(root, 'repo-totem-claude-demo');
+    await addWorktreeEntry({ worktreePath: target, entry: entryFor(), root });
+
+    expect(await deleteWorktreeEntry(target, { expectCreatedAt: entryFor().createdAt })).toBe(true);
+    expect(readWorktreeRegistry().worktrees).toEqual({});
+  });
 });
 
 // ─── Path identity (invariant 9) ────────────────────────
@@ -249,6 +285,23 @@ describe('worktreePathExists', () => {
     // not read a dangling junction as "already gone".
     expect(worktreePathExists(link)).toBe(true);
     expect(worktreePathExists(path.join(home, 'never-existed'))).toBe(false);
+  });
+
+  // Fail-closed (bot round, CR findings 8+9): only ENOENT/ENOTDIR PROVE
+  // absence; an unknowable path must read as present so removal fails loud
+  // rather than deleting a record for a directory that may still stand.
+  it('fails CLOSED: a non-ENOENT lstat failure reads as PRESENT', () => {
+    vi.mocked(fs.lstatSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    });
+    expect(worktreePathExists(path.join(home, 'denied'))).toBe(true);
+  });
+
+  it('reads ENOENT as absent through the same mock seam', () => {
+    vi.mocked(fs.lstatSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+    });
+    expect(worktreePathExists(path.join(home, 'missing'))).toBe(false);
   });
 });
 
