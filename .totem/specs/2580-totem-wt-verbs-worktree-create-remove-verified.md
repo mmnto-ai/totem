@@ -220,7 +220,7 @@ No silent-degradation rows.
 5. Untracked content under `.totem/orchestration/**` blocks removal; tracked-only orchestration content does not.
 6. `create` writes the entry before invoking git; a git failure rolls it back or reports the phantom loudly.
 7. No wt verb ever writes `registry.json` (schema-collision guard); its read path is untouched.
-8. Recorded roots survive entry removal, and `scanEstate` receives them as container roots — the `%TEMP%\claude` class stays reachable with zero live entries.
+8. Recorded roots survive entry removal and reach `scanEstate` — the DEFAULT `~/.totem/worktrees` root as a CONTAINER root, every other recorded root as a STANDARD shape-evidence sweep — so the `%TEMP%\claude` class stays reachable (via shape evidence: repo-prefix name + `node_modules`) with zero live entries. (Amended round 2: the original text claimed container semantics for all recorded roots, which finding 11's partition superseded.)
 9. Path comparisons case-fold on win32 only (author-sandbox precedent).
 10. `create`'s resolved root is never the repo, never UNDER the repo, and never the workspace root itself, under any flag combination (containment semantics — post-falsification amendment).
 
@@ -267,5 +267,19 @@ Standing pre-merge falsification leg ran against the full branch diff; verdict M
 - **`worktree` alias for the `wt` group:** absent by issue wording; no ruling requested.
 
 Invariant 1 is accordingly read as: `wt remove` can never exit 0 while the directory is observably present via lstat; invariant 10 as: the resolved root is never the repo, never under the repo, and never the workspace root itself.
+
+### Re-verification dispositions (2026-08-07, round 2 — scoped to the fold)
+
+The falsification leg re-ran scoped to the fold commit; verdict FIXES-NEEDED (no HIGH, the three required fixes held). Taken:
+
+1. **Finding 1 (wt.ts):** the primary-checkout discriminator is now `--git-dir` == `--git-common-dir` — equal for every primary shape including `--separate-git-dir`, divergent only in a linked worktree. The previous `<toplevel>/.git` comparison misread separate-git-dir primaries as worktrees, and `--path-format=absolute` silently required git ≥ 2.31; both dropped. Separate-git-dir pass arm tested.
+2. **Finding 2 (spec):** invariant 8 amended above — it still asserted container semantics for ALL recorded roots after finding 11's partition shipped.
+3. **Finding 3 (core tests):** direct unit tests added for `partitionWorktreeRoots` (default→container, non-default→standard, no-dedup pass-through, win32-only fold on the default match, empty input) and `defaultWorktreeRoot`.
+4. **Finding 4 (doctor.ts):** the unreadable-sync-registry disclosure now also rides the CATCH arm of the `Estate` row (`registryNote` hoisted above the try); registry-unreadable × scan-throw test added.
+5. **Finding 5:** finding-13/14 disposition mis-citations corrected in `wt.ts` and `wt.test.ts`.
+6. **Finding 6 (wt.ts):** the dead `--from`→`--seat` rewrite deleted — mail's `--from` guidance lives in the recovery-hint field this wrapper never surfaces; the wrapper's own message already carries `--seat`.
+7. **Finding 9 (wt.ts):** the `.lock` / trailing-dot branch guard applies per path component, matching `git check-ref-format`.
+
+**Declined:** lexical-only containment vs a symlinked `--root` under the repo (finding 7) — deliberate-operator-action class; `realpath` is undefined for a root that does not exist yet; revisit on a specimen. **Noted:** the onDisk-gated worktree-list arm (finding 8) adds one reachable path to the deferred lstat errno-tri-state follow-up — fold that into the follow-up issue's text when filed.
 
 Releasable slice: one PR, `feat(cli,core)`, changeset minor for `@mmnto/totem` + `@mmnto/cli`.

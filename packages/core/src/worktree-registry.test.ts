@@ -16,9 +16,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   addWorktreeEntry,
+  defaultWorktreeRoot,
   deleteWorktreeEntry,
   existingWorktreeRoots,
   findWorktreeEntry,
+  partitionWorktreeRoots,
   readWorktreeRegistry,
   WORKTREE_REGISTRY_SCHEMA_VERSION,
   type WorktreeEntry,
@@ -247,5 +249,43 @@ describe('worktreePathExists', () => {
     // not read a dangling junction as "already gone".
     expect(worktreePathExists(link)).toBe(true);
     expect(worktreePathExists(path.join(home, 'never-existed'))).toBe(false);
+  });
+});
+
+describe('defaultWorktreeRoot', () => {
+  it('is ~/.totem/worktrees under the pinned home', () => {
+    expect(path.resolve(defaultWorktreeRoot())).toBe(path.join(home, '.totem', 'worktrees'));
+  });
+});
+
+describe('partitionWorktreeRoots', () => {
+  it('routes the default root to container and everything else to standard', () => {
+    const scratch = path.join(home, 'scratch');
+    const { container, standard } = partitionWorktreeRoots([defaultWorktreeRoot(), scratch]);
+    expect(container).toEqual([defaultWorktreeRoot()]);
+    expect(standard).toEqual([scratch]);
+  });
+
+  it('returns empty partitions for empty input', () => {
+    expect(partitionWorktreeRoots([])).toEqual({ container: [], standard: [] });
+  });
+
+  it('keeps duplicate roots on their side rather than deduping — accretion is the writer’s charge', () => {
+    const scratch = path.join(home, 'scratch');
+    const { container, standard } = partitionWorktreeRoots([scratch, scratch]);
+    expect(container).toEqual([]);
+    expect(standard).toEqual([scratch, scratch]);
+  });
+
+  it('matches the default root case-insensitively on win32 ONLY (invariant 9)', () => {
+    const shouted = path.join(home, '.TOTEM', 'WORKTREES');
+    const { container, standard } = partitionWorktreeRoots([shouted]);
+    if (IS_WIN32) {
+      expect(container).toEqual([shouted]);
+      expect(standard).toEqual([]);
+    } else {
+      expect(container).toEqual([]);
+      expect(standard).toEqual([shouted]);
+    }
   });
 });

@@ -209,25 +209,34 @@ function coreHelpers(core: Core) {
    * `rev-parse --show-toplevel` answers with the WORKTREE, so the entry would
    * record a home repo that vanishes with it and every later removal of its
    * children would resolve against nothing (#2580 slice-2 falsification,
-   * finding 10). The discriminator is git's own: the common dir of a primary
-   * checkout is `<toplevel>/.git`; a linked worktree's points elsewhere.
+   * finding 10). The discriminator: `--git-dir` and `--git-common-dir` name
+   * the SAME directory for every primary shape — an in-tree `.git` and a
+   * `--separate-git-dir` layout alike — and diverge only in a linked worktree,
+   * whose git dir is `<common>/worktrees/<name>`. Comparing the common dir
+   * against `<toplevel>/.git` instead would misread separate-git-dir primaries
+   * as worktrees (re-verification round 2, finding 1).
    */
-  function assertPrimaryCheckout(exec: WtExecFn, cwd: string, repoRoot: string): void {
+  function assertPrimaryCheckout(exec: WtExecFn, cwd: string): void {
+    let gitDir: string;
     let commonDir: string;
     // totem-context: intentional cleanup — a probe that cannot answer is re-thrown as a named TotemGitError; the catch attaches the recovery hint, nothing is swallowed.
     try {
-      commonDir = exec(
+      const out = exec(
         'git',
-        [
-          '--no-optional-locks',
-          '-C',
-          cwd,
-          'rev-parse',
-          '--path-format=absolute',
-          '--git-common-dir',
-        ],
+        ['--no-optional-locks', '-C', cwd, 'rev-parse', '--git-dir', '--git-common-dir'],
         { timeout: GIT_READ_TIMEOUT_MS },
-      ).trim();
+      );
+      // One answer per line, and git may answer with a path RELATIVE to the
+      // cwd (a bare `.git` at the toplevel) — resolve both before comparing.
+      const lines = out
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      if (lines.length < 2) {
+        throw new Error(`expected two rev-parse answers, got ${lines.length}`);
+      }
+      gitDir = path.resolve(cwd, lines[0]!);
+      commonDir = path.resolve(cwd, lines[1]!);
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
       throw new TotemGitError(
@@ -236,7 +245,7 @@ function coreHelpers(core: Core) {
         err,
       );
     }
-    if (worktreePathKey(commonDir) !== worktreePathKey(path.join(repoRoot, '.git'))) {
+    if (worktreePathKey(gitDir) !== worktreePathKey(commonDir)) {
       throw new TotemConfigError(
         `wt create: ${render(cwd)} is inside a linked worktree, not the primary checkout`,
         'Run `totem wt create` from the primary checkout (cohort-overlay §2 — worktrees are minted from the primary, the same convention that keeps mail there).',
@@ -429,7 +438,7 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
   }
 
   const repoRoot = requireGitRoot(exec, cwd);
-  assertPrimaryCheckout(exec, cwd, repoRoot);
+  assertPrimaryCheckout(exec, cwd);
   const repoName = path.basename(repoRoot);
 
   let seat: string;
@@ -437,13 +446,13 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
     seat = options.seat.trim();
   } else {
     const { resolveSelfSender } = await import('./mail.js');
-    // totem-context: intentional cleanup — the resolver's failure is re-thrown as a wt-scoped error; the catch exists to swap the mail verb's `--from` hint for this verb's `--seat`, and nothing is swallowed.
+    // totem-context: intentional cleanup — the resolver's failure is re-thrown as a wt-scoped error whose message carries this verb's `--seat` guidance (the mail verb's `--from` lives in the resolver's recovery-hint field, which this wrapper never surfaces), and nothing is swallowed.
     try {
       seat = resolveSelfSender(repoRoot, env);
       // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch (err) {
       throw new TotemConfigError(
-        `wt create: cannot derive the creating seat: ${render(describe(err).replace(/--from/g, '--seat'))} — pass --seat <agent-id> or set TOTEM_SELF_AGENT`,
+        `wt create: cannot derive the creating seat: ${render(describe(err))} — pass --seat <agent-id> or set TOTEM_SELF_AGENT`,
         'Pass --seat <agent-id> (e.g. totem-claude) or set TOTEM_SELF_AGENT.',
         'CONFIG_INVALID',
       );
@@ -458,14 +467,15 @@ export async function wtCreateCommand(options: WtCreateOptions): Promise<void> {
   }
 
   const branch = options.branch?.trim() ?? defaultBranchName(slug, options.ticket);
-  // Trailing `.` and a `.lock` suffix are `git check-ref-format` refusals that
-  // would otherwise surface AFTER the record-first write, via the rollback path.
+  // Trailing-dot and `.lock` components are `git check-ref-format` refusals
+  // that would otherwise surface AFTER the record-first write, via the
+  // rollback path — checked per PATH COMPONENT, since git refuses them
+  // mid-ref too (re-verification round 2, finding 9).
   if (
     !BRANCH_PATTERN.test(branch) ||
     branch.includes('..') ||
     branch.endsWith('/') ||
-    branch.endsWith('.') ||
-    branch.endsWith('.lock')
+    branch.split('/').some((part) => part.endsWith('.') || part.endsWith('.lock'))
   ) {
     throw new TotemConfigError(
       `wt create: invalid branch name ${JSON.stringify(branch)}`,
@@ -705,7 +715,7 @@ export async function wtRemoveCommand(options: WtRemoveOptions): Promise<void> {
     // recorded root. An entry OUTSIDE every recorded root is a hand-edit
     // anomaly, and handing it to a recursive delete would make a corrupted
     // worktrees.json an arbitrary-delete primitive (#2580 slice-2
-    // falsification, finding 14).
+    // falsification, finding 13).
     if (!file.roots.some((recorded) => pathIsUnder(resolvedPath, recorded))) {
       throw new TotemConfigError(
         `wt remove: ${render(resolvedPath)} is recorded but lies under none of the recorded roots — refusing the residue delete`,

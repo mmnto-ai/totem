@@ -1994,6 +1994,17 @@ export async function checkEstate(
   } = {},
 ): Promise<DiagnosticResult> {
   const name = 'Estate';
+  // Hoisted ABOVE the try: the sync-registry disclosure must ride EVERY arm of
+  // the row — the live arms AND the catch. With recorded wt roots the scan
+  // proceeds on zero repo entries, and a row without this note would hide the
+  // one signal that the sensor is blind to every registered repo (#2580
+  // slice-2 falsification finding 1; catch arm per re-verification round 2,
+  // finding 4).
+  const registryWarnings: string[] = [];
+  const registryNote = (): string =>
+    registryWarnings.length === 0
+      ? ''
+      : ` Sync registry unreadable — no repos enumerated: ${registryWarnings.join(' | ')}.`;
   try {
     const {
       existingWorktreeRoots,
@@ -2003,7 +2014,6 @@ export async function checkEstate(
       safeExec,
       scanEstate,
     } = await import('@mmnto/totem');
-    const registryWarnings: string[] = [];
     const registry = seams.registry ?? readRegistry((msg: string) => registryWarnings.push(msg));
     const entries = Object.values(registry).map((entry) => ({
       path: entry.path,
@@ -2025,14 +2035,6 @@ export async function checkEstate(
       existingWorktreeRoots(readWorktreeRegistry((msg: string) => wtWarnings.push(msg)));
     const wtPartition = partitionWorktreeRoots(wtRoots);
     const wtNote = wtWarnings.length === 0 ? '' : ` ${wtWarnings.join(' | ')}.`;
-    // The sync-registry disclosure must ride EVERY arm, not just the
-    // short-circuit: with recorded wt roots the scan proceeds on zero repo
-    // entries, and a green row would hide the one signal that the sensor is
-    // blind to every registered repo (#2580 slice-2 falsification, finding 1).
-    const registryNote =
-      registryWarnings.length === 0
-        ? ''
-        : ` Sync registry unreadable — no repos enumerated: ${registryWarnings.join(' | ')}.`;
 
     if (entries.length === 0 && wtRoots.length === 0) {
       // `readRegistry` warns only when it swallowed a non-ENOENT read/parse
@@ -2086,7 +2088,7 @@ export async function checkEstate(
       return {
         name,
         status: 'warn',
-        message: `${s.stale} stale worktree(s), ${s.huskCandidates} husk candidate(s) across ${enumerated} enumerated repo(s)${skipped}.${probes}${registryNote}${wtNote}`,
+        message: `${s.stale} stale worktree(s), ${s.huskCandidates} husk candidate(s) across ${enumerated} enumerated repo(s)${skipped}.${probes}${registryNote()}${wtNote}`,
         remediation:
           'Run `totem doctor --estate` for the per-row evidence (report-only — this row never gates).',
         gateExempt: true,
@@ -2097,7 +2099,7 @@ export async function checkEstate(
     return {
       name,
       status: registryWarnings.length > 0 ? 'warn' : 'pass',
-      message: `${enumerated} enumerated repo(s)${skipped} · ${s.worktrees} linked worktree(s); no stale worktrees or husk candidates.${probes}${registryNote}${wtNote}`,
+      message: `${enumerated} enumerated repo(s)${skipped} · ${s.worktrees} linked worktree(s); no stale worktrees or husk candidates.${probes}${registryNote()}${wtNote}`,
       ...(registryWarnings.length > 0
         ? { remediation: 'Repair ~/.totem/registry.json, then run `totem doctor --estate`.' }
         : {}),
@@ -2108,7 +2110,7 @@ export async function checkEstate(
     return {
       name,
       status: 'warn',
-      message: `Estate scan failed: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Estate scan failed: ${err instanceof Error ? err.message : String(err)}.${registryNote()}`,
       remediation: 'Run `totem doctor --estate` to see which probe failed.',
       gateExempt: true,
     };

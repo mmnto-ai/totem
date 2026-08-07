@@ -2915,6 +2915,30 @@ describe('checkEstate — wt-registry roots', () => {
     expect(result.remediation).toContain('registry.json');
   });
 
+  it('keeps the unreadable-registry disclosure when the scan itself throws', async () => {
+    // Re-verification round 2, finding 4: the catch arm was the one row shape
+    // that dropped the disclosure — broken sync registry AND a scan failure
+    // must surface BOTH signals on the same row.
+    fs.mkdirSync(path.join(estateHome, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(estateHome, '.totem', 'registry.json'), '{ not json', 'utf-8');
+
+    // The seam getter throws AFTER the registry read populated its warnings —
+    // the nearest injectable stand-in for a scan-side failure, since
+    // `scanEstate` contains its own probe failures.
+    const seams = {};
+    Object.defineProperty(seams, 'wtRoots', {
+      get(): string[] {
+        throw new Error('scan-side failure');
+      },
+      enumerable: true,
+    });
+
+    const result = await checkEstate(seams);
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('Estate scan failed: scan-side failure');
+    expect(result.message).toContain('Sync registry unreadable');
+  });
+
   it('still skips when the recorded root no longer exists (empty sweep, not a hole)', async () => {
     writeWtRegistry(
       JSON.stringify({ schemaVersion: 1, roots: [path.join(estateHome, 'gone')], worktrees: {} }),

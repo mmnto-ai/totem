@@ -120,7 +120,9 @@ interface FakeGitOptions {
   statusThrows?: boolean;
   /** Make `worktree list` fail (an unreadable home repo). */
   listThrows?: boolean;
-  /** Answer for `rev-parse --git-common-dir` (default: the primary's `.git`). */
+  /** Answer for `rev-parse --git-dir` (default: the primary's `.git`). */
+  gitDir?: string;
+  /** Answer for `rev-parse --git-common-dir` (default: same as gitDir — a primary). */
   commonDir?: string;
 }
 
@@ -149,7 +151,12 @@ function fakeGit(options: FakeGitOptions = {}): FakeGit {
     }
 
     if (verbs[0] === 'rev-parse' && verbs.includes('--git-common-dir')) {
-      return (options.commonDir ?? path.join(repo, '.git')).split(path.sep).join('/');
+      // Two answers, one per line, exactly as `rev-parse --git-dir
+      // --git-common-dir` emits them. They are EQUAL for every primary shape
+      // and diverge only in a linked worktree.
+      const gitDir = options.gitDir ?? path.join(repo, '.git');
+      const commonDir = options.commonDir ?? gitDir;
+      return [gitDir, commonDir].map((p) => p.split(path.sep).join('/')).join('\n');
     }
 
     if (verbs[0] === 'status') {
@@ -345,7 +352,9 @@ describe('wt create', () => {
 
   it('rejects branch names git check-ref-format would bounce AFTER the record', async () => {
     const git = fakeGit();
-    for (const branch of ['wt/demo.', 'wt/demo.lock', 'wt/../demo']) {
+    // The `.lock` / trailing-dot refusals apply per PATH COMPONENT, exactly as
+    // git's own check does (re-verification round 2, finding 9).
+    for (const branch of ['wt/demo.', 'wt/demo.lock', 'wt/../demo', 'feat/x.lock/y', 'wt/x./y']) {
       await expect(createOne(git, { branch })).rejects.toThrow(/invalid branch name/);
     }
     expect(callsMatching(git, 'worktree', 'add')).toHaveLength(0);
@@ -353,11 +362,25 @@ describe('wt create', () => {
   });
 
   it('refuses to run from inside a linked worktree (primary checkout only)', async () => {
-    const git = fakeGit({ commonDir: path.join(root, 'elsewhere', '.git') });
+    // A linked worktree is the ONE shape where git-dir and common-dir diverge.
+    const git = fakeGit({
+      gitDir: path.join(root, 'elsewhere', '.git', 'worktrees', 'wt-x'),
+      commonDir: path.join(root, 'elsewhere', '.git'),
+    });
     await expect(createOne(git)).rejects.toThrow(/primary checkout/);
     // Refused BEFORE anything landed: no record, no git mutation.
     expect(callsMatching(git, 'worktree', 'add')).toHaveLength(0);
     expect(readWorktreeRegistry().worktrees).toEqual({});
+  });
+
+  it('accepts a separate-git-dir primary: git-dir == common-dir, both external', async () => {
+    // `git init --separate-git-dir` is a PRIMARY whose git dir is nowhere near
+    // `<toplevel>/.git` — the shape the old `<toplevel>/.git` comparison
+    // misread as a worktree (re-verification round 2, finding 1).
+    const sep = path.join(root, 'sepgit');
+    const git = fakeGit({ gitDir: sep, commonDir: sep });
+    await createOne(git);
+    expect(callsMatching(git, 'worktree', 'add')).toHaveLength(1);
   });
 
   it('rewords a failed seat resolution to --seat, never the mail verb’s --from', async () => {
@@ -715,7 +738,7 @@ describe('wt remove resolution', () => {
     const target = await createOne(git);
     // Hand-edit the registry: an entry pointing outside all recorded roots is
     // exactly the shape that would turn a corrupted worktrees.json into an
-    // arbitrary-recursive-delete primitive (falsification finding 14).
+    // arbitrary-recursive-delete primitive (falsification finding 13).
     const stray = path.join(root, 'stray-location', 'repo-totem-claude-demo');
     fs.mkdirSync(stray, { recursive: true });
     const raw = JSON.parse(fs.readFileSync(worktreeRegistryPath(), 'utf-8')) as {
