@@ -1139,11 +1139,12 @@ export function registerSearchKnowledge(server: McpServer): void {
         // is unreachable in practice.
         if (result.isError !== true && result.content.length > 0) {
           let threshold = CONTEXT_WARNING_THRESHOLD_FALLBACK;
+          // totem-context: intentional fallback (#2600) — a context failure after a successful search cannot happen (memoized); the named default keeps the disclosure seam total rather than letting it throw away the response.
           try {
             threshold = (await getContext()).config.contextWarningThreshold;
-            // totem-context: intentional fallback — a context failure after a successful search cannot happen (memoized); the named default keeps the disclosure seam total rather than letting it throw away the response.
-          } catch {
-            // Fall through to the named default.
+            // totem-context: intentional fallback (#2600) — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+          } catch (err) {
+            void err; // fall through to the named default
           }
           result.content[0] = {
             type: 'text' as const,
