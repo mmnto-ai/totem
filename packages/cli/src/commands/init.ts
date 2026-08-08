@@ -391,12 +391,19 @@ export async function installGeminiHooks(cwd: string): Promise<HookInstallerResu
         summaryActionOverride: `Migrated legacy Gemini ${path.basename(file)} → .cjs`,
       });
     } else if (action === 'skipped' && reason === 'unreadable-legacy') {
-      // The one non-migrated migration outcome init discloses: the path exists and
-      // could not be read at all, so the user is the only one who can resolve it.
+      // Unreadable outcomes are the non-migrated ones init discloses: the path
+      // exists and could not be read at all, so the user is the only one who can
+      // resolve it — and "user-owned" must never render for them (#2601).
       results.push({
         file,
         action: 'skipped',
         summaryActionOverride: `Skipped — legacy ${path.basename(file)} could not be read; left in place (remove or rename it to complete the .cjs migration)`,
+      });
+    } else if (action === 'skipped' && reason === 'unreadable-successor') {
+      results.push({
+        file,
+        action: 'skipped',
+        summaryActionOverride: `Skipped — the .cjs successor of ${path.basename(file)} could not be read; left both files untouched (remove or rename the successor to complete the migration)`,
       });
     }
   }
@@ -728,6 +735,20 @@ function looksLikeScriptPath(value: string): boolean {
   return SCRIPT_FILE_RE.test(value);
 }
 
+/**
+ * Whether a `command` is a Node-family runtime — the only commands whose FIRST
+ * script-suffixed argument is, by the runtime's own semantics, the ENTRYPOINT.
+ * The path probe is scoped to this shape: probing every `.js` argument of every
+ * command would let an unrelated server's plugin/config argument (a file totem
+ * happens to own) masquerade as a totem registration and silently suppress the
+ * real install (Greptile P2 on #2606). Package-manager launchers (`npx`,
+ * `pnpm dlx`, `cmd /c npx …`) name the package instead — the name probe's job.
+ */
+function isNodeCommand(command: string): boolean {
+  const base = path.basename(command).toLowerCase();
+  return base === 'node' || base === 'node.exe';
+}
+
 /** No-throw file probe: only an existing regular FILE qualifies for the identity walk. */
 function isExistingFile(p: string): boolean {
   // totem-context: intentional cleanup — an unstat-able path is simply not an attributable registration; dedup must never abort the init scaffold.
@@ -784,11 +805,12 @@ function packageNameForScript(scriptPath: string): string | undefined {
  *
  *   1. Name probe — {@link MCP_PACKAGE_RE} on each candidate string.
  *   2. Path probe — a registration need not spell the package at all. This repo's own
- *      configs run `node ./packages/mcp/dist/index.js`; the pin is resolved against
- *      EVERY candidate base and, when it lands on a real file, the owning package is
- *      read from the nearest `package.json` on the written path (lexical — an
- *      aliased/symlinked script attributes to its host package) via
- *      {@link packageNameForScript}.
+ *      configs run `node ./packages/mcp/dist/index.js`; for a Node-family command
+ *      ({@link isNodeCommand}), the FIRST script-suffixed arg — the runtime's own
+ *      entrypoint — is resolved against every candidate base and, when it lands on a
+ *      real file, the owning package is read from the nearest `package.json` on the
+ *      written path (lexical — an aliased/symlinked script attributes to its host
+ *      package) via {@link packageNameForScript}.
  *
  * `baseDirs` carries the config's own directory AND the project root: hosts launch
  * the server from the project root, and three of the four host configs live in
@@ -814,13 +836,19 @@ function findMcpPackageRegistration(
 
     if (candidates.some((candidate) => MCP_PACKAGE_RE.test(candidate))) return name;
 
-    for (const candidate of candidates) {
-      if (!looksLikeScriptPath(candidate)) continue;
-      for (const baseDir of baseDirs) {
-        const resolved = path.resolve(baseDir, candidate);
-        if (!isExistingFile(resolved)) continue;
-        if (packageNameForScript(resolved) === MCP_PACKAGE) return name;
-      }
+    // Path probe: only a Node-family command has a script ENTRYPOINT to attribute,
+    // and only its FIRST script-suffixed arg is that entrypoint (node's own CLI
+    // semantics). Later `.js` args are plugin/config inputs — attributing those
+    // would suppress a real registration over a file the server merely consumes.
+    if (typeof command !== 'string' || !isNodeCommand(command)) continue;
+    const entrypoint = Array.isArray(args)
+      ? args.find((arg): arg is string => typeof arg === 'string' && looksLikeScriptPath(arg))
+      : undefined;
+    if (entrypoint === undefined) continue;
+    for (const baseDir of baseDirs) {
+      const resolved = path.resolve(baseDir, entrypoint);
+      if (!isExistingFile(resolved)) continue;
+      if (packageNameForScript(resolved) === MCP_PACKAGE) return name;
     }
   }
   return undefined;

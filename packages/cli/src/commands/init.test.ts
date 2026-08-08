@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
 import { AUTO_CLOSE_REGEX_SOURCE, LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
@@ -299,6 +299,37 @@ describe('scaffoldMcpConfig', () => {
     );
 
     const result = scaffoldMcpConfig(filePath, SERVER_ENTRY, { projectRoot: subDir });
+
+    expect(result).toEqual({ action: 'merged' });
+  });
+
+  it("a non-Node command's script argument never starts an identity walk (Greptile P2)", () => {
+    // An unrelated server consuming a totem-owned .js as a plugin/config ARG is not
+    // a registration — only a Node-family command's entrypoint is attributable.
+    const distDir = path.join(tmpDir, 'packages', 'mcp', 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'index.js'), '', 'utf-8');
+    fs.writeFileSync(
+      path.join(tmpDir, 'packages', 'mcp', 'package.json'),
+      JSON.stringify({ name: '@mmnto/mcp' }, null, 2),
+      'utf-8',
+    );
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            helper: { command: 'other-server', args: ['--plugin', './packages/mcp/dist/index.js'] },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
 
     expect(result).toEqual({ action: 'merged' });
   });
@@ -874,6 +905,31 @@ describe('vendor-hook managed-marker guard (mmnto-ai/totem#2601)', () => {
     expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.cjs'), 'utf-8')).toBe(
       '// MY OWN cjs\n',
     );
+  });
+
+  it('skips an unreadable SUCCESSOR rather than crashing the migration (CR round 1)', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // Marker-headed bounded legacy .js (migratable) + a DIRECTORY squatting the
+    // successor path: the successor read previously threw EISDIR mid-migration.
+    fs.writeFileSync(
+      path.join(hooksDir, 'SessionStart.js'),
+      `${TOTEM_FILE_MARKER}\nlegacy body\n${TOTEM_FILE_END}\n`,
+      'utf-8',
+    );
+    fs.mkdirSync(path.join(hooksDir, 'SessionStart.cjs'));
+
+    const results = await installGeminiHooks(tmpDir);
+
+    const disclosed = results.find(
+      (r) =>
+        r.summaryActionOverride !== undefined &&
+        /successor.*could not be read/.test(r.summaryActionOverride),
+    );
+    expect(disclosed).toBeDefined();
+    // Both files exactly as found — no partial migration.
+    expect(fs.statSync(path.join(hooksDir, 'SessionStart.cjs')).isDirectory()).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'SessionStart.js'))).toBe(true);
   });
 
   it('skips an unreadable legacy hook rather than crashing the run', async () => {
@@ -1718,6 +1774,23 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     // Forced TTY + `--yes`: the ONLY way to reach the installers' non-interactive arms
     // through init, and a real git repo is what puts those arms on the path at all.
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    // Hermetic git: ambient `core.hooksPath` / `init.templateDir` would relocate the
+    // hooks this test asserts on — and the installer's own git calls read the same
+    // ambient config, so the isolation must be env-level for the WHOLE run, not a
+    // `-c` on `git init` alone (CR round 1, adapted).
+    const savedGlobal = process.env['GIT_CONFIG_GLOBAL'];
+    const savedSystem = process.env['GIT_CONFIG_SYSTEM'];
+    // An empty file, not os.devNull: git exits 128 on the Windows NUL-device path.
+    const emptyGitConfig = path.join(tmpDir, 'empty-gitconfig');
+    fs.writeFileSync(emptyGitConfig, '', 'utf-8');
+    process.env['GIT_CONFIG_GLOBAL'] = emptyGitConfig;
+    process.env['GIT_CONFIG_SYSTEM'] = emptyGitConfig;
+    onTestFinished(() => {
+      if (savedGlobal === undefined) delete process.env['GIT_CONFIG_GLOBAL'];
+      else process.env['GIT_CONFIG_GLOBAL'] = savedGlobal;
+      if (savedSystem === undefined) delete process.env['GIT_CONFIG_SYSTEM'];
+      else process.env['GIT_CONFIG_SYSTEM'] = savedSystem;
+    });
     const gitInit = spawnSync('git', ['init'], { cwd: tmpDir, encoding: 'utf-8' });
     expect(gitInit.status).toBe(0);
     const stderr: string[] = [];

@@ -1265,12 +1265,18 @@ export interface GeminiHookMigrationResult {
    *  the SUCCESSOR path (mmnto-ai/totem#2488): no Totem marker there — the migration
    *  never overwrites a user's successor (even under `--force`); or marker-headed but
    *  unbounded (user content past the end marker) — awaits `--force`. Both files stay
-   *  either way. `unreadable-legacy` names a legacy candidate that could not be READ
-   *  (a directory sharing the name, a permissions failure): unprovable ownership is
-   *  the skip arm, never a crash (mmnto-ai/totem#2601). The `totem init` path surfaces
-   *  `migrated` and `unreadable-legacy`; the rest are disclosed on the `totem hook
-   *  install` summary path (what `prepare` runs). */
-  reason?: 'user-owned-successor' | 'drifted-successor' | 'unreadable-legacy';
+   *  either way. `unreadable-legacy` / `unreadable-successor` name a candidate at the
+   *  respective path that could not be READ (a directory sharing the name, a
+   *  permissions failure): unprovable ownership is the skip arm, never a crash
+   *  (mmnto-ai/totem#2601), and BOTH summary consumers must render it as unreadable —
+   *  not as "user-owned", an ownership claim no read ever established. The `totem
+   *  init` path surfaces `migrated` and the unreadable reasons; the rest are disclosed
+   *  on the `totem hook install` summary path (what `prepare` runs). */
+  reason?:
+    | 'user-owned-successor'
+    | 'drifted-successor'
+    | 'unreadable-legacy'
+    | 'unreadable-successor';
 }
 
 /**
@@ -1349,7 +1355,16 @@ export async function migrateLegacyGeminiHooks(
     // the canonical write below as an idempotent repair.
     const successorPath = path.join(cwd, ...successorRel.split('/'));
     if (fs.existsSync(successorPath)) {
-      const successorExisting = fs.readFileSync(successorPath, 'utf-8');
+      let successorExisting: string;
+      // totem-context: intentional cleanup — an unreadable successor (a directory sharing the name, EISDIR/EACCES) cannot be proven totem-owned; the ownership gate declines and says so rather than crashing init mid-run (mmnto-ai/totem#2601, same arm as the legacy read).
+      try {
+        successorExisting = fs.readFileSync(successorPath, 'utf-8');
+        // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+      } catch (err) {
+        void err;
+        results.push({ file: legacyRel, action: 'skipped', reason: 'unreadable-successor' });
+        continue;
+      }
       if (!markerOpensFile(successorExisting, marker)) {
         results.push({ file: legacyRel, action: 'skipped', reason: 'user-owned-successor' });
         continue;
@@ -1468,10 +1483,16 @@ async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Pr
         );
         break;
       case 'skipped':
+        // "User-owned" is an ownership CLAIM — it must never render for the
+        // unreadable reasons, where no read ever established ownership (#2601).
         console.error(
           reason === 'user-owned-successor'
             ? `[Totem] ${file}: its .cjs successor already exists and is user-owned — left both files untouched (remove the legacy .js manually if unwanted).`
-            : `[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`,
+            : reason === 'unreadable-legacy'
+              ? `[Totem] ${file}: could not be read — left in place (remove or rename it to complete the .cjs migration).`
+              : reason === 'unreadable-successor'
+                ? `[Totem] ${file}: its .cjs successor could not be read — left both files untouched (remove or rename the successor to complete the migration).`
+                : `[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`,
         );
         break;
     }
