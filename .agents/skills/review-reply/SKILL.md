@@ -71,7 +71,7 @@ totem review --covariate
 
 It resolves the current branch lineage exactly as the review fan does, loads the LATEST verdict artifact for that lineage (`.totem/artifacts/verdicts/`), and prints the canonical `local-lane:` line from the single core-owned renderer — never trust a pasted or hand-copied value. If it reports no verdict for the current lineage, there is no line to carry (note that in the body and continue).
 
-2. **Assemble the single body.** One comment: the per-item dispositions (fixed / deferred / nit / extracted) followed by the non-empty `local-lane:` line from step 1, verbatim. The local `review-loop` holds this line but never posts it, so `/review-reply` is the SOLE path that carries it to GitHub.
+2. **Assemble the single body.** One comment: @-tag EVERY bot addressed in the round — exactly ONE tag each (e.g. `@gemini-code-assist`, `@coderabbitai`, `@greptileai`) so each bot registers the disposition; a bot with nothing addressed in the round gets no tag, and a tag is NEVER combined with that bot's slash-trigger in the same comment — then the per-item dispositions (fixed / deferred / nit / extracted) followed by the non-empty `local-lane:` line from step 1, verbatim. The local `review-loop` holds this line but never posts it, so `/review-reply` is the SOLE path that carries it to GitHub.
 
 3. **Post on an explicit go.** Show the assembled body and wait for the operator; on their go, post the ONE comment with `gh pr comment $ARGUMENTS --body-file -` (pipe the body via stdin). Never mutate the PR autonomously.
 

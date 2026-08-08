@@ -808,7 +808,20 @@ export function upgradeReflexes(content: string): { content: string; clean: bool
 
   if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
     const before = content.slice(0, startIdx).replace(/\n+$/, '\n');
-    const after = content.slice(endIdx + REFLEX_END.length);
+    let after = content.slice(endIdx + REFLEX_END.length);
+    // AI_PROMPT_BLOCK already ends with the end marker's own line terminator,
+    // so the OLD block's terminator must not re-enter through `after` — that
+    // duplication accreted one blank line per regen into the after-end span
+    // that is contractually user content (#1890; byte-verified v7→v9, #2599).
+    // A pure-whitespace tail is nobody's content: normalize it away entirely
+    // so already-accreted files heal instead of freezing their residue.
+    if (after.trim() === '') {
+      after = '';
+    } else if (after.startsWith('\r\n')) {
+      after = after.slice(2);
+    } else if (after.startsWith('\n')) {
+      after = after.slice(1);
+    }
     return { content: before + AI_PROMPT_BLOCK + after, clean: true };
   }
 

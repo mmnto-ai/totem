@@ -34,6 +34,7 @@ import {
 } from './init.js';
 import { detectProject } from './init-detect.js';
 import {
+  AI_PROMPT_BLOCK,
   BARE_REF_REGEX_SOURCE,
   CLAUDE_PREWRITESHIELD,
   CLAUDE_PREWRITESHIELD_ENTRY,
@@ -945,6 +946,28 @@ describe('upgradeReflexes', () => {
 
     expect(updated).toContain('<!-- totem:reflexes:start -->');
     expect(updated).toContain('<!-- totem:reflexes:end -->');
+  });
+
+  it('regen is byte-idempotent — no blank-line accretion at the end-marker seam (#2599)', () => {
+    const content =
+      '# CLAUDE.md\n\nMy custom rules.\n\n<!-- totem:reflexes:start -->\n<!-- totem:reflexes:version:1 -->\nOld reflexes\n<!-- totem:reflexes:end -->\n\n## My Section\nUser content\n';
+    const once = upgradeReflexes(content).content;
+    const twice = upgradeReflexes(once).content;
+    expect(twice).toBe(once);
+  });
+
+  it('a current-shape file with user content after the end marker regens byte-identically', () => {
+    const content =
+      '# CLAUDE.md\n' + AI_PROMPT_BLOCK + '\n## My Custom Section\n\nDo not delete this!\n';
+    expect(upgradeReflexes(content).content).toBe(content);
+  });
+
+  it('heals an already-accreted pure-whitespace tail to the canonical single terminator', () => {
+    const damaged =
+      '# CLAUDE.md\n\n<!-- totem:reflexes:start -->\n<!-- totem:reflexes:version:9 -->\nOld\n<!-- totem:reflexes:end -->\n\n\n';
+    const { content: updated } = upgradeReflexes(damaged);
+    expect(updated.endsWith('<!-- totem:reflexes:end -->\n')).toBe(true);
+    expect(updated.endsWith('<!-- totem:reflexes:end -->\n\n')).toBe(false);
   });
 });
 
