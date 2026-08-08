@@ -1,6 +1,6 @@
 {
   "name": "@mmnto/pack-agent-workflow",
-  "version": "1.113.0",
+  "version": "1.113.1",
   "private": true,
   "description": "Agent-workflow governance pack for Totem (Ask 1, micro-pack v1). Ships hand-authored rules covering agent-instruction authority, fail-open gates, agent-context secret exposure, and dependency-introduction discipline.",
   "license": "Apache-2.0",
