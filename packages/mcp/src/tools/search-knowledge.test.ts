@@ -332,6 +332,143 @@ describe('search_knowledge', () => {
     expect(mockLogMcpCall).toHaveBeenCalledWith('search_knowledge');
   });
 
+  describe('size disclosure (#2600)', () => {
+    it('appends the measurement envelope above the threshold — no risk claim, correct arithmetic', async () => {
+      mockSearchResults = [
+        {
+          label: 'Huge lesson',
+          type: 'lesson',
+          filePath: 'lessons/huge.md',
+          score: 0.95,
+          // 60_001, not a round number: keeps the total payload length ≢ 0
+          // (mod 4) so ceil/floor/round/trunc are distinguishable below
+          // (leg finding — a 0-mod-4 fixture pinned nothing).
+          content: 'x'.repeat(60_001),
+        },
+      ];
+      const res = (await handle({ query: 'big' })) as { content: [{ text: string }] };
+      const text = res.content[0].text;
+      const idx = text.lastIndexOf('<size-disclosure');
+      expect(idx).toBeGreaterThan(-1);
+      const payloadLen = idx - 2; // envelope is appended as `\n\n<size-disclosure … />`
+      expect(payloadLen % 4).not.toBe(0);
+      const disclosure = text.slice(idx);
+      expect(disclosure).toMatch(
+        /^<size-disclosure chars="\d+" approxTokens="\d+" sessionChars="\d+" sessionCalls="1" scope="server-process" \/>$/,
+      );
+      expect(disclosure).toContain(`chars="${payloadLen}"`);
+      expect(disclosure).toContain(`approxTokens="${Math.ceil(payloadLen / 4)}"`);
+      expect(disclosure).not.toContain(`approxTokens="${Math.floor(payloadLen / 4)}"`);
+      expect(disclosure).toContain(`sessionChars="${payloadLen}"`);
+      // The denominator-blind context-pressure claim is gone (#2600). The
+      // mocked formatSystemWarning renders as `[SYSTEM WARNING] …`, so that
+      // literal (not the real tag name) is the observable to exclude here.
+      expect(text).not.toContain('forgetting earlier instructions');
+      expect(text).not.toContain('[SYSTEM WARNING]');
+    });
+
+    it('emits no envelope below the threshold but still accumulates session totals', async () => {
+      const mod = await import('./search-knowledge.js');
+      mockSearchResults = [
+        {
+          label: 'Small',
+          type: 'lesson',
+          filePath: 'lessons/small.md',
+          score: 0.9,
+          content: 'tiny',
+        },
+      ];
+      const res1 = (await handle({ query: 'a' })) as { content: [{ text: string }] };
+      expect(res1.content[0].text).not.toContain('<size-disclosure');
+      expect(mod.sessionPayload.calls).toBe(1);
+      expect(mod.sessionPayload.chars).toBe(res1.content[0].text.length);
+      const res2 = (await handle({ query: 'b' })) as { content: [{ text: string }] };
+      expect(mod.sessionPayload.calls).toBe(2);
+      expect(mod.sessionPayload.chars).toBe(
+        res1.content[0].text.length + res2.content[0].text.length,
+      );
+    });
+
+    it('session totals accumulate on the pre-envelope basis across small→large→small', async () => {
+      const mod = await import('./search-knowledge.js');
+      mockSearchResults = [
+        {
+          label: 'Small',
+          type: 'lesson',
+          filePath: 'lessons/small.md',
+          score: 0.9,
+          content: 'tiny',
+        },
+      ];
+      const small = (await handle({ query: 'a' })) as { content: [{ text: string }] };
+      const smallLen = small.content[0].text.length;
+      mockSearchResults = [
+        {
+          label: 'Huge',
+          type: 'lesson',
+          filePath: 'lessons/huge.md',
+          score: 0.95,
+          content: 'x'.repeat(60_001),
+        },
+      ];
+      const large = (await handle({ query: 'b' })) as { content: [{ text: string }] };
+      const text = large.content[0].text;
+      const payloadLen = text.lastIndexOf('<size-disclosure') - 2;
+      expect(text).toContain('sessionCalls="2"');
+      expect(text).toContain(`sessionChars="${smallLen + payloadLen}"`);
+      // A call AFTER the large one proves the accumulator's basis excludes
+      // the envelope bytes (leg finding: an over-count added after emission
+      // was invisible to any small→large-ending sequence).
+      mockSearchResults = [
+        {
+          label: 'Small2',
+          type: 'lesson',
+          filePath: 'lessons/s2.md',
+          score: 0.9,
+          content: 'tiny2',
+        },
+      ];
+      const small2 = (await handle({ query: 'c' })) as { content: [{ text: string }] };
+      expect(mod.sessionPayload.calls).toBe(3);
+      expect(mod.sessionPayload.chars).toBe(smallLen + payloadLen + small2.content[0].text.length);
+    });
+
+    describe('withSizeDisclosure unit contract', () => {
+      it('threshold boundary: exactly-at stays bare, one-over discloses', async () => {
+        const mod = await import('./search-knowledge.js');
+        mod.sessionPayload.chars = 0;
+        mod.sessionPayload.calls = 0;
+        const at = mod.withSizeDisclosure('x'.repeat(40), 40);
+        expect(at).toBe('x'.repeat(40));
+        const over = mod.withSizeDisclosure('x'.repeat(41), 40);
+        expect(over).toContain('<size-disclosure chars="41"');
+      });
+
+      it('approxTokens is ceil, pinned on a non-divisible length', async () => {
+        const mod = await import('./search-knowledge.js');
+        mod.sessionPayload.chars = 0;
+        mod.sessionPayload.calls = 0;
+        // 41 / 4 = 10.25 → ceil 11, floor 10: the two are distinguishable.
+        const out = mod.withSizeDisclosure('x'.repeat(41), 40);
+        expect(out).toContain('approxTokens="11"');
+        expect(out).not.toContain('approxTokens="10"');
+      });
+
+      it('the envelope never counts itself — attribute or accumulator', async () => {
+        const mod = await import('./search-knowledge.js');
+        mod.sessionPayload.chars = 0;
+        mod.sessionPayload.calls = 0;
+        const out = mod.withSizeDisclosure('x'.repeat(41), 40);
+        expect(out.length).toBeGreaterThan(41);
+        expect(out).toContain('sessionChars="41"');
+        expect(mod.sessionPayload.chars).toBe(41);
+        mod.withSizeDisclosure('y'.repeat(5), 40);
+        expect(mod.sessionPayload.chars).toBe(46);
+        expect(mod.sessionPayload.calls).toBe(2);
+      });
+    });
+  });
+
   it('emits the mcp_call event even when the search returns an error', async () => {
     // Dimension mismatch path returns isError without throwing; mcp_call
     // should still fire — invocation, not success, is what ADR-029 measures.

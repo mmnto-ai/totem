@@ -818,7 +818,7 @@ async function performSearch(
   const formatted = results.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
 
   const knowledgeBody = formatXmlResponse('knowledge', formatted);
-  let text = composeResponseText({
+  const text = composeResponseText({
     fallbackWarning,
     runtimeWarning,
     staleWarning,
@@ -827,17 +827,63 @@ async function performSearch(
     body: knowledgeBody,
   }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
 
-  // Append a system warning when the payload is large enough to risk context pressure
-  if (text.length > config.contextWarningThreshold) {
-    text +=
-      '\n\n' +
-      formatSystemWarning(
-        'You just ingested a large amount of context. You may be at risk of forgetting earlier instructions. ' +
-          'Consider warning the user about context pressure and suggest running `totem handoff` to capture mid-session state.',
-      );
-  }
-
   return { content: [{ type: 'text' as const, text }] };
+}
+
+/**
+ * Per-process accumulation behind the `<size-disclosure>` envelope (#2600).
+ * The basis is the MCP server process's lifetime, declared in-band via the
+ * envelope's `scope="server-process"`: totals survive conversation clears
+ * and compactions, and a client running multiple totem MCP servers sees
+ * independent per-server totals. That is the only scope measurable
+ * UNCONDITIONALLY at this seam — `TOTEM_SESSION_ID`, when a harness sets it
+ * (see search-log.ts), could key a finer scope; deciding that is #2604.
+ * Counts non-error responses only (error bodies are bounded provider/store
+ * text, never corpus content). Exported with {@link withSizeDisclosure} so
+ * unit tests can drive and reset the accumulator directly.
+ */
+export const sessionPayload = { chars: 0, calls: 0 };
+
+/** The config JSDoc's stated approximation: ~4 chars ≈ 1 token. */
+const APPROX_CHARS_PER_TOKEN = 4;
+
+/**
+ * Fallback threshold when the config cannot be re-read at the finalize seam
+ * (practically unreachable after a successful search) — mirrors the
+ * `contextWarningThreshold` default in core's config-schema.
+ */
+const CONTEXT_WARNING_THRESHOLD_FALLBACK = 40_000;
+
+/**
+ * Count the response toward the session totals and, when THIS response
+ * crosses `contextWarningThreshold`, append a self-closing measurement
+ * envelope (house style of `<index-meta>` / `<retrieval-envelope>`):
+ *
+ *   `<size-disclosure chars="…" approxTokens="…" sessionChars="…" sessionCalls="…" scope="server-process" />`
+ *
+ * A measurement with NO risk claim: this seam never sees the consumer's
+ * model, window size, or occupancy, so the context-pressure warning it
+ * replaces was denominator-blind by construction (live-falsified at 15%
+ * occupancy on a 1M-window seat, #2600). The weighing judgment lives with
+ * the only party holding the denominator — the consumer, per the generated
+ * CLAUDE.md Context Management Guardrail (reflex v10, #2599). `chars` counts
+ * the delivered payload BEFORE this envelope (the envelope never counts
+ * itself, in the attribute or the accumulator). Applied once, at the
+ * handler's finalize seam AFTER the first-call warning prepend — measuring
+ * earlier understated `chars` on exactly the call a first-time consumer
+ * reads. Attribute values are numerals and a fixed token, so no XML
+ * escaping is required.
+ */
+export function withSizeDisclosure(text: string, thresholdChars: number): string {
+  sessionPayload.calls += 1;
+  sessionPayload.chars += text.length;
+  if (text.length <= thresholdChars) return text;
+  const approxTokens = Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
+  return (
+    text +
+    `\n\n<size-disclosure chars="${text.length}" approxTokens="${approxTokens}" ` +
+    `sessionChars="${sessionPayload.chars}" sessionCalls="${sessionPayload.calls}" scope="server-process" />`
+  );
 }
 
 /**
@@ -1081,6 +1127,28 @@ export function registerSearchKnowledge(server: McpServer): void {
           result.content[0] = {
             type: 'text' as const,
             text: warnings.join('\n\n') + '\n\n' + result.content[0]!.text, // totem-ignore #1294 — all system-generated + XML-wrapped
+          };
+        }
+
+        // Size disclosure LAST, on the final delivered text (#2600): the
+        // first-call warning prepend above is part of what the consumer
+        // ingests, so measuring any earlier understates `chars` on exactly
+        // the call a first-time consumer reads. Error responses excluded —
+        // bounded error text, never corpus content. getContext is memoized
+        // and already resolved for the search itself; the fallback default
+        // is unreachable in practice.
+        if (result.isError !== true && result.content.length > 0) {
+          let threshold = CONTEXT_WARNING_THRESHOLD_FALLBACK;
+          // totem-context: intentional fallback (#2600) — a context failure after a successful search cannot happen (memoized); the named default keeps the disclosure seam total rather than letting it throw away the response.
+          try {
+            threshold = (await getContext()).config.contextWarningThreshold;
+            // totem-context: intentional fallback (#2600) — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+          } catch (err) {
+            void err; // fall through to the named default
+          }
+          result.content[0] = {
+            type: 'text' as const,
+            text: withSizeDisclosure(result.content[0]!.text, threshold),
           };
         }
 
