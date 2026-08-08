@@ -2067,6 +2067,19 @@ export async function checkEstate(
           gateExempt: true,
         };
       }
+      // Same collapse, worktree side (round 2, CR outside-diff finding): an
+      // unreadable worktrees.json yields zero roots, which is exactly what
+      // routes the row onto this short-circuit — a clean "nothing registered"
+      // skip here would hide that recorded roots may exist and went unscanned.
+      if (wtWarnings.length > 0) {
+        return {
+          name,
+          status: 'warn',
+          message: `Worktree registry unreadable — recorded roots not scanned: ${wtWarnings.map(flatten).join(' | ')}`,
+          remediation: 'Repair ~/.totem/worktrees.json, then run `totem doctor --estate`.',
+          gateExempt: true,
+        };
+      }
       return {
         name,
         status: 'skip',
@@ -2111,14 +2124,20 @@ export async function checkEstate(
         gateExempt: true,
       };
     }
-    // An unreadable sync registry demotes the clean arm to warn: the row DID
-    // scan the recorded roots, but it saw zero of the registered repos.
+    // An unreadable registry — sync OR worktree — demotes the clean arm to
+    // warn: the row scanned what it could see, but a file it could not read
+    // may name repos or recorded roots it never looked at (round 2, CR
+    // outside-diff finding for the worktree side).
+    const unreadable = [
+      registryWarnings.length > 0 ? '~/.totem/registry.json' : '',
+      wtWarnings.length > 0 ? '~/.totem/worktrees.json' : '',
+    ].filter((f) => f.length > 0);
     return {
       name,
-      status: registryWarnings.length > 0 ? 'warn' : 'pass',
+      status: unreadable.length > 0 ? 'warn' : 'pass',
       message: `${enumerated} enumerated repo(s)${skipped} · ${s.worktrees} linked worktree(s); no stale worktrees or husk candidates.${probes}${registryNote()}${wtNote()}`,
-      ...(registryWarnings.length > 0
-        ? { remediation: 'Repair ~/.totem/registry.json, then run `totem doctor --estate`.' }
+      ...(unreadable.length > 0
+        ? { remediation: `Repair ${unreadable.join(' and ')}, then run \`totem doctor --estate\`.` }
         : {}),
       gateExempt: true,
     };

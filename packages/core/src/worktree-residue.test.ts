@@ -202,4 +202,13 @@ describe('removeWorktreeResidue', () => {
     });
     expect(residuePathExists(path.join(root, 'missing'))).toBe(false);
   });
+
+  it('fails CLOSED on a non-object throw — no errno cannot prove absence', () => {
+    // Round 2, GCA null-safety finding: a throw that is not an object carries
+    // no `code`; the probe must answer a survivor, not crash on the extraction.
+    vi.mocked(fs.lstatSync).mockImplementationOnce(() => {
+      throw null;
+    });
+    expect(residuePathExists(path.join(root, 'null-throw'))).toBe(true);
+  });
 });

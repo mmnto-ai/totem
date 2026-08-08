@@ -303,6 +303,15 @@ describe('worktreePathExists', () => {
     });
     expect(worktreePathExists(path.join(home, 'missing'))).toBe(false);
   });
+
+  it('fails CLOSED on a non-object throw — no errno cannot prove absence', () => {
+    // Round 2, GCA null-safety finding: a throw that is not an object carries
+    // no `code`; the probe must answer present, not crash on the extraction.
+    vi.mocked(fs.lstatSync).mockImplementationOnce(() => {
+      throw null;
+    });
+    expect(worktreePathExists(path.join(home, 'null-throw'))).toBe(true);
+  });
 });
 
 describe('defaultWorktreeRoot', () => {

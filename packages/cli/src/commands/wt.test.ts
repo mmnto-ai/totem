@@ -246,11 +246,17 @@ async function createOne(
   };
   await wtCreateCommand(opts);
   // Derived from the EFFECTIVE options: an override of slug/seat/root must
-  // return the path that was actually created (bot round, CR finding 4).
-  return path.join(
-    opts.root ?? container,
-    `repo-${opts.seat ?? 'totem-claude'}-${opts.slug ?? 'demo'}`,
-  );
+  // return the path that was actually created (bot round, CR finding 4) —
+  // including a tilde root, which the command expands against the pinned home
+  // (round 2, CR finding).
+  const effectiveRoot = opts.root ?? container;
+  const expandedRoot =
+    effectiveRoot === '~' ||
+    effectiveRoot.startsWith('~/') ||
+    effectiveRoot.startsWith(`~${path.sep}`)
+      ? path.join(home, effectiveRoot.slice(1))
+      : effectiveRoot;
+  return path.join(expandedRoot, `repo-${opts.seat ?? 'totem-claude'}-${opts.slug ?? 'demo'}`);
 }
 
 // ─── create ─────────────────────────────────────────────

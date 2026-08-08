@@ -2984,13 +2984,44 @@ describe('checkEstate — wt-registry roots', () => {
     expect(result.message).toContain('No registered repos');
   });
 
-  it('discloses an unreadable worktrees.json in the row message', async () => {
+  it('treats an unreadable worktrees.json as degraded state, never a clean skip', async () => {
+    // Round 2, CR outside-diff finding, short-circuit half: an unreadable
+    // worktree registry yields zero roots — exactly what routes the row onto
+    // the empty short-circuit — so the skip arm itself must disclose it.
     writeWtRegistry('{ not json');
     const result = await checkEstate({ registry: {} });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('Worktree registry unreadable');
     expect(result.message).toContain('Cannot read worktree registry');
+    // The scan never ran — the row must not claim a clean sweep.
+    expect(result.message).not.toContain('no stale worktrees');
+    expect(result.remediation).toContain('worktrees.json');
     // Degraded, but never a fail: the row is sensor-class.
     expect(result.gateExempt).toBe(true);
-    expect(result.status).not.toBe('fail');
+  });
+
+  it('demotes an otherwise-clean scan to warn when worktrees.json is unreadable', async () => {
+    // Round 2, CR outside-diff finding, clean-arm half: the scan ran (one
+    // registry entry routes past the short-circuit; a missing repo path needs
+    // no git), but an unreadable worktree registry may name recorded roots
+    // the sweep never saw — a green line would overstate the coverage.
+    writeWtRegistry('{ not json');
+    const missingRepo = path.join(estateHome, 'gone-repo');
+    const result = await checkEstate({
+      registry: {
+        [missingRepo]: {
+          path: missingRepo,
+          chunkCount: 0,
+          lastSync: '2026-08-01T00:00:00.000Z',
+          embedder: 'x',
+        },
+      },
+    });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('no stale worktrees or husk candidates');
+    expect(result.message).toContain('Cannot read worktree registry');
+    expect(result.remediation).toContain('worktrees.json');
+    expect(result.gateExempt).toBe(true);
   });
 
   it('honours the wtRoots seam without reading the home file', async () => {

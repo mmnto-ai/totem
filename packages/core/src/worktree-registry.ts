@@ -112,7 +112,13 @@ export function worktreePathExists(p: string): boolean {
     return true;
     // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
+    // A non-object throw carries no errno and cannot PROVE absence — it reads
+    // as present, the same fail-closed answer as any unrecognized failure
+    // (round 2, GCA null-safety finding).
+    const code =
+      err !== null && typeof err === 'object' && 'code' in err
+        ? (err as NodeJS.ErrnoException).code
+        : undefined;
     return code !== 'ENOENT' && code !== 'ENOTDIR';
   }
 }
