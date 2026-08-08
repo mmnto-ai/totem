@@ -807,15 +807,22 @@ export function upgradeReflexes(content: string): { content: string; clean: bool
   const endIdx = content.indexOf(REFLEX_END);
 
   if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
-    const before = content.slice(0, startIdx).replace(/\n+$/, '\n');
+    // Both seams must be owned by exactly one party for regen to be a
+    // byte-fixpoint. Before-seam: normalize the prefix to end with exactly one
+    // `\n` (AI_PROMPT_BLOCK's own leading `\n` supplies the separating blank
+    // line); a prefix that is nothing but that added newline drops to '' so a
+    // marker-at-byte-0 file cannot grow a leading blank line per regen.
+    let before = content.slice(0, startIdx).replace(/\n*$/, '\n');
+    if (before === '\n') before = '';
     let after = content.slice(endIdx + REFLEX_END.length);
-    // AI_PROMPT_BLOCK already ends with the end marker's own line terminator,
-    // so the OLD block's terminator must not re-enter through `after` — that
-    // duplication accreted one blank line per regen into the after-end span
-    // that is contractually user content (#1890; byte-verified v7→v9, #2599).
-    // A pure-whitespace tail is nobody's content: normalize it away entirely
-    // so already-accreted files heal instead of freezing their residue.
-    if (after.trim() === '') {
+    // After-seam: AI_PROMPT_BLOCK already ends with the end marker's own line
+    // terminator, so the OLD block's terminator must not re-enter through
+    // `after` — that duplication accreted one blank line per regen into the
+    // after-end span that is contractually user content (#1890; byte-verified
+    // v7→v9, #2599). A tail of nothing but ASCII whitespace is totem's own
+    // accretion residue, not user content: normalize it away entirely so
+    // already-damaged files heal instead of freezing their residue.
+    if (/^[ \t\r\n]*$/.test(after)) {
       after = '';
     } else if (after.startsWith('\r\n')) {
       after = after.slice(2);

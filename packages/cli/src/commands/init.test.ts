@@ -969,6 +969,44 @@ describe('upgradeReflexes', () => {
     expect(updated.endsWith('<!-- totem:reflexes:end -->\n')).toBe(true);
     expect(updated.endsWith('<!-- totem:reflexes:end -->\n\n')).toBe(false);
   });
+
+  it('a CRLF file regens without inserting a blank line at the seam (leg F4/M2)', () => {
+    const content =
+      '# CLAUDE.md\r\n\r\n<!-- totem:reflexes:start -->\r\n<!-- totem:reflexes:version:1 -->\r\nOld\r\n<!-- totem:reflexes:end -->\r\n\r\n## After\r\nUser content\r\n';
+    const once = upgradeReflexes(content).content;
+    const twice = upgradeReflexes(once).content;
+    expect(twice).toBe(once);
+    // The old block's own CRLF terminator must not survive into the seam:
+    // the canonical block ends `end -->\n`, so the seam is `\n` + user CRLF span.
+    expect(once).toContain('<!-- totem:reflexes:end -->\n\r\n## After');
+    expect(once).not.toContain('<!-- totem:reflexes:end -->\n\r\n\r\n## After');
+  });
+
+  it('user text glued to the end marker on its own line survives regen (leg F4/B2)', () => {
+    const content =
+      '# CLAUDE.md\n\n<!-- totem:reflexes:start -->\n<!-- totem:reflexes:version:1 -->\nOld\n<!-- totem:reflexes:end --> IMPORTANT same-line note\n';
+    const once = upgradeReflexes(content).content;
+    expect(once).toContain(' IMPORTANT same-line note');
+    expect(upgradeReflexes(once).content).toBe(once);
+  });
+
+  it('marker at byte 0 and marker glued to a prefix are both byte-idempotent (leg F5)', () => {
+    const atZero =
+      '<!-- totem:reflexes:start -->\n<!-- totem:reflexes:version:1 -->\nOld\n<!-- totem:reflexes:end -->\n';
+    const onceZero = upgradeReflexes(atZero).content;
+    expect(upgradeReflexes(onceZero).content).toBe(onceZero);
+
+    const glued =
+      '# CLAUDE.md text<!-- totem:reflexes:start -->\n<!-- totem:reflexes:version:1 -->\nOld\n<!-- totem:reflexes:end -->\n';
+    const onceGlued = upgradeReflexes(glued).content;
+    expect(upgradeReflexes(onceGlued).content).toBe(onceGlued);
+    expect(onceGlued).toContain('# CLAUDE.md text');
+  });
+
+  it('the guardrail names the exact envelope tag the MCP server emits (#2600 coupling lock)', () => {
+    expect(AI_PROMPT_BLOCK).toContain('<size-disclosure ... />');
+    expect(AI_PROMPT_BLOCK).toContain('totem_system_warning');
+  });
 });
 
 describe('REFLEX_VERSION', () => {
