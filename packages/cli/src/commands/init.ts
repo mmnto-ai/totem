@@ -812,7 +812,7 @@ export function upgradeReflexes(content: string): { content: string; clean: bool
     // `\n` (AI_PROMPT_BLOCK's own leading `\n` supplies the separating blank
     // line); a prefix that is nothing but that added newline drops to '' so a
     // marker-at-byte-0 file cannot grow a leading blank line per regen.
-    let before = content.slice(0, startIdx).replace(/\n*$/, '\n');
+    let before = content.slice(0, startIdx).replace(/(?:\r?\n)*$/, '\n');
     if (before === '\n') before = '';
     let after = content.slice(endIdx + REFLEX_END.length);
     // After-seam: AI_PROMPT_BLOCK already ends with the end marker's own line

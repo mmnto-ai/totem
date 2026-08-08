@@ -976,6 +976,9 @@ describe('upgradeReflexes', () => {
     const once = upgradeReflexes(content).content;
     const twice = upgradeReflexes(once).content;
     expect(twice).toBe(once);
+    // The before-seam normalizes CRLF too (bot round 1): the trailing CRLF run
+    // collapses to one canonical LF ahead of the block's own leading newline.
+    expect(once).toContain('# CLAUDE.md\n\n<!-- totem:reflexes:start -->');
     // The old block's own CRLF terminator must not survive into the seam:
     // the canonical block ends `end -->\n`, so the seam is `\n` + user CRLF span.
     expect(once).toContain('<!-- totem:reflexes:end -->\n\r\n## After');
