@@ -18,12 +18,15 @@ import {
   buildNpxCommand,
   detectEmbeddingTier,
   detectReflexStatus,
+  findUnownedHookSibling,
   generateConfig,
   initCommand,
   installBaselineLessons,
+  installGeminiHooks,
   OLLAMA_FLOOR_DEFAULT_BASE_URL,
   probeOllamaFloor,
   REFLEX_VERSION,
+  resolveToolSelection,
   scaffoldClaudeHooks,
   scaffoldClaudeSessionStart,
   scaffoldClaudeSkill,
@@ -165,6 +168,105 @@ describe('scaffoldMcpConfig', () => {
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
     expect(result.err).toContain('at position'); // includes original parse error detail
+  });
+
+  // ─── Dedup keys on the registered package, not the entry name (#2601) ───
+
+  it('skips when @mmnto/mcp is already registered under a different name', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    const existing = {
+      mcpServers: {
+        'totem-dev': { command: 'npx', args: ['-y', '@mmnto/mcp', '--cwd', '../totem'] },
+      },
+    };
+    const before = JSON.stringify(existing, null, 2);
+    fs.writeFileSync(filePath, before, 'utf-8');
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'skipped', existingName: 'totem-dev' });
+    // The file is not rewritten at all — byte-identical, no reformat, no third entry.
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(before);
+  });
+
+  it('detects a registration carried on the command string', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            'totem-strategy': { command: 'node ./node_modules/@mmnto/mcp/dist/index.js' },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'skipped', existingName: 'totem-strategy' });
+  });
+
+  it('detects a registration on an arbitrary entry shape', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            memory: { type: 'stdio', run: { pkg: '@mmnto/mcp', mode: 'local' } },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'skipped', existingName: 'memory' });
+  });
+
+  it('merges when only unrelated servers are registered', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            github: { command: 'gh', args: ['mcp'] },
+            // Near-miss: a different package whose name is not the totem MCP.
+            other: { command: 'npx', args: ['-y', '@mmnto/other-mcp'] },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.mcpServers.totem).toEqual(SERVER_ENTRY);
+    expect(content.mcpServers.github).toEqual({ command: 'gh', args: ['mcp'] });
+  });
+
+  it('keeps the bare skip shape when the totem key itself is present', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ mcpServers: { totem: SERVER_ENTRY } }, null, 2),
+      'utf-8',
+    );
+
+    // The name check runs first, so `existingName` marks ONLY the different-name case.
+    expect(scaffoldMcpConfig(filePath, SERVER_ENTRY)).toEqual({ action: 'skipped' });
   });
 });
 
@@ -484,6 +586,78 @@ describe('Gemini hook scaffolding', () => {
   });
 });
 
+describe('vendor-hook managed-marker guard (mmnto-ai/totem#2601)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-vendor-guard-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  const CUSTOM_HOOK = '// strategy#482 parity hook\nconsole.log("custom orientation");\n';
+
+  it('findUnownedHookSibling reports an unowned .js sibling', () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+
+    expect(findUnownedHookSibling(path.join(hooksDir, 'SessionStart.cjs'))).toBe('SessionStart.js');
+  });
+
+  it('findUnownedHookSibling ignores a marker-headed sibling and an absent one', () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), GEMINI_SESSION_START, 'utf-8');
+
+    // Marker-headed → the legacy `.js`→`.cjs` migration case, not a custom hook.
+    expect(findUnownedHookSibling(path.join(hooksDir, 'SessionStart.cjs'))).toBeUndefined();
+    expect(findUnownedHookSibling(path.join(hooksDir, 'BeforeTool.cjs'))).toBeUndefined();
+  });
+
+  it('withholds the managed .cjs when a custom same-stem .js is present', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+
+    const results = await installGeminiHooks(tmpDir);
+
+    // No generic twin dropped beside the custom hook, and the custom hook is untouched.
+    expect(fs.existsSync(path.join(hooksDir, 'SessionStart.cjs'))).toBe(false);
+    expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.js'), 'utf-8')).toBe(CUSTOM_HOOK);
+
+    const disclosed = results.find((r) => r.file.endsWith('SessionStart.cjs'));
+    expect(disclosed?.action).toBe('skipped');
+    expect(disclosed?.summaryActionOverride).toContain('custom SessionStart.js present');
+    expect(disclosed?.summaryActionOverride).toContain('remove or rename it');
+
+    // The guard is per-target: the unguarded sibling hook still installs.
+    expect(fs.existsSync(path.join(hooksDir, 'BeforeTool.cjs'))).toBe(true);
+  });
+
+  it('leaves the legacy marker-headed .js migration path unchanged', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), GEMINI_SESSION_START, 'utf-8');
+
+    const results = await installGeminiHooks(tmpDir);
+
+    // Migrated, not guarded: successor written, legacy removed.
+    expect(fs.existsSync(path.join(hooksDir, 'SessionStart.js'))).toBe(false);
+    expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.cjs'), 'utf-8')).toBe(
+      GEMINI_SESSION_START,
+    );
+    expect(results.some((r) => r.summaryActionOverride?.includes('Migrated legacy Gemini'))).toBe(
+      true,
+    );
+    expect(results.some((r) => r.summaryActionOverride?.includes('custom SessionStart.js'))).toBe(
+      false,
+    );
+  });
+});
+
 describe('detectEmbeddingTier', () => {
   let tmpDir: string;
   const SAVED_OPENAI = process.env['OPENAI_API_KEY'];
@@ -791,6 +965,44 @@ describe('installBaselineLessons', () => {
     expect(result).toBe('installed');
     const content = fs.readFileSync(lessonsPath, 'utf-8');
     expect(content).toContain(UNIVERSAL_BASELINE_MARKER);
+  });
+
+  // ─── Threaded non-interactive predicate (mmnto-ai/totem#2601) ───
+
+  it('raises no prompt when the threaded interactive flag is false, even on a TTY', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    // A prompt that would HANG a real `--yes` run: reaching it at all fails the test.
+    const explodingRl = {
+      question: async () => {
+        throw new Error('prompt raised in non-interactive mode');
+      },
+    } as unknown as import('node:readline/promises').Interface;
+
+    const result = await installBaselineLessons(lessonsPath, explodingRl, undefined, false);
+
+    expect(result).toBe('installed');
+    expect(fs.readFileSync(lessonsPath, 'utf-8')).toContain(UNIVERSAL_BASELINE_MARKER);
+  });
+
+  it('honors the threaded interactive flag over the bare TTY probe', async () => {
+    // isTTY is false (beforeEach), but the caller says interactive — the prompt runs.
+    const result = await installBaselineLessons(lessonsPath, makeMockRl('n'), undefined, true);
+    expect(result).toBe('skipped');
+    expect(fs.existsSync(lessonsPath)).toBe(false);
+  });
+});
+
+describe('resolveToolSelection (mmnto-ai/totem#2601)', () => {
+  it('maps the explicit answers', () => {
+    expect(resolveToolSelection('none')).toBe('none');
+    expect(resolveToolSelection('  SELECT  ')).toBe('select');
+    expect(resolveToolSelection('all')).toBe('all');
+  });
+
+  it('treats Enter and anything unrecognized as the "all" default', () => {
+    expect(resolveToolSelection('')).toBe('all');
+    expect(resolveToolSelection('   ')).toBe('all');
+    expect(resolveToolSelection('yes please')).toBe('all');
   });
 });
 
@@ -1171,6 +1383,96 @@ describe('initCommand --global', () => {
     expect(configContent).toContain('targets:');
     expect(configContent).toContain("glob: '.totem/lessons/*.md'");
   });
+});
+
+describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  const savedIsTTY = process.stdin.isTTY;
+  const savedEnv = {
+    OPENAI_API_KEY: process.env['OPENAI_API_KEY'],
+    GEMINI_API_KEY: process.env['GEMINI_API_KEY'],
+    GOOGLE_API_KEY: process.env['GOOGLE_API_KEY'],
+  };
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-init-noninteractive-'));
+    originalCwd = process.cwd();
+    // No key detected → the embedding-tier prompt site is on the path.
+    delete process.env['OPENAI_API_KEY'];
+    delete process.env['GEMINI_API_KEY'];
+    delete process.env['GOOGLE_API_KEY'];
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    Object.defineProperty(process.stdin, 'isTTY', { value: savedIsTTY, configurable: true });
+    for (const [key, val] of Object.entries(savedEnv)) {
+      if (val === undefined) delete process.env[key];
+      else process.env[key] = val;
+    }
+  });
+
+  // Both cases would previously HANG on the first unguarded prompt (the run never
+  // settles and the mutations already landed) — resolving at all is the assertion.
+
+  it('runs to completion with a non-TTY stdin', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    // A detected AI tool puts the tool-selection prompt — the site that killed the
+    // real stdin-null run — on the path.
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Project\n', 'utf-8');
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({});
+
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'lessons', 'baseline.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'compiled-rules.json'))).toBe(true);
+    // The embedding-key prompt's non-interactive default is Lite — no .env is written.
+    expect(fs.existsSync(path.join(tmpDir, '.env'))).toBe(false);
+    // Tool selection took the 'all' default and said so.
+    const output = stderr.join('\n');
+    expect(output).toContain('Non-interactive mode — configuring all detected tools');
+    expect(output).toContain('Claude Code');
+    const mcp = JSON.parse(fs.readFileSync(path.join(tmpDir, '.mcp.json'), 'utf-8'));
+    expect(mcp.mcpServers.totem).toBeDefined();
+  }, 60000);
+
+  it('runs to completion with --yes on a TTY', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+
+    await initCommand({ yes: true });
+
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'lessons', 'baseline.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.env'))).toBe(false);
+  }, 60000);
+
+  it('declines the cursor-rules compile rather than firing it headless', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    fs.writeFileSync(
+      path.join(tmpDir, '.cursorrules'),
+      '# House rules\n\n- Never commit directly to main.\n',
+      'utf-8',
+    );
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({});
+
+    const output = stderr.join('\n');
+    // The decline is disclosed and names the manual verb.
+    expect(output).toContain('totem compile --from-cursor');
+    // Neither compile outcome line appears — the mutating path never ran.
+    expect(output).not.toContain('cursor rule(s) into invariants');
+    expect(output).not.toContain('Could not compile cursor rules');
+  }, 60000);
 });
 
 // ─── Write-time xrepo-qualify-refs hook (mmnto-ai/totem#1846) ────────────

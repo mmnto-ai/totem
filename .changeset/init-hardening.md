@@ -1,0 +1,9 @@
+---
+'@mmnto/cli': patch
+---
+
+`totem init` hardening (mmnto-ai/totem#2601) — three misses observed on a live floor-refresh run:
+
+- **MCP registration dedup keys on the registered package, not the entry name.** `scaffoldMcpConfig` previously only checked for a `totem` key, so a `.mcp.json` already carrying `@mmnto/mcp` under other names (`totem-dev`, `totem-strategy`) collected a duplicate third entry. Every existing server entry is now scanned for an `@mmnto/mcp` registration (structured `command`/`args` probe, falling through to a whole-entry scan for arbitrary shapes); a hit skips the append without rewriting the file and the init summary discloses the name it is already registered under.
+- **Vendor-hook managed-marker guard.** Init no longer drops the generic `.gemini/hooks/SessionStart.cjs` / `BeforeTool.cjs` beside a consumer's CUSTOM same-stem `.js` hook (the double-fire / orientation-regression trap). An unowned `<stem>.js` sibling — one the totem marker does not open — withholds the managed `.cjs` and the skip is disclosed in the summary. The marker-headed legacy `.js` → `.cjs` migration path is unaffected.
+- **Full non-interactive detection plus `--yes`.** Only two of six prompt sites were TTY-guarded, so a stdin-null init printed its non-interactive banner and still died at an unguarded prompt with mutations already landed. One `interactive` predicate (`stdin.isTTY && !--yes`) now guards every `rl.question` site in init and the two it reaches in the hook installers. Non-interactive defaults are the Enter defaults — install baseline lessons, upgrade reflexes, configure all detected tools, Lite embedding tier, install enforcement hooks, decline the post-merge hook — except the cursor-rules compile, which declines and names `totem compile --from-cursor` rather than firing an LLM-driven rewrite unattended. Every default taken is logged.

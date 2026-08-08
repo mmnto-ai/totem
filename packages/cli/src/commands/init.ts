@@ -270,7 +270,33 @@ export function wirePreparePackageJson(pkgPath: string): {
 
 // --- Gemini CLI hook installer ---
 
-async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
+/**
+ * Whether a managed `<stem>.cjs` vendor hook must be WITHHELD because the consumer
+ * owns a custom `<stem>.js` sibling (mmnto-ai/totem#2601 — the strategy#482 incident:
+ * the generic template dropped beside a repo's own SessionStart.js, double-firing or
+ * regressing orientation depending on Gemini's hook discovery). Ownership is the same
+ * positional gate `scaffoldFile` and `migrateLegacyGeminiHooks` use, so a marker-headed
+ * sibling — the legacy `.js`→`.cjs` migration case — is never blocked here; only an
+ * UNOWNED sibling is. A sibling that cannot be read is not provably totem-owned and
+ * takes the withholding arm (non-destructive posture, never a crash).
+ * Returns the sibling's basename when the scaffold must be withheld.
+ */
+export function findUnownedHookSibling(cjsPath: string): string | undefined {
+  if (!cjsPath.endsWith('.cjs')) return undefined;
+  const siblingPath = `${cjsPath.slice(0, -'.cjs'.length)}.js`;
+  if (!fs.existsSync(siblingPath)) return undefined;
+  try {
+    const existing = fs.readFileSync(siblingPath, 'utf-8');
+    if (markerOpensFile(existing, TOTEM_FILE_MARKER)) return undefined;
+    // totem-context: intentional cleanup — an unreadable sibling cannot be proven
+    // totem-owned, so it withholds the scaffold rather than aborting init.
+  } catch {
+    // fall through to withhold
+  }
+  return path.basename(siblingPath);
+}
+
+export async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
   const results: HookInstallerResult[] = [];
   // The two whole-file hooks carry the managed end marker (mmnto-ai/totem#2410) so a
   // drifted-but-bounded artifact self-repairs on re-init; the skill is marker-block
@@ -301,6 +327,18 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
 
   for (const { rel, content, marker, endMarker } of files) {
     const filePath = path.join(cwd, rel);
+    // Vendor-hook managed-marker guard (mmnto-ai/totem#2601): a custom same-stem `.js`
+    // the consumer owns suppresses the managed `.cjs` entirely — the drop is disclosed,
+    // never silent, because a withheld hook otherwise reads as an installed one.
+    const unownedSibling = findUnownedHookSibling(filePath);
+    if (unownedSibling !== undefined) {
+      results.push({
+        file: rel,
+        action: 'skipped',
+        summaryActionOverride: `Skipped — custom ${unownedSibling} present — totem hook not installed; remove or rename it to adopt the managed hook`,
+      });
+      continue;
+    }
     const result = scaffoldFile(filePath, content, marker, endMarker);
     // Map the scaffold action onto HookInstallerResult: a bounded drift-repair
     // (`refreshed`) surfaces as `merged` (file mutated) for installer summary parity
@@ -634,10 +672,49 @@ if (claudeTool) claudeTool.hookInstaller = installClaudeHooks;
 const geminiTool = AI_TOOLS.find((t) => t.name === 'Gemini CLI');
 if (geminiTool) geminiTool.hookInstaller = installGeminiHooks;
 
+/** The npm package every Totem MCP registration invokes, under whatever entry name. */
+const MCP_PACKAGE = '@mmnto/mcp';
+
+/**
+ * Find an existing registration of the Totem MCP package under ANY entry name
+ * (mmnto-ai/totem#2601). Dedup keys on the registered PACKAGE, not the entry name: a
+ * consumer that registered `@mmnto/mcp` as `totem-dev` / `totem-strategy` (a `--cwd`
+ * pin, a local path pin) must not collect a third duplicate `totem` entry on re-init.
+ * Entry shapes are arbitrary across hosts (`command`/`args`, wrapper scripts, an
+ * `env`-carried invocation), so the structured `command`/`args` probe falls through to
+ * a whole-entry serialization scan — a mention of the package IS a registration.
+ */
+function findMcpPackageRegistration(servers: Record<string, unknown>): string | undefined {
+  for (const [name, entry] of Object.entries(servers)) {
+    if (entry === null || typeof entry !== 'object') continue;
+    const { command, args } = entry as { command?: unknown; args?: unknown };
+    if (typeof command === 'string' && command.includes(MCP_PACKAGE)) return name;
+    if (Array.isArray(args) && args.some((a) => typeof a === 'string' && a.includes(MCP_PACKAGE))) {
+      return name;
+    }
+    let serialized: string | undefined;
+    try {
+      serialized = JSON.stringify(entry);
+      // totem-context: intentional cleanup — a non-serializable entry (a toJSON that
+      // throws) is simply not a match; dedup must never abort the init scaffold.
+    } catch {
+      serialized = undefined;
+    }
+    if (serialized?.includes(MCP_PACKAGE)) return name;
+  }
+  return undefined;
+}
+
 export function scaffoldMcpConfig(
   filePath: string,
   serverEntry: Record<string, unknown>,
-): { action: 'created' | 'merged' | 'skipped'; err?: string } {
+): {
+  action: 'created' | 'merged' | 'skipped';
+  /** The entry name an existing `@mmnto/mcp` registration was found under, when the
+   *  skip came from the package-level dedup rather than the `totem` key check. */
+  existingName?: string;
+  err?: string;
+} {
   try {
     if (!fs.existsSync(filePath)) {
       const dir = path.dirname(filePath);
@@ -680,6 +757,12 @@ export function scaffoldMcpConfig(
     if ('totem' in servers) {
       return { action: 'skipped' };
     }
+    // Package-level dedup runs after the name check so the `totem`-key skip keeps its
+    // bare shape: `existingName` marks the different-name case the caller discloses.
+    const existingName = findMcpPackageRegistration(servers);
+    if (existingName !== undefined) {
+      return { action: 'skipped', existingName };
+    }
 
     servers.totem = serverEntry;
     parsed.mcpServers = servers;
@@ -694,12 +777,15 @@ export function scaffoldMcpConfig(
 /**
  * Install the Universal AI Developer Baseline lessons into the lessons file.
  * Returns 'installed', 'exists' (already present), or 'skipped' (user declined).
- * In non-TTY mode (CI), defaults to installing without prompting.
+ * In non-interactive mode (CI, `--yes`, piped input), defaults to installing without
+ * prompting. `interactive` is threaded from init's single non-interactive predicate
+ * (mmnto-ai/totem#2601) and falls back to the bare TTY probe for standalone callers.
  */
 export async function installBaselineLessons(
   baselinePath: string,
   rl: import('node:readline/promises').Interface,
   ecosystems?: Ecosystem[],
+  interactive: boolean = process.stdin.isTTY === true,
 ): Promise<'installed' | 'exists' | 'skipped'> {
   const { UNIVERSAL_BASELINE_LESSONS, UNIVERSAL_BASELINE_MARKER } =
     await import('../assets/universal-baseline.js');
@@ -715,11 +801,13 @@ export async function installBaselineLessons(
         return 'exists';
     }
 
-    // In non-TTY mode (CI, piped input), default to installing
+    // Non-interactive (CI, `--yes`, piped input): take the (Y) default — install.
     let declined = false;
-    if (process.stdin.isTTY) {
+    if (interactive) {
       const answer = await rl.question('Install baseline lessons? (Y/n): ');
       declined = answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no';
+    } else {
+      log.info('Totem', 'Non-interactive mode — installing baseline lessons.');
     }
 
     if (declined) return 'skipped';
@@ -864,6 +952,18 @@ interface InitSummaryEntry {
   action: string;
 }
 
+/**
+ * Resolve the AI-tool selection prompt's answer. Anything that is not an explicit
+ * `none` / `select` is the Enter default, `all` — which is also the answer the
+ * non-interactive path takes without raising the prompt (mmnto-ai/totem#2601).
+ */
+export function resolveToolSelection(answer: string): 'all' | 'none' | 'select' {
+  const trimmed = answer.trim().toLowerCase();
+  if (trimmed === 'none') return 'none';
+  if (trimmed === 'select') return 'select';
+  return 'all';
+}
+
 export async function initCommand(options?: {
   bare?: boolean;
   pilot?: boolean;
@@ -883,6 +983,11 @@ export async function initCommand(options?: {
    *  (mmnto-ai/totem#2088, Proposal 292 S1). Non-interactive; honest-absent
    *  when the `@mmnto/strategy-doctrine` pin is not installed. */
   doctrine?: boolean;
+  /** Answer every prompt with its default and raise none (mmnto-ai/totem#2601).
+   *  Implied when stdin is not a TTY: a partial guard let a stdin-null init print
+   *  the non-interactive banner and still die at an unguarded prompt with mutations
+   *  already landed. Every non-interactive default is logged. */
+  yes?: boolean;
   /** Override home directory for testing. */
   _homeDir?: string;
 }): Promise<void> {
@@ -1036,6 +1141,11 @@ export default {
   const configExists = !!existingConfig;
 
   const rl = readline.createInterface({ input, output });
+  // The ONE non-interactive predicate (mmnto-ai/totem#2601). Every `rl.question` site
+  // below is guarded by it: a prompt raised without a TTY never settles, and init's
+  // mutations land BEFORE the prompts, so a half-run reads as a silent no-op. Each
+  // guarded site logs the default it took.
+  const interactive = process.stdin.isTTY === true && options?.yes !== true;
   const summary: InitSummaryEntry[] = [];
 
   try {
@@ -1090,6 +1200,13 @@ export default {
           log.info(
             'Totem',
             `Detected ${bold('GEMINI_API_KEY')} in environment. Using Gemini embeddings (single-key DX).`,
+          );
+        } else if (!interactive) {
+          // Non-interactive: take the Enter default (Lite tier). The other two answers
+          // MUTATE (an .env write, an Ollama pin) and must not fire unattended.
+          log.info(
+            'Totem',
+            'Non-interactive mode — no embedding key entered; starting in Lite tier.',
           );
         } else {
           // No key detected — prompt the user
@@ -1221,7 +1338,12 @@ export default {
     // --- Baseline lessons (core + detected ecosystem packs) ---
     const baselinePath = path.join(lessonsDir, 'baseline.md');
     const detectedEcosystems = detectProject(cwd).ecosystems;
-    const baselineResult = await installBaselineLessons(baselinePath, rl, detectedEcosystems);
+    const baselineResult = await installBaselineLessons(
+      baselinePath,
+      rl,
+      detectedEcosystems,
+      interactive,
+    );
     if (baselineResult === 'installed') {
       const extraPacks = detectedEcosystems.filter((e) => e !== 'javascript');
       const packLabel = extraPacks.length > 0 ? ` + ${extraPacks.join(', ')}` : '';
@@ -1296,26 +1418,34 @@ export default {
       if (detectedTools.length > 0) {
         const toolNames = detectedTools.map((t) => t.name).join(', ');
         log.info('Totem', `Detected AI tools: ${bold(toolNames)}`);
-        const toolAnswer = await rl.question(
-          'Which tools should Totem configure? [all/none/select] (default: all): ',
-        );
-
         let selectedTools: AiToolInfo[];
-        const trimmed = toolAnswer.trim().toLowerCase();
-
-        if (trimmed === 'none') {
-          selectedTools = [];
-        } else if (trimmed === 'select') {
-          selectedTools = [];
-          for (const tool of detectedTools) {
-            const pick = await rl.question(`  Configure ${tool.name}? (Y/n): `);
-            if (pick.trim().toLowerCase() !== 'n' && pick.trim().toLowerCase() !== 'no') {
-              selectedTools.push(tool);
-            }
-          }
-        } else {
-          // 'all' or Enter (default)
+        if (!interactive) {
+          // Non-interactive: the Enter default is 'all'. The per-tool `select` loop is
+          // unreachable from here — it is entered only by an interactive 'select'.
           selectedTools = detectedTools;
+          log.info(
+            'Totem',
+            `Non-interactive mode — configuring all detected tools (${toolNames}).`,
+          );
+        } else {
+          const toolAnswer = await rl.question(
+            'Which tools should Totem configure? [all/none/select] (default: all): ',
+          );
+
+          const selection = resolveToolSelection(toolAnswer);
+          if (selection === 'none') {
+            selectedTools = [];
+          } else if (selection === 'select') {
+            selectedTools = [];
+            for (const tool of detectedTools) {
+              const pick = await rl.question(`  Configure ${tool.name}? (Y/n): `);
+              if (pick.trim().toLowerCase() !== 'n' && pick.trim().toLowerCase() !== 'no') {
+                selectedTools.push(tool);
+              }
+            }
+          } else {
+            selectedTools = detectedTools;
+          }
         }
 
         // --- MCP scaffolding for selected tools ---
@@ -1334,6 +1464,14 @@ export default {
             summary.push({ file: tool.mcpPath, action: `Created with Totem MCP server` });
           } else if (result.action === 'merged') {
             summary.push({ file: tool.mcpPath, action: `Added totem to mcpServers` });
+          } else if (result.existingName !== undefined) {
+            // Package-level dedup hit (mmnto-ai/totem#2601): no append, but the skip is
+            // disclosed rather than silent — the user's registration is under a name
+            // they chose, and a silent no-op reads as init having done nothing.
+            summary.push({
+              file: tool.mcpPath,
+              action: `Totem MCP already registered as \`${result.existingName}\` — no duplicate added`,
+            });
           }
         }
 
@@ -1365,12 +1503,13 @@ export default {
           log.warn('Totem', `Outdated reflexes found in: ${bold(fileList)}`);
 
           let shouldUpgrade = false;
-          if (process.stdin.isTTY) {
+          if (interactive) {
             const answer = await rl.question(`Upgrade reflexes to v${REFLEX_VERSION}? (Y/n): `);
             shouldUpgrade =
               answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no';
           } else {
-            // Non-TTY (CI/scripted): auto-upgrade to match baseline lessons behavior
+            // Non-interactive (CI/scripted/`--yes`): take the (Y) default, matching
+            // baseline lessons behavior.
             shouldUpgrade = true;
             log.info('Totem', 'Non-interactive mode — auto-upgrading reflexes.');
           }
@@ -1432,6 +1571,11 @@ export default {
                 action:
                   result.summaryActionOverride ?? `Merged ${tool.name} hook into existing config`,
               });
+            } else if (result.action === 'skipped' && result.summaryActionOverride) {
+              // A skip an installer chose to DISCLOSE (mmnto-ai/totem#2601 vendor-hook
+              // guard). Bare `skipped`/`exists` stay silent; an override means the user
+              // must know why the file was left alone.
+              summary.push({ file: result.file, action: result.summaryActionOverride });
             }
           }
         }
@@ -1484,7 +1628,10 @@ export default {
 
       // --- Always run: enforcement hooks (pre-commit + pre-push) ---
       const hookTier = options?.strict ? 'strict' : undefined;
-      const enforcement = await installEnforcementHooks(cwd, rl, { tier: hookTier });
+      const enforcement = await installEnforcementHooks(cwd, rl, {
+        tier: hookTier,
+        interactive,
+      });
       if (enforcement.preCommit === 'installed' || enforcement.preCommit === 'appended') {
         summary.push({
           file: '.git/hooks/pre-commit',
@@ -1509,7 +1656,7 @@ export default {
       }
 
       // --- Always run: post-merge git hook ---
-      await installPostMergeHook(cwd, rl);
+      await installPostMergeHook(cwd, rl, { interactive });
 
       // --- Always run: .gitignore ---
       const gitignorePath = path.join(cwd, '.gitignore');
@@ -1540,10 +1687,23 @@ export default {
       const { scanCursorInstructions } = await import('@mmnto/totem');
       const cursorInstructions = scanCursorInstructions(cwd);
       if (cursorInstructions.length > 0) {
-        const answer = await rl.question(
-          `\nFound ${cursorInstructions.length} existing AI rule(s) (.cursorrules / .mdc). Compile into deterministic invariants? (Y/n): `,
-        );
-        if (answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no') {
+        // The one non-interactive default that is NOT the Enter default: compiling is
+        // an LLM-driven rewrite of compiled-rules.json, so it stays opt-in and the
+        // manual command is disclosed instead (mmnto-ai/totem#2601).
+        let shouldCompile = false;
+        if (interactive) {
+          const answer = await rl.question(
+            `\nFound ${cursorInstructions.length} existing AI rule(s) (.cursorrules / .mdc). Compile into deterministic invariants? (Y/n): `,
+          );
+          shouldCompile =
+            answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no';
+        } else {
+          log.info(
+            'Totem',
+            `Non-interactive mode — found ${cursorInstructions.length} existing AI rule(s) (.cursorrules / .mdc); not compiling. Run \`totem compile --from-cursor\` to compile them.`,
+          );
+        }
+        if (shouldCompile) {
           try {
             const { compileCommand } = await import('./compile.js');
             await compileCommand({ fromCursor: true });

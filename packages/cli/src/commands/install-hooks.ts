@@ -348,7 +348,14 @@ function printHookManagerGuidance(manager: HookManager): void {
 export async function installPostMergeHook(
   cwd: string,
   rl: readline.Interface,
-  options?: { tier?: 'strict' | 'standard' },
+  options?: {
+    tier?: 'strict' | 'standard';
+    /** Threaded from init's single non-interactive predicate (mmnto-ai/totem#2601);
+     *  falls back to the bare TTY probe for the standalone `install-hooks` caller.
+     *  A prompt raised without a TTY never settles — init dies mid-run with its
+     *  mutations already landed. */
+    interactive?: boolean;
+  },
 ): Promise<void> {
   // Guard: must be a git repo — resolve root from any subdirectory. A malformed
   // `.git` pointer file is the same declared-skip class, not a crash (#2422 round:
@@ -369,6 +376,16 @@ export async function installPostMergeHook(
   if (manager) {
     generateHookHelpers(gitRoot, fallbackCmd, options);
     printHookManagerGuidance(manager);
+    return;
+  }
+
+  const interactive = options?.interactive ?? process.stdin.isTTY === true;
+  if (!interactive) {
+    // Non-interactive: the Enter default here is (N) — decline, and disclose the verb
+    // that installs it later.
+    console.error(
+      '[Totem] Non-interactive mode — post-merge auto-sync hook not installed. Run `totem install-hooks` to add it.',
+    );
     return;
   }
 
@@ -723,7 +740,12 @@ export interface EnforcementHookResult {
 export async function installEnforcementHooks(
   cwd: string,
   rl: readline.Interface,
-  options?: { tier?: 'strict' | 'standard' },
+  options?: {
+    tier?: 'strict' | 'standard';
+    /** See installPostMergeHook — the same non-interactive predicate, threaded
+     *  (mmnto-ai/totem#2601). */
+    interactive?: boolean;
+  },
 ): Promise<EnforcementHookResult> {
   const skip: EnforcementHookResult = { preCommit: 'skipped', prePush: 'skipped' };
 
@@ -743,12 +765,19 @@ export async function installEnforcementHooks(
   }
 
   // Ask user — default to yes for safety
-  const answer = await rl.question(
-    '\nInstall git enforcement hooks (block main commits + totem lint)? (Y/n): ',
-  );
+  const interactive = options?.interactive ?? process.stdin.isTTY === true;
+  if (interactive) {
+    const answer = await rl.question(
+      '\nInstall git enforcement hooks (block main commits + totem lint)? (Y/n): ',
+    );
 
-  if (answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no') {
-    return skip;
+    if (answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no') {
+      return skip;
+    }
+  } else {
+    // Non-interactive: take the (Y) default. Both hooks are marker-bounded and
+    // idempotent, so the unattended install is reversible and never clobbers.
+    console.error('[Totem] Non-interactive mode — installing git enforcement hooks.');
   }
 
   const hooksDir = resolveHooksDir(gitRoot);
