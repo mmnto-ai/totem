@@ -430,7 +430,7 @@ Always await side-effect operations like indexing during tool execution to provi
 
 **Tags:** context-management, observability, guardrail
 
-Implement a `contextWarningThreshold` to append a system warning block when tool payloads exceed safe token limits (e.g., 40k chars). This prompts agents to proactively suggest context hygiene maneuvers, such as bridging, before hitting hard window constraints.
+Gate a measured `<size-disclosure>` envelope on `contextWarningThreshold` when tool payloads are large (e.g., 40k chars) — never a risk-claim warning: the server seam cannot see the consumer's window size or occupancy, so context-pressure judgment belongs to the consumer holding the denominator (mmnto-ai/totem#2600 demoted the original warning after it fired at 15% occupancy on a 1M-window seat). Disclose measurements; let the consumer decide.
 
 ## Lesson — 2026-03-07T00:44:37.037Z
 
