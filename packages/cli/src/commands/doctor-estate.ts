@@ -45,6 +45,11 @@ export interface EstateCliOptions {
   execForTest?: EstateExecFn;
   /** Test seam — pins `derivedAt` and every `age-days` value. */
   nowForTest?: number;
+  /**
+   * Test seam — bypasses the user-level `~/.totem/worktrees.json` read that
+   * supplies the wt-registry's recorded container roots.
+   */
+  wtRootsForTest?: string[];
 }
 
 /** Gutter width for row labels, so every row family aligns on one column. */
@@ -172,8 +177,16 @@ function degenerateArtifact(
 
 export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Promise<void> {
   const path = await import('node:path');
-  const { ESTATE_SCHEMA_VERSION, readRegistry, safeExec, sanitizeForTerminal, scanEstate } =
-    await import('@mmnto/totem');
+  const {
+    ESTATE_SCHEMA_VERSION,
+    existingWorktreeRoots,
+    partitionWorktreeRoots,
+    readRegistry,
+    readWorktreeRegistry,
+    safeExec,
+    sanitizeForTerminal,
+    scanEstate,
+  } = await import('@mmnto/totem');
   const {
     bold,
     dim: dimColor,
@@ -213,13 +226,41 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
   // would be exactly the silent degradation this sensor exists to surface.
   for (const warning of registryWarnings) log.warn(TAG, render(warning));
 
-  const extraRoots = (options.roots ?? []).map((root) => path.resolve(cwd, root));
+  // The wt-registry's recorded roots (mmnto-ai/totem#2580 slice 2, round-3
+  // MINOR-3): every root `totem wt create` has ever minted under. This is what
+  // keeps a recorded location reachable once the last live entry under it is
+  // gone — with only the derived roots, an emptied location is invisible to
+  // the sweep and every husk in it goes unreported. Only the DEFAULT
+  // `~/.totem/worktrees` location carries the CONTAINER semantics an
+  // operator's per-invocation `--root` confers; every other recorded root
+  // sweeps as a STANDARD root, where husk-ness needs shape evidence — a
+  // recorded scratch root must never permanently arm by-location residue rows
+  // for the unrelated directories beside its worktrees (#2580 slice-2
+  // falsification, finding 11).
+  //
+  // Unreadable file: warn and proceed with the derived roots (the
+  // container-withdrawal precedent — a degraded scan may report LESS, never
+  // more). Recorded roots that no longer exist are filtered out inside
+  // `existingWorktreeRoots`: an absent root is an empty sweep, not a hole.
+  const wtWarnings: string[] = [];
+  const wtRoots =
+    options.wtRootsForTest ??
+    existingWorktreeRoots(readWorktreeRegistry((msg: string) => wtWarnings.push(msg)));
+  for (const warning of wtWarnings) log.warn(TAG, render(warning));
+  const wtPartition = partitionWorktreeRoots(wtRoots);
+
+  const extraRoots = [
+    ...(options.roots ?? []).map((root) => path.resolve(cwd, root)),
+    ...wtPartition.container,
+  ];
+  const extraStandardRoots = wtPartition.standard;
 
   // The empty-registry short-circuit yields ONLY when there is also nothing to
   // sweep: `--root` declares a worktree location independently of the registry,
-  // and `scanEstate` sweeps `extraRoots` with `registry: []` — dropping them
-  // here would kill the flag exactly when the registry is useless.
-  if (entries.length === 0 && extraRoots.length === 0) {
+  // the wt-registry's recorded roots do the same, and `scanEstate` sweeps
+  // `extraRoots` with `registry: []` — dropping them here would kill both
+  // exactly when the registry is useless.
+  if (entries.length === 0 && extraRoots.length === 0 && extraStandardRoots.length === 0) {
     if (options.json) {
       process.stdout.write(
         JSON.stringify(degenerateArtifact(now, registryStatus, ESTATE_SCHEMA_VERSION), null, 2) +
@@ -241,6 +282,7 @@ export async function doctorEstateCliCommand(options: EstateCliOptions = {}): Pr
     safeExec: options.execForTest ?? safeExec,
     now,
     extraRoots,
+    extraStandardRoots,
   });
 
   if (options.json) {

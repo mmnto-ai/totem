@@ -561,6 +561,33 @@ export type {
 } from './estate-scan.js';
 export { ESTATE_SCHEMA_VERSION, parseWorktreeListPorcelain, scanEstate } from './estate-scan.js';
 
+// User-level worktree registry (mmnto-ai/totem#2580 — backs `totem wt`)
+export type { WorktreeEntry, WorktreeFile } from './worktree-registry.js';
+export {
+  addWorktreeEntry,
+  defaultWorktreeRoot,
+  deleteWorktreeEntry,
+  emptyWorktreeFile,
+  existingWorktreeRoots,
+  findWorktreeEntry,
+  partitionWorktreeRoots,
+  readWorktreeRegistry,
+  WORKTREE_REGISTRY_SCHEMA_VERSION,
+  WorktreeEntrySchema,
+  WorktreeFileSchema,
+  worktreePathExists,
+  worktreePathKey,
+  worktreeRegistryPath,
+} from './worktree-registry.js';
+
+// Verified residue deletion (mmnto-ai/totem#2580 — the finish `git` skips)
+export type { ResidueRemovalOptions, ResidueRemovalResult } from './worktree-residue.js';
+export {
+  removeWorktreeResidue,
+  residuePathExists,
+  stripReparsePoints,
+} from './worktree-residue.js';
+
 // Secrets (user-defined DLP patterns)
 export type { CustomSecret, SecretsFile } from './secrets.js';
 export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secrets.js';
