@@ -134,6 +134,10 @@ program
     '--doctrine',
     'Wire orient.parityManifest to the installed @mmnto/strategy-doctrine pin (no-op until the pin is added)',
   )
+  .option(
+    '-y, --yes',
+    'Answer every prompt with its default and read nothing from stdin (also implied when stdin is not a TTY)',
+  )
   .action(
     async (options: {
       bare?: boolean;
@@ -143,6 +147,7 @@ program
       forceSkillRefresh?: boolean;
       gates?: string;
       doctrine?: boolean;
+      yes?: boolean;
     }) => {
       try {
         await initCommand({
@@ -153,6 +158,7 @@ program
           forceSkillRefresh: options.forceSkillRefresh,
           gates: options.gates,
           doctrine: options.doctrine,
+          yes: options.yes,
         });
       } catch (err) {
         handleError(err);

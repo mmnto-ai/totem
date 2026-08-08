@@ -348,7 +348,14 @@ function printHookManagerGuidance(manager: HookManager): void {
 export async function installPostMergeHook(
   cwd: string,
   rl: readline.Interface,
-  options?: { tier?: 'strict' | 'standard' },
+  options?: {
+    tier?: 'strict' | 'standard';
+    /** Threaded from init's single non-interactive predicate (mmnto-ai/totem#2601);
+     *  falls back to the bare TTY probe for the standalone `install-hooks` caller.
+     *  A prompt raised without a TTY never settles — init dies mid-run with its
+     *  mutations already landed. */
+    interactive?: boolean;
+  },
 ): Promise<void> {
   // Guard: must be a git repo — resolve root from any subdirectory. A malformed
   // `.git` pointer file is the same declared-skip class, not a crash (#2422 round:
@@ -369,6 +376,16 @@ export async function installPostMergeHook(
   if (manager) {
     generateHookHelpers(gitRoot, fallbackCmd, options);
     printHookManagerGuidance(manager);
+    return;
+  }
+
+  const interactive = options?.interactive ?? process.stdin.isTTY === true;
+  if (!interactive) {
+    // Non-interactive: the Enter default here is (N) — decline, and disclose the verb
+    // that installs it later.
+    console.error(
+      '[Totem] Non-interactive mode — post-merge auto-sync hook not installed. Run `totem install-hooks` to add it.',
+    );
     return;
   }
 
@@ -723,7 +740,12 @@ export interface EnforcementHookResult {
 export async function installEnforcementHooks(
   cwd: string,
   rl: readline.Interface,
-  options?: { tier?: 'strict' | 'standard' },
+  options?: {
+    tier?: 'strict' | 'standard';
+    /** See installPostMergeHook — the same non-interactive predicate, threaded
+     *  (mmnto-ai/totem#2601). */
+    interactive?: boolean;
+  },
 ): Promise<EnforcementHookResult> {
   const skip: EnforcementHookResult = { preCommit: 'skipped', prePush: 'skipped' };
 
@@ -743,12 +765,19 @@ export async function installEnforcementHooks(
   }
 
   // Ask user — default to yes for safety
-  const answer = await rl.question(
-    '\nInstall git enforcement hooks (block main commits + totem lint)? (Y/n): ',
-  );
+  const interactive = options?.interactive ?? process.stdin.isTTY === true;
+  if (interactive) {
+    const answer = await rl.question(
+      '\nInstall git enforcement hooks (block main commits + totem lint)? (Y/n): ',
+    );
 
-  if (answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no') {
-    return skip;
+    if (answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no') {
+      return skip;
+    }
+  } else {
+    // Non-interactive: take the (Y) default. Both hooks are marker-bounded and
+    // idempotent, so the unattended install is reversible and never clobbers.
+    console.error('[Totem] Non-interactive mode — installing git enforcement hooks.');
   }
 
   const hooksDir = resolveHooksDir(gitRoot);
@@ -1231,14 +1260,23 @@ export interface GeminiHookMigrationResult {
   /** `migrated` — successor materialized + legacy removed; `declined` — drifted
    *  unbounded, awaits `--force`; `skipped` — user-owned file, never touched. */
   action: 'migrated' | 'declined' | 'skipped';
-  /** Present when the block was caused by the file at the SUCCESSOR path
-   *  (mmnto-ai/totem#2488). `user-owned-successor` — no Totem marker there; the
-   *  migration never overwrites a user's successor (even under `--force`), both
-   *  files stay. `drifted-successor` — marker-headed but unbounded (user content
-   *  past the end marker); awaits `--force`, both files stay. Disclosure happens
-   *  on the `totem hook install` summary path (what `prepare` runs); the `totem
-   *  init` path surfaces only `migrated` results, like every non-migrated action. */
-  reason?: 'user-owned-successor' | 'drifted-successor';
+  /** Why a non-`migrated` action was taken, when the bare action is not enough.
+   *  `user-owned-successor` / `drifted-successor` name a block caused by the file at
+   *  the SUCCESSOR path (mmnto-ai/totem#2488): no Totem marker there — the migration
+   *  never overwrites a user's successor (even under `--force`); or marker-headed but
+   *  unbounded (user content past the end marker) — awaits `--force`. Both files stay
+   *  either way. `unreadable-legacy` / `unreadable-successor` name a candidate at the
+   *  respective path that could not be READ (a directory sharing the name, a
+   *  permissions failure): unprovable ownership is the skip arm, never a crash
+   *  (mmnto-ai/totem#2601), and BOTH summary consumers must render it as unreadable —
+   *  not as "user-owned", an ownership claim no read ever established. The `totem
+   *  init` path surfaces `migrated` and the unreadable reasons; the rest are disclosed
+   *  on the `totem hook install` summary path (what `prepare` runs). */
+  reason?:
+    | 'user-owned-successor'
+    | 'drifted-successor'
+    | 'unreadable-legacy'
+    | 'unreadable-successor';
 }
 
 /**
@@ -1247,6 +1285,11 @@ export interface GeminiHookMigrationResult {
  * totem-owned `legacyRel`. Ownership gate mirrors {@link regenerateManagedSessionHooks}:
  *
  *   - Legacy missing                     → nothing to migrate (omitted from results).
+ *   - Legacy present but UNREADABLE      → `skipped` + `reason: 'unreadable-legacy'`
+ *                                          (mmnto-ai/totem#2601): a directory sharing
+ *                                          the name reads EISDIR, and an ownership gate
+ *                                          that crashes init mid-run is worse than one
+ *                                          that declines and says so.
  *   - Marker does not OPEN the file      → `skipped` even under `--force` (a user file
  *                                          that merely shares the name is never touched).
  *   - Marker + bounded totem-owned whole file, OR `--force` → materialize successor +
@@ -1286,7 +1329,15 @@ export async function migrateLegacyGeminiHooks(
     const legacyPath = path.join(cwd, ...legacyRel.split('/'));
     if (!fs.existsSync(legacyPath)) continue;
 
-    const existing = fs.readFileSync(legacyPath, 'utf-8');
+    let existing: string;
+    // totem-context: intentional cleanup — a legacy candidate that cannot be read (a DIRECTORY sharing the name → EISDIR, a permissions failure) is not a provably totem-owned artifact to migrate; it takes the same skip arm as a user-owned file, disclosed via `reason`, because the ownership gate must never crash init mid-run.
+    try {
+      existing = fs.readFileSync(legacyPath, 'utf-8');
+      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    } catch {
+      results.push({ file: legacyRel, action: 'skipped', reason: 'unreadable-legacy' });
+      continue;
+    }
     if (!markerOpensFile(existing, marker)) {
       results.push({ file: legacyRel, action: 'skipped' });
       continue;
@@ -1304,7 +1355,16 @@ export async function migrateLegacyGeminiHooks(
     // the canonical write below as an idempotent repair.
     const successorPath = path.join(cwd, ...successorRel.split('/'));
     if (fs.existsSync(successorPath)) {
-      const successorExisting = fs.readFileSync(successorPath, 'utf-8');
+      let successorExisting: string;
+      // totem-context: intentional cleanup — an unreadable successor (a directory sharing the name, EISDIR/EACCES) cannot be proven totem-owned; the ownership gate declines and says so rather than crashing init mid-run (mmnto-ai/totem#2601, same arm as the legacy read).
+      try {
+        successorExisting = fs.readFileSync(successorPath, 'utf-8');
+        // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+      } catch (err) {
+        void err;
+        results.push({ file: legacyRel, action: 'skipped', reason: 'unreadable-successor' });
+        continue;
+      }
       if (!markerOpensFile(successorExisting, marker)) {
         results.push({ file: legacyRel, action: 'skipped', reason: 'user-owned-successor' });
         continue;
@@ -1423,10 +1483,16 @@ async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Pr
         );
         break;
       case 'skipped':
+        // "User-owned" is an ownership CLAIM — it must never render for the
+        // unreadable reasons, where no read ever established ownership (#2601).
         console.error(
           reason === 'user-owned-successor'
             ? `[Totem] ${file}: its .cjs successor already exists and is user-owned — left both files untouched (remove the legacy .js manually if unwanted).`
-            : `[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`,
+            : reason === 'unreadable-legacy'
+              ? `[Totem] ${file}: could not be read — left in place (remove or rename it to complete the .cjs migration).`
+              : reason === 'unreadable-successor'
+                ? `[Totem] ${file}: its .cjs successor could not be read — left both files untouched (remove or rename the successor to complete the migration).`
+                : `[Totem] ${file}: user-owned file (no Totem marker) — left untouched.`,
         );
         break;
     }

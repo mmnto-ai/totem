@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
 import { AUTO_CLOSE_REGEX_SOURCE, LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
@@ -18,12 +18,15 @@ import {
   buildNpxCommand,
   detectEmbeddingTier,
   detectReflexStatus,
+  findUnownedHookSibling,
   generateConfig,
   initCommand,
   installBaselineLessons,
+  installGeminiHooks,
   OLLAMA_FLOOR_DEFAULT_BASE_URL,
   probeOllamaFloor,
   REFLEX_VERSION,
+  resolveToolSelection,
   scaffoldClaudeHooks,
   scaffoldClaudeSessionStart,
   scaffoldClaudeSkill,
@@ -50,6 +53,8 @@ import {
   SIGNON_SKILL_CONTENT,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
+  TOTEM_FILE_END,
+  TOTEM_FILE_MARKER,
 } from './init-templates.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
@@ -166,6 +171,280 @@ describe('scaffoldMcpConfig', () => {
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
     expect(result.err).toContain('at position'); // includes original parse error detail
+  });
+
+  // ─── Dedup keys on the registered package, not the entry name (#2601) ───
+
+  it('skips when @mmnto/mcp is already registered under a different name', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    const existing = {
+      mcpServers: {
+        'totem-dev': { command: 'npx', args: ['-y', '@mmnto/mcp', '--cwd', '../totem'] },
+      },
+    };
+    const before = JSON.stringify(existing, null, 2);
+    fs.writeFileSync(filePath, before, 'utf-8');
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'skipped', existingName: 'totem-dev' });
+    // The file is not rewritten at all — byte-identical, no reformat, no third entry.
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(before);
+  });
+
+  it('detects a registration carried on the command string', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            'totem-strategy': { command: 'node ./node_modules/@mmnto/mcp/dist/index.js' },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'skipped', existingName: 'totem-strategy' });
+  });
+
+  it('detects a path-pinned registration that never spells the package name', () => {
+    // This repo's OWN .mcp.json shape: `node ./packages/mcp/dist/index.js`. No string
+    // in the entry contains `@mmnto/mcp` — only the file on disk knows what it is.
+    const distDir = path.join(tmpDir, 'packages', 'mcp', 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'index.js'), '', 'utf-8');
+    fs.writeFileSync(
+      path.join(tmpDir, 'packages', 'mcp', 'package.json'),
+      JSON.stringify({ name: '@mmnto/mcp' }, null, 2),
+      'utf-8',
+    );
+
+    const filePath = path.join(tmpDir, '.mcp.json');
+    const before =
+      JSON.stringify(
+        {
+          mcpServers: {
+            'totem-dev': { command: 'node', args: ['./packages/mcp/dist/index.js', '--cwd', '.'] },
+          },
+        },
+        null,
+        2,
+      ) + '\n';
+    fs.writeFileSync(filePath, before, 'utf-8');
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'skipped', existingName: 'totem-dev' });
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(before);
+  });
+
+  it('detects a root-relative pin from a SUBDIRECTORY host config via projectRoot (leg D1)', () => {
+    // Three of the four host configs live in subdirectories (.gemini/, .cursor/,
+    // .junie/mcp/) while their pins are written relative to the PROJECT ROOT — the
+    // config's own directory is the wrong base for them.
+    const distDir = path.join(tmpDir, 'packages', 'mcp', 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'index.js'), '', 'utf-8');
+    fs.writeFileSync(
+      path.join(tmpDir, 'packages', 'mcp', 'package.json'),
+      JSON.stringify({ name: '@mmnto/mcp' }, null, 2),
+      'utf-8',
+    );
+
+    const geminiDir = path.join(tmpDir, '.gemini');
+    fs.mkdirSync(geminiDir, { recursive: true });
+    const filePath = path.join(geminiDir, 'settings.json');
+    const before =
+      JSON.stringify(
+        {
+          mcpServers: {
+            'totem-dev': { command: 'node', args: ['./packages/mcp/dist/index.js'] },
+          },
+        },
+        null,
+        2,
+      ) + '\n';
+    fs.writeFileSync(filePath, before, 'utf-8');
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY, { projectRoot: tmpDir });
+
+    expect(result).toEqual({ action: 'skipped', existingName: 'totem-dev' });
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(before);
+  });
+
+  it('a directory-shaped arg never starts an identity walk (leg D2)', () => {
+    // `--cwd ./` resolves to a DIRECTORY; walking from a directory's parent could
+    // escape the repo and attribute an unrelated server to an ancestor package.
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({ name: '@mmnto/mcp' }, null, 2),
+      'utf-8',
+    );
+    const subDir = path.join(tmpDir, 'consumer');
+    fs.mkdirSync(subDir, { recursive: true });
+    const filePath = path.join(subDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        { mcpServers: { unrelated: { command: 'some-server', args: ['--cwd', './'] } } },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY, { projectRoot: subDir });
+
+    expect(result).toEqual({ action: 'merged' });
+  });
+
+  it("a non-Node command's script argument never starts an identity walk (Greptile P2)", () => {
+    // An unrelated server consuming a totem-owned .js as a plugin/config ARG is not
+    // a registration — only a Node-family command's entrypoint is attributable.
+    const distDir = path.join(tmpDir, 'packages', 'mcp', 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'index.js'), '', 'utf-8');
+    fs.writeFileSync(
+      path.join(tmpDir, 'packages', 'mcp', 'package.json'),
+      JSON.stringify({ name: '@mmnto/mcp' }, null, 2),
+      'utf-8',
+    );
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            helper: { command: 'other-server', args: ['--plugin', './packages/mcp/dist/index.js'] },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'merged' });
+  });
+
+  it('a dotted near-miss package name is not a registration (leg D6)', () => {
+    // npm scoped names may contain `.` — `@mmnto/mcp.js` is a different package.
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        { mcpServers: { other: { command: 'npx', args: ['-y', '@mmnto/mcp.js'] } } },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'merged' });
+  });
+
+  it('merges when a path pin is stale and no name matches', () => {
+    // The pinned script does not exist, so there is no package identity to read and
+    // nothing to attribute the entry to — init registers its own.
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            'totem-dev': { command: 'node', args: ['./packages/mcp/dist/index.js'] },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.mcpServers.totem).toEqual(SERVER_ENTRY);
+  });
+
+  it('merges when a mention sits outside command/args', () => {
+    // The probe is scoped to the fields that INVOKE something. A nested descriptor or
+    // an `env` doc-string that merely NAMES the package is not a registration — the
+    // old whole-entry serialization scan false-positived on exactly this.
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            memory: { type: 'stdio', run: { pkg: '@mmnto/mcp', mode: 'local' } },
+            notes: {
+              command: 'notes-server',
+              env: { DOC: 'replaced by @mmnto/mcp in 2026' },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.mcpServers.totem).toEqual(SERVER_ENTRY);
+  });
+
+  it('merges when only unrelated servers are registered', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            github: { command: 'gh', args: ['mcp'] },
+            // Near-miss: a DIFFERENT package whose name extends the totem MCP's.
+            // A bare substring probe would call this a registration and skip.
+            other: { command: 'npx', args: ['-y', '@mmnto/mcp-experimental'] },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.mcpServers.totem).toEqual(SERVER_ENTRY);
+    expect(content.mcpServers.github).toEqual({ command: 'gh', args: ['mcp'] });
+  });
+
+  it('keeps the bare skip shape when the totem key itself is present', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ mcpServers: { totem: SERVER_ENTRY } }, null, 2),
+      'utf-8',
+    );
+
+    // The name check runs first, so `existingName` marks ONLY the different-name case.
+    expect(scaffoldMcpConfig(filePath, SERVER_ENTRY)).toEqual({ action: 'skipped' });
   });
 });
 
@@ -485,6 +764,194 @@ describe('Gemini hook scaffolding', () => {
   });
 });
 
+describe('vendor-hook managed-marker guard (mmnto-ai/totem#2601)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-vendor-guard-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  const CUSTOM_HOOK = '// strategy#482 parity hook\nconsole.log("custom orientation");\n';
+
+  it('findUnownedHookSibling reports an unowned .js sibling', () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+
+    expect(findUnownedHookSibling(path.join(hooksDir, 'SessionStart.cjs'))).toBe('SessionStart.js');
+  });
+
+  it('findUnownedHookSibling ignores a marker-headed sibling and an absent one', () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), GEMINI_SESSION_START, 'utf-8');
+
+    // Marker-headed → the legacy `.js`→`.cjs` migration case, not a custom hook.
+    expect(findUnownedHookSibling(path.join(hooksDir, 'SessionStart.cjs'))).toBeUndefined();
+    expect(findUnownedHookSibling(path.join(hooksDir, 'BeforeTool.cjs'))).toBeUndefined();
+  });
+
+  it('findUnownedHookSibling only answers for a .cjs target', () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+
+    // A non-`.cjs` target has no `<stem>.js` TWIN to guard against — it IS the `.js`.
+    // Dropping the extension check would make the probe compare the file to itself.
+    expect(findUnownedHookSibling(path.join(hooksDir, 'SessionStart.js'))).toBeUndefined();
+  });
+
+  it('withholds the managed .cjs when a custom same-stem .js is present', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+
+    const results = await installGeminiHooks(tmpDir);
+
+    // No generic twin dropped beside the custom hook, and the custom hook is untouched.
+    expect(fs.existsSync(path.join(hooksDir, 'SessionStart.cjs'))).toBe(false);
+    expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.js'), 'utf-8')).toBe(CUSTOM_HOOK);
+
+    const disclosed = results.find((r) => r.file.endsWith('SessionStart.cjs'));
+    expect(disclosed?.action).toBe('skipped');
+    expect(disclosed?.summaryActionOverride).toContain('custom SessionStart.js present');
+    expect(disclosed?.summaryActionOverride).toContain('remove or rename it');
+
+    // The guard is per-target: the unguarded sibling hook still installs.
+    expect(fs.existsSync(path.join(hooksDir, 'BeforeTool.cjs'))).toBe(true);
+  });
+
+  it('leaves the legacy marker-headed .js migration path unchanged', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), GEMINI_SESSION_START, 'utf-8');
+
+    const results = await installGeminiHooks(tmpDir);
+
+    // Migrated, not guarded: successor written, legacy removed.
+    expect(fs.existsSync(path.join(hooksDir, 'SessionStart.js'))).toBe(false);
+    expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.cjs'), 'utf-8')).toBe(
+      GEMINI_SESSION_START,
+    );
+    expect(results.some((r) => r.summaryActionOverride?.includes('Migrated legacy Gemini'))).toBe(
+      true,
+    );
+    expect(results.some((r) => r.summaryActionOverride?.includes('custom SessionStart.js'))).toBe(
+      false,
+    );
+  });
+
+  it('drift-repairs an existing managed .cjs and discloses the coexistence', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // The re-init shape: the twin is ALREADY live. Withholding here would suppress
+    // drift-repair of a file that fires anyway and report it as "not installed".
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+    fs.writeFileSync(
+      path.join(hooksDir, 'SessionStart.cjs'),
+      `${TOTEM_FILE_MARKER}\nstale body\n${TOTEM_FILE_END}\n`,
+      'utf-8',
+    );
+
+    const results = await installGeminiHooks(tmpDir);
+
+    // Repaired to canonical, and the user's hook is still untouched.
+    expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.cjs'), 'utf-8')).toBe(
+      GEMINI_SESSION_START,
+    );
+    expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.js'), 'utf-8')).toBe(CUSTOM_HOOK);
+
+    const disclosed = results.find((r) => r.file.endsWith('SessionStart.cjs'));
+    expect(disclosed?.action).toBe('merged');
+    expect(disclosed?.summaryActionOverride).toContain(
+      'Custom SessionStart.js coexists with the managed SessionStart.cjs',
+    );
+    expect(disclosed?.summaryActionOverride).toContain('both may fire');
+    // The false "not installed" claim is gone.
+    expect(disclosed?.summaryActionOverride).not.toContain('totem hook not installed');
+  });
+
+  it('a CANONICAL managed .cjs beside an unowned .js reports exists + coexistence (leg D4)', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.cjs'), GEMINI_SESSION_START, 'utf-8');
+
+    const results = await installGeminiHooks(tmpDir);
+
+    const disclosed = results.find((r) => r.file.endsWith('SessionStart.cjs'));
+    // Nothing needed rewriting, but the coexistence hazard is unconditional — the
+    // `exists` action must still carry the disclosure or the summary swallows it.
+    expect(disclosed?.action).toBe('exists');
+    expect(disclosed?.summaryActionOverride).toContain('coexists with the managed');
+  });
+
+  it('a USER-owned .cjs beside an unowned .js gets the truthful not-installed line (leg D3)', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.cjs'), '// MY OWN cjs\n', 'utf-8');
+
+    const results = await installGeminiHooks(tmpDir);
+
+    const disclosed = results.find((r) => r.file.endsWith('SessionStart.cjs'));
+    // Totem installed nothing: the line must not claim a "managed" .cjs exists or
+    // steer the user toward deleting their own file.
+    expect(disclosed?.summaryActionOverride).toContain("neither is totem's");
+    expect(disclosed?.summaryActionOverride).not.toContain('managed');
+    expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.cjs'), 'utf-8')).toBe(
+      '// MY OWN cjs\n',
+    );
+  });
+
+  it('skips an unreadable SUCCESSOR rather than crashing the migration (CR round 1)', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // Marker-headed bounded legacy .js (migratable) + a DIRECTORY squatting the
+    // successor path: the successor read previously threw EISDIR mid-migration.
+    fs.writeFileSync(
+      path.join(hooksDir, 'SessionStart.js'),
+      `${TOTEM_FILE_MARKER}\nlegacy body\n${TOTEM_FILE_END}\n`,
+      'utf-8',
+    );
+    fs.mkdirSync(path.join(hooksDir, 'SessionStart.cjs'));
+
+    const results = await installGeminiHooks(tmpDir);
+
+    const disclosed = results.find(
+      (r) =>
+        r.summaryActionOverride !== undefined &&
+        /successor.*could not be read/.test(r.summaryActionOverride),
+    );
+    expect(disclosed).toBeDefined();
+    // Both files exactly as found — no partial migration.
+    expect(fs.statSync(path.join(hooksDir, 'SessionStart.cjs')).isDirectory()).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'SessionStart.js'))).toBe(true);
+  });
+
+  it('skips an unreadable legacy hook rather than crashing the run', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // A DIRECTORY sharing the legacy name: `readFileSync` throws EISDIR. The ownership
+    // gate previously read it unguarded and took init down mid-run.
+    fs.mkdirSync(path.join(hooksDir, 'SessionStart.js'));
+
+    const results = await installGeminiHooks(tmpDir);
+
+    const disclosed = results.find(
+      (r) => r.file.endsWith('SessionStart.js') && r.action === 'skipped',
+    );
+    expect(disclosed?.summaryActionOverride).toContain('could not be read');
+    expect(disclosed?.summaryActionOverride).toContain('left in place');
+    // The path is left exactly as found — no clobber, no partial migration.
+    expect(fs.statSync(path.join(hooksDir, 'SessionStart.js')).isDirectory()).toBe(true);
+  });
+});
+
 describe('detectEmbeddingTier', () => {
   let tmpDir: string;
   const SAVED_OPENAI = process.env['OPENAI_API_KEY'];
@@ -792,6 +1259,44 @@ describe('installBaselineLessons', () => {
     expect(result).toBe('installed');
     const content = fs.readFileSync(lessonsPath, 'utf-8');
     expect(content).toContain(UNIVERSAL_BASELINE_MARKER);
+  });
+
+  // ─── Threaded non-interactive predicate (mmnto-ai/totem#2601) ───
+
+  it('raises no prompt when the threaded interactive flag is false, even on a TTY', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    // A prompt that would HANG a real `--yes` run: reaching it at all fails the test.
+    const explodingRl = {
+      question: async () => {
+        throw new Error('prompt raised in non-interactive mode');
+      },
+    } as unknown as import('node:readline/promises').Interface;
+
+    const result = await installBaselineLessons(lessonsPath, explodingRl, undefined, false);
+
+    expect(result).toBe('installed');
+    expect(fs.readFileSync(lessonsPath, 'utf-8')).toContain(UNIVERSAL_BASELINE_MARKER);
+  });
+
+  it('honors the threaded interactive flag over the bare TTY probe', async () => {
+    // isTTY is false (beforeEach), but the caller says interactive — the prompt runs.
+    const result = await installBaselineLessons(lessonsPath, makeMockRl('n'), undefined, true);
+    expect(result).toBe('skipped');
+    expect(fs.existsSync(lessonsPath)).toBe(false);
+  });
+});
+
+describe('resolveToolSelection (mmnto-ai/totem#2601)', () => {
+  it('maps the explicit answers', () => {
+    expect(resolveToolSelection('none')).toBe('none');
+    expect(resolveToolSelection('  SELECT  ')).toBe('select');
+    expect(resolveToolSelection('all')).toBe('all');
+  });
+
+  it('treats Enter and anything unrecognized as the "all" default', () => {
+    expect(resolveToolSelection('')).toBe('all');
+    expect(resolveToolSelection('   ')).toBe('all');
+    expect(resolveToolSelection('yes please')).toBe('all');
   });
 });
 
@@ -1235,6 +1740,193 @@ describe('initCommand --global', () => {
     expect(configContent).toContain('targets:');
     expect(configContent).toContain("glob: '.totem/lessons/*.md'");
   });
+});
+
+describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  const savedIsTTY = process.stdin.isTTY;
+  const savedEnv = {
+    OPENAI_API_KEY: process.env['OPENAI_API_KEY'],
+    GEMINI_API_KEY: process.env['GEMINI_API_KEY'],
+    GOOGLE_API_KEY: process.env['GOOGLE_API_KEY'],
+  };
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-init-noninteractive-'));
+    originalCwd = process.cwd();
+    // No key detected → the embedding-tier prompt site is on the path.
+    delete process.env['OPENAI_API_KEY'];
+    delete process.env['GEMINI_API_KEY'];
+    delete process.env['GOOGLE_API_KEY'];
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    Object.defineProperty(process.stdin, 'isTTY', { value: savedIsTTY, configurable: true });
+    for (const [key, val] of Object.entries(savedEnv)) {
+      if (val === undefined) delete process.env[key];
+      else process.env[key] = val;
+    }
+  });
+
+  // Both cases would previously HANG on the first unguarded prompt (the run never
+  // settles and the mutations already landed) — resolving at all is the assertion.
+
+  it('runs to completion with a non-TTY stdin', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    // A detected AI tool puts the tool-selection prompt — the site that killed the
+    // real stdin-null run — on the path.
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Project\n', 'utf-8');
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({});
+
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'lessons', 'baseline.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'compiled-rules.json'))).toBe(true);
+    // The embedding-key prompt's non-interactive default is Lite — no .env is written.
+    expect(fs.existsSync(path.join(tmpDir, '.env'))).toBe(false);
+    // ...and the Lite tier LANDS in the generated config: no ecosystem marker in the
+    // fixture → yaml, and the Lite tier is the one tier that emits no `embedding` key.
+    // The `.env` absence alone would also hold for a tier that never writes one.
+    const configPath = path.join(tmpDir, 'totem.yaml');
+    expect(fs.existsSync(configPath)).toBe(true);
+    expect(fs.readFileSync(configPath, 'utf-8')).not.toContain('embedding');
+    // Tool selection took the 'all' default and said so.
+    const output = stderr.join('\n');
+    expect(output).toContain('Non-interactive mode — configuring all detected tools');
+    expect(output).toContain('Claude Code');
+    expect(output).toContain('(Lite tier)');
+    const mcp = JSON.parse(fs.readFileSync(path.join(tmpDir, '.mcp.json'), 'utf-8'));
+    expect(mcp.mcpServers.totem).toBeDefined();
+  }, 60000);
+
+  it('discloses the package-level MCP dedup instead of appending a duplicate', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Project\n', 'utf-8');
+    // Already registered under a name the user chose — the live floor-refresh shape.
+    fs.writeFileSync(
+      path.join(tmpDir, '.mcp.json'),
+      JSON.stringify(
+        { mcpServers: { 'totem-dev': { command: 'npx', args: ['-y', '@mmnto/mcp'] } } },
+        null,
+        2,
+      ) + '\n',
+      'utf-8',
+    );
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({});
+
+    const output = stderr.join('\n');
+    expect(output).toContain('already registered as');
+    expect(output).toContain('totem-dev');
+    const mcp = JSON.parse(fs.readFileSync(path.join(tmpDir, '.mcp.json'), 'utf-8'));
+    expect(Object.keys(mcp.mcpServers)).toEqual(['totem-dev']);
+  }, 60000);
+
+  it('takes both git-hook installer defaults non-interactively and discloses each', async () => {
+    // Forced TTY + `--yes`: the ONLY way to reach the installers' non-interactive arms
+    // through init, and a real git repo is what puts those arms on the path at all.
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    // Hermetic git: ambient `core.hooksPath` / `init.templateDir` would relocate the
+    // hooks this test asserts on — and the installer's own git calls read the same
+    // ambient config, so the isolation must be env-level for the WHOLE run, not a
+    // `-c` on `git init` alone (CR round 1, adapted).
+    const savedGlobal = process.env['GIT_CONFIG_GLOBAL'];
+    const savedSystem = process.env['GIT_CONFIG_SYSTEM'];
+    // An empty file, not os.devNull: git exits 128 on the Windows NUL-device path.
+    const emptyGitConfig = path.join(tmpDir, 'empty-gitconfig');
+    fs.writeFileSync(emptyGitConfig, '', 'utf-8');
+    process.env['GIT_CONFIG_GLOBAL'] = emptyGitConfig;
+    process.env['GIT_CONFIG_SYSTEM'] = emptyGitConfig;
+    onTestFinished(() => {
+      if (savedGlobal === undefined) delete process.env['GIT_CONFIG_GLOBAL'];
+      else process.env['GIT_CONFIG_GLOBAL'] = savedGlobal;
+      if (savedSystem === undefined) delete process.env['GIT_CONFIG_SYSTEM'];
+      else process.env['GIT_CONFIG_SYSTEM'] = savedSystem;
+    });
+    const gitInit = spawnSync('git', ['init'], { cwd: tmpDir, encoding: 'utf-8' });
+    expect(gitInit.status).toBe(0);
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({ yes: true });
+
+    const output = stderr.join('\n');
+    // Enforcement hooks take the (Y) default...
+    expect(output).toContain('[Totem] Non-interactive mode — installing git enforcement hooks.');
+    // ...and the post-merge hook takes its (N) default, naming the verb that adds it.
+    expect(output).toContain(
+      '[Totem] Non-interactive mode — post-merge auto-sync hook not installed. Run `totem install-hooks` to add it.',
+    );
+    // The artifacts, not just the log lines (leg D5): the two enforcement hooks
+    // actually landed and the declined post-merge hook actually did not.
+    const gitHooksDir = path.join(tmpDir, '.git', 'hooks');
+    expect(fs.existsSync(path.join(gitHooksDir, 'pre-commit'))).toBe(true);
+    expect(fs.existsSync(path.join(gitHooksDir, 'pre-push'))).toBe(true);
+    expect(fs.existsSync(path.join(gitHooksDir, 'post-merge'))).toBe(false);
+  }, 60000);
+
+  it('surfaces the coexistence disclosure through the summary on a canonical .cjs (leg D4)', async () => {
+    // Kills the summary-filter mutant: an `exists`-action result carrying an override
+    // must reach the rendered summary, not just the installer's return value.
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), '// my own hook\n', 'utf-8');
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.cjs'), GEMINI_SESSION_START, 'utf-8');
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({});
+
+    expect(stderr.join('\n')).toContain('coexists with the managed SessionStart.cjs');
+  }, 60000);
+
+  it('runs to completion with --yes on a TTY', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+
+    await initCommand({ yes: true });
+
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'lessons', 'baseline.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.env'))).toBe(false);
+  }, 60000);
+
+  it('declines the cursor-rules compile rather than firing it headless', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    fs.writeFileSync(
+      path.join(tmpDir, '.cursorrules'),
+      '# House rules\n\n- Never commit directly to main.\n',
+      'utf-8',
+    );
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({});
+
+    const output = stderr.join('\n');
+    // The decline is disclosed and names the manual verb.
+    expect(output).toContain('totem compile --from-cursor');
+    // Neither compile outcome line appears — the mutating path never ran.
+    expect(output).not.toContain('cursor rule(s) into invariants');
+    expect(output).not.toContain('Could not compile cursor rules');
+  }, 60000);
 });
 
 // ─── Write-time xrepo-qualify-refs hook (mmnto-ai/totem#1846) ────────────
