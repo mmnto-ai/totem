@@ -352,14 +352,22 @@ export async function installGeminiHooks(cwd: string): Promise<HookInstallerResu
     // Map the scaffold action onto HookInstallerResult: a bounded drift-repair
     // (`refreshed`) surfaces as `merged` (file mutated) for installer summary parity
     // with scaffoldClaudeSkill's mapping.
+    const action = result.action === 'refreshed' ? 'merged' : result.action;
+    // The coexistence line is true only when the `.cjs` really is totem's — `exists`
+    // (canonical) or `merged` (drift-repaired). A USER-owned `.cjs` (no marker) takes
+    // scaffoldFile's preserve path: totem installed nothing, so claiming a "managed
+    // .cjs" and steering the user to delete their own file would be false both ways
+    // (scoped leg round 2, D3) — that state gets the truthful not-installed line.
+    const coexistenceOverride =
+      unownedSibling === undefined
+        ? undefined
+        : action === 'exists' || action === 'merged'
+          ? `Custom ${unownedSibling} coexists with the managed ${path.basename(filePath)} — both may fire; remove one (delete the managed .cjs to keep yours, or your .js to keep totem's)`
+          : `Custom ${unownedSibling} and ${path.basename(filePath)} are both present and neither is totem's — totem hook not installed`;
     results.push({
       file: rel,
-      action: result.action === 'refreshed' ? 'merged' : result.action,
-      ...(unownedSibling !== undefined
-        ? {
-            summaryActionOverride: `Custom ${unownedSibling} coexists with the managed ${path.basename(filePath)} — both may fire; remove one (delete the managed .cjs to keep yours, or your .js to keep totem's)`,
-          }
-        : {}),
+      action,
+      ...(coexistenceOverride !== undefined ? { summaryActionOverride: coexistenceOverride } : {}),
       ...(result.err ? { err: result.err } : {}),
     });
   }
@@ -700,23 +708,35 @@ const MCP_PACKAGE = '@mmnto/mcp';
 /**
  * Boundary-anchored name probe. A bare `includes('@mmnto/mcp')` also fires on
  * `@mmnto/mcp-experimental` — a DIFFERENT package whose presence must not suppress the
- * real registration. The lookahead rejects a following word char or hyphen; a `/`, a
- * quote, a space, or end-of-string all still match (`@mmnto/mcp/dist/index.js`,
- * `-y @mmnto/mcp`). Non-global, so it carries no `lastIndex` state across calls.
+ * real registration. The lookahead rejects a following word char, hyphen, or dot
+ * (`@mmnto/mcp.js` is a different package name too); a `/`, an `@`, a quote, a space,
+ * or end-of-string all still match (`@mmnto/mcp/dist/index.js`, `@mmnto/mcp@1.2.3`).
+ * Non-global, so it carries no `lastIndex` state across calls.
  */
-const MCP_PACKAGE_RE = /@mmnto\/mcp(?![\w-])/;
+const MCP_PACKAGE_RE = /@mmnto\/mcp(?![\w.-])/;
 
 /**
- * Whether a `command`/`args` string is shaped like a script path worth resolving: it
- * carries a separator, or it names a `.js` file. Deliberately whole-string, not
- * `path.basename` — the argument as written IS the path, and a bare `index.js` in the
- * config's own directory is as resolvable as a nested one. Non-global, so `.test()`
- * carries no `lastIndex` state.
+ * Whether a `command`/`args` string names a JS-family SCRIPT FILE worth an identity
+ * walk. A suffix gate, not a separator gate: a separator-shaped non-script arg
+ * (`--cwd ./`) resolves to a DIRECTORY, and `path.dirname` on a directory would start
+ * the walk one level above it — outside the config, potentially outside the repo
+ * (scoped leg round 2, D2). Non-global, so `.test()` carries no `lastIndex` state.
  */
-const SCRIPT_PATH_RE = /[/\\]|\.js$/;
+const SCRIPT_FILE_RE = /\.(?:cjs|mjs|js)$/i;
 
 function looksLikeScriptPath(value: string): boolean {
-  return SCRIPT_PATH_RE.test(value);
+  return SCRIPT_FILE_RE.test(value);
+}
+
+/** No-throw file probe: only an existing regular FILE qualifies for the identity walk. */
+function isExistingFile(p: string): boolean {
+  // totem-context: intentional cleanup — an unstat-able path is simply not an attributable registration; dedup must never abort the init scaffold.
+  try {
+    return fs.statSync(p).isFile();
+    // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -759,20 +779,29 @@ function packageNameForScript(scriptPath: string): string | undefined {
  *
  * Two probes, both scoped to `command` and the string members of `args` — the only
  * fields that can INVOKE anything. There is deliberately no whole-entry serialization
- * scan: it false-positives on a prose mention in `env` and on `@mmnto/mcp-experimental`.
+ * scan: it false-positives on a prose mention in `env`, a field that cannot invoke
+ * anything.
  *
  *   1. Name probe — {@link MCP_PACKAGE_RE} on each candidate string.
  *   2. Path probe — a registration need not spell the package at all. This repo's own
- *      `.mcp.json` runs `node ./packages/mcp/dist/index.js`; the path is resolved
- *      against `baseDir` (the `.mcp.json`'s directory) and, when the file exists, the
- *      owning package is read off disk via {@link packageNameForScript}.
+ *      configs run `node ./packages/mcp/dist/index.js`; the pin is resolved against
+ *      EVERY candidate base and, when it lands on a real file, the owning package is
+ *      read from the nearest `package.json` on the written path (lexical — an
+ *      aliased/symlinked script attributes to its host package) via
+ *      {@link packageNameForScript}.
  *
- * A path that does not resolve to an existing file is a stale pin, not a registration
- * we can attribute — it falls through and init appends its own entry.
+ * `baseDirs` carries the config's own directory AND the project root: hosts launch
+ * the server from the project root, and three of the four host configs live in
+ * subdirectories (`.gemini/`, `.cursor/`, `.junie/mcp/`) while their pins are written
+ * root-relative — the config's directory alone is the right base only for the
+ * root-level `.mcp.json` (scoped leg round 2, D1).
+ *
+ * A path that does not resolve to an existing file under any base is a stale pin, not
+ * a registration we can attribute — it falls through and init appends its own entry.
  */
 function findMcpPackageRegistration(
   servers: Record<string, unknown>,
-  baseDir: string,
+  baseDirs: string[],
 ): string | undefined {
   for (const [name, entry] of Object.entries(servers)) {
     if (entry === null || typeof entry !== 'object') continue;
@@ -787,9 +816,11 @@ function findMcpPackageRegistration(
 
     for (const candidate of candidates) {
       if (!looksLikeScriptPath(candidate)) continue;
-      const resolved = path.resolve(baseDir, candidate);
-      if (!fs.existsSync(resolved)) continue;
-      if (packageNameForScript(resolved) === MCP_PACKAGE) return name;
+      for (const baseDir of baseDirs) {
+        const resolved = path.resolve(baseDir, candidate);
+        if (!isExistingFile(resolved)) continue;
+        if (packageNameForScript(resolved) === MCP_PACKAGE) return name;
+      }
     }
   }
   return undefined;
@@ -798,6 +829,11 @@ function findMcpPackageRegistration(
 export function scaffoldMcpConfig(
   filePath: string,
   serverEntry: Record<string, unknown>,
+  opts?: {
+    /** The project root — the second resolution base for relative script pins
+     *  (host configs in subdirectories carry root-relative pins; leg D1). */
+    projectRoot?: string;
+  },
 ): {
   action: 'created' | 'merged' | 'skipped';
   /** The entry name an existing `@mmnto/mcp` registration was found under, when the
@@ -849,8 +885,9 @@ export function scaffoldMcpConfig(
     }
     // Package-level dedup runs after the name check so the `totem`-key skip keeps its
     // bare shape: `existingName` marks the different-name case the caller discloses.
-    // Relative script pins in the config resolve against the config's own directory.
-    const existingName = findMcpPackageRegistration(servers, path.dirname(filePath));
+    const baseDirs = [path.dirname(filePath)];
+    if (opts?.projectRoot !== undefined) baseDirs.push(opts.projectRoot);
+    const existingName = findMcpPackageRegistration(servers, baseDirs);
     if (existingName !== undefined) {
       return { action: 'skipped', existingName };
     }
@@ -1543,7 +1580,7 @@ export default {
         for (const tool of selectedTools) {
           if (!tool.mcpPath || !tool.serverEntry) continue;
           const filePath = path.join(cwd, tool.mcpPath);
-          const result = scaffoldMcpConfig(filePath, tool.serverEntry);
+          const result = scaffoldMcpConfig(filePath, tool.serverEntry, { projectRoot: cwd });
 
           if (result.err) {
             log.error('Totem Error', result.err); // totem-ignore — result.err is internal scaffolding error, not LLM output

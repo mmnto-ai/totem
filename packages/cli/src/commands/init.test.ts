@@ -243,6 +243,84 @@ describe('scaffoldMcpConfig', () => {
     expect(fs.readFileSync(filePath, 'utf-8')).toBe(before);
   });
 
+  it('detects a root-relative pin from a SUBDIRECTORY host config via projectRoot (leg D1)', () => {
+    // Three of the four host configs live in subdirectories (.gemini/, .cursor/,
+    // .junie/mcp/) while their pins are written relative to the PROJECT ROOT — the
+    // config's own directory is the wrong base for them.
+    const distDir = path.join(tmpDir, 'packages', 'mcp', 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'index.js'), '', 'utf-8');
+    fs.writeFileSync(
+      path.join(tmpDir, 'packages', 'mcp', 'package.json'),
+      JSON.stringify({ name: '@mmnto/mcp' }, null, 2),
+      'utf-8',
+    );
+
+    const geminiDir = path.join(tmpDir, '.gemini');
+    fs.mkdirSync(geminiDir, { recursive: true });
+    const filePath = path.join(geminiDir, 'settings.json');
+    const before =
+      JSON.stringify(
+        {
+          mcpServers: {
+            'totem-dev': { command: 'node', args: ['./packages/mcp/dist/index.js'] },
+          },
+        },
+        null,
+        2,
+      ) + '\n';
+    fs.writeFileSync(filePath, before, 'utf-8');
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY, { projectRoot: tmpDir });
+
+    expect(result).toEqual({ action: 'skipped', existingName: 'totem-dev' });
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(before);
+  });
+
+  it('a directory-shaped arg never starts an identity walk (leg D2)', () => {
+    // `--cwd ./` resolves to a DIRECTORY; walking from a directory's parent could
+    // escape the repo and attribute an unrelated server to an ancestor package.
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({ name: '@mmnto/mcp' }, null, 2),
+      'utf-8',
+    );
+    const subDir = path.join(tmpDir, 'consumer');
+    fs.mkdirSync(subDir, { recursive: true });
+    const filePath = path.join(subDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        { mcpServers: { unrelated: { command: 'some-server', args: ['--cwd', './'] } } },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY, { projectRoot: subDir });
+
+    expect(result).toEqual({ action: 'merged' });
+  });
+
+  it('a dotted near-miss package name is not a registration (leg D6)', () => {
+    // npm scoped names may contain `.` — `@mmnto/mcp.js` is a different package.
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        { mcpServers: { other: { command: 'npx', args: ['-y', '@mmnto/mcp.js'] } } },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result).toEqual({ action: 'merged' });
+  });
+
   it('merges when a path pin is stale and no name matches', () => {
     // The pinned script does not exist, so there is no package identity to read and
     // nothing to attribute the entry to — init registers its own.
@@ -763,6 +841,39 @@ describe('vendor-hook managed-marker guard (mmnto-ai/totem#2601)', () => {
     expect(disclosed?.summaryActionOverride).toContain('both may fire');
     // The false "not installed" claim is gone.
     expect(disclosed?.summaryActionOverride).not.toContain('totem hook not installed');
+  });
+
+  it('a CANONICAL managed .cjs beside an unowned .js reports exists + coexistence (leg D4)', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.cjs'), GEMINI_SESSION_START, 'utf-8');
+
+    const results = await installGeminiHooks(tmpDir);
+
+    const disclosed = results.find((r) => r.file.endsWith('SessionStart.cjs'));
+    // Nothing needed rewriting, but the coexistence hazard is unconditional — the
+    // `exists` action must still carry the disclosure or the summary swallows it.
+    expect(disclosed?.action).toBe('exists');
+    expect(disclosed?.summaryActionOverride).toContain('coexists with the managed');
+  });
+
+  it('a USER-owned .cjs beside an unowned .js gets the truthful not-installed line (leg D3)', async () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), CUSTOM_HOOK, 'utf-8');
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.cjs'), '// MY OWN cjs\n', 'utf-8');
+
+    const results = await installGeminiHooks(tmpDir);
+
+    const disclosed = results.find((r) => r.file.endsWith('SessionStart.cjs'));
+    // Totem installed nothing: the line must not claim a "managed" .cjs exists or
+    // steer the user toward deleting their own file.
+    expect(disclosed?.summaryActionOverride).toContain("neither is totem's");
+    expect(disclosed?.summaryActionOverride).not.toContain('managed');
+    expect(fs.readFileSync(path.join(hooksDir, 'SessionStart.cjs'), 'utf-8')).toBe(
+      '// MY OWN cjs\n',
+    );
   });
 
   it('skips an unreadable legacy hook rather than crashing the run', async () => {
@@ -1623,6 +1734,30 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     expect(output).toContain(
       '[Totem] Non-interactive mode — post-merge auto-sync hook not installed. Run `totem install-hooks` to add it.',
     );
+    // The artifacts, not just the log lines (leg D5): the two enforcement hooks
+    // actually landed and the declined post-merge hook actually did not.
+    const gitHooksDir = path.join(tmpDir, '.git', 'hooks');
+    expect(fs.existsSync(path.join(gitHooksDir, 'pre-commit'))).toBe(true);
+    expect(fs.existsSync(path.join(gitHooksDir, 'pre-push'))).toBe(true);
+    expect(fs.existsSync(path.join(gitHooksDir, 'post-merge'))).toBe(false);
+  }, 60000);
+
+  it('surfaces the coexistence disclosure through the summary on a canonical .cjs (leg D4)', async () => {
+    // Kills the summary-filter mutant: an `exists`-action result carrying an override
+    // must reach the rendered summary, not just the installer's return value.
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.js'), '// my own hook\n', 'utf-8');
+    fs.writeFileSync(path.join(hooksDir, 'SessionStart.cjs'), GEMINI_SESSION_START, 'utf-8');
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({});
+
+    expect(stderr.join('\n')).toContain('coexists with the managed SessionStart.cjs');
   }, 60000);
 
   it('runs to completion with --yes on a TTY', async () => {
