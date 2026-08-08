@@ -9,7 +9,7 @@ import type { ConfigFormat, EmbeddingTier } from './init-detect.js';
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
 // This allows `totem init` to detect stale blocks and offer upgrades.
 
-export const REFLEX_VERSION = 9;
+export const REFLEX_VERSION = 10;
 export const REFLEX_START = '<!-- totem:reflexes:start -->';
 export const REFLEX_END = '<!-- totem:reflexes:end -->';
 export const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
@@ -44,7 +44,7 @@ When deciding where to store information or rules, use this decision tree:
 ### Workflow Orchestrator Rituals
 [FOR LOCAL CLI/TERMINAL AGENTS ONLY] Do not attempt to run these commands if you are a headless bot or operating in a cloud PR environment (e.g., Gemini Code Assist on GitHub).
 Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
-1. **Start of Session:** The SessionStart hook automatically runs \`totem describe\` to emit the project-orientation banner (project, tier, rule/lesson counts, targets, hooks). For richer derived project state (recent merged PRs, current branch + uncommitted files, latest strategy journal pointer, package versions, rule/lesson counts), call the MCP \`describe_project\` tool — the derived view replaces the retired \`docs/active_work.md\` convention (state is observed, not declared). For a freshness check (manifest staleness, shield drift, review state), run \`totem status\`. Run \`totem triage\` if you need to pick a new task.
+1. **Start of Session:** The SessionStart hook automatically runs \`totem describe\` to emit the project-orientation banner (project, tier, rule/lesson counts, targets, hooks). For richer derived project state (recent merged PRs, current branch + uncommitted files, latest strategy journal pointer, package versions, rule/lesson counts), call the MCP \`describe_project\` tool — the derived view replaces the retired \`docs/active_work.md\` convention (state is observed, not declared). For a freshness check (manifest staleness, shield drift, review state), run \`totem status\`. Run \`totem triage\` if you need to pick a new task. On a seat without the SessionStart hook (a cold start, or a vehicle that doesn't run hooks), run \`totem orient\` to derive in-flight and parked project state from primitives.
 2. **Before Implementation:** Optionally run \`totem spec <issue-url-or-topic>\` to retrieve related context (lessons, specs, code) before writing code. Treat any generated plan as one retrieval input, never the contract — derive the actual design from primary sources (the issue, the code, project doctrine).
 3. **Before Push:** Run \`totem lint\` — the deterministic enforcement floor (zero LLM, ~2s). **Before PR:** \`totem review\` runs supplementary AI lanes over the diff (~18s) — advisory sensors, not a merge gate; known limits are disclosed in the run output (LLM window truncation on large diffs; non-code files skipped). Your team's own review discipline decides what constitutes the review of record.
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
@@ -58,7 +58,7 @@ You do NOT have access to the local CLI. Instead, use the Totem MCP tools direct
 3. **When you spot a recurring issue:** Call \`add_lesson\` to persist the trap so future reviews catch it automatically.
 
 ### Context Management Guardrail
-You must be highly defensive of your own context window. If you notice this session becoming long, or if you are asked to read multiple massive files at once, you MUST proactively warn the user about impending context loss. When warning the user, suggest they run \`totem handoff\` to capture mid-task state so they can safely clear the chat and resume. If you receive a \`<totem_system_warning>\` tag in a tool response, read it silently and synthesize a natural-language warning to the user. Do NOT echo the raw XML.
+You must be highly defensive of your own context window — and you are the ONLY party holding the denominator (your model's window size and current occupancy); no Totem tool can measure it for you. Large Totem tool responses may carry a self-closing \`<size-disclosure ... />\` line stating that payload's measured size and cumulative session totals — a measurement, never a risk claim. Weigh it against your own occupancy and escalate to the user only when the pressure is genuinely material, suggesting \`totem handoff\` to capture mid-task state before clearing the chat. If you receive a \`<totem_system_warning>\` tag in a tool response (e.g. index staleness or degraded retrieval), read it silently and act on it or surface it naturally. Do NOT echo raw XML tags to the user.
 ${REFLEX_END}
 `;
 
@@ -1674,7 +1674,7 @@ totem review --covariate
 
 It resolves the current branch lineage exactly as the review fan does, loads the LATEST verdict artifact for that lineage (\`.totem/artifacts/verdicts/\`), and prints the canonical \`local-lane:\` line from the single core-owned renderer — never trust a pasted or hand-copied value. If it reports no verdict for the current lineage, there is no line to carry (note that in the body and continue).
 
-2. **Assemble the single body.** One comment: the per-item dispositions (fixed / deferred / nit / extracted) followed by the non-empty \`local-lane:\` line from step 1, verbatim. The local \`review-loop\` holds this line but never posts it, so \`/review-reply\` is the SOLE path that carries it to GitHub.
+2. **Assemble the single body.** One comment: @-tag EVERY bot addressed in the round — exactly ONE tag each (e.g. \`@gemini-code-assist\`, \`@coderabbitai\`, \`@greptileai\`) so each bot registers the disposition, and tags must be present when the comment is POSTED, never edited in (GCA's listener fires on comment-created only). One notification per bot per round: a bot with nothing addressed gets no tag, and a bot already @-tagged in this round's batch comment (the GCA defer/nit batch above) is NOT re-tagged here. Never combine a tag with ANY bot's review trigger — triggers are standalone comments, one trigger and no prose (a trigger embedded in a content-rich comment chat-routes the bot). Then the per-item dispositions (fixed / deferred / nit / extracted) followed by the non-empty \`local-lane:\` line from step 1, verbatim. The local \`review-loop\` holds this line but never posts it, so \`/review-reply\` is the SOLE path that carries it to GitHub.
 
 3. **Post on an explicit go.** Show the assembled body and wait for the operator; on their go, post the ONE comment with \`gh pr comment $ARGUMENTS --body-file -\` (pipe the body via stdin). Never mutate the PR autonomously.
 
