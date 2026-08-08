@@ -285,11 +285,11 @@ export function findUnownedHookSibling(cjsPath: string): string | undefined {
   if (!cjsPath.endsWith('.cjs')) return undefined;
   const siblingPath = `${cjsPath.slice(0, -'.cjs'.length)}.js`;
   if (!fs.existsSync(siblingPath)) return undefined;
+  // totem-context: intentional cleanup — an unreadable sibling cannot be proven totem-owned, so it withholds the scaffold (non-destructive) rather than aborting init.
   try {
     const existing = fs.readFileSync(siblingPath, 'utf-8');
     if (markerOpensFile(existing, TOTEM_FILE_MARKER)) return undefined;
-    // totem-context: intentional cleanup — an unreadable sibling cannot be proven
-    // totem-owned, so it withholds the scaffold rather than aborting init.
+    // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
   } catch {
     // fall through to withhold
   }
@@ -693,10 +693,10 @@ function findMcpPackageRegistration(servers: Record<string, unknown>): string | 
       return name;
     }
     let serialized: string | undefined;
+    // totem-context: intentional cleanup — a non-serializable entry (a toJSON that throws) is simply not a match; dedup must never abort the init scaffold.
     try {
       serialized = JSON.stringify(entry);
-      // totem-context: intentional cleanup — a non-serializable entry (a toJSON that
-      // throws) is simply not a match; dedup must never abort the init scaffold.
+      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch {
       serialized = undefined;
     }
