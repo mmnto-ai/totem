@@ -3000,6 +3000,22 @@ describe('checkEstate — wt-registry roots', () => {
     expect(result.gateExempt).toBe(true);
   });
 
+  it('names BOTH files in the remediation when both registries are unreadable', async () => {
+    // Round 3, CR inline: the sync-registry arm wins precedence and its
+    // message carries wtNote(), but a remediation naming only registry.json
+    // would leave the next run warning again on the file it never mentioned.
+    fs.mkdirSync(path.join(estateHome, '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(estateHome, '.totem', 'registry.json'), '{ not json', 'utf-8');
+    writeWtRegistry('{ not json');
+    const result = await checkEstate();
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('Registry unreadable');
+    expect(result.message).toContain('Cannot read worktree registry');
+    expect(result.remediation).toContain('registry.json');
+    expect(result.remediation).toContain('worktrees.json');
+    expect(result.gateExempt).toBe(true);
+  });
+
   it('demotes an otherwise-clean scan to warn when worktrees.json is unreadable', async () => {
     // Round 2, CR outside-diff finding, clean-arm half: the scan ran (one
     // registry entry routes past the short-circuit; a missing repo path needs

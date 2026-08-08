@@ -264,6 +264,12 @@ export async function addWorktreeEntry(args: {
     if (!file.roots.some((existing) => foldCase(path.resolve(existing)) === foldCase(root))) {
       file.roots.push(root);
     }
+    // Overwrite of an occupied key is BY DESIGN, not an oversight: the only
+    // path that reaches here with an existing entry is a re-create over a
+    // STALE record (create refuses when the target directory exists, so the
+    // dir is gone and the old entry describes nothing). Replacing it is the
+    // recovery; callers must not assume exclusive-write semantics. The
+    // delete side is what carries identity (expectCreatedAt guard below).
     file.worktrees[path.resolve(args.worktreePath)] = args.entry;
     writeAtomic(filePath, file);
   } finally {

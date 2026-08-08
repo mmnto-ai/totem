@@ -2063,7 +2063,13 @@ export async function checkEstate(
           name,
           status: 'warn',
           message: `Registry unreadable — no repos scanned: ${registryWarnings.map(flatten).join(' | ')}${wtNote()}`,
-          remediation: 'Repair ~/.totem/registry.json, then run `totem doctor --estate`.',
+          // The message carries wtNote() when BOTH files are broken, so the
+          // remediation must name both too — telling the user to repair only
+          // registry.json would leave the next run warning again (round 3, CR).
+          remediation:
+            wtWarnings.length > 0
+              ? 'Repair ~/.totem/registry.json and ~/.totem/worktrees.json, then run `totem doctor --estate`.'
+              : 'Repair ~/.totem/registry.json, then run `totem doctor --estate`.',
           gateExempt: true,
         };
       }
