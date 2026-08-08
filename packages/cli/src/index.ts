@@ -136,7 +136,7 @@ program
   )
   .option(
     '-y, --yes',
-    'Answer every prompt with its default (also implied when stdin is not a TTY)',
+    'Answer every prompt with its default and read nothing from stdin (also implied when stdin is not a TTY)',
   )
   .action(
     async (options: {

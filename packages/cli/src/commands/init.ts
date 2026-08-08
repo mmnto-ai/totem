@@ -271,15 +271,18 @@ export function wirePreparePackageJson(pkgPath: string): {
 // --- Gemini CLI hook installer ---
 
 /**
- * Whether a managed `<stem>.cjs` vendor hook must be WITHHELD because the consumer
- * owns a custom `<stem>.js` sibling (mmnto-ai/totem#2601 — the strategy#482 incident:
- * the generic template dropped beside a repo's own SessionStart.js, double-firing or
- * regressing orientation depending on Gemini's hook discovery). Ownership is the same
- * positional gate `scaffoldFile` and `migrateLegacyGeminiHooks` use, so a marker-headed
- * sibling — the legacy `.js`→`.cjs` migration case — is never blocked here; only an
- * UNOWNED sibling is. A sibling that cannot be read is not provably totem-owned and
- * takes the withholding arm (non-destructive posture, never a crash).
- * Returns the sibling's basename when the scaffold must be withheld.
+ * Whether a consumer owns a custom `<stem>.js` sibling of a managed `<stem>.cjs` vendor
+ * hook (mmnto-ai/totem#2601 — the strategy#482 incident: the generic template dropped
+ * beside a repo's own SessionStart.js, double-firing or regressing orientation depending
+ * on Gemini's hook discovery). Ownership is the same positional gate `scaffoldFile` and
+ * `migrateLegacyGeminiHooks` use, so a marker-headed sibling — the legacy `.js`→`.cjs`
+ * migration case — never reports here; only an UNOWNED sibling does. A sibling that
+ * cannot be read is not provably totem-owned and reports (non-destructive posture,
+ * never a crash). Returns the sibling's basename when one is present.
+ *
+ * This is a PREDICATE, not the policy: whether a report withholds the scaffold or only
+ * discloses a coexistence depends on whether the managed `.cjs` already exists — see
+ * `installGeminiHooks`, the sole caller.
  */
 export function findUnownedHookSibling(cjsPath: string): string | undefined {
   if (!cjsPath.endsWith('.cjs')) return undefined;
@@ -328,10 +331,16 @@ export async function installGeminiHooks(cwd: string): Promise<HookInstallerResu
   for (const { rel, content, marker, endMarker } of files) {
     const filePath = path.join(cwd, rel);
     // Vendor-hook managed-marker guard (mmnto-ai/totem#2601): a custom same-stem `.js`
-    // the consumer owns suppresses the managed `.cjs` entirely — the drop is disclosed,
-    // never silent, because a withheld hook otherwise reads as an installed one.
+    // the consumer owns withholds the managed `.cjs` — the drop is disclosed, never
+    // silent, because a withheld hook otherwise reads as an installed one.
+    //
+    // The withhold is scoped to the FRESH path (no `.cjs` on disk yet), where it is what
+    // prevents the twin from being introduced. Once the `.cjs` EXISTS the twin is already
+    // live: withholding there would suppress drift-repair of a file that fires anyway and
+    // would report "not installed" about an installed hook. That case scaffolds normally
+    // and discloses the coexistence plus the two ways out.
     const unownedSibling = findUnownedHookSibling(filePath);
-    if (unownedSibling !== undefined) {
+    if (unownedSibling !== undefined && !fs.existsSync(filePath)) {
       results.push({
         file: rel,
         action: 'skipped',
@@ -346,6 +355,11 @@ export async function installGeminiHooks(cwd: string): Promise<HookInstallerResu
     results.push({
       file: rel,
       action: result.action === 'refreshed' ? 'merged' : result.action,
+      ...(unownedSibling !== undefined
+        ? {
+            summaryActionOverride: `Custom ${unownedSibling} coexists with the managed ${path.basename(filePath)} — both may fire; remove one (delete the managed .cjs to keep yours, or your .js to keep totem's)`,
+          }
+        : {}),
       ...(result.err ? { err: result.err } : {}),
     });
   }
@@ -359,7 +373,7 @@ export async function installGeminiHooks(cwd: string): Promise<HookInstallerResu
   // drift-repair machinery.
   const { migrateGeminiHookRegistration, migrateLegacyGeminiHooks } =
     await import('./install-hooks.js');
-  for (const { file, action } of await migrateLegacyGeminiHooks(cwd)) {
+  for (const { file, action, reason } of await migrateLegacyGeminiHooks(cwd)) {
     if (action === 'migrated') {
       results.push({
         file,
@@ -367,6 +381,14 @@ export async function installGeminiHooks(cwd: string): Promise<HookInstallerResu
         // Named from the migrated artifact, not hardcoded — the legacy roster now
         // carries more than one pair.
         summaryActionOverride: `Migrated legacy Gemini ${path.basename(file)} → .cjs`,
+      });
+    } else if (action === 'skipped' && reason === 'unreadable-legacy') {
+      // The one non-migrated migration outcome init discloses: the path exists and
+      // could not be read at all, so the user is the only one who can resolve it.
+      results.push({
+        file,
+        action: 'skipped',
+        summaryActionOverride: `Skipped — legacy ${path.basename(file)} could not be read; left in place (remove or rename it to complete the .cjs migration)`,
       });
     }
   }
@@ -676,31 +698,99 @@ if (geminiTool) geminiTool.hookInstaller = installGeminiHooks;
 const MCP_PACKAGE = '@mmnto/mcp';
 
 /**
+ * Boundary-anchored name probe. A bare `includes('@mmnto/mcp')` also fires on
+ * `@mmnto/mcp-experimental` — a DIFFERENT package whose presence must not suppress the
+ * real registration. The lookahead rejects a following word char or hyphen; a `/`, a
+ * quote, a space, or end-of-string all still match (`@mmnto/mcp/dist/index.js`,
+ * `-y @mmnto/mcp`). Non-global, so it carries no `lastIndex` state across calls.
+ */
+const MCP_PACKAGE_RE = /@mmnto\/mcp(?![\w-])/;
+
+/**
+ * Whether a `command`/`args` string is shaped like a script path worth resolving: it
+ * carries a separator, or it names a `.js` file. Deliberately whole-string, not
+ * `path.basename` — the argument as written IS the path, and a bare `index.js` in the
+ * config's own directory is as resolvable as a nested one. Non-global, so `.test()`
+ * carries no `lastIndex` state.
+ */
+const SCRIPT_PATH_RE = /[/\\]|\.js$/;
+
+function looksLikeScriptPath(value: string): boolean {
+  return SCRIPT_PATH_RE.test(value);
+}
+
+/**
+ * The package name owning a resolved script: walk from the script's directory to the
+ * filesystem root and read the nearest `package.json`'s `name`. A `package.json` that
+ * names nothing (the `{"type":"module"}` dual-package shim inside a `dist/`) is not an
+ * identity, so the walk continues past it.
+ */
+function packageNameForScript(scriptPath: string): string | undefined {
+  let dir = path.dirname(scriptPath);
+  for (;;) {
+    const pkgPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      // totem-context: intentional cleanup — an unreadable/invalid package.json is not evidence of a DIFFERENT package, so the walk continues to the next parent; dedup must never abort the init scaffold.
+      try {
+        // `JSON.parse` also yields `null`, arrays, and scalars — checked explicitly
+        // (the wirePreparePackageJson posture) rather than left to throw into the catch.
+        const parsed: unknown = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        if (parsed !== null && typeof parsed === 'object') {
+          const { name } = parsed as { name?: unknown };
+          if (typeof name === 'string') return name;
+        }
+        // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+      } catch {
+        // fall through to the next parent
+      }
+    }
+    // `path.dirname` is a fixpoint at the filesystem root — that fixpoint ends the walk.
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+/**
  * Find an existing registration of the Totem MCP package under ANY entry name
  * (mmnto-ai/totem#2601). Dedup keys on the registered PACKAGE, not the entry name: a
  * consumer that registered `@mmnto/mcp` as `totem-dev` / `totem-strategy` (a `--cwd`
  * pin, a local path pin) must not collect a third duplicate `totem` entry on re-init.
- * Entry shapes are arbitrary across hosts (`command`/`args`, wrapper scripts, an
- * `env`-carried invocation), so the structured `command`/`args` probe falls through to
- * a whole-entry serialization scan — a mention of the package IS a registration.
+ *
+ * Two probes, both scoped to `command` and the string members of `args` — the only
+ * fields that can INVOKE anything. There is deliberately no whole-entry serialization
+ * scan: it false-positives on a prose mention in `env` and on `@mmnto/mcp-experimental`.
+ *
+ *   1. Name probe — {@link MCP_PACKAGE_RE} on each candidate string.
+ *   2. Path probe — a registration need not spell the package at all. This repo's own
+ *      `.mcp.json` runs `node ./packages/mcp/dist/index.js`; the path is resolved
+ *      against `baseDir` (the `.mcp.json`'s directory) and, when the file exists, the
+ *      owning package is read off disk via {@link packageNameForScript}.
+ *
+ * A path that does not resolve to an existing file is a stale pin, not a registration
+ * we can attribute — it falls through and init appends its own entry.
  */
-function findMcpPackageRegistration(servers: Record<string, unknown>): string | undefined {
+function findMcpPackageRegistration(
+  servers: Record<string, unknown>,
+  baseDir: string,
+): string | undefined {
   for (const [name, entry] of Object.entries(servers)) {
     if (entry === null || typeof entry !== 'object') continue;
     const { command, args } = entry as { command?: unknown; args?: unknown };
-    if (typeof command === 'string' && command.includes(MCP_PACKAGE)) return name;
-    if (Array.isArray(args) && args.some((a) => typeof a === 'string' && a.includes(MCP_PACKAGE))) {
-      return name;
+    const candidates: string[] = [];
+    if (typeof command === 'string') candidates.push(command);
+    if (Array.isArray(args)) {
+      for (const arg of args) if (typeof arg === 'string') candidates.push(arg);
     }
-    let serialized: string | undefined;
-    // totem-context: intentional cleanup — a non-serializable entry (a toJSON that throws) is simply not a match; dedup must never abort the init scaffold.
-    try {
-      serialized = JSON.stringify(entry);
-      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
-    } catch {
-      serialized = undefined;
+
+    if (candidates.some((candidate) => MCP_PACKAGE_RE.test(candidate))) return name;
+
+    for (const candidate of candidates) {
+      if (!looksLikeScriptPath(candidate)) continue;
+      const resolved = path.resolve(baseDir, candidate);
+      if (!fs.existsSync(resolved)) continue;
+      if (packageNameForScript(resolved) === MCP_PACKAGE) return name;
     }
-    if (serialized?.includes(MCP_PACKAGE)) return name;
   }
   return undefined;
 }
@@ -759,7 +849,8 @@ export function scaffoldMcpConfig(
     }
     // Package-level dedup runs after the name check so the `totem`-key skip keeps its
     // bare shape: `existingName` marks the different-name case the caller discloses.
-    const existingName = findMcpPackageRegistration(servers);
+    // Relative script pins in the config resolve against the config's own directory.
+    const existingName = findMcpPackageRegistration(servers, path.dirname(filePath));
     if (existingName !== undefined) {
       return { action: 'skipped', existingName };
     }
@@ -1571,10 +1662,16 @@ export default {
                 action:
                   result.summaryActionOverride ?? `Merged ${tool.name} hook into existing config`,
               });
-            } else if (result.action === 'skipped' && result.summaryActionOverride) {
-              // A skip an installer chose to DISCLOSE (mmnto-ai/totem#2601 vendor-hook
+            } else if (
+              (result.action === 'skipped' || result.action === 'exists') &&
+              result.summaryActionOverride
+            ) {
+              // A no-op an installer chose to DISCLOSE (mmnto-ai/totem#2601 vendor-hook
               // guard). Bare `skipped`/`exists` stay silent; an override means the user
-              // must know why the file was left alone.
+              // must know why the file was left alone. `exists` carries one too: a
+              // custom `.js` coexisting with an already-canonical managed `.cjs` is the
+              // same live double-fire hazard as the drift-repaired case, and the fact
+              // that nothing needed rewriting must not silence it.
               summary.push({ file: result.file, action: result.summaryActionOverride });
             }
           }

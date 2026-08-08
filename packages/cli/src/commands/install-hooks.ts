@@ -1260,14 +1260,17 @@ export interface GeminiHookMigrationResult {
   /** `migrated` — successor materialized + legacy removed; `declined` — drifted
    *  unbounded, awaits `--force`; `skipped` — user-owned file, never touched. */
   action: 'migrated' | 'declined' | 'skipped';
-  /** Present when the block was caused by the file at the SUCCESSOR path
-   *  (mmnto-ai/totem#2488). `user-owned-successor` — no Totem marker there; the
-   *  migration never overwrites a user's successor (even under `--force`), both
-   *  files stay. `drifted-successor` — marker-headed but unbounded (user content
-   *  past the end marker); awaits `--force`, both files stay. Disclosure happens
-   *  on the `totem hook install` summary path (what `prepare` runs); the `totem
-   *  init` path surfaces only `migrated` results, like every non-migrated action. */
-  reason?: 'user-owned-successor' | 'drifted-successor';
+  /** Why a non-`migrated` action was taken, when the bare action is not enough.
+   *  `user-owned-successor` / `drifted-successor` name a block caused by the file at
+   *  the SUCCESSOR path (mmnto-ai/totem#2488): no Totem marker there — the migration
+   *  never overwrites a user's successor (even under `--force`); or marker-headed but
+   *  unbounded (user content past the end marker) — awaits `--force`. Both files stay
+   *  either way. `unreadable-legacy` names a legacy candidate that could not be READ
+   *  (a directory sharing the name, a permissions failure): unprovable ownership is
+   *  the skip arm, never a crash (mmnto-ai/totem#2601). The `totem init` path surfaces
+   *  `migrated` and `unreadable-legacy`; the rest are disclosed on the `totem hook
+   *  install` summary path (what `prepare` runs). */
+  reason?: 'user-owned-successor' | 'drifted-successor' | 'unreadable-legacy';
 }
 
 /**
@@ -1276,6 +1279,11 @@ export interface GeminiHookMigrationResult {
  * totem-owned `legacyRel`. Ownership gate mirrors {@link regenerateManagedSessionHooks}:
  *
  *   - Legacy missing                     → nothing to migrate (omitted from results).
+ *   - Legacy present but UNREADABLE      → `skipped` + `reason: 'unreadable-legacy'`
+ *                                          (mmnto-ai/totem#2601): a directory sharing
+ *                                          the name reads EISDIR, and an ownership gate
+ *                                          that crashes init mid-run is worse than one
+ *                                          that declines and says so.
  *   - Marker does not OPEN the file      → `skipped` even under `--force` (a user file
  *                                          that merely shares the name is never touched).
  *   - Marker + bounded totem-owned whole file, OR `--force` → materialize successor +
@@ -1315,7 +1323,15 @@ export async function migrateLegacyGeminiHooks(
     const legacyPath = path.join(cwd, ...legacyRel.split('/'));
     if (!fs.existsSync(legacyPath)) continue;
 
-    const existing = fs.readFileSync(legacyPath, 'utf-8');
+    let existing: string;
+    // totem-context: intentional cleanup — a legacy candidate that cannot be read (a DIRECTORY sharing the name → EISDIR, a permissions failure) is not a provably totem-owned artifact to migrate; it takes the same skip arm as a user-owned file, disclosed via `reason`, because the ownership gate must never crash init mid-run.
+    try {
+      existing = fs.readFileSync(legacyPath, 'utf-8');
+      // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+    } catch {
+      results.push({ file: legacyRel, action: 'skipped', reason: 'unreadable-legacy' });
+      continue;
+    }
     if (!markerOpensFile(existing, marker)) {
       results.push({ file: legacyRel, action: 'skipped' });
       continue;

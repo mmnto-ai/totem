@@ -115,8 +115,18 @@ program
   .option('--pilot', 'Enable pilot mode — hooks warn instead of block during initial adoption')
   .option('--strict', 'Use strict enforcement tier (spec-required + review gate for agents)')
   .option('--global', 'Create a personal profile in ~/.totem/ for use across all projects')
+  .option(
+    '-y, --yes',
+    'Answer every prompt with its default and read nothing from stdin (also implied when stdin is not a TTY)',
+  )
   .action(
-    async (options: { bare?: boolean; pilot?: boolean; strict?: boolean; global?: boolean }) => {
+    async (options: {
+      bare?: boolean;
+      pilot?: boolean;
+      strict?: boolean;
+      global?: boolean;
+      yes?: boolean;
+    }) => {
       try {
         const { initCommand } = await import('./commands/init.js');
         await initCommand({
@@ -124,6 +134,7 @@ program
           pilot: options.pilot,
           strict: options.strict,
           global: options.global,
+          yes: options.yes,
         });
       } catch (err) {
         handleError(err);
