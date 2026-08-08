@@ -486,7 +486,7 @@ export const TotemConfigSchema = z.object({
   /** Optional: additional glob patterns to exclude from deterministic shield scanning (merged with ignorePatterns) */
   shieldIgnorePatterns: z.array(z.string()).optional().default([]),
 
-  /** Character count threshold for MCP context payload warnings (~4 chars ≈ 1 token). Default: 40,000 (~10k tokens). */
+  /** Character count above which `search_knowledge` appends its `<size-disclosure>` measurement envelope — a size disclosure, not a risk claim (#2600) (~4 chars ≈ 1 token). Default: 40,000 (~10k tokens). */
   contextWarningThreshold: z.number().int().positive().default(40_000),
 
   /**

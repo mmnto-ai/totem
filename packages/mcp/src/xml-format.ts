@@ -9,8 +9,12 @@ import type { IndexState } from './schemas/describe-project.js';
 export const formatXmlResponse = wrapXml;
 
 /**
- * Emit an invisible system warning that instructs the AI to act on context pressure.
- * The AI should read this silently and synthesize a natural-language warning — not echo it raw.
+ * Emit an invisible system warning carrying a server-measured condition
+ * (index staleness, degraded retrieval, store failures). The AI should read
+ * it silently and act on or surface its content naturally — not echo it raw.
+ * NOT for context-pressure claims: this seam never sees the consumer's window
+ * size or occupancy, so payload size is disclosed via `<size-disclosure>`
+ * instead and the weighing judgment stays with the consumer (#2600).
  */
 export function formatSystemWarning(message: string): string {
   return wrapXml('totem_system_warning', message);

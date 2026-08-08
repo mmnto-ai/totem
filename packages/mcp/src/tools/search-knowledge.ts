@@ -733,7 +733,11 @@ async function performSearch(
       retrievalEnvelope: emptyEnvelope,
       body,
     }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
-    return { content: [{ type: 'text' as const, text }] };
+    return {
+      content: [
+        { type: 'text' as const, text: withSizeDisclosure(text, config.contextWarningThreshold) },
+      ],
+    };
   }
 
   // Floor fires ONLY when a real relevance signal exists — a pure-FTS corpus
@@ -783,7 +787,11 @@ async function performSearch(
         retrievalEnvelope: belowFloorEnvelope,
         body,
       }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
-      return { content: [{ type: 'text' as const, text }] };
+      return {
+        content: [
+          { type: 'text' as const, text: withSizeDisclosure(text, config.contextWarningThreshold) },
+        ],
+      };
     }
 
     // Mixed batch: return the floor-exempt keyword hits, disclose the
@@ -805,7 +813,11 @@ async function performSearch(
       retrievalEnvelope: mixedEnvelope,
       body,
     }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
-    return { content: [{ type: 'text' as const, text }] };
+    return {
+      content: [
+        { type: 'text' as const, text: withSizeDisclosure(text, config.contextWarningThreshold) },
+      ],
+    };
   }
 
   const okEnvelope = formatRetrievalEnvelope({
@@ -818,7 +830,7 @@ async function performSearch(
   const formatted = results.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
 
   const knowledgeBody = formatXmlResponse('knowledge', formatted);
-  let text = composeResponseText({
+  const text = composeResponseText({
     fallbackWarning,
     runtimeWarning,
     staleWarning,
@@ -827,17 +839,51 @@ async function performSearch(
     body: knowledgeBody,
   }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
 
-  // Append a system warning when the payload is large enough to risk context pressure
-  if (text.length > config.contextWarningThreshold) {
-    text +=
-      '\n\n' +
-      formatSystemWarning(
-        'You just ingested a large amount of context. You may be at risk of forgetting earlier instructions. ' +
-          'Consider warning the user about context pressure and suggest running `totem handoff` to capture mid-session state.',
-      );
-  }
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: withSizeDisclosure(text, config.contextWarningThreshold),
+      },
+    ],
+  };
+}
 
-  return { content: [{ type: 'text' as const, text }] };
+/**
+ * Per-process accumulation behind the `<size-disclosure>` envelope (#2600).
+ * "Session" here is the MCP server process's lifetime — the only scope this
+ * seam can actually measure. Exported so tests can reset between cases.
+ */
+export const sessionPayload = { chars: 0, calls: 0 };
+
+/** The config JSDoc's stated approximation: ~4 chars ≈ 1 token. */
+const APPROX_CHARS_PER_TOKEN = 4;
+
+/**
+ * Count every response toward the session totals and, when THIS response
+ * crosses `contextWarningThreshold`, append a self-closing measurement
+ * envelope (house style of `<index-meta>` / `<retrieval-envelope>`):
+ *
+ *   `<size-disclosure chars="…" approxTokens="…" sessionChars="…" sessionCalls="…" />`
+ *
+ * A measurement with NO risk claim: this seam never sees the consumer's
+ * model, window size, or occupancy, so the context-pressure warning it
+ * replaces was denominator-blind by construction (live-falsified at 15%
+ * occupancy on a 1M-window seat, #2600). The weighing judgment lives with
+ * the only party holding the denominator — the consumer, per the generated
+ * CLAUDE.md Context Management Guardrail (reflex v10, #2599). Attribute
+ * values are all numerals, so no XML escaping is required.
+ */
+function withSizeDisclosure(text: string, thresholdChars: number): string {
+  sessionPayload.calls += 1;
+  sessionPayload.chars += text.length;
+  if (text.length <= thresholdChars) return text;
+  const approxTokens = Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
+  return (
+    text +
+    `\n\n<size-disclosure chars="${text.length}" approxTokens="${approxTokens}" ` +
+    `sessionChars="${sessionPayload.chars}" sessionCalls="${sessionPayload.calls}" />`
+  );
 }
 
 /**
