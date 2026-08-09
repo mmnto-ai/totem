@@ -11,9 +11,11 @@ import {
   resolveEjectHooksContext,
   scrubPostCheckoutHook,
   scrubPostMergeHook,
+  scrubReflexFiles,
 } from './eject.js';
 import {
   AI_PROMPT_BLOCK,
+  REFLEX_END,
   REFLEX_START,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
@@ -972,5 +974,104 @@ describe('ejectCommand git-hook resolution (mmnto-ai/totem#2426)', () => {
     expect(errorOutput()).toContain('git hooks directory could not be resolved');
 
     cleanTmpDir(dir);
+  });
+});
+
+// ─── scrubReflexFiles — pairing, residue, legacy boundary ─────────────
+// Direct-drive summary-contract tests from the mmnto-ai/totem#2602
+// falsification round: END-anchored pairing, the removal loop, residue
+// reporting, and the legacy next-H2 boundary.
+
+describe('scrubReflexFiles — marker pairing, residue, and legacy boundary', () => {
+  let cwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(cwd);
+  });
+
+  function freshSummary(): EjectSummary {
+    return { removed: [], scrubbed: [], skipped: [] };
+  }
+
+  function write(rel: string, content: string): string {
+    const p = path.join(cwd, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, content, 'utf-8');
+    return p;
+  }
+
+  it('an orphan START above a complete pair never widens the span — content between them survives', async () => {
+    // The orphan head is exactly the corrupt state the pre-fix eject produced;
+    // a later re-init appended a fresh complete block below it (upgradeReflexes
+    // Case 3). First-occurrence pairing deleted everything between the orphan
+    // and the real block's END.
+    const orphanHead =
+      '# Head\n\n' +
+      REFLEX_START +
+      '\n<!-- totem:reflexes:version:9 -->\n\n## My Custom Section\n\nDo not delete this!\n';
+    const p = write('CLAUDE.md', orphanHead + AI_PROMPT_BLOCK);
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe(orphanHead);
+    expect(summary.scrubbed).toEqual(['CLAUDE.md (marker residue remains — remove manually)']);
+  });
+
+  it('double-injection damage clears — both complete blocks removed, none left behind a green line', async () => {
+    const p = write('CLAUDE.md', '# Head\n' + AI_PROMPT_BLOCK + AI_PROMPT_BLOCK);
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe('# Head\n');
+    expect(summary.scrubbed).toEqual(['CLAUDE.md']);
+  });
+
+  it('inverted markers (END above START) are residue: file byte-untouched and reported', async () => {
+    const corrupt = '# Head\n\n' + REFLEX_END + '\nmiddle\n' + REFLEX_START + '\n';
+    const p = write('CLAUDE.md', corrupt);
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe(corrupt);
+    expect(summary.skipped).toEqual([
+      'CLAUDE.md (reflex marker residue — not scrubbed; remove manually, else init keeps reading the file as current)',
+    ]);
+  });
+
+  it('legacy block is bounded at the next non-Totem H2, not EOF — user content below survives', async () => {
+    const p = write(
+      'CLAUDE.md',
+      '# My Project\n\nSome instructions.\n\n## Totem AI Integration (Auto-Generated)\nblock body\n\n## My Custom Section\n\nDo not delete this!\n',
+    );
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe(
+      '# My Project\n\nSome instructions.\n\n## My Custom Section\n\nDo not delete this!\n',
+    );
+    expect(summary.scrubbed).toEqual(['CLAUDE.md']);
+  });
+
+  it('a bare legacy heading in a post-marker-era roster file is user-authored — byte-untouched', async () => {
+    // GEMINI.md joined the tool table after markers shipped, so a totem-written
+    // marker-less block there is impossible; heading-to-EOF on it could only
+    // ever eat a user's hand-authored section.
+    const userAuthored =
+      '# Gemini notes\n\n## Totem AI Integration (Auto-Generated)\nI hand-copied this section.\n';
+    const p = write('GEMINI.md', userAuthored);
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe(userAuthored);
+    expect(summary.skipped).toEqual(['GEMINI.md (no Totem block)']);
   });
 });
