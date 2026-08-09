@@ -12,9 +12,6 @@ const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 // skills `<!-- [totem] auto-generated … -->` — the first-line gate matches both.
 const TOTEM_FILE_MARKER = '[totem] auto-generated';
 
-/** Files that may have AI reflex blocks appended by `totem init`. */
-const REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
-
 /** Files scaffolded by `totem init` that are fully owned by Totem. */
 const TOTEM_SCAFFOLDED_FILES = [
   // Current (BeforeTool: mmnto-ai/totem#2481; SessionStart: mmnto-ai/totem#2488) +
@@ -483,31 +480,153 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
   }
 }
 
+/** Reflex files that predate the marker era and may carry a v1 marker-less
+ *  block. REFLEX_START shipped before GEMINI.md / .junie/guidelines.md /
+ *  .github/copilot-instructions.md joined the tool table, so on those files a
+ *  bare legacy heading can only be user-authored — never scrubbed.
+ *  `.gemini/gemini.md` is the RETIRED pre-marker Gemini target (replaced by
+ *  GEMINI.md when the tool table landed): init no longer injects there, but an
+ *  old block can still be sitting in it, so eject still visits it. */
+const LEGACY_REFLEX_FILES = ['CLAUDE.md', '.gemini/gemini.md', '.cursorrules'];
+
+/** The alt heading of the oldest legacy block shape (pre-LEGACY_SENTINEL). */
+const LEGACY_ALT_HEADING = '## Totem Memory Reflexes';
+
 /**
  * Remove the AI Integration block appended by `totem init` to reflex files.
+ *
+ * Exported for the summary-contract tests (mmnto-ai/totem#2602).
  */
-function scrubReflexFiles(cwd: string, summary: EjectSummary): void {
-  for (const rel of REFLEX_FILES) {
+export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Promise<void> {
+  // Lazy-load both sources (the CLI command-file cold-start discipline
+  // scrubClaudeSkills documents). The roster is derived from the SAME tool
+  // table init injects through — the hand-mirrored pair this replaces silently
+  // missed GEMINI.md, .junie/guidelines.md, and .github/copilot-instructions.md
+  // (mmnto-ai/totem#2602).
+  const { AI_TOOLS } = await import('./init-detect.js');
+  const { LEGACY_SENTINEL, REFLEX_END, REFLEX_START } = await import('./init-templates.js');
+  const reflexFiles = AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile]));
+  // Visit the union: the roster init injects through today, plus the retired
+  // pre-marker targets that can still carry an old block (scoped fold round).
+  const scanFiles = [...new Set([...reflexFiles, ...LEGACY_REFLEX_FILES])];
+
+  for (const rel of scanFiles) {
     const filePath = path.join(cwd, rel);
-    if (!fs.existsSync(filePath)) continue;
+    // Per-file best-effort (the Tenet 4 eject cleanup carve-out every sibling
+    // scrubber honours): one unreadable/locked file degrades to a reported
+    // skip, never an abort that strands the remaining eject steps.
+    try {
+      if (!fs.existsSync(filePath)) continue;
 
-    const content = fs.readFileSync(filePath, 'utf-8');
-    // Match the block from the heading to end of file (init always appends at the end)
-    const primaryMarker = /\n*## Totem AI Integration \(Auto-Generated\)[\s\S]*$/;
-    const altMarker = /\n*## Totem Memory Reflexes[\s\S]*$/;
-    const activeMarker = primaryMarker.test(content)
-      ? primaryMarker
-      : altMarker.test(content)
-        ? altMarker
-        : null;
+      const content = fs.readFileSync(filePath, 'utf-8');
 
-    if (!activeMarker) {
-      summary.skipped.push(`${rel} (no Totem block)`);
-      continue;
+      // Marker era (v2+): remove each complete REFLEX_START..REFLEX_END span.
+      // The span AFTER an end marker is contractually user content
+      // (mmnto-ai/totem#1890; regen preserves it byte-exactly since
+      // mmnto-ai/totem#2599) — the pre-fix heading-to-EOF scrub deleted it and
+      // left an orphan start+version pair that detectReflexStatus reads as
+      // `current` (mmnto-ai/totem#2602). Pairing is END-anchored (lastIndexOf)
+      // so an orphan START from that same pre-fix damage sitting ABOVE a
+      // complete block never widens the removal span; the loop clears
+      // double-injection damage instead of leaving a live block behind a
+      // "Scrubbed" line.
+      let out = content;
+      let removedBlocks = 0;
+      // A leading orphan END (no START anywhere before it) must not halt the
+      // scan — later complete pairs are still totem's to remove, and the
+      // changeset contract is "loops until no complete pair remains". Skip
+      // past the orphan (it stays residue) and keep scanning; reset after a
+      // removal since indices shifted (GCA round on this PR).
+      let searchStart = 0;
+      for (;;) {
+        const endIdx = out.indexOf(REFLEX_END, searchStart);
+        if (endIdx === -1) break;
+        const startIdx = out.lastIndexOf(REFLEX_START, endIdx);
+        if (startIdx === -1) {
+          searchStart = endIdx + REFLEX_END.length;
+          continue;
+        }
+        // Single-owner seams, mirroring upgradeReflexes with the block replaced
+        // by nothing: the prefix keeps at most one trailing newline (the blank
+        // line above the block was AI_PROMPT_BLOCK's own leading `\n`), and the
+        // end marker's own line terminator leaves with the block. Seam
+        // whitespace normalizes exactly as regen would — a seam contract, not a
+        // byte-restore of the pre-init file.
+        let before = out.slice(0, startIdx).replace(/(?:\r?\n)*$/, '\n');
+        if (before === '\n') before = '';
+        let after = out.slice(endIdx + REFLEX_END.length);
+        if (/^[ \t\r\n]*$/.test(after)) {
+          after = '';
+        } else if (after.startsWith('\r\n')) {
+          after = after.slice(2);
+        } else if (after.startsWith('\n')) {
+          after = after.slice(1);
+        }
+        out = before + after;
+        removedBlocks++;
+        searchStart = 0;
+      }
+
+      // Marker residue = an unpaired START or END (either shape of the pre-fix
+      // corruption, or an inverted pair). The content around it cannot be
+      // attributed, so it is never scrubbed — and while a version marker
+      // remains, detectReflexStatus keeps reading the file as `current`
+      // (the mmnto-ai/totem#2602 corrupt-but-green state): healing is manual.
+      const residue = out.includes(REFLEX_START) || out.includes(REFLEX_END);
+
+      if (removedBlocks > 0) {
+        fs.writeFileSync(filePath, out, 'utf-8');
+        summary.scrubbed.push(residue ? `${rel} (marker residue remains — remove manually)` : rel);
+        continue;
+      }
+      if (residue) {
+        summary.skipped.push(
+          `${rel} (reflex marker residue — not scrubbed; remove manually, else init keeps reading the file as current)`,
+        );
+        continue;
+      }
+
+      // Legacy era (pre-marker v1), LEGACY_REFLEX_FILES only. init's own legacy
+      // upgrade (upgradeReflexes Case 2) bounds a v1 block at the next
+      // non-Totem H2, NOT at EOF — mirror it, or user content below a v1 block
+      // takes the same mmnto-ai/totem#2602 loss the marker path just fixed.
+      if (!LEGACY_REFLEX_FILES.includes(rel)) {
+        summary.skipped.push(`${rel} (no Totem block)`);
+        continue;
+      }
+      const primaryIdx = content.indexOf(LEGACY_SENTINEL);
+      const altIdx = content.indexOf(LEGACY_ALT_HEADING);
+      const legacyIdx =
+        primaryIdx === -1 ? altIdx : altIdx === -1 ? primaryIdx : Math.min(primaryIdx, altIdx);
+      if (legacyIdx === -1) {
+        summary.skipped.push(`${rel} (no Totem block)`);
+        continue;
+      }
+      const afterLegacy = content.slice(legacyIdx);
+      // init.ts upgradeReflexes Case 2's boundary, VERBATIM: the next H2 that
+      // is not a Totem AI Integration heading ends the block. No extra
+      // alternatives — both injector generations guarded on the absence of
+      // "Totem Memory Reflexes" before writing, so a second Totem-titled H2
+      // below the block can only be user-authored (scoped fold round).
+      const nextH2 = afterLegacy.match(/\r?\n## (?!Totem AI Integration)/);
+      const blockEnd = nextH2?.index !== undefined ? legacyIdx + nextH2.index : content.length;
+      let before = content.slice(0, legacyIdx).replace(/(?:\r?\n)*$/, '\n');
+      if (before === '\n') before = '';
+      let tail = content.slice(blockEnd);
+      // The boundary newline is seam-owned: with a non-empty prefix it supplies
+      // the blank-line separation; at byte 0 it would mint a leading blank line
+      // the seam rules forbid.
+      if (before === '') {
+        if (tail.startsWith('\r\n')) tail = tail.slice(2);
+        else if (tail.startsWith('\n')) tail = tail.slice(1);
+      }
+      fs.writeFileSync(filePath, before + tail, 'utf-8');
+      summary.scrubbed.push(rel);
+      // totem-context: intentional cleanup — per-file best-effort scrub; the failure is surfaced as a reported skip, never a silent drop.
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      summary.skipped.push(`${rel} (could not scrub: ${msg})`);
     }
-
-    fs.writeFileSync(filePath, content.replace(activeMarker, '\n'), 'utf-8');
-    summary.scrubbed.push(rel);
   }
 }
 
@@ -624,7 +743,7 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   await scrubClaudeSkills(cwd, summary);
 
   // 6. Scrub AI reflex blocks from markdown files
-  scrubReflexFiles(cwd, summary);
+  await scrubReflexFiles(cwd, summary);
 
   // 7. Delete artifacts
   deleteArtifacts(cwd, summary);
