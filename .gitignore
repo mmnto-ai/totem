@@ -21,9 +21,11 @@ target/
 *.code-workspace
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
-.gemini/settings.json
 
-# Gemini hooks & skills ARE committed (no secrets)
+# Gemini settings, hooks & skills ARE committed (hooks-only team file, no
+# secrets — mmnto-ai/totem-strategy#619 ruling 2026-07-22: minimal team-level
+# registration arms the write-guard at trust; per-developer content lives at
+# user-level ~/.gemini/settings.json)
 !.gemini/hooks/
 !.gemini/skills/
 .mcp.json
