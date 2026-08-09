@@ -12,9 +12,6 @@ const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 // skills `<!-- [totem] auto-generated … -->` — the first-line gate matches both.
 const TOTEM_FILE_MARKER = '[totem] auto-generated';
 
-/** Files that may have AI reflex blocks appended by `totem init`. */
-const REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
-
 /** Files scaffolded by `totem init` that are fully owned by Totem. */
 const TOTEM_SCAFFOLDED_FILES = [
   // Current (BeforeTool: mmnto-ai/totem#2481; SessionStart: mmnto-ai/totem#2488) +
@@ -486,13 +483,63 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
 /**
  * Remove the AI Integration block appended by `totem init` to reflex files.
  */
-function scrubReflexFiles(cwd: string, summary: EjectSummary): void {
-  for (const rel of REFLEX_FILES) {
+async function scrubReflexFiles(cwd: string, summary: EjectSummary): Promise<void> {
+  // Lazy-load both sources (the CLI command-file cold-start discipline
+  // scrubClaudeSkills documents). The roster is derived from the SAME tool
+  // table init injects through — the hand-mirrored pair this replaces silently
+  // missed GEMINI.md, .junie/guidelines.md, and .github/copilot-instructions.md
+  // (mmnto-ai/totem#2602).
+  const { AI_TOOLS } = await import('./init-detect.js');
+  const { REFLEX_END, REFLEX_START } = await import('./init-templates.js');
+  const reflexFiles = AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile]));
+
+  for (const rel of reflexFiles) {
     const filePath = path.join(cwd, rel);
     if (!fs.existsSync(filePath)) continue;
 
     const content = fs.readFileSync(filePath, 'utf-8');
-    // Match the block from the heading to end of file (init always appends at the end)
+
+    // Marker era (v2+): remove exactly the REFLEX_START..REFLEX_END span. The
+    // span AFTER the end marker is contractually user content (mmnto-ai/totem#1890;
+    // regen preserves it byte-exactly since mmnto-ai/totem#2599), so the
+    // heading-to-EOF fallback below must never see a marker-bearing file — it
+    // deleted that span and left an orphan start+version pair that
+    // detectReflexStatus reads as `current` (mmnto-ai/totem#2602).
+    const startIdx = content.indexOf(REFLEX_START);
+    const endIdx = content.indexOf(REFLEX_END);
+    if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
+      // Single-owner seams, mirroring upgradeReflexes with the block replaced
+      // by nothing: the prefix keeps at most one trailing newline (the blank
+      // line above the block was AI_PROMPT_BLOCK's own leading `\n`), and the
+      // end marker's own line terminator leaves with the block.
+      let before = content.slice(0, startIdx).replace(/(?:\r?\n)*$/, '\n');
+      if (before === '\n') before = '';
+      let after = content.slice(endIdx + REFLEX_END.length);
+      if (/^[ \t\r\n]*$/.test(after)) {
+        after = '';
+      } else if (after.startsWith('\r\n')) {
+        after = after.slice(2);
+      } else if (after.startsWith('\n')) {
+        after = after.slice(1);
+      }
+      fs.writeFileSync(filePath, before + after, 'utf-8');
+      summary.scrubbed.push(rel);
+      continue;
+    }
+
+    // Exactly one marker (or end before start): the block boundary is corrupt.
+    // Scrubbing heading-to-EOF here is the mmnto-ai/totem#2602 data-loss — the
+    // heading sits INSIDE the block, so everything below it to EOF would go.
+    // Leave the file byte-untouched and say so.
+    if (startIdx !== -1 || endIdx !== -1) {
+      summary.skipped.push(
+        `${rel} (reflex markers incomplete — not scrubbed; remove the block manually)`,
+      );
+      continue;
+    }
+
+    // Legacy era (pre-marker v1): the block was appended at end of file with no
+    // reserved user span, so heading-to-EOF is the correct boundary.
     const primaryMarker = /\n*## Totem AI Integration \(Auto-Generated\)[\s\S]*$/;
     const altMarker = /\n*## Totem Memory Reflexes[\s\S]*$/;
     const activeMarker = primaryMarker.test(content)
@@ -624,7 +671,7 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   await scrubClaudeSkills(cwd, summary);
 
   // 6. Scrub AI reflex blocks from markdown files
-  scrubReflexFiles(cwd, summary);
+  await scrubReflexFiles(cwd, summary);
 
   // 7. Delete artifacts
   deleteArtifacts(cwd, summary);

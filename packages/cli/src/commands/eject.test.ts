@@ -12,7 +12,12 @@ import {
   scrubPostCheckoutHook,
   scrubPostMergeHook,
 } from './eject.js';
-import { SKILL_MARKER_END, SKILL_MARKER_START } from './init-templates.js';
+import {
+  AI_PROMPT_BLOCK,
+  REFLEX_START,
+  SKILL_MARKER_END,
+  SKILL_MARKER_START,
+} from './init-templates.js';
 import { resolveGitRootForHookPath, resolveHooksDir } from './install-hooks.js';
 
 // Mock the git seam (mmnto-ai/totem#2426): eject now resolves the git root +
@@ -201,6 +206,67 @@ describe('ejectCommand', () => {
     expect(content).toContain('Some instructions.');
     expect(content).not.toContain('Totem AI Integration');
     expect(content).not.toContain('Memory Reflexes');
+  });
+
+  // ─── Marker-bounded reflex scrub (mmnto-ai/totem#2602) ─────────────
+  // The span AFTER the end marker is contractually user content (the same span
+  // regen preserves byte-exactly since the regen-idempotence fix). The
+  // heading-to-EOF scrub deleted it and left an orphan start+version pair.
+
+  it('preserves user content below the end marker and removes exactly the block (marker era)', async () => {
+    const claudePath = path.join(cwd, 'CLAUDE.md');
+    fs.writeFileSync(
+      claudePath,
+      '# CLAUDE.md\n' + AI_PROMPT_BLOCK + '\n## My Custom Section\n\nDo not delete this!\n',
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.readFileSync(claudePath, 'utf-8')).toBe(
+      '# CLAUDE.md\n\n## My Custom Section\n\nDo not delete this!\n',
+    );
+  });
+
+  it('scrubs a file that is nothing but the block down to empty (marker at byte 0)', async () => {
+    const claudePath = path.join(cwd, 'CLAUDE.md');
+    fs.writeFileSync(claudePath, AI_PROMPT_BLOCK);
+
+    await ejectCommand({ force: true });
+
+    expect(fs.readFileSync(claudePath, 'utf-8')).toBe('');
+  });
+
+  it('leaves a file with an ORPHAN start marker byte-untouched (never heading-to-EOF)', async () => {
+    // This is exactly the corrupt-but-green state the pre-fix eject left behind:
+    // start + version markers with no end marker, heading inside, user content
+    // below. A heading-to-EOF scrub here would re-enact the data loss.
+    const claudePath = path.join(cwd, 'CLAUDE.md');
+    const corrupt =
+      '# CLAUDE.md\n\n' +
+      REFLEX_START +
+      '\n<!-- totem:reflexes:version:10 -->\n\n## Totem AI Integration (Auto-Generated)\nblock body\n\n## My Custom Section\n\nDo not delete this!\n';
+    fs.writeFileSync(claudePath, corrupt);
+
+    await ejectCommand({ force: true });
+
+    expect(fs.readFileSync(claudePath, 'utf-8')).toBe(corrupt);
+  });
+
+  it('scrubs every tool-table reflex file, not just CLAUDE.md/.cursorrules', async () => {
+    // The roster is derived from AI_TOOLS — the pre-fix hardcoded pair silently
+    // skipped GEMINI.md, .junie/guidelines.md, and .github/copilot-instructions.md.
+    const rels = ['GEMINI.md', '.junie/guidelines.md', '.github/copilot-instructions.md'];
+    for (const rel of rels) {
+      const p = path.join(cwd, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, '# Head\n' + AI_PROMPT_BLOCK);
+    }
+
+    await ejectCommand({ force: true });
+
+    for (const rel of rels) {
+      expect(fs.readFileSync(path.join(cwd, ...rel.split('/')), 'utf-8'), rel).toBe('# Head\n');
+    }
   });
 
   it('deletes .lancedb, .totem, and totem.config.ts', async () => {
