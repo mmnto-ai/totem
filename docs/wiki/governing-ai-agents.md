@@ -21,11 +21,27 @@ Wire `totem status` into your agent's startup hook so the agent receives the pro
 Example hook for Gemini (`.gemini/hooks/SessionStart.cjs` — the `.cjs` extension is load-bearing: the body is CommonJS, and a repo whose `package.json` declares `"type": "module"` would resolve a bare `.js` as ESM and the hook would throw before emitting the briefing. Note Gemini CLI only executes hooks registered through a `settings.json` `hooks` entry (project, user, or system level — or an extension); there is no filename-convention discovery, so wire the script through one per the vendor's hooks docs):
 
 ```javascript
-const { execSync } = require('child_process');
-execSync('totem status', { stdio: ['ignore', 'inherit', 'inherit'] });
+const { spawnSync } = require('child_process');
+const run = spawnSync('totem status', {
+  shell: true,
+  timeout: 20000,
+  encoding: 'utf-8',
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+// The Totem CLI writes its banner to stderr — capture BOTH streams, and emit
+// the hookSpecificOutput envelope: interactive Gemini ingests SessionStart
+// output ONLY from hookSpecificOutput.additionalContext (plain stdout wraps
+// as systemMessage, which the interactive startup consumer never reads).
+const briefing = (run.stdout || '') + (run.stderr || '');
+process.stdout.write(
+  JSON.stringify({
+    systemMessage: briefing,
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: briefing },
+  }) + '\n',
+);
 ```
 
-The agent now sees whether the manifest is fresh, whether the review stamp is stale, and the current rule and lesson counts before taking any action.
+The agent now sees whether the manifest is fresh, whether the review stamp is stale, and the current rule and lesson counts before taking any action. (The managed hook `totem init` distributes does exactly this — with `totem describe` + `totem orient --session` as the briefing legs and fail-soft error handling; prefer it over hand-rolling.)
 
 ## 2. Deterministic Enforcement (Pre-Push Hook)
 

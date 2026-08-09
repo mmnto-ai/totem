@@ -171,7 +171,7 @@ export const GEMINI_SESSION_START = `// [totem] auto-generated — Gemini CLI Se
 // totem-strategy, totem-substrate, arhgap11, and totem-status, and
 // matches the Claude-side SessionStart hook scaffolded by this same init
 // pass (mmnto-ai/totem#1884).
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 
 // totem-status refresh-gh — GH-federation snapshot refresh (mmnto-ai/totem-status#127
 // C3 residual; tracking mmnto-ai/totem#2556). Spawn-and-forget, detached+unref, and
@@ -269,18 +269,32 @@ try {
 // systemMessage, which the interactive startup consumer never reads, so the
 // briefing was silently dropped in the primary dev flow even once registered
 // (mmnto-ai/totem#2613; leg-verified against @google/gemini-cli 0.54.4).
-// Capture both briefing legs and emit the same envelope the Claude twin uses
-// (.claude/hooks/session-context.mjs — the mmnto-ai/totem#2522 cold-boot
-// lesson). Per-leg 20s budgets keep the worst case inside Gemini's 60s
-// DEFAULT_HOOK_TIMEOUT — at the old 30s each, one pathological hang consumed
-// the entire hook budget.
+// systemMessage rides alongside the envelope: /clear renders ONLY
+// systemMessage (as a UI info item) and -p prints it to stderr — without it
+// those surfaces lose the briefing entirely; the interactive consumer ignores
+// systemMessage, so nothing double-renders.
+// The Totem CLI writes its banner and diagnostics to STDERR, so capture takes
+// BOTH streams — the same seam the Claude-side template documents; a
+// stdout-only capture silently drops the describe leg (mmnto-ai/totem#2613
+// falsification round).
+// Per-leg 20s budgets cut the measured worst-case process exit from 60s to
+// 40s against Gemini's 60s DEFAULT_HOOK_TIMEOUT. Residual (pre-existing): the
+// vendor keys hook completion on stream CLOSURE, so a hung grandchild holding
+// a pipe can stall the hook past any inner budget.
 let briefing = '';
 try {
-  briefing += execSync('totem describe', {
+  const describeRun = spawnSync('totem describe', {
+    shell: true,
     timeout: 20000,
     encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'inherit'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  // spawnSync sets .error (it does NOT throw) on a spawn-level failure.
+  if (describeRun.error) throw describeRun.error;
+  if (describeRun.status !== 0) {
+    throw new Error((describeRun.stderr || '').trim() || 'totem describe exited ' + describeRun.status);
+  }
+  briefing += (describeRun.stdout || '') + (describeRun.stderr || '');
 } catch (err) {
   // Fail-soft (exit 0, never blocks boot): the unavailable note rides the
   // envelope so it still reaches interactive context.
@@ -290,11 +304,17 @@ try {
 // totem orient --session — live derived in-flight state, ADDITIVE to describe
 // (mmnto-ai/totem#2044 PR-3). Own try/catch; orient --session is itself boot-safe.
 try {
-  briefing += execSync('totem orient --session', {
+  const orientRun = spawnSync('totem orient --session', {
+    shell: true,
     timeout: 20000,
     encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'inherit'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  if (orientRun.error) throw orientRun.error;
+  if (orientRun.status !== 0) {
+    throw new Error((orientRun.stderr || '').trim() || 'totem orient exited ' + orientRun.status);
+  }
+  briefing += (orientRun.stdout || '') + (orientRun.stderr || '');
 } catch (err) {
   // Boot-safe: orient is additive to describe; a failure never blocks session start —
   // surface a NON-fatal breadcrumb (matches the Claude-side hook) rather than swallow.
@@ -302,6 +322,7 @@ try {
 }
 
 process.stdout.write(JSON.stringify({
+  systemMessage: briefing,
   hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: briefing },
 }) + '\\n');
 ${TOTEM_FILE_END}
