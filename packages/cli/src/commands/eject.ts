@@ -576,9 +576,20 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
       // file that does not round-trip through UTF-8 cannot be scrubbed
       // without substituting U+FFFD into the KEPT user content, and rule 4
       // licenses no bak for tracked files — refuse with a reason instead.
+      // Ordering mirrors scrubHook (round 3, finding 3): block-presence FIRST
+      // (markers are ASCII and survive the lossy decode), so an untouched
+      // non-UTF-8 file keeps its honest "(no Totem block)" line instead of a
+      // false remove-the-block instruction.
       const rawContent = fs.readFileSync(filePath);
       const content = rawContent.toString('utf-8');
-      if (Buffer.compare(Buffer.from(content, 'utf-8'), rawContent) !== 0) {
+      const hasMarkerBlock = content.includes(REFLEX_START) || content.includes(REFLEX_END);
+      const hasLegacyBlock =
+        LEGACY_REFLEX_FILES.includes(rel) &&
+        (content.includes(LEGACY_SENTINEL) || content.includes(LEGACY_ALT_HEADING));
+      if (
+        (hasMarkerBlock || hasLegacyBlock) &&
+        Buffer.compare(Buffer.from(content, 'utf-8'), rawContent) !== 0
+      ) {
         summary.skipped.push(
           `${rel} (non-UTF-8 content — not scrubbed; remove the Totem block manually)`,
         );
@@ -720,6 +731,7 @@ function deleteArtifacts(cwd: string, summary: EjectSummary): void {
       try {
         fs.rmSync(dirPath, { recursive: true, force: true });
         summary.removed.push(`${dir}/`);
+        // totem-context: intentional cleanup — per-item best-effort delete; the failure is a reported skip
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         summary.skipped.push(`${dir}/ (could not delete: ${msg})`);
@@ -852,8 +864,10 @@ export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense>
     );
   }
   if (!ignoredVisible) {
+    // States exactly what was measured (round 3, finding 4): the flagged call
+    // failed and the plain one succeeded — not a diagnosed git version.
     lines.push(
-      'Gitignored-path visibility unavailable on this git version (needs git ≥ 2.16) — ignored deletion targets are not sensed.',
+      '`git status --ignored=matching` failed here while plain status succeeded (git ≥ 2.16 is needed for ignored-path visibility) — ignored deletion targets are not sensed.',
     );
   }
   return { dirty, ignored, lines };
@@ -944,9 +958,9 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   // 5. Scrub distributed Claude session-utility skills (Phase C slice 3)
   await scrubClaudeSkills(cwd, summary);
 
-  // 6. Scrub AI reflex blocks from markdown files. Any throw here (the
-  // Tenet-4 EJECT_FAILED backstop included) is DEFERRED past step 7 and the
-  // summary print, then rethrown: a backstop that fires before the summary
+  // 6. Scrub AI reflex blocks from markdown files. An EJECT_FAILED throw here
+  // (the Tenet-4 backstop — and ONLY it, round 2 F1) is DEFERRED past step 7
+  // and the summary print, then rethrown: a backstop that fires before the summary
   // destroys the very accounting surface — the skip reasons and the
   // `.totem-bak` paths — that licenses it, and leaves the error text pointing
   // at a summary that never printed (2026-08-09 falsification round 1, finding 1).

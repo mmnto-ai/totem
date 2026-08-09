@@ -93,6 +93,10 @@ beforeEach(() => {
   }));
   vi.mocked(resolveHooksDir).mockImplementation((root: string) => path.join(root, '.git', 'hooks'));
   vi.mocked(safeExec).mockReturnValue('');
+  // Call HISTORY resets per test too: assertions index mock.calls[0]/[1] as
+  // test-local (the roster parity + retry-argv checks), and an accumulated
+  // cross-test history makes those indices land on a prior test's call.
+  vi.mocked(safeExec).mockClear();
   atomicControl.failAll = undefined;
   atomicControl.failPathIncludes = undefined;
   atomicControl.failPathEndsWith = undefined;
@@ -1446,7 +1450,15 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
     const sense = await deriveDirtyTreeSense(cwd);
     expect(sense.dirty).toHaveLength(1);
     expect(sense.lines.join('\n')).toContain('Uncommitted changes in 1 path(s)');
-    expect(sense.lines.join('\n')).toContain('Gitignored-path visibility unavailable');
+    expect(sense.lines.join('\n')).toContain('ignored deletion targets are not sensed');
+    // The retry must actually DROP the flag — a copy/paste of the flagged args
+    // would keep every other assertion green while the fallback no-ops against
+    // a real pre-2.16 git (round 3, finding 1).
+    expect((vi.mocked(safeExec).mock.calls[1] as [string, string[]])[1].slice(0, 3)).toEqual([
+      'status',
+      '--porcelain',
+      '--',
+    ]);
   });
 
   it('degrade line surfaces the stderr cause, not the pathspec wall (round 2, F3)', async () => {
@@ -1535,6 +1547,22 @@ describe('scrubReflexFiles loud backstop (Tenet 4 licensed shape, #2620 pre-buil
     expect(Buffer.compare(fs.readFileSync(path.join(cwd, 'CLAUDE.md')), raw)).toBe(0);
     expect(summary.scrubbed).toEqual([]);
     expect(summary.skipped.some((s) => s.startsWith('CLAUDE.md (non-UTF-8 content'))).toBe(true);
+  });
+
+  it('non-UTF-8 file WITHOUT a Totem block keeps its honest no-block line — no false instruction (round 3, finding 3)', async () => {
+    const raw = Buffer.concat([
+      Buffer.from('# Proj caf'),
+      Buffer.from([0xe9]),
+      Buffer.from(' notes — never touched by totem\n'),
+    ]);
+    fs.writeFileSync(path.join(cwd, 'CLAUDE.md'), raw);
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    await scrubReflexFiles(cwd, summary);
+
+    expect(Buffer.compare(fs.readFileSync(path.join(cwd, 'CLAUDE.md')), raw)).toBe(0);
+    expect(summary.skipped.some((s) => s.includes('non-UTF-8'))).toBe(false);
+    expect(summary.skipped).toContain('CLAUDE.md (no Totem block)');
   });
 
   it('partial success does NOT trip the backstop — per-item accounting covers it', async () => {
