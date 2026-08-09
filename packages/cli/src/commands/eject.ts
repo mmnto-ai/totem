@@ -17,8 +17,10 @@ const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 // skills `<!-- [totem] auto-generated … -->` — the first-line gate matches both.
 const TOTEM_FILE_MARKER = '[totem] auto-generated';
 
-/** Files scaffolded by `totem init` that are fully owned by Totem. */
-const TOTEM_SCAFFOLDED_FILES = [
+/** Files scaffolded by `totem init` that are fully owned by Totem.
+ *  Exported for the sense-roster set-equality test (mmnto-ai/totem#2620) —
+ *  a sampled roster assertion cannot detect a dropped member. */
+export const TOTEM_SCAFFOLDED_FILES = [
   // Current (BeforeTool: mmnto-ai/totem#2481; SessionStart: mmnto-ai/totem#2488) +
   // the pre-migration `.js` each one renamed — eject removes both shapes so an
   // upgraded-then-ejected consumer leaves no fail-open artifact behind.
@@ -74,9 +76,10 @@ export interface EjectHooksContext {
  * git root via `resolveGitRootForHookPath` (anchors from a subdirectory; maps an
  * unparseable pointer to a null root) and the hooks dir via `resolveHooksDir`
  * (git's own worktree/`commondir` walk — the rev-parse root resolution the
- * hardcode-`.git/hooks` lesson prescribes). Best-effort under Tenet 4's
- * licensed shape (per-item failure accounting, loud backstop) — a genuine git
- * failure is reported as unresolvable, never a crash of the whole eject.
+ * hardcode-`.git/hooks` lesson prescribes). Resolution is a READ, not the
+ * mutation boundary: a genuine git failure degrades to an unresolvable-hooks
+ * result that the caller reports as per-hook skip lines. No backstop rides
+ * this path — nothing has been mutated when it fires.
  */
 export async function resolveEjectHooksContext(cwd: string): Promise<EjectHooksContext> {
   // Lazy-load the hook-path resolvers: they pull the core git barrel, so keeping
@@ -86,9 +89,9 @@ export async function resolveEjectHooksContext(cwd: string): Promise<EjectHooksC
   let gitRoot: string | null;
   try {
     ({ gitRoot } = resolveGitRootForHookPath(cwd));
-    // Eject cleanup is Tenet 4 licensed best-effort: a genuine git failure
-    // (NOT not-a-repo / unparseable pointer, which return a null root WITHOUT
-    // throwing) degrades to "unresolvable" rather than crashing the whole eject.
+    // A genuine git failure (NOT not-a-repo / unparseable pointer, which
+    // return a null root WITHOUT throwing) degrades to "unresolvable" — a
+    // read-path degrade the caller reports per hook, not a mutation swallow.
     // totem-context: intentional cleanup — best-effort git resolution for eject.
   } catch {
     return { hooksDir: null, isLinkedWorktree: false };
@@ -125,9 +128,21 @@ function scrubHook(
     return;
   }
 
-  const content = fs.readFileSync(hookPath, 'utf-8');
+  // Raw bytes first: the bak must be BYTE-exact (rule 3, "pre-mutation
+  // bytes"), and a hook that does not round-trip through UTF-8 cannot be
+  // line-scrubbed without silently substituting U+FFFD into the KEPT user
+  // content — that class degrades to a reported skip instead (falsification
+  // round: finding 3).
+  const rawContent = fs.readFileSync(hookPath);
+  const content = rawContent.toString('utf-8');
   if (!content.includes(startMarker)) {
     summary.skipped.push(`${hookFileName} (no Totem section)`);
+    return;
+  }
+  if (Buffer.compare(Buffer.from(content, 'utf-8'), rawContent) !== 0) {
+    summary.skipped.push(
+      `${hookFileName} (non-UTF-8 content — not scrubbed; remove the Totem block manually)`,
+    );
     return;
   }
 
@@ -142,7 +157,7 @@ function scrubHook(
   const bakFileName = `${hookFileName}.totem-bak`;
   try {
     const sourceMode = fs.statSync(hookPath).mode & 0o7777;
-    writeFileAtomicSync(`${hookPath}.totem-bak`, content, { mode: sourceMode });
+    writeFileAtomicSync(`${hookPath}.totem-bak`, rawContent, { mode: sourceMode });
     // totem-context: intentional cleanup — bak failure degrades to a reported skip and WITHHOLDS the mutation
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -338,8 +353,8 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
   }
 
   // Read separately from parse so permission errors fail loud (they are
-  // a distinct failure mode from invalid JSON, which is recoverable as
-  // a documented eject skip under Tenet 4's licensed best-effort shape).
+  // a distinct failure mode from invalid JSON, which is recoverable as a
+  // documented eject skip — a read-path degrade, before any mutation).
   const raw = fs.readFileSync(filePath, 'utf-8');
   let rawParsed: unknown;
   try {
@@ -474,7 +489,7 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
     try {
       fs.unlinkSync(filePath);
       summary.removed.push(rel);
-      // totem-context: intentional cleanup — Tenet 4 licensed best-effort; the failure is a reported skip
+      // totem-context: intentional cleanup — per-item best-effort; the failure is a reported skip (no backstop rides this step)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       summary.skipped.push(`${rel} (${msg})`);
@@ -511,7 +526,7 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
  *  `.gemini/gemini.md` is the RETIRED pre-marker Gemini target (replaced by
  *  GEMINI.md when the tool table landed): init no longer injects there, but an
  *  old block can still be sitting in it, so eject still visits it. */
-const LEGACY_REFLEX_FILES = ['CLAUDE.md', '.gemini/gemini.md', '.cursorrules'];
+export const LEGACY_REFLEX_FILES = ['CLAUDE.md', '.gemini/gemini.md', '.cursorrules'];
 
 /** The alt heading of the oldest legacy block shape (pre-LEGACY_SENTINEL). */
 const LEGACY_ALT_HEADING = '## Totem Memory Reflexes';
@@ -715,6 +730,13 @@ function deleteArtifacts(cwd: string, summary: EjectSummary): void {
 export interface DirtyTreeSense {
   /** `git status --porcelain` lines for roster paths with uncommitted changes. */
   dirty: string[];
+  /**
+   * `!!` porcelain lines: gitignored roster paths. Git holds NO copy of these
+   * at all — for a deletion target (`.totem/secrets.json`, `.lancedb/`) that
+   * is the strongest no-revert-point class, and plain `git status` omits them
+   * by design (falsification round: finding 2).
+   */
+  ignored: string[];
   /** Human sense lines to print ahead of the consent prompt (empty = clean derivation). */
   lines: string[];
 }
@@ -737,48 +759,61 @@ export interface DirtyTreeSense {
  * Exported for the sense-contract tests.
  */
 export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense> {
-  const { AI_TOOLS } = await import('./init-detect.js');
-  const { DISTRIBUTED_CLAUDE_SKILLS } = await import('./init-templates.js');
-  const roster = [
-    ...new Set([
-      ...TOTEM_SCAFFOLDED_FILES,
-      '.claude/settings.local.json',
-      '.claude/settings.json',
-      ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
-      ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
-      ...LEGACY_REFLEX_FILES,
-      '.lancedb',
-      '.totem',
-      'totem.config.ts',
-    ]),
-  ];
-
   let porcelain: string;
   try {
+    // The roster imports live INSIDE the try: a sensor that can throw before
+    // its own catch is a sensor that can abort the eject it senses for
+    // (falsification round: finding 11).
+    const { AI_TOOLS } = await import('./init-detect.js');
+    const { DISTRIBUTED_CLAUDE_SKILLS } = await import('./init-templates.js');
+    const roster = [
+      ...new Set([
+        ...TOTEM_SCAFFOLDED_FILES,
+        '.claude/settings.local.json',
+        '.claude/settings.json',
+        ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
+        ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
+        ...LEGACY_REFLEX_FILES,
+        '.lancedb',
+        '.totem',
+        'totem.config.ts',
+      ]),
+    ];
     // Lazy barrel import — the established eject runtime pattern
     // (resolveEjectHooksContext pulls the core git barrel the same way).
+    // `--ignored=matching`: plain porcelain omits ignored paths by design, so
+    // without it the sense reads "invisible to git" as "committed and clean"
+    // for exactly the paths with NO git copy at all (finding 2).
     const { safeExec } = await import('@mmnto/totem');
-    porcelain = safeExec('git', ['status', '--porcelain', '--', ...roster], { cwd });
+    porcelain = safeExec('git', ['status', '--porcelain', '--ignored=matching', '--', ...roster], {
+      cwd,
+    });
     // totem-context: intentional sensor degradation — the failure is SAID as an honest sense line (Tenet 13), never swallowed
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const line = msg.includes('not a git repository')
       ? 'Not a git repository — files eject modifies here have no VCS revert point.'
       : `Could not derive VCS state for eject targets (${msg.split('\n')[0]}) — proceeding without the dirty-tree sense.`;
-    return { dirty: [], lines: [line] };
+    return { dirty: [], ignored: [], lines: [line] };
   }
 
-  const dirty = porcelain.length === 0 ? [] : porcelain.split('\n').filter((l) => l.trim() !== '');
-  if (dirty.length === 0) {
-    return { dirty, lines: [] };
-  }
-  return {
-    dirty,
-    lines: [
+  const rows = porcelain.length === 0 ? [] : porcelain.split('\n').filter((l) => l.trim() !== '');
+  const ignored = rows.filter((l) => l.startsWith('!!'));
+  const dirty = rows.filter((l) => !l.startsWith('!!'));
+  const lines: string[] = [];
+  if (dirty.length > 0) {
+    lines.push(
       `Uncommitted changes in ${dirty.length} path(s) eject will modify — no revert point until committed:`,
       ...dirty.map((l) => `  ${l}`),
-    ],
-  };
+    );
+  }
+  if (ignored.length > 0) {
+    lines.push(
+      `${ignored.length} gitignored path(s) eject will remove — git holds no copy of these at all:`,
+      ...ignored.map((l) => `  ${l}`),
+    );
+  }
+  return { dirty, ignored, lines };
 }
 
 // ─── Main command ───────────────────────────────────────
@@ -866,8 +901,19 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   // 5. Scrub distributed Claude session-utility skills (Phase C slice 3)
   await scrubClaudeSkills(cwd, summary);
 
-  // 6. Scrub AI reflex blocks from markdown files
-  await scrubReflexFiles(cwd, summary);
+  // 6. Scrub AI reflex blocks from markdown files. Any throw here (the
+  // Tenet-4 EJECT_FAILED backstop included) is DEFERRED past step 7 and the
+  // summary print, then rethrown: a backstop that fires before the summary
+  // destroys the very accounting surface — the skip reasons and the
+  // `.totem-bak` paths — that licenses it, and leaves the error text pointing
+  // at a summary that never printed (falsification round: finding 1).
+  let deferredThrow: unknown;
+  // totem-context: intentional cleanup — deferred rethrow after the summary below, never a swallow
+  try {
+    await scrubReflexFiles(cwd, summary);
+  } catch (err) {
+    deferredThrow = err;
+  }
 
   // 7. Delete artifacts
   deleteArtifacts(cwd, summary);
@@ -898,11 +944,16 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   // The sense line rides the summary under --force (mmnto-ai/totem#2620 leg
   // finding 5): the prompt was skipped, so the no-revert-point state is
   // restated where the operator is actually looking.
-  if (options.force && sense.dirty.length > 0) {
+  const noRevertCount = sense.dirty.length + sense.ignored.length;
+  if (options.force && noRevertCount > 0) {
     log.warn(
       TAG,
-      `--force skipped the consent prompt with uncommitted changes in ${sense.dirty.length} modified path(s) — see the sense lines above.`,
+      `--force skipped the consent prompt with ${noRevertCount} touched path(s) lacking a revert point — see the sense lines above.`,
     );
+  }
+
+  if (deferredThrow !== undefined) {
+    throw deferredThrow;
   }
 
   log.success(TAG, 'Totem has been ejected from this project.');

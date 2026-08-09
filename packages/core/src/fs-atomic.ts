@@ -47,10 +47,21 @@ export interface AtomicWriteOptions {
  * account the failure (Tenet 4's licensed shape: failure accounting + a loud
  * backstop).
  *
- * Declared Windows boundaries: a rename over a target held open by another
- * process fails EPERM/EACCES (old bytes remain); mode/ownership application
- * is skipped; the temp suffix adds ~14 chars, which can cross MAX_PATH on
- * already-long target paths.
+ * Declared boundaries (falsification round, 2026-08-09):
+ * - Windows: a rename over a target held open by another process fails
+ *   EPERM/EACCES (old bytes remain); mode/ownership application is skipped;
+ *   the temp suffix adds ~20 chars (`.<pid>-<uuid8>.tmp`), which can cross
+ *   MAX_PATH on already-long target paths.
+ * - HARD-link identity is NOT preserved: rename-over replaces the directory
+ *   entry, so a target with nlink > 1 silently decouples from its other
+ *   names (rule 1 names symlink identity only).
+ * - Two behavior deltas vs the in-place writeFileSync this replaces: a
+ *   cross-uid/gid target the process cannot chown now throws (previously an
+ *   in-place write succeeded), and the parent DIRECTORY must be writable
+ *   (in-place writes needed only the file writable).
+ * - On a failure already in flight, temp cleanup is best-effort: if the
+ *   cleanup itself fails — or the process is hard-killed mid-write — a
+ *   `<target>.<pid>-<uuid8>.tmp` file can remain beside the target.
  */
 export function writeFileAtomicSync(
   targetPath: string,
@@ -70,7 +81,11 @@ export function writeFileAtomicSync(
   const tmpPath = `${writePath}.${process.pid}-${crypto.randomUUID().slice(0, 8)}.tmp`;
   let fd: number | undefined;
   try {
-    fd = fs.openSync(tmpPath, 'wx');
+    // Create the temp AT the final permission bits (still umask-masked; the
+    // explicit chmod below sets them exactly) — creating at the 0666 default
+    // and chmodding later would give a 0600 target's new bytes a brief
+    // world-readable window (falsification round: finding 12).
+    fd = fs.openSync(tmpPath, 'wx', options.mode ?? existing?.mode ?? 0o666);
     fs.writeFileSync(fd, data);
     fs.fsyncSync(fd);
     fs.closeSync(fd);
@@ -98,7 +113,10 @@ export function writeFileAtomicSync(
         fs.closeSync(fd);
       }
       if (fs.existsSync(tmpPath)) {
-        fs.rmSync(tmpPath, { force: true, maxRetries: 3, retryDelay: 100 });
+        // No maxRetries/retryDelay: Node documents them as ignored when
+        // `recursive` is not true, and this target is always a plain file —
+        // the advisory suggesting them is a false fit on this path.
+        fs.rmSync(tmpPath, { force: true });
       }
       // totem-context: intentional cleanup — a secondary close/rm failure on the temp must not mask the in-flight write error
     } catch {

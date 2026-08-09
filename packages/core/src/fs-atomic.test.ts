@@ -151,8 +151,10 @@ describe('writeFileAtomicSync', () => {
     },
   );
 
-  it('symlink target: link identity survives, content lands through the real path', () => {
-    if (!canSymlink(dir)) return; // host cannot create symlinks (win32 without Developer Mode)
+  it('symlink target: link identity survives, content lands through the real path', (ctx) => {
+    // A silent `return` here would report PASSED with zero assertions on
+    // symlink-incapable hosts (falsification round: finding 8) — skip loudly.
+    if (!canSymlink(dir)) ctx.skip();
     const real = path.join(dir, 'real.md');
     const link = path.join(dir, 'link.md');
     fs.writeFileSync(real, 'old');
@@ -164,12 +166,12 @@ describe('writeFileAtomicSync', () => {
     expect(fs.readFileSync(link, 'utf-8')).toBe('new');
   });
 
-  it('dangling symlink target: throws loud, the link is untouched', () => {
-    if (!canSymlink(dir)) return; // host cannot create symlinks (win32 without Developer Mode)
+  it('dangling symlink target: throws loud, the link is untouched', (ctx) => {
+    if (!canSymlink(dir)) ctx.skip();
     const link = path.join(dir, 'dangling.md');
     fs.symlinkSync(path.join(dir, 'nowhere.md'), link);
 
-    expect(() => writeFileAtomicSync(link, 'new')).toThrow();
+    expect(() => writeFileAtomicSync(link, 'new')).toThrow(/ENOENT|ELOOP/);
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(dir, 'nowhere.md'))).toBe(false);
     expect(tmpResidue()).toEqual([]);

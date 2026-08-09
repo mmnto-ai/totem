@@ -11,13 +11,17 @@ import type { EjectSummary } from './eject.js';
 import {
   deriveDirtyTreeSense,
   ejectCommand,
+  LEGACY_REFLEX_FILES,
   resolveEjectHooksContext,
   scrubPostCheckoutHook,
   scrubPostMergeHook,
   scrubReflexFiles,
+  TOTEM_SCAFFOLDED_FILES,
 } from './eject.js';
+import { AI_TOOLS } from './init-detect.js';
 import {
   AI_PROMPT_BLOCK,
+  DISTRIBUTED_CLAUDE_SKILLS,
   REFLEX_END,
   REFLEX_START,
   SKILL_MARKER_END,
@@ -57,6 +61,7 @@ vi.mock('@mmnto/totem', async (importOriginal) => {
 const atomicControl: {
   failAll?: Error;
   failPathIncludes?: { needle: string; err: Error };
+  failPathEndsWith?: { suffix: string; err: Error };
 } = {};
 vi.mock('@mmnto/totem/fs-atomic', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@mmnto/totem/fs-atomic')>();
@@ -64,6 +69,9 @@ vi.mock('@mmnto/totem/fs-atomic', async (importOriginal) => {
     if (atomicControl.failAll) throw atomicControl.failAll;
     if (atomicControl.failPathIncludes && args[0].includes(atomicControl.failPathIncludes.needle)) {
       throw atomicControl.failPathIncludes.err;
+    }
+    if (atomicControl.failPathEndsWith && args[0].endsWith(atomicControl.failPathEndsWith.suffix)) {
+      throw atomicControl.failPathEndsWith.err;
     }
     return actual.writeFileAtomicSync(...args);
   }) as typeof actual.writeFileAtomicSync;
@@ -83,6 +91,7 @@ beforeEach(() => {
   vi.mocked(safeExec).mockReturnValue('');
   atomicControl.failAll = undefined;
   atomicControl.failPathIncludes = undefined;
+  atomicControl.failPathEndsWith = undefined;
 });
 
 function makeTmpDir(): string {
@@ -1287,6 +1296,86 @@ echo "[totem] Triggering background re-index..."
     expect(fs.statSync(`${hookPath}.totem-bak`).mode & 0o7777).toBe(0o755);
     expect(fs.statSync(hookPath).mode & 0o7777).toBe(0o755);
   });
+
+  it('ORDERING control: induced hook-write failure leaves the bak present and the hook byte-untouched (the strategy#1045 addendum, spec-declared invariant)', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(hookPath, MIXED_HOOK);
+    // Fails the write whose target IS the hook; the bak path ends '.totem-bak'
+    // and passes through — a bak written AFTER the mutation could not survive
+    // this arm with the hook intact.
+    atomicControl.failPathEndsWith = {
+      suffix: 'post-merge',
+      err: Object.assign(new Error('EACCES: injected'), { code: 'EACCES' }),
+    };
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
+
+    expect(Buffer.compare(fs.readFileSync(`${hookPath}.totem-bak`), Buffer.from(MIXED_HOOK))).toBe(
+      0,
+    );
+    expect(Buffer.compare(fs.readFileSync(hookPath), Buffer.from(MIXED_HOOK))).toBe(0);
+    expect(summary.scrubbed).toEqual([]);
+    expect(summary.removed).toEqual([]);
+    expect(summary.skipped.some((s) => s.includes('EACCES: injected'))).toBe(true);
+  });
+
+  it('non-UTF-8 hook bytes: reported skip, no mutation, no bak — scrubbing would substitute U+FFFD into kept user content', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    const raw = Buffer.concat([
+      Buffer.from('#!/bin/sh\necho "caf'),
+      Buffer.from([0xe9]),
+      Buffer.from('"\n# [totem] post-merge hook — x\n# [totem] end post-merge\n'),
+    ]);
+    fs.writeFileSync(hookPath, raw);
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
+
+    expect(Buffer.compare(fs.readFileSync(hookPath), raw)).toBe(0);
+    expect(fs.existsSync(`${hookPath}.totem-bak`)).toBe(false);
+    expect(summary.skipped.some((s) => s.includes('non-UTF-8 content'))).toBe(true);
+    expect(summary.scrubbed).toEqual([]);
+  });
+});
+
+describe('ejectCommand deferred backstop (falsification finding 1 — the summary is the accounting surface)', () => {
+  let cwd: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(cwd);
+    fs.mkdirSync(path.join(cwd, '.git', 'hooks'), { recursive: true });
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(cwd);
+  });
+
+  it('EJECT_FAILED rethrows only AFTER step 7 ran and the summary (skip reasons) printed', async () => {
+    fs.writeFileSync(path.join(cwd, 'CLAUDE.md'), `# P\n\n${REFLEX_START}\nbody\n${REFLEX_END}\n`);
+    fs.writeFileSync(path.join(cwd, 'totem.config.ts'), 'export default {};\n');
+    atomicControl.failAll = Object.assign(new Error('EPERM: injected'), { code: 'EPERM' });
+    const { log } = await import('../ui.js');
+    const dimSpy = vi.spyOn(log, 'dim');
+    const successSpy = vi.spyOn(log, 'success');
+
+    await expect(ejectCommand({ force: true })).rejects.toThrow(/all 1 reflex-file scrub attempt/);
+
+    // Step 7 still ran: the artifact delete is not stranded by the backstop.
+    expect(fs.existsSync(path.join(cwd, 'totem.config.ts'))).toBe(false);
+    // The accounting surface printed BEFORE the throw: per-file skip reasons.
+    const dims = dimSpy.mock.calls.map((c) => String(c[1]));
+    expect(dims.some((m) => m.includes('could not scrub'))).toBe(true);
+    // And the success line did NOT print — the run still fails loud.
+    const successes = successSpy.mock.calls.map((c) => String(c[1]));
+    expect(successes.some((m) => m.includes('has been ejected'))).toBe(false);
+    dimSpy.mockRestore();
+    successSpy.mockRestore();
+  });
 });
 
 describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
@@ -1316,19 +1405,38 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
     expect(sense.lines.join('\n')).toContain('.totem/');
   });
 
-  it('roster derives from the shared constants — deletions count (intent-read Q3)', async () => {
+  it('roster is SET-EQUAL to the constants the scrub/removal steps consume (Tenet 20; a sampled assertion cannot detect a dropped member)', async () => {
     vi.mocked(safeExec).mockReturnValue('');
     await deriveDirtyTreeSense(cwd);
 
     const [cmd, args] = vi.mocked(safeExec).mock.calls[0] as [string, string[]];
     expect(cmd).toBe('git');
-    expect(args).toContain('--porcelain');
-    // Scrub targets AND delete targets ride one derived roster.
-    expect(args).toContain('CLAUDE.md');
-    expect(args).toContain('.claude/settings.json');
-    expect(args).toContain('.gemini/hooks/SessionStart.cjs');
-    expect(args).toContain('.totem');
-    expect(args).toContain('totem.config.ts');
+    expect(args.slice(0, 4)).toEqual(['status', '--porcelain', '--ignored=matching', '--']);
+    // Parity assertion: both sides read the same source constants, so a
+    // dropped spread or a hand-mirrored divergence in EITHER place fails.
+    const expected = [
+      ...new Set([
+        ...TOTEM_SCAFFOLDED_FILES,
+        '.claude/settings.local.json',
+        '.claude/settings.json',
+        ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
+        ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
+        ...LEGACY_REFLEX_FILES,
+        '.lancedb',
+        '.totem',
+        'totem.config.ts',
+      ]),
+    ];
+    expect([...args.slice(4)].sort()).toEqual([...expected].sort());
+  });
+
+  it('gitignored roster paths: says git holds no copy at all (the secrets-deletion class)', async () => {
+    vi.mocked(safeExec).mockReturnValue('!! .lancedb/\n!! .totem/secrets.json');
+    const sense = await deriveDirtyTreeSense(cwd);
+    expect(sense.dirty).toEqual([]);
+    expect(sense.ignored).toHaveLength(2);
+    expect(sense.lines[0]).toContain('git holds no copy');
+    expect(sense.lines.join('\n')).toContain('.totem/secrets.json');
   });
 
   it('not a git repository: honest no-revert-point line, still proceeds', async () => {
