@@ -264,27 +264,46 @@ try {
   process.stderr.write('[SessionStart] totem-status refresh-gh unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
 
+// Interactive Gemini ingests SessionStart output ONLY from the
+// hookSpecificOutput.additionalContext envelope — plain exit-0 stdout wraps as
+// systemMessage, which the interactive startup consumer never reads, so the
+// briefing was silently dropped in the primary dev flow even once registered
+// (mmnto-ai/totem#2613; leg-verified against @google/gemini-cli 0.54.4).
+// Capture both briefing legs and emit the same envelope the Claude twin uses
+// (.claude/hooks/session-context.mjs — the mmnto-ai/totem#2522 cold-boot
+// lesson). Per-leg 20s budgets keep the worst case inside Gemini's 60s
+// DEFAULT_HOOK_TIMEOUT — at the old 30s each, one pathological hang consumed
+// the entire hook budget.
+let briefing = '';
 try {
-  execSync('totem describe', {
-    timeout: 30000,
-    stdio: ['ignore', 'inherit', 'inherit'],
+  briefing += execSync('totem describe', {
+    timeout: 20000,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'inherit'],
   });
 } catch (err) {
-  process.stdout.write('[Totem] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
+  // Fail-soft (exit 0, never blocks boot): the unavailable note rides the
+  // envelope so it still reaches interactive context.
+  briefing += '[Totem] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n';
 }
 
 // totem orient --session — live derived in-flight state, ADDITIVE to describe
 // (mmnto-ai/totem#2044 PR-3). Own try/catch; orient --session is itself boot-safe.
 try {
-  execSync('totem orient --session', {
-    timeout: 30000,
-    stdio: ['ignore', 'inherit', 'inherit'],
+  briefing += execSync('totem orient --session', {
+    timeout: 20000,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'inherit'],
   });
 } catch (err) {
   // Boot-safe: orient is additive to describe; a failure never blocks session start —
   // surface a NON-fatal breadcrumb (matches the Claude-side hook) rather than swallow.
   process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
+
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: briefing },
+}) + '\\n');
 ${TOTEM_FILE_END}
 `;
 

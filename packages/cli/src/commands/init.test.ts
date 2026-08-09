@@ -2323,14 +2323,24 @@ describe('GEMINI_SESSION_START template', () => {
     expect(GEMINI_SESSION_START).not.toContain("'totem status'");
   });
 
-  it('uses a 30-second timeout matching the Claude-side hook contract', () => {
-    expect(GEMINI_SESSION_START).toContain('timeout: 30000');
+  it('uses 20-second per-leg timeouts so the worst case fits Gemini’s 60s hook budget', () => {
+    // Two sequential legs at the old 30s each could consume Gemini's entire
+    // DEFAULT_HOOK_TIMEOUT on one pathological hang (mmnto-ai/totem#2613).
+    expect(GEMINI_SESSION_START).toContain('timeout: 20000');
+    expect(GEMINI_SESSION_START).not.toContain('timeout: 30000');
   });
 
-  it('routes diagnostic stdio so the banner lands in the session prompt', () => {
-    // Gemini SessionStart hooks inherit stdio; the third entry must be
-    // 'inherit' for the orientation output to reach the agent.
-    expect(GEMINI_SESSION_START).toContain("stdio: ['ignore', 'inherit', 'inherit']");
+  it('captures briefing stdout and emits the hookSpecificOutput envelope', () => {
+    // Interactive Gemini ingests SessionStart output ONLY from
+    // hookSpecificOutput.additionalContext — an 'inherit' stdout wraps as
+    // systemMessage, which the interactive startup consumer never reads
+    // (mmnto-ai/totem#2613; the pre-fix pin here asserted exactly that
+    // dropped channel). The runtime contract is pinned end-to-end by
+    // gemini-sessionstart-contract.test.ts; this guards template drift.
+    expect(GEMINI_SESSION_START).toContain("stdio: ['ignore', 'pipe', 'inherit']");
+    expect(GEMINI_SESSION_START).not.toContain("stdio: ['ignore', 'inherit', 'inherit']");
+    expect(GEMINI_SESSION_START).toContain("hookEventName: 'SessionStart'");
+    expect(GEMINI_SESSION_START).toContain('additionalContext: briefing');
   });
 
   it('emits a generic fallback breadcrumb when describe fails', () => {
