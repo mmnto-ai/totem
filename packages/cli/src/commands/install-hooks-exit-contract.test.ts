@@ -715,6 +715,10 @@ describe('Gemini BeforeTool .js→.cjs migration', () => {
 
   it('is idempotent — a second pass is a no-op (flat command shape too)', async () => {
     writeFileRel(GEMINI_BEFORE_TOOL_LEGACY_REL, GEMINI_BEFORE_TOOL);
+    // Migration INPUT only — this flat {type, command} entry is a shape Gemini's
+    // processHookDefinition DISCARDS (registrations must nest {matcher, hooks:
+    // [{type, command}]}); it exercises the basename rewrite on whatever the
+    // user wrote, not a registration shape Gemini would run (mmnto-ai/totem#2611).
     writeFileRel(
       '.gemini/settings.json',
       JSON.stringify(
