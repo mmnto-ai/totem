@@ -140,6 +140,8 @@ function scrubHook(
   // skips the mutation entirely, because disclosure never substitutes for
   // recovery (the strategy#1045 addendum).
   const bakFileName = `${hookFileName}.totem-bak`;
+  // totem-context: intentional cleanup — a failed recovery artifact degrades to
+  // a reported skip and WITHHOLDS the mutation; nothing is silently attempted.
   try {
     const sourceMode = fs.statSync(hookPath).mode & 0o7777;
     writeFileAtomicSync(`${hookPath}.totem-bak`, content, { mode: sourceMode });
@@ -753,6 +755,9 @@ export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense>
   ];
 
   let porcelain: string;
+  // totem-context: intentional sensor degradation — the failure is SAID to the
+  // user as an honest sense line (Tenet 13), never swallowed; a sensor must not
+  // block the eject it senses for.
   try {
     // Lazy barrel import — the established eject runtime pattern
     // (resolveEjectHooksContext pulls the core git barrel the same way).

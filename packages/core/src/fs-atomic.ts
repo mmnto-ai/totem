@@ -93,15 +93,15 @@ export function writeFileAtomicSync(
 
     fs.renameSync(tmpPath, writePath);
   } finally {
+    // totem-context: intentional cleanup — the original write error is the
+    // signal; a secondary close/rm failure on the temp must not mask it.
     try {
       if (fd !== undefined) {
         fs.closeSync(fd);
       }
       if (fs.existsSync(tmpPath)) {
-        fs.rmSync(tmpPath, { force: true });
+        fs.rmSync(tmpPath, { force: true, maxRetries: 3, retryDelay: 100 });
       }
-      // totem-context: intentional cleanup — the original write error is the
-      // signal; a secondary close/rm failure on the temp must not mask it.
     } catch {
       /* temp cleanup is best-effort; the throw in flight carries the cause */
     }
