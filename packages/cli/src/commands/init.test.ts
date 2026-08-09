@@ -2323,14 +2323,32 @@ describe('GEMINI_SESSION_START template', () => {
     expect(GEMINI_SESSION_START).not.toContain("'totem status'");
   });
 
-  it('uses a 30-second timeout matching the Claude-side hook contract', () => {
-    expect(GEMINI_SESSION_START).toContain('timeout: 30000');
+  it('uses 20-second per-leg timeouts — measured worst-case exit drops 60s to 40s', () => {
+    // Two sequential legs at the old 30s each could consume Gemini's entire
+    // 60s DEFAULT_HOOK_TIMEOUT on one pathological hang. Post-fix no
+    // descendant inherits the hook's own streams, so the inner budgets are
+    // honored even under a hung grandchild, and the vendor tree-kills at its
+    // own 60s expiry regardless (mmnto-ai/totem#2613 falsification rounds).
+    expect(GEMINI_SESSION_START).toContain('timeout: 20000');
+    expect(GEMINI_SESSION_START).not.toContain('timeout: 30000');
   });
 
-  it('routes diagnostic stdio so the banner lands in the session prompt', () => {
-    // Gemini SessionStart hooks inherit stdio; the third entry must be
-    // 'inherit' for the orientation output to reach the agent.
-    expect(GEMINI_SESSION_START).toContain("stdio: ['ignore', 'inherit', 'inherit']");
+  it('captures BOTH streams of the briefing legs and emits envelope + systemMessage', () => {
+    // Interactive Gemini ingests SessionStart output ONLY from
+    // hookSpecificOutput.additionalContext — an 'inherit' stdout wraps as
+    // systemMessage, which the interactive startup consumer never reads
+    // (mmnto-ai/totem#2613; the pre-fix pin here asserted exactly that
+    // dropped channel). The Totem CLI writes its banner to STDERR, so capture
+    // must take both streams — a stdout-only capture silently drops the
+    // describe leg. systemMessage rides alongside for the /clear and -p
+    // surfaces, which read only that key. The runtime contract is pinned
+    // end-to-end by gemini-sessionstart-contract.test.ts; this guards
+    // template drift.
+    expect(GEMINI_SESSION_START).toContain("stdio: ['ignore', 'pipe', 'pipe']");
+    expect(GEMINI_SESSION_START).not.toContain("stdio: ['ignore', 'inherit', 'inherit']");
+    expect(GEMINI_SESSION_START).toContain("hookEventName: 'SessionStart'");
+    expect(GEMINI_SESSION_START).toContain('additionalContext: briefing');
+    expect(GEMINI_SESSION_START).toContain('systemMessage: briefing');
   });
 
   it('emits a generic fallback breadcrumb when describe fails', () => {
