@@ -1483,6 +1483,17 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
     expect(sense.lines.join('\n')).toContain('.totem/secrets.json');
   });
 
+  it('per-path display rows cap at a named maximum; exact counts stay in the header (CR round)', async () => {
+    const rows = Array.from({ length: 25 }, (_, i) => ` M .totem/file-${i}.md`).join('\n');
+    vi.mocked(safeExec).mockReturnValue(rows);
+    const sense = await deriveDirtyTreeSense(cwd);
+    expect(sense.dirty).toHaveLength(25);
+    expect(sense.lines[0]).toContain('Uncommitted changes in 25 path(s)');
+    // Header + 20 shown rows + the "and N more" trailer.
+    expect(sense.lines).toHaveLength(22);
+    expect(sense.lines[21]).toContain('and 5 more');
+  });
+
   it('not a git repository: honest no-revert-point line, still proceeds', async () => {
     vi.mocked(safeExec).mockImplementation(() => {
       throw new Error(

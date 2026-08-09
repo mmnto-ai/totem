@@ -758,6 +758,19 @@ function deleteArtifacts(cwd: string, summary: EjectSummary): void {
 
 // ─── Dirty-tree sense (User-File Mutation Contract rule 2) ──────
 
+/** Cap on per-path rows printed under each sense header — the exact COUNTS
+ *  always ride the headers; unbounded rows can scroll the consent prompt off
+ *  screen (CR round on the PR). */
+const SENSE_DISPLAY_MAX_ROWS = 20;
+
+function capSenseRows(rows: string[]): string[] {
+  const shown = rows.slice(0, SENSE_DISPLAY_MAX_ROWS).map((l) => `  ${l}`);
+  if (rows.length > SENSE_DISPLAY_MAX_ROWS) {
+    shown.push(`  … and ${rows.length - SENSE_DISPLAY_MAX_ROWS} more`);
+  }
+  return shown;
+}
+
 /** Derived pre-consent VCS state for the files eject is about to mutate. */
 export interface DirtyTreeSense {
   /** `git status --porcelain` lines for roster paths with uncommitted changes. */
@@ -838,8 +851,13 @@ export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense>
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // The stderr tail names the actual cause (git's own words); the wrapper
-    // message leads with the full ~24-path pathspec wall (round 2, F3).
-    const stderrLine = (err as { stderr?: string }).stderr?.trim().split('\n')[0];
+    // message leads with the full ~24-path pathspec wall (round 2, F3). The
+    // instanceof guard keeps a non-object throw from TypeError-ing INSIDE this
+    // catch — a sensor that can crash its own catch can abort the eject it
+    // senses for (GCA round on the PR).
+    const stderrRaw =
+      err instanceof Error ? (err as Error & { stderr?: string }).stderr : undefined;
+    const stderrLine = typeof stderrRaw === 'string' ? stderrRaw.trim().split('\n')[0] : undefined;
     const cause = stderrLine && stderrLine.length > 0 ? stderrLine : msg.split('\n')[0];
     const line = msg.includes('not a git repository')
       ? 'Not a git repository — files eject modifies here have no VCS revert point.'
@@ -854,13 +872,13 @@ export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense>
   if (dirty.length > 0) {
     lines.push(
       `Uncommitted changes in ${dirty.length} path(s) eject will modify — no revert point until committed:`,
-      ...dirty.map((l) => `  ${l}`),
+      ...capSenseRows(dirty),
     );
   }
   if (ignored.length > 0) {
     lines.push(
       `${ignored.length} gitignored path(s) eject will remove — git holds no copy of these at all:`,
-      ...ignored.map((l) => `  ${l}`),
+      ...capSenseRows(ignored),
     );
   }
   if (!ignoredVisible) {
