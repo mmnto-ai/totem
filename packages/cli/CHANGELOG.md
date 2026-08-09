@@ -1,5 +1,22 @@
 # @mmnto/cli
 
+## 1.114.0
+
+### Minor Changes
+
+- 772f058: `totem init` hardening (mmnto-ai/totem#2601) — three misses observed on a live floor-refresh run:
+  - **MCP registration dedup keys on the registered package, not the entry name.** `scaffoldMcpConfig` previously only checked for a `totem` key, so a `.mcp.json` already carrying `@mmnto/mcp` under other names (`totem-dev`, `totem-strategy`) collected a duplicate third entry. Every existing server entry's `command` and `args` are now probed two ways: for the package name (boundary-anchored, so `@mmnto/mcp-experimental` is correctly a different package), and — because a registration need not spell the name at all — by resolving a Node-family command's entrypoint script against both the config's own directory and the project root (host configs in `.gemini/`, `.cursor/`, and `.junie/mcp/` carry root-relative pins) and reading the owning `package.json` off disk, which catches the `node ./packages/mcp/dist/index.js` form. A hit skips the append without rewriting the file and the init summary discloses the name it is already registered under.
+  - **Vendor-hook managed-marker guard.** Init no longer drops the generic `.gemini/hooks/SessionStart.cjs` / `BeforeTool.cjs` beside a consumer's CUSTOM same-stem `.js` hook (the double-fire / orientation-regression trap). On a fresh install an unowned `<stem>.js` sibling — one the totem marker does not open — withholds the managed `.cjs` and the skip is disclosed in the summary. When the managed `.cjs` already EXISTS beside a custom `.js` the twin is already live, so init drift-repairs it as usual and the summary discloses the coexistence plus the two ways out, rather than falsely reporting the hook as not installed. The marker-headed legacy `.js` → `.cjs` migration path is unaffected; a legacy path that cannot be read at all (a directory sharing the name) is skipped and disclosed instead of crashing init mid-run.
+  - **Full non-interactive detection plus `--yes`.** Only two of six prompt sites were TTY-guarded, so a stdin-null init printed its non-interactive banner and still died at an unguarded prompt with mutations already landed. One `interactive` predicate (`stdin.isTTY && !--yes`) now guards every `rl.question` site in init and the two it reaches in the hook installers. Non-interactive defaults are the Enter defaults — install baseline lessons, upgrade reflexes, configure all detected tools, Lite embedding tier, install enforcement hooks, decline the post-merge hook — except the cursor-rules compile, which declines and names `totem compile --from-cursor` rather than firing an LLM-driven rewrite unattended. Every default taken is logged. `-y, --yes` is registered on both the full CLI and the standalone lite binary.
+
+    **Behavior change for scripted callers:** piped stdin is no longer read as prompt answers. A non-TTY run now takes every default without consuming stdin — previously a piped answer could reach the first prompt (and the run then died at the second, unguarded one). Scripts that piped `none` or an empty line into `totem init` must pass the equivalent flags explicitly instead; the defaults a bare non-interactive run takes are listed above.
+
+### Patch Changes
+
+- d11e4ba: Distributed-template batch (#2599): reflex v10 adds the `totem orient` cold-start fallback to the Start-of-Session bullet and demotes the Context Management Guardrail from synthesize-a-warning to weighing the server's measured `<size-disclosure>` against the consumer's own window; `upgradeReflexes` no longer accretes one blank line per regen at the end-marker seam (byte-idempotent, heals pure-whitespace tails); the review-reply skill's consolidated round-disposition step now states the one-tag-per-addressed-bot floor.
+- Updated dependencies [3624a2d]
+  - @mmnto/totem@1.114.0
+
 ## 1.113.1
 
 ### Patch Changes
