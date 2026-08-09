@@ -1112,6 +1112,36 @@ describe('scrubReflexFiles — marker pairing, residue, and legacy boundary', ()
     expect(fs.readFileSync(p, 'utf-8')).toBe('## User Section\n\nkeep me\n');
   });
 
+  it('a leading orphan END does not halt the scan — the complete pair below it is still removed', async () => {
+    // "Loops until no complete pair remains" must hold even when an unpaired
+    // END sits above the real block (GCA round on this PR): the orphan stays
+    // residue, the well-formed block goes.
+    const residueHead = '# Head\n\n' + REFLEX_END + '\nuser between\n';
+    const p = write('CLAUDE.md', residueHead + AI_PROMPT_BLOCK);
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe(residueHead);
+    expect(summary.scrubbed).toEqual(['CLAUDE.md (marker residue remains — remove manually)']);
+  });
+
+  it('an unreadable roster entry degrades to a could-not-scrub skip and later files still scrub', async () => {
+    // A DIRECTORY at CLAUDE.md makes readFileSync throw (EISDIR class) — the
+    // per-file best-effort contract: report the skip, keep going (CR round on
+    // this PR; live-verified for EISDIR and EPERM on the falsification round).
+    fs.mkdirSync(path.join(cwd, 'CLAUDE.md'));
+    const geminiPath = write('GEMINI.md', '# Head\n' + AI_PROMPT_BLOCK);
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(summary.skipped).toHaveLength(1);
+    expect(summary.skipped[0]).toMatch(/^CLAUDE\.md \(could not scrub: /);
+    expect(fs.readFileSync(geminiPath, 'utf-8')).toBe('# Head\n');
+    expect(summary.scrubbed).toEqual(['GEMINI.md']);
+  });
+
   it('the retired pre-marker target .gemini/gemini.md still gets its legacy block scrubbed', async () => {
     const p = write(
       '.gemini/gemini.md',

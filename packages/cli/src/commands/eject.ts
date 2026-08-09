@@ -532,11 +532,20 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
       // "Scrubbed" line.
       let out = content;
       let removedBlocks = 0;
+      // A leading orphan END (no START anywhere before it) must not halt the
+      // scan — later complete pairs are still totem's to remove, and the
+      // changeset contract is "loops until no complete pair remains". Skip
+      // past the orphan (it stays residue) and keep scanning; reset after a
+      // removal since indices shifted (GCA round on this PR).
+      let searchStart = 0;
       for (;;) {
-        const endIdx = out.indexOf(REFLEX_END);
+        const endIdx = out.indexOf(REFLEX_END, searchStart);
         if (endIdx === -1) break;
         const startIdx = out.lastIndexOf(REFLEX_START, endIdx);
-        if (startIdx === -1) break;
+        if (startIdx === -1) {
+          searchStart = endIdx + REFLEX_END.length;
+          continue;
+        }
         // Single-owner seams, mirroring upgradeReflexes with the block replaced
         // by nothing: the prefix keeps at most one trailing newline (the blank
         // line above the block was AI_PROMPT_BLOCK's own leading `\n`), and the
@@ -555,6 +564,7 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
         }
         out = before + after;
         removedBlocks++;
+        searchStart = 0;
       }
 
       // Marker residue = an unpaired START or END (either shape of the pre-fix
