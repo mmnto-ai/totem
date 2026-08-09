@@ -117,7 +117,44 @@ describe('rendered SessionStart.cjs — Gemini envelope contract (mmnto-ai/totem
       // surfaces render, and it is the assertion that distinguishes the
       // dual-key contract from the envelope-only intermediate shape.
       expect(envelope.systemMessage).toMatch(/Briefing unavailable/);
-      // The orient leg's failure stays a stderr breadcrumb (its pre-fix surface).
+      // The orient gap is noted in the briefing too (a stderr-only note is
+      // invisible to the model), and the breadcrumb stays for diagnostics.
+      expect(envelope.hookSpecificOutput.additionalContext).toMatch(/Orient briefing unavailable/);
+      expect(run.stderr).toMatch(/orient briefing unavailable/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'a failing orient leg carries its partial stdout plus the unavailable note in both keys',
+    () => {
+      // Shim: both legs emit on both streams; the orient invocation exits 3.
+      const shimDir = path.join(tmpDir, 'shim-orient-fail');
+      fs.mkdirSync(shimDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(shimDir, 'totem.cmd'),
+        '@echo off\r\necho shim-out %*\r\necho shim-err %* 1>&2\r\nif "%1"=="orient" exit /b 3\r\n',
+        'utf-8',
+      );
+      const sh = path.join(shimDir, 'totem');
+      fs.writeFileSync(
+        sh,
+        '#!/bin/sh\necho "shim-out $@"\necho "shim-err $@" 1>&2\ncase "$1" in orient) exit 3;; esac\n',
+        'utf-8',
+      );
+      fs.chmodSync(sh, 0o755);
+      const run = runHook(shimDir + path.delimiter + process.env.PATH);
+
+      expect(run.status).toBe(0);
+      const envelope = JSON.parse(run.stdout) as Envelope;
+      const ctx = envelope.hookSpecificOutput.additionalContext;
+      // Describe leg intact (both streams), orient partial stdout carried, and
+      // the note (reason = the leg's stderr) rides the briefing.
+      expect(ctx).toMatch(/shim-out describe/);
+      expect(ctx).toMatch(/shim-err describe/);
+      expect(ctx).toMatch(/shim-out orient --session/);
+      expect(ctx).toMatch(/Orient briefing unavailable: shim-err orient --session/);
+      expect(envelope.systemMessage).toBe(ctx);
       expect(run.stderr).toMatch(/orient briefing unavailable/);
     },
     TEST_TIMEOUT_MS,

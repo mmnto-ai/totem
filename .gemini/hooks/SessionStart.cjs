@@ -153,13 +153,19 @@ try {
       ? (orientRun.error.message || String(orientRun.error))
       : ((orientRun.stderr || '').trim() || 'totem orient exited ' + orientRun.status);
     // Boot-safe: orient is additive to describe; a failure never blocks session
-    // start — surface a NON-fatal breadcrumb (matches the Claude-side hook).
+    // start. The note rides the briefing (both keys) so the model and the human
+    // both see the orient gap — a stderr-only note is invisible to the model
+    // (CR round on this PR); the parent-stderr breadcrumb stays for hook
+    // diagnostics.
+    briefing += '[Totem] Orient briefing unavailable: ' + orientReason + '\n';
     process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + orientReason + '\n');
   } else {
     briefing += orientRun.stderr || '';
   }
 } catch (err) {
-  process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\n');
+  const orientMsg = err instanceof Error ? err.message : String(err);
+  briefing += '[Totem] Orient briefing unavailable: ' + orientMsg + '\n';
+  process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + orientMsg + '\n');
 }
 
 process.stdout.write(JSON.stringify({
