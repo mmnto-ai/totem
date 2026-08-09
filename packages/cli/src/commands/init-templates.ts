@@ -457,7 +457,7 @@ function checkXrepoQualifyRefs(toolName, toolInput) {
   );
 }
 
-module.exports = function beforeTool(toolName, toolInput) {
+function beforeTool(toolName, toolInput) {
   checkOutboxSubjectQuoting(toolName, toolInput);
   checkAutoCloseKeywords(toolName, toolInput);
   checkXrepoQualifyRefs(toolName, toolInput);
@@ -471,7 +471,50 @@ module.exports = function beforeTool(toolName, toolInput) {
   } catch (err) {
     throw new Error('[Totem Error] Shield check failed. Fix violations before pushing.\\n' + err.message);
   }
-};
+}
+module.exports = beforeTool;
+
+// Entry point — Gemini runs this file as a COMMAND hook (\`node BeforeTool.cjs\`)
+// with the hook-input JSON on stdin; without this block the file defines a
+// function and exits 0 = allow, leaving every guard above inert
+// (mmnto-ai/totem#2611). Exit contract (leg-verified against
+// @google/gemini-cli 0.54.4): exit 0 allow · exit 1 ALLOW with warning (an
+// uncaught throw exits 1 — throwing can never deny) · exit >= 2 deny ·
+// structured stdout {"decision":"deny","reason"} deny. A violation emits the
+// structured deny AND exits 2 so either channel suffices. Gemini reads stderr
+// only when stdout is EMPTY, so the stderr copy on the deny path never enters
+// the hook pipeline — it serves hand-run invocations; on the exit-1 paths the
+// stderr breadcrumb IS the payload that surfaces as the warning. Input the
+// guard cannot evaluate (unparseable JSON, missing tool_name) is
+// allow-with-warning (exit 1): denying every call on a vendor shape change
+// would brick the seat, and exiting 0 would hide the outage.
+if (require.main === module) {
+  let raw = '';
+  process.stdin.setEncoding('utf-8');
+  process.stdin.on('data', function (chunk) { raw += chunk; });
+  process.stdin.on('end', function () {
+    let input;
+    try {
+      input = JSON.parse(raw);
+    } catch (err) {
+      process.stderr.write('[totem BeforeTool] hook input is not parseable JSON — guard did not evaluate this call: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
+      process.exit(1);
+    }
+    if (typeof input !== 'object' || input === null || typeof input.tool_name !== 'string') {
+      process.stderr.write('[totem BeforeTool] hook input carries no tool_name — guard did not evaluate this call\\n');
+      process.exit(1);
+    }
+    try {
+      beforeTool(input.tool_name, input.tool_input);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      process.stdout.write(JSON.stringify({ decision: 'deny', reason: reason }) + '\\n');
+      process.stderr.write(reason + '\\n');
+      process.exit(2);
+    }
+    process.exit(0);
+  });
+}
 ${TOTEM_FILE_END}
 `;
 
