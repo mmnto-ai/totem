@@ -481,11 +481,13 @@ module.exports = beforeTool;
 // @google/gemini-cli 0.54.4): exit 0 allow · exit 1 ALLOW with warning (an
 // uncaught throw exits 1 — throwing can never deny) · exit >= 2 deny ·
 // structured stdout {"decision":"deny","reason"} deny. A violation emits the
-// structured deny AND exits 2 so either channel suffices; the reason also goes
-// to stderr for the human transcript. Input the guard cannot evaluate
-// (unparseable JSON, missing tool_name) is allow-with-warning (exit 1):
-// denying every call on a vendor shape change would brick the seat, and
-// exiting 0 would hide the outage.
+// structured deny AND exits 2 so either channel suffices. Gemini reads stderr
+// only when stdout is EMPTY, so the stderr copy on the deny path never enters
+// the hook pipeline — it serves hand-run invocations; on the exit-1 paths the
+// stderr breadcrumb IS the payload that surfaces as the warning. Input the
+// guard cannot evaluate (unparseable JSON, missing tool_name) is
+// allow-with-warning (exit 1): denying every call on a vendor shape change
+// would brick the seat, and exiting 0 would hide the outage.
 if (require.main === module) {
   let raw = '';
   process.stdin.setEncoding('utf-8');

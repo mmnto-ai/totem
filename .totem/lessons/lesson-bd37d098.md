@@ -1,4 +1,4 @@
-## Lesson — Gemini CLI hook registration semantics (leg-verified
+## Lesson — Gemini CLI hook registration semantics (leg-verified)
 
 **Tags:** gemini-cli, hooks, trap, fail-open, settings-json, vendor-semantics
 

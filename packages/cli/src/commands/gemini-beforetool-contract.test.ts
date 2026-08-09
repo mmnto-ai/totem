@@ -5,22 +5,27 @@
  *
  * install-hooks-exit-contract.test.ts locks the INSTALLER's exit codes; nothing
  * there runs the guard itself, which is how a module.exports-only template
- * (defines a function, exits 0 = allow) shipped inert. This file is the
- * positive + negative control pair the Tenet 9 sense→enforce legitimacy gate
- * requires before the deferred registration slice (mmnto-ai/totem#2478) arms
- * the hook as blocking:
- *   - a rule-violating write DENIES: structured stdout
- *     {"decision":"deny","reason"} AND exit 2 (either channel denies under
- *     Gemini's contract — exit 1 is allow-with-warning, so a throw can never
- *     deny);
- *   - a clean write ALLOWS: exit 0, empty stdout;
+ * (defines a function, exits 0 = allow) shipped inert. This file supplies the
+ * positive and negative controls of the Tenet 9 sense→enforce legitimacy gate
+ * (provenance · positive control · negative control) ahead of the deferred
+ * registration slice (mmnto-ai/totem#2478) arming the hook as blocking;
+ * provenance is the leg receipts on mmnto-ai/totem#2611 and #2610's PR thread:
+ *   - POSITIVE CONTROL (fires on the violation): a rule-violating write DENIES
+ *     via structured stdout {"decision":"deny","reason"} AND exit 2 (either
+ *     channel denies under Gemini's contract — exit 1 is allow-with-warning,
+ *     so a throw can never deny). This case and both cannot-evaluate cases
+ *     FAIL against the pre-fix inert artifact (mutation-checked);
+ *   - NEGATIVE CONTROL (does not fire on the miss): a clean write ALLOWS with
+ *     exit 0 and silent stdout/stderr. Passes against the inert artifact too —
+ *     it guards regression, not the fix;
  *   - input the guard cannot evaluate (unparseable JSON, missing tool_name) is
  *     allow-with-warning (exit 1) with a stderr breadcrumb — loud, not silent,
  *     and never a seat-bricking deny-everything;
  *   - require() still yields the bare function (entry point gated on
- *     require.main) so unit consumers and fixtures keep working.
+ *     require.main) so unit consumers and fixtures keep working (regression
+ *     guard; also passes pre-fix).
  */
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as os from 'node:os';
@@ -56,25 +61,21 @@ describe('rendered BeforeTool.cjs — Gemini command-hook contract (mmnto-ai/tot
   });
 
   function runHook(stdin: string): HookRun {
-    try {
-      const stdout = execFileSync(process.execPath, [hookPath], {
-        input: stdin,
-        encoding: 'utf-8',
-        timeout: SPAWN_TIMEOUT_MS,
-        cwd: tmpDir,
-      });
-      return { status: 0, stdout, stderr: '' };
-    } catch (err) {
-      const e = err as { status?: number; stdout?: string; stderr?: string };
-      // A spawn-layer failure (timeout, ENOENT) carries no status — rethrow so
-      // it fails the test as itself rather than masquerading as a hook verdict.
-      if (typeof e.status !== 'number') throw err;
-      return { status: e.status, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
-    }
+    const run = spawnSync(process.execPath, [hookPath], {
+      input: stdin,
+      encoding: 'utf-8',
+      timeout: SPAWN_TIMEOUT_MS,
+      cwd: tmpDir,
+    });
+    // A spawn-layer failure (timeout, ENOENT, signal kill) carries no exit
+    // status — surface it as itself rather than masquerading as a hook verdict.
+    if (run.error) throw run.error;
+    if (run.status === null) throw new Error('hook process terminated without an exit status');
+    return { status: run.status, stdout: run.stdout, stderr: run.stderr };
   }
 
   it(
-    'DENIES a rule-violating write: structured stdout decision AND exit 2 (negative control)',
+    'DENIES a rule-violating write: structured stdout decision AND exit 2 (positive control)',
     () => {
       const run = runHook(
         JSON.stringify({
@@ -93,7 +94,7 @@ describe('rendered BeforeTool.cjs — Gemini command-hook contract (mmnto-ai/tot
   );
 
   it(
-    'ALLOWS a clean write: exit 0, empty stdout (positive control)',
+    'ALLOWS a clean write: exit 0, silent stdout AND stderr (negative control)',
     () => {
       const run = runHook(
         JSON.stringify({
@@ -103,6 +104,7 @@ describe('rendered BeforeTool.cjs — Gemini command-hook contract (mmnto-ai/tot
       );
       expect(run.status).toBe(0);
       expect(run.stdout).toBe('');
+      expect(run.stderr).toBe('');
     },
     TEST_TIMEOUT_MS,
   );
