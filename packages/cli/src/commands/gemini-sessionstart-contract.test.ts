@@ -2,13 +2,14 @@
  * Runtime contract of the RENDERED `.gemini/hooks/SessionStart.cjs` artifact,
  * executed the way Gemini CLI executes it (mmnto-ai/totem#2613).
  *
- * Interactive Gemini ingests SessionStart output ONLY from the
+ * Interactive Gemini ingests SessionStart CONTEXT only from the
  * `hookSpecificOutput.additionalContext` envelope — plain exit-0 stdout wraps
- * as `systemMessage`, which the interactive startup consumer never reads, so a
- * plain-text briefing is silently dropped in the primary dev flow. The
- * template emits BOTH keys: the envelope for interactive context, and
- * `systemMessage` for the `/clear` (UI info item) and `-p` (stderr) surfaces,
- * which read only that key.
+ * as `systemMessage`, which the interactive startup consumer never injects, so
+ * a plain-text briefing never reached model context in the primary dev flow.
+ * The template emits BOTH keys: the envelope for model context, and
+ * `systemMessage` for the human surfaces (interactive startup and `/clear`
+ * render it as a UI info item via the hook-system-message path; `-p` echoes it
+ * to stderr).
  *
  * The shim emits on BOTH streams because the real verbs do: `totem describe`
  * writes its whole banner to STDERR (the CLI routes all logging there) — a
@@ -112,6 +113,10 @@ describe('rendered SessionStart.cjs — Gemini envelope contract (mmnto-ai/totem
       const envelope = JSON.parse(run.stdout) as Envelope;
       expect(envelope.hookSpecificOutput.hookEventName).toBe('SessionStart');
       expect(envelope.hookSpecificOutput.additionalContext).toMatch(/Briefing unavailable/);
+      // The note must ALSO ride systemMessage — that key is what the human
+      // surfaces render, and it is the assertion that distinguishes the
+      // dual-key contract from the envelope-only intermediate shape.
+      expect(envelope.systemMessage).toMatch(/Briefing unavailable/);
       // The orient leg's failure stays a stderr breadcrumb (its pre-fix surface).
       expect(run.stderr).toMatch(/orient briefing unavailable/);
     },
@@ -152,10 +157,12 @@ describe('rendered SessionStart.cjs — refresh-gh armed path stays out of the d
     'stdout stays exactly one JSON payload even with the refresh-gh leg armed',
     () => {
       // A `.git` DIRECTORY arms the refresh-gh spawn — the only other code in
-      // the template that could conceivably touch stdout. A chatty
-      // `totem-status` shim proves its output routes to the log fd (or the
-      // spawn-reject-quiet branch on hosts that cannot spawn the shim shape),
-      // never into the decision channel.
+      // the template that could conceivably touch stdout. Which branch this
+      // proves is platform-split: on win32 the extension-less spawn (no shell)
+      // cannot resolve the .cmd shim, so this pins the spawn-reject-quiet
+      // branch; on the POSIX CI legs the 0755 shim executes and this pins that
+      // a chatty child's output routes to the log fd. Both must keep stdout as
+      // exactly the JSON payload.
       fs.mkdirSync(path.join(tmpDir, '.git'));
       const shimDir = path.join(tmpDir, 'shim');
       writeTotemShim(shimDir);

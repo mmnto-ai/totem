@@ -98,23 +98,23 @@ try {
   process.stderr.write('[SessionStart] totem-status refresh-gh unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\n');
 }
 
-// Interactive Gemini ingests SessionStart output ONLY from the
+// Interactive Gemini ingests SessionStart CONTEXT only from the
 // hookSpecificOutput.additionalContext envelope — plain exit-0 stdout wraps as
-// systemMessage, which the interactive startup consumer never reads, so the
-// briefing was silently dropped in the primary dev flow even once registered
-// (mmnto-ai/totem#2613; leg-verified against @google/gemini-cli 0.54.4).
-// systemMessage rides alongside the envelope: /clear renders ONLY
-// systemMessage (as a UI info item) and -p prints it to stderr — without it
-// those surfaces lose the briefing entirely; the interactive consumer ignores
-// systemMessage, so nothing double-renders.
+// systemMessage, which the interactive startup consumer never injects, so the
+// briefing was absent from model context in the primary dev flow even once
+// registered (mmnto-ai/totem#2613; leg-verified against @google/gemini-cli
+// 0.54.4). systemMessage rides alongside the envelope for the human surfaces:
+// interactive startup and /clear render it as a UI info item and -p echoes it
+// to stderr — so the briefing is VISIBLE to the human on those surfaces and
+// injected as context for the model (one payload, both audiences).
 // The Totem CLI writes its banner and diagnostics to STDERR, so capture takes
 // BOTH streams — the same seam the Claude-side template documents; a
 // stdout-only capture silently drops the describe leg (mmnto-ai/totem#2613
-// falsification round).
+// falsification round). A leg failure carries any partial stdout plus the
+// fail-soft note; exit is ALWAYS 0 (never blocks boot).
 // Per-leg 20s budgets cut the measured worst-case process exit from 60s to
-// 40s against Gemini's 60s DEFAULT_HOOK_TIMEOUT. Residual (pre-existing): the
-// vendor keys hook completion on stream CLOSURE, so a hung grandchild holding
-// a pipe can stall the hook past any inner budget.
+// 40s against Gemini's 60s DEFAULT_HOOK_TIMEOUT (which tree-kills at expiry;
+// no descendant inherits this hook's own streams).
 let briefing = '';
 try {
   const describeRun = spawnSync('totem describe', {
@@ -123,15 +123,18 @@ try {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  // spawnSync sets .error (it does NOT throw) on a spawn-level failure.
-  if (describeRun.error) throw describeRun.error;
-  if (describeRun.status !== 0) {
-    throw new Error((describeRun.stderr || '').trim() || 'totem describe exited ' + describeRun.status);
+  // spawnSync sets .error (it does NOT throw) on spawn-level failure/timeout.
+  briefing += describeRun.stdout || '';
+  if (describeRun.error || describeRun.status !== 0) {
+    const reason = describeRun.error
+      ? (describeRun.error.message || String(describeRun.error))
+      : ((describeRun.stderr || '').trim() || 'totem describe exited ' + describeRun.status);
+    briefing += '[Totem] Briefing unavailable: ' + reason + '\n';
+  } else {
+    briefing += describeRun.stderr || '';
   }
-  briefing += (describeRun.stdout || '') + (describeRun.stderr || '');
 } catch (err) {
-  // Fail-soft (exit 0, never blocks boot): the unavailable note rides the
-  // envelope so it still reaches interactive context.
+  // Belt for a genuinely throwing spawnSync: same fail-soft note.
   briefing += '[Totem] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\n';
 }
 
@@ -144,14 +147,18 @@ try {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  if (orientRun.error) throw orientRun.error;
-  if (orientRun.status !== 0) {
-    throw new Error((orientRun.stderr || '').trim() || 'totem orient exited ' + orientRun.status);
+  briefing += orientRun.stdout || '';
+  if (orientRun.error || orientRun.status !== 0) {
+    const orientReason = orientRun.error
+      ? (orientRun.error.message || String(orientRun.error))
+      : ((orientRun.stderr || '').trim() || 'totem orient exited ' + orientRun.status);
+    // Boot-safe: orient is additive to describe; a failure never blocks session
+    // start — surface a NON-fatal breadcrumb (matches the Claude-side hook).
+    process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + orientReason + '\n');
+  } else {
+    briefing += orientRun.stderr || '';
   }
-  briefing += (orientRun.stdout || '') + (orientRun.stderr || '');
 } catch (err) {
-  // Boot-safe: orient is additive to describe; a failure never blocks session start —
-  // surface a NON-fatal breadcrumb (matches the Claude-side hook) rather than swallow.
   process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\n');
 }
 

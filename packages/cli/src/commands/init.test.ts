@@ -2325,10 +2325,10 @@ describe('GEMINI_SESSION_START template', () => {
 
   it('uses 20-second per-leg timeouts — measured worst-case exit drops 60s to 40s', () => {
     // Two sequential legs at the old 30s each could consume Gemini's entire
-    // 60s DEFAULT_HOOK_TIMEOUT on one pathological hang. Residual
-    // (pre-existing): the vendor keys hook completion on stream CLOSURE, so a
-    // hung grandchild holding a pipe can still stall the hook past any inner
-    // budget (mmnto-ai/totem#2613 falsification round).
+    // 60s DEFAULT_HOOK_TIMEOUT on one pathological hang. Post-fix no
+    // descendant inherits the hook's own streams, so the inner budgets are
+    // honored even under a hung grandchild, and the vendor tree-kills at its
+    // own 60s expiry regardless (mmnto-ai/totem#2613 falsification rounds).
     expect(GEMINI_SESSION_START).toContain('timeout: 20000');
     expect(GEMINI_SESSION_START).not.toContain('timeout: 30000');
   });
