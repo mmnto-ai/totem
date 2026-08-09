@@ -1396,3 +1396,46 @@ describe('scrubReflexFiles loud backstop (Tenet 4 licensed shape, #2620 leg find
     expect(summary.skipped.some((s) => s.startsWith('GEMINI.md (could not scrub'))).toBe(true);
   });
 });
+
+describe('ejectCommand --force dirty-sense trailer (mmnto-ai/totem#2620 rule 2)', () => {
+  let cwd: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(cwd);
+    fs.mkdirSync(path.join(cwd, '.git', 'hooks'), { recursive: true });
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(cwd);
+  });
+
+  it('says the no-revert-point state before the (skipped) prompt AND restates it after the summary', async () => {
+    vi.mocked(safeExec).mockReturnValue(' M CLAUDE.md');
+    const { log } = await import('../ui.js');
+    const warnSpy = vi.spyOn(log, 'warn');
+
+    await ejectCommand({ force: true });
+
+    const messages = warnSpy.mock.calls.map((c) => String(c[1]));
+    expect(messages.some((m) => m.includes('Uncommitted changes in 1 path(s)'))).toBe(true);
+    expect(messages.some((m) => m.includes('--force skipped the consent prompt'))).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it('clean tree under --force: no sense lines, no trailer', async () => {
+    vi.mocked(safeExec).mockReturnValue('');
+    const { log } = await import('../ui.js');
+    const warnSpy = vi.spyOn(log, 'warn');
+
+    await ejectCommand({ force: true });
+
+    const messages = warnSpy.mock.calls.map((c) => String(c[1]));
+    expect(messages.some((m) => m.includes('Uncommitted changes'))).toBe(false);
+    expect(messages.some((m) => m.includes('--force skipped the consent prompt'))).toBe(false);
+    warnSpy.mockRestore();
+  });
+});
