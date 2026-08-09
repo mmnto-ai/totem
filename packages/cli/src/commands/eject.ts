@@ -483,8 +483,11 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
 /** Reflex files that predate the marker era and may carry a v1 marker-less
  *  block. REFLEX_START shipped before GEMINI.md / .junie/guidelines.md /
  *  .github/copilot-instructions.md joined the tool table, so on those files a
- *  bare legacy heading can only be user-authored — never scrubbed. */
-const LEGACY_REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
+ *  bare legacy heading can only be user-authored — never scrubbed.
+ *  `.gemini/gemini.md` is the RETIRED pre-marker Gemini target (replaced by
+ *  GEMINI.md when the tool table landed): init no longer injects there, but an
+ *  old block can still be sitting in it, so eject still visits it. */
+const LEGACY_REFLEX_FILES = ['CLAUDE.md', '.gemini/gemini.md', '.cursorrules'];
 
 /** The alt heading of the oldest legacy block shape (pre-LEGACY_SENTINEL). */
 const LEGACY_ALT_HEADING = '## Totem Memory Reflexes';
@@ -503,8 +506,11 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
   const { AI_TOOLS } = await import('./init-detect.js');
   const { LEGACY_SENTINEL, REFLEX_END, REFLEX_START } = await import('./init-templates.js');
   const reflexFiles = AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile]));
+  // Visit the union: the roster init injects through today, plus the retired
+  // pre-marker targets that can still carry an old block (scoped fold round).
+  const scanFiles = [...new Set([...reflexFiles, ...LEGACY_REFLEX_FILES])];
 
-  for (const rel of reflexFiles) {
+  for (const rel of scanFiles) {
     const filePath = path.join(cwd, rel);
     // Per-file best-effort (the Tenet 4 eject cleanup carve-out every sibling
     // scrubber honours): one unreadable/locked file degrades to a reported
@@ -587,16 +593,29 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
         continue;
       }
       const afterLegacy = content.slice(legacyIdx);
-      const nextH2 = afterLegacy.match(/\r?\n## (?!Totem AI Integration|Totem Memory Reflexes)/);
+      // init.ts upgradeReflexes Case 2's boundary, VERBATIM: the next H2 that
+      // is not a Totem AI Integration heading ends the block. No extra
+      // alternatives — both injector generations guarded on the absence of
+      // "Totem Memory Reflexes" before writing, so a second Totem-titled H2
+      // below the block can only be user-authored (scoped fold round).
+      const nextH2 = afterLegacy.match(/\r?\n## (?!Totem AI Integration)/);
       const blockEnd = nextH2?.index !== undefined ? legacyIdx + nextH2.index : content.length;
       let before = content.slice(0, legacyIdx).replace(/(?:\r?\n)*$/, '\n');
       if (before === '\n') before = '';
-      fs.writeFileSync(filePath, before + content.slice(blockEnd), 'utf-8');
+      let tail = content.slice(blockEnd);
+      // The boundary newline is seam-owned: with a non-empty prefix it supplies
+      // the blank-line separation; at byte 0 it would mint a leading blank line
+      // the seam rules forbid.
+      if (before === '') {
+        if (tail.startsWith('\r\n')) tail = tail.slice(2);
+        else if (tail.startsWith('\n')) tail = tail.slice(1);
+      }
+      fs.writeFileSync(filePath, before + tail, 'utf-8');
       summary.scrubbed.push(rel);
       // totem-context: intentional cleanup — per-file best-effort scrub; the failure is surfaced as a reported skip, never a silent drop.
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      summary.skipped.push(`${rel} (${msg})`);
+      summary.skipped.push(`${rel} (could not scrub: ${msg})`);
     }
   }
 }

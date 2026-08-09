@@ -1074,4 +1074,54 @@ describe('scrubReflexFiles — marker pairing, residue, and legacy boundary', ()
     expect(fs.readFileSync(p, 'utf-8')).toBe(userAuthored);
     expect(summary.skipped).toEqual(['GEMINI.md (no Totem block)']);
   });
+
+  it("a user's own '## Totem Memory Reflexes…' H2 below a legacy block terminates the span (init Case 2 boundary, verbatim)", async () => {
+    // Both injector generations guarded on the absence of "Totem Memory
+    // Reflexes" before writing, so a second Totem-titled H2 below the block is
+    // always user-authored — it must bound the scrub, not be eaten by it.
+    const p = write(
+      'CLAUDE.md',
+      '# P\n\n## Totem AI Integration (Auto-Generated)\nblock body\n\n## Totem Memory Reflexes tips\n\nmy notes\n',
+    );
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe('# P\n\n## Totem Memory Reflexes tips\n\nmy notes\n');
+  });
+
+  it('the removal loop preserves user content BETWEEN two complete blocks', async () => {
+    const p = write('CLAUDE.md', '# Head\n' + AI_PROMPT_BLOCK + 'USER-MID\n' + AI_PROMPT_BLOCK);
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe('# Head\nUSER-MID\n');
+    expect(summary.scrubbed).toEqual(['CLAUDE.md']);
+  });
+
+  it('a legacy block at byte 0 does not mint a leading blank line above the surviving user section', async () => {
+    const p = write(
+      'CLAUDE.md',
+      '## Totem AI Integration (Auto-Generated)\nbody\n\n## User Section\n\nkeep me\n',
+    );
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe('## User Section\n\nkeep me\n');
+  });
+
+  it('the retired pre-marker target .gemini/gemini.md still gets its legacy block scrubbed', async () => {
+    const p = write(
+      '.gemini/gemini.md',
+      '# Old gemini\n\n## Totem AI Integration (Auto-Generated)\nold body\n',
+    );
+    const summary = freshSummary();
+
+    await scrubReflexFiles(cwd, summary);
+
+    expect(fs.readFileSync(p, 'utf-8')).toBe('# Old gemini\n');
+    expect(summary.scrubbed).toEqual(['.gemini/gemini.md']);
+  });
 });
