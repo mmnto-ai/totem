@@ -322,7 +322,11 @@ describe('search_knowledge', () => {
     }));
 
     handle = await setupFresh();
-  });
+    // 30s, not vitest's 10s default: this hook pays the cold module-graph
+    // re-import behind `vi.resetModules()`, and the FIRST test's instance blew
+    // 10s on a loaded windows-latest CI runner with the test body never run
+    // (mmnto-ai/totem#2608 — the suite's known load-flake class).
+  }, 30_000);
 
   // --- A.3.a — Trap Ledger writer wiring ---
 
