@@ -2,22 +2,11 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": ".*",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "node .gemini/hooks/SessionStart.cjs"
-          }
-        ]
-      }
-    ],
-    "BeforeTool": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .gemini/hooks/BeforeTool.cjs"
           }
         ]
       }
