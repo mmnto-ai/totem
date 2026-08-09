@@ -63,7 +63,7 @@ Runs a battery of automated health checks to verify config bloat, index health, 
 
 ### `totem eject`
 
-Safely removes all Totem git hooks, config files, agent prompt injections, and the local `.lancedb/` index.
+Safely removes all Totem git hooks, config files, agent prompt injections, and the local `.lancedb/` index. Before asking consent it senses uncommitted changes to the files it is about to modify and says which ones have no revert point (`--force` skips the prompt, not the sense line). Git hooks are the one surface git itself cannot recover, so eject writes each hook's pre-mutation bytes to `.git/hooks/<name>.totem-bak` before touching it — if a scrub goes wrong, the `.totem-bak` file is the revert path. All file rewrites are atomic (temp + rename): an interrupted eject leaves every file with its old or new content, never a torn mix.
 
 ### `totem link <path>`
 

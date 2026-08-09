@@ -7,6 +7,7 @@ import type { TotemConfig } from '../config-schema.js';
 import { requireEmbedding } from '../config-schema.js';
 import { createEmbedder } from '../embedders/embedder.js';
 import { TotemDatabaseError, TotemError } from '../errors.js';
+import { writeFileAtomicSync } from '../fs-atomic.js';
 import type { LockRelease } from '../lock.js';
 import { withLock } from '../lock.js';
 import { sanitizeForIngestion } from '../sanitize.js';
@@ -127,11 +128,10 @@ function readSyncState(totemDir: string, onProgress?: (msg: string) => void): Sy
  */
 function writeJsonAtomic(filePath: string, value: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  // PID-unique tmp name: two writers racing under a stolen stale lock must
-  // not interleave through one tmp path (falsification round 1, MINOR 6).
-  const tmpPath = `${filePath}.${process.pid}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(value, null, 2) + '\n', 'utf-8');
-  fs.renameSync(tmpPath, filePath);
+  // Unique tmp naming (two writers racing under a stolen stale lock must not
+  // interleave through one tmp path — falsification round 1, MINOR 6) is the
+  // shared corollary helper's contract (mmnto-ai/totem#2620).
+  writeFileAtomicSync(filePath, JSON.stringify(value, null, 2) + '\n');
 }
 
 function writeSyncState(totemDir: string, state: SyncState): void {

@@ -4,9 +4,12 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { safeExec } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import type { EjectSummary } from './eject.js';
 import {
+  deriveDirtyTreeSense,
   ejectCommand,
   resolveEjectHooksContext,
   scrubPostCheckoutHook,
@@ -39,6 +42,34 @@ vi.mock('./install-hooks.js', async (importOriginal) => {
   };
 });
 
+// Same git-seam rule for the rule-2 dirty-tree sense (mmnto-ai/totem#2620):
+// `deriveDirtyTreeSense` shells `git status --porcelain` via the core barrel's
+// safeExec — mocked so no test ever spawns real git from a temp cwd. Default
+// (armed in the file-scope beforeEach): empty porcelain = clean tree.
+vi.mock('@mmnto/totem', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mmnto/totem')>();
+  return { ...actual, safeExec: vi.fn(() => '') };
+});
+
+// Failure-injection seam for the shared atomic writer (mmnto-ai/totem#2620):
+// passthrough to the REAL helper unless a test arms a failure, so the
+// byte-exact scrub fixtures keep exercising real fs writes.
+const atomicControl: {
+  failAll?: Error;
+  failPathIncludes?: { needle: string; err: Error };
+} = {};
+vi.mock('@mmnto/totem/fs-atomic', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mmnto/totem/fs-atomic')>();
+  const writeFileAtomicSync = ((...args: Parameters<typeof actual.writeFileAtomicSync>) => {
+    if (atomicControl.failAll) throw atomicControl.failAll;
+    if (atomicControl.failPathIncludes && args[0].includes(atomicControl.failPathIncludes.needle)) {
+      throw atomicControl.failPathIncludes.err;
+    }
+    return actual.writeFileAtomicSync(...args);
+  }) as typeof actual.writeFileAtomicSync;
+  return { ...actual, writeFileAtomicSync };
+});
+
 // Default seam behavior for the plain-checkout fixtures every describe below
 // builds: git root = cwd, hooks dir = <root>/.git/hooks. Re-established before
 // EVERY test (file-scope hook runs before each describe-scope hook); the
@@ -49,6 +80,9 @@ beforeEach(() => {
     unparseablePointer: false,
   }));
   vi.mocked(resolveHooksDir).mockImplementation((root: string) => path.join(root, '.git', 'hooks'));
+  vi.mocked(safeExec).mockReturnValue('');
+  atomicControl.failAll = undefined;
+  atomicControl.failPathIncludes = undefined;
 });
 
 function makeTmpDir(): string {
@@ -601,7 +635,9 @@ fi
     scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
 
     expect(fs.existsSync(hookPath)).toBe(false);
-    expect(summary.removed).toContain('.git/hooks/post-merge');
+    expect(summary.removed).toContain(
+      '.git/hooks/post-merge (pre-removal bytes: .git/hooks/post-merge.totem-bak)',
+    );
   });
 
   it('scrubs old unconditional hook format', () => {
@@ -615,7 +651,9 @@ fi
     scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
 
     expect(fs.existsSync(hookPath)).toBe(false);
-    expect(summary.removed).toContain('.git/hooks/post-merge');
+    expect(summary.removed).toContain(
+      '.git/hooks/post-merge (pre-removal bytes: .git/hooks/post-merge.totem-bak)',
+    );
   });
 
   it('preserves non-totem content when scrubbing', () => {
@@ -641,7 +679,9 @@ fi
     const content = fs.readFileSync(hookPath, 'utf-8');
     expect(content).toContain('deploy notification');
     expect(content).not.toContain('[totem]');
-    expect(summary.scrubbed).toContain('.git/hooks/post-merge');
+    expect(summary.scrubbed).toContain(
+      '.git/hooks/post-merge (pre-scrub bytes: .git/hooks/post-merge.totem-bak)',
+    );
   });
 });
 
@@ -684,7 +724,9 @@ fi
     scrubPostCheckoutHook(path.join(cwd, '.git', 'hooks'), summary);
 
     expect(fs.existsSync(hookPath)).toBe(false);
-    expect(summary.removed).toContain('.git/hooks/post-checkout');
+    expect(summary.removed).toContain(
+      '.git/hooks/post-checkout (pre-removal bytes: .git/hooks/post-checkout.totem-bak)',
+    );
   });
 
   it('preserves non-Totem content in post-checkout hook', () => {
@@ -714,7 +756,9 @@ fi
     const content = fs.readFileSync(hookPath, 'utf-8');
     expect(content).toContain('deploy notification');
     expect(content).not.toContain('[totem]');
-    expect(summary.scrubbed).toContain('.git/hooks/post-checkout');
+    expect(summary.scrubbed).toContain(
+      '.git/hooks/post-checkout (pre-scrub bytes: .git/hooks/post-checkout.totem-bak)',
+    );
   });
 });
 
@@ -1153,5 +1197,202 @@ describe('scrubReflexFiles — marker pairing, residue, and legacy boundary', ()
 
     expect(fs.readFileSync(p, 'utf-8')).toBe('# Old gemini\n');
     expect(summary.scrubbed).toEqual(['.gemini/gemini.md']);
+  });
+});
+
+// ─── Rule-3 recovery artifact + rule-2 sense + Tenet-4 backstop (mmnto-ai/totem#2620) ───
+
+describe('scrubHook recovery artifact (User-File Mutation Contract rule 3)', () => {
+  let cwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    fs.mkdirSync(path.join(cwd, '.git', 'hooks'), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(cwd);
+  });
+
+  const MIXED_HOOK = `#!/bin/sh
+echo "deploy notification"
+# [totem] post-merge hook — background re-index after pull/merge.
+
+if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
+  (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+fi
+# [totem] end post-merge
+`;
+
+  const TOTEM_ONLY_HOOK = `#!/bin/sh
+# [totem] post-merge hook — background re-index after pull/merge.
+
+echo "[totem] Triggering background re-index..."
+(pnpm exec totem sync --incremental > .git/totem-sync.log 2>&1) &
+`;
+
+  it('partial scrub writes the bak with exact pre-mutation bytes BEFORE mutating', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(hookPath, MIXED_HOOK);
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
+
+    expect(fs.readFileSync(`${hookPath}.totem-bak`, 'utf-8')).toBe(MIXED_HOOK);
+    expect(fs.readFileSync(hookPath, 'utf-8')).not.toContain('[totem]');
+    expect(summary.scrubbed).toContain(
+      '.git/hooks/post-merge (pre-scrub bytes: .git/hooks/post-merge.totem-bak)',
+    );
+  });
+
+  it('full-removal path baks too — surface class, not content claim (intent-read Q1)', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(hookPath, TOTEM_ONLY_HOOK);
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
+
+    expect(fs.existsSync(hookPath)).toBe(false);
+    expect(fs.readFileSync(`${hookPath}.totem-bak`, 'utf-8')).toBe(TOTEM_ONLY_HOOK);
+  });
+
+  it('bak failure skips the mutation entirely — recovery-before-mutation is load-bearing', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(hookPath, MIXED_HOOK);
+    atomicControl.failPathIncludes = {
+      needle: '.totem-bak',
+      err: Object.assign(new Error('ENOSPC: injected'), { code: 'ENOSPC' }),
+    };
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
+
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(MIXED_HOOK);
+    expect(fs.existsSync(`${hookPath}.totem-bak`)).toBe(false);
+    expect(summary.scrubbed).toEqual([]);
+    expect(summary.removed).toEqual([]);
+    expect(
+      summary.skipped.some((s) => s.includes('recovery backup failed — hook left untouched')),
+    ).toBe(true);
+  });
+
+  it.skipIf(process.platform === 'win32')('bak carries the source hook mode (0755)', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(hookPath, MIXED_HOOK);
+    fs.chmodSync(hookPath, 0o755);
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(path.join(cwd, '.git', 'hooks'), summary);
+
+    expect(fs.statSync(`${hookPath}.totem-bak`).mode & 0o7777).toBe(0o755);
+    expect(fs.statSync(hookPath).mode & 0o7777).toBe(0o755);
+  });
+});
+
+describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
+  let cwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(cwd);
+  });
+
+  it('clean tree: no lines, no dirty paths', async () => {
+    vi.mocked(safeExec).mockReturnValue('');
+    const sense = await deriveDirtyTreeSense(cwd);
+    expect(sense.dirty).toEqual([]);
+    expect(sense.lines).toEqual([]);
+  });
+
+  it('dirty roster paths: says which files have no revert point, never blocks', async () => {
+    vi.mocked(safeExec).mockReturnValue(' M CLAUDE.md\n?? .totem/');
+    const sense = await deriveDirtyTreeSense(cwd);
+    expect(sense.dirty).toHaveLength(2);
+    expect(sense.lines[0]).toContain('Uncommitted changes in 2 path(s)');
+    expect(sense.lines.join('\n')).toContain('CLAUDE.md');
+    expect(sense.lines.join('\n')).toContain('.totem/');
+  });
+
+  it('roster derives from the shared constants — deletions count (intent-read Q3)', async () => {
+    vi.mocked(safeExec).mockReturnValue('');
+    await deriveDirtyTreeSense(cwd);
+
+    const [cmd, args] = vi.mocked(safeExec).mock.calls[0] as [string, string[]];
+    expect(cmd).toBe('git');
+    expect(args).toContain('--porcelain');
+    // Scrub targets AND delete targets ride one derived roster.
+    expect(args).toContain('CLAUDE.md');
+    expect(args).toContain('.claude/settings.json');
+    expect(args).toContain('.gemini/hooks/SessionStart.cjs');
+    expect(args).toContain('.totem');
+    expect(args).toContain('totem.config.ts');
+  });
+
+  it('not a git repository: honest no-revert-point line, still proceeds', async () => {
+    vi.mocked(safeExec).mockImplementation(() => {
+      throw new Error(
+        'Command failed: git status --porcelain\nfatal: not a git repository (or any of the parent directories): .git',
+      );
+    });
+    const sense = await deriveDirtyTreeSense(cwd);
+    expect(sense.dirty).toEqual([]);
+    expect(sense.lines).toEqual([
+      'Not a git repository — files eject modifies here have no VCS revert point.',
+    ]);
+  });
+
+  it('underivable VCS state: honest could-not-derive line, still proceeds', async () => {
+    vi.mocked(safeExec).mockImplementation(() => {
+      throw new Error('Command failed: git status --porcelain\nfatal: unable to read tree');
+    });
+    const sense = await deriveDirtyTreeSense(cwd);
+    expect(sense.dirty).toEqual([]);
+    expect(sense.lines).toHaveLength(1);
+    expect(sense.lines[0]).toContain('Could not derive VCS state');
+  });
+});
+
+describe('scrubReflexFiles loud backstop (Tenet 4 licensed shape, #2620 leg finding 4)', () => {
+  let cwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(cwd);
+  });
+
+  const markerBlock = (body: string): string =>
+    `# My project\n\n${REFLEX_START}\n${body}\n${REFLEX_END}\n`;
+
+  it('every attempted scrub failing throws EJECT_FAILED instead of exiting clean', async () => {
+    fs.writeFileSync(path.join(cwd, 'CLAUDE.md'), markerBlock('claude body'));
+    atomicControl.failAll = Object.assign(new Error('EPERM: injected'), { code: 'EPERM' });
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    await expect(scrubReflexFiles(cwd, summary)).rejects.toThrow(
+      /all 1 reflex-file scrub attempt\(s\) failed/,
+    );
+    // Per-item accounting still fired before the backstop threw.
+    expect(summary.skipped.some((s) => s.includes('could not scrub'))).toBe(true);
+  });
+
+  it('partial success does NOT trip the backstop — per-item accounting covers it', async () => {
+    fs.writeFileSync(path.join(cwd, 'CLAUDE.md'), markerBlock('claude body'));
+    fs.writeFileSync(path.join(cwd, 'GEMINI.md'), markerBlock('gemini body'));
+    atomicControl.failPathIncludes = {
+      needle: 'GEMINI.md',
+      err: Object.assign(new Error('EPERM: injected'), { code: 'EPERM' }),
+    };
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    await scrubReflexFiles(cwd, summary);
+
+    expect(summary.scrubbed).toContain('CLAUDE.md');
+    expect(summary.skipped.some((s) => s.startsWith('GEMINI.md (could not scrub'))).toBe(true);
   });
 });

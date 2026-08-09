@@ -28,6 +28,10 @@
     "./packs": {
       "import": "./dist/packs.js",
       "types": "./dist/packs.d.ts"
+    },
+    "./fs-atomic": {
+      "import": "./dist/fs-atomic.js",
+      "types": "./dist/fs-atomic.d.ts"
     }
   },
   "scripts": {

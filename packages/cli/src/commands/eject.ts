@@ -1,6 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+// Subpath import, NOT the core barrel: fs-atomic pulls only node builtins, so
+// the command file's cold-start discipline holds without threading a lazy seam
+// through the sync scrub helpers that need it (mmnto-ai/totem#2620).
+import { writeFileAtomicSync } from '@mmnto/totem/fs-atomic';
+
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Eject';
@@ -69,9 +74,9 @@ export interface EjectHooksContext {
  * git root via `resolveGitRootForHookPath` (anchors from a subdirectory; maps an
  * unparseable pointer to a null root) and the hooks dir via `resolveHooksDir`
  * (git's own worktree/`commondir` walk — the rev-parse root resolution the
- * hardcode-`.git/hooks` lesson prescribes). Best-effort per Tenet 4's eject
- * cleanup carve-out — a genuine git failure is reported as unresolvable, never a
- * crash of the whole eject.
+ * hardcode-`.git/hooks` lesson prescribes). Best-effort under Tenet 4's
+ * licensed shape (per-item failure accounting, loud backstop) — a genuine git
+ * failure is reported as unresolvable, never a crash of the whole eject.
  */
 export async function resolveEjectHooksContext(cwd: string): Promise<EjectHooksContext> {
   // Lazy-load the hook-path resolvers: they pull the core git barrel, so keeping
@@ -81,7 +86,7 @@ export async function resolveEjectHooksContext(cwd: string): Promise<EjectHooksC
   let gitRoot: string | null;
   try {
     ({ gitRoot } = resolveGitRootForHookPath(cwd));
-    // Eject is best-effort per Tenet 4's cleanup carve-out: a genuine git failure
+    // Eject cleanup is Tenet 4 licensed best-effort: a genuine git failure
     // (NOT not-a-repo / unparseable pointer, which return a null root WITHOUT
     // throwing) degrades to "unresolvable" rather than crashing the whole eject.
     // totem-context: intentional cleanup — best-effort git resolution for eject.
@@ -126,6 +131,24 @@ function scrubHook(
     return;
   }
 
+  // Rule-3 recovery artifact (User-File Mutation Contract corollary,
+  // mmnto-ai/totem#2620): `.git/hooks/*` is unrecoverable through git BY
+  // SURFACE CLASS — no derivable-state escape, so the full-removal path baks
+  // too (author intent-read Q1: "these bytes are fully ours" is a belief
+  // produced by the same logic that would be the bug — the #2602 provenance).
+  // Written BEFORE mutating, carrying the source hook's mode; a bak failure
+  // skips the mutation entirely, because disclosure never substitutes for
+  // recovery (the strategy#1045 addendum).
+  const bakFileName = `${hookFileName}.totem-bak`;
+  try {
+    const sourceMode = fs.statSync(hookPath).mode & 0o7777;
+    writeFileAtomicSync(`${hookPath}.totem-bak`, content, { mode: sourceMode });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    summary.skipped.push(`${hookFileName} (recovery backup failed — hook left untouched: ${msg})`);
+    return;
+  }
+
   const endSentinel = `# ${endMarker}`;
   const hasEndMarker = content.includes(endSentinel);
   const lines = content.split('\n');
@@ -165,10 +188,10 @@ function scrubHook(
   try {
     if (!remaining || remaining === '#!/bin/sh') {
       fs.unlinkSync(hookPath);
-      summary.removed.push(hookFileName);
+      summary.removed.push(`${hookFileName} (pre-removal bytes: ${bakFileName})`);
     } else {
-      fs.writeFileSync(hookPath, remaining + '\n', 'utf-8');
-      summary.scrubbed.push(hookFileName);
+      writeFileAtomicSync(hookPath, remaining + '\n');
+      summary.scrubbed.push(`${hookFileName} (pre-scrub bytes: ${bakFileName})`);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -285,7 +308,7 @@ function scrubClaudeSettings(cwd: string, summary: EjectSummary): void {
     fs.unlinkSync(filePath);
     summary.removed.push('.claude/settings.local.json');
   } else {
-    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    writeFileAtomicSync(filePath, JSON.stringify(parsed, null, 2) + '\n');
     summary.scrubbed.push('.claude/settings.local.json');
   }
 }
@@ -315,7 +338,7 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
 
   // Read separately from parse so permission errors fail loud (they are
   // a distinct failure mode from invalid JSON, which is recoverable as
-  // a documented eject skip per Tenet 4's "best-effort cleanup" carve-out).
+  // a documented eject skip under Tenet 4's licensed best-effort shape).
   const raw = fs.readFileSync(filePath, 'utf-8');
   let rawParsed: unknown;
   try {
@@ -406,7 +429,7 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
     fs.unlinkSync(filePath);
     summary.removed.push('.claude/settings.json');
   } else {
-    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    writeFileAtomicSync(filePath, JSON.stringify(parsed, null, 2) + '\n');
     summary.scrubbed.push('.claude/settings.json');
   }
 }
@@ -450,7 +473,7 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
     try {
       fs.unlinkSync(filePath);
       summary.removed.push(rel);
-      // totem-context: intentional cleanup — eject best-effort per Tenet 4 carve-out
+      // totem-context: intentional cleanup — Tenet 4 licensed best-effort; the failure is a reported skip
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       summary.skipped.push(`${rel} (${msg})`);
@@ -510,10 +533,16 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
   // pre-marker targets that can still carry an old block (scoped fold round).
   const scanFiles = [...new Set([...reflexFiles, ...LEGACY_REFLEX_FILES])];
 
+  // Tenet 4 licenses per-item best-effort ONLY together with failure
+  // accounting and a loud backstop (the licensing gap this closes was
+  // mmnto-ai/totem#2620 leg finding 4 — before it, an eject where every
+  // scrub write failed still exited clean over a wall of skip lines).
+  let failed = 0;
+  let succeeded = 0;
+
   for (const rel of scanFiles) {
     const filePath = path.join(cwd, rel);
-    // Per-file best-effort (the Tenet 4 eject cleanup carve-out every sibling
-    // scrubber honours): one unreadable/locked file degrades to a reported
+    // Per-file best-effort: one unreadable/locked file degrades to a reported
     // skip, never an abort that strands the remaining eject steps.
     try {
       if (!fs.existsSync(filePath)) continue;
@@ -575,7 +604,8 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
       const residue = out.includes(REFLEX_START) || out.includes(REFLEX_END);
 
       if (removedBlocks > 0) {
-        fs.writeFileSync(filePath, out, 'utf-8');
+        writeFileAtomicSync(filePath, out);
+        succeeded++;
         summary.scrubbed.push(residue ? `${rel} (marker residue remains — remove manually)` : rel);
         continue;
       }
@@ -620,13 +650,27 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
         if (tail.startsWith('\r\n')) tail = tail.slice(2);
         else if (tail.startsWith('\n')) tail = tail.slice(1);
       }
-      fs.writeFileSync(filePath, before + tail, 'utf-8');
+      writeFileAtomicSync(filePath, before + tail);
+      succeeded++;
       summary.scrubbed.push(rel);
-      // totem-context: intentional cleanup — per-file best-effort scrub; the failure is surfaced as a reported skip, never a silent drop.
+      // totem-context: intentional cleanup — per-file best-effort scrub; the failure is a reported skip the accounting below counts toward the loud backstop, never a silent drop.
     } catch (err) {
+      failed++;
       const msg = err instanceof Error ? err.message : String(err);
       summary.skipped.push(`${rel} (could not scrub: ${msg})`);
     }
+  }
+
+  // The loud systemic backstop Tenet 4's licensed shape requires alongside
+  // the per-item accounting (mmnto-ai/totem#2620 leg finding 4): when every
+  // attempted scrub failed, eject must not exit clean.
+  if (failed > 0 && succeeded === 0) {
+    const { TotemError } = await import('@mmnto/totem');
+    throw new TotemError(
+      'EJECT_FAILED',
+      `all ${failed} reflex-file scrub attempt(s) failed — nothing was scrubbed; see the per-file skip reasons in the summary`,
+      'Check permissions/locks on the listed reflex files, then re-run totem eject.',
+    );
   }
 }
 
@@ -664,6 +708,77 @@ function deleteArtifacts(cwd: string, summary: EjectSummary): void {
   }
 }
 
+// ─── Dirty-tree sense (User-File Mutation Contract rule 2) ──────
+
+/** Derived pre-consent VCS state for the files eject is about to mutate. */
+export interface DirtyTreeSense {
+  /** `git status --porcelain` lines for roster paths with uncommitted changes. */
+  dirty: string[];
+  /** Human sense lines to print ahead of the consent prompt (empty = clean derivation). */
+  lines: string[];
+}
+
+/**
+ * Rule-2 sense of the User-File Mutation Contract (mmnto-ai/totem#2620): the
+ * git-native form of backup-before-modify is knowing whether a commit exists
+ * to diff against, so eject SAYS which of its mutation targets carry
+ * uncommitted changes before asking consent. Sense-and-say only (Tenet 13):
+ * never a block, never an exit-code change; `--force` skips the prompt, not
+ * the sense. Deletions count — deleting a tracked-dirty file is the limiting
+ * case of mutation with no revert point (author intent-read Q3).
+ *
+ * The roster derives from the SAME constants the scrub/removal steps consume
+ * (Tenet 20 — a hand-mirrored sense list would be the prohibited mirror
+ * inside the very rule built to prevent silent loss). `.git/hooks/*` never
+ * appears here: git cannot see that surface — its recovery is scrubHook's
+ * rule-3 `.totem-bak` artifact.
+ *
+ * Exported for the sense-contract tests.
+ */
+export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense> {
+  const { AI_TOOLS } = await import('./init-detect.js');
+  const { DISTRIBUTED_CLAUDE_SKILLS } = await import('./init-templates.js');
+  const roster = [
+    ...new Set([
+      ...TOTEM_SCAFFOLDED_FILES,
+      '.claude/settings.local.json',
+      '.claude/settings.json',
+      ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
+      ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
+      ...LEGACY_REFLEX_FILES,
+      '.lancedb',
+      '.totem',
+      'totem.config.ts',
+    ]),
+  ];
+
+  let porcelain: string;
+  try {
+    // Lazy barrel import — the established eject runtime pattern
+    // (resolveEjectHooksContext pulls the core git barrel the same way).
+    const { safeExec } = await import('@mmnto/totem');
+    porcelain = safeExec('git', ['status', '--porcelain', '--', ...roster], { cwd });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const line = msg.includes('not a git repository')
+      ? 'Not a git repository — files eject modifies here have no VCS revert point.'
+      : `Could not derive VCS state for eject targets (${msg.split('\n')[0]}) — proceeding without the dirty-tree sense.`;
+    return { dirty: [], lines: [line] };
+  }
+
+  const dirty = porcelain.length === 0 ? [] : porcelain.split('\n').filter((l) => l.trim() !== '');
+  if (dirty.length === 0) {
+    return { dirty, lines: [] };
+  }
+  return {
+    dirty,
+    lines: [
+      `Uncommitted changes in ${dirty.length} path(s) eject will modify — no revert point until committed:`,
+      ...dirty.map((l) => `  ${l}`),
+    ],
+  };
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export interface EjectOptions {
@@ -676,6 +791,13 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   const { log } = await import('../ui.js');
 
   const cwd = process.cwd();
+
+  // Rule-2 sense line(s) ride ahead of the consent prompt — and under
+  // --force too: the flag skips the prompt, never the sense (mmnto-ai/totem#2620).
+  const sense = await deriveDirtyTreeSense(cwd);
+  for (const line of sense.lines) {
+    log.warn(TAG, line);
+  }
 
   if (!options.force) {
     const rl = readline.createInterface({ input, output });
@@ -769,6 +891,16 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   }
   if (summary.removed.length === 0 && summary.scrubbed.length === 0) {
     log.info(TAG, 'Nothing to remove — project appears clean.');
+  }
+
+  // The sense line rides the summary under --force (mmnto-ai/totem#2620 leg
+  // finding 5): the prompt was skipped, so the no-revert-point state is
+  // restated where the operator is actually looking.
+  if (options.force && sense.dirty.length > 0) {
+    log.warn(
+      TAG,
+      `--force skipped the consent prompt with uncommitted changes in ${sense.dirty.length} modified path(s) — see the sense lines above.`,
+    );
   }
 
   log.success(TAG, 'Totem has been ejected from this project.');
