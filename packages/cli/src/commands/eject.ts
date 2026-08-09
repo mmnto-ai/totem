@@ -140,11 +140,10 @@ function scrubHook(
   // skips the mutation entirely, because disclosure never substitutes for
   // recovery (the strategy#1045 addendum).
   const bakFileName = `${hookFileName}.totem-bak`;
-  // totem-context: intentional cleanup — a failed recovery artifact degrades to
-  // a reported skip and WITHHOLDS the mutation; nothing is silently attempted.
   try {
     const sourceMode = fs.statSync(hookPath).mode & 0o7777;
     writeFileAtomicSync(`${hookPath}.totem-bak`, content, { mode: sourceMode });
+    // totem-context: intentional cleanup — bak failure degrades to a reported skip and WITHHOLDS the mutation
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     summary.skipped.push(`${hookFileName} (recovery backup failed — hook left untouched: ${msg})`);
@@ -755,14 +754,12 @@ export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense>
   ];
 
   let porcelain: string;
-  // totem-context: intentional sensor degradation — the failure is SAID to the
-  // user as an honest sense line (Tenet 13), never swallowed; a sensor must not
-  // block the eject it senses for.
   try {
     // Lazy barrel import — the established eject runtime pattern
     // (resolveEjectHooksContext pulls the core git barrel the same way).
     const { safeExec } = await import('@mmnto/totem');
     porcelain = safeExec('git', ['status', '--porcelain', '--', ...roster], { cwd });
+    // totem-context: intentional sensor degradation — the failure is SAID as an honest sense line (Tenet 13), never swallowed
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const line = msg.includes('not a git repository')
