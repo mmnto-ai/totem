@@ -734,6 +734,7 @@ function deleteArtifacts(cwd: string, summary: EjectSummary): void {
     try {
       fs.unlinkSync(configPath);
       summary.removed.push(EJECT_CONFIG_FILE);
+      // totem-context: intentional cleanup — per-item best-effort delete; the failure is a reported skip
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       summary.skipped.push(`${EJECT_CONFIG_FILE} (could not delete: ${msg})`);
