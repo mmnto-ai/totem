@@ -9,7 +9,11 @@ import { safeExec } from '@mmnto/totem';
 import { cleanTmpDir } from '../test-utils.js';
 import type { EjectSummary } from './eject.js';
 import {
+  CLAUDE_SETTINGS_FILE,
+  CLAUDE_SETTINGS_LOCAL_FILE,
   deriveDirtyTreeSense,
+  EJECT_ARTIFACT_DIRS,
+  EJECT_CONFIG_FILE,
   ejectCommand,
   LEGACY_REFLEX_FILES,
   resolveEjectHooksContext,
@@ -1412,22 +1416,50 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
     const [cmd, args] = vi.mocked(safeExec).mock.calls[0] as [string, string[]];
     expect(cmd).toBe('git');
     expect(args.slice(0, 4)).toEqual(['status', '--porcelain', '--ignored=matching', '--']);
-    // Parity assertion: both sides read the same source constants, so a
-    // dropped spread or a hand-mirrored divergence in EITHER place fails.
+    // Parity assertion: both sides read the same exported source constants
+    // (round 2, F5 closed the six re-declared literals). The one narrated
+    // literal left is the skills-path SHAPE, which mirrors scrubClaudeSkills'
+    // path.join construction.
     const expected = [
       ...new Set([
         ...TOTEM_SCAFFOLDED_FILES,
-        '.claude/settings.local.json',
-        '.claude/settings.json',
+        CLAUDE_SETTINGS_LOCAL_FILE,
+        CLAUDE_SETTINGS_FILE,
         ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
-        '.lancedb',
-        '.totem',
-        'totem.config.ts',
+        ...EJECT_ARTIFACT_DIRS,
+        EJECT_CONFIG_FILE,
       ]),
     ];
     expect([...args.slice(4)].sort()).toEqual([...expected].sort());
+  });
+
+  it('older git rejecting --ignored=matching: degrades to the DIRTY-ONLY sense with an honest visibility line (round 2, F3)', async () => {
+    vi.mocked(safeExec)
+      .mockImplementationOnce(() => {
+        throw new Error(
+          'Command failed: git status --porcelain --ignored=matching -- CLAUDE.md\nerror: unknown option `ignored=matching`',
+        );
+      })
+      .mockReturnValueOnce(' M CLAUDE.md');
+    const sense = await deriveDirtyTreeSense(cwd);
+    expect(sense.dirty).toHaveLength(1);
+    expect(sense.lines.join('\n')).toContain('Uncommitted changes in 1 path(s)');
+    expect(sense.lines.join('\n')).toContain('Gitignored-path visibility unavailable');
+  });
+
+  it('degrade line surfaces the stderr cause, not the pathspec wall (round 2, F3)', async () => {
+    vi.mocked(safeExec).mockImplementation(() => {
+      throw Object.assign(
+        new Error('Command failed: git status --porcelain --ignored=matching -- <24 paths>'),
+        { stderr: 'fatal: unable to read tree abc123\n' },
+      );
+    });
+    const sense = await deriveDirtyTreeSense(cwd);
+    expect(sense.lines).toHaveLength(1);
+    expect(sense.lines[0]).toContain('fatal: unable to read tree abc123');
+    expect(sense.lines[0]).not.toContain('<24 paths>');
   });
 
   it('gitignored roster paths: says git holds no copy at all (the secrets-deletion class)', async () => {
@@ -1463,7 +1495,7 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
   });
 });
 
-describe('scrubReflexFiles loud backstop (Tenet 4 licensed shape, #2620 leg finding 4)', () => {
+describe('scrubReflexFiles loud backstop (Tenet 4 licensed shape, #2620 pre-build leg finding 4)', () => {
   let cwd: string;
 
   beforeEach(() => {
@@ -1487,6 +1519,22 @@ describe('scrubReflexFiles loud backstop (Tenet 4 licensed shape, #2620 leg find
     );
     // Per-item accounting still fired before the backstop threw.
     expect(summary.skipped.some((s) => s.includes('could not scrub'))).toBe(true);
+  });
+
+  it('non-UTF-8 reflex file: reported skip, bytes untouched, benign to the backstop (round 2, F2)', async () => {
+    const raw = Buffer.concat([
+      Buffer.from('# Proj caf'),
+      Buffer.from([0xe9]),
+      Buffer.from(` notes\n\n${REFLEX_START}\nbody\n${REFLEX_END}\n`),
+    ]);
+    fs.writeFileSync(path.join(cwd, 'CLAUDE.md'), raw);
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    await scrubReflexFiles(cwd, summary);
+
+    expect(Buffer.compare(fs.readFileSync(path.join(cwd, 'CLAUDE.md')), raw)).toBe(0);
+    expect(summary.scrubbed).toEqual([]);
+    expect(summary.skipped.some((s) => s.startsWith('CLAUDE.md (non-UTF-8 content'))).toBe(true);
   });
 
   it('partial success does NOT trip the backstop — per-item accounting covers it', async () => {
@@ -1530,7 +1578,34 @@ describe('ejectCommand --force dirty-sense trailer (mmnto-ai/totem#2620 rule 2)'
 
     const messages = warnSpy.mock.calls.map((c) => String(c[1]));
     expect(messages.some((m) => m.includes('Uncommitted changes in 1 path(s)'))).toBe(true);
-    expect(messages.some((m) => m.includes('--force skipped the consent prompt'))).toBe(true);
+    // Full trailer wording pinned — a substring that also matched the pre-fold
+    // string could not detect a wording regression (round 2, F6).
+    expect(
+      messages.some((m) =>
+        m.includes(
+          '--force skipped the consent prompt with 1 touched path(s) lacking a revert point',
+        ),
+      ),
+    ).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it('gitignored-only dirty state still fires the --force trailer (round 2, F6 — the new class)', async () => {
+    vi.mocked(safeExec).mockReturnValue('!! .totem/secrets.json');
+    const { log } = await import('../ui.js');
+    const warnSpy = vi.spyOn(log, 'warn');
+
+    await ejectCommand({ force: true });
+
+    const messages = warnSpy.mock.calls.map((c) => String(c[1]));
+    expect(messages.some((m) => m.includes('git holds no copy'))).toBe(true);
+    expect(
+      messages.some((m) =>
+        m.includes(
+          '--force skipped the consent prompt with 1 touched path(s) lacking a revert point',
+        ),
+      ),
+    ).toBe(true);
     warnSpy.mockRestore();
   });
 

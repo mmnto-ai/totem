@@ -81,11 +81,19 @@ export function writeFileAtomicSync(
   const tmpPath = `${writePath}.${process.pid}-${crypto.randomUUID().slice(0, 8)}.tmp`;
   let fd: number | undefined;
   try {
-    // Create the temp AT the final permission bits (still umask-masked; the
-    // explicit chmod below sets them exactly) — creating at the 0666 default
-    // and chmodding later would give a 0600 target's new bytes a brief
-    // world-readable window (falsification round: finding 12).
-    fd = fs.openSync(tmpPath, 'wx', options.mode ?? existing?.mode ?? 0o666);
+    // POSIX: create the temp AT the final permission bits (still umask-masked;
+    // the explicit chmod below sets them exactly) — creating at the 0666
+    // default and chmodding later would give a 0600 target's new bytes a brief
+    // world-readable window (2026-08-09 falsification round 1, finding 12).
+    // win32 passes NO create-mode: libuv maps a missing write bit to
+    // FILE_ATTRIBUTE_READONLY at create, which would mint read-only temps and
+    // EPERM re-writes — the "mode ignored on win32" boundary stays true
+    // (round 2, F4).
+    const createMode =
+      process.platform === 'win32'
+        ? undefined
+        : (options.mode ?? (existing === undefined ? undefined : existing.mode & 0o7777));
+    fd = fs.openSync(tmpPath, 'wx', createMode);
     fs.writeFileSync(fd, data);
     fs.fsyncSync(fd);
     fs.closeSync(fd);

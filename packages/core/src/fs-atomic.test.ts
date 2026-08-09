@@ -151,9 +151,24 @@ describe('writeFileAtomicSync', () => {
     },
   );
 
+  it.skipIf(process.platform === 'win32')(
+    'exact bits land under a restrictive umask (chmod is not umask-masked — round 2, F10)',
+    () => {
+      const prevUmask = process.umask(0o077);
+      try {
+        const target = path.join(dir, 'hook-umask');
+        writeFileAtomicSync(target, '#!/bin/sh\n', { mode: 0o755 });
+        expect(fs.statSync(target).mode & 0o7777).toBe(0o755);
+      } finally {
+        process.umask(prevUmask);
+      }
+    },
+  );
+
   it('symlink target: link identity survives, content lands through the real path', (ctx) => {
     // A silent `return` here would report PASSED with zero assertions on
-    // symlink-incapable hosts (falsification round: finding 8) — skip loudly.
+    // symlink-incapable hosts (2026-08-09 falsification round 1, finding 8) —
+    // skip loudly.
     if (!canSymlink(dir)) ctx.skip();
     const real = path.join(dir, 'real.md');
     const link = path.join(dir, 'link.md');
