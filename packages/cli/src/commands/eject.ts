@@ -908,9 +908,9 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   // `.totem-bak` paths — that licenses it, and leaves the error text pointing
   // at a summary that never printed (falsification round: finding 1).
   let deferredThrow: unknown;
-  // totem-context: intentional cleanup — deferred rethrow after the summary below, never a swallow
   try {
     await scrubReflexFiles(cwd, summary);
+    // totem-context: intentional cleanup — captured for a DEFERRED rethrow after the summary below, never a swallow
   } catch (err) {
     deferredThrow = err;
   }
