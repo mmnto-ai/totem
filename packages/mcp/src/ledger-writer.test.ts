@@ -163,6 +163,10 @@ describe('logSelectionManifest (mmnto-ai/totem#2468)', () => {
         reason: 'returned rank=1',
         bytes: 4,
         approxTokens: 1,
+        // Measured fields travel together (schema invariant, PR #2625 CR
+        // round) — a bytes-without-fingerprint fixture is now a contract
+        // violation, as it should be.
+        fingerprint: '0123456789abcdef',
       },
     ],
     warnings: [],

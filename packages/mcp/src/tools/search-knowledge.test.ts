@@ -90,6 +90,9 @@ let mockLogSelectionManifest: ReturnType<typeof vi.fn>;
  * core's selection-manifest.test.ts; this suite verifies the CALL SITE
  * (which hits become candidates, with which dispositions and reasons).
  */
+/** The mock's declared cost basis — mirrors core's chars/4 approximation. */
+const APPROX_TOKEN_BYTES = 4;
+
 function fakeBuildMeasuredCandidate(input: {
   id: string;
   content: string | Buffer;
@@ -108,7 +111,7 @@ function fakeBuildMeasuredCandidate(input: {
       disposition: input.disposition,
       reason: input.reason,
       bytes,
-      approxTokens: Math.ceil(bytes / 4),
+      approxTokens: Math.ceil(bytes / APPROX_TOKEN_BYTES),
       fingerprint: '0123456789abcdef',
       ...(input.sourceRepo !== undefined && { sourceRepo: input.sourceRepo }),
       ...(input.deliveredBytes !== undefined && { deliveredBytes: input.deliveredBytes }),

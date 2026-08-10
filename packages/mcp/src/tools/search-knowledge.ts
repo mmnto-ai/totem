@@ -789,8 +789,14 @@ async function performSearch(
           // Links that never initialized are absent from `linkedStores`, so
           // `answered` alone would read a permanently-broken link as a full
           // pool — the exact misreading D-3 exists to prevent (leg round 2,
-          // finding 3). Configured-but-unqueryable stores are disclosed here.
-          storesUnavailable: linkedStoreInitErrors.size,
+          // finding 3). Counted as init-error entries NOT also present in
+          // `linkedStores`: that map carries non-fatal startup warnings for
+          // stores that still serve (empty stores, name collisions), and
+          // counting those would record an answering store as unavailable
+          // (PR #2625, greptile P1 + CR — the double-count both bots named).
+          storesUnavailable: [...linkedStoreInitErrors.keys()].filter(
+            (name) => !linkedStores.has(name),
+          ).length,
         },
         universe: federated
           ? `federated-returned-pool perStoreLimit=${finalLimit} stores=${linkedStores.size + 1} answered=${linkedStores.size + 1 - storesFailed}`

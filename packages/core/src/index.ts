@@ -657,6 +657,7 @@ export {
 // Selection manifests — the Prop 308 / strategy#467 M1 instrument (mmnto-ai/totem#2468)
 export type {
   SelectionCandidate,
+  SelectionContextKey,
   SelectionEmitter,
   SelectionManifestInput,
   SelectionManifestResult,
@@ -669,6 +670,7 @@ export {
   fingerprintContent,
   measureCandidateCost,
   readSelectionManifests,
+  SELECTION_CONTEXT_KEYS,
   SELECTION_COST_BASIS,
   SELECTION_EMITTERS,
   SELECTION_MANIFESTS_FILE,

@@ -159,10 +159,14 @@ const SELF_AGENT =
 // leg round 1 MB-2). Anchored at gitRoot, not cwd, so the row and the
 // manifest's .session-id read can never split roots (leg round 1 H-8).
 // Fire-and-forget: a ledger failure must NOT block the briefing.
+// Hoisted so the manifest emission in main() can stamp the SAME minted UUID
+// without re-reading the shared pointer (PR #2625 CR round, partial).
+let mintedSessionId = null;
 try {
   const ledgerDir = join(getGitRoot(), '.totem', 'ledger');
   mkdirSync(ledgerDir, { recursive: true });
   const sessionId = randomUUID();
+  mintedSessionId = sessionId;
   writeFileSync(join(ledgerDir, '.session-id'), sessionId, 'utf-8');
   const mintSelfAgent = (process.env.TOTEM_SELF_AGENT || '')
     .split(',')
@@ -658,6 +662,11 @@ async function main() {
         {
           totemDir: join(gitRoot, '.totem'),
           emitter: 'session-start',
+          // The minted UUID is passed DIRECTLY — re-reading the shared
+          // .session-id pointer here would race a concurrent session's
+          // rotation between this hook's mint and its emission (PR #2625 CR
+          // round, partial absorption of the concurrent-hook finding).
+          ...(mintedSessionId ? { sessionId: mintedSessionId } : {}),
           context: { branch, ticket: ticket ?? null, selfAgent: SELF_AGENT },
           universe:
             'session-start blocks: journal dir + inbox poll + orient render + ticket-matched proposals + vector top-5',

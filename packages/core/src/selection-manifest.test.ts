@@ -179,6 +179,44 @@ describe('schema strictness', () => {
     expect(SelectionManifestRowSchema.safeParse(poisoned).success).toBe(false);
   });
 
+  it('rejects a shared score smuggled through CONTEXT — the key space is closed (PR #2625 CR round)', () => {
+    const row = buildSelectionManifestRow(baseInput());
+    const poisoned = { ...row, context: { ...row.context, sharedRelevanceScore: 0.9 } };
+    expect(SelectionManifestRowSchema.safeParse(poisoned).success).toBe(false);
+    const weighted = { ...row, context: { ...row.context, commonWeight: 1 } };
+    expect(SelectionManifestRowSchema.safeParse(weighted).success).toBe(false);
+  });
+
+  it('rejects partial measurement states — the trio travels together (PR #2625 CR round)', () => {
+    // bytes without fingerprint
+    expect(
+      SelectionCandidateSchema.safeParse(baseCandidate({ bytes: 5, approxTokens: 2 })).success,
+    ).toBe(false);
+    // fingerprint without cost
+    expect(
+      SelectionCandidateSchema.safeParse(baseCandidate({ fingerprint: 'c'.repeat(16) })).success,
+    ).toBe(false);
+  });
+
+  it('rejects deliveredBytes outside a truncated row, and a delivery larger than the measurement', () => {
+    expect(
+      SelectionCandidateSchema.safeParse(
+        baseCandidate({ disposition: 'excluded', deliveredBytes: 4 }),
+      ).success,
+    ).toBe(false);
+    expect(
+      SelectionCandidateSchema.safeParse(
+        baseCandidate({
+          disposition: 'truncated',
+          bytes: 10,
+          approxTokens: 3,
+          fingerprint: 'd'.repeat(16),
+          deliveredBytes: 11,
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
   it('accepts a fully-populated row round-trip', () => {
     const row = buildSelectionManifestRow(
       baseInput({
@@ -191,6 +229,7 @@ describe('schema strictness', () => {
             reason: 'display-cap 250 lines',
             bytes: 100,
             approxTokens: 25,
+            fingerprint: 'b'.repeat(16),
             deliveredBytes: 40,
           }),
           baseCandidate({ id: 'c.md', disposition: 'excluded', reason: 'recency-policy' }),
@@ -303,16 +342,66 @@ describe('senseSelectionManifest', () => {
     expect(result.written).toBe(true);
     expect(warnings).toEqual([]);
   });
+
+  it('contains a THROWING onWarn sink — the accounting channel can never fail the command (PR #2625 CR round)', () => {
+    const spy = vi.spyOn(fs, 'appendFileSync').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    const result = senseSelectionManifest(baseInput(), () => {
+      throw new Error('sink exploded');
+    });
+    spy.mockRestore();
+    // No throw escaped, and the warning survives in the returned array.
+    expect(result.written).toBe(false);
+    expect(result.warnings.some((w) => w.includes('append failed'))).toBe(true);
+  });
+});
+
+// ─── Probe failures (PR #2625 CR round) ─────────────────
+
+describe('instrumented-project probe', () => {
+  it('a non-ENOENT probe failure (EACCES) is a NAMED skip, never a silent not-a-project', () => {
+    const spy = vi.spyOn(fs, 'statSync').mockImplementation(() => {
+      const err = new Error('EACCES: permission denied') as NodeJS.ErrnoException;
+      err.code = 'EACCES';
+      throw err;
+    });
+    const warnings: string[] = [];
+    const result = senseSelectionManifest(baseInput(), (w) => warnings.push(w));
+    spy.mockRestore();
+    expect(result).toMatchObject({ written: false, skipped: true });
+    expect(warnings.some((w) => w.includes('.totem probe failed'))).toBe(true);
+  });
+});
+
+// ─── Session override (PR #2625 CR round, partial) ──────
+
+describe('sessionId override', () => {
+  it('a minting emitter stamps its own UUID instead of the shared pointer', () => {
+    fs.mkdirSync(path.join(totemDir, 'ledger'), { recursive: true });
+    fs.writeFileSync(path.join(totemDir, 'ledger', '.session-id'), SESSION_A, 'utf-8');
+    const other = '550e8400-e29b-41d4-a716-446655440009';
+    const row = buildSelectionManifestRow(baseInput({ sessionId: other }));
+    expect(row.session_id).toBe(other);
+    // Without the override the pointer still governs.
+    expect(buildSelectionManifestRow(baseInput()).session_id).toBe(SESSION_A);
+  });
 });
 
 // ─── Reader ─────────────────────────────────────────────
 
 describe('readSelectionManifests', () => {
-  it('returns [] on ENOENT and skips malformed / schema-invalid lines', () => {
+  it('returns [] on ENOENT and skips malformed / schema-invalid lines, reporting the malformed count', () => {
     expect(readSelectionManifests(totemDir)).toEqual([]);
     appendSelectionManifest(baseInput());
     fs.appendFileSync(manifestPath(), 'not json\n{"schemaVersion":99}\n', 'utf-8');
-    const rows = readSelectionManifests(totemDir);
+    const warnings: string[] = [];
+    const rows = readSelectionManifests(totemDir, (w) => warnings.push(w));
     expect(rows).toHaveLength(1);
+    // One AGGREGATE warning for the malformed-JSON line — never a firehose
+    // (PR #2625 CR round); the schema-invalid-but-parseable line stays under
+    // the generic-consumer skip contract.
+    expect(warnings.filter((w) => w.includes('malformed'))).toHaveLength(1);
+    expect(warnings[0]).toContain('1 malformed line(s)');
   });
 });

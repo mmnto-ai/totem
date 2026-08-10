@@ -124,17 +124,80 @@ export const SelectionCandidateSchema = z
     /** For `truncated` rows: bytes actually delivered after the cut. */
     deliveredBytes: z.number().int().nonnegative().optional(),
   })
-  .strict();
+  .strict()
+  // Measured-candidate invariants (PR #2625 CR round): the builders produce
+  // exactly two shapes — id-only (nothing measured) or fully measured — so
+  // the schema refuses the partial states in between, and `deliveredBytes`
+  // is meaningful only on a truncated row and can never exceed the full
+  // measurement it was cut from.
+  .superRefine((c, ctx) => {
+    const measuredPresent = [c.fingerprint, c.bytes, c.approxTokens].filter(
+      (v) => v !== undefined,
+    ).length;
+    if (measuredPresent !== 0 && measuredPresent !== 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'measured fields (fingerprint, bytes, approxTokens) travel together — a candidate is id-only or fully measured, never partial',
+      });
+    }
+    if (c.deliveredBytes !== undefined) {
+      if (c.disposition !== 'truncated') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['deliveredBytes'],
+          message: 'deliveredBytes is only meaningful on a truncated candidate',
+        });
+      }
+      if (c.bytes !== undefined && c.deliveredBytes > c.bytes) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['deliveredBytes'],
+          message: 'deliveredBytes cannot exceed the full measured bytes',
+        });
+      }
+    }
+  });
 
 export type SelectionCandidate = z.infer<typeof SelectionCandidateSchema>;
 
 /**
- * Per-emitter context: a FLAT scalar map (query, boundary, floor, branch,
- * ticket, limits…). Flat by design — a nested structure is where a shared
- * relevance model would grow, and the schema refuses it room.
+ * The CLOSED set of per-emitter context keys. Closing the key space is the
+ * context-layer half of the Prop 308 refute-condition guard (PR #2625 CR
+ * round): with an open record, `context.sharedRelevanceScore` would have
+ * parsed cleanly and the "no shared score without a schema change" claim held
+ * only at the row/candidate layers. Adding a context key is now a deliberate
+ * schema change, exactly like adding a field.
+ */
+export const SELECTION_CONTEXT_KEYS = [
+  // search_knowledge
+  'query',
+  'boundary',
+  'typeFilter',
+  'floor',
+  'finalLimit',
+  'method',
+  'status',
+  'storesFailed',
+  'storesUnavailable',
+  // orient
+  'render',
+  // session-start (V2 hook + published templates)
+  'branch',
+  'ticket',
+  'selfAgent',
+  'template',
+] as const;
+
+export type SelectionContextKey = (typeof SELECTION_CONTEXT_KEYS)[number];
+
+/**
+ * Per-emitter context: a FLAT scalar map over the closed key set. Flat by
+ * design — a nested structure is where a shared relevance model would grow,
+ * and the schema refuses it room; closed-keyed so it cannot grow one either.
  */
 const SelectionContextSchema = z.record(
-  z.string(),
+  z.enum(SELECTION_CONTEXT_KEYS),
   z.union([z.string(), z.number(), z.boolean(), z.null()]),
 );
 
@@ -256,7 +319,7 @@ export interface SelectionManifestInput {
   /** Absolute path to the resolved `.totem` directory. */
   totemDir: string;
   emitter: SelectionEmitter;
-  context: Record<string, string | number | boolean | null>;
+  context: Partial<Record<SelectionContextKey, string | number | boolean | null>>;
   universe: string;
   candidates: SelectionCandidate[];
   warnings?: string[];
@@ -266,6 +329,12 @@ export interface SelectionManifestInput {
   nowMs?: number;
   /** Test seam — production callers omit and the writer reads `process.env`. */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Session UUID override for emitters that minted the id themselves (the
+   * session-start hooks). When absent, the id is read from the
+   * `.totem/ledger/.session-id` pointer.
+   */
+  sessionId?: string;
 }
 
 export interface SelectionManifestResult {
@@ -281,16 +350,27 @@ export interface SelectionManifestResult {
 
 /**
  * Is this an instrumented project at all? Same convention as
- * `qbd/record.ts`: an absent `.totem` is the honest "nothing here to
- * instrument" state — skip silently rather than materialising a stray
- * `.totem/ledger/` in whatever cwd an instrumented command ran from.
+ * `qbd/record.ts`: an absent `.totem` (ENOENT, or ENOTDIR — a path component
+ * being a file, the cross-platform divergence `session-id.ts` documents) is
+ * the honest "nothing here to instrument" state — skip silently rather than
+ * materialising a stray `.totem/ledger/` in whatever cwd an instrumented
+ * command ran from. Every OTHER errno (EACCES, I/O) is a real probe failure
+ * that must not masquerade as not-a-project (PR #2625 CR round): it returns a
+ * named warning so the skip lands on the accounting channel.
  */
-function isInstrumentedProject(totemDir: string): boolean {
+function probeInstrumentedProject(totemDir: string): { instrumented: boolean; warning?: string } {
   try {
-    return fs.statSync(totemDir).isDirectory();
-    // totem-context: a missing `.totem` is the honest "not a Totem project" state for this sensor — skip silently rather than creating a stray directory in an unrelated cwd.
-  } catch {
-    return false;
+    return { instrumented: fs.statSync(totemDir).isDirectory() };
+    // totem-context: intentional degradation — a missing `.totem` is the honest "not a Totem project" state; any OTHER errno is reported via the returned warning (the accounting channel), never swallowed.
+  } catch (err) {
+    const code =
+      typeof err === 'object' && err !== null ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return { instrumented: false };
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      instrumented: false,
+      warning: `selection-manifest: .totem probe failed (${msg}) — not recording`,
+    };
   }
 }
 
@@ -298,7 +378,11 @@ function isInstrumentedProject(totemDir: string): boolean {
 export function buildSelectionManifestRow(input: SelectionManifestInput): SelectionManifestRow {
   const env = input.env ?? process.env;
   const nowMs = input.nowMs ?? Date.now();
-  const sessionId = readSessionId(input.totemDir);
+  // An emitter that MINTED the session id this event belongs to passes it
+  // directly (the session-start hooks) — immune to the shared-pointer being
+  // rotated by a concurrent session between mint and emission (PR #2625 CR
+  // round, partial). Everyone else joins via the pointer.
+  const sessionId = input.sessionId ?? readSessionId(input.totemDir);
   const agentSource = resolveQbdAgentSource(env);
   return {
     schemaVersion: 1,
@@ -330,7 +414,11 @@ export function buildSelectionManifestRow(input: SelectionManifestInput): Select
 export function appendSelectionManifest(input: SelectionManifestInput): SelectionManifestResult {
   const warnings: string[] = [...(input.warnings ?? [])];
 
-  if (!isInstrumentedProject(input.totemDir)) return { written: false, skipped: true, warnings };
+  const probe = probeInstrumentedProject(input.totemDir);
+  if (!probe.instrumented) {
+    if (probe.warning !== undefined) warnings.push(probe.warning);
+    return { written: false, skipped: true, warnings };
+  }
 
   const row = buildSelectionManifestRow({ ...input, warnings });
   const parsed = SelectionManifestRowSchema.safeParse(row);
@@ -367,19 +455,33 @@ export function appendSelectionManifest(input: SelectionManifestInput): Selectio
  * `onWarn`; there is no path that discards a failure silently, and no path
  * that fails the instrumented command (Tenet 13).
  */
+/**
+ * Deliver a warning to the caller's sink without letting the sink's own
+ * failure escape — an accounting-channel exception altering the instrumented
+ * command would invert Tenet 13 at the last step (PR #2625 CR round).
+ */
+function safeWarn(onWarn: ((msg: string) => void) | undefined, msg: string): void {
+  try {
+    onWarn?.(msg);
+    // totem-context: intentional swallow — a throwing warning SINK must not fail the instrumented command; the warning also remains in the returned `warnings` array, so nothing is lost.
+  } catch (err) {
+    void err;
+  }
+}
+
 export function senseSelectionManifest(
   input: SelectionManifestInput,
   onWarn?: (msg: string) => void,
 ): SelectionManifestResult {
   try {
     const result = appendSelectionManifest(input);
-    for (const warning of result.warnings) onWarn?.(warning);
+    for (const warning of result.warnings) safeWarn(onWarn, warning);
     return result;
     // totem-context: instrumentation is a sensor — a telemetry failure must never fail the instrumented command (Tenet 13); the failure is reported through onWarn, never discarded.
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const warning = `selection-manifest sensor failed: ${msg}`;
-    onWarn?.(warning);
+    safeWarn(onWarn, warning);
     return { written: false, warnings: [warning] };
   }
 }
@@ -400,21 +502,32 @@ export function readSelectionManifests(
     content = fs.readFileSync(filePath, 'utf-8');
     // totem-context: intentional degradation — ENOENT is the normal no-manifests-yet state; every other read failure is REPORTED through onWarn (the accounting channel), never swallowed, and the reader degrades to empty rather than failing its caller (Tenet 13 sensor posture, mirroring readLedgerEvents).
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    const code =
+      typeof err === 'object' && err !== null ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code === 'ENOENT') return [];
     const msg = err instanceof Error ? err.message : String(err);
     onWarn?.(`selection-manifest read failed: ${msg}`);
     return [];
   }
   const rows: SelectionManifestRow[] = [];
+  let malformed = 0;
   for (const line of content.split('\n')) {
     if (line.trim().length === 0) continue;
     try {
       const parsed = SelectionManifestRowSchema.safeParse(JSON.parse(line));
       if (parsed.success) rows.push(parsed.data);
-      // totem-context: intentional skip of malformed lines — generic consumers mirror readLedgerEvents; reject-counting consumers read the file raw by contract.
-    } catch {
-      // malformed JSON line — same skip contract as the schema-invalid case
+      // totem-context: intentional skip of malformed lines — generic consumers mirror readLedgerEvents; the AGGREGATE count is reported through onWarn below, and reject-counting consumers read the file raw by contract.
+    } catch (err) {
+      void err;
+      malformed += 1;
     }
+  }
+  // One aggregate line, not one per row — a torn or hand-edited file must not
+  // turn the accounting channel into a firehose (PR #2625 CR round).
+  if (malformed > 0) {
+    onWarn?.(
+      `selection-manifest: skipped ${malformed} malformed line(s) — reject-counting consumers read the file raw`,
+    );
   }
   return rows;
 }

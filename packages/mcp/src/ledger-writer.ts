@@ -18,7 +18,7 @@
 
 import * as path from 'node:path';
 
-import type { LedgerEvent, SelectionCandidate } from '@mmnto/totem';
+import type { LedgerEvent, SelectionCandidate, SelectionContextKey } from '@mmnto/totem';
 import {
   appendLedgerEvent,
   readSessionId,
@@ -95,7 +95,7 @@ export async function logMcpCall(activityName: string): Promise<void> {
  * stderr/stdout are off-limits by styleguide.
  */
 export async function logSelectionManifest(input: {
-  context: Record<string, string | number | boolean | null>;
+  context: Partial<Record<SelectionContextKey, string | number | boolean | null>>;
   universe: string;
   candidates: SelectionCandidate[];
   warnings: string[];

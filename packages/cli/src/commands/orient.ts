@@ -841,16 +841,18 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
       );
     } else {
       const { buildMeasuredCandidate, senseSelectionManifest } = await import('@mmnto/totem');
+      const manifestWarnings: string[] = [];
       let cliVersion: string | undefined;
       try {
         const { createRequire } = await import('node:module');
         const req = createRequire(import.meta.url);
         cliVersion = (req('../../package.json') as { version?: string }).version;
-        // totem-context: cli_version is a best-effort enrichment of the manifest row; package.json resolution failure must never disturb the render (Tenet 13).
+        // totem-context: cli_version is a best-effort enrichment of the manifest row; resolution failure must never disturb the render (Tenet 13) — but it lands on the row's accounting channel rather than vanishing (PR #2625 CR round).
       } catch (err) {
-        void err;
+        manifestWarnings.push(
+          `cli_version unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-      const manifestWarnings: string[] = [];
       const sections: Array<[string, unknown]> = [
         ['repo', report.repo],
         ['indexFreshness', report.indexFreshness],
