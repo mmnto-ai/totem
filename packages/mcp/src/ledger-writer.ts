@@ -107,14 +107,17 @@ export async function logSelectionManifest(input: {
     // Best-effort emitting-package version (leg round 1, N-13 — row parity
     // with the orient/hook emitters). `../package.json` resolves to
     // packages/mcp/package.json from BOTH src/ and dist/ layouts.
+    const rowWarnings = [...input.warnings];
     let emitterVersion: string | undefined;
     try {
       const { createRequire } = await import('node:module');
       emitterVersion = (createRequire(import.meta.url)('../package.json') as { version?: string })
         .version;
-      // totem-context: version is a best-effort enrichment of the manifest row; resolution failure must never cost the row (Tenet 13).
+      // totem-context: version is a best-effort enrichment of the manifest row; resolution failure must never cost the row (Tenet 13) — but it lands on the row's accounting channel rather than vanishing (PR #2625 re-review, greptile residual: this emitter had the void-err half only).
     } catch (err) {
-      void err;
+      rowWarnings.push(
+        `cli_version unavailable: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     senseSelectionManifest(
       {
@@ -123,7 +126,7 @@ export async function logSelectionManifest(input: {
         context: input.context,
         universe: input.universe,
         candidates: input.candidates,
-        warnings: input.warnings,
+        warnings: rowWarnings,
         ...(emitterVersion !== undefined && { cliVersion: emitterVersion }),
       },
       (msg) => {
