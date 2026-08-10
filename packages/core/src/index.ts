@@ -654,6 +654,29 @@ export {
   senseDeriveAction,
 } from './qbd/record.js';
 
+// Selection manifests — the Prop 308 / strategy#467 M1 instrument (mmnto-ai/totem#2468)
+export type {
+  SelectionCandidate,
+  SelectionEmitter,
+  SelectionManifestInput,
+  SelectionManifestResult,
+  SelectionManifestRow,
+} from './selection-manifest.js';
+export {
+  appendSelectionManifest,
+  buildMeasuredCandidate,
+  buildSelectionManifestRow,
+  fingerprintContent,
+  measureCandidateCost,
+  readSelectionManifests,
+  SELECTION_COST_BASIS,
+  SELECTION_EMITTERS,
+  SELECTION_MANIFESTS_FILE,
+  SelectionCandidateSchema,
+  SelectionManifestRowSchema,
+  senseSelectionManifest,
+} from './selection-manifest.js';
+
 // Pack rule merge primitive (ADR-085 + ADR-089, mmnto-ai/totem#1485)
 export type { ImmutableOverrideBlock, MergeRulesResult } from './pack-merge.js';
 export { mergeRules } from './pack-merge.js';

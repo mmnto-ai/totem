@@ -10,10 +10,12 @@
  */
 
 import { execSync, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   appendFileSync,
   closeSync,
   existsSync,
+  mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -144,6 +146,41 @@ const SELF_AGENT =
     ? _agentOverride
     : DEFAULT_SELF_AGENT;
 
+// ─── A.3.a: mint session ID + log session_start event ───
+// This bespoke V2 hook is the SOLE SessionStart entry in this repo, and until
+// mmnto-ai/totem#2468 it never took over the managed template's A.3.a duty —
+// measured on the live ledger: 5 session_start rows against 132 mcp_call. The
+// session UUID is the selection-manifest join key AND the session_start row is
+// the emitter's recorded-absence denominator, so the mint block lands with the
+// M1 instrument (same shape as CLAUDE_SESSION_START in init-templates.ts).
+// Fire-and-forget: a ledger failure must NOT block the briefing.
+try {
+  const ledgerDir = join(process.cwd(), '.totem', 'ledger');
+  mkdirSync(ledgerDir, { recursive: true });
+  const sessionId = randomUUID();
+  writeFileSync(join(ledgerDir, '.session-id'), sessionId, 'utf-8');
+  const event = {
+    timestamp: new Date().toISOString(),
+    type: 'session_start',
+    activity_name: 'SessionStart',
+    source: 'bot',
+    agent_source: process.env.TOTEM_SELF_AGENT
+      ? process.env.TOTEM_SELF_AGENT.split(',')
+          .map((s) => s.trim())
+          .find((s) => s.length > 0)
+      : SELF_AGENT,
+    justification: '',
+    session_id: sessionId,
+  };
+  appendFileSync(join(ledgerDir, 'events.ndjson'), JSON.stringify(event) + '\n', 'utf-8');
+} catch (err) {
+  process.stderr.write(
+    '[session-context] session-start telemetry unavailable (non-fatal): ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\n',
+  );
+}
+
 // Cross-repo inbound mail (ADR-106 § 3). Delegates to the canonical
 // `pollMail()` from `@mmnto/cli` (mmnto-ai/totem#1971, shipped in 1.44.0).
 // The mail command lives in the same workspace; load from packages/cli/dist
@@ -251,7 +288,13 @@ function extractTicket(branch) {
 
 // ─── Static Context (V1 preserved) ───────────────────────
 
-async function buildStaticContext(gitRoot, branch, ticket) {
+// `records` collects selection-manifest candidates (mmnto-ai/totem#2468) as
+// each block makes its selection: content-bearing records carry the exact
+// bytes the policy read; id-only records are candidates the policy never read
+// (recorded without fabricated measurement); `premeasured` records come from
+// auto-context's own metadata. Purely observational — nothing here alters
+// what any block selects.
+async function buildStaticContext(gitRoot, branch, ticket, records) {
   const lines = [];
 
   lines.push('── Session Context ──');
@@ -359,6 +402,27 @@ async function buildStaticContext(gitRoot, branch, ticket) {
         lines.push(...journalLines);
         if (allJournalLines.length > JOURNAL_DISPLAY_LINE_CAP) lines.push('...');
         lines.push('');
+        // Selection manifest (#2468): the latest journal is the recency
+        // policy's one read; every sibling lost to that policy id-only.
+        const journalTruncated = allJournalLines.length > JOURNAL_DISPLAY_LINE_CAP;
+        records.push({
+          id: `journal/${latest}`,
+          content,
+          disposition: journalTruncated ? 'truncated' : 'selected',
+          reason: journalTruncated
+            ? `recency-policy: latest journal; display-cap ${JOURNAL_DISPLAY_LINE_CAP} lines`
+            : 'recency-policy: latest journal injected in full',
+          ...(journalTruncated && {
+            deliveredBytes: Buffer.byteLength(journalLines.join('\n'), 'utf-8'),
+          }),
+        });
+        for (const f of files.slice(1)) {
+          records.push({
+            id: `journal/${f}`,
+            disposition: 'excluded',
+            reason: 'recency-policy: only latest journal injected',
+          });
+        }
       }
     } catch (err) {
       process.stderr.write(`[session-context] Could not read journal: ${err.message}\n`);
@@ -382,9 +446,20 @@ async function buildStaticContext(gitRoot, branch, ticket) {
     inbox.files.slice(0, 10).forEach((m) => {
       lines.push(`  - ${m.file} (from ${m.from} @ ${m.repo})`);
       lines.push(`      subject: ${m.subject}`);
+      // Selection manifest (#2468): the considered bytes are the two display
+      // lines — the poll surfaces headers, never dispatch bodies.
+      records.push({
+        id: `mail/${m.file}`,
+        content: `${m.file} (from ${m.from} @ ${m.repo}) subject: ${m.subject}`,
+        disposition: 'selected',
+        reason: 'inbox unread (display cap 10)',
+      });
     });
     if (inbox.files.length > 10) {
       lines.push(`  ... and ${inbox.files.length - 10} more.`);
+      inbox.files.slice(10).forEach((m) => {
+        records.push({ id: `mail/${m.file}`, disposition: 'excluded', reason: 'display-cap 10' });
+      });
     }
     if (inbox.truncated) {
       lines.push(`  [scan truncated at ${inbox.scanned} files]`);
@@ -410,6 +485,15 @@ async function buildStaticContext(gitRoot, branch, ticket) {
   if (orientBlock) {
     lines.push(orientBlock);
     lines.push('');
+    // Selection manifest (#2468): one candidate — the bounded render's
+    // per-item caps are that render's internal policy; orient is derived
+    // state, so the overlap join needs no finer grain (design OQ3).
+    records.push({
+      id: 'orient:session-block',
+      content: orientBlock,
+      disposition: 'selected',
+      reason: 'bounded session render (renderOrientForSession caps)',
+    });
   }
 
   // Active proposal matching ticket — proposals live in totem-strategy
@@ -423,7 +507,8 @@ async function buildStaticContext(gitRoot, branch, ticket) {
         try {
           const files = readdirSync(proposalsDir).filter((f) => f.endsWith('.md'));
           const ticketRe = new RegExp(`\\b${ticket}\\b`);
-          for (const file of files) {
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             const content = readFileSync(join(proposalsDir, file), 'utf-8');
             if (ticketRe.test(content)) {
               lines.push(`Active proposal: ${file}`);
@@ -431,6 +516,24 @@ async function buildStaticContext(gitRoot, branch, ticket) {
               lines.push(...proposalLines);
               lines.push('...');
               lines.push('');
+              // Selection manifest (#2468): the match ships a 10-line excerpt;
+              // files after it lose to first-match-wins WITHOUT being read
+              // (id-only — no fabricated measurement). Files before it were
+              // read and non-matching: query non-hits, not selection losses.
+              records.push({
+                id: `proposal/${file}`,
+                content,
+                disposition: 'truncated',
+                reason: `ticket-match #${ticket}; 10-line excerpt`,
+                deliveredBytes: Buffer.byteLength(proposalLines.join('\n'), 'utf-8'),
+              });
+              for (const untested of files.slice(i + 1)) {
+                records.push({
+                  id: `proposal/${untested}`,
+                  disposition: 'excluded',
+                  reason: 'first-match-wins: untested after first match',
+                });
+              }
               break;
             }
           }
@@ -446,7 +549,7 @@ async function buildStaticContext(gitRoot, branch, ticket) {
 
 // ─── Vector Context (V2 new) ─────────────────────────────
 
-async function buildVectorContext(gitRoot, branch) {
+async function buildVectorContext(gitRoot, branch, records) {
   try {
     // Dynamic import — the CLI must be built for this to resolve.
     // Use pathToFileURL for Windows ESM compatibility (ERR_UNSUPPORTED_ESM_URL_SCHEME).
@@ -459,6 +562,21 @@ async function buildVectorContext(gitRoot, branch) {
       limit: 5,
       projectRoot: gitRoot,
     });
+
+    // Selection manifest (#2468): auto-context measures its own candidates
+    // (formatted-block bytes + fingerprint), including the char-budget cut —
+    // carried through as premeasured records. `|| []` tolerates a stale CLI
+    // dist that predates the metadata field.
+    for (const c of result.candidates || []) {
+      records.push({
+        id: `knowledge/${c.filePath}`,
+        premeasured: { bytes: c.bytes, approxTokens: c.approxTokens, fingerprint: c.fingerprint },
+        disposition: c.included ? 'selected' : 'excluded',
+        reason: c.included
+          ? `vector-rank (relevance ${typeof c.relevance === 'number' ? c.relevance.toFixed(3) : 'n/a'})`
+          : 'char-budget 6000',
+      });
+    }
 
     if (result.content) {
       const header = `\nRelevant knowledge (${result.searchMethod}, ${result.resultsIncluded} results, ${result.durationMs}ms):`;
@@ -479,8 +597,9 @@ async function main() {
   const branch = getBranch();
   const ticket = extractTicket(branch);
 
-  const staticContext = await buildStaticContext(gitRoot, branch, ticket);
-  const vectorContext = await buildVectorContext(gitRoot, branch);
+  const records = [];
+  const staticContext = await buildStaticContext(gitRoot, branch, ticket, records);
+  const vectorContext = await buildVectorContext(gitRoot, branch, records);
 
   // Hard cap: ~10k chars total (~2.5k tokens) per ADR-013
   const MAX_TOTAL_CHARS = 10_000;
@@ -489,6 +608,76 @@ async function main() {
     combined.length > MAX_TOTAL_CHARS
       ? combined.slice(0, MAX_TOTAL_CHARS) + '\n...(truncated)'
       : combined;
+
+  // ─── Selection manifest (mmnto-ai/totem#2468 M1) ───
+  // Emitted AFTER the context is fully composed and BEFORE the stdout write —
+  // a pure sensor over a finished selection; its own try so no failure can
+  // reach the hookSpecificOutput envelope. The core writer is loaded from the
+  // workspace dist (same pattern as loadResolvers); a stale dist that predates
+  // the writer skips with a breadcrumb, and the absence stays recorded via the
+  // session_start denominator row minted above.
+  try {
+    const corePath = join(gitRoot, 'packages', 'core', 'dist', 'index.js');
+    const core = await import(pathToFileURL(corePath).href);
+    if (
+      typeof core.senseSelectionManifest === 'function' &&
+      typeof core.buildMeasuredCandidate === 'function'
+    ) {
+      let cliVersion;
+      try {
+        cliVersion = JSON.parse(
+          readFileSync(join(gitRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
+        ).version;
+      } catch {
+        // best-effort enrichment only — the row is valid without it
+      }
+      const warnings = [];
+      const candidates = records.map((rec) => {
+        if (rec.content !== undefined) {
+          const { candidate, warning } = core.buildMeasuredCandidate({
+            id: rec.id,
+            content: rec.content,
+            disposition: rec.disposition,
+            reason: rec.reason,
+            ...(rec.deliveredBytes !== undefined && { deliveredBytes: rec.deliveredBytes }),
+          });
+          if (warning !== undefined) warnings.push(warning);
+          return candidate;
+        }
+        if (rec.premeasured !== undefined) {
+          return { id: rec.id, disposition: rec.disposition, reason: rec.reason, ...rec.premeasured };
+        }
+        return { id: rec.id, disposition: rec.disposition, reason: rec.reason };
+      });
+      core.senseSelectionManifest(
+        {
+          totemDir: join(gitRoot, '.totem'),
+          emitter: 'session-start',
+          context: { branch, ticket: ticket ?? null, selfAgent: SELF_AGENT },
+          universe:
+            'session-start blocks: journal dir + inbox poll + orient render + ticket-matched proposals + vector top-5',
+          candidates,
+          warnings,
+          finalTruncation: {
+            cap: MAX_TOTAL_CHARS,
+            totalChars: combined.length,
+            applied: combined.length > MAX_TOTAL_CHARS,
+          },
+          ...(cliVersion !== undefined && { cliVersion }),
+          env: { ...process.env, TOTEM_SELF_AGENT: process.env.TOTEM_SELF_AGENT || SELF_AGENT },
+        },
+        (msg) => process.stderr.write(`[session-context] ${msg}\n`),
+      );
+    } else {
+      process.stderr.write(
+        '[session-context] selection manifest skipped: core dist predates the writer\n',
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `[session-context] selection manifest skipped: ${err && err.message ? err.message : String(err)}\n`,
+    );
+  }
 
   // Claude Code hook protocol: SessionStart context is ingested ONLY from the
   // hookSpecificOutput envelope. A top-level additionalContext key is not part

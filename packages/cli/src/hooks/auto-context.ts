@@ -2,7 +2,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { Embedder, SearchResult, TotemConfig } from '@mmnto/totem';
-import { createEmbedder, LanceStore, requireEmbedding, TotemConfigSchema } from '@mmnto/totem';
+import {
+  createEmbedder,
+  fingerprintContent,
+  LanceStore,
+  measureCandidateCost,
+  requireEmbedding,
+  TotemConfigSchema,
+} from '@mmnto/totem';
 
 import { loadEnv } from '../utils.js';
 
@@ -15,6 +22,23 @@ export interface AutoContextOptions {
   projectRoot?: string;
 }
 
+/**
+ * Per-result selection metadata (mmnto-ai/totem#2468) so the SessionStart
+ * hook can record its vector candidates in a selection manifest without
+ * re-deriving the search. Measured over each result's FORMATTED block — the
+ * exact bytes that ship (or would have shipped) in the injection. Purely
+ * observational: computing a cut candidate's block is a pure function over
+ * content the policy already fetched, so recording it alters nothing.
+ */
+export interface AutoContextCandidateMeta {
+  filePath: string;
+  relevance?: number;
+  bytes: number;
+  approxTokens: number;
+  fingerprint: string;
+  included: boolean;
+}
+
 export interface AutoContextResult {
   query: string;
   resultsIncluded: number;
@@ -22,6 +46,8 @@ export interface AutoContextResult {
   content: string;
   searchMethod: 'hybrid' | 'fts' | 'none';
   durationMs: number;
+  /** Additive (mmnto-ai/totem#2468); empty on every no-search path. */
+  candidates: AutoContextCandidateMeta[];
 }
 
 // ─── Branch Parsing ───────────────────────────────────────
@@ -69,8 +95,8 @@ function formatResult(result: SearchResult, index: number): string {
 export function truncateResults(
   results: SearchResult[],
   maxCharacters: number,
-): { content: string; included: number } {
-  if (results.length === 0) return { content: '', included: 0 };
+): { content: string; included: number; candidates: AutoContextCandidateMeta[] } {
+  if (results.length === 0) return { content: '', included: 0, candidates: [] };
 
   const blocks: string[] = [];
   let totalChars = 0;
@@ -84,13 +110,30 @@ export function truncateResults(
     included++;
   }
 
+  // Selection metadata over EVERY fetched result — including the char-budget
+  // cut, whose exclusion is exactly the half the manifest exists to record
+  // (mmnto-ai/totem#2468). formatResult is pure, so measuring a cut block
+  // observes without altering.
+  const candidates: AutoContextCandidateMeta[] = results.map((r, i) => {
+    const block = formatResult(r, i);
+    const { bytes, approxTokens } = measureCandidateCost(block);
+    return {
+      filePath: r.filePath,
+      ...(typeof r.relevance === 'number' && { relevance: r.relevance }),
+      bytes,
+      approxTokens,
+      fingerprint: fingerprintContent(block),
+      included: i < included,
+    };
+  });
+
   const omitted = results.length - included;
   let content = blocks.join('\n\n---\n\n');
   if (omitted > 0) {
     content += `\n\n(${omitted} additional result${omitted > 1 ? 's' : ''} omitted for token budget)`;
   }
 
-  return { content, included };
+  return { content, included, candidates };
 }
 
 // ─── Config Loading (lightweight) ─────────────────────────
@@ -120,6 +163,7 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
     content: '',
     searchMethod: 'none',
     durationMs: Date.now() - start,
+    candidates: [],
   };
 
   // ── Locate config & LanceDB ──
@@ -191,7 +235,7 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
     }
   }
 
-  const { content, included } = truncateResults(results, maxCharacters);
+  const { content, included, candidates } = truncateResults(results, maxCharacters);
 
   return {
     query,
@@ -200,5 +244,6 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
     content,
     searchMethod,
     durationMs: Date.now() - start,
+    candidates,
   };
 }

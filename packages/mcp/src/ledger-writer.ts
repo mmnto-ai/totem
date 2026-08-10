@@ -18,8 +18,13 @@
 
 import * as path from 'node:path';
 
-import type { LedgerEvent } from '@mmnto/totem';
-import { appendLedgerEvent, readSessionId, senseCorpusQuery } from '@mmnto/totem';
+import type { LedgerEvent, SelectionCandidate } from '@mmnto/totem';
+import {
+  appendLedgerEvent,
+  readSessionId,
+  senseCorpusQuery,
+  senseSelectionManifest,
+} from '@mmnto/totem';
 
 import { getContext } from './context.js';
 import { logSearch } from './search-log.js';
@@ -79,6 +84,55 @@ export async function logMcpCall(activityName: string): Promise<void> {
  * Zero hits still counts — the query RAN, and the agent saw its result. The
  * distinction is "did a corpus query execute", not "did it find something".
  */
+/**
+ * Emit the `search_knowledge` selection manifest (mmnto-ai/totem#2468 M1).
+ *
+ * Pure sensor: called only after a search actually produced a selection
+ * outcome (the same "did it run" boundary `logCorpusQuery` draws — isError
+ * outages emit nothing; the `mcp_call` denominator row makes that absence a
+ * recorded one, never a silent skip). Failures surface through the search log
+ * under the `internal:` idiom — this package speaks MCP over stdio, so
+ * stderr/stdout are off-limits by styleguide.
+ */
+export async function logSelectionManifest(input: {
+  context: Record<string, string | number | boolean | null>;
+  universe: string;
+  candidates: SelectionCandidate[];
+  warnings: string[];
+}): Promise<void> {
+  // totem-context: fire-and-forget telemetry; failure must not propagate
+  try {
+    const { projectRoot, config } = await getContext();
+    const totemDir = path.join(projectRoot, config.totemDir);
+    senseSelectionManifest(
+      {
+        totemDir,
+        emitter: 'search_knowledge',
+        context: input.context,
+        universe: input.universe,
+        candidates: input.candidates,
+        warnings: input.warnings,
+      },
+      (msg) => {
+        logSearch({
+          timestamp: new Date().toISOString(),
+          query: 'internal:selection-manifest',
+          resultCount: 0,
+          durationMs: 0,
+          topScore: null,
+          error: msg,
+        });
+      },
+    );
+    // totem-context: fire-and-forget telemetry; failure must not propagate
+  } catch (err) {
+    // intentional swallow — telemetry is a sensor (lesson-b1bae311); failing to
+    // record a selection manifest must not crash the MCP server. The absence
+    // stays recorded via the mcp_call denominator row (#2468 design).
+    void err;
+  }
+}
+
 export async function logCorpusQuery(): Promise<void> {
   // totem-context: fire-and-forget telemetry; failure must not propagate
   try {

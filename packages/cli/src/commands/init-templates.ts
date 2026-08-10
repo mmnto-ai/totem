@@ -264,6 +264,43 @@ try {
   process.stderr.write('[SessionStart] totem-status refresh-gh unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
 
+// ─── A.3.a: mint session ID + log session_start event ──────────
+// New with mmnto-ai/totem#2468: this template never took over the A.3.a duty
+// its Claude sibling carries, so Gemini-seat sessions had no session UUID and
+// no session_start denominator row — the selection-manifest join key and the
+// recorded-absence contract both need them. Same shape as the Claude template.
+// Fire-and-forget: a ledger failure must NOT block the briefing.
+let mintedSessionId = null;
+try {
+  const nodePath = require('path');
+  const { mkdirSync, writeFileSync, appendFileSync } = require('fs');
+  const { randomUUID } = require('crypto');
+  const ledgerDir = nodePath.join(process.cwd(), '.totem', 'ledger');
+  mkdirSync(ledgerDir, { recursive: true });
+  mintedSessionId = randomUUID();
+  writeFileSync(nodePath.join(ledgerDir, '.session-id'), mintedSessionId, 'utf-8');
+  const selfAgentEntry = (process.env.TOTEM_SELF_AGENT || '')
+    .split(',')
+    .map((s) => s.trim())
+    .find((s) => s.length > 0);
+  const event = {
+    timestamp: new Date().toISOString(),
+    type: 'session_start',
+    activity_name: 'SessionStart',
+    source: 'bot',
+    ...(selfAgentEntry ? { agent_source: selfAgentEntry } : {}),
+    justification: '',
+    session_id: mintedSessionId,
+  };
+  appendFileSync(nodePath.join(ledgerDir, 'events.ndjson'), JSON.stringify(event) + '\\n', 'utf-8');
+} catch (err) {
+  process.stderr.write(
+    '[SessionStart] session-start telemetry unavailable (non-fatal): ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\\n',
+  );
+}
+
 // Interactive Gemini ingests SessionStart CONTEXT only from the
 // hookSpecificOutput.additionalContext envelope — plain exit-0 stdout wraps as
 // systemMessage, which the interactive startup consumer never injects, so the
@@ -304,6 +341,11 @@ try {
   briefing += '[Totem] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n';
 }
 
+// Selection-manifest block boundary (mmnto-ai/totem#2468): everything in
+// \`briefing\` up to here is the describe leg — including its fail-soft note,
+// which IS injected payload when it fires.
+const describeBriefingEnd = briefing.length;
+
 // totem orient --session — live derived in-flight state, ADDITIVE to describe
 // (mmnto-ai/totem#2044 PR-3). Own try/catch; orient --session is itself boot-safe.
 try {
@@ -332,6 +374,59 @@ try {
   const orientMsg = err instanceof Error ? err.message : String(err);
   briefing += '[Totem] Orient briefing unavailable: ' + orientMsg + '\\n';
   process.stderr.write('[SessionStart] orient briefing unavailable (non-fatal): ' + orientMsg + '\\n');
+}
+
+// ─── selection manifest (mmnto-ai/totem#2468 M1) ────────────────
+// Inline append mirroring the A.3.a write above — this rendered hook runs
+// standalone in consumer repos with no access to @mmnto/totem's writer. The
+// row shape is BOUND to SelectionManifestRowSchema (strict): change both in
+// the same PR; the template contract test parses this row with the real
+// schema. A zero-byte block never becomes a candidate (nothing was injected).
+try {
+  const nodePath = require('path');
+  const { appendFileSync } = require('fs');
+  const { createHash } = require('crypto');
+  const measure = (id, content, reason) => {
+    const bytes = Buffer.byteLength(content, 'utf-8');
+    return {
+      id,
+      disposition: 'selected',
+      reason,
+      bytes,
+      approxTokens: Math.ceil(bytes / 4),
+      fingerprint: createHash('sha256').update(content, 'utf-8').digest('hex').slice(0, 16),
+    };
+  };
+  const selfAgent = (process.env.TOTEM_SELF_AGENT || '')
+    .split(',')
+    .map((s) => s.trim())
+    .find((s) => s.length > 0);
+  const row = {
+    schemaVersion: 1,
+    timestamp: new Date().toISOString(),
+    emitter: 'session-start',
+    ...(mintedSessionId ? { session_id: mintedSessionId } : {}),
+    ...(selfAgent ? { agent_source: selfAgent } : {}),
+    context: { template: 'gemini-managed' },
+    universe: 'managed-template blocks: describe + orient --session',
+    costBasis: { bytes: 'utf8-length', approxTokens: 'ceil(bytes/4) approximation' },
+    candidates: [
+      measure('describe', briefing.slice(0, describeBriefingEnd), 'always-injected briefing'),
+      measure('orient:session-block', briefing.slice(describeBriefingEnd), 'always-injected briefing'),
+    ].filter((c) => c.bytes > 0),
+    warnings: [],
+  };
+  appendFileSync(
+    nodePath.join(process.cwd(), '.totem', 'ledger', 'selection-manifests.ndjson'),
+    JSON.stringify(row) + '\\n',
+    'utf-8',
+  );
+} catch (err) {
+  process.stderr.write(
+    '[SessionStart] selection manifest unavailable (non-fatal): ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\\n',
+  );
 }
 
 process.stdout.write(JSON.stringify({
@@ -877,10 +972,14 @@ const { randomUUID } = require('crypto');
 const { join } = require('path');
 
 // ─── A.3.a: mint session ID + log session_start event ──────────
+// Hoisted so the selection-manifest row below (mmnto-ai/totem#2468) can carry
+// the same session UUID as its join key.
+let mintedSessionId = null;
 try {
   const ledgerDir = join(process.cwd(), '.totem', 'ledger');
   mkdirSync(ledgerDir, { recursive: true });
   const sessionId = randomUUID();
+  mintedSessionId = sessionId;
   writeFileSync(join(ledgerDir, '.session-id'), sessionId, 'utf-8');
   // Amended ADR-078 (2026-07-15): agent_source is the env-carried seat-id
   // (TOTEM_SELF_AGENT, first non-empty comma entry), never a vendor class
@@ -1010,6 +1109,9 @@ try {
 }
 
 // ─── totem describe briefing (existing behavior) ────────────────
+// Captured (mmnto-ai/totem#2468): the injected block is the selection-manifest
+// candidate below — the not-installed notice is a notice, not a briefing.
+let describeText = '';
 try {
   const cliPath = join(process.cwd(), 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
   if (existsSync(cliPath)) {
@@ -1022,7 +1124,8 @@ try {
     }
     // Totem CLI writes diagnostic output to stderr; route to stdout so the
     // session-start context lands in Claude's prompt rather than user-visible noise.
-    process.stdout.write((result.stdout || '') + (result.stderr || ''));
+    describeText = (result.stdout || '') + (result.stderr || '');
+    process.stdout.write(describeText);
   } else {
     process.stdout.write(
       '[Totem] @mmnto/cli not installed. Run \`pnpm install\` (or your package manager equivalent) to enable session-start orientation.\\n',
@@ -1042,6 +1145,7 @@ try {
 // never replace. Its OWN try/catch so an orient failure never disturbs the describe
 // briefing or the boot; \`orient --session\` is itself boot-safe (emits nothing when
 // nothing is high-signal, never exits non-zero, degrades to honest "could not derive").
+let orientText = '';
 try {
   const orientCliPath = join(process.cwd(), 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
   if (existsSync(orientCliPath)) {
@@ -1054,7 +1158,8 @@ try {
     if (orientResult.error) {
       throw orientResult.error;
     }
-    process.stdout.write((orientResult.stdout || '') + (orientResult.stderr || ''));
+    orientText = (orientResult.stdout || '') + (orientResult.stderr || '');
+    process.stdout.write(orientText);
   }
 } catch (err) {
   // Boot-safe: orient is additive to describe (already emitted), so a failure never
@@ -1062,6 +1167,57 @@ try {
   // to keep the prompt clean) for debuggability rather than swallowing silently.
   process.stderr.write(
     '[SessionStart] orient briefing unavailable (non-fatal): ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\\n',
+  );
+}
+
+// ─── selection manifest (mmnto-ai/totem#2468 M1) ────────────────
+// Inline append mirroring the session_start write above — this rendered hook
+// runs standalone in consumer repos with no access to @mmnto/totem's writer.
+// The row shape is BOUND to SelectionManifestRowSchema (strict): change both
+// in the same PR; the template contract test parses this row with the real
+// schema. A zero-byte block never becomes a candidate (nothing was injected).
+try {
+  const { createHash } = require('crypto');
+  const measure = (id, content, reason) => {
+    const bytes = Buffer.byteLength(content, 'utf-8');
+    return {
+      id,
+      disposition: 'selected',
+      reason,
+      bytes,
+      approxTokens: Math.ceil(bytes / 4),
+      fingerprint: createHash('sha256').update(content, 'utf-8').digest('hex').slice(0, 16),
+    };
+  };
+  const selfAgent = (process.env.TOTEM_SELF_AGENT || '')
+    .split(',')
+    .map((s) => s.trim())
+    .find((s) => s.length > 0);
+  const row = {
+    schemaVersion: 1,
+    timestamp: new Date().toISOString(),
+    emitter: 'session-start',
+    ...(mintedSessionId ? { session_id: mintedSessionId } : {}),
+    ...(selfAgent ? { agent_source: selfAgent } : {}),
+    context: { template: 'claude-managed' },
+    universe: 'managed-template blocks: describe + orient --session',
+    costBasis: { bytes: 'utf8-length', approxTokens: 'ceil(bytes/4) approximation' },
+    candidates: [
+      measure('describe', describeText, 'always-injected briefing'),
+      measure('orient:session-block', orientText, 'always-injected briefing'),
+    ].filter((c) => c.bytes > 0),
+    warnings: [],
+  };
+  appendFileSync(
+    join(process.cwd(), '.totem', 'ledger', 'selection-manifests.ndjson'),
+    JSON.stringify(row) + '\\n',
+    'utf-8',
+  );
+} catch (err) {
+  process.stderr.write(
+    '[SessionStart] selection manifest unavailable (non-fatal): ' +
       (err instanceof Error ? err.message : String(err)) +
       '\\n',
   );

@@ -819,6 +819,70 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
     if (seamReport.note !== undefined) process.stderr.write(`[orient] ${seamReport.note}\n`);
   }
 
+  // Selection manifest (mmnto-ai/totem#2468 M1) — agent-invoked renders only,
+  // mirroring the QBD scope decision above: the machine-fired `--session` boot
+  // render returned before this point and is recorded by the SessionStart
+  // hook's own manifest (the hook is the selector at that tier). This policy
+  // is "render every derived section in full", so every healthy section is
+  // `selected` and a failed derivation is `excluded: derive-error` — the
+  // why-excluded half that is invisible today. Bytes measure each section's
+  // DERIVED data (JSON) — the content this policy considered; orient is
+  // derived state, never corpus content, so the overlap join needs no finer
+  // grain (#2468 design, OQ3 as ruled).
+  {
+    const { resolveQbdLedgerDirDetailed } = await import('./qbd-seam.js');
+    const { dir: manifestTotemDir } = await resolveQbdLedgerDirDetailed(cwd);
+    if (manifestTotemDir !== undefined) {
+      const { buildMeasuredCandidate, senseSelectionManifest } = await import('@mmnto/totem');
+      let cliVersion: string | undefined;
+      try {
+        const { createRequire } = await import('node:module');
+        const req = createRequire(import.meta.url);
+        cliVersion = (req('../../package.json') as { version?: string }).version;
+        // totem-context: cli_version is a best-effort enrichment of the manifest row; package.json resolution failure must never disturb the render (Tenet 13).
+      } catch (err) {
+        void err;
+      }
+      const manifestWarnings: string[] = [];
+      const sections: Array<[string, unknown]> = [
+        ['repo', report.repo],
+        ['indexFreshness', report.indexFreshness],
+        ['parked', report.parked],
+        ['freezeChannel', report.freezeChannel],
+        ['openPRs', report.openPRs],
+        ['board', report.board],
+        ['coherence', report.coherence],
+        ['epics', report.epics],
+        ['otherOpenIssues', report.otherOpenIssues],
+      ];
+      const candidates = sections.map(([name, section]) => {
+        const failed = isError(section as Section<unknown>);
+        const { candidate, warning } = buildMeasuredCandidate({
+          id: `orient:${name}`,
+          content: JSON.stringify(section),
+          disposition: failed ? 'excluded' : 'selected',
+          reason: failed
+            ? `derive-error: ${(section as ErrorEnvelope).error}`
+            : 'derived state rendered in full',
+        });
+        if (warning !== undefined) manifestWarnings.push(warning);
+        return candidate;
+      });
+      senseSelectionManifest(
+        {
+          totemDir: manifestTotemDir,
+          emitter: 'orient',
+          context: { render: json ? 'json' : 'human' },
+          universe: 'derived-report sections',
+          candidates,
+          warnings: manifestWarnings,
+          ...(cliVersion !== undefined && { cliVersion }),
+        },
+        (msg) => process.stderr.write(`[orient] ${msg}\n`),
+      );
+    }
+  }
+
   if (json) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     return;

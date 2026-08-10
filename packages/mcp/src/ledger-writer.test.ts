@@ -151,3 +151,65 @@ describe('logCorpusQuery (mmnto-ai/totem#2510)', () => {
     await expect(logCorpusQuery()).resolves.toBeUndefined();
   });
 });
+
+describe('logSelectionManifest (mmnto-ai/totem#2468)', () => {
+  const input = {
+    context: { query: 'q', status: 'ok' },
+    universe: 'store-returned-pool maxResults=5',
+    candidates: [
+      {
+        id: 'a.ts',
+        disposition: 'selected' as const,
+        reason: 'returned rank=1',
+        bytes: 4,
+        approxTokens: 1,
+      },
+    ],
+    warnings: [],
+  };
+
+  it('writes a schema-valid row to selection-manifests.ndjson end-to-end', async () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    mockContext();
+    const { logSelectionManifest } = await import('./ledger-writer.js');
+    await logSelectionManifest(input);
+
+    const rows = readRows(path.join(tmpDir, '.totem', 'ledger', 'selection-manifests.ndjson'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!).toMatchObject({
+      schemaVersion: 1,
+      emitter: 'search_knowledge',
+      universe: 'store-returned-pool maxResults=5',
+    });
+    expect(rows[0]!.costBasis).toEqual({
+      bytes: 'utf8-length',
+      approxTokens: 'ceil(bytes/4) approximation',
+    });
+    // The events.ndjson stream is untouched — the sidecar ruling (#2468 OQ1).
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'))).toBe(false);
+  });
+
+  it('does not throw when getContext fails', async () => {
+    vi.doMock('./context.js', () => ({
+      getContext: async () => {
+        throw new Error('context load failed');
+      },
+    }));
+    const { logSelectionManifest } = await import('./ledger-writer.js');
+    await expect(logSelectionManifest(input)).resolves.toBeUndefined();
+  });
+
+  it('never throws on a contract-invalid row — the sense wrapper absorbs it, nothing persists', async () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    mockContext();
+    const { logSelectionManifest } = await import('./ledger-writer.js');
+    const poisoned = {
+      ...input,
+      candidates: [{ ...input.candidates[0]!, reason: '' }],
+    };
+    await expect(logSelectionManifest(poisoned)).resolves.toBeUndefined();
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'ledger', 'selection-manifests.ndjson'))).toBe(
+      false,
+    );
+  });
+});

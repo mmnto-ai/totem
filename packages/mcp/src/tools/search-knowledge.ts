@@ -3,11 +3,20 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import type { ContentType, HealthCheckResult, SearchResult } from '@mmnto/totem';
-import { ContentTypeSchema, DEFAULT_SEARCH_RELEVANCE_FLOOR } from '@mmnto/totem';
+import type {
+  ContentType,
+  HealthCheckResult,
+  SearchResult,
+  SelectionCandidate,
+} from '@mmnto/totem';
+import {
+  buildMeasuredCandidate,
+  ContentTypeSchema,
+  DEFAULT_SEARCH_RELEVANCE_FLOOR,
+} from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
-import { logCorpusQuery, logMcpCall } from '../ledger-writer.js';
+import { logCorpusQuery, logMcpCall, logSelectionManifest } from '../ledger-writer.js';
 import { logSearch, setLogDir } from '../search-log.js';
 import { extractIndexState } from '../state-extractors.js';
 import { formatIndexEnvelope, formatSystemWarning, formatXmlResponse } from '../xml-format.js';
@@ -242,6 +251,7 @@ async function federatedSearch(
   finalLimit: number,
   failures: FailureLog,
   onFtsFallback: () => void,
+  overflow?: SearchResult[],
 ): Promise<SearchResult[]> {
   const { store: primaryStore, linkedStores } = await getContext();
 
@@ -354,6 +364,7 @@ async function federatedSearch(
   // already comparable since they all come from one store. Skip RRF
   // normalization to keep the original scores visible to the agent.
   if (buckets.length === 1) {
+    overflow?.push(...primaryResults.slice(finalLimit));
     return primaryResults.slice(0, finalLimit);
   }
 
@@ -388,6 +399,11 @@ async function federatedSearch(
     });
   }
   reranked.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  // Selection-manifest visibility (mmnto-ai/totem#2468): the final-limit cut
+  // was this pipeline's one SILENT exclusion — fetched, ranked, then dropped
+  // with no trace. Report the cut candidates so the emitter can record them;
+  // the returned selection is byte-identical with or without the out-param.
+  overflow?.push(...reranked.slice(finalLimit));
   return reranked.slice(0, finalLimit);
 }
 
@@ -465,6 +481,11 @@ async function performSearch(
   // `deriveLinkName` strips leading dots so a `.primary/` linked repo would
   // collide with a reserved key. CR MAJOR catch on round 7.
   const failures: FailureLog = makeFailureLog();
+
+  // Selection-manifest capture (mmnto-ai/totem#2468): candidates the federation
+  // fetched but cut at the final limit — populated only by Case 5, mirroring
+  // the `failures` out-param pattern. Purely observational.
+  const federationOverflow: SearchResult[] = [];
 
   // ─── Boundary resolution (mmnto/totem#1294 Phase 2) ──
   //
@@ -596,6 +617,7 @@ async function performSearch(
       finalLimit,
       failures,
       onFtsFallback,
+      federationOverflow,
     );
   }
 
@@ -703,6 +725,63 @@ async function performSearch(
   const hasRelevanceSignal = relevances.length > 0;
   const bestRelevance = hasRelevanceSignal ? Math.max(...relevances) : null;
 
+  // ─── Selection-manifest emitter (mmnto-ai/totem#2468 M1) ──
+  //
+  // One manifest per selection OUTCOME (empty / no_useful_hits / mixed / ok) —
+  // the same "did a selection happen" boundary logCorpusQuery draws for the
+  // QBD row. isError outages emit nothing: the mcp_call denominator row makes
+  // that absence recorded, never silent. Each branch calls this AFTER
+  // composing its response text, so emission can never alter the selection
+  // (Tenet 13); logSelectionManifest swallows its own failures into the
+  // search log.
+  //
+  // Every candidate here was FETCHED by the policy (returned, withheld at the
+  // floor, or cut at the federation final limit), so every row is fully
+  // measured — the id-only form exists for policies that never read their
+  // exclusions, which this one has none of. `universe` names that boundary:
+  // exclusions are recorded over the fetched pool, not the whole index.
+  const emitSelectionManifest = async (
+    status: 'empty' | 'no_useful_hits' | 'ok',
+    parts: {
+      selected?: { hit: SearchResult; reason: string }[];
+      excluded?: { hit: SearchResult; reason: string }[];
+    },
+  ): Promise<void> => {
+    const candidates: SelectionCandidate[] = [];
+    const manifestWarnings: string[] = [];
+    const add = (hit: SearchResult, disposition: 'selected' | 'excluded', reason: string): void => {
+      const { candidate, warning } = buildMeasuredCandidate({
+        id: hit.filePath,
+        content: hit.content,
+        disposition,
+        reason,
+        ...(hit.sourceRepo !== undefined && { sourceRepo: hit.sourceRepo }),
+      });
+      candidates.push(candidate);
+      if (warning !== undefined) manifestWarnings.push(warning);
+    };
+    for (const { hit, reason } of parts.selected ?? []) add(hit, 'selected', reason);
+    for (const { hit, reason } of parts.excluded ?? []) add(hit, 'excluded', reason);
+    for (const hit of federationOverflow) add(hit, 'excluded', 'federation-final-limit overflow');
+    const federated = boundary === undefined && linkedStores.size > 0;
+    await logSelectionManifest({
+      context: {
+        query,
+        boundary: boundary ?? null,
+        typeFilter: typeFilter ?? null,
+        floor: effectiveFloor,
+        finalLimit,
+        method,
+        status,
+      },
+      universe: federated
+        ? `federated-returned-pool perStoreLimit=${finalLimit} stores=${linkedStores.size + 1}`
+        : `store-returned-pool maxResults=${finalLimit}`,
+      candidates,
+      warnings: manifestWarnings,
+    });
+  };
+
   if (results.length === 0) {
     if (allFederatedStoresFailed) {
       return {
@@ -733,6 +812,7 @@ async function performSearch(
       retrievalEnvelope: emptyEnvelope,
       body,
     }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
+    await emitSelectionManifest('empty', {});
     return { content: [{ type: 'text' as const, text }] };
   }
 
@@ -783,6 +863,12 @@ async function performSearch(
         retrievalEnvelope: belowFloorEnvelope,
         body,
       }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
+      await emitSelectionManifest('no_useful_hits', {
+        excluded: withheld.map((hit) => ({
+          hit,
+          reason: `below-relevance-floor floor=${effectiveFloor.toFixed(3)} relevance=${typeof hit.relevance === 'number' ? hit.relevance.toFixed(3) : 'n/a'}`,
+        })),
+      });
       return { content: [{ type: 'text' as const, text }] };
     }
 
@@ -805,6 +891,16 @@ async function performSearch(
       retrievalEnvelope: mixedEnvelope,
       body,
     }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
+    await emitSelectionManifest('ok', {
+      selected: floorExempt.map((hit) => ({
+        hit,
+        reason: 'floor-exempt keyword hit (no relevance signal)',
+      })),
+      excluded: withheld.map((hit) => ({
+        hit,
+        reason: `below-relevance-floor floor=${effectiveFloor.toFixed(3)} relevance=${typeof hit.relevance === 'number' ? hit.relevance.toFixed(3) : 'n/a'}`,
+      })),
+    });
     return { content: [{ type: 'text' as const, text }] };
   }
 
@@ -827,6 +923,9 @@ async function performSearch(
     body: knowledgeBody,
   }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
 
+  await emitSelectionManifest('ok', {
+    selected: results.map((hit, i) => ({ hit, reason: `returned rank=${i + 1}` })),
+  });
   return { content: [{ type: 'text' as const, text }] };
 }
 
