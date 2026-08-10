@@ -118,6 +118,30 @@ describe('truncateResults', () => {
     const { content } = truncateResults(results, 10_000);
     expect(content).toContain('additional results omitted');
   });
+
+  // ─── Selection metadata (mmnto-ai/totem#2468) ───────────
+
+  it('records every fetched result — included AND char-budget cut — with measured blocks', () => {
+    const results = [fakeResult('A', 8000), fakeResult('B', 8000), fakeResult('C', 8000)];
+    const { included, candidates } = truncateResults(results, 10_000);
+    expect(included).toBe(1);
+    expect(candidates).toHaveLength(3);
+    expect(candidates.map((c) => c.included)).toEqual([true, false, false]);
+    // Measured over the formatted block, so bytes exceed the raw content length.
+    expect(candidates.every((c) => c.bytes > 8000)).toBe(true);
+    expect(candidates.every((c) => /^[0-9a-f]{16}$/.test(c.fingerprint))).toBe(true);
+  });
+
+  it('carries relevance through when present and omits it when absent', () => {
+    const withRel = { ...fakeResult('A', 100), relevance: 0.72 };
+    const { candidates } = truncateResults([withRel, fakeResult('B', 100)], 10_000);
+    expect(candidates[0]!.relevance).toBe(0.72);
+    expect(candidates[1]!.relevance).toBeUndefined();
+  });
+
+  it('returns empty candidates for no results', () => {
+    expect(truncateResults([], 10_000).candidates).toEqual([]);
+  });
 });
 
 // ─── getAutoContext (graceful degradation) ─────────────────

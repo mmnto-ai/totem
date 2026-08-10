@@ -57,6 +57,10 @@ let repoRoot = '/repo/root';
 // need); status.test.ts uses this same importActual pattern. Note:
 // `readFreezeConfig` is intentionally NOT overridden — the freeze section is
 // tested against the real reader via a real temp `.totem/freeze.json`.
+// mmnto-ai/totem#2468: overridable manifest sensor — the defense-catch probe
+// (leg round 1, D-5) forces it to throw and asserts the render survives.
+let mockSenseSelectionManifest: ((...args: unknown[]) => unknown) | null = null;
+
 vi.mock('@mmnto/totem', async () => {
   const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
   return {
@@ -64,6 +68,10 @@ vi.mock('@mmnto/totem', async () => {
     safeExec: () => mockSafeExec(),
     readRegistry: () => mockReadRegistry(),
     resolveGitRoot: () => repoRoot,
+    senseSelectionManifest: (...args: unknown[]) =>
+      mockSenseSelectionManifest
+        ? mockSenseSelectionManifest(...args)
+        : (actual.senseSelectionManifest as (...a: unknown[]) => unknown)(...args),
     // #2018 structural tripwire: orient must never construct an embedder/store.
     createEmbedder: embedderTripwire,
     LanceStore: class {
@@ -77,9 +85,16 @@ vi.mock('@mmnto/totem', async () => {
 // ─── utils mock (config / project number resolution) ────────────────────
 
 const mockLoadConfig = vi.fn();
+// mmnto-ai/totem#2468: the selection-manifest seam resolves its ledger dir
+// through resolveConfigPath/isGlobalConfigPath. The default path keeps the
+// historical "unresolvable → seam skips" behavior (config.totemDir undefined);
+// manifest tests point it at the temp repo and return a real totemDir.
+let mockConfigPath = '/repo/root/totem.config.ts';
+let mockIsGlobalConfigPath = false;
 vi.mock('../utils.js', () => ({
-  resolveConfigPath: () => '/repo/root/totem.config.ts',
+  resolveConfigPath: () => mockConfigPath,
   loadConfig: () => mockLoadConfig(),
+  isGlobalConfigPath: () => mockIsGlobalConfigPath,
 }));
 
 import {
@@ -130,6 +145,9 @@ afterEach(() => {
   vi.clearAllMocks();
   fs.rmSync(tmpRoot, { recursive: true, force: true });
   delete process.env['TOTEM_ORIENT_PROJECT'];
+  mockConfigPath = '/repo/root/totem.config.ts';
+  mockIsGlobalConfigPath = false;
+  mockSenseSelectionManifest = null;
 });
 
 // ─── Per-section failure isolation ──────────────────────
@@ -672,5 +690,143 @@ describe('orient --session — boot-safe SessionStart projection', () => {
     // …and stdout is still the bounded session projection, NOT the JSON report.
     expect(stdout).toContain('◐ PR #42');
     expect(stdout).not.toContain('"openPRs"');
+  });
+});
+
+// ─── Selection manifest (mmnto-ai/totem#2468) ───────────
+
+describe('orient selection manifest (mmnto-ai/totem#2468)', () => {
+  function manifestPath(): string {
+    return path.join(tmpRoot, '.totem', 'ledger', 'selection-manifests.ndjson');
+  }
+
+  function readManifestRows(): Array<Record<string, unknown>> {
+    return fs
+      .readFileSync(manifestPath(), 'utf-8')
+      .split('\n')
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+  }
+
+  function pointSeamAtTmpRepo(): void {
+    mockConfigPath = path.join(tmpRoot, 'totem.config.ts');
+    mockLoadConfig.mockResolvedValue({ orient: undefined, totemDir: '.totem' });
+  }
+
+  it('emits one manifest per agent-invoked render with every section selected on the happy path', async () => {
+    pointSeamAtTmpRepo();
+    await runJson();
+    const rows = readManifestRows();
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.emitter).toBe('orient');
+    expect(row.universe).toBe('derived-report sections');
+    expect(row.context).toMatchObject({ render: 'json' });
+    const candidates = row.candidates as Array<Record<string, unknown>>;
+    expect(candidates.map((c) => c.id)).toEqual([
+      'orient:repo',
+      'orient:indexFreshness',
+      'orient:parked',
+      'orient:freezeChannel',
+      'orient:openPRs',
+      'orient:board',
+      'orient:coherence',
+      'orient:epics',
+      'orient:otherOpenIssues',
+    ]);
+    expect(candidates.every((c) => c.disposition === 'selected')).toBe(true);
+    // Every candidate is fully measured — this policy reads all its sections.
+    expect(candidates.every((c) => typeof c.bytes === 'number')).toBe(true);
+    expect(candidates.every((c) => typeof c.fingerprint === 'string')).toBe(true);
+  });
+
+  it('records a failed derivation as excluded with the derive-error reason', async () => {
+    pointSeamAtTmpRepo();
+    mockFetchOpenPRs.mockImplementation(() => {
+      throw new Error('gh pr list exploded');
+    });
+    await runJson();
+    const candidates = readManifestRows()[0]!.candidates as Array<Record<string, unknown>>;
+    const prs = candidates.find((c) => c.id === 'orient:openPRs')!;
+    expect(prs.disposition).toBe('excluded');
+    expect(String(prs.reason)).toContain('derive-error:');
+    // Failure isolation carries into the manifest: siblings stay selected.
+    const parked = candidates.find((c) => c.id === 'orient:parked')!;
+    expect(parked.disposition).toBe('selected');
+  });
+
+  it('does NOT emit on the --session boot render — that selection belongs to the hook (#2510 scope mirror)', async () => {
+    pointSeamAtTmpRepo();
+    await orientCommand({ session: true });
+    expect(fs.existsSync(manifestPath())).toBe(false);
+  });
+
+  it('declines LOUDLY when no project config resolves — a named stderr note, never a silent skip (leg round 1, D-4)', async () => {
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
+    await runJson();
+    errSpy.mockRestore();
+    expect(fs.existsSync(manifestPath())).toBe(false);
+    expect(stderr).toMatch(/selection-manifest: .*not recording/);
+  });
+
+  it('announces a global-profile landing — mirrors the QBD globalNote (leg round 1, D-4)', async () => {
+    pointSeamAtTmpRepo();
+    mockIsGlobalConfigPath = true;
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
+    await runJson();
+    errSpy.mockRestore();
+    // The row still lands (legitimate), but never silently — and the note
+    // fires AFTER the write, so it reports an outcome, not an intention.
+    expect(readManifestRows()).toHaveLength(1);
+    expect(stderr).toMatch(/selection-manifest: recorded to the global profile ledger/);
+  });
+
+  it('the resolved-dir-without-ledger decline is loud too — the third path (leg round 2, finding 1)', async () => {
+    mockConfigPath = path.join(tmpRoot, 'totem.config.ts');
+    mockLoadConfig.mockResolvedValue({ orient: undefined, totemDir: '.totem-absent' });
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
+    await runJson();
+    errSpy.mockRestore();
+    expect(fs.existsSync(path.join(tmpRoot, '.totem-absent'))).toBe(false);
+    expect(stderr).toMatch(/selection-manifest: no ledger at .*not recording/);
+  });
+
+  it('a THROWING manifest sensor never costs the render — defense catch + named stderr line (leg round 1, D-5)', async () => {
+    pointSeamAtTmpRepo();
+    mockSenseSelectionManifest = () => {
+      throw new Error('sensor exploded');
+    };
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
+    await runJson();
+    errSpy.mockRestore();
+    // The render is intact — the whole report reached stdout as JSON.
+    const r = parseJson();
+    expect(r.repo).toBe('mmnto-ai/totem');
+    expect(stderr).toContain('selection-manifest sensor failed: sensor exploded');
+    expect(fs.existsSync(manifestPath())).toBe(false);
   });
 });

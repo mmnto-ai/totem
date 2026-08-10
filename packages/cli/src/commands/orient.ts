@@ -819,6 +819,97 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
     if (seamReport.note !== undefined) process.stderr.write(`[orient] ${seamReport.note}\n`);
   }
 
+  // Selection manifest (mmnto-ai/totem#2468 M1) — agent-invoked renders only,
+  // mirroring the QBD scope decision above: the machine-fired `--session` boot
+  // render returned before this point and is recorded by the SessionStart
+  // hook's own manifest (the hook is the selector at that tier). This policy
+  // is "render every derived section in full", so every healthy section is
+  // `selected` and a failed derivation is `excluded: derive-error` — the
+  // why-excluded half that is invisible today. Bytes measure each section's
+  // DERIVED data (JSON) — the content this policy considered; orient is
+  // derived state, never corpus content, so the overlap join needs no finer
+  // grain (#2468 design, OQ3 as ruled).
+  try {
+    const { resolveQbdLedgerDirDetailed } = await import('./qbd-seam.js');
+    const seamResolution = await resolveQbdLedgerDirDetailed(cwd);
+    const manifestTotemDir = seamResolution.dir;
+    // Neither decline nor a global-profile landing may be silent (ADR-115 § 2;
+    // leg round 1 D-4) — mirror the QBD seam's note/globalNote twenty lines up.
+    if (manifestTotemDir === undefined) {
+      process.stderr.write(
+        `[orient] selection-manifest: ${seamResolution.reason ?? 'unresolved'} — not recording\n`,
+      );
+    } else {
+      const { buildMeasuredCandidate, senseSelectionManifest } = await import('@mmnto/totem');
+      const manifestWarnings: string[] = [];
+      let cliVersion: string | undefined;
+      try {
+        const { createRequire } = await import('node:module');
+        const req = createRequire(import.meta.url);
+        cliVersion = (req('../../package.json') as { version?: string }).version;
+        // totem-context: cli_version is a best-effort enrichment of the manifest row; resolution failure must never disturb the render (Tenet 13) — but it lands on the row's accounting channel rather than vanishing (PR #2625 CR round).
+      } catch (err) {
+        manifestWarnings.push(
+          `cli_version unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      const sections: Array<[string, unknown]> = [
+        ['repo', report.repo],
+        ['indexFreshness', report.indexFreshness],
+        ['parked', report.parked],
+        ['freezeChannel', report.freezeChannel],
+        ['openPRs', report.openPRs],
+        ['board', report.board],
+        ['coherence', report.coherence],
+        ['epics', report.epics],
+        ['otherOpenIssues', report.otherOpenIssues],
+      ];
+      const candidates = sections.map(([name, section]) => {
+        const failed = isError(section as Section<unknown>);
+        const { candidate, warning } = buildMeasuredCandidate({
+          id: `orient:${name}`,
+          content: JSON.stringify(section),
+          disposition: failed ? 'excluded' : 'selected',
+          reason: failed
+            ? `derive-error: ${(section as ErrorEnvelope).error}`
+            : 'derived state rendered in full',
+        });
+        if (warning !== undefined) manifestWarnings.push(warning);
+        return candidate;
+      });
+      const manifestResult = senseSelectionManifest(
+        {
+          totemDir: manifestTotemDir,
+          emitter: 'orient',
+          context: { render: json ? 'json' : 'human' },
+          universe: 'derived-report sections',
+          candidates,
+          warnings: manifestWarnings,
+          ...(cliVersion !== undefined && { cliVersion }),
+        },
+        (msg) => process.stderr.write(`[orient] ${msg}\n`),
+      );
+      // The third decline path (resolved dir, no ledger there) and the
+      // global-profile landing, both AFTER the write so neither can announce
+      // an outcome that didn't happen — mirrors qbd-seam.ts note/globalNote
+      // ordering exactly (leg round 2, finding 1).
+      if (manifestResult.skipped === true) {
+        process.stderr.write(
+          `[orient] selection-manifest: no ledger at ${manifestTotemDir} — not recording\n`,
+        );
+      } else if (seamResolution.global === true) {
+        process.stderr.write(
+          `[orient] selection-manifest: recorded to the global profile ledger at ${manifestTotemDir} — no project config found from this cwd\n`,
+        );
+      }
+    }
+    // totem-context: defense-in-depth (leg round 1, D-5) — the sense wrapper never throws by contract, but this block runs BEFORE the render writes; a programming error here must degrade to a named stderr line, never cost the user their orientation output (Tenet 13).
+  } catch (err) {
+    process.stderr.write(
+      `[orient] selection-manifest sensor failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
+
   if (json) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     return;

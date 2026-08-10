@@ -81,6 +81,43 @@ let mockLogMcpCall: ReturnType<typeof vi.fn>;
 let mockLogCorpusQuery: ReturnType<typeof vi.fn>;
 /** mmnto-ai/totem#2463: captured logSearch spy so tests can assert topRelevance. */
 let mockLogSearch: ReturnType<typeof vi.fn>;
+/** mmnto-ai/totem#2468: the selection-manifest emitter spy. */
+let mockLogSelectionManifest: ReturnType<typeof vi.fn>;
+
+/**
+ * Lightweight stand-in for core's `buildMeasuredCandidate` — real byte
+ * measurement, fixed fingerprint. The real hashing behavior is covered in
+ * core's selection-manifest.test.ts; this suite verifies the CALL SITE
+ * (which hits become candidates, with which dispositions and reasons).
+ */
+/** The mock's declared cost basis — mirrors core's chars/4 approximation. */
+const APPROX_TOKEN_BYTES = 4;
+
+function fakeBuildMeasuredCandidate(input: {
+  id: string;
+  content: string | Buffer;
+  disposition: string;
+  reason: string;
+  sourceRepo?: string;
+  deliveredBytes?: number;
+}): { candidate: Record<string, unknown>; warning?: string } {
+  const bytes = Buffer.byteLength(
+    typeof input.content === 'string' ? input.content : input.content.toString('utf-8'),
+    'utf-8',
+  );
+  return {
+    candidate: {
+      id: input.id,
+      disposition: input.disposition,
+      reason: input.reason,
+      bytes,
+      approxTokens: Math.ceil(bytes / APPROX_TOKEN_BYTES),
+      fingerprint: '0123456789abcdef',
+      ...(input.sourceRepo !== undefined && { sourceRepo: input.sourceRepo }),
+      ...(input.deliveredBytes !== undefined && { deliveredBytes: input.deliveredBytes }),
+    },
+  };
+}
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: class {},
@@ -90,6 +127,7 @@ vi.mock('@mmnto/totem', () => ({
   ContentTypeSchema: {
     options: ['code', 'session_log', 'spec', 'lesson'],
   },
+  buildMeasuredCandidate: fakeBuildMeasuredCandidate,
 }));
 
 vi.mock('../context.js', () => ({
@@ -177,6 +215,7 @@ vi.mock('../search-log.js', () => ({
 vi.mock('../ledger-writer.js', () => ({
   logMcpCall: vi.fn(async () => {}),
   logCorpusQuery: vi.fn(async () => {}),
+  logSelectionManifest: vi.fn(async () => {}),
 }));
 
 // ---------------------------------------------------------------------------
@@ -224,6 +263,7 @@ describe('search_knowledge', () => {
     mockLogMcpCall = vi.fn(async () => {});
     mockLogCorpusQuery = vi.fn(async () => {});
     mockLogSearch = vi.fn();
+    mockLogSelectionManifest = vi.fn(async () => {});
 
     // Reset modules to clear the firstHealthCheckDone flag
     vi.resetModules();
@@ -237,6 +277,7 @@ describe('search_knowledge', () => {
       ContentTypeSchema: {
         options: ['code', 'session_log', 'spec', 'lesson'],
       },
+      buildMeasuredCandidate: fakeBuildMeasuredCandidate,
     }));
 
     vi.doMock('../context.js', () => ({
@@ -319,6 +360,7 @@ describe('search_knowledge', () => {
     vi.doMock('../ledger-writer.js', () => ({
       logMcpCall: mockLogMcpCall,
       logCorpusQuery: mockLogCorpusQuery,
+      logSelectionManifest: mockLogSelectionManifest,
     }));
 
     handle = await setupFresh();
@@ -334,6 +376,168 @@ describe('search_knowledge', () => {
     mockSearchResults = [];
     await handle({ query: 'test' });
     expect(mockLogMcpCall).toHaveBeenCalledWith('search_knowledge');
+  });
+
+  // --- mmnto-ai/totem#2468 — selection-manifest emitter ---
+
+  describe('selection manifest (mmnto-ai/totem#2468)', () => {
+    interface ManifestCall {
+      context: Record<string, unknown>;
+      universe: string;
+      candidates: Array<Record<string, unknown>>;
+      warnings: string[];
+    }
+    const manifestCall = (): ManifestCall =>
+      mockLogSelectionManifest.mock.calls[0]![0] as ManifestCall;
+
+    it('records returned hits as selected with rank reasons on the ok path', async () => {
+      mockSearchResults = [
+        { label: 'A', type: 'code', filePath: 'a.ts', score: 0.9, content: 'aaaa', relevance: 0.9 },
+        { label: 'B', type: 'code', filePath: 'b.ts', score: 0.8, content: 'bb', relevance: 0.7 },
+      ];
+      await handle({ query: 'test' });
+      expect(mockLogSelectionManifest).toHaveBeenCalledTimes(1);
+      const call = manifestCall();
+      expect(call.context).toMatchObject({ query: 'test', status: 'ok', floor: 0.4 });
+      expect(call.universe).toBe('store-returned-pool maxResults=5');
+      expect(call.candidates).toHaveLength(2);
+      expect(call.candidates[0]).toMatchObject({
+        id: 'a.ts',
+        disposition: 'selected',
+        reason: 'returned rank=1',
+        bytes: 4,
+      });
+      expect(call.candidates[1]).toMatchObject({
+        id: 'b.ts',
+        disposition: 'selected',
+        reason: 'returned rank=2',
+      });
+    });
+
+    it('records withheld hits as excluded with the floor in the reason (no_useful_hits)', async () => {
+      mockSearchResults = [
+        { label: 'A', type: 'code', filePath: 'a.ts', score: 0.9, content: 'aaaa', relevance: 0.1 },
+      ];
+      await handle({ query: 'test' });
+      const call = manifestCall();
+      expect(call.context).toMatchObject({ status: 'no_useful_hits' });
+      expect(call.candidates).toHaveLength(1);
+      expect(call.candidates[0]).toMatchObject({
+        id: 'a.ts',
+        disposition: 'excluded',
+        reason: 'below-relevance-floor floor=0.400 relevance=0.100',
+      });
+    });
+
+    it('records a mixed batch as floor-exempt selected + withheld excluded', async () => {
+      mockSearchResults = [
+        { label: 'A', type: 'code', filePath: 'a.ts', score: 0.9, content: 'aaaa', relevance: 0.1 },
+        {
+          label: 'K',
+          type: 'code',
+          filePath: 'k.ts',
+          score: 0.5,
+          content: 'kw',
+          searchMethod: 'fts',
+        },
+      ];
+      await handle({ query: 'test' });
+      const call = manifestCall();
+      expect(call.context).toMatchObject({ status: 'ok' });
+      const byId = Object.fromEntries(call.candidates.map((c) => [c.id, c]));
+      expect(byId['k.ts']).toMatchObject({
+        disposition: 'selected',
+        reason: 'floor-exempt keyword hit (no relevance signal)',
+      });
+      expect(byId['a.ts']).toMatchObject({ disposition: 'excluded' });
+    });
+
+    it('emits a zero-candidate manifest on an empty result set', async () => {
+      mockSearchResults = [];
+      await handle({ query: 'test' });
+      const call = manifestCall();
+      expect(call.context).toMatchObject({ status: 'empty' });
+      expect(call.candidates).toEqual([]);
+    });
+
+    it('records the federation final-limit cut — accounting completeness over the fetched pool', async () => {
+      // Primary returns 2, linked returns 2, finalLimit 2 → pool of 4:
+      // 2 selected + 2 excluded as federation overflow. Nothing vanishes.
+      mockSearchResults = [
+        { label: 'P1', type: 'code', filePath: 'p1.ts', score: 0.9, content: 'p1', relevance: 0.9 },
+        { label: 'P2', type: 'code', filePath: 'p2.ts', score: 0.8, content: 'p2', relevance: 0.8 },
+      ];
+      mockLinkedStores.set('strategy', {
+        search: async () => [
+          {
+            label: 'L1',
+            type: 'spec',
+            filePath: 'l1.md',
+            score: 0.7,
+            content: 'l1',
+            relevance: 0.9,
+            sourceRepo: 'strategy',
+          },
+          {
+            label: 'L2',
+            type: 'spec',
+            filePath: 'l2.md',
+            score: 0.6,
+            content: 'l2',
+            relevance: 0.8,
+            sourceRepo: 'strategy',
+          },
+        ],
+        reconnect: async () => {},
+      });
+      await handle({ query: 'test', max_results: 2 });
+      const call = manifestCall();
+      expect(call.universe).toBe('federated-returned-pool perStoreLimit=2 stores=2 answered=2');
+      expect(call.candidates).toHaveLength(4);
+      const selected = call.candidates.filter((c) => c.disposition === 'selected');
+      const overflow = call.candidates.filter(
+        (c) => c.reason === 'federation-final-limit overflow',
+      );
+      expect(selected).toHaveLength(2);
+      expect(overflow).toHaveLength(2);
+    });
+
+    it('does NOT emit a manifest when the search fails to an isError outcome', async () => {
+      mockSearchThrows = true;
+      const result = (await handle({ query: 'test' })) as { isError?: boolean };
+      expect(result.isError).toBe(true);
+      expect(mockLogSelectionManifest).not.toHaveBeenCalled();
+    });
+
+    it('emission is a pure sensor: a REJECTING emitter leaves the response byte-identical, non-error, and visibly logged (leg round 1, D-5)', async () => {
+      mockSearchResults = [
+        { label: 'A', type: 'code', filePath: 'a.ts', score: 0.9, content: 'aaaa', relevance: 0.9 },
+      ];
+      const first = (await handle({ query: 'test' })) as {
+        isError?: boolean;
+        content: Array<{ text: string }>;
+      };
+      // The writer forced to throw — the spec's sensor-purity clause verbatim.
+      // The real logSelectionManifest swallows internally (ledger-writer
+      // tests); the call site's defense catch must hold even if that contract
+      // regresses.
+      mockLogSelectionManifest.mockRejectedValue(new Error('emitter exploded'));
+      const second = (await handle({ query: 'test' })) as {
+        isError?: boolean;
+        content: Array<{ text: string }>;
+      };
+      expect(second.isError).toBeUndefined();
+      const stripSession = (t: string): string =>
+        t.replace(/sessionChars="\d+" sessionCalls="\d+"/, '');
+      expect(stripSession(second.content[0]!.text)).toBe(stripSession(first.content[0]!.text));
+      // Visible, never swallowed: the failure lands in the search log.
+      expect(mockLogSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: 'internal:selection-manifest',
+          error: expect.stringContaining('emitter exploded'),
+        }),
+      );
+    });
   });
 
   describe('size disclosure (#2600)', () => {
@@ -1309,6 +1513,19 @@ describe('search_knowledge', () => {
       // the reserved 'primary' key
       expect(result.content[0]!.text).toContain('[SYSTEM WARNING]');
       expect(result.content[0]!.text).toContain('primary');
+
+      // Selection-manifest outage accounting (leg round 2, finding 2 — the
+      // D-3 arithmetic pinned on a run where a store ACTUALLY failed, not the
+      // all-healthy identity): the failed primary is named on the row, the
+      // context counts it, and `answered` decrements.
+      const manifest = mockLogSelectionManifest.mock.calls[0]![0] as {
+        context: Record<string, unknown>;
+        universe: string;
+        warnings: string[];
+      };
+      expect(manifest.warnings.some((w) => w.startsWith('store failure: primary:'))).toBe(true);
+      expect(manifest.context.storesFailed).toBe(1);
+      expect(manifest.universe).toBe('federated-returned-pool perStoreLimit=5 stores=2 answered=1');
     });
 
     it('per-query runtime warnings do not mutate global init errors (transient failures stay transient)', async () => {

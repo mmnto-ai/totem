@@ -46,7 +46,9 @@ export type TotemErrorCode =
   /** Query-before-derive correlation contract breach (mmnto-ai/totem#2510). */
   | 'QBD_CORRELATION_CONTRACT'
   /** Eject's loud backstop: every attempted cleanup mutation failed (mmnto-ai/totem#2620). */
-  | 'EJECT_FAILED';
+  | 'EJECT_FAILED'
+  /** Selection-manifest schema breach — an emitter programming error (mmnto-ai/totem#2468). */
+  | 'SELECTION_MANIFEST_CONTRACT';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;
