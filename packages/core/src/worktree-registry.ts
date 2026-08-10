@@ -32,6 +32,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import { TotemParseError } from './errors.js';
+import { writeFileAtomicSync } from './fs-atomic.js';
 import { acquireLock } from './lock.js';
 import { readJsonSafe } from './sys/fs.js';
 
@@ -234,11 +235,10 @@ function loadForMutation(filePath: string): WorktreeFile {
   }
 }
 
-/** PID-unique temp + rename: a concurrent reader never sees partial JSON. */
+/** Unique temp + rename via the shared corollary helper (mmnto-ai/totem#2620):
+ *  a concurrent reader never sees partial JSON. */
 function writeAtomic(filePath: string, file: WorktreeFile): void {
-  const tmpPath = `${filePath}.${process.pid}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(file, null, 2) + '\n');
-  fs.renameSync(tmpPath, filePath);
+  writeFileAtomicSync(filePath, JSON.stringify(file, null, 2) + '\n');
 }
 
 /**

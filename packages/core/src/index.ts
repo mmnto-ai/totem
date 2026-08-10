@@ -51,6 +51,13 @@ export {
 } from './errors.js';
 export { buildMissingSdkHint } from './missing-sdk.js';
 
+// Atomic user-file writes (Tenet 4 User-File Mutation Contract corollary,
+// mmnto-ai/totem#2620). Also exported as the `@mmnto/totem/fs-atomic` subpath
+// so command files under cold-start discipline can static-import it without
+// pulling this barrel.
+export type { AtomicWriteOptions } from './fs-atomic.js';
+export { writeFileAtomicSync } from './fs-atomic.js';
+
 // Gate engine (WS3 — Proposal 288 §6.2)
 export type {
   ActiveFreeze,

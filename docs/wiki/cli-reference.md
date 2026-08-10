@@ -63,7 +63,10 @@ Runs a battery of automated health checks to verify config bloat, index health, 
 
 ### `totem eject`
 
-Safely removes all Totem git hooks, config files, agent prompt injections, and the local `.lancedb/` index.
+Safely removes all Totem git hooks, config files, agent prompt injections, and the local `.lancedb/` index. Before asking consent it senses the VCS state of the files it is about to touch and says which ones have no revert point — uncommitted changes, and gitignored paths (like `.totem/secrets.json`) that git holds no copy of at all (`--force` skips the prompt, not the sense lines). Git hooks live outside version control, so eject writes each hook's pre-mutation bytes to `.git/hooks/<name>.totem-bak` before touching it — if a scrub goes wrong, restore from the `.totem-bak` file. File rewrites are atomic (temp + rename): an interrupted eject leaves each rewritten file with its old or new content, never a torn mix (file and directory deletions are ordinary deletes).
+
+- **Files eject will not modify:** any hook or agent-instruction file carrying a Totem block whose bytes don't decode as UTF-8 is reported as a skip and left byte-identical — scrubbing it would corrupt the kept content, so remove the Totem block manually.
+- **Exit code:** if every reflex-file scrub attempt fails, eject still prints the full summary (the skip reasons and any `.totem-bak` recovery paths), then exits non-zero with `EJECT_FAILED`.
 
 ### `totem link <path>`
 

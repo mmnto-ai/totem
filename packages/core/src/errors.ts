@@ -44,7 +44,9 @@ export type TotemErrorCode =
   | 'PR_MERGE_FAILED'
   | 'BASH_RESOLUTION_FAILED'
   /** Query-before-derive correlation contract breach (mmnto-ai/totem#2510). */
-  | 'QBD_CORRELATION_CONTRACT';
+  | 'QBD_CORRELATION_CONTRACT'
+  /** Eject's loud backstop: every attempted cleanup mutation failed (mmnto-ai/totem#2620). */
+  | 'EJECT_FAILED';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

@@ -10,24 +10,28 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./config": {
-      "import": "./dist/config.js",
-      "types": "./dist/config.d.ts"
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
     },
     "./lessons": {
-      "import": "./dist/lessons.js",
-      "types": "./dist/lessons.d.ts"
+      "types": "./dist/lessons.d.ts",
+      "import": "./dist/lessons.js"
     },
     "./artifacts": {
-      "import": "./dist/artifacts.js",
-      "types": "./dist/artifacts.d.ts"
+      "types": "./dist/artifacts.d.ts",
+      "import": "./dist/artifacts.js"
     },
     "./packs": {
-      "import": "./dist/packs.js",
-      "types": "./dist/packs.d.ts"
+      "types": "./dist/packs.d.ts",
+      "import": "./dist/packs.js"
+    },
+    "./fs-atomic": {
+      "types": "./dist/fs-atomic.d.ts",
+      "import": "./dist/fs-atomic.js"
     }
   },
   "scripts": {

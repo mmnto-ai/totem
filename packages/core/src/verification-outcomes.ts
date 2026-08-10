@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import { canonicalStringify } from './compile-manifest.js';
+import { writeFileAtomicSync } from './fs-atomic.js';
 import type { Stage4Outcome } from './stage4-verifier.js';
 
 /**
@@ -176,14 +177,9 @@ export function writeVerificationOutcomes(
   const file: VerificationOutcomesFile = { version: 1, outcomes };
   const json = `${canonicalStringify(file, 2)}\n`;
 
-  // totem-context: per-write unique temp filename so two concurrent lint
-  // processes can't clobber each other's in-flight write and trigger a
-  // hard rename failure mid-pass (CR mmnto-ai/totem#1787 R1).
-  const tmpPath = `${filePath}.${process.pid}.${Date.now().toString(36)}.tmp`;
-  try {
-    fs.writeFileSync(tmpPath, json, 'utf-8');
-    fs.renameSync(tmpPath, filePath);
-  } finally {
-    if (fs.existsSync(tmpPath)) fs.rmSync(tmpPath, { force: true });
-  }
+  // Per-write unique temp naming (two concurrent lint processes must not
+  // clobber each other's in-flight write — CR mmnto-ai/totem#1787 R1) and
+  // failure-path temp cleanup are the shared corollary helper's contract
+  // (mmnto-ai/totem#2620).
+  writeFileAtomicSync(filePath, json);
 }
