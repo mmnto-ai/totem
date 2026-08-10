@@ -104,6 +104,18 @@ export async function logSelectionManifest(input: {
   try {
     const { projectRoot, config } = await getContext();
     const totemDir = path.join(projectRoot, config.totemDir);
+    // Best-effort emitting-package version (leg round 1, N-13 — row parity
+    // with the orient/hook emitters). `../package.json` resolves to
+    // packages/mcp/package.json from BOTH src/ and dist/ layouts.
+    let emitterVersion: string | undefined;
+    try {
+      const { createRequire } = await import('node:module');
+      emitterVersion = (createRequire(import.meta.url)('../package.json') as { version?: string })
+        .version;
+      // totem-context: version is a best-effort enrichment of the manifest row; resolution failure must never cost the row (Tenet 13).
+    } catch (err) {
+      void err;
+    }
     senseSelectionManifest(
       {
         totemDir,
@@ -112,6 +124,7 @@ export async function logSelectionManifest(input: {
         universe: input.universe,
         candidates: input.candidates,
         warnings: input.warnings,
+        ...(emitterVersion !== undefined && { cliVersion: emitterVersion }),
       },
       (msg) => {
         logSearch({

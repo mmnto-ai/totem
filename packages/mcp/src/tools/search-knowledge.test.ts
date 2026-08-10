@@ -489,7 +489,7 @@ describe('search_knowledge', () => {
       });
       await handle({ query: 'test', max_results: 2 });
       const call = manifestCall();
-      expect(call.universe).toBe('federated-returned-pool perStoreLimit=2 stores=2');
+      expect(call.universe).toBe('federated-returned-pool perStoreLimit=2 stores=2 answered=2');
       expect(call.candidates).toHaveLength(4);
       const selected = call.candidates.filter((c) => c.disposition === 'selected');
       const overflow = call.candidates.filter(
@@ -506,24 +506,34 @@ describe('search_knowledge', () => {
       expect(mockLogSelectionManifest).not.toHaveBeenCalled();
     });
 
-    it('emission is pass-through: response text is identical to a manifest-free run', async () => {
+    it('emission is a pure sensor: a REJECTING emitter leaves the response byte-identical, non-error, and visibly logged (leg round 1, D-5)', async () => {
       mockSearchResults = [
         { label: 'A', type: 'code', filePath: 'a.ts', score: 0.9, content: 'aaaa', relevance: 0.9 },
       ];
       const first = (await handle({ query: 'test' })) as {
+        isError?: boolean;
         content: Array<{ text: string }>;
       };
-      // Second run with the emitter spy replaced by a rejecting fn — the real
-      // logSelectionManifest swallows internally (covered in ledger-writer
-      // tests); here the call-site contract is that composition happens BEFORE
-      // emission, so the text cannot depend on the emitter's fate.
-      mockLogSelectionManifest.mockClear();
+      // The writer forced to throw — the spec's sensor-purity clause verbatim.
+      // The real logSelectionManifest swallows internally (ledger-writer
+      // tests); the call site's defense catch must hold even if that contract
+      // regresses.
+      mockLogSelectionManifest.mockRejectedValue(new Error('emitter exploded'));
       const second = (await handle({ query: 'test' })) as {
+        isError?: boolean;
         content: Array<{ text: string }>;
       };
+      expect(second.isError).toBeUndefined();
       const stripSession = (t: string): string =>
         t.replace(/sessionChars="\d+" sessionCalls="\d+"/, '');
       expect(stripSession(second.content[0]!.text)).toBe(stripSession(first.content[0]!.text));
+      // Visible, never swallowed: the failure lands in the search log.
+      expect(mockLogSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: 'internal:selection-manifest',
+          error: expect.stringContaining('emitter exploded'),
+        }),
+      );
     });
   });
 

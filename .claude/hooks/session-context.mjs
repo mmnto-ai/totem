@@ -152,23 +152,28 @@ const SELF_AGENT =
 // measured on the live ledger: 5 session_start rows against 132 mcp_call. The
 // session UUID is the selection-manifest join key AND the session_start row is
 // the emitter's recorded-absence denominator, so the mint block lands with the
-// M1 instrument (same shape as CLAUDE_SESSION_START in init-templates.ts).
+// M1 instrument (same shape as CLAUDE_SESSION_START in init-templates.ts —
+// including its attribution discipline: agent_source is stamped ONLY from
+// TOTEM_SELF_AGENT, omitted when absent, never guessed from SELF_AGENT, which
+// is hook CONFIG (whose mail to poll), not session attribution; ADR-078 +
+// leg round 1 MB-2). Anchored at gitRoot, not cwd, so the row and the
+// manifest's .session-id read can never split roots (leg round 1 H-8).
 // Fire-and-forget: a ledger failure must NOT block the briefing.
 try {
-  const ledgerDir = join(process.cwd(), '.totem', 'ledger');
+  const ledgerDir = join(getGitRoot(), '.totem', 'ledger');
   mkdirSync(ledgerDir, { recursive: true });
   const sessionId = randomUUID();
   writeFileSync(join(ledgerDir, '.session-id'), sessionId, 'utf-8');
+  const mintSelfAgent = (process.env.TOTEM_SELF_AGENT || '')
+    .split(',')
+    .map((s) => s.trim())
+    .find((s) => s.length > 0);
   const event = {
     timestamp: new Date().toISOString(),
     type: 'session_start',
     activity_name: 'SessionStart',
     source: 'bot',
-    agent_source: process.env.TOTEM_SELF_AGENT
-      ? process.env.TOTEM_SELF_AGENT.split(',')
-          .map((s) => s.trim())
-          .find((s) => s.length > 0)
-      : SELF_AGENT,
+    ...(mintSelfAgent ? { agent_source: mintSelfAgent } : {}),
     justification: '',
     session_id: sessionId,
   };
@@ -411,7 +416,7 @@ async function buildStaticContext(gitRoot, branch, ticket, records) {
           disposition: journalTruncated ? 'truncated' : 'selected',
           reason: journalTruncated
             ? `recency-policy: latest journal; display-cap ${JOURNAL_DISPLAY_LINE_CAP} lines`
-            : 'recency-policy: latest journal injected in full',
+            : 'recency-policy: latest journal, no display-cap cut (the global char slice may still apply — see finalTruncation)',
           ...(journalTruncated && {
             deliveredBytes: Buffer.byteLength(journalLines.join('\n'), 'utf-8'),
           }),
@@ -664,7 +669,11 @@ async function main() {
             applied: combined.length > MAX_TOTAL_CHARS,
           },
           ...(cliVersion !== undefined && { cliVersion }),
-          env: { ...process.env, TOTEM_SELF_AGENT: process.env.TOTEM_SELF_AGENT || SELF_AGENT },
+          // No env override: agent_source resolves from the REAL environment
+          // (stamped absence when TOTEM_SELF_AGENT is unset — ADR-078, leg
+          // round 1 MB-2). SELF_AGENT is hook config and already disclosed in
+          // `context.selfAgent`; forcing it into the env would fabricate the
+          // instrument's per-seat axis on exactly the seat baselines run on.
         },
         (msg) => process.stderr.write(`[session-context] ${msg}\n`),
       );

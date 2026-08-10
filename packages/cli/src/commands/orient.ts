@@ -829,10 +829,22 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
   // DERIVED data (JSON) — the content this policy considered; orient is
   // derived state, never corpus content, so the overlap join needs no finer
   // grain (#2468 design, OQ3 as ruled).
-  {
+  try {
     const { resolveQbdLedgerDirDetailed } = await import('./qbd-seam.js');
-    const { dir: manifestTotemDir } = await resolveQbdLedgerDirDetailed(cwd);
-    if (manifestTotemDir !== undefined) {
+    const seamResolution = await resolveQbdLedgerDirDetailed(cwd);
+    const manifestTotemDir = seamResolution.dir;
+    // Neither decline nor a global-profile landing may be silent (ADR-115 § 2;
+    // leg round 1 D-4) — mirror the QBD seam's note/globalNote twenty lines up.
+    if (manifestTotemDir === undefined) {
+      process.stderr.write(
+        `[orient] selection-manifest: ${seamResolution.reason ?? 'unresolved'} — not recording\n`,
+      );
+    } else {
+      if (seamResolution.global === true) {
+        process.stderr.write(
+          `[orient] selection-manifest: recording to the global profile ledger at ${manifestTotemDir} — no project config found from this cwd\n`,
+        );
+      }
       const { buildMeasuredCandidate, senseSelectionManifest } = await import('@mmnto/totem');
       let cliVersion: string | undefined;
       try {
@@ -881,6 +893,11 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
         (msg) => process.stderr.write(`[orient] ${msg}\n`),
       );
     }
+    // totem-context: defense-in-depth (leg round 1, D-5) — the sense wrapper never throws by contract, but this block runs BEFORE the render writes; a programming error here must degrade to a named stderr line, never cost the user their orientation output (Tenet 13).
+  } catch (err) {
+    process.stderr.write(
+      `[orient] selection-manifest sensor failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
   }
 
   if (json) {

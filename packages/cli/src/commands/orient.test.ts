@@ -57,6 +57,10 @@ let repoRoot = '/repo/root';
 // need); status.test.ts uses this same importActual pattern. Note:
 // `readFreezeConfig` is intentionally NOT overridden — the freeze section is
 // tested against the real reader via a real temp `.totem/freeze.json`.
+// mmnto-ai/totem#2468: overridable manifest sensor — the defense-catch probe
+// (leg round 1, D-5) forces it to throw and asserts the render survives.
+let mockSenseSelectionManifest: ((...args: unknown[]) => unknown) | null = null;
+
 vi.mock('@mmnto/totem', async () => {
   const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
   return {
@@ -64,6 +68,10 @@ vi.mock('@mmnto/totem', async () => {
     safeExec: () => mockSafeExec(),
     readRegistry: () => mockReadRegistry(),
     resolveGitRoot: () => repoRoot,
+    senseSelectionManifest: (...args: unknown[]) =>
+      mockSenseSelectionManifest
+        ? mockSenseSelectionManifest(...args)
+        : (actual.senseSelectionManifest as (...a: unknown[]) => unknown)(...args),
     // #2018 structural tripwire: orient must never construct an embedder/store.
     createEmbedder: embedderTripwire,
     LanceStore: class {
@@ -82,10 +90,11 @@ const mockLoadConfig = vi.fn();
 // historical "unresolvable → seam skips" behavior (config.totemDir undefined);
 // manifest tests point it at the temp repo and return a real totemDir.
 let mockConfigPath = '/repo/root/totem.config.ts';
+let mockIsGlobalConfigPath = false;
 vi.mock('../utils.js', () => ({
   resolveConfigPath: () => mockConfigPath,
   loadConfig: () => mockLoadConfig(),
-  isGlobalConfigPath: () => false,
+  isGlobalConfigPath: () => mockIsGlobalConfigPath,
 }));
 
 import {
@@ -137,6 +146,8 @@ afterEach(() => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
   delete process.env['TOTEM_ORIENT_PROJECT'];
   mockConfigPath = '/repo/root/totem.config.ts';
+  mockIsGlobalConfigPath = false;
+  mockSenseSelectionManifest = null;
 });
 
 // ─── Per-section failure isolation ──────────────────────
@@ -750,8 +761,55 @@ describe('orient selection manifest (mmnto-ai/totem#2468)', () => {
     expect(fs.existsSync(manifestPath())).toBe(false);
   });
 
-  it('skips silently when no project config resolves (default harness state)', async () => {
+  it('declines LOUDLY when no project config resolves — a named stderr note, never a silent skip (leg round 1, D-4)', async () => {
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
     await runJson();
+    errSpy.mockRestore();
+    expect(fs.existsSync(manifestPath())).toBe(false);
+    expect(stderr).toMatch(/selection-manifest: .*not recording/);
+  });
+
+  it('announces a global-profile landing — mirrors the QBD globalNote (leg round 1, D-4)', async () => {
+    pointSeamAtTmpRepo();
+    mockIsGlobalConfigPath = true;
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
+    await runJson();
+    errSpy.mockRestore();
+    // The row still lands (legitimate), but never silently.
+    expect(readManifestRows()).toHaveLength(1);
+    expect(stderr).toMatch(/selection-manifest: recording to the global profile ledger/);
+  });
+
+  it('a THROWING manifest sensor never costs the render — defense catch + named stderr line (leg round 1, D-5)', async () => {
+    pointSeamAtTmpRepo();
+    mockSenseSelectionManifest = () => {
+      throw new Error('sensor exploded');
+    };
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
+    await runJson();
+    errSpy.mockRestore();
+    // The render is intact — the whole report reached stdout as JSON.
+    const r = parseJson();
+    expect(r.repo).toBe('mmnto-ai/totem');
+    expect(stderr).toContain('selection-manifest sensor failed: sensor exploded');
     expect(fs.existsSync(manifestPath())).toBe(false);
   });
 });

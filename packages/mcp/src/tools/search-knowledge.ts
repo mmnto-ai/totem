@@ -764,22 +764,46 @@ async function performSearch(
     for (const { hit, reason } of parts.excluded ?? []) add(hit, 'excluded', reason);
     for (const hit of federationOverflow) add(hit, 'excluded', 'federation-final-limit overflow');
     const federated = boundary === undefined && linkedStores.size > 0;
-    await logSelectionManifest({
-      context: {
-        query,
-        boundary: boundary ?? null,
-        typeFilter: typeFilter ?? null,
-        floor: effectiveFloor,
-        finalLimit,
-        method,
-        status,
-      },
-      universe: federated
-        ? `federated-returned-pool perStoreLimit=${finalLimit} stores=${linkedStores.size + 1}`
-        : `store-returned-pool maxResults=${finalLimit}`,
-      candidates,
-      warnings: manifestWarnings,
-    });
+    // Store outages are part of the observable-pool accounting (leg round 1,
+    // D-3): without them a query where stores errored reads as a FULL pool.
+    // Each failed store is named on the row's accounting channel, and the
+    // federated universe string carries how many stores actually answered.
+    if (failures.primary !== null) {
+      manifestWarnings.push(`store failure: primary: ${failures.primary}`);
+    }
+    for (const [name, msg] of failures.linked.entries()) {
+      manifestWarnings.push(`store failure: ${name}: ${msg}`);
+    }
+    const storesFailed = (failures.primary !== null ? 1 : 0) + failures.linked.size;
+    try {
+      await logSelectionManifest({
+        context: {
+          query,
+          boundary: boundary ?? null,
+          typeFilter: typeFilter ?? null,
+          floor: effectiveFloor,
+          finalLimit,
+          method,
+          status,
+          storesFailed,
+        },
+        universe: federated
+          ? `federated-returned-pool perStoreLimit=${finalLimit} stores=${linkedStores.size + 1} answered=${linkedStores.size + 1 - storesFailed}`
+          : `store-returned-pool maxResults=${finalLimit}`,
+        candidates,
+        warnings: manifestWarnings,
+      });
+      // totem-context: defense-in-depth (leg round 1, D-5) — logSelectionManifest swallows its own failures by contract; this catch guarantees the sensor can never surface as a search failure even if that contract regresses, and the failure stays visible via the search log (never swallowed silently).
+    } catch (err) {
+      logSearch({
+        timestamp: new Date().toISOString(),
+        query: 'internal:selection-manifest',
+        resultCount: 0,
+        durationMs: 0,
+        topScore: null,
+        error: `selection-manifest emit failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
   };
 
   if (results.length === 0) {

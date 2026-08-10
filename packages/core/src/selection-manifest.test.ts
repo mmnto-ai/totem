@@ -47,6 +47,7 @@ import {
   SELECTION_COST_BASIS,
   SELECTION_MANIFESTS_FILE,
   type SelectionCandidate,
+  SelectionCandidateSchema,
   type SelectionManifestInput,
   SelectionManifestRowSchema,
   senseSelectionManifest,
@@ -133,6 +134,24 @@ describe('buildMeasuredCandidate', () => {
       approxTokens: 2,
       fingerprint: fingerprintContent('hello'),
     });
+  });
+
+  it('is TOTAL over bad content: non-string/non-Buffer degrades to an id-only row + warning, never a throw or a NaN (leg round 1, H-7)', () => {
+    for (const bad of [undefined, null, 42, {}] as unknown[]) {
+      const { candidate, warning } = buildMeasuredCandidate({
+        id: 'bad.md',
+        content: bad as string,
+        disposition: 'selected',
+        reason: 'r',
+      });
+      expect(warning).toContain('bad.md');
+      expect(candidate.bytes).toBeUndefined();
+      expect(candidate.approxTokens).toBeUndefined();
+      expect(candidate.fingerprint).toBeUndefined();
+      // The degraded row is still schema-valid inside a manifest — the whole
+      // point: one malformed hit must not cost the row (H-7's failure shape).
+      expect(SelectionCandidateSchema.safeParse(candidate).success).toBe(true);
+    }
   });
 });
 

@@ -25,9 +25,13 @@ blocker to #467 run 1**.
 2. **Senses, never gates** (Tenet 13). Emission must never block, filter, or
    alter a selection. Failure to emit degrades to a _recorded absence_, never a
    silent skip (#2466 failure class).
-3. **The ruled `<total>` cost basis** (#467 outcome 3): every emitted figure
-   names its aggregation. The manifest declares its cost basis explicitly
-   (UTF-8 bytes; approx tokens = ceil(bytes/4), named as an approximation).
+3. **Named aggregation** (#467 outcome 3's naming requirement): every emitted
+   figure names its basis — the manifest declares it explicitly (UTF-8 bytes;
+   approx tokens = ceil(bytes/4), declared as an approximation). What it emits
+   is a **payload-byte census, NOT the ruled `<total>` basis** (measured
+   cache-aware consumption); whether it may substitute for a `<total>` surface
+   is the pre-registration's call via versioned revision (#467 §9), never this
+   instrument's claim. (Corrected per leg round 1, D-6.)
 4. **Per-seat, not per-repo** (F4): rows carry seat attribution
    (`agent_source` from `TOTEM_SELF_AGENT`, absent when unset — never guessed).
 5. **Race note:** #2458 (federated dedupe, ~50% duplicated payload) is OPEN —
@@ -57,8 +61,10 @@ blocker to #467 run 1**.
 Ship the M1 instrument: a versioned, strict manifest schema + append-only
 writer in core, and manifest emission from the three consumers (V2 hook + both
 published SessionStart templates; `search_knowledge`; `totem orient`). It will
-NOT: share any score across consumers, gate or alter any selection, populate
-`actuallyUsed` (analysis-side join; field reserved, null at emission), build
+NOT: share any score across consumers, gate or alter any selection, carry an
+`actuallyUsed` field (the usage join is analysis-side; the field arrives with
+a `schemaVersion` bump when the analysis layer defines its semantics — the
+`.strict()`-compatible evolution path, corrected per leg round 1 N-12), build
 M2 threshold registration, or touch #2458 dedupe.
 
 ### Data model deltas

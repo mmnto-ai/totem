@@ -20,9 +20,13 @@
  *   alter a selection. Command call sites use {@link senseSelectionManifest};
  *   the throwing writer exists so the contract is testable and a programming
  *   error is never silent (the `qbd/record.ts` posture, mirrored).
- * - **Named cost basis** (#467 outcome 3, the ruled `<total>` basis): every
- *   figure names its aggregation. {@link SELECTION_COST_BASIS} is a fixed
- *   literal stamped on every row.
+ * - **Named cost basis** (#467 outcome 3's naming requirement): every figure
+ *   names its aggregation — {@link SELECTION_COST_BASIS} is a fixed literal
+ *   stamped on every row. What the manifest emits is a PAYLOAD-BYTE census
+ *   with a declared token approximation; it is NOT the ruled `<total>` basis
+ *   (measured cache-aware consumption), and whether it may substitute for a
+ *   `<total>` surface is the pre-registration's call via versioned revision
+ *   (#467 §9), never this module's claim.
  * - **No fabricated measurement:** a manifest records only what the policy
  *   observed. Candidates the policy never read (recency-excluded journals,
  *   first-match-losing proposals) are recorded id-only — no fingerprint, no
@@ -202,8 +206,12 @@ export function measureCandidateCost(content: string | Buffer): {
 
 /**
  * Build a fully-measured candidate from content the policy actually read.
- * Hash failure degrades to an id-only-measured row (fingerprint absent) with
- * the failure named on the returned warning — never a fabricated value.
+ *
+ * TOTAL over its input space (leg round 1, H-7): a non-string/non-Buffer
+ * `content` (a store row whose unchecked cast lied) or a hash failure
+ * degrades to an ID-ONLY row with the failure named on the returned warning —
+ * it never throws into the emitting command, and it never persists a
+ * fabricated or NaN measurement.
  */
 export function buildMeasuredCandidate(input: {
   id: string;
@@ -213,24 +221,31 @@ export function buildMeasuredCandidate(input: {
   sourceRepo?: string;
   deliveredBytes?: number;
 }): { candidate: SelectionCandidate; warning?: string } {
-  const { bytes, approxTokens } = measureCandidateCost(input.content);
-  const base: SelectionCandidate = {
+  const idOnly: SelectionCandidate = {
     id: input.id,
     disposition: input.disposition,
     reason: input.reason,
-    bytes,
-    approxTokens,
     ...(input.sourceRepo !== undefined && { sourceRepo: input.sourceRepo }),
     ...(input.deliveredBytes !== undefined && { deliveredBytes: input.deliveredBytes }),
   };
+  const content: unknown = input.content;
+  if (typeof content !== 'string' && !Buffer.isBuffer(content)) {
+    return {
+      candidate: idOnly,
+      warning: `selection-manifest: unmeasurable content for ${input.id} (got ${typeof content}) — recorded id-only`,
+    };
+  }
   try {
-    return { candidate: { ...base, fingerprint: fingerprintContent(input.content) } };
-    // totem-context: intentional degradation — a hash failure records the candidate WITHOUT a fingerprint and names the failure on the accounting channel; fabricating or dropping the row would both lie (Tenet 13).
+    const { bytes, approxTokens } = measureCandidateCost(content);
+    return {
+      candidate: { ...idOnly, bytes, approxTokens, fingerprint: fingerprintContent(content) },
+    };
+    // totem-context: intentional degradation — a measurement/hash failure records the candidate ID-ONLY and names the failure on the accounting channel; fabricating or dropping the row would both lie (Tenet 13).
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
-      candidate: base,
-      warning: `selection-manifest: fingerprint failed for ${input.id}: ${msg}`,
+      candidate: idOnly,
+      warning: `selection-manifest: measurement failed for ${input.id}: ${msg} — recorded id-only`,
     };
   }
 }
@@ -383,6 +398,7 @@ export function readSelectionManifests(
   let content: string;
   try {
     content = fs.readFileSync(filePath, 'utf-8');
+    // totem-context: intentional degradation — ENOENT is the normal no-manifests-yet state; every other read failure is REPORTED through onWarn (the accounting channel), never swallowed, and the reader degrades to empty rather than failing its caller (Tenet 13 sensor posture, mirroring readLedgerEvents).
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     const msg = err instanceof Error ? err.message : String(err);

@@ -46,14 +46,21 @@ function writeHook(rel: string, content: string): string {
 
 function runHook(
   hookPath: string,
-  pathEnv?: string,
+  opts: { pathEnv?: string; seat?: string } = {},
 ): {
   status: number | null;
   stdout: string;
   stderr: string;
 } {
-  const env =
-    pathEnv !== undefined ? { ...process.env, PATH: pathEnv, Path: pathEnv } : { ...process.env };
+  const env = { ...process.env };
+  // Deterministic attribution baseline: absent unless the test stamps a seat.
+  // ADR-078 / leg round 1 MB-2 — agent_source comes ONLY from this env var.
+  delete env.TOTEM_SELF_AGENT;
+  if (opts.seat !== undefined) env.TOTEM_SELF_AGENT = opts.seat;
+  if (opts.pathEnv !== undefined) {
+    env.PATH = opts.pathEnv;
+    env.Path = opts.pathEnv;
+  }
   const run = spawnSync(process.execPath, [hookPath], {
     cwd: tmpDir,
     encoding: 'utf-8',
@@ -111,7 +118,7 @@ describe('rendered Gemini SessionStart — manifest + A.3.a contract (mmnto-ai/t
       const hookPath = writeHook('.gemini/hooks/SessionStart.cjs', GEMINI_SESSION_START);
       const shimDir = path.join(tmpDir, 'shim');
       writeTotemShim(shimDir);
-      const run = runHook(hookPath, shimDir + path.delimiter + process.env.PATH);
+      const run = runHook(hookPath, { pathEnv: shimDir + path.delimiter + process.env.PATH });
       expect(run.status).toBe(0);
 
       // Envelope untouched by the new blocks — stdout is still one JSON payload.
@@ -142,6 +149,30 @@ describe('rendered Gemini SessionStart — manifest + A.3.a contract (mmnto-ai/t
       expect(candidates.every((c) => c.disposition === 'selected')).toBe(true);
       expect(candidates.every((c) => (c.bytes as number) > 0)).toBe(true);
       expect(candidates.every((c) => /^[0-9a-f]{16}$/.test(String(c.fingerprint)))).toBe(true);
+
+      // Attribution is stamped absence (ADR-078; leg round 1 MB-2): with
+      // TOTEM_SELF_AGENT unset, NEITHER row guesses a seat.
+      expect(sessionStart[0]!.agent_source).toBeUndefined();
+      expect(row.agent_source).toBeUndefined();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'stamps the seat on both rows when TOTEM_SELF_AGENT is set',
+    () => {
+      const hookPath = writeHook('.gemini/hooks/SessionStart.cjs', GEMINI_SESSION_START);
+      const shimDir = path.join(tmpDir, 'shim');
+      writeTotemShim(shimDir);
+      const run = runHook(hookPath, {
+        pathEnv: shimDir + path.delimiter + process.env.PATH,
+        seat: 'seat-x, seat-y',
+      });
+      expect(run.status).toBe(0);
+      const events = readNdjson('.totem/ledger/events.ndjson');
+      expect(events.find((e) => e.type === 'session_start')!.agent_source).toBe('seat-x');
+      const rows = readNdjson('.totem/ledger/selection-manifests.ndjson');
+      expect(rows[0]!.agent_source).toBe('seat-x');
     },
     TEST_TIMEOUT_MS,
   );
@@ -153,7 +184,7 @@ describe('rendered Claude SessionStart — manifest contract (mmnto-ai/totem#246
     () => {
       const hookPath = writeHook('.claude/hooks/SessionStart.cjs', CLAUDE_SESSION_START);
       writeCliStub();
-      const run = runHook(hookPath);
+      const run = runHook(hookPath, { seat: 'seat-x' });
       expect(run.status).toBe(0);
       // The briefing itself still reaches stdout ahead of any telemetry.
       expect(run.stdout).toContain('stub-describe output');
@@ -166,6 +197,7 @@ describe('rendered Claude SessionStart — manifest contract (mmnto-ai/totem#246
       const row = rows[0]!;
       expectValidRow(row);
       expect(row.session_id).toBe(sessionId);
+      expect(row.agent_source).toBe('seat-x');
       expect(row.context).toEqual({ template: 'claude-managed' });
       const candidates = row.candidates as Array<Record<string, unknown>>;
       expect(candidates.map((c) => c.id)).toEqual(['describe', 'orient:session-block']);
@@ -175,7 +207,7 @@ describe('rendered Claude SessionStart — manifest contract (mmnto-ai/totem#246
   );
 
   it(
-    'emits an honest zero-candidate row when the CLI is not installed (nothing was injected)',
+    'emits an honest zero-candidate row when the CLI is not installed (nothing was injected), with no guessed seat',
     () => {
       const hookPath = writeHook('.claude/hooks/SessionStart.cjs', CLAUDE_SESSION_START);
       const run = runHook(hookPath);
@@ -184,6 +216,8 @@ describe('rendered Claude SessionStart — manifest contract (mmnto-ai/totem#246
       expect(rows).toHaveLength(1);
       expectValidRow(rows[0]!);
       expect(rows[0]!.candidates).toEqual([]);
+      // Attribution is stamped absence (ADR-078; leg round 1 MB-2).
+      expect(rows[0]!.agent_source).toBeUndefined();
     },
     TEST_TIMEOUT_MS,
   );
