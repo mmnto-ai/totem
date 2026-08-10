@@ -840,11 +840,6 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
         `[orient] selection-manifest: ${seamResolution.reason ?? 'unresolved'} — not recording\n`,
       );
     } else {
-      if (seamResolution.global === true) {
-        process.stderr.write(
-          `[orient] selection-manifest: recording to the global profile ledger at ${manifestTotemDir} — no project config found from this cwd\n`,
-        );
-      }
       const { buildMeasuredCandidate, senseSelectionManifest } = await import('@mmnto/totem');
       let cliVersion: string | undefined;
       try {
@@ -880,7 +875,7 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
         if (warning !== undefined) manifestWarnings.push(warning);
         return candidate;
       });
-      senseSelectionManifest(
+      const manifestResult = senseSelectionManifest(
         {
           totemDir: manifestTotemDir,
           emitter: 'orient',
@@ -892,6 +887,19 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
         },
         (msg) => process.stderr.write(`[orient] ${msg}\n`),
       );
+      // The third decline path (resolved dir, no ledger there) and the
+      // global-profile landing, both AFTER the write so neither can announce
+      // an outcome that didn't happen — mirrors qbd-seam.ts note/globalNote
+      // ordering exactly (leg round 2, finding 1).
+      if (manifestResult.skipped === true) {
+        process.stderr.write(
+          `[orient] selection-manifest: no ledger at ${manifestTotemDir} — not recording\n`,
+        );
+      } else if (seamResolution.global === true) {
+        process.stderr.write(
+          `[orient] selection-manifest: recorded to the global profile ledger at ${manifestTotemDir} — no project config found from this cwd\n`,
+        );
+      }
     }
     // totem-context: defense-in-depth (leg round 1, D-5) — the sense wrapper never throws by contract, but this block runs BEFORE the render writes; a programming error here must degrade to a named stderr line, never cost the user their orientation output (Tenet 13).
   } catch (err) {

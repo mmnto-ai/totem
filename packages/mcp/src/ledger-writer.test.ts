@@ -185,6 +185,10 @@ describe('logSelectionManifest (mmnto-ai/totem#2468)', () => {
       bytes: 'utf8-length',
       approxTokens: 'ceil(bytes/4) approximation',
     });
+    // Emitting-package version rides the row (leg round 2, finding 4 — the
+    // compile.ts precedent names "regressions that strip cli_version" as a
+    // known class; this guards the seam).
+    expect(String(rows[0]!.cli_version)).toMatch(/^\d+\.\d+\.\d+/);
     // The events.ndjson stream is untouched — the sidecar ruling (#2468 OQ1).
     expect(fs.existsSync(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'))).toBe(false);
   });

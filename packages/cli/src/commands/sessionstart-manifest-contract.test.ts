@@ -198,6 +198,10 @@ describe('rendered Claude SessionStart — manifest contract (mmnto-ai/totem#246
       expectValidRow(row);
       expect(row.session_id).toBe(sessionId);
       expect(row.agent_source).toBe('seat-x');
+      // The A.3.a denominator row stamps the same seat (leg round 2,
+      // finding 6 — symmetry with the Gemini pinning).
+      const events = readNdjson('.totem/ledger/events.ndjson');
+      expect(events.find((e) => e.type === 'session_start')!.agent_source).toBe('seat-x');
       expect(row.context).toEqual({ template: 'claude-managed' });
       const candidates = row.candidates as Array<Record<string, unknown>>;
       expect(candidates.map((c) => c.id)).toEqual(['describe', 'orient:session-block']);
@@ -216,8 +220,11 @@ describe('rendered Claude SessionStart — manifest contract (mmnto-ai/totem#246
       expect(rows).toHaveLength(1);
       expectValidRow(rows[0]!);
       expect(rows[0]!.candidates).toEqual([]);
-      // Attribution is stamped absence (ADR-078; leg round 1 MB-2).
+      // Attribution is stamped absence (ADR-078; leg round 1 MB-2) — on the
+      // denominator row too (leg round 2, finding 6).
       expect(rows[0]!.agent_source).toBeUndefined();
+      const events = readNdjson('.totem/ledger/events.ndjson');
+      expect(events.find((e) => e.type === 'session_start')!.agent_source).toBeUndefined();
     },
     TEST_TIMEOUT_MS,
   );

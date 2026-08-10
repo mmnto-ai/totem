@@ -1510,6 +1510,19 @@ describe('search_knowledge', () => {
       // the reserved 'primary' key
       expect(result.content[0]!.text).toContain('[SYSTEM WARNING]');
       expect(result.content[0]!.text).toContain('primary');
+
+      // Selection-manifest outage accounting (leg round 2, finding 2 — the
+      // D-3 arithmetic pinned on a run where a store ACTUALLY failed, not the
+      // all-healthy identity): the failed primary is named on the row, the
+      // context counts it, and `answered` decrements.
+      const manifest = mockLogSelectionManifest.mock.calls[0]![0] as {
+        context: Record<string, unknown>;
+        universe: string;
+        warnings: string[];
+      };
+      expect(manifest.warnings.some((w) => w.startsWith('store failure: primary:'))).toBe(true);
+      expect(manifest.context.storesFailed).toBe(1);
+      expect(manifest.universe).toBe('federated-returned-pool perStoreLimit=5 stores=2 answered=1');
     });
 
     it('per-query runtime warnings do not mutate global init errors (transient failures stay transient)', async () => {

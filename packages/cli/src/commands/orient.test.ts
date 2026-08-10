@@ -787,9 +787,26 @@ describe('orient selection manifest (mmnto-ai/totem#2468)', () => {
       });
     await runJson();
     errSpy.mockRestore();
-    // The row still lands (legitimate), but never silently.
+    // The row still lands (legitimate), but never silently — and the note
+    // fires AFTER the write, so it reports an outcome, not an intention.
     expect(readManifestRows()).toHaveLength(1);
-    expect(stderr).toMatch(/selection-manifest: recording to the global profile ledger/);
+    expect(stderr).toMatch(/selection-manifest: recorded to the global profile ledger/);
+  });
+
+  it('the resolved-dir-without-ledger decline is loud too — the third path (leg round 2, finding 1)', async () => {
+    mockConfigPath = path.join(tmpRoot, 'totem.config.ts');
+    mockLoadConfig.mockResolvedValue({ orient: undefined, totemDir: '.totem-absent' });
+    let stderr = '';
+    const errSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        stderr += chunk.toString();
+        return true;
+      });
+    await runJson();
+    errSpy.mockRestore();
+    expect(fs.existsSync(path.join(tmpRoot, '.totem-absent'))).toBe(false);
+    expect(stderr).toMatch(/selection-manifest: no ledger at .*not recording/);
   });
 
   it('a THROWING manifest sensor never costs the render — defense catch + named stderr line (leg round 1, D-5)', async () => {

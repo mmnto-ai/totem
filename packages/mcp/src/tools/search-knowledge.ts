@@ -786,6 +786,11 @@ async function performSearch(
           method,
           status,
           storesFailed,
+          // Links that never initialized are absent from `linkedStores`, so
+          // `answered` alone would read a permanently-broken link as a full
+          // pool — the exact misreading D-3 exists to prevent (leg round 2,
+          // finding 3). Configured-but-unqueryable stores are disclosed here.
+          storesUnavailable: linkedStoreInitErrors.size,
         },
         universe: federated
           ? `federated-returned-pool perStoreLimit=${finalLimit} stores=${linkedStores.size + 1} answered=${linkedStores.size + 1 - storesFailed}`
