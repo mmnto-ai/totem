@@ -911,9 +911,27 @@ export type { OrchestrationPaths, SelfAgentResolution } from './orchestration-re
 export {
   isPathSafeAgentId,
   knownCohortAgents,
+  readSeatDirs,
   resolveOrchestrationPaths,
   resolveSelfAgents,
 } from './orchestration-resolver.js';
+
+// Declared seat lifecycle markers (mmnto-ai/totem#2511)
+export type {
+  SeatLifecycleMarker,
+  SeatLifecycleRead,
+  SeatLifecycleState,
+  SeatStatus,
+} from './seat-lifecycle.js';
+export {
+  deriveSeatStatuses,
+  readSeatLifecycle,
+  SEAT_LIFECYCLE_FILENAME,
+  SEAT_LIFECYCLE_SCHEMA_VERSION,
+  SeatLifecycleMarkerSchema,
+  SeatLifecycleStateSchema,
+  writeSeatLifecycle,
+} from './seat-lifecycle.js';
 
 // Parity-manifest parser + config-path resolver (mmnto-ai/totem-strategy#448)
 export type {
