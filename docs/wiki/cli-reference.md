@@ -462,6 +462,29 @@ Shows unread cross-repo mail addressed to this repo's agent(s) (ADR-106 § 3). S
   - `mail reply <source>` replies to a dispatch, inferring recipient and subject from the source.
   - `mail mark <source>` marks a consumed dispatch processed in your own `processed/` cursor (consume-without-reply, ADR-106 § A1.4).
 
+### `totem seat` (add / suspend / remove / list)
+
+Declared seat lifecycle (`active | suspended | retired`) as a per-seat marker at
+`.totem/orchestration/<seat>/lifecycle.json` (mmnto-ai/totem#2511). Lifecycle is declared and
+operator-driven; session state (`LIVE/IDLE/FAULTED`) is derived downstream and is a different axis.
+A seat with no marker is `active` — existing trees are unaffected. Lifecycle transitions never
+discharge obligation edges and never delete data (retention is a separate contract).
+
+- **Subcommands:**
+  - `seat add <seat-id>` wires the birth checklist: the three orchestration subdirs, an `active`
+    marker (`by` recorded from `TOTEM_SELF_AGENT` when set, honestly absent otherwise), a
+    preserving `host_agents` append where `.totem/orchestration/config.json` exists (never created
+    where absent), and the emitted propagation checklist for surfaces the verb cannot reach
+    (vendor poll wiring, external registries, seat-roster tables). `--reactivate` transitions an
+    existing `suspended` seat back to `active`; a `retired` seat is never resurrected.
+  - `seat suspend <seat-id> [--reason <text>]` marks the seat `suspended`: it leaves broadcast
+    required-sets and round denominators but keeps its directed-mail visibility. `--reason` is
+    encouraged — it becomes the recorded-ruling audit trail.
+  - `seat remove <seat-id> [--reason <text>]` marks the seat `retired` and emits the
+    deregistration checklist. Nothing is deleted.
+  - `seat list [--json]` renders the derived seat-state table (seat · state · since · source) with
+    any degraded-marker warnings.
+
 ### `totem ecl-gc`
 
 Prunes your own aged ECL outbox dispatches; with `--compact`, also compacts your processed-mark cursor. Self-resolving and dry-run unless `--apply` is passed.
