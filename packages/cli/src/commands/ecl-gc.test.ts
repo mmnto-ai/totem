@@ -535,6 +535,34 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(0);
   });
 
+  it('C1c — the narrowed falsifier STILL TRIPS on a real this-run over-collection (re-arm NEW-2 positive control)', () => {
+    ensureRepos(CROSTER);
+    // One collectable mark (its dispatch is absent, so the retention gate
+    // legitimately lets it through) — then induce the race the falsifier
+    // exists to catch: the "swept" dispatch reappears in a peer outbox at the
+    // instant of deletion, i.e. between the delete loop and the A2.4 verify
+    // re-poll. The mark WAS live after all; the verify must say so. This is
+    // the assertion that makes "the falsifier loses nothing" (the MB-1
+    // comparand narrowing) CI-checkable rather than probe-checkable: mutate
+    // `resurfaced` to a constant [] and this test is the one that fails.
+    writeMark(CS, DIRECT_SWEPT);
+    const realUnlink = fs.unlinkSync.bind(fs);
+    const spy = vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+      realUnlink(target);
+      if (String(target).endsWith(DIRECT_SWEPT)) {
+        writeInbound('totem-strategy', 'strategy-claude', DIRECT_SWEPT, CS);
+      }
+    });
+    try {
+      const r = runCompact({ apply: true });
+      expect(r.collected).toEqual([DIRECT_SWEPT]);
+      expect(r.resurfaced).toEqual([DIRECT_SWEPT]);
+      expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(3);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('C2 — A2.1 inversion RED test: a live mark is RETAINED (naive pollMail().mail would delete it)', () => {
     ensureRepos(CROSTER);
     // The dispatch is present AND marked handled — so `pollMail().mail` (which

@@ -779,10 +779,10 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   }
   result.retained = allMarks.size - result.collected.length;
 
-  // A2.4 falsifier (in-command): immediately re-poll the SAME seat and assert NO
-  // previously-handled dispatch re-surfaces as unread. A resurfaced basename ∈
-  // the pre-compaction mark set means a LIVE mark was collected — the gate was
-  // too weak; the caller maps a non-empty `resurfaced` to the abort exit code.
+  // A2.4 falsifier (in-command): immediately re-poll the SAME seat and assert
+  // that nothing THIS RUN deleted re-surfaces as unread. A resurfaced basename
+  // ∈ `result.collected` means a LIVE mark was collected — the gate was too
+  // weak; the caller maps a non-empty `resurfaced` to the abort exit code.
   // The re-poll inherits `maxScan` so it can never be MORE truncated than the
   // discovery poll that passed the gate (CodeRabbit).
   const verify = pollMail({
