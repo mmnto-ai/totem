@@ -12,8 +12,9 @@
  * `optsWithGlobals()` read that keeps `totem seat list --json` and
  * `totem --json seat list` in agreement (the mmnto-ai/totem#2097 parent/child
  * option collision). A drift between index.ts and this mirror is NOT caught
- * here; the built-binary behavior is exercised by the E2E receipts recorded on
- * the PR. Parser-level only: no real fs, no core import.
+ * here; the verb→poll behavior is covered in-repo by `seat.test.ts` +
+ * `seat-poll-chain.test.ts`, and built-binary runs accompany the change's
+ * review round. Parser-level only: no real fs, no core import.
  */
 
 import { Command } from 'commander';

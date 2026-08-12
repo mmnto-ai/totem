@@ -498,7 +498,7 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(r.resurfaced).toEqual([]);
   });
 
-  it('C1b — a VALID suspended lifecycle marker on the compacting seat never reds the A2.4 verify (falsification finding 1, arm a)', () => {
+  it('C1b — a VALID suspended lifecycle marker on the compacting seat never reds the A2.4 verify (falsification finding 1 arm a + re-arm MB-1)', () => {
     ensureRepos(CROSTER);
     // Held directed mail for the suspended seat (the obligation-held case) plus
     // one genuinely collectable mark — the exact fixture that pre-fold deleted
@@ -507,6 +507,14 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     // the post-delete re-poll gates on `warnings.length === 0`.
     writeInbound('totem-strategy', 'strategy-claude', DIRECT_LIVE, CS);
     writeMark(CS, DIRECT_SWEPT);
+    // Re-arm MB-1 widening: a LIVE broadcast this seat already CONSUMED. The
+    // lifecycle-aware verify re-poll re-surfaces it (`required = max(0,1)`
+    // over an empty active-mark map) with the mark untouched on disk — the
+    // `resurfaced` comparand must be THIS RUN's deletions, not the
+    // pre-compaction mark set, or the falsifier reports a mark loss that
+    // never happened (exit 3 for the life of the suspension).
+    writeInbound('totem-strategy', 'strategy-claude', BCAST_LIVE, 'broadcast');
+    writeMark(CS, BCAST_LIVE, true);
     writeSeatLifecycle(compactRoot(), CS, {
       schemaVersion: SEAT_LIFECYCLE_SCHEMA_VERSION,
       state: 'suspended',
@@ -517,6 +525,10 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
 
     expect(r.gateComplete).toBe(true);
     expect(r.collected).toEqual([DIRECT_SWEPT]);
+    // The consumed broadcast's mark was RETAINED (it is live), so nothing this
+    // run deleted can resurface: the falsifier stays quiet and trustworthy.
+    expect(markExists(CS, BCAST_LIVE, true)).toBe(true);
+    expect(r.resurfaced).toEqual([]);
     // The annotation rides `notices` (non-gating): the A2.4 re-poll sees zero
     // warnings, the post-delete falsifier stays trustworthy, exit stays clean.
     expect(r.verifyComplete).toBe(true);

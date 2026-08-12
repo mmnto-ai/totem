@@ -203,6 +203,7 @@ async function pollInboundMail(gitRoot) {
         count: 0,
         files: [],
         warnings: [],
+        notices: [],
         scanError: '@mmnto/cli not built at packages/cli/dist; run pnpm -F @mmnto/cli build',
       };
     }
@@ -221,6 +222,10 @@ async function pollInboundMail(gitRoot) {
       // mid-rename race) surface here; pollMail does not throw on them.
       // Surfaced in the session context per Tenet 13 (sensor visibility).
       warnings: result.warnings || [],
+      // Informational lifecycle senses (mmnto-ai/totem#2511) — non-gating by
+      // contract, but exactly the session-start-relevant kind ("obligation
+      // held, not discharged"), so the primary render must not drop them.
+      notices: result.notices || [],
       scanError: null,
       scanned: result.scanned,
       truncated: result.truncated,
@@ -230,6 +235,7 @@ async function pollInboundMail(gitRoot) {
       count: 0,
       files: [],
       warnings: [],
+      notices: [],
       scanError: String(err && err.message ? err.message : err),
     };
   }
@@ -479,6 +485,12 @@ async function buildStaticContext(gitRoot, branch, ticket, records) {
   // populated-mail states. Per Tenet 13: sensor visibility is the contract.
   (inbox.warnings || []).forEach((w) => {
     lines.push(`  Warning: ${w}`);
+  });
+  // Lifecycle notices (mmnto-ai/totem#2511): informational senses — a held
+  // obligation on a suspended seat is exactly the first-inbound-signal class
+  // this block exists for. Rendered after warnings, never gate-armed.
+  (inbox.notices || []).forEach((n) => {
+    lines.push(`  Note: ${n}`);
   });
   lines.push('');
 

@@ -676,7 +676,10 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
 
   const slots = enumerateOutboxes(workspace, opts.recursive === true, warnings);
 
-  // Set inside the subtraction loop; surfaced as ONE notice after the scan.
+  // Set inside the PARSE loop (parsed `to: broadcast` + the filename token
+  // that selects the per-seat floor — never the filename alone, which can
+  // mislabel a directed dispatch, the codex-F2 class); surfaced as ONE notice
+  // after the scan.
   let allSuspendedBroadcastHeld = false;
 
   // Two-pass scan for fairness under MAX_SCAN.
@@ -744,22 +747,8 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       // against its NTFS-safe mark. `isBroadcastNamed` keeps reading the RAW file
       // (positional-token logic is untouched per the amendment scope).
       if ((counts.get(sanitizeEclBasename(file)) ?? 0) >= required) continue;
-      // Lifecycle-caused permanent pin (falsification finding on this branch):
-      // with SELF resolved but every seat suspended/retired, no action the seat
-      // can take clears a broadcast — the retained file must not render as a
-      // clean unread line with the cause unstated. Zero-resolution polls
-      // (selfAgents empty) keep the pre-#2511 behavior, no notice.
-      if (broadcastNamed && activeSeatCount === 0 && selfAgents.length > 0) {
-        allSuspendedBroadcastHeld = true;
-      }
       unread.push({ slot, file });
     }
-  }
-
-  if (allSuspendedBroadcastHeld) {
-    notices.push(
-      `every resolved self seat is suspended/retired — broadcast dispatches cannot be cleared (the required-set floor holds them unread); recovery: totem seat add <seat-id> --reactivate`,
-    );
   }
 
   // Global newest-first by filename. ISO-timestamp prefixes give a total
@@ -849,9 +838,9 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // one seat's broadcast fan-out copies across repos can never fire it.
   // basename → (owner-seat lowercased → `repo/agent` display path).
   const collisionsByBasename = new Map<string, Map<string, string>>();
-  // Lifecycle annotation ledger (mmnto-ai/totem#2511): one warning per affected
+  // Lifecycle annotation ledger (mmnto-ai/totem#2511): one NOTICE per affected
   // SELF seat per poll, not one per file — a suspended seat carrying twenty held
-  // dispatches must not bury the rest of the warnings channel.
+  // dispatches must not bury the rest of the notices channel.
   const lifecycleAnnotatedSeats = new Set<string>();
   const inScope = ordered.length > maxScan ? ordered.slice(0, maxScan) : ordered;
   for (const { slot, file } of inScope) {
@@ -908,7 +897,7 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     // mail addressed to a non-active SELF seat still surfaces above and below
     // this block: a lifecycle transition does NOT discharge an obligation edge
     // (OQ4, resolved at the Phase-4 gate), and the exclusion this feature grants
-    // is denominator-only. Bounded by `lifecycleAnnotatedSeats` to one warning
+    // is denominator-only. Bounded by `lifecycleAnnotatedSeats` to one notice
     // per seat per poll. `header.to` is already control-byte-escaped by
     // `parseHeader`, so interpolating it is display-safe (same as the roster
     // sensor above). Like the collision sensor below, detection is bounded by
@@ -916,6 +905,22 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     // parsed — and truncation independently warns, so the bounded view never
     // renders as a clean one.
     //
+    // Lifecycle-caused permanent pin (falsification finding 2 + re-arm D-2):
+    // a broadcast that SURVIVED subtraction under the per-seat floor while
+    // every resolved seat is suspended/retired can never be cleared by any
+    // action the seat can take. Flagged on PARSED truth (`to: broadcast`) AND
+    // the filename token (which is what selects the per-seat floor — a legacy
+    // tokenless `to: broadcast` stays on the any-seat union rule and remains
+    // clearable, so it earns no notice). Zero-resolution polls keep the
+    // pre-#2511 behavior.
+    if (
+      toLower === 'broadcast' &&
+      isBroadcastNamed(file) &&
+      activeSeatCount === 0 &&
+      selfAgents.length > 0
+    ) {
+      allSuspendedBroadcastHeld = true;
+    }
     // These annotations ride `notices`, never `warnings`: they are
     // informational senses on a HEALTHY scan, and every `warnings.length`
     // consumer treats non-empty as scan-untrustworthy (channel-discipline
@@ -950,6 +955,18 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       subject: header.subject ?? '(no subject)',
       filePath: path.join(slot.outbox, file),
     });
+  }
+
+  if (allSuspendedBroadcastHeld) {
+    // Never advertise a recovery the CLI refuses (re-arm D-1): `--reactivate`
+    // exists only for suspended seats; an all-retired roster routes to a
+    // fresh operator ruling — resurrection is structurally refused.
+    const anySuspended = [...seatLifecycleStates.values()].some((s) => s === 'suspended');
+    notices.push(
+      anySuspended
+        ? 'every resolved self seat is suspended/retired — broadcast dispatches cannot be cleared (the required-set floor holds them unread); recovery: totem seat add <seat-id> --reactivate'
+        : 'every resolved self seat is retired — broadcast dispatches cannot be cleared (the required-set floor holds them unread); a retirement is never resurrected: register a replacement seat (totem seat add <new-seat-id>) or route to the operator',
+    );
   }
 
   // Warn once per colliding basename, naming every seat path. Sensor, not

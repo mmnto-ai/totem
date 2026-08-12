@@ -706,6 +706,39 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
     expect(held[0]).toContain('--reactivate');
   });
 
+  it('all seats RETIRED ⇒ the hold notice routes to a fresh ruling, never to the --reactivate the CLI refuses (re-arm D-1)', () => {
+    writeBroadcast();
+    writeLifecycleMarker('totem', 'totem-claude', 'retired');
+    writeLifecycleMarker('totem', 'totem-gemini', 'retired');
+    const result = poll({ env: TWO_SEATS });
+    expect(result.mail.map((m) => m.file)).toEqual([BROADCAST_FILE]);
+    const held = result.notices.filter((n) => n.includes('retired'));
+    expect(held).toHaveLength(1);
+    // `seat add --reactivate` hard-errors on a retired seat — the notice must
+    // never advertise a recovery the CLI structurally refuses.
+    expect(held[0]).not.toContain('--reactivate');
+    expect(held[0]).toContain('register a replacement seat');
+  });
+
+  it('a broadcast-NAMED file whose parsed to: is directed earns no hold notice (re-arm D-2, the codex-F2 mislabel class)', () => {
+    // The filename token alone selected the flag pre-fold; parsed truth rules
+    // now — a mislabeled directed dispatch must not render a "held broadcast"
+    // claim above a verdict that shows nothing held.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-08-11T0940Z-broadcast-mislabeled.md',
+        to: 'strategy-claude',
+        subject: 'directed despite the name',
+      },
+    ]);
+    writeLifecycleMarker('totem', 'totem-claude', 'suspended');
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    const result = poll({ env: TWO_SEATS });
+    // Addressed to a non-self seat: no mail surfaces, and no hold exists.
+    expect(result.mail).toEqual([]);
+    expect(result.notices.filter((n) => n.includes('broadcast dispatches'))).toEqual([]);
+  });
+
   it('a marker declaring `active` behaves exactly like no marker (absent ⇒ active)', () => {
     writeBroadcast();
     writeLifecycleMarker('totem', 'totem-gemini', 'active');

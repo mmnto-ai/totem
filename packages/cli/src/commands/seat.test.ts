@@ -141,6 +141,18 @@ describe('seat add', () => {
     expect(output()).toContain('stamped absence');
   });
 
+  it('a SET-but-unusable TOTEM_SELF_AGENT is disclosed as such — never rendered as "not set" (re-arm P-3)', async () => {
+    const repo = makeRepo();
+    await seatAddCommand('totem-kimi', {
+      cwdForTest: repo,
+      envForTest: { TOTEM_SELF_AGENT: '../evil' },
+      nowForTest: NOW,
+    });
+    expect(readMarker(repo, 'totem-kimi')['by']).toBeUndefined();
+    expect(output()).toContain('is set but no entry is a usable seat id');
+    expect(output()).not.toContain('is not set');
+  });
+
   it('--reactivate on a NONEXISTENT seat is a hard error, never a silent birth (the flag must not change meaning)', async () => {
     const repo = makeRepo();
     const { message, hint } = await rejection(

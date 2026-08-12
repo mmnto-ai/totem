@@ -158,15 +158,20 @@ function directoryExists(target: string, TotemErrorCtor: Core['TotemError']): bo
 function resolveActingSeat(
   env: NodeJS.ProcessEnv,
   isSafe: (id: string) => boolean,
-): { by: string | undefined; ambiguous: boolean } {
+): { by: string | undefined; ambiguous: boolean; setButUnusable: boolean } {
   const raw = env[SELF_AGENT_ENV_VAR];
-  if (typeof raw !== 'string') return { by: undefined, ambiguous: false };
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return { by: undefined, ambiguous: false, setButUnusable: false };
+  }
   const usable = raw
     .split(',')
     .map((entry) => entry.trim())
     .filter(isSafe);
-  if (usable.length === 1) return { by: usable[0], ambiguous: false };
-  return { by: undefined, ambiguous: usable.length > 1 };
+  if (usable.length === 1) return { by: usable[0], ambiguous: false, setButUnusable: false };
+  // Distinct absences (re-arm P-3): a SET-but-unusable env must not render as
+  // "not set" — a false fact about the environment inside a feature whose
+  // thesis is stamped absence over invention.
+  return { by: undefined, ambiguous: usable.length > 1, setButUnusable: usable.length === 0 };
 }
 
 /** One-line disclosure when ambiguity (not absence) caused the `by` omission. */
@@ -559,7 +564,18 @@ export async function seatAddCommand(seatId: string, options: SeatAddOptions = {
   // ── New seat ──
   const completed: string[] = [];
   for (const subdir of SEAT_SUBDIRS) {
-    fs.mkdirSync(path.join(seatDir, subdir), { recursive: true });
+    const target = path.join(seatDir, subdir);
+    // totem-context: intentional rethrow-as-TotemError — a seat-dir path occupied by a FILE (ENOTDIR) or a permission wall must fail loud with the path (re-arm P-4), never as a raw fs error one call after the directoryExists guard.
+    try {
+      fs.mkdirSync(target, { recursive: true });
+    } catch (err) {
+      throw new TotemError(
+        'CHECK_FAILED',
+        `seat add: cannot create ${render(target)}: ${String(err)}`,
+        'Check that the .totem/orchestration path is a writable directory tree (a file squatting on the seat path must be moved aside).',
+        err,
+      );
+    }
   }
 
   // Verify through the resolver rather than trusting the mkdir calls: the
@@ -627,21 +643,24 @@ export async function seatAddCommand(seatId: string, options: SeatAddOptions = {
     `  marker: ${render(markerPath)}`,
     `  ${describeMarker(marker)}`,
     ...configLines,
-    // Distinct absence disclosures: unset env vs an AMBIGUOUS multi-seat env
-    // (finding 7 — "the first entry" is no evidence that seat ran the verb).
+    // Distinct absence disclosures (finding 7 + re-arm P-3): ambiguous
+    // multi-seat env / set-but-unusable env / genuinely unset — each states
+    // the true reason, never "not set" for an env that IS set.
     ...(acting.ambiguous
-      ? [
-          `  · by omitted: ${SELF_AGENT_ENV_VAR} lists multiple seats — the marker records`,
-          '    stamped absence rather than a guess at which one acted.',
-          '',
-        ]
-      : by === undefined
+      ? [...attributionNote(acting), '']
+      : acting.setButUnusable
         ? [
-            `  · ${SELF_AGENT_ENV_VAR} is not set, so the marker records no \`by\` —`,
-            '    a stamped absence rather than a fabricated attribution.',
+            `  · by omitted: ${SELF_AGENT_ENV_VAR} is set but no entry is a usable seat id —`,
+            '    the marker records stamped absence rather than a fabricated attribution.',
             '',
           ]
-        : ['']),
+        : by === undefined
+          ? [
+              `  · ${SELF_AGENT_ENV_VAR} is not set, so the marker records no \`by\` —`,
+              '    a stamped absence rather than a fabricated attribution.',
+              '',
+            ]
+          : ['']),
     ...birthChecklist(seatId),
   ]);
 }

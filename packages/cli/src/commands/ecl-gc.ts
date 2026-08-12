@@ -793,13 +793,24 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   });
   // Normalize BOTH sides through the same sanitizer as the A2.1 retention
   // comparison (mmnto-ai/totem#2431): the verify poll's inbound files can be
-  // colon-bearing while `allMarks` are stored NTFS-safe, so a raw-vs-actual
+  // colon-bearing while marks are stored NTFS-safe, so a raw-vs-actual
   // compare would MISS a colon-bearing resurfaced dispatch and read the A2.4
   // falsifier as falsely clean. No-op for the colon-free common case.
-  const allMarksSanitized = new Set([...allMarks].map(sanitizeEclBasename));
+  //
+  // The comparand is THIS RUN's deletions (`collected`), not the
+  // pre-compaction mark set (#2511 re-arm MB-1): A2.4 asks "did this run
+  // delete a live mark?", and a genuinely over-collected mark is in
+  // `collected` by construction, so the falsifier loses nothing. Filtering
+  // against `allMarks` made the answer depend on poll-visibility shifts the
+  // compaction never caused — a suspended/retired compacting seat's
+  // lifecycle-aware verify re-poll re-surfaces its consumed broadcasts
+  // (`required = max(active, 1)` over an empty active-mark map) with every
+  // mark still on disk, and the falsifier read that as "a live mark was
+  // collected", exit 3, for the life of the suspension.
+  const collectedSanitized = new Set(result.collected.map(sanitizeEclBasename));
   result.resurfaced = verify.mail
     .map((m) => m.file)
-    .filter((f) => allMarksSanitized.has(sanitizeEclBasename(f)))
+    .filter((f) => collectedSanitized.has(sanitizeEclBasename(f)))
     .sort();
   // The A2.4 verdict is trustworthy only if the re-poll itself was complete: a
   // truncated or warned verify could miss a resurfaced dispatch beyond its
