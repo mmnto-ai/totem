@@ -32,6 +32,12 @@ import * as path from 'node:path';
 import {
   isPathSafeAgentId,
   knownCohortAgents,
+  // pollMail is a SYNC public API consumed directly by the SessionStart hook
+  // (session-context.mjs), so the #2339 dynamic-import shape is structurally
+  // impossible for this name; mail.ts is itself action-lazy-loaded by index.ts,
+  // so this statement (five sibling value imports predate the rule) never runs
+  // at --help startup.
+  // totem-ignore-next-line mmnto-ai/totem#2511
   readSeatLifecycle,
   resolveSelfAgents,
   resolveTotemRepoRootSync,

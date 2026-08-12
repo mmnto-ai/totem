@@ -236,7 +236,8 @@ function readHead(filePath: string): string {
 function evidenceList(items: string[]): string {
   const shown = items.slice(0, MAX_EVIDENCE_FILES);
   const more = items.length - shown.length;
-  return `${items.length} file(s): ${shown.join(', ')}${more > 0 ? ` (+${more} more)` : ''}`;
+  const listed = more > 0 ? `${shown.join(', ')} (+${more} more)` : shown.join(', ');
+  return `${items.length} file(s): ${listed}`;
 }
 
 /**

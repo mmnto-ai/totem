@@ -64,7 +64,11 @@ function readConfig(repo: string): Record<string, unknown> {
 
 /** Everything the verb wrote to stdout since the last reset. */
 function output(): string {
-  return chunks.join('');
+  // Raw stream segments re-assembled verbatim — a write() chunk boundary is
+  // not a token boundary, so no delimiter belongs between chunks.
+  let joined = '';
+  for (const chunk of chunks) joined += chunk;
+  return joined;
 }
 
 /** The thrown value, so `recoveryHint` (not just the message) is assertable. */
