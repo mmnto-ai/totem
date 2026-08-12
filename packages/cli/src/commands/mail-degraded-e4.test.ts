@@ -625,7 +625,15 @@ describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnt
     const markerPath = writeLifecycleMarker(root, 'totem-claude', 'suspended');
     const suspended = pollMail({ repoRoot: root, workspace, env: {} });
     expect(suspended.mail.map((m) => m.file)).toEqual([DIRECTED]);
-    expect(suspended.warnings.some((w) => w.includes('unusable lifecycle marker'))).toBe(false);
+    // Falsification finding 1, arm (b): a VALID suspended marker is a healthy
+    // scan — the annotation rides `notices`, warnings stay EMPTY, and the
+    // verdict must not read INCOMPLETE (only the CORRUPT marker above may
+    // degrade the envelope). This is what keeps the #2516 discriminator and
+    // the ecl-gc A2.2/A2.4 gates meaning "scan untrustworthy", not "lifecycle
+    // exists".
+    expect(suspended.warnings).toEqual([]);
+    expect(suspended.notices.some((n) => n.includes('suspended seat'))).toBe(true);
+    expect(verdictLineOf(formatTextResult(suspended))).not.toContain('INCOMPLETE');
 
     // Fault-removed-returns-to-green: no marker at all ⇒ active by default, no
     // lifecycle warnings, and the same fixture polls exactly as a pre-#2511 tree

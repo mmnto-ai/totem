@@ -15,7 +15,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { type TotemConfig, TotemConfigError, TotemConfigSchema } from '@mmnto/totem';
+import {
+  SEAT_LIFECYCLE_SCHEMA_VERSION,
+  type TotemConfig,
+  TotemConfigError,
+  TotemConfigSchema,
+  writeSeatLifecycle,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
@@ -490,6 +496,31 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(markExists(CS, BCAST_SWEPT, true)).toBe(false);
     // A2.4: nothing previously-handled re-surfaces.
     expect(r.resurfaced).toEqual([]);
+  });
+
+  it('C1b — a VALID suspended lifecycle marker on the compacting seat never reds the A2.4 verify (falsification finding 1, arm a)', () => {
+    ensureRepos(CROSTER);
+    // Held directed mail for the suspended seat (the obligation-held case) plus
+    // one genuinely collectable mark — the exact fixture that pre-fold deleted
+    // the mark and then exited 3 "A2.4 self-check UNTRUSTWORTHY" with an empty
+    // reason list, because the suspended-held annotation rode `warnings` and
+    // the post-delete re-poll gates on `warnings.length === 0`.
+    writeInbound('totem-strategy', 'strategy-claude', DIRECT_LIVE, CS);
+    writeMark(CS, DIRECT_SWEPT);
+    writeSeatLifecycle(compactRoot(), CS, {
+      schemaVersion: SEAT_LIFECYCLE_SCHEMA_VERSION,
+      state: 'suspended',
+      since: '2026-08-11T00:00:00.000Z',
+    });
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([DIRECT_SWEPT]);
+    // The annotation rides `notices` (non-gating): the A2.4 re-poll sees zero
+    // warnings, the post-delete falsifier stays trustworthy, exit stays clean.
+    expect(r.verifyComplete).toBe(true);
+    expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(0);
   });
 
   it('C2 — A2.1 inversion RED test: a live mark is RETAINED (naive pollMail().mail would delete it)', () => {

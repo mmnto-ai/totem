@@ -28,6 +28,7 @@ import { log } from '../ui.js';
 import {
   composeDispatch,
   type DispatchHeader,
+  formatTextResult,
   mailCommand,
   type MailPollResult,
   mailReply,
@@ -594,12 +595,29 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
     // Sense, never hide: both held dispatches surface (OQ4 — a suspension does
     // not discharge the obligation edge).
     expect(result.mail).toHaveLength(2);
-    // Bounded annotation: ONE warning for the seat, not one per file.
-    const held = result.warnings.filter((w) => w.includes('suspended seat'));
+    // Bounded annotation: ONE notice for the seat, not one per file — and it
+    // rides the NON-GATING notices channel, never warnings (finding 1 of the
+    // falsification round: warnings arm three gates).
+    expect(result.warnings).toEqual([]);
+    const held = result.notices.filter((n) => n.includes('suspended seat'));
     expect(held).toHaveLength(1);
     expect(held[0]).toContain('totem-gemini');
     expect(held[0]).toContain('obligation held, not discharged');
     expect(held[0]).toContain('mmnto-ai/totem-status#127');
+  });
+
+  it('a suspended seat with held mail never pins the verdict to INCOMPLETE (the #2516 discriminator stays honest)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-11T0939Z-totem-gemini-held.md', to: 'totem-gemini' },
+    ]);
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    const rendered = formatTextResult(poll({ env: TWO_SEATS }));
+    // The scan IS complete: the annotation renders as a Note line and the
+    // verdict must not claim degradation — a suspended seat must leave the
+    // INCOMPLETE token meaning "scan not trustworthy", not "lifecycle exists".
+    expect(rendered).toContain('Note: directed mail surfacing for suspended seat');
+    expect(rendered).not.toContain('INCOMPLETE');
+    expect(rendered).toContain('1 unread:');
   });
 
   it("a suspended seat's already-consumed directed mail stays consumed (no false-unread)", () => {
@@ -624,17 +642,20 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
     writeLifecycleMarker('totem', 'totem-gemini', 'retired');
     const result = poll({ env: TWO_SEATS });
     expect(result.mail).toHaveLength(2);
-    const retired = result.warnings.filter((w) => w.includes('addressed to retired seat'));
+    // Notices channel, never warnings — same channel discipline as suspended.
+    expect(result.warnings).toEqual([]);
+    const retired = result.notices.filter((n) => n.includes('addressed to retired seat'));
     expect(retired).toHaveLength(1);
     expect(retired[0]).toContain('totem-gemini');
   });
 
-  it('annotations are reader-path only: the compaction discovery poll stays annotation-free while the corrupt-marker warning still fires', () => {
-    // The `ecl-gc --compact` A2.2 completeness gate arms on `warnings.length
-    // === 0`. The two lifecycle ANNOTATION classes are informational senses —
-    // a weeks-long suspension must not block mark compaction (sense, never
-    // actuator, Tenet 13) — but a corrupt marker IS a denominator-integrity
-    // anomaly and must red the gate on BOTH paths.
+  it('channel discipline: annotations ride the non-gating notices channel on BOTH paths; only the corrupt-marker warning arms the gates', () => {
+    // The `warnings` channel arms THREE gates (ecl-gc A2.2, A2.4
+    // verifyComplete, the #2516 INCOMPLETE verdict). Lifecycle annotations are
+    // informational senses on a healthy scan — they ride `notices`, which no
+    // gate reads, uniformly on the reader AND the compaction-discovery path. A
+    // corrupt marker IS a denominator-integrity anomaly and stays a warning on
+    // both paths.
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-08-11T0937Z-totem-gemini-held.md', to: 'totem-gemini' },
       { name: '2026-08-11T0938Z-totem-claude-note.md', to: 'totem-claude' },
@@ -642,14 +663,11 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
     writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
     const readerView = poll({ env: TWO_SEATS });
     const discoveryView = poll({ env: TWO_SEATS, includeProcessed: true });
-    // Positive control: the reader path DOES annotate this exact fixture, so
-    // the discovery path's silence below is suppression, not a dead sense.
-    expect(readerView.warnings.filter((w) => w.includes('suspended seat'))).toHaveLength(1);
-    expect(discoveryView.warnings.filter((w) => w.includes('suspended seat'))).toHaveLength(0);
-    expect(discoveryView.warnings.filter((w) => w.includes('retired seat'))).toHaveLength(0);
-    // Both dispatches still surface on the discovery path — suppression covers
-    // the annotation, never the mail.
-    expect(discoveryView.mail).toHaveLength(2);
+    for (const view of [readerView, discoveryView]) {
+      expect(view.warnings).toEqual([]);
+      expect(view.notices.filter((n) => n.includes('suspended seat'))).toHaveLength(1);
+      expect(view.mail).toHaveLength(2);
+    }
 
     // Corrupt the marker: the integrity warning fires on the discovery path
     // too (naming the marker path), redding the compaction gate by design.
@@ -667,7 +685,7 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
     expect(corruptWarnings).toHaveLength(1);
   });
 
-  it('all self seats suspended ⇒ broadcasts NEVER subtract, even with every mark present', () => {
+  it('all self seats suspended ⇒ broadcasts NEVER subtract, and the hold is NAMED with its recovery (never a clean render)', () => {
     writeBroadcast();
     writeLifecycleMarker('totem', 'totem-claude', 'suspended');
     writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
@@ -676,7 +694,16 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
     // activeCount 0 ⇒ required stays 1 (`max(…, 1)`) and the active-mark map is
     // EMPTY, so the count is 0: an empty required set is never "closed" (the
     // inherited orchestration.go boundary). Never vacuously consumed.
-    expect(poll({ env: TWO_SEATS }).mail.map((m) => m.file)).toEqual([BROADCAST_FILE]);
+    const result = poll({ env: TWO_SEATS });
+    expect(result.mail.map((m) => m.file)).toEqual([BROADCAST_FILE]);
+    // Falsification finding 2: the permanently-pinned broadcast must not
+    // render as a clean unread line — one notice names the all-suspended
+    // cause and the reactivation recovery. Warnings stay empty (the scan is
+    // healthy; nothing here may red a gate).
+    expect(result.warnings).toEqual([]);
+    const held = result.notices.filter((n) => n.includes('suspended/retired'));
+    expect(held).toHaveLength(1);
+    expect(held[0]).toContain('--reactivate');
   });
 
   it('a marker declaring `active` behaves exactly like no marker (absent ⇒ active)', () => {
@@ -687,6 +714,7 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
     // Both seats are in the denominator, so one mark does not close it.
     expect(result.mail.map((m) => m.file)).toEqual([BROADCAST_FILE]);
     expect(result.warnings).toEqual([]);
+    expect(result.notices).toEqual([]);
   });
 
   it('markerless tree: the FULL poll result is identical to the pre-#2511 snapshot', () => {
@@ -798,6 +826,9 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
         'unresolvable outbox address: totem-strategy/strategy-claude/2026-08-01T1704Z-cohort-bad-address.md — to: "cohort" matches no roster agent; invisible to every seat-scoped poll',
         'cross-sender basename collision: 2026-08-01T1705Z-collide.md from liquid-city/lc-claude and totem-strategy/strategy-claude — a single processed/ mark would shadow both',
       ],
+      // Additive field (fold): a markerless tree emits zero notices — the
+      // channel's existence is the only delta vs the pre-#2511 result shape.
+      notices: [],
     });
   });
 });
@@ -1834,7 +1865,15 @@ describe('mailCommand — --json output', () => {
 
 describe('resolveMailExitCode (unit)', () => {
   function result(selfAgents: MailPollResult['selfAgents']): MailPollResult {
-    return { selfAgents, mail: [], scanned: 0, truncated: false, workspace: '/w', warnings: [] };
+    return {
+      selfAgents,
+      mail: [],
+      scanned: 0,
+      truncated: false,
+      workspace: '/w',
+      warnings: [],
+      notices: [],
+    };
   }
   it('is 2 when self is unresolved (source none), 0 when resolved', () => {
     expect(resolveMailExitCode(result({ agents: [], source: 'none' }))).toBe(2);

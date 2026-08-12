@@ -116,14 +116,45 @@ describe('seat add', () => {
     expect(output()).toContain('TOTEM_SELF_AGENT is not set');
   });
 
-  it('records `by` as the FIRST usable TOTEM_SELF_AGENT entry when the env is set', async () => {
+  it('records `by` from a SINGLE-seat TOTEM_SELF_AGENT', async () => {
+    const repo = makeRepo();
+    await seatAddCommand('totem-kimi', {
+      cwdForTest: repo,
+      envForTest: { TOTEM_SELF_AGENT: 'totem-claude' },
+      nowForTest: NOW,
+    });
+    expect(readMarker(repo, 'totem-kimi')['by']).toBe('totem-claude');
+  });
+
+  it('a MULTI-seat TOTEM_SELF_AGENT is ambiguous: `by` is omitted and the omission is disclosed (stamped absence, MB-2)', async () => {
+    // "The first entry" is no evidence that seat ran the verb — under the
+    // stamped-absence rule the honest answer for an ambiguous env is absence
+    // plus a note, never a guess (falsification finding 7).
     const repo = makeRepo();
     await seatAddCommand('totem-kimi', {
       cwdForTest: repo,
       envForTest: { TOTEM_SELF_AGENT: 'totem-claude,totem-gemini' },
       nowForTest: NOW,
     });
-    expect(readMarker(repo, 'totem-kimi')['by']).toBe('totem-claude');
+    expect(readMarker(repo, 'totem-kimi')['by']).toBeUndefined();
+    expect(output()).toContain('by omitted');
+    expect(output()).toContain('stamped absence');
+  });
+
+  it('--reactivate on a NONEXISTENT seat is a hard error, never a silent birth (the flag must not change meaning)', async () => {
+    const repo = makeRepo();
+    const { message, hint } = await rejection(
+      seatAddCommand('brand-new', {
+        cwdForTest: repo,
+        envForTest: NO_ENV,
+        nowForTest: NOW,
+        reactivate: true,
+      }),
+    );
+    expect(message).toContain('nothing to reactivate');
+    expect(hint).toContain('without --reactivate');
+    // Nothing was created.
+    expect(fs.readdirSync(path.join(repo, '.totem', 'orchestration'))).toEqual([]);
   });
 
   it('refuses an id that is not a safe path segment', async () => {

@@ -4,13 +4,16 @@
  *
  * `index.ts` builds its `program` at module scope and auto-runs `parseAsync` on
  * import, so it cannot be imported without executing the CLI against the test
- * runner's argv. This reconstructs the EXACT registration — group-only `seat`
- * with four subcommands, the `--reactivate` / `--reason` flags, and the
+ * runner's argv. This therefore tests a hand-maintained MIRROR of the
+ * registration (`buildSeatProgram` below), not `index.ts` itself — the same
+ * structural limit `mail-cli-wiring.test.ts` documents. What it verifies is
+ * Commander's parsing of the mirrored shape: group-only `seat` with four
+ * subcommands, the `--reactivate` / `--reason` flags, and the
  * `optsWithGlobals()` read that keeps `totem seat list --json` and
  * `totem --json seat list` in agreement (the mmnto-ai/totem#2097 parent/child
- * option collision) — with the command-module functions stubbed, verifying the
- * parser produces the options the lib is invoked with. Parser-level only: no
- * real fs, no core import.
+ * option collision). A drift between index.ts and this mirror is NOT caught
+ * here; the built-binary behavior is exercised by the E2E receipts recorded on
+ * the PR. Parser-level only: no real fs, no core import.
  */
 
 import { Command } from 'commander';

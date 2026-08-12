@@ -126,30 +126,57 @@ function rule(): string {
 }
 
 /**
- * `fs.statSync` raises on missing paths and on EACCES/ENOTDIR; every stat
- * failure is the "not a directory here" signal, matching the
- * `orchestration-resolver` posture.
+ * `throwIfNoEntry: false` suppresses ENOENT only; any OTHER stat failure
+ * (EACCES, ENOTDIR, ELOOP) is rethrown as a TotemError naming the path — a
+ * permission wall must fail loud, never read as "seat does not exist" (a
+ * false-unknown would route the operator to `seat add` on a tree they cannot
+ * even stat).
  */
-function directoryExists(target: string): boolean {
-  const stat = fs.statSync(target, { throwIfNoEntry: false });
+function directoryExists(target: string, TotemErrorCtor: Core['TotemError']): boolean {
+  let stat: fs.Stats | undefined;
+  try {
+    stat = fs.statSync(target, { throwIfNoEntry: false });
+    // totem-context: intentional rethrow-as-TotemError — non-ENOENT stat failures must surface loudly with the path, not degrade to "not a directory here".
+  } catch (err) {
+    throw new TotemErrorCtor(
+      'CHECK_FAILED',
+      `cannot stat ${target}: ${String(err)}`,
+      'check permissions on the .totem/orchestration tree.',
+      err,
+    );
+  }
   return stat !== undefined && stat.isDirectory();
 }
 
 /**
- * The acting seat for a marker's `by`: the FIRST usable `TOTEM_SELF_AGENT`
- * entry, or `undefined`. Never a guess — an unset env means the transition is
- * recorded without an attribution rather than with an invented one.
+ * The acting seat for a marker's `by`: the SINGLE usable `TOTEM_SELF_AGENT`
+ * entry, or `undefined`. Never a guess — an unset env records the transition
+ * without attribution, and a MULTI-seat env list is ambiguous, so under the
+ * stamped-absence rule (#2625 MB-2) it also records absence: "the first entry"
+ * is no evidence that seat ran the verb.
  */
 function resolveActingSeat(
   env: NodeJS.ProcessEnv,
   isSafe: (id: string) => boolean,
-): string | undefined {
+): { by: string | undefined; ambiguous: boolean } {
   const raw = env[SELF_AGENT_ENV_VAR];
-  if (typeof raw !== 'string') return undefined;
-  return raw
+  if (typeof raw !== 'string') return { by: undefined, ambiguous: false };
+  const usable = raw
     .split(',')
     .map((entry) => entry.trim())
-    .filter(isSafe)[0];
+    .filter(isSafe);
+  if (usable.length === 1) return { by: usable[0], ambiguous: false };
+  return { by: undefined, ambiguous: usable.length > 1 };
+}
+
+/** One-line disclosure when ambiguity (not absence) caused the `by` omission. */
+function attributionNote(acting: { ambiguous: boolean }): string[] {
+  return acting.ambiguous
+    ? [
+        `  · by omitted: ${SELF_AGENT_ENV_VAR} lists multiple seats — the marker records`,
+        '    stamped absence rather than a guess at which one acted.',
+      ]
+    : [];
 }
 
 /** `state · since · by · reason` for a one-line marker echo. */
@@ -246,7 +273,7 @@ function coreHelpers(core: Core) {
    * id must never mint a marker for a seat nobody has.
    */
   function requireKnownSeat(verb: string, repoRoot: string, seatId: string): void {
-    if (directoryExists(seatDirFor(repoRoot, seatId))) return;
+    if (directoryExists(seatDirFor(repoRoot, seatId), TotemError)) return;
     const known = knownSeatLabels(repoRoot);
     throw new TotemConfigError(
       `seat ${verb}: unknown seat "${seatId}" — no seat directory at ${render(seatDirFor(repoRoot, seatId))}`,
@@ -400,8 +427,8 @@ function birthChecklist(seatId: string): string[] {
     '   · .gemini/skills/signoff.md',
     '   · packages/cli/src/commands/init-templates.ts — SIGNOFF_SKILL_CONTENT,',
     '     the PUBLISHED template every `totem init` consumer receives.',
-    '   A parity test locks the copies against each other; update them together',
-    '   or CI fails.',
+    '   A parity test locks three of the four against each other (CI fails on',
+    '   drift); the .gemini copy has NO mechanical lock — check it explicitly.',
     '',
     '5. Strategy lane — parity-manifest row candidate for this seat. The',
     '   manifest is strategy-owned; this verb never adds a row. File it there.',
@@ -469,9 +496,10 @@ export async function seatAddCommand(seatId: string, options: SeatAddOptions = {
   const seatDir = seatDirFor(repoRoot, seatId);
   const current = readState(repoRoot, seatId);
   const markerPresent = fs.existsSync(path.join(seatDir, core.SEAT_LIFECYCLE_FILENAME));
-  const by = resolveActingSeat(env, isPathSafeAgentId);
+  const acting = resolveActingSeat(env, isPathSafeAgentId);
+  const by = acting.by;
 
-  if (directoryExists(seatDir) || markerPresent) {
+  if (directoryExists(seatDir, TotemError) || markerPresent) {
     if (options.reactivate !== true) {
       throw new TotemConfigError(
         `seat add: "${seatId}" already exists in ${render(repoRoot)} — current state: ${current.state}`,
@@ -511,9 +539,21 @@ export async function seatAddCommand(seatId: string, options: SeatAddOptions = {
       '  · The seat re-enters broadcast required-sets and round denominators on',
       '    the very next poll — markers are read fresh, never cached.',
       '  · Its dirs, outbox, processed marks, and journals were untouched.',
+      ...attributionNote(acting),
       ...(current.warning === undefined ? [] : ['', `warning: ${render(current.warning)}`]),
     ]);
     return;
+  }
+
+  // --reactivate on a seat that does not exist must not silently fall through
+  // to the birth path — the flag would change meaning (falsification finding
+  // 11 on this branch): reactivation is a transition on an EXISTING seat.
+  if (options.reactivate === true) {
+    throw new TotemConfigError(
+      `seat add --reactivate: unknown seat "${seatId}" — there is nothing to reactivate`,
+      'The flag transitions suspended → active on an existing seat. Register a new seat by running `totem seat add` without --reactivate.',
+      'CONFIG_INVALID',
+    );
   }
 
   // ── New seat ──
@@ -587,13 +627,21 @@ export async function seatAddCommand(seatId: string, options: SeatAddOptions = {
     `  marker: ${render(markerPath)}`,
     `  ${describeMarker(marker)}`,
     ...configLines,
-    ...(by === undefined
+    // Distinct absence disclosures: unset env vs an AMBIGUOUS multi-seat env
+    // (finding 7 — "the first entry" is no evidence that seat ran the verb).
+    ...(acting.ambiguous
       ? [
-          `  · ${SELF_AGENT_ENV_VAR} is not set, so the marker records no \`by\` —`,
-          '    a stamped absence rather than a fabricated attribution.',
+          `  · by omitted: ${SELF_AGENT_ENV_VAR} lists multiple seats — the marker records`,
+          '    stamped absence rather than a guess at which one acted.',
           '',
         ]
-      : ['']),
+      : by === undefined
+        ? [
+            `  · ${SELF_AGENT_ENV_VAR} is not set, so the marker records no \`by\` —`,
+            '    a stamped absence rather than a fabricated attribution.',
+            '',
+          ]
+        : ['']),
     ...birthChecklist(seatId),
   ]);
 }
@@ -641,18 +689,15 @@ export async function seatSuspendCommand(
     );
   }
 
-  const marker = buildMarker(
-    'suspended',
-    since,
-    resolveActingSeat(env, isPathSafeAgentId),
-    options.reason,
-  );
+  const acting = resolveActingSeat(env, isPathSafeAgentId);
+  const marker = buildMarker('suspended', since, acting.by, options.reason);
   const markerPath = core.writeSeatLifecycle(repoRoot, seatId, marker);
 
   emit([
     `Seat suspended: ${seatId}`,
     `  marker: ${render(markerPath)}`,
     `  ${describeMarker(marker)}`,
+    ...attributionNote(acting),
     '',
     'Effects',
     `  · ${seatId} drops out of broadcast REQUIRED-SETS and round denominators:`,
@@ -714,12 +759,8 @@ export async function seatRemoveCommand(
     return;
   }
 
-  const marker = buildMarker(
-    'retired',
-    since,
-    resolveActingSeat(env, isPathSafeAgentId),
-    options.reason,
-  );
+  const acting = resolveActingSeat(env, isPathSafeAgentId);
+  const marker = buildMarker('retired', since, acting.by, options.reason);
   const markerPath = core.writeSeatLifecycle(repoRoot, seatId, marker);
 
   const configPath = configPathFor(repoRoot);
@@ -731,6 +772,7 @@ export async function seatRemoveCommand(
     `Seat retired: ${seatId}`,
     `  marker: ${render(markerPath)}`,
     `  ${describeMarker(marker)}`,
+    ...attributionNote(acting),
     '',
     'Retention',
     `  · Nothing was deleted. ${render(seatDirFor(repoRoot, seatId))} keeps its`,

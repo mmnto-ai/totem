@@ -34,9 +34,9 @@ import {
   knownCohortAgents,
   // pollMail is a SYNC public API consumed directly by the SessionStart hook
   // (session-context.mjs), so the #2339 dynamic-import shape is structurally
-  // impossible for this name; mail.ts is itself action-lazy-loaded by index.ts,
-  // so this statement (five sibling value imports predate the rule) never runs
-  // at --help startup.
+  // impossible for this name; mail.ts is itself action-lazy-loaded by index.ts
+  // and ecl-gc, so this statement (five sibling value imports, all predating
+  // the #2339 coverage fix) never runs on the --help startup graph.
   // totem-ignore-next-line mmnto-ai/totem#2511
   readSeatLifecycle,
   resolveSelfAgents,
@@ -100,8 +100,19 @@ export interface MailPollResult {
   truncated: boolean;
   /** Workspace directory walked (absolute). */
   workspace: string;
-  /** Per-source repo failure messages — never throws, surfaces via this. */
+  /** Per-source repo failure messages — never throws, surfaces via this.
+   * GATE-ARMED accounting channel: three consumers treat a non-empty array as
+   * "the scan/subtraction is not trustworthy" — the `ecl-gc --compact` A2.2
+   * completeness gate and A2.4 post-delete verify (mmnto-ai/totem#2309), and
+   * the #2516 `INCOMPLETE` verdict token. Only scan/subtraction-integrity
+   * anomalies belong here; informational senses ride `notices`. */
   warnings: string[];
+  /** Informational lifecycle senses (mmnto-ai/totem#2511) — NEVER gate-armed.
+   * Rendered to humans as `Note:` lines; every `warnings.length` consumer
+   * ignores this channel by design, so a weeks-long suspension can never red
+   * mark-compaction or pin the verdict to INCOMPLETE (the falsification-round
+   * regression this channel exists to prevent). */
+  notices: string[];
 }
 
 export interface MailCommandOptions {
@@ -588,6 +599,8 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   const selfLower = new Set(selfResolution.agents.map((a) => a.toLowerCase()));
 
   const warnings: string[] = [];
+  // Non-gating informational channel (see MailPollResult.notices).
+  const notices: string[] = [];
   if (selfResolution.warnings !== undefined) {
     // Resolver diagnostics are Tenet-4 loud by contract (today: the config
     // warn-shape — host_agents omitting a present seat dir, mmnto-ai/totem#2141).
@@ -618,13 +631,16 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // fail-open-and-loud, so a corrupt/unreadable marker leaves its seat ACTIVE
   // (still in the denominator, mail still surfacing) and warns naming the file.
   //
-  // The warnings channel is load-bearing beyond display here, same as the
-  // collision sensor below: `ecl-gc --compact` arms its A2.2 completeness gate
-  // on `warnings.length === 0` (mmnto-ai/totem#2309), so a corrupt marker — or
-  // a held obligation on a suspended seat — REDS mark-compaction for as long as
-  // the anomaly is live. Intended: compaction must not run while a denominator
-  // is being read through a marker nobody can parse. It clears the moment the
-  // marker is fixed/deleted or the obligation is disposed.
+  // Channel discipline (falsification-round finding on this branch): the
+  // `warnings` channel arms THREE gates — the ecl-gc A2.2 completeness gate,
+  // its A2.4 post-delete verify (`verifyComplete`, exit 3), and the #2516
+  // `INCOMPLETE` verdict token. The CORRUPT-MARKER warning below deliberately
+  // rides it: compaction must not run, and a verdict must not read clean,
+  // while a denominator is being read through a marker nobody can parse; it
+  // clears the moment the marker is fixed or deleted. The lifecycle
+  // ANNOTATIONS (suspended-held / retired-addressee, further down) ride
+  // `notices` instead — informational senses on a healthy scan must never red
+  // compaction or render a complete scan as INCOMPLETE.
   const seatLifecycleStates = new Map<string, SeatLifecycleState>();
   const activeSelfAgents: string[] = [];
   for (const agent of selfAgents) {
@@ -659,6 +675,9 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   const activeSeatCount = activeSelfAgents.length;
 
   const slots = enumerateOutboxes(workspace, opts.recursive === true, warnings);
+
+  // Set inside the subtraction loop; surfaced as ONE notice after the scan.
+  let allSuspendedBroadcastHeld = false;
 
   // Two-pass scan for fairness under MAX_SCAN.
   // Pass 1 (cheap): readdirSync every outbox to collect all unread filenames.
@@ -725,8 +744,22 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       // against its NTFS-safe mark. `isBroadcastNamed` keeps reading the RAW file
       // (positional-token logic is untouched per the amendment scope).
       if ((counts.get(sanitizeEclBasename(file)) ?? 0) >= required) continue;
+      // Lifecycle-caused permanent pin (falsification finding on this branch):
+      // with SELF resolved but every seat suspended/retired, no action the seat
+      // can take clears a broadcast — the retained file must not render as a
+      // clean unread line with the cause unstated. Zero-resolution polls
+      // (selfAgents empty) keep the pre-#2511 behavior, no notice.
+      if (broadcastNamed && activeSeatCount === 0 && selfAgents.length > 0) {
+        allSuspendedBroadcastHeld = true;
+      }
       unread.push({ slot, file });
     }
+  }
+
+  if (allSuspendedBroadcastHeld) {
+    notices.push(
+      `every resolved self seat is suspended/retired — broadcast dispatches cannot be cleared (the required-set floor holds them unread); recovery: totem seat add <seat-id> --reactivate`,
+    );
   }
 
   // Global newest-first by filename. ISO-timestamp prefixes give a total
@@ -883,28 +916,21 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     // parsed — and truncation independently warns, so the bounded view never
     // renders as a clean one.
     //
-    // Reader path ONLY (`includeProcessed !== true`): the `ecl-gc --compact`
-    // A2.2 completeness gate arms on `warnings.length === 0`, and these two
-    // classes are informational senses, not mark-subtraction anomalies — a
-    // weeks-long suspension or a long-held retired-addressee dispatch must not
-    // block mark compaction indefinitely (that would turn a sense into an
-    // actuator, Tenet 13). The corrupt-marker warning above deliberately stays
-    // on BOTH paths: a marker that fails to parse IS a denominator-integrity
-    // anomaly, and redding the gate during that window is the intended shape.
-    if (
-      opts.includeProcessed !== true &&
-      toLower !== 'broadcast' &&
-      !lifecycleAnnotatedSeats.has(toLower)
-    ) {
+    // These annotations ride `notices`, never `warnings`: they are
+    // informational senses on a HEALTHY scan, and every `warnings.length`
+    // consumer treats non-empty as scan-untrustworthy (channel-discipline
+    // comment above the lifecycle read). Uniform across both poll paths —
+    // nothing gates on notices, so the discovery path needs no special case.
+    if (toLower !== 'broadcast' && !lifecycleAnnotatedSeats.has(toLower)) {
       const seatState = seatLifecycleStates.get(toLower);
       if (seatState === 'suspended') {
         lifecycleAnnotatedSeats.add(toLower);
-        warnings.push(
+        notices.push(
           `directed mail surfacing for suspended seat: to: "${header.to}" — obligation held, not discharged — disposition per mmnto-ai/totem-status#127`,
         );
       } else if (seatState === 'retired') {
         lifecycleAnnotatedSeats.add(toLower);
-        warnings.push(
+        notices.push(
           `addressed to retired seat: to: "${header.to}" — mail still surfaces; the sender should re-route`,
         );
       }
@@ -959,6 +985,7 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     truncated,
     workspace,
     warnings,
+    notices,
   };
 }
 
@@ -986,6 +1013,12 @@ export function formatTextResult(result: MailPollResult): string {
   lines.push(`Self agents: ${selfList} (source: ${result.selfAgents.source})`);
   if (result.warnings.length > 0) {
     for (const w of result.warnings) lines.push(`Warning: ${w}`);
+  }
+  // Notices are informational senses (lifecycle annotations) — rendered for
+  // the human, invisible to every `warnings.length` gate and to the verdict
+  // qualifiers below (a notice never makes a complete scan read INCOMPLETE).
+  if (result.notices.length > 0) {
+    for (const n of result.notices) lines.push(`Note: ${n}`);
   }
   if (result.selfAgents.source === 'none') {
     // Unresolved self ⇒ refuse to render ANY inbox verdict (Tenet 4 fail-loud,

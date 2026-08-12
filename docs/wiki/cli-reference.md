@@ -472,9 +472,11 @@ discharge obligation edges and never delete data (retention is a separate contra
 
 - **Subcommands:**
   - `seat add <seat-id>` wires the birth checklist: the three orchestration subdirs, an `active`
-    marker (`by` recorded from `TOTEM_SELF_AGENT` when set, honestly absent otherwise), a
-    preserving `host_agents` append where `.totem/orchestration/config.json` exists (never created
-    where absent), and the emitted propagation checklist for surfaces the verb cannot reach
+    marker (`by` recorded from a single-seat `TOTEM_SELF_AGENT` when set; honestly absent when the
+    env is unset or lists multiple seats), the `host_agents` handling in
+    `.totem/orchestration/config.json` (appended preserving every existing entry where the key
+    exists; a config without the key is left byte-identical and reported; no config is ever
+    created where absent), and the emitted propagation checklist for surfaces the verb cannot reach
     (vendor poll wiring, external registries, seat-roster tables). `--reactivate` transitions an
     existing `suspended` seat back to `active`; a `retired` seat is never resurrected.
   - `seat suspend <seat-id> [--reason <text>]` marks the seat `suspended`: it leaves broadcast
