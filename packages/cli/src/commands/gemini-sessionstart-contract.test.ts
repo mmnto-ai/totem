@@ -161,6 +161,25 @@ describe('rendered SessionStart.cjs — Gemini envelope contract (mmnto-ai/totem
   );
 });
 
+// ── tracked dogfood copy ⇄ published template parity lock (mmnto-ai/totem#2628) ──
+// The tracked .gemini/hooks/SessionStart.cjs is the copy THIS repo's Gemini
+// seat actually boots through, regenerated manually whenever the template
+// changes. #2621 regenerated it; #2625 did not — so the booting seat predated
+// the A.3.a mint block and could not self-identify (the parity-drift half of
+// the #2629 misattribution). Same mechanism as the distributed-skill locks
+// (init.test.ts, mmnto-ai/totem#1890): byte-equality fails CI, so the next
+// template change demands a regeneration instead of relying on vigilance.
+describe('tracked .gemini/hooks/SessionStart.cjs matches the published template (mmnto-ai/totem#2628)', () => {
+  it('is byte-identical to GEMINI_SESSION_START', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
+    const tracked = fs.readFileSync(
+      path.join(repoRoot, ...GEMINI_SESSION_START_REL.split('/')),
+      'utf-8',
+    );
+    expect(tracked).toBe(GEMINI_SESSION_START);
+  });
+});
+
 describe('rendered SessionStart.cjs — refresh-gh armed path stays out of the decision channel', () => {
   let tmpDir: string;
   let hookPath: string;
