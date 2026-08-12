@@ -1052,6 +1052,91 @@ wtCmd
     }
   });
 
+// ─── Seat noun-verb subcommands (mmnto-ai/totem#2511) ──────────────────────
+// Declared seat lifecycle: `add` registers a seat (dirs + an `active` marker +
+// the `host_agents` append where a config.json already exists) and EMITS the
+// birth checklist for every surface the binary cannot reach honestly;
+// `suspend`/`remove` write the declared state that drops a seat from broadcast
+// denominators without discharging one obligation or deleting one byte.
+// Nothing here auto-edits a vendor hook file or a foreign surface.
+const seatCmd = program
+  .command('seat')
+  .description(
+    'Declared seat lifecycle: register, suspend, retire, and list cohort seats (mmnto-ai/totem#2511)',
+  );
+
+seatCmd
+  .command('add <seat-id>')
+  .description(
+    'Register a seat: outbox/processed/journal dirs + an `active` marker, then emit the birth checklist (never auto-applied)',
+  )
+  .option(
+    '--reactivate',
+    'Transition an existing SUSPENDED seat back to active (never resurrects a retired seat)',
+  )
+  .action(async (seatId: string, opts: { reactivate?: boolean }) => {
+    try {
+      const { seatAddCommand } = await import('./commands/seat.js');
+      await seatAddCommand(seatId, opts);
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+seatCmd
+  .command('suspend <seat-id>')
+  .description(
+    'Declare a seat suspended — it leaves broadcast required-sets and round denominators; its directed mail still surfaces and its obligations are NOT discharged',
+  )
+  .option('--reason <text>', 'Recorded ruling for the suspension (the §6.6 audit trail)')
+  .action(async (seatId: string, opts: { reason?: string }) => {
+    try {
+      const { seatSuspendCommand } = await import('./commands/seat.js');
+      await seatSuspendCommand(seatId, opts);
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+seatCmd
+  .command('remove <seat-id>')
+  .description(
+    'Declare a seat retired — a durable tombstone; nothing is deleted (retention is mmnto-ai/totem#2518) and the deregistration checklist is emitted, not applied',
+  )
+  .option('--reason <text>', 'Recorded ruling for the retirement (the §6.6 audit trail)')
+  .action(async (seatId: string, opts: { reason?: string }) => {
+    try {
+      const { seatRemoveCommand } = await import('./commands/seat.js');
+      await seatRemoveCommand(seatId, opts);
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+seatCmd
+  .command('list')
+  .description(
+    'List every registered seat with its declared lifecycle (derived at read time — the dirs ARE the roster)',
+  )
+  .option('--json', 'Emit the full seat-status array as JSON on stdout')
+  .action(async (_opts: { json?: boolean }, cmd: Command) => {
+    try {
+      const { seatListCommand } = await import('./commands/seat.js');
+      // The program-level `--json` swallows the flag when it appears after the
+      // subcommand (commander parent/child option collision,
+      // mmnto-ai/totem#2097): optsWithGlobals() merges both scopes so
+      // `totem seat list --json` and `totem --json seat list` agree.
+      const { json } = cmd.optsWithGlobals<{ json?: boolean }>();
+      await seatListCommand({ json });
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 // ECL outbox retention prune (mmnto-ai/totem#2279; parent mmnto-ai/totem-strategy#700;
 // doctrine/ecl-discipline.md § 4.4). The binary-guaranteed cohort-wide replacement
 // for `scripts/prune-outbox.mjs` — self-resolves the caller's agent so a seat can

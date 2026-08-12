@@ -908,12 +908,33 @@ export { resolveSubstratePaths } from './substrate-resolver.js';
 // Additive sibling to resolveSubstratePaths; substrate stays live as the
 // frozen-archive read path while orchestration is the active read+write surface.
 export type { OrchestrationPaths, SelfAgentResolution } from './orchestration-resolver.js';
+// `readSeatDirs` is deliberately NOT re-exported here: its export widening
+// (#2511) exists for the module-internal seat-lifecycle consumer, and a public
+// barrel export with zero consumers would be a permanently-supported API
+// nobody asked for — `deriveSeatStatuses` is the public read surface.
 export {
   isPathSafeAgentId,
   knownCohortAgents,
   resolveOrchestrationPaths,
   resolveSelfAgents,
 } from './orchestration-resolver.js';
+
+// Declared seat lifecycle markers (mmnto-ai/totem#2511)
+export type {
+  SeatLifecycleMarker,
+  SeatLifecycleRead,
+  SeatLifecycleState,
+  SeatStatus,
+} from './seat-lifecycle.js';
+export {
+  deriveSeatStatuses,
+  readSeatLifecycle,
+  SEAT_LIFECYCLE_FILENAME,
+  SEAT_LIFECYCLE_SCHEMA_VERSION,
+  SeatLifecycleMarkerSchema,
+  SeatLifecycleStateSchema,
+  writeSeatLifecycle,
+} from './seat-lifecycle.js';
 
 // Parity-manifest parser + config-path resolver (mmnto-ai/totem-strategy#448)
 export type {

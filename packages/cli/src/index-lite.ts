@@ -573,6 +573,7 @@ registerExcluded('docs [paths...]', 'Auto-update registered project docs');
 registerExcluded('review-learn <pr-number>', 'Extract lessons from resolved bot review comments');
 registerExcluded('extract [pr-numbers...]', 'Extract lessons from PR review(s)');
 registerExcluded('link <path>', 'Link a neighboring repo into this project');
+registerExcluded('seat', 'Declared seat lifecycle: register, suspend, retire, and list seats');
 
 // Excluded lesson subcommands (require LLM)
 lessonCmd

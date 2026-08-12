@@ -436,6 +436,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Grandfathered Rules',
   'Freeze state',
   'Estate',
+  'Seat Identity',
 ] as const;
 
 /**

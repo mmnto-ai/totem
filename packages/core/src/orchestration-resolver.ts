@@ -186,8 +186,12 @@ const COHORT_AGENT_MAP: Readonly<Record<string, readonly string[]>> = Object.fre
  * Any readdir failure (missing tree on a fresh clone — orchestration is
  * gitignored — EACCES, raced rename) degrades to an empty contribution so
  * callers fall back to the basename map, preserving pre-dirs behavior.
+ *
+ * Export widened from module-private for mmnto-ai/totem#2511's
+ * `seat-lifecycle.ts` (module-internal consumer; `deriveSeatStatuses` is the
+ * public read surface). Deliberately NOT barrel-exported — see index.ts.
  */
-function readSeatDirs(repoRoot: string): string[] {
+export function readSeatDirs(repoRoot: string): string[] {
   const orchDir = path.join(path.resolve(repoRoot), '.totem', 'orchestration');
   try {
     return fs

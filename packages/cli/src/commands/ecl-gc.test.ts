@@ -15,7 +15,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { type TotemConfig, TotemConfigError, TotemConfigSchema } from '@mmnto/totem';
+import {
+  SEAT_LIFECYCLE_SCHEMA_VERSION,
+  type TotemConfig,
+  TotemConfigError,
+  TotemConfigSchema,
+  writeSeatLifecycle,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
@@ -490,6 +496,71 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(markExists(CS, BCAST_SWEPT, true)).toBe(false);
     // A2.4: nothing previously-handled re-surfaces.
     expect(r.resurfaced).toEqual([]);
+  });
+
+  it('C1b — a VALID suspended lifecycle marker on the compacting seat never reds the A2.4 verify (falsification finding 1 arm a + re-arm MB-1)', () => {
+    ensureRepos(CROSTER);
+    // Held directed mail for the suspended seat (the obligation-held case) plus
+    // one genuinely collectable mark — the exact fixture that pre-fold deleted
+    // the mark and then exited 3 "A2.4 self-check UNTRUSTWORTHY" with an empty
+    // reason list, because the suspended-held annotation rode `warnings` and
+    // the post-delete re-poll gates on `warnings.length === 0`.
+    writeInbound('totem-strategy', 'strategy-claude', DIRECT_LIVE, CS);
+    writeMark(CS, DIRECT_SWEPT);
+    // Re-arm MB-1 widening: a LIVE broadcast this seat already CONSUMED. The
+    // lifecycle-aware verify re-poll re-surfaces it (`required = max(0,1)`
+    // over an empty active-mark map) with the mark untouched on disk — the
+    // `resurfaced` comparand must be THIS RUN's deletions, not the
+    // pre-compaction mark set, or the falsifier reports a mark loss that
+    // never happened (exit 3 for the life of the suspension).
+    writeInbound('totem-strategy', 'strategy-claude', BCAST_LIVE, 'broadcast');
+    writeMark(CS, BCAST_LIVE, true);
+    writeSeatLifecycle(compactRoot(), CS, {
+      schemaVersion: SEAT_LIFECYCLE_SCHEMA_VERSION,
+      state: 'suspended',
+      since: '2026-08-11T00:00:00.000Z',
+    });
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(true);
+    expect(r.collected).toEqual([DIRECT_SWEPT]);
+    // The consumed broadcast's mark was RETAINED (it is live), so nothing this
+    // run deleted can resurface: the falsifier stays quiet and trustworthy.
+    expect(markExists(CS, BCAST_LIVE, true)).toBe(true);
+    expect(r.resurfaced).toEqual([]);
+    // The annotation rides `notices` (non-gating): the A2.4 re-poll sees zero
+    // warnings, the post-delete falsifier stays trustworthy, exit stays clean.
+    expect(r.verifyComplete).toBe(true);
+    expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(0);
+  });
+
+  it('C1c — the narrowed falsifier STILL TRIPS on a real this-run over-collection (re-arm NEW-2 positive control)', () => {
+    ensureRepos(CROSTER);
+    // One collectable mark (its dispatch is absent, so the retention gate
+    // legitimately lets it through) — then induce the race the falsifier
+    // exists to catch: the "swept" dispatch reappears in a peer outbox at the
+    // instant of deletion, i.e. between the delete loop and the A2.4 verify
+    // re-poll. The mark WAS live after all; the verify must say so. This is
+    // the assertion that makes "the falsifier loses nothing" (the MB-1
+    // comparand narrowing) CI-checkable rather than probe-checkable: mutate
+    // `resurfaced` to a constant [] and this test is the one that fails.
+    writeMark(CS, DIRECT_SWEPT);
+    const realUnlink = fs.unlinkSync.bind(fs);
+    const spy = vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+      realUnlink(target);
+      if (String(target).endsWith(DIRECT_SWEPT)) {
+        writeInbound('totem-strategy', 'strategy-claude', DIRECT_SWEPT, CS);
+      }
+    });
+    try {
+      const r = runCompact({ apply: true });
+      expect(r.collected).toEqual([DIRECT_SWEPT]);
+      expect(r.resurfaced).toEqual([DIRECT_SWEPT]);
+      expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(3);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('C2 — A2.1 inversion RED test: a live mark is RETAINED (naive pollMail().mail would delete it)', () => {
