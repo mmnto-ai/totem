@@ -69,6 +69,11 @@ describe('isBotComment', () => {
 
   it('matches ghcq by login shape, not a bare substring (mmnto-ai/totem#2626)', () => {
     expect(isBotComment('github-code-quality[bot]')).toBe(true);
+    // Variant arm mirrors the greptile precedent ("future bot variants are
+    // still surfaced") — a renamed/tiered variant never re-enters the
+    // pre-#2626 invisible-drop state.
+    expect(isBotComment('github-code-quality-enterprise[bot]')).toBe(true);
+    expect(detectBot('github-code-quality-enterprise[bot]')).toBe('ghcq');
     // A human whose login merely contains the phrase is NOT a bot — the
     // `[bot]` suffix is required, per the greptile shape precedent.
     expect(isBotComment('alice-github-code-quality')).toBe(false);
@@ -175,9 +180,10 @@ describe('parseSeverityForTool', () => {
   });
 
   it('returns info for ghcq — the observed corpus carries no severity vocabulary (mmnto-ai/totem#2626)', () => {
-    // Real lc#980 corpus shape: `## <headline>` + description + fix guidance,
-    // no priority tokens. Even severity-looking words in prose stay `info` —
-    // there is no ghcq vocabulary to parse until a corpus shows one.
+    // Real corpus shape (n=7 across totem #1897/#2224/#2434/#2457 + lc#980):
+    // `## <headline>` + description, sometimes followed by fix guidance — no
+    // priority tokens anywhere. Even severity-looking words in prose stay
+    // `info` — there is no ghcq vocabulary to parse until a corpus shows one.
     expect(
       parseSeverityForTool('ghcq', '## Unused import\n\nImport of `Matrix` is not used.'),
     ).toBe('info');

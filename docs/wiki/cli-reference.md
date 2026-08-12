@@ -323,7 +323,7 @@ Fetches open GitHub issues and generates a prioritized roadmap. Ideal for planni
 
 ### `totem triage-pr <pr-number>`
 
-Categorized bot review triage. Fetches CodeRabbit, GCA, Greptile, and `github-code-quality[bot]` comments, heuristically maps their severities, and groups them by impact to prevent alert fatigue. (`github-code-quality[bot]` has no @-listener: disposition comments are audit-trail-only for it, and its findings carry no native severity vocabulary — they surface as `info` and are bucketed by body keywords.)
+Categorized bot review triage. Fetches CodeRabbit, GCA, Greptile, and `github-code-quality[bot]` comments, heuristically maps their severities, and groups them by impact to prevent alert fatigue. (`github-code-quality[bot]` has no known @-listener, so disposition comments are audit-trail-only for it; its findings carry no native severity vocabulary — they surface as `info` and are bucketed by word-bounded body keywords.)
 
 ### `totem retrospect <pr-number>`
 

@@ -68,16 +68,31 @@ export const NIT_KEYWORDS = [
   'trailing',
 ];
 
+/**
+ * Word-bounded keyword test. A bare substring match mis-buckets on innocent
+ * containments — `nit` fires inside "defi**nit**ions" (ghcq's stock closing
+ * boilerplate) and "u**nit** test", routing real findings to the NITS bucket
+ * the command exists to keep clean (mmnto-ai/totem#2626 falsification round,
+ * reproduced on 5 of the 7 in-org ghcq comments). `\b` at both ends keeps
+ * multi-word keywords ('totem error') and hyphen-adjacent hits working, since
+ * hyphens and spaces are non-word characters.
+ */
+function matchesKeyword(text: string, keywords: readonly string[]): boolean {
+  return keywords.some((kw) =>
+    new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text),
+  );
+}
+
 export function mapToTriageCategory(finding: NormalizedBotFinding): TriageCategory {
   // Only search the body for keywords — NOT severity, which would cause
   // 'minor' severity to match NIT_KEYWORDS and misbucket
   const text = finding.body.toLowerCase();
 
   // Check in priority order — security first
-  if (SECURITY_KEYWORDS.some((kw) => text.includes(kw))) return 'security';
-  if (ARCHITECTURE_KEYWORDS.some((kw) => text.includes(kw))) return 'architecture';
-  if (CONVENTION_KEYWORDS.some((kw) => text.includes(kw))) return 'convention';
-  if (NIT_KEYWORDS.some((kw) => text.includes(kw))) return 'nit';
+  if (matchesKeyword(text, SECURITY_KEYWORDS)) return 'security';
+  if (matchesKeyword(text, ARCHITECTURE_KEYWORDS)) return 'architecture';
+  if (matchesKeyword(text, CONVENTION_KEYWORDS)) return 'convention';
+  if (matchesKeyword(text, NIT_KEYWORDS)) return 'nit';
 
   // Fall back to bot-assigned severity
   if (finding.severity === 'critical' || finding.severity === 'high') return 'security';

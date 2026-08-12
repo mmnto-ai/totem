@@ -346,16 +346,20 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     const normalized = normalizeFindingBody(a.finding.body);
     if (normalized.length === 0) continue;
     const signature = computeSignature(normalized);
-    // greptile is a first-class tool in the persisted RetrospectFindingToolSchema, so
-    // preserve its attribution (CR Major on mmnto-ai/totem#2244) rather than collapsing it.
-    const tool: 'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'unknown' =
+    // greptile and ghcq are first-class tools in the persisted
+    // RetrospectFindingToolSchema, so preserve their attribution (CR Major on
+    // mmnto-ai/totem#2244; ghcq per mmnto-ai/totem#2626 — a live 3× in-org
+    // recurrence cluster would otherwise persist as 'unknown').
+    const tool: 'coderabbit' | 'gca' | 'greptile' | 'ghcq' | 'sarif' | 'override' | 'unknown' =
       a.finding.tool === 'coderabbit'
         ? 'coderabbit'
         : a.finding.tool === 'gca'
           ? 'gca'
           : a.finding.tool === 'greptile'
             ? 'greptile'
-            : 'unknown';
+            : a.finding.tool === 'ghcq'
+              ? 'ghcq'
+              : 'unknown';
     const severityBucket = toSeverityBucket(tool, a.finding.severity);
 
     // Cross-PR recurrence — count of OTHER PRs (target excluded by construction).
