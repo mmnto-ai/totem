@@ -23,8 +23,13 @@ import { parseCodeRabbitReviewFindings, parseGreptileReviewFindings } from '../p
  * a compact display id; it matches coderabbit/gca by substring and greptile by
  * its bot-login shape (see `GREPTILE_BOT_LOGIN`). The two schemes serve
  * different purposes and are deliberately not coupled.
+ *
+ * `ghcq` is GitHub's own `github-code-quality[bot]` (first sighting
+ * mmnto-ai/liquid-city#980; mmnto-ai/totem#2626) — an inline-comment-only
+ * surface whose review submissions are empty carriers and which has NO
+ * @-listener: disposition comments are audit-trail-only for it.
  */
-export type BotTool = 'coderabbit' | 'gca' | 'greptile' | 'unknown';
+export type BotTool = 'coderabbit' | 'gca' | 'greptile' | 'ghcq' | 'unknown';
 
 export interface NormalizedBotFinding {
   tool: BotTool;
@@ -69,12 +74,19 @@ export interface CommentThread {
 // exact-login map lives in `@mmnto/totem`'s `review-catch.ts`).
 const GREPTILE_BOT_LOGIN = /\bgreptile(?:-[^[]+)?\[bot\]/i;
 
+// ghcq follows the greptile bot-login-shape precedent (mmnto-ai/totem#2626):
+// the observed login is exactly `github-code-quality[bot]` (mmnto-ai/liquid-city#980),
+// and requiring the `[bot]` suffix keeps a human account like
+// `alice-github-code-quality` out of the bot classes.
+const GHCQ_BOT_LOGIN = /\bgithub-code-quality\[bot\]/i;
+
 export function isBotComment(author: string): boolean {
   const lower = author.toLowerCase();
   return (
     lower.includes('coderabbit') ||
     lower.includes('gemini-code-assist') ||
-    GREPTILE_BOT_LOGIN.test(author)
+    GREPTILE_BOT_LOGIN.test(author) ||
+    GHCQ_BOT_LOGIN.test(author)
   );
 }
 
@@ -83,6 +95,7 @@ export function detectBot(author: string): BotTool {
   if (lower.includes('coderabbit')) return 'coderabbit';
   if (lower.includes('gemini-code-assist')) return 'gca';
   if (GREPTILE_BOT_LOGIN.test(author)) return 'greptile';
+  if (GHCQ_BOT_LOGIN.test(author)) return 'ghcq';
   return 'unknown';
 }
 
@@ -173,6 +186,13 @@ export function parseSeverityForTool(tool: BotTool, body: string): string {
       return parseGCASeverity(body);
     case 'greptile':
       return parseGreptileSeverity(body);
+    case 'ghcq':
+      // Deliberate, not a fall-through: the observed ghcq corpus (n=2 inline
+      // comments, mmnto-ai/liquid-city#980) carries NO severity vocabulary —
+      // headline + description + fix guidance only. Per mmnto-ai/totem#2626's
+      // derive-don't-guess rule, everything is `info` (the body-keyword
+      // categorizer does the bucketing) until a corpus with vocabulary exists.
+      return 'info';
     default:
       return 'info';
   }

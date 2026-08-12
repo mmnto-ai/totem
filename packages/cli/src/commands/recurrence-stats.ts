@@ -246,7 +246,12 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
 
   for (const a of annotated) {
     const isOverride = a.prNumber === undefined;
-    const tool = isOverride ? ('override' as const) : a.finding.tool;
+    // ghcq collapses to 'unknown' at this boundary: the persisted severity-bucket
+    // vocabulary has no ghcq entry, and ghcq carries no severity vocabulary to
+    // bucket anyway (mmnto-ai/totem#2626 — first-classing rides a follow-up when
+    // in-org ghcq rows exist to persist; the same collapse retrospect applies).
+    const rawTool = isOverride ? ('override' as const) : a.finding.tool;
+    const tool = rawTool === 'ghcq' ? ('unknown' as const) : rawTool;
 
     const normalized = normalizeFindingBody(a.finding.body);
     if (normalized.length === 0) continue;

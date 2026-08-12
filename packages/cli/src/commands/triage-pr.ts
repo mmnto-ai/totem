@@ -130,6 +130,8 @@ function toolAbbrev(tool: BotTool): string {
       return 'GCA';
     case 'greptile':
       return 'GT';
+    case 'ghcq':
+      return 'GHCQ';
     default:
       return '??';
   }
