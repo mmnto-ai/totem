@@ -60,7 +60,7 @@ describe('mapToTriageCategory', () => {
     expect(mapToTriageCategory(finding)).toBe('nit');
   });
 
-  it('does not match keywords inside larger words (mmnto-ai/totem#2626 falsification round)', () => {
+  it('the NITS bucket ignores keywords inside word context (mmnto-ai/totem#2626 falsification rounds)', () => {
     // ghcq's stock closing boilerplate contains "defi-nit-ions"; a bare
     // substring match routed 5 of the 7 in-org ghcq findings to NITS. With no
     // other keyword hit, both bodies fall to the architecture default —
@@ -73,31 +73,54 @@ describe('mapToTriageCategory', () => {
     // "u-nit test" is the same containment class for every bot.
     const unitTest = makeFinding({ body: 'Missing unit test for the new branch' });
     expect(mapToTriageCategory(unitTest)).toBe('architecture');
-    // Boundary-anchored keywords still match when legitimately present.
-    const realNit = makeFinding({ body: 'nit: prefer const here' });
-    expect(mapToTriageCategory(realNit)).toBe('nit');
+    // snake_case identifiers are word context too — `_` is in the blocked
+    // class (round-3 catch: "is_minor_bump" bucketed to nit).
+    expect(mapToTriageCategory(makeFinding({ body: 'the is_minor_bump flag is never read' }))).toBe(
+      'architecture',
+    );
+    // Non-ASCII letters are word context. Both normalization forms are pinned
+    // (round-3 catch: an NFC-only fixture hid the decomposed-form leak — the
+    // combining mark U+0308 is neither letter nor number, so \p{M} must be in
+    // the blocked class; GitHub does not normalize comment bodies). Bodies are
+    // built via fromCharCode so this source file stays deterministic ASCII.
+    const nfcBody = String.fromCharCode(0x00fc) + 'nit coverage discussion';
+    expect(mapToTriageCategory(makeFinding({ body: nfcBody }))).toBe('architecture');
+    const nfdBody = 'u' + String.fromCharCode(0x0308) + 'nit coverage discussion';
+    expect(mapToTriageCategory(makeFinding({ body: nfdBody }))).toBe('architecture');
+    // Boundary-anchored NIT keywords still match when legitimately present,
+    // including CodeRabbit's real severity markup, which keeps a space or
+    // emoji before the token (parse-nits.ts `\s*`).
+    expect(mapToTriageCategory(makeFinding({ body: 'nit: prefer const here' }))).toBe('nit');
+    expect(mapToTriageCategory(makeFinding({ body: 'de quality_ | _🟡 minor_ | _⚡ quick' }))).toBe(
+      'nit',
+    );
+    // Inflections keep matching under the open trail.
+    expect(mapToTriageCategory(makeFinding({ body: 'two typos in this paragraph' }))).toBe('nit');
   });
 
-  it('keeps stem-prefix keywords and inflections matching (round-2 regression guard)', () => {
+  it('security/architecture/convention keep substring semantics — stems, inflections, negations (rounds 2–3 regression guards)', () => {
     // The security list deliberately carries stems ('sanitiz', 'authenticat');
-    // a trailing \b killed them for every real inflection — the round-2 catch.
+    // round 2 proved a trailing \b killed every inflection, and round 3 proved
+    // a leading boundary killed the negation class — substring keeps both.
     expect(mapToTriageCategory(makeFinding({ body: 'Please sanitize the user input' }))).toBe(
+      'security',
+    );
+    expect(mapToTriageCategory(makeFinding({ body: 'unsanitized input reaches the sink' }))).toBe(
+      'security',
+    );
+    expect(mapToTriageCategory(makeFinding({ body: 'unauthorized access is possible' }))).toBe(
       'security',
     );
     expect(mapToTriageCategory(makeFinding({ body: 'authentication bypass possible' }))).toBe(
       'security',
     );
-    // Plural/inflected multi-word keywords keep matching under the open trail.
-    expect(mapToTriageCategory(makeFinding({ body: 'race conditions in the write path' }))).toBe(
-      'architecture',
-    );
-    // CodeRabbit's italic markup: `_` is a \w char, so a \b-based boundary
-    // would refuse `_🟡 minor_`; the letter/number lookbehind must not.
-    expect(mapToTriageCategory(makeFinding({ body: 'de quality_ | _🟡 minor_ | _⚡ quick' }))).toBe(
-      'nit',
-    );
-    // Non-ASCII letters count as blocking word-context (the ASCII-only leak).
-    expect(mapToTriageCategory(makeFinding({ body: 'ünit coverage discussion' }))).not.toBe('nit');
+    // Non-vacuous inflection guard (round-3 catch: without the decoy this
+    // assertion passed even with keyword matching switched off): if
+    // 'race condition' stops matching inside 'race conditions', the body
+    // falls to NIT via 'consider' instead of architecture.
+    expect(
+      mapToTriageCategory(makeFinding({ body: 'Consider the race conditions in the write path' })),
+    ).toBe('architecture');
   });
 
   it('falls back to architecture for unknown findings', () => {
