@@ -348,8 +348,8 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     const signature = computeSignature(normalized);
     // greptile and ghcq are first-class tools in the persisted
     // RetrospectFindingToolSchema, so preserve their attribution (CR Major on
-    // mmnto-ai/totem#2244; ghcq per mmnto-ai/totem#2626 — a live 3× in-org
-    // recurrence cluster would otherwise persist as 'unknown').
+    // mmnto-ai/totem#2244; ghcq per mmnto-ai/totem#2626 — in-org ghcq findings
+    // exist and would otherwise persist as 'unknown').
     const tool: 'coderabbit' | 'gca' | 'greptile' | 'ghcq' | 'sarif' | 'override' | 'unknown' =
       a.finding.tool === 'coderabbit'
         ? 'coderabbit'

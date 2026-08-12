@@ -69,17 +69,26 @@ export const NIT_KEYWORDS = [
 ];
 
 /**
- * Word-bounded keyword test. A bare substring match mis-buckets on innocent
- * containments — `nit` fires inside "defi**nit**ions" (ghcq's stock closing
- * boilerplate) and "u**nit** test", routing real findings to the NITS bucket
- * the command exists to keep clean (mmnto-ai/totem#2626 falsification round,
- * reproduced on 5 of the 7 in-org ghcq comments). `\b` at both ends keeps
- * multi-word keywords ('totem error') and hyphen-adjacent hits working, since
- * hyphens and spaces are non-word characters.
+ * Keyword test with an ASYMMETRIC boundary: the keyword must start at a
+ * letter/number boundary but may extend rightward. Both halves are
+ * falsification-round findings (mmnto-ai/totem#2626):
+ *
+ * - Round 1: bare substring matching mis-bucketed mid-word containments —
+ *   `nit` fired inside "defi**nit**ions" (ghcq's stock closing boilerplate,
+ *   5 of the 7 real in-org ghcq findings) and "u**nit** test" (every bot),
+ *   routing real findings to the NITS bucket. Hence the leading boundary.
+ * - Round 2: a TRAILING `\b` broke the lists' deliberate stem prefixes
+ *   ('sanitiz', 'escap', 'authori', 'authenticat') and every inflected form
+ *   ('leaks', 'race conditions', 'empty catches'). Hence the open trail.
+ *
+ * The lookbehind uses Unicode letter/number classes rather than `\b` because
+ * `_` is a `\w` character — CodeRabbit's `_🟡 Minor_` italic markup must
+ * still match — and so non-ASCII letters ("ünit") also count as blocking
+ * word-context, closing the ASCII-only containment leak.
  */
 function matchesKeyword(text: string, keywords: readonly string[]): boolean {
   return keywords.some((kw) =>
-    new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text),
+    new RegExp(`(?<![\\p{L}\\p{N}])${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'iu').test(text),
   );
 }
 

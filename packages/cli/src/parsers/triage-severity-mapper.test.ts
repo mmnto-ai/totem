@@ -62,18 +62,42 @@ describe('mapToTriageCategory', () => {
 
   it('does not match keywords inside larger words (mmnto-ai/totem#2626 falsification round)', () => {
     // ghcq's stock closing boilerplate contains "defi-nit-ions"; a bare
-    // substring match routed 5 of the 7 in-org ghcq findings to NITS.
+    // substring match routed 5 of the 7 in-org ghcq findings to NITS. With no
+    // other keyword hit, both bodies fall to the architecture default —
+    // pinned exactly, not merely not-nit.
     const ghcqBoilerplate = makeFinding({
       tool: 'ghcq',
       body: '## Unused variable\n\nNo imports, new methods, or new definitions are needed.',
     });
-    expect(mapToTriageCategory(ghcqBoilerplate)).not.toBe('nit');
+    expect(mapToTriageCategory(ghcqBoilerplate)).toBe('architecture');
     // "u-nit test" is the same containment class for every bot.
     const unitTest = makeFinding({ body: 'Missing unit test for the new branch' });
-    expect(mapToTriageCategory(unitTest)).not.toBe('nit');
-    // Word-bounded keywords still match when legitimately present.
+    expect(mapToTriageCategory(unitTest)).toBe('architecture');
+    // Boundary-anchored keywords still match when legitimately present.
     const realNit = makeFinding({ body: 'nit: prefer const here' });
     expect(mapToTriageCategory(realNit)).toBe('nit');
+  });
+
+  it('keeps stem-prefix keywords and inflections matching (round-2 regression guard)', () => {
+    // The security list deliberately carries stems ('sanitiz', 'authenticat');
+    // a trailing \b killed them for every real inflection — the round-2 catch.
+    expect(mapToTriageCategory(makeFinding({ body: 'Please sanitize the user input' }))).toBe(
+      'security',
+    );
+    expect(mapToTriageCategory(makeFinding({ body: 'authentication bypass possible' }))).toBe(
+      'security',
+    );
+    // Plural/inflected multi-word keywords keep matching under the open trail.
+    expect(mapToTriageCategory(makeFinding({ body: 'race conditions in the write path' }))).toBe(
+      'architecture',
+    );
+    // CodeRabbit's italic markup: `_` is a \w char, so a \b-based boundary
+    // would refuse `_🟡 minor_`; the letter/number lookbehind must not.
+    expect(mapToTriageCategory(makeFinding({ body: 'de quality_ | _🟡 minor_ | _⚡ quick' }))).toBe(
+      'nit',
+    );
+    // Non-ASCII letters count as blocking word-context (the ASCII-only leak).
+    expect(mapToTriageCategory(makeFinding({ body: 'ünit coverage discussion' }))).not.toBe('nit');
   });
 
   it('falls back to architecture for unknown findings', () => {
