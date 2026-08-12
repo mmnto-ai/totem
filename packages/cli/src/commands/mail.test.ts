@@ -14,7 +14,14 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { findTotemRepoRootSync, TotemError } from '@mmnto/totem';
+import {
+  findTotemRepoRootSync,
+  SEAT_LIFECYCLE_FILENAME,
+  SEAT_LIFECYCLE_SCHEMA_VERSION,
+  type SeatLifecycleState,
+  TotemError,
+  writeSeatLifecycle,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
@@ -103,6 +110,21 @@ function writeBroadcastProcessed(repo: string, recipientAgent: string, names: st
   );
   mkDir(dir);
   for (const n of names) fs.writeFileSync(path.join(dir, n), '---\nto: broadcast\n---\n', 'utf-8');
+}
+
+/**
+ * Declare a seat's lifecycle at `<repo>/.totem/orchestration/<seat>/lifecycle.json`
+ * (mmnto-ai/totem#2511) through CORE'S REAL WRITER — the same producer the
+ * `totem seat` verbs use — so the fixture can never be weaker than the on-disk
+ * contract the poll reads back (a hand-rolled JSON fixture could drift from the
+ * strict schema and quietly test nothing). Returns the marker path.
+ */
+function writeLifecycleMarker(repo: string, seat: string, state: SeatLifecycleState): string {
+  return writeSeatLifecycle(path.join(workspace, repo), seat, {
+    schemaVersion: SEAT_LIFECYCLE_SCHEMA_VERSION,
+    state,
+    since: '2026-08-11T00:00:00.000Z',
+  });
 }
 
 /**
@@ -519,6 +541,264 @@ describe('pollMail — broadcast marks are per-seat, not union (mmnto-ai/totem#2
     // Only once EVERY resolved seat holds the mark does it subtract.
     writeProcessed('totem', 'totem-claude', [sanitized]);
     expect(poll({ env: TWO_SEATS }).mail).toEqual([]);
+  });
+});
+
+// ─── Lifecycle-aware broadcast denominators ────────────
+// mmnto-ai/totem#2511: a suspended-but-dir-present seat pinned every broadcast
+// open forever (the denominator failure). The declared lifecycle marker takes
+// such a seat OUT OF THE DENOMINATOR only — resolution stays lifecycle-blind,
+// so directed mail keeps surfacing (a transition does not discharge an
+// obligation edge, OQ4) and directed marks keep subtracting (an already-handled
+// dispatch resurfacing as unread is the ADR-106 § A2.1 false-unread bomb).
+
+describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#2511)', () => {
+  const BROADCAST_FILE = '2026-08-11T0930Z-broadcast-lifecycle-note.md';
+  const TWO_SEATS = { TOTEM_SELF_AGENT: 'totem-claude,totem-gemini' };
+
+  function writeBroadcast(): void {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: BROADCAST_FILE, to: 'broadcast', subject: 'cohort note' },
+    ]);
+  }
+
+  it("a suspended seat leaves the denominator — the ACTIVE seats' marks alone close the broadcast", () => {
+    writeBroadcast();
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    // Only the ACTIVE seat holds a mark. Pre-#2511 the requirement was 2 and
+    // this broadcast stayed unread forever — the pinned-open denominator.
+    writeBroadcastProcessed('totem', 'totem-claude', [BROADCAST_FILE]);
+    expect(poll({ env: TWO_SEATS }).mail).toEqual([]);
+  });
+
+  it("a suspended seat's mark alone cannot close a broadcast the active seat has not marked", () => {
+    writeBroadcast();
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    // The SUSPENDED seat's mark, and only it. The requirement is 1 (one active
+    // seat), so a shared count map would read 1 >= 1 and vacuously consume the
+    // broadcast for the active seat that never saw it — which is why the
+    // broadcast count is folded from the ACTIVE seats' marks only.
+    writeBroadcastProcessed('totem', 'totem-gemini', [BROADCAST_FILE]);
+    expect(poll({ env: TWO_SEATS }).mail.map((m) => m.file)).toEqual([BROADCAST_FILE]);
+  });
+
+  it('a suspended seat stays RESOLVED: its directed mail surfaces, annotated once per poll', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-11T0931Z-totem-gemini-held-one.md', to: 'totem-gemini' },
+      { name: '2026-08-11T0932Z-totem-gemini-held-two.md', to: 'totem-gemini' },
+    ]);
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    const result = poll({ env: TWO_SEATS });
+    // Resolution is lifecycle-blind — the seat is still SELF.
+    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini']);
+    // Sense, never hide: both held dispatches surface (OQ4 — a suspension does
+    // not discharge the obligation edge).
+    expect(result.mail).toHaveLength(2);
+    // Bounded annotation: ONE warning for the seat, not one per file.
+    const held = result.warnings.filter((w) => w.includes('suspended seat'));
+    expect(held).toHaveLength(1);
+    expect(held[0]).toContain('totem-gemini');
+    expect(held[0]).toContain('obligation held, not discharged');
+    expect(held[0]).toContain('mmnto-ai/totem-status#127');
+  });
+
+  it("a suspended seat's already-consumed directed mail stays consumed (no false-unread)", () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-11T0933Z-totem-gemini-done.md', to: 'totem-gemini', subject: 'handled' },
+      { name: '2026-08-11T0934Z-totem-gemini-live.md', to: 'totem-gemini', subject: 'still open' },
+    ]);
+    writeProcessed('totem', 'totem-gemini', ['2026-08-11T0933Z-totem-gemini-done.md']);
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    // NON-VACUITY: the unconsumed sibling still surfaces, so "the handled one is
+    // gone" is a subtraction, not an empty scan.
+    expect(poll({ env: TWO_SEATS }).mail.map((m) => m.file)).toEqual([
+      '2026-08-11T0934Z-totem-gemini-live.md',
+    ]);
+  });
+
+  it('mail addressed to a RETIRED seat surfaces, with the retired-addressee warning (sense, never hide)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-11T0935Z-totem-gemini-late.md', to: 'totem-gemini' },
+      { name: '2026-08-11T0936Z-totem-gemini-later.md', to: 'totem-gemini' },
+    ]);
+    writeLifecycleMarker('totem', 'totem-gemini', 'retired');
+    const result = poll({ env: TWO_SEATS });
+    expect(result.mail).toHaveLength(2);
+    const retired = result.warnings.filter((w) => w.includes('addressed to retired seat'));
+    expect(retired).toHaveLength(1);
+    expect(retired[0]).toContain('totem-gemini');
+  });
+
+  it('annotations are reader-path only: the compaction discovery poll stays annotation-free while the corrupt-marker warning still fires', () => {
+    // The `ecl-gc --compact` A2.2 completeness gate arms on `warnings.length
+    // === 0`. The two lifecycle ANNOTATION classes are informational senses —
+    // a weeks-long suspension must not block mark compaction (sense, never
+    // actuator, Tenet 13) — but a corrupt marker IS a denominator-integrity
+    // anomaly and must red the gate on BOTH paths.
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-11T0937Z-totem-gemini-held.md', to: 'totem-gemini' },
+      { name: '2026-08-11T0938Z-totem-claude-note.md', to: 'totem-claude' },
+    ]);
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    const readerView = poll({ env: TWO_SEATS });
+    const discoveryView = poll({ env: TWO_SEATS, includeProcessed: true });
+    // Positive control: the reader path DOES annotate this exact fixture, so
+    // the discovery path's silence below is suppression, not a dead sense.
+    expect(readerView.warnings.filter((w) => w.includes('suspended seat'))).toHaveLength(1);
+    expect(discoveryView.warnings.filter((w) => w.includes('suspended seat'))).toHaveLength(0);
+    expect(discoveryView.warnings.filter((w) => w.includes('retired seat'))).toHaveLength(0);
+    // Both dispatches still surface on the discovery path — suppression covers
+    // the annotation, never the mail.
+    expect(discoveryView.mail).toHaveLength(2);
+
+    // Corrupt the marker: the integrity warning fires on the discovery path
+    // too (naming the marker path), redding the compaction gate by design.
+    const markerPath = path.join(
+      workspace,
+      'totem',
+      '.totem',
+      'orchestration',
+      'totem-gemini',
+      SEAT_LIFECYCLE_FILENAME,
+    );
+    fs.writeFileSync(markerPath, '{not json', 'utf-8');
+    const corruptDiscovery = poll({ env: TWO_SEATS, includeProcessed: true });
+    const corruptWarnings = corruptDiscovery.warnings.filter((w) => w.includes(markerPath));
+    expect(corruptWarnings).toHaveLength(1);
+  });
+
+  it('all self seats suspended ⇒ broadcasts NEVER subtract, even with every mark present', () => {
+    writeBroadcast();
+    writeLifecycleMarker('totem', 'totem-claude', 'suspended');
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    writeBroadcastProcessed('totem', 'totem-claude', [BROADCAST_FILE]);
+    writeBroadcastProcessed('totem', 'totem-gemini', [BROADCAST_FILE]);
+    // activeCount 0 ⇒ required stays 1 (`max(…, 1)`) and the active-mark map is
+    // EMPTY, so the count is 0: an empty required set is never "closed" (the
+    // inherited orchestration.go boundary). Never vacuously consumed.
+    expect(poll({ env: TWO_SEATS }).mail.map((m) => m.file)).toEqual([BROADCAST_FILE]);
+  });
+
+  it('a marker declaring `active` behaves exactly like no marker (absent ⇒ active)', () => {
+    writeBroadcast();
+    writeLifecycleMarker('totem', 'totem-gemini', 'active');
+    writeBroadcastProcessed('totem', 'totem-claude', [BROADCAST_FILE]);
+    const result = poll({ env: TWO_SEATS });
+    // Both seats are in the denominator, so one mark does not close it.
+    expect(result.mail.map((m) => m.file)).toEqual([BROADCAST_FILE]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('markerless tree: the FULL poll result is identical to the pre-#2511 snapshot', () => {
+    // The snapshot below was captured by running this exact fixture through
+    // HEAD's pre-#2511 `pollMail` and the post-change one side by side and
+    // deep-equalling the two results (directed + broadcast + marks + a
+    // half-marked broadcast + a roster-invalid address + a cross-sender
+    // collision, over a two-seat poll). Pinning the WHOLE object — not a
+    // spot-check — is what makes "markerless trees behave bit-identically"
+    // (#2511 data-model invariant) a test rather than a claim.
+    const DATE = '2026-08-01T1700Z';
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-08-01T1700Z-totem-claude-directed.md',
+        to: 'totem-claude',
+        subject: 'one',
+        date: DATE,
+      },
+      {
+        name: '2026-08-01T1701Z-totem-claude-consumed.md',
+        to: 'totem-claude',
+        subject: 'done',
+        date: DATE,
+      },
+      {
+        name: '2026-08-01T1702Z-broadcast-cohort.md',
+        to: 'broadcast',
+        subject: 'bcast',
+        date: DATE,
+      },
+      { name: '2026-08-01T1703Z-broadcast-half.md', to: 'broadcast', subject: 'half', date: DATE },
+      {
+        name: '2026-08-01T1704Z-cohort-bad-address.md',
+        to: 'cohort',
+        subject: 'nobody',
+        date: DATE,
+      },
+      { name: '2026-08-01T1705Z-collide.md', to: 'totem-gemini', subject: 'collide-a', date: DATE },
+    ]);
+    writeOutbox('liquid-city', 'lc-claude', [
+      { name: '2026-08-01T1705Z-collide.md', to: 'totem-gemini', subject: 'collide-b', date: DATE },
+      {
+        name: '2026-08-01T1706Z-totem-gemini-directed.md',
+        to: 'totem-gemini',
+        subject: 'two',
+        date: DATE,
+      },
+    ]);
+    writeProcessed('totem', 'totem-claude', [
+      '2026-08-01T1701Z-totem-claude-consumed.md',
+      '2026-08-01T1703Z-broadcast-half.md',
+    ]);
+    writeProcessed('totem', 'totem-gemini', ['2026-08-01T1702Z-broadcast-cohort.md']);
+    writeBroadcastProcessed('totem', 'totem-claude', ['2026-08-01T1702Z-broadcast-cohort.md']);
+
+    const entry = (repo: string, sender: string, file: string, to: string, subject: string) => ({
+      file,
+      repo,
+      from: sender,
+      to,
+      date: DATE,
+      subject,
+      filePath: path.join(workspace, repo, '.totem', 'orchestration', sender, 'outbox', file),
+    });
+
+    expect(poll({ env: TWO_SEATS })).toEqual({
+      selfAgents: { agents: ['totem-claude', 'totem-gemini'], source: 'env' },
+      mail: [
+        entry(
+          'liquid-city',
+          'lc-claude',
+          '2026-08-01T1706Z-totem-gemini-directed.md',
+          'totem-gemini',
+          'two',
+        ),
+        entry(
+          'totem-strategy',
+          'strategy-claude',
+          '2026-08-01T1703Z-broadcast-half.md',
+          'broadcast',
+          'half',
+        ),
+        entry(
+          'totem-strategy',
+          'strategy-claude',
+          '2026-08-01T1700Z-totem-claude-directed.md',
+          'totem-claude',
+          'one',
+        ),
+        entry(
+          'liquid-city',
+          'lc-claude',
+          '2026-08-01T1705Z-collide.md',
+          'totem-gemini',
+          'collide-b',
+        ),
+        entry(
+          'totem-strategy',
+          'strategy-claude',
+          '2026-08-01T1705Z-collide.md',
+          'totem-gemini',
+          'collide-a',
+        ),
+      ],
+      scanned: 6,
+      truncated: false,
+      workspace,
+      warnings: [
+        'unresolvable outbox address: totem-strategy/strategy-claude/2026-08-01T1704Z-cohort-bad-address.md — to: "cohort" matches no roster agent; invisible to every seat-scoped poll',
+        'cross-sender basename collision: 2026-08-01T1705Z-collide.md from liquid-city/lc-claude and totem-strategy/strategy-claude — a single processed/ mark would shadow both',
+      ],
+    });
   });
 });
 

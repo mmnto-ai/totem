@@ -59,6 +59,13 @@ vi.mock('node:fs', async () => {
 
 import * as fs from 'node:fs';
 
+import {
+  SEAT_LIFECYCLE_FILENAME,
+  SEAT_LIFECYCLE_SCHEMA_VERSION,
+  type SeatLifecycleState,
+  writeSeatLifecycle,
+} from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import { formatTextResult, pollMail, resolveMailExitCode } from './mail.js';
 
@@ -113,6 +120,46 @@ function selfRepoRootWithSeats(seats: string[]): string {
   const orchDir = mkDir(path.join(root, '.totem', 'orchestration'));
   for (const seat of seats) mkDir(path.join(orchDir, seat));
   return root;
+}
+
+/** `<root>/.totem/orchestration/<seat>/processed/_broadcast/<name>` — a consumed-broadcast mark. */
+function writeBroadcastMark(root: string, seat: string, names: string[]): void {
+  const dir = mkDir(path.join(root, '.totem', 'orchestration', seat, 'processed', '_broadcast'));
+  for (const n of names) fs.writeFileSync(path.join(dir, n), '---\nto: broadcast\n---\n', 'utf-8');
+}
+
+/**
+ * THE INDUCED FAULT: unparseable bytes where a lifecycle marker belongs
+ * (mmnto-ai/totem#2511 failure table, corrupt-marker row). Real bytes on real
+ * disk — no mocks, so core's real read path produces the real degradation.
+ * Returns the marker path the warning must name.
+ */
+function writeCorruptLifecycleMarker(root: string, seat: string): string {
+  const markerPath = path.join(root, '.totem', 'orchestration', seat, SEAT_LIFECYCLE_FILENAME);
+  mkDir(path.dirname(markerPath));
+  fs.writeFileSync(markerPath, '{ "schemaVersion": 1, "state": "susp', 'utf-8');
+  return markerPath;
+}
+
+/** The healthy counterpart, written through core's real writer (the `totem seat` producer). */
+function writeLifecycleMarker(root: string, seat: string, state: SeatLifecycleState): string {
+  return writeSeatLifecycle(root, seat, {
+    schemaVersion: SEAT_LIFECYCLE_SCHEMA_VERSION,
+    state,
+    since: '2026-08-11T00:00:00.000Z',
+  });
+}
+
+/**
+ * The single rendered line that asserts inbox state (the mmnto-ai/totem#2516
+ * `INCOMPLETE` invariant). Module-scope twin of the fault-3 addendum's local
+ * `verdictLine` so fault 4 can pin the same invariant without reaching into
+ * another describe's closure.
+ */
+function verdictLineOf(text: string): string {
+  const line = text.split('\n').find((l) => l.includes('INCOMPLETE') || l.includes('unread'));
+  expect(line, 'a verdict line is always rendered').toBeDefined();
+  return line!;
 }
 
 beforeEach(() => {
@@ -506,5 +553,88 @@ describe('E4 fault 3 addendum — qualified verdict line (mmnto-ai/totem#2516)',
     expect(verdict).toBe('2 unread:');
     expect(verdict.includes('INCOMPLETE')).toBe(false);
     expect(resolveMailExitCode(clean)).toBe(0);
+  });
+});
+
+// ─── Fault 4: corrupt seat-lifecycle marker ─────────────
+// mmnto-ai/totem#2511 ships a second read the poll depends on: the declared
+// lifecycle marker that shrinks a broadcast DENOMINATOR. The failure table's
+// corrupt-marker row is this slice's ADR-115 induced-failure entry, and its
+// required direction is fail-OPEN: an unparseable marker must never shrink a
+// denominator (wrongly closing an obligation) nor hide held mail — the
+// narrowing here would be silent and would look exactly like a healthy poll.
+
+describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnto-ai/totem#2511)', () => {
+  const SEATS = ['totem-claude', 'totem-gemini'];
+  const BCAST = '2026-08-11T0930Z-broadcast-cohort-note.md';
+  const DIRECTED = '2026-08-11T0931Z-totem-claude-directed.md';
+
+  /** Sender is NON-resident, so the #2364 own-broadcast arm cannot fire. */
+  function writeInbound(): void {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: BCAST, to: 'broadcast', subject: 'cohort note' },
+      { name: DIRECTED, to: 'totem-claude', subject: 'directed to the corrupt seat' },
+    ]);
+  }
+
+  it('warning names the marker file, the seat STAYS in the broadcast denominator, and its directed mail still surfaces', () => {
+    const root = selfRepoRootWithSeats(SEATS);
+    const markerPath = writeCorruptLifecycleMarker(root, 'totem-claude');
+    writeInbound();
+    // Only the OTHER (readable) seat consumed the broadcast. If the corrupt
+    // marker were read as suspended/retired — or if an unreadable marker were
+    // treated as "not in the denominator" — the requirement would drop to 1 and
+    // this broadcast would be silently subtracted: an obligation closed by a
+    // file nobody could parse.
+    writeBroadcastMark(root, 'totem-gemini', [BCAST]);
+
+    const result = pollMail({ repoRoot: root, workspace, env: {} });
+
+    // Pack 1 — the accounting fires, and it hands over the ONE-STEP recovery
+    // target (#2511 amendment 2: the recovery route is "fix or delete the
+    // marker", so the warning names the marker file).
+    const lifecycleWarnings = result.warnings.filter((w) =>
+      w.includes('unusable lifecycle marker'),
+    );
+    expect(lifecycleWarnings).toHaveLength(1);
+    expect(lifecycleWarnings[0]).toContain(markerPath);
+    expect(lifecycleWarnings[0]).toContain('totem-claude');
+    // Pack 2 — backstop for a read-only path (ADR-115 § 2): the warnings channel
+    // IS the degraded envelope (it also reds the `ecl-gc --compact` A2.2 gate,
+    // mmnto-ai/totem#2309), and NOTHING narrows: the broadcast stays unread
+    // because the unreadable seat is still counted, and the seat's directed mail
+    // surfaces untouched. Exit stays 0 per the deliberate contract.
+    expect(result.mail.map((m) => m.file).sort()).toEqual([BCAST, DIRECTED].sort());
+    expect(result.selfAgents.agents).toEqual(SEATS);
+    expect(resolveMailExitCode(result)).toBe(0);
+    // The rendered verdict is distinguishable from a clean poll's.
+    expect(verdictLineOf(formatTextResult(result))).toContain('INCOMPLETE');
+  });
+
+  it('positive control + fault-removed: a VALID suspended marker does exclude the seat; deleting the corrupt marker returns to green', () => {
+    const root = selfRepoRootWithSeats(SEATS);
+    writeInbound();
+    writeBroadcastMark(root, 'totem-gemini', [BCAST]);
+
+    // Positive control — NON-VACUITY for the assertion above: with a marker the
+    // reader can actually parse, the exclusion really does fire (requirement
+    // drops to 1, totem-gemini's mark closes the broadcast). So "the broadcast
+    // stayed unread" under the corrupt marker is a measured difference, not a
+    // mechanism that never fires. Directed mail still surfaces — suspension
+    // touches the denominator only.
+    const markerPath = writeLifecycleMarker(root, 'totem-claude', 'suspended');
+    const suspended = pollMail({ repoRoot: root, workspace, env: {} });
+    expect(suspended.mail.map((m) => m.file)).toEqual([DIRECTED]);
+    expect(suspended.warnings.some((w) => w.includes('unusable lifecycle marker'))).toBe(false);
+
+    // Fault-removed-returns-to-green: no marker at all ⇒ active by default, no
+    // lifecycle warnings, and the same fixture polls exactly as a pre-#2511 tree
+    // would (both seats in the denominator, so one mark leaves the broadcast
+    // unread).
+    fs.rmSync(markerPath);
+    const recovered = pollMail({ repoRoot: root, workspace, env: {} });
+    expect(recovered.warnings).toEqual([]);
+    expect(recovered.mail.map((m) => m.file).sort()).toEqual([BCAST, DIRECTED].sort());
+    expect(verdictLineOf(formatTextResult(recovered))).not.toContain('INCOMPLETE');
   });
 });

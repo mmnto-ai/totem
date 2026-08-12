@@ -13,6 +13,13 @@
  * directory of the calling repo, overridable via the `TOTEM_WORKSPACE` env
  * var or `--workspace` flag.
  *
+ * Resolution is lifecycle-BLIND; the declared seat lifecycle
+ * (`.totem/orchestration/<seat>/lifecycle.json`, mmnto-ai/totem#2511) filters
+ * only the BROADCAST denominator, and only through a successfully-parsed
+ * marker. A suspended seat keeps every byte of its directed-mail behavior —
+ * visibility and processed-mark subtraction alike — and the poll annotates the
+ * held obligation rather than hiding it.
+ *
  * Ports the strategy-side reference implementation
  * (`mmnto-ai/totem-strategy:.claude/hooks/SessionStart.cjs:pollInboundOutboxes`,
  * merged via mmnto-ai/totem-strategy#373) into a cohort-portable command
@@ -25,8 +32,10 @@ import * as path from 'node:path';
 import {
   isPathSafeAgentId,
   knownCohortAgents,
+  readSeatLifecycle,
   resolveSelfAgents,
   resolveTotemRepoRootSync,
+  type SeatLifecycleState,
   type SelfAgentResolution,
   TotemError,
 } from '@mmnto/totem';
@@ -335,38 +344,67 @@ export function sanitizeEclBasename(name: string): string {
 }
 
 /**
- * Per-basename count of RESOLVED SELF seats holding a processed mark (in
+ * Per-seat SANITIZED processed-mark basenames for the RESOLVED SELF seats (in
  * `processed/` or `processed/_broadcast/` — both locations count; the live
- * mmnto-ai/totem#2412 specimen sat in the root). Directed mail subtracts on ANY
- * seat's mark (the historical flat union). A broadcast is per-seat consumable —
- * ecl-gc stores and collects `_broadcast` marks per seat — so it subtracts only
- * when EVERY resolved seat holds the mark: the flat union collapsed exactly
- * that, letting one seat's consumption hide a live broadcast from every other
- * seat in a multi-seat poll (first-consumer-wins, mmnto-ai/totem#2412). A
- * multi-seat poll's unread line then truthfully asserts "unread for at least
- * one of my seats" — the only claim it can make. Marks are keyed by their
- * SANITIZED basename (mmnto-ai/totem#2431) so a colon-bearing inbound name
- * (matched via the same sanitizer in `pollMail`) subtracts against its
- * NTFS-safe mark.
+ * mmnto-ai/totem#2412 specimen sat in the root).
+ *
+ * Split out of the old single-pass count builder (mmnto-ai/totem#2511) because
+ * the directed and broadcast denominators now fold DIFFERENT seat sets: the
+ * drain happens ONCE per seat here and `countMarksAcrossSeats` folds it twice.
+ * A second drain would double every `processed/ scan failed` warning on the
+ * degraded path, and a markerless tree must poll byte-identically to a
+ * pre-#2511 one — warnings channel included.
+ *
+ * Marks are keyed by their SANITIZED basename (mmnto-ai/totem#2431) so a
+ * colon-bearing inbound name (matched via the same sanitizer in `pollMail`)
+ * subtracts against its NTFS-safe mark. De-duping per seat happens here so a
+ * corrupted+healed pair (a legacy colon mark on a colon-legal FS plus its
+ * sanitized heal) in one seat's stores still counts as ONE seat — load-bearing
+ * for the per-seat broadcast requirement.
  */
-function buildProcessedMarkCounts(
+function readProcessedMarkKeys(
   repoRoot: string,
   selfAgents: string[],
   warnings: string[],
-): Map<string, number> {
-  const counts = new Map<string, number>();
+): Map<string, Set<string>> {
+  const marksBySeat = new Map<string, Set<string>>();
   for (const agent of selfAgents) {
     const agentDir = path.join(repoRoot, '.totem', 'orchestration', agent, 'processed');
     const seatMarks = new Set<string>();
     drainProcessedDir(agentDir, seatMarks, warnings);
     drainProcessedDir(path.join(agentDir, '_broadcast'), seatMarks, warnings);
-    // Normalize to the portable/NTFS-safe basename BEFORE counting, and dedupe
-    // per seat so a corrupted+healed pair (a legacy colon mark on a colon-legal
-    // FS plus its sanitized heal) in one seat's stores still counts as ONE seat
-    // — load-bearing for the per-seat broadcast requirement (mmnto-ai/totem#2431).
     const seatKeys = new Set<string>();
     for (const name of seatMarks) seatKeys.add(sanitizeEclBasename(name));
-    for (const key of seatKeys) {
+    marksBySeat.set(agent, seatKeys);
+  }
+  return marksBySeat;
+}
+
+/**
+ * Per-basename count of seats (drawn from `seats`) holding a processed mark.
+ * Directed mail subtracts on ANY seat's mark (the historical flat union). A
+ * broadcast is per-seat consumable — ecl-gc stores and collects `_broadcast`
+ * marks per seat — so it subtracts only when EVERY seat in its denominator
+ * holds the mark: the flat union collapsed exactly that, letting one seat's
+ * consumption hide a live broadcast from every other seat in a multi-seat poll
+ * (first-consumer-wins, mmnto-ai/totem#2412). A multi-seat poll's unread line
+ * then truthfully asserts "unread for at least one of my seats" — the only
+ * claim it can make.
+ *
+ * `seats` is the FULL resolved self set for the directed count and the
+ * lifecycle-ACTIVE subset for the broadcast count (mmnto-ai/totem#2511): a
+ * suspended seat's mark must not close a broadcast the active seats have not
+ * all marked, while its directed marks must keep subtracting — an
+ * already-consumed directed dispatch resurfacing as unread is the ADR-106
+ * § A2.1 false-unread bomb.
+ */
+function countMarksAcrossSeats(
+  marksBySeat: ReadonlyMap<string, ReadonlySet<string>>,
+  seats: readonly string[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const seat of seats) {
+    for (const key of marksBySeat.get(seat) ?? []) {
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
   }
@@ -555,21 +593,64 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     );
   }
 
-  // `includeProcessed` (ADR-106 § A2.1) yields the RAW addressed-inbound set:
-  // an empty mark-count map makes the subtraction below a no-op, so nothing is
-  // subtracted. The reader default stays `inbound − processed`; the compaction
-  // path opts in to the pre-dedupe view.
   // Normalize duplicate ids once (env/config can carry them): a duplicated seat
   // would double-drain its marks AND inflate the broadcast requirement in
   // lockstep — behavior-equivalent today by symmetry, but the equality between
   // "seats counted" and "seats that can hold marks" is load-bearing for the
   // per-seat broadcast rule, so it is enforced rather than assumed (GCA #2424).
   const selfAgents = [...new Set(selfResolution.agents)];
-  const processedMarkCounts =
+
+  // Declared seat lifecycle (mmnto-ai/totem#2511). Resolution stays
+  // lifecycle-BLIND: `selfAgents` is the resolver's answer untouched, so every
+  // resolved seat keeps directed-mail visibility AND its processed-mark
+  // subtraction. Lifecycle filters exactly ONE thing — the broadcast
+  // denominator below — and only via a SUCCESSFULLY-PARSED marker. The filter
+  // therefore starts from the resolver's OUTPUT, never from a fresh directory
+  // enumeration: `readSeatDirs` degrades to `[]` silently on an unreadable
+  // orchestration dir by its own shipped contract, and a silent empty set must
+  // never shrink a required-set (#2511 failure table). Core's read is
+  // fail-open-and-loud, so a corrupt/unreadable marker leaves its seat ACTIVE
+  // (still in the denominator, mail still surfacing) and warns naming the file.
+  //
+  // The warnings channel is load-bearing beyond display here, same as the
+  // collision sensor below: `ecl-gc --compact` arms its A2.2 completeness gate
+  // on `warnings.length === 0` (mmnto-ai/totem#2309), so a corrupt marker — or
+  // a held obligation on a suspended seat — REDS mark-compaction for as long as
+  // the anomaly is live. Intended: compaction must not run while a denominator
+  // is being read through a marker nobody can parse. It clears the moment the
+  // marker is fixed/deleted or the obligation is disposed.
+  const seatLifecycleStates = new Map<string, SeatLifecycleState>();
+  const activeSelfAgents: string[] = [];
+  for (const agent of selfAgents) {
+    const lifecycle = readSeatLifecycle(repoRoot, agent);
+    seatLifecycleStates.set(agent.toLowerCase(), lifecycle.state);
+    if (lifecycle.warning !== undefined) warnings.push(lifecycle.warning);
+    // Both conjuncts are deliberate rather than redundant: "only an explicitly
+    // PARSED suspended/retired marker shrinks the denominator" IS the rule, and
+    // stating it structurally keeps a fail-open read (`source:
+    // 'default-active'`) inside the denominator even if the degraded state ever
+    // widens beyond `active`.
+    if (lifecycle.source === 'marker' && lifecycle.state !== 'active') continue;
+    activeSelfAgents.push(agent);
+  }
+
+  // `includeProcessed` (ADR-106 § A2.1) yields the RAW addressed-inbound set:
+  // an empty mark-count map makes the subtraction below a no-op, so nothing is
+  // subtracted. The reader default stays `inbound − processed`; the compaction
+  // path opts in to the pre-dedupe view.
+  const marksBySeat =
     opts.includeProcessed !== true && selfAgents.length > 0
-      ? buildProcessedMarkCounts(repoRoot, selfAgents, warnings)
-      : new Map<string, number>();
-  const selfSeatCount = selfAgents.length;
+      ? readProcessedMarkKeys(repoRoot, selfAgents, warnings)
+      : new Map<string, Set<string>>();
+  // Directed subtraction: the FULL resolved self set, unchanged by lifecycle —
+  // a suspended seat's already-consumed directed mail must never resurface as
+  // unread (mmnto-ai/totem#2511).
+  const processedMarkCounts = countMarksAcrossSeats(marksBySeat, selfAgents);
+  // Broadcast subtraction: ACTIVE seats only, on BOTH sides of the comparison
+  // (count and requirement), so a suspended seat can neither hold a broadcast
+  // open nor close one on the active seats' behalf.
+  const broadcastMarkCounts = countMarksAcrossSeats(marksBySeat, activeSelfAgents);
+  const activeSeatCount = activeSelfAgents.length;
 
   const slots = enumerateOutboxes(workspace, opts.recursive === true, warnings);
 
@@ -619,15 +700,25 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       continue;
     }
     for (const file of files) {
+      const broadcastNamed = isBroadcastNamed(file);
       // `max(seats, 1)` keeps the zero-resolution poll (empty map, seats = 0)
       // from vacuously treating every broadcast as consumed, and makes a
-      // single-seat poll bit-identical to the pre-#2412 behavior.
-      const required = isBroadcastNamed(file) ? Math.max(selfSeatCount, 1) : 1;
+      // single-seat poll bit-identical to the pre-#2412 behavior. The seat count
+      // is the lifecycle-ACTIVE one (mmnto-ai/totem#2511) — a suspended seat
+      // leaves the DENOMINATOR, not the poll — and the same `max(…, 1)` floor
+      // covers the all-seats-suspended edge: an empty required set is never
+      // "closed" (the inherited orchestration.go boundary), and it is read
+      // against an EMPTY active-mark map, so broadcasts simply never subtract
+      // until a seat is reactivated.
+      const required = broadcastNamed ? Math.max(activeSeatCount, 1) : 1;
+      // Broadcast counts come from the ACTIVE seats' marks only; directed mail
+      // keeps the full-self-set union (mmnto-ai/totem#2511).
+      const counts = broadcastNamed ? broadcastMarkCounts : processedMarkCounts;
       // Normalize the inbound basename through the same sanitizer the marks are
       // keyed by (mmnto-ai/totem#2431), so a colon-bearing inbound name subtracts
       // against its NTFS-safe mark. `isBroadcastNamed` keeps reading the RAW file
       // (positional-token logic is untouched per the amendment scope).
-      if ((processedMarkCounts.get(sanitizeEclBasename(file)) ?? 0) >= required) continue;
+      if ((counts.get(sanitizeEclBasename(file)) ?? 0) >= required) continue;
       unread.push({ slot, file });
     }
   }
@@ -719,6 +810,10 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // one seat's broadcast fan-out copies across repos can never fire it.
   // basename → (owner-seat lowercased → `repo/agent` display path).
   const collisionsByBasename = new Map<string, Map<string, string>>();
+  // Lifecycle annotation ledger (mmnto-ai/totem#2511): one warning per affected
+  // SELF seat per poll, not one per file — a suspended seat carrying twenty held
+  // dispatches must not bury the rest of the warnings channel.
+  const lifecycleAnnotatedSeats = new Set<string>();
   const inScope = ordered.length > maxScan ? ordered.slice(0, maxScan) : ordered;
   for (const { slot, file } of inScope) {
     scanned += 1;
@@ -769,6 +864,44 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     // the observed noise class.
     if (opts.includeProcessed !== true && toLower === 'broadcast' && selfLower.has(senderSeat)) {
       continue;
+    }
+    // Lifecycle annotations (mmnto-ai/totem#2511) — sense, never hide. Directed
+    // mail addressed to a non-active SELF seat still surfaces above and below
+    // this block: a lifecycle transition does NOT discharge an obligation edge
+    // (OQ4, resolved at the Phase-4 gate), and the exclusion this feature grants
+    // is denominator-only. Bounded by `lifecycleAnnotatedSeats` to one warning
+    // per seat per poll. `header.to` is already control-byte-escaped by
+    // `parseHeader`, so interpolating it is display-safe (same as the roster
+    // sensor above). Like the collision sensor below, detection is bounded by
+    // the scan window — a held dispatch beyond the maxScan horizon is never
+    // parsed — and truncation independently warns, so the bounded view never
+    // renders as a clean one.
+    //
+    // Reader path ONLY (`includeProcessed !== true`): the `ecl-gc --compact`
+    // A2.2 completeness gate arms on `warnings.length === 0`, and these two
+    // classes are informational senses, not mark-subtraction anomalies — a
+    // weeks-long suspension or a long-held retired-addressee dispatch must not
+    // block mark compaction indefinitely (that would turn a sense into an
+    // actuator, Tenet 13). The corrupt-marker warning above deliberately stays
+    // on BOTH paths: a marker that fails to parse IS a denominator-integrity
+    // anomaly, and redding the gate during that window is the intended shape.
+    if (
+      opts.includeProcessed !== true &&
+      toLower !== 'broadcast' &&
+      !lifecycleAnnotatedSeats.has(toLower)
+    ) {
+      const seatState = seatLifecycleStates.get(toLower);
+      if (seatState === 'suspended') {
+        lifecycleAnnotatedSeats.add(toLower);
+        warnings.push(
+          `directed mail surfacing for suspended seat: to: "${header.to}" — obligation held, not discharged — disposition per mmnto-ai/totem-status#127`,
+        );
+      } else if (seatState === 'retired') {
+        lifecycleAnnotatedSeats.add(toLower);
+        warnings.push(
+          `addressed to retired seat: to: "${header.to}" — mail still surfaces; the sender should re-route`,
+        );
+      }
     }
     let seats = collisionsByBasename.get(file);
     if (seats === undefined) {
