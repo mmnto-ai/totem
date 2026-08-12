@@ -16,6 +16,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { SEAT_LIFECYCLE_FILENAME } from '@mmnto/totem';
+
 import { pollMail } from './mail.js';
 import { seatAddCommand, seatRemoveCommand, seatSuspendCommand } from './seat.js';
 
@@ -118,7 +120,7 @@ describe('seat verbs chained into pollMail (mmnto-ai/totem#2511 induced chain)',
 
     const marker = JSON.parse(
       fs.readFileSync(
-        path.join(repo, '.totem', 'orchestration', SEAT_B, 'lifecycle.json'),
+        path.join(repo, '.totem', 'orchestration', SEAT_B, SEAT_LIFECYCLE_FILENAME),
         'utf-8',
       ),
     ) as Record<string, unknown>;

@@ -157,7 +157,15 @@ function writeLifecycleMarker(root: string, seat: string, state: SeatLifecycleSt
  * another describe's closure.
  */
 function verdictLineOf(text: string): string {
-  const line = text.split('\n').find((l) => l.includes('INCOMPLETE') || l.includes('unread'));
+  // Informational channels are excluded from the search (CR on #2627): the
+  // all-suspended hold notice contains the word "unread", and `Note:` lines
+  // render BEFORE the verdict arms — without the filter, a future
+  // all-suspended fixture would get the notice back and a
+  // `not.toContain('INCOMPLETE')` assertion would pass vacuously.
+  const line = text
+    .split('\n')
+    .filter((l) => !l.startsWith('Note: ') && !l.startsWith('Warning: '))
+    .find((l) => l.includes('INCOMPLETE') || l.includes('unread'));
   expect(line, 'a verdict line is always rendered').toBeDefined();
   return line!;
 }

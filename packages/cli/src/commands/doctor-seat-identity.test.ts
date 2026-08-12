@@ -172,7 +172,7 @@ describe('checkSeatIdentity — (b) writing while excluded', () => {
     const result = await checkSeatIdentity(root, { env: NO_ENV });
 
     expect(result.message).toContain('totem-agy [writing-while-excluded]');
-    expect(result.status).not.toBe('fail');
+    expect(result.status).toBe('warn');
   });
 
   it('leaves an ACTIVE seat alone however recent its writes', async () => {
@@ -207,7 +207,7 @@ describe('checkSeatIdentity — (b) writing while excluded', () => {
 
     expect(result.message).toContain('totem-agy [unreadable-marker]');
     expect(result.message).not.toContain('writing-while-excluded');
-    expect(result.status).not.toBe('fail');
+    expect(result.status).toBe('warn');
   });
 });
 
@@ -280,7 +280,9 @@ describe('checkSeatIdentity — scan bound', () => {
     expect(bounded.message).toContain('scan bounded at 2/outbox');
     expect(bounded.message).toContain('totem-claude: newest 2 of 4 outbox file(s) scanned');
     expect(bounded.gateExempt).toBe(true);
-    expect(bounded.status).not.toBe('fail');
+    // Exact contract (CR on #2627): a disclosed bound over a finding-free scan
+    // is a clean pass — the disclosure is a detail line, not a finding.
+    expect(bounded.status).toBe('pass');
   });
 
   it('says nothing about the bound when the whole outbox fits inside it', async () => {
@@ -289,7 +291,8 @@ describe('checkSeatIdentity — scan bound', () => {
     const result = await checkSeatIdentity(root, { env: NO_ENV });
 
     expect(result.message).not.toContain('scan bounded');
-    expect(OUTBOX_SCAN_LIMIT).toBeGreaterThan(1);
+    // Exact default, not a weak range check (CR on #2627).
+    expect(OUTBOX_SCAN_LIMIT).toBe(200);
   });
 
   it('keeps the NEWEST files when the bound bites (lexical tail = newest tail)', async () => {
