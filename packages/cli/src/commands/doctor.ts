@@ -2218,6 +2218,9 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkGrandfatheredRules(cwd),
     await checkFreezes(cwd),
     await checkEstate(options.estateSeamsForTest ?? {}),
+    // Seat-identity sense (mmnto-ai/totem#2511) — lazily imported so the row's
+    // module stays off the cold-start graph, the command-layer discipline.
+    await (await import('./doctor-seat-identity.js')).checkSeatIdentity(cwd),
   ];
 
   for (const result of results) {
