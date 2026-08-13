@@ -347,8 +347,9 @@ describe('attribution provenance (#2629)', () => {
     // row-only assertion passes with onWarn never firing (a builder-appended
     // warning lived only on the persisted row). All three surfaces asserted.
     const surfaced: string[] = [];
-    const result = senseSelectionManifest(baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' } }), (w) =>
-      surfaced.push(w),
+    const result = senseSelectionManifest(
+      baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' } }),
+      (w) => surfaced.push(w),
     );
     expect(result.written).toBe(true);
     expect(result.warnings.some((w) => w.includes('attribution conflict probe failed'))).toBe(true);

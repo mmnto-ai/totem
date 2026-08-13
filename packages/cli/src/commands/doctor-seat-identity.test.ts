@@ -433,7 +433,8 @@ describe('checkSeatIdentity — (d) registry scope-sense (win32, mmnto-ai/totem#
   });
 
   it('a blank value with trailing padding (untrimmed stdout variant) is equally inert', async () => {
-    const blank = '\r\nHKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ    \r\n\r\n';
+    const blank =
+      '\r\nHKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ    \r\n\r\n';
     const result = await checkSeatIdentity(root, {
       env: NO_ENV,
       platform: 'win32',
