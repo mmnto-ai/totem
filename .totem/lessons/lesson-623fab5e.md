@@ -3,4 +3,4 @@
 **Tags:** github, security, regex
 **Scope:** packages/cli/src/parsers/bot-review-parser.ts
 
-When normalizing bot accounts as review surfaces, require explicit suffixes like `[bot]` to prevent human accounts with similar names from being incorrectly classified as bots.
+When normalizing Greptile and GHCQ bot accounts, require the explicit `[bot]` login suffix to prevent human accounts with similar names from being classified as bots. Preserve the established matching rules for CodeRabbit and Gemini Code Assist.

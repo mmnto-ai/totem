@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  _clearLogDirForTesting,
   deriveSearchLogAttribution,
   getSearchStats,
   logSearch,
@@ -152,6 +153,9 @@ describe('logSearch attribution stamp', () => {
       if (saved[k] === undefined) delete process.env[k];
       else process.env[k] = saved[k];
     }
+    // Reset the module-level log path so no test depends on file order and a
+    // torn-down tmpdir is never probed by a later logSearch (CR on #2634).
+    _clearLogDirForTesting();
   });
 
   it('stamps the trio + env provenance from process.env onto the returned entry', () => {
@@ -195,8 +199,6 @@ describe('logSearch attribution stamp', () => {
     expect(JSON.parse(JSON.stringify(stamped))).not.toHaveProperty('attribution_conflict');
   });
 
-  // The setLogDir tests sit LAST in this file deliberately: setLogDir sets
-  // module-level state the earlier no-fs describes rely on being unset.
   it('SEAM-LEVEL invariant 10: with EVERY probe failing (pointer AND events paths are directories), logSearch still records, stamps env, and names the errno', () => {
     const totemDir = fs.mkdtempSync(path.join(os.tmpdir(), 'search-log-probe-'));
     try {

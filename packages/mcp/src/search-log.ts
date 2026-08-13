@@ -147,6 +147,15 @@ export function setLogDir(totemDir: string): void {
 }
 
 /**
+ * Test seam — clears the configured log path so attribution runs env-only
+ * (no ledger in reach) and file logging is disarmed. Production never calls
+ * this; the naming follows `_clearBashResolverCacheForTesting` (core).
+ */
+export function _clearLogDirForTesting(): void {
+  logFilePath = undefined;
+}
+
+/**
  * Record a search call.
  *
  * - Stamps the attribution fields (the A.3.a trio + the #2629 provenance /
