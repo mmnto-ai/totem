@@ -81,8 +81,10 @@ describe('mapToTriageCategory', () => {
     // Non-ASCII letters are word context. Both normalization forms are pinned
     // (round-3 catch: an NFC-only fixture hid the decomposed-form leak — the
     // combining mark U+0308 is neither letter nor number, so \p{M} must be in
-    // the blocked class; GitHub does not normalize comment bodies). Bodies are
-    // built via fromCharCode so this source file stays deterministic ASCII.
+    // the blocked class; GitHub does not normalize comment bodies). These two
+    // fixture bodies are built via fromCharCode so their source form is
+    // deterministic — an editor normalizing a literal NFD body would silently
+    // re-hide the leak.
     const nfcBody = String.fromCharCode(0x00fc) + 'nit coverage discussion';
     expect(mapToTriageCategory(makeFinding({ body: nfcBody }))).toBe('architecture');
     const nfdBody = 'u' + String.fromCharCode(0x0308) + 'nit coverage discussion';
@@ -114,13 +116,27 @@ describe('mapToTriageCategory', () => {
     expect(mapToTriageCategory(makeFinding({ body: 'authentication bypass possible' }))).toBe(
       'security',
     );
-    // Non-vacuous inflection guard (round-3 catch: without the decoy this
-    // assertion passed even with keyword matching switched off): if
-    // 'race condition' stops matching inside 'race conditions', the body
-    // falls to NIT via 'consider' instead of architecture.
+    // Non-vacuous inflection guard: the body carries a nit-decoy ('Consider')
+    // AND a 'minor' severity, so if 'race condition' stops matching inside
+    // 'race conditions' the result is 'nit' (keyword path) or 'convention'
+    // (severity fallback) — observable either way; only a real architecture
+    // keyword hit yields the expected value. (Round-4 catch: with the default
+    // 'info' severity, the all-predicates-off mutant fell through to the
+    // architecture default and still passed.)
     expect(
-      mapToTriageCategory(makeFinding({ body: 'Consider the race conditions in the write path' })),
+      mapToTriageCategory(
+        makeFinding({ body: 'Consider the race conditions in the write path', severity: 'minor' }),
+      ),
     ).toBe('architecture');
+    // Architecture/convention leading-openness pinned (round-4 catch: this
+    // guard's title claimed three buckets but only security could fail):
+    // mid-word containments are DELIBERATE matches in these buckets.
+    expect(mapToTriageCategory(makeFinding({ body: 'decoupling the parser from the CLI' }))).toBe(
+      'architecture',
+    );
+    expect(
+      mapToTriageCategory(makeFinding({ body: 'renaming this helper would read better' })),
+    ).toBe('convention');
   });
 
   it('falls back to architecture for unknown findings', () => {

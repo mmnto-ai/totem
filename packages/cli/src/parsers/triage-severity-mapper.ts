@@ -83,9 +83,11 @@ export const NIT_KEYWORDS = [
  *   boilerplate, 5 of the 7 real in-org ghcq findings), "u**nit** test",
  *   "is_minor_bump" — demoted real findings into the lowest bucket, the
  *   unsafe direction. Blocked word-context is letters, numbers, combining
- *   marks (NFD text), and `_` (snake_case identifiers); real CodeRabbit
- *   severity markup keeps a space or emoji before the token (`_🟡 Minor_` —
- *   see the `\s*` in parse-nits.ts's severity regex), so it still matches.
+ *   marks (NFD text; also VS16-bearing emoji-adjacent tokens), and `_`
+ *   (snake_case identifiers; also markdown-italic `_nit_` — both false
+ *   negatives fall in the safe upward direction); real CodeRabbit severity
+ *   markup keeps a space or emoji before the token (`_🟡 Minor_` — see the
+ *   `\s*` in parse-nits.ts's severity regex), so it still matches.
  *   The trail stays open so inflections keep matching ('nits', 'typos').
  *
  * Net effect vs the pre-#2626 behavior: the NITS bucket only narrows
