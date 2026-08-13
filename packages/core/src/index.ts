@@ -612,6 +612,20 @@ export {
 // Session ID — A.3.a SessionStart hook + MCP correlation
 export { mintSessionId, readSessionId, writeSessionId } from './session-id.js';
 
+// Agent-attribution provenance sense (mmnto-ai/totem#2629)
+export type {
+  AgentAttributionSense,
+  AgentAttributionSenseInput,
+  AgentSourceProvenance,
+  AttributionConflict,
+  SessionMintingSeatLookup,
+} from './attribution-sense.js';
+export {
+  AGENT_SOURCE_PROVENANCE_VALUES,
+  readSessionMintingSeat,
+  senseAgentAttribution,
+} from './attribution-sense.js';
+
 // Query-before-derive compliance (mmnto-ai/totem#2510)
 export type {
   QbdAnomalies,

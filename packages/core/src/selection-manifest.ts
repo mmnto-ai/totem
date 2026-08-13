@@ -45,8 +45,8 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
+import { AGENT_SOURCE_PROVENANCE_VALUES, senseAgentAttribution } from './attribution-sense.js';
 import { TotemError } from './errors.js';
-import { resolveQbdAgentSource } from './qbd/record.js';
 import { readSessionId } from './session-id.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -212,6 +212,31 @@ export const SelectionManifestRowSchema = z
     session_id: z.string().uuid().optional(),
     /** Seat id from TOTEM_SELF_AGENT (ADR-078). Absent = stamped absence, never guessed. */
     agent_source: z.string().trim().min(1).optional(),
+    /**
+     * Provenance of `agent_source` (mmnto-ai/totem#2629, ruled two-value enum):
+     * `'env'` iff the row was stamped from `TOTEM_SELF_AGENT`, `'absent'` iff
+     * no attribution was stamped. Schema-optional for pre-sensor rows (the
+     * ADR-078 additive migration shape); {@link buildSelectionManifestRow}
+     * stamps it on every new row.
+     */
+    agent_source_provenance: z.enum(AGENT_SOURCE_PROVENANCE_VALUES).optional(),
+    /**
+     * Fail-closed disclosure (#2629): present iff the ambient env seat and the
+     * pointer session's minting seat disagreed — `agent_source` is withheld and
+     * both candidates are named so a post-hoc reader can partition the window
+     * without guessing. Never present on self-minted rows (the minting seat IS
+     * the emitting process's own env read there).
+     */
+    attribution_conflict: z
+      .object({
+        env_seat: z.string().trim().min(1),
+        minting_seat: z.string().trim().min(1),
+        pointer_session_id: z.string().uuid(),
+      })
+      .strict()
+      .optional(),
+    /** Named degradation (#2629): the conflict probe failed; the env stamp stands. */
+    attribution_probe_error: z.string().trim().min(1).optional(),
     /** Emitting package version, when the emitter can resolve it cheaply. */
     cli_version: z.string().trim().min(1).optional(),
     context: SelectionContextSchema,
@@ -382,21 +407,45 @@ export function buildSelectionManifestRow(input: SelectionManifestInput): Select
   // directly (the session-start hooks) — immune to the shared-pointer being
   // rotated by a concurrent session between mint and emission (PR #2625 CR
   // round, partial). Everyone else joins via the pointer.
+  const selfMinted = input.sessionId !== undefined;
   const sessionId = input.sessionId ?? readSessionId(input.totemDir);
-  const agentSource = resolveQbdAgentSource(env);
+  // #2629 provenance/fail-closed sense, derived per row and never cached.
+  // Self-minted rows run env-only: the minting seat IS this process's own env
+  // read, so a pointer conflict is structurally impossible — and probing the
+  // (possibly foreign) pointer would check the WRONG session. Pointer rows
+  // hand the sense the SAME id the row joins on, so the probe cannot race a
+  // concurrent rotation into checking a different session than the row's own.
+  // A pointer-less row has no counter-candidate — env-only there too.
+  const sense =
+    selfMinted || sessionId === undefined
+      ? senseAgentAttribution({ env })
+      : senseAgentAttribution({ env, totemDir: input.totemDir, pointerSessionId: sessionId });
+  const warnings = [...(input.warnings ?? [])];
+  if (sense.attribution_probe_error !== undefined) {
+    warnings.push(
+      `selection-manifest: attribution conflict probe failed (${sense.attribution_probe_error}) — env stamp kept`,
+    );
+  }
   return {
     schemaVersion: 1,
     timestamp: new Date(nowMs).toISOString(),
     emitter: input.emitter,
     ...(sessionId !== undefined && { session_id: sessionId }),
-    ...(agentSource !== undefined && { agent_source: agentSource }),
+    ...(sense.agent_source !== null && { agent_source: sense.agent_source }),
+    agent_source_provenance: sense.agent_source_provenance,
+    ...(sense.attribution_conflict !== undefined && {
+      attribution_conflict: sense.attribution_conflict,
+    }),
+    ...(sense.attribution_probe_error !== undefined && {
+      attribution_probe_error: sense.attribution_probe_error,
+    }),
     ...(input.cliVersion !== undefined && { cli_version: input.cliVersion }),
     context: input.context,
     universe: input.universe,
     costBasis: { ...SELECTION_COST_BASIS },
     ...(input.finalTruncation !== undefined && { finalTruncation: input.finalTruncation }),
     candidates: input.candidates,
-    warnings: input.warnings ?? [],
+    warnings,
   };
 }
 

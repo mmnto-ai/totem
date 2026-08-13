@@ -1,6 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import type { AgentSourceProvenance, AttributionConflict } from '@mmnto/totem';
+import { senseAgentAttribution } from '@mmnto/totem';
+
 export interface SearchLogEntry {
   timestamp: string;
   query: string;
@@ -36,6 +39,21 @@ export interface SearchLogEntry {
    * identity to join against (ruled on mmnto-ai/totem#2362).
    */
   agent_source?: string | null;
+  /**
+   * Provenance of `agent_source` (mmnto-ai/totem#2629, ruled two-value enum):
+   * `'env'` iff the row was stamped from `TOTEM_SELF_AGENT`, `'absent'` iff no
+   * attribution was stamped (the honest stamped-absence default). Optional for
+   * pre-sensor rows; `logSearch` stamps it on every new row.
+   */
+  agent_source_provenance?: AgentSourceProvenance;
+  /**
+   * Fail-closed disclosure (#2629): present iff the ambient env seat and the
+   * session pointer's minting seat disagreed — `agent_source` is withheld and
+   * both candidates are named. The query itself is never refused (Tenet 13).
+   */
+  attribution_conflict?: AttributionConflict;
+  /** Named degradation (#2629): the conflict probe failed; the env stamp stands. */
+  attribution_probe_error?: string;
   /** A.3.a: explicit session id passed through from `TOTEM_SESSION_ID` if present, else null (never guessed). Reserved forward primitive for the ADR-078 commit-side session join; deliberately inert in the current repo-wide windowing. */
   session_id?: string | null;
   /** A.3.a: trace-correlation id passed through from `TOTEM_CORRELATION_ID` if present, else null (never guessed). Reserved for the A.3.c end-to-end correlation pass; carried now so the trio lands in one producer touch. */
@@ -43,12 +61,20 @@ export interface SearchLogEntry {
 }
 
 /**
- * The A.3.a attribution trio stamped onto every `SearchLogEntry` at log time.
- * Every field is `string | null` — a present value or an explicit `null`
- * (Tenet 4: absence is stamped, never guessed).
+ * The attribution stamp applied to every `SearchLogEntry` at log time: the
+ * A.3.a trio (`string | null` — a present value or an explicit `null`, Tenet 4)
+ * plus the #2629 provenance/fail-closed fields. Every key is REQUIRED on this
+ * interface — `attribution_conflict` / `attribution_probe_error` carry explicit
+ * `undefined` when clean — so the spread-last stamp in `logSearch` displaces
+ * any caller-supplied value for every stamped field (absence from the sense is
+ * as authoritative as presence; `JSON.stringify` drops the undefined keys from
+ * the persisted row).
  */
 export interface SearchLogAttribution {
   agent_source: string | null;
+  agent_source_provenance: AgentSourceProvenance;
+  attribution_conflict: AttributionConflict | undefined;
+  attribution_probe_error: string | undefined;
   session_id: string | null;
   correlation_id: string | null;
 }
@@ -65,34 +91,36 @@ function envOrNull(env: NodeJS.ProcessEnv, key: string): string | null {
 }
 
 /**
- * Derive the A.3.a attribution trio from the environment (default
- * `process.env`). Pure — no I/O, no side effects — so the producer stamp is
- * testable without touching the filesystem.
+ * Derive the attribution stamp for one row.
  *
- * - `agent_source`: from `TOTEM_SELF_AGENT`, reusing the same read + comma
- *   parsing precedent as `resolveSelfAgents` (orchestration-resolver.ts). The
- *   MCP server is spawned under a single seat, so the first non-empty
- *   comma-separated entry is that seat; a bare value passes through unchanged.
+ * - `agent_source` + the #2629 provenance/fail-closed fields: delegated to
+ *   core's `senseAgentAttribution` — the one derivation both stamp seams
+ *   (this one and the selection-manifest builder) consume. Same env read +
+ *   comma parse as `resolveSelfAgents` (the MCP server runs under a single
+ *   seat, so the first non-empty entry is that seat), cross-checked against
+ *   the session pointer's minting seat when `totemDir` is provided.
  * - `session_id` / `correlation_id`: straight pass-through from
  *   `TOTEM_SESSION_ID` / `TOTEM_CORRELATION_ID`.
  *
- * Any field whose env var is absent or blank is stamped `null`.
+ * Any field whose env var is absent or blank is stamped `null`. Env-only calls
+ * (no `totemDir`) stay pure — no I/O — the testable-producer property the
+ * original trio derivation had; with `totemDir` the conflict probe reads the
+ * pointer + `events.ndjson`, per call, never cached (ruled — a cache converts
+ * a transient contamination into a whole-session one). The probe can never
+ * throw into the stamp path: failures degrade to the env-only stamp with the
+ * failure named on `attribution_probe_error`.
  */
 export function deriveSearchLogAttribution(
   env: NodeJS.ProcessEnv = process.env,
+  totemDir?: string,
 ): SearchLogAttribution {
-  const selfAgentRaw = envOrNull(env, 'TOTEM_SELF_AGENT');
-  const agent_source =
-    selfAgentRaw !== null
-      ? // Same comma-split as resolveSelfAgents; take the first non-empty seat.
-        (selfAgentRaw
-          .split(',')
-          .map((s) => s.trim())
-          .find((s) => s.length > 0) ?? null)
-      : null;
+  const sense = senseAgentAttribution({ env, totemDir });
 
   return {
-    agent_source,
+    agent_source: sense.agent_source,
+    agent_source_provenance: sense.agent_source_provenance,
+    attribution_conflict: sense.attribution_conflict,
+    attribution_probe_error: sense.attribution_probe_error,
     session_id: envOrNull(env, 'TOTEM_SESSION_ID'),
     correlation_id: envOrNull(env, 'TOTEM_CORRELATION_ID'),
   };
@@ -121,10 +149,10 @@ export function setLogDir(totemDir: string): void {
 /**
  * Record a search call.
  *
- * - Stamps the A.3.a attribution trio (`agent_source` / `session_id` /
- *   `correlation_id`) from the environment at log time — one producer touch
- *   shared by every call site. A caller-supplied value (none today) wins over
- *   the env derivation.
+ * - Stamps the attribution fields (the A.3.a trio + the #2629 provenance /
+ *   fail-closed fields) at log time — one producer touch shared by every call
+ *   site. The derived stamp is authoritative: a caller-supplied value for any
+ *   stamped field is displaced (see the stamp comment below).
  * - Always appends to the in-memory array.
  * - Best-effort appends a single JSON line to `{totemDir}/.search-log.jsonl`.
  *   File writes are fire-and-forget — failures are silently swallowed because
@@ -134,10 +162,19 @@ export function setLogDir(totemDir: string): void {
  * without touching the filesystem.
  */
 export function logSearch(entry: SearchLogEntry): SearchLogEntry {
-  // Env stamp LAST: the attribution trio is governance telemetry, so the
-  // environment-derived values are authoritative — a caller-supplied (or
-  // spread-truthy `undefined`) trio field must never displace the stamp.
-  const stamped: SearchLogEntry = { ...entry, ...deriveSearchLogAttribution() };
+  // Env stamp LAST: the attribution fields are governance telemetry, so the
+  // derived values are authoritative — a caller-supplied (or spread-truthy
+  // `undefined`) stamped field must never displace the stamp. The attribution
+  // object carries every stamped key explicitly (undefined when clean), so a
+  // caller-supplied conflict cannot survive a clean sense either.
+  // `totemDir` recovers from the log path per call — when `setLogDir` was
+  // never called there is no ledger in reach and the sense runs env-only
+  // (provenance still stamped, no conflict probe).
+  const totemDir = logFilePath !== undefined ? path.dirname(logFilePath) : undefined;
+  const stamped: SearchLogEntry = {
+    ...entry,
+    ...deriveSearchLogAttribution(process.env, totemDir),
+  };
   entries.push(stamped);
 
   // Best-effort, non-blocking file append
