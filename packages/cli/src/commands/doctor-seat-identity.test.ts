@@ -444,6 +444,32 @@ describe('checkSeatIdentity — (d) registry scope-sense (win32, mmnto-ai/totem#
     expect(result.message).not.toContain('env-ambient-scope');
   });
 
+  it('a blank HKCU does NOT mask a real machine-scope hit — the loop probes both hives', async () => {
+    const blank = 'HKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ';
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? blank : REG_HIT_STDOUT),
+    });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('[env-ambient-scope]');
+    expect(result.message).toContain('machine scope');
+  });
+
+  it('a CR/LF-leading value is NOT the inert blank shape — it still stamps downstream, so it stays a finding', async () => {
+    // Programmatically-settable only (never via setx/GUI), but such a value
+    // survives resolveQbdAgentSource's trim-split and contaminates rows.
+    const crlfValue =
+      'HKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ    \r\nrogue-seat';
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? crlfValue : regAbsent()),
+    });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('(value present, unparsed) [env-ambient-scope]');
+  });
+
   it('a hit whose value line resists parsing is still a finding — presence IS the contradiction', async () => {
     const result = await checkSeatIdentity(root, {
       env: NO_ENV,

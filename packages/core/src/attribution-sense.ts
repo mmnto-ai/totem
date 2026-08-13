@@ -31,9 +31,11 @@
  * NAMED LIMIT (stated so coverage is never overread): the conflict arm fires
  * only when two PRESENT candidates disagree — a seated process joining a
  * foreign seat's pointer session. The b8d7aa9b specimen itself had an
- * UNSEATED mint row (minted before the ambient var was armed), and a
+ * UNSEATED mint row (its minting process's env carried no var), and a
  * machine-wide ambient var makes every mint agree with every process env —
- * both shapes yield an env stamp with no conflict here, by ruled design. The
+ * both shapes yield an env stamp with no conflict here: the ruling's
+ * fail-closed clause covers disagreement between two PRESENT candidates, and
+ * the missing-counter-evidence rule (design invariant 3) covers the rest. The
  * sensors for the ambient-scope class are the provenance field (post-hoc
  * partitioning), doctor arm (d)'s registry scope-sense, and the launch-shell
  * scope protocol — not this predicate.

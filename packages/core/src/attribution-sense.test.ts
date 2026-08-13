@@ -203,12 +203,13 @@ describe('senseAgentAttribution', () => {
 
   it('mint row without a seat → no counter-evidence — env stamp stands (the ACTUAL b8d7aa9b specimen shape)', () => {
     // Honest coverage note (leg finding on this PR): the live specimen's mint
-    // row carries NO agent_source (minted 03:03Z, before the user-scope var
-    // was armed), so in the contamination window this sensor would have
-    // stamped the ambient seat with provenance 'env' and NO conflict — ruled
-    // item 2 fires only on disagreement between two PRESENT candidates. The
-    // ambient-scope class where every mint agrees with the env is sensed by
-    // doctor arm (d) + the launch-shell protocol, not by this predicate.
+    // row carries NO agent_source (minted 03:03Z; the ledger proves only that
+    // the minting process's env lacked the var, not why), so in the
+    // contamination window this sensor would have stamped the ambient seat
+    // with provenance 'env' and NO conflict — ruled item 2 fires only on
+    // disagreement between two PRESENT candidates. The ambient-scope class
+    // where every mint agrees with the env is sensed by doctor arm (d) + the
+    // launch-shell protocol, not by this predicate.
     writePointer(SESSION_A);
     writeEvents([sessionStartRow(SESSION_A)]);
     const sense = senseAgentAttribution({ totemDir, env: { TOTEM_SELF_AGENT: 'totem-gemini' } });

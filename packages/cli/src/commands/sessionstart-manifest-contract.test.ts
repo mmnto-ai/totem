@@ -154,6 +154,10 @@ describe('rendered Gemini SessionStart — manifest + A.3.a contract (mmnto-ai/t
       // TOTEM_SELF_AGENT unset, NEITHER row guesses a seat.
       expect(sessionStart[0]!.agent_source).toBeUndefined();
       expect(row.agent_source).toBeUndefined();
+      // #2629 ruled item 1: provenance disclosed on EVERY row. The schema
+      // field is optional (migration shape), so the universal is locked HERE —
+      // deleting the template's stamp must go red, not ride a green parse.
+      expect(row.agent_source_provenance).toBe('absent');
     },
     TEST_TIMEOUT_MS,
   );
@@ -173,6 +177,8 @@ describe('rendered Gemini SessionStart — manifest + A.3.a contract (mmnto-ai/t
       expect(events.find((e) => e.type === 'session_start')!.agent_source).toBe('seat-x');
       const rows = readNdjson('.totem/ledger/selection-manifests.ndjson');
       expect(rows[0]!.agent_source).toBe('seat-x');
+      // #2629: seated row carries env provenance (the biconditional's other arm).
+      expect(rows[0]!.agent_source_provenance).toBe('env');
     },
     TEST_TIMEOUT_MS,
   );
@@ -198,6 +204,8 @@ describe('rendered Claude SessionStart — manifest contract (mmnto-ai/totem#246
       expectValidRow(row);
       expect(row.session_id).toBe(sessionId);
       expect(row.agent_source).toBe('seat-x');
+      // #2629: seated row carries env provenance.
+      expect(row.agent_source_provenance).toBe('env');
       // The A.3.a denominator row stamps the same seat (leg round 2,
       // finding 6 — symmetry with the Gemini pinning).
       const events = readNdjson('.totem/ledger/events.ndjson');
@@ -223,6 +231,8 @@ describe('rendered Claude SessionStart — manifest contract (mmnto-ai/totem#246
       // Attribution is stamped absence (ADR-078; leg round 1 MB-2) — on the
       // denominator row too (leg round 2, finding 6).
       expect(rows[0]!.agent_source).toBeUndefined();
+      // #2629: provenance discloses the absence explicitly on every row.
+      expect(rows[0]!.agent_source_provenance).toBe('absent');
       const events = readNdjson('.totem/ledger/events.ndjson');
       expect(events.find((e) => e.type === 'session_start')!.agent_source).toBeUndefined();
     },

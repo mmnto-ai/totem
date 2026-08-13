@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   deriveSearchLogAttribution,
+  getSearchStats,
   logSearch,
   type SearchLogEntry,
   setLogDir,
@@ -196,21 +197,28 @@ describe('logSearch attribution stamp', () => {
 
   // The setLogDir tests sit LAST in this file deliberately: setLogDir sets
   // module-level state the earlier no-fs describes rely on being unset.
-  it('SEAM-LEVEL invariant 10: with every probe failing (events.ndjson is a directory), logSearch still records, stamps env, and names the failure', () => {
+  it('SEAM-LEVEL invariant 10: with EVERY probe failing (pointer AND events paths are directories), logSearch still records, stamps env, and names the errno', () => {
     const totemDir = fs.mkdtempSync(path.join(os.tmpdir(), 'search-log-probe-'));
     try {
       const ledgerDir = path.join(totemDir, 'ledger');
-      // A DIRECTORY where the events file should be — EISDIR on read, the
-      // non-benign probe-failure class (not the honest-absence ENOENT set).
+      // DIRECTORIES where both probe files should be — EISDIR on read for the
+      // pointer and the events file alike: every probe fails, the non-benign
+      // class (not the honest-absence ENOENT set).
       fs.mkdirSync(path.join(ledgerDir, 'events.ndjson'), { recursive: true });
-      fs.writeFileSync(path.join(ledgerDir, '.session-id'), SESSION_A, 'utf-8');
+      fs.mkdirSync(path.join(ledgerDir, '.session-id'), { recursive: true });
       process.env.TOTEM_SELF_AGENT = 'totem-claude';
       setLogDir(totemDir);
+      const callsBefore = getSearchStats().totalCalls;
       const stamped = logSearch({ ...baseEntry });
+      // "still records": the in-memory log grew (the file append is
+      // fire-and-forget by contract and not asserted here).
+      expect(getSearchStats().totalCalls).toBe(callsBefore + 1);
       expect(stamped.agent_source).toBe('totem-claude');
       expect(stamped.agent_source_provenance).toBe('env');
       expect(stamped.attribution_conflict).toBeUndefined();
-      expect(stamped.attribution_probe_error).toContain('events.ndjson');
+      // "names the failure": the errno itself — the half a post-hoc reader
+      // filters on — must survive the cause unroll, not just the wrapper text.
+      expect(stamped.attribution_probe_error).toMatch(/EISDIR|EPERM|EACCES/);
     } finally {
       fs.rmSync(totemDir, RM_OPTS);
     }

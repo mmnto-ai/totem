@@ -464,8 +464,19 @@ export async function checkSeatIdentity(
         // "unparsed". An exit-0 output whose shape resists this parse entirely
         // stays a finding — present but unprovably inert: disclose, not guess.
         const valueMatch = /TOTEM_SELF_AGENT\s+REG_\w+[ \t]*(.*)/i.exec(output);
-        if (valueMatch !== null && valueMatch[1].trim().length === 0) continue;
-        const value = valueMatch === null ? '(value present, unparsed)' : valueMatch[1];
+        if (valueMatch !== null && valueMatch[1].trim().length === 0) {
+          // Inert ONLY when nothing follows the match either: a value whose
+          // data begins past a line break (programmatically-set CR/LF-leading
+          // values) captures '' here yet still stamps downstream — that shape
+          // must stay a finding, not vanish into the blank-skip (fold re-arm
+          // leg catch on this PR).
+          const rest = output.slice(valueMatch.index + valueMatch[0].length);
+          if (rest.trim().length === 0) continue;
+        }
+        const value =
+          valueMatch === null || valueMatch[1].trim().length === 0
+            ? '(value present, unparsed)'
+            : valueMatch[1];
         findings.push({
           seat: capToken(render(value)),
           cls: 'env-ambient-scope',

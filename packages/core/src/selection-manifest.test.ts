@@ -345,15 +345,20 @@ describe('attribution provenance (#2629)', () => {
     }) as never);
     // Through the SENSE wrapper deliberately: the leg on this PR proved the
     // row-only assertion passes with onWarn never firing (a builder-appended
-    // warning lived only on the persisted row). All three surfaces asserted.
+    // warning lived only on the persisted row). All three surfaces asserted —
+    // and with a caller-supplied warning in play, EXACT shape: the re-adopt
+    // must neither drop nor duplicate it (its truncate-and-refill is the
+    // guard; this pins it).
     const surfaced: string[] = [];
     const result = senseSelectionManifest(
-      baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' } }),
+      baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' }, warnings: ['pre-existing'] }),
       (w) => surfaced.push(w),
     );
     expect(result.written).toBe(true);
-    expect(result.warnings.some((w) => w.includes('attribution conflict probe failed'))).toBe(true);
-    expect(surfaced.some((w) => w.includes('attribution conflict probe failed'))).toBe(true);
+    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings[0]).toBe('pre-existing');
+    expect(result.warnings[1]).toContain('attribution conflict probe failed');
+    expect(surfaced).toEqual(result.warnings);
     const rows = readSelectionManifests(totemDir);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.agent_source).toBe('totem-gemini');
