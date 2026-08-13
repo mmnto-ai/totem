@@ -132,6 +132,7 @@ export function readSessionMintingSeat(
     // totem-context: intentional malformed-line tolerance — a torn/corrupt NDJSON line is skipped and the scan continues (the parseSearchLog precedent); a torn mint row must read as not-found, never crash the stamp path or fabricate a conflict.
     try {
       obj = JSON.parse(line);
+      // totem-context: intentional degradation — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
     } catch {
       continue;
     }
