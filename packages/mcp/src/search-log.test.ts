@@ -7,11 +7,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   deriveSearchLogAttribution,
   logSearch,
-  setLogDir,
   type SearchLogEntry,
+  setLogDir,
 } from './search-log.js';
 
 const SESSION_A = '550e8400-e29b-41d4-a716-446655440000';
+
+/** Windows-safe teardown options — retries ride out transient ENOTEMPTY. */
+const RM_OPTS = { recursive: true, force: true, maxRetries: 3, retryDelay: 100 } as const;
 
 /** Pointer at SESSION_A minted by `mintSeat` — the #2629 contamination fixture. */
 function contaminatedTotemDir(mintSeat: string): string {
@@ -98,7 +101,7 @@ describe('deriveSearchLogAttribution conflict sense (#2629)', () => {
   let totemDir: string;
 
   afterEach(() => {
-    fs.rmSync(totemDir, { recursive: true, force: true });
+    fs.rmSync(totemDir, RM_OPTS);
   });
 
   it('FAIL-CLOSED: env seat ≠ pointer minting seat → stamp neither, name both', () => {
@@ -207,7 +210,7 @@ describe('logSearch attribution stamp', () => {
         pointer_session_id: SESSION_A,
       });
     } finally {
-      fs.rmSync(totemDir, { recursive: true, force: true });
+      fs.rmSync(totemDir, RM_OPTS);
     }
   });
 });
