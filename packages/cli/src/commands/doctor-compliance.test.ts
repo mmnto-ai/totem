@@ -60,6 +60,24 @@ describe('parseSearchLog', () => {
     expect(result.malformedCount).toBe(0);
   });
 
+  it('tolerates the #2629 provenance/conflict fields on a row — invariant 5, compliance-parser half', () => {
+    const sensorRow = JSON.stringify({
+      timestamp: iso(BASE),
+      agent_source: 'totem-claude',
+      agent_source_provenance: 'env',
+      attribution_conflict: {
+        env_seat: 'totem-gemini',
+        minting_seat: 'totem-claude',
+        pointer_session_id: '550e8400-e29b-41d4-a716-446655440000',
+      },
+      attribution_probe_error: 'probe failed',
+    });
+    const result = parseSearchLog(sensorRow);
+    expect(result.malformedCount).toBe(0);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.agent_source).toBe('totem-claude');
+  });
+
   it('skips a corrupt JSONL line with a warn count, still parses the rest', () => {
     const good1 = JSON.stringify({ timestamp: iso(BASE), agent_source: 'claude' });
     const good2 = JSON.stringify({ timestamp: iso(BASE + H), agent_source: 'gemini' });

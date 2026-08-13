@@ -312,18 +312,27 @@ describe('attribution provenance (#2629)', () => {
     });
   });
 
-  it('a self-minted row never probes the pointer — conflict structurally impossible there', () => {
+  it('a self-minted row never RUNS the probe — asserted on the fs, not just the outcome', () => {
     pointerMintedBy('totem-claude');
+    // Outcome-only assertion would pass even if the probe ran and was ignored
+    // (leg finding on this PR) — so assert the events.ndjson read never fires.
+    const realRead = fs.readFileSync.bind(fs);
+    const eventsReads: string[] = [];
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((target: unknown, ...rest: unknown[]) => {
+      if (String(target).endsWith('events.ndjson')) eventsReads.push(String(target));
+      return (realRead as (...args: unknown[]) => unknown)(target, ...rest);
+    }) as never);
     const row = buildSelectionManifestRow(
       baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' }, sessionId: SESSION_B }),
     );
+    expect(eventsReads).toEqual([]);
     expect(row.session_id).toBe(SESSION_B);
     expect(row.agent_source).toBe('totem-gemini');
     expect(row.agent_source_provenance).toBe('env');
     expect(row.attribution_conflict).toBeUndefined();
   });
 
-  it('a failed conflict probe keeps the env stamp and names itself on the row AND the warnings channel', () => {
+  it('a failed conflict probe keeps the env stamp and names itself on the row, the returned warnings, AND onWarn', () => {
     pointerMintedBy('totem-claude');
     const realRead = fs.readFileSync.bind(fs);
     vi.spyOn(fs, 'readFileSync').mockImplementation(((target: unknown, ...rest: unknown[]) => {
@@ -334,11 +343,21 @@ describe('attribution provenance (#2629)', () => {
       }
       return (realRead as (...args: unknown[]) => unknown)(target, ...rest);
     }) as never);
-    const row = buildSelectionManifestRow(baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' } }));
-    expect(row.agent_source).toBe('totem-gemini');
-    expect(row.agent_source_provenance).toBe('env');
-    expect(row.attribution_probe_error).toContain('EACCES');
-    expect(row.warnings.some((w) => w.includes('attribution conflict probe failed'))).toBe(true);
+    // Through the SENSE wrapper deliberately: the leg on this PR proved the
+    // row-only assertion passes with onWarn never firing (a builder-appended
+    // warning lived only on the persisted row). All three surfaces asserted.
+    const surfaced: string[] = [];
+    const result = senseSelectionManifest(baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' } }), (w) =>
+      surfaced.push(w),
+    );
+    expect(result.written).toBe(true);
+    expect(result.warnings.some((w) => w.includes('attribution conflict probe failed'))).toBe(true);
+    expect(surfaced.some((w) => w.includes('attribution conflict probe failed'))).toBe(true);
+    const rows = readSelectionManifests(totemDir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.agent_source).toBe('totem-gemini');
+    expect(rows[0]!.agent_source_provenance).toBe('env');
+    expect(rows[0]!.attribution_probe_error).toContain('EACCES');
   });
 
   it('pre-sensor rows stay parseable — the additive-optional migration shape', () => {

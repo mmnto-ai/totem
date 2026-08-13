@@ -430,9 +430,13 @@ export async function checkSeatIdentity(
 
     // Arm (d) — the win32 registry scope-sense (mmnto-ai/totem#2629).
     // Doctor-time only: two `reg query` spawns per explicit doctor run, never
-    // the stamp hot path. Presence at either persistent scope IS the finding,
-    // whatever the value — user/machine scope turns a per-seat identity into a
-    // per-machine stamp inherited by every seat's processes.
+    // the stamp hot path. A NON-BLANK value at either persistent scope is the
+    // finding — user/machine scope turns a per-seat identity into a
+    // per-machine stamp inherited by every seat's processes. A key whose value
+    // is BLANK is the post-remediation live shape (`reg` still exits 0 when a
+    // clear left the key behind); a blank stamps nothing downstream
+    // (resolveQbdAgentSource normalizes '' to undefined), so it is inert — no
+    // contradiction, no finding.
     const platform = seams.platform ?? process.platform;
     if (platform === 'win32') {
       const regQuery =
@@ -455,7 +459,12 @@ export async function checkSeatIdentity(
           }
           continue;
         }
-        const valueMatch = /TOTEM_SELF_AGENT\s+REG_\w+\s+(.+)/i.exec(output);
+        // Rest-of-line capture, deliberately possibly-empty: the blank-value
+        // shape must parse (and be skipped as inert) rather than degrade to
+        // "unparsed". An exit-0 output whose shape resists this parse entirely
+        // stays a finding — present but unprovably inert: disclose, not guess.
+        const valueMatch = /TOTEM_SELF_AGENT\s+REG_\w+[ \t]*(.*)/i.exec(output);
+        if (valueMatch !== null && valueMatch[1].trim().length === 0) continue;
         const value = valueMatch === null ? '(value present, unparsed)' : valueMatch[1];
         findings.push({
           seat: capToken(render(value)),

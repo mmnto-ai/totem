@@ -201,14 +201,21 @@ describe('senseAgentAttribution', () => {
     expect(sense).toEqual({ agent_source: 'totem-claude', agent_source_provenance: 'env' });
   });
 
-  it('mint row without a seat → no counter-evidence — env stamp stands', () => {
+  it('mint row without a seat → no counter-evidence — env stamp stands (the ACTUAL b8d7aa9b specimen shape)', () => {
+    // Honest coverage note (leg finding on this PR): the live specimen's mint
+    // row carries NO agent_source (minted 03:03Z, before the user-scope var
+    // was armed), so in the contamination window this sensor would have
+    // stamped the ambient seat with provenance 'env' and NO conflict — ruled
+    // item 2 fires only on disagreement between two PRESENT candidates. The
+    // ambient-scope class where every mint agrees with the env is sensed by
+    // doctor arm (d) + the launch-shell protocol, not by this predicate.
     writePointer(SESSION_A);
     writeEvents([sessionStartRow(SESSION_A)]);
     const sense = senseAgentAttribution({ totemDir, env: { TOTEM_SELF_AGENT: 'totem-gemini' } });
     expect(sense).toEqual({ agent_source: 'totem-gemini', agent_source_provenance: 'env' });
   });
 
-  it('FAIL-CLOSED: env seat ≠ minting seat → stamp neither, name both (the b8d7aa9b shape)', () => {
+  it('FAIL-CLOSED: env seat ≠ minting seat → stamp neither, name both (a seated foreign-pointer join)', () => {
     writePointer(SESSION_A);
     writeEvents([sessionStartRow(SESSION_A, 'totem-claude')]);
     const sense = senseAgentAttribution({ totemDir, env: { TOTEM_SELF_AGENT: 'totem-gemini' } });

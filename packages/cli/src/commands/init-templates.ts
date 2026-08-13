@@ -407,6 +407,11 @@ try {
     emitter: 'session-start',
     ...(mintedSessionId ? { session_id: mintedSessionId } : {}),
     ...(selfAgent ? { agent_source: selfAgent } : {}),
+    // mmnto-ai/totem#2629: provenance disclosed on every row (ruled item 1).
+    // Self-minted row — the minting seat IS this process's env read, so the
+    // core conflict probe is structurally inapplicable; only the two-value
+    // provenance enum rides. Mirrors senseAgentAttribution's biconditional.
+    agent_source_provenance: selfAgent ? 'env' : 'absent',
     context: { template: 'gemini-managed' },
     universe: 'managed-template blocks: describe + orient --session',
     costBasis: { bytes: 'utf8-length', approxTokens: 'ceil(bytes/4) approximation' },
@@ -1201,6 +1206,11 @@ try {
     emitter: 'session-start',
     ...(mintedSessionId ? { session_id: mintedSessionId } : {}),
     ...(selfAgent ? { agent_source: selfAgent } : {}),
+    // mmnto-ai/totem#2629: provenance disclosed on every row (ruled item 1).
+    // Self-minted row — the minting seat IS this process's env read, so the
+    // core conflict probe is structurally inapplicable; only the two-value
+    // provenance enum rides. Mirrors senseAgentAttribution's biconditional.
+    agent_source_provenance: selfAgent ? 'env' : 'absent',
     context: { template: 'claude-managed' },
     universe: 'managed-template blocks: describe + orient --session',
     costBasis: { bytes: 'utf8-length', approxTokens: 'ceil(bytes/4) approximation' },

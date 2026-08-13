@@ -417,6 +417,32 @@ describe('checkSeatIdentity — (d) registry scope-sense (win32, mmnto-ai/totem#
     expect(result.message).not.toContain('env-ambient-scope');
   });
 
+  it('a BLANK-valued key (the post-remediation live shape: value cleared, key kept) is inert — no finding', async () => {
+    // Verbatim `reg query` output for a blank REG_SZ value after safeExec's
+    // whole-output trim: `reg` exits 0, the key exists, the value stamps
+    // nothing (resolveQbdAgentSource normalizes '' to undefined).
+    const blank = 'HKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ';
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? blank : regAbsent()),
+    });
+    expect(result.status).toBe('pass');
+    expect(result.message).not.toContain('env-ambient-scope');
+    expect(result.message).not.toContain('registry-scope-unreadable');
+  });
+
+  it('a blank value with trailing padding (untrimmed stdout variant) is equally inert', async () => {
+    const blank = '\r\nHKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ    \r\n\r\n';
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? blank : regAbsent()),
+    });
+    expect(result.status).toBe('pass');
+    expect(result.message).not.toContain('env-ambient-scope');
+  });
+
   it('a hit whose value line resists parsing is still a finding — presence IS the contradiction', async () => {
     const result = await checkSeatIdentity(root, {
       env: NO_ENV,

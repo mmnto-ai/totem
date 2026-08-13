@@ -194,8 +194,28 @@ describe('logSearch attribution stamp', () => {
     expect(JSON.parse(JSON.stringify(stamped))).not.toHaveProperty('attribution_conflict');
   });
 
-  // LAST in this file deliberately: setLogDir sets module-level state the
-  // earlier no-fs describes rely on being unset.
+  // The setLogDir tests sit LAST in this file deliberately: setLogDir sets
+  // module-level state the earlier no-fs describes rely on being unset.
+  it('SEAM-LEVEL invariant 10: with every probe failing (events.ndjson is a directory), logSearch still records, stamps env, and names the failure', () => {
+    const totemDir = fs.mkdtempSync(path.join(os.tmpdir(), 'search-log-probe-'));
+    try {
+      const ledgerDir = path.join(totemDir, 'ledger');
+      // A DIRECTORY where the events file should be — EISDIR on read, the
+      // non-benign probe-failure class (not the honest-absence ENOENT set).
+      fs.mkdirSync(path.join(ledgerDir, 'events.ndjson'), { recursive: true });
+      fs.writeFileSync(path.join(ledgerDir, '.session-id'), SESSION_A, 'utf-8');
+      process.env.TOTEM_SELF_AGENT = 'totem-claude';
+      setLogDir(totemDir);
+      const stamped = logSearch({ ...baseEntry });
+      expect(stamped.agent_source).toBe('totem-claude');
+      expect(stamped.agent_source_provenance).toBe('env');
+      expect(stamped.attribution_conflict).toBeUndefined();
+      expect(stamped.attribution_probe_error).toContain('events.ndjson');
+    } finally {
+      fs.rmSync(totemDir, RM_OPTS);
+    }
+  });
+
   it('with setLogDir armed, a contaminated ledger produces a conflict row and the call still succeeds', () => {
     const totemDir = contaminatedTotemDir('totem-claude');
     try {

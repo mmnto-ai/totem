@@ -27,6 +27,16 @@
  * #2625 template, so the lookup needs no new producer. Absence of that row
  * (pre-hook ledger, rotated file, unseated mint) is NOT a disagreement: only
  * positive counter-evidence strips attribution.
+ *
+ * NAMED LIMIT (stated so coverage is never overread): the conflict arm fires
+ * only when two PRESENT candidates disagree — a seated process joining a
+ * foreign seat's pointer session. The b8d7aa9b specimen itself had an
+ * UNSEATED mint row (minted before the ambient var was armed), and a
+ * machine-wide ambient var makes every mint agree with every process env —
+ * both shapes yield an env stamp with no conflict here, by ruled design. The
+ * sensors for the ambient-scope class are the provenance field (post-hoc
+ * partitioning), doctor arm (d)'s registry scope-sense, and the launch-shell
+ * scope protocol — not this predicate.
  */
 
 import * as fs from 'node:fs';

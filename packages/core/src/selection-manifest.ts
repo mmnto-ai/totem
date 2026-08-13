@@ -355,9 +355,15 @@ export interface SelectionManifestInput {
   /** Test seam — production callers omit and the writer reads `process.env`. */
   env?: NodeJS.ProcessEnv;
   /**
-   * Session UUID override for emitters that minted the id themselves (the
+   * Session UUID for emitters that minted the id themselves (the
    * session-start hooks). When absent, the id is read from the
    * `.totem/ledger/.session-id` pointer.
+   *
+   * CONTRACT (#2629): passing this field asserts THIS PROCESS minted the id —
+   * it disables the attribution conflict probe, because a self-minted row's
+   * minting seat is by construction the emitting process's own env read. A
+   * caller that merely RESOLVED an id from somewhere else (env, a foreign
+   * pointer) must NOT pass it here, or it silently opts out of the sensor.
    */
   sessionId?: string;
 }
@@ -470,6 +476,14 @@ export function appendSelectionManifest(input: SelectionManifestInput): Selectio
   }
 
   const row = buildSelectionManifestRow({ ...input, warnings });
+  // Re-adopt the ROW's warnings array: the builder copies its input and may
+  // append its own accounting entries onto the copy (the #2629 attribution
+  // probe warning). Without this re-adopt the entry would live only on the
+  // persisted row while the returned warnings — the channel `onWarn` and
+  // callers actually see — stayed silent (leg finding on this PR: a
+  // degradation the accounting channel never surfaces is a Tenet 4 miss).
+  warnings.length = 0;
+  warnings.push(...row.warnings);
   const parsed = SelectionManifestRowSchema.safeParse(row);
   if (!parsed.success) {
     const detail = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
