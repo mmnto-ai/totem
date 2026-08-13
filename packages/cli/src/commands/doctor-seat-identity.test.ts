@@ -27,6 +27,14 @@ import {
 /** No env by default: arm (c) must stay silent unless a test names a seat. */
 const NO_ENV: Record<string, string | undefined> = {};
 
+/**
+ * Every pre-arm-(d) test pins a non-win32 platform so the suite is hermetic:
+ * without the pin, a win32 dev host would spawn REAL `reg query` probes and a
+ * machine with a user-scope TOTEM_SELF_AGENT would fail unrelated assertions —
+ * exactly the un-isolated-test-environment trap arm (d) itself senses for.
+ */
+const LINUX: NodeJS.Platform = 'linux';
+
 let root: string;
 
 beforeEach(() => {
@@ -83,7 +91,7 @@ describe('checkSeatIdentity — verdict shape', () => {
     seatDir('totem-claude');
     dispatch('totem-claude', '2026-08-01T1200Z-totem-codex-note.md', 'totem-claude');
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.name).toBe(SEAT_IDENTITY_CHECK_NAME);
     expect(result.status).toBe('pass');
@@ -94,7 +102,7 @@ describe('checkSeatIdentity — verdict shape', () => {
   });
 
   it('senses zero seats without failing when no seat has registered', async () => {
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.status).toBe('pass');
     expect(result.gateExempt).toBe(true);
@@ -104,7 +112,7 @@ describe('checkSeatIdentity — verdict shape', () => {
   it('does not flag a dispatch that declares no from: (the dir IS the binding)', async () => {
     dispatch('totem-claude', '2026-08-01T1200Z-totem-codex-note.md', null);
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.status).toBe('pass');
     expect(result.message).not.toContain('from-mismatch');
@@ -116,7 +124,7 @@ describe('checkSeatIdentity — (a) from ≠ owning dir', () => {
     dispatch('totem-claude', '2026-08-01T1200Z-totem-codex-ok.md', 'totem-claude');
     dispatch('totem-claude', '2026-08-02T0900Z-totem-codex-forged.md', 'totem-agy');
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.status).toBe('warn');
     expect(result.gateExempt).toBe(true);
@@ -130,7 +138,7 @@ describe('checkSeatIdentity — (a) from ≠ owning dir', () => {
   it('reads a quoted from: as the same seat (yamlScalar quotes when it must)', async () => {
     dispatch('totem-claude', '2026-08-01T1200Z-totem-codex-quoted.md', '"totem-claude"');
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.status).toBe('pass');
   });
@@ -143,7 +151,7 @@ describe('checkSeatIdentity — (a) from ≠ owning dir', () => {
       ['---', 'to: totem-codex', '---', '', 'from: totem-agy', ''].join('\n'),
     );
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.status).toBe('pass');
   });
@@ -155,7 +163,7 @@ describe('checkSeatIdentity — (b) writing while excluded', () => {
     dispatch('totem-agy', '2026-08-05T1000Z-totem-claude-after.md', 'totem-agy');
     marker('totem-agy', validMarker('suspended', '2026-08-01T00:00:00.000Z'));
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.status).toBe('warn');
     expect(result.gateExempt).toBe(true);
@@ -169,7 +177,7 @@ describe('checkSeatIdentity — (b) writing while excluded', () => {
     dispatch('totem-agy', '2026-08-05T1000Z-totem-claude-after.md', 'totem-agy');
     marker('totem-agy', validMarker('retired', '2026-08-01T00:00:00.000Z'));
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.message).toContain('totem-agy [writing-while-excluded]');
     expect(result.status).toBe('warn');
@@ -179,7 +187,7 @@ describe('checkSeatIdentity — (b) writing while excluded', () => {
     dispatch('totem-agy', '2026-08-05T1000Z-totem-claude-after.md', 'totem-agy');
     marker('totem-agy', validMarker('active', '2026-08-01T00:00:00.000Z'));
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.status).toBe('pass');
   });
@@ -188,7 +196,7 @@ describe('checkSeatIdentity — (b) writing while excluded', () => {
     dispatch('totem-agy', '2026-08-05T1000Z-totem-claude-after.md', 'totem-agy');
     marker('totem-agy', '{ not json');
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.status).toBe('warn');
     expect(result.gateExempt).toBe(true);
@@ -203,7 +211,7 @@ describe('checkSeatIdentity — (b) writing while excluded', () => {
     dispatch('totem-agy', '2026-08-05T1000Z-totem-claude-after.md', 'totem-agy');
     marker('totem-agy', validMarker('FAULTED', '2026-08-01T00:00:00.000Z'));
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.message).toContain('totem-agy [unreadable-marker]');
     expect(result.message).not.toContain('writing-while-excluded');
@@ -216,7 +224,10 @@ describe('checkSeatIdentity — (c) TOTEM_SELF_AGENT vs lifecycle', () => {
     seatDir('totem-agy');
     marker('totem-agy', validMarker('suspended', '2026-08-01T00:00:00.000Z'));
 
-    const result = await checkSeatIdentity(root, { env: { TOTEM_SELF_AGENT: 'totem-agy' } });
+    const result = await checkSeatIdentity(root, {
+      env: { TOTEM_SELF_AGENT: 'totem-agy' },
+      platform: LINUX,
+    });
 
     expect(result.status).toBe('warn');
     expect(result.gateExempt).toBe(true);
@@ -227,7 +238,10 @@ describe('checkSeatIdentity — (c) TOTEM_SELF_AGENT vs lifecycle', () => {
   it('flags an env var naming no seat directory in this repo', async () => {
     seatDir('totem-claude');
 
-    const result = await checkSeatIdentity(root, { env: { TOTEM_SELF_AGENT: 'totem-ghost' } });
+    const result = await checkSeatIdentity(root, {
+      env: { TOTEM_SELF_AGENT: 'totem-ghost' },
+      platform: LINUX,
+    });
 
     expect(result.status).toBe('warn');
     expect(result.message).toContain('totem-ghost [env-names-unknown-seat]');
@@ -236,9 +250,15 @@ describe('checkSeatIdentity — (c) TOTEM_SELF_AGENT vs lifecycle', () => {
   it('stays silent for an active seat and for an unset / blank env var', async () => {
     seatDir('totem-claude');
 
-    const active = await checkSeatIdentity(root, { env: { TOTEM_SELF_AGENT: 'totem-claude' } });
-    const unset = await checkSeatIdentity(root, { env: NO_ENV });
-    const blank = await checkSeatIdentity(root, { env: { TOTEM_SELF_AGENT: '   ' } });
+    const active = await checkSeatIdentity(root, {
+      env: { TOTEM_SELF_AGENT: 'totem-claude' },
+      platform: LINUX,
+    });
+    const unset = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
+    const blank = await checkSeatIdentity(root, {
+      env: { TOTEM_SELF_AGENT: '   ' },
+      platform: LINUX,
+    });
 
     for (const result of [active, unset, blank]) {
       expect(result.status).toBe('pass');
@@ -253,6 +273,7 @@ describe('checkSeatIdentity — (c) TOTEM_SELF_AGENT vs lifecycle', () => {
 
     const result = await checkSeatIdentity(root, {
       env: { TOTEM_SELF_AGENT: 'totem-claude, totem-agy' },
+      platform: LINUX,
     });
 
     expect(result.message).toContain('totem-agy [env-names-excluded-seat]');
@@ -262,7 +283,10 @@ describe('checkSeatIdentity — (c) TOTEM_SELF_AGENT vs lifecycle', () => {
   it('does not flag (c) on a corrupt marker — the seat reads active by core contract', async () => {
     marker('totem-agy', '{ not json');
 
-    const result = await checkSeatIdentity(root, { env: { TOTEM_SELF_AGENT: 'totem-agy' } });
+    const result = await checkSeatIdentity(root, {
+      env: { TOTEM_SELF_AGENT: 'totem-agy' },
+      platform: LINUX,
+    });
 
     expect(result.message).toContain('unreadable-marker');
     expect(result.message).not.toContain('env-names-excluded-seat');
@@ -275,7 +299,11 @@ describe('checkSeatIdentity — scan bound', () => {
       dispatch('totem-claude', `2026-08-0${i + 1}T1200Z-totem-codex-n${i}.md`, 'totem-claude');
     }
 
-    const bounded = await checkSeatIdentity(root, { env: NO_ENV, outboxScanLimit: 2 });
+    const bounded = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      outboxScanLimit: 2,
+      platform: LINUX,
+    });
 
     expect(bounded.message).toContain('scan bounded at 2/outbox');
     expect(bounded.message).toContain('totem-claude: newest 2 of 4 outbox file(s) scanned');
@@ -288,7 +316,7 @@ describe('checkSeatIdentity — scan bound', () => {
   it('says nothing about the bound when the whole outbox fits inside it', async () => {
     dispatch('totem-claude', '2026-08-01T1200Z-totem-codex-n0.md', 'totem-claude');
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV });
+    const result = await checkSeatIdentity(root, { env: NO_ENV, platform: LINUX });
 
     expect(result.message).not.toContain('scan bounded');
     // Exact default, not a weak range check (CR on #2627).
@@ -299,9 +327,156 @@ describe('checkSeatIdentity — scan bound', () => {
     dispatch('totem-claude', '2026-07-01T1200Z-totem-codex-old.md', 'totem-agy');
     dispatch('totem-claude', '2026-08-09T1200Z-totem-codex-new.md', 'totem-agy');
 
-    const result = await checkSeatIdentity(root, { env: NO_ENV, outboxScanLimit: 1 });
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      outboxScanLimit: 1,
+      platform: LINUX,
+    });
 
     expect(result.message).toContain('2026-08-09T1200Z-totem-codex-new.md');
     expect(result.message).not.toContain('2026-07-01T1200Z-totem-codex-old.md');
+  });
+});
+
+describe('checkSeatIdentity — (d) registry scope-sense (win32, mmnto-ai/totem#2629)', () => {
+  /** Real `reg query` hit shape, CRLF line endings and all. */
+  const REG_HIT_STDOUT = [
+    'HKEY_CURRENT_USER\\Environment',
+    '    TOTEM_SELF_AGENT    REG_SZ    totem-claude',
+    '',
+  ].join('\r\n');
+
+  /** The healthy state: `reg query` exits 1 when the value is absent. */
+  function regAbsent(): never {
+    const err = new Error('reg exited 1') as Error & { status: number };
+    err.status = 1;
+    throw err;
+  }
+
+  it('never probes the registry off win32', async () => {
+    let calls = 0;
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: LINUX,
+      regQuery: () => {
+        calls++;
+        return REG_HIT_STDOUT;
+      },
+    });
+    expect(calls).toBe(0);
+    expect(result.message).not.toContain('env-ambient-scope');
+  });
+
+  it('flags a user-scope TOTEM_SELF_AGENT with the value, scope, and issue named', async () => {
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? REG_HIT_STDOUT : regAbsent()),
+    });
+    expect(result.status).toBe('warn');
+    expect(result.gateExempt).toBe(true);
+    expect(result.message).toContain('totem-claude [env-ambient-scope]');
+    expect(result.message).toContain('user scope');
+    expect(result.message).toContain('mmnto-ai/totem#2629');
+  });
+
+  it('a machine-scope hit names the machine scope', async () => {
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive.startsWith('HKLM') ? REG_HIT_STDOUT : regAbsent()),
+    });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('[env-ambient-scope]');
+    expect(result.message).toContain('machine scope');
+  });
+
+  it('both hives absent (reg exit 1) is the healthy silent state', async () => {
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: regAbsent,
+    });
+    expect(result.status).toBe('pass');
+    expect(result.message).not.toContain('env-ambient-scope');
+    expect(result.message).not.toContain('registry-scope-unreadable');
+  });
+
+  it('a real probe failure is DISCLOSED as registry-scope-unreadable, never silent or fabricated', async () => {
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: () => {
+        throw new Error('spawn reg ENOENT');
+      },
+    });
+    expect(result.status).toBe('warn');
+    expect(result.gateExempt).toBe(true);
+    expect(result.message).toContain('[registry-scope-unreadable]');
+    expect(result.message).toContain('ENOENT');
+    expect(result.message).not.toContain('env-ambient-scope');
+  });
+
+  it('a BLANK-valued key (the post-remediation live shape: value cleared, key kept) is inert — no finding', async () => {
+    // Verbatim `reg query` output for a blank REG_SZ value after safeExec's
+    // whole-output trim: `reg` exits 0, the key exists, the value stamps
+    // nothing (resolveQbdAgentSource normalizes '' to undefined).
+    const blank = 'HKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ';
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? blank : regAbsent()),
+    });
+    expect(result.status).toBe('pass');
+    expect(result.message).not.toContain('env-ambient-scope');
+    expect(result.message).not.toContain('registry-scope-unreadable');
+  });
+
+  it('a blank value with trailing padding (untrimmed stdout variant) is equally inert', async () => {
+    const blank =
+      '\r\nHKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ    \r\n\r\n';
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? blank : regAbsent()),
+    });
+    expect(result.status).toBe('pass');
+    expect(result.message).not.toContain('env-ambient-scope');
+  });
+
+  it('a blank HKCU does NOT mask a real machine-scope hit — the loop probes both hives', async () => {
+    const blank = 'HKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ';
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? blank : REG_HIT_STDOUT),
+    });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('[env-ambient-scope]');
+    expect(result.message).toContain('machine scope');
+  });
+
+  it('a CR/LF-leading value is NOT the inert blank shape — it still stamps downstream, so it stays a finding', async () => {
+    // Programmatically-settable only (never via setx/GUI), but such a value
+    // survives resolveQbdAgentSource's trim-split and contaminates rows.
+    const crlfValue =
+      'HKEY_CURRENT_USER\\Environment\r\n    TOTEM_SELF_AGENT    REG_SZ    \r\nrogue-seat';
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? crlfValue : regAbsent()),
+    });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('(value present, unparsed) [env-ambient-scope]');
+  });
+
+  it('a hit whose value line resists parsing is still a finding — presence IS the contradiction', async () => {
+    const result = await checkSeatIdentity(root, {
+      env: NO_ENV,
+      platform: 'win32',
+      regQuery: (hive) => (hive === 'HKCU\\Environment' ? 'unexpected output shape' : regAbsent()),
+    });
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('(value present, unparsed) [env-ambient-scope]');
   });
 });

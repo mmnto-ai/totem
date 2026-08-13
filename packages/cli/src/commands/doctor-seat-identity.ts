@@ -6,7 +6,7 @@
  * exemption is a property of the row (`doctor.ts` DiagnosticResult), not of the
  * tier a later change might widen.
  *
- * Three post-hoc contradictions are sensed per registered seat dir:
+ * Four post-hoc contradiction arms are sensed:
  *
  *   (a) `from-mismatch` — an outbox dispatch whose frontmatter `from:` names a
  *       DIFFERENT seat than the directory it sits in. The dir is the
@@ -18,6 +18,13 @@
  *       observed behaviour.
  *   (c) `env-names-excluded-seat` / `env-names-unknown-seat` — `TOTEM_SELF_AGENT`
  *       naming a non-active seat, or naming no seat directory in this repo.
+ *   (d) `env-ambient-scope` (win32 only; mmnto-ai/totem#2629) —
+ *       `TOTEM_SELF_AGENT` present at a PERSISTENT registry scope (user or
+ *       machine). A per-SEAT identity at either scope is inherited by every
+ *       seat's processes on the machine — the #2629 cross-seat fallthrough
+ *       root cause. Doctor-time only, never the stamp hot path; the stamp-seam
+ *       counterpart (provenance + fail-closed conflict) lives in core's
+ *       `senseAgentAttribution`.
  *
  * A corrupt marker degrades to `active` by core's contract
  * (`seat-lifecycle.ts` — fail open on visibility), so (b) is NEVER evaluated
@@ -105,8 +112,23 @@ export type SeatIdentityFindingClass =
   | 'writing-while-excluded'
   | 'env-names-excluded-seat'
   | 'env-names-unknown-seat'
+  | 'env-ambient-scope'
+  | 'registry-scope-unreadable'
   | 'unreadable-marker'
   | 'outbox-unreadable';
+
+/**
+ * The two persistent Windows env scopes arm (d) probes (mmnto-ai/totem#2629).
+ * Launch-shell env is NOT in the registry, so a hit at either hive is ambient
+ * by definition — no value comparison needed to make it a finding.
+ */
+const REGISTRY_SCOPES = [
+  { scope: 'user', hive: 'HKCU\\Environment' },
+  {
+    scope: 'machine',
+    hive: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',
+  },
+] as const;
 
 interface Finding {
   seat: string;
@@ -123,6 +145,15 @@ export interface SeatIdentitySeams {
   env?: Record<string, string | undefined>;
   /** Test seam — overrides {@link OUTBOX_SCAN_LIMIT} so truncation is testable. */
   outboxScanLimit?: number;
+  /** Test seam — production reads `process.platform`. Arm (d) is win32-only. */
+  platform?: NodeJS.Platform;
+  /**
+   * Test seam — production spawns `reg query <hive> /v TOTEM_SELF_AGENT` via
+   * core's `safeExec`. Implementations keep the `reg` contract this arm reads
+   * through: return stdout on a hit; throw with `.status === 1` when the value
+   * is absent at that hive (the healthy state).
+   */
+  regQuery?: (hive: string) => string;
 }
 
 /** One-line, ANSI-stripped, length-capped rendering of an off-the-wire token. */
@@ -268,7 +299,7 @@ export async function checkSeatIdentity(
 
   // totem-context: a scan failure is reported as a warn row — the seat-identity sensor must never take `totem doctor` down with it (report-only, Tenet 13; the checkEstate precedent).
   try {
-    const { deriveSeatStatuses, resolveTotemRepoRootSync, sanitizeForTerminal } =
+    const { deriveSeatStatuses, resolveTotemRepoRootSync, safeExec, sanitizeForTerminal } =
       await import('@mmnto/totem');
     sanitize = sanitizeForTerminal;
 
@@ -394,6 +425,63 @@ export async function checkSeatIdentity(
             evidence: `TOTEM_SELF_AGENT names a ${status.state} seat (since ${render(status.since ?? 'unknown')})`,
           });
         }
+      }
+    }
+
+    // Arm (d) — the win32 registry scope-sense (mmnto-ai/totem#2629).
+    // Doctor-time only: two `reg query` spawns per explicit doctor run, never
+    // the stamp hot path. A NON-BLANK value at either persistent scope is the
+    // finding — user/machine scope turns a per-seat identity into a
+    // per-machine stamp inherited by every seat's processes. A key whose value
+    // is BLANK is the post-remediation live shape (`reg` still exits 0 when a
+    // clear left the key behind); a blank stamps nothing downstream
+    // (resolveQbdAgentSource normalizes '' to undefined), so it is inert — no
+    // contradiction, no finding.
+    const platform = seams.platform ?? process.platform;
+    if (platform === 'win32') {
+      const regQuery =
+        seams.regQuery ??
+        ((hive: string): string => safeExec('reg', ['query', hive, '/v', 'TOTEM_SELF_AGENT']));
+      for (const { scope, hive } of REGISTRY_SCOPES) {
+        let output: string;
+        // totem-context: intentional degradation — `reg query` exits 1 when the value is absent at that hive (the healthy state, silent by contract); any OTHER failure is a scan hole this row DISCLOSES as a registry-scope-unreadable finding rather than a clean line it never verified.
+        try {
+          output = regQuery(hive);
+          // totem-context: intentional degradation — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+        } catch (err) {
+          const status = (err as Error & { status?: number | null }).status;
+          if (status !== 1) {
+            findings.push({
+              seat: `${scope}-scope`,
+              cls: 'registry-scope-unreadable',
+              evidence: render(`${hive} probe failed: ${messageOf(err)}`),
+            });
+          }
+          continue;
+        }
+        // Rest-of-line capture, deliberately possibly-empty: the blank-value
+        // shape must parse (and be skipped as inert) rather than degrade to
+        // "unparsed". An exit-0 output whose shape resists this parse entirely
+        // stays a finding — present but unprovably inert: disclose, not guess.
+        const valueMatch = /TOTEM_SELF_AGENT\s+REG_\w+[ \t]*(.*)/i.exec(output);
+        if (valueMatch !== null && valueMatch[1].trim().length === 0) {
+          // Inert ONLY when nothing follows the match either: a value whose
+          // data begins past a line break (programmatically-set CR/LF-leading
+          // values) captures '' here yet still stamps downstream — that shape
+          // must stay a finding, not vanish into the blank-skip (fold re-arm
+          // leg catch on this PR).
+          const rest = output.slice(valueMatch.index + valueMatch[0].length);
+          if (rest.trim().length === 0) continue;
+        }
+        const value =
+          valueMatch === null || valueMatch[1].trim().length === 0
+            ? '(value present, unparsed)'
+            : valueMatch[1];
+        findings.push({
+          seat: capToken(render(value)),
+          cls: 'env-ambient-scope',
+          evidence: `TOTEM_SELF_AGENT is set at ${scope} scope (${hive}) — a per-seat identity must be launch-shell-scoped, never user/machine scope (mmnto-ai/totem#2629)`,
+        });
       }
     }
 

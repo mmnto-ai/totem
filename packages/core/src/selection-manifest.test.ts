@@ -261,6 +261,129 @@ describe('attribution', () => {
   });
 });
 
+// ─── Attribution provenance + fail-closed conflict (mmnto-ai/totem#2629) ──
+
+describe('attribution provenance (#2629)', () => {
+  const SESSION_B = '550e8400-e29b-41d4-a716-446655440009';
+
+  /** Pointer at SESSION_A, minted by `mintSeat` — the contamination fixture. */
+  function pointerMintedBy(mintSeat: string): void {
+    fs.mkdirSync(path.join(totemDir, 'ledger'), { recursive: true });
+    fs.writeFileSync(path.join(totemDir, 'ledger', '.session-id'), SESSION_A, 'utf-8');
+    fs.writeFileSync(
+      path.join(totemDir, 'ledger', 'events.ndjson'),
+      JSON.stringify({
+        timestamp: '2026-08-12T03:03:00.000Z',
+        type: 'session_start',
+        activity_name: 'SessionStart',
+        source: 'bot',
+        justification: '',
+        session_id: SESSION_A,
+        agent_source: mintSeat,
+      }) + '\n',
+      'utf-8',
+    );
+  }
+
+  it('stamps provenance on every row — the env/absent biconditional', () => {
+    expect(buildSelectionManifestRow(baseInput()).agent_source_provenance).toBe('absent');
+    const seated = buildSelectionManifestRow(
+      baseInput({ env: { TOTEM_SELF_AGENT: 'totem-claude' } }),
+    );
+    expect(seated.agent_source).toBe('totem-claude');
+    expect(seated.agent_source_provenance).toBe('env');
+  });
+
+  it('FAIL-CLOSED: env seat ≠ pointer minting seat → stamp neither, name both — and the row is still written', () => {
+    pointerMintedBy('totem-claude');
+    const result = appendSelectionManifest(
+      baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' } }),
+    );
+    expect(result.written).toBe(true); // fail-closed scopes to attribution, never the operation
+    const rows = readSelectionManifests(totemDir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.agent_source).toBeUndefined();
+    expect(rows[0]!.agent_source_provenance).toBe('absent');
+    expect(rows[0]!.session_id).toBe(SESSION_A);
+    expect(rows[0]!.attribution_conflict).toEqual({
+      env_seat: 'totem-gemini',
+      minting_seat: 'totem-claude',
+      pointer_session_id: SESSION_A,
+    });
+  });
+
+  it('a self-minted row never RUNS the probe — asserted on the fs, not just the outcome', () => {
+    pointerMintedBy('totem-claude');
+    // Outcome-only assertion would pass even if the probe ran and was ignored
+    // (leg finding on this PR) — so assert the events.ndjson read never fires.
+    const realRead = fs.readFileSync.bind(fs);
+    const eventsReads: string[] = [];
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((target: unknown, ...rest: unknown[]) => {
+      if (String(target).endsWith('events.ndjson')) eventsReads.push(String(target));
+      return (realRead as (...args: unknown[]) => unknown)(target, ...rest);
+    }) as never);
+    const row = buildSelectionManifestRow(
+      baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' }, sessionId: SESSION_B }),
+    );
+    expect(eventsReads).toEqual([]);
+    expect(row.session_id).toBe(SESSION_B);
+    expect(row.agent_source).toBe('totem-gemini');
+    expect(row.agent_source_provenance).toBe('env');
+    expect(row.attribution_conflict).toBeUndefined();
+  });
+
+  it('a failed conflict probe keeps the env stamp and names itself on the row, the returned warnings, AND onWarn', () => {
+    pointerMintedBy('totem-claude');
+    const realRead = fs.readFileSync.bind(fs);
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((target: unknown, ...rest: unknown[]) => {
+      if (String(target).endsWith('events.ndjson')) {
+        const err = new Error('EACCES: permission denied') as NodeJS.ErrnoException;
+        err.code = 'EACCES';
+        throw err;
+      }
+      return (realRead as (...args: unknown[]) => unknown)(target, ...rest);
+    }) as never);
+    // Through the SENSE wrapper deliberately: the leg on this PR proved the
+    // row-only assertion passes with onWarn never firing (a builder-appended
+    // warning lived only on the persisted row). All three surfaces asserted —
+    // and with a caller-supplied warning in play, EXACT shape: the re-adopt
+    // must neither drop nor duplicate it (its truncate-and-refill is the
+    // guard; this pins it).
+    const surfaced: string[] = [];
+    const result = senseSelectionManifest(
+      baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' }, warnings: ['pre-existing'] }),
+      (w) => surfaced.push(w),
+    );
+    expect(result.written).toBe(true);
+    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings[0]).toBe('pre-existing');
+    expect(result.warnings[1]).toContain('attribution conflict probe failed');
+    expect(surfaced).toEqual(result.warnings);
+    const rows = readSelectionManifests(totemDir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.agent_source).toBe('totem-gemini');
+    expect(rows[0]!.agent_source_provenance).toBe('env');
+    expect(rows[0]!.attribution_probe_error).toContain('EACCES');
+  });
+
+  it('pre-sensor rows stay parseable — the additive-optional migration shape', () => {
+    const modern = buildSelectionManifestRow(baseInput());
+    const legacy = JSON.parse(JSON.stringify(modern)) as Record<string, unknown>;
+    delete legacy.agent_source_provenance;
+    expect(SelectionManifestRowSchema.safeParse(legacy).success).toBe(true);
+  });
+
+  it('the conflict disclosure is strict — no field can be smuggled into it', () => {
+    pointerMintedBy('totem-claude');
+    const row = buildSelectionManifestRow(baseInput({ env: { TOTEM_SELF_AGENT: 'totem-gemini' } }));
+    const poisoned = {
+      ...row,
+      attribution_conflict: { ...row.attribution_conflict!, sharedRelevanceScore: 0.9 },
+    };
+    expect(SelectionManifestRowSchema.safeParse(poisoned).success).toBe(false);
+  });
+});
+
 // ─── Writer ─────────────────────────────────────────────
 
 describe('appendSelectionManifest', () => {
