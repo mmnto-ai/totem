@@ -23,6 +23,7 @@ export const RecurrenceToolSchema = z.enum([
   'coderabbit',
   'gca',
   'greptile',
+  'ghcq',
   'sarif',
   'override',
   'mixed',
@@ -46,6 +47,8 @@ export type RecurrenceSeverityBucket = z.infer<typeof RecurrenceSeverityBucketSc
  * - `'gca'` / `'greptile'`: `critical` / `high` / `medium` / `low` → identical buckets; default `low` (greptile P0 → `critical`)
  * - `'sarif'`: SARIF level vocabulary (`error` / `warning` / `note` / `none`) → `high` / `medium` / `low` / `low`
  * - `'override'`: trap-ledger override events surface as `medium`
+ * - `'ghcq'`: no native severity vocabulary (mmnto-ai/totem#2626) — its `info`
+ *   findings ride the generic branch to `low`
  * - any other tool (`'unknown'`, `undefined`): keyword-mapped from the raw severity string
  */
 /**

@@ -98,6 +98,14 @@ describe('toSeverityBucket — greptile', () => {
   });
 });
 
+// ─── toSeverityBucket (ghcq; mmnto-ai/totem#2626) ──
+
+describe('toSeverityBucket — ghcq', () => {
+  it('rides the generic branch: info→low (ghcq has no native severity vocabulary)', () => {
+    expect(toSeverityBucket('ghcq', 'info')).toBe('low');
+  });
+});
+
 describe('RecurrenceStatsSchema', () => {
   it('parses an empty stats document', () => {
     const result = RecurrenceStatsSchema.safeParse({

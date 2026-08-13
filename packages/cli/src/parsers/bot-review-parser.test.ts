@@ -32,6 +32,10 @@ describe('detectBot', () => {
     expect(detectBot('greptile-apps[bot]')).toBe('greptile');
   });
 
+  it('identifies github-code-quality[bot] (mmnto-ai/totem#2626)', () => {
+    expect(detectBot('github-code-quality[bot]')).toBe('ghcq');
+  });
+
   it('returns unknown for human authors', () => {
     expect(detectBot('octocat')).toBe('unknown');
     expect(detectBot('jmatt')).toBe('unknown');
@@ -61,6 +65,19 @@ describe('isBotComment', () => {
     // (a bare-substring match would hide their replies / ingest them as findings).
     expect(isBotComment('alice-greptile')).toBe(false);
     expect(detectBot('alice-greptile')).toBe('unknown');
+  });
+
+  it('matches ghcq by login shape, not a bare substring (mmnto-ai/totem#2626)', () => {
+    expect(isBotComment('github-code-quality[bot]')).toBe(true);
+    // Variant arm mirrors the greptile precedent ("future bot variants are
+    // still surfaced") — a renamed/tiered variant never re-enters the
+    // pre-#2626 invisible-drop state.
+    expect(isBotComment('github-code-quality-enterprise[bot]')).toBe(true);
+    expect(detectBot('github-code-quality-enterprise[bot]')).toBe('ghcq');
+    // A human whose login merely contains the phrase is NOT a bot — the
+    // `[bot]` suffix is required, per the greptile shape precedent.
+    expect(isBotComment('alice-github-code-quality')).toBe(false);
+    expect(detectBot('alice-github-code-quality')).toBe('unknown');
   });
 
   it('returns false for human authors', () => {
@@ -160,6 +177,17 @@ describe('parseSeverityForTool', () => {
   it('dispatches greptile to the greptile parser', () => {
     expect(parseSeverityForTool('greptile', '**P1** null deref')).toBe('high');
     expect(parseSeverityForTool('greptile', '**P0** rce')).toBe('critical');
+  });
+
+  it('returns info for ghcq — the observed corpus carries no severity vocabulary (mmnto-ai/totem#2626)', () => {
+    // Real corpus shape (n=7 across totem #1897/#2224/#2434/#2457 + lc#980):
+    // `## <headline>` + description, sometimes followed by fix guidance — no
+    // priority tokens anywhere. Even severity-looking words in prose stay
+    // `info` — there is no ghcq vocabulary to parse until a corpus shows one.
+    expect(
+      parseSeverityForTool('ghcq', '## Unused import\n\nImport of `Matrix` is not used.'),
+    ).toBe('info');
+    expect(parseSeverityForTool('ghcq', 'a critical-sounding phrase')).toBe('info');
   });
 
   it('returns info for an unknown tool', () => {

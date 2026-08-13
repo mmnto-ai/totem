@@ -231,7 +231,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   // 5. Cluster by signature
   interface MutableCluster {
     signature: string;
-    tools: Set<'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'unknown'>;
+    tools: Set<'coderabbit' | 'gca' | 'greptile' | 'ghcq' | 'sarif' | 'override' | 'unknown'>;
     severityBuckets: SeverityBucket[];
     occurrences: number;
     prs: Set<string>;
@@ -303,7 +303,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   // 7. Materialize patterns
   const allPatterns: Array<{
     signature: string;
-    tool: 'coderabbit' | 'gca' | 'greptile' | 'sarif' | 'override' | 'mixed' | 'unknown';
+    tool: 'coderabbit' | 'gca' | 'greptile' | 'ghcq' | 'sarif' | 'override' | 'mixed' | 'unknown';
     severityBucket: SeverityBucket;
     occurrences: number;
     prs: string[];

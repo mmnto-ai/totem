@@ -50,6 +50,7 @@ const RetrospectFindingToolSchema = z.enum([
   'coderabbit',
   'gca',
   'greptile',
+  'ghcq',
   'sarif',
   'override',
   'unknown',
