@@ -28,6 +28,10 @@ interface WiringHandlers {
 function buildMailProgram(handlers: WiringHandlers): Command {
   const program = new Command();
   program.exitOverride(); // throw on parse error instead of process.exit
+  // Program-level --json mirrors index.ts: the parent/child option collision
+  // (#2097) is the seam optsWithGlobals below exists to fix — the mirror must
+  // carry it to sense it (fold re-arm finding 7).
+  program.option('--json', 'Emit JSON to stdout (program-level)');
   const mailCmd = program
     .command('mail')
     .option('--json', 'Emit JSON to stdout')
@@ -36,17 +40,33 @@ function buildMailProgram(handlers: WiringHandlers): Command {
     .option('--as <seat>', "Serve exactly this seat's mail")
     .option('--all-seats', 'Serve the full multi-seat union')
     .action(
-      (opts: {
-        json?: boolean;
-        recursive?: boolean;
-        workspace?: string;
-        as?: string;
-        allSeats?: boolean;
-      }) => {
-        // EXACT translation from index.ts (#2204): Commander stores `--as` under
-        // `as`; the lib option is `asSeat` — the rename is the drift hazard this
-        // mirror exists to sense.
-        const { json, recursive, workspace, as: asSeat, allSeats } = opts;
+      (
+        _opts: {
+          json?: boolean;
+          recursive?: boolean;
+          workspace?: string;
+          as?: string;
+          allSeats?: boolean;
+        },
+        cmd: Command,
+      ) => {
+        // EXACT translation from index.ts (#2204 + #2097): optsWithGlobals
+        // merges the program-level --json into the subcommand scope, and
+        // Commander stores `--as` under `as`; the lib option is `asSeat` —
+        // the rename is the drift hazard this mirror exists to sense.
+        const {
+          json,
+          recursive,
+          workspace,
+          as: asSeat,
+          allSeats,
+        } = cmd.optsWithGlobals<{
+          json?: boolean;
+          recursive?: boolean;
+          workspace?: string;
+          as?: string;
+          allSeats?: boolean;
+        }>();
         handlers.mailCommand({ json, recursive, workspace, asSeat, allSeats });
       },
     );
@@ -101,6 +121,14 @@ describe('mail CLI command-surface (Commander wiring, mmnto-ai/totem#2396 + #220
     buildMailProgram(h).parse(['node', 'totem', 'mail', '--all-seats']);
     const opts = h.mailCommand.mock.calls[0]![0] as Record<string, unknown>;
     expect(opts['allSeats']).toBe(true);
+  });
+
+  it('`totem --json mail --as x` merges the program-level --json into the poll opts (#2097 seam)', () => {
+    const h = handlers();
+    buildMailProgram(h).parse(['node', 'totem', '--json', 'mail', '--as', 'x']);
+    const opts = h.mailCommand.mock.calls[0]![0] as Record<string, unknown>;
+    expect(opts['json']).toBe(true);
+    expect(opts['asSeat']).toBe('x');
   });
 
   it('reply WITHOUT --no-mark → noMark: false (marking on by default)', () => {

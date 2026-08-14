@@ -833,28 +833,30 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     // first, so any landing here means self-priority volume alone exceeded
     // the cap — name them explicitly instead of hiding behind the generic
     // truncation line. Under the identity gate (mmnto-ai/totem#2204) the
-    // union-directed part of the tail is reported as a COUNT: an ECL basename
-    // is `<stamp>-<recipient>-<topic-slug>.md` — recipient + compressed
-    // subject — so naming it here would rebuild the withheld-listing exposure
-    // inside this warning (falsification-leg F1). Broadcast-token files carry
-    // no per-seat privacy and stay named either way.
+    // WHOLE self-token tail is reported as a COUNT: an ECL basename is
+    // `<stamp>-<recipient>-<topic-slug>.md` — recipient + compressed subject
+    // — and the filename token is untrusted for delivery truth (codex F2: a
+    // broadcast-NAMED file can carry a directed `to:` inside), so the only
+    // exposure-safe read of an UNOPENED tail is to name none of it
+    // (falsification-leg F1 + re-arm finding 3). The count line says
+    // "self-token", filename-truth — it never asserts a parsed `to:` the
+    // code does not have (re-arm finding 6).
     const droppedSelfEntries = ordered.slice(maxScan).filter(({ file }) => hasSelfToken(file));
-    const nameable = identityGated
-      ? droppedSelfEntries.filter(({ file }) => isBroadcastNamed(file))
-      : droppedSelfEntries;
-    const droppedSelf = nameable.map(({ slot, file }) => `${slot.repo}/${slot.agent}/${file}`);
-    const withheldFromNaming = droppedSelfEntries.length - nameable.length;
     if (droppedSelfEntries.length > 0) {
-      const shown = droppedSelf.slice(0, 5);
-      if (droppedSelf.length > shown.length) {
-        shown.push(`(+${droppedSelf.length - shown.length} more)`);
-      }
-      if (withheldFromNaming > 0) {
-        shown.push(
-          `(+${withheldFromNaming} directed-addressed beyond the horizon, withheld from naming — identity-ambiguous poll)`,
+      if (identityGated) {
+        warnings.push(
+          `possible self-addressed mail beyond the scan horizon: ${droppedSelfEntries.length} self-token file(s), withheld from naming — identity-ambiguous poll`,
         );
+      } else {
+        const droppedSelf = droppedSelfEntries.map(
+          ({ slot, file }) => `${slot.repo}/${slot.agent}/${file}`,
+        );
+        const shown = droppedSelf.slice(0, 5);
+        if (droppedSelf.length > shown.length) {
+          shown.push(`(+${droppedSelf.length - shown.length} more)`);
+        }
+        warnings.push(`possible self-addressed mail beyond the scan horizon: ${shown.join(', ')}`);
       }
-      warnings.push(`possible self-addressed mail beyond the scan horizon: ${shown.join(', ')}`);
     }
   }
 
@@ -977,15 +979,25 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     // nothing gates on notices, so the discovery path needs no special case.
     if (toLower !== 'broadcast' && !lifecycleAnnotatedSeats.has(toLower)) {
       const seatState = seatLifecycleStates.get(toLower);
+      // Gate-aware wording (re-arm finding 1): on the withheld path the
+      // "surfacing"/"still surfaces" clauses would assert a listing the same
+      // render withholds — the mislabeled-claim class this file's own re-arm
+      // D-2 test forbids. The seat name stays (it is already in the banner);
+      // the obligation/re-route sense is what the notice exists to carry.
+      const withheld = identityGated;
       if (seatState === 'suspended') {
         lifecycleAnnotatedSeats.add(toLower);
         notices.push(
-          `directed mail surfacing for suspended seat: to: "${header.to}" — obligation held, not discharged — disposition per mmnto-ai/totem-status#127`,
+          withheld
+            ? `directed mail WITHHELD for suspended seat: to: "${header.to}" (identity-ambiguous poll) — obligation held, not discharged — disposition per mmnto-ai/totem-status#127`
+            : `directed mail surfacing for suspended seat: to: "${header.to}" — obligation held, not discharged — disposition per mmnto-ai/totem-status#127`,
         );
       } else if (seatState === 'retired') {
         lifecycleAnnotatedSeats.add(toLower);
         notices.push(
-          `addressed to retired seat: to: "${header.to}" — mail still surfaces; the sender should re-route`,
+          withheld
+            ? `addressed to retired seat: to: "${header.to}" — mail withheld (identity-ambiguous poll); the sender should re-route`
+            : `addressed to retired seat: to: "${header.to}" — mail still surfaces; the sender should re-route`,
         );
       }
     }
@@ -1166,13 +1178,13 @@ export function formatTextResult(result: MailPollResult): string {
     if (result.mail.length === 0) {
       lines.push(
         nonGateWarnings > 0
-          ? `Scan INCOMPLETE (${nonGateWarnings} warning(s) above) — no unread broadcast mail found in the scanned locations; unread broadcast mail may exist in the unscanned ones.`
+          ? `Scan INCOMPLETE (${nonGateWarnings} scan warning(s) above) — no unread broadcast mail found in the scanned locations; unread broadcast mail may exist in the unscanned ones.`
           : 'No unread broadcast mail in the scanned locations.',
       );
     } else {
       lines.push(
         nonGateWarnings > 0
-          ? `${result.mail.length} unread broadcast dispatch(es) — scan INCOMPLETE (${nonGateWarnings} warning(s) above); more may exist in unscanned locations:`
+          ? `${result.mail.length} unread broadcast dispatch(es) — scan INCOMPLETE (${nonGateWarnings} scan warning(s) above); more may exist in unscanned locations:`
           : `${result.mail.length} unread broadcast dispatch(es):`,
       );
       for (const m of result.mail) {

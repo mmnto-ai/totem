@@ -3136,6 +3136,51 @@ describe('pollMail — identity gate (mmnto-ai/totem#2204)', () => {
     expect(text).toContain('Scan INCOMPLETE');
   });
 
+  it('gated poll keeps lifecycle sensing with withheld wording — no filename leak (re-arm 1/2a)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-gemini-secret-slug.md', to: 'totem-gemini' },
+    ]);
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    const result = poll();
+    expect(result.seatGate).toEqual({ withheldDirected: 1 });
+    expect(result.mail).toHaveLength(0);
+    const notice = result.notices.find((n) => n.includes('suspended seat'));
+    expect(notice).toBeDefined();
+    // The notice must not assert a surfacing the same render withholds
+    // (the mislabeled-claim class the D-2 test forbids for broadcasts).
+    expect(notice).toContain('WITHHELD');
+    expect(notice).not.toContain('surfacing');
+    expect([...result.warnings, ...result.notices].join('\n')).not.toContain('secret');
+  });
+
+  it('gated poll suppresses the collision sensor for withheld basenames; --all-seats control fires it (re-arm 2b)', () => {
+    const N = '2026-08-14T0900Z-totem-claude-converged.md';
+    writeOutbox('totem-strategy', 'strategy-claude', [{ name: N, to: 'totem-claude' }]);
+    writeOutbox('liquid-city', 'lc-claude', [{ name: N, to: 'totem-claude' }]);
+    const gated = poll();
+    expect(gated.seatGate).toEqual({ withheldDirected: 2 });
+    expect(gated.warnings.join('\n')).not.toContain('cross-sender basename collision');
+    // Control: the identical fixture DOES fire the sensor when the union view
+    // is explicitly requested — proving the gated suppression is what the
+    // first assertion measured, not a fixture that never collides.
+    const control = poll({ allSeats: true });
+    expect(control.warnings.join('\n')).toContain('cross-sender basename collision');
+  });
+
+  it('a broadcast-NAMED directed dispatch beyond the horizon is not named under the gate (re-arm 3)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-broadcast-actually-directed-secret.md', to: 'totem-claude' },
+      { name: '2026-08-14T0902Z-broadcast-real.md', to: 'broadcast' },
+    ]);
+    // The filename token is untrusted for delivery truth (codex F2): under the
+    // gate an UNOPENED tail is never named, broadcast-token or not.
+    const result = poll({ maxScan: 1 });
+    expect(result.truncated).toBe(true);
+    const joined = result.warnings.join('\n');
+    expect(joined).toContain('withheld from naming');
+    expect(joined).not.toContain('actually-directed-secret');
+  });
+
   it('gated arm keys INCOMPLETE on non-gate warnings — broadcast list qualified (leg F2)', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       {
@@ -3321,5 +3366,11 @@ describe('mailCommand — --as selector (mmnto-ai/totem#2204)', () => {
         allSeats: true,
       }),
     ).rejects.toThrow(/contradictory/);
+  });
+
+  it('rejects an unsafe --as value with the correctly-labeled error (re-arm 4)', async () => {
+    await expect(
+      runMailCommand({ repoRoot: selfRepoRoot(), workspace, env: {}, asSeat: '../evil' }),
+    ).rejects.toThrow(/invalid --as/);
   });
 });
