@@ -403,6 +403,10 @@ describe('shieldCommand --estimate incompatibility guard', () => {
     ['mode-standard', { mode: 'standard' as const }, '--mode'],
     ['mode-structural', { mode: 'structural' as const }, '--mode'],
     ['raw', { raw: true }, '--raw'],
+    // --gate has no estimate semantics (a forecast maps no dispositions), and
+    // rejecting it here keeps the --gate/--fail-on conflict unreachable via
+    // the estimate short-circuit (#2473 re-arm leg MINOR 2).
+    ['gate', { gate: true }, '--gate'],
   ])(
     'throws CONFIG_INVALID when --estimate is combined with %s',
     async (_name, extra, expectedFlag) => {

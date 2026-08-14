@@ -1936,9 +1936,10 @@ function describeNotApplicable(
 ): string {
   // Counts are EXACT for what each arm's `skippedFileCount` actually holds
   // (falsification-leg MINOR 4): all-generated counts the changed files;
-  // all-non-code and filtered-empty count the files in scope AFTER
-  // generated-artifact exclusion — the wording names that scope, never a
-  // number the count does not measure.
+  // all-non-code and filtered-empty count the files remaining AFTER
+  // generated-artifact exclusion. The rendered strings say "in scope" for the
+  // post-strip arms — shorthand for that post-exclusion set (the record
+  // schema's field doc carries the full reason-dependent basis; re-arm NIT 8).
   switch (outcome.reason) {
     case 'no-diff':
       return 'no changes detected in the resolved scope';
@@ -2193,7 +2194,9 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // admission identity. A not-applicable outcome takes the SINGLE emission
   // path (one record + one calm line, no stamp — the former no-diff "trivial
   // pass" stamp is removed: it minted authorization for a tree no reviewer
-  // saw) and returns; fan execution is structurally unreachable past this gate.
+  // saw) and returns — the fan is unreachable past this gate by CONTROL FLOW
+  // (boot-spy test-locked); the type barrier sits one seam later at
+  // `selectExecutionPayload` (re-arm NIT 9 wording).
   const diffResult = await getDiffForReview(options, config, cwd, DISPLAY_TAG);
   const admission = await evaluateAdmission({
     diffResult,
@@ -2277,8 +2280,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     ? { eligible: false, reason: 'multi-lane fan requires full diff scope' }
     : await evaluateIncrementalEligibility(cwd, config.totemDir, configRoot);
   // quiet=true for the delta re-projection: the full-scope pass already printed
-  // the generated/filtered disclosures — a second copy for the delta is noise
-  // (falsification-leg NIT 11; also drops a redundant .gitattributes read path).
+  // the generated/filtered disclosures, so the delta pass logs nothing (the
+  // .gitattributes read itself still happens — quiet gates logging only).
+  // Named trade-off: on a narrowed run the printed disclosures describe the
+  // FULL scope, a superset of the payload actually reviewed.
   const selection = await selectExecutionPayload(admission, incremental, cwd, true);
   if (selection.narrowed) {
     log.info(

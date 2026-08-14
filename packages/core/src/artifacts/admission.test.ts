@@ -2,8 +2,9 @@
  * Admission-record store tests (mmnto-ai/totem#2473).
  *
  * The store mirrors the verdict store's idioms — content-addressed with
- * `createdAt` excluded as observability-only, `wx` + EEXIST logical-identity
- * dedup, raw-address verification before schema parsing — and the record binds
+ * `createdAt` (observability) and `schemaVersion` (writer metadata) excluded,
+ * `wx` + EEXIST logical-identity dedup, raw-address verification before
+ * schema parsing — and the record binds
  * the exact observation (scope + inputHash + projectionPolicyHash), so these
  * tests lock the identity semantics the codex design review required: two
  * different observations never share an address, an identical observation
@@ -207,10 +208,33 @@ describe('admission store — save/load/dedup/identity', () => {
       computeAdmissionContentHash(baseRecord({ schemaVersion: '1.9.3' })),
     );
 
-    const saved = saveAdmissionRecord(totemDirAbs, baseRecord({ schemaVersion: '1.0.0' }));
+    // Save under a DIFFERENT 1.x than the writer default so the version-free
+    // lookup half genuinely crosses versions (re-arm leg MINOR 6 — a 1.0.0
+    // save was same-version on both sides and tested nothing).
+    const saved = saveAdmissionRecord(totemDirAbs, baseRecord({ schemaVersion: '1.9.3' }));
     const { createdAt: _c, schemaVersion: _s, ...identity } = baseRecord();
     const found = findAdmissionRecordByIdentity(totemDirAbs, identity, () => {});
     expect(found?.contentHash).toBe(saved.hash);
+  });
+
+  it('a newer-major record at a shared address fails with the NAMED upgrade error, never generic corruption', () => {
+    // Version-free addressing makes this meeting possible (re-arm leg MINOR 5):
+    // hand-write a valid-shaped 2.x record at the address its observation
+    // would occupy, then load it as this 1.x reader.
+    const record = { ...baseRecord(), schemaVersion: '2.0.0' };
+    const { createdAt: _c, schemaVersion: _s, ...identity } = record;
+    const dir = path.join(totemDirAbs, 'artifacts', 'admissions');
+    fs.mkdirSync(dir, { recursive: true });
+    const hash = computeAdmissionContentHash(record as AdmissionRecord);
+    fs.writeFileSync(path.join(dir, `${hash}.json`), JSON.stringify(record, null, 2), 'utf-8');
+
+    expect(() => loadAdmissionRecord(totemDirAbs, hash)).toThrow(/written by a newer totem/);
+    // And the exact-identity path routes it to onCorrupt-style handling
+    // upstream — but never as an address-verification failure.
+    expect(() => loadAdmissionRecord(totemDirAbs, hash)).not.toThrow(
+      /content-address verification/,
+    );
+    void identity;
   });
 
   it('renderAdmissionLine carries the local-lane prefix, reason, address, and record timestamp', () => {

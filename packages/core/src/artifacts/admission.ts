@@ -13,11 +13,15 @@
  * policy. Equal bytes under a changed policy are a DIFFERENT observation.
  *
  * Store mechanics mirror the verdict store deliberately (one idiom, two
- * artifact kinds): content-addressed with `createdAt` excluded as
- * observability-only, `wx` create-exclusive writes with EEXIST as
- * logical-identity dedup, raw-address verification BEFORE schema parsing on
- * load, and a version-tolerant-within-major reader with a migration registry
- * for future majors. Resolution by consumers is deterministic and
+ * artifact kinds): content-addressed with `createdAt` (observability) AND
+ * `schemaVersion` (writer metadata) excluded — the address is the OBSERVATION
+ * — `wx` create-exclusive writes with EEXIST as logical-identity dedup,
+ * raw-address verification BEFORE schema parsing on load, and a
+ * version-tolerant-within-major reader with a migration registry for future
+ * majors. Version-free addressing has a named backward cost: an OLDER CLI
+ * meeting a NEWER-major record at a shared address reports it via the
+ * explicit newer-major load error below (upgrade guidance), never a generic
+ * corruption message. Resolution by consumers is deterministic and
  * exact-current: `totem review --covariate` re-derives the CURRENT admission
  * classification and looks up that exact identity — never wall-clock
  * arbitration across record families.
@@ -146,7 +150,14 @@ export const AdmissionRecordSchema = z.object({
   inputHash: Sha256HexSchema,
   /** {@link computeProjectionPolicyHash} over the effective selection policy. */
   projectionPolicyHash: Sha256HexSchema,
-  /** Count only, never names (names ride the CLI's dim stderr line; smallest honest record). */
+  /**
+   * Count only, never names (names ride the CLI's dim stderr line; smallest
+   * honest record). The counting basis is REASON-DEPENDENT (re-arm leg NIT 8):
+   * `all-generated` counts the changed files; `all-non-code` and
+   * `filtered-empty` count the files remaining in scope AFTER generated-
+   * artifact exclusion; `no-diff` is 0. A consumer must not interpret the
+   * field uniformly across reasons.
+   */
   skippedFileCount: z.number().int().nonnegative(),
 });
 
@@ -155,7 +166,7 @@ export type AdmissionRecord = z.infer<typeof AdmissionRecordSchema>;
 /** A loaded record paired with its VERIFIED content address (the filename stem). */
 export interface AdmissionWithAddress {
   record: AdmissionRecord;
-  /** The verified content address = filename stem (raw-payload hash, `createdAt` excluded). */
+  /** The verified content address = filename stem (raw-payload hash, `createdAt`/`schemaVersion` excluded). */
   contentHash: string;
 }
 
@@ -229,8 +240,8 @@ export function saveAdmissionRecord(
   } catch (err) {
     if (err !== null && typeof err === 'object' && 'code' in err && err.code === 'EEXIST') {
       // Verified load: proves the incumbent hashes back to THIS address — the
-      // same logical observation modulo createdAt. A differing or corrupt
-      // record cannot occupy this address without failing loud there.
+      // same logical observation modulo createdAt/schemaVersion. A differing
+      // or corrupt record cannot occupy this address without failing loud.
       loadAdmissionRecord(totemDirAbs, hash);
       return { hash, path: filePath, existed: true };
     }
@@ -245,9 +256,12 @@ const MIGRATIONS = new Map<number, (raw: unknown) => unknown>();
 /**
  * Load + validate an admission record by content address. Raw-address
  * verification runs FIRST (identity is major-agnostic, over the on-disk bytes
- * minus `createdAt`); only then is any migration applied and the output
- * validated against the current schema. Throws loud on a missing file,
- * corrupt JSON, schema violation, address mismatch, or unknown major.
+ * minus `createdAt`/`schemaVersion`); only then is any migration applied and
+ * the output validated against the current schema. Throws loud on a missing
+ * file, corrupt JSON, schema violation, address mismatch, or a NEWER/unknown
+ * major with no migration entry (a NAMED upgrade-the-CLI error — an older CLI
+ * meeting a newer record must never report valid data as corruption; re-arm
+ * leg MINOR 5).
  */
 export function loadAdmissionRecord(totemDirAbs: string, hash: string): AdmissionWithAddress {
   if (!Sha256HexSchema.safeParse(hash).success) {
@@ -263,7 +277,7 @@ export function loadAdmissionRecord(totemDirAbs: string, hash: string): Admissio
   if (verificationHash !== hash) {
     throw new TotemError(
       'DATABASE_MISMATCH',
-      `Admission record at ${filePath} fails content-address verification: its recomputed content hash ${verificationHash} does not match the filename address ${hash} (modulo createdAt).`,
+      `Admission record at ${filePath} fails content-address verification: its recomputed content hash ${verificationHash} does not match the filename address ${hash} (modulo createdAt/schemaVersion).`,
       'This should be unreachable in a content-addressed store. Investigate a mis-addressed copy, a hand-edited/corrupted record, or a hash collision, then re-run `totem review`.',
     );
   }
@@ -272,6 +286,15 @@ export function loadAdmissionRecord(totemDirAbs: string, hash: string): Admissio
   const migrate = major !== undefined ? MIGRATIONS.get(major) : undefined;
   if (migrate !== undefined) {
     return { record: AdmissionRecordSchema.parse(migrate(raw)), contentHash: hash };
+  }
+  // Version-free addressing means an older CLI CAN meet a newer-major record
+  // at a shared address (re-arm leg MINOR 5). Name that case explicitly — the
+  // record is valid data this reader cannot parse, never corruption.
+  if (major !== undefined && major > 1) {
+    throw new TotemParseError(
+      `Admission record ${hash} was written by a newer totem (schemaVersion major ${major}; this reader understands 1.x).`,
+      'Upgrade @mmnto/cli to read it — the record is valid, not corrupt.',
+    );
   }
   const result = AdmissionRecordSchema.safeParse(raw);
   if (!result.success) {
