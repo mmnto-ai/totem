@@ -595,6 +595,14 @@ function enumerateOutboxes(
 
 // ─── Core poll ──────────────────────────────────────────
 
+// The #2204 gate line's producer/discriminator coupling: `pollMail` emits the
+// warning under this prefix and `formatTextResult`'s #2516 INCOMPLETE
+// discriminator filters it back out (the gate line is serve-policy, not scan
+// integrity). One constant binds the two sites so a reword can never desync
+// them — that desync is exactly falsification-leg F2's recorded failure
+// (CR on #2639).
+const GATE_WARNING_PREFIX = 'identity-ambiguous poll:';
+
 /**
  * Programmatic entry point. Returns a structured `MailPollResult` for
  * consumers that want to render their own output (hooks, MCP audits,
@@ -1080,7 +1088,7 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   // a count only.
   if (identityGated) {
     warnings.push(
-      `identity-ambiguous poll: ${selfAgents.length} seats resolve from ${selfResolution.source} (${selfAgents.join(', ')}); ${withheldDirected} directed dispatch(es) withheld — pass --as <seat> or set per-shell TOTEM_SELF_AGENT; --all-seats serves the union dashboard view by name`,
+      `${GATE_WARNING_PREFIX} ${selfAgents.length} seats resolve from ${selfResolution.source} (${selfAgents.join(', ')}); ${withheldDirected} directed dispatch(es) withheld — pass --as <seat> or set per-shell TOTEM_SELF_AGENT; --all-seats serves the union dashboard view by name`,
     );
   } else if (opts.allSeats === true && selfAgents.length > 1 && selfResolution.source !== 'env') {
     // The named bypass is a sense-worthy event (informational — a notice,
@@ -1170,7 +1178,7 @@ export function formatTextResult(result: MailPollResult): string {
     // `warnings.length` alone would pin every gated poll to INCOMPLETE and
     // destroy the discriminator (falsification-leg F2).
     const nonGateWarnings = result.warnings.filter(
-      (w) => !w.startsWith('identity-ambiguous poll:'),
+      (w) => !w.startsWith(GATE_WARNING_PREFIX),
     ).length;
     lines.push(
       `Directed inbox NOT DERIVED — identity-ambiguous poll (${result.selfAgents.agents.length} seats via ${result.selfAgents.source}); ${result.seatGate.withheldDirected} directed dispatch(es) withheld. Pass --as <seat>, set per-shell TOTEM_SELF_AGENT, or use --all-seats for the union dashboard view.`,
@@ -1239,8 +1247,21 @@ export async function mailCommand(
       );
     }
     const asSeat = opts.asSeat.trim();
-    // Bare token — the helper renders `--${label}` (falsification-leg F8).
-    assertSafeAgentId(asSeat, 'as');
+    // Core's path-segment guard, inlined rather than via `assertSafeAgentId`:
+    // that helper's MAIL_SEND_FAILED code is the send path's contract, and a
+    // poll-option rejection is CONFIG_INVALID like every other `--as` refusal
+    // in this function (GCA on #2639). The message renders the flag name
+    // verbatim (falsification-leg F8) and JSON-escapes the echoed token — this
+    // rejection path exists precisely because the value may carry control
+    // bytes, and echoing it raw would re-create the terminal injection it
+    // blocks.
+    if (!isPathSafeAgentId(asSeat)) {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `invalid --as ${JSON.stringify(asSeat)} (path-traversal, unsafe characters, or empty)`,
+        'pass a plain agent-id such as "totem-claude" (no path separators, "..", whitespace, or control characters).',
+      );
+    }
     const env = opts.env ?? process.env;
     // Same walk-start the poll itself uses (mmnto-ai/totem#2312), so the
     // validation resolves the SAME union the poll would — but with any ambient

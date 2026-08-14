@@ -3014,8 +3014,8 @@ describe('pollMail — identity gate (mmnto-ai/totem#2204)', () => {
       { name: '2026-08-14T0901Z-broadcast-ruling.md', to: 'broadcast', subject: 'ruling' },
     ]);
     const result = poll();
-    expect(result.selfAgents.agents.length).toBeGreaterThan(1);
-    expect(result.selfAgents.source).not.toBe('env');
+    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.selfAgents.source).toBe('map');
     expect(result.seatGate).toEqual({ withheldDirected: 1 });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.to).toBe('broadcast');
@@ -3369,8 +3369,14 @@ describe('mailCommand — --as selector (mmnto-ai/totem#2204)', () => {
   });
 
   it('rejects an unsafe --as value with the correctly-labeled error (re-arm 4)', async () => {
+    // Pins the CODE, not only the message: an --as refusal is poll-option
+    // validation (CONFIG_INVALID), never the send path's MAIL_SEND_FAILED
+    // (GCA on #2639).
     await expect(
       runMailCommand({ repoRoot: selfRepoRoot(), workspace, env: {}, asSeat: '../evil' }),
-    ).rejects.toThrow(/invalid --as/);
+    ).rejects.toMatchObject({
+      code: 'CONFIG_INVALID',
+      message: expect.stringMatching(/invalid --as/),
+    });
   });
 });
