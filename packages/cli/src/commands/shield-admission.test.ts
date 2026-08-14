@@ -18,7 +18,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { TotemConfig } from '@mmnto/totem';
+import type { NotApplicableReason, TotemConfig } from '@mmnto/totem';
+import { NOT_APPLICABLE_REASONS } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
@@ -210,19 +211,32 @@ describe('evaluateAdmission — the closed admission evaluator', () => {
   });
 });
 
+/**
+ * PINNED classifier-table digest + entry count (CR on #2641): a live-vs-live
+ * recompute moves with any edit and can never observe the re-key property the
+ * mechanical binding exists for. Editing ANY classifier table fails here and
+ * states the new address key — update BOTH literals in the SAME commit as the
+ * table edit; that update IS the re-key signal made reviewable.
+ */
+const EXPECTED_TABLES_DIGEST = '7641cc478a33';
+const EXPECTED_TABLES_SIZE = 80;
+
 describe('buildProjectionPolicy — classifier tables bound mechanically (leg MATERIAL 2)', () => {
-  it('classifierId embeds the digest of the exported classifier tables — a table edit re-keys every address with no version-bump discipline', async () => {
+  it('classifierId embeds the PINNED digest of the exported classifier tables — a table edit fails here with the new key', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shield-policy-'));
     try {
       const policy = await buildProjectionPolicy(TEST_CONFIG, tmpDir);
-      const digest = createHash('sha256')
-        .update(JSON.stringify(CLASSIFIER_POLICY_TABLES), 'utf-8')
-        .digest('hex')
-        .slice(0, 12);
-      expect(policy.classifierId).toBe(`classifyChangedFiles@1:${digest}`);
-      // The tables constant is the classifier's ENTIRE policy surface:
-      // non-trivial and canonically sorted, so the digest is deterministic.
-      expect(CLASSIFIER_POLICY_TABLES.length).toBeGreaterThan(50);
+      // The pin makes the re-key observable; the cross-check proves the pin is
+      // the digest of the LIVE constant (wiring), so the two cannot drift apart.
+      expect(policy.classifierId).toBe(`classifyChangedFiles@1:${EXPECTED_TABLES_DIGEST}`);
+      expect(
+        createHash('sha256')
+          .update(JSON.stringify(CLASSIFIER_POLICY_TABLES), 'utf-8')
+          .digest('hex')
+          .slice(0, 12),
+      ).toBe(EXPECTED_TABLES_DIGEST);
+      // Exact size — a deleted table fails here, never a range check.
+      expect(CLASSIFIER_POLICY_TABLES.length).toBe(EXPECTED_TABLES_SIZE);
       expect([...CLASSIFIER_POLICY_TABLES]).toEqual([...CLASSIFIER_POLICY_TABLES].sort());
     } finally {
       cleanTmpDir(tmpDir);
@@ -323,7 +337,14 @@ describe('resolveNotApplicableExit — declared mapping, fail-closed unknown und
   }
 
   it('every KNOWN reason maps to exit 0 under both bare and --gate (the ruled no-nonzero-by-default shape)', () => {
-    for (const reason of ['no-diff', 'all-non-code', 'filtered-empty', 'all-generated']) {
+    // Iterate the core's OWN closed reason set (CR on #2641, strengthened
+    // beyond the suggested typed literal — a subset would still typecheck):
+    // a NEW union member is exercised automatically and would fail CLOSED
+    // under --gate right here, forcing the mapping switch to grow with the
+    // union in the same change.
+    const known: readonly NotApplicableReason[] = NOT_APPLICABLE_REASONS;
+    expect(known).toHaveLength(4);
+    for (const reason of known) {
       expect(resolveNotApplicableExit(reason, false, FakeGateError)).toBe(0);
       expect(resolveNotApplicableExit(reason, true, FakeGateError)).toBe(0);
     }

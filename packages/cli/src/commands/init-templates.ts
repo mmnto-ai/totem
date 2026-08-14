@@ -1977,7 +1977,7 @@ This is NOT the external-bot triage skill. \`/review-reply\` handles bot comment
 
 <!-- covariate line format v1.1 — do not alter without a spec amendment (v1.1 adds the additive admission form: mmnto-ai/totem#2473 design § Implementation Design, operator-approved 2026-08-14) -->
 
-\`\`\`
+\`\`\`text
 local-lane: <verdictHash8> round=<n> settled=<true|false> lanes=<completed>/<attempted>
 local-lane: not-applicable (<reason>) recorded=<recordHash8> at=<createdAt>
 \`\`\`

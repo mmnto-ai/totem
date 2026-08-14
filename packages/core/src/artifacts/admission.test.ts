@@ -54,13 +54,22 @@ describe('computeProjectionPolicyHash — canonicalizer determinism', () => {
     classifierId: 'classifyChangedFiles@1',
   };
 
-  it('is order-insensitive across array fields (set semantics)', () => {
+  it('is order-insensitive AND duplicate-insensitive across array fields (true set semantics)', () => {
     const reordered = {
       ...policy,
       sourceExtensions: ['.tsx', '.ts'],
       generatedGlobs: ['**/dist/**', '**/pnpm-lock.yaml'],
     };
     expect(computeProjectionPolicyHash(reordered)).toBe(computeProjectionPolicyHash(policy));
+
+    // A duplicated config entry does not change the effective projection, so
+    // it must not re-key the address (CR on #2641).
+    const duplicated = {
+      ...policy,
+      sourceExtensions: ['.ts', '.tsx', '.ts'],
+      ignorePatterns: ['audits/**', 'audits/**'],
+    };
+    expect(computeProjectionPolicyHash(duplicated)).toBe(computeProjectionPolicyHash(policy));
   });
 
   it('is fixture-locked: a frozen policy pins a frozen digest (canonicalization drift fails red)', () => {
@@ -154,6 +163,22 @@ describe('admission store — save/load/dedup/identity', () => {
       } as unknown as AdmissionRecord),
     ).toThrow();
     expect(fs.existsSync(storeDir())).toBe(false);
+  });
+
+  it('createdAt is a constrained UTC instant — a newline-bearing value is rejected on write AND on verified load', () => {
+    // The field is address-excluded yet rides the stdout `local-lane:` line,
+    // so an injection through it must fail loud (CR on #2641).
+    const injected = '2026-08-14T20:00:00.000Z\ninjected: line';
+    expect(() => saveAdmissionRecord(totemDirAbs, baseRecord({ createdAt: injected }))).toThrow();
+
+    // Hand-edit the stored record's timestamp: the address still verifies
+    // (createdAt is excluded), so the SCHEMA must be the rejecting layer.
+    const saved = saveAdmissionRecord(totemDirAbs, baseRecord());
+    const filePath = path.join(storeDir(), `${saved.hash}.json`);
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+    raw['createdAt'] = injected;
+    fs.writeFileSync(filePath, JSON.stringify(raw, null, 2), 'utf-8');
+    expect(() => loadAdmissionRecord(totemDirAbs, saved.hash)).toThrow(/schema validation/);
   });
 
   it('a tampered stored record fails content-address verification loud', () => {

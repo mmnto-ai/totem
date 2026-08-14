@@ -123,12 +123,16 @@ export interface ProjectionPolicy {
  * recursive key sort. Fixture-locked for cross-platform / key-order stability.
  */
 export function computeProjectionPolicyHash(policy: ProjectionPolicy): string {
+  // TRUE set semantics (CR on #2641): dedupe before sorting — a duplicated
+  // config entry does not change the effective projection, so it must not
+  // re-key the address and orphan an equivalent record on exact lookup.
+  const canonicalizeSet = (values: readonly string[]): string[] => [...new Set(values)].sort();
   const canonical = {
     classifierId: policy.classifierId,
-    generatedGlobs: [...policy.generatedGlobs].sort(),
-    ignorePatterns: [...policy.ignorePatterns].sort(),
-    notGeneratedGlobs: [...policy.notGeneratedGlobs].sort(),
-    sourceExtensions: [...policy.sourceExtensions].sort(),
+    generatedGlobs: canonicalizeSet(policy.generatedGlobs),
+    ignorePatterns: canonicalizeSet(policy.ignorePatterns),
+    notGeneratedGlobs: canonicalizeSet(policy.notGeneratedGlobs),
+    sourceExtensions: canonicalizeSet(policy.sourceExtensions),
   };
   return calculateDeterministicHash(canonical);
 }
@@ -143,8 +147,15 @@ export const AdmissionRecordSchema = z.object({
   /** The only admission disposition persisted: an admitted run persists a verdict instead. */
   disposition: z.literal('not-applicable'),
   reason: NotApplicableReasonSchema,
-  /** Observability ONLY — excluded from the content address; never a resolution key. */
-  createdAt: z.string(),
+  /**
+   * Observability ONLY — excluded from the content address; never a
+   * resolution key. Constrained to an ISO-8601 UTC instant (CR on #2641):
+   * the value is address-excluded yet interpolated into the stdout
+   * `local-lane:` transport line, so a hand-edited record must not be able
+   * to smuggle line breaks (or any non-timestamp bytes) into that payload —
+   * validate-on-write and the verified load both reject it.
+   */
+  createdAt: z.string().datetime(),
   scope: AdmissionScopeSchema,
   /** sha256 over the pre-filter diff bytes (hash of the empty string for `no-diff`). */
   inputHash: Sha256HexSchema,
