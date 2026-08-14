@@ -74,6 +74,16 @@ import { formatTextResult, pollMail, resolveMailExitCode } from './mail.js';
 let tmpRoot: string;
 let workspace: string;
 
+/**
+ * Explicit single-seat identity (mmnto-ai/totem#2204). The `totem` fixture
+ * basename resolves TWO seats, so an identity-less poll withholds directed
+ * dispatches as a count; the faults below are induced on the DIRECTED
+ * pipeline, so each such poll declares the seat it reads as — the same
+ * per-shell `TOTEM_SELF_AGENT` a real seat exports. Polls whose subject is the
+ * multi-seat resolution itself pass `allSeats: true` instead.
+ */
+const SELF_CLAUDE = { TOTEM_SELF_AGENT: 'totem-claude' };
+
 function mkDir(p: string): string {
   fs.mkdirSync(p, { recursive: true });
   return p;
@@ -191,7 +201,7 @@ describe('E4 fault 1 — basename collision is surfaced AND loudly accounted', (
     writeOutbox('totem-strategy', 'strategy-claude', [{ name: NAME, to: 'totem-claude' }]);
     writeOutbox('liquid-city', 'lc-claude', [{ name: NAME, to: 'totem-claude' }]);
 
-    const result = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: {} });
+    const result = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: SELF_CLAUDE });
 
     // Pack 1 — the accounting fires: the degraded envelope announces itself.
     const collisionWarnings = result.warnings.filter((w) =>
@@ -218,7 +228,7 @@ describe('E4 fault 1 — basename collision is surfaced AND loudly accounted', (
       { name: '2026-07-20T1718Z-totem-claude-lane-note.md', to: 'totem-claude' },
     ]);
 
-    const result = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: {} });
+    const result = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: SELF_CLAUDE });
 
     expect(result.mail).toHaveLength(2);
     expect(result.warnings).toEqual([]);
@@ -235,12 +245,18 @@ describe('E4 fault 2 — own-broadcast suppression is never silent (mmnto-ai/tot
   const BCAST = '2026-07-20T2326Z-broadcast-cohort-note.md';
   const RESIDENT_SEATS = ['totem-claude', 'totem-gemini'];
 
-  /** Default-resolution poll (no env override) over the two-seat fixture. */
+  /**
+   * Default-resolution poll (no env override) over the two-seat fixture. The
+   * union is served BY NAME (`allSeats`, mmnto-ai/totem#2204) because the
+   * multi-seat resolution IS the #2462 condition under test — the identity
+   * gate would otherwise withhold directed mail and mask it.
+   */
   function pollTwoSeat(opts: Parameters<typeof pollMail>[0] = {}) {
     return pollMail({
       repoRoot: selfRepoRootWithSeats(RESIDENT_SEATS),
       workspace,
       env: {},
+      allSeats: true,
       ...opts,
     });
   }
@@ -346,7 +362,7 @@ describe('E4 fault 3 — scan failure announces itself, never a silent clean inb
   it('workspace scan root unresolvable (ENOTDIR) with dispatches on disk → degraded envelope, empty mail, exit 0', () => {
     writeHealthyFixture();
     // Positive control (pack 3): the healthy fixture renders everything.
-    const healthy = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: {} });
+    const healthy = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: SELF_CLAUDE });
     expect(healthy.mail).toHaveLength(2);
     expect(healthy.warnings).toEqual([]);
 
@@ -359,7 +375,7 @@ describe('E4 fault 3 — scan failure announces itself, never a silent clean inb
     const degraded = pollMail({
       repoRoot: selfRepoRootWithSeats([]),
       workspace: brokenRoot,
-      env: {},
+      env: SELF_CLAUDE,
     });
 
     // Pack 1 — the accounting fires: the scan failure is named in the
@@ -379,7 +395,11 @@ describe('E4 fault 3 — scan failure announces itself, never a silent clean inb
 
     // Fault-removed-returns-to-green (pack 3): repoint at the healthy scan
     // root and the same fixture polls clean.
-    const recovered = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: {} });
+    const recovered = pollMail({
+      repoRoot: selfRepoRootWithSeats([]),
+      workspace,
+      env: SELF_CLAUDE,
+    });
     expect(recovered.mail).toHaveLength(2);
     expect(recovered.warnings).toEqual([]);
   });
@@ -403,7 +423,11 @@ describe('E4 fault 3 — scan failure announces itself, never a silent clean inb
       return realReaddirSync(target, options as never) as never;
     });
     try {
-      const degraded = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: {} });
+      const degraded = pollMail({
+        repoRoot: selfRepoRootWithSeats([]),
+        workspace,
+        env: SELF_CLAUDE,
+      });
       // Pack 1 — the accounting fires: the failed repo is NAMED.
       expect(
         degraded.warnings.some((w) => w.startsWith('orchestration scan failed (totem-strategy)')),
@@ -420,7 +444,11 @@ describe('E4 fault 3 — scan failure announces itself, never a silent clean inb
 
     // Pack 3 — fault-removed-returns-to-green: with the scan healthy again,
     // BOTH dispatches surface with zero warnings.
-    const recovered = pollMail({ repoRoot: selfRepoRootWithSeats([]), workspace, env: {} });
+    const recovered = pollMail({
+      repoRoot: selfRepoRootWithSeats([]),
+      workspace,
+      env: SELF_CLAUDE,
+    });
     expect(recovered.mail.map((m) => m.file).sort()).toEqual([MAIL_A, MAIL_B].sort());
     expect(recovered.warnings).toEqual([]);
   });
@@ -457,12 +485,15 @@ describe('E4 fault 3 addendum — qualified verdict line (mmnto-ai/totem#2516)',
   }
 
   /** Two-seat fixture so the clean-empty sentence names real seats — making
-   *  the substring-exclusion assertion (invariant 2) load-bearing. */
+   *  the substring-exclusion assertion (invariant 2) load-bearing. Both seats
+   *  are declared explicitly (mmnto-ai/totem#2204): an identity-less two-seat
+   *  poll is gated onto its own NOT-DERIVED verdict arm, which would take the
+   *  #2516 verdict line out from under these assertions entirely. */
   function pollTwoSeat(opts: Parameters<typeof pollMail>[0] = {}) {
     return pollMail({
       repoRoot: selfRepoRootWithSeats(SEATS),
       workspace,
-      env: {},
+      env: { TOTEM_SELF_AGENT: SEATS.join(',') },
       ...opts,
     });
   }
@@ -596,7 +627,10 @@ describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnt
     // file nobody could parse.
     writeBroadcastMark(root, 'totem-gemini', [BCAST]);
 
-    const result = pollMail({ repoRoot: root, workspace, env: {} });
+    // The union is served by NAME (`allSeats`, mmnto-ai/totem#2204): the
+    // multi-seat denominator IS what this fault probes, so the identity gate
+    // must not withhold the directed half of the fixture.
+    const result = pollMail({ repoRoot: root, workspace, env: {}, allSeats: true });
 
     // Pack 1 — the accounting fires, and it hands over the ONE-STEP recovery
     // target (#2511 amendment 2: the recovery route is "fix or delete the
@@ -631,7 +665,7 @@ describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnt
     // mechanism that never fires. Directed mail still surfaces — suspension
     // touches the denominator only.
     const markerPath = writeLifecycleMarker(root, 'totem-claude', 'suspended');
-    const suspended = pollMail({ repoRoot: root, workspace, env: {} });
+    const suspended = pollMail({ repoRoot: root, workspace, env: {}, allSeats: true });
     expect(suspended.mail.map((m) => m.file)).toEqual([DIRECTED]);
     // Falsification finding 1, arm (b): a VALID suspended marker is a healthy
     // scan — the annotation rides `notices`, warnings stay EMPTY, and the
@@ -648,7 +682,7 @@ describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnt
     // would (both seats in the denominator, so one mark leaves the broadcast
     // unread).
     fs.rmSync(markerPath);
-    const recovered = pollMail({ repoRoot: root, workspace, env: {} });
+    const recovered = pollMail({ repoRoot: root, workspace, env: {}, allSeats: true });
     expect(recovered.warnings).toEqual([]);
     expect(recovered.mail.map((m) => m.file).sort()).toEqual([BCAST, DIRECTED].sort());
     expect(verdictLineOf(formatTextResult(recovered))).not.toContain('INCOMPLETE');

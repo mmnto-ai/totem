@@ -189,6 +189,18 @@ function poll(opts: Parameters<typeof pollMail>[0] = {}): MailPollResult {
   return pollMail({ repoRoot: selfRepoRoot(), workspace, env: {}, ...opts });
 }
 
+/**
+ * Explicit single-seat identity for the pipeline tests (mmnto-ai/totem#2204).
+ * The `totem` fixture basename resolves TWO seats via the cohort map, so an
+ * identity-less poll is identity-AMBIGUOUS: directed dispatches are withheld
+ * as a count and the directed verdict is NOT DERIVED. Tests whose subject is
+ * the single-recipient pipeline (parse / sort / truncation / workspace
+ * derivation / round-trip) declare the recipient the way a real seat does —
+ * per-shell `TOTEM_SELF_AGENT` — so their directed fixture is served. Tests
+ * whose subject IS the multi-seat resolution pass `allSeats: true` instead.
+ */
+const SELF_CLAUDE = { TOTEM_SELF_AGENT: 'totem-claude' };
+
 // ─── Basic filter behavior ──────────────────────────────
 
 describe('pollMail — basic filter behavior', () => {
@@ -204,7 +216,7 @@ describe('pollMail — basic filter behavior', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-05-18T1734Z-strategy-claude.md', to: 'totem-claude', subject: 'lane' },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.to).toBe('totem-claude');
     expect(result.mail[0]!.from).toBe('strategy-claude');
@@ -233,7 +245,7 @@ describe('pollMail — basic filter behavior', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-05-18T1734Z.md', to: 'Totem-Claude', subject: 'case test' },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.to).toBe('Totem-Claude');
   });
@@ -245,7 +257,7 @@ describe('pollMail — basic filter behavior', () => {
     writeOutbox('liquid-city', 'lc-claude', [
       { name: '2026-05-18T1800Z.md', to: 'totem-claude', subject: 'lc heads-up' },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(2);
     const repos = result.mail.map((m) => m.repo).sort();
     expect(repos).toEqual(['liquid-city', 'totem-strategy']);
@@ -296,7 +308,7 @@ describe('pollMail — own-broadcast exclusion (mmnto-ai/totem#2364)', () => {
     writeOutbox('totem', 'totem-claude', [
       { name: '2026-07-06T2332Z-totem-claude-note-to-self.md', to: 'totem-claude' },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
   });
 
@@ -377,7 +389,7 @@ describe('pollMail — symlinked agent/outbox dirs are not traversed (mmnto-ai/t
     const orchDir = path.join(workspace, 'totem-strategy', '.totem', 'orchestration');
     symlinkDir(path.join(tmpRoot, 'outside2', 'rogue-agent'), path.join(orchDir, 'rogue-agent'));
 
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe('real mail');
   });
@@ -392,7 +404,7 @@ describe('pollMail — processed/ exclusion', () => {
       { name: '2026-05-18T1918Z.md', to: 'totem-claude', subject: 'still unread' },
     ]);
     writeProcessed('totem', 'totem-claude', ['2026-05-18T1734Z.md']);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.file).toBe('2026-05-18T1918Z.md');
   });
@@ -412,8 +424,12 @@ describe('pollMail — processed/ exclusion', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-05-18T1700Z.md', to: 'totem-gemini', subject: 'already done' },
     ]);
+    // Multi-seat union semantics ARE the subject here, so the union is served
+    // by name (mmnto-ai/totem#2204) — under the identity gate a directed
+    // dispatch to totem-gemini is withheld regardless of its mark, and the
+    // assertion would pass without the subtraction ever running.
     writeProcessed('totem', 'totem-gemini', ['2026-05-18T1700Z.md']);
-    const result = poll();
+    const result = poll({ allSeats: true });
     expect(result.mail).toEqual([]);
   });
 
@@ -426,11 +442,11 @@ describe('pollMail — processed/ exclusion', () => {
     ]);
     writeProcessed('totem', 'totem-claude', ['2026-05-18T1734Z.md']);
     // Default (reader) view subtracts the mark → 1 unread.
-    expect(poll().mail).toHaveLength(1);
+    expect(poll({ env: SELF_CLAUDE }).mail).toHaveLength(1);
     // Pre-dedupe view keeps BOTH → the raw addressed-inbound set. NON-VACUITY:
     // feeding the default 1-item list back to compaction would delete the
     // handled mark (the A2.1 false-unread bomb).
-    const raw = poll({ includeProcessed: true });
+    const raw = poll({ env: SELF_CLAUDE, includeProcessed: true });
     expect(raw.mail.map((m) => m.file).sort()).toEqual([
       '2026-05-18T1734Z.md',
       '2026-05-18T1918Z.md',
@@ -874,7 +890,7 @@ describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#23
   it('warns once when two distinct senders converge on one addressed-inbound basename', () => {
     writeOutbox('totem-strategy', 'strategy-gemini', [{ name: NAME, to: 'totem-claude' }]);
     writeOutbox('totem-strategy', 'strategy-agy', [{ name: NAME, to: 'totem-claude' }]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     const collisionWarnings = result.warnings.filter((w) =>
       w.startsWith('cross-sender basename collision'),
     );
@@ -889,7 +905,7 @@ describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#23
   it('fires on a broadcast + directed mix (both are addressed-inbound for this seat)', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [{ name: NAME, to: 'broadcast' }]);
     writeOutbox('liquid-city', 'lc-claude', [{ name: NAME, to: 'totem-claude' }]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(
       result.warnings.filter((w) => w.startsWith('cross-sender basename collision')),
     ).toHaveLength(1);
@@ -900,7 +916,7 @@ describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#23
     // shadowing all copies is correct handled-semantics, not a drop hazard.
     writeOutbox('totem-strategy', 'strategy-claude', [{ name: NAME, to: 'broadcast' }]);
     writeOutbox('liquid-city', 'strategy-claude', [{ name: NAME, to: 'broadcast' }]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.warnings).toEqual([]);
   });
 
@@ -912,7 +928,7 @@ describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#23
       { name: NAME, to: 'totem-claude', from: 'someone-else' },
     ]);
     writeOutbox('liquid-city', 'strategy-claude', [{ name: NAME, to: 'totem-claude' }]);
-    expect(poll().warnings).toEqual([]);
+    expect(poll({ env: SELF_CLAUDE }).warnings).toEqual([]);
 
     writeOutbox('totem-status', 'status-claude', [
       { name: NAME, to: 'totem-claude', from: 'strategy-claude' },
@@ -921,14 +937,16 @@ describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#23
       { name: NAME, to: 'totem-claude', from: 'strategy-claude' },
     ]);
     expect(
-      poll().warnings.filter((w) => w.startsWith('cross-sender basename collision')),
+      poll({ env: SELF_CLAUDE }).warnings.filter((w) =>
+        w.startsWith('cross-sender basename collision'),
+      ),
     ).toHaveLength(1);
   });
 
   it('does NOT fire when neither same-basename dispatch is addressed to this seat', () => {
     writeOutbox('totem-strategy', 'strategy-gemini', [{ name: NAME, to: 'lc-claude' }]);
     writeOutbox('totem-strategy', 'strategy-agy', [{ name: NAME, to: 'lc-claude' }]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.warnings).toEqual([]);
   });
 
@@ -936,7 +954,7 @@ describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#23
     writeOutbox('totem-strategy', 'strategy-gemini', [{ name: NAME, to: 'totem-claude' }]);
     writeOutbox('totem-strategy', 'strategy-agy', [{ name: NAME, to: 'totem-claude' }]);
     writeOutbox('liquid-city', 'lc-claude', [{ name: NAME, to: 'totem-claude' }]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     const collisionWarnings = result.warnings.filter((w) =>
       w.startsWith('cross-sender basename collision'),
     );
@@ -955,8 +973,8 @@ describe('pollMail — cross-sender basename-collision sensor (mmnto-ai/totem#23
     writeOutbox('totem-strategy', 'strategy-gemini', [{ name: NAME, to: 'totem-claude' }]);
     writeOutbox('totem-strategy', 'strategy-agy', [{ name: NAME, to: 'totem-claude' }]);
     writeProcessed('totem', 'totem-claude', [NAME]);
-    expect(poll().warnings).toEqual([]);
-    const raw = poll({ includeProcessed: true });
+    expect(poll({ env: SELF_CLAUDE }).warnings).toEqual([]);
+    const raw = poll({ env: SELF_CLAUDE, includeProcessed: true });
     expect(
       raw.warnings.filter((w) => w.startsWith('cross-sender basename collision')),
     ).toHaveLength(1);
@@ -1040,7 +1058,7 @@ describe('pollMail — outbox roster-validation sensor (mmnto-ai/totem#2335)', (
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: 'stray.md', to: 'unused', raw: 'to: cohort\njust a note\n' },
     ]);
-    expect(poll().warnings).toEqual([]);
+    expect(poll({ env: SELF_CLAUDE }).warnings).toEqual([]);
   });
 
   it('warns once per unresolvable dispatch (per-file, not basename-deduped)', () => {
@@ -1063,7 +1081,7 @@ describe('pollMail — sort + metadata', () => {
       { name: 'b.md', to: 'totem-claude', date: '2026-05-18T2000Z', subject: 'newer' },
       { name: 'c.md', to: 'totem-claude', date: '2026-05-18T1500Z', subject: 'middle' },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail.map((m) => m.subject)).toEqual(['newer', 'middle', 'older']);
   });
 
@@ -1072,7 +1090,7 @@ describe('pollMail — sort + metadata', () => {
       { name: '2026-05-18T1000Z.md', to: 'totem-claude', raw: '---\nto: totem-claude\n---\n' },
       { name: '2026-05-18T2000Z.md', to: 'totem-claude', raw: '---\nto: totem-claude\n---\n' },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail[0]!.file).toBe('2026-05-18T2000Z.md');
     expect(result.mail[1]!.file).toBe('2026-05-18T1000Z.md');
   });
@@ -1081,7 +1099,7 @@ describe('pollMail — sort + metadata', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: 'x.md', to: 'Totem-Claude', subject: 'mixed case to' },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail[0]!.to).toBe('Totem-Claude');
   });
 
@@ -1094,7 +1112,7 @@ describe('pollMail — sort + metadata', () => {
         subject: 'overridden from field',
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail[0]!.from).toBe('override-sender');
   });
 
@@ -1106,7 +1124,7 @@ describe('pollMail — sort + metadata', () => {
         raw: '---\nto: totem-claude\nsubject: no from field\n---\n',
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail[0]!.from).toBe('strategy-claude');
   });
 
@@ -1114,7 +1132,7 @@ describe('pollMail — sort + metadata', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: 'x.md', to: 'totem-claude', raw: '---\nto: totem-claude\n---\n' },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail[0]!.subject).toBe('(no subject)');
   });
 });
@@ -1159,7 +1177,7 @@ describe('pollMail — frontmatter parsing', () => {
         raw: '---\r\nfrom: strategy-claude\r\nto: totem-claude\r\nsubject: crlf\r\n---\r\n\r\nBody.\r\n',
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe('crlf');
   });
@@ -1171,7 +1189,10 @@ describe('pollMail — frontmatter parsing', () => {
       '---\nto: totem-claude\n---\nshould be skipped',
       'utf-8',
     );
-    const result = poll();
+    // Identity declared (mmnto-ai/totem#2204): the stray is addressed to a
+    // union seat, so under an identity-ambiguous poll the empty result would
+    // hold even if the extension filter regressed.
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toEqual([]);
   });
 });
@@ -1248,7 +1269,7 @@ describe('pollMail — workspace', () => {
       '---\nto: totem-claude\nsubject: alt-workspace\n---\n',
       'utf-8',
     );
-    const result = poll({ workspace: alt });
+    const result = poll({ workspace: alt, env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.workspace).toBe(path.resolve(alt));
   });
@@ -1274,7 +1295,10 @@ describe('pollMail — workspace', () => {
       '---\nto: totem-claude\n---\n',
       'utf-8',
     );
-    const result = poll({ workspace: undefined, env: { TOTEM_WORKSPACE: alt } });
+    const result = poll({
+      workspace: undefined,
+      env: { TOTEM_WORKSPACE: alt, ...SELF_CLAUDE },
+    });
     expect(result.workspace).toBe(path.resolve(alt));
     expect(result.mail).toHaveLength(1);
   });
@@ -1308,10 +1332,10 @@ describe('pollMail — workspace', () => {
       'utf-8',
     );
 
-    const flat = poll({ recursive: false });
+    const flat = poll({ recursive: false, env: SELF_CLAUDE });
     expect(flat.mail).toEqual([]);
 
-    const recursive = poll({ recursive: true });
+    const recursive = poll({ recursive: true, env: SELF_CLAUDE });
     expect(recursive.mail).toHaveLength(1);
     expect(recursive.mail[0]!.subject).toBe('nested');
     // Label uses the immediate parent dir (where `.totem/orchestration/`
@@ -1330,7 +1354,10 @@ describe('pollMail — workspace', () => {
       '---\nto: totem-claude\nsubject: spam\n---\n',
       'utf-8',
     );
-    const result = poll({ recursive: true });
+    // Identity declared (mmnto-ai/totem#2204): the planted dispatch is
+    // addressed to a union seat, so an identity-ambiguous poll would withhold
+    // it and the empty result would hold even if the skip-list regressed.
+    const result = poll({ recursive: true, env: SELF_CLAUDE });
     expect(result.mail).toEqual([]);
   });
 });
@@ -1355,7 +1382,7 @@ describe('pollMail — subdirectory workspace derivation (mmnto-ai/totem#2312)',
     ]);
     // No `workspace` override — derivation must find `<workspace>` (parent of
     // the resolved root `<workspace>/totem`).
-    const result = pollMail({ repoRoot: subdir, env: {} });
+    const result = pollMail({ repoRoot: subdir, env: SELF_CLAUDE });
     expect(result.workspace).toBe(path.resolve(workspace));
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.to).toBe('totem-claude');
@@ -1373,7 +1400,9 @@ describe('pollMail — subdirectory workspace derivation (mmnto-ai/totem#2312)',
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-05-18T1800Z-totem-claude.md', to: 'totem-claude', subject: 'git-marked' },
     ]);
-    const result = pollMail({ repoRoot: subdir, env: {} });
+    // `allSeats` (mmnto-ai/totem#2204), not an env identity: the map-derived
+    // resolution IS what this test asserts, so the union must stay served.
+    const result = pollMail({ repoRoot: subdir, env: {}, allSeats: true });
     expect(result.workspace).toBe(path.resolve(workspace));
     expect(result.selfAgents.agents).toContain('totem-claude');
     expect(result.mail).toHaveLength(1);
@@ -1422,7 +1451,7 @@ describe('pollMail — MAX_SCAN truncation', () => {
       files.push({ name: `${num}.md`, to: 'totem-claude', subject: `n${i}` });
     }
     writeOutbox('totem-strategy', 'strategy-claude', files);
-    const result = poll({ maxScan: 500 });
+    const result = poll({ maxScan: 500, env: SELF_CLAUDE });
     expect(result.truncated).toBe(true);
     // Contract: scanned never exceeds the cap. Documents the pre-increment
     // off-by-one fix from CR R1 (#1971).
@@ -1472,7 +1501,7 @@ describe('pollMail — MAX_SCAN truncation', () => {
     }
     writeOutbox('zebra-repo', 'zebra-sender', newFiles);
 
-    const result = poll({ maxScan: 500 });
+    const result = poll({ maxScan: 500, env: SELF_CLAUDE });
     expect(result.truncated).toBe(true);
     expect(result.scanned).toBe(500);
     // All 5 fresh entries must be in the result. Pre-fix, they would have
@@ -1501,7 +1530,7 @@ describe('pollMail — self-token scan priority (mmnto-ai/totem#2144)', () => {
       ...others,
       { name: '2020-01-01T0000Z-totem-claude-ancient.md', to: 'totem-claude', subject: 'ancient' },
     ]);
-    const result = poll({ maxScan: 10 });
+    const result = poll({ maxScan: 10, env: SELF_CLAUDE });
     expect(result.truncated).toBe(true);
     expect(result.mail.some((m) => m.subject === 'ancient')).toBe(true);
   });
@@ -1525,7 +1554,7 @@ describe('pollMail — self-token scan priority (mmnto-ai/totem#2144)', () => {
       // token says lc-claude, header says totem-claude.
       { name: '2026-12-31T2359Z-lc-claude-mislabeled.md', to: 'totem-claude', subject: 'rescue' },
     ]);
-    const result = poll({ maxScan: 5 });
+    const result = poll({ maxScan: 5, env: SELF_CLAUDE });
     expect(result.truncated).toBe(true);
     expect(result.mail.some((m) => m.subject === 'rescue')).toBe(true);
   });
@@ -1568,7 +1597,9 @@ describe('pollMail — self-token scan priority (mmnto-ai/totem#2144)', () => {
       });
     }
     writeOutbox('totem-strategy', 'strategy-claude', selfFlood);
-    const result = poll({ maxScan: 3 });
+    // Explicit identity: the NAMING behavior under test is the ungated arm —
+    // the gated arm reports the directed tail as a count (#2204, leg F1).
+    const result = poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' }, maxScan: 3 });
     expect(result.truncated).toBe(true);
     const directed = result.warnings.filter((w) => w.includes('beyond the scan horizon'));
     expect(directed).toHaveLength(1);
@@ -1587,7 +1618,7 @@ describe('pollMail — self-token scan priority (mmnto-ai/totem#2144)', () => {
       });
     }
     writeOutbox('totem-strategy', 'strategy-claude', otherFlood);
-    const generic = poll({ maxScan: 3 });
+    const generic = poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' }, maxScan: 3 });
     expect(generic.truncated).toBe(true);
     expect(generic.warnings.every((w) => !w.includes('beyond the scan horizon'))).toBe(true);
   });
@@ -1671,7 +1702,7 @@ describe('pollMail — dir-derived seats (mmnto-ai/totem#2141)', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-06-01T0000Z-totem-codex-hello.md', to: 'totem-codex', subject: 'for codex' },
     ]);
-    const result = poll();
+    const result = poll({ allSeats: true });
     expect(result.selfAgents.source).toBe('dirs+map');
     expect(result.selfAgents.agents).toContain('totem-codex');
     expect(result.mail.some((m) => m.subject === 'for codex')).toBe(true);
@@ -1704,7 +1735,7 @@ describe('pollMail — frontmatter forge defense', () => {
         raw: 'to: totem-claude\nsubject: forged\nbody text\n',
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toEqual([]);
     // A stray .md is non-mail by contract; warning on it every poll would be
     // permanent, unclearable noise (mmnto-ai/totem#2118 design note).
@@ -1743,7 +1774,7 @@ describe('pollMail — frontmatter forge defense', () => {
         raw: '---\nfrom: strategy-claude\nto: totem-claude\nsubject: tight\n---\n',
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe('tight');
   });
@@ -1762,7 +1793,7 @@ describe('pollMail — frontmatter-only dispatches (#2118)', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-06-07T2015Z-totem-claude.md', to: 'unused', raw },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.to).toBe('totem-claude');
     expect(result.mail[0]!.date).toBe('2026-06-07T2015Z');
@@ -1774,7 +1805,7 @@ describe('pollMail — frontmatter-only dispatches (#2118)', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: 'crlf-large.md', to: 'unused', raw },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.to).toBe('totem-claude');
   });
@@ -1805,7 +1836,7 @@ describe('pollMail — frontmatter-only dispatches (#2118)', () => {
         raw: '---\nfrom: strategy-claude\n\nto: totem-claude\nsubject: post-blank\n---\n',
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe('post-blank');
   });
@@ -1823,7 +1854,7 @@ describe('pollMail — frontmatter-only dispatches (#2118)', () => {
         raw: '---\nfrom: strategy-claude\nto: totem-claude\nsubject: ws close\n---  \nBody.\n',
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe('ws close');
   });
@@ -1859,7 +1890,7 @@ describe('pollMail — frontmatter-only dispatches (#2118)', () => {
         raw: '---\nfrom: strategy-claude\nto: totem-claude\nsubject: with footer\n---\n\nFull content in subject above.\n',
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe('with footer');
   });
@@ -1880,7 +1911,7 @@ describe('mailCommand — --json output', () => {
         return true;
       });
     try {
-      await mailCommand({ json: true, repoRoot: selfRepoRoot(), workspace, env: {} });
+      await mailCommand({ json: true, repoRoot: selfRepoRoot(), workspace, env: SELF_CLAUDE });
     } finally {
       spy.mockRestore();
     }
@@ -1970,7 +2001,7 @@ describe('mailCommand — exit contract + NOT-DERIVED verdict (mmnto-ai/totem#23
     });
     let exitCode: number;
     try {
-      ({ exitCode } = await mailCommand({ repoRoot: selfRepoRoot(), workspace, env: {} }));
+      ({ exitCode } = await mailCommand({ repoRoot: selfRepoRoot(), workspace, env: SELF_CLAUDE }));
     } finally {
       spy.mockRestore();
     }
@@ -2020,7 +2051,7 @@ describe('pollMail — structured warnings on FS failures', () => {
     const selfProcessed = path.join(selfRepoRoot(), '.totem', 'orchestration', 'totem-claude');
     mkDir(selfProcessed);
     fs.writeFileSync(path.join(selfProcessed, 'processed'), 'not a directory');
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     // Mail still surfaces (degraded — no exclusion filter), warning recorded.
     expect(result.mail).toHaveLength(1);
     expect(result.warnings.some((w) => w.startsWith('processed/ scan failed'))).toBe(true);
@@ -2047,7 +2078,7 @@ describe('parseHeader — timestamp:/date: precedence (mmnto-ai/totem#2042)', ()
         ]),
       },
     ]);
-    const result = poll();
+    const result = poll({ env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
   });
@@ -2066,14 +2097,14 @@ describe('parseHeader — timestamp:/date: precedence (mmnto-ai/totem#2042)', ()
         ]),
       },
     ]);
-    expect(poll().mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
+    expect(poll({ env: SELF_CLAUDE }).mail[0]!.date).toBe('2026-06-09T17:34:37.127Z');
   });
 
   it('still falls back to legacy date: (backwards-compat read)', () => {
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-06-09T1734Z-legacy.md', to: 'totem-claude', date: '2026-05-18T1700Z' },
     ]);
-    expect(poll().mail[0]!.date).toBe('2026-05-18T1700Z');
+    expect(poll({ env: SELF_CLAUDE }).mail[0]!.date).toBe('2026-05-18T1700Z');
   });
 });
 
@@ -2105,7 +2136,14 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
 
     // The poller (sensor) surfaces exactly what the actuator emitted.
     const recipientRepo = markedRepoRoot('totem-strategy');
-    const inbox = pollMail({ repoRoot: recipientRepo, workspace, env: {} });
+    // The recipient repo (`totem-strategy`) hosts TWO seats, so the poll
+    // declares which one it reads as (mmnto-ai/totem#2204) — the round-trip
+    // is about the wire shape, not about union resolution.
+    const inbox = pollMail({
+      repoRoot: recipientRepo,
+      workspace,
+      env: { TOTEM_SELF_AGENT: 'strategy-claude' },
+    });
     expect(inbox.mail).toHaveLength(1);
     expect(inbox.mail[0]!.to).toBe('strategy-claude');
     expect(inbox.mail[0]!.from).toBe('totem-claude');
@@ -2469,7 +2507,7 @@ describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)'
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-06-09T1734Z-roundtrip.md', to: 'totem-claude', raw: md },
     ]);
-    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe(subject); // unquoted on read
   });
@@ -2494,7 +2532,7 @@ describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)'
         },
       ]);
     }
-    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(2);
     const esc = String.fromCharCode(0x1b);
     for (const entry of result.mail) {
@@ -2535,7 +2573,7 @@ describe('validateDispatchContent / composeDispatch / resolveSelfSender (units)'
         ].join('\n'),
       },
     ]);
-    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: {} });
+    const result = pollMail({ repoRoot: selfRepoRoot(), workspace, env: SELF_CLAUDE });
     expect(result.mail).toHaveLength(2);
     for (const entry of result.mail) {
       expect(entry.subject).not.toContain(esc);
@@ -2959,5 +2997,386 @@ describe('mailSend — the filename emitter is colon-free / ADS-safe (mmnto-ai/t
     expect(res.fileName).not.toContain(':');
     expect(res.fileName).toMatch(/^2026-07-18T0510Z-/); // compact stamp, colon dropped
     expect(path.basename(res.filePath)).not.toContain(':');
+  });
+});
+
+// ─── Identity gate (mmnto-ai/totem#2204) ────────────────
+// The fixture repo basename `totem` resolves TWO seats via the cohort map
+// (totem-claude, totem-gemini), so an env-less poll here is exactly the
+// ambiguous shape the gate exists for — the 2026-08-13 BLIND-round
+// contamination class: the listing (subjects included) is the exposure
+// surface, so withheld mail is a COUNT, never per-item detail.
+
+describe('pollMail — identity gate (mmnto-ai/totem#2204)', () => {
+  it('withholds union-directed mail as a count, serves broadcasts, warns, and exits 2', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-directed.md', to: 'totem-claude', subject: 'secret' },
+      { name: '2026-08-14T0901Z-broadcast-ruling.md', to: 'broadcast', subject: 'ruling' },
+    ]);
+    const result = poll();
+    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.selfAgents.source).toBe('map');
+    expect(result.seatGate).toEqual({ withheldDirected: 1 });
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.to).toBe('broadcast');
+    // COUNT only — no per-item detail about withheld mail on ANY channel.
+    const allText = [...result.warnings, ...result.notices].join('\n');
+    expect(allText).toContain('identity-ambiguous poll');
+    expect(allText).not.toContain('secret');
+    expect(allText).not.toContain('directed.md');
+    expect(resolveMailExitCode(result)).toBe(2);
+  });
+
+  it('fires at zero withheld — the ambiguity, not the volume, is the signal', () => {
+    const result = poll();
+    expect(result.seatGate).toEqual({ withheldDirected: 0 });
+    expect(result.warnings.some((w) => w.includes('identity-ambiguous poll'))).toBe(true);
+    expect(resolveMailExitCode(result)).toBe(2);
+  });
+
+  it('counts only would-have-served items: processed-subtracted mail is not withheld', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-done.md', to: 'totem-claude' },
+    ]);
+    writeProcessed('totem', 'totem-claude', ['2026-08-14T0900Z-totem-claude-done.md']);
+    const result = poll();
+    expect(result.seatGate).toEqual({ withheldDirected: 0 });
+  });
+
+  it('does not count directed mail addressed outside the union', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-lc-claude-other.md', to: 'lc-claude' },
+    ]);
+    const result = poll();
+    expect(result.seatGate).toEqual({ withheldDirected: 0 });
+  });
+
+  it('explicit env identity is exempt: single-seat serve, no gate, exit 0', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-directed.md', to: 'totem-claude' },
+    ]);
+    const result = poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' } });
+    expect(result.selfAgents.source).toBe('env');
+    expect(result.seatGate).toBeUndefined();
+    expect(result.mail).toHaveLength(1);
+    expect(resolveMailExitCode(result)).toBe(0);
+  });
+
+  it('--all-seats serves the union by name: pre-gate mail set, exit 0, notice', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-directed.md', to: 'totem-claude' },
+      { name: '2026-08-14T0901Z-totem-gemini-directed.md', to: 'totem-gemini' },
+    ]);
+    const result = poll({ allSeats: true });
+    expect(result.seatGate).toBeUndefined();
+    // Byte-identical union serve (design invariant 5): the exact pre-gate set,
+    // not just its size.
+    expect(result.mail.map((m) => m.file).sort()).toEqual([
+      '2026-08-14T0900Z-totem-claude-directed.md',
+      '2026-08-14T0901Z-totem-gemini-directed.md',
+    ]);
+    expect(result.notices.some((n) => n.includes('union dashboard view'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('identity-ambiguous'))).toBe(false);
+    expect(resolveMailExitCode(result)).toBe(0);
+  });
+
+  it('single-seat config resolution is exempt from the gate (no consumer-repo regression)', () => {
+    const root = markedRepoRoot('cfg-solo');
+    const orch = mkDir(path.join(root, '.totem', 'orchestration'));
+    fs.writeFileSync(
+      path.join(orch, 'config.json'),
+      JSON.stringify({ host_agents: ['solo-seat'] }),
+      'utf-8',
+    );
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-solo-seat-directed.md', to: 'solo-seat' },
+    ]);
+    const result = pollMail({ repoRoot: root, workspace, env: {} });
+    expect(result.selfAgents).toEqual({ agents: ['solo-seat'], source: 'config' });
+    expect(result.seatGate).toBeUndefined();
+    expect(result.mail).toHaveLength(1);
+    expect(resolveMailExitCode(result)).toBe(0);
+  });
+
+  it('gated truncation reports the union-directed tail as a count, never by name (leg F1)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-secret-topic.md', to: 'totem-claude' },
+      { name: '2026-08-14T0902Z-broadcast-bulletin.md', to: 'broadcast' },
+    ]);
+    // maxScan 1: the newer broadcast is scanned, the directed file falls
+    // beyond the horizon — an ECL basename is recipient + compressed subject,
+    // so under the gate the dropped tail must not be named.
+    const result = poll({ maxScan: 1 });
+    expect(result.truncated).toBe(true);
+    const joined = [...result.warnings, ...result.notices].join('\n');
+    expect(joined).toContain('withheld from naming');
+    expect(joined).not.toContain('secret-topic');
+  });
+
+  it('ungated truncation still names the directed tail (leg F1 control)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-secret-topic.md', to: 'totem-claude' },
+      { name: '2026-08-14T0902Z-broadcast-bulletin.md', to: 'broadcast' },
+    ]);
+    const result = poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' }, maxScan: 1 });
+    expect(result.truncated).toBe(true);
+    expect(result.warnings.join('\n')).toContain('secret-topic');
+  });
+
+  it('gated arm keys INCOMPLETE on non-gate warnings — empty broadcast view (leg F2)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-08-14T0900Z-totem-claude-broken.md',
+        to: 'totem-claude',
+        raw: '---\nfrom: strategy-claude\n---\n',
+      },
+    ]);
+    const text = formatTextResult(poll());
+    expect(text).toContain('Directed inbox NOT DERIVED');
+    expect(text).toContain('Scan INCOMPLETE');
+  });
+
+  it('gated poll keeps lifecycle sensing with withheld wording — no filename leak (re-arm 1/2a)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-gemini-secret-slug.md', to: 'totem-gemini' },
+    ]);
+    writeLifecycleMarker('totem', 'totem-gemini', 'suspended');
+    const result = poll();
+    expect(result.seatGate).toEqual({ withheldDirected: 1 });
+    expect(result.mail).toHaveLength(0);
+    const notice = result.notices.find((n) => n.includes('suspended seat'));
+    expect(notice).toBeDefined();
+    // The notice must not assert a surfacing the same render withholds
+    // (the mislabeled-claim class the D-2 test forbids for broadcasts).
+    expect(notice).toContain('WITHHELD');
+    expect(notice).not.toContain('surfacing');
+    expect([...result.warnings, ...result.notices].join('\n')).not.toContain('secret');
+  });
+
+  it('gated poll suppresses the collision sensor for withheld basenames; --all-seats control fires it (re-arm 2b)', () => {
+    const N = '2026-08-14T0900Z-totem-claude-converged.md';
+    writeOutbox('totem-strategy', 'strategy-claude', [{ name: N, to: 'totem-claude' }]);
+    writeOutbox('liquid-city', 'lc-claude', [{ name: N, to: 'totem-claude' }]);
+    const gated = poll();
+    expect(gated.seatGate).toEqual({ withheldDirected: 2 });
+    expect(gated.warnings.join('\n')).not.toContain('cross-sender basename collision');
+    // Control: the identical fixture DOES fire the sensor when the union view
+    // is explicitly requested — proving the gated suppression is what the
+    // first assertion measured, not a fixture that never collides.
+    const control = poll({ allSeats: true });
+    expect(control.warnings.join('\n')).toContain('cross-sender basename collision');
+  });
+
+  it('a broadcast-NAMED directed dispatch beyond the horizon is not named under the gate (re-arm 3)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-broadcast-actually-directed-secret.md', to: 'totem-claude' },
+      { name: '2026-08-14T0902Z-broadcast-real.md', to: 'broadcast' },
+    ]);
+    // The filename token is untrusted for delivery truth (codex F2): under the
+    // gate an UNOPENED tail is never named, broadcast-token or not.
+    const result = poll({ maxScan: 1 });
+    expect(result.truncated).toBe(true);
+    const joined = result.warnings.join('\n');
+    expect(joined).toContain('withheld from naming');
+    expect(joined).not.toContain('actually-directed-secret');
+  });
+
+  it('gated arm keys INCOMPLETE on non-gate warnings — broadcast list qualified (leg F2)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-08-14T0900Z-totem-claude-broken.md',
+        to: 'totem-claude',
+        raw: '---\nfrom: strategy-claude\n---\n',
+      },
+      { name: '2026-08-14T0901Z-broadcast-ok.md', to: 'broadcast' },
+    ]);
+    const text = formatTextResult(poll());
+    expect(text).toContain('1 unread broadcast dispatch(es) — scan INCOMPLETE');
+  });
+
+  it('gate leaves the broadcast per-seat floor untouched (listing ≠ accounting)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-broadcast-ruling.md', to: 'broadcast' },
+    ]);
+    writeBroadcastProcessed('totem', 'totem-claude', ['2026-08-14T0900Z-broadcast-ruling.md']);
+    const oneMark = poll();
+    expect(oneMark.mail).toHaveLength(1); // floor is 2 active seats — still unread
+    writeBroadcastProcessed('totem', 'totem-gemini', ['2026-08-14T0900Z-broadcast-ruling.md']);
+    const bothMarks = poll();
+    expect(bothMarks.mail).toHaveLength(0); // both marks clear it, same as ungated
+  });
+
+  it('gate + truncation compose: both warnings present', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-broadcast-a.md', to: 'broadcast' },
+      { name: '2026-08-14T0901Z-broadcast-b.md', to: 'broadcast' },
+    ]);
+    const result = poll({ maxScan: 1 });
+    expect(result.truncated).toBe(true);
+    expect(result.warnings.some((w) => w.includes('identity-ambiguous'))).toBe(true);
+  });
+
+  it('formatTextResult gated arm leads with the withheld qualifier', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-directed.md', to: 'totem-claude' },
+      { name: '2026-08-14T0901Z-broadcast-ruling.md', to: 'broadcast', subject: 'ruling' },
+    ]);
+    const text = formatTextResult(poll());
+    expect(text).toContain('Directed inbox NOT DERIVED');
+    expect(text).toContain('1 directed dispatch(es) withheld');
+    expect(text).toContain('1 unread broadcast dispatch(es):');
+    expect(text).not.toContain('directed.md');
+  });
+
+  it('formatTextResult gated arm with no broadcasts says so', () => {
+    const text = formatTextResult(poll());
+    expect(text).toContain('No unread broadcast mail in the scanned locations.');
+  });
+});
+
+describe('mailCommand — --as selector (mmnto-ai/totem#2204)', () => {
+  /** Text-path mailCommand prints via log.info (stderr) — silence per the
+   * suite's #2312 idiom so test output stays clean. */
+  async function runMailCommand(
+    opts: Parameters<typeof mailCommand>[0],
+  ): Promise<Awaited<ReturnType<typeof mailCommand>>> {
+    const spy = vi.spyOn(log, 'info').mockImplementation(() => {});
+    try {
+      return await mailCommand(opts);
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('serves exactly the named union seat via env-injection (source env)', async () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-directed.md', to: 'totem-claude' },
+      { name: '2026-08-14T0901Z-totem-gemini-directed.md', to: 'totem-gemini' },
+    ]);
+    const { result, exitCode } = await runMailCommand({
+      repoRoot: selfRepoRoot(),
+      workspace,
+      env: {},
+      asSeat: 'totem-claude',
+    });
+    expect(result.selfAgents).toEqual({ agents: ['totem-claude'], source: 'env' });
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.to).toBe('totem-claude');
+    expect(result.seatGate).toBeUndefined();
+    expect(exitCode).toBe(0);
+  });
+
+  it('canonicalizes case through the resolver', async () => {
+    const { result } = await runMailCommand({
+      repoRoot: selfRepoRoot(),
+      workspace,
+      env: {},
+      asSeat: 'TOTEM-CLAUDE',
+    });
+    expect(result.selfAgents.agents).toEqual(['totem-claude']);
+  });
+
+  it('overrides an ambient env identity (flag-over-env, validated against the structural union)', async () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-gemini-directed.md', to: 'totem-gemini' },
+    ]);
+    // A shell seated as totem-claude asks for the sibling seat's view: the
+    // ambient identity must not shadow the structural union down to itself.
+    const { result } = await runMailCommand({
+      repoRoot: selfRepoRoot(),
+      workspace,
+      env: { TOTEM_SELF_AGENT: 'totem-claude' },
+      asSeat: 'totem-gemini',
+    });
+    expect(result.selfAgents).toEqual({ agents: ['totem-gemini'], source: 'env' });
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.to).toBe('totem-gemini');
+  });
+
+  it('refuses a seat outside the resolved union (the foreign-anchor trap)', async () => {
+    await expect(
+      runMailCommand({ repoRoot: selfRepoRoot(), workspace, env: {}, asSeat: 'lc-claude' }),
+    ).rejects.toThrow(/not a seat resolved for this repo/);
+  });
+
+  it('refusal carries the resolver diagnostics (#2141 config-omits-present-dir, leg F3)', async () => {
+    const root = markedRepoRoot('cfg-repo');
+    const orch = mkDir(path.join(root, '.totem', 'orchestration'));
+    fs.writeFileSync(
+      path.join(orch, 'config.json'),
+      JSON.stringify({ host_agents: ['seat-alpha'] }),
+      'utf-8',
+    );
+    mkDir(path.join(orch, 'seat-beta'));
+    // seat-beta's dir IS its registration; config omits it, so --as seat-beta
+    // is refused — the error must carry the resolver's own explanation.
+    await expect(
+      runMailCommand({ repoRoot: root, workspace, env: {}, asSeat: 'seat-beta' }),
+    ).rejects.toThrow(/omits present seat dir/);
+  });
+
+  it('falls back to the env-declared list when the structural union is empty (worktree shape, leg F4)', async () => {
+    const root = markedRepoRoot('scratch-wt');
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-seat-a-directed.md', to: 'seat-a' },
+    ]);
+    const { result } = await runMailCommand({
+      repoRoot: root,
+      workspace,
+      env: { TOTEM_SELF_AGENT: 'seat-a,seat-b' },
+      asSeat: 'seat-a',
+    });
+    expect(result.selfAgents).toEqual({ agents: ['seat-a'], source: 'env' });
+    expect(result.mail).toHaveLength(1);
+  });
+
+  it('a seat outside the env-declared list is still refused in the worktree shape (leg F4)', async () => {
+    const root = markedRepoRoot('scratch-wt');
+    await expect(
+      runMailCommand({
+        repoRoot: root,
+        workspace,
+        env: { TOTEM_SELF_AGENT: 'seat-a,seat-b' },
+        asSeat: 'seat-c',
+      }),
+    ).rejects.toThrow(/not a seat resolved for this repo/);
+  });
+
+  it('anchors processed-mark subtraction to the selected seat (design invariant 3)', async () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-handled.md', to: 'totem-claude' },
+    ]);
+    writeProcessed('totem', 'totem-claude', ['2026-08-14T0900Z-totem-claude-handled.md']);
+    const { result } = await runMailCommand({
+      repoRoot: selfRepoRoot(),
+      workspace,
+      env: {},
+      asSeat: 'totem-claude',
+    });
+    expect(result.mail).toHaveLength(0);
+  });
+
+  it('refuses --as together with --all-seats', async () => {
+    await expect(
+      runMailCommand({
+        repoRoot: selfRepoRoot(),
+        workspace,
+        env: {},
+        asSeat: 'totem-claude',
+        allSeats: true,
+      }),
+    ).rejects.toThrow(/contradictory/);
+  });
+
+  it('rejects an unsafe --as value with the correctly-labeled error (re-arm 4)', async () => {
+    // Pins the CODE, not only the message: an --as refusal is poll-option
+    // validation (CONFIG_INVALID), never the send path's MAIL_SEND_FAILED
+    // (GCA on #2639).
+    await expect(
+      runMailCommand({ repoRoot: selfRepoRoot(), workspace, env: {}, asSeat: '../evil' }),
+    ).rejects.toMatchObject({
+      code: 'CONFIG_INVALID',
+      message: expect.stringMatching(/invalid --as/),
+    });
   });
 });

@@ -457,6 +457,9 @@ Shows unread cross-repo mail addressed to this repo's agent(s) (ADR-106 § 3). S
   - `--json`: Emit JSON to stdout instead of human-readable text to stderr.
   - `--recursive`: Walk the workspace recursively for nested layouts (default: single-level siblings).
   - `--workspace <path>`: Workspace dir to scan (default: `$TOTEM_WORKSPACE`, else the parent of the current directory).
+  - `--as <seat>`: Serve exactly this seat's mail. The seat must be one this repo resolves (config / seat dirs / cohort map — or the env-declared list when those are empty); a foreign seat is refused, because its processed-marks cursor lives in its home repo and a foreign-anchored poll answers "ever addressed," never "unread." Poll-only: the flag is parent-scoped, so `mail reply` ignores it — use `mail reply --from <seat>`.
+  - `--all-seats`: Serve the full multi-seat union (repo dashboard view) — bypasses the identity gate by name.
+- **Identity gate (multi-seat repos):** an identity-less poll (no per-shell `TOTEM_SELF_AGENT`, no `--as`) in a repo that resolves more than one seat serves **broadcast mail only** — directed mail is withheld as a count and the poll exits `2` until identity is explicit. Reading never consumes: `mail mark` is the single-writer mark actuator (ADR-106 § A1.3).
 - **Subcommands:**
   - `mail send` composes and writes a validated ADR-098 dispatch to your outbox.
   - `mail reply <source>` replies to a dispatch, inferring recipient and subject from the source.
