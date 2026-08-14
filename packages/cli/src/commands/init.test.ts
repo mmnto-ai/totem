@@ -3807,13 +3807,20 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     // un-bussed from vacant, crown-scopes step 4 by name, and carries the
     // own-owed-edges journal rule with the self-held→live asymmetry.
     expect(SIGNOFF_SKILL_CONTENT).toContain('Crown gate — derive FIRST');
-    expect(SIGNOFF_SKILL_CONTENT).toContain('un-bussed');
-    expect(SIGNOFF_SKILL_CONTENT).toContain('crown **vacant**');
-    expect(SIGNOFF_SKILL_CONTENT).toContain('CROWN ONLY');
+    // Pin the NORMATIVE arms, not just tokens (re-arm MINOR-4: a token pin
+    // lets a later edit keep the word and invert the rule under green CI).
+    expect(SIGNOFF_SKILL_CONTENT).toContain(
+      '**non-cohort consumer**: the crown gate does not apply',
+    );
+    expect(SIGNOFF_SKILL_CONTENT).toContain('crown **vacant** (fail-closed — the ruled default)');
+    expect(SIGNOFF_SKILL_CONTENT).toContain('CROWN ONLY where the crown gate applies');
     expect(SIGNOFF_SKILL_CONTENT).toContain('every OTHER managed step (1–3, 5–6) still runs');
     expect(SIGNOFF_SKILL_CONTENT).toContain(
       'a skipped note-to-self THERE and a LIVE edge in yours',
     );
+    // Step 0 is the FIRST numbered step (not a demotable preamble) and
+    // precedes step 1.
+    expect(SIGNOFF_SKILL_CONTENT).toMatch(/\n0\. \*\*Crown gate — derive FIRST/);
     expect(SIGNOFF_SKILL_CONTENT.indexOf('Crown gate — derive FIRST')).toBeLessThan(
       SIGNOFF_SKILL_CONTENT.indexOf('1. **Update memory.**'),
     );
@@ -3825,7 +3832,11 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(SIGNON_SKILL_CONTENT).toContain('exit 2');
     expect(SIGNON_SKILL_CONTENT).toContain('--as <your-seat>');
     expect(SIGNON_SKILL_CONTENT).toContain('the seat it is CONFIGURED for');
-    expect(SIGNON_SKILL_CONTENT).toContain('A GATED poll is not an exposure');
+    // The gated-poll claim is scoped to the LISTING with the warning-line
+    // limit named (re-arm MATERIAL-B: an unqualified "not an exposure" was
+    // falsified by the CLI's own named unclassifiable-file limit).
+    expect(SIGNON_SKILL_CONTENT).toContain("A GATED poll's LISTING is broadcast-only");
+    expect(SIGNON_SKILL_CONTENT).toContain('propagate nothing from a gated poll');
   });
 
   // rev-6 item 4: the consolidated round-disposition comment is a CONCRETE, executable
