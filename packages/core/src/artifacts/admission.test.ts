@@ -62,6 +62,22 @@ describe('computeProjectionPolicyHash — canonicalizer determinism', () => {
     expect(computeProjectionPolicyHash(reordered)).toBe(computeProjectionPolicyHash(policy));
   });
 
+  it('is fixture-locked: a frozen policy pins a frozen digest (canonicalization drift fails red)', () => {
+    // Falsification-leg MINOR 6: order-insensitivity tests alone cannot catch
+    // a canonicalization change (a new field, a changed sort, a platform value
+    // entering the hash). This pin does — recompute deliberately on any
+    // intentional canonicalizer change.
+    expect(
+      computeProjectionPolicyHash({
+        sourceExtensions: ['.ts', '.tsx'],
+        generatedGlobs: ['**/pnpm-lock.yaml', '**/dist/**'],
+        notGeneratedGlobs: ['docs/**'],
+        ignorePatterns: ['audits/**'],
+        classifierId: 'pinned-fixture@1',
+      }),
+    ).toBe('0d7c60a7f0fe5e2d06a1a61c37082599432adf4f19638948313f3db1eec2adc8');
+  });
+
   it('changes when any policy input changes — equal bytes under a changed policy are a different observation', () => {
     const base = computeProjectionPolicyHash(policy);
     expect(computeProjectionPolicyHash({ ...policy, sourceExtensions: ['.ts'] })).not.toBe(base);
@@ -153,7 +169,7 @@ describe('admission store — save/load/dedup/identity', () => {
 
   it('findAdmissionRecordByIdentity: exact-identity hit, miss, and loud corruption routing', () => {
     const record = baseRecord();
-    const { createdAt: _createdAt, ...identity } = record;
+    const { createdAt: _createdAt, schemaVersion: _schemaVersion, ...identity } = record;
     const corrupt: string[] = [];
 
     // Miss before any write.
@@ -181,6 +197,20 @@ describe('admission store — save/load/dedup/identity', () => {
       undefined,
     );
     expect(corrupt).toHaveLength(1);
+  });
+
+  it('schemaVersion is writer metadata: the address is stable across 1.x versions and lookup needs no version', () => {
+    // Falsification-leg MINOR 3: including schemaVersion in the address would
+    // orphan every prior record on each minor bump — the tolerant-reader
+    // contract requires the OBSERVATION alone to be the identity.
+    expect(computeAdmissionContentHash(baseRecord({ schemaVersion: '1.0.0' }))).toBe(
+      computeAdmissionContentHash(baseRecord({ schemaVersion: '1.9.3' })),
+    );
+
+    const saved = saveAdmissionRecord(totemDirAbs, baseRecord({ schemaVersion: '1.0.0' }));
+    const { createdAt: _c, schemaVersion: _s, ...identity } = baseRecord();
+    const found = findAdmissionRecordByIdentity(totemDirAbs, identity, () => {});
+    expect(found?.contentHash).toBe(saved.hash);
   });
 
   it('renderAdmissionLine carries the local-lane prefix, reason, address, and record timestamp', () => {

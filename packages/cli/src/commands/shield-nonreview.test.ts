@@ -248,7 +248,10 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
 
     // The load-bearing assertion: no push authorization was minted.
     expect(fs.existsSync(stampPath())).toBe(false);
-    expectCalmLine('all-non-code');
+    const line = expectCalmLine('all-non-code');
+    // Exact rendered count (leg MINOR 4): the count measures files in scope
+    // after generated-artifact exclusion, and the wording names that scope.
+    expect(line).toContain('every file in scope (2) is non-code');
     expectSingleRecord('all-non-code', 2);
     expect(bootstrapEngineSpy).not.toHaveBeenCalled();
   });
@@ -291,9 +294,12 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
 
     expect(fs.existsSync(stampPath())).toBe(false);
     const line = expectCalmLine('filtered-empty');
-    // Stage-2 wording specifically — distinguishes this from the Stage-1
-    // all-non-code branch.
-    expect(line).toMatch(/no code diff remains after filtering/);
+    // Stage-2 wording, with the EXACT rendered count (leg MINOR 4): the count
+    // is the in-scope file total, and the wording says so — never "N non-code
+    // file(s)" for a number that counts something else.
+    expect(line).toContain(
+      'no code diff remains after filtering non-code files from 2 file(s) in scope',
+    );
     expectSingleRecord('filtered-empty', 2);
   });
 
@@ -374,6 +380,29 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
         fs.readdirSync(admissionsDir())[0],
       ).slice(0, 8)} at=${String(record['createdAt'])}`,
     );
+  });
+
+  it('covariate falls back LOUD on a corrupt exact-identity record — never a stale line (leg MINOR 7)', async () => {
+    getDiffForReviewSpy.mockResolvedValue({
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted',
+    });
+    const { shieldCommand } = await import('./shield.js');
+    await shieldCommand({} as Parameters<typeof shieldCommand>[0]); // record it
+    const recordFile = fs.readdirSync(admissionsDir())[0]!;
+    fs.writeFileSync(path.join(admissionsDir(), recordFile), '{ not json', 'utf-8');
+
+    output.length = 0;
+    warnLines.length = 0;
+    await expect(
+      shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]),
+    ).resolves.toBeUndefined();
+    // The corrupt load routed to the sensor AND the loud no-current-record
+    // warn fired — and no local-lane line printed (never a stale fallback).
+    expect(warnLines.some((l) => l.startsWith('Sensor:'))).toBe(true);
+    expect(warnLines.some((l) => l.includes('no admission record exists'))).toBe(true);
+    expect(output.some((l) => l.startsWith('local-lane:'))).toBe(false);
   });
 
   it('mixed code + prose does NOT take a skip path (the skip must not over-fire)', async () => {

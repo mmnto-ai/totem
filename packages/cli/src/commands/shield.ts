@@ -1538,12 +1538,15 @@ export async function evaluateIncrementalEligibility(
 // deterministically — never wall-clock arbitration (codex review, 2026-08-14).
 
 /**
- * Identifier for the non-code classifier whose partition the admission
- * projection applies. Bump when `classifyFile`'s behavior changes without any
- * config input changing — a projection-version bump explains drift with no
- * source change.
+ * Base identifier for the non-code classifier whose partition the admission
+ * projection applies. `buildProjectionPolicy` appends a digest of the
+ * classifier's exported policy tables (`CLASSIFIER_POLICY_TABLES`), so a
+ * table edit re-keys every admission address MECHANICALLY — no hand-bumped
+ * version string to forget (falsification-leg MATERIAL 2). Bump the base
+ * only when the classification ALGORITHM changes shape (new lookup order,
+ * new rule class) rather than its tables.
  */
-const REVIEW_CLASSIFIER_ID = 'classifyChangedFiles@1';
+const REVIEW_CLASSIFIER_ID_BASE = 'classifyChangedFiles@1';
 
 /** The resolved-diff subset admission consumes (structural — avoids a git.ts type export). */
 interface AdmissionDiffResult {
@@ -1783,13 +1786,23 @@ export async function selectExecutionPayload(
 }
 
 /** The effective selection policy whose projection produced the admission outcome. */
-async function buildProjectionPolicy(
+export async function buildProjectionPolicy(
   config: TotemConfig,
   cwd: string,
 ): Promise<import('@mmnto/totem').ProjectionPolicy> {
   const { DEFAULT_GENERATED_ARTIFACT_GLOBS, readGitattributesGeneratedPatterns } =
     await import('./shield-generated.js');
+  const { CLASSIFIER_POLICY_TABLES } = await import('./shield-classify.js');
+  const crypto = await import('node:crypto');
   const gitattr = readGitattributesGeneratedPatterns(cwd);
+  // Mechanical table binding (falsification-leg MATERIAL 2): the digest of the
+  // classifier's exported tables rides the id, so an edited table changes the
+  // policy hash with no version-bump discipline required.
+  const tablesDigest = crypto
+    .createHash('sha256')
+    .update(JSON.stringify(CLASSIFIER_POLICY_TABLES), 'utf-8')
+    .digest('hex')
+    .slice(0, 12);
   return {
     sourceExtensions: config.review.sourceExtensions,
     generatedGlobs: [...DEFAULT_GENERATED_ARTIFACT_GLOBS, ...gitattr.generated],
@@ -1798,7 +1811,7 @@ async function buildProjectionPolicy(
     // this seam also receives cast fixtures (and the same guard shape git.ts
     // uses for `shieldIgnorePatterns`).
     ignorePatterns: [...(config.ignorePatterns ?? []), ...(config.shieldIgnorePatterns ?? [])],
-    classifierId: REVIEW_CLASSIFIER_ID,
+    classifierId: `${REVIEW_CLASSIFIER_ID_BASE}:${tablesDigest}`,
   };
 }
 
@@ -1921,13 +1934,18 @@ export function resolveNotApplicableExit(
 function describeNotApplicable(
   outcome: Extract<AdmissionOutcome, { status: 'not-applicable' }>,
 ): string {
+  // Counts are EXACT for what each arm's `skippedFileCount` actually holds
+  // (falsification-leg MINOR 4): all-generated counts the changed files;
+  // all-non-code and filtered-empty count the files in scope AFTER
+  // generated-artifact exclusion — the wording names that scope, never a
+  // number the count does not measure.
   switch (outcome.reason) {
     case 'no-diff':
       return 'no changes detected in the resolved scope';
     case 'all-non-code':
-      return `every changed file (${outcome.skippedFileCount}) is non-code`;
+      return `every file in scope (${outcome.skippedFileCount}) is non-code`;
     case 'filtered-empty':
-      return `no code diff remains after filtering ${outcome.skippedFileCount} non-code file(s)`;
+      return `no code diff remains after filtering non-code files from ${outcome.skippedFileCount} file(s) in scope`;
     case 'all-generated':
       return `every changed file (${outcome.skippedFileCount}) is a generated artifact`;
   }
@@ -2004,6 +2022,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       ['fresh', '--fresh'],
       ['mode', '--mode'],
       ['raw', '--raw'],
+      // --gate maps admission/round dispositions to exits; an estimate is a
+      // zero-LLM forecast with neither, so the flag has no semantics here —
+      // and rejecting it keeps the --gate/--fail-on conflict unreachable via
+      // the estimate short-circuit (falsification-leg MINOR 8).
+      ['gate', '--gate'],
     ];
     for (const [key, flag] of incompatible) {
       const value = options[key];
@@ -2101,15 +2124,13 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       quiet: true,
     });
     if (admission.status === 'not-applicable') {
-      const {
-        ADMISSION_RECORD_SCHEMA_VERSION,
-        findAdmissionRecordByIdentity,
-        renderAdmissionLine,
-      } = await import('@mmnto/totem');
+      const { findAdmissionRecordByIdentity, renderAdmissionLine } = await import('@mmnto/totem');
+      // Identity carries the OBSERVATION only — schemaVersion is writer
+      // metadata, excluded from the address so a 1.x bump never orphans prior
+      // records on this exact-identity path (falsification-leg MINOR 3).
       const found = findAdmissionRecordByIdentity(
         path.join(configRoot, config.totemDir),
         {
-          schemaVersion: ADMISSION_RECORD_SCHEMA_VERSION,
           disposition: 'not-applicable',
           reason: admission.reason,
           scope: admission.scope,
@@ -2255,7 +2276,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const incremental: IncrementalResult = fanActive
     ? { eligible: false, reason: 'multi-lane fan requires full diff scope' }
     : await evaluateIncrementalEligibility(cwd, config.totemDir, configRoot);
-  const selection = await selectExecutionPayload(admission, incremental, cwd, false);
+  // quiet=true for the delta re-projection: the full-scope pass already printed
+  // the generated/filtered disclosures — a second copy for the delta is noise
+  // (falsification-leg NIT 11; also drops a redundant .gitattributes read path).
+  const selection = await selectExecutionPayload(admission, incremental, cwd, true);
   if (selection.narrowed) {
     log.info(
       DISPLAY_TAG,
@@ -2439,16 +2463,9 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // a verdict artifact, and enforce the cache-eligibility exit contract. The
   // legacy single-lane path below is left byte-for-byte unchanged (invariant 7).
   if (fanActive) {
-    if (diffScopeMeta === undefined) {
-      // Unreachable: the fan bypasses the incremental fast-path, so the full
-      // getDiffForReview path always populated diffScopeMeta. Fail loud, never a
-      // silent scope guess (Tenet 4).
-      throw new TotemError(
-        'SHIELD_FAILED',
-        'Internal: diff-scope metadata was not resolved for the review fan.',
-        'Re-run `totem review`; report this if it recurs.',
-      );
-    }
+    // `diffScopeMeta` is a const built from the admission's bound scope (the
+    // `source: 'none'` fail-loud guard above is the live unreachability check)
+    // — the old `undefined` guard died with the incremental-path split.
     // Exemptions are read once here and passed in side-effect-free (the fan is
     // pure over them). --suppress mutation is not wired into the fan this slice;
     // committed shared exemptions still filter each lane.

@@ -11,6 +11,7 @@
  * fail-closed unknown arm under `--gate`.
  */
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -21,12 +22,14 @@ import type { TotemConfig } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
+  buildProjectionPolicy,
   evaluateAdmission,
   requestedSelectorForm,
   resolveNotApplicableExit,
   selectExecutionPayload,
   type ShieldOptions,
 } from './shield.js';
+import { CLASSIFIER_POLICY_TABLES } from './shield-classify.js';
 
 const SHA_EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
@@ -204,6 +207,26 @@ describe('evaluateAdmission — the closed admission evaluator', () => {
       throw new Error('both fixtures must be not-applicable');
     }
     expect(after.projectionPolicyHash).not.toBe(before.projectionPolicyHash);
+  });
+});
+
+describe('buildProjectionPolicy — classifier tables bound mechanically (leg MATERIAL 2)', () => {
+  it('classifierId embeds the digest of the exported classifier tables — a table edit re-keys every address with no version-bump discipline', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shield-policy-'));
+    try {
+      const policy = await buildProjectionPolicy(TEST_CONFIG, tmpDir);
+      const digest = createHash('sha256')
+        .update(JSON.stringify(CLASSIFIER_POLICY_TABLES), 'utf-8')
+        .digest('hex')
+        .slice(0, 12);
+      expect(policy.classifierId).toBe(`classifyChangedFiles@1:${digest}`);
+      // The tables constant is the classifier's ENTIRE policy surface:
+      // non-trivial and canonically sorted, so the digest is deterministic.
+      expect(CLASSIFIER_POLICY_TABLES.length).toBeGreaterThan(50);
+      expect([...CLASSIFIER_POLICY_TABLES]).toEqual([...CLASSIFIER_POLICY_TABLES].sort());
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
   });
 });
 

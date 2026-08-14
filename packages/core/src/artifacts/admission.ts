@@ -60,11 +60,14 @@ const NotApplicableReasonSchema = z.enum(NOT_APPLICABLE_REASONS);
 
 /**
  * Normalized diff-scope identity. ALWAYS present on a record — including
- * `no-diff`, where the resolution chain found nothing: there `source` is
- * `'none'`, `base`/`head` are null, and `selectorForm` records the REQUESTED
- * selector expression, so two no-diff runs under different selectors are
- * different observations (a global null identity fails the base/range
- * constraint — codex blocking finding 1).
+ * `no-diff`, which binds the RESOLVED terminal scope the resolver had reached
+ * when it found nothing (e.g. `branch-vs-base` + the resolved base after the
+ * default chain exhausts; the explicit range with its refs for `--diff`),
+ * with `selectorForm` falling back to the REQUESTED selector where the
+ * resolver supplies none — so empty runs under different scopes or selectors
+ * are different observations (codex conformance note 1). `source: 'none'`
+ * survives only for the scope-less legacy caller arm (a caller passing no
+ * resolver result at all); no shipped CLI path produces it.
  */
 export const AdmissionScopeSchema = z
   .object({
@@ -156,11 +159,19 @@ export interface AdmissionWithAddress {
   contentHash: string;
 }
 
-// ─── Content addressing (createdAt = observability-only, excluded) ──────────
+// ─── Content addressing (observation identity only) ─────────────────────────
+//
+// BOTH `createdAt` (observability) and `schemaVersion` (writer metadata) are
+// excluded from the address: the identity is the OBSERVATION — scope, input
+// bytes, projection policy, reason, count. Including `schemaVersion` would
+// make every 1.x minor bump orphan every prior record on the exact-identity
+// lookup path, silently defeating the tolerant-reader contract
+// (falsification-leg MINOR 3 on the #2473 round). Version tolerance is the
+// reader's job (schema regex + migration registry), never the address's.
 
-/** Content address over the validated record with ONLY `createdAt` excluded. */
+/** Content address over the validated record — observation identity only. */
 export function computeAdmissionContentHash(record: AdmissionRecord): string {
-  const { createdAt: _excluded, ...identity } = record;
+  const { createdAt: _createdAt, schemaVersion: _schemaVersion, ...identity } = record;
   return calculateDeterministicHash(identity);
 }
 
@@ -169,7 +180,11 @@ function computeRawAdmissionContentHash(raw: unknown): string {
   if (typeof raw !== 'object' || raw === null) {
     return calculateDeterministicHash(raw);
   }
-  const { createdAt: _excluded, ...identity } = raw as Record<string, unknown>;
+  const {
+    createdAt: _createdAt,
+    schemaVersion: _schemaVersion,
+    ...identity
+  } = raw as Record<string, unknown>;
   return calculateDeterministicHash(identity);
 }
 
@@ -279,7 +294,7 @@ export function loadAdmissionRecord(totemDirAbs: string, hash: string): Admissio
  */
 export function findAdmissionRecordByIdentity(
   totemDirAbs: string,
-  identity: Omit<AdmissionRecord, 'createdAt'>,
+  identity: Omit<AdmissionRecord, 'createdAt' | 'schemaVersion'>,
   onCorrupt: (message: string) => void,
 ): AdmissionWithAddress | undefined {
   const hash = calculateDeterministicHash(identity);
