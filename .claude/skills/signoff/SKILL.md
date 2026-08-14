@@ -7,6 +7,8 @@ description: End-of-session — update memory, write journal entry, clean up
 
 End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in the per-repo `.totem/orchestration/<agent-id>/` tree (gitignored) — NOT the substrate. Substrate stays as a frozen archive for forensic reads; the active surface is local.
 
+0. **Crown gate — derive FIRST (Prop 305 §8; operator-ruled 2026-08-13, distributed per the mmnto-ai/totem-strategy#488 R-table).** Read the `totem:agent-bus` marker in this repo's AGENTS.md and derive `primary=` fresh — that seat is the crown. No `primary=` (attribute or marker absent) = crown **vacant**, a legitimate state: surface upkeep stages/defers, mail the operator, and no seat self-promotes (Prop 305 §8.4b). If you are NOT the crown, your signoff is seat-anchored + own-lane only: skip every surface-upkeep MUTATION — derived-cache/corpus rebuilds, GH board writes, cohort-wide upkeep walks, and step 4's shared-tree branch cleanup (crown-scoped there by name) — while read-only derivation stays open to every seat: derive, then report staleness to the crown by mail. **Journal rule, every seat:** restate your OWN chain's still-open `owed:` lines only — lines where YOU are the waiter and `@holder:` names the counterparty who owes — and never another seat's carryforward: the parser keys each edge's waiter to the journal-owning seat, so a copied line mints a live foreign edge in YOUR chain that persists until your own next journal drops it. (Canonical rulings home: mmnto-ai/totem-status#127.)
+
 1. **Update memory.** Update auto-memory files (e.g. `MEMORY.md`, topic memories) with any new state — version shipped, tickets closed, key decisions, banked feedback or doctrine signals.
 
 2. **Write a journal entry to the per-repo orchestration path.** Filename convention: `<model>-NNNN-<short-topic-slug>.md` (e.g., `claude-0057-phase-4-resolver-shipped.md`).
@@ -32,7 +34,7 @@ End-of-session wrap-up. Post-Proposal-282 (ADR-106), journals + handoffs live in
 
 3. **No commit, no push.** `.totem/orchestration/` is gitignored — local filesystem write is the entire operation. No more substrate rebase-retry loops; the cross-agent write-collision class is eliminated by the single-writer-per-path invariant (you only ever write into your own `<agent-id>/` subtree).
 
-4. **Clean up stale local branches:**
+4. **Clean up stale local branches — CROWN ONLY (step 0 gates this; the named design choice per the mmnto-ai/totem-strategy#488 R8 ruling).** The cleanup mutates the SHARED per-repo working tree — cohort upkeep, not own-lane (worktree-pinned branches refuse deletion, so it is collision-safe, but ownership is the point, not safety). A non-crown seat skips this step and reports any `[gone]` branches to the crown by mail instead.
 
    ```bash
    git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | while read -r branch track; do
