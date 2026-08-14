@@ -832,15 +832,27 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     // FILENAME (zero I/O) for self/broadcast tokens. Self-token files sort
     // first, so any landing here means self-priority volume alone exceeded
     // the cap — name them explicitly instead of hiding behind the generic
-    // truncation line.
-    const droppedSelf = ordered
-      .slice(maxScan)
-      .filter(({ file }) => hasSelfToken(file))
-      .map(({ slot, file }) => `${slot.repo}/${slot.agent}/${file}`);
-    if (droppedSelf.length > 0) {
+    // truncation line. Under the identity gate (mmnto-ai/totem#2204) the
+    // union-directed part of the tail is reported as a COUNT: an ECL basename
+    // is `<stamp>-<recipient>-<topic-slug>.md` — recipient + compressed
+    // subject — so naming it here would rebuild the withheld-listing exposure
+    // inside this warning (falsification-leg F1). Broadcast-token files carry
+    // no per-seat privacy and stay named either way.
+    const droppedSelfEntries = ordered.slice(maxScan).filter(({ file }) => hasSelfToken(file));
+    const nameable = identityGated
+      ? droppedSelfEntries.filter(({ file }) => isBroadcastNamed(file))
+      : droppedSelfEntries;
+    const droppedSelf = nameable.map(({ slot, file }) => `${slot.repo}/${slot.agent}/${file}`);
+    const withheldFromNaming = droppedSelfEntries.length - nameable.length;
+    if (droppedSelfEntries.length > 0) {
       const shown = droppedSelf.slice(0, 5);
       if (droppedSelf.length > shown.length) {
         shown.push(`(+${droppedSelf.length - shown.length} more)`);
+      }
+      if (withheldFromNaming > 0) {
+        shown.push(
+          `(+${withheldFromNaming} directed-addressed beyond the horizon, withheld from naming — identity-ambiguous poll)`,
+        );
       }
       warnings.push(`possible self-addressed mail beyond the scan horizon: ${shown.join(', ')}`);
     }
@@ -915,18 +927,6 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
       );
     }
     if (toLower !== 'broadcast' && !selfLower.has(toLower)) continue;
-    // Identity gate (mmnto-ai/totem#2204): under an ambiguous poll,
-    // union-directed dispatches are withheld as a COUNT — the skip sits
-    // BEFORE the lifecycle/collision sensors so no per-item detail about
-    // withheld mail reaches any output channel (collision coverage for these
-    // files is preserved by every ungated poll, incl. ecl-gc's env-bound
-    // ones, which are the polls whose compaction gates need it). This runs
-    // AFTER processed-mark subtraction (the unread-collection loop above), so
-    // the count is exactly the would-have-served set.
-    if (identityGated && toLower !== 'broadcast') {
-      withheldDirected += 1;
-      continue;
-    }
     const senderSeat = slot.agent.toLowerCase();
     // Own-broadcast exclusion (mmnto-ai/totem#2364): a seat's outbound
     // broadcast is not its own inbound — without this, a broadcasting seat
@@ -988,6 +988,24 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
           `addressed to retired seat: to: "${header.to}" — mail still surfaces; the sender should re-route`,
         );
       }
+    }
+    // Identity gate (mmnto-ai/totem#2204): under an ambiguous poll,
+    // union-directed dispatches are withheld as a COUNT. The skip sits AFTER
+    // the lifecycle annotations above (they name only a union SEAT already in
+    // the banner — #2511 sensing preserved, falsification-leg F9) and BEFORE
+    // the collision sensor and the mail[] push (both name FILENAMES; an ECL
+    // basename is recipient + compressed subject, so naming a withheld file
+    // would rebuild the exposure — collision coverage for these files is
+    // preserved by every ungated poll, incl. ecl-gc's env-bound ones, which
+    // are the polls whose compaction gates need it). Runs AFTER
+    // processed-mark subtraction (the unread-collection loop above), so the
+    // count is exactly the would-have-served set. Named limit: a dispatch
+    // that cannot be CLASSIFIED (read/parse failure) is warned with its
+    // filename before its `to:` is knowable — an integrity signal that
+    // cannot be seat-scoped.
+    if (identityGated && toLower !== 'broadcast') {
+      withheldDirected += 1;
+      continue;
     }
     let seats = collisionsByBasename.get(file);
     if (seats === undefined) {
@@ -1134,14 +1152,29 @@ export function formatTextResult(result: MailPollResult): string {
     // with its withheld qualifier — a broadcast-only list rendered under the
     // normal `N unread:` banner would be the reassuring-lead class (#2516).
     // Broadcast dispatches (addressed to every seat — no per-seat privacy)
-    // still render below it.
+    // still render below it. The #2516 INCOMPLETE discriminator keys on
+    // NON-GATE warnings here: the gate line is serve-policy, not scan
+    // integrity, and is ALWAYS present on a gated poll — keying on
+    // `warnings.length` alone would pin every gated poll to INCOMPLETE and
+    // destroy the discriminator (falsification-leg F2).
+    const nonGateWarnings = result.warnings.filter(
+      (w) => !w.startsWith('identity-ambiguous poll:'),
+    ).length;
     lines.push(
       `Directed inbox NOT DERIVED — identity-ambiguous poll (${result.selfAgents.agents.length} seats via ${result.selfAgents.source}); ${result.seatGate.withheldDirected} directed dispatch(es) withheld. Pass --as <seat>, set per-shell TOTEM_SELF_AGENT, or use --all-seats for the union dashboard view.`,
     );
     if (result.mail.length === 0) {
-      lines.push('No unread broadcast mail in the scanned locations.');
+      lines.push(
+        nonGateWarnings > 0
+          ? `Scan INCOMPLETE (${nonGateWarnings} warning(s) above) — no unread broadcast mail found in the scanned locations; unread broadcast mail may exist in the unscanned ones.`
+          : 'No unread broadcast mail in the scanned locations.',
+      );
     } else {
-      lines.push(`${result.mail.length} unread broadcast dispatch(es):`);
+      lines.push(
+        nonGateWarnings > 0
+          ? `${result.mail.length} unread broadcast dispatch(es) — scan INCOMPLETE (${nonGateWarnings} warning(s) above); more may exist in unscanned locations:`
+          : `${result.mail.length} unread broadcast dispatch(es):`,
+      );
       for (const m of result.mail) {
         lines.push(`  - ${m.file} (from ${m.from} @ ${m.repo}, to: ${m.to})`);
         lines.push(`      subject: ${m.subject}`);
@@ -1194,7 +1227,8 @@ export async function mailCommand(
       );
     }
     const asSeat = opts.asSeat.trim();
-    assertSafeAgentId(asSeat, '--as');
+    // Bare token — the helper renders `--${label}` (falsification-leg F8).
+    assertSafeAgentId(asSeat, 'as');
     const env = opts.env ?? process.env;
     // Same walk-start the poll itself uses (mmnto-ai/totem#2312), so the
     // validation resolves the SAME union the poll would — but with any ambient
@@ -1202,23 +1236,37 @@ export async function mailCommand(
     // must override a shell-scoped identity (flag-over-env precedence), so it
     // validates against the repo's STRUCTURAL union (config/dirs/map). Without
     // the strip, a seated shell could never `--as` a sibling seat of its own
-    // repo — the env identity would shadow the union down to itself.
+    // repo — the env identity would shadow the union down to itself. When the
+    // structural union is EMPTY (a per-agent worktree off the cohort map with
+    // the gitignored config absent — falsification-leg F4), fall back to the
+    // env-declared list itself: a multi-seat env declaration is the
+    // gate-exempt operator-declared shape, and narrowing it is exactly what
+    // this flag is for.
     const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
     const structuralEnv = { ...env };
     delete structuralEnv['TOTEM_SELF_AGENT'];
-    const resolved = resolveSelfAgents(repoRoot, structuralEnv);
+    let resolved = resolveSelfAgents(repoRoot, structuralEnv);
+    if (resolved.agents.length === 0) {
+      resolved = resolveSelfAgents(repoRoot, env);
+    }
     const member = resolved.agents.find((a) => a.toLowerCase() === asSeat.toLowerCase());
     if (member === undefined) {
       // Foreclose the foreign-anchor trap (lesson-2923d5e0): marks live in the
       // seat's HOME repo, so polling "as" a seat that does not resolve here
       // would count its entire addressed inbound as unread — an answer to
-      // "ever addressed", presented as "unread".
+      // "ever addressed", presented as "unread". The resolver's own
+      // diagnostics ride along (falsification-leg F3): the #2141
+      // config-omits-present-dir warn-shape often IS the explanation.
+      const resolverDiag =
+        resolved.warnings !== undefined && resolved.warnings.length > 0
+          ? ` Resolver: ${resolved.warnings.join('; ')}`
+          : '';
       throw new TotemError(
         'CONFIG_INVALID',
         `--as "${asSeat}" is not a seat resolved for this repo (resolved: ${
           resolved.agents.length > 0 ? resolved.agents.join(', ') : '(none)'
-        } via ${resolved.source})`,
-        "a foreign-anchored poll answers 'ever addressed', never 'unread' — run the poll from that seat's home repo, or pass a seat this repo resolves.",
+        } via ${resolved.source}).${resolverDiag}`,
+        "a foreign-anchored poll answers 'ever addressed', never 'unread' — run the poll from that seat's home repo, pass a seat this repo resolves (config/dirs/map or an env-declared list), or fix the config omission the resolver names.",
       );
     }
     // Validated: inject as ENV (canonical casing from the resolver) so

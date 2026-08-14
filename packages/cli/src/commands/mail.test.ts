@@ -1597,7 +1597,9 @@ describe('pollMail — self-token scan priority (mmnto-ai/totem#2144)', () => {
       });
     }
     writeOutbox('totem-strategy', 'strategy-claude', selfFlood);
-    const result = poll({ maxScan: 3 });
+    // Explicit identity: the NAMING behavior under test is the ungated arm —
+    // the gated arm reports the directed tail as a count (#2204, leg F1).
+    const result = poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' }, maxScan: 3 });
     expect(result.truncated).toBe(true);
     const directed = result.warnings.filter((w) => w.includes('beyond the scan horizon'));
     expect(directed).toHaveLength(1);
@@ -1616,7 +1618,7 @@ describe('pollMail — self-token scan priority (mmnto-ai/totem#2144)', () => {
       });
     }
     writeOutbox('totem-strategy', 'strategy-claude', otherFlood);
-    const generic = poll({ maxScan: 3 });
+    const generic = poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' }, maxScan: 3 });
     expect(generic.truncated).toBe(true);
     expect(generic.warnings.every((w) => !w.includes('beyond the scan horizon'))).toBe(true);
   });
@@ -3067,10 +3069,84 @@ describe('pollMail — identity gate (mmnto-ai/totem#2204)', () => {
     ]);
     const result = poll({ allSeats: true });
     expect(result.seatGate).toBeUndefined();
-    expect(result.mail).toHaveLength(2);
+    // Byte-identical union serve (design invariant 5): the exact pre-gate set,
+    // not just its size.
+    expect(result.mail.map((m) => m.file).sort()).toEqual([
+      '2026-08-14T0900Z-totem-claude-directed.md',
+      '2026-08-14T0901Z-totem-gemini-directed.md',
+    ]);
     expect(result.notices.some((n) => n.includes('union dashboard view'))).toBe(true);
     expect(result.warnings.some((w) => w.includes('identity-ambiguous'))).toBe(false);
     expect(resolveMailExitCode(result)).toBe(0);
+  });
+
+  it('single-seat config resolution is exempt from the gate (no consumer-repo regression)', () => {
+    const root = markedRepoRoot('cfg-solo');
+    const orch = mkDir(path.join(root, '.totem', 'orchestration'));
+    fs.writeFileSync(
+      path.join(orch, 'config.json'),
+      JSON.stringify({ host_agents: ['solo-seat'] }),
+      'utf-8',
+    );
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-solo-seat-directed.md', to: 'solo-seat' },
+    ]);
+    const result = pollMail({ repoRoot: root, workspace, env: {} });
+    expect(result.selfAgents).toEqual({ agents: ['solo-seat'], source: 'config' });
+    expect(result.seatGate).toBeUndefined();
+    expect(result.mail).toHaveLength(1);
+    expect(resolveMailExitCode(result)).toBe(0);
+  });
+
+  it('gated truncation reports the union-directed tail as a count, never by name (leg F1)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-secret-topic.md', to: 'totem-claude' },
+      { name: '2026-08-14T0902Z-broadcast-bulletin.md', to: 'broadcast' },
+    ]);
+    // maxScan 1: the newer broadcast is scanned, the directed file falls
+    // beyond the horizon — an ECL basename is recipient + compressed subject,
+    // so under the gate the dropped tail must not be named.
+    const result = poll({ maxScan: 1 });
+    expect(result.truncated).toBe(true);
+    const joined = [...result.warnings, ...result.notices].join('\n');
+    expect(joined).toContain('withheld from naming');
+    expect(joined).not.toContain('secret-topic');
+  });
+
+  it('ungated truncation still names the directed tail (leg F1 control)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-secret-topic.md', to: 'totem-claude' },
+      { name: '2026-08-14T0902Z-broadcast-bulletin.md', to: 'broadcast' },
+    ]);
+    const result = poll({ env: { TOTEM_SELF_AGENT: 'totem-claude' }, maxScan: 1 });
+    expect(result.truncated).toBe(true);
+    expect(result.warnings.join('\n')).toContain('secret-topic');
+  });
+
+  it('gated arm keys INCOMPLETE on non-gate warnings — empty broadcast view (leg F2)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-08-14T0900Z-totem-claude-broken.md',
+        to: 'totem-claude',
+        raw: '---\nfrom: strategy-claude\n---\n',
+      },
+    ]);
+    const text = formatTextResult(poll());
+    expect(text).toContain('Directed inbox NOT DERIVED');
+    expect(text).toContain('Scan INCOMPLETE');
+  });
+
+  it('gated arm keys INCOMPLETE on non-gate warnings — broadcast list qualified (leg F2)', () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      {
+        name: '2026-08-14T0900Z-totem-claude-broken.md',
+        to: 'totem-claude',
+        raw: '---\nfrom: strategy-claude\n---\n',
+      },
+      { name: '2026-08-14T0901Z-broadcast-ok.md', to: 'broadcast' },
+    ]);
+    const text = formatTextResult(poll());
+    expect(text).toContain('1 unread broadcast dispatch(es) — scan INCOMPLETE');
   });
 
   it('gate leaves the broadcast per-seat floor untouched (listing ≠ accounting)', () => {
@@ -3176,6 +3252,63 @@ describe('mailCommand — --as selector (mmnto-ai/totem#2204)', () => {
     await expect(
       runMailCommand({ repoRoot: selfRepoRoot(), workspace, env: {}, asSeat: 'lc-claude' }),
     ).rejects.toThrow(/not a seat resolved for this repo/);
+  });
+
+  it('refusal carries the resolver diagnostics (#2141 config-omits-present-dir, leg F3)', async () => {
+    const root = markedRepoRoot('cfg-repo');
+    const orch = mkDir(path.join(root, '.totem', 'orchestration'));
+    fs.writeFileSync(
+      path.join(orch, 'config.json'),
+      JSON.stringify({ host_agents: ['seat-alpha'] }),
+      'utf-8',
+    );
+    mkDir(path.join(orch, 'seat-beta'));
+    // seat-beta's dir IS its registration; config omits it, so --as seat-beta
+    // is refused — the error must carry the resolver's own explanation.
+    await expect(
+      runMailCommand({ repoRoot: root, workspace, env: {}, asSeat: 'seat-beta' }),
+    ).rejects.toThrow(/omits present seat dir/);
+  });
+
+  it('falls back to the env-declared list when the structural union is empty (worktree shape, leg F4)', async () => {
+    const root = markedRepoRoot('scratch-wt');
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-seat-a-directed.md', to: 'seat-a' },
+    ]);
+    const { result } = await runMailCommand({
+      repoRoot: root,
+      workspace,
+      env: { TOTEM_SELF_AGENT: 'seat-a,seat-b' },
+      asSeat: 'seat-a',
+    });
+    expect(result.selfAgents).toEqual({ agents: ['seat-a'], source: 'env' });
+    expect(result.mail).toHaveLength(1);
+  });
+
+  it('a seat outside the env-declared list is still refused in the worktree shape (leg F4)', async () => {
+    const root = markedRepoRoot('scratch-wt');
+    await expect(
+      runMailCommand({
+        repoRoot: root,
+        workspace,
+        env: { TOTEM_SELF_AGENT: 'seat-a,seat-b' },
+        asSeat: 'seat-c',
+      }),
+    ).rejects.toThrow(/not a seat resolved for this repo/);
+  });
+
+  it('anchors processed-mark subtraction to the selected seat (design invariant 3)', async () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-claude-handled.md', to: 'totem-claude' },
+    ]);
+    writeProcessed('totem', 'totem-claude', ['2026-08-14T0900Z-totem-claude-handled.md']);
+    const { result } = await runMailCommand({
+      repoRoot: selfRepoRoot(),
+      workspace,
+      env: {},
+      asSeat: 'totem-claude',
+    });
+    expect(result.mail).toHaveLength(0);
   });
 
   it('refuses --as together with --all-seats', async () => {
