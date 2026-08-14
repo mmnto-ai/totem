@@ -98,6 +98,9 @@ describe('shieldCommand --covariate short-circuit (rev-6 item 7)', () => {
     );
     // No verdict artifacts were written (no fan ran).
     expect(fs.existsSync(path.join(tmpDir, '.totem', 'artifacts', 'verdicts'))).toBe(false);
+    // No admission records either (mmnto-ai/totem#2473): the admission-aware
+    // resolution is read-only — exact-identity lookup, never a write.
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'artifacts', 'admissions'))).toBe(false);
     // No pre-push hook file was created.
     expect(fs.existsSync(path.join(tmpDir, '.git', 'hooks', 'pre-push'))).toBe(false);
   });

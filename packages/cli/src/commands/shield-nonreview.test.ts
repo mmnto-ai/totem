@@ -1,20 +1,18 @@
 /**
- * CLI-level deterministic-skip NON-REVIEW tests (mmnto-ai/totem#2466).
+ * CLI-level deterministic-skip tests (mmnto-ai/totem#2466 → #2473).
  *
- * `totem review` has three deterministic skip paths that drop the ENTIRE diff
- * without examining it: all-non-code, no-code-after-filtering, and all-generated.
- * Each used to call `writeReviewedContentHash(...)` before returning, minting the
- * `.reviewed-content-hash` push-gate stamp for content nothing reviewed.
+ * `totem review` has four deterministic skip paths that drop the ENTIRE diff
+ * without examining it: no-diff, all-non-code, filtered-empty, all-generated.
+ * Since #2473 each is an ADMISSION verdict through the single emission path:
+ * one machine-readable admission record + ONE calm info-level disposition line
+ * — and never a stamp. The no-diff arm is the sharpest regression here: it
+ * used to be a "trivial pass" that STAMPED `.reviewed-content-hash`, minting
+ * push authorization for a tree no reviewer saw.
  *
- * The danger is not uniform, which is why all three are pinned here rather than
- * only the reported one:
- *
- *   - all-non-code / filtered-empty fire only when no code file is in the diff,
- *     so the hash is unchanged and the stamp was a no-op. The defect is the
- *     dishonest clean-pass surface (Tenets 4/13).
- *   - all-generated can drop a TRACKED, HASHED source file, because
- *     `.gitattributes linguist-generated` can mark a `.ts` as generated. There the
- *     stamp genuinely authorized never-reviewed code — a push-gate bypass.
+ * The all-generated danger remains non-uniform (why every path is pinned):
+ * `.gitattributes linguist-generated` can mark a `.ts` as generated, so that
+ * skip can drop a TRACKED, HASHED source file — the old stamp there genuinely
+ * authorized never-reviewed code.
  *
  * Mirrors `shield-covariate.test.ts`: its own file to avoid mock contamination,
  * mocking the heavy seams (config, engine bootstrap, hook installer, git diff) so
@@ -30,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TotemConfig } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
+import { log } from '../ui.js';
 
 // ── Seams that MUST NOT run once a skip path is taken ──
 const bootstrapEngineSpy = vi.fn(async (..._args: unknown[]): Promise<void> => {});
@@ -40,6 +39,10 @@ const TEST_CONFIG = {
   totemDir: '.totem',
   review: { sourceExtensions: ['.ts'] },
 } as unknown as TotemConfig;
+
+// Per-test config override (the malformed-lanes precedence test); reset in
+// beforeEach. The loadConfig mock closes over this holder.
+let currentConfig: TotemConfig = TEST_CONFIG;
 
 vi.mock('../utils/bootstrap-engine.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/bootstrap-engine.js')>();
@@ -57,7 +60,7 @@ vi.mock('../utils.js', async (importOriginal) => {
     ...actual,
     loadEnv: vi.fn(),
     resolveConfigPath: (cwd: string) => path.join(cwd, 'totem.config.ts'),
-    loadConfig: vi.fn(async () => TEST_CONFIG),
+    loadConfig: vi.fn(async () => currentConfig),
   };
 });
 
@@ -79,24 +82,52 @@ function diffFor(file: string): string {
   ].join('\n');
 }
 
-describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () => {
+describe('deterministic skips are not-applicable ADMISSIONS: record + calm line, never a stamp (#2473)', () => {
   let tmpDir: string;
-  let warnings: string[];
+  let output: string[];
+  let infoLines: string[];
+  let warnLines: string[];
 
   const stampPath = () => path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash');
+  const admissionsDir = () => path.join(tmpDir, '.totem', 'artifacts', 'admissions');
+
+  /** The store's records, parsed. */
+  function admissionRecords(): Array<Record<string, unknown>> {
+    if (!fs.existsSync(admissionsDir())) return [];
+    return fs
+      .readdirSync(admissionsDir())
+      .map((f) => JSON.parse(fs.readFileSync(path.join(admissionsDir(), f), 'utf-8')));
+  }
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shield-nonreview-'));
-    warnings = [];
+    output = [];
+    infoLines = [];
+    warnLines = [];
     vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-      warnings.push(args.map(String).join(' '));
+      output.push(args.map(String).join(' '));
     });
     vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-      warnings.push(args.map(String).join(' '));
+      output.push(args.map(String).join(' '));
+    });
+    // Level-lock spies (the calm-line invariant): the disposition line is
+    // info-level, never WARN-class — it prints on every docs-only run in every
+    // consumer repo and must not read as a warning wall (#2473 consumer datum).
+    vi.spyOn(log, 'info').mockImplementation((_tag: string, msg: string) => {
+      infoLines.push(msg);
+    });
+    vi.spyOn(log, 'warn').mockImplementation((_tag: string, msg: string) => {
+      warnLines.push(msg);
     });
     bootstrapEngineSpy.mockClear();
+    upgradePrePushHookSpy.mockClear();
     getDiffForReviewSpy.mockClear();
+    getDiffForReviewSpy.mockReset();
+    // The production resolver shape: a no-changes resolution is a discriminated
+    // empty carrying the RESOLVED scope (conformance note 1), never null.
+    getDiffForReviewSpy.mockResolvedValue({ empty: true, source: 'branch-vs-base', base: 'main' });
+    currentConfig = TEST_CONFIG;
   });
 
   afterEach(() => {
@@ -113,16 +144,45 @@ describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () 
     }
   });
 
+  /** The single calm disposition line for `reason`, asserted info-level and one-line. */
+  function expectCalmLine(reason: string): string {
+    const matching = infoLines.filter((l) => l.includes(`not-applicable (${reason})`));
+    expect(matching).toHaveLength(1);
+    const line = matching[0]!;
+    expect(line).not.toContain('\n');
+    expect(line).toMatch(/does not authorize a push/);
+    // Never WARN-class — the level lock.
+    expect(warnLines.filter((l) => l.includes('not-applicable ('))).toHaveLength(0);
+    return line;
+  }
+
+  /** The store's single record, asserted against the expected identity fields. */
+  function expectSingleRecord(reason: string, skippedFileCount: number): Record<string, unknown> {
+    const records = admissionRecords();
+    expect(records).toHaveLength(1);
+    const record = records[0]!;
+    expect(record['disposition']).toBe('not-applicable');
+    expect(record['reason']).toBe(reason);
+    expect(record['skippedFileCount']).toBe(skippedFileCount);
+    expect(record['schemaVersion']).toMatch(/^1\.\d+\.\d+$/);
+    expect(record['inputHash']).toMatch(/^[0-9a-f]{64}$/);
+    expect(record['projectionPolicyHash']).toMatch(/^[0-9a-f]{64}$/);
+    return record;
+  }
+
   /**
    * Drive the real command with a diff whose files are all `files`.
    *
    * A run that does NOT take a skip path continues into the LLM review path and
    * throws on the unmocked embedding config. That throw is expected and is itself
    * evidence the skip did not fire, so it is swallowed here — every assertion
-   * below is made on the stamp and the emitted output, never on resolution.
+   * below is made on the stamp, the store, and the emitted output.
    */
-  async function runWithDiff(files: string[]): Promise<void> {
-    await runWithDiffRaw(files.map(diffFor).join('\n'), files);
+  async function runWithDiff(
+    files: string[],
+    options: Record<string, unknown> = {},
+  ): Promise<void> {
+    await runWithDiffRaw(files.map(diffFor).join('\n'), files, options);
   }
 
   /**
@@ -130,24 +190,67 @@ describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () 
    * must differ — the filtered-empty path needs a code file present in the list
    * whose hunks are absent from the diff (a mode-only change has this shape).
    */
-  async function runWithDiffRaw(diff: string, changedFiles: string[]): Promise<void> {
-    getDiffForReviewSpy.mockResolvedValueOnce({ diff, changedFiles });
+  async function runWithDiffRaw(
+    diff: string,
+    changedFiles: string[],
+    options: Record<string, unknown> = {},
+  ): Promise<void> {
+    getDiffForReviewSpy.mockResolvedValue({ diff, changedFiles, source: 'uncommitted' });
     const { shieldCommand } = await import('./shield.js');
     try {
-      await shieldCommand({} as Parameters<typeof shieldCommand>[0]);
+      await shieldCommand(options as Parameters<typeof shieldCommand>[0]);
     } catch {
       // See doc comment — a non-skip run is expected to fail downstream.
     }
   }
 
-  it('all-non-code: does not stamp, and says so', async () => {
+  it('no-diff: does NOT stamp (the removed trivial-pass), records the RESOLVED empty scope', async () => {
+    // getDiffForReview resolves the scoped empty (the beforeEach default) —
+    // the arm that used to write `.reviewed-content-hash` as a "trivial pass".
+    const { shieldCommand } = await import('./shield.js');
+    await shieldCommand({} as Parameters<typeof shieldCommand>[0]);
+
+    expect(fs.existsSync(stampPath())).toBe(false);
+    expectCalmLine('no-diff');
+    const record = expectSingleRecord('no-diff', 0);
+    // Conformance note 1: the record binds the resolver's RESOLVED terminal
+    // scope; the requested selector fills the selector slot.
+    expect(record['scope']).toEqual({
+      source: 'branch-vs-base',
+      base: 'main',
+      head: null,
+      selectorForm: '(default-chain)',
+    });
+    // A skip never boots the engine (phase ordering).
+    expect(bootstrapEngineSpy).not.toHaveBeenCalled();
+  });
+
+  it('a malformed lane config never preempts a not-applicable disposition (conformance note 2)', async () => {
+    // Fan configuration is downstream of admission: with a docs-only diff and
+    // a lanes value that would hard-error validation, the run still resolves
+    // to the calm disposition — the config error is an ADMITTED-branch error.
+    currentConfig = {
+      ...(TEST_CONFIG as object),
+      review: { sourceExtensions: ['.ts'], lanes: 12345 },
+    } as unknown as TotemConfig;
+    getDiffForReviewSpy.mockResolvedValue({
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted',
+    });
+    const { shieldCommand } = await import('./shield.js');
+    await expect(shieldCommand({} as Parameters<typeof shieldCommand>[0])).resolves.toBeUndefined();
+    expectCalmLine('all-non-code');
+  });
+
+  it('all-non-code: does not stamp, records, and says so calmly', async () => {
     await runWithDiff(['docs/plan.md', 'README.md']);
 
     // The load-bearing assertion: no push authorization was minted.
     expect(fs.existsSync(stampPath())).toBe(false);
-    // And the skip is LOUD — a caller cannot read it as a clean review.
-    expect(warnings.join('\n')).toMatch(/NON-REVIEW/);
-    expect(warnings.join('\n')).toMatch(/does not authorize a push/);
+    expectCalmLine('all-non-code');
+    expectSingleRecord('all-non-code', 2);
+    expect(bootstrapEngineSpy).not.toHaveBeenCalled();
   });
 
   it('all-generated: does not stamp — the path that could authorize real code', async () => {
@@ -155,8 +258,8 @@ describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () 
     await runWithDiff(['pnpm-lock.yaml']);
 
     expect(fs.existsSync(stampPath())).toBe(false);
-    expect(warnings.join('\n')).toMatch(/NON-REVIEW/);
-    expect(warnings.join('\n')).toMatch(/does not authorize a push/);
+    expectCalmLine('all-generated');
+    expectSingleRecord('all-generated', 1);
   });
 
   it('all-generated via .gitattributes on a TRACKED .ts: does not stamp (the bypass case)', async () => {
@@ -172,11 +275,12 @@ describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () 
     await runWithDiff(['src/generated-client.ts']);
 
     expect(fs.existsSync(stampPath())).toBe(false);
-    // Assert the GENERATED-path wording specifically. A bare /NON-REVIEW/ match
-    // would also pass if this fell through to the all-non-code branch, which
-    // would mean the test proves nothing about the bypass it exists to cover.
-    expect(warnings.join('\n')).toMatch(/every changed file is a generated artifact/);
-    expect(warnings.join('\n')).toMatch(/does not authorize a push/);
+    // Assert the GENERATED-path wording specifically. A bare not-applicable
+    // match would also pass if this fell through to the all-non-code branch,
+    // which would mean the test proves nothing about the bypass it covers.
+    const line = expectCalmLine('all-generated');
+    expect(line).toMatch(/is a generated artifact/);
+    expectSingleRecord('all-generated', 1);
   });
 
   it('filtered-empty: does not stamp when no code hunks survive filtering', async () => {
@@ -186,10 +290,90 @@ describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () 
     await runWithDiffRaw(diffFor('docs/plan.md'), ['docs/plan.md', 'src/index.ts']);
 
     expect(fs.existsSync(stampPath())).toBe(false);
+    const line = expectCalmLine('filtered-empty');
     // Stage-2 wording specifically — distinguishes this from the Stage-1
-    // all-non-code branch, which a generic NON-REVIEW match would not.
-    expect(warnings.join('\n')).toMatch(/no code changes remain after filtering/);
-    expect(warnings.join('\n')).toMatch(/does not authorize a push/);
+    // all-non-code branch.
+    expect(line).toMatch(/no code diff remains after filtering/);
+    expectSingleRecord('filtered-empty', 2);
+  });
+
+  it('--fail-on cannot reach an admission skip: docs-only + --fail-on critical resolves clean (regression)', async () => {
+    // Codex regression lock: every skip returns before `runReviewFan`, so the
+    // fan's `!cacheEligible` arm can never convert a skip into SHIELD_FAILED.
+    getDiffForReviewSpy.mockResolvedValue({
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted',
+    });
+    const { shieldCommand } = await import('./shield.js');
+    await expect(
+      shieldCommand({ failOn: 'critical' } as Parameters<typeof shieldCommand>[0]),
+    ).resolves.toBeUndefined();
+    expectCalmLine('all-non-code');
+  });
+
+  it('--gate maps a known not-applicable admission to a clean pass (the hook form)', async () => {
+    getDiffForReviewSpy.mockResolvedValue({
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted',
+    });
+    const { shieldCommand } = await import('./shield.js');
+    await expect(
+      shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]),
+    ).resolves.toBeUndefined();
+    expectCalmLine('all-non-code');
+    expect(fs.existsSync(stampPath())).toBe(false);
+  });
+
+  it('--gate + --fail-on is CONFIG_INVALID, validated BEFORE the hook-upgrade side effect', async () => {
+    const { shieldCommand } = await import('./shield.js');
+    await expect(
+      shieldCommand({ gate: true, failOn: 'critical' } as Parameters<typeof shieldCommand>[0]),
+    ).rejects.toMatchObject({ code: 'CONFIG_INVALID' });
+    // Codex amendment: an invalid command must not mutate the hook on its way
+    // to CONFIG_INVALID.
+    expect(upgradePrePushHookSpy).not.toHaveBeenCalled();
+  });
+
+  it('a failed record write degrades to a loud warning — the line still prints, exit unchanged', async () => {
+    // A FILE at the admissions-dir path makes mkdirSync/writeFileSync fail.
+    fs.mkdirSync(path.join(tmpDir, '.totem', 'artifacts'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'artifacts', 'admissions'), 'not a dir');
+
+    await runWithDiff(['docs/plan.md']);
+
+    expect(fs.existsSync(stampPath())).toBe(false);
+    const line = expectCalmLine('all-non-code');
+    expect(line).not.toContain('recorded');
+    expect(warnLines.some((l) => l.includes('Admission record write failed'))).toBe(true);
+  });
+
+  it('covariate resolves the exact-identity admission record (and warns loud when absent)', async () => {
+    const docsDiff = {
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted' as const,
+    };
+    getDiffForReviewSpy.mockResolvedValue(docsDiff);
+    const { shieldCommand } = await import('./shield.js');
+
+    // Absent: LOUD no-current-record sensor, never a fallback.
+    await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
+    expect(warnLines.some((l) => l.includes('no admission record exists'))).toBe(true);
+    expect(admissionRecords()).toHaveLength(0);
+
+    // Record it, then resolve it by exact identity.
+    await shieldCommand({} as Parameters<typeof shieldCommand>[0]);
+    const record = expectSingleRecord('all-non-code', 1);
+    output.length = 0;
+    await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
+    const lane = output.find((l) => l.startsWith('local-lane:'));
+    expect(lane).toBe(
+      `local-lane: not-applicable (all-non-code) recorded=${String(
+        fs.readdirSync(admissionsDir())[0],
+      ).slice(0, 8)} at=${String(record['createdAt'])}`,
+    );
   });
 
   it('mixed code + prose does NOT take a skip path (the skip must not over-fire)', async () => {
@@ -197,7 +381,8 @@ describe('deterministic skip paths are NON-REVIEWS and never stamp (#2466)', () 
     // code. A surviving `.ts` file means this is a review, not a non-review.
     await runWithDiff(['docs/plan.md', 'src/index.ts']);
 
-    expect(warnings.join('\n')).not.toMatch(/NON-REVIEW/);
+    expect(infoLines.filter((l) => l.includes('not-applicable ('))).toHaveLength(0);
+    expect(admissionRecords()).toHaveLength(0);
     // It also must not stamp here — this run never completed a review either.
     expect(fs.existsSync(stampPath())).toBe(false);
   });

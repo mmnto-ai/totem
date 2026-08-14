@@ -864,9 +864,23 @@ export interface ShieldOptions {
    * resolves the CURRENT lineage exactly as the review fan does, loads the latest
    * verdict artifact for it, and prints the core-owned covariate line to stdout.
    * No verdict for the lineage ⇒ loud sensor message, exit 0. Short-circuits before
-   * any LLM/engine work; nothing is stamped or written.
+   * any LLM/engine work; nothing is stamped or written. Admission-aware since
+   * mmnto-ai/totem#2473: a not-applicable current state resolves the exact-identity
+   * admission record instead of the verdict store.
    */
   covariate?: boolean;
+  /**
+   * Declared disposition→exit mapping for gate wiring (mmnto-ai/totem#2473 ruling
+   * item 2 — the regenerated managed pre-push hook's form). The flag IS the
+   * wiring's declared mapping (ADR-109: the engine states verdicts, the wrapper
+   * maps disposition → exit): known not-applicable admissions → 0 (an explicit
+   * coverage pass, disclosed), completed rounds → 0 (findings are report-only in
+   * hook context, #2551), hard failures → nonzero (unchanged), an UNKNOWN
+   * disposition → nonzero fail-closed (the one exit-semantic difference from the
+   * bare sensor). Contradictory with `--fail-on` (hook context asserts
+   * findings-report-only; a severity gate asserts the opposite).
+   */
+  gate?: boolean;
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─
@@ -1512,14 +1526,124 @@ export async function evaluateIncrementalEligibility(
   };
 }
 
-// ─── Main command ───────────────────────────────────
+// ─── Admission phase (mmnto-ai/totem#2473) ──────────────────────────────────
+//
+// Applicability is decided by ONE closed evaluator BEFORE the engine boots or
+// any lane is configured: either an admitted payload (the exact fan inputs) or
+// a `not-applicable` verdict with its deterministic reason (the exact record
+// inputs). A deterministic skip is an ADMISSION outcome — never a lane status,
+// never an `InvokeFailureKind` (#2452 describes failures after an invocation
+// was attempted). The record binds the exact observation (scope + input hash +
+// selection-policy fingerprint) so `--covariate` resolves the CURRENT identity
+// deterministically — never wall-clock arbitration (codex review, 2026-08-14).
 
-export async function shieldCommand(options: ShieldOptions): Promise<void> {
-  const path = await import('node:path');
-  const { TotemConfigError, TotemError } = await import('@mmnto/totem');
-  const { filterDiffByPatterns, getDiffForReview } = await import('../git.js');
+/**
+ * Identifier for the non-code classifier whose partition the admission
+ * projection applies. Bump when `classifyFile`'s behavior changes without any
+ * config input changing — a projection-version bump explains drift with no
+ * source change.
+ */
+const REVIEW_CLASSIFIER_ID = 'classifyChangedFiles@1';
+
+/** The resolved-diff subset admission consumes (structural — avoids a git.ts type export). */
+interface AdmissionDiffResult {
+  diff: string;
+  changedFiles: string[];
+  source: 'explicit-range' | 'staged' | 'uncommitted' | 'branch-vs-base';
+  base?: string;
+  head?: string;
+  selectorForm?: string;
+}
+
+/**
+ * The resolver's discriminated no-changes shape (git.ts `DiffForReviewEmpty`):
+ * the RESOLVED terminal scope that produced no diff. The `no-diff` record
+ * binds THIS scope — never a synthetic `source: 'none'` that discards what the
+ * resolver already resolved (codex conformance note 1 on mmnto-ai/totem#2473).
+ */
+interface AdmissionDiffEmpty {
+  empty: true;
+  source: 'explicit-range' | 'staged' | 'uncommitted' | 'branch-vs-base';
+  base?: string;
+  head?: string;
+  selectorForm?: string;
+}
+
+export interface AdmissionEvaluationInput {
+  /**
+   * `null` is the legacy/caller-without-scope shape (records `source: 'none'`);
+   * production always passes the resolver's result or its discriminated empty.
+   */
+  diffResult: AdmissionDiffResult | AdmissionDiffEmpty | null;
+  /** The REQUESTED selector expression — the empty arms' selector fallback identity. */
+  requestedSelector: string;
+  cwd: string;
+  config: TotemConfig;
+  /** Suppress payload-prep logging (the read-only `--covariate` re-derivation). */
+  quiet: boolean;
+}
+
+export type AdmissionOutcome =
+  | {
+      status: 'admitted';
+      diff: string;
+      changedFiles: string[];
+      filteredDiff: string;
+      filteredFiles: string[];
+      generatedArtifactSummary: string | undefined;
+      scope: import('@mmnto/totem').AdmissionScope;
+      inputHash: string;
+      projectionPolicyHash: string;
+    }
+  | {
+      status: 'not-applicable';
+      reason: import('@mmnto/totem').NotApplicableReason;
+      scope: import('@mmnto/totem').AdmissionScope;
+      inputHash: string;
+      projectionPolicyHash: string;
+      skippedFileCount: number;
+      /** For the dim stderr listing only — never persisted (count-only record). */
+      skippedFiles: string[];
+    };
+
+/** The requested selector expression, recorded as the no-diff arm's scope identity. */
+export function requestedSelectorForm(options: ShieldOptions): string {
+  if (options.diff !== undefined) return `--diff ${options.diff}`;
+  if (options.staged === true) return '--staged';
+  if (options.base !== undefined) return `--branch --base ${options.base}`;
+  if (options.branch === true) return '--branch';
+  return '(default-chain)';
+}
+
+/** Payload preparation result: the mechanical generated-strip + non-code filter. */
+type ReviewPayloadResult =
+  | {
+      empty: 'all-generated' | 'all-non-code' | 'filtered-empty';
+      skippedFiles: string[];
+    }
+  | {
+      empty?: undefined;
+      diff: string;
+      changedFiles: string[];
+      filteredDiff: string;
+      filteredFiles: string[];
+      generatedArtifactSummary: string | undefined;
+    };
+
+/**
+ * Mechanical payload narrowing shared by admission (full scope) and the legacy
+ * incremental fast-path (delta): strip generated-artifact bytes (summarized,
+ * not dropped), then filter non-code files. Pure classification — writes
+ * nothing — so the read-only `--covariate` re-derivation can run it.
+ */
+async function prepareReviewPayload(
+  diff: string,
+  changedFiles: string[],
+  cwd: string,
+  quiet: boolean,
+): Promise<ReviewPayloadResult> {
+  const { filterDiffByPatterns } = await import('../git.js');
   const { classifyChangedFiles } = await import('./shield-classify.js');
-  const { extractShieldContextAnnotations, extractShieldHints } = await import('./shield-hints.js');
   const {
     DEFAULT_GENERATED_ARTIFACT_GLOBS,
     buildGeneratedArtifactSection,
@@ -1527,6 +1651,343 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     formatGeneratedArtifactLine,
     readGitattributesGeneratedPatterns,
   } = await import('./shield-generated.js');
+
+  // Stage 0.5: Exclude generated-artifact BYTES from the synthesis input
+  // (mmnto-ai/totem#2398): lockfiles, compiled-rules.json, dist/**, *.wasm burn
+  // review-context tokens on bytes no reviewer should read. Classified by the
+  // seeded globs + `.gitattributes` linguist-generated, stripped with a
+  // per-file SUMMARY instead of a silent drop.
+  let keptDiff = diff;
+  let keptFiles = changedFiles;
+  let generatedArtifactSummary: string | undefined;
+  const gitattr = readGitattributesGeneratedPatterns(cwd);
+  const generated = classifyGeneratedArtifacts({
+    diff,
+    changedFiles,
+    generatedGlobs: [...DEFAULT_GENERATED_ARTIFACT_GLOBS, ...gitattr.generated],
+    excludeGlobs: gitattr.notGenerated,
+  });
+  if (generated.summaries.length > 0) {
+    if (!quiet) {
+      log.info(
+        DISPLAY_TAG,
+        `Excluded ${generated.summaries.length} generated-artifact file(s) from the review payload (summarized, not dropped):`,
+      );
+      for (const summary of generated.summaries) {
+        log.dim(DISPLAY_TAG, formatGeneratedArtifactLine(summary));
+      }
+    }
+    keptDiff = generated.keptDiff;
+    keptFiles = generated.keptFiles;
+    generatedArtifactSummary = buildGeneratedArtifactSection(generated.summaries);
+
+    // All changed files were generated artifacts — nothing left to review.
+    // This is the one skip that can drop a TRACKED, HASHED source file
+    // (`.gitattributes linguist-generated` can mark a `.ts` as generated), so
+    // it must never read as a clean review (mmnto-ai/totem#2466).
+    if (!keptDiff.trim()) {
+      return { empty: 'all-generated', skippedFiles: changedFiles };
+    }
+  }
+
+  // Stage 1: Classify files — fast-path for non-code-only diffs
+  const classification = classifyChangedFiles(keptFiles);
+  if (classification.allNonCode) {
+    return { empty: 'all-non-code', skippedFiles: keptFiles };
+  }
+
+  // Stage 2: Filter diff to code-only files for mixed diffs
+  let filteredDiff = keptDiff;
+  let filteredFiles = keptFiles;
+  if (!classification.allCode && classification.nonCodeFiles.length > 0) {
+    filteredDiff = await filterDiffByPatterns(keptDiff, classification.nonCodeFiles);
+    filteredFiles = classification.codeFiles;
+    if (!filteredDiff.trim()) {
+      // After filtering non-code files, no code diff remains — nothing was examined.
+      return { empty: 'filtered-empty', skippedFiles: keptFiles };
+    }
+    if (!quiet) {
+      log.dim(
+        DISPLAY_TAG,
+        `Filtered ${classification.nonCodeFiles.length} non-code file(s) from diff`,
+      );
+    }
+  }
+
+  return {
+    diff: keptDiff,
+    changedFiles: keptFiles,
+    filteredDiff,
+    filteredFiles,
+    generatedArtifactSummary,
+  };
+}
+
+/**
+ * The closed execution-payload type the review path consumes (codex
+ * conformance note 3 on mmnto-ai/totem#2473): payload SELECTION is a
+ * post-admission step — a revalidated reviewable delta, or the admitted
+ * full-scope payload — and applicability can never change underneath the
+ * fan (the admitted verdict stands regardless of which payload is selected).
+ */
+export interface ExecutionPayload {
+  diff: string;
+  changedFiles: string[];
+  filteredDiff: string;
+  filteredFiles: string[];
+  generatedArtifactSummary: string | undefined;
+}
+
+/**
+ * Select the execution payload for an ADMITTED run: the incremental delta when
+ * it is eligible AND re-projects to something reviewable, else the admitted
+ * full-scope payload. A non-reviewable delta (docs-only since the last pass)
+ * falls back — it can never demote the run to a skip, because admission
+ * already admitted the full scope. Pure selection; the caller owns logging.
+ */
+export async function selectExecutionPayload(
+  admitted: Extract<AdmissionOutcome, { status: 'admitted' }>,
+  incremental: IncrementalResult,
+  cwd: string,
+  quiet: boolean,
+): Promise<{ payload: ExecutionPayload; narrowed: boolean; deltaFallbackReason?: string }> {
+  const fullScope: ExecutionPayload = {
+    diff: admitted.diff,
+    changedFiles: admitted.changedFiles,
+    filteredDiff: admitted.filteredDiff,
+    filteredFiles: admitted.filteredFiles,
+    generatedArtifactSummary: admitted.generatedArtifactSummary,
+  };
+  if (!incremental.eligible || !incremental.deltaDiff || !incremental.changedFiles) {
+    return { payload: fullScope, narrowed: false };
+  }
+  const delta = await prepareReviewPayload(
+    incremental.deltaDiff,
+    incremental.changedFiles,
+    cwd,
+    quiet,
+  );
+  if (delta.empty !== undefined) {
+    return { payload: fullScope, narrowed: false, deltaFallbackReason: delta.empty };
+  }
+  return {
+    payload: {
+      diff: delta.diff,
+      changedFiles: delta.changedFiles,
+      filteredDiff: delta.filteredDiff,
+      filteredFiles: delta.filteredFiles,
+      generatedArtifactSummary: delta.generatedArtifactSummary,
+    },
+    narrowed: true,
+  };
+}
+
+/** The effective selection policy whose projection produced the admission outcome. */
+async function buildProjectionPolicy(
+  config: TotemConfig,
+  cwd: string,
+): Promise<import('@mmnto/totem').ProjectionPolicy> {
+  const { DEFAULT_GENERATED_ARTIFACT_GLOBS, readGitattributesGeneratedPatterns } =
+    await import('./shield-generated.js');
+  const gitattr = readGitattributesGeneratedPatterns(cwd);
+  return {
+    sourceExtensions: config.review.sourceExtensions,
+    generatedGlobs: [...DEFAULT_GENERATED_ARTIFACT_GLOBS, ...gitattr.generated],
+    notGeneratedGlobs: gitattr.notGenerated,
+    // Defensive `?? []`: the Zod-validated config always carries the field, but
+    // this seam also receives cast fixtures (and the same guard shape git.ts
+    // uses for `shieldIgnorePatterns`).
+    ignorePatterns: [...(config.ignorePatterns ?? []), ...(config.shieldIgnorePatterns ?? [])],
+    classifierId: REVIEW_CLASSIFIER_ID,
+  };
+}
+
+/**
+ * The closed admission evaluator (mmnto-ai/totem#2473 ruling item 1). Either
+ * an admitted payload (the exact fan inputs) or `not-applicable` with the
+ * exact record inputs. Read-only — the caller owns record emission.
+ */
+export async function evaluateAdmission(
+  input: AdmissionEvaluationInput,
+): Promise<AdmissionOutcome> {
+  const { computeProjectionPolicyHash } = await import('@mmnto/totem');
+  const crypto = await import('node:crypto');
+  const sha256Hex = (text: string): string =>
+    crypto.createHash('sha256').update(text, 'utf-8').digest('hex');
+
+  const projectionPolicyHash = computeProjectionPolicyHash(
+    await buildProjectionPolicy(input.config, input.cwd),
+  );
+
+  if (input.diffResult === null || 'empty' in input.diffResult) {
+    // Bind the RESOLVED empty scope when the resolver supplied one; the
+    // requested selector fills the selector slot where the resolver has none
+    // (keeping an empty `--staged` run distinguishable from an empty
+    // default-chain run even though both terminate at the same branch-vs-base
+    // fallback). `source: 'none'` survives only for the scope-less legacy arm.
+    const resolved = input.diffResult;
+    return {
+      status: 'not-applicable',
+      reason: 'no-diff',
+      scope:
+        resolved === null
+          ? { source: 'none', base: null, head: null, selectorForm: input.requestedSelector }
+          : {
+              source: resolved.source,
+              base: resolved.base ?? null,
+              head: resolved.head ?? null,
+              selectorForm: resolved.selectorForm ?? input.requestedSelector,
+            },
+      inputHash: sha256Hex(''),
+      projectionPolicyHash,
+      skippedFileCount: 0,
+      skippedFiles: [],
+    };
+  }
+
+  const scope: import('@mmnto/totem').AdmissionScope = {
+    source: input.diffResult.source,
+    base: input.diffResult.base ?? null,
+    head: input.diffResult.head ?? null,
+    selectorForm: input.diffResult.selectorForm ?? null,
+  };
+  const inputHash = sha256Hex(input.diffResult.diff);
+
+  const payload = await prepareReviewPayload(
+    input.diffResult.diff,
+    input.diffResult.changedFiles,
+    input.cwd,
+    input.quiet,
+  );
+  if (payload.empty !== undefined) {
+    return {
+      status: 'not-applicable',
+      reason: payload.empty,
+      scope,
+      inputHash,
+      projectionPolicyHash,
+      skippedFileCount: payload.skippedFiles.length,
+      skippedFiles: payload.skippedFiles,
+    };
+  }
+  return {
+    status: 'admitted',
+    diff: payload.diff,
+    changedFiles: payload.changedFiles,
+    filteredDiff: payload.filteredDiff,
+    filteredFiles: payload.filteredFiles,
+    generatedArtifactSummary: payload.generatedArtifactSummary,
+    scope,
+    inputHash,
+    projectionPolicyHash,
+  };
+}
+
+/**
+ * Disposition→exit mapping for the admission phase. Bare review and `--gate`
+ * both map every KNOWN not-applicable reason to exit 0 (the ruled
+ * no-nonzero-by-default shape). The difference is the unknown arm: `--gate` is
+ * a DECLARED mapping, so an unknown disposition fails CLOSED (nonzero via the
+ * supplied error ctor) while the bare sensor warns and stays 0.
+ */
+export function resolveNotApplicableExit(
+  reason: string,
+  gate: boolean,
+  errCtor: new (code: 'SHIELD_FAILED', message: string, hint: string) => Error,
+): 0 {
+  switch (reason) {
+    case 'no-diff':
+    case 'all-non-code':
+    case 'filtered-empty':
+    case 'all-generated':
+      return 0;
+    default:
+      if (gate) {
+        throw new errCtor(
+          'SHIELD_FAILED',
+          `--gate: unknown admission disposition "${reason}" — failing closed (the gate maps only declared dispositions to exits).`,
+          'Upgrade @mmnto/cli so the hook and the CLI agree on the disposition vocabulary, or drop --gate for the sensor default.',
+        );
+      }
+      log.warn(
+        DISPLAY_TAG,
+        `Unknown admission disposition "${reason}" — sensor default exit 0 (a --gate wiring would fail closed here).`,
+      );
+      return 0;
+  }
+}
+
+/** Human detail for the single calm disposition line, per reason. */
+function describeNotApplicable(
+  outcome: Extract<AdmissionOutcome, { status: 'not-applicable' }>,
+): string {
+  switch (outcome.reason) {
+    case 'no-diff':
+      return 'no changes detected in the resolved scope';
+    case 'all-non-code':
+      return `every changed file (${outcome.skippedFileCount}) is non-code`;
+    case 'filtered-empty':
+      return `no code diff remains after filtering ${outcome.skippedFileCount} non-code file(s)`;
+    case 'all-generated':
+      return `every changed file (${outcome.skippedFileCount}) is a generated artifact`;
+  }
+}
+
+/**
+ * The SINGLE not-applicable emission path (one record, one calm line — ruling
+ * item 2). Persisting the record is fail-soft: it is disclosure, not a gate
+ * (Tenet 13) — the printed line is the loud surface and never silently drops,
+ * which is what licenses the catch below against Tenet 4. Never stamps.
+ */
+async function emitNotApplicableDisposition(params: {
+  outcome: Extract<AdmissionOutcome, { status: 'not-applicable' }>;
+  gate: boolean;
+  totemDirAbs: string;
+  errCtor: new (code: 'SHIELD_FAILED', message: string, hint: string) => Error;
+}): Promise<void> {
+  const { ADMISSION_RECORD_SCHEMA_VERSION, saveAdmissionRecord } = await import('@mmnto/totem');
+  const { outcome } = params;
+  resolveNotApplicableExit(outcome.reason, params.gate, params.errCtor);
+
+  let recordedNote = '';
+  try {
+    const saved = saveAdmissionRecord(params.totemDirAbs, {
+      schemaVersion: ADMISSION_RECORD_SCHEMA_VERSION,
+      disposition: 'not-applicable',
+      reason: outcome.reason,
+      createdAt: new Date().toISOString(),
+      scope: outcome.scope,
+      inputHash: outcome.inputHash,
+      projectionPolicyHash: outcome.projectionPolicyHash,
+      skippedFileCount: outcome.skippedFileCount,
+    });
+    recordedNote = ` (recorded ${saved.hash.slice(0, 8)})`;
+    // totem-context: intentional cleanup — the record is disclosure, not a gate (Tenet 13): the printed disposition line below is the loud surface and never silently drops, so a failed persist degrades to the WARN here instead of blocking a docs-only push (design §Failure modes, mmnto-ai/totem#2473; strategy-claude review upheld this boundary)
+  } catch (err) {
+    log.warn(
+      DISPLAY_TAG,
+      `Admission record write failed — disposition not persisted (the line below remains the loud surface): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  // ONE calm line, info-level — this prints on every docs-only run in every
+  // consumer repo, so it must never read as a warning wall (#2473 consumer
+  // datum). The no-stamp guarantee text is single-sourced via NO_STAMP_NOTICE.
+  log.info(
+    DISPLAY_TAG,
+    `not-applicable (${outcome.reason}): ${describeNotApplicable(outcome)} — no lane ran. ${NO_STAMP_NOTICE}${recordedNote}`,
+  );
+  if (outcome.skippedFiles.length > 0) {
+    log.dim(DISPLAY_TAG, `Skipped: ${outcome.skippedFiles.join(', ')}`);
+  }
+}
+
+// ─── Main command ───────────────────────────────────
+
+export async function shieldCommand(options: ShieldOptions): Promise<void> {
+  const path = await import('node:path');
+  const { TotemConfigError, TotemError } = await import('@mmnto/totem');
+  const { getDiffForReview } = await import('../git.js');
+  const { extractShieldContextAnnotations, extractShieldHints } = await import('./shield-hints.js');
 
   // mmnto-ai/totem#1714: --estimate is the deterministic-rule pre-flight
   // path. Reject incompatible flag combinations BEFORE any other
@@ -1576,6 +2037,25 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       'CONFIG_INVALID',
     );
   }
+  // Flag-contract validation runs BEFORE `upgradePrePushHookIfNeeded` or any
+  // other side effect (codex on mmnto-ai/totem#2473): an invalid command must
+  // not mutate the hook on its way to CONFIG_INVALID.
+  if (options.gate === true && options.failOn !== undefined) {
+    throw new TotemConfigError(
+      '--gate and --fail-on are contradictory (hook context is findings-report-only per mmnto-ai/totem#2551; a severity gate asserts the opposite).',
+      'Use --gate for hook wiring (declared disposition→exit mapping) OR --fail-on <severity> for a findings gate — not both.',
+      'CONFIG_INVALID',
+    );
+  }
+  // Gate G5: validate `--fail-on` (only the fan reads it, but a bad value is a hard
+  // config error on any path so the user is never silently ignored).
+  if (options.failOn !== undefined && options.failOn !== 'critical' && options.failOn !== 'warn') {
+    throw new TotemConfigError(
+      `Invalid --fail-on "${options.failOn}". Use "critical" or "warn".`,
+      'Pass --fail-on critical (exit non-zero on CRITICAL findings) or --fail-on warn (WARN or CRITICAL). Omit it for the default sensor exit 0.',
+      'CONFIG_INVALID',
+    );
+  }
   if (options.override !== undefined && options.override.length < 10) {
     throw new TotemConfigError(
       `--override reason must be at least 10 characters (got ${options.override.length}).`,
@@ -1608,10 +2088,56 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // ordinary no-diff path performs — this verb writes nothing).
   if (options.covariate) {
     const diffResult = await getDiffForReview(options, config, cwd, DISPLAY_TAG);
+    // Admission-aware resolution (mmnto-ai/totem#2473): re-derive the CURRENT
+    // admission classification (read-only, zero-LLM) and resolve by exact
+    // identity — deterministic, never wall-clock arbitration across record
+    // families. A not-applicable current state resolves the admission store;
+    // an admitted current state resolves the verdict store as before.
+    const admission = await evaluateAdmission({
+      diffResult,
+      requestedSelector: requestedSelectorForm(options),
+      cwd,
+      config,
+      quiet: true,
+    });
+    if (admission.status === 'not-applicable') {
+      const {
+        ADMISSION_RECORD_SCHEMA_VERSION,
+        findAdmissionRecordByIdentity,
+        renderAdmissionLine,
+      } = await import('@mmnto/totem');
+      const found = findAdmissionRecordByIdentity(
+        path.join(configRoot, config.totemDir),
+        {
+          schemaVersion: ADMISSION_RECORD_SCHEMA_VERSION,
+          disposition: 'not-applicable',
+          reason: admission.reason,
+          scope: admission.scope,
+          inputHash: admission.inputHash,
+          projectionPolicyHash: admission.projectionPolicyHash,
+          skippedFileCount: admission.skippedFileCount,
+        },
+        (msg) => log.warn(DISPLAY_TAG, `Sensor: ${msg}`),
+      );
+      if (found !== undefined) {
+        // STDOUT, not the stderr log: the line IS the transport payload.
+        console.log(renderAdmissionLine(found));
+      } else {
+        // LOUD no-current-record sensor — never a silent fallback to an older
+        // verdict on the lineage (codex on mmnto-ai/totem#2473).
+        log.warn(
+          DISPLAY_TAG,
+          `Covariate: the current state is not-applicable (${admission.reason}) but no admission record exists for this exact observation — run \`totem review\` to record it (sensor; exit 0).`,
+        );
+      }
+      return;
+    }
     const { printCovariateLine } = await import('./review-fan.js');
     await printCovariateLine({
+      // An empty/absent resolution never reaches here (it resolves through the
+      // admission arm above); the null arm is type-narrowing, not a live path.
       diffMeta:
-        diffResult === null
+        diffResult === null || 'empty' in diffResult
           ? null
           : {
               source: diffResult.source,
@@ -1640,17 +2166,41 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     );
   }
 
-  // Engine boot (mmnto-ai/totem#1794) — see lint.ts wiring for context.
-  const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
-  await bootstrapEngine(config, configRoot);
+  // ── Admission phase (mmnto-ai/totem#2473) ──
+  // Always the FULL scope from `getDiffForReview` — the legacy incremental
+  // fast-path narrows only the admitted execution payload below, never
+  // admission identity. A not-applicable outcome takes the SINGLE emission
+  // path (one record + one calm line, no stamp — the former no-diff "trivial
+  // pass" stamp is removed: it minted authorization for a tree no reviewer
+  // saw) and returns; fan execution is structurally unreachable past this gate.
+  const diffResult = await getDiffForReview(options, config, cwd, DISPLAY_TAG);
+  const admission = await evaluateAdmission({
+    diffResult,
+    requestedSelector: requestedSelectorForm(options),
+    cwd,
+    config,
+    quiet: false,
+  });
+  if (admission.status === 'not-applicable') {
+    await emitNotApplicableDisposition({
+      outcome: admission,
+      gate: options.gate === true,
+      totemDirAbs: path.join(configRoot, config.totemDir),
+      errCtor: TotemError,
+    });
+    return;
+  }
 
   // ── Multi-lane review fan activation (Prop 304 R2, mmnto-ai/totem#2106) ──
-  // Validate `review.lanes` at review startup (a hard init error on any
-  // violation) and normalize. An explicit `--model` selects a ONE-lane
-  // invocation and never joins the configured fan (precedence pinned); the fan
-  // also does not apply to structural mode (context-blind single-lane stays
-  // legacy). `review.lanes` absent ⇒ [] ⇒ the legacy single-lane path runs
-  // byte-for-byte as today (invariant 7).
+  // ADMITTED branch: fan configuration is downstream of admission (codex
+  // conformance note 2 on #2473) — a malformed lane config must not preempt a
+  // not-applicable disposition. Universal flag validation (--gate/--fail-on/
+  // --mode/--override) stays at the top of the command.
+  // Validate `review.lanes` (a hard init error on any violation) and
+  // normalize. An explicit `--model` selects a ONE-lane invocation and never
+  // joins the configured fan (precedence pinned); the fan also does not apply
+  // to structural mode (context-blind single-lane stays legacy). `review.lanes`
+  // absent ⇒ [] ⇒ the legacy single-lane path runs byte-for-byte (invariant 7).
   const { validateReviewLanes, assertFanFlagsSupported } = await import('./review-fan.js');
   const laneModels = validateReviewLanes(
     config.review.lanes,
@@ -1668,149 +2218,64 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Finding 12: when the fan is active, reject flags with no defined fan semantics
   // LOUDLY (naming the unsupported combination) rather than silently ignoring them.
   if (fanActive) assertFanFlagsSupported(options, TotemConfigError);
-  // Gate G5: validate `--fail-on` (only the fan reads it, but a bad value is a hard
-  // config error on any path so the user is never silently ignored).
-  if (options.failOn !== undefined && options.failOn !== 'critical' && options.failOn !== 'warn') {
-    throw new TotemConfigError(
-      `Invalid --fail-on "${options.failOn}". Use "critical" or "warn".`,
-      'Pass --fail-on critical (exit non-zero on CRITICAL findings) or --fail-on warn (WARN or CRITICAL). Omit it for the default sensor exit 0.',
-      'CONFIG_INVALID',
+
+  // Engine boot (mmnto-ai/totem#1794) — admitted runs only; a deterministic
+  // skip never boots the engine. See lint.ts wiring for context.
+  const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
+  await bootstrapEngine(config, configRoot);
+
+  // Resolved diff-scope metadata (Prop 304 R2) — the fan's verdict `diffScope` +
+  // lineage, read from the admission's bound scope (one identity, never a
+  // re-derive). Finding 10: the raw CLI selector form so `--diff main` and
+  // `--diff main..HEAD` (same resolved refs) do NOT share a lineage — the
+  // admitted arm carries the resolver's selectorForm only (never the
+  // requested-selector fallback the empty arms use).
+  const admittedScope = admission.scope;
+  if (admittedScope.source === 'none') {
+    // Unreachable: an admitted outcome requires a resolved diff. Fail loud,
+    // never fabricate a lineage.
+    throw new TotemError(
+      'SHIELD_FAILED',
+      'Admitted review carries no resolved diff scope — this is a bug in the admission evaluator.',
+      'Re-run `totem review`; if this persists, file it with the command line used.',
     );
   }
+  const diffScopeMeta = {
+    source: admittedScope.source,
+    base: admittedScope.base ?? undefined,
+    head: admittedScope.head ?? undefined,
+    selectorForm: admittedScope.selectorForm ?? undefined,
+  };
 
-  // --- Incremental shield fast-path (#1010) ---
-  // If the change since the last passed shield is small enough (< 15 lines,
-  // no new files), only evaluate the delta instead of the full branch diff.
-  // The fan needs full diff-scope metadata (source/base/head) for lineage, so
-  // the incremental fast-path is bypassed when the fan is active.
-  let diff: string;
-  let changedFiles: string[];
-  // Resolved diff-scope metadata (Prop 304 R2) — captured for the fan's verdict
-  // `diffScope` + lineage. Only populated on the full-diff path (the fan bypasses
-  // the incremental fast-path), so it is defined whenever `fanActive`.
-  let diffScopeMeta:
-    | {
-        source: 'explicit-range' | 'staged' | 'uncommitted' | 'branch-vs-base';
-        base?: string;
-        head?: string;
-        selectorForm?: string;
-      }
-    | undefined;
-
+  // --- Incremental fast-path (#1010) — a payload SELECTION step (codex note 3) ---
+  // The fan needs full diff-scope metadata for lineage, so it bypasses the
+  // incremental path. Selection can narrow the execution payload to the delta;
+  // it can never change admission (a non-reviewable delta falls back to the
+  // admitted full-scope payload).
   const incremental: IncrementalResult = fanActive
     ? { eligible: false, reason: 'multi-lane fan requires full diff scope' }
     : await evaluateIncrementalEligibility(cwd, config.totemDir, configRoot);
-  if (incremental.eligible && incremental.deltaDiff && incremental.changedFiles) {
+  const selection = await selectExecutionPayload(admission, incremental, cwd, false);
+  if (selection.narrowed) {
     log.info(
       DISPLAY_TAG,
       `Incremental review: ${incremental.linesChanged} line(s) since last pass`,
     );
-    diff = incremental.deltaDiff;
-    changedFiles = incremental.changedFiles;
-  } else {
-    if (incremental.reason && incremental.reason !== 'No previous shield state') {
-      log.dim(DISPLAY_TAG, `Full review: ${incremental.reason}`);
-    }
-    // Get git diff — shared helper merges ignore patterns, tries staged/all
-    // then falls back to branch diff, and extracts changed file paths.
-    const diffResult = await getDiffForReview(options, config, cwd, DISPLAY_TAG);
-    if (!diffResult) {
-      // No changes = trivial pass — stamp content hash
-      await writeReviewedContentHash(
-        cwd,
-        config.totemDir,
-        configRoot,
-        config.review.sourceExtensions,
-      );
-      return;
-    }
-    diff = diffResult.diff;
-    changedFiles = diffResult.changedFiles;
-    diffScopeMeta = {
-      source: diffResult.source,
-      base: diffResult.base,
-      head: diffResult.head,
-      // Finding 10: the raw CLI selector form so `--diff main` and `--diff main..HEAD`
-      // (same resolved refs) do NOT share a lineage.
-      selectorForm: diffResult.selectorForm,
-    };
-  }
-
-  // Stage 0.5: Exclude generated-artifact BYTES from the synthesis input
-  // (mmnto-ai/totem#2398). Generated artifacts (lockfiles, compiled-rules.json,
-  // dist/**, *.wasm, regenerated dashboards) burn review-context tokens on bytes
-  // no reviewer should read. Classify them by default (seeded globs + honor
-  // `.gitattributes` `linguist-generated`), strip their diff sections, and inject
-  // a per-file SUMMARY instead of a silent drop — path, change shape, size delta,
-  // semantic hash — so the "this regenerated" signal survives without the bytes.
-  let generatedArtifactSummary: string | undefined;
-  {
-    const gitattr = readGitattributesGeneratedPatterns(cwd);
-    const generated = classifyGeneratedArtifacts({
-      diff,
-      changedFiles,
-      generatedGlobs: [...DEFAULT_GENERATED_ARTIFACT_GLOBS, ...gitattr.generated],
-      excludeGlobs: gitattr.notGenerated,
-    });
-    if (generated.summaries.length > 0) {
-      log.info(
-        DISPLAY_TAG,
-        `Excluded ${generated.summaries.length} generated-artifact file(s) from the review payload (summarized, not dropped):`,
-      );
-      for (const summary of generated.summaries) {
-        log.dim(DISPLAY_TAG, formatGeneratedArtifactLine(summary));
-      }
-      diff = generated.keptDiff;
-      changedFiles = generated.keptFiles;
-      generatedArtifactSummary = buildGeneratedArtifactSection(generated.summaries);
-
-      // All changed files were generated artifacts — nothing left to review.
-      // Not sending them to the LLM stays correct (their correctness is a gate
-      // concern, not the LLM's) but that does NOT extend to stamping the push
-      // gate on their behalf: this is the one skip path that can drop a TRACKED,
-      // HASHED source file, because `.gitattributes linguist-generated` can mark
-      // a `.ts` as generated. Stamping here would authorize code no reviewer saw
-      // (mmnto-ai/totem#2466).
-      if (!diff.trim()) {
-        log.warn(
-          DISPLAY_TAG,
-          `NON-REVIEW: every changed file is a generated artifact, so no lane ran. ${NO_STAMP_NOTICE}`,
-        );
-        return;
-      }
-    }
-  }
-
-  // Stage 1: Classify files — fast-path for non-code-only diffs
-  const classification = classifyChangedFiles(changedFiles);
-  if (classification.allNonCode) {
-    log.warn(
-      DISPLAY_TAG,
-      `NON-REVIEW: every changed file is non-code, so no lane ran. ${NO_STAMP_NOTICE}`,
-    );
-    log.dim(DISPLAY_TAG, `Skipped: ${changedFiles.join(', ')}`);
-    return;
-  }
-
-  // Stage 2: Filter diff to code-only files for mixed diffs
-  let filteredDiff = diff;
-  let filteredFiles = changedFiles;
-  if (!classification.allCode && classification.nonCodeFiles.length > 0) {
-    filteredDiff = await filterDiffByPatterns(diff, classification.nonCodeFiles);
-    filteredFiles = classification.codeFiles;
-    if (!filteredDiff.trim()) {
-      // After filtering non-code files, no code diff remains — nothing was examined.
-      log.warn(
-        DISPLAY_TAG,
-        `NON-REVIEW: no code changes remain after filtering non-code files, so no lane ran. ${NO_STAMP_NOTICE}`,
-      );
-      return;
-    }
+  } else if (selection.deltaFallbackReason !== undefined) {
     log.dim(
       DISPLAY_TAG,
-      `Filtered ${classification.nonCodeFiles.length} non-code file(s) from diff`,
+      `Incremental delta is non-reviewable after filtering (${selection.deltaFallbackReason}) — using the full-scope payload.`,
     );
+  } else if (incremental.reason && incremental.reason !== 'No previous shield state') {
+    log.dim(DISPLAY_TAG, `Full review: ${incremental.reason}`);
   }
+  const { diff, changedFiles, filteredDiff, filteredFiles, generatedArtifactSummary } =
+    selection.payload;
+
+  // Generated-artifact exclusion (#2398) and non-code classification/filtering
+  // now run inside the admission evaluator's `prepareReviewPayload` (one
+  // emission path, mmnto-ai/totem#2473) — the admitted payload above already
+  // carries `filteredDiff` / `filteredFiles` / `generatedArtifactSummary`.
 
   // Extract annotations once (shared between hints and ledger)
   const annotations = extractShieldContextAnnotations(filteredFiles, cwd);

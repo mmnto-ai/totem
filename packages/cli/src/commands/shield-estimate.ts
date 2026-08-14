@@ -64,11 +64,11 @@ export async function runEstimate(
   log.info(ESTIMATE_DISPLAY_TAG, 'Pre-flight prediction (deterministic, zero-LLM):');
 
   const diffResult = await getDiffForReview(options, config, cwd, ESTIMATE_DISPLAY_TAG);
-  if (!diffResult) {
-    // Distinct from the `totem review` no-diff branch: the LLM path
-    // stamps the push-gate content hash because an empty diff is a
-    // trivial pass; an estimate is a forecast and explicitly does NOT
-    // stamp the cache. (Q2 in `.totem/specs/1714.md`.)
+  if ('empty' in diffResult) {
+    // An estimate is a forecast and does not stamp the cache. (Since
+    // mmnto-ai/totem#2473 the LLM path's no-diff branch does not stamp
+    // either — it records a not-applicable admission; the estimator stays
+    // record-free, matching Q2 in `.totem/specs/1714.md`.)
     log.info(ESTIMATE_DISPLAY_TAG, 'No changes detected. Nothing to estimate.');
     return;
   }

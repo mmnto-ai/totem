@@ -492,7 +492,18 @@ export function buildPrePushHook(fallbackCmd: string, tier?: 'strict' | 'standar
     echo "[Totem] Running doctor --strict (repo-state gate)..."
     $TOTEM_CMD doctor --strict || exit 1
     echo "[Totem] Running shield gate (strict mode)..."
-    $TOTEM_CMD review || exit 1
+    # Gate-mapped review invocation (mmnto-ai/totem#2473): --gate IS the
+    # wiring's declared disposition→exit mapping — not-applicable admissions
+    # and completed rounds pass (findings are report-only in hook context),
+    # hard failures and unknown dispositions block. Probe --help for flag
+    # support (the --scope-to-diff defensive-degrade precedent); an older CLI
+    # falls back to the bare sensor form with a visible compat line.
+    if $TOTEM_CMD review --help 2>/dev/null | grep -q -- '--gate'; then
+      $TOTEM_CMD review --gate || exit 1
+    else
+      echo "[totem] Hook running review in compat mode (CLI without --gate); 'npm i -g @mmnto/cli@latest' enables the declared gate mapping." >&2
+      $TOTEM_CMD review || exit 1
+    fi
   fi`;
 
   return `#!/bin/sh

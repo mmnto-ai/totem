@@ -902,6 +902,28 @@ export {
   verdictsDir,
 } from './artifacts/verdict.js';
 
+// Admission-record contract (mmnto-ai/totem#2473 — deterministic-skip disposition)
+export type {
+  AdmissionRecord,
+  AdmissionScope,
+  AdmissionWithAddress,
+  NotApplicableReason,
+  ProjectionPolicy,
+  SaveAdmissionRecordResult,
+} from './artifacts/admission.js';
+export {
+  ADMISSION_RECORD_SCHEMA_VERSION,
+  AdmissionRecordSchema,
+  AdmissionScopeSchema,
+  computeAdmissionContentHash,
+  computeProjectionPolicyHash,
+  findAdmissionRecordByIdentity,
+  loadAdmissionRecord,
+  NOT_APPLICABLE_REASONS,
+  renderAdmissionLine,
+  saveAdmissionRecord,
+} from './artifacts/admission.js';
+
 // Strategy-root resolver (mmnto-ai/totem#1710)
 export type {
   StrategyResolverConfig,
