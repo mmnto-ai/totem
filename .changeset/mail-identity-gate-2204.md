@@ -1,0 +1,9 @@
+---
+'@mmnto/cli': minor
+---
+
+feat(mail): multi-seat identity gate + `--as <seat>` selector + `--all-seats` union view (mmnto-ai/totem#2204)
+
+**Behavior change (fail-loud by design):** in a repo that resolves MORE THAN ONE seat (config `host_agents`, seat dirs, or the cohort basename map), an identity-less `totem mail` poll no longer serves the union. It serves **broadcast-addressed mail only**, withholds directed dispatches as a **count** (never subjects — the listing is the exposure surface), pushes an `identity-ambiguous poll` warning naming the union and its source, and exits **2** (the #2312 NOT-DERIVED family: a per-seat inbox verdict cannot be asserted without identity). Motivated by the 2026-08-13 BLIND-round contamination: an identity-less poll under a doctrine-correct multi-seat config served peer deposits' subjects before the seat could check the banner.
+
+Explicit identity restores full service, unchanged: per-shell `TOTEM_SELF_AGENT` (hook paths already do this), or the new `--as <seat>` flag — validated against the repo's resolved union (a foreign seat is refused: its processed-marks cursor lives in its home repo, so a foreign-anchored poll answers "ever addressed," never "unread"). The prior union view remains available **by name** via `--all-seats` (repo dashboard; exit 0, with a notice that per-seat unread accounting does not apply). Single-seat resolutions from any source, multi-seat `source: 'env'`, and the env-bound `ecl-gc` discovery/verify polls are unaffected. `MailPollResult` gains an additive optional `seatGate: { withheldDirected }` field for `--json` consumers; denominator/subtraction math is unchanged (the gate withholds the listing, never the accounting). `totem mail --help` now documents the consume path (`mail mark` is the single-writer mark actuator, ADR-106 § A1.3).

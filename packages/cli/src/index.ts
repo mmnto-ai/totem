@@ -839,6 +839,28 @@ const mailCmd = program
     '--workspace <path>',
     'Workspace dir to scan (default: $TOTEM_WORKSPACE, else parent of cwd)',
   )
+  .option(
+    '--as <seat>',
+    "Serve exactly this seat's mail — must be a seat this repo resolves (the mmnto-ai/totem#2204 seat selector)",
+  )
+  .option(
+    '--all-seats',
+    'Serve the full multi-seat union (repo dashboard view) — bypasses the identity gate by name',
+  )
+  .addHelpText(
+    'after',
+    [
+      '',
+      'Reading never consumes: unread = inbound − processed marks, and marks are',
+      'written at consumption time by the consuming flow (single-writer, ADR-106',
+      '§ A1.3) — `totem mail mark <file>` is the mark actuator.',
+      '',
+      'In a multi-seat repo, an identity-less poll serves broadcast mail only',
+      '(directed mail is withheld as a count, exit 2) until identity is explicit:',
+      'per-shell TOTEM_SELF_AGENT, `--as <seat>`, or `--all-seats` by name.',
+      '',
+    ].join('\n'),
+  )
   .action(
     async (_opts: { json?: boolean; recursive?: boolean; workspace?: string }, cmd: Command) => {
       try {
@@ -849,16 +871,24 @@ const mailCmd = program
         // receives {}. optsWithGlobals() merges both scopes so `totem mail --json`
         // and `totem --json mail` agree. Typed destructure so a future global
         // option can't silently shadow a MailCommandOptions field.
-        const { json, recursive, workspace } = cmd.optsWithGlobals<{
+        const {
+          json,
+          recursive,
+          workspace,
+          as: asSeat,
+          allSeats,
+        } = cmd.optsWithGlobals<{
           json?: boolean;
           recursive?: boolean;
           workspace?: string;
+          as?: string;
+          allSeats?: boolean;
         }>();
         // Custom exit-code contract (mmnto-ai/totem#2312): pollMail never throws,
         // so the wrapper returns the code and we set process.exitCode (never
         // process.exit mid-flow — same pattern as the ecl-gc action). Exit 2 when
         // no self agent resolves: the verdict is NOT DERIVED, not a clean inbox.
-        const { exitCode } = await mailCommand({ json, recursive, workspace });
+        const { exitCode } = await mailCommand({ json, recursive, workspace, asSeat, allSeats });
         if (exitCode !== 0) process.exitCode = exitCode;
       } catch (err) {
         handleError(err);
