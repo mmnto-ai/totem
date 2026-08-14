@@ -325,6 +325,7 @@ export function findAdmissionRecordByIdentity(
   if (!fs.existsSync(filePath)) return undefined;
   try {
     return loadAdmissionRecord(totemDirAbs, hash);
+    // totem-context: intentional routed degradation — the failure is HANDED to `onCorrupt` (required param; the CLI wires it to a loud sensor warn) and `undefined` triggers the caller's loud no-current-record arm, so nothing is silent; a scan-style skip-with-warning is this store's documented corrupt-record contract (mirrors the verdict store's verified-scan load)
   } catch (err) {
     onCorrupt(
       `Admission record ${hash.slice(0, 8)} exists but failed verified load: ${err instanceof Error ? err.message : String(err)}`,
