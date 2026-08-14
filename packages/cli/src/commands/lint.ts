@@ -300,7 +300,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   // advisory (mmnto-ai/totem#2090) — review never sets it, so staged-slice
   // reviews stay warning-free.
   const result = await getDiffForReview({ ...options, warnNarrowScope: true }, config, cwd, TAG);
-  if (!result) return;
+  if ('empty' in result) return;
 
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
   const exportPaths = config.exports ? Object.values(config.exports) : undefined;

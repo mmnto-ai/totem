@@ -1,0 +1,369 @@
+/**
+ * Admission-record contract — the machine-readable disposition a deterministic
+ * review skip leaves behind (mmnto-ai/totem#2473, operator-ruled 2026-08-12).
+ *
+ * The admission phase precedes fan execution: a poll of the diff that resolves
+ * to nothing reviewable is a `not-applicable` ADMISSION VERDICT, never a lane
+ * outcome and never an `InvokeFailureKind` (#2452's taxonomy describes failures
+ * after an invocation was attempted). The record is DISCLOSURE, not
+ * authorization — no skip path ever stamps the push-gate cache — but it is
+ * still a claim about a projection, so it binds the exact observation that
+ * produced it (codex review, 2026-08-14): the normalized diff scope, a hash of
+ * the pre-filter diff bytes, and a canonical hash of the effective selection
+ * policy. Equal bytes under a changed policy are a DIFFERENT observation.
+ *
+ * Store mechanics mirror the verdict store deliberately (one idiom, two
+ * artifact kinds): content-addressed with `createdAt` (observability) AND
+ * `schemaVersion` (writer metadata) excluded — the address is the OBSERVATION
+ * — `wx` create-exclusive writes with EEXIST as logical-identity dedup,
+ * raw-address verification BEFORE schema parsing on load, and a
+ * version-tolerant-within-major reader with a migration registry for future
+ * majors. Version-free addressing has a named backward cost: an OLDER CLI
+ * meeting a NEWER-major record at a shared address reports it via the
+ * explicit newer-major load error below (upgrade guidance), never a generic
+ * corruption message. Resolution by consumers is deterministic and
+ * exact-current: `totem review --covariate` re-derives the CURRENT admission
+ * classification and looks up that exact identity — never wall-clock
+ * arbitration across record families.
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { z } from 'zod';
+
+import { rethrowAsParseError, TotemError, TotemParseError } from '../errors.js';
+import { readJsonSafe } from '../sys/fs.js';
+import { calculateDeterministicHash } from './hash.js';
+
+// ─── Schema version (mirrors VerdictArtifact / RunArtifact F1 policy) ───────
+
+/**
+ * The admission schemaVersion WRITTEN by this code. Readers accept any 1.x;
+ * a MAJOR bump requires a migration entry in {@link loadAdmissionRecord}
+ * before the writer ships.
+ */
+export const ADMISSION_RECORD_SCHEMA_VERSION = '1.0.0';
+
+// ─── Reasons + scope ────────────────────────────────────────────────────────
+
+/**
+ * The closed set of deterministic not-applicable reasons (mmnto-ai/totem#2473
+ * ruling item 1). Order here is the documentation order; the value is data.
+ */
+export const NOT_APPLICABLE_REASONS = [
+  'no-diff',
+  'all-non-code',
+  'filtered-empty',
+  'all-generated',
+] as const;
+
+export type NotApplicableReason = (typeof NOT_APPLICABLE_REASONS)[number];
+
+const NotApplicableReasonSchema = z.enum(NOT_APPLICABLE_REASONS);
+
+/**
+ * Normalized diff-scope identity. ALWAYS present on a record — including
+ * `no-diff`, which binds the RESOLVED terminal scope the resolver had reached
+ * when it found nothing (e.g. `branch-vs-base` + the resolved base after the
+ * default chain exhausts; the explicit range with its refs for `--diff`),
+ * with `selectorForm` falling back to the REQUESTED selector where the
+ * resolver supplies none — so empty runs under different scopes or selectors
+ * are different observations (codex conformance note 1). `source: 'none'`
+ * survives only for the scope-less legacy caller arm (a caller passing no
+ * resolver result at all); no shipped CLI path produces it.
+ */
+export const AdmissionScopeSchema = z
+  .object({
+    source: z.enum(['explicit-range', 'staged', 'uncommitted', 'branch-vs-base', 'none']),
+    base: z.string().nullable(),
+    head: z.string().nullable(),
+    selectorForm: z.string().nullable(),
+  })
+  .strict();
+
+export type AdmissionScope = z.infer<typeof AdmissionScopeSchema>;
+
+// ─── Selection-policy fingerprint ───────────────────────────────────────────
+
+/**
+ * The effective selection policy whose projection produced the admission
+ * outcome. `not-applicable` is a projection result; equal diff bytes classify
+ * differently when any of these inputs change, so the record binds them
+ * (codex: the disclosure/authorization distinction does not remove the
+ * binding requirement).
+ *
+ * The caller (the CLI) assembles the EFFECTIVE values — config-resolved
+ * extensions, seeded generated globs unioned with `.gitattributes` rules,
+ * ignore/filter patterns, and an identifier for the classifier whose
+ * non-code/code partition applies. Core owns only the canonicalization.
+ */
+export interface ProjectionPolicy {
+  /** Effective review source extensions (config-resolved). */
+  sourceExtensions: readonly string[];
+  /** Effective generated-artifact globs (defaults ∪ .gitattributes generated). */
+  generatedGlobs: readonly string[];
+  /** Effective NOT-generated exclusions (.gitattributes -linguist-generated). */
+  notGeneratedGlobs: readonly string[];
+  /** Effective ignore/filter patterns applied during diff resolution. */
+  ignorePatterns: readonly string[];
+  /**
+   * Identifier + version of the non-code classifier whose partition applies
+   * (e.g. `'classifyChangedFiles@1'`). Bumped when the classification
+   * BEHAVIOR changes without any config input changing — a projection-version
+   * bump explains drift with no input change (ADR-113's distinction).
+   */
+  classifierId: string;
+}
+
+/**
+ * Canonical fingerprint over the effective selection policy. Deterministic by
+ * construction: array fields are sorted copies (set semantics — ordering is
+ * config-file incidental), and `calculateDeterministicHash` performs a
+ * recursive key sort. Fixture-locked for cross-platform / key-order stability.
+ */
+export function computeProjectionPolicyHash(policy: ProjectionPolicy): string {
+  // TRUE set semantics (CR on #2641): dedupe before sorting — a duplicated
+  // config entry does not change the effective projection, so it must not
+  // re-key the address and orphan an equivalent record on exact lookup.
+  const canonicalizeSet = (values: readonly string[]): string[] => [...new Set(values)].sort();
+  const canonical = {
+    classifierId: policy.classifierId,
+    generatedGlobs: canonicalizeSet(policy.generatedGlobs),
+    ignorePatterns: canonicalizeSet(policy.ignorePatterns),
+    notGeneratedGlobs: canonicalizeSet(policy.notGeneratedGlobs),
+    sourceExtensions: canonicalizeSet(policy.sourceExtensions),
+  };
+  return calculateDeterministicHash(canonical);
+}
+
+// ─── Record schema ──────────────────────────────────────────────────────────
+
+const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
+
+export const AdmissionRecordSchema = z.object({
+  /** Writer version; readers tolerate any 1.x (F1 policy). */
+  schemaVersion: z.string().regex(/^1\.\d+\.\d+$/),
+  /** The only admission disposition persisted: an admitted run persists a verdict instead. */
+  disposition: z.literal('not-applicable'),
+  reason: NotApplicableReasonSchema,
+  /**
+   * Observability ONLY — excluded from the content address; never a
+   * resolution key. Constrained to an ISO-8601 UTC instant (CR on #2641):
+   * the value is address-excluded yet interpolated into the stdout
+   * `local-lane:` transport line, so a hand-edited record must not be able
+   * to smuggle line breaks (or any non-timestamp bytes) into that payload —
+   * validate-on-write and the verified load both reject it.
+   */
+  createdAt: z.string().datetime(),
+  scope: AdmissionScopeSchema,
+  /** sha256 over the pre-filter diff bytes (hash of the empty string for `no-diff`). */
+  inputHash: Sha256HexSchema,
+  /** {@link computeProjectionPolicyHash} over the effective selection policy. */
+  projectionPolicyHash: Sha256HexSchema,
+  /**
+   * Count only, never names (names ride the CLI's dim stderr line; smallest
+   * honest record). The counting basis is REASON-DEPENDENT (re-arm leg NIT 8):
+   * `all-generated` counts the changed files; `all-non-code` and
+   * `filtered-empty` count the files remaining in scope AFTER generated-
+   * artifact exclusion; `no-diff` is 0. A consumer must not interpret the
+   * field uniformly across reasons.
+   */
+  skippedFileCount: z.number().int().nonnegative(),
+});
+
+export type AdmissionRecord = z.infer<typeof AdmissionRecordSchema>;
+
+/** A loaded record paired with its VERIFIED content address (the filename stem). */
+export interface AdmissionWithAddress {
+  record: AdmissionRecord;
+  /** The verified content address = filename stem (raw-payload hash, `createdAt`/`schemaVersion` excluded). */
+  contentHash: string;
+}
+
+// ─── Content addressing (observation identity only) ─────────────────────────
+//
+// BOTH `createdAt` (observability) and `schemaVersion` (writer metadata) are
+// excluded from the address: the identity is the OBSERVATION — scope, input
+// bytes, projection policy, reason, count. Including `schemaVersion` would
+// make every 1.x minor bump orphan every prior record on the exact-identity
+// lookup path, silently defeating the tolerant-reader contract
+// (falsification-leg MINOR 3 on the #2473 round). Version tolerance is the
+// reader's job (schema regex + migration registry), never the address's.
+
+/** Content address over the validated record — observation identity only. */
+export function computeAdmissionContentHash(record: AdmissionRecord): string {
+  const { createdAt: _createdAt, schemaVersion: _schemaVersion, ...identity } = record;
+  return calculateDeterministicHash(identity);
+}
+
+/** Raw-payload variant for load verification (unknown-key tamper caught; forward-minor verifies). */
+function computeRawAdmissionContentHash(raw: unknown): string {
+  if (typeof raw !== 'object' || raw === null) {
+    return calculateDeterministicHash(raw);
+  }
+  const {
+    createdAt: _createdAt,
+    schemaVersion: _schemaVersion,
+    ...identity
+  } = raw as Record<string, unknown>;
+  return calculateDeterministicHash(identity);
+}
+
+function admissionsDir(totemDirAbs: string): string {
+  return path.join(totemDirAbs, 'artifacts', 'admissions');
+}
+
+// ─── Save / load ────────────────────────────────────────────────────────────
+
+export interface SaveAdmissionRecordResult {
+  /** The content address (= filename stem). */
+  hash: string;
+  /** Absolute path of the stored record. */
+  path: string;
+  /** True when an identical logical record was already recorded (no write happened). */
+  existed: boolean;
+}
+
+/**
+ * Persist an admission record at its content address, write-if-absent (`wx`).
+ * Validates on the way OUT so a writer bug never poisons the store. EEXIST is
+ * logical-identity dedup: with `scope` + `inputHash` + `projectionPolicyHash`
+ * bound, an identical address IS the same observation repeated — first-write-
+ * wins, and the verified load below surfaces any address collision loud.
+ */
+export function saveAdmissionRecord(
+  totemDirAbs: string,
+  record: AdmissionRecord,
+): SaveAdmissionRecordResult {
+  const validated = AdmissionRecordSchema.parse(record);
+  const hash = computeAdmissionContentHash(validated);
+  const dir = admissionsDir(totemDirAbs);
+  const filePath = path.join(dir, `${hash}.json`);
+
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(validated, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600, // matches the artifact-store default posture (verdicts/runs)
+      flag: 'wx',
+    });
+  } catch (err) {
+    if (err !== null && typeof err === 'object' && 'code' in err && err.code === 'EEXIST') {
+      // Verified load: proves the incumbent hashes back to THIS address — the
+      // same logical observation modulo createdAt/schemaVersion. A differing
+      // or corrupt record cannot occupy this address without failing loud.
+      loadAdmissionRecord(totemDirAbs, hash);
+      return { hash, path: filePath, existed: true };
+    }
+    throw err;
+  }
+  return { hash, path: filePath, existed: false };
+}
+
+/** Future-major migration registry (empty at 1.x — mirrors the verdict store's shape). */
+const MIGRATIONS = new Map<number, (raw: unknown) => unknown>();
+
+/**
+ * Load + validate an admission record by content address. Raw-address
+ * verification runs FIRST (identity is major-agnostic, over the on-disk bytes
+ * minus `createdAt`/`schemaVersion`); only then is any migration applied and
+ * the output validated against the current schema. Throws loud on a missing
+ * file, corrupt JSON, schema violation, address mismatch, or a NEWER/unknown
+ * major with no migration entry (a NAMED upgrade-the-CLI error — an older CLI
+ * meeting a newer record must never report valid data as corruption; re-arm
+ * leg MINOR 5).
+ */
+export function loadAdmissionRecord(totemDirAbs: string, hash: string): AdmissionWithAddress {
+  if (!Sha256HexSchema.safeParse(hash).success) {
+    throw new TotemParseError(
+      `Invalid admission-record id "${hash}" — expected a 64-char sha256 hex content address.`,
+      'Pass the hash exactly as reported at emission (or from the artifacts/admissions/ filename).',
+    );
+  }
+  const filePath = path.join(admissionsDir(totemDirAbs), `${hash}.json`);
+  const raw = readJsonSafe(filePath);
+
+  const verificationHash = computeRawAdmissionContentHash(raw);
+  if (verificationHash !== hash) {
+    throw new TotemError(
+      'DATABASE_MISMATCH',
+      `Admission record at ${filePath} fails content-address verification: its recomputed content hash ${verificationHash} does not match the filename address ${hash} (modulo createdAt/schemaVersion).`,
+      'This should be unreachable in a content-addressed store. Investigate a mis-addressed copy, a hand-edited/corrupted record, or a hash collision, then re-run `totem review`.',
+    );
+  }
+
+  const major = readMajor(raw);
+  const migrate = major !== undefined ? MIGRATIONS.get(major) : undefined;
+  if (migrate !== undefined) {
+    return { record: AdmissionRecordSchema.parse(migrate(raw)), contentHash: hash };
+  }
+  // Version-free addressing means an older CLI CAN meet a newer-major record
+  // at a shared address (re-arm leg MINOR 5). Name that case explicitly — the
+  // record is valid data this reader cannot parse, never corruption.
+  if (major !== undefined && major > 1) {
+    throw new TotemParseError(
+      `Admission record ${hash} was written by a newer totem (schemaVersion major ${major}; this reader understands 1.x).`,
+      'Upgrade @mmnto/cli to read it — the record is valid, not corrupt.',
+    );
+  }
+  const result = AdmissionRecordSchema.safeParse(raw);
+  if (!result.success) {
+    rethrowAsParseError(
+      `Admission record ${hash} failed schema validation`,
+      result.error,
+      'The record may be corrupted or written by an incompatible totem version; re-run `totem review` (or add the migration entry for its major).',
+    );
+  }
+  return { record: result.data, contentHash: hash };
+}
+
+/**
+ * Exact-identity lookup: does a record for THIS observation exist? The caller
+ * re-derives the current admission outcome, builds the record identity, and
+ * asks for exactly its address — deterministic, no scanning, no wall-clock.
+ * Returns `undefined` when absent; a PRESENT-but-corrupt record routes to
+ * `onCorrupt` and returns `undefined` (the caller's loud no-current-record
+ * sensor covers both — never a silent fallback to an older verdict).
+ */
+export function findAdmissionRecordByIdentity(
+  totemDirAbs: string,
+  identity: Omit<AdmissionRecord, 'createdAt' | 'schemaVersion'>,
+  onCorrupt: (message: string) => void,
+): AdmissionWithAddress | undefined {
+  const hash = calculateDeterministicHash(identity);
+  const filePath = path.join(admissionsDir(totemDirAbs), `${hash}.json`);
+  if (!fs.existsSync(filePath)) return undefined;
+  try {
+    return loadAdmissionRecord(totemDirAbs, hash);
+    // totem-context: intentional routed degradation — the failure is HANDED to `onCorrupt` (required param; the CLI wires it to a loud sensor warn) and `undefined` triggers the caller's loud no-current-record arm, so nothing is silent; a scan-style skip-with-warning is this store's documented corrupt-record contract (mirrors the verdict store's verified-scan load)
+  } catch (err) {
+    onCorrupt(
+      `Admission record ${hash.slice(0, 8)} exists but failed verified load: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return undefined;
+  }
+}
+
+// ─── Renderer (covariate-line family — one format authority) ────────────────
+
+/**
+ * The core-owned admission form of the `local-lane:` line. Same prefix as
+ * {@link renderCovariateLine} so the round-disposition comment carries either
+ * form. `at=` renders the RECORD's timestamp: under dedup a repeat identical
+ * skip shows the first observation's stamp (the record's own truth, named in
+ * the changeset so it never reads as staleness of the check).
+ */
+export function renderAdmissionLine(admission: AdmissionWithAddress): string {
+  const hash8 = admission.contentHash.slice(0, 8);
+  return `local-lane: not-applicable (${admission.record.reason}) recorded=${hash8} at=${admission.record.createdAt}`;
+}
+
+/** Best-effort major extraction from a raw parsed payload; undefined when absent/garbled. */
+function readMajor(raw: unknown): number | undefined {
+  if (typeof raw !== 'object' || raw === null || !('schemaVersion' in raw)) return undefined;
+  const version = raw.schemaVersion;
+  if (typeof version !== 'string') return undefined;
+  const major = Number.parseInt(version.split('.')[0] ?? '', 10);
+  return Number.isNaN(major) ? undefined : major;
+}

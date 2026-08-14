@@ -37,8 +37,37 @@ vi.mock('../utils.js', async () => {
       targets: [],
       totemDir: '.totem',
       ignorePatterns: [],
+      // The real Zod-validated config always carries `review`; shield's fan
+      // validation reads `review.lanes` BEFORE admission/boot since
+      // mmnto-ai/totem#2473, so the minimal fixture must not omit it.
+      review: { sourceExtensions: ['.ts'] },
     }),
     loadEnv: () => {},
+  };
+});
+
+// The shield main path boots the engine only on an ADMITTED run since
+// mmnto-ai/totem#2473 (a deterministic skip returns before boot), so the
+// wiring fixture must present an admittable CODE diff — the bare tmp dir
+// would otherwise resolve no diff and exit through the admission phase
+// without ever reaching the boot site this test pins.
+vi.mock('../git.js', async () => {
+  const actual = await vi.importActual<typeof import('../git.js')>('../git.js');
+  return {
+    ...actual,
+    getDiffForReview: async () => ({
+      diff: [
+        'diff --git a/src/index.ts b/src/index.ts',
+        'index 1111111..2222222 100644',
+        '--- a/src/index.ts',
+        '+++ b/src/index.ts',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+      ].join('\n'),
+      changedFiles: ['src/index.ts'],
+      source: 'uncommitted',
+    }),
   };
 });
 

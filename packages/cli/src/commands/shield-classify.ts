@@ -106,14 +106,34 @@ const NON_CODE_FILENAMES = new Set<string>([
 
 // ─── Compound extension check ───────────────────────
 
+/** Compound suffixes `path.extname` cannot see (it returns only the last segment). */
+const COMPOUND_NON_CODE_SUFFIXES: readonly string[] = ['.d.ts.map'];
+
 /**
  * Check for compound extensions like `.d.ts.map` that path.extname
  * won't catch (it only returns `.map`).
  */
 function hasCompoundNonCodeExtension(filePath: string): boolean {
   const base = path.basename(filePath);
-  return base.endsWith('.d.ts.map');
+  return COMPOUND_NON_CODE_SUFFIXES.some((suffix) => base.endsWith(suffix));
 }
+
+/**
+ * Canonical, namespaced flattening of EVERY classification table above — the
+ * classifier's entire behavioral policy surface. Exported so the #2473
+ * admission `projectionPolicyHash` binds the actual tables MECHANICALLY
+ * (falsification-leg MATERIAL 2 on the #2473 round): editing any set re-keys
+ * every admission address without anyone remembering to bump a version
+ * string. Namespace prefixes keep the flattening collision-free; the sort
+ * makes the digest deterministic.
+ */
+export const CLASSIFIER_POLICY_TABLES: readonly string[] = [
+  ...[...CODE_EXTENSIONS].map((ext) => `code-ext:${ext}`),
+  ...[...NON_CODE_EXTENSIONS].map((ext) => `non-code-ext:${ext}`),
+  ...[...CODE_FILENAMES].map((name) => `code-name:${name}`),
+  ...[...NON_CODE_FILENAMES].map((name) => `non-code-name:${name}`),
+  ...COMPOUND_NON_CODE_SUFFIXES.map((suffix) => `compound-non-code:${suffix}`),
+].sort();
 
 // ─── Public API ─────────────────────────────────────
 

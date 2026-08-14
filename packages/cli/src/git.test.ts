@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  type DiffForReviewEmpty,
+  type DiffForReviewResult,
   extractChangedFiles,
   filterDiffByPatterns,
   getDefaultBranch,
@@ -22,6 +24,21 @@ import {
   MAX_DISCLOSED_UNTRACKED_FILES,
   resolveGitRoot,
 } from './git.js';
+
+/** Narrow the resolver union to its non-empty variant, failing loud otherwise. */
+function asDiff(result: DiffForReviewResult | DiffForReviewEmpty): DiffForReviewResult {
+  if ('empty' in result) throw new Error('expected a non-empty diff resolution');
+  return result;
+}
+
+/**
+ * Narrow to the discriminated empty variant (mmnto-ai/totem#2473 conformance
+ * note 1): a no-changes resolution carries the RESOLVED scope, never null.
+ */
+function asEmpty(result: DiffForReviewResult | DiffForReviewEmpty): DiffForReviewEmpty {
+  if (!('empty' in result)) throw new Error('expected an empty (no-changes) resolution');
+  return result;
+}
 
 describe('git re-exports', () => {
   it('re-exports all pure git utilities from core', () => {
@@ -224,9 +241,9 @@ describe('getDiffForReview ignore-filter disclosure (#1748)', () => {
       '/tmp',
       'Lint',
     );
-    expect(result).not.toBeNull();
-    expect(result!.diff).not.toContain('audits/internal/report.md');
-    expect(result!.diff).toContain('src/kept.ts');
+    const kept = asDiff(result);
+    expect(kept.diff).not.toContain('audits/internal/report.md');
+    expect(kept.diff).toContain('src/kept.ts');
     expect(uiMod.log.warn).toHaveBeenCalledWith(
       'Lint',
       expect.stringContaining(
@@ -302,10 +319,17 @@ describe('getDiffForReview --diff (#1717)', () => {
     expect(mockGetGitBranchDiffResult).not.toHaveBeenCalled();
   });
 
-  it('returns null when explicit range produces an empty diff', async () => {
+  it('returns a scoped empty when explicit range produces an empty diff', async () => {
     mockGetGitDiffRange.mockReturnValue('');
     const result = await getDiffForReview({ diff: 'HEAD..HEAD' }, config, '/tmp', 'Review');
-    expect(result).toBeNull();
+    // Conformance note 1 (#2473): the empty carries the RESOLVED scope.
+    expect(asEmpty(result)).toEqual({
+      empty: true,
+      source: 'explicit-range',
+      base: 'HEAD',
+      head: 'HEAD',
+      selectorForm: 'HEAD..HEAD',
+    });
   });
 
   it('still applies ignore patterns to the explicit-range diff', async () => {
@@ -325,7 +349,10 @@ describe('getDiffForReview --diff (#1717)', () => {
       '/tmp',
       'Review',
     );
-    expect(result).toBeNull();
+    expect(asEmpty(result)).toMatchObject({
+      source: 'explicit-range',
+      selectorForm: 'HEAD^..HEAD',
+    });
   });
 
   it('reports source: branch-vs-base when the working-tree diff is empty', async () => {
@@ -383,9 +410,9 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
 
     const result = await getDiffForReview({ base: 'develop' }, config, '/tmp', 'Lint');
 
-    expect(result).not.toBeNull();
-    expect(result!.source).toBe('branch-vs-base');
-    expect(result!.changedFiles).toEqual(['committed.ts']);
+    const branchScoped = asDiff(result);
+    expect(branchScoped.source).toBe('branch-vs-base');
+    expect(branchScoped.changedFiles).toEqual(['committed.ts']);
     expect(mockGetGitDiff).not.toHaveBeenCalled();
     expect(mockGetGitBranchDiffResult).toHaveBeenCalledWith('/tmp', 'develop');
   });
@@ -481,16 +508,29 @@ describe('getDiffForReview --branch/--base (#2091)', () => {
     expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
   });
 
-  it('returns null with the existing no-changes warn when the forced branch diff is empty', async () => {
+  it('returns a scoped empty with the existing no-changes warn when the forced branch diff is empty', async () => {
     mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
 
     const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
 
-    expect(result).toBeNull();
+    // Conformance note 1 (#2473): the resolved base survives into the empty.
+    expect(asEmpty(result)).toMatchObject({ source: 'branch-vs-base', base: 'main' });
     const warned = mockLog.warn.mock.calls.find((c) =>
       String(c[1]).includes('No changes detected'),
     );
     expect(warned).toBeDefined();
+  });
+
+  it('an empty --staged run resolves through the branch fallback — a scoped empty, distinct from forced-branch', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiffResult.mockReturnValue({ diff: '', resolvedBase: 'main' });
+
+    const result = await getDiffForReview({ staged: true }, config, '/tmp', 'Lint');
+
+    // The chain's TERMINAL scope is the branch fallback; the staged request
+    // stays distinguishable at the admission layer via the requested selector.
+    expect(asEmpty(result)).toMatchObject({ source: 'branch-vs-base', base: 'main' });
+    expect(mockGetGitDiff).toHaveBeenCalledWith('staged', '/tmp');
   });
 
   it('lets branch-diff errors bubble on the forced path', async () => {
@@ -775,8 +815,8 @@ describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)',
 
     const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
 
-    // Exit path unchanged: still null → the caller still exits 0.
-    expect(result).toBeNull();
+    // Exit path unchanged: a scoped empty → the caller still exits 0.
+    expect(asEmpty(result)).toMatchObject({ source: 'branch-vs-base', base: 'main' });
     expect(mockSafeExec).toHaveBeenCalledWith(
       'git',
       ['ls-files', '--others', '--exclude-standard'],
@@ -797,7 +837,7 @@ describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)',
 
     const result = await getDiffForReview({}, config, '/tmp', 'Lint');
 
-    expect(result).toBeNull();
+    expect(asEmpty(result)).toMatchObject({ source: 'branch-vs-base', base: 'main' });
     const warned = lastWarn();
     expect(warned).toContain('scratch.ts');
     expect(warned).toMatch(/NOT examined/);
@@ -840,7 +880,7 @@ describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)',
 
     const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
 
-    expect(result).toBeNull();
+    expect(asEmpty(result)).toMatchObject({ source: 'branch-vs-base' });
     expect(lastWarn()).toBe(PLAIN_NO_CHANGES);
   });
 
@@ -853,7 +893,7 @@ describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)',
 
     const result = await getDiffForReview({ branch: true }, config, '/tmp', 'Lint');
 
-    expect(result).toBeNull();
+    expect(asEmpty(result)).toMatchObject({ source: 'branch-vs-base' });
     expect(lastWarn()).toBe(PLAIN_NO_CHANGES);
   });
 
@@ -863,7 +903,12 @@ describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)',
 
     const result = await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Lint');
 
-    expect(result).toBeNull();
+    expect(asEmpty(result)).toMatchObject({
+      source: 'explicit-range',
+      base: 'main',
+      head: 'HEAD',
+      selectorForm: 'main..HEAD',
+    });
     const warned = lastWarn();
     expect(warned).toContain("Explicit range 'main..HEAD'");
     expect(warned).toMatch(/examined NOTHING/);
@@ -878,7 +923,7 @@ describe('getDiffForReview untracked disclosure on the empty-diff path (#2535)',
 
     const result = await getDiffForReview({ diff: 'main..HEAD' }, config, '/tmp', 'Lint');
 
-    expect(result).toBeNull();
+    expect(asEmpty(result)).toMatchObject({ source: 'explicit-range' });
     expect(lastWarn()).toBe("Explicit range 'main..HEAD' produced no diff. Nothing to review.");
   });
 

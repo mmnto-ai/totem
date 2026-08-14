@@ -3779,16 +3779,22 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(actual).toEqual(expected);
   });
 
-  // The covariate PR-line is a versioned contract (format v1) consumed by a
-  // measurement pilot (Prop 304 R2, mmnto-ai/totem#2106). Its shape is grep-able
-  // and MUST NOT drift without a spec amendment — lock the exact template string
-  // + the v1 do-not-alter marker into the canonical skill content.
-  it('REVIEW_LOOP_SKILL_CONTENT carries the exact covariate line format v1 contract', () => {
+  // The covariate PR-line is a versioned contract consumed by a measurement
+  // pilot (Prop 304 R2, mmnto-ai/totem#2106). Its shapes are grep-able and
+  // MUST NOT drift without a spec amendment — lock the exact template strings
+  // + the do-not-alter marker into the canonical skill content. v1.1 added the
+  // additive ADMISSION form under the mmnto-ai/totem#2473 design (operator-
+  // approved 2026-08-14) — this pin fired on that amendment exactly as
+  // intended, and was updated WITH the spec amendment, never around it.
+  it('REVIEW_LOOP_SKILL_CONTENT carries the exact covariate line format v1.1 contract (both shapes)', () => {
     expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
       'local-lane: <verdictHash8> round=<n> settled=<true|false> lanes=<completed>/<attempted>',
     );
     expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
-      'covariate line format v1 — do not alter without a spec amendment',
+      'local-lane: not-applicable (<reason>) recorded=<recordHash8> at=<createdAt>',
+    );
+    expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
+      'covariate line format v1.1 — do not alter without a spec amendment',
     );
   });
 

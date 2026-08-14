@@ -126,8 +126,8 @@ describe('runEstimate', () => {
 
   // ─── Empty-diff branch ────────────────────────────
 
-  it('returns clean and skips runCompiledRules when getDiffForReview returns null', async () => {
-    mockGetDiffForReview.mockResolvedValue(null);
+  it('returns clean and skips runCompiledRules when getDiffForReview resolves empty', async () => {
+    mockGetDiffForReview.mockResolvedValue({ empty: true, source: 'branch-vs-base', base: 'main' });
 
     const { runEstimate } = await import('./shield-estimate.js');
     await expect(
@@ -403,6 +403,10 @@ describe('shieldCommand --estimate incompatibility guard', () => {
     ['mode-standard', { mode: 'standard' as const }, '--mode'],
     ['mode-structural', { mode: 'structural' as const }, '--mode'],
     ['raw', { raw: true }, '--raw'],
+    // --gate has no estimate semantics (a forecast maps no dispositions), and
+    // rejecting it here keeps the --gate/--fail-on conflict unreachable via
+    // the estimate short-circuit (#2473 re-arm leg MINOR 2).
+    ['gate', { gate: true }, '--gate'],
   ])(
     'throws CONFIG_INVALID when --estimate is combined with %s',
     async (_name, extra, expectedFlag) => {
@@ -434,7 +438,7 @@ describe('shieldCommand --estimate incompatibility guard', () => {
     // Commander seeds --suppress with `[]`. An empty array MUST NOT
     // trigger the incompatibility error — only a non-empty array
     // counts as the user actually passing --suppress.
-    mockGetDiffForReview.mockResolvedValue(null);
+    mockGetDiffForReview.mockResolvedValue({ empty: true, source: 'branch-vs-base', base: 'main' });
     const { shieldCommand } = await import('./shield.js');
     await expect(shieldCommand({ estimate: true, suppress: [] })).resolves.toBeUndefined();
   });

@@ -155,6 +155,23 @@ export interface DiffForReviewResult {
 }
 
 /**
+ * The discriminated no-changes result (mmnto-ai/totem#2473 conformance note 1):
+ * the resolver had ALREADY resolved a concrete scope — staged→branch fallback,
+ * an explicit range, or the forced branch-vs-base — by the time it found no
+ * diff, and a bare `null` discarded that metadata. The admission record's
+ * `no-diff` identity binds THIS resolved scope, so empty runs under different
+ * scopes can never collapse into one observation. Field semantics match
+ * {@link DiffForReviewResult} exactly (same population rules per source).
+ */
+export interface DiffForReviewEmpty {
+  empty: true;
+  source: DiffForReviewSource;
+  base?: string;
+  head?: string;
+  selectorForm?: string;
+}
+
+/**
  * Resolve the base/head endpoints of an explicit `--diff` range for scope
  * metadata (Prop 304). Records the refs the operator named, at derivation
  * time, so the verdict artifact never reconstructs them later. Mirrors git's
@@ -245,14 +262,16 @@ const BRANCH_SCOPE_EMPTY = {
  * the LLM call is made, so the operator can re-run with a narrower
  * `--diff <range>` instead of paying for a degraded review.
  *
- * Returns `null` when no changes are detected.
+ * Returns a {@link DiffForReviewEmpty} (carrying the RESOLVED scope) when no
+ * changes are detected — never a bare `null`, which would discard the scope
+ * the admission record must bind (mmnto-ai/totem#2473 conformance note 1).
  */
 export async function getDiffForReview(
   options: DiffForReviewOptions,
   config: DiffForReviewConfig,
   cwd: string,
   tag: string,
-): Promise<DiffForReviewResult | null> {
+): Promise<DiffForReviewResult | DiffForReviewEmpty> {
   const { log } = await import('./ui.js');
   const {
     TotemError,
@@ -412,7 +431,7 @@ export async function getDiffForReview(
     resolveBranchScope(base);
     if (!diff.trim()) {
       log.warn(tag, noChangesMessage(BRANCH_SCOPE_EMPTY));
-      return null;
+      return { empty: true, source, base: scopeBase, head: scopeHead, selectorForm };
     }
   } else if (options.diff !== undefined) {
     // Explicit-range path — no fallback. getGitDiffRange rejects flag-injection
@@ -436,7 +455,7 @@ export async function getDiffForReview(
           whenClean: `Explicit range '${safeRange}' produced no diff. Nothing to review.`,
         }),
       );
-      return null;
+      return { empty: true, source, base: scopeBase, head: scopeHead, selectorForm };
     }
   } else {
     const mode: 'staged' | 'all' = options.staged ? 'staged' : 'all';
@@ -459,8 +478,13 @@ export async function getDiffForReview(
     }
 
     if (!diff.trim()) {
+      // The chain is exhausted: whatever started it (staged / uncommitted),
+      // the TERMINAL resolved scope here is the branch-vs-base fallback — that
+      // is what this empty observation binds. The requested selector stays
+      // distinguishable at the admission layer (its scope records the
+      // requested form when the resolver supplies no selectorForm).
       log.warn(tag, noChangesMessage(BRANCH_SCOPE_EMPTY));
-      return null;
+      return { empty: true, source, base: scopeBase, head: scopeHead, selectorForm };
     }
   }
 

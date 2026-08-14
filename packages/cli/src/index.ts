@@ -453,7 +453,11 @@ const reviewOptions = (cmd: Command) =>
     )
     .option(
       '--covariate',
-      'Read-only, zero-LLM: resolve the current review lineage (same resolution as the fan), load its latest verdict artifact, and print the canonical local-lane covariate line to stdout. No verdict for the lineage prints a loud sensor message; always exits 0. Writes nothing.',
+      'Read-only, zero-LLM: resolve the current review state and print the canonical local-lane line to stdout — the latest verdict artifact for the lineage when the current diff is admitted, or the exact-identity admission record when it is not-applicable (mmnto-ai/totem#2473). A missing record/verdict prints a loud sensor message; always exits 0. Writes nothing.',
+    )
+    .option(
+      '--gate',
+      'Declared disposition→exit mapping for gate wiring (the managed pre-push hook form, mmnto-ai/totem#2473): known not-applicable admissions and completed rounds exit 0 (findings are report-only in hook context), hard failures exit non-zero, an unknown disposition fails CLOSED. Contradictory with --fail-on.',
     )
     .addHelpText(
       'after',
@@ -516,6 +520,7 @@ async function runReview(opts: {
   continues?: string;
   failOn?: string;
   covariate?: boolean;
+  gate?: boolean;
 }): Promise<void> {
   // Redirect removed --deterministic flag to totem lint
   if (opts.deterministic) {

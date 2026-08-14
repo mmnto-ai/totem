@@ -1935,7 +1935,7 @@ Disposing the round is ONE consolidated comment (single-comment ownership per bo
 totem review --covariate
 \`\`\`
 
-It resolves the current branch lineage exactly as the review fan does, loads the LATEST verdict artifact for that lineage (\`.totem/artifacts/verdicts/\`), and prints the canonical \`local-lane:\` line from the single core-owned renderer — never trust a pasted or hand-copied value. If it reports no verdict for the current lineage, there is no line to carry (note that in the body and continue).
+It resolves the current branch lineage exactly as the review fan does and prints the canonical \`local-lane:\` line from the core-owned renderers — the LATEST verdict artifact's line (\`.totem/artifacts/verdicts/\`) when the current diff is admitted, or the exact-identity admission record's \`not-applicable\` form (\`.totem/artifacts/admissions/\`, format v1.1, mmnto-ai/totem#2473) when the current diff is a deterministic skip — never trust a pasted or hand-copied value. If it reports neither a verdict nor an admission record for the current state, there is no line to carry (note that in the body and continue).
 
 2. **Assemble the single body.** One comment: @-tag EVERY bot addressed in the round — exactly ONE tag each (e.g. \`@gemini-code-assist\`, \`@coderabbitai\`, \`@greptileai\`) so each bot registers the disposition, and tags must be present when the comment is POSTED, never edited in (GCA's listener fires on comment-created only). One notification per bot per round: a bot with nothing addressed gets no tag, and a bot already @-tagged in this round's batch comment (the GCA defer/nit batch above) is NOT re-tagged here. ghcq (\`github-code-quality[bot]\`) has no known listener — it is never tagged; its items are dispositioned in the body for the audit trail only (mmnto-ai/totem#2626). Never combine a tag with ANY bot's review trigger — triggers are standalone comments, one trigger and no prose (a trigger embedded in a content-rich comment chat-routes the bot). Then the per-item dispositions (fixed / deferred / nit / extracted) followed by the non-empty \`local-lane:\` line from step 1, verbatim. The local \`review-loop\` holds this line but never posts it, so \`/review-reply\` is the SOLE path that carries it to GitHub.
 
@@ -1975,13 +1975,14 @@ This is NOT the external-bot triage skill. \`/review-reply\` handles bot comment
 
 \`review-loop\` NEVER creates or posts a PR comment. The local loop runs BEFORE any external bot pass, and the round-disposition comment is ONE consolidated comment owned by the operator-invoked \`/review-reply\` workflow. At settle the CLI already prints the covariate line — hold and report it locally, in exactly this format:
 
-<!-- covariate line format v1 — do not alter without a spec amendment -->
+<!-- covariate line format v1.1 — do not alter without a spec amendment (v1.1 adds the additive admission form: mmnto-ai/totem#2473 design § Implementation Design, operator-approved 2026-08-14) -->
 
-\`\`\`
+\`\`\`text
 local-lane: <verdictHash8> round=<n> settled=<true|false> lanes=<completed>/<attempted>
+local-lane: not-applicable (<reason>) recorded=<recordHash8> at=<createdAt>
 \`\`\`
 
-\`<verdictHash8>\` is the first 8 hex characters of the verdict artifact hash the CLI reports. This line is a versioned contract (format v1) consumed by a measurement pilot — do not change its shape without a spec amendment. The CLI renders it from the verdict artifact on every fan run via a single core-owned renderer, so it is re-derivable from the canonical artifact and never hand-authored — on demand, the read-only \`totem review --covariate\` (zero-LLM) resolves the current lineage and prints the latest verdict's line. Inclusion of any pending \`local-lane:\` line in the single consolidated round-disposition comment belongs to \`/review-reply\` (which obtains it by running \`totem review --covariate\`), not to this loop — never post it to GitHub yourself.
+\`<verdictHash8>\` is the first 8 hex characters of the verdict artifact hash the CLI reports. The second shape is the ADMISSION form (format v1.1, mmnto-ai/totem#2473): rendered when the current diff resolves to a deterministic not-applicable admission — \`<recordHash8>\` addresses the admission record in \`.totem/artifacts/admissions/\`, and a consumer discriminates the two forms on the literal second token \`not-applicable\`. This line is a versioned contract consumed by a measurement pilot — do not change either shape without a spec amendment. The CLI renders both from their canonical artifacts via single core-owned renderers, so the line is re-derivable and never hand-authored — on demand, the read-only \`totem review --covariate\` (zero-LLM) resolves the current state and prints the verdict's line (admitted diff) or the admission record's line (deterministic skip). Inclusion of any pending \`local-lane:\` line in the single consolidated round-disposition comment belongs to \`/review-reply\` (which obtains it by running \`totem review --covariate\`), not to this loop — never post it to GitHub yourself.
 
 ${SKILL_MARKER_END}
 `;
