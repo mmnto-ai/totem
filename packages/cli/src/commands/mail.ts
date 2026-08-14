@@ -1197,9 +1197,16 @@ export async function mailCommand(
     assertSafeAgentId(asSeat, '--as');
     const env = opts.env ?? process.env;
     // Same walk-start the poll itself uses (mmnto-ai/totem#2312), so the
-    // validation resolves the SAME union the poll would.
+    // validation resolves the SAME union the poll would — but with any ambient
+    // TOTEM_SELF_AGENT stripped first: the flag is explicit operator intent and
+    // must override a shell-scoped identity (flag-over-env precedence), so it
+    // validates against the repo's STRUCTURAL union (config/dirs/map). Without
+    // the strip, a seated shell could never `--as` a sibling seat of its own
+    // repo — the env identity would shadow the union down to itself.
     const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
-    const resolved = resolveSelfAgents(repoRoot, env);
+    const structuralEnv = { ...env };
+    delete structuralEnv['TOTEM_SELF_AGENT'];
+    const resolved = resolveSelfAgents(repoRoot, structuralEnv);
     const member = resolved.agents.find((a) => a.toLowerCase() === asSeat.toLowerCase());
     if (member === undefined) {
       // Foreclose the foreign-anchor trap (lesson-2923d5e0): marks live in the

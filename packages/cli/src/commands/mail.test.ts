@@ -3155,6 +3155,23 @@ describe('mailCommand — --as selector (mmnto-ai/totem#2204)', () => {
     expect(result.selfAgents.agents).toEqual(['totem-claude']);
   });
 
+  it('overrides an ambient env identity (flag-over-env, validated against the structural union)', async () => {
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-08-14T0900Z-totem-gemini-directed.md', to: 'totem-gemini' },
+    ]);
+    // A shell seated as totem-claude asks for the sibling seat's view: the
+    // ambient identity must not shadow the structural union down to itself.
+    const { result } = await runMailCommand({
+      repoRoot: selfRepoRoot(),
+      workspace,
+      env: { TOTEM_SELF_AGENT: 'totem-claude' },
+      asSeat: 'totem-gemini',
+    });
+    expect(result.selfAgents).toEqual({ agents: ['totem-gemini'], source: 'env' });
+    expect(result.mail).toHaveLength(1);
+    expect(result.mail[0]!.to).toBe('totem-gemini');
+  });
+
   it('refuses a seat outside the resolved union (the foreign-anchor trap)', async () => {
     await expect(
       runMailCommand({ repoRoot: selfRepoRoot(), workspace, env: {}, asSeat: 'lc-claude' }),
