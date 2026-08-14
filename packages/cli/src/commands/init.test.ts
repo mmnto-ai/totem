@@ -3798,6 +3798,36 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     );
   });
 
+  // The crown-gate + S0 fold (strategy#488 R-table, operator-ruled 2026-08-13/14)
+  // is load-bearing distributed procedure — pin its tokens + ordering the same
+  // way the ecl-gc step is pinned (a byte-lock alone lets both sides reword
+  // together; falsification-leg MINOR-9 on the fold round).
+  it('SIGNOFF/SIGNON constants carry the crown-gate + S0 fold (tokens + ordering)', () => {
+    // Signoff: the gate derives FIRST (step 0 precedes step 1), distinguishes
+    // un-bussed from vacant, crown-scopes step 4 by name, and carries the
+    // own-owed-edges journal rule with the self-held→live asymmetry.
+    expect(SIGNOFF_SKILL_CONTENT).toContain('Crown gate — derive FIRST');
+    expect(SIGNOFF_SKILL_CONTENT).toContain('un-bussed');
+    expect(SIGNOFF_SKILL_CONTENT).toContain('crown **vacant**');
+    expect(SIGNOFF_SKILL_CONTENT).toContain('CROWN ONLY');
+    expect(SIGNOFF_SKILL_CONTENT).toContain('every OTHER managed step (1–3, 5–6) still runs');
+    expect(SIGNOFF_SKILL_CONTENT).toContain(
+      'a skipped note-to-self THERE and a LIVE edge in yours',
+    );
+    expect(SIGNOFF_SKILL_CONTENT.indexOf('Crown gate — derive FIRST')).toBeLessThan(
+      SIGNOFF_SKILL_CONTENT.indexOf('1. **Update memory.**'),
+    );
+    // Signon: seat-anchored poll + the S0 residual check, truthful about what
+    // the 1.117.0 gate mechanized and what the hook actually guarantees.
+    expect(SIGNON_SKILL_CONTENT).toContain('seat-anchored');
+    expect(SIGNON_SKILL_CONTENT).toContain('S0 identity check');
+    expect(SIGNON_SKILL_CONTENT).toContain('Self agents:');
+    expect(SIGNON_SKILL_CONTENT).toContain('exit 2');
+    expect(SIGNON_SKILL_CONTENT).toContain('--as <your-seat>');
+    expect(SIGNON_SKILL_CONTENT).toContain('the seat it is CONFIGURED for');
+    expect(SIGNON_SKILL_CONTENT).toContain('A GATED poll is not an exposure');
+  });
+
   // rev-6 item 4: the consolidated round-disposition comment is a CONCRETE, executable
   // step — it EXECUTES `totem review --covariate` inside the comment-assembly flow, so the
   // covariate line no longer rides a conditional aside that never runs. Lock the executable
