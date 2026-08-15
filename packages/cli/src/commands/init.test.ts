@@ -3829,6 +3829,20 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(SIGNON_SKILL_CONTENT).toContain('seat-anchored');
     expect(SIGNON_SKILL_CONTENT).toContain('S0 identity check');
     expect(SIGNON_SKILL_CONTENT).toContain('Self agents:');
+    // Pin the exact-seat wording and the foreign-seat STOP arm verbatim (CR on
+    // #2643: label pins alone let the safety branch vanish under green CI).
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      "the banner's `Self agents:` line must name exactly your seat",
+    );
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      'A banner naming a FOREIGN seat = STOP: act on nothing served, propagate nothing from it, fix the identity, re-poll.',
+    );
+    // Hook-seat mismatch fail-closed + the signoff-side identity check (CR
+    // majors 1-2 on #2643).
+    expect(SIGNON_SKILL_CONTENT).toContain('On a hook-seat MISMATCH');
+    expect(SIGNON_SKILL_CONTENT).toContain('consume NONE of the injected material');
+    expect(SIGNOFF_SKILL_CONTENT).toContain('the signon S0 check applies at signoff too');
+    expect(SIGNOFF_SKILL_CONTENT).toContain('must not make this session the crown');
     expect(SIGNON_SKILL_CONTENT).toContain('exit 2');
     expect(SIGNON_SKILL_CONTENT).toContain('--as <your-seat>');
     expect(SIGNON_SKILL_CONTENT).toContain('the seat it is CONFIGURED for');
