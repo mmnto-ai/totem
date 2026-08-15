@@ -76,9 +76,9 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 ## Agent-bus binding (Proposal 305)
 
-<!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" -->
+<!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" primary="totem-claude" since="2026-08-14" -->
 
-Role `bus` → seat `totem-claude`; judgment-density file classes: cohort defaults + `AGENTS.md` · `docs/wiki/**` · `.claude/skills/**`. Lane table: mmnto-ai/totem-strategy#697 (pointer, not a copy). Duties + fail-closed succession: Prop 305 §3 + the mmnto-ai/totem-strategy#639 operating spec. The `agent-bus` parity row senses declaration presence only; duty execution is adherence-class (Tenet 19). Cold-start fallback (crown-round A3): a session without the SessionStart hook derives orientation via `totem orient`.
+Bus + crown per the marker above; judgment-density file classes: cohort defaults + `AGENTS.md` · `docs/wiki/**` · `.claude/skills/**`. Lane table: mmnto-ai/totem-strategy#697 (pointer, not a copy). Duties + fail-closed succession: Prop 305 §3/§8 + the mmnto-ai/totem-strategy#639 operating spec. The `agent-bus` parity row senses declaration presence only; duty execution is adherence-class (Tenet 19). Cold-start fallback: no SessionStart hook ⇒ derive orientation via `totem orient`.
 
 ## Detailed Docs
 
