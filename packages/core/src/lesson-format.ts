@@ -97,14 +97,23 @@ function trimIncompleteClause(text: string): string {
 }
 
 /**
+ * Punctuation a word-boundary cut can leave attached to the final word
+ * ("…contamination class," — the boundary keeps the word WITH its comma).
+ * Stripped iteratively below because removing it can expose a dangling
+ * word ("…runs, and," → "…runs, and" → "…runs," → "…runs").
+ */
+const TRAILING_PUNCT_RE = /[\s,;:–—-]+$/;
+
+/**
  * Iteratively trim trailing fragments that leave a heading mid-clause.
- * Chains the existing dangling-tail strip with the clause-incomplete strip
- * so multi-word tails ("to enable auditable") collapse cleanly.
+ * Chains the cut-exposed punctuation strip, the dangling-tail strip, and
+ * the clause-incomplete strip so multi-word tails ("to enable auditable")
+ * and punctuation-masked tails ("and,") collapse cleanly.
  */
 function trimTrailingFragments(text: string): string {
   let prev = text;
   for (;;) {
-    let next = prev;
+    let next = prev.replace(TRAILING_PUNCT_RE, '');
     if (DANGLING_TAIL_RE.test(next)) {
       next = next.replace(DANGLING_TAIL_RE, '').trimEnd();
     }
@@ -120,8 +129,11 @@ function trimTrailingFragments(text: string): string {
  * Strips trailing ellipsis/periods added by LLMs before enforcing the limit.
  * Also trims dangling prepositions/articles/conjunctions that leave the
  * heading feeling incomplete (e.g. "must be tested against the" → "must be tested"),
- * and clause-internal-cut tails where a verb/adjective follows a preposition
- * (e.g. "to prevent" → drop both, per mmnto-ai/totem#1872).
+ * clause-internal-cut tails where a verb/adjective follows a preposition
+ * (e.g. "to prevent" → drop both, per mmnto-ai/totem#1872), and punctuation
+ * the word-boundary cut leaves attached to the final word (e.g.
+ * "…contamination class," → "…contamination class" — the strategy#1060
+ * GCA-mined exhibit).
  */
 export function truncateHeading(heading: string): string {
   // Strip trailing ellipsis (…) or triple-dot (...) that LLMs love to add
