@@ -2,6 +2,8 @@
 
 import { z } from 'zod';
 
+import { TotemError } from '@mmnto/totem';
+
 import { ghFetchAndParse } from './gh-utils.js';
 
 // ─── Board (GH Project) reader ──────────────────────────
@@ -98,10 +100,15 @@ export function fetchBoardItems(owner: string, projectNumber: number, cwd: strin
   // itself as the full in-flight set, so a short fetch must never read as
   // completeness — fail loud into the caller's { error } envelope instead.
   if (parsed.totalCount !== undefined && parsed.items.length < parsed.totalCount) {
-    throw new Error(
+    // 'SHIELD_FAILED' is this adapter's existing fetch-failure code (the
+    // handleGhError fallthrough). The remediation stays in the message too:
+    // orient's { error } envelope surfaces .message only, never recoveryHint.
+    throw new TotemError(
+      'SHIELD_FAILED',
       `GH Project board ${owner}/${projectNumber} truncated: fetched ${parsed.items.length} of ` +
         `${parsed.totalCount} cards (--limit ${BOARD_ITEM_LIMIT}) — raise BOARD_ITEM_LIMIT; ` +
         `a partial board must not derive orientation`,
+      'Raise BOARD_ITEM_LIMIT in github-cli-project.ts so one fetch covers the whole board, then re-run `totem orient`.',
     );
   }
   return parsed.items.map((i) => ({

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { safeExec } from '@mmnto/totem';
+import { safeExec, TotemError } from '@mmnto/totem';
 
 import { fetchBoardItems } from './github-cli-project.js';
 
@@ -78,6 +78,9 @@ describe('fetchBoardItems', () => {
     expect(() => fetchBoardItems('mmnto-ai', 1, '/repo')).toThrow(
       /truncated: fetched 3 of 227 cards/,
     );
+    // Layer idiom (PR #2646 GCA round): the guard throws the adapter's
+    // structured error type, same family as every other fetch failure here.
+    expect(() => fetchBoardItems('mmnto-ai', 1, '/repo')).toThrow(TotemError);
   });
 
   it('tolerates an absent totalCount (older gh) — no truncation signal, no throw', () => {

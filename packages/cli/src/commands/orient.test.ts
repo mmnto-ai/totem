@@ -363,7 +363,7 @@ describe('orient fail-loud on truncated board fetch', () => {
     process.env['TOTEM_ORIENT_PROJECT'] = '1';
     mockFetchBoardItems.mockImplementation(() => {
       throw new Error(
-        'GH Project board mmnto-ai/1 truncated: fetched 200 of 227 cards (--limit 200)',
+        'GH Project board mmnto-ai/1 truncated: fetched 200 of 227 cards (--limit 1000)',
       );
     });
     await runJson();
