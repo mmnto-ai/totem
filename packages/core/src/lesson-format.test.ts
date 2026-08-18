@@ -111,6 +111,28 @@ describe('truncateHeading', () => {
     expect(truncateHeading(long).length).toBeLessThanOrEqual(HEADING_MAX_CHARS);
   });
 
+  it('strips punctuation the word-boundary cut leaves attached (strategy#1060 exhibit shape)', () => {
+    // slice(0,60) cuts inside "and"; the boundary keeps "class," WITH its comma.
+    expect(
+      truncateHeading(
+        'Baseline readings exclude the contaminated session class, and rows stamped in that window',
+      ),
+    ).toBe('Baseline readings exclude the contaminated session class');
+  });
+
+  it('iterates when a stripped comma exposes a dangling word', () => {
+    // "…runs, and," → strip comma → dangling "and" → strip → "…runs," → strip comma.
+    expect(truncateHeading('Reset state snapshots between runs, and,')).toBe(
+      'Reset state snapshots between runs',
+    );
+  });
+
+  it('strips a trailing colon or semicolon without touching interior punctuation', () => {
+    expect(truncateHeading('Guard the shared ledger root; single-writer:')).toBe(
+      'Guard the shared ledger root; single-writer',
+    );
+  });
+
   it('handles heading that is exactly at the limit', () => {
     const exact = 'x'.repeat(HEADING_MAX_CHARS);
     expect(truncateHeading(exact)).toBe(exact);
