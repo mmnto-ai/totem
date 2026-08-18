@@ -21,3 +21,8 @@ updates:
     labels:
       - 'type: chore'
       - 'scope: ci'
+    ignore:
+      # changesets/action v2 hard-fails against @changesets/cli v2 (this repo
+      # pins ^2.x) — the major re-lands with the CLI v3 upgrade, mmnto-ai/totem#2653.
+      - dependency-name: changesets/action
+        update-types: ['version-update:semver-major']
