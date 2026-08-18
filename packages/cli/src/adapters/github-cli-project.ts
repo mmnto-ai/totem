@@ -2,6 +2,8 @@
 
 import { z } from 'zod';
 
+import { TotemError } from '@mmnto/totem';
+
 import { ghFetchAndParse } from './gh-utils.js';
 
 // ─── Board (GH Project) reader ──────────────────────────
@@ -38,9 +40,13 @@ const GhProjectItemSchema = z
   })
   .passthrough();
 
+// `totalCount` is the board's full card count regardless of `--limit` — the
+// truncation signal the #2644 guard compares against. Optional: older gh
+// versions omit it, and without it there is no signal to check.
 const GhProjectItemListSchema = z
   .object({
     items: z.array(GhProjectItemSchema),
+    totalCount: z.number().optional(),
   })
   .passthrough();
 
@@ -57,14 +63,21 @@ export interface BoardItem {
   contentType?: string;
 }
 
-const BOARD_ITEM_LIMIT = 200;
+// Deliberately-complete page budget (mmnto-ai/totem#2644): the previous 200
+// silently truncated >200-card boards — active tail cards vanished and the
+// board section read as complete. `gh` paginates up to `--limit` and stops at
+// the board's real card count, so a high limit costs nothing on small boards;
+// the totalCount guard below keeps any board past this budget loud.
+const BOARD_ITEM_LIMIT = 1000;
 
 /**
  * Read the in-flight items of a GH Project board for `owner` / `projectNumber`.
  *
  * Throws (via `ghFetchAndParse` → `handleGhError`) when the board is
- * inaccessible / the project is absent / the JSON shape is unexpected; the
- * `orient` command catches that and renders a per-section `{ error }` envelope.
+ * inaccessible / the project is absent / the JSON shape is unexpected — and
+ * directly when the response is truncated (`items.length < totalCount`,
+ * mmnto-ai/totem#2644); the `orient` command catches that and renders a
+ * per-section `{ error }` envelope.
  */
 export function fetchBoardItems(owner: string, projectNumber: number, cwd: string): BoardItem[] {
   const parsed = ghFetchAndParse(
@@ -83,6 +96,21 @@ export function fetchBoardItems(owner: string, projectNumber: number, cwd: strin
     `GH Project board ${owner}/${projectNumber}`,
     cwd,
   );
+  // Truncation guard (Tenet 4, mmnto-ai/totem#2644): the board section presents
+  // itself as the full in-flight set, so a short fetch must never read as
+  // completeness — fail loud into the caller's { error } envelope instead.
+  if (parsed.totalCount !== undefined && parsed.items.length < parsed.totalCount) {
+    // 'SHIELD_FAILED' is this adapter's existing fetch-failure code (the
+    // handleGhError fallthrough). The remediation stays in the message too:
+    // orient's { error } envelope surfaces .message only, never recoveryHint.
+    throw new TotemError(
+      'SHIELD_FAILED',
+      `GH Project board ${owner}/${projectNumber} truncated: fetched ${parsed.items.length} of ` +
+        `${parsed.totalCount} cards (--limit ${BOARD_ITEM_LIMIT}) — raise BOARD_ITEM_LIMIT; ` +
+        `a partial board must not derive orientation`,
+      'Raise BOARD_ITEM_LIMIT in github-cli-project.ts so one fetch covers the whole board, then re-run `totem orient`.',
+    );
+  }
   return parsed.items.map((i) => ({
     status: i.status,
     title: i.title,

@@ -352,6 +352,33 @@ describe('orient fail-loud on invalid board config', () => {
   });
 });
 
+// ─── Fail loud on a truncated board fetch (mmnto-ai/totem#2644) ──
+//
+// The adapter throws when `gh` returns fewer cards than the board's totalCount;
+// that must surface as a loud board { error } — never as a shorter board that
+// reads as complete — and coherence must propagate the error rather than
+// false-flag against a partial card set.
+describe('orient fail-loud on truncated board fetch', () => {
+  it('a truncation throw becomes a board { error } envelope and coherence carries it', async () => {
+    process.env['TOTEM_ORIENT_PROJECT'] = '1';
+    mockFetchBoardItems.mockImplementation(() => {
+      throw new Error(
+        'GH Project board mmnto-ai/1 truncated: fetched 200 of 227 cards (--limit 1000)',
+      );
+    });
+    await runJson();
+    const r = parseJson();
+    expect(r.board).toHaveProperty('error', expect.stringMatching(/truncated: fetched 200 of 227/));
+    expect(r.boardConfigured).toBe(true);
+    // Coherence can't be computed over a partial card set — the error propagates
+    // (orient.ts deriveCoherence), it never renders as a clean empty flag list.
+    expect(r.coherence).toHaveProperty(
+      'error',
+      expect.stringMatching(/truncated: fetched 200 of 227/),
+    );
+  });
+});
+
 // ─── --json and human render share board filter + coherence ─
 
 describe('orient --json and human render parity', () => {
