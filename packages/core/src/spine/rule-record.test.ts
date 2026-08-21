@@ -10,7 +10,7 @@
 // fixtures are how that is mechanically checked.
 
 import { describe, expect, it } from 'vitest';
-import { stringify as yamlStringify } from 'yaml';
+import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
 import { DeclaredEngineSchema } from './authored-rule.js';
 import {
@@ -20,12 +20,14 @@ import {
   type GlobDialectRule,
   LEGACY_ENGINE_DETAIL,
   parseRuleRecord,
+  RULE_RECORD_FORBIDDEN_PROTOTYPE_KEYS,
   RULE_RECORD_INEXPRESSIBLE_KEYS,
   RULE_RECORD_SCHEMA_VERSION,
   ruleExamplePairHash,
   RuleRecordNoSilentSkipError,
   RuleRecordParseError,
   RuleRecordProducerKeyError,
+  RuleRecordPrototypeKeyError,
   RuleRecordSchema,
   RuleTargetTypeSchema,
 } from './rule-record.js';
@@ -962,6 +964,129 @@ describe('§ Design 4 — producer-owned and intake-seam keys are INEXPRESSIBLE'
     const failure = reject(record);
     expect(failure.keyPath).toBe('id');
     expect(failure.recoveryHint).not.toContain('PASTED');
+  });
+});
+
+// ── Security floor — JS prototype machinery is never a mapping key ───────────
+
+describe('security floor — prototype-machinery keys are rejected at any depth', () => {
+  const PROTO_KEYS = [...RULE_RECORD_FORBIDDEN_PROTOTYPE_KEYS];
+
+  function payloadCarrying(key: string): string {
+    return [
+      'schemaVersion: 1',
+      'severity: error',
+      'message: "m"',
+      'target:',
+      '  type: ast-grep',
+      '  language: typescript',
+      '  rule:',
+      `    ${key}:`,
+      '      polluted: true',
+      '  scope:',
+      '    fileGlobs: ["src/*.ts"]',
+      'examples:',
+      '  - bad: "b"',
+      '    good: "g"',
+      '',
+    ].join(LF);
+  }
+
+  function topLevelCarrying(key: string): string {
+    return [
+      'schemaVersion: 1',
+      'severity: error',
+      'message: "m"',
+      `${key}:`,
+      '  polluted: true',
+      'target:',
+      '  type: regex',
+      '  pattern: "x"',
+      '  scope:',
+      '    fileGlobs: ["src/*.ts"]',
+      'examples:',
+      '  - bad: "b"',
+      '    good: "g"',
+      '',
+    ].join(LF);
+  }
+
+  it('PREMISE: `yaml` materializes `__proto__` as an OWN ENUMERABLE key the scan can see', () => {
+    // Pinned, not assumed: the whole floor rests on the scan's `Object.entries`
+    // actually visiting these keys. If a `yaml` upgrade ever stopped materializing
+    // them as own properties, this fails and tells us the premise moved — rather
+    // than the rejection fixtures passing vacuously for a new reason.
+    const parsed = yamlParse('rule:\n  __proto__:\n    polluted: true\n') as {
+      rule: Record<string, unknown>;
+    };
+    expect(Object.keys(parsed.rule)).toContain('__proto__');
+    expect(Object.entries(parsed.rule).map(([k]) => k)).toContain('__proto__');
+    expect(Object.getOwnPropertyDescriptor(parsed.rule, '__proto__')).toBeDefined();
+  });
+
+  it.each(PROTO_KEYS)('rejects `%s` directly inside the opaque `target.rule` payload', (key) => {
+    const failure = rejectRaw(payloadCarrying(key));
+    expect(failure).toBeInstanceOf(RuleRecordPrototypeKeyError);
+    expect((failure as RuleRecordPrototypeKeyError).prototypeKey).toBe(key);
+    expect(failure.keyPath).toBe(`target.rule.${key}`);
+    expect(failure.message).toContain('prototype machinery');
+    // Rejected on SECURITY grounds, not as a § Design 4 producer-owned key.
+    expect(failure.message).not.toContain('producer-owned');
+    expect(failure).not.toBeInstanceOf(RuleRecordProducerKeyError);
+  });
+
+  it.each(PROTO_KEYS)('rejects `%s` at the document TOP LEVEL', (key) => {
+    const failure = rejectRaw(topLevelCarrying(key));
+    expect(failure).toBeInstanceOf(RuleRecordPrototypeKeyError);
+    expect(failure.keyPath).toBe(key);
+    expect(failure.message).not.toContain('producer-owned');
+  });
+
+  it('rejects `__proto__` DEEP-nested inside a compound payload (under `has:`)', () => {
+    const failure = rejectRaw(
+      [
+        'schemaVersion: 1',
+        'severity: error',
+        'message: "m"',
+        'target:',
+        '  type: ast-grep',
+        '  language: typescript',
+        '  rule:',
+        '    kind: catch_clause',
+        '    not:',
+        '      has:',
+        '        __proto__:',
+        '          polluted: true',
+        '  scope:',
+        '    fileGlobs: ["src/*.ts"]',
+        'examples:',
+        '  - bad: "b"',
+        '    good: "g"',
+        '',
+      ].join(LF),
+    );
+    expect(failure).toBeInstanceOf(RuleRecordPrototypeKeyError);
+    expect(failure.keyPath).toBe('target.rule.not.has.__proto__');
+  });
+
+  it('is a SEPARATE set from the § Design 4 inexpressible keys — the 21-key guard is untouched', () => {
+    // The spec-defined set stays exactly 21 producer-owned keys; the floor is
+    // three keys rejected on different grounds, with a different diagnostic.
+    expect(RULE_RECORD_INEXPRESSIBLE_KEYS.size).toBe(21);
+    expect(RULE_RECORD_FORBIDDEN_PROTOTYPE_KEYS.size).toBe(3);
+    for (const key of PROTO_KEYS) {
+      expect(RULE_RECORD_INEXPRESSIBLE_KEYS.has(key)).toBe(false);
+    }
+  });
+
+  it('still admits the censused ast-grep payload vocabulary — the floor is narrow', () => {
+    const record = astGrepRecord();
+    target(record).rule = {
+      kind: 'catch_clause',
+      not: { has: { kind: 'throw_statement', stopBy: 'end' } },
+      inside: { kind: 'function_declaration' },
+    };
+    expect(parseObject(record).record.target.rule).toBeDefined();
   });
 });
 

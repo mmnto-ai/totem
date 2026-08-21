@@ -35,14 +35,16 @@ import { z } from 'zod';
 import { canonicalStringify } from '../compile-manifest.js';
 import { TotemParseError } from '../errors.js';
 import type { DeclaredEngine } from './authored-rule.js';
+import { lfDeepNormalize } from './authoring-ledger.js';
 
 // ── Error classes ────────────────────────────────────────────────────────────
 //
 // Every record-grammar failure is a hard error naming the FILE and the RECORD
-// KEY PATH (§ Failure modes: "hard error, file+path named"). The two subclasses
-// exist so the § Design 2 no-silent-skip gate and the § Design 4 inexpressible-key
-// rejection are MECHANICALLY distinguishable from a generic schema failure —
-// "distinct diagnostic" is a testable property, not a wording preference.
+// KEY PATH (§ Failure modes: "hard error, file+path named"). The three subclasses
+// exist so the § Design 2 no-silent-skip gate, the § Design 4 inexpressible-key
+// rejection, and the prototype-machinery security floor are each MECHANICALLY
+// distinguishable from a generic schema failure and from each other — "distinct
+// diagnostic" is a testable property, not a wording preference.
 
 /** Base: any Prop 310 record-grammar parse failure. Carries file + key path. */
 export class RuleRecordParseError extends TotemParseError {
@@ -106,6 +108,26 @@ export class RuleRecordProducerKeyError extends RuleRecordParseError {
     );
     this.name = 'RuleRecordProducerKeyError';
     this.producerKey = producerKey;
+  }
+}
+
+/**
+ * A mapping key that is JS prototype machinery. NOT a § Design 4 violation —
+ * these are rejected on security grounds, not because a producer owns them — so
+ * it carries its own diagnostic and never says "producer-owned".
+ */
+export class RuleRecordPrototypeKeyError extends RuleRecordParseError {
+  readonly prototypeKey: string;
+
+  constructor(filePath: string, keyPath: string, prototypeKey: string) {
+    super(
+      filePath,
+      keyPath,
+      `'${prototypeKey}' is JS prototype machinery and is rejected as a mapping key at ANY depth — the censused ast-grep payload vocabulary contains no such construct, so a record carrying one is an injection vector, never a rule (prototype-pollution floor)`,
+      'Remove the key. A rule that genuinely needs to match a literal named `__proto__` expresses it as a pattern VALUE, never as a mapping key.',
+    );
+    this.name = 'RuleRecordPrototypeKeyError';
+    this.prototypeKey = prototypeKey;
   }
 }
 
@@ -177,8 +199,30 @@ function joinKeyPath(at: string, segment: string | number): string {
 }
 
 /**
- * § Design 4 — reject the inexpressible key set at EVERY depth, and refuse a
- * cyclic document while doing it.
+ * SECURITY FLOOR — mapping keys that are JS prototype machinery, rejected at any
+ * depth including the opaque `target.rule` interior. DELIBERATELY a separate set
+ * from `RULE_RECORD_INEXPRESSIBLE_KEYS`: that one is spec-defined at exactly 21
+ * producer-owned keys (§ Design 4) and size-guarded, while these three are not a
+ * grammar rule at all.
+ *
+ * The floor is needed because IR-2 keeps the payload interior OPAQUE: `yaml`
+ * materializes `__proto__` as an OWN ENUMERABLE property, so it survives into
+ * whatever slice 2's lowering builds — a spread carries it forward as a real key,
+ * and an `Object.assign` reparents the destination's prototype while silently
+ * DROPPING the key. Both are structural corruption a parser must not hand
+ * downstream. No legitimate ast-grep construct is named any of these.
+ */
+export const RULE_RECORD_FORBIDDEN_PROTOTYPE_KEYS: ReadonlySet<string> = new Set([
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
+
+/**
+ * Walk the whole document once, enforcing the three whole-key-space rules that
+ * `.strict()` cannot: the prototype-machinery SECURITY FLOOR, § Design 4's
+ * INEXPRESSIBLE key set, and finiteness. All three bind at EVERY depth —
+ * `.strict()` is not recursive and does not reach into the opaque payload at all.
  *
  * `ancestors` is the DFS ancestor stack, not a visit log: YAML resolves a
  * RECURSIVE anchor (`target: &t` … `rule: {loop: *t}`) into a genuinely cyclic
@@ -188,7 +232,7 @@ function joinKeyPath(at: string, segment: string | number): string {
  * legal SHARED anchor — the same node aliased twice as siblings, a DAG, not a
  * cycle — free to validate; a visit-once log would misdiagnose that as a cycle.
  */
-function assertNoInexpressibleKeys(
+function assertRecordKeySpace(
   filePath: string,
   value: unknown,
   at: string,
@@ -206,15 +250,20 @@ function assertNoInexpressibleKeys(
   ancestors.add(value);
   if (Array.isArray(value)) {
     value.forEach((entry, i) =>
-      assertNoInexpressibleKeys(filePath, entry, joinKeyPath(at, i), ancestors),
+      assertRecordKeySpace(filePath, entry, joinKeyPath(at, i), ancestors),
     );
   } else {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
       const keyPath = joinKeyPath(at, key);
+      // Security floor FIRST, and before descending: a prototype-machinery key is
+      // rejected on its own grounds, never reported as a § Design 4 violation.
+      if (RULE_RECORD_FORBIDDEN_PROTOTYPE_KEYS.has(key)) {
+        throw new RuleRecordPrototypeKeyError(filePath, keyPath, key);
+      }
       if (RULE_RECORD_INEXPRESSIBLE_KEYS.has(key)) {
         throw new RuleRecordProducerKeyError(filePath, keyPath, key);
       }
-      assertNoInexpressibleKeys(filePath, child, keyPath, ancestors);
+      assertRecordKeySpace(filePath, child, keyPath, ancestors);
     }
   }
   ancestors.delete(value);
@@ -694,32 +743,17 @@ export interface RuleExamplePairHash {
 }
 
 /**
- * Recursively LF-normalize every string in a value.
- *
- * MIRRORED, not shared: `lfDeepNormalize` is module-private in
- * `spine/authoring-ledger.ts`, and Amendment 1 item 3 names that helper as the
- * hash-material normalization this basis MIRRORS while calling it "a different
- * edge" — the authoring-ledger's material and § Design 10's exemplar pairs are
- * distinct hash bases. Keeping them separate means an edit to one basis cannot
- * silently move the other.
- */
-function lfDeepNormalize(value: unknown): unknown {
-  if (typeof value === 'string') return value.replace(/\r\n/g, '\n');
-  if (Array.isArray(value)) return value.map(lfDeepNormalize);
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, lfDeepNormalize(v)]),
-    );
-  }
-  return value;
-}
-
-/**
  * Amendment 1 item 3 — the § Design 10 per-pair content hash is CR-BLIND,
  * computed over the LF-image of its material, so a CRLF-authored and an
  * LF-authored variant of the same exemplar hash IDENTICALLY. The trial's P3 row
  * (`serialization-admit`) is exactly the class this defeats: a writer that
  * escape-smuggles `\r` past the admit hop must not fire a false drift alarm.
+ *
+ * This is a DIFFERENT EDGE from the authoring-ledger's material hash (Amendment 1
+ * item 3's own note) — different inputs, different consumers, different drift
+ * meaning. Only the LF-image PRIMITIVE is shared, single-homed at
+ * `lfDeepNormalize` (Tenet 20): mirroring the normalizer would let the two edges
+ * drift apart on the one thing they must agree about.
  */
 export function ruleExamplePairHash(example: RuleRecordExample): string {
   return createHash('sha256')
@@ -822,8 +856,8 @@ export function parseRuleRecord(content: string, filePath: string): ParsedRuleRe
     );
   }
 
-  // ── § Design 4 — inexpressible keys, scanned at every depth (+ cycle guard) ──
-  assertNoInexpressibleKeys(filePath, raw, '', new WeakSet<object>());
+  // ── Whole-key-space scan: prototype floor + § Design 4 + cycle guard ──
+  assertRecordKeySpace(filePath, raw, '', new WeakSet<object>());
 
   // ── § Design 2/§ Design 6 — the no-silent-skip target-type gate ──
   const rawTarget = raw.target;
