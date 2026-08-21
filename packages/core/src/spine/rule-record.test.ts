@@ -413,6 +413,34 @@ describe('§ Design 14 — banned silent behaviour: SILENT SKIP (§ Design 2 no-
     expect(failure.message).not.toContain('join by grammar version bump');
   });
 
+  it.each(['AST', 'Ast', 'ast ', ' ast'])(
+    'gives the near-miss %j the DROPPED-tier answer, and still rejects it',
+    (nearMiss) => {
+      // Case-folded + trimmed for DIAGNOSTIC SELECTION only: these are the same
+      // authoring mistake and deserve the same answer, not a promise of a version
+      // bump that will never carry `ast`.
+      const record = astGrepRecord();
+      target(record).type = nearMiss;
+      const failure = reject(record);
+      expect(failure).toBeInstanceOf(RuleRecordNoSilentSkipError);
+      expect(failure.message).toBe(`[Totem Error] ${FILE}: target.type — ${LEGACY_ENGINE_DETAIL}`);
+    },
+  );
+
+  it.each([' ast-grep ', 'AST-GREP', 'Regex'])(
+    'still REJECTS the near-miss %j — admission stays the closed case-sensitive enum',
+    (nearMiss) => {
+      // The diagnostic softening must not soften ADMISSION: only the exact
+      // lowercase tokens parse, so a case/whitespace variant of a LIVE type is
+      // still an unknown type, not a silent accept.
+      const record = astGrepRecord();
+      target(record).type = nearMiss;
+      const failure = reject(record);
+      expect(failure).toBeInstanceOf(RuleRecordNoSilentSkipError);
+      expect((failure as RuleRecordNoSilentSkipError).construct).toBe('target.type');
+    },
+  );
+
   it('lets the VERSION gate win over the V1 key set — an unknown version is diagnosed first', () => {
     // `version:` is inexpressible at V1 (§ Design 3) but is the field § Design 3
     // itself names as "can return by version bump". A future-version record
@@ -497,6 +525,8 @@ describe('§ Design 7 — the normative glob dialect', () => {
     ['drive-letter', 'C:/packages/core/*.ts'],
     ['empty', ''],
     ['empty-segment', 'packages//core/*.ts'],
+    ['current-segment', './packages/*.ts'],
+    ['current-segment', 'a/./b/*.ts'],
     ['parent-segment', '../sibling-repo/src/*.ts'],
     ['parent-segment', 'packages/../tools/*.mjs'],
     ['surrounding-whitespace', ' packages/**/*.ts'],
@@ -506,7 +536,7 @@ describe('§ Design 7 — the normative glob dialect', () => {
   it('every § Design 7 rule has a negative fixture (no rule ships unexercised)', () => {
     // Mirrors the inexpressible-key guard: a rule added to the dialect without a
     // fixture is a rule nothing pins (§ Design 14).
-    expect(GLOB_DIALECT_RULES.length).toBe(12);
+    expect(GLOB_DIALECT_RULES.length).toBe(13);
     const exercised = new Set(violations.map(([rule]) => rule));
     for (const rule of GLOB_DIALECT_RULES) {
       expect(exercised.has(rule)).toBe(true);
@@ -544,6 +574,11 @@ describe('§ Design 7 — the normative glob dialect', () => {
     '**',
     'tools/install-hooks.js',
     'packages/*/src/**/*.ts',
+    // Dots are rejected as WHOLE segments only — inside a segment a dot is an
+    // ordinary literal, which is what every extension form is built on.
+    '.github/workflows/*.yml',
+    'src/a..b/*.ts',
+    'docs/release.notes.md',
   ])('admits the dialect-clean glob %j', (glob) => {
     expect(checkGlobDialect(glob)).toBeNull();
   });
@@ -735,6 +770,64 @@ describe('§ Design 4 — producer-owned and intake-seam keys are INEXPRESSIBLE'
     expect(reject(scanRecord).keyPath.split('.')[1]).toBe('0');
   });
 
+  it('uses dot-form in the FULL rendered message, not just keyPath — no bracket-index residue', () => {
+    // The one-path-grammar rule governs what the author READS, so it is swept over
+    // whole messages: a bracket INDEX (`[0]`, `[]`) from either the scan or a Zod
+    // label is the residue class. A bare `'['` — as in the regex-syntax diagnostic
+    // that quotes the offending character — is content, not a path, and stays legal.
+    const BRACKET_INDEX = /\[\d*\]/;
+    const fixtures: Array<() => Record<string, unknown>> = [
+      () => {
+        const r = astGrepRecord();
+        r.examples = [{ bad: '', good: 'y' }];
+        return r;
+      },
+      () => {
+        const r = astGrepRecord();
+        r.examples = [{ bad: 'x', good: '   ' }];
+        return r;
+      },
+      () => {
+        const r = astGrepRecord();
+        r.examples = [{ bad: 'x' }];
+        return r;
+      },
+      () => {
+        const r = astGrepRecord();
+        r.examples = [{ bad: 'x', good: 'y', note: 'z' }];
+        return r;
+      },
+      () => {
+        const r = astGrepRecord();
+        r.examples = [{ bad: 'x', good: 'y', origin: 'mined' }];
+        return r;
+      },
+      () => {
+        const r = astGrepRecord();
+        scope(r).fileGlobs = ['packages/**/*.{ts,tsx}'];
+        return r;
+      },
+      () => {
+        const r = astGrepRecord();
+        scope(r).excludeGlobs = ['!**/*.test.ts'];
+        return r;
+      },
+    ];
+    for (const build of fixtures) {
+      const failure = reject(build());
+      expect(failure.message).not.toMatch(BRACKET_INDEX);
+      expect(failure.keyPath).not.toMatch(BRACKET_INDEX);
+      expect(failure.recoveryHint).not.toMatch(BRACKET_INDEX);
+    }
+    // Guard the guard: the regex-syntax diagnostic DOES quote a bracket, and that
+    // is content the sweep must not be tuned to forbid.
+    const bracketGlob = astGrepRecord();
+    scope(bracketGlob).fileGlobs = ['src/[abc]/*.ts'];
+    const quoted = reject(bracketGlob);
+    expect(quoted.message).toContain('[');
+    expect(quoted.message).not.toMatch(BRACKET_INDEX);
+  });
+
   it('rejects a producer-owned key inside the OPAQUE ast-grep payload interior (IR-3)', () => {
     // IR-2 keeps the payload interior opaque to NapiConfig validation; § Design 4’s
     // "inexpressible at ANY depth" still binds, so the closure scan descends.
@@ -745,10 +838,12 @@ describe('§ Design 4 — producer-owned and intake-seam keys are INEXPRESSIBLE'
     expect(failure.keyPath).toBe('target.rule.declaredEngine');
   });
 
-  it('adds the PASTED-CONFIG hint when a whole ast-grep config lands under `target.rule`', () => {
-    // A complete ast-grep config carries `id`/`language` at ITS top level; the
-    // record's `target.rule` carries only the payload. Without the hint the author
-    // is told "producer-owned" with nowhere to put the value.
+  it('adds the PASTED-CONFIG hint on `target.rule.id` when a whole ast-grep config is pasted in', () => {
+    // A complete ast-grep config carries `id` AND `language` at ITS top level; the
+    // record's `target.rule` carries only the payload. `id` is the only half that
+    // TRIPS here — it is inexpressible, while `language` is a legal record key at
+    // `target.language`, so no producer-key error can ever fire for it. The single
+    // reachable diagnostic therefore has to tell the author where BOTH halves go.
     const record = astGrepRecord();
     target(record).rule = {
       id: 'no-fail-open-catch',
@@ -759,8 +854,22 @@ describe('§ Design 4 — producer-owned and intake-seam keys are INEXPRESSIBLE'
     const failure = reject(record);
     expect(failure).toBeInstanceOf(RuleRecordProducerKeyError);
     expect(failure.keyPath).toBe('target.rule.id');
+    expect((failure as RuleRecordProducerKeyError).producerKey).toBe('id');
     expect(failure.recoveryHint).toContain('PASTED complete ast-grep config');
     expect(failure.recoveryHint).toContain('target.language');
+  });
+
+  it('never fires a producer-key error for `language` — it is a LEGAL record key, not an inexpressible one', () => {
+    // Pins the premise the hint rests on: `language` is absent from the closed
+    // inexpressible set, so a `language` inside the opaque payload is carried, not
+    // rejected, and the hint has exactly one reachable trigger (`id`).
+    expect(RULE_RECORD_INEXPRESSIBLE_KEYS.has('language')).toBe(false);
+    const record = astGrepRecord();
+    target(record).rule = { kind: 'catch_clause', language: 'typescript' };
+    expect(parseObject(record).record.target.rule).toEqual({
+      kind: 'catch_clause',
+      language: 'typescript',
+    });
   });
 
   it('does NOT add the pasted-config hint for the same key at the record top level', () => {

@@ -112,14 +112,19 @@ export class RuleRecordProducerKeyError extends RuleRecordParseError {
 const PRODUCER_KEY_BASE_HINT =
   'Remove the key. Identity is minted by the ADR-112 producer; authoring metadata and attestations are supplied at the `totem rule author` intake seam, never in-record.';
 
-// Keys a COMPLETE ast-grep config file carries at its own top level that a
-// `target.rule` payload must not: a pasted whole config is the likely authoring
+// The one key a COMPLETE ast-grep config file carries at its own top level that
+// is ALSO inexpressible here: a pasted whole config is the likely authoring
 // mistake behind a hit at this depth, and the generic "producer-owned" hint would
-// leave the author with nowhere to put the value.
-const PASTED_AST_GREP_CONFIG_KEYS: ReadonlySet<string> = new Set(['id', 'language']);
+// leave the author with nowhere to put the value. `language` is deliberately NOT
+// part of this test — the hint fires only from `RuleRecordProducerKeyError`,
+// which is thrown only for `RULE_RECORD_INEXPRESSIBLE_KEYS` members, and
+// `language` is not one (it is a LEGAL record key, at `target.language`). The
+// hint's advice still names it, because a pasted config carries both halves and
+// the author needs to know where each one goes.
+const PASTED_AST_GREP_CONFIG_KEY = 'id';
 
 function producerKeyRecoveryHint(keyPath: string, producerKey: string): string {
-  if (keyPath.startsWith('target.rule.') && PASTED_AST_GREP_CONFIG_KEYS.has(producerKey)) {
+  if (keyPath.startsWith('target.rule.') && producerKey === PASTED_AST_GREP_CONFIG_KEY) {
     return `${PRODUCER_KEY_BASE_HINT} This looks like a PASTED complete ast-grep config: such a file carries \`id\`/\`language\` at its own top level, but \`target.rule\` carries ONLY the rule payload — \`id\` is producer-minted (§ Design 3) and the language belongs at \`target.language\` (§ Design 4/§ Design 6).`;
   }
   return PRODUCER_KEY_BASE_HINT;
@@ -239,6 +244,7 @@ export const GLOB_DIALECT_RULES = [
   'negation',
   'regex-syntax',
   'empty-segment',
+  'current-segment',
   'parent-segment',
   'embedded-globstar',
   'adjacent-globstar',
@@ -258,7 +264,10 @@ export interface GlobDialectViolation {
 // admitting them would let a regex-shaped glob silently match nothing.
 const REGEX_SYNTAX_CHARS = ['[', ']', '(', ')', '?', '+', '|', '^', '$'] as const;
 const DRIVE_LETTER_RE = /^[A-Za-z]:/;
-/** The segment a repo-relative, git-tracked path can never contain (§ Design 7). */
+// The relative-navigation segments a git-tracked, repo-relative path NAME never
+// contains (§ Design 7). WHOLE segments only: a dot inside a segment is an
+// ordinary literal (`.github`, `a..b`, and every `*.ts` extension form).
+const CURRENT_SEGMENT = '.';
 const PARENT_SEGMENT = '..';
 
 /**
@@ -336,6 +345,13 @@ export function checkGlobDialect(glob: string): GlobDialectViolation | null {
           'empty path segment — an empty segment is not a literal segment (Prop 310 § Design 7)',
       };
     }
+    if (segment === CURRENT_SEGMENT) {
+      return {
+        rule: 'current-segment',
+        message:
+          '`.` segment — globs are repo-relative and match against git-tracked path names, which never contain a `.` segment, so the glob can only ever match nothing; drop the `./` (Prop 310 § Design 7 Windows semantics)',
+      };
+    }
     if (segment === PARENT_SEGMENT) {
       return {
         rule: 'parent-segment',
@@ -367,6 +383,11 @@ export const RULE_RECORD_SCHEMA_VERSION = 1;
 // Non-mutating emptiness check, matching the shipped spine discipline: a record
 // value is never trimmed on the way in (an exemplar is certification preimage
 // material — § Design 10 — so a transform would move the hash basis).
+//
+// `label` is the ORDINAL-FREE dot-form address, never bracket-form: the one path
+// grammar above governs rendered MESSAGES too, not just `keyPath`, and the
+// concrete ordinal is already carried by the Zod issue path the renderer prefixes
+// (`examples.0.bad: examples.bad must be non-empty`).
 const nonEmpty = (label: string) =>
   z.string().refine((s) => s.trim().length > 0, { message: `${label} must be non-empty` });
 
@@ -547,8 +568,8 @@ export type RuleTarget = z.infer<typeof RuleTargetSchema>;
  */
 export const RuleRecordExampleSchema = z
   .object({
-    bad: nonEmpty('examples[].bad'),
-    good: nonEmpty('examples[].good'),
+    bad: nonEmpty('examples.bad'),
+    good: nonEmpty('examples.good'),
   })
   .strict();
 export type RuleRecordExample = z.infer<typeof RuleRecordExampleSchema>;
@@ -709,6 +730,11 @@ export function parseRuleRecord(content: string, filePath: string): ParsedRuleRe
   // ── YAML parse ── syntax errors and DUPLICATE KEYS are hard errors naming the
   // file (`yaml`'s `uniqueKeys` default): a duplicate key would silently pick one
   // value, which is the silent-transform class this grammar exists to kill.
+  //
+  // NO parse options are passed, so the alias-expansion ceiling the cycle/DAG
+  // scan below inherits is `yaml`'s own `maxAliasCount` default of 100 — if a
+  // later slice passes options here, or the `yaml` major moves, that bound moves
+  // with it and the ancestor-stack guard's cost profile must be re-verified.
   let doc: unknown;
   try {
     doc = parseYaml(content);
@@ -768,10 +794,18 @@ export function parseRuleRecord(content: string, filePath: string): ParsedRuleRe
   const rawTarget = raw.target;
   if (rawTarget !== null && typeof rawTarget === 'object' && !Array.isArray(rawTarget)) {
     const rawType = (rawTarget as Record<string, unknown>).type;
-    if (rawType === LEGACY_INERT_ENGINE) {
-      // R16 — `ast` is not "not yet"; it is DROPPED from the authoring surface and
-      // does not return by version bump. Telling the author otherwise would send
-      // them to wait for a bump that will never carry it.
+    // R16 — `ast` is not "not yet"; it is DROPPED from the authoring surface and
+    // does not return by version bump. Telling the author otherwise would send
+    // them to wait for a bump that will never carry it. The comparison case-folds
+    // and trims for DIAGNOSTIC SELECTION ONLY — `AST` / `Ast` / `ast ` are the
+    // same authoring mistake and deserve the same answer. ADMISSION is unchanged:
+    // it runs on the RAW value against the closed, case-sensitive V1 enum below,
+    // so a near-miss is still rejected, just told the truth about why.
+    if (
+      typeof rawType === 'string' &&
+      rawType.trim().toLowerCase() === LEGACY_INERT_ENGINE &&
+      !RuleTargetTypeSchema.safeParse(rawType).success
+    ) {
       throw new RuleRecordNoSilentSkipError(filePath, 'target.type', LEGACY_ENGINE_DETAIL);
     }
     if (rawType !== undefined && !RuleTargetTypeSchema.safeParse(rawType).success) {
