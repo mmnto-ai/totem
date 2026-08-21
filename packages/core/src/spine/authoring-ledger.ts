@@ -116,8 +116,13 @@ export type AuthoringLedgerEntry = z.infer<typeof AuthoringLedgerEntrySchema>;
  * is CRLF-invariant regardless of whether the caller pre-normalized, so a future
  * caller of `authoringContentHash` can't silently produce a divergent hash by
  * passing un-normalized CRLF input.
+ *
+ * Exported (Tenet 20, derive-or-couple-never-mirror): it single-homes the
+ * LF-image PRIMITIVE for two distinct hash-material edges — this ledger's
+ * material and Prop 310 § Design 10's example-pair material — since Amendment 1
+ * item 3's "different edge" note distinguishes the CALL SITES, not the normalizer.
  */
-function lfDeepNormalize(value: unknown): unknown {
+export function lfDeepNormalize(value: unknown): unknown {
   if (typeof value === 'string') return value.replace(/\r\n/g, '\n');
   if (Array.isArray(value)) return value.map(lfDeepNormalize);
   if (value !== null && typeof value === 'object') {
