@@ -82,6 +82,38 @@ export function isRecordPathRule(rule: CompiledRule): boolean {
 }
 
 /**
+ * § Design 12 — fail loud on a TORN record rule: one carrying a Prop 310
+ * compiled home but no `examples`.
+ *
+ * Such a rule cannot exist downstream of the lowering (`examples` is min-1 at
+ * parse and emitted unconditionally) nor in the frozen legacy corpus (which
+ * carries no home at all), so this only ever catches a hand-edited manifest or
+ * a bypassed producer. Left unchecked, `isRecordPathRule` would class it LEGACY
+ * and its `excludeGlobs` and `requires` would be dropped — a scope silently
+ * widened and a requirement silently unevaluated. The drop direction is toward
+ * flagging, so it is not fail-open, but § Design 12's ban on accepting a
+ * construct and dropping it is a ban on the SILENCE, not just on the unsafe
+ * direction. Fail loud instead.
+ *
+ * Called at dispatcher altitude, once per invocation — the same altitude as the
+ * tree-sitter `requires` backstop, and for the same reason: a per-file check
+ * would re-report the same defect on every file.
+ */
+export function assertNoTornRecordRules(rules: readonly CompiledRule[]): void {
+  const torn = rules.find(
+    (rule) =>
+      rule.examples === undefined &&
+      RECORD_COMPILED_HOME_KEYS.some((key) => rule[key] !== undefined),
+  );
+  if (torn === undefined) return;
+  const homes = RECORD_COMPILED_HOME_KEYS.filter((key) => torn[key] !== undefined);
+  throw new TotemParseError(
+    `Rule ${torn.lessonHash} (${torn.lessonHeading}) carries Prop 310 record field(s) [${homes.join(', ')}] but no \`examples\`, so it can be classified neither as a record rule nor as a legacy one.`,
+    'Prop 310 § Design 5 makes `examples` non-omittable and the record lowering always emits it, so this manifest was hand-edited or written by a bypassed producer. Re-compile the rule record. Left unclassified, its `excludeGlobs` would be ignored and its `requires` never evaluated.',
+  );
+}
+
+/**
  * § Design 7 — the two-array scope rule for a RECORD-path rule:
  * `positiveMatch && !excludeMatch`, both arrays evaluated under the normative
  * dialect (`matchesRecordGlob`).

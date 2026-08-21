@@ -17,7 +17,11 @@ import { TotemParseError } from './errors.js';
 // Prop 310 slice 2 — the record-grammar runtime semantics (§ Design 7 two-array
 // scope, § Design 8 `requires` two-pass). Every entry point is gated on
 // `isRecordPathRule`, so the legacy corpus's matching is untouched.
-import { requiresSuppressesMatch, ruleAppliesToFile } from './spine/record-runtime.js';
+import {
+  assertNoTornRecordRules,
+  requiresSuppressesMatch,
+  ruleAppliesToFile,
+} from './spine/record-runtime.js';
 import { detectStaleManifest, staleManifestError } from './stale-manifest.js';
 import { fileMatchesGlobs, matchesGlob } from './sys/glob.js';
 
@@ -582,6 +586,10 @@ export function applyRulesToAdditions(
 ): Violation[] {
   if (additions.length === 0 || rules.length === 0) return [];
 
+  // Prop 310 § Design 12 — a rule that is neither classifiable as a record nor
+  // as legacy is a torn manifest; fail loud rather than drop its constructs.
+  assertNoTornRecordRules(rules);
+
   const violations: Violation[] = [];
 
   // Only process regex-engine rules — AST rules have pattern: '' which would match everything
@@ -768,6 +776,10 @@ export async function applyAstRulesToAdditions(
   onWarn?: (msg: string) => void,
   readStrategy?: (filePath: string) => Promise<string | null>,
 ): Promise<Violation[]> {
+  // Prop 310 § Design 12 — torn-manifest guard, same altitude as the tree-sitter
+  // `requires` backstop below.
+  assertNoTornRecordRules(rules);
+
   const treeSitterRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
   // Widen to include compound rules (mmnto/totem#1408). A rule is runnable
   // when EITHER `astGrepPattern` (string) or `astGrepYamlRule` (NapiConfig

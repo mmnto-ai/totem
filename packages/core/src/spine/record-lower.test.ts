@@ -17,7 +17,7 @@ import { stringify as yamlStringify } from 'yaml';
 import { extensionToLanguage } from '../ast-classifier.js';
 import { extensionToLang, resolveAstGrepLangs } from '../ast-grep-query.js';
 import { canonicalStringify } from '../compile-manifest.js';
-import { sanitizeFileGlobs } from '../compiler.js';
+import { fileMatchesGlobs, sanitizeFileGlobs } from '../compiler.js';
 import { CompiledRuleSchema, CompiledRulesFileSchema } from '../compiler-schema.js';
 import { design4ExemplarRecord, design8ExemplarRecord } from './record-exemplars.fixture.js';
 import {
@@ -26,7 +26,11 @@ import {
   resolveRecordLanguage,
   V1_INEXPRESSIBLE_NAPI_KEYS,
 } from './record-lower.js';
-import { isRecordPathRule, RECORD_COMPILED_HOME_KEYS } from './record-runtime.js';
+import {
+  isRecordPathRule,
+  RECORD_COMPILED_HOME_KEYS,
+  ruleAppliesToFile,
+} from './record-runtime.js';
 import {
   type ParsedRuleRecord,
   parseRuleRecord,
@@ -162,6 +166,38 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     ).toBe(true);
     // And every rule this slice lowers carries it.
     expect(isRecordPathRule(lowerOk(regexRecord()))).toBe(true);
+  });
+
+  it('CORPUS SWEEP: every legacy rule scopes IDENTICALLY under the shared predicate', () => {
+    // The reviewer's sweep, promoted to a standing test. `ruleAppliesToFile` is
+    // now the single scope predicate for both lint dispatchers, Stage 4, and the
+    // wind tunnel, so "legacy behaviour is byte-identical" has to be a measured
+    // property of the whole shipped corpus, not a claim about one code path.
+    const compiled = CompiledRulesFileSchema.parse(rawManifest).rules;
+    const paths = [
+      'a.ts',
+      'src/a.ts',
+      'packages/core/src/a.ts',
+      'packages/core/src/a.test.ts',
+      'scripts/x.sh',
+      'deep/nest/mod.rs',
+      'README.md',
+      'src/a.tsx',
+      '.github/workflows/ci.yml',
+      'packages/cli/src/index.cjs',
+    ];
+    let compared = 0;
+    for (const rule of compiled) {
+      for (const filePath of paths) {
+        const shipped =
+          rule.fileGlobs && rule.fileGlobs.length > 0
+            ? fileMatchesGlobs(filePath, rule.fileGlobs)
+            : true;
+        expect(ruleAppliesToFile(rule, filePath)).toBe(shipped);
+        compared += 1;
+      }
+    }
+    expect(compared).toBe(compiled.length * paths.length);
   });
 
   it('accepts a rule carrying NONE of the additions (every one is optional)', () => {

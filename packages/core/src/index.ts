@@ -1339,6 +1339,7 @@ export {
 } from './spine/record-lower.js';
 export type { RequiresScopeText } from './spine/record-runtime.js';
 export {
+  assertNoTornRecordRules,
   isRecordPathRule,
   RECORD_COMPILED_HOME_KEYS,
   recordScopeMatchesFile,

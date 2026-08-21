@@ -32,16 +32,19 @@ import {
   matchesGlob,
   type RuleEngineContext,
 } from '../rule-engine.js';
+import { verifyAgainstCodebase } from '../stage4-verifier.js';
 import { matchesRecordGlob } from '../sys/glob.js';
 import { design4ExemplarRecord, design8ExemplarRecord } from './record-exemplars.fixture.js';
 import { compileRuleRecord } from './record-lower.js';
 import {
+  assertNoTornRecordRules,
   isRecordPathRule,
   recordScopeMatchesFile,
   requiresSuppressesMatch,
   ruleAppliesToFile,
 } from './record-runtime.js';
 import { parseRuleRecord } from './rule-record.js';
+import { buildFirings } from './windtunnel-firing.js';
 
 const FILE = '.totem/rules/exemplar.rule.yaml';
 const RULE_ID = '0123456789abcdef';
@@ -606,6 +609,168 @@ describe('applyRulesToAdditionsBounded — the record semantics reach the lint p
   });
 });
 
+// ─── Torn-manifest guard (§ Design 12) ───────────────────────────────────────
+
+describe('§ Design 12 — a rule that is neither record nor legacy fails LOUD', () => {
+  function tornRule(extra: Record<string, unknown>): CompiledRule {
+    return CompiledRuleSchema.parse({
+      lessonHash: 'fedcba9876543210',
+      lessonHeading: 'hand-edited torn rule',
+      pattern: 'console\\.log',
+      message: 'x',
+      engine: 'regex',
+      compiledAt: NOW,
+      fileGlobs: ['**/*.ts'],
+      ...extra,
+    });
+  }
+
+  it('throws on a record home with no `examples` — the dropped constructs get a signal', () => {
+    for (const extra of [
+      { excludeGlobs: ['**/*.test.ts'] },
+      { requires: { pattern: 'x', scope: 'line' } },
+      { language: 'typescript' },
+      { verificationShadow: { type: 'rego', source: 'p' } },
+    ]) {
+      expect(() => assertNoTornRecordRules([tornRule(extra)])).toThrow(
+        /carries Prop 310 record field\(s\).*but no `examples`/s,
+      );
+    }
+  });
+
+  it('names the offending homes so the operator knows what would have been dropped', () => {
+    expect(() =>
+      assertNoTornRecordRules([
+        tornRule({ excludeGlobs: ['**/*.test.ts'], language: 'typescript' }),
+      ]),
+    ).toThrow(/excludeGlobs, language/);
+  });
+
+  it('leaves a clean LEGACY rule and a clean RECORD rule untouched', () => {
+    expect(() => assertNoTornRecordRules([legacyRule(['**/*.ts'])])).not.toThrow();
+    expect(() => assertNoTornRecordRules([compile(design4ExemplarRecord())])).not.toThrow();
+    expect(() => assertNoTornRecordRules([])).not.toThrow();
+  });
+
+  it('fires at DISPATCHER altitude on every regex path', async () => {
+    const torn = tornRule({ excludeGlobs: ['**/*.test.ts'] });
+    const hit = addition('src/a.ts', 'console.log(1)');
+    expect(() => applyRulesToAdditions(ctx(), [torn], [hit])).toThrow(/no `examples`/);
+
+    const evaluator = new RegexEvaluator();
+    try {
+      await expect(
+        applyRulesToAdditionsBounded(ctx(), [torn], [hit], {
+          evaluator,
+          timeoutMode: 'strict',
+          repoRoot: os.tmpdir(),
+        }),
+      ).rejects.toThrow(/no `examples`/);
+    } finally {
+      await evaluator.dispose();
+    }
+  });
+});
+
+// ─── Certification seams — Stage 4 and the wind tunnel ───────────────────────
+
+describe('Stage 4 — record scope is visible, and “unscoped” does not invert', () => {
+  // An EMPTY baseline, so every classification below is the RULE's scope talking
+  // and nothing else. Regex engine on purpose: this is a scope-classification
+  // test, and routing it through ast-grep would add a parser to the equation.
+  const emptyBaseline = {
+    excludeFileGlobs: [],
+    extendedFromIgnoreFile: [],
+    extendedFromConfig: [],
+    excludedFromConfig: [],
+  };
+  const record = compile(scopedRegexRecord(['packages/**/*.ts'], ['**/*.test.ts']));
+
+  function deps(file: string, content: string) {
+    return {
+      listFiles: async () => [file],
+      readFile: async () => content,
+      workingDirectory: os.tmpdir(),
+    };
+  }
+
+  it('classifies an EXCLUDED file as out-of-scope instead of over-broad firing', async () => {
+    // Passing bare `rule.fileGlobs` made `excludeGlobs` structurally invisible
+    // here, so a hit on a file the rule's own scope EXCLUDES read as an in-scope
+    // match — the rule looked over-broad because of a scope it never had.
+    const result = await verifyAgainstCodebase(
+      record,
+      emptyBaseline,
+      deps('packages/core/src/a.test.ts', 'console.log(1)\n'),
+    );
+    expect(result.outcome).toBe('out-of-scope');
+  });
+
+  it('still finds an IN-SCOPE match — the strip does not zero the record path', async () => {
+    // The inversion this guards: `runRuleAgainstAllFiles` expresses "fires
+    // everywhere" as ABSENT `fileGlobs`, which means include-all on the legacy
+    // matcher and match-NOTHING on the record dialect. Unfixed, every record rule
+    // Stage 4 ever verified would have reported `no-matches`.
+    const result = await verifyAgainstCodebase(
+      record,
+      emptyBaseline,
+      deps('packages/core/src/a.ts', 'console.log(1)\n'),
+    );
+    expect(result.outcome).not.toBe('no-matches');
+    expect(result.baselineMatches).toEqual([]);
+  });
+
+  it('leaves a LEGACY rule’s classification byte-identical', async () => {
+    const result = await verifyAgainstCodebase(
+      legacyRule(['**/*.ts']),
+      emptyBaseline,
+      deps('src/a.ts', 'console.log(1)\n'),
+    );
+    expect(result.outcome).not.toBe('no-matches');
+    expect(result.outcome).not.toBe('out-of-scope');
+  });
+});
+
+describe('wind tunnel — a file-scoped requirement reads the POST-IMAGE', () => {
+  const rule = compile({
+    ...design8ExemplarRecord(),
+    requires: { pattern: 'LC_ALL=C', scope: 'file' },
+  });
+  const diff = [
+    'diff --git a/scripts/x.sh b/scripts/x.sh',
+    '--- a/scripts/x.sh',
+    '+++ b/scripts/x.sh',
+    '@@ -1,1 +1,1 @@',
+    '+git log --oneline',
+    '',
+  ].join('\n');
+
+  async function fire(postImage: string) {
+    return buildFirings({
+      rules: [rule],
+      prDiffs: [{ pr: 1, diff, controlKind: 'corpus' as const }],
+      cwd: os.tmpdir(),
+      readStrategy: async () => postImage,
+      ruleEngineCtx: ctx(),
+    });
+  }
+
+  it('stays silent when the POST-IMAGE satisfies the requirement', async () => {
+    const result = await fire(['export LC_ALL=C', 'git log --oneline'].join('\n'));
+    expect(result.firings).toEqual([]);
+  });
+
+  it('fires when the POST-IMAGE does not — the local worktree never decides', async () => {
+    // The seam this closes: `applyRulesToAdditions` was called with five args, so
+    // the requirement was judged against whatever happened to be on the
+    // certifying machine's disk rather than the PR's post-image — the same class
+    // of divergence as the staged-read hole, in the certification corpus.
+    const result = await fire('git log --oneline');
+    expect(result.firings).toHaveLength(1);
+    expect(result.firings[0]!.ruleId).toBe(RULE_ID);
+  });
+});
+
 // ─── Fail-loud backstop on the unevaluated branch ────────────────────────────
 
 describe('§ Design 12 — `requires` is never silently unevaluated', () => {
@@ -618,6 +783,10 @@ describe('§ Design 12 — `requires` is never silently unevaluated', () => {
       engine: 'ast',
       astQuery: '(call_expression) @c',
       compiledAt: NOW,
+      // `examples` present, so this is a well-formed RECORD-shaped rule on the
+      // wrong engine — it reaches the tree-sitter backstop rather than being
+      // caught upstream as a torn manifest.
+      examples: [{ bad: 'b', good: 'g' }],
       requires: { pattern: 'LC_ALL=C', scope: 'line' },
     });
     await expect(
@@ -645,6 +814,7 @@ describe('§ Design 12 — `requires` is never silently unevaluated', () => {
       message: 'x',
       engine: 'ast',
       compiledAt: NOW,
+      examples: [{ bad: 'b', good: 'g' }],
       requires: { pattern: 'LC_ALL=C', scope: 'file' },
     });
     await expect(

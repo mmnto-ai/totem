@@ -52,6 +52,7 @@ import {
   applyRulesToAdditions,
   fileMatchesGlobs,
 } from './rule-engine.js';
+import { isRecordPathRule, ruleAppliesToFile } from './spine/record-runtime.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -290,16 +291,33 @@ export function parseStage4BaselineDirectives(content: string): string[] {
  * earlier local regex-conversion matcher had a substring hole
  * (`**\/tests/**` would match `src/contests/foo.ts`) which the
  * pattern-specific matcher in rule-engine fixes by construction.
+ *
+ * The RULE-scope half now delegates one level up, to `ruleAppliesToFile`
+ * (Prop 310 slice 2) — the same predicate both lint dispatchers use. Taking
+ * the whole `rule` rather than a bare glob array is what makes a record
+ * rule's `excludeGlobs` visible here at all: passing `rule.fileGlobs` alone
+ * structurally discarded them, so a Stage-4 verification would judge a
+ * record rule over-broad on files its own scope excludes. Legacy behaviour
+ * is byte-identical by construction — for a rule carrying no Prop 310
+ * homes, `ruleAppliesToFile` IS `fileGlobs.length ? fileMatchesGlobs(...) :
+ * true`, which is exactly the expression it replaces.
+ *
+ * The BASELINE half below deliberately still calls `fileMatchesGlobs`
+ * directly: those globs are Stage-4 configuration (`baseline.excludeFileGlobs`,
+ * consumer-supplied, `!`-negation-bearing), not the rule's scope, so the
+ * question they answer — "is this file baseline-excluded" — is not the
+ * question `ruleAppliesToFile` answers. The same reasoning holds for the R3
+ * subtraction: only a rule's POSITIVE globs can claim a baseline entry back,
+ * and a record rule's `excludeGlobs` never claim anything.
  */
 function classifyFile(
   filePath: string,
-  ruleFileGlobs: readonly string[] | undefined,
+  rule: Pick<CompiledRule, 'fileGlobs' | 'excludeGlobs' | 'examples'>,
   baseline: Stage4Baseline,
 ): 'in-scope' | 'baseline' {
-  // Rule has explicit fileGlobs and this file doesn't match → baseline (out-of-scope).
-  if (ruleFileGlobs && ruleFileGlobs.length > 0) {
-    if (!fileMatchesGlobs(filePath, ruleFileGlobs)) return 'baseline';
-  }
+  const ruleFileGlobs = rule.fileGlobs;
+  // File is outside the rule's declared scope → baseline (out-of-scope).
+  if (!ruleAppliesToFile(rule as CompiledRule, filePath)) return 'baseline';
   // File matches rule scope (or rule has no scope). Now check baseline overrides.
   //
   // Subtract rule-declared scope from the baseline first (CR mmnto-ai/totem#1766 R3).
@@ -399,7 +417,29 @@ async function runRuleAgainstAllFiles(
   ctx: RuleEngineContext,
   workingDirectory: string | undefined,
 ): Promise<Violation[]> {
-  const ruleNoScope: CompiledRule = { ...rule, fileGlobs: undefined };
+  // "Unscoped" has to be expressed differently in the two dialects, and getting
+  // it wrong here INVERTS Stage 4 for record rules (Prop 310 slice 2).
+  //
+  // The legacy expression of "fires everywhere" is ABSENT `fileGlobs`, because
+  // `fileMatchesGlobs` treats an empty positive set as include-all. The record
+  // dialect deliberately does the opposite — `recordScopeMatchesFile` requires a
+  // positive match, so a record rule with no `fileGlobs` matches NOTHING (that
+  // asymmetry is what stops a hand-edited record from silently widening its own
+  // scope). Stripping `fileGlobs` off a record rule would therefore make it fire
+  // on zero files, and Stage 4 would report `no-matches` for every record rule
+  // ever verified — a silent, total inversion of this function's contract.
+  //
+  // So: legacy rules keep the shipped strip byte-for-byte, and record rules get
+  // an explicit match-everything glob plus their exclusions dropped. `**\/*`
+  // compiles to `^(?:[^/]+/)*[^/]*$` under the record dialect, matching every
+  // repo-relative path including root-level ones. `examples` and `requires` are
+  // deliberately left intact: this strip removes SCOPE, and neither of those is
+  // scope — dropping `examples` would also re-classify the rule as legacy
+  // mid-run, and dropping only `examples` while `requires` remained would
+  // manufacture exactly the torn shape `assertNoTornRecordRules` rejects.
+  const ruleNoScope: CompiledRule = isRecordPathRule(rule)
+    ? { ...rule, fileGlobs: ['**/*'], excludeGlobs: undefined }
+    : { ...rule, fileGlobs: undefined };
 
   if (rule.engine === 'regex' || !rule.engine) {
     return applyRulesToAdditions(ctx, [ruleNoScope], [...additions]);
@@ -515,7 +555,7 @@ export async function verifyAgainstCodebase(
   const candidateDebtLines: string[] = [];
 
   for (const violation of violations) {
-    const classification = classifyFile(violation.file, rule.fileGlobs, baseline);
+    const classification = classifyFile(violation.file, rule, baseline);
     if (classification === 'baseline') {
       baselineMatchSet.add(violation.file);
     } else {

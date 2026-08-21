@@ -32,7 +32,11 @@ import {
 } from '../rule-engine.js';
 // Prop 310 slice 2 — the record-grammar runtime semantics, shared with
 // `rule-engine.ts` so both regex dispatchers scope and gate identically.
-import { requiresSuppressesMatch, ruleAppliesToFile } from '../spine/record-runtime.js';
+import {
+  assertNoTornRecordRules,
+  requiresSuppressesMatch,
+  ruleAppliesToFile,
+} from '../spine/record-runtime.js';
 import type { RegexEvaluator } from './evaluator.js';
 import { redactPath } from './telemetry.js';
 
@@ -80,6 +84,9 @@ export async function applyRulesToAdditionsBounded(
   if (additions.length === 0 || rules.length === 0) {
     return { violations, timeoutOutcomes };
   }
+
+  // Prop 310 § Design 12 — torn-manifest guard (see `assertNoTornRecordRules`).
+  assertNoTornRecordRules(rules);
 
   const regexRules = rules.filter((r) => r.engine === 'regex' || !r.engine);
 
