@@ -11,5 +11,16 @@
         ]
       }
     ]
+  },
+  "mcpServers": {
+    "totem": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@mmnto/mcp"
+      ]
+    }
   }
 }
