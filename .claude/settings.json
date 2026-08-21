@@ -1,21 +1,32 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(npm view *)",
-      "Bash(gdlint *)",
-      "Bash(gh search *)",
-      "mcp__totem-dev__search_knowledge",
-      "mcp__totem-strategy__search_knowledge"
-    ]
-  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/PreWriteShield.cjs"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "node .claude/hooks/session-context.mjs"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/SessionStart.cjs",
+            "timeout": 30000
           }
         ]
       }
@@ -41,6 +52,15 @@
           }
         ]
       }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm view *)",
+      "Bash(gdlint *)",
+      "Bash(gh search *)",
+      "mcp__totem-dev__search_knowledge",
+      "mcp__totem-strategy__search_knowledge"
     ]
   }
 }
