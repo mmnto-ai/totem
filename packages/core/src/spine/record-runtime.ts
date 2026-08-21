@@ -55,12 +55,30 @@ export const RECORD_COMPILED_HOME_KEYS = [
 
 /**
  * True when a compiled rule came from the Prop 310 record path — i.e. when the
- * § Design 7 dialect, the § Design 7 two-array scope rule, and the § Design 8
- * two-pass apply to it. False for every legacy/mined rule, which keeps the
- * shipped matcher unchanged.
+ * § Design 7 dialect and its two-array scope rule apply to it. False for every
+ * legacy/mined rule, which keeps the shipped matcher unchanged.
+ *
+ * The test is `examples !== undefined` ALONE, deliberately narrower than "any
+ * § Design 12 home" (falsification round, 2026-08-21). `examples` is the EXACT
+ * discriminator, not merely a sufficient one:
+ *   - § Design 5 makes it non-omittable and min-1, so EVERY record carries it;
+ *   - `compileRuleRecord` emits it unconditionally, so every lowered rule has it;
+ *   - it is the one home no other construct can be present without.
+ *
+ * The wider seven-key disjunction was demonstrated to be UNSAFE in the other
+ * direction: a legacy-shaped rule that ever gained just a `recoveryHint` — a
+ * plausible future addition to the mined path, and a purely cosmetic one — would
+ * silently flip from the shipped tree-wide matcher to the record dialect's
+ * root-only reading of the same `*.ts` glob, narrowing its scope with no signal.
+ * Keying on the field that MEANS "this is a record" removes that coupling
+ * between a diagnostic field and a matcher semantic.
+ *
+ * `RECORD_COMPILED_HOME_KEYS` remains the full home set for the corpus guard
+ * (which asserts the legacy manifest carries NONE of them — a stronger claim
+ * than this predicate needs, and the right one for a freeze check).
  */
 export function isRecordPathRule(rule: CompiledRule): boolean {
-  return RECORD_COMPILED_HOME_KEYS.some((key) => rule[key] !== undefined);
+  return rule.examples !== undefined;
 }
 
 /**

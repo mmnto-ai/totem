@@ -560,6 +560,16 @@ function resolveAstMatchSuppression(
  *   on trigger / suppress / failure events.
  * @param workingDirectory - Optional working directory for resolving files on disk
  *   when parsing spans.
+ * @param readFileText - Optional SYNC reader for whole-file content, consulted
+ *   only by a Prop 310 `requires: {scope: file}` check. Returns `null` when the
+ *   file cannot be resolved; when omitted, the disk is read directly.
+ *
+ *   SYNC, unlike the ast path's async `readStrategy`, because this function is
+ *   synchronous and four shipped callers depend on that. The async staged reader
+ *   is threaded instead through `applyRulesToAdditionsBounded`, which is the
+ *   dispatcher `totem lint` actually uses for regex rules and is already async —
+ *   so the staged guarantee lands where staged mode exists (falsification round,
+ *   2026-08-21).
  * @returns All regex-based violations found.
  */
 export function applyRulesToAdditions(
@@ -568,6 +578,7 @@ export function applyRulesToAdditions(
   additions: DiffAddition[],
   onRuleEvent?: RuleEventCallback,
   workingDirectory?: string,
+  readFileText?: (filePath: string) => string | null,
 ): Violation[] {
   if (additions.length === 0 || rules.length === 0) return [];
 
@@ -596,16 +607,30 @@ export function applyRulesToAdditions(
   // Memoized per invocation, and reached ONLY when a record-path rule with a
   // file-scoped requirement has already matched its target: no legacy rule
   // carries `requires`, so this adds zero IO to the shipped path.
+  //
+  // `readFileText` (when supplied) is what makes the check see the SAME bytes the
+  // rest of the lint is judging. Reading the worktree while the caller is judging
+  // the index is FAIL-OPEN in the direction that matters: a required context
+  // deleted in the staged edit but still present on disk would satisfy the
+  // requirement and silence a real staged violation.
   const fileTextCache = new Map<string, string | null>();
   const getFileTextSync = (file: string, workDir: string): string | null => {
     const cached = fileTextCache.get(file);
     if (cached !== undefined || fileTextCache.has(file)) return cached ?? null;
     let text: string | null = null;
-    try {
-      text = fs.readFileSync(path.resolve(workDir, file), 'utf-8');
-      // totem-context: read failure yields no required-context evidence → the requirement is UNMET → the rule still FIRES; like the span exemption above, this fails toward flagging, never toward suppression.
-    } catch {
-      text = null;
+    if (readFileText) {
+      // DELIBERATELY unwrapped: the caller's reader owns its own failure
+      // contract (a staged reader throws so an unreadable index entry surfaces
+      // rather than degrading quietly). A reader that means "absent" returns
+      // `null`, which is handled below.
+      text = readFileText(file);
+    } else {
+      try {
+        text = fs.readFileSync(path.resolve(workDir, file), 'utf-8');
+        // totem-context: read failure yields no required-context evidence → the requirement is UNMET → the rule still FIRES; like the span exemption above, this fails toward flagging, never toward suppression.
+      } catch {
+        text = null;
+      }
     }
     fileTextCache.set(file, text);
     return text;
@@ -761,7 +786,12 @@ export async function applyAstRulesToAdditions(
   // compiled rule carries `requires` — pinned by the byte-identity guard), so
   // this is a fail-loud backstop against a hand-edited manifest, never a path a
   // well-formed pipeline can take.
-  const treeSitterWithRequires = treeSitterRules.find((r) => r.requires !== undefined);
+  // Searched over ALL rules, not over `treeSitterRules` — that list is already
+  // filtered on `astQuery` being present, so a hand-edited `{engine: 'ast',
+  // requires, no astQuery}` rule would slip past the throw and have its
+  // `requires` silently unevaluated, which is precisely the hole this backstop
+  // exists to close (falsification round, 2026-08-21).
+  const treeSitterWithRequires = rules.find((r) => r.engine === 'ast' && r.requires !== undefined);
   if (treeSitterWithRequires) {
     throw new TotemParseError(
       `Rule ${treeSitterWithRequires.lessonHash} (${treeSitterWithRequires.lessonHeading}) carries a \`requires\` block on the tree-sitter ('ast') engine, which has no two-pass evaluator.`,

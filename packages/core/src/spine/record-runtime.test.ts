@@ -24,6 +24,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { stringify as yamlStringify } from 'yaml';
 
 import { type CompiledRule, CompiledRuleSchema, type DiffAddition } from '../compiler-schema.js';
+import { applyRulesToAdditionsBounded } from '../regex-safety/apply-rules-bounded.js';
+import { RegexEvaluator } from '../regex-safety/evaluator.js';
 import {
   applyAstRulesToAdditions,
   applyRulesToAdditions,
@@ -422,6 +424,188 @@ describe('end-to-end — parse → lower → evaluate (§ Design 4 exemplar, ast
   });
 });
 
+// ─── Cure 1 — the requirement reads the bytes the lint is judging ────────────
+
+describe('§ Design 8 — a file-scoped requirement honours the caller’s read seam', () => {
+  let workDir: string;
+  const rule = compile({
+    ...design8ExemplarRecord(),
+    requires: { pattern: 'LC_ALL=C', scope: 'file' },
+  });
+  const hit = addition('scripts/x.sh', 'git log --oneline');
+
+  beforeAll(() => {
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-p310-seam-'));
+    fs.mkdirSync(path.join(workDir, 'scripts'), { recursive: true });
+    // The WORKTREE satisfies the requirement.
+    fs.writeFileSync(
+      path.join(workDir, 'scripts', 'x.sh'),
+      ['export LC_ALL=C', 'git log --oneline'].join('\n'),
+      'utf-8',
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('FAIL-OPEN COUNTEREXAMPLE: context deleted in the staged edit is not excused by the worktree', () => {
+    // Without the seam this is the hole: the requirement is satisfied on disk,
+    // so the staged violation is suppressed and the commit passes. With the
+    // staged reader threaded, the requirement is judged on the staged bytes and
+    // the rule fires.
+    expect(applyRulesToAdditions(ctx(), [rule], [hit], undefined, workDir)).toEqual([]);
+    const staged = applyRulesToAdditions(
+      ctx(),
+      [rule],
+      [hit],
+      undefined,
+      workDir,
+      () => 'git log --oneline',
+    );
+    expect(staged).toHaveLength(1);
+  });
+
+  it('the inverse direction too: context added in the staged edit silences the rule', () => {
+    const worktreeOnly = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-p310-inv-'));
+    try {
+      fs.mkdirSync(path.join(worktreeOnly, 'scripts'), { recursive: true });
+      fs.writeFileSync(path.join(worktreeOnly, 'scripts', 'x.sh'), 'git log --oneline', 'utf-8');
+      expect(applyRulesToAdditions(ctx(), [rule], [hit], undefined, worktreeOnly)).toHaveLength(1);
+      expect(
+        applyRulesToAdditions(ctx(), [rule], [hit], undefined, worktreeOnly, () =>
+          ['export LC_ALL=C', 'git log --oneline'].join('\n'),
+        ),
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(worktreeOnly, { recursive: true, force: true });
+    }
+  });
+
+  it('a reader that reports the file absent still FIRES (direction unchanged)', () => {
+    expect(
+      applyRulesToAdditions(ctx(), [rule], [hit], undefined, workDir, () => null),
+    ).toHaveLength(1);
+  });
+
+  it('a reader that THROWS propagates — its failure contract is not swallowed', () => {
+    // Staged mode's reader throws `STAGED_READ_FAILED` precisely so an unreadable
+    // index entry surfaces; converting that to "context absent" would turn a loud
+    // failure into a quiet one.
+    expect(() =>
+      applyRulesToAdditions(ctx(), [rule], [hit], undefined, workDir, () => {
+        throw new Error('STAGED_READ_FAILED');
+      }),
+    ).toThrow(/STAGED_READ_FAILED/);
+  });
+
+  it('never consults the reader for a LINE-scoped requirement', () => {
+    const lineRule = compile(design8ExemplarRecord());
+    let calls = 0;
+    applyRulesToAdditions(ctx(), [lineRule], [hit], undefined, workDir, () => {
+      calls += 1;
+      return null;
+    });
+    expect(calls).toBe(0);
+  });
+});
+
+// ─── Cure 1 (extended) — the dispatcher `totem lint` actually uses ───────────
+
+describe('applyRulesToAdditionsBounded — the record semantics reach the lint path', () => {
+  it('applies the § Design 7 two-array scope, not the legacy predicate', async () => {
+    // This dispatcher — not `applyRulesToAdditions` — is what `totem lint` runs
+    // regex rules through. Without the shared predicate a record rule's
+    // `excludeGlobs` is ignored here and its `*.ts` is promoted tree-wide: a
+    // silent scope WIDENING on the only path that ships.
+    const evaluator = new RegexEvaluator();
+    try {
+      const rule = compile(scopedRegexRecord(['*.ts'], ['**/*.test.ts']));
+      const result = await applyRulesToAdditionsBounded(
+        ctx(),
+        [rule],
+        [
+          addition('a.ts', 'console.log(1)'),
+          addition('src/a.ts', 'console.log(1)'),
+          addition('a.test.ts', 'console.log(1)'),
+        ],
+        { evaluator, timeoutMode: 'strict', repoRoot: os.tmpdir() },
+      );
+      expect(result.violations.map((v) => v.file)).toEqual(['a.ts']);
+    } finally {
+      await evaluator.dispose();
+    }
+  });
+
+  it('applies the § Design 8 two-pass, at line scope', async () => {
+    const evaluator = new RegexEvaluator();
+    try {
+      const rule = compile(design8ExemplarRecord());
+      const result = await applyRulesToAdditionsBounded(
+        ctx(),
+        [rule],
+        [
+          addition('scripts/a.sh', 'git log --oneline'),
+          addition('scripts/b.sh', 'LC_ALL=C git log --oneline'),
+        ],
+        { evaluator, timeoutMode: 'strict', repoRoot: os.tmpdir() },
+      );
+      expect(result.violations.map((v) => v.file)).toEqual(['scripts/a.sh']);
+    } finally {
+      await evaluator.dispose();
+    }
+  });
+
+  it('threads the staged reader into a FILE-scoped requirement', async () => {
+    const evaluator = new RegexEvaluator();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-p310-bnd-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'scripts', 'x.sh'),
+        ['export LC_ALL=C', 'git log --oneline'].join('\n'),
+        'utf-8',
+      );
+      const rule = compile({
+        ...design8ExemplarRecord(),
+        requires: { pattern: 'LC_ALL=C', scope: 'file' },
+      });
+      const additions = [addition('scripts/x.sh', 'git log --oneline')];
+      const opts = { evaluator, timeoutMode: 'strict' as const, repoRoot: dir };
+
+      // Worktree read: the requirement is satisfied → silent.
+      const worktree = await applyRulesToAdditionsBounded(ctx(), [rule], additions, opts);
+      expect(worktree.violations).toEqual([]);
+
+      // Staged read: the requirement is gone from the index → fires.
+      const staged = await applyRulesToAdditionsBounded(ctx(), [rule], additions, {
+        ...opts,
+        readStrategy: async () => 'git log --oneline',
+      });
+      expect(staged.violations).toHaveLength(1);
+    } finally {
+      await evaluator.dispose();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves a LEGACY rule on the shipped predicate byte-for-byte', async () => {
+    const evaluator = new RegexEvaluator();
+    try {
+      const result = await applyRulesToAdditionsBounded(
+        ctx(),
+        [legacyRule(['*.ts'])],
+        [addition('src/a.ts', 'console.log(1)')],
+        { evaluator, timeoutMode: 'strict', repoRoot: os.tmpdir() },
+      );
+      // Shallow-glob promotion survives on the legacy path.
+      expect(result.violations).toHaveLength(1);
+    } finally {
+      await evaluator.dispose();
+    }
+  });
+});
+
 // ─── Fail-loud backstop on the unevaluated branch ────────────────────────────
 
 describe('§ Design 12 — `requires` is never silently unevaluated', () => {
@@ -435,6 +619,33 @@ describe('§ Design 12 — `requires` is never silently unevaluated', () => {
       astQuery: '(call_expression) @c',
       compiledAt: NOW,
       requires: { pattern: 'LC_ALL=C', scope: 'line' },
+    });
+    await expect(
+      applyAstRulesToAdditions(
+        ctx(),
+        [astRule],
+        [addition('src/a.ts', 'foo()')],
+        os.tmpdir(),
+        undefined,
+        undefined,
+        async () => 'foo()',
+      ),
+    ).rejects.toThrow(/has no two-pass evaluator/);
+  });
+
+  it('throws even when the ast rule carries NO astQuery (the widened search)', async () => {
+    // The backstop searched `treeSitterRules`, which is pre-filtered on
+    // `astQuery` being present — so this shape slipped past the throw and had its
+    // `requires` silently unevaluated, which is the exact hole the backstop
+    // exists to close.
+    const astRule = CompiledRuleSchema.parse({
+      lessonHash: 'fedcba9876543210',
+      lessonHeading: 'hand-edited ast rule, no query',
+      pattern: '',
+      message: 'x',
+      engine: 'ast',
+      compiledAt: NOW,
+      requires: { pattern: 'LC_ALL=C', scope: 'file' },
     });
     await expect(
       applyAstRulesToAdditions(

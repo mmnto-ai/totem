@@ -30,7 +30,9 @@ import {
   isSuppressed,
   type RuleEngineContext,
 } from '../rule-engine.js';
-import { fileMatchesGlobs } from '../sys/glob.js';
+// Prop 310 slice 2 — the record-grammar runtime semantics, shared with
+// `rule-engine.ts` so both regex dispatchers scope and gate identically.
+import { requiresSuppressesMatch, ruleAppliesToFile } from '../spine/record-runtime.js';
 import type { RegexEvaluator } from './evaluator.js';
 import { redactPath } from './telemetry.js';
 
@@ -47,6 +49,17 @@ export interface BoundedApplyOptions {
   evaluator: RegexEvaluator;
   timeoutMode: TimeoutMode;
   repoRoot: string;
+  /**
+   * Prop 310 § Design 8 — whole-file reader for a `requires: {scope: file}`
+   * check. Same shape as the ast path's shipped `readStrategy` 7th parameter, so
+   * `totem lint --staged` threads the SAME `git show :<file>` reader into both
+   * dispatchers and the requirement is evaluated against the bytes being
+   * committed. Omitted ⇒ the worktree file is read.
+   *
+   * Reached only after a record-path rule with a file-scoped requirement has
+   * matched its target, so it adds no IO to the legacy corpus.
+   */
+  readStrategy?: (filePath: string) => Promise<string | null>;
 }
 
 export interface BoundedApplyResult {
@@ -86,15 +99,47 @@ export async function applyRulesToAdditionsBounded(
     }
   };
 
+  // Prop 310 § Design 8 — whole-file text for a `requires: {scope: file}` check,
+  // memoized per invocation. Prefers the caller's `readStrategy` (staged mode's
+  // `git show :<file>`) so the requirement is judged against the same bytes as
+  // the rest of the lint; a read failure yields `null`, which the evaluator
+  // treats as "context absent" and therefore FIRES — the safe direction.
+  const fileTextCache = new Map<string, string | null>();
+  const getFileText = async (file: string): Promise<string | null> => {
+    if (fileTextCache.has(file)) return fileTextCache.get(file) ?? null;
+    let text: string | null = null;
+    if (options.readStrategy) {
+      // DELIBERATELY unwrapped: the caller's reader owns its own failure
+      // contract. Staged mode's reader throws `STAGED_READ_FAILED` precisely so
+      // an unreadable index entry surfaces instead of silently degrading, and a
+      // catch here would convert that loud failure into a quiet one. A reader
+      // that means "absent" returns `null`, which is handled below.
+      text = await options.readStrategy(file);
+    } else {
+      try {
+        text = await fs.promises.readFile(path.resolve(options.repoRoot, file), 'utf-8');
+        // totem-context: read failure yields no required-context evidence → the requirement is UNMET → the rule still FIRES; fails toward flagging, never toward suppression.
+      } catch {
+        text = null;
+      }
+    }
+    fileTextCache.set(file, text);
+    return text;
+  };
+
   for (const rule of regexRules) {
     // Partition additions by file so the evaluator can batch one rule per
     // file at a time. File granularity matches the fileGlobs scoping and
     // keeps timeout isolation per rule-file pair.
     const byFile = new Map<string, DiffAddition[]>();
     for (const addition of additions) {
-      if (rule.fileGlobs && rule.fileGlobs.length > 0) {
-        if (!fileMatchesGlobs(addition.file, rule.fileGlobs)) continue;
-      }
+      // Prop 310 § Design 7 — the two-array scope rule for record-path rules,
+      // the shipped `fileMatchesGlobs` predicate for every legacy rule. This
+      // dispatcher is the one `totem lint` uses for regex rules, so without the
+      // shared predicate a record rule's `excludeGlobs` would be ignored here
+      // and its `*.ts` silently promoted tree-wide — the scope WIDENING the
+      // grammar exists to prevent (falsification round, 2026-08-21).
+      if (!ruleAppliesToFile(rule, addition.file)) continue;
       const bucket = byFile.get(addition.file) ?? [];
       bucket.push(addition);
       byFile.set(addition.file, bucket);
@@ -139,6 +184,19 @@ export async function applyRulesToAdditionsBounded(
       for (const matchedIndex of result.matchedIndices) {
         const addition = fileAdditions[matchedIndex];
         if (!addition) continue;
+
+        // Prop 310 § Design 8 — pass two, ahead of every other per-match check:
+        // the requirement is part of the MATCH PREDICATE, so a locus whose
+        // required context is present is not a match at all and emits neither a
+        // violation nor a `suppress` event. The file text is resolved here rather
+        // than lazily because this dispatcher is async and `requiresSuppressesMatch`
+        // is a pure sync predicate; `line` scope never triggers the read.
+        if (rule.requires !== undefined) {
+          const fileText = rule.requires.scope === 'file' ? await getFileText(file) : null;
+          if (requiresSuppressesMatch(rule, { line: addition.line, file: () => fileText })) {
+            continue;
+          }
+        }
 
         // Exempt matches inside inline Rust test modules for production-only Rust rules
         if (isProductionRustRule(rule)) {

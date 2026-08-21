@@ -57,7 +57,7 @@
 // untouched — the freeze covers that path and nothing regenerates it.
 
 import { extensionToLanguage, registeredExtensions } from '../ast-classifier.js';
-import { extensionToLang } from '../ast-grep-query.js';
+import { extensionToLang, TRAILING_EXT_RE } from '../ast-grep-query.js';
 import { validateAstGrepPattern } from '../compile-lesson.js';
 import { engineFields, validateRegex } from '../compiler.js';
 import { CompiledRuleSchema } from '../compiler-schema.js';
@@ -135,6 +135,65 @@ export function resolveRecordLanguage(language: string): RecordLanguageResolutio
  */
 export function languageProbeGlobs(extension: string): string[] {
   return [`**/*${extension}`];
+}
+
+// ── The language⇄glob consistency floor ──────────────────────────────────────
+//
+// OPERATOR-CONSISTENT RULING (falsification round, 2026-08-21): for a
+// `type: ast-grep` record, EVERY `target.scope.fileGlobs` entry must end in a
+// registered extension that resolves — via `extensionToLanguage`, the same
+// § Design 6 authority — to the DECLARED `target.language`. Otherwise the record
+// is rejected.
+//
+// Grounds. § Design 6 fixes ONE declared language per record and the options
+// table spells out the consequence: "a multi-language ast-grep rule is N
+// records". Without this floor a record could declare `language: typescript`
+// and scope itself to `**\/*.js`, and the runtime — which dispatches ast-grep by
+// FILE EXTENSION, not by the rule's compiled `language` — would then evaluate it
+// under a grammar it was never validated against. The review demonstrated both
+// halves of that gap: a compound payload fails inertly per file (a silent
+// non-firing rule), and a flat pattern FIRES under the wrong grammar. Neither is
+// visible to the author. With the floor, validated-as-declared and
+// evaluated-by-extension agree BY CONSTRUCTION, so the runtime needs no
+// language gate of its own.
+//
+// Scope of the floor, precisely:
+//   - `fileGlobs` only. `excludeGlobs` entries are EXEMPT: they only ever narrow
+//     an already-consistent positive scope, so an exclusion written against a
+//     different extension can widen nothing.
+//   - `type: regex` records are UNCHECKED — a regex payload has no grammar
+//     binding at all (`target.language` is forbidden there, § Design 4), and the
+//     match is textual, so the same globs are legitimate.
+//   - An EXTENSION-LESS glob (`packages/**`) rejects under the same rule: a
+//     scope that cannot be pinned to a language cannot be validated as it will
+//     be evaluated, and silently admitting it would reopen the gap for every
+//     file the directory happens to contain.
+
+/**
+ * Check the § Design 6 one-declared-language rule against a record's positive
+ * globs. Returns `null` when the scope is consistent, or the rejection reason.
+ * ast-grep targets only — the caller does not invoke it for regex.
+ */
+export function checkLanguageGlobConsistency(
+  language: string,
+  fileGlobs: readonly string[],
+): string | null {
+  const advice = `§ Design 6 fixes ONE declared language per record — "a multi-language ast-grep rule is N records". Split the rule per language, or correct the glob. (The runtime dispatches ast-grep by FILE EXTENSION, so a scope the declared language does not cover would be evaluated under a grammar the payload was never validated against.)`;
+  for (const glob of fileGlobs) {
+    const match = TRAILING_EXT_RE.exec(glob);
+    if (match === null) {
+      return `Prop 310 § Design 6: target.scope.fileGlobs entry '${glob}' carries no file extension, so its scope cannot be pinned to the declared language '${language}'. ${advice}`;
+    }
+    const extension = `.${match[1]!.toLowerCase()}`;
+    const globLanguage = extensionToLanguage(extension);
+    if (globLanguage === undefined) {
+      return `Prop 310 § Design 6: target.scope.fileGlobs entry '${glob}' targets extension '${extension}', which is not registered, so it cannot be confirmed to match the declared language '${language}'. ${advice}`;
+    }
+    if (globLanguage !== language) {
+      return `Prop 310 § Design 6: target.scope.fileGlobs entry '${glob}' targets language '${globLanguage}' but the record declares '${language}'. ${advice}`;
+    }
+  }
+  return null;
 }
 
 // ── The tree-form gate (operator ruling 2026-08-21) ──────────────────────────
@@ -316,6 +375,26 @@ export function compileRuleRecord(
         reason: `Prop 310 § Design 8: requires.pattern is not a usable regex (${v.reason ?? 'invalid regex pattern'}) — the requirement is a safe-regex2-gated regex evaluated textually at the declared scope, independent of target.type.`,
       };
     }
+    // RULING (falsification round, 2026-08-21): `requires.scope: line` is
+    // REJECTED on an ast-grep target. An ast-grep match is a SPAN, not a line,
+    // so "the line containing L" has no engine-defined answer: the runtime reads
+    // the span's START line, which makes the verdict depend on how the author
+    // wrapped their source — the review measured a rule firing once when its
+    // subject was split across lines and not at all when it was written on one.
+    // A formatting-dependent verdict is not a semantic. § Design 8 already
+    // reserves `block` — the span's natural unit — as unimplemented pending a
+    // language adapter's boundary definition, so the honest V1 answer is to
+    // reject the combination rather than ship a line reading that only
+    // coincidentally agrees with the author's intent. `file` scope stays valid
+    // on ast-grep (whole-file text is unambiguous), and `line` stays valid on
+    // regex targets (a regex match IS line-local by construction).
+    if (record.target.type === 'ast-grep' && record.requires.scope === 'line') {
+      return {
+        kind: 'rejected',
+        reason:
+          "Prop 310 § Design 8: `requires.scope: line` is not available on an `ast-grep` target — an ast-grep match is a SPAN, and reading it as its start line makes the verdict depend on source formatting rather than on the rule. Use `scope: file` (unambiguous on any engine), move the requirement into the payload's own `not:`/`has:` combinators (§ Design 8: node-scoped absence stays payload-owned), or wait for the reserved `block` unit, which is the span's natural scope and is unimplemented at V1.",
+      };
+    }
   }
 
   let payloadFields: {
@@ -343,6 +422,14 @@ export function compileRuleRecord(
     const resolution = resolveRecordLanguage(target.language!);
     if (!resolution.resolved) return { kind: 'rejected', reason: resolution.reason };
     resolvedLanguage = resolution.language;
+
+    // The language⇄glob consistency floor, BEFORE the payload gate: a scope that
+    // will be evaluated under a different grammar than the payload is validated
+    // under is a defect in the record, and the author should be told that rather
+    // than being handed a payload error for a payload that is fine.
+    const inconsistent = checkLanguageGlobConsistency(resolution.language, target.scope.fileGlobs);
+    if (inconsistent !== null) return { kind: 'rejected', reason: inconsistent };
+
     const probeGlobs = languageProbeGlobs(resolution.extension);
 
     if (target.rule !== undefined) {

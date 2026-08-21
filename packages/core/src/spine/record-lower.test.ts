@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { stringify as yamlStringify } from 'yaml';
 
+import { extensionToLanguage } from '../ast-classifier.js';
 import { extensionToLang, resolveAstGrepLangs } from '../ast-grep-query.js';
 import { canonicalStringify } from '../compile-manifest.js';
 import { sanitizeFileGlobs } from '../compiler.js';
@@ -129,6 +130,38 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     expect(carriers).toEqual([]);
     const compiled = CompiledRulesFileSchema.parse(rawManifest).rules;
     expect(compiled.filter(isRecordPathRule)).toEqual([]);
+  });
+
+  it('keys the record path on `examples` ALONE — a cosmetic field never flips a matcher', () => {
+    // `examples` is the EXACT discriminator: § Design 5 makes it non-omittable
+    // and the lowering emits it unconditionally. A wider "any compiled home"
+    // test would let a legacy-shaped rule that merely gained a `recoveryHint`
+    // silently switch matchers — flipping the same `*.ts` glob from the shipped
+    // tree-wide reading to the record dialect's root-only one.
+    const base = {
+      lessonHash: 'fedcba9876543210',
+      lessonHeading: 'legacy',
+      pattern: 'x',
+      message: 'm',
+      engine: 'regex' as const,
+      compiledAt: NOW,
+      fileGlobs: ['*.ts'],
+    };
+    expect(isRecordPathRule(CompiledRuleSchema.parse(base))).toBe(false);
+    expect(
+      isRecordPathRule(CompiledRuleSchema.parse({ ...base, recoveryHint: 'try harder' })),
+    ).toBe(false);
+    expect(
+      isRecordPathRule(
+        CompiledRuleSchema.parse({ ...base, verificationShadow: { type: 'rego', source: 'p' } }),
+      ),
+    ).toBe(false);
+    // The deliberate contract: `examples` present ⇒ record path.
+    expect(
+      isRecordPathRule(CompiledRuleSchema.parse({ ...base, examples: [{ bad: 'b', good: 'g' }] })),
+    ).toBe(true);
+    // And every rule this slice lowers carries it.
+    expect(isRecordPathRule(lowerOk(regexRecord()))).toBe(true);
   });
 
   it('accepts a rule carrying NONE of the additions (every one is optional)', () => {
@@ -262,25 +295,98 @@ describe('§ Design 6 — the declared language resolves against the registry', 
     }
   });
 
-  it('validates under the DECLARED language, not the glob-derived one (the “moves” row)', () => {
+  it('validates under the DECLARED language, not a permissive fallback (the “moves” row)', () => {
     // `type_alias_declaration` exists in the TypeScript/TSX grammars and not in
-    // JavaScript. The shipped try-each-glob-derived-Lang validator would resolve
-    // TypeScript from `**/*.ts` and ACCEPT this payload; the record path resolves
-    // ONLY the declared `javascript` and must reject it. This is the
-    // mmnto-ai/totem#1654 cross-grammar acceptance being retired on this path.
-    const record = astGrepRecord();
-    const target = record.target as Record<string, unknown>;
-    target.rule = { kind: 'type_alias_declaration' };
-    target.scope = { fileGlobs: ['**/*.ts'] };
+    // JavaScript. The shipped validator falls back to `Lang.Tsx` — its most
+    // permissive parser — whenever a glob carries no registered extension, and
+    // accepts a pattern under ANY resolved Lang; the record path resolves ONLY
+    // the declared language and validates under exactly it. Since the language⇄
+    // glob floor now requires the scope to agree with the declaration, the globs
+    // co-vary — but they never reach the validator, which sees only the
+    // language-derived probe.
+    const typescript = astGrepRecord();
+    const tsTarget = typescript.target as Record<string, unknown>;
+    tsTarget.rule = { kind: 'type_alias_declaration' };
+    tsTarget.scope = { fileGlobs: ['**/*.ts'] };
+    expect(lower(typescript).kind).toBe('compiled');
 
-    target.language = 'typescript';
-    expect(lower(record).kind).toBe('compiled');
-
-    target.language = 'javascript';
-    const reason = lowerRejected(record);
-    expect(reason).toContain('§ Design 6');
+    const javascript = astGrepRecord();
+    const jsTarget = javascript.target as Record<string, unknown>;
+    jsTarget.language = 'javascript';
+    jsTarget.rule = { kind: 'type_alias_declaration' };
+    jsTarget.scope = { fileGlobs: ['**/*.js'] };
+    const reason = lowerRejected(javascript);
+    // The PAYLOAD gate rejected it — not the consistency floor. That distinction
+    // is what makes this a language-pinning test rather than a scope test.
+    expect(reason).toContain('target.rule failed ast-grep validation');
     expect(reason).toContain("declared language 'javascript'");
     expect(reason).toContain('try-each-glob-derived-Lang');
+  });
+});
+
+// ─── § Design 6 — the language⇄glob consistency floor ────────────────────────
+
+describe('§ Design 6 — an ast-grep scope must agree with its declared language', () => {
+  function astGrepScoped(language: string, fileGlobs: string[], excludeGlobs?: string[]) {
+    const record = astGrepRecord();
+    const target = record.target as Record<string, unknown>;
+    target.language = language;
+    target.scope = { fileGlobs, ...(excludeGlobs ? { excludeGlobs } : {}) };
+    return record;
+  }
+
+  it('rejects a scope whose extension resolves to a DIFFERENT language', () => {
+    // The demonstrated gap: this lowered clean before the floor, and the runtime
+    // — which dispatches ast-grep by file extension — would then evaluate a
+    // TypeScript-validated payload under the JavaScript grammar.
+    const reason = lowerRejected(astGrepScoped('typescript', ['**/*.js']));
+    expect(reason).toContain('§ Design 6');
+    expect(reason).toContain("targets language 'javascript'");
+    expect(reason).toContain("declares 'typescript'");
+    expect(reason).toContain('N records');
+  });
+
+  it('rejects `.tsx` under `language: typescript` — the registry says they are different grammars', () => {
+    // `extensionToLanguage('.tsx')` is `'tsx'`, a distinct SupportedLanguage with
+    // its own WASM loader and its own napi `Lang`. Admitting it under
+    // `typescript` would reopen exactly the gap this floor closes, so the
+    // mechanical rule governs: a `.tsx` scope declares `language: tsx`.
+    expect(extensionToLanguage('.tsx')).toBe('tsx');
+    const reason = lowerRejected(astGrepScoped('typescript', ['**/*.ts', '**/*.tsx']));
+    expect(reason).toContain("targets language 'tsx'");
+    expect(lower(astGrepScoped('tsx', ['**/*.tsx', '**/*.jsx'])).kind).toBe('compiled');
+  });
+
+  it('accepts MULTIPLE globs that all resolve to the declared language', () => {
+    expect(
+      lower(astGrepScoped('typescript', ['**/*.ts', '**/*.mts', 'packages/**/*.cts'])).kind,
+    ).toBe('compiled');
+  });
+
+  it('rejects an EXTENSION-LESS glob on an ast-grep target', () => {
+    const reason = lowerRejected(astGrepScoped('typescript', ['packages/**']));
+    expect(reason).toContain('carries no file extension');
+    expect(reason).toContain('§ Design 6');
+  });
+
+  it('rejects an UNREGISTERED extension it cannot confirm', () => {
+    const reason = lowerRejected(astGrepScoped('typescript', ['**/*.rs']));
+    expect(reason).toContain("extension '.rs', which is not registered");
+  });
+
+  it('EXEMPTS excludeGlobs — an exclusion only ever narrows', () => {
+    const outcome = lower(
+      astGrepScoped('typescript', ['packages/**/*.ts'], ['**/*.test.js', 'vendor/**']),
+    );
+    expect(outcome.kind).toBe('compiled');
+  });
+
+  it('leaves REGEX targets unchecked — a regex payload has no grammar binding', () => {
+    const record = regexRecord();
+    (record.target as Record<string, unknown>).scope = {
+      fileGlobs: ['**/*.js', 'packages/**', '**/*.rs'],
+    };
+    expect(lower(record).kind).toBe('compiled');
   });
 });
 
@@ -304,6 +410,32 @@ describe('§ Design 12 — a construct that cannot lower fails compile LOUD', ()
     });
     expect(reason).toContain('§ Design 8');
     expect(reason).toContain('independent of target.type');
+  });
+
+  it('rejects `requires.scope: line` on an ast-grep target (span-vs-line ruling)', () => {
+    // An ast-grep match is a SPAN. Reading it as its start line makes the verdict
+    // depend on how the author wrapped the source, and § Design 8 reserves
+    // `block` — the span's natural unit — as unimplemented, so V1 rejects rather
+    // than shipping a formatting-dependent semantic.
+    const reason = lowerRejected({
+      ...astGrepRecord(),
+      requires: { pattern: 'LC_ALL=C', scope: 'line' },
+    });
+    expect(reason).toContain('§ Design 8');
+    expect(reason).toContain('an ast-grep match is a SPAN');
+    expect(reason).toContain('`block`');
+  });
+
+  it('keeps `line` valid on regex and `file` valid on BOTH engines', () => {
+    expect(lower({ ...regexRecord(), requires: { pattern: 'x', scope: 'line' } }).kind).toBe(
+      'compiled',
+    );
+    expect(lower({ ...regexRecord(), requires: { pattern: 'x', scope: 'file' } }).kind).toBe(
+      'compiled',
+    );
+    expect(lower({ ...astGrepRecord(), requires: { pattern: 'x', scope: 'file' } }).kind).toBe(
+      'compiled',
+    );
   });
 
   it('rejects an unresolvable `language`', () => {
@@ -361,10 +493,13 @@ describe('§ Design 12 — a construct that cannot lower fails compile LOUD', ()
     );
   });
 
-  it('THROWS on an engine-binding divergence (the assert is NOT tautological)', () => {
-    // § Design 3: the two sides originate differently — the record's `target.type`
-    // and the payload's actual compilation path. Tamper with one and the assert
-    // must still fire, which is exactly what makes the derivation safe.
+  it('THROWS on an engine-binding divergence — the tamper guard fires (defence in depth)', () => {
+    // Honest scope, per the falsification round: this divergence is UNREACHABLE
+    // from any parse-valid record, because slice 1's `RuleTargetSchema` already
+    // kills the payload/type mismatch class at parse (pattern XOR rule, per
+    // type). The assert is therefore defence in depth against a future lowering
+    // edit or a hand-built `ParsedRuleRecord`, NOT a live § Design 3 gate — and
+    // what this test demonstrates is that the guard fires on tampered input.
     const parsed = parseRuleRecord(yamlStringify(regexRecord()), FILE);
     const tampered = { ...parsed, derivedEngine: 'ast-grep' } as unknown as ParsedRuleRecord;
     expect(() => compileRuleRecord(tampered, { ruleId: RULE_ID, now: NOW })).toThrow(
