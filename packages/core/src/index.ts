@@ -1349,6 +1349,7 @@ export type {
 } from './spine/rule-record.js';
 export {
   checkGlobDialect,
+  CURATION_PROCESS_FIELDS,
   GLOB_DIALECT_RULES,
   LEGACY_ENGINE_DETAIL,
   LEGACY_INERT_ENGINE,

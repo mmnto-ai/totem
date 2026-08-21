@@ -594,18 +594,53 @@ export type RuleRequires = z.infer<typeof RuleRequiresSchema>;
  * name `curation:` (renamed there because `provenance` is the ADR-112 producer's
  * own output field). Keys are camelCase, normalized from Prop 270 §8's snake_case
  * — a casing normalization, not a semantic change. The block is optional for
- * direct-authored rules and REQUIRED for Baseline-5-curated ones; when present it
- * is COMPLETE (IR-4 — a closed-key grammar with no defaults cannot carry a
- * half-filled mandated block).
+ * direct-authored rules and REQUIRED for Baseline-5-curated ones.
+ *
+ * SHAPE, per OPERATOR RULING 2026-08-21 (superseding IR-4's build-time
+ * complete-or-absent reading, which rejected a lone `sourceLesson`):
+ *
+ *   - `sourceLesson` is REQUIRED whenever the block is present. It is § Design 1's
+ *     record→lesson link — the one thing every curated rule has, since a curated
+ *     rule always derives from a lesson — so a block without it is incoherent.
+ *   - `curatedBy` / `curatedAt` / `baseline5Phase` are the Baseline-5 PROCESS
+ *     trio (Prop 270 §8), optional as a GROUP but ALL-OR-NONE together: a
+ *     direct-authored rule carries the link alone, a Baseline-5-curated rule
+ *     carries the whole process record, and a PARTIAL trio is a parse error
+ *     naming the missing members.
+ *
+ * No defaults are introduced by the relaxation, and the key space stays closed —
+ * "optional" here means absent, never silently filled in.
  */
+/** Prop 270 §8's Baseline-5 process trio — optional as a group, all-or-none together. */
+export const CURATION_PROCESS_FIELDS = ['curatedBy', 'curatedAt', 'baseline5Phase'] as const;
+
 export const RuleCurationSchema = z
   .object({
+    /** § Design 1 — the record→lesson link. Required whenever the block is present. */
     sourceLesson: nonEmpty('curation.sourceLesson'),
-    curatedBy: nonEmpty('curation.curatedBy'),
-    curatedAt: nonEmpty('curation.curatedAt'),
-    baseline5Phase: z.number().int({ message: 'curation.baseline5Phase must be an integer' }),
+    curatedBy: nonEmpty('curation.curatedBy').optional(),
+    curatedAt: nonEmpty('curation.curatedAt').optional(),
+    baseline5Phase: z
+      .number()
+      .int({ message: 'curation.baseline5Phase must be an integer' })
+      .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((curation, ctx) => {
+    // All-or-none, not "any subset": a half-filled process record would leave a
+    // reader guessing which half is authoritative, and the grammar carries no
+    // defaults to fill the gap. Every MISSING member is named, so the author is
+    // told what to add rather than that something is wrong.
+    const missing = CURATION_PROCESS_FIELDS.filter((field) => curation[field] === undefined);
+    if (missing.length === 0 || missing.length === CURATION_PROCESS_FIELDS.length) return;
+    for (const field of missing) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message: `curation.${field} is REQUIRED once any Baseline-5 process field is present — the trio (${CURATION_PROCESS_FIELDS.join(', ')}) is all-or-none (Prop 310 § Design 4 / Prop 270 §8; operator ruling 2026-08-21)`,
+      });
+    }
+  });
 export type RuleCuration = z.infer<typeof RuleCurationSchema>;
 
 /**

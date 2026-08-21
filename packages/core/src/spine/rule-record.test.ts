@@ -15,6 +15,7 @@ import { stringify as yamlStringify } from 'yaml';
 import { DeclaredEngineSchema } from './authored-rule.js';
 import {
   checkGlobDialect,
+  CURATION_PROCESS_FIELDS,
   GLOB_DIALECT_RULES,
   type GlobDialectRule,
   LEGACY_ENGINE_DETAIL,
@@ -30,6 +31,9 @@ import {
 } from './rule-record.js';
 
 const FILE = '.totem/rules/fail-open-catch.rule.yaml';
+
+/** One member of Prop 270 §8's Baseline-5 process trio. */
+type CurationProcessField = (typeof CURATION_PROCESS_FIELDS)[number];
 
 // Built via char codes, never source escapes, so no authoring layer can mangle
 // the control bytes these CR-blindness fixtures depend on.
@@ -671,16 +675,97 @@ describe('§ Design 4 — closed keys (unknown keys are parse errors at any dept
     expect(reject(record).message).toContain('verified');
   });
 
-  it('rejects a partial `curation` block — a mandated block is complete or absent (IR-4)', () => {
-    const record = astGrepRecord();
-    record.curation = { sourceLesson: 'lesson-77c5e668389fb1a2' };
-    expect(reject(record).message).toContain('curatedBy');
-  });
-
   it('rejects a `verification_shadow` missing its `source` (§ Design 12 closed keys)', () => {
     const record = astGrepRecord();
     record.verification_shadow = { type: 'rego' };
     expect(reject(record).message).toContain('source');
+  });
+});
+
+// ── § Design 4 — the curation block, per operator ruling 2026-08-21 ──────────
+
+describe('§ Design 4 — `curation`: the link stands alone, the process trio is all-or-none', () => {
+  const SOURCE_LESSON = 'lesson-77c5e668389fb1a2';
+  const TRIO = {
+    curatedBy: 'strategy-gemini',
+    curatedAt: '2026-06-15T14:00:00Z',
+    baseline5Phase: 3,
+  } as const;
+
+  function withCuration(curation: unknown): Record<string, unknown> {
+    const record = astGrepRecord();
+    record.curation = curation;
+    return record;
+  }
+
+  it('ADMITS `sourceLesson` alone — the direct-authored record→lesson link (§ Design 1)', () => {
+    // Superseded IR-4: the build-time complete-or-absent reading rejected this
+    // record; the operator ruling makes the link the block's only mandatory half.
+    const parsed = parseObject(withCuration({ sourceLesson: SOURCE_LESSON }));
+    expect(parsed.record.curation).toEqual({ sourceLesson: SOURCE_LESSON });
+  });
+
+  it('ADMITS the full block — link plus the whole Baseline-5 process record', () => {
+    const parsed = parseObject(withCuration({ sourceLesson: SOURCE_LESSON, ...TRIO }));
+    expect(parsed.record.curation).toEqual({ sourceLesson: SOURCE_LESSON, ...TRIO });
+  });
+
+  // Every PROPER non-empty subset of the trio — the three 1-of-3s and the three
+  // 2-of-3s. All-or-none has exactly these six ways to be broken.
+  const partialTrios: Array<[string, CurationProcessField[]]> = [
+    ['curatedBy only', ['curatedBy']],
+    ['curatedAt only', ['curatedAt']],
+    ['baseline5Phase only', ['baseline5Phase']],
+    ['curatedBy + curatedAt', ['curatedBy', 'curatedAt']],
+    ['curatedBy + baseline5Phase', ['curatedBy', 'baseline5Phase']],
+    ['curatedAt + baseline5Phase', ['curatedAt', 'baseline5Phase']],
+  ];
+
+  it.each(partialTrios)(
+    'REJECTS the partial trio (%s), naming every missing member',
+    (_label, present) => {
+      const curation: Record<string, unknown> = { sourceLesson: SOURCE_LESSON };
+      for (const field of present) curation[field] = TRIO[field];
+      const failure = reject(withCuration(curation));
+      const missing = CURATION_PROCESS_FIELDS.filter((field) => !present.includes(field));
+      for (const field of missing) {
+        expect(failure.message).toContain(`curation.${field} is REQUIRED`);
+      }
+      // …and never reports a member that IS present as missing.
+      for (const field of present) {
+        expect(failure.message).not.toContain(`curation.${field} is REQUIRED`);
+      }
+      expect(failure.keyPath).toBe(`curation.${missing[0]!}`);
+    },
+  );
+
+  it('REJECTS the trio WITHOUT `sourceLesson` — the link is not the optional half', () => {
+    const failure = reject(withCuration({ ...TRIO }));
+    expect(failure.keyPath).toBe('curation.sourceLesson');
+  });
+
+  it('REJECTS an empty `curation: {}` block', () => {
+    expect(reject(withCuration({})).keyPath).toBe('curation.sourceLesson');
+  });
+
+  it('REJECTS an empty-string `sourceLesson`', () => {
+    expect(reject(withCuration({ sourceLesson: '   ' })).keyPath).toBe('curation.sourceLesson');
+  });
+
+  it('keeps the block CLOSED under the relaxation — an unknown key still fails', () => {
+    const failure = reject(withCuration({ sourceLesson: SOURCE_LESSON, curatedFor: 'baseline-5' }));
+    expect(failure.message).toContain('curatedFor');
+  });
+
+  it('introduces NO default — an absent trio stays ABSENT, never filled in', () => {
+    const parsed = parseObject(withCuration({ sourceLesson: SOURCE_LESSON }));
+    for (const field of CURATION_PROCESS_FIELDS) {
+      expect(parsed.record.curation).not.toHaveProperty(field);
+    }
+  });
+
+  it('still admits an OMITTED curation block — optional for direct-authored rules', () => {
+    expect(parseObject(astGrepRecord()).record.curation).toBeUndefined();
   });
 });
 
