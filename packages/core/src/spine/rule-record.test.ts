@@ -12,8 +12,12 @@
 import { describe, expect, it } from 'vitest';
 import { stringify as yamlStringify } from 'yaml';
 
+import { DeclaredEngineSchema } from './authored-rule.js';
 import {
   checkGlobDialect,
+  GLOB_DIALECT_RULES,
+  type GlobDialectRule,
+  LEGACY_ENGINE_DETAIL,
   parseRuleRecord,
   RULE_RECORD_INEXPRESSIBLE_KEYS,
   RULE_RECORD_SCHEMA_VERSION,
@@ -22,6 +26,7 @@ import {
   RuleRecordParseError,
   RuleRecordProducerKeyError,
   RuleRecordSchema,
+  RuleTargetTypeSchema,
 } from './rule-record.js';
 
 const FILE = '.totem/rules/fail-open-catch.rule.yaml';
@@ -257,6 +262,18 @@ describe('§ Design 3 — `declaredEngine` is DERIVED from `target.type`, never 
   it('maps `type: regex` to derivedEngine `regex`', () => {
     expect(parseRuleRecord(DESIGN8_EXEMPLAR, FILE).derivedEngine).toBe('regex');
   });
+
+  it('keeps the V1 target enum a SUBSET of the reader-side DeclaredEngineSchema (R16)', () => {
+    // The compile-time half is the `_ruleTargetTypeSubsetCheck` assignment in
+    // rule-record.ts; this is the runtime half. A target-enum widening that
+    // outruns the enum the compiled artifact is read under fails HERE.
+    for (const option of RuleTargetTypeSchema.options) {
+      expect(DeclaredEngineSchema.options).toContain(option);
+    }
+    // `ast` is the reader-side inert legacy member the AUTHORING enum drops (R16).
+    expect(DeclaredEngineSchema.options).toContain('ast');
+    expect(RuleTargetTypeSchema.options).not.toContain('ast');
+  });
 });
 
 describe('§ Design 10 / Amendment 1 item 3 — CR-blind per-pair content hashes', () => {
@@ -275,7 +292,12 @@ describe('§ Design 10 / Amendment 1 item 3 — CR-blind per-pair content hashes
     }
   });
 
-  it('hashes a CRLF-authored document identically to its LF-authored twin', () => {
+  it('a CRLF-authored FILE parses to the same hashes — pins YAML line-break normalization, NOT the CR-blind hash', () => {
+    // Deliberately weak, and labelled so: `split(LF).join(CRLF)` puts CR only into
+    // LINE BREAKS, which the YAML reader normalizes before this module sees a
+    // value. It pins the file-level authoring case; the load-bearing CR-blindness
+    // fixture is the escape-smuggled one below, where a real CR reaches a parsed
+    // value (the trial's P3 `serialization-admit` class).
     const lfDoc = DESIGN4_EXEMPLAR;
     const crlfDoc = lfDoc.split(LF).join(CR + LF);
     expect(crlfDoc).not.toBe(lfDoc);
@@ -377,10 +399,30 @@ describe('§ Design 14 — banned silent behaviour: SILENT SKIP (§ Design 2 no-
     expect((failure as RuleRecordNoSilentSkipError).construct).toBe('target.type');
   });
 
-  it('rejects `type: ast` — dropped from the AUTHORING surface at V1 (R16, § Design 6)', () => {
+  it('rejects `type: ast` with the DROPPED-not-deferred message, never the version-bump text (R16, § Design 6)', () => {
     const record = astGrepRecord();
     target(record).type = 'ast';
-    expect(reject(record)).toBeInstanceOf(RuleRecordNoSilentSkipError);
+    const failure = reject(record);
+    expect(failure).toBeInstanceOf(RuleRecordNoSilentSkipError);
+    // Pinned exactly: `ast` does not come back by version bump the way `rego` and
+    // ADR-109's action-rule type do, and telling an author to wait for one would
+    // be a wrong answer, not a terse one.
+    expect(failure.message).toBe(`[Totem Error] ${FILE}: target.type — ${LEGACY_ENGINE_DETAIL}`);
+    expect(failure.message).toContain('does NOT return by version bump');
+    // The generic unknown-type text — which DOES promise a bump — must not be reused here.
+    expect(failure.message).not.toContain('join by grammar version bump');
+  });
+
+  it('lets the VERSION gate win over the V1 key set — an unknown version is diagnosed first', () => {
+    // `version:` is inexpressible at V1 (§ Design 3) but is the field § Design 3
+    // itself names as "can return by version bump". A future-version record
+    // carrying it must be told its VERSION is unknown — the V1 reserved set has no
+    // standing over a document that does not declare V1.
+    const record: Record<string, unknown> = { ...astGrepRecord(), schemaVersion: 2, version: '3' };
+    const failure = reject(record);
+    expect(failure).toBeInstanceOf(RuleRecordNoSilentSkipError);
+    expect(failure).not.toBeInstanceOf(RuleRecordProducerKeyError);
+    expect((failure as RuleRecordNoSilentSkipError).construct).toBe('schemaVersion');
   });
 
   it('rejects the reserved-unimplemented `requires.scope: block` (§ Design 8)', () => {
@@ -435,7 +477,7 @@ describe('§ Design 14 — banned silent behaviour: SILENT PROMOTION', () => {
 // ── § Design 7 — one negative fixture per dialect rule ───────────────────────
 
 describe('§ Design 7 — the normative glob dialect', () => {
-  const violations: ReadonlyArray<[string, string]> = [
+  const violations: ReadonlyArray<[GlobDialectRule, string]> = [
     ['brace-expansion', 'packages/**/*.{ts,tsx}'],
     ['negation', '!**/*.test.ts'],
     ['adjacent-globstar', '**/**/*.ts'],
@@ -444,12 +486,36 @@ describe('§ Design 7 — the normative glob dialect', () => {
     ['regex-syntax', 'src/(a|b)/*.ts'],
     ['regex-syntax', 'src/?.ts'],
     ['regex-syntax', 'src/a+/*.ts'],
+    // Each regex construct varied INDEPENDENTLY of the others: bare alternation
+    // with no parens, and each anchor with no brackets — otherwise an earlier
+    // blacklist entry would mask a missing one.
+    ['regex-syntax', 'src/a|b/*.ts'],
+    ['regex-syntax', 'src/^foo/*.ts'],
+    ['regex-syntax', 'src/foo$/*.ts'],
     ['separator', 'packages\\core\\*.ts'],
     ['absolute-path', '/packages/core/*.ts'],
     ['drive-letter', 'C:/packages/core/*.ts'],
     ['empty', ''],
     ['empty-segment', 'packages//core/*.ts'],
+    ['parent-segment', '../sibling-repo/src/*.ts'],
+    ['parent-segment', 'packages/../tools/*.mjs'],
+    ['surrounding-whitespace', ' packages/**/*.ts'],
+    ['surrounding-whitespace', 'packages/**/*.ts '],
   ];
+
+  it('every § Design 7 rule has a negative fixture (no rule ships unexercised)', () => {
+    // Mirrors the inexpressible-key guard: a rule added to the dialect without a
+    // fixture is a rule nothing pins (§ Design 14).
+    expect(GLOB_DIALECT_RULES.length).toBe(12);
+    const exercised = new Set(violations.map(([rule]) => rule));
+    for (const rule of GLOB_DIALECT_RULES) {
+      expect(exercised.has(rule)).toBe(true);
+    }
+    // …and no fixture cites a rule outside the closed set.
+    for (const rule of exercised) {
+      expect(GLOB_DIALECT_RULES).toContain(rule);
+    }
+  });
 
   it.each(violations)('cites the `%s` rule for %j', (rule, glob) => {
     const violation = checkGlobDialect(glob);
@@ -498,6 +564,19 @@ describe('§ Design 7 — the normative glob dialect', () => {
     const record = astGrepRecord();
     scope(record).fileGlobs = [];
     expect(reject(record).keyPath).toBe('target.scope.fileGlobs');
+  });
+
+  it('rejects an empty `excludeGlobs` array — "no exclusions" is expressed by OMISSION', () => {
+    // An empty list is a silent no-op, and no key in this grammar carries a
+    // do-nothing value (§ Design 4).
+    const record = astGrepRecord();
+    scope(record).excludeGlobs = [];
+    expect(reject(record).keyPath).toBe('target.scope.excludeGlobs');
+  });
+
+  it('accepts an OMITTED `excludeGlobs` — the optional key stays optional', () => {
+    const record = astGrepRecord();
+    expect(parseObject(record).record.target.scope.excludeGlobs).toBeUndefined();
   });
 
   it('enforces the dialect through `RuleRecordSchema` itself, not only the parser', () => {
@@ -635,10 +714,25 @@ describe('§ Design 4 — producer-owned and intake-seam keys are INEXPRESSIBLE'
     expect(reject(record).keyPath).toBe('target.scope.provenance');
   });
 
-  it('rejects a producer-owned key inside an ARRAY element (`examples[i]`)', () => {
+  it('rejects a producer-owned key inside an ARRAY element, in DOT-form (one path grammar)', () => {
     const record = astGrepRecord();
     record.examples = [{ bad: 'x', good: 'y', origin: 'mined' }];
-    expect(reject(record).keyPath).toBe('examples[0].origin');
+    const failure = reject(record);
+    // Dot-form at every depth, ordinals included — the same grammar Zod renders
+    // (`examples.0.bad`). Two renderings of one address make a diagnostic ungreppable.
+    expect(failure.keyPath).toBe('examples.0.origin');
+  });
+
+  it('renders scan paths and Zod paths in the SAME grammar for the same address', () => {
+    const scanRecord = astGrepRecord();
+    scanRecord.examples = [{ bad: 'x', good: 'y', origin: 'mined' }];
+    const zodRecord = astGrepRecord();
+    zodRecord.examples = [{ bad: '', good: 'y' }];
+    const [scanHead] = reject(scanRecord).keyPath.split('.');
+    const [zodHead, zodOrdinal] = reject(zodRecord).keyPath.split('.');
+    expect(scanHead).toBe(zodHead);
+    expect(zodOrdinal).toBe('0');
+    expect(reject(scanRecord).keyPath.split('.')[1]).toBe('0');
   });
 
   it('rejects a producer-owned key inside the OPAQUE ast-grep payload interior (IR-3)', () => {
@@ -649,6 +743,120 @@ describe('§ Design 4 — producer-owned and intake-seam keys are INEXPRESSIBLE'
     const failure = reject(record);
     expect(failure).toBeInstanceOf(RuleRecordProducerKeyError);
     expect(failure.keyPath).toBe('target.rule.declaredEngine');
+  });
+
+  it('adds the PASTED-CONFIG hint when a whole ast-grep config lands under `target.rule`', () => {
+    // A complete ast-grep config carries `id`/`language` at ITS top level; the
+    // record's `target.rule` carries only the payload. Without the hint the author
+    // is told "producer-owned" with nowhere to put the value.
+    const record = astGrepRecord();
+    target(record).rule = {
+      id: 'no-fail-open-catch',
+      language: 'typescript',
+      rule: { kind: 'catch_clause' },
+      message: 'pasted from a standalone ast-grep config',
+    };
+    const failure = reject(record);
+    expect(failure).toBeInstanceOf(RuleRecordProducerKeyError);
+    expect(failure.keyPath).toBe('target.rule.id');
+    expect(failure.recoveryHint).toContain('PASTED complete ast-grep config');
+    expect(failure.recoveryHint).toContain('target.language');
+  });
+
+  it('does NOT add the pasted-config hint for the same key at the record top level', () => {
+    const record: Record<string, unknown> = { ...astGrepRecord(), id: 'hand-written' };
+    const failure = reject(record);
+    expect(failure.keyPath).toBe('id');
+    expect(failure.recoveryHint).not.toContain('PASTED');
+  });
+});
+
+// ── § Design 1 / § Design 12 — a record is a finite tree ─────────────────────
+
+describe('§ Design 1 — a cyclic anchor is a parse error, never a crash', () => {
+  it('rejects a recursive `&anchor`/`*alias` with a RuleRecordParseError, not a RangeError', () => {
+    // `yaml` resolves a recursive alias into a genuinely cyclic object; unguarded
+    // recursion over it blows the stack, which would break this module's totality
+    // contract (a parse either returns a value or throws RuleRecordParseError).
+    const cyclic = [
+      'schemaVersion: 1',
+      'severity: error',
+      'message: "m"',
+      'target: &t',
+      '  type: ast-grep',
+      '  language: typescript',
+      '  rule:',
+      '    loop: *t',
+      '  scope:',
+      '    fileGlobs: ["src/*.ts"]',
+      'examples:',
+      '  - bad: "b"',
+      '    good: "g"',
+      '',
+    ].join(LF);
+    let thrown: unknown;
+    try {
+      parseRuleRecord(cyclic, FILE);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(RuleRecordParseError);
+    expect(thrown).not.toBeInstanceOf(RangeError);
+    const failure = thrown as RuleRecordParseError;
+    expect(failure.filePath).toBe(FILE);
+    expect(failure.keyPath).toBe('target.rule.loop');
+    expect(failure.message).toContain(FILE);
+    expect(failure.message).toContain('cyclic YAML anchor');
+  });
+
+  it('rejects a cycle reached through an ARRAY element too', () => {
+    const cyclic = [
+      'schemaVersion: 1',
+      'severity: error',
+      'message: "m"',
+      'target: &t',
+      '  type: ast-grep',
+      '  language: typescript',
+      '  rule:',
+      '    any:',
+      '      - *t',
+      '  scope:',
+      '    fileGlobs: ["src/*.ts"]',
+      'examples:',
+      '  - bad: "b"',
+      '    good: "g"',
+      '',
+    ].join(LF);
+    const failure = rejectRaw(cyclic);
+    expect(failure.keyPath).toBe('target.rule.any.0');
+    expect(failure.message).toContain('cyclic YAML anchor');
+  });
+
+  it('still admits a legal SHARED anchor — a DAG is not a cycle', () => {
+    // The guard tracks ANCESTORS, not visits: aliasing one node twice as siblings
+    // is legal YAML and must not be misdiagnosed as recursion.
+    const shared = [
+      'schemaVersion: 1',
+      'severity: error',
+      'message: "m"',
+      'target:',
+      '  type: ast-grep',
+      '  language: typescript',
+      '  rule:',
+      '    all:',
+      '      - &leaf { kind: catch_clause }',
+      '      - *leaf',
+      '  scope:',
+      '    fileGlobs: ["src/*.ts"]',
+      'examples:',
+      '  - bad: "b"',
+      '    good: "g"',
+      '',
+    ].join(LF);
+    const parsed = parseRuleRecord(shared, FILE);
+    expect(parsed.record.target.rule).toEqual({
+      all: [{ kind: 'catch_clause' }, { kind: 'catch_clause' }],
+    });
   });
 });
 
@@ -857,6 +1065,24 @@ describe('§ Design 1 — the carrier: one rule = one YAML document = one file',
     );
     expect(failure.message).toContain('invalid YAML');
     expect(failure.message).toContain('unique');
+  });
+
+  it('rejects a MULTI-document file — one rule is one YAML document is one file', () => {
+    const failure = rejectRaw(
+      [
+        'schemaVersion: 1',
+        'severity: error',
+        'message: "first"',
+        '---',
+        'schemaVersion: 1',
+        'severity: error',
+        'message: "second"',
+        '',
+      ].join(LF),
+    );
+    expect(failure.message).toContain('invalid YAML');
+    expect(failure.message).toContain('multiple documents');
+    expect(failure.keyPath).toBe('(document)');
   });
 
   it('rejects a document that is a LIST, not a mapping', () => {

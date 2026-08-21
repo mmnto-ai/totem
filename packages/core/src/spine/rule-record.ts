@@ -102,11 +102,27 @@ export class RuleRecordProducerKeyError extends RuleRecordParseError {
       filePath,
       keyPath,
       `'${producerKey}' is producer-owned / intake-seam metadata and is INEXPRESSIBLE in a rule record (Prop 310 § Design 1/§ Design 3/§ Design 4)`,
-      'Remove the key. Identity is minted by the ADR-112 producer; authoring metadata and attestations are supplied at the `totem rule author` intake seam, never in-record.',
+      producerKeyRecoveryHint(keyPath, producerKey),
     );
     this.name = 'RuleRecordProducerKeyError';
     this.producerKey = producerKey;
   }
+}
+
+const PRODUCER_KEY_BASE_HINT =
+  'Remove the key. Identity is minted by the ADR-112 producer; authoring metadata and attestations are supplied at the `totem rule author` intake seam, never in-record.';
+
+// Keys a COMPLETE ast-grep config file carries at its own top level that a
+// `target.rule` payload must not: a pasted whole config is the likely authoring
+// mistake behind a hit at this depth, and the generic "producer-owned" hint would
+// leave the author with nowhere to put the value.
+const PASTED_AST_GREP_CONFIG_KEYS: ReadonlySet<string> = new Set(['id', 'language']);
+
+function producerKeyRecoveryHint(keyPath: string, producerKey: string): string {
+  if (keyPath.startsWith('target.rule.') && PASTED_AST_GREP_CONFIG_KEYS.has(producerKey)) {
+    return `${PRODUCER_KEY_BASE_HINT} This looks like a PASTED complete ast-grep config: such a file carries \`id\`/\`language\` at its own top level, but \`target.rule\` carries ONLY the rule payload — \`id\` is producer-minted (§ Design 3) and the language belongs at \`target.language\` (§ Design 4/§ Design 6).`;
+  }
+  return PRODUCER_KEY_BASE_HINT;
 }
 
 // ── § Design 4 — the inexpressible key set ───────────────────────────────────
@@ -148,19 +164,55 @@ export const RULE_RECORD_INEXPRESSIBLE_KEYS: ReadonlySet<string> = new Set([
   'origin',
 ]);
 
-function assertNoInexpressibleKeys(filePath: string, value: unknown, at: string): void {
-  if (Array.isArray(value)) {
-    value.forEach((entry, i) => assertNoInexpressibleKeys(filePath, entry, `${at}[${i}]`));
-    return;
-  }
+// ONE path grammar across every diagnostic: dot-form at every depth, array
+// ordinals included (`examples.0.bad`), matching how Zod renders `issue.path`.
+// Two renderings of the same address would make a diagnostic ungreppable.
+function joinKeyPath(at: string, segment: string | number): string {
+  return at === '' ? String(segment) : `${at}.${segment}`;
+}
+
+/**
+ * § Design 4 — reject the inexpressible key set at EVERY depth, and refuse a
+ * cyclic document while doing it.
+ *
+ * `ancestors` is the DFS ancestor stack, not a visit log: YAML resolves a
+ * RECURSIVE anchor (`target: &t` … `rule: {loop: *t}`) into a genuinely cyclic
+ * object, which un-guarded recursion turns into a raw `RangeError` — a crash, not
+ * the `RuleRecordParseError` this module's totality contract promises. Tracking
+ * ANCESTORS (added on entry, removed on exit) detects a true cycle while leaving a
+ * legal SHARED anchor — the same node aliased twice as siblings, a DAG, not a
+ * cycle — free to validate; a visit-once log would misdiagnose that as a cycle.
+ */
+function assertNoInexpressibleKeys(
+  filePath: string,
+  value: unknown,
+  at: string,
+  ancestors: WeakSet<object>,
+): void {
   if (value === null || typeof value !== 'object') return;
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    const keyPath = at === '' ? key : `${at}.${key}`;
-    if (RULE_RECORD_INEXPRESSIBLE_KEYS.has(key)) {
-      throw new RuleRecordProducerKeyError(filePath, keyPath, key);
-    }
-    assertNoInexpressibleKeys(filePath, child, keyPath);
+  if (ancestors.has(value)) {
+    throw new RuleRecordParseError(
+      filePath,
+      at === '' ? '(document)' : at,
+      'cyclic YAML anchor — a record is a finite tree; a recursive alias can never be lowered totally or hashed (Prop 310 § Design 1/§ Design 12)',
+      'Remove the recursive `&anchor` / `*alias` reference and write the payload out explicitly.',
+    );
   }
+  ancestors.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((entry, i) =>
+      assertNoInexpressibleKeys(filePath, entry, joinKeyPath(at, i), ancestors),
+    );
+  } else {
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const keyPath = joinKeyPath(at, key);
+      if (RULE_RECORD_INEXPRESSIBLE_KEYS.has(key)) {
+        throw new RuleRecordProducerKeyError(filePath, keyPath, key);
+      }
+      assertNoInexpressibleKeys(filePath, child, keyPath, ancestors);
+    }
+  }
+  ancestors.delete(value);
 }
 
 // ── § Design 7 — the normative glob dialect ──────────────────────────────────
@@ -172,18 +224,28 @@ function assertNoInexpressibleKeys(filePath: string, value: unknown, at: string)
 // glob means what it says, so `*.ts` is root-level and tree-wide is written
 // `**/*.ts` (§ Design 7 "No silent promotion").
 
+/**
+ * The closed set of § Design 7 rules a glob can violate. A runtime value, not a
+ * bare type union, so the conformance suite can assert every rule has a negative
+ * fixture — an unexercised rule is an unpinned rule (§ Design 14).
+ */
+export const GLOB_DIALECT_RULES = [
+  'empty',
+  'surrounding-whitespace',
+  'separator',
+  'absolute-path',
+  'drive-letter',
+  'brace-expansion',
+  'negation',
+  'regex-syntax',
+  'empty-segment',
+  'parent-segment',
+  'embedded-globstar',
+  'adjacent-globstar',
+] as const;
+
 /** The § Design 7 rule a glob violated. Each maps to one negative conformance fixture. */
-export type GlobDialectRule =
-  | 'empty'
-  | 'separator'
-  | 'absolute-path'
-  | 'drive-letter'
-  | 'brace-expansion'
-  | 'negation'
-  | 'regex-syntax'
-  | 'empty-segment'
-  | 'embedded-globstar'
-  | 'adjacent-globstar';
+export type GlobDialectRule = (typeof GLOB_DIALECT_RULES)[number];
 
 /** A dialect violation: the rule broken + a message citing it. */
 export interface GlobDialectViolation {
@@ -191,8 +253,13 @@ export interface GlobDialectViolation {
   message: string;
 }
 
-const REGEX_SYNTAX_CHARS = ['[', ']', '(', ')', '?', '+'] as const;
+// `.` is DELIBERATELY absent — extension forms (`*.ts`) are the dialect's own
+// allowed shape. `|`, `^`, and `$` are regex constructs a glob never means, and
+// admitting them would let a regex-shaped glob silently match nothing.
+const REGEX_SYNTAX_CHARS = ['[', ']', '(', ')', '?', '+', '|', '^', '$'] as const;
 const DRIVE_LETTER_RE = /^[A-Za-z]:/;
+/** The segment a repo-relative, git-tracked path can never contain (§ Design 7). */
+const PARENT_SEGMENT = '..';
 
 /**
  * § Design 7 — validate one glob against the normative dialect. Returns the first
@@ -210,6 +277,13 @@ export function checkGlobDialect(glob: string): GlobDialectViolation | null {
       rule: 'empty',
       message:
         'empty glob — the dialect admits literal segments, `*`, and `**` only (Prop 310 § Design 7)',
+    };
+  }
+  if (glob !== glob.trim()) {
+    return {
+      rule: 'surrounding-whitespace',
+      message:
+        'leading/trailing whitespace — matching is against git-tracked path NAMES, which never carry it, so the glob can only ever match nothing (Prop 310 § Design 7); a glob is retained byte-verbatim, so the parser will not trim it for you',
     };
   }
   if (glob.includes('\\')) {
@@ -262,6 +336,13 @@ export function checkGlobDialect(glob: string): GlobDialectViolation | null {
           'empty path segment — an empty segment is not a literal segment (Prop 310 § Design 7)',
       };
     }
+    if (segment === PARENT_SEGMENT) {
+      return {
+        rule: 'parent-segment',
+        message:
+          '`..` segment — globs are repo-relative and match against git-tracked path names, which never contain `..`, so the glob can only ever match nothing (Prop 310 § Design 7 Windows semantics)',
+      };
+    }
     if (segment.includes('**') && segment !== '**') {
       return {
         rule: 'embedded-globstar',
@@ -301,10 +382,27 @@ export type RuleSeverity = z.infer<typeof RuleSeveritySchema>;
 export const RuleTargetTypeSchema = z.enum(['ast-grep', 'regex']);
 export type RuleTargetType = z.infer<typeof RuleTargetTypeSchema>;
 
+/**
+ * § Design 6 (R16) — the S-expression tier. Reader/compiled enums keep it as an
+ * inert legacy member with a deprecation diagnostic; the AUTHORING surface drops
+ * it, and unlike `rego` / ADR-109's action-rule type it does NOT return by version
+ * bump. Exported with its diagnostic so the conformance suite pins the wording:
+ * pointing an author at a bump that will never carry `ast` is a wrong answer, not
+ * a terse one.
+ */
+export const LEGACY_INERT_ENGINE = 'ast';
+export const LEGACY_ENGINE_DETAIL =
+  '`ast` (the S-expression tier) is DROPPED from the V1 authoring surface and does NOT return by version bump — 0 of the 485 corpus rules used it. Reader and compiled enums keep `ast` as an inert legacy member with a deprecation diagnostic, but no record may declare it (§ Design 6, R16)';
+
 // § Design 3/§ Design 6 (R16) — the authoring enum is a strict subset of the
 // reader-side `DeclaredEngineSchema`, so a target-enum widening can never outrun
-// the enum the compiled artifact is read under. Compile-time only.
+// the enum the compiled artifact is read under. The conditional type collapses to
+// `never` the moment the subset breaks, and the ASSIGNMENT below is what makes
+// that a COMPILE ERROR — a bare unused conditional type is inert, so the guard has
+// to be consumed to guard anything. The runtime half is pinned in the conformance
+// suite (`DeclaredEngineSchema.options` ⊇ `RuleTargetTypeSchema.options`).
 type _RuleTargetTypeIsDeclaredEngine = RuleTargetType extends DeclaredEngine ? true : never;
+const _ruleTargetTypeSubsetCheck: _RuleTargetTypeIsDeclaredEngine = true;
 
 /**
  * § Design 8 — the absence unit. The closed name space RESERVES `line | block |
@@ -334,8 +432,19 @@ export const RuleScopeSchema = z
     fileGlobs: z
       .array(GlobSchema)
       .min(1, { message: 'target.scope.fileGlobs must declare ≥1 glob (Prop 310 § Design 5)' }),
-    /** Applied as `positiveMatch && !excludeMatch` — positive-form entries, never `!`-negation. */
-    excludeGlobs: z.array(GlobSchema).optional(),
+    /**
+     * Applied as `positiveMatch && !excludeMatch` — positive-form entries, never
+     * `!`-negation. Min-1 WHEN PRESENT: an empty list is a silent no-op, and
+     * "no exclusions" is expressed by OMITTING the key (§ Design 4 — no key in
+     * this grammar carries a do-nothing value).
+     */
+    excludeGlobs: z
+      .array(GlobSchema)
+      .min(1, {
+        message:
+          'target.scope.excludeGlobs must declare ≥1 glob when present — omit the key to declare no exclusions (Prop 310 § Design 4)',
+      })
+      .optional(),
   })
   .strict();
 export type RuleScope = z.infer<typeof RuleScopeSchema>;
@@ -430,14 +539,19 @@ export type RuleTarget = z.infer<typeof RuleTargetSchema>;
  * non-empty. `examples` is certification's PRIMARY PREIMAGE SOURCE (ADR-112 §4)
  * and Amendment 1 makes the record the EDITABLE home, so a zero-byte exemplar
  * cannot serve as the fire-on-bad ∧ silent-on-good differential it exists to be.
+ *
+ * Named `RuleRecordExample`, not `RuleExample`: the shipped LEGACY
+ * `RuleExamples` (`lesson-pattern.ts`, on the same barrel) is the hit/miss shape
+ * of the frozen lesson path this grammar supersedes, and two barrel exports one
+ * character apart is a mis-import waiting to happen.
  */
-export const RuleExampleSchema = z
+export const RuleRecordExampleSchema = z
   .object({
     bad: nonEmpty('examples[].bad'),
     good: nonEmpty('examples[].good'),
   })
   .strict();
-export type RuleExample = z.infer<typeof RuleExampleSchema>;
+export type RuleRecordExample = z.infer<typeof RuleRecordExampleSchema>;
 
 /**
  * § Design 8 — the absence / must-contain block. Fires on a `target` match at
@@ -502,7 +616,7 @@ export const RuleRecordSchema = z
     message: nonEmpty('message'),
     recoveryHint: nonEmpty('recoveryHint').optional(),
     target: RuleTargetSchema,
-    examples: z.array(RuleExampleSchema).min(1, {
+    examples: z.array(RuleRecordExampleSchema).min(1, {
       message:
         'examples must carry ≥1 bad/good pair — it is certification’s primary preimage source (Prop 310 § Design 5)',
     }),
@@ -551,7 +665,7 @@ function lfDeepNormalize(value: unknown): unknown {
  * (`serialization-admit`) is exactly the class this defeats: a writer that
  * escape-smuggles `\r` past the admit hop must not fire a false drift alarm.
  */
-export function ruleExamplePairHash(example: RuleExample): string {
+export function ruleExamplePairHash(example: RuleRecordExample): string {
   return createHash('sha256')
     .update(canonicalStringify(lfDeepNormalize({ bad: example.bad, good: example.good })))
     .digest('hex');
@@ -617,10 +731,15 @@ export function parseRuleRecord(content: string, filePath: string): ParsedRuleRe
   }
   const raw = doc as Record<string, unknown>;
 
-  // ── § Design 4 — inexpressible keys, scanned at every depth ──
-  assertNoInexpressibleKeys(filePath, raw, '');
-
-  // ── § Design 2 — the no-silent-skip version gate, BEFORE shape validation ──
+  // ── § Design 2 — the no-silent-skip version gate, FIRST ──
+  // Ahead of the § Design 4 key scan on purpose: the inexpressible SET is V1's,
+  // so it may only be applied to a document that declares V1. A future version
+  // could re-admit a key V1 reserves — `version:` itself is § Design 3's named
+  // "can return by version bump" candidate — and diagnosing such a record as
+  // producer-owned would name the wrong defect. The version answers "whose rules
+  // apply" and therefore has to answer first. (The `target.type` gate stays AFTER
+  // the scan: an unknown type does not change WHICH grammar version's key set is
+  // in force, so no analogous misdiagnosis exists there.)
   const rawVersion = raw.schemaVersion;
   if (rawVersion === undefined) {
     throw new RuleRecordParseError(
@@ -642,10 +761,19 @@ export function parseRuleRecord(content: string, filePath: string): ParsedRuleRe
     );
   }
 
+  // ── § Design 4 — inexpressible keys, scanned at every depth (+ cycle guard) ──
+  assertNoInexpressibleKeys(filePath, raw, '', new WeakSet<object>());
+
   // ── § Design 2/§ Design 6 — the no-silent-skip target-type gate ──
   const rawTarget = raw.target;
   if (rawTarget !== null && typeof rawTarget === 'object' && !Array.isArray(rawTarget)) {
     const rawType = (rawTarget as Record<string, unknown>).type;
+    if (rawType === LEGACY_INERT_ENGINE) {
+      // R16 — `ast` is not "not yet"; it is DROPPED from the authoring surface and
+      // does not return by version bump. Telling the author otherwise would send
+      // them to wait for a bump that will never carry it.
+      throw new RuleRecordNoSilentSkipError(filePath, 'target.type', LEGACY_ENGINE_DETAIL);
+    }
     if (rawType !== undefined && !RuleTargetTypeSchema.safeParse(rawType).success) {
       throw new RuleRecordNoSilentSkipError(
         filePath,
