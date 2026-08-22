@@ -19,13 +19,21 @@ entry flags CANDIDATES with grounds, and the scorer types them.
   `compileRuleRecord(parsed, {ruleId: '0123456789abcdef', now: '2026-08-22T00:00:00.000Z'})`.
   The `ruleId` is SYNTHETIC and harness-only — identity is producer-owned (§ Design 3 / R17) and is
   minted at the ADR-112 intake seam, which this trial does not run.
-- **Supplementary verification (not part of the harness contract):** an off-tree scratch script
-  re-parsed each record and compared `severity` / `message` / payload against the frozen seed
-  byte-for-byte, then ran each record's `examples.bad` and `examples.good` through the shipped
-  matchers (`new RegExp(rule.pattern)` per line, as `rule-engine.ts:659` does; `matchAstGrepPattern`
-  at `.ts` for ast-grep). Results are reported per rule under **differential**. The only payload
-  divergence from seed across all 20 is the deliberate absence→`requires` transformation on
-  `5da43ea60b66e96e`.
+- **Differential harness:** `operations-local/r14-differential.mjs` runs each record's
+  `examples.bad` and `examples.good` through the shipped matchers (`new RegExp(rule.pattern)` per
+  line, as `rule-engine.ts:659` does; `matchAstGrepPattern` at `.ts` for ast-grep), classifies every
+  record into the four § Design 15 step 4 outcomes, and carries the entry-17 dead-matcher probe with
+  its two isolating controls. Results are reported per rule below under **differential**. It is
+  committed alongside the validate script so every measured claim in these notes is REPLAYABLE at
+  this SHA: it derives the repo root from its own module URL, reads nothing outside the tree, uses
+  no clock or randomness, and exits non-zero if the measurement stops matching the verdict recorded
+  here. Verbatim output at § Replay below.
+- **Fidelity leg (optional, needs the frozen seed artifact):** the same script accepts
+  `--seed <path>` to the frozen seed-20 JSON and compares each parsed record's `severity` /
+  `message` / payload against it. Measured: 19 of 20 identical to seed, 0 unexpected divergences —
+  the only payload divergence across all 20 is the deliberate absence→`requires` transformation on
+  `5da43ea60b66e96e`. The seed JSON lives outside the repo, so this leg is gated behind the flag and
+  the two legs above stand without it.
 
 ## Whole-seed transformation inventory
 
@@ -476,3 +484,53 @@ construct and the intended translation, never a violation.
 In all five non-satisfying cases the failure is a property of the LEGACY rule carried faithfully
 forward, not of the translation: the notes above name the mechanism for each, and every one of them
 would have been hidden by authoring an unrelated silent `good`.
+
+---
+
+## Replay
+
+Both harnesses re-run from the committed tree. Output below is verbatim; both are deterministic, so
+a re-run at this SHA reproduces it byte for byte.
+
+`node operations-local/r14-validate.mjs` (exit 0):
+
+```
+Summary: 20 record(s) — parsed 20, compiled 19, lowering-rejected 1, harness failures 0
+```
+
+`node operations-local/r14-differential.mjs` (exit 0):
+
+```
+Differential split (measured):
+  differential-satisfied   15  (entries 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 16, 18, 19, 20)
+  good-also-fires          3  (entries 11, 14, 15)
+  bad-does-not-fire        1  (entries 17)
+  not-evaluable            1  (entries 12)
+
+
+Dead-matcher probe — seed entry 17 (d940b2c9ffe92e99)
+Pattern under test: { $$$BEFORE, stdio: $VAL, $$$AFTER }
+
+  hits=0  "const out = execSync(cmd, { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' });"
+  hits=0  "const opts = { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' };"
+  hits=0  "({ cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' })"
+  hits=0  "const opts = { stdio: 'pipe', encoding: 'utf8' };"
+  hits=0  "const opts = { cwd: repoRoot, stdio: 'pipe' };"
+  hits=0  "const opts = { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8', shell: true };"
+  hits=0  "const opts = { a: 1, stdio: 'pipe', b: 2 };"
+
+  candidates: 7, total hits: 0 (a dead matcher scores 0)
+
+  Controls, over one fixed subject:
+  subject: "const opts = { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' };"
+    hits=1 (expected 1)  pattern: "const $X = { $$$BEFORE, stdio: $VAL, $$$AFTER }"
+    hits=1 (expected 1)  pattern: "{ cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' }"
+
+
+Replay check against the recorded verdict:
+  REPRODUCED — differential split and dead-matcher probe match the notes.
+```
+
+Both controls holding while all seven candidates score zero is what localizes entry 17's failure to
+the bare-brace-with-leading-`$$$` shape specifically, rather than to the matcher machinery, the
+metavariables, or the probe snippets.
