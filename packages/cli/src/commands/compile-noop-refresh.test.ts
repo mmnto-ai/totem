@@ -4,7 +4,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { generateInputHash, hashLesson, readCompileManifest, safeExec } from '@mmnto/totem';
+import {
+  attestRecordsHash,
+  generateInputHash,
+  hashLesson,
+  readCompileManifest,
+  safeExec,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { compileCommand } from './compile.js';
@@ -117,6 +123,33 @@ function setupWorkspace(tmpDir: string, options: WorkspaceOptions): void {
   }
 }
 
+/**
+ * Overwrite the manifest with an explicit input/records hash pair. Used by the
+ * Prop 310 rows, which must write their manifest AFTER `git init` so both hashes
+ * are taken over the tracked scope the command itself will use.
+ */
+function writeManifest(
+  manifestPath: string,
+  opts: { inputHash: string; recordsHash: string; ruleCount: number },
+): void {
+  fs.writeFileSync(
+    manifestPath,
+    JSON.stringify(
+      {
+        compiled_at: '2026-04-11T00:00:00Z',
+        model: 'test-model',
+        input_hash: opts.inputHash,
+        output_hash: '0'.repeat(64),
+        records_hash: opts.recordsHash,
+        rule_count: opts.ruleCount,
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf-8',
+  );
+}
+
 describe('compileCommand no-op manifest refresh (#1337)', () => {
   let tmpDir: string;
   let originalCwd: string;
@@ -183,6 +216,85 @@ describe('compileCommand no-op manifest refresh (#1337)', () => {
     // compiled-rules.json. Byte-for-byte equality is the strictest check.
     const rulesAfter = fs.readFileSync(rulesPath, 'utf-8');
     expect(rulesAfter).toBe(rulesBefore);
+  });
+
+  // ── Prop 310 § Design 1 (bot round 1, B-1) — the record class joins this branch ──
+  //
+  // A tracked record-only change moves NOTHING this branch previously looked at:
+  // the lessons are untouched so `input_hash` matches, and nothing prunes. Before
+  // the fix the manifest was left alone and `verify-manifest` then hard-FAILed on
+  // a stale `records_hash` with no writer that would act.
+  it('rewrites the manifest on a tracked RECORD-only change, leaving the rules file byte-identical', async () => {
+    const heading = 'Use err in catch';
+    const body = 'Do not use the identifier "error" in catch blocks.';
+    const lessonHash = hashLesson(heading, body);
+    setupWorkspace(tmpDir, {
+      lessons: { 'use-err.md': lessonMarkdown(heading, body) },
+      rules: [{ lessonHash, lessonHeading: heading }],
+    });
+
+    const totemDir = path.join(tmpDir, '.totem');
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+    const recordPath = path.join(totemDir, 'rules', 'a.rule.yaml');
+
+    // A REAL repo with the lessons AND one record staged, so the tracked-set
+    // restriction genuinely runs and the input hash the command computes matches
+    // what the manifest records — leaving the RECORD class as the only thing that
+    // can move. (Without staging the lessons this would rewrite via
+    // `manifestStale` and prove nothing.)
+    fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+    fs.writeFileSync(recordPath, 'schemaVersion: 1\n', 'utf-8');
+    safeExec('git', ['init', '-q'], { cwd: tmpDir });
+    safeExec('git', ['add', '.totem/lessons', '.totem/rules/a.rule.yaml'], { cwd: tmpDir });
+    writeManifest(manifestPath, {
+      inputHash: generateInputHash(path.join(totemDir, 'lessons'), tmpDir),
+      recordsHash: attestRecordsHash(totemDir, tmpDir),
+      ruleCount: 1,
+    });
+
+    const staleRecordsHash = readCompileManifest(manifestPath).records_hash;
+    // The record-only change. The file stays tracked, so it stays in scope.
+    fs.writeFileSync(recordPath, 'schemaVersion: 1\nseverity: warning\n', 'utf-8');
+    const rulesBefore = fs.readFileSync(rulesPath, 'utf-8');
+
+    await compileCommand({});
+
+    const manifestAfter = readCompileManifest(manifestPath);
+    expect(manifestAfter.records_hash).toBe(attestRecordsHash(totemDir, tmpDir));
+    expect(manifestAfter.records_hash).not.toBe(staleRecordsHash);
+    // Surgical: a records-only refresh must not rewrite compiled-rules.json.
+    expect(fs.readFileSync(rulesPath, 'utf-8')).toBe(rulesBefore);
+  });
+
+  it('stays a NO-OP when nothing changed — the records conjunct does not force a write', async () => {
+    // The negative control for the row above: adding `!recordsFresh` to the write
+    // condition must not turn every no-op run into a manifest rewrite.
+    const heading = 'Use err in catch';
+    const body = 'Do not use the identifier "error" in catch blocks.';
+    const lessonHash = hashLesson(heading, body);
+    setupWorkspace(tmpDir, {
+      lessons: { 'use-err.md': lessonMarkdown(heading, body) },
+      rules: [{ lessonHash, lessonHeading: heading }],
+    });
+
+    const totemDir = path.join(tmpDir, '.totem');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+    const recordPath = path.join(totemDir, 'rules', 'a.rule.yaml');
+    fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+    fs.writeFileSync(recordPath, 'schemaVersion: 1\n', 'utf-8');
+    safeExec('git', ['init', '-q'], { cwd: tmpDir });
+    safeExec('git', ['add', '.totem/lessons', '.totem/rules/a.rule.yaml'], { cwd: tmpDir });
+    writeManifest(manifestPath, {
+      inputHash: generateInputHash(path.join(totemDir, 'lessons'), tmpDir),
+      recordsHash: attestRecordsHash(totemDir, tmpDir),
+      ruleCount: 1,
+    });
+
+    const manifestBefore = fs.readFileSync(manifestPath, 'utf-8');
+    await compileCommand({});
+    // Byte-for-byte: no `compiled_at` bump, no rewrite at all.
+    expect(fs.readFileSync(manifestPath, 'utf-8')).toBe(manifestBefore);
   });
 
   it('records a tracked-only input hash, excluding an untracked lesson (producer/consumer symmetry)', async () => {

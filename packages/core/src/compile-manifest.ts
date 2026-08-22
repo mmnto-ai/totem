@@ -255,6 +255,34 @@ export function listRecordFilesUnder(totemDir: string, repoCwd?: string): string
 }
 
 /**
+ * The OQ-3 freshness predicate: is a manifest's `records_hash` still an honest
+ * statement about the record class on disk?
+ *
+ * TRUE when the field is ABSENT and zero git-tracked records exist (the
+ * pre-Prop-310 state the ruling keeps legal), or when it is PRESENT and equals
+ * the current attestation. FALSE otherwise — which is exactly the pair of
+ * conditions `verify-manifest` hard-FAILs on ("unattested file class" and
+ * "records hash mismatch").
+ *
+ * Single-homed because THREE surfaces have to agree about it: the verifier, the
+ * `--refresh-manifest` no-LLM path, and the ordinary compile no-op path. Two of
+ * them re-deriving the rule independently is how a writer comes to think a
+ * manifest is fresh that the verifier then rejects — the exact divergence bot
+ * round 1 found (B-1), where a record-only change left the no-op path convinced
+ * nothing needed rewriting.
+ */
+export function isRecordsAttestationFresh(
+  existingRecordsHash: string | undefined,
+  totemDir: string,
+  repoCwd?: string,
+): boolean {
+  if (existingRecordsHash === undefined) {
+    return listRecordFilesUnder(totemDir, repoCwd).length === 0;
+  }
+  return existingRecordsHash === attestRecordsHash(totemDir, repoCwd);
+}
+
+/**
  * Deterministic JSON stringify. Walks the input tree and sorts every
  * object's keys alphabetically before serialising. Arrays keep their
  * element order (arrays are ordered by contract). Primitives and

@@ -67,7 +67,7 @@ const LESSON_REF_RE = /^[0-9a-f]{16}$/;
  * refuses uppercase: admitting a non-canonical digest is a silent data-quality
  * hole, and normalising it on parse would move the hash basis.
  */
-const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+export const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 
 // The persisted minted-rule-id shape (ADR-112 §8): a 16-char lowercase-hex base from
 // `mintAuthoredRuleId`, with an optional collision suffix. The suffix is EXACTLY what the
@@ -307,20 +307,17 @@ export const AuthoredFixtureSchema = z
   // ZodEffects and break discriminator extraction).
   .superRefine((fixture, ctx) => {
     const src = fixture.preimageSource;
-    if (src.kind === 'lesson' && src.badExample.trim() === src.goodExample.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          'badExample and goodExample must differ — identical sides are a vacuous preimage-differential control (ADR-112 §4)',
-        path: ['preimageSource', 'goodExample'],
-      });
-    }
-    // Prop 310 § Design 10 — the derived record branch takes the SAME anti-vacuity
-    // floor as `lesson`: the two sides are the record's own `examples[i].bad`/`.good`,
-    // and an identical pair is unconditionally vacuous whichever home authored it.
-    // The record grammar requires both sides non-empty but does not require them to
-    // DIFFER, so this is the only gate that catches it.
-    if (src.kind === 'record' && src.badExample.trim() === src.goodExample.trim()) {
+    // The two INLINE-EXEMPLAR kinds take one anti-vacuity floor: `lesson` carries
+    // its pair from the lesson corpus, `record` from the § Design 10 derivation off
+    // `examples[i].bad`/`.good`, and an identical pair is unconditionally vacuous
+    // whichever home authored it. (The record grammar requires both sides non-empty
+    // but does not require them to DIFFER, so this is the only gate that catches
+    // it.) One predicate rather than two identical branches — a second copy is how
+    // one of them silently stops matching the other's message.
+    if (
+      (src.kind === 'lesson' || src.kind === 'record') &&
+      src.badExample.trim() === src.goodExample.trim()
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:

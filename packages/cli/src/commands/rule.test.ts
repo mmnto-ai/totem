@@ -413,13 +413,17 @@ describe('rule test', () => {
       };
     }
 
-    const runTest = async (examples: { bad: string; good: string }[]) => {
+    /** RAW captured stderr — every escape byte the command actually emitted. */
+    const runTestRaw = async (examples: { bad: string; good: string }[]) => {
       scaffold(tmpDir, [recordRule(examples)]);
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const { ruleTestCommand } = await import('./rule.js');
       await ruleTestCommand(RECORD_HASH);
-      return stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+      return consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
     };
+
+    const runTest = async (examples: { bad: string; good: string }[]) =>
+      stripAnsi(await runTestRaw(examples));
 
     it('PASSES with no lesson on disk — a record rule has no source lesson to look up', async () => {
       // The wiring check: before slice 3 this rule would have taken the lesson
@@ -448,6 +452,27 @@ describe('rule test', () => {
       expect(output).toContain('FAIL examples[0]');
       expect(output).toContain('good fired');
       expect(process.exitCode).toBe(1);
+    });
+
+    it('SANITIZES authored exemplar text before printing it (terminal injection)', async () => {
+      // A record's exemplars are author-controlled YAML. An ANSI escape in one
+      // would otherwise be interpreted by the terminal rather than shown. Built
+      // with `String.fromCharCode` so this source file carries no raw control byte.
+      const ESC = String.fromCharCode(27);
+      // RAW output on purpose: `stripAnsi` would remove the injected escape and
+      // make this assertion pass whether or not the code sanitizes.
+      const raw = await runTestRaw([
+        { bad: `${ESC}[31mnothing matches here`, good: 'logger.info("x")' },
+      ]);
+      // The preview line is reached only on FAIL, which this pair is (bad silent).
+      expect(stripAnsi(raw)).toContain('FAIL examples[0]');
+      expect(stripAnsi(raw)).toContain('bad:');
+      // The AUTHORED escape never reaches the terminal. `ui`'s own colouring adds
+      // escapes of its own, so the check is against the authored sequence, which
+      // `sanitizeForTerminal` replaces with a visible rendering.
+      expect(raw).not.toContain(`${ESC}[31m`);
+      // …while the visible text still does, so the preview stayed useful.
+      expect(stripAnsi(raw)).toContain('nothing matches here');
     });
 
     it('verifies EVERY pair, not just the first', async () => {

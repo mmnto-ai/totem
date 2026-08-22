@@ -528,6 +528,7 @@ export {
   generateInputHash,
   generateOutputHash,
   generateRecordsHash,
+  isRecordsAttestationFresh,
   listRecordFiles,
   listRecordFilesUnder,
   readCompileManifest,

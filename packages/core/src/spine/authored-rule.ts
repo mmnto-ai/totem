@@ -25,6 +25,7 @@ import {
   AuthoredNegativeFixtureSchema,
   AuthoredProvenanceRecordSchema,
   isIso8601CalendarDate,
+  SHA256_HEX_RE,
 } from '../compiler-schema.js';
 import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger } from './ledgers.js';
@@ -149,7 +150,7 @@ export const AuthoredRuleRecordSchema = z.object({
         message: 'record.path must be a non-empty repo-relative path',
       }),
       /** sha256 of the LF-admitted record bytes — what every attestation binds to. */
-      contentHash: z.string().regex(/^[0-9a-f]{64}$/, {
+      contentHash: z.string().regex(SHA256_HEX_RE, {
         message: 'record.contentHash must be the sha256 hex of the LF-admitted record bytes',
       }),
       /** Slice 1's parsed value (§ Design 3's derived engine + Amendment 1's pair hashes). */

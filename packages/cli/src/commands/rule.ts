@@ -2,6 +2,9 @@ import type { CompiledRule } from '@mmnto/totem';
 
 const TAG = 'Rule';
 
+/** How much of an authored exemplar a FAIL line previews before eliding. */
+const EXAMPLE_PREVIEW_MAX_CHARS = 80;
+
 // ─── Helpers ───────────────────────────────────────────
 
 function truncate(text: string, max: number): string {
@@ -238,7 +241,7 @@ export async function ruleScaffoldCommand(id: string, opts: { out?: string }): P
  */
 async function testRecordRuleExamples(rule: CompiledRule): Promise<void> {
   const { log, bold, dim, errorColor, success: successColor } = await import('../ui.js');
-  const { runSmokeGate } = await import('@mmnto/totem');
+  const { runSmokeGate, sanitizeForTerminal } = await import('@mmnto/totem');
 
   const examples = rule.examples ?? [];
   console.error('');
@@ -260,8 +263,19 @@ async function testRecordRuleExamples(rule: CompiledRule): Promise<void> {
     }
     failures += 1;
     log.info(TAG, `${errorColor(bold('FAIL'))} examples[${ordinal}] — ${reasons.join('; ')}`);
-    log.warn(TAG, `  bad:  ${dim(truncate(example.bad, 80))}`);
-    log.warn(TAG, `  good: ${dim(truncate(example.good, 80))}`);
+    // SANITIZED before it reaches the terminal (bot round 1, B-2): a record's
+    // exemplars are author-controlled YAML text, so an ANSI/control sequence in
+    // one would otherwise be interpreted by the terminal rather than shown — the
+    // same terminal-injection surface `authored-rule-intake.ts` escapes on its
+    // author/targetDefect interpolations.
+    log.warn(
+      TAG,
+      `  bad:  ${dim(truncate(sanitizeForTerminal(example.bad), EXAMPLE_PREVIEW_MAX_CHARS))}`,
+    );
+    log.warn(
+      TAG,
+      `  good: ${dim(truncate(sanitizeForTerminal(example.good), EXAMPLE_PREVIEW_MAX_CHARS))}`,
+    );
   }
 
   if (failures > 0) {

@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import { canonicalStringify } from '../compile-manifest.js';
+import { SHA256_HEX_RE } from '../compiler-schema.js';
 import { TotemError } from '../errors.js';
 import {
   AuthoredOriginSchema,
@@ -94,10 +95,7 @@ export const AuthoringLedgerEntrySchema = z
      * materialize path fail-louds when a frozen-artifact run meets an
      * uncommitted entry.
      */
-    freezeCommitment: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/)
-      .optional(),
+    freezeCommitment: z.string().regex(SHA256_HEX_RE).optional(),
     /**
      * Prop 310 § Design 1 — the rule record this entry was authored from. Present
      * iff the rule is record-carried (every rule since slice 3; pre-slice-3 rows
@@ -112,7 +110,7 @@ export const AuthoringLedgerEntrySchema = z
     record: z
       .object({
         path: nonEmpty('record.path'),
-        contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+        contentHash: z.string().regex(SHA256_HEX_RE),
       })
       .strict()
       .optional(),

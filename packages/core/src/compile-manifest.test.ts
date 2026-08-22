@@ -14,6 +14,7 @@ import {
   generateInputHash,
   generateOutputHash,
   generateRecordsHash,
+  isRecordsAttestationFresh,
   listRecordFiles,
   listRecordFilesUnder,
   readCompileManifest,
@@ -256,6 +257,34 @@ describe('generateRecordsHash / attestRecordsHash', () => {
 
     expect(listRecordFilesUnder(totemDir, tmpDir)).toEqual([]);
     expect(attestRecordsHash(totemDir, tmpDir)).toBe(EMPTY_RECORDS_HASH);
+  });
+
+  it('isRecordsAttestationFresh answers the OQ-3 question the same way the verifier does', () => {
+    // The predicate three writers/readers share (bot round 1, B-1). All four
+    // arms, in a REAL repo so the tracked restriction runs.
+    safeExec('git', ['init', '-q'], { cwd: tmpDir });
+
+    // absent + ZERO tracked records ⇒ fresh (the pre-Prop-310 state).
+    expect(isRecordsAttestationFresh(undefined, totemDir, tmpDir)).toBe(true);
+
+    // …an UNTRACKED draft does not change that: it is not counted.
+    write('draft.rule.yaml');
+    expect(isRecordsAttestationFresh(undefined, totemDir, tmpDir)).toBe(true);
+
+    // absent + N tracked records ⇒ STALE ("unattested file class").
+    write('tracked.rule.yaml');
+    safeExec('git', ['add', '.totem/rules/tracked.rule.yaml'], { cwd: tmpDir });
+    expect(isRecordsAttestationFresh(undefined, totemDir, tmpDir)).toBe(false);
+
+    // present + EQUAL ⇒ fresh.
+    const current = attestRecordsHash(totemDir, tmpDir);
+    expect(isRecordsAttestationFresh(current, totemDir, tmpDir)).toBe(true);
+
+    // present + DIFFERENT ⇒ stale ("records hash mismatch").
+    expect(isRecordsAttestationFresh('f'.repeat(64), totemDir, tmpDir)).toBe(false);
+    // …including the empty-set value once records exist, which is the shape a
+    // manifest written before the record landed would carry.
+    expect(isRecordsAttestationFresh(EMPTY_RECORDS_HASH, totemDir, tmpDir)).toBe(false);
   });
 
   it('attestRecordsHash resolves `<totemDir>/rules` — the one writer-side entry point', () => {

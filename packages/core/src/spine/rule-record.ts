@@ -33,6 +33,7 @@ import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
 import { canonicalStringify } from '../compile-manifest.js';
+import { SHA256_HEX_RE } from '../compiler-schema.js';
 import { TotemParseError } from '../errors.js';
 import type { DeclaredEngine } from './authored-rule.js';
 import { lfDeepNormalize } from './lf-normalize.js';
@@ -797,6 +798,16 @@ export interface ParsedRuleRecord {
   examplePairHashes: RuleExamplePairHash[];
 }
 
+/** One `examples[i]` ordinal and its § Design 10 drift-sensor digest. */
+export const RuleExamplePairHashSchema = z
+  .object({
+    ordinal: z.number().int().nonnegative(),
+    hash: z.string().regex(SHA256_HEX_RE, {
+      message: 'example pair hash must be a sha256 hex digest',
+    }),
+  })
+  .strict();
+
 /**
  * The `ParsedRuleRecord` value as a Zod schema — the parser's OUTPUT expressed at
  * a schema boundary so `AuthoredRuleRecord` can carry it under closed keys like
@@ -810,15 +821,6 @@ export interface ParsedRuleRecord {
  * file `contentHash`, so re-serialising this value into a hash basis would be a
  * second statement of the same bytes (Tenet 20) that could drift from them.
  */
-export const RuleExamplePairHashSchema = z
-  .object({
-    ordinal: z.number().int().nonnegative(),
-    hash: z.string().regex(/^[0-9a-f]{64}$/, {
-      message: 'example pair hash must be a sha256 hex digest',
-    }),
-  })
-  .strict();
-
 export const ParsedRuleRecordSchema = z
   .object({
     record: RuleRecordSchema,

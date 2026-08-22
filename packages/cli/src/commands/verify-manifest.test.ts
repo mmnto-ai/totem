@@ -677,8 +677,17 @@ describe('verify-manifest — records_hash (Prop 310 slice 3)', () => {
     writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
     writeRecord(tmpDir, 'no-console', 'error'); // one byte of one record
 
+    // The generic throw is shared by every mismatch this command can report, so
+    // the logged text is what pins WHICH gate fired (mirroring the sibling
+    // "unattested file class" row below).
+    const errors: string[] = [];
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+    });
     const { verifyManifestCommand } = await import('./verify-manifest.js');
     await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+    expect(errors.join('\n')).toContain('Records hash mismatch');
+    errSpy.mockRestore();
   });
 
   it('FAILS when a record is ADDED after the manifest was written', async () => {
@@ -687,8 +696,14 @@ describe('verify-manifest — records_hash (Prop 310 slice 3)', () => {
     writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
     writeRecord(tmpDir, 'second');
 
+    const errors: string[] = [];
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+    });
     const { verifyManifestCommand } = await import('./verify-manifest.js');
     await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+    expect(errors.join('\n')).toContain('Records hash mismatch');
+    errSpy.mockRestore();
   });
 
   it('FAILS "unattested file class" when records exist and the manifest has no records_hash', async () => {

@@ -1,3 +1,7 @@
+# Prop 310 slice 1 — V1 record-grammar parser (design of record: § Implementation Design)
+
+> **Everything above `## Implementation Design` is the `totem spec` generator's DISCARDED scaffold — it is NOT the contract.** It plans a JSON parser with author-set ids and graceful `{success:false}` degradation; the primaries specify a YAML record carrier, producer-owned identity, and fail-loud explicit-or-error. The divergence table at the head of § Implementation Design itemises the differences, and that section is the design the build was held to.
+
 ### Problem Statement
 
 The system requires a robust, type-safe, and validation-strict parser for `Prop310` Version 1 specification files (typically JSON format). This parser must ingest, validate, and transform raw payloads into guaranteed type-safe domain objects, preventing malformed or invalid schemas from leaking deeper into core systems.
