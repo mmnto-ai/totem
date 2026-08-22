@@ -41,9 +41,9 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
     findRepoRootSync,
     generateInputHash,
     generateOutputHash,
-    generateRecordsHash,
+    attestRecordsHash,
     getDefaultBranch,
-    listRecordFiles,
+    listRecordFilesUnder,
     readCompileManifest,
     RECORDS_DIR_REL,
     safeExec,
@@ -61,7 +61,10 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   const manifestPath = path.join(cwd, config.totemDir, 'compile-manifest.json');
   const rulesPath = path.join(cwd, config.totemDir, 'compiled-rules.json');
   const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
-  const recordsDir = path.join(cwd, config.totemDir, RECORDS_DIR_REL);
+  const totemDirAbs = path.join(cwd, config.totemDir);
+  // Diagnostic only — the hash and the count both go through the single-homed
+  // `<totemDir>`-taking helpers, so this string can never disagree with them.
+  const recordsDir = path.join(totemDirAbs, RECORDS_DIR_REL);
 
   log.info(TAG, 'Verifying compile manifest integrity...');
 
@@ -98,36 +101,43 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
 
   // ─── Prop 310 § Design 1 — the record file class (slice-3 OQ-3 ruling) ───
   //
-  // `records_hash` absent is OK IFF zero `*.rule.yaml` exist under
+  // `records_hash` absent is OK IFF zero GIT-TRACKED `*.rule.yaml` exist under
   // `<totemDir>/rules/` — the state every pre-Prop-310 manifest is in, printed
-  // explicitly as `records: none` rather than passing silently. The first record
-  // landing forces attestation. The COUNT decides, not a comparison against the
+  // explicitly as `records: none` rather than passing silently. The first tracked
+  // record forces attestation. The COUNT decides, not a comparison against the
   // empty-set hash: inferring "no files" from a digest would answer the question
-  // with a derivation instead of with the disk.
+  // with a derivation instead of with the file set.
+  //
+  // TRACKED, not "on disk": `attestRecordsHash` and `listRecordFilesUnder` both
+  // restrict to the git-tracked set, so an untracked draft record is neither hashed
+  // nor counted — writer and verifier are symmetric, exactly as they are for the
+  // lesson class, and a working-tree draft cannot block an unrelated push. The
+  // messages below say so, because a "none" that silently meant "none tracked"
+  // would be the kind of half-truth this gate exists to prevent.
   //
   // Both record failures are HARD: neither joins `mismatches`, because that list
   // feeds the freeze WARN-downgrade below, which is INPUT-HASH-ONLY. A record
   // mismatch must never be downgraded — the freeze covers the legacy lesson
   // compile path, which does not write or read this file class at all.
-  const actualRecordsHash = generateRecordsHash(recordsDir, cwd);
-  const recordCount = listRecordFiles(recordsDir, cwd).length;
+  const actualRecordsHash = attestRecordsHash(totemDirAbs, cwd);
+  const recordCount = listRecordFilesUnder(totemDirAbs, cwd).length;
   const recordsFailures: string[] = [];
   if (manifest.records_hash === undefined) {
     if (recordCount === 0) {
       log.info(
         TAG,
-        `records: none — no ${config.totemDir}/${RECORDS_DIR_REL}/**/*.rule.yaml on disk and no records_hash attested.`,
+        `records: none — no git-tracked ${config.totemDir}/${RECORDS_DIR_REL}/**/*.rule.yaml and no records_hash attested.`,
       );
     } else {
       recordsFailures.push(
-        `Unattested file class — ${recordCount} rule record(s) on disk but the manifest carries no records_hash.\n` +
+        `Unattested file class — ${recordCount} git-tracked rule record(s) but the manifest carries no records_hash.\n` +
           `  Records dir: ${recordsDir}\n` +
           `  Actual:      ${actualRecordsHash}`,
       );
     }
   } else if (manifest.records_hash !== actualRecordsHash) {
     recordsFailures.push(
-      `Records hash mismatch — ${config.totemDir}/${RECORDS_DIR_REL}/ changed since the manifest was written.\n` +
+      `Records hash mismatch — git-tracked ${config.totemDir}/${RECORDS_DIR_REL}/ changed since the manifest was written.\n` +
         `  Expected: ${manifest.records_hash}\n` +
         `  Actual:   ${actualRecordsHash}`,
     );
@@ -144,7 +154,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
       mismatches.length > 0
         ? await consultRuleCompilationFreeze({
             cwd,
-            totemDir: path.join(cwd, config.totemDir),
+            totemDir: totemDirAbs,
             warn: (msg) => log.warn(TAG, msg),
           })
         : undefined;

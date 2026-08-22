@@ -1362,7 +1362,8 @@ export async function findLegacyGrandfatheredRules(
   if (!fs.existsSync(rulesPath)) return null;
 
   try {
-    const { loadCompiledRulesFile, ruleBadExampleLines } = await import('@mmnto/totem');
+    const { loadCompiledRulesFile, ruleBadExampleLines, ruleGoodExampleLines } =
+      await import('@mmnto/totem');
     const rulesFile = loadCompiledRulesFile(rulesPath);
 
     const candidates: GrandfatheredRuleCandidate[] = [];
@@ -1381,7 +1382,11 @@ export async function findLegacyGrandfatheredRules(
       if (ruleBadExampleLines(rule).length === 0) {
         reasons.push('no-badExample');
       }
-      if (!rule.goodExample || rule.goodExample.trim().length === 0) {
+      // Same single-homing on the POSTIMAGE side. Reading `examples[i].bad` here
+      // but the legacy `goodExample` there would clear one reason and raise the
+      // other on the very same absence — § Design 10 makes `examples` the editable
+      // home for BOTH sides of the pair, so both readers have to know it.
+      if (ruleGoodExampleLines(rule).length === 0) {
         reasons.push('no-goodExample');
       }
 

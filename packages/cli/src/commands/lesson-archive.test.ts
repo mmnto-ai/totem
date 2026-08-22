@@ -1,10 +1,16 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { generateOutputHash, readCompileManifest } from '@mmnto/totem';
+import {
+  attestRecordsHash,
+  EMPTY_RECORDS_HASH,
+  generateOutputHash,
+  readCompileManifest,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { lessonArchiveCommand } from './lesson.js';
@@ -126,6 +132,33 @@ describe('lessonArchiveCommand (#1587)', () => {
 
     const manifestAfter = readCompileManifest(manifestPath);
     expect(manifestAfter.output_hash).toBe(generateOutputHash(rulesPath));
+  });
+
+  // ── Prop 310 § Design 1 (MIN-8) — this writer attests the record class ──
+  it('refreshes records_hash — the shipping writer reaches attestRecordsHash', async () => {
+    // The wiring check, not a helper check: without the call site this manifest
+    // keeps no `records_hash`, and `verify-manifest` then hard-FAILS "unattested
+    // file class" on any repo carrying a tracked record. Run in a REAL git repo
+    // with one STAGED record, so the attested value is neither the empty-set
+    // constant nor an untracked-inclusive walk — a missing call site cannot
+    // coincidentally produce it.
+    setupWorkspace(tmpDir, [{ lessonHash: 'abc123def456abcd', lessonHeading: 'Use err in catch' }]);
+    const totemDir = path.join(tmpDir, '.totem');
+    const recordsDir = path.join(totemDir, 'rules');
+    fs.mkdirSync(recordsDir, { recursive: true });
+    fs.writeFileSync(path.join(recordsDir, 'tracked.rule.yaml'), 'schemaVersion: 1\n', 'utf-8');
+    fs.writeFileSync(path.join(recordsDir, 'draft.rule.yaml'), 'schemaVersion: 1\n', 'utf-8');
+    execFileSync('git', ['init', '-q'], { cwd: tmpDir });
+    execFileSync('git', ['add', '.totem/rules/tracked.rule.yaml'], { cwd: tmpDir });
+
+    await lessonArchiveCommand('abc123def456abcd', { reason: 'Over-broad in test contexts' });
+
+    const manifestAfter = readCompileManifest(path.join(totemDir, 'compile-manifest.json'));
+    expect(manifestAfter.records_hash).toBe(attestRecordsHash(totemDir, tmpDir));
+    expect(manifestAfter.records_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(manifestAfter.records_hash).not.toBe(EMPTY_RECORDS_HASH);
+    // …and it is the TRACKED-set value, not the untracked-inclusive walk.
+    expect(manifestAfter.records_hash).not.toBe(attestRecordsHash(totemDir));
   });
 
   it('is idempotent on rerun: archivedReason refreshes, archivedAt is preserved', async () => {

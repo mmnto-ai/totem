@@ -7,12 +7,21 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { stringify as yamlStringify } from 'yaml';
 
 import {
+  AuthoredRuleInputSchema,
+  type ParsedRuleRecord,
+  parseRuleRecord,
   readAuthoringLedger,
   RuleRecordNoSilentSkipError,
   RuleRecordParseError,
 } from '@mmnto/totem';
 
-import { runRuleAuthor } from '../authored-rule-intake.js';
+import {
+  checkRecordReference,
+  deriveRecordFixtures,
+  RECORD_REFERENCE_RULES,
+  type RecordReferenceRule,
+  runRuleAuthor,
+} from '../authored-rule-intake.js';
 
 let root: string;
 let totemDir: string;
@@ -62,11 +71,11 @@ function writeRecord(
   opts: { crlf?: boolean } = {},
 ): string {
   const text = yamlStringify(body);
-  fs.writeFileSync(
-    path.join(rulesDir, `${slug}.rule.yaml`),
-    opts.crlf === true ? text.replace(/\n/g, '\r\n') : text,
-    'utf-8',
-  );
+  const target = path.join(rulesDir, `${slug}.rule.yaml`);
+  // The slug may carry a directory (`sub/x`) — records nest, and `records_hash`
+  // walks recursively.
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, opts.crlf === true ? text.replace(/\n/g, '\r\n') : text, 'utf-8');
   return recordRef(slug);
 }
 
@@ -222,6 +231,38 @@ describe('runRuleAuthor — the pre-slice-3 carrier keys are rejected BY NAME', 
     expect((thrown as { code?: string }).code).toBe('CONFIG_INVALID');
   });
 
+  it('interpolates the REPO’s totem-dir name into the hint, not a hardcoded `.totem/`', () => {
+    // MIN-6: a repo whose config names a different totem directory was being handed
+    // a migration instruction that does not resolve there. The hint is derived from
+    // the caller's actual `totemDir`.
+    const altRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-altdir-'));
+    const altTotem = path.join(altRoot, '.mytotem');
+    fs.mkdirSync(path.join(altTotem, 'spine'), { recursive: true });
+    fs.mkdirSync(path.join(altTotem, 'rules'), { recursive: true });
+    fs.writeFileSync(
+      path.join(altTotem, 'spine', 'authored-rules.yaml'),
+      yamlStringify({
+        splitRef: 'split-2026-06-27',
+        authoredAfterSplit: true,
+        heldOutNonInspectionAttestation: true,
+        rules: [{ ...decidableRule({ dslSource: 'console\\.log' }) }],
+      }),
+      'utf-8',
+    );
+    let thrown: unknown;
+    try {
+      runRuleAuthor(altTotem, { judgedBy: 'static-whitelist@test' });
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as Error).message).toContain('.mytotem/rules/<slug>.rule.yaml');
+    expect((thrown as Error).message).not.toContain('.totem/rules/<slug>');
+    expect((thrown as { recoveryHint?: string }).recoveryHint).toContain(
+      '.mytotem/rules/<slug>.rule.yaml',
+    );
+    fs.rmSync(altRoot, { recursive: true, force: true });
+  });
+
   it('rejects, never STRIPS — a migrated key does not silently vanish into a successful run', () => {
     writeYaml([decidableRule({ dslSource: 'console\\.log' })]);
     expect(() => run()).toThrow();
@@ -233,21 +274,104 @@ describe('runRuleAuthor — the pre-slice-3 carrier keys are rejected BY NAME', 
 // ── Prop 310 § Design 1 — the `record:` reference's own shape rules ───────────
 
 describe('runRuleAuthor — record reference resolution', () => {
-  it('rejects a reference that does not end in .rule.yaml', () => {
-    fs.writeFileSync(path.join(rulesDir, 'thing.yaml'), yamlStringify(recordBody()), 'utf-8');
-    writeYaml([decidableRule({ record: '.totem/rules/thing.yaml' })]);
-    expect(() => run()).toThrow(/does not end in '\.rule\.yaml'/);
+  // ── MIN-2: the LEXICAL rule table ──
+  //
+  // Every verdict here is a property of the reference TEXT, so it is identical on
+  // win32 and linux. That is the point: `path.resolve`/`path.relative` diverge on
+  // exactly these inputs (a backslash is a separator on one platform and a
+  // filename character on the other; a drive-letter absolute inside the root
+  // passes containment; the default case-insensitive filesystem resolves
+  // `.totem/Rules/…` and linux does not), and the reference is recorded VERBATIM
+  // in the tracked authoring-ledger — so an accepted machine-specific form would
+  // be committed into a shared attestation.
+  //
+  // Exercised through `checkRecordReference` (the pure rule) AND through
+  // `runRuleAuthor` (the shipping path), so the table cannot pass while the
+  // producer bypasses it.
+  const LEXICAL_TABLE: { reference: string; rule: RecordReferenceRule | null; why: string }[] = [
+    { reference: '.totem/rules/no-console-log.rule.yaml', rule: null, why: 'posix relative' },
+    {
+      reference: '.totem/rules/sub/no-console-log.rule.yaml',
+      rule: null,
+      why: 'nested subdir — records_hash walks recursively, so nesting stays legal',
+    },
+    { reference: '.totem\\rules\\x.rule.yaml', rule: 'separator', why: 'backslashes' },
+    {
+      reference: 'C:/totem/.totem/rules/x.rule.yaml',
+      rule: 'drive-letter',
+      why: 'drive-letter absolute',
+    },
+    { reference: '/.totem/rules/x.rule.yaml', rule: 'absolute-path', why: 'leading slash' },
+    { reference: '//server/.totem/rules/x.rule.yaml', rule: 'unc-path', why: 'UNC path' },
+    {
+      reference: '.totem/Rules/x.rule.yaml',
+      rule: 'records-dir-prefix',
+      why: 'records dir case variant',
+    },
+    {
+      reference: '.TOTEM/rules/x.rule.yaml',
+      rule: 'records-dir-prefix',
+      why: 'totem dir case variant',
+    },
+    { reference: './.totem/rules/x.rule.yaml', rule: 'records-dir-prefix', why: 'leading ./' },
+    { reference: '.totem/rules//x.rule.yaml', rule: 'empty-segment', why: '// mid-path' },
+    { reference: '.totem/rules/./x.rule.yaml', rule: 'current-segment', why: '. segment mid-path' },
+    { reference: '.totem/rules/../rules/x.rule.yaml', rule: 'parent-segment', why: '.. segment' },
+    { reference: '.totem/rules/', rule: 'is-the-records-dir', why: 'equals the rules dir' },
+    { reference: '.totem/rules/thing.yaml', rule: 'suffix', why: 'wrong file class' },
+  ];
+
+  it.each(LEXICAL_TABLE)('checkRecordReference: $why → $rule', ({ reference, rule }) => {
+    // EXACT rule, not merely "rejected": a reference that fails for the wrong
+    // reason would send the author to fix the wrong thing.
+    expect(checkRecordReference('.totem', reference)).toBe(rule);
   });
 
-  it('rejects a reference containing a `..` segment', () => {
-    writeYaml([decidableRule({ record: '.totem/rules/../rules/no-console-log.rule.yaml' })]);
-    expect(() => run()).toThrow(/contains a '\.\.' segment/);
-  });
+  it.each(LEXICAL_TABLE.filter((row) => row.rule !== null))(
+    'runRuleAuthor rejects CONFIG_INVALID naming [$rule]: $why',
+    ({ reference, rule }) => {
+      // The record the malformed reference "means" EXISTS on disk, so the reject
+      // can only be the lexical gate — never a coincidental CONFIG_MISSING.
+      writeRecord('x');
+      writeYaml([decidableRule({ record: reference })]);
+      let thrown: unknown;
+      try {
+        run();
+      } catch (err) {
+        thrown = err;
+      }
+      expect((thrown as { code?: string }).code).toBe('CONFIG_INVALID');
+      expect((thrown as Error).message).toContain(`[${rule}]`);
+      expect((thrown as Error).message).toContain('.totem/rules/<slug>.rule.yaml');
+    },
+  );
 
-  it('rejects a reference resolving OUTSIDE <totemDir>/rules/', () => {
+  it.each(LEXICAL_TABLE.filter((row) => row.rule === null))(
+    'runRuleAuthor ACCEPTS: $why',
+    ({ reference }) => {
+      // `sub/` is created by `writeRecord` when the slug carries a directory.
+      writeRecord(reference.slice('.totem/rules/'.length, -'.rule.yaml'.length));
+      writeYaml([decidableRule({ record: reference })]);
+      const res = run();
+      expect(res.rejected).toEqual([]);
+      expect(res.records[0]?.record.path).toBe(reference);
+    },
+  );
+
+  it('keeps the resolved-containment check as the second line of defence', () => {
+    // A reference that is lexically clean for a DIFFERENT totem dir still cannot
+    // escape this one's `rules/`. The lexical prefix rule catches it first, which
+    // is why the containment check is defence in depth rather than the only gate.
     fs.writeFileSync(path.join(totemDir, 'stray.rule.yaml'), yamlStringify(recordBody()), 'utf-8');
     writeYaml([decidableRule({ record: '.totem/stray.rule.yaml' })]);
-    expect(() => run()).toThrow(/does not resolve inside/);
+    expect(() => run()).toThrow(/records-dir-prefix/);
+  });
+
+  it('every RECORD_REFERENCE_RULE has a negative fixture in the table', () => {
+    // An unexercised rule is an unpinned rule — the same exhaustiveness guard the
+    // glob dialect's conformance suite applies.
+    const covered = new Set(LEXICAL_TABLE.map((row) => row.rule).filter((r) => r !== null));
+    expect([...covered].sort()).toEqual([...RECORD_REFERENCE_RULES].sort());
   });
 
   it('CONFIG_MISSING (not CONFIG_INVALID) when the referenced record does not exist', () => {
@@ -376,6 +500,50 @@ describe('runRuleAuthor — examples ⇄ fixture derivation', () => {
       }),
     ]);
     expect(run().records[0]!.provenance.positiveFixtures).toHaveLength(2);
+  });
+
+  it('binds the pair hash by ORDINAL FIELD, not array position (N-3)', () => {
+    // `examplePairHashes` is a list of `{ordinal, hash}` records. Indexing it would
+    // bind a fixture to the wrong pair the moment the list is filtered or
+    // reordered — and a WRONG drift sensor reads as intact, which is worse than a
+    // missing one. Pinned by asserting the derived hash equals the entry whose
+    // `.ordinal` matches, for a non-zero ordinal.
+    writeRecord(
+      'two-pairs',
+      recordBody({
+        examples: [
+          { bad: 'console.log("a")', good: 'logger.debug("a")' },
+          { bad: 'console.log("b")', good: 'logger.debug("b")' },
+        ],
+      }),
+    );
+    writeYaml([
+      decidableRule({ record: recordRef('two-pairs'), positiveFixtures: [fixture(101, 1)] }),
+    ]);
+    const record = run().records[0]!;
+    const src = record.provenance.positiveFixtures[0]!.preimageSource;
+    const byField = record.record.parsed.examplePairHashes.find((h) => h.ordinal === 1)!;
+    expect(src.kind).toBe('record');
+    if (src.kind === 'record') expect(src.pairHash).toBe(byField.hash);
+    // …and the two pairs really do hash differently, so the lookup is discriminating.
+    const other = record.record.parsed.examplePairHashes.find((h) => h.ordinal === 0)!;
+    expect(byField.hash).not.toBe(other.hash);
+  });
+
+  it('THROWS on a ParsedRuleRecord carrying no hash for the referenced ordinal (producer bug)', () => {
+    // Unreachable through `parseRuleRecord`, which emits one hash per example — so
+    // this drives the derivation directly with a hand-built value, the caller class
+    // the guard exists for. The removed fallback would have RECOMPUTED the hash,
+    // minting a § Design 10 drift sensor from a value nothing attested.
+    const parsed = parseRuleRecord(yamlStringify(recordBody()), recordRef('x'));
+    const stripped: ParsedRuleRecord = { ...parsed, examplePairHashes: [] };
+    expect(() =>
+      deriveRecordFixtures(
+        AuthoredRuleInputSchema.parse(decidableRule()),
+        { path: recordRef('x'), contentHash: 'a'.repeat(64), parsed: stripped },
+        '0123456789abcdef',
+      ),
+    ).toThrow(/no example-pair hash for ordinal 0/);
   });
 
   it('drops the envelope-side `example` reference from the DERIVED fixture (one home for the ordinal)', () => {

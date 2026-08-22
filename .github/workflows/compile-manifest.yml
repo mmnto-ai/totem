@@ -13,6 +13,10 @@ on:
       # is the only thing checking that attestation.
       - '.totem/rules/**'
       - 'packages/core/src/compiler*'
+      # The hashing implementation itself — `generateInputHash`, `generateRecordsHash`,
+      # and the manifest schema all live here, so a change to it must re-run the gate
+      # that checks its output.
+      - 'packages/core/src/compile-manifest.ts'
       - 'packages/cli/src/commands/compile.ts'
 
 concurrency:

@@ -46,6 +46,7 @@ import {
   requiresSuppressesMatch,
   ruleAppliesToFile,
   ruleBadExampleLines,
+  ruleGoodExampleLines,
 } from './record-runtime.js';
 import { parseRuleRecord } from './rule-record.js';
 import { buildFirings } from './windtunnel-firing.js';
@@ -860,6 +861,49 @@ describe('ruleBadExampleLines — one home for both badExample readers', () => {
     const rule = compile(scopedRegexRecord(['packages/**/*.ts']));
     expect(ruleBadExampleLines({ ...rule, badExample: 'never-read()' })).toEqual([
       'console.log(1)',
+    ]);
+  });
+});
+
+describe('ruleGoodExampleLines — the POSTIMAGE twin, on the identical contract', () => {
+  it('reads a record rule’s `examples[i].good`, every pair, in ordinal order', () => {
+    const rule = compile({
+      ...scopedRegexRecord(['packages/**/*.ts']),
+      examples: [
+        { bad: 'console.log(1)', good: 'logger.info(1)' },
+        { bad: 'console.log(2)', good: 'logger.info(2)\nlogger.info(3)' },
+      ],
+    });
+    expect(ruleGoodExampleLines(rule)).toEqual([
+      'logger.info(1)',
+      'logger.info(2)',
+      'logger.info(3)',
+    ]);
+  });
+
+  it('reads a LEGACY rule’s `goodExample`, split on lines', () => {
+    expect(ruleGoodExampleLines({ ...legacyRule(['**/*.ts']), goodExample: 'a()\r\nb()' })).toEqual(
+      ['a()', 'b()'],
+    );
+  });
+
+  it('returns [] for absent and for whitespace-only — the doctor `no-goodExample` test', () => {
+    expect(ruleGoodExampleLines(legacyRule(['**/*.ts']))).toEqual([]);
+    expect(ruleGoodExampleLines({ ...legacyRule(['**/*.ts']), goodExample: '  \n\t' })).toEqual([]);
+  });
+
+  it('reads the GOOD side, never the bad — the two readers are not aliases', () => {
+    // The failure this pins: a copy-paste twin that reads `example.bad` would make
+    // doctor's two reasons agree by accident and hide a genuine one-sided absence.
+    const rule = compile(scopedRegexRecord(['packages/**/*.ts']));
+    expect(ruleGoodExampleLines(rule)).toEqual(['logger.info(1)']);
+    expect(ruleBadExampleLines(rule)).toEqual(['console.log(1)']);
+  });
+
+  it('IGNORES a legacy `goodExample` on a record rule — the record’s examples are the home', () => {
+    const rule = compile(scopedRegexRecord(['packages/**/*.ts']));
+    expect(ruleGoodExampleLines({ ...rule, goodExample: 'never-read()' })).toEqual([
+      'logger.info(1)',
     ]);
   });
 });

@@ -104,12 +104,46 @@ export function isRecordPathRule(rule: Pick<CompiledRule, 'examples'>): boolean 
  * whitespace-only `badExample` must still count as absent for doctor.
  */
 export function ruleBadExampleLines(rule: Pick<CompiledRule, 'badExample' | 'examples'>): string[] {
-  const blocks: string[] = [];
-  if (isRecordPathRule(rule)) {
-    for (const example of rule.examples ?? []) blocks.push(example.bad);
-  } else if (rule.badExample !== undefined) {
-    blocks.push(rule.badExample);
-  }
+  return exemplarLines(
+    isRecordPathRule(rule) ? (rule.examples ?? []).map((e) => e.bad) : maybeBlock(rule.badExample),
+  );
+}
+
+/**
+ * The POSTIMAGE twin of `ruleBadExampleLines`, on the identical contract: record
+ * path → every `examples[i].good`, legacy → `goodExample`, blank lines dropped.
+ *
+ * `totem doctor`'s `no-goodExample` grandfathering reason reads it. Without the
+ * twin, a record rule cleared the `no-badExample` reason and then tripped
+ * `no-goodExample` on the very same absence — the record's exemplars live in
+ * `examples`, and § Design 10 makes that the editable home for BOTH sides of the
+ * pair, so a reader that single-homes one side and not the other reports half a
+ * truth. An empty result is exactly the old
+ * `!goodExample || goodExample.trim() === ''` test.
+ */
+export function ruleGoodExampleLines(
+  rule: Pick<CompiledRule, 'goodExample' | 'examples'>,
+): string[] {
+  return exemplarLines(
+    isRecordPathRule(rule)
+      ? (rule.examples ?? []).map((e) => e.good)
+      : maybeBlock(rule.goodExample),
+  );
+}
+
+/** A present block as a one-element list, an absent one as none. */
+function maybeBlock(block: string | undefined): string[] {
+  return block === undefined ? [] : [block];
+}
+
+/**
+ * Split exemplar blocks into lines and DROP the blank ones — the shared half of
+ * both readers' contract. The blank-drop is what makes them byte-identical to the
+ * shipped behaviour for legacy rules: Stage 4 already refuses to match an empty
+ * trimmed line, and a whitespace-only exemplar field must still count as absent
+ * for doctor.
+ */
+function exemplarLines(blocks: readonly string[]): string[] {
   return blocks.flatMap((block) => block.split(/\r?\n/)).filter((line) => line.trim().length > 0);
 }
 

@@ -106,7 +106,10 @@ function writeValidManifest(
   writeCompileManifest(manifestPath, {
     compiled_at: new Date().toISOString(),
     model: 'test-model',
-    input_hash: generateInputHash(lessonsDir),
+    // Producer/consumer symmetry: when a repo cwd is given, BOTH hashes are taken
+    // over the tracked scope — the same thing `totem compile` does, and the only
+    // way a fixture inside a real git repo can be a faithful writer.
+    input_hash: generateInputHash(lessonsDir, recordsCwd),
     output_hash: generateOutputHash(rulesPath),
     ...(recordsCwd !== undefined
       ? { records_hash: attestRecordsHash(path.join(recordsCwd, '.totem'), recordsCwd) }
@@ -729,6 +732,99 @@ describe('verify-manifest — records_hash (Prop 310 slice 3)', () => {
 
     const { verifyManifestCommand } = await import('./verify-manifest.js');
     await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
+  // ── MIN-1: the verdict is over GIT-TRACKED records, in a REAL git repo ──
+  //
+  // Every other row in this file runs under `os.tmpdir()`, where
+  // `listTrackedFilesUnder` returns null and the tracked-set restriction
+  // short-circuits — so none of them can tell "no records" from "no TRACKED
+  // records". This one initialises a real repo and stages one of two records.
+  // Nothing is mocked: the git seam is the thing under test.
+  describe('git-tracked scope (real git repo)', () => {
+    /**
+     * A real repo with the LESSONS staged (so the input hash the verifier computes
+     * — which restricts to tracked — matches what the writer recorded) and exactly
+     * ONE of two records staged.
+     */
+    function initRepoWithOneTrackedRecord(): void {
+      execFileSync('git', ['init', '-q'], { cwd: tmpDir });
+      execFileSync('git', ['add', '.totem/lessons'], { cwd: tmpDir });
+      writeRecord(tmpDir, 'tracked');
+      writeRecord(tmpDir, 'untracked');
+      execFileSync('git', ['add', '.totem/rules/tracked.rule.yaml'], { cwd: tmpDir });
+    }
+
+    it('FAILS "unattested file class" naming the TRACKED count when records_hash is absent', async () => {
+      const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+      initRepoWithOneTrackedRecord();
+      // Manifest written WITHOUT a records_hash but with the tracked-scope input
+      // hash, so the only thing this row can fail on is the record class.
+      writeCompileManifest(manifestPath, {
+        compiled_at: new Date().toISOString(),
+        model: 'test-model',
+        input_hash: generateInputHash(lessonsDir, tmpDir),
+        output_hash: generateOutputHash(rulesPath),
+        rule_count: 1,
+      });
+
+      const errors: string[] = [];
+      const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        errors.push(args.map(String).join(' '));
+      });
+      const { verifyManifestCommand } = await import('./verify-manifest.js');
+      await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+      // ONE, not two: the untracked sibling is not counted.
+      expect(errors.join('\n')).toContain('1 git-tracked rule record(s)');
+      errSpy.mockRestore();
+    });
+
+    it('PASSES with `records: none` when the ONLY record is untracked', async () => {
+      const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+      execFileSync('git', ['init', '-q'], { cwd: tmpDir });
+      execFileSync('git', ['add', '.totem/lessons'], { cwd: tmpDir });
+      writeRecord(tmpDir, 'draft'); // never staged
+      writeCompileManifest(manifestPath, {
+        compiled_at: new Date().toISOString(),
+        model: 'test-model',
+        input_hash: generateInputHash(lessonsDir, tmpDir),
+        output_hash: generateOutputHash(rulesPath),
+        rule_count: 1,
+      });
+
+      const logs: string[] = [];
+      const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        logs.push(args.map(String).join(' '));
+      });
+      const { verifyManifestCommand } = await import('./verify-manifest.js');
+      await expect(verifyManifestCommand()).resolves.toBeUndefined();
+      expect(logs.join('\n')).toContain('records: none — no git-tracked');
+      errSpy.mockRestore();
+    });
+
+    it('PASSES when the manifest attests exactly the TRACKED set', async () => {
+      const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+      initRepoWithOneTrackedRecord();
+      writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+
+      const { verifyManifestCommand } = await import('./verify-manifest.js');
+      await expect(verifyManifestCommand()).resolves.toBeUndefined();
+    });
+
+    it('is UNMOVED by editing an untracked record, and FAILS on editing a tracked one', async () => {
+      // The two arms of the tracked-set claim, on the same tree: the draft is
+      // invisible to the gate, the staged record is not.
+      const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+      initRepoWithOneTrackedRecord();
+      writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+
+      writeRecord(tmpDir, 'untracked', 'error'); // edit the DRAFT
+      const { verifyManifestCommand } = await import('./verify-manifest.js');
+      await expect(verifyManifestCommand()).resolves.toBeUndefined();
+
+      writeRecord(tmpDir, 'tracked', 'error'); // edit the STAGED record
+      await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+    });
   });
 
   it('IGNORES a non-record `.yaml` under the records dir — the double extension is the class', async () => {

@@ -52,7 +52,6 @@ import {
   readAuthoringLedger,
   RECORD_FILE_SUFFIX,
   RECORDS_DIR_REL,
-  ruleExamplePairHash,
   sanitizeForTerminal,
   SPLIT_REF_RE,
   TotemError,
@@ -118,9 +117,15 @@ const MIGRATED_RECORD_KEYS: ReadonlyMap<string, string> = new Map([
   ],
 ]);
 
-function assertNoReservedProducerKeys(value: unknown, at = '<root>'): void {
+/**
+ * `recordForm` is the reference shape THIS repo uses — derived from the caller's
+ * actual `totemDir`, never the hardcoded `.totem/`. A repo whose config names a
+ * different totem directory would otherwise be handed a migration instruction
+ * that does not resolve there (MIN-6).
+ */
+function assertNoReservedProducerKeys(value: unknown, recordForm: string, at = '<root>'): void {
   if (Array.isArray(value)) {
-    value.forEach((v, i) => assertNoReservedProducerKeys(v, `${at}[${i}]`));
+    value.forEach((v, i) => assertNoReservedProducerKeys(v, recordForm, `${at}[${i}]`));
     return;
   }
   if (value === null || typeof value !== 'object') return;
@@ -138,18 +143,23 @@ function assertNoReservedProducerKeys(value: unknown, at = '<root>'): void {
       // instruction to go edit one line, so it names the line.
       throw new TotemError(
         'CONFIG_INVALID',
-        `authored-rules.yaml carries '${k}' at ${at}.${k} — ${migrated}. Since Prop 310 slice 3 an authored entry carries ONLY a \`record:\` reference to \`${RECORDS_DIR_REL}/<slug>${RECORD_FILE_SUFFIX}\` (Prop 310 § Design 1, OQ-1 records-only).`,
-        `Move the rule into a record file at \`.totem/${RECORDS_DIR_REL}/<slug>${RECORD_FILE_SUFFIX}\` and replace the key with \`record: .totem/${RECORDS_DIR_REL}/<slug>${RECORD_FILE_SUFFIX}\`.`,
+        `authored-rules.yaml carries '${k}' at ${at}.${k} — ${migrated}. Since Prop 310 slice 3 an authored entry carries ONLY a \`record:\` reference to \`${recordForm}\` (Prop 310 § Design 1, OQ-1 records-only).`,
+        `Move the rule into a record file at \`${recordForm}\` and replace the key with \`record: ${recordForm}\`.`,
       );
     }
-    assertNoReservedProducerKeys(v, `${at}.${k}`);
+    assertNoReservedProducerKeys(v, recordForm, `${at}.${k}`);
   }
+}
+
+/** The `record:` reference shape for a given `.totem` dir, as the author must write it. */
+function recordReferenceForm(totemDir: string): string {
+  return `${path.basename(totemDir)}/${RECORDS_DIR_REL}/<slug>${RECORD_FILE_SUFFIX}`;
 }
 
 // ── Prop 310 § Design 1 — reading the referenced record ──────────────────────
 
 /** One ingested record: the resolved path, its LF-admitted content hash, and slice 1's parse. */
-interface IngestedRecord {
+export interface IngestedRecord {
   /** The reference exactly as the envelope wrote it — informational, never identity. */
   path: string;
   /** sha256 of the LF-admitted bytes — what every §8 attestation binds to. */
@@ -158,9 +168,101 @@ interface IngestedRecord {
 }
 
 /**
- * Resolve an envelope `record:` reference to an absolute path, enforcing the three
- * § Design 1 shape rules: it must end in `.rule.yaml`, must not navigate with
- * `..`, and must resolve INSIDE `<totemDir>/rules/`.
+ * The closed set of § Design 1 shape rules an envelope `record:` reference can
+ * violate. A runtime value, not a bare union, so the test table can assert every
+ * rule has a negative fixture — the same discipline `GLOB_DIALECT_RULES` applies
+ * on the record-grammar side.
+ */
+export const RECORD_REFERENCE_RULES = [
+  'separator',
+  'absolute-path',
+  'drive-letter',
+  'unc-path',
+  'empty-segment',
+  'current-segment',
+  'parent-segment',
+  'records-dir-prefix',
+  'suffix',
+  'is-the-records-dir',
+] as const;
+
+export type RecordReferenceRule = (typeof RECORD_REFERENCE_RULES)[number];
+
+// Vocabulary deliberately MIRRORS `checkGlobDialect`'s (rule-record.ts): a
+// backslash is a `separator` violation, a leading `/` an `absolute-path`, a
+// `C:` prefix a `drive-letter`, and so on, so an author who has met one surface
+// reads the other without relearning it. `checkGlobDialect` itself is NOT called
+// here — it bans `[ ( ) ? + | ^ $`, which are perfectly legal in a FILENAME.
+const DRIVE_LETTER_RE = /^[A-Za-z]:/;
+
+/**
+ * LEXICAL validation of a `record:` reference — pure string rules over the value
+ * as written, run BEFORE any path resolution.
+ *
+ * Why lexical and why first (falsification leg MIN-2): `path.resolve` +
+ * `path.relative` reach the same verdict for a POSIX-clean reference on every
+ * platform, but they DIVERGE on the malformed ones. On win32 a backslash is a
+ * separator and on linux it is a filename character; a drive-letter absolute that
+ * happens to land inside the root passes containment; `//` collapses; and the
+ * default filesystem case-insensitivity lets `.totem/Rules/x.rule.yaml` resolve
+ * into the real directory on Windows and fail on linux. The reference is also
+ * recorded VERBATIM in the tracked `authoring-ledger.ndjson`, so an accepted
+ * absolute or backslashed form would commit a machine-specific path into a shared
+ * attestation. These rules give one verdict on both platforms, on the text.
+ *
+ * Returns the violated rule, or `null` when the reference is well-formed. The
+ * resolved-containment check in `resolveRecordPath` stays as the second line of
+ * defence.
+ */
+export function checkRecordReference(
+  totemDirName: string,
+  reference: string,
+): RecordReferenceRule | null {
+  if (reference.includes('\\')) return 'separator';
+  if (reference.startsWith('//')) return 'unc-path';
+  if (reference.startsWith('/')) return 'absolute-path';
+  if (DRIVE_LETTER_RE.test(reference)) return 'drive-letter';
+
+  const requiredPrefix = `${totemDirName}/${RECORDS_DIR_REL}/`;
+  // CASE-SENSITIVE by construction (plain `startsWith`): the record class is the
+  // git-tracked path NAME, which is case-sensitive, and accepting a case variant
+  // here would admit a reference that resolves on a case-folding filesystem and
+  // dangles everywhere else.
+  if (!reference.startsWith(requiredPrefix)) return 'records-dir-prefix';
+  if (reference === requiredPrefix) return 'is-the-records-dir';
+
+  for (const segment of reference.split('/')) {
+    if (segment.length === 0) return 'empty-segment';
+    if (segment === '.') return 'current-segment';
+    if (segment === '..') return 'parent-segment';
+  }
+
+  // Last: a well-shaped path pointing at the wrong FILE CLASS is the most
+  // specific defect, so it reads after the structural ones.
+  if (!reference.endsWith(RECORD_FILE_SUFFIX)) return 'suffix';
+  return null;
+}
+
+/** Why each rule fired, in the author's terms. */
+const RECORD_REFERENCE_DETAIL: Record<RecordReferenceRule, string> = {
+  separator: 'contains a backslash — records use `/` exclusively, on every platform',
+  'absolute-path': 'is an absolute path — the reference is repo-relative',
+  'drive-letter': 'carries a drive letter — the reference is repo-relative',
+  'unc-path': 'is a UNC path — the reference is repo-relative',
+  'empty-segment': 'contains an empty path segment',
+  'current-segment': 'contains a `.` segment — write the path without it',
+  'parent-segment': 'contains a `..` segment — a reference never navigates upward',
+  'records-dir-prefix':
+    'does not begin with the records directory, compared CASE-SENSITIVELY against the git-tracked path name',
+  suffix: `does not end in '${RECORD_FILE_SUFFIX}'`,
+  'is-the-records-dir': 'names the records directory itself rather than a record file',
+};
+
+/**
+ * Resolve an envelope `record:` reference to an absolute path.
+ *
+ * Two gates, in order: the platform-independent LEXICAL rules above, then the
+ * resolved-containment check as defence in depth.
  *
  * The reference is repo-relative (§ Design 1) and this library is git-free, so the
  * repo root it resolves against is `dirname(totemDir)` — the layout `.totem/` and
@@ -170,25 +272,23 @@ interface IngestedRecord {
  */
 function resolveRecordPath(totemDir: string, reference: string): string {
   const rulesRoot = path.resolve(totemDir, RECORDS_DIR_REL);
-  const reject = (why: string): never => {
+  const totemDirName = path.basename(totemDir);
+  const expectedForm = recordReferenceForm(totemDir);
+  const reject = (rule: string, why: string): never => {
     throw new TotemError(
       'CONFIG_INVALID',
-      `authored-rules.yaml record reference '${reference}' ${why} — a record lives at \`${RECORDS_DIR_REL}/<slug>${RECORD_FILE_SUFFIX}\` under the totem directory (Prop 310 § Design 1)`,
-      `Point \`record:\` at a file inside ${rulesRoot} whose name ends in ${RECORD_FILE_SUFFIX}.`,
+      `authored-rules.yaml record reference '${reference}' ${why} [${rule}] — a record is referenced as \`${expectedForm}\` (Prop 310 § Design 1)`,
+      `Write \`record: ${expectedForm}\` with forward slashes, no leading \`./\` or \`/\`, and the directory name exactly as it appears in git.`,
     );
   };
-  if (!reference.endsWith(RECORD_FILE_SUFFIX)) {
-    reject(`does not end in '${RECORD_FILE_SUFFIX}'`);
-  }
-  // Checked on the RAW reference, before resolution collapses it: `..` is banned as
-  // a shape rule of its own (§ Failure modes), not merely as a way out of the root.
-  if (reference.split(/[/\\]/).includes('..')) {
-    reject("contains a '..' segment");
-  }
+
+  const violation = checkRecordReference(totemDirName, reference);
+  if (violation !== null) reject(violation, RECORD_REFERENCE_DETAIL[violation]);
+
   const resolved = path.resolve(path.dirname(totemDir), reference);
   const relative = path.relative(rulesRoot, resolved);
   if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
-    reject(`does not resolve inside ${rulesRoot}`);
+    reject('containment', `does not resolve inside ${rulesRoot}`);
   }
   return resolved;
 }
@@ -232,7 +332,7 @@ function ingestRecord(totemDir: string, reference: string): IngestedRecord {
  * intake — never a silent re-pair"); the hash-mismatch leg is the ledger's own
  * `contentHash` comparison, which needs no second mechanism.
  */
-function deriveRecordFixtures(
+export function deriveRecordFixtures(
   rule: AuthoredRuleInput,
   ingested: IngestedRecord,
   ruleId: string,
@@ -258,6 +358,20 @@ function deriveRecordFixtures(
       );
     }
     seenOrdinals.add(ordinal);
+    // Looked up by the `ordinal` FIELD, not by array position: `examplePairHashes`
+    // is a list of `{ordinal, hash}` records, so indexing it would silently bind a
+    // fixture to the wrong pair the moment the list is ever filtered or reordered —
+    // a wrong drift sensor is worse than none, because it reads as intact.
+    const pairHash = ingested.parsed.examplePairHashes.find((h) => h.ordinal === ordinal);
+    if (pairHash === undefined) {
+      // A PRODUCER bug, not an authoring defect: `parseRuleRecord` emits one hash
+      // per example. Reaching here means a hand-built `ParsedRuleRecord`, and
+      // recomputing the hash to paper over it would mint a § Design 10 drift sensor
+      // from a value nothing attested. Fail loud, in the incumbent idiom.
+      throw new Error(
+        `[Totem Error] deriveRecordFixtures: rule '${ruleId}' has no example-pair hash for ordinal ${ordinal} — the parser emits one per \`examples[i]\` (Prop 310 Amendment 1 item 3), so a missing hash means the ParsedRuleRecord was hand-built or a producer dropped it; deriving the fixture anyway would give it a drift sensor nothing computed from the record.`,
+      );
+    }
     return {
       pr: fixture.pr,
       filePath: fixture.filePath,
@@ -267,12 +381,9 @@ function deriveRecordFixtures(
         kind: 'record',
         ruleId,
         ordinal,
-        // Read from the parser's own per-pair hashes, never recomputed here: one
-        // home for the Amendment 1 item 3 basis (Tenet 20). The fallback recompute
-        // is unreachable through `parseRuleRecord` (which emits one hash per
-        // example, in ordinal order) and exists only so a hand-built
-        // `ParsedRuleRecord` cannot silently produce a fixture with no drift sensor.
-        pairHash: ingested.parsed.examplePairHashes[ordinal]?.hash ?? ruleExamplePairHash(example),
+        // The parser's own per-pair hash, never recomputed here: one home for the
+        // Amendment 1 item 3 basis (Tenet 20).
+        pairHash: pairHash.hash,
         badExample: example.bad,
         goodExample: example.good,
       },
@@ -380,7 +491,7 @@ export function runRuleAuthor(
 
   // FM(d): reject reserved producer keys at ANY depth (codex — `.strict()` is not recursive),
   // THEN strict-parse the top level (any unknown top-level/rule key also fails, never stripped).
-  assertNoReservedProducerKeys(doc);
+  assertNoReservedProducerKeys(doc, recordReferenceForm(totemDir));
   const parsed = AuthoredRulesFileSchema.safeParse(doc);
   if (!parsed.success) {
     throw new TotemError(

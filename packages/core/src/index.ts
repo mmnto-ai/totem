@@ -529,6 +529,7 @@ export {
   generateOutputHash,
   generateRecordsHash,
   listRecordFiles,
+  listRecordFilesUnder,
   readCompileManifest,
   RECORD_FILE_SUFFIX,
   RECORDS_DIR_REL,
@@ -1367,6 +1368,7 @@ export {
   requiresSuppressesMatch,
   ruleAppliesToFile,
   ruleBadExampleLines,
+  ruleGoodExampleLines,
 } from './spine/record-runtime.js';
 // Spine: Prop 310 V1 record grammar — the `.totem/rules/*.rule.yaml` parser (slice 1)
 export type {

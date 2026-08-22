@@ -15,6 +15,7 @@ import {
   generateOutputHash,
   generateRecordsHash,
   listRecordFiles,
+  listRecordFilesUnder,
   readCompileManifest,
   RECORDS_DIR_REL,
   writeCompileManifest,
@@ -225,6 +226,36 @@ describe('generateRecordsHash / attestRecordsHash', () => {
 
     fs.rmSync(path.join(rulesDir, 'untracked.rule.yaml'));
     expect(generateRecordsHash(rulesDir)).toBe(trackedOnly);
+  });
+
+  it('listRecordFilesUnder is the READ-side twin of attestRecordsHash over the same tracked set', () => {
+    // MIN-1/N-4: the verifier's COUNT and the writer's HASH must describe one set.
+    // Exercised in a REAL git repo, because outside one `restrictToTracked`
+    // short-circuits and the tracked/untracked distinction never runs at all.
+    safeExec('git', ['init', '-q'], { cwd: tmpDir });
+    write('tracked.rule.yaml');
+    write('untracked.rule.yaml');
+    safeExec('git', ['add', '.totem/rules/tracked.rule.yaml'], { cwd: tmpDir });
+
+    // Same directory, same restriction, reached through the `<totemDir>` helpers.
+    expect(listRecordFilesUnder(totemDir, tmpDir)).toEqual(['tracked.rule.yaml']);
+    expect(listRecordFilesUnder(totemDir, tmpDir)).toEqual(listRecordFiles(rulesDir, tmpDir));
+    expect(attestRecordsHash(totemDir, tmpDir)).toBe(generateRecordsHash(rulesDir, tmpDir));
+
+    // …and the tracked answer genuinely DIFFERS from the plain fs walk, so the
+    // equality above is not two names for the same unrestricted result.
+    expect(attestRecordsHash(totemDir, tmpDir)).not.toBe(attestRecordsHash(totemDir));
+    expect(listRecordFilesUnder(totemDir)).toEqual(['tracked.rule.yaml', 'untracked.rule.yaml']);
+  });
+
+  it('counts an UNTRACKED record as absent — it is neither attested nor counted', () => {
+    // The `records: none` claim rests on this: a working-tree draft must not make
+    // the verifier demand an attestation the writer would not have produced.
+    safeExec('git', ['init', '-q'], { cwd: tmpDir });
+    write('draft.rule.yaml'); // never `git add`ed
+
+    expect(listRecordFilesUnder(totemDir, tmpDir)).toEqual([]);
+    expect(attestRecordsHash(totemDir, tmpDir)).toBe(EMPTY_RECORDS_HASH);
   });
 
   it('attestRecordsHash resolves `<totemDir>/rules` — the one writer-side entry point', () => {

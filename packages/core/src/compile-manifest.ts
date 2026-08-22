@@ -182,10 +182,15 @@ export const EMPTY_RECORDS_HASH = crypto.createHash('sha256').digest('hex');
  * directory does not exist — an absent record class is the pre-Prop-310 state, not
  * an error, which is the one place this differs from the lesson class.
  *
- * Exported because `verify-manifest` needs the COUNT, not the hash, to decide the
- * OQ-3 verdict ("absent `records_hash` is OK iff zero records on disk"): deciding
- * it by comparing against `EMPTY_RECORDS_HASH` would infer a file count from a
- * digest instead of asking the disk.
+ * GIT-TRACKED, not "on disk": inside a repo an UNTRACKED `*.rule.yaml` is neither
+ * hashed nor counted, exactly as an untracked lesson is not. That is what keeps a
+ * draft record from diverging the attestation and blocking an unrelated push — and
+ * it is why every surface that reports on this class says "git-tracked" rather
+ * than "on disk". Outside a repo (or when git is unavailable) the restriction
+ * degrades to the plain fs walk, so the no-`repoCwd` form stays pure.
+ *
+ * Prefer `listRecordFilesUnder(totemDir, repoCwd)` at call sites that hold a
+ * `.totem` dir: it single-homes the `rules/` join with `attestRecordsHash`.
  */
 export function listRecordFiles(rulesDir: string, repoCwd?: string): string[] {
   if (!fs.existsSync(rulesDir)) return [];
@@ -219,7 +224,34 @@ export function generateRecordsHash(rulesDir: string, repoCwd?: string): string 
  * disagree about where records live or how they are hashed (Tenet 20).
  */
 export function attestRecordsHash(totemDir: string, repoCwd?: string): string {
-  return generateRecordsHash(path.join(totemDir, RECORDS_DIR_REL), repoCwd);
+  return generateRecordsHash(recordsDirOf(totemDir), repoCwd);
+}
+
+/**
+ * The record directory for a `.totem` dir — the ONE home of the
+ * `join(totemDir, RECORDS_DIR_REL)` join. Kept private on purpose: callers ask
+ * `attestRecordsHash` for the hash and `listRecordFilesUnder` for the file set, so
+ * neither the writer nor the verifier re-derives the path and they cannot drift
+ * apart about where records live (Tenet 20).
+ */
+function recordsDirOf(totemDir: string): string {
+  return path.join(totemDir, RECORDS_DIR_REL);
+}
+
+/**
+ * The record files the attestation covers, given the `.totem` dir — the READ-side
+ * twin of `attestRecordsHash`, over exactly the same directory and exactly the
+ * same tracked-set restriction.
+ *
+ * `verify-manifest` and `compile --refresh-manifest` need the COUNT, not the hash,
+ * to decide the OQ-3 verdict ("absent `records_hash` is OK iff zero records"), and
+ * they must be asking about the same set the writer hashed. Deciding it by
+ * comparing against `EMPTY_RECORDS_HASH` would infer a file count from a digest;
+ * re-deriving the directory at each call site would give the two surfaces two
+ * chances to disagree.
+ */
+export function listRecordFilesUnder(totemDir: string, repoCwd?: string): string[] {
+  return listRecordFiles(recordsDirOf(totemDir), repoCwd);
 }
 
 /**

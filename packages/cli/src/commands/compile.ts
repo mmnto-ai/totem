@@ -460,8 +460,7 @@ export async function compileCommand(
     // Prop 310 § Design 1 — the ONE record-class attestation every manifest writer
     // calls, so the three write sites in this file cannot disagree about it.
     attestRecordsHash,
-    listRecordFiles,
-    RECORDS_DIR_REL,
+    listRecordFilesUnder,
   } = await import('@mmnto/totem');
 
   // Compile-worker fingerprint resolved relative to the running compile.js.
@@ -893,13 +892,14 @@ export async function compileCommand(
     // writer") with no writer that would act.
     //
     // ABSENCE is judged by the OQ-3 rule, not by comparing against the empty-set
-    // hash: a manifest with no `records_hash` is fresh IFF zero records are on
-    // disk. That is the same verdict `verify-manifest` reaches, so this command
-    // never rewrites a pre-Prop-310 manifest the verifier is content with.
+    // hash: a manifest with no `records_hash` is fresh IFF zero GIT-TRACKED records
+    // exist. Both facts come from the `<totemDir>`-taking helpers, which share one
+    // home for the `rules/` join and one tracked-set restriction — so this command
+    // and `verify-manifest` cannot reach different verdicts about the same tree.
     const freshRecordsHash = attestRecordsHash(totemDir, cwd);
     const recordsFresh =
       compileManifest.records_hash === undefined
-        ? listRecordFiles(path.join(totemDir, RECORDS_DIR_REL), cwd).length === 0
+        ? listRecordFilesUnder(totemDir, cwd).length === 0
         : compileManifest.records_hash === freshRecordsHash;
     if (compileManifest.output_hash === freshOutputHash && recordsFresh) {
       log.info(TAG, 'Manifest already fresh — no changes.');

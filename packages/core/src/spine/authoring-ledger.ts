@@ -118,11 +118,16 @@ export const AuthoringLedgerEntrySchema = z
       .optional(),
     /**
      * Fingerprint of the MATERIAL author input (engine / class / record bytes /
-     * fixtures / origin) — identity (`author`/`targetDefect`/`ruleId`) AND
-     * `authoredAt` EXCLUDED, so a pure timestamp refresh is a no-op (§8: a
-     * timestamp drift must not churn the rule) while a matcher/fixture edit
-     * appends a new revision row under the SAME `ruleId`. Equal hash on re-read ⇒
-     * no append.
+     * fixtures / origin) — identity (`author`/`targetDefect`) AND `authoredAt`
+     * EXCLUDED, so a pure timestamp refresh is a no-op (§8: a timestamp drift must
+     * not churn the rule) while a matcher/fixture edit appends a new revision row
+     * under the SAME `ruleId`. Equal hash on re-read ⇒ no append.
+     *
+     * `ruleId` enters the material in exactly ONE place since Prop 310 slice 3: as
+     * the § Design 10 join key inside each derived
+     * `positiveFixtures[].preimageSource`. It is stable per identity (reused from
+     * the ledger, never re-minted), so it cannot churn an unchanged rule — the §8
+     * "identity is not material" property is preserved in effect, not by absence.
      */
     contentHash: nonEmpty('contentHash'),
   })
@@ -153,6 +158,13 @@ export { lfDeepNormalize } from './lf-normalize.js';
  * row — otherwise the rule reads `unchanged`, no row is appended, and the ledger
  * keeps the STALE split. `authoredAt` stays excluded (a timestamp refresh is a
  * no-op, §8); every OTHER ledger-attested mutable field is covered here.
+ *
+ * IDENTITY (`author`/`targetDefect`) is excluded. `ruleId` is NOT a separate
+ * exclusion since Prop 310 slice 3: it rides inside each derived
+ * `positiveFixtures[].preimageSource` as the § Design 10 join key. Because the
+ * intake reuses an identity's persisted id and never re-mints it, that value is
+ * constant across revisions of one rule and cannot make an unchanged rule read
+ * `revised`.
  */
 export function authoringContentHash(material: {
   declaredEngine: string;
