@@ -37,7 +37,10 @@ import { matchesRecordGlob } from '../sys/glob.js';
 import { design4ExemplarRecord, design8ExemplarRecord } from './record-exemplars.fixture.js';
 import { compileRuleRecord } from './record-lower.js';
 import {
+  assertNoAstGrepLineScope,
   assertNoTornRecordRules,
+  assertRequiresPatternsSafe,
+  isInsideRoot,
   isRecordPathRule,
   recordScopeMatchesFile,
   requiresSuppressesMatch,
@@ -672,6 +675,148 @@ describe('§ Design 12 — a rule that is neither record nor legacy fails LOUD',
   });
 });
 
+// ─── Runtime safety gates on a hand-edited manifest ──────────────────────────
+
+describe('§ Design 8 — runtime gates on a torn manifest', () => {
+  /** A record-shaped rule (carries `examples`) with a hand-set requires block. */
+  function handEdited(requires: Record<string, unknown>, engine = 'regex'): CompiledRule {
+    return CompiledRuleSchema.parse({
+      lessonHash: 'fedcba9876543210',
+      lessonHeading: 'hand-edited rule',
+      pattern: 'console\\.log',
+      message: 'x',
+      engine,
+      compiledAt: NOW,
+      fileGlobs: ['**/*.ts'],
+      examples: [{ bad: 'b', good: 'g' }],
+      ...(engine === 'ast-grep' ? { astGrepPattern: 'console.log($A)' } : {}),
+      requires,
+    });
+  }
+
+  it('rejects a ReDoS-shaped requires.pattern BEFORE evaluating it', () => {
+    // The compile gate runs safe-regex2 on this exact field, so an unsafe pattern
+    // here means a bypassed producer. At `scope: file` it would run unbounded
+    // against whole-file text on the pre-commit path.
+    const unsafe = handEdited({ pattern: '(a+)+$', scope: 'file' });
+    expect(() => assertRequiresPatternsSafe([unsafe])).toThrow(/ReDoS/);
+    expect(() =>
+      applyRulesToAdditions(ctx(), [unsafe], [addition('src/a.ts', 'console.log(1)')]),
+    ).toThrow(/unusable `requires.pattern`/);
+  });
+
+  it('rejects an uncompilable requires.pattern at the same gate', () => {
+    expect(() => assertRequiresPatternsSafe([handEdited({ pattern: '(', scope: 'line' })])).toThrow(
+      /invalid syntax/,
+    );
+  });
+
+  it('passes a safe pattern and every legacy rule untouched', () => {
+    expect(() =>
+      assertRequiresPatternsSafe([handEdited({ pattern: 'LC_ALL=C', scope: 'line' })]),
+    ).not.toThrow();
+    expect(() => assertRequiresPatternsSafe([legacyRule(['**/*.ts'])])).not.toThrow();
+  });
+
+  it('rejects `ast-grep` + `requires.scope: line` — the span-vs-line backstop', async () => {
+    // The lowering refuses this combination; a hand-edited manifest can still
+    // carry it, and the ast dispatcher would evaluate `match.lineText`.
+    const offender = handEdited({ pattern: 'LC_ALL=C', scope: 'line' }, 'ast-grep');
+    expect(() => assertNoAstGrepLineScope([offender])).toThrow(
+      /`requires\.scope: line` on the `ast-grep` engine/,
+    );
+    // The span-vs-line GROUNDS travel with the error, in its recovery hint.
+    try {
+      assertNoAstGrepLineScope([offender]);
+      expect.unreachable('expected the backstop to throw');
+    } catch (err) {
+      expect((err as { recoveryHint?: string }).recoveryHint).toContain(
+        'an ast-grep match is a SPAN',
+      );
+    }
+    await expect(
+      applyAstRulesToAdditions(
+        ctx(),
+        [offender],
+        [addition('src/a.ts', 'console.log(1)')],
+        os.tmpdir(),
+        undefined,
+        undefined,
+        async () => 'console.log(1)',
+      ),
+    ).rejects.toThrow(/`requires\.scope: line` on the `ast-grep` engine/);
+  });
+
+  it('leaves `ast-grep` + `file` and `regex` + `line` alone', () => {
+    expect(() =>
+      assertNoAstGrepLineScope([handEdited({ pattern: 'x', scope: 'file' }, 'ast-grep')]),
+    ).not.toThrow();
+    expect(() =>
+      assertNoAstGrepLineScope([handEdited({ pattern: 'x', scope: 'line' })]),
+    ).not.toThrow();
+  });
+});
+
+describe('§ Design 8 — the whole-file readers stay inside the root', () => {
+  it('treats an out-of-root path as unreadable, so the rule FIRES', () => {
+    // Diff-supplied paths are attacker-shaped on any lint over contributed
+    // changes. Containment yields "unreadable", which keeps the documented
+    // fail-toward-flagging direction rather than inventing a new failure mode.
+    expect(isInsideRoot(os.tmpdir(), '../outside.sh')).toBe(false);
+    expect(isInsideRoot(os.tmpdir(), 'nested/inside.sh')).toBe(true);
+    // A sibling-directory prefix must NOT pass — the reason for `path.relative`
+    // over a `startsWith` string test.
+    expect(isInsideRoot('/app', '../app-secrets/x.sh')).toBe(false);
+
+    const rule = compile({
+      ...design8ExemplarRecord(),
+      requires: { pattern: 'LC_ALL=C', scope: 'file' },
+    });
+    const violations = applyRulesToAdditions(
+      ctx(),
+      [rule],
+      [addition('../escape/x.sh', 'git log --oneline')],
+      undefined,
+      os.tmpdir(),
+    );
+    expect(violations).toHaveLength(1);
+  });
+
+  it('applies containment on the bounded dispatcher too', async () => {
+    const evaluator = new RegexEvaluator();
+    try {
+      const rule = compile({
+        ...design8ExemplarRecord(),
+        requires: { pattern: 'LC_ALL=C', scope: 'file' },
+      });
+      const result = await applyRulesToAdditionsBounded(
+        ctx(),
+        [rule],
+        [addition('../escape/x.sh', 'git log --oneline')],
+        { evaluator, timeoutMode: 'strict', repoRoot: os.tmpdir() },
+      );
+      expect(result.violations).toHaveLength(1);
+    } finally {
+      await evaluator.dispose();
+    }
+  });
+});
+
+describe('§ Design 8 — the compiled requires pattern is cached, not recompiled', () => {
+  it('returns identical verdicts across repeated evaluation (cache is transparent)', () => {
+    const rule = compile(design8ExemplarRecord());
+    const absent = { line: 'git log --oneline', file: () => null };
+    const present = { line: 'LC_ALL=C git log --oneline', file: () => null };
+    // Repeated because the cache is only exercised from the second call on, and a
+    // stateful `lastIndex` bug (a cached /g/ regex) would surface as an
+    // ALTERNATING verdict rather than a constant one.
+    for (let i = 0; i < 5; i += 1) {
+      expect(requiresSuppressesMatch(rule, absent)).toBe(false);
+      expect(requiresSuppressesMatch(rule, present)).toBe(true);
+    }
+  });
+});
+
 // ─── Certification seams — Stage 4 and the wind tunnel ───────────────────────
 
 describe('Stage 4 — record scope is visible, and “unscoped” does not invert', () => {
@@ -716,7 +861,16 @@ describe('Stage 4 — record scope is visible, and “unscoped” does not inver
       emptyBaseline,
       deps('packages/core/src/a.ts', 'console.log(1)\n'),
     );
-    expect(result.outcome).not.toBe('no-matches');
+    // EXACT outcome, not merely "not no-matches": `candidate-debt` is the ceiling
+    // a record rule can reach today. `in-scope-bad-example` requires the matched
+    // line to equal `rule.badExample`, and the lowering deliberately does NOT
+    // mirror `examples[0].bad` onto that legacy field (Tenet 20 — one editable
+    // home), so `lineMatchesBadExample` returns false for every record rule and
+    // the outcome always lands here. That carries a real consequence downstream:
+    // `candidate-debt` forces `severity: 'warning'`, so a record rule cannot be
+    // Stage-4-promoted to high confidence until intake supplies a badExample
+    // derivation (slice 3). Pinned so that change is visible when it lands.
+    expect(result.outcome).toBe('candidate-debt');
     expect(result.baselineMatches).toEqual([]);
   });
 
@@ -726,8 +880,10 @@ describe('Stage 4 — record scope is visible, and “unscoped” does not inver
       emptyBaseline,
       deps('src/a.ts', 'console.log(1)\n'),
     );
-    expect(result.outcome).not.toBe('no-matches');
-    expect(result.outcome).not.toBe('out-of-scope');
+    // Same exact-outcome discipline: this fixture carries no `badExample`
+    // either, so `candidate-debt` is the shipped answer and any drift shows up
+    // here rather than passing a loose negative assertion.
+    expect(result.outcome).toBe('candidate-debt');
   });
 });
 

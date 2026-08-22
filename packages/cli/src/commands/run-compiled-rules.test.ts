@@ -783,7 +783,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '100644 hash 0\tsrc/app.ts\n';
           }
           if (args[0] === 'show') {
@@ -937,7 +937,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '120000 hash 0\tsrc/app.ts\n'; // Symlink
           }
           if (args[0] === 'show') {
@@ -980,7 +980,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '100644 hash 0\tsrc/app.ts\n';
           }
           if (args[0] === 'show') {
@@ -1034,7 +1034,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '100644 hash 0\tsrc/app.ts\n';
           }
           if (args[0] === 'show') {
@@ -1129,7 +1129,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '100644 hash 0\tsrc/app.ts\n';
           }
           if (args[0] === 'show') {

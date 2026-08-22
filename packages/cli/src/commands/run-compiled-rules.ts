@@ -618,15 +618,22 @@ export async function runCompiledRules(
   if (isStaged && repoRoot) {
     stagedReadStrategy = async (filePath: string) => {
       try {
-        // totem-context: false positive — comment mentions `git ls-files`; the actual call below already uses --recurse-submodules
         // 1. Detect symlinks explicitly (git ls-files -s returns mode 120000).
         //    The `--` separator prevents filePath values starting with `-` from
         //    being interpreted as git options.
-        const lsOutput = safeExec(
-          'git',
-          ['ls-files', '--recurse-submodules', '-s', '--', filePath],
-          { cwd: repoRoot, env: { ...process.env, LC_ALL: 'C' } },
-        );
+        //
+        //    `--recurse-submodules` is deliberately ABSENT: combining it with
+        //    `-s` requires Git ≥2.36, this project declares no minimum Git
+        //    version, and on an older Git the flag makes the whole staged read
+        //    fail as `STAGED_READ_FAILED` — turning a supported setup into a
+        //    hard error. It bought nothing here either: the staged content is
+        //    read by `git show :<file>` below, which the flag does not affect,
+        //    so its only role was this symlink probe. Do not re-add it without
+        //    also declaring a minimum Git version.
+        const lsOutput = safeExec('git', ['ls-files', '-s', '--', filePath], {
+          cwd: repoRoot,
+          env: { ...process.env, LC_ALL: 'C' },
+        });
         if (lsOutput.startsWith('120000 ')) {
           return null; // Explicitly exclude symlinks from AST checks
         }

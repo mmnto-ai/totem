@@ -52,7 +52,11 @@ import {
   applyRulesToAdditions,
   fileMatchesGlobs,
 } from './rule-engine.js';
-import { isRecordPathRule, ruleAppliesToFile } from './spine/record-runtime.js';
+import {
+  isRecordPathRule,
+  ruleAppliesToFile,
+  type RuleScopeFields,
+} from './spine/record-runtime.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -312,12 +316,12 @@ export function parseStage4BaselineDirectives(content: string): string[] {
  */
 function classifyFile(
   filePath: string,
-  rule: Pick<CompiledRule, 'fileGlobs' | 'excludeGlobs' | 'examples'>,
+  rule: RuleScopeFields,
   baseline: Stage4Baseline,
 ): 'in-scope' | 'baseline' {
   const ruleFileGlobs = rule.fileGlobs;
   // File is outside the rule's declared scope → baseline (out-of-scope).
-  if (!ruleAppliesToFile(rule as CompiledRule, filePath)) return 'baseline';
+  if (!ruleAppliesToFile(rule, filePath)) return 'baseline';
   // File matches rule scope (or rule has no scope). Now check baseline overrides.
   //
   // Subtract rule-declared scope from the baseline first (CR mmnto-ai/totem#1766 R3).

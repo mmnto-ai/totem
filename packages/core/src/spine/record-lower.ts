@@ -261,7 +261,13 @@ function assertKeysDispositioned(
   at: string,
 ): void {
   for (const key of Object.keys(value)) {
-    if (table[key] === undefined) {
+    // `Object.hasOwn`, not `table[key] === undefined`: a key named `constructor`
+    // or `toString` would otherwise resolve up the prototype chain and read as
+    // "dispositioned". Slice 1's prototype floor already rejects those at parse,
+    // so nothing reaching here through `parseRuleRecord` can carry one — this is
+    // defence in depth for a hand-constructed `ParsedRuleRecord`, which is
+    // exactly the caller class this whole assertion exists for.
+    if (!Object.hasOwn(table, key)) {
       throw new Error(
         `[Totem Error] compileRuleRecord: record key '${at}${key}' has no defined lowering — Prop 310 § Design 12 forbids accepting a construct at parse and dropping it at compile. Give it a compiled home (and a disposition in record-lower.ts) or reject it at parse.`,
       );

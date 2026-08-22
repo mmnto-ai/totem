@@ -40,7 +40,15 @@ const NO_OPTIONAL_SYNTAX = new Set<OptionalSyntax>();
 const CLASSIFIER_OPTIONAL_SYNTAX = new Set<OptionalSyntax>(['brace-alternation', 'question']);
 const classifierCache = new Map<string, RegExp>();
 
-class BoundedRegexCache implements GlobCache {
+/**
+ * LRU-bounded `string → RegExp` cache. Nothing about it is glob-specific — the
+ * key is any source string and the value its compiled expression — so it is
+ * exported for the other compile-once-evaluate-many sites in the engine (Prop
+ * 310's `requires.pattern`, `spine/record-runtime.ts`). Reusing this rather than
+ * a bare `Map` keeps the shipped idiom AND the bound: an unbounded map keyed by
+ * rule content grows with every distinct pattern the process ever sees.
+ */
+export class BoundedRegexCache implements GlobCache {
   private readonly entries = new Map<string, RegExp>();
 
   constructor(private readonly capacity: number) {}

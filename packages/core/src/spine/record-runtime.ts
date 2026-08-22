@@ -24,9 +24,12 @@
 // file text as a LAZY resolver so the caller owns the read (and so a `line`-scope
 // requirement never forces one).
 
+import * as path from 'node:path';
+
 import type { CompiledRule } from '../compiler-schema.js';
 import { TotemParseError } from '../errors.js';
-import { fileMatchesGlobs, matchesRecordGlob } from '../sys/glob.js';
+import { validateRegex } from '../regex-validation.js';
+import { BoundedRegexCache, fileMatchesGlobs, matchesRecordGlob } from '../sys/glob.js';
 
 /**
  * The Prop 310 compiled homes, as a runtime-readable list. A rule carrying ANY
@@ -77,9 +80,17 @@ export const RECORD_COMPILED_HOME_KEYS = [
  * (which asserts the legacy manifest carries NONE of them — a stronger claim
  * than this predicate needs, and the right one for a freeze check).
  */
-export function isRecordPathRule(rule: CompiledRule): boolean {
+export function isRecordPathRule(rule: RuleScopeFields): boolean {
   return rule.examples !== undefined;
 }
+
+/**
+ * Exactly the fields the scope predicates READ. Structural rather than the whole
+ * `CompiledRule` so callers holding a projection — Stage 4's `classifyFile`
+ * takes one — pass it directly instead of casting a narrower object back to the
+ * full type. A cast there would have been a lie the compiler stopped checking.
+ */
+export type RuleScopeFields = Pick<CompiledRule, 'fileGlobs' | 'excludeGlobs' | 'examples'>;
 
 /**
  * § Design 12 — fail loud on a TORN record rule: one carrying a Prop 310
@@ -148,7 +159,7 @@ export function recordScopeMatchesFile(
  * expression, and four copies of a dialect fork is how a rule silently gets one
  * scope at dispatch and a different one at the fail-loud guard.
  */
-export function ruleAppliesToFile(rule: CompiledRule, filePath: string): boolean {
+export function ruleAppliesToFile(rule: RuleScopeFields, filePath: string): boolean {
   if (isRecordPathRule(rule)) {
     return recordScopeMatchesFile(filePath, rule.fileGlobs, rule.excludeGlobs);
   }
@@ -171,6 +182,92 @@ export interface RequiresScopeText {
   line: string;
   /** The whole file containing L, or `null` when unreadable. */
   file: () => string | null;
+}
+
+/**
+ * Compiled `requires.pattern` instances, LRU-bounded and shared across every
+ * dispatcher. Keyed by pattern SOURCE, so two rules declaring the same
+ * requirement share one compilation and a manifest reload does not leak.
+ */
+const REQUIRES_PATTERN_CACHE_CAPACITY = 512;
+const requiresPatternCache = new BoundedRegexCache(REQUIRES_PATTERN_CACHE_CAPACITY);
+
+/**
+ * Path-containment check for the § Design 8 whole-file readers.
+ *
+ * The paths handed to these readers come out of a DIFF, which is
+ * attacker-shaped input on any path where a lint runs over untrusted contributed
+ * changes — a `../` prefix would otherwise read outside the repo. `path.relative`
+ * rather than `startsWith` on purpose: the string form admits the
+ * sibling-directory bypass (`/app-secrets` passing a `/app` prefix test), which
+ * is the same reasoning the shipped ast-path containment checks use.
+ *
+ * An out-of-root path is reported as UNREADABLE, not as an error: the requirement
+ * is then unmet and the rule FIRES, preserving the fail-toward-flagging direction
+ * every other read failure on this path takes.
+ */
+export function isInsideRoot(root: string, filePath: string): boolean {
+  const resolvedRoot = path.resolve(root);
+  const relative = path.relative(resolvedRoot, path.resolve(resolvedRoot, filePath));
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/** Evaluate a compiled requirement against the declared § Design 8 scope. */
+function matchesInScope(re: RegExp, scope: 'line' | 'file', text: RequiresScopeText): boolean {
+  if (scope === 'line') return re.test(text.line);
+  const fileText = text.file();
+  if (fileText === null) return false;
+  return re.test(fileText);
+}
+
+/**
+ * § Design 8 — gate every `requires.pattern` in the loaded manifest through the
+ * SAME safe-regex2 check the compile path applies, before any of them is
+ * evaluated.
+ *
+ * The lowering already gates this, so a pattern reaching here unsafe means the
+ * manifest was hand-edited or written by a bypassed producer. Left ungated it is
+ * a live ReDoS surface, and a worse one than the target pattern's: at
+ * `scope: file` the requirement runs against WHOLE-FILE text, unbounded, on the
+ * pre-commit path. `validateRegex` is the same single-homed check the compile
+ * gate uses, so the two can never drift.
+ *
+ * Dispatcher altitude, once per invocation — the same reason as
+ * `assertNoTornRecordRules`: a per-match check would re-report one defect on
+ * every line of every file.
+ */
+export function assertRequiresPatternsSafe(rules: readonly CompiledRule[]): void {
+  for (const rule of rules) {
+    if (rule.requires === undefined) continue;
+    const validation = validateRegex(rule.requires.pattern);
+    if (validation.valid) continue;
+    throw new TotemParseError(
+      `Rule ${rule.lessonHash} (${rule.lessonHeading}) has an unusable \`requires.pattern\` (${validation.reason ?? 'invalid regex pattern'}) and cannot be evaluated (Prop 310 § Design 8).`,
+      `The record-path compile gate runs this exact safe-regex2 check, so a pattern that fails it here means the manifest was hand-edited or written by a bypassed producer. Re-compile the rule record. At \`scope: file\` this pattern would run against whole-file text. Pattern: ${JSON.stringify(rule.requires.pattern)}`,
+    );
+  }
+}
+
+/**
+ * § Design 8 — fail loud on `ast-grep` + `requires.scope: line`.
+ *
+ * The lowering REJECTS this combination (an ast-grep match is a span, and
+ * reading it as its start line makes the verdict depend on source formatting),
+ * but a hand-edited manifest can still carry it, and the ast dispatcher would
+ * silently evaluate `match.lineText` — shipping exactly the formatting-dependent
+ * semantic the ruling refused. Mirrors the tree-sitter `requires` backstop:
+ * unreachable from any compiled record, unreachable from the legacy corpus,
+ * live only against a torn manifest.
+ */
+export function assertNoAstGrepLineScope(rules: readonly CompiledRule[]): void {
+  const offender = rules.find(
+    (rule) => rule.engine === 'ast-grep' && rule.requires?.scope === 'line',
+  );
+  if (offender === undefined) return;
+  throw new TotemParseError(
+    `Rule ${offender.lessonHash} (${offender.lessonHeading}) carries \`requires.scope: line\` on the \`ast-grep\` engine, a combination the record lowering rejects.`,
+    "Prop 310 § Design 8: an ast-grep match is a SPAN, and reading it as its start line makes the verdict depend on source formatting rather than on the rule. No rule record can compile to this shape, so the manifest was hand-edited or written by a bypassed producer. Use `scope: file`, move the requirement into the payload's own `not:`/`has:` combinators, or wait for the reserved `block` unit.",
+  );
 }
 
 /**
@@ -199,9 +296,18 @@ export function requiresContextPresent(
   requires: NonNullable<CompiledRule['requires']>,
   text: RequiresScopeText,
 ): boolean {
-  let re: RegExp;
+  // Compiled once per distinct pattern, not once per MATCH: this runs on every
+  // target hit of every requires-carrying rule, and at `scope: file` against
+  // whole-file text. The pattern set is manifest-bounded, and the LRU bound keeps
+  // a long-lived process (the MCP server, a watch loop) from growing a map keyed
+  // by rule content.
+  let re = requiresPatternCache.get(requires.pattern);
+  if (re !== undefined) {
+    return matchesInScope(re, requires.scope, text);
+  }
   try {
     re = new RegExp(requires.pattern);
+    requiresPatternCache.set(requires.pattern, re);
   } catch (err) {
     throw new TotemParseError(
       `Rule ${rule.lessonHash} has an invalid \`requires.pattern\` and cannot be evaluated (Prop 310 § Design 8).`,
@@ -209,10 +315,7 @@ export function requiresContextPresent(
       err,
     );
   }
-  if (requires.scope === 'line') return re.test(text.line);
-  const fileText = text.file();
-  if (fileText === null) return false;
-  return re.test(fileText);
+  return matchesInScope(re, requires.scope, text);
 }
 
 /**

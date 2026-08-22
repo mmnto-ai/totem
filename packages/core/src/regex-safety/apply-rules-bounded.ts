@@ -34,6 +34,8 @@ import {
 // `rule-engine.ts` so both regex dispatchers scope and gate identically.
 import {
   assertNoTornRecordRules,
+  assertRequiresPatternsSafe,
+  isInsideRoot,
   requiresSuppressesMatch,
   ruleAppliesToFile,
 } from '../spine/record-runtime.js';
@@ -85,8 +87,10 @@ export async function applyRulesToAdditionsBounded(
     return { violations, timeoutOutcomes };
   }
 
-  // Prop 310 § Design 12 — torn-manifest guard (see `assertNoTornRecordRules`).
+  // Prop 310 § Design 12 — torn-manifest guard, and § Design 8's safe-regex2 gate
+  // on every `requires.pattern` before any of them is executed.
   assertNoTornRecordRules(rules);
+  assertRequiresPatternsSafe(rules);
 
   const regexRules = rules.filter((r) => r.engine === 'regex' || !r.engine);
 
@@ -122,7 +126,7 @@ export async function applyRulesToAdditionsBounded(
       // catch here would convert that loud failure into a quiet one. A reader
       // that means "absent" returns `null`, which is handled below.
       text = await options.readStrategy(file);
-    } else {
+    } else if (isInsideRoot(options.repoRoot, file)) {
       try {
         text = await fs.promises.readFile(path.resolve(options.repoRoot, file), 'utf-8');
         // totem-context: read failure yields no required-context evidence → the requirement is UNMET → the rule still FIRES; fails toward flagging, never toward suppression.
@@ -130,6 +134,8 @@ export async function applyRulesToAdditionsBounded(
         text = null;
       }
     }
+    // Out-of-root paths fall through as unreadable ⇒ requirement unmet ⇒ the rule
+    // FIRES. Diff-supplied paths are attacker-shaped; see `isInsideRoot`.
     fileTextCache.set(file, text);
     return text;
   };

@@ -3,6 +3,7 @@ import type { CompiledRule, DiffAddition, Violation } from '../compiler-schema.j
 import { extractAddedLines } from '../diff-parser.js';
 import type { RuleEngineContext } from '../rule-engine.js';
 import { applyAstRulesToAdditions, applyRulesToAdditions } from '../rule-engine.js';
+import { ruleAppliesToFile } from './record-runtime.js';
 import { firingLabelId } from './windtunnel-lock.js';
 import type { RuleFiring } from './windtunnel-scorer.js';
 
@@ -259,9 +260,16 @@ export async function buildFirings(input: BuildFiringsInput): Promise<BuildFirin
     // mined rule carries `requires`, so the 485-rule certification corpus does
     // exactly as much IO as before this line existed.
     let postImageText: ((file: string) => string | null) | undefined = undefined;
-    if (rules.some((r) => r.requires?.scope === 'file')) {
+    const fileScoped = rules.filter((r) => r.requires?.scope === 'file');
+    if (fileScoped.length > 0) {
       const resolved = new Map<string, string | null>();
       for (const file of new Set(additions.map((a) => a.file))) {
+        // Narrowed to files at least one file-scoped rule is actually SCOPED to:
+        // a PR touching hundreds of files would otherwise pay a post-image read
+        // for every one of them to answer a question no rule asks about most.
+        // An unread file resolves to `null` below, which only ever reaches a rule
+        // that is out of scope for it — so no verdict changes.
+        if (!fileScoped.some((rule) => ruleAppliesToFile(rule, file))) continue;
         // The reader's own failure contract is preserved: a throw propagates
         // rather than being degraded into "context absent".
         resolved.set(file, await readStrategy(file));

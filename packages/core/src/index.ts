@@ -1338,8 +1338,12 @@ export {
   V1_INEXPRESSIBLE_NAPI_KEYS,
 } from './spine/record-lower.js';
 export type { RequiresScopeText } from './spine/record-runtime.js';
+export type { RuleScopeFields } from './spine/record-runtime.js';
 export {
+  assertNoAstGrepLineScope,
   assertNoTornRecordRules,
+  assertRequiresPatternsSafe,
+  isInsideRoot,
   isRecordPathRule,
   RECORD_COMPILED_HOME_KEYS,
   recordScopeMatchesFile,

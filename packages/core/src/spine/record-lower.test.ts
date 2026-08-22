@@ -40,6 +40,14 @@ import {
 } from './rule-record.js';
 
 const FILE = '.totem/rules/fail-open-catch.rule.yaml';
+/**
+ * The size of the shipped legacy corpus. A CONSTANT, not a floor, because the
+ * `rule-compilation` freeze means nothing regenerates `.totem/compiled-rules.json`
+ * — so this number cannot drift while the freeze stands. When the freeze lifts and
+ * the corpus is regenerated or migrated, this updates ONCE, deliberately, and the
+ * update is the signal that the corpus moved.
+ */
+const SHIPPED_RULE_COUNT = 485;
 /** A well-formed ADR-112 §8 minted id (16 lowercase hex, no collision suffix). */
 const RULE_ID = '0123456789abcdef';
 const NOW = '2026-08-21T00:00:00.000Z';
@@ -112,6 +120,14 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     rules: Record<string, unknown>[];
   };
 
+  it('reads a NON-EMPTY corpus at the expected size (the floor the sweeps stand on)', () => {
+    // Without this, every assertion below is self-referentially vacuous: an empty
+    // or truncated `rules` array satisfies "all rules re-validate", "no rule
+    // carries a record field", and "every rule scopes identically" trivially, and
+    // the suite would go green on a corpus that had silently disappeared.
+    expect(rawManifest.rules.length).toBe(SHIPPED_RULE_COUNT);
+  });
+
   it('re-validates the shipped 485-rule manifest BYTE-IDENTICALLY under the extended schema', () => {
     // The freeze-compatibility proof (Amendment R11 / § Data model deltas): the
     // additions are optional, so the frozen corpus parses unchanged — and
@@ -119,7 +135,7 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     // which is the identity that actually matters to `verify-manifest`. A
     // required addition, or one that introduced a default, would move every hash.
     const parsed = CompiledRulesFileSchema.parse(rawManifest);
-    expect(parsed.rules.length).toBe(rawManifest.rules.length);
+    expect(parsed.rules.length).toBe(SHIPPED_RULE_COUNT);
     expect(canonicalStringify(parsed.rules)).toBe(canonicalStringify(rawManifest.rules));
   });
 
@@ -128,6 +144,7 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     // is what makes "legacy rules keep their matching behaviour byte-for-byte" a
     // fact rather than an intention. If a future writer ever puts one of these
     // fields on a mined rule, this fails before the matcher silently changes.
+    expect(rawManifest.rules.length).toBe(SHIPPED_RULE_COUNT);
     const carriers = rawManifest.rules.filter((rule) =>
       RECORD_COMPILED_HOME_KEYS.some((key) => rule[key] !== undefined),
     );
@@ -174,6 +191,7 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     // wind tunnel, so "legacy behaviour is byte-identical" has to be a measured
     // property of the whole shipped corpus, not a claim about one code path.
     const compiled = CompiledRulesFileSchema.parse(rawManifest).rules;
+    expect(compiled.length).toBe(SHIPPED_RULE_COUNT);
     const paths = [
       'a.ts',
       'src/a.ts',
@@ -249,7 +267,7 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
 
   it('couples the compiled `examples` and `curation` shapes to the grammar’s schemas', () => {
     expect(Object.keys(RuleRecordExampleSchema.shape).sort()).toEqual(['bad', 'good']);
-    expect(Object.keys(RuleCurationSchema._def.schema.shape).sort()).toEqual([
+    expect(Object.keys(RuleCurationSchema.innerType().shape).sort()).toEqual([
       'baseline5Phase',
       'curatedAt',
       'curatedBy',

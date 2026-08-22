@@ -18,7 +18,10 @@ import { TotemParseError } from './errors.js';
 // scope, § Design 8 `requires` two-pass). Every entry point is gated on
 // `isRecordPathRule`, so the legacy corpus's matching is untouched.
 import {
+  assertNoAstGrepLineScope,
   assertNoTornRecordRules,
+  assertRequiresPatternsSafe,
+  isInsideRoot,
   requiresSuppressesMatch,
   ruleAppliesToFile,
 } from './spine/record-runtime.js';
@@ -588,7 +591,10 @@ export function applyRulesToAdditions(
 
   // Prop 310 § Design 12 — a rule that is neither classifiable as a record nor
   // as legacy is a torn manifest; fail loud rather than drop its constructs.
+  // § Design 8 — and no `requires.pattern` is executed before it clears the same
+  // safe-regex2 gate the compile path applies.
   assertNoTornRecordRules(rules);
+  assertRequiresPatternsSafe(rules);
 
   const violations: Violation[] = [];
 
@@ -632,7 +638,7 @@ export function applyRulesToAdditions(
       // rather than degrading quietly). A reader that means "absent" returns
       // `null`, which is handled below.
       text = readFileText(file);
-    } else {
+    } else if (isInsideRoot(workDir, file)) {
       try {
         text = fs.readFileSync(path.resolve(workDir, file), 'utf-8');
         // totem-context: read failure yields no required-context evidence → the requirement is UNMET → the rule still FIRES; like the span exemption above, this fails toward flagging, never toward suppression.
@@ -640,6 +646,9 @@ export function applyRulesToAdditions(
         text = null;
       }
     }
+    // An out-of-root path falls through with `text === null` — treated as
+    // unreadable, so the requirement is unmet and the rule FIRES. Same direction
+    // as a read failure; see `isInsideRoot`.
     fileTextCache.set(file, text);
     return text;
   };
@@ -776,9 +785,12 @@ export async function applyAstRulesToAdditions(
   onWarn?: (msg: string) => void,
   readStrategy?: (filePath: string) => Promise<string | null>,
 ): Promise<Violation[]> {
-  // Prop 310 § Design 12 — torn-manifest guard, same altitude as the tree-sitter
-  // `requires` backstop below.
+  // Prop 310 § Design 12 / § Design 8 — torn-manifest guard, the safe-regex2
+  // gate, and the ast-grep span-vs-line backstop, all at the same altitude as the
+  // tree-sitter `requires` backstop below.
   assertNoTornRecordRules(rules);
+  assertRequiresPatternsSafe(rules);
+  assertNoAstGrepLineScope(rules);
 
   const treeSitterRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
   // Widen to include compound rules (mmnto/totem#1408). A rule is runnable
