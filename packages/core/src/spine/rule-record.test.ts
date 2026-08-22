@@ -526,6 +526,14 @@ describe('§ Design 7 — the normative glob dialect', () => {
     ['regex-syntax', 'src/a|b/*.ts'],
     ['regex-syntax', 'src/^foo/*.ts'],
     ['regex-syntax', 'src/foo$/*.ts'],
+    // Same masking cure applied to the CLOSING halves. `src/[abc]/*.ts` and
+    // `src/(a|b)/*.ts` above contain BOTH members of their pair, so `]` and `)`
+    // were only ever rejected by their opening partner's blacklist entry — drop
+    // `]` or `)` from the set and every fixture above still passed. These pin
+    // each one alone (Prop 310 Amendment 2's strict set is ruled spec text, so
+    // every member needs its own fixture).
+    ['regex-syntax', 'src/abc]/*.ts'],
+    ['regex-syntax', 'src/ab)/*.ts'],
     ['separator', 'packages\\core\\*.ts'],
     ['absolute-path', '/packages/core/*.ts'],
     ['drive-letter', 'C:/packages/core/*.ts'],
@@ -587,6 +595,29 @@ describe('§ Design 7 — the normative glob dialect', () => {
     'docs/release.notes.md',
   ])('admits the dialect-clean glob %j', (glob) => {
     expect(checkGlobDialect(glob)).toBeNull();
+  });
+
+  // Per-character LEGAL NEAR-MISS: the same glob shape with the banned character
+  // removed and nothing else changed. Without these, the negative fixtures above
+  // are satisfiable by a validator that rejects far too much — every one of them
+  // would still pass if `checkGlobDialect` simply refused any glob containing a
+  // letter from `abc`. Pairing each rejection with the minimally-different
+  // acceptance is what makes the boundary a boundary rather than a wall.
+  it.each([
+    ['[', 'src/[abc]/*.ts', 'src/abc/*.ts'],
+    [']', 'src/abc]/*.ts', 'src/abc/*.ts'],
+    ['(', 'src/(ab/*.ts', 'src/ab/*.ts'],
+    [')', 'src/ab)/*.ts', 'src/ab/*.ts'],
+    ['?', 'src/?.ts', 'src/a.ts'],
+    ['+', 'src/a+/*.ts', 'src/a/*.ts'],
+    ['|', 'src/a|b/*.ts', 'src/ab/*.ts'],
+    ['^', 'src/^foo/*.ts', 'src/foo/*.ts'],
+    ['$', 'src/foo$/*.ts', 'src/foo/*.ts'],
+  ])('bans %j but admits the construct-free literal beside it', (char, banned, clean) => {
+    const violation = checkGlobDialect(banned);
+    expect(violation?.rule).toBe('regex-syntax');
+    expect(violation?.message).toContain(`'${char}'`);
+    expect(checkGlobDialect(clean)).toBeNull();
   });
 
   it('never rewrites a glob — the validator is a pure predicate', () => {

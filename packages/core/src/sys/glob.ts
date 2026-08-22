@@ -40,7 +40,15 @@ const NO_OPTIONAL_SYNTAX = new Set<OptionalSyntax>();
 const CLASSIFIER_OPTIONAL_SYNTAX = new Set<OptionalSyntax>(['brace-alternation', 'question']);
 const classifierCache = new Map<string, RegExp>();
 
-class BoundedRegexCache implements GlobCache {
+/**
+ * LRU-bounded `string → RegExp` cache. Nothing about it is glob-specific — the
+ * key is any source string and the value its compiled expression — so it is
+ * exported for the other compile-once-evaluate-many sites in the engine (Prop
+ * 310's `requires.pattern`, `spine/record-runtime.ts`). Reusing this rather than
+ * a bare `Map` keeps the shipped idiom AND the bound: an unbounded map keyed by
+ * rule content grows with every distinct pattern the process ever sees.
+ */
+export class BoundedRegexCache implements GlobCache {
   private readonly entries = new Map<string, RegExp>();
 
   constructor(private readonly capacity: number) {}
@@ -82,6 +90,48 @@ const PATH_CLASSIFIER_PROFILE: GlobProfileOptions = Object.freeze({
   starActivation: 'all',
   crossSegmentWildcard: '.*',
   cache: classifierCache,
+});
+
+/**
+ * Prop 310 § Design 7 — the NORMATIVE record-grammar dialect, as a third profile
+ * over the same tokenizer rather than a second matcher (the file's own design:
+ * "profiles are option records over this one tokenizer and compiler"; a parallel
+ * implementation would be Tenet 20's prohibited mirror of glob semantics).
+ *
+ * Each option below IS a spec clause, not a preference:
+ *   - `barePatternMatchesBasename: false` — § Design 7 "No silent promotion": a
+ *     glob means what it says, so `*.ts` is ROOT-LEVEL and tree-wide is written
+ *     `**\/*.ts`. The rule-engine profile's basename prefix is exactly the
+ *     promotion the grammar kills.
+ *   - `starActivation: 'all'` — every `*` is a wildcard. The rule-engine profile's
+ *     bounded legacy shapes silently demote unrecognized stars to LITERALS; the
+ *     record dialect admits `*` and `**` and nothing else, so there is no
+ *     unrecognized shape to demote.
+ *   - `optionalSyntax` empty — braces are OUT of the dialect (§ Design 7's brace
+ *     ruling) and `?` is banned regex syntax. Both are already parse errors, so
+ *     this is defence in depth against a hand-edited manifest.
+ *   - `crossSegmentWildcard: '.*'` — a TRAILING `**` (`packages/**`) matches the
+ *     whole subtree. A `**\/` SEGMENT compiles to `(?:[^/]+/)*` via the shared
+ *     `globstar-segments` token, so `**\/*.ts` is tree-wide INCLUDING the root.
+ *   - `normalizePatternSeparators: false` — record globs are `/`-only (a backslash
+ *     is a parse error), so there is nothing to normalize on the PATTERN side.
+ *     The PATH side is normalized by `matchGlob` for every profile, which is
+ *     § Design 7's "matchers normalize host separators before evaluation".
+ *
+ * Matching is case-SENSITIVE (no `i` flag anywhere in this file) against
+ * repo-relative path names, per § Design 7's Windows-semantics paragraph.
+ *
+ * Its own cache instance is mandatory: the caches are keyed by glob STRING only,
+ * so sharing one with another profile would serve a `*.ts` regex compiled under
+ * the opposite promotion rule.
+ */
+const RECORD_DIALECT_PROFILE: GlobProfileOptions = Object.freeze({
+  normalizePatternSeparators: false,
+  barePatternMatchesBasename: false,
+  optionalSyntax: NO_OPTIONAL_SYNTAX,
+  starActivation: 'all',
+  crossSegmentWildcard: '.*',
+  cache: new BoundedRegexCache(RULE_ENGINE_CACHE_CAPACITY),
 });
 
 function escapeRegexLiteral(value: string): string {
@@ -318,6 +368,19 @@ export function matchesGlob(filePath: string, glob: string): boolean {
 /** Match a path with the anchored path-classifier compatibility profile. */
 export function matchesPathGlob(filePath: string, glob: string): boolean {
   return matchGlob(filePath, glob, PATH_CLASSIFIER_PROFILE);
+}
+
+/**
+ * Match a repo-relative path against ONE glob under the Prop 310 § Design 7
+ * normative dialect. Single-glob only: the two-array scope rule
+ * (`positiveMatch && !excludeMatch`) is record-grammar SEMANTICS and lives with
+ * the record runtime (`spine/record-runtime.ts`), not in the dialect mechanics.
+ *
+ * Reachable only for rules that carry a Prop 310 compiled home; every legacy
+ * rule keeps `matchesGlob`'s shipped behaviour byte-for-byte.
+ */
+export function matchesRecordGlob(filePath: string, glob: string): boolean {
+  return matchGlob(filePath, glob, RECORD_DIALECT_PROFILE);
 }
 
 /**

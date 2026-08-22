@@ -1329,6 +1329,28 @@ export {
   normalizeReviewChrome,
   REVIEW_CHROME_NORMALIZER_VERSION,
 } from './spine/review-normalize.js';
+// Spine: Prop 310 V1 record grammar — lowering + runtime evaluation (slice 2)
+export type { CompileRuleRecordOptions, RecordLanguageResolution } from './spine/record-lower.js';
+export {
+  compileRuleRecord,
+  languageProbeGlobs,
+  resolveRecordLanguage,
+  V1_INEXPRESSIBLE_NAPI_KEYS,
+} from './spine/record-lower.js';
+export type { RequiresScopeText } from './spine/record-runtime.js';
+export type { RuleScopeFields } from './spine/record-runtime.js';
+export {
+  assertNoAstGrepLineScope,
+  assertNoTornRecordRules,
+  assertRequiresPatternsSafe,
+  isInsideRoot,
+  isRecordPathRule,
+  RECORD_COMPILED_HOME_KEYS,
+  recordScopeMatchesFile,
+  requiresContextPresent,
+  requiresSuppressesMatch,
+  ruleAppliesToFile,
+} from './spine/record-runtime.js';
 // Spine: Prop 310 V1 record grammar — the `.totem/rules/*.rule.yaml` parser (slice 1)
 export type {
   GlobDialectRule,

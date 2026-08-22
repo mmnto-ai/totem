@@ -606,6 +606,61 @@ export async function runCompiledRules(
       );
     }
   };
+  // Staged-content reader, hoisted above BOTH dispatchers (Prop 310 slice 2,
+  // falsification round 2026-08-21). It was previously defined inside the AST
+  // block, so the regex path had no way to reach it — and a Prop 310
+  // `requires: {scope: file}` check evaluated there would have read the WORKTREE
+  // while `--staged` was judging the index. That is fail-open in the direction
+  // that matters: a required context deleted in the staged edit but still on
+  // disk would satisfy the requirement and let the staged violation through the
+  // pre-commit gate. One reader, both paths, same bytes.
+  let stagedReadStrategy: ((filePath: string) => Promise<string | null>) | undefined = undefined;
+  if (isStaged && repoRoot) {
+    stagedReadStrategy = async (filePath: string) => {
+      try {
+        // 1. Detect symlinks explicitly (git ls-files -s returns mode 120000).
+        //    The `--` separator prevents filePath values starting with `-` from
+        //    being interpreted as git options.
+        //
+        //    `--recurse-submodules` is deliberately ABSENT: combining it with
+        //    `-s` requires Git ≥2.36, this project declares no minimum Git
+        //    version, and on an older Git the flag makes the whole staged read
+        //    fail as `STAGED_READ_FAILED` — turning a supported setup into a
+        //    hard error. It bought nothing here either: the staged content is
+        //    read by `git show :<file>` below, which the flag does not affect,
+        //    so its only role was this symlink probe. Do not re-add it without
+        //    also declaring a minimum Git version.
+        const lsOutput = safeExec('git', ['ls-files', '-s', '--', filePath], {
+          cwd: repoRoot,
+          env: { ...process.env, LC_ALL: 'C' },
+        });
+        if (lsOutput.startsWith('120000 ')) {
+          return null; // Explicitly exclude symlinks from AST checks
+        }
+
+        // 2. Read staged content
+        const content = safeExec('git', ['show', `:${filePath}`], {
+          cwd: repoRoot,
+          trim: false,
+          env: { ...process.env, LC_ALL: 'C' },
+        });
+
+        // 3. Normalize CRLF to LF specifically for the staged callback
+        // totem-context: Invariant #4 refers to an internal invariant number, not an issue ref
+        // Disk-read callback preserves existing behavior per Invariant #4.
+        return content.replace(/\r\n/g, '\n');
+      } catch (err) {
+        // Explicit throw per Failure Mode 1 decision
+        throw new TotemError(
+          'STAGED_READ_FAILED',
+          `Failed to read staged content for ${filePath}`,
+          `git show :${filePath} failed. The file may not exist in the index or may be staged for deletion. Ensure --staged is used correctly.`,
+          { cause: err },
+        );
+      }
+    };
+  }
+
   const regexEvaluator = new RegexEvaluator({}, writeRegexTelemetry);
   let regexViolations: Violation[] = [];
   const regexTimeouts: RuleTimeoutOutcome[] = [];
@@ -618,6 +673,10 @@ export async function runCompiledRules(
         evaluator: regexEvaluator,
         timeoutMode: effectiveTimeoutMode,
         repoRoot: repoRoot ?? cwd,
+        // Prop 310 § Design 8 — a file-scoped requirement reads the same bytes
+        // the lint is judging (the index under `--staged`, the worktree
+        // otherwise). Undefined outside staged mode ⇒ worktree read.
+        readStrategy: stagedReadStrategy,
       },
       ruleEventCallback,
     );
@@ -644,48 +703,8 @@ export async function runCompiledRules(
     log.dim(tag, `Running ${astRules.length} AST rule(s)...`);
     try {
       const workingDirectory = repoRoot ?? cwd;
-      let readStrategy: ((filePath: string) => Promise<string | null>) | undefined = undefined;
-
-      if (isStaged) {
-        if (repoRoot) {
-          readStrategy = async (filePath: string) => {
-            try {
-              // totem-context: false positive — comment mentions `git ls-files`; the actual call below already uses --recurse-submodules
-              // 1. Detect symlinks explicitly (git ls-files -s returns mode 120000).
-              //    The `--` separator prevents filePath values starting with `-` from
-              //    being interpreted as git options.
-              const lsOutput = safeExec(
-                'git',
-                ['ls-files', '--recurse-submodules', '-s', '--', filePath],
-                { cwd: repoRoot, env: { ...process.env, LC_ALL: 'C' } },
-              );
-              if (lsOutput.startsWith('120000 ')) {
-                return null; // Explicitly exclude symlinks from AST checks
-              }
-
-              // 2. Read staged content
-              const content = safeExec('git', ['show', `:${filePath}`], {
-                cwd: repoRoot,
-                trim: false,
-                env: { ...process.env, LC_ALL: 'C' },
-              });
-
-              // 3. Normalize CRLF to LF specifically for the staged callback
-              // totem-context: Invariant #4 refers to an internal invariant number, not an issue ref
-              // Disk-read callback preserves existing behavior per Invariant #4.
-              return content.replace(/\r\n/g, '\n');
-            } catch (err) {
-              // Explicit throw per Failure Mode 1 decision
-              throw new TotemError(
-                'STAGED_READ_FAILED',
-                `Failed to read staged content for ${filePath}`,
-                `git show :${filePath} failed. The file may not exist in the index or may be staged for deletion. Ensure --staged is used correctly.`,
-                { cause: err },
-              );
-            }
-          };
-        }
-      }
+      // Defined once above both dispatchers — see the hoist comment there.
+      const readStrategy = stagedReadStrategy;
 
       astViolations = await applyAstRulesToAdditions(
         ruleCtx,

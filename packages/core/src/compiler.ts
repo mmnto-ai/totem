@@ -11,7 +11,6 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 
-import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
 import type {
@@ -20,7 +19,6 @@ import type {
   CompiledRulesFile,
   CompilerOutput,
   NonCompilableEntry,
-  RegexValidation,
 } from './compiler-schema.js';
 import {
   CompiledRulesFileSchema,
@@ -105,23 +103,12 @@ export function hashLesson(heading: string, body: string): string {
 
 // ─── Regex validation ───────────────────────────────
 
-/**
- * Validate that a pattern string is a syntactically valid RegExp
- * and is not vulnerable to ReDoS (catastrophic backtracking).
- */
-export function validateRegex(pattern: string): RegexValidation {
-  try {
-    new RegExp(pattern);
-  } catch {
-    return { valid: false, reason: 'invalid syntax' };
-  }
-
-  if (!safeRegex(pattern)) {
-    return { valid: false, reason: 'ReDoS vulnerability detected' };
-  }
-
-  return { valid: true };
-}
+// Re-exported, not defined here: the rule engine needs this same gate at
+// dispatcher altitude (Prop 310 § Design 8), and `compiler.ts` imports
+// `rule-engine.ts`, so the definition moved to the leaf `regex-validation.ts` to
+// avoid a cycle. Every existing `import { validateRegex } from './compiler.js'`
+// is unchanged, and there is still exactly ONE implementation of the check.
+export { validateRegex } from './regex-validation.js';
 
 // ─── File I/O ───────────────────────────────────────
 

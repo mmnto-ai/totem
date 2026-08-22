@@ -14,6 +14,17 @@ import type {
 } from './compiler-schema.js';
 import { extractAddedLines } from './diff-parser.js';
 import { TotemParseError } from './errors.js';
+// Prop 310 slice 2 — the record-grammar runtime semantics (§ Design 7 two-array
+// scope, § Design 8 `requires` two-pass). Every entry point is gated on
+// `isRecordPathRule`, so the legacy corpus's matching is untouched.
+import {
+  assertNoAstGrepLineScope,
+  assertNoTornRecordRules,
+  assertRequiresPatternsSafe,
+  isInsideRoot,
+  requiresSuppressesMatch,
+  ruleAppliesToFile,
+} from './spine/record-runtime.js';
 import { detectStaleManifest, staleManifestError } from './stale-manifest.js';
 import { fileMatchesGlobs, matchesGlob } from './sys/glob.js';
 
@@ -556,6 +567,16 @@ function resolveAstMatchSuppression(
  *   on trigger / suppress / failure events.
  * @param workingDirectory - Optional working directory for resolving files on disk
  *   when parsing spans.
+ * @param readFileText - Optional SYNC reader for whole-file content, consulted
+ *   only by a Prop 310 `requires: {scope: file}` check. Returns `null` when the
+ *   file cannot be resolved; when omitted, the disk is read directly.
+ *
+ *   SYNC, unlike the ast path's async `readStrategy`, because this function is
+ *   synchronous and four shipped callers depend on that. The async staged reader
+ *   is threaded instead through `applyRulesToAdditionsBounded`, which is the
+ *   dispatcher `totem lint` actually uses for regex rules and is already async —
+ *   so the staged guarantee lands where staged mode exists (falsification round,
+ *   2026-08-21).
  * @returns All regex-based violations found.
  */
 export function applyRulesToAdditions(
@@ -564,8 +585,16 @@ export function applyRulesToAdditions(
   additions: DiffAddition[],
   onRuleEvent?: RuleEventCallback,
   workingDirectory?: string,
+  readFileText?: (filePath: string) => string | null,
 ): Violation[] {
   if (additions.length === 0 || rules.length === 0) return [];
+
+  // Prop 310 § Design 12 — a rule that is neither classifiable as a record nor
+  // as legacy is a torn manifest; fail loud rather than drop its constructs.
+  // § Design 8 — and no `requires.pattern` is executed before it clears the same
+  // safe-regex2 gate the compile path applies.
+  assertNoTornRecordRules(rules);
+  assertRequiresPatternsSafe(rules);
 
   const violations: Violation[] = [];
 
@@ -586,6 +615,42 @@ export function applyRulesToAdditions(
       rustTestSpansCache.set(file, []);
       return [];
     }
+  };
+
+  // Prop 310 § Design 8 — whole-file text for a `requires: {scope: file}` check.
+  // Memoized per invocation, and reached ONLY when a record-path rule with a
+  // file-scoped requirement has already matched its target: no legacy rule
+  // carries `requires`, so this adds zero IO to the shipped path.
+  //
+  // `readFileText` (when supplied) is what makes the check see the SAME bytes the
+  // rest of the lint is judging. Reading the worktree while the caller is judging
+  // the index is FAIL-OPEN in the direction that matters: a required context
+  // deleted in the staged edit but still present on disk would satisfy the
+  // requirement and silence a real staged violation.
+  const fileTextCache = new Map<string, string | null>();
+  const getFileTextSync = (file: string, workDir: string): string | null => {
+    const cached = fileTextCache.get(file);
+    if (cached !== undefined || fileTextCache.has(file)) return cached ?? null;
+    let text: string | null = null;
+    if (readFileText) {
+      // DELIBERATELY unwrapped: the caller's reader owns its own failure
+      // contract (a staged reader throws so an unreadable index entry surfaces
+      // rather than degrading quietly). A reader that means "absent" returns
+      // `null`, which is handled below.
+      text = readFileText(file);
+    } else if (isInsideRoot(workDir, file)) {
+      try {
+        text = fs.readFileSync(path.resolve(workDir, file), 'utf-8');
+        // totem-context: read failure yields no required-context evidence → the requirement is UNMET → the rule still FIRES; like the span exemption above, this fails toward flagging, never toward suppression.
+      } catch {
+        text = null;
+      }
+    }
+    // An out-of-root path falls through with `text === null` — treated as
+    // unreadable, so the requirement is unmet and the rule FIRES. Same direction
+    // as a read failure; see `isInsideRoot`.
+    fileTextCache.set(file, text);
+    return text;
   };
 
   for (const rule of regexRules) {
@@ -609,9 +674,27 @@ export function applyRulesToAdditions(
     }
 
     for (const addition of additions) {
-      // Skip if rule has fileGlobs and this file doesn't match
-      if (rule.fileGlobs && rule.fileGlobs.length > 0) {
-        if (!fileMatchesGlobs(addition.file, rule.fileGlobs)) continue;
+      // Scope: Prop 310 § Design 7's two-array rule for record-path rules
+      // (`positiveMatch && !excludeMatch` under the normative dialect), the
+      // shipped `fileMatchesGlobs` predicate — including its unscoped-rule
+      // include-everything behaviour — for every legacy rule.
+      if (!ruleAppliesToFile(rule, addition.file)) continue;
+
+      // Prop 310 § Design 8 — pass two. The requirement is part of the MATCH
+      // PREDICATE (the rule fires iff the target matched AND the required
+      // context is absent), so it is evaluated BEFORE suppression and before any
+      // telemetry: a locus whose required context is PRESENT is not a match at
+      // all, and must emit neither a violation nor a `suppress` event. Guarded on
+      // `rule.requires` so no legacy rule pays the second `re.test`.
+      if (
+        rule.requires !== undefined &&
+        re.test(addition.line) &&
+        requiresSuppressesMatch(rule, {
+          line: addition.line,
+          file: () => getFileTextSync(addition.file, workingDirectory || process.cwd()),
+        })
+      ) {
+        continue;
       }
 
       // Skip if suppressed via inline directive
@@ -702,6 +785,13 @@ export async function applyAstRulesToAdditions(
   onWarn?: (msg: string) => void,
   readStrategy?: (filePath: string) => Promise<string | null>,
 ): Promise<Violation[]> {
+  // Prop 310 § Design 12 / § Design 8 — torn-manifest guard, the safe-regex2
+  // gate, and the ast-grep span-vs-line backstop, all at the same altitude as the
+  // tree-sitter `requires` backstop below.
+  assertNoTornRecordRules(rules);
+  assertRequiresPatternsSafe(rules);
+  assertNoAstGrepLineScope(rules);
+
   const treeSitterRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
   // Widen to include compound rules (mmnto/totem#1408). A rule is runnable
   // when EITHER `astGrepPattern` (string) or `astGrepYamlRule` (NapiConfig
@@ -711,6 +801,28 @@ export async function applyAstRulesToAdditions(
   const astGrepRules = rules.filter(
     (r) => r.engine === 'ast-grep' && (r.astGrepPattern || r.astGrepYamlRule),
   );
+
+  // Prop 310 § Design 8 / § Design 12 — `requires` has no evaluator on the
+  // tree-sitter branch, and leaving it unevaluated would be exactly the
+  // accept-then-silently-drop class § Design 12 bans. UNREACHABLE from the record
+  // path by construction (the V1 authoring enum is `ast-grep | regex`; `ast` is
+  // dropped per § Design 6/R16) and unreachable from the legacy corpus (no
+  // compiled rule carries `requires` — pinned by the byte-identity guard), so
+  // this is a fail-loud backstop against a hand-edited manifest, never a path a
+  // well-formed pipeline can take.
+  // Searched over ALL rules, not over `treeSitterRules` — that list is already
+  // filtered on `astQuery` being present, so a hand-edited `{engine: 'ast',
+  // requires, no astQuery}` rule would slip past the throw and have its
+  // `requires` silently unevaluated, which is precisely the hole this backstop
+  // exists to close (falsification round, 2026-08-21).
+  const treeSitterWithRequires = rules.find((r) => r.engine === 'ast' && r.requires !== undefined);
+  if (treeSitterWithRequires) {
+    throw new TotemParseError(
+      `Rule ${treeSitterWithRequires.lessonHash} (${treeSitterWithRequires.lessonHeading}) carries a \`requires\` block on the tree-sitter ('ast') engine, which has no two-pass evaluator.`,
+      "Prop 310 § Design 6 drops 'ast' from the V1 authoring surface, so no rule record can produce this combination — the manifest was hand-edited or written by a bypassed producer. Re-compile the rule, or move it to the 'regex' or 'ast-grep' engine where `requires` is evaluated.",
+    );
+  }
+
   if ((treeSitterRules.length === 0 && astGrepRules.length === 0) || additions.length === 0) {
     return [];
   }
@@ -746,8 +858,14 @@ export async function applyAstRulesToAdditions(
     // mechanism for adding language support.
     const ext = path.extname(file);
     if (!extensionToLanguage(ext)) {
+      // The `fileGlobs.length > 0` prefix is load-bearing and NOT folded into
+      // `ruleAppliesToFile`: an UNSCOPED rule must not trigger this fail-loud
+      // guard (no rule cares about the file ⇒ a silent skip is correct), while
+      // `ruleAppliesToFile` answers "does this rule apply", for which an unscoped
+      // rule applies everywhere. Record-path rules always carry ≥1 glob (min-1 at
+      // parse), so the prefix never excludes one.
       const ruleExpectingThisFile = allAstRules.find(
-        (r) => r.fileGlobs && r.fileGlobs.length > 0 && fileMatchesGlobs(file, r.fileGlobs),
+        (r) => r.fileGlobs && r.fileGlobs.length > 0 && ruleAppliesToFile(r, file),
       );
       if (ruleExpectingThisFile) {
         // mmnto-ai/totem#1811 (ADR-101): before re-throwing the raw
@@ -789,12 +907,7 @@ export async function applyAstRulesToAdditions(
 
     // ── Tree-sitter S-expression rules ────────────────
     if (treeSitterRules.length > 0) {
-      const applicableTreeSitter = treeSitterRules.filter((rule) => {
-        if (rule.fileGlobs && rule.fileGlobs.length > 0) {
-          return fileMatchesGlobs(file, rule.fileGlobs);
-        }
-        return true;
-      });
+      const applicableTreeSitter = treeSitterRules.filter((rule) => ruleAppliesToFile(rule, file));
 
       if (applicableTreeSitter.length > 0) {
         // Path containment check — prevent traversal outside the project.
@@ -898,12 +1011,7 @@ export async function applyAstRulesToAdditions(
 
     // ── ast-grep structural pattern rules ─────────────
     if (astGrepRules.length > 0) {
-      const applicableAstGrep = astGrepRules.filter((rule) => {
-        if (rule.fileGlobs && rule.fileGlobs.length > 0) {
-          return fileMatchesGlobs(file, rule.fileGlobs);
-        }
-        return true;
-      });
+      const applicableAstGrep = astGrepRules.filter((rule) => ruleAppliesToFile(rule, file));
 
       if (applicableAstGrep.length > 0) {
         // Read file content once for all ast-grep rules on this file
@@ -929,6 +1037,9 @@ export async function applyAstRulesToAdditions(
           // Fall through — content stays null for standard file read failures
         }
         if (content) {
+          // Bound once so the § Design 8 `file`-scope resolver below closes over a
+          // narrowed `string` rather than the outer `string | null` binding.
+          const fileText = content;
           // Batch: parse file once, run all patterns.
           // Each rule carries either astGrepPattern (string) or astGrepYamlRule
           // (NapiConfig object); the batch helper polymorphically dispatches on
@@ -961,6 +1072,21 @@ export async function applyAstRulesToAdditions(
             const matches = batchResults[i] ?? [];
 
             for (const match of matches) {
+              // Prop 310 § Design 8 — pass two, ahead of every other per-match
+              // check for the same reason as the regex path: a locus whose
+              // required context is PRESENT is not a match, so it emits neither a
+              // violation nor a `suppress` event. The requirement is a REGEX
+              // evaluated textually even here — § Design 8 makes it independent of
+              // the target engine ("a context check, not a second matcher").
+              if (
+                requiresSuppressesMatch(rule, {
+                  line: match.lineText,
+                  file: () => fileText,
+                })
+              ) {
+                continue;
+              }
+
               // Exempt matches inside inline Rust test modules (#2397).
               if (
                 isProductionRustRule(rule) &&

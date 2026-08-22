@@ -783,7 +783,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '100644 hash 0\tsrc/app.ts\n';
           }
           if (args[0] === 'show') {
@@ -820,6 +820,106 @@ describe('runCompiledRules', () => {
       mockExec.mockRestore();
     });
 
+    // ─── Prop 310 § Design 8 — the staged read decides the REGEX verdict ─────
+    //
+    // The wiring this pins: `readStrategy` used to be built inside the AST block,
+    // so the regex dispatcher never received it and a record rule's
+    // `requires: {scope: file}` was judged against the WORKTREE while `--staged`
+    // was judging the index. That is fail-open in the direction that matters —
+    // a required context deleted in the staged edit but still on disk would
+    // satisfy the requirement and let the staged violation through the
+    // pre-commit gate. The fixtures below make the two sources DISAGREE, so only
+    // the source that actually decides can produce the observed verdict.
+    describe('Prop 310 record rule with a file-scoped requirement', () => {
+      /** A record-shaped rule: `examples` present ⇒ the Prop 310 runtime applies. */
+      function requiresRule(): CompiledRule {
+        return makeRule('\\bgit\\s+log\\b', 'pin LC_ALL=C', 'LC_ALL pin', {
+          fileGlobs: ['**/*.sh'],
+          examples: [{ bad: 'git log --oneline', good: 'LC_ALL=C git log --oneline' }],
+          requires: { pattern: 'LC_ALL=C', scope: 'file' },
+        });
+      }
+
+      /** Worktree SATISFIES the requirement; the index (git show) does NOT. */
+      function stageDivergence(stagedContent: string) {
+        fs.mkdirSync(path.join(tmpDir, 'scripts'), { recursive: true });
+        fs.writeFileSync(
+          path.join(tmpDir, 'scripts', 'x.sh'),
+          ['export LC_ALL=C', 'git log --oneline'].join('\n'),
+          'utf-8',
+        );
+        const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+        const mockExec = vi
+          .spyOn(totem, 'safeExec')
+          .mockImplementation((_cmd: string, args?: string[]) => {
+            if (!args) return '';
+            if (args[0] === 'ls-files') return '100644 hash 0\tscripts/x.sh\n';
+            if (args[0] === 'show') return stagedContent;
+            return '';
+          });
+        return () => {
+          mockResolveGitRoot.mockRestore();
+          mockExec.mockRestore();
+        };
+      }
+
+      async function violationCount(isStaged: boolean): Promise<number> {
+        try {
+          const result = await runCompiledRules({
+            diff: makeDiff('scripts/x.sh', 'git log --oneline'),
+            cwd: tmpDir,
+            totemDir: TOTEM_DIR,
+            format: 'json',
+            tag: 'Test',
+            isStaged,
+          });
+          return result.violations.length;
+        } catch (err: unknown) {
+          if (
+            err instanceof Error &&
+            err.name === 'TotemError' &&
+            err.message.includes('Violations detected')
+          ) {
+            return 1;
+          }
+          throw err;
+        }
+      }
+
+      it('FIRES under --staged when the index drops the required context', async () => {
+        writeRules(tmpDir, [requiresRule()]);
+        const restore = stageDivergence('git log --oneline\n');
+        try {
+          expect(await violationCount(true)).toBe(1);
+        } finally {
+          restore();
+        }
+      });
+
+      it('stays SILENT without --staged, where the worktree is the source of truth', async () => {
+        // Same manifest, same diff, same disk — only the read source changes.
+        // If the regex path had ignored the staged reader, both arms would agree
+        // and the test above could not distinguish them.
+        writeRules(tmpDir, [requiresRule()]);
+        const restore = stageDivergence('git log --oneline\n');
+        try {
+          expect(await violationCount(false)).toBe(0);
+        } finally {
+          restore();
+        }
+      });
+
+      it('stays SILENT under --staged when the index KEEPS the required context', async () => {
+        writeRules(tmpDir, [requiresRule()]);
+        const restore = stageDivergence('export LC_ALL=C\ngit log --oneline\n');
+        try {
+          expect(await violationCount(true)).toBe(0);
+        } finally {
+          restore();
+        }
+      });
+    });
+
     it('filters symlinks via the underlying index check mode 120000', async () => {
       const rules = [
         makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
@@ -837,7 +937,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '120000 hash 0\tsrc/app.ts\n'; // Symlink
           }
           if (args[0] === 'show') {
@@ -880,7 +980,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '100644 hash 0\tsrc/app.ts\n';
           }
           if (args[0] === 'show') {
@@ -934,7 +1034,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '100644 hash 0\tsrc/app.ts\n';
           }
           if (args[0] === 'show') {
@@ -1029,7 +1129,7 @@ describe('runCompiledRules', () => {
         .spyOn(totem, 'safeExec')
         .mockImplementation((cmd: string, args?: string[]) => {
           if (!args) return '';
-          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+          if (args[0] === 'ls-files' && args[1] === '-s') {
             return '100644 hash 0\tsrc/app.ts\n';
           }
           if (args[0] === 'show') {

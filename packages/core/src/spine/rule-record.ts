@@ -309,8 +309,26 @@ export interface GlobDialectViolation {
 }
 
 // `.` is DELIBERATELY absent — extension forms (`*.ts`) are the dialect's own
-// allowed shape. `|`, `^`, and `$` are regex constructs a glob never means, and
-// admitting them would let a regex-shaped glob silently match nothing.
+// allowed shape.
+//
+// The GROUNDS for banning the rest, per Prop 310 Amendment 2 (which promoted this
+// strict set to ruled spec text): the dialect's no-silent-transform discipline,
+// extended to AMBIGUITY AVOIDANCE. A character that reads as a regex construct
+// to an author, and as a literal to this matcher, is a glob whose meaning depends
+// on which of the two the reader has in mind — and that is precisely the class
+// § Design 7 exists to remove, whether or not the glob would have matched
+// anything.
+//
+// Match-impossibility is claimed for NO character here. `$types.ts` and
+// `(legacy)/util.ts` are perfectly ordinary path names, so a `$` or `(` glob can
+// and does match real trees; an earlier framing of this comment said otherwise
+// and over-claimed. The ban is not "this can never match" — it is "this must not
+// mean two things".
+//
+// The escape hatch is a FUTURE QUOTING CONSTRUCT arriving by `schemaVersion`
+// bump, never a silent literal reading of a banned character. Until then, a path
+// that genuinely contains one of these is out of the dialect's reach, and that
+// cost is named rather than papered over.
 const REGEX_SYNTAX_CHARS = ['[', ']', '(', ')', '?', '+', '|', '^', '$'] as const;
 const DRIVE_LETTER_RE = /^[A-Za-z]:/;
 // The relative-navigation segments a git-tracked, repo-relative path NAME never

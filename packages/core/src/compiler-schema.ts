@@ -611,6 +611,127 @@ const CompiledRuleBaseSchema = z.object({
    * reader falls back to the legacy engine-type proxy.
    */
   ruleClass: z.enum(['hard', 'advisory']).optional(),
+
+  // ─── Prop 310 V1 record-grammar compiled homes (§ Design 12) ───────────────
+  //
+  // The four homes the Existing-Surface Coupling table's lint-runtime row names
+  // as V1-BLOCKING build items (`excludeGlobs`, `requires`, `examples`,
+  // `language`), plus the verbatim `verificationShadow` carry (§ Design 9 /
+  // Amendment R4) and the two §§ Design 4 constructs total lowering forces a home
+  // for (`recoveryHint`, `curation` — see `record-lower.ts`'s contract comment).
+  //
+  // EVERY addition is OPTIONAL, and that is load-bearing, not stylistic: the 485
+  // mined/legacy rules in `.totem/compiled-rules.json` carry none of them, the
+  // rule-compilation freeze means nothing regenerates that file, and a required
+  // addition would fail the whole frozen corpus at `loadCompiledRules`. The
+  // mined-path byte-identity guard (`record-lower.test.ts`) is the proof: the
+  // shipped manifest re-validates unchanged under the extended schema, and zero
+  // of its rules carry any field added here.
+  //
+  // Absence is also the RECORD-PATH DISCRIMINATOR the runtime reads (see
+  // `isRecordPathRule` in `spine/record-runtime.ts`): a rule carrying any of
+  // these came from the Prop 310 path and gets the § Design 7 glob dialect;
+  // everything else keeps the shipped matcher byte-for-byte.
+  /**
+   * Prop 310 § Design 7 / mmnto-ai/totem#1574 — first-class structural
+   * exclusions. Entries are POSITIVE-form globs applied as exclusions: a file is
+   * in scope iff it matches some `fileGlobs` entry AND no `excludeGlobs` entry
+   * (`positiveMatch && !excludeMatch`). `!`-negation is a parse error in the
+   * record grammar, so an entry here never carries one.
+   */
+  excludeGlobs: z.array(z.string()).optional(),
+  /**
+   * Prop 310 § Design 8 — the absence / must-contain block. The rule fires on a
+   * target match at locus L iff `pattern` does NOT match within the declared
+   * scope containing L. `pattern` is a safe-regex2-gated regex evaluated
+   * TEXTUALLY, independent of `engine`; V1 carries exactly one block.
+   *
+   * The scope enum MIRRORS `RequiresScopeSchema` (`spine/rule-record.ts`) rather
+   * than importing it — `compiler-schema.ts` is an import-graph LEAF (zod only)
+   * and `spine/rule-record.ts` transitively imports it, so an import here would
+   * close a cycle. The two are COUPLED by an equality test in
+   * `record-lower.test.ts`, never left to drift on inspection. `block` is
+   * reserved-unimplemented at the grammar (§ Design 8) and therefore can never
+   * reach a compiled rule.
+   */
+  requires: z
+    .object({
+      pattern: z.string(),
+      scope: z.enum(['line', 'file']),
+    })
+    .optional(),
+  /**
+   * Prop 310 § Design 5 / § Design 10 — certification's PRIMARY PREIMAGE SOURCE
+   * (ADR-112 §4), and per Amendment 1 the record's block is the hand-editable
+   * home (the fixture envelope derives). Carried verbatim, in ordinal order: the
+   * `(ruleId, ordinal)` join key is positional, so a reorder is a re-pair.
+   *
+   * Deliberately NOT projected onto the legacy `badExample`/`goodExample` pair —
+   * that would be Tenet 20's prohibited mirror (two hand-editable homes for one
+   * object). Consumers that need a single exemplar read `examples[0]`.
+   */
+  examples: z
+    .array(
+      z.object({
+        bad: z.string(),
+        good: z.string(),
+      }),
+    )
+    .optional(),
+  /**
+   * Prop 310 § Design 6 — the rule's grammar binding: the single declared
+   * language the ast-grep payload was validated under, resolved against the
+   * Map-backed `extensionToLanguage` registry at compile (built-ins + pack
+   * contributions), never a spec-frozen enum. Present only for record-path
+   * ast-grep rules; the record grammar FORBIDS `language` for regex.
+   */
+  language: z.string().optional(),
+  /**
+   * Prop 310 § Design 9 (Amendment R4) — the classification block, carried
+   * VERBATIM and **NEVER EVALUATED at V1**. Evaluation is gated by the ADR-103
+   * Amendment's proof-required-for-enforcement ruling (and any OPA wiring by
+   * Amendment R1's Q2 perf probe); when SMT lands, the verification result binds
+   * to the emitted artifact via the Amendment's R2 certificate chain. Any reader
+   * that starts EXECUTING this field has crossed the R4 gate — a doctrine change,
+   * not a code change.
+   *
+   * The record key keeps its shipped snake_case name (`verification_shadow`, a
+   * named § Design 4 exception); the COMPILED home is camelCase like every other
+   * field here — the rename happens exactly once, at lowering.
+   */
+  verificationShadow: z
+    .object({
+      type: z.string(),
+      source: z.string(),
+    })
+    .optional(),
+  /**
+   * Prop 310 § Design 4 — the optional author-supplied recovery hint. Compiled
+   * home added under § Design 12's total-lowering obligation: the parser admits
+   * the construct, so it either lands here or fails compile loud, and failing
+   * loud on a legal § Design 4 field is not an option. See `record-lower.ts`
+   * § "Total lowering, mechanically".
+   */
+  recoveryHint: z.string().optional(),
+  /**
+   * Prop 310 § Design 4 (R8) — Prop 270 §8's curation-provenance block, carried
+   * under the § Design 4 collision rename (`curation`, not `provenance` — that
+   * name is the ADR-112 producer's own output field). Compiled home added under
+   * § Design 12's total-lowering obligation, same grounds as `recoveryHint`.
+   *
+   * Shape mirrors `RuleCurationSchema` (`spine/rule-record.ts`) for the same
+   * import-graph-leaf reason as `requires.scope` above, and is coupled by test.
+   * The grammar's all-or-none process-trio refinement is a PARSE-stage rule; a
+   * compiled rule only ever carries a record that already satisfied it.
+   */
+  curation: z
+    .object({
+      sourceLesson: z.string(),
+      curatedBy: z.string().optional(),
+      curatedAt: z.string().optional(),
+      baseline5Phase: z.number().int().optional(),
+    })
+    .optional(),
 });
 
 /**

@@ -3,6 +3,7 @@ import type { CompiledRule, DiffAddition, Violation } from '../compiler-schema.j
 import { extractAddedLines } from '../diff-parser.js';
 import type { RuleEngineContext } from '../rule-engine.js';
 import { applyAstRulesToAdditions, applyRulesToAdditions } from '../rule-engine.js';
+import { ruleAppliesToFile } from './record-runtime.js';
 import { firingLabelId } from './windtunnel-lock.js';
 import type { RuleFiring } from './windtunnel-scorer.js';
 
@@ -250,12 +251,45 @@ export async function buildFirings(input: BuildFiringsInput): Promise<BuildFirin
     // SAME post-image content the AST engine will parse (S1).
     await enrichWithAstContext(additions, { cwd, readStrategy, onWarn });
 
+    // Prop 310 § Design 8 — the regex engine's file-scoped requirement must read
+    // the SAME post-image content this function already mandates for every other
+    // reader (S1), not the local worktree. `applyRulesToAdditions` is SYNC, so
+    // the async post-image reader is pre-resolved into a lookup here.
+    //
+    // Gated on a rule actually declaring a file-scoped requirement: no legacy or
+    // mined rule carries `requires`, so the 485-rule certification corpus does
+    // exactly as much IO as before this line existed.
+    let postImageText: ((file: string) => string | null) | undefined = undefined;
+    const fileScoped = rules.filter((r) => r.requires?.scope === 'file');
+    if (fileScoped.length > 0) {
+      const resolved = new Map<string, string | null>();
+      for (const file of new Set(additions.map((a) => a.file))) {
+        // Narrowed to files at least one file-scoped rule is actually SCOPED to:
+        // a PR touching hundreds of files would otherwise pay a post-image read
+        // for every one of them to answer a question no rule asks about most.
+        // An unread file resolves to `null` below, which only ever reaches a rule
+        // that is out of scope for it — so no verdict changes.
+        if (!fileScoped.some((rule) => ruleAppliesToFile(rule, file))) continue;
+        // The reader's own failure contract is preserved: a throw propagates
+        // rather than being degraded into "context absent".
+        resolved.set(file, await readStrategy(file));
+      }
+      postImageText = (file: string) => resolved.get(file) ?? null;
+    }
+
     // Both engines receive the FULL rule set and self-filter by `rule.engine`
     // into DISJOINT partitions — applyRulesToAdditions takes `engine === 'regex'
     // || !engine`; applyAstRulesToAdditions takes `engine === 'ast' | 'ast-grep'`
     // (rule-engine.ts). No rule is processed by both, so double-processing can
     // never manufacture a same-rule labelId self-collision at the A1 gate. (CR #2215.)
-    const regexViolations = applyRulesToAdditions(ruleEngineCtx, rules, additions, undefined, cwd);
+    const regexViolations = applyRulesToAdditions(
+      ruleEngineCtx,
+      rules,
+      additions,
+      undefined,
+      cwd,
+      postImageText,
+    );
     // AST / ast-grep violations (whole post-image via the shared readStrategy).
     const astViolations = await applyAstRulesToAdditions(
       ruleEngineCtx,
