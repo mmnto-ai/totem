@@ -2538,6 +2538,49 @@ describe('findLegacyGrandfatheredRules + checkGrandfatheredRules', () => {
     ]);
   });
 
+  // ── Prop 310 § Design 10 (slice 3) — the record rule's exemplar home ──
+  it('does NOT flag no-badExample for a RECORD rule — its bad examples live in `examples`', async () => {
+    // A record rule's exemplars are the § Design 10 editable home and are never
+    // mirrored onto the legacy `badExample`, so the shipped read would have called
+    // every record rule grandfathered. `goodExample` is supplied so this row isolates
+    // the badExample reason (the goodExample reader is out of slice-3 scope).
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-record',
+        lessonHeading: 'Prop 310 rule record (rule-record)',
+        pattern: 'console\\.log',
+        message: 'no console.log',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        examples: [{ bad: 'console.log(1)', good: 'logger.info(1)' }],
+        goodExample: 'good snippet',
+      },
+    ]);
+    expect(await findLegacyGrandfatheredRules(tmpDir)).toEqual([]);
+  });
+
+  it('STILL flags no-badExample for a legacy rule with a whitespace-only badExample', async () => {
+    // The byte-identity control for the reader swap: dropping blank lines is what
+    // keeps `.length === 0` equal to the shipped `!badExample || trim() === ''`.
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-blank-bad',
+        lessonHeading: 'blank bad',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        badExample: '   \n\t',
+        goodExample: 'good snippet',
+      },
+    ]);
+    expect(await findLegacyGrandfatheredRules(tmpDir)).toEqual([
+      expect.objectContaining({ lessonHash: 'rule-blank-bad', reasons: ['no-badExample'] }),
+    ]);
+  });
+
   it('flags a rule for no-goodExample in isolation', async () => {
     writeRules(tmpDir, [
       {

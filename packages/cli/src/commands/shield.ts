@@ -1048,6 +1048,7 @@ export async function captureObservationRules(
   const fs = await import('node:fs');
   const path = await import('node:path');
   const {
+    attestRecordsHash,
     deduplicateObservations,
     generateObservationRule,
     generateOutputHash,
@@ -1105,6 +1106,8 @@ export async function captureObservationRules(
     try {
       const manifest = readCompileManifest(manifestPath);
       manifest.output_hash = generateOutputHash(rulesPath);
+      // Prop 310 § Design 1: every manifest writer attests the record class.
+      manifest.records_hash = attestRecordsHash(resolvedTotemDir, cwd);
       writeCompileManifest(manifestPath, manifest);
       // totem-context: intentional — the compile manifest may not exist yet (first run before compile); a missing manifest is not an error, verify-manifest resyncs later.
     } catch (err) {

@@ -457,6 +457,11 @@ export async function compileCommand(
     verifyRuleExamples,
     writeCacheEntry,
     writeCompileManifest,
+    // Prop 310 § Design 1 — the ONE record-class attestation every manifest writer
+    // calls, so the three write sites in this file cannot disagree about it.
+    attestRecordsHash,
+    listRecordFiles,
+    RECORDS_DIR_REL,
   } = await import('@mmnto/totem');
 
   // Compile-worker fingerprint resolved relative to the running compile.js.
@@ -882,11 +887,26 @@ export async function compileCommand(
     const compiledRulesFile = loadCompiledRulesFile(rulesPath);
     const compileManifest = readCompileManifest(manifestPath);
     const freshOutputHash = generateOutputHash(rulesPath);
-    if (compileManifest.output_hash === freshOutputHash) {
+    // Prop 310 § Design 1: the RECORD class is part of "is the manifest fresh?".
+    // Without it, a records-only change would report "already fresh" here and then
+    // hard-FAIL `verify-manifest` — leaving the OQ-3 recovery ("re-run the manifest
+    // writer") with no writer that would act.
+    //
+    // ABSENCE is judged by the OQ-3 rule, not by comparing against the empty-set
+    // hash: a manifest with no `records_hash` is fresh IFF zero records are on
+    // disk. That is the same verdict `verify-manifest` reaches, so this command
+    // never rewrites a pre-Prop-310 manifest the verifier is content with.
+    const freshRecordsHash = attestRecordsHash(totemDir, cwd);
+    const recordsFresh =
+      compileManifest.records_hash === undefined
+        ? listRecordFiles(path.join(totemDir, RECORDS_DIR_REL), cwd).length === 0
+        : compileManifest.records_hash === freshRecordsHash;
+    if (compileManifest.output_hash === freshOutputHash && recordsFresh) {
       log.info(TAG, 'Manifest already fresh — no changes.');
       return;
     }
     compileManifest.output_hash = freshOutputHash;
+    compileManifest.records_hash = freshRecordsHash;
     compileManifest.compiled_at = new Date().toISOString();
     compileManifest.rule_count = compiledRulesFile.rules.length;
     writeCompileManifest(manifestPath, compileManifest);
@@ -1280,6 +1300,7 @@ export async function compileCommand(
             model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
             input_hash: currentInputHash,
             output_hash: outputHash,
+            records_hash: attestRecordsHash(totemDir, cwd),
             rule_count: freshRules.length,
             ...(postPruneFingerprint !== undefined
               ? { compile_worker_fingerprint: postPruneFingerprint }
@@ -1938,6 +1959,7 @@ export async function compileCommand(
           model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
           input_hash: inputHash,
           output_hash: outputHash,
+          records_hash: attestRecordsHash(totemDir, cwd),
           rule_count: newRules.length,
           ...(fullRecompileFingerprint !== undefined
             ? { compile_worker_fingerprint: fullRecompileFingerprint }

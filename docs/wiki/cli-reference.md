@@ -105,7 +105,7 @@ Manage your deterministic rules (Pipeline 1). Subcommands: `list`, `inspect`, `t
 - `rule test <id>` tests a rule against its inline Example Hit/Miss.
 - `rule scaffold <id>` generates a test fixture skeleton for a compiled rule.
 - `rule promote <hash>` flips a rule from `unverified` to active per ADR-089 (Zero-Trust Default). Pipeline 2 and Pipeline 3 LLM-generated rules ship `unverified: true` unconditionally; this command is the atomic activation surface. Supports partial hash prefixes; ambiguous prefixes print candidates and exit non-zero with no mutation. Idempotent.
-- `rule author` ingests `.totem/spine/authored-rules.yaml` into authored rules and the §8 authoring-ledger (ADR-112).
+- `rule author` ingests `.totem/spine/authored-rules.yaml` into authored rules and the §8 authoring-ledger (ADR-112); each entry references its rule as a `.totem/rules/<slug>.rule.yaml` record rather than carrying the matcher inline (Prop 310).
 
 ### `totem gate` (check / install)
 

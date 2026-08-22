@@ -276,6 +276,23 @@ describe('buildAuthoredCertifyingCorpus — fail-loud guards', () => {
     );
   });
 
+  // ── Prop 310 § Design 10 — the drift sensor reaches the CERT path ──
+  it('refuses a record EDITED since its ledger entry (verifyOnly re-derive re-reads the bytes)', async () => {
+    // The wiring check: the cert builder's `verifyOnly` re-derive must RE-READ every
+    // referenced record and re-hash its bytes into the material. If it reused a
+    // cached/stale parse, an example edit would slip into a cert run unnoticed —
+    // exactly the "hash-mismatched reference" § Design 10 says must fail loud.
+    writeAuthoredYaml(totemDir); // authors + records the ledger entry
+    writeRecord(totemDir, DEFAULT_RECORD_SLUG, 'forbiddenCall2\\(');
+    await expect(buildAuthoredCertifyingCorpus(baseDeps(totemDir))).rejects.toThrow(/\(revised\)/);
+  });
+
+  it('accepts an UNCHANGED record — the refusal above is drift, not a blanket cert-path block', async () => {
+    writeAuthoredYaml(totemDir);
+    writeRecord(totemDir, DEFAULT_RECORD_SLUG); // rewritten byte-identically
+    await expect(buildAuthoredCertifyingCorpus(baseDeps(totemDir))).resolves.toBeDefined();
+  });
+
   it('an authored compile-rejection fails the build (not a partial corpus)', async () => {
     // A record that PARSES but whose payload fails the per-engine gate at lowering.
     writeRecord(totemDir, 'unclosed-group', '(unclosed');
