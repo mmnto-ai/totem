@@ -1,0 +1,19 @@
+schemaVersion: 1
+
+severity: warning
+message: "All log.error calls must include the 'Totem Error' tag for consistent diagnostic parsing and filtering"
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: 'log.error($$$ARGS)'
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+
+examples:
+  - bad: "log.error('compile failed: ' + msg);"
+    good: "log.error('Totem Error', 'compile failed: ' + msg);"
+
+curation:
+  sourceLesson: 'lesson-6b2b62eb1e8693fc'

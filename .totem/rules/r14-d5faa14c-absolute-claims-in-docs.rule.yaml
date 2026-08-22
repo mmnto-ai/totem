@@ -1,0 +1,21 @@
+schemaVersion: 1
+
+severity: warning
+message: "Avoid absolute claims like 'guarantee', 'comprehensive', 'always', 'never', 'perfect', 'complete', 'foolproof', or '100% reliable' in technical documentation. Replace with specific, evidence-backed descriptions of tested behavior."
+
+target:
+  type: regex
+  pattern: '\b(guarantee[sd]?|comprehensive(ly)?|always|never|perfect(ly)?|complete(ly)?|foolproof|infallible|100%\s+(?:accurate|reliable|secure|safe))\b'
+  scope:
+    fileGlobs:
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.rst'
+      - '**/*.txt'
+
+examples:
+  - bad: 'The compiler guarantees complete coverage of every edge case.'
+    good: 'The compiler covers the 14 edge cases listed in the test matrix.'
+
+curation:
+  sourceLesson: 'lesson-d5faa14cbb8b50fb'

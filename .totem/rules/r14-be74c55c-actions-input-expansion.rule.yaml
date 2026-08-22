@@ -1,0 +1,25 @@
+schemaVersion: 1
+
+severity: warning
+message: 'Do not expand GitHub Actions inputs directly in run steps — map inputs to intermediate environment variables first to prevent command injection vulnerabilities'
+
+target:
+  type: regex
+  pattern: '\$\{\{\s*inputs\.[a-zA-Z_][a-zA-Z0-9_]*\s*\}\}'
+  scope:
+    fileGlobs:
+      - '**/*.yml'
+      - '**/*.yaml'
+
+examples:
+  - bad: |-
+      - name: Check out the requested ref
+        run: git checkout ${{ inputs.ref }}
+    good: |-
+      - name: Check out the requested ref
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: git checkout "$REQUESTED_REF"
+
+curation:
+  sourceLesson: 'lesson-be74c55caa9fd60c'

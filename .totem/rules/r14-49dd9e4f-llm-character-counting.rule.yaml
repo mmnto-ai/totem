@@ -1,0 +1,24 @@
+schemaVersion: 1
+
+severity: warning
+message: 'LLMs are notoriously poor at character counting; use'
+
+target:
+  type: regex
+  pattern: '\b\d+\s*(?:characters?|chars?|words?)\b'
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.py'
+      - '**/*.md'
+      - '**/*.txt'
+
+examples:
+  - bad: "const PROMPT = 'Summarize the diff in 200 characters or less.';"
+    good: "const PROMPT = 'Summarize the diff in one sentence; the caller truncates.';"
+
+curation:
+  sourceLesson: 'lesson-49dd9e4fd02d692b'

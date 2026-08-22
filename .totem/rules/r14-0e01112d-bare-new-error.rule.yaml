@@ -1,0 +1,21 @@
+schemaVersion: 1
+
+severity: warning
+message: 'When wrapping external errors or providing fallbacks,'
+
+target:
+  type: regex
+  pattern: '\bnew\s+(?!Totem)Error\('
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.jsx'
+
+examples:
+  - bad: "throw new Error('lesson compile failed');"
+    good: "throw new TotemParseError('lesson compile failed', 'Fix the lesson pattern and re-run totem compile.');"
+
+curation:
+  sourceLesson: 'lesson-0e01112d5f18ffde'

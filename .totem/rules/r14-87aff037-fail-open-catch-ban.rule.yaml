@@ -1,0 +1,30 @@
+schemaVersion: 1
+
+severity: error
+message: |-
+  Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-context: intentional cleanup` above the try/catch to document the exception.
+
+  Tenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.
+
+target:
+  type: ast-grep
+  language: typescript
+  rule:
+    kind: catch_clause
+    not:
+      has:
+        kind: throw_statement
+        stopBy: end
+  scope:
+    fileGlobs:
+      - 'packages/**/*.ts'
+    excludeGlobs:
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: 'try { risky() } catch (e) { log(e) }'
+    good: 'try { risky() } catch (e) { log(e); throw e }'
+
+curation:
+  sourceLesson: 'lesson-87aff037d7de47a7'
