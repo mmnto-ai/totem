@@ -459,18 +459,24 @@ describe('rule test', () => {
       // would otherwise be interpreted by the terminal rather than shown. Built
       // with `String.fromCharCode` so this source file carries no raw control byte.
       const ESC = String.fromCharCode(27);
+      // The authored sequence is an ERASE-DISPLAY CSI (`ESC[2J`), deliberately NOT
+      // an SGR colour code: `ui`'s own colouring emits SGR sequences (`ESC[31m`,
+      // `ESC[2m`, …) whenever colours are enabled, so asserting on a colour code
+      // would fail in a colour-enabled environment for a reason unrelated to the
+      // sanitizer (it did — owner gate, bot round 1). The CLI never emits `ESC[2J`,
+      // so its absence is attributable to `sanitizeForTerminal` alone, and the
+      // check holds with colours on or off.
+      const INJECTED = `${ESC}[2J`;
       // RAW output on purpose: `stripAnsi` would remove the injected escape and
       // make this assertion pass whether or not the code sanitizes.
       const raw = await runTestRaw([
-        { bad: `${ESC}[31mnothing matches here`, good: 'logger.info("x")' },
+        { bad: `${INJECTED}nothing matches here`, good: 'logger.info("x")' },
       ]);
       // The preview line is reached only on FAIL, which this pair is (bad silent).
       expect(stripAnsi(raw)).toContain('FAIL examples[0]');
       expect(stripAnsi(raw)).toContain('bad:');
-      // The AUTHORED escape never reaches the terminal. `ui`'s own colouring adds
-      // escapes of its own, so the check is against the authored sequence, which
-      // `sanitizeForTerminal` replaces with a visible rendering.
-      expect(raw).not.toContain(`${ESC}[31m`);
+      // The AUTHORED escape never reaches the terminal…
+      expect(raw).not.toContain(INJECTED);
       // …while the visible text still does, so the preview stayed useful.
       expect(stripAnsi(raw)).toContain('nothing matches here');
     });
