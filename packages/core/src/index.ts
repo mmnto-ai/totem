@@ -476,6 +476,13 @@ export {
   verifyRuleExamples,
 } from './compile-lesson.js';
 
+// Compile-time smoke gate (ADR-087) — the role-agnostic "does this rule fire on
+// this snippet" entry point. Exported for `totem rule test`, which runs a Prop 310
+// record rule's own `examples[i]` pairs through the SAME gate the compiler and the
+// §4 preimage-differential use, rather than growing a third firing path (Tenet 20).
+export type { SmokeGateResult } from './compile-smoke-gate.js';
+export { runSmokeGate } from './compile-smoke-gate.js';
+
 // Stage 4 Verify-Against-Codebase verifier (mmnto-ai/totem#1682)
 export type {
   ResolveStage4BaselineInput,
@@ -513,12 +520,20 @@ export {
 // Compile manifest (signing / provenance)
 export type { CompileManifest } from './compile-manifest.js';
 export {
+  attestRecordsHash,
   canonicalizeKeys,
   canonicalStringify,
   CompileManifestSchema,
+  EMPTY_RECORDS_HASH,
   generateInputHash,
   generateOutputHash,
+  generateRecordsHash,
+  isRecordsAttestationFresh,
+  listRecordFiles,
+  listRecordFilesUnder,
   readCompileManifest,
+  RECORD_FILE_SUFFIX,
+  RECORDS_DIR_REL,
   writeCompileManifest,
 } from './compile-manifest.js';
 
@@ -1130,10 +1145,12 @@ export type {
   AuthoredRuleRecord,
   AuthoredRulesFile,
   DeclaredEngine,
+  RecordFixtureInput,
   StructEligResult,
   WhitelistEntry,
 } from './spine/authored-rule.js';
 export {
+  AUTHORED_RULE_ID_RE,
   AuthoredOriginSchema,
   AuthoredRuleInputSchema,
   AuthoredRuleRecordSchema,
@@ -1141,6 +1158,7 @@ export {
   DeclaredEngineSchema,
   evaluateStructuralEligibility,
   mintAuthoredRuleId,
+  RecordFixtureInputSchema,
   StructEligResultSchema,
   toCompileFeed,
 } from './spine/authored-rule.js';
@@ -1350,6 +1368,8 @@ export {
   requiresContextPresent,
   requiresSuppressesMatch,
   ruleAppliesToFile,
+  ruleBadExampleLines,
+  ruleGoodExampleLines,
 } from './spine/record-runtime.js';
 // Spine: Prop 310 V1 record grammar — the `.totem/rules/*.rule.yaml` parser (slice 1)
 export type {
@@ -1375,6 +1395,7 @@ export {
   GLOB_DIALECT_RULES,
   LEGACY_ENGINE_DETAIL,
   LEGACY_INERT_ENGINE,
+  ParsedRuleRecordSchema,
   parseRuleRecord,
   REQUIRES_SCOPE_RESERVED,
   RequiresScopeSchema,
@@ -1383,6 +1404,7 @@ export {
   RULE_RECORD_SCHEMA_VERSION,
   RuleCurationSchema,
   ruleExamplePairHash,
+  RuleExamplePairHashSchema,
   RuleRecordExampleSchema,
   RuleRecordNoSilentSkipError,
   RuleRecordParseError,

@@ -136,6 +136,7 @@ export async function lessonArchiveCommand(id: string, opts: { reason?: string }
   const path = await import('node:path');
   const { log, bold } = await import('../ui.js');
   const {
+    attestRecordsHash,
     exportLessons,
     generateOutputHash,
     hashLesson,
@@ -238,6 +239,9 @@ export async function lessonArchiveCommand(id: string, opts: { reason?: string }
   // mutation order is: read-manifest -> mutate-rules -> write-rules ->
   // update-manifest.
   compileManifest.output_hash = generateOutputHash(rulesPath);
+  // Prop 310 § Design 1: every manifest writer attests the record class, so a
+  // manifest refreshed here never leaves `records_hash` behind on disk truth.
+  compileManifest.records_hash = attestRecordsHash(totemDir, cwd);
   compileManifest.compiled_at = new Date().toISOString();
   writeCompileManifest(manifestPath, compileManifest);
 

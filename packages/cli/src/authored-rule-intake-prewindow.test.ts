@@ -24,10 +24,32 @@ const artifact = {
 } as unknown as FrozenSplitArtifact;
 
 let root: string;
+let totemDir: string;
+
+// Prop 310 § Design 1: the rule half lives in a record file the envelope
+// REFERENCES. The §5.2 gate reads `positiveFixtures[].pr`, which is unchanged.
+const RECORD_REF = '.totem/rules/no-console-log.rule.yaml';
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-intake-prewindow-'));
-  fs.mkdirSync(path.join(root, 'spine'), { recursive: true });
+  totemDir = path.join(root, '.totem');
+  fs.mkdirSync(path.join(totemDir, 'spine'), { recursive: true });
+  fs.mkdirSync(path.join(totemDir, 'rules'), { recursive: true });
+  fs.writeFileSync(
+    path.join(totemDir, 'rules', 'no-console-log.rule.yaml'),
+    yamlStringify({
+      schemaVersion: 1,
+      severity: 'warning',
+      message: 'console.log is banned in production code.',
+      target: {
+        type: 'regex',
+        pattern: 'console\\.log',
+        scope: { fileGlobs: ['src/**/*.rs'] },
+      },
+      examples: [{ bad: 'console.log("dbg")', good: 'logger.debug("dbg")' }],
+    }),
+    'utf-8',
+  );
 });
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
@@ -35,19 +57,15 @@ afterEach(() => {
 
 const fixture = (pr: number) => ({
   pr,
-  preimageSource: {
-    kind: 'commit',
-    preimageCommitSha: 'b'.repeat(40),
-    mergeCommitSha: 'a'.repeat(40),
-  },
   filePath: 'src/x.rs',
   matchedSpan: 'L1',
   contentHash: 'h'.repeat(8),
+  example: 0,
 });
 
 const writeYaml = (fixturePr: number) => {
   fs.writeFileSync(
-    path.join(root, 'spine', 'authored-rules.yaml'),
+    path.join(totemDir, 'spine', 'authored-rules.yaml'),
     yamlStringify({
       splitRef: SPLIT_REF,
       freezeCommitment: COMMITMENT,
@@ -58,9 +76,8 @@ const writeYaml = (fixturePr: number) => {
           author: 'alice',
           authoredAt: '2026-07-04',
           targetDefect: 'forbidden console.log',
-          declaredEngine: 'regex',
           structuralClass: 'forbidden-literal-token',
-          dslSource: 'console\\.log',
+          record: RECORD_REF,
           positiveFixtures: [fixture(fixturePr)],
         },
       ],
@@ -70,7 +87,7 @@ const writeYaml = (fixturePr: number) => {
 };
 
 const run = (verified?: ReadonlySet<number>) =>
-  runRuleAuthor(root, {
+  runRuleAuthor(totemDir, {
     judgedBy: 'static-whitelist@cert-1',
     freezeBinding: { artifact },
     ...(verified !== undefined ? { verifiedPreWindowFixturePrs: verified } : {}),

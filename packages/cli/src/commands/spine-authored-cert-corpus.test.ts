@@ -43,26 +43,6 @@ const sha = (n: number): string => String(n).padStart(40, '0');
 const NOW = '2026-06-19T12:00:00.000Z';
 const SPLIT_REF = 'split-cert-1';
 const JUDGED_BY = 'static-whitelist@cert-1';
-const LESSON_REF = 'deadbeefdeadbeef';
-
-/** A regex DSL that compiles cleanly + fires on `forbiddenCall()`. */
-const REGEX_DSL = [
-  '**Pattern:** `forbiddenCall\\(`',
-  '**Engine:** regex',
-  '**Severity:** warning',
-  '',
-  '### Bad Example',
-  '```ts',
-  'forbiddenCall()',
-  '```',
-].join('\n');
-
-/** A regex DSL that PARSES but fails per-engine validation (unterminated group) → compile-rejected. */
-const BAD_REGEX_DSL = [
-  '**Pattern:** `(unclosed`',
-  '**Engine:** regex',
-  '**Severity:** warning',
-].join('\n');
 
 const SPLIT: SplitArtifact = {
   asOfCommit: sha(100),
@@ -78,25 +58,46 @@ interface AuthoredRuleInputLike {
   author: string;
   authoredAt: string;
   targetDefect: string;
-  declaredEngine: string;
   structuralClass: string;
-  dslSource: string;
+  record: string;
   positiveFixtures: unknown[];
   negativeFixtures?: unknown[];
+}
+
+// ── Prop 310 § Design 1 — the record carrier ────────────────────────────────
+//
+// The rule half lives in `.totem/rules/<slug>.rule.yaml`; the envelope references
+// it and DERIVES the fixture preimages from its `examples`. Every assertion below
+// is the one it always made — only the carrier moved (OQ-1 records-only).
+
+const DEFAULT_RECORD_SLUG = 'forbidden-call';
+const recordRef = (slug: string): string => `.totem/rules/${slug}.rule.yaml`;
+
+/** Write a record file under the temp totem dir; returns the envelope reference. */
+function writeRecord(totemDir: string, slug: string, pattern = 'forbiddenCall\\('): string {
+  const dir = path.join(totemDir, 'rules');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, `${slug}.rule.yaml`),
+    stringify({
+      schemaVersion: 1,
+      severity: 'warning',
+      message: 'forbiddenCall() is banned.',
+      target: { type: 'regex', pattern, scope: { fileGlobs: ['src/**/*.ts'] } },
+      examples: [{ bad: 'bad()', good: 'good()' }],
+    }),
+    'utf-8',
+  );
+  return recordRef(slug);
 }
 
 function posFixture(pr = 1, filePath = 'src/a.ts', matchedSpan = 'L1-L2') {
   return {
     pr,
-    preimageSource: {
-      kind: 'lesson',
-      lessonRef: LESSON_REF,
-      badExample: 'bad()',
-      goodExample: 'good()',
-    },
     filePath,
     matchedSpan,
     contentHash: `ch-${pr}-${filePath}`,
+    example: 0,
   };
 }
 
@@ -105,9 +106,8 @@ function authoredRuleInput(overrides: Partial<AuthoredRuleInputLike> = {}): Auth
     author: 'agent-x',
     authoredAt: '2026-06-01',
     targetDefect: 'a real lc defect',
-    declaredEngine: 'regex',
     structuralClass: 'forbidden-literal-token',
-    dslSource: REGEX_DSL,
+    record: recordRef(DEFAULT_RECORD_SLUG),
     positiveFixtures: [posFixture()],
     ...overrides,
   };
@@ -124,6 +124,7 @@ function writeAuthoredYaml(
     heldOutNonInspectionAttestation: true,
     rules: opts.rules ?? [authoredRuleInput()],
   };
+  writeRecord(totemDir, DEFAULT_RECORD_SLUG);
   const dir = path.join(totemDir, 'spine');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'authored-rules.yaml'), stringify(fileDoc), 'utf-8');
@@ -215,12 +216,17 @@ function baseDeps(
 
 // ─── Temp totemDir lifecycle ──────────────────────────
 
+let certRoot: string;
 let totemDir: string;
 beforeEach(() => {
-  totemDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-authored-cert-'));
+  // Prop 310 § Design 1: the envelope's `record:` reference is REPO-relative, so
+  // the totem dir has to sit under a repo root rather than being the temp root.
+  certRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-authored-cert-'));
+  totemDir = path.join(certRoot, '.totem');
+  fs.mkdirSync(totemDir, { recursive: true });
 });
 afterEach(() => {
-  fs.rmSync(totemDir, { recursive: true, force: true });
+  fs.rmSync(certRoot, { recursive: true, force: true });
 });
 
 // ─── 1. Production path (REAL compile, no mocked CompiledCandidate[]) ──────────
@@ -270,8 +276,29 @@ describe('buildAuthoredCertifyingCorpus — fail-loud guards', () => {
     );
   });
 
+  // ── Prop 310 § Design 10 — the drift sensor reaches the CERT path ──
+  it('refuses a record EDITED since its ledger entry (verifyOnly re-derive re-reads the bytes)', async () => {
+    // The wiring check: the cert builder's `verifyOnly` re-derive must RE-READ every
+    // referenced record and re-hash its bytes into the material. If it reused a
+    // cached/stale parse, an example edit would slip into a cert run unnoticed —
+    // exactly the "hash-mismatched reference" § Design 10 says must fail loud.
+    writeAuthoredYaml(totemDir); // authors + records the ledger entry
+    writeRecord(totemDir, DEFAULT_RECORD_SLUG, 'forbiddenCall2\\(');
+    await expect(buildAuthoredCertifyingCorpus(baseDeps(totemDir))).rejects.toThrow(/\(revised\)/);
+  });
+
+  it('accepts an UNCHANGED record — the refusal above is drift, not a blanket cert-path block', async () => {
+    writeAuthoredYaml(totemDir);
+    writeRecord(totemDir, DEFAULT_RECORD_SLUG); // rewritten byte-identically
+    await expect(buildAuthoredCertifyingCorpus(baseDeps(totemDir))).resolves.toBeDefined();
+  });
+
   it('an authored compile-rejection fails the build (not a partial corpus)', async () => {
-    writeAuthoredYaml(totemDir, { rules: [authoredRuleInput({ dslSource: BAD_REGEX_DSL })] });
+    // A record that PARSES but whose payload fails the per-engine gate at lowering.
+    writeRecord(totemDir, 'unclosed-group', '(unclosed');
+    writeAuthoredYaml(totemDir, {
+      rules: [authoredRuleInput({ record: recordRef('unclosed-group') })],
+    });
     await expect(buildAuthoredCertifyingCorpus(baseDeps(totemDir))).rejects.toThrow(
       /rejected at compile/,
     );

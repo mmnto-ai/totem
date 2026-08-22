@@ -382,6 +382,118 @@ describe('rule test', () => {
     const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
     expect(output).toContain('No compiled rules found');
   });
+
+  // ── Prop 310 § Design 5/§ Design 10 — the RECORD path (slice 3) ──
+  describe('record rules run their own `examples[i]` pairs', () => {
+    const RECORD_HASH = '0123456789abcdef';
+
+    // The command signals failure through `process.exitCode`; save + restore so a
+    // failing pair here cannot leak a non-zero exit into a sibling suite.
+    const savedExitCode = process.exitCode;
+    beforeEach(() => {
+      process.exitCode = undefined;
+    });
+    afterEach(() => {
+      process.exitCode = savedExitCode;
+    });
+
+    /** A record-path compiled rule: `examples` is the § Design 12 discriminator. */
+    function recordRule(examples: { bad: string; good: string }[]) {
+      return {
+        lessonHash: RECORD_HASH,
+        lessonHeading: `Prop 310 rule record (${RECORD_HASH})`,
+        pattern: 'console\\.log',
+        message: 'console.log is banned.',
+        engine: 'regex' as const,
+        severity: 'warning' as const,
+        fileGlobs: ['src/**/*.ts'],
+        examples,
+        compiledAt: '2026-08-22T00:00:00.000Z',
+        createdAt: '2026-08-22T00:00:00.000Z',
+      };
+    }
+
+    /** RAW captured stderr — every escape byte the command actually emitted. */
+    const runTestRaw = async (examples: { bad: string; good: string }[]) => {
+      scaffold(tmpDir, [recordRule(examples)]);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { ruleTestCommand } = await import('./rule.js');
+      await ruleTestCommand(RECORD_HASH);
+      return consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    };
+
+    const runTest = async (examples: { bad: string; good: string }[]) =>
+      stripAnsi(await runTestRaw(examples));
+
+    it('PASSES with no lesson on disk — a record rule has no source lesson to look up', async () => {
+      // The wiring check: before slice 3 this rule would have taken the lesson
+      // lookup and reported "Source lesson … not found", never touching the pairs.
+      const output = await runTest([{ bad: 'console.log("dbg")', good: 'logger.info("dbg")' }]);
+      expect(output).toContain('PASS');
+      expect(output).not.toContain('Source lesson');
+      expect(process.exitCode).toBeUndefined();
+    });
+
+    it('reports PER ORDINAL and exits 1 when one pair’s `bad` does not fire', async () => {
+      const output = await runTest([
+        { bad: 'console.log("dbg")', good: 'logger.info("dbg")' }, // ok
+        { bad: 'nothing matches here', good: 'logger.info("x")' }, // bad silent
+      ]);
+      expect(output).toContain('PASS examples[0]');
+      expect(output).toContain('FAIL examples[1]');
+      expect(output).toContain('bad did not fire');
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('exits 1 when a pair’s `good` FIRES (the silence leg is checked too)', async () => {
+      const output = await runTest([
+        { bad: 'console.log("dbg")', good: 'console.log("still bad")' },
+      ]);
+      expect(output).toContain('FAIL examples[0]');
+      expect(output).toContain('good fired');
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('SANITIZES authored exemplar text before printing it (terminal injection)', async () => {
+      // A record's exemplars are author-controlled YAML. An ANSI escape in one
+      // would otherwise be interpreted by the terminal rather than shown. Built
+      // with `String.fromCharCode` so this source file carries no raw control byte.
+      const ESC = String.fromCharCode(27);
+      // The authored sequence is an ERASE-DISPLAY CSI (`ESC[2J`), deliberately NOT
+      // an SGR colour code: `ui`'s own colouring emits SGR sequences (`ESC[31m`,
+      // `ESC[2m`, …) whenever colours are enabled, so asserting on a colour code
+      // would fail in a colour-enabled environment for a reason unrelated to the
+      // sanitizer (it did — owner gate, bot round 1). The CLI never emits `ESC[2J`,
+      // so its absence is attributable to `sanitizeForTerminal` alone, and the
+      // check holds with colours on or off.
+      const INJECTED = `${ESC}[2J`;
+      // RAW output on purpose: `stripAnsi` would remove the injected escape and
+      // make this assertion pass whether or not the code sanitizes.
+      const raw = await runTestRaw([
+        { bad: `${INJECTED}nothing matches here`, good: 'logger.info("x")' },
+      ]);
+      // The preview line is reached only on FAIL, which this pair is (bad silent).
+      expect(stripAnsi(raw)).toContain('FAIL examples[0]');
+      expect(stripAnsi(raw)).toContain('bad:');
+      // The AUTHORED escape never reaches the terminal…
+      expect(raw).not.toContain(INJECTED);
+      // …while the visible text still does, so the preview stayed useful.
+      expect(stripAnsi(raw)).toContain('nothing matches here');
+    });
+
+    it('verifies EVERY pair, not just the first', async () => {
+      const output = await runTest([
+        { bad: 'console.log(1)', good: 'logger.info(1)' },
+        { bad: 'console.log(2)', good: 'logger.info(2)' },
+        { bad: 'console.log(3)', good: 'logger.info(3)' },
+      ]);
+      expect(output).toContain('PASS examples[0]');
+      expect(output).toContain('PASS examples[1]');
+      expect(output).toContain('PASS examples[2]');
+      expect(output).toContain('3 example pair(s) verified');
+      expect(process.exitCode).toBeUndefined();
+    });
+  });
 });
 
 describe('rule scaffold', () => {
@@ -555,6 +667,38 @@ describe('rule promote', () => {
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
   }
+
+  // ── Prop 310 § Design 1 — every manifest WRITER attests the record class ──
+  it('refreshes records_hash on promote — the shipping writer reaches attestRecordsHash', async () => {
+    // The wiring check the design asks for: not "the helper computes a hash", but
+    // "the command that writes a manifest wrote THIS field". Without the call site
+    // this manifest would keep no `records_hash` and verify-manifest would then
+    // hard-FAIL "unattested file class" on a repo carrying records.
+    const { attestRecordsHash } = await import('@mmnto/totem');
+    const unverifiedRule = {
+      ...SAMPLE_RULES[0]!,
+      lessonHash: 'bbbb2222bbbb2222',
+      unverified: true,
+    };
+    const { totemDir } = scaffold(tmpDir, [unverifiedRule]);
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    await writeManifest(totemDir, rulesPath);
+    // A record on disk, so the attested value is NOT the empty-set constant and a
+    // missing call site cannot coincidentally produce the right answer.
+    const recordsDir = path.join(totemDir, 'rules');
+    fs.mkdirSync(recordsDir, { recursive: true });
+    fs.writeFileSync(path.join(recordsDir, 'x.rule.yaml'), 'schemaVersion: 1\n', 'utf-8');
+
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { rulePromoteCommand } = await import('./rule.js');
+    await rulePromoteCommand('bbbb2222');
+
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(totemDir, 'compile-manifest.json'), 'utf-8'),
+    ) as { records_hash?: string };
+    expect(manifest.records_hash).toBe(attestRecordsHash(totemDir, tmpDir));
+    expect(manifest.records_hash).toMatch(/^[a-f0-9]{64}$/);
+  });
 
   it('removes the unverified flag from a matching rule and refreshes the manifest', async () => {
     const unverifiedRule = {
