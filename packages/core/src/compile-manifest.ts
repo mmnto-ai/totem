@@ -20,6 +20,18 @@ export const CompileManifestSchema = z.object({
   // Optional for backward-compat with pre-#1937 manifests; only the anthropic
   // provider populates it in Phase 1. Per Proposal 278 § Action 3.
   compile_worker_fingerprint: z.string().optional(),
+  /**
+   * Prop 310 § Design 1 — the aggregate attestation over the RECORD file class
+   * (`<totemDir>/rules/**\/*.rule.yaml`), computed by `generateRecordsHash`.
+   *
+   * OPTIONAL, per the slice-3 OQ-3 ruling: absence is legal IFF zero record files
+   * exist on disk (the state every pre-Prop-310 manifest is in), so no shipped
+   * manifest needs a hand-edit and downstream manifests keep verifying. The first
+   * record landing forces attestation — `verify-manifest` hard-FAILS on records
+   * present with no `records_hash` ("unattested file class"), and hard-FAILS on a
+   * mismatch. Neither ever takes the freeze WARN-downgrade, which is input-hash-only.
+   */
+  records_hash: z.string().optional(),
 });
 
 export type CompileManifest = z.infer<typeof CompileManifestSchema>;
@@ -27,29 +39,88 @@ export type CompileManifest = z.infer<typeof CompileManifestSchema>;
 // ─── Hashing ─────────────────────────────────────────
 
 /**
- * Walk a directory recursively and collect all `.md` file paths
- * relative to `baseDir`, sorted alphabetically.
+ * Walk a directory recursively and collect every file path ending in `suffix`,
+ * relative to `baseDir`, '/'-separated. UNSORTED (callers sort).
+ *
+ * Generalised from the `.md`-only walk by Prop 310 slice 3 so the record file
+ * class (`*.rule.yaml`) is attested by the SAME collector the lesson class uses —
+ * a second walk would be the mirror that silently drifts on the next fix. The
+ * missing-directory throw is the lesson class's contract and is kept exactly:
+ * `collectMdFiles` is the thin wrapper below, so `generateInputHash` is unchanged.
  */
-function collectMdFiles(baseDir: string, currentDir: string = baseDir): string[] {
-  if (!fs.existsSync(baseDir)) {
-    throw new TotemParseError(
-      `Lessons directory not found: ${baseDir}`,
-      'Run "totem sync" or create .totem/lessons/ with lesson files.',
-    );
-  }
+function collectFilesWithSuffix(
+  baseDir: string,
+  suffix: string,
+  currentDir: string = baseDir,
+): string[] {
   const entries = fs.readdirSync(currentDir, { withFileTypes: true });
   const results: string[] = [];
 
   for (const entry of entries) {
     const fullPath = path.join(currentDir, entry.name);
     if (entry.isDirectory()) {
-      results.push(...collectMdFiles(baseDir, fullPath));
-    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      results.push(...collectFilesWithSuffix(baseDir, suffix, fullPath));
+    } else if (entry.isFile() && entry.name.endsWith(suffix)) {
       results.push(path.relative(baseDir, fullPath).replace(/\\/g, '/'));
     }
   }
 
   return results;
+}
+
+/**
+ * Walk a directory recursively and collect all `.md` file paths
+ * relative to `baseDir`, sorted alphabetically.
+ */
+function collectMdFiles(baseDir: string): string[] {
+  if (!fs.existsSync(baseDir)) {
+    throw new TotemParseError(
+      `Lessons directory not found: ${baseDir}`,
+      'Run "totem sync" or create .totem/lessons/ with lesson files.',
+    );
+  }
+  return collectFilesWithSuffix(baseDir, '.md');
+}
+
+/**
+ * Restrict a collected relative-path list to the git-tracked subset when
+ * `repoCwd` resolves inside a git repository; outside one (or when git is
+ * unavailable) the list passes through unchanged.
+ *
+ * Single-homed across both hashed file classes so lessons and records can never
+ * disagree about what "tracked" means (see `generateInputHash`'s own note for
+ * why tracked-only is the producer/consumer-symmetric answer).
+ */
+function restrictToTracked(files: string[], baseDir: string, repoCwd: string | undefined): string[] {
+  if (repoCwd === undefined) return files;
+  const tracked = listTrackedFilesUnder(repoCwd, baseDir);
+  if (tracked === null) return files;
+  // Both collectors and `listTrackedFilesUnder` emit '/'-separated paths, so the
+  // membership test already agrees cross-platform. Normalize the comparison key
+  // anyway so this filter never silently depends on a distant function preserving
+  // that invariant — a no-op on forward-slash input.
+  return files.filter((relPath) => tracked.has(relPath.replace(/\\/g, '/')));
+}
+
+/**
+ * Roll a deterministic sha256 over `${relPath}\n${lfContent}\n` for each file, in
+ * the given order. The one hashing method both attested file classes use.
+ */
+function rollingContentHash(
+  baseDir: string,
+  files: readonly string[],
+  onReadError: (relPath: string, err: unknown) => never,
+): string {
+  const hash = crypto.createHash('sha256');
+  for (const relPath of files) {
+    try {
+      const content = fs.readFileSync(path.join(baseDir, relPath), 'utf-8').replace(/\r\n/g, '\n');
+      hash.update(`${relPath}\n${content}\n`);
+    } catch (err) {
+      onReadError(relPath, err);
+    }
+  }
+  return hash.digest('hex');
 }
 
 /**
@@ -70,35 +141,74 @@ function collectMdFiles(baseDir: string, currentDir: string = baseDir): string[]
  * so the default no-arg form is byte-for-byte unchanged.
  */
 export function generateInputHash(lessonsDir: string, repoCwd?: string): string {
-  let files = collectMdFiles(lessonsDir).sort();
-  if (repoCwd !== undefined) {
-    const tracked = listTrackedFilesUnder(repoCwd, lessonsDir);
-    if (tracked !== null) {
-      // collectMdFiles and listTrackedFilesUnder both emit '/'-separated paths,
-      // so the membership test already agrees cross-platform. Normalize the
-      // comparison key anyway so this filter never silently depends on a distant
-      // function preserving that invariant — a no-op on forward-slash input.
-      files = files.filter((relPath) => tracked.has(relPath.replace(/\\/g, '/')));
-    }
-  }
-  const hash = crypto.createHash('sha256');
+  const files = restrictToTracked(collectMdFiles(lessonsDir).sort(), lessonsDir, repoCwd);
+  return rollingContentHash(lessonsDir, files, (relPath, err) => {
+    throw new TotemParseError(
+      `Cannot read lesson file ${relPath}: ${getErrorMessage(err)}`,
+      'Ensure all lesson files in .totem/lessons/ are readable.',
+      err,
+    );
+  });
+}
 
-  for (const relPath of files) {
-    try {
-      const content = fs
-        .readFileSync(path.join(lessonsDir, relPath), 'utf-8')
-        .replace(/\r\n/g, '\n');
-      hash.update(`${relPath}\n${content}\n`);
-    } catch (err) {
-      throw new TotemParseError(
-        `Cannot read lesson file ${relPath}: ${getErrorMessage(err)}`,
-        'Ensure all lesson files in .totem/lessons/ are readable.',
-        err,
-      );
-    }
-  }
+// ─── Prop 310 § Design 1 — the RECORD file class ─────────────────────────────
 
-  return hash.digest('hex');
+/** `.totem`-relative directory the Prop 310 rule records live in (§ Design 1). */
+export const RECORDS_DIR_REL = 'rules';
+
+/** The double extension § Design 1 rules: `*.rule.yaml`, never a bare `*.yaml`. */
+export const RECORD_FILE_SUFFIX = '.rule.yaml';
+
+/**
+ * The `records_hash` of an EMPTY record set — sha256 over nothing, the value
+ * `generateRecordsHash` returns when `<totemDir>/rules/` is absent or holds no
+ * `*.rule.yaml`. COMPUTED, never a transcribed literal: a hand-copied digest is a
+ * mirror that can be typo'd, and this constant is what the OQ-3 "records: none"
+ * verdict and the cross-platform stability test both bind to.
+ */
+export const EMPTY_RECORDS_HASH = crypto.createHash('sha256').digest('hex');
+
+/**
+ * Enumerate the record files under `rulesDir`, sorted, '/'-separated, restricted
+ * to the git-tracked set when `repoCwd` resolves inside a repo (the same
+ * producer/consumer symmetry `generateInputHash` documents). Returns `[]` when the
+ * directory does not exist — an absent record class is the pre-Prop-310 state, not
+ * an error, which is the one place this differs from the lesson class.
+ *
+ * Exported because `verify-manifest` needs the COUNT, not the hash, to decide the
+ * OQ-3 verdict ("absent `records_hash` is OK iff zero records on disk"): deciding
+ * it by comparing against `EMPTY_RECORDS_HASH` would infer a file count from a
+ * digest instead of asking the disk.
+ */
+export function listRecordFiles(rulesDir: string, repoCwd?: string): string[] {
+  if (!fs.existsSync(rulesDir)) return [];
+  return restrictToTracked(collectFilesWithSuffix(rulesDir, RECORD_FILE_SUFFIX).sort(), rulesDir, repoCwd);
+}
+
+/**
+ * Generate the deterministic sha256 attestation over the Prop 310 record file
+ * class — the same rolling `${relPath}\n${lfContent}\n` method `generateInputHash`
+ * uses over lessons, so the two attestations are path-AND-content sensitive in
+ * exactly the same way: one edited byte, one added, removed, or renamed record all
+ * move it. Absent directory ⇒ `EMPTY_RECORDS_HASH`.
+ */
+export function generateRecordsHash(rulesDir: string, repoCwd?: string): string {
+  return rollingContentHash(rulesDir, listRecordFiles(rulesDir, repoCwd), (relPath, err) => {
+    throw new TotemParseError(
+      `Cannot read rule record ${relPath}: ${getErrorMessage(err)}`,
+      `Ensure all record files in ${RECORDS_DIR_REL}/ are readable.`,
+      err,
+    );
+  });
+}
+
+/**
+ * The ONE call every `writeCompileManifest` caller makes to attest the record
+ * class, given the `.totem` directory. Single-homed so six writer sites cannot
+ * disagree about where records live or how they are hashed (Tenet 20).
+ */
+export function attestRecordsHash(totemDir: string, repoCwd?: string): string {
+  return generateRecordsHash(path.join(totemDir, RECORDS_DIR_REL), repoCwd);
 }
 
 /**

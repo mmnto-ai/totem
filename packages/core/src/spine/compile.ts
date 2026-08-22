@@ -41,6 +41,10 @@ import {
 import { AUTHORED_RULE_ID_RE } from './authored-rule.js';
 import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger, Stage4LedgerOutcome } from './ledgers.js';
+// Prop 310 slice 2's lowering — the record carrier's compile path. `record-lower.ts`
+// imports only the `CompileOutcome` TYPE from this module, so the edge is one-way at
+// runtime.
+import { compileRuleRecord } from './record-lower.js';
 
 /**
  * The slice-4 output: a compiled, Stage-4-verified candidate. Carries `provenance`
@@ -95,7 +99,10 @@ function candidateHeading(candidate: CompileInputCandidate): string {
 }
 
 /**
- * Compile a single compile-routed candidate's `dslSource` into a `CompiledRule`.
+ * Compile a single compile-routed candidate's rule CARRIER into a `CompiledRule`.
+ * A candidate carries exactly one: the mined producer's lesson-markdown `dslSource`
+ * (parsed here by `extractManualPattern`) or the authored producer's already-parsed
+ * Prop 310 `record` (lowered by `compileRuleRecord`). Both/neither throws up front.
  * PURE (no IO). Throws — fail loud, never a silent skip — on a behavioral candidate
  * (FM(c) code backstop) or a structural candidate whose `dslSource` yields no usable
  * pattern (a producer-contract violation: slice-2's `isUsableDsl` preflight should
@@ -144,9 +151,45 @@ export function compileCandidate(
     );
   }
 
+  // ── Prop 310 § Design 1 — the carrier XOR, asserted UP FRONT (before any parse) ──
+  //
+  // A candidate carries EXACTLY ONE rule carrier: the mined producer's lesson-markdown
+  // `dslSource`, or the authored producer's already-parsed `record`. Both or neither is
+  // a PRODUCER BUG, not an authoring defect, so it throws with the same fail-loud idiom
+  // as the behavioral/ruleId preconditions above rather than returning a `rejected`
+  // outcome — and it is asserted before any parse work so a violation can never be
+  // masked by a coincidental parse error.
+  const record = candidate.record;
+  const dslSource = candidate.dslSource;
+  if (record !== undefined) {
+    if (dslSource !== undefined) {
+      throw new Error(
+        `[Totem Error] compileCandidate: candidate '${candidate.classifierLedgerRef}' carries BOTH a record and a dslSource — exactly one rule carrier is a producer contract (Prop 310 § Design 1); compiling either one would silently discard the other`,
+      );
+    }
+    // The record path is ALREADY PARSED (slice 1) and lowers through slice 2's
+    // `compileRuleRecord`; `extractManualPattern`/`sanitizeFileGlobs` never run on it.
+    // Identity is the same §8 precondition asserted above — reused, never re-derived.
+    // The §3 engine binding is `compileRuleRecord`'s own two-sided assert (the record's
+    // `target.type` vs the payload's actual compilation path), so the whitelist-judged
+    // `declaredEngine` — which intake DERIVES from that same `target.type` — needs no
+    // second, tautological check here.
+    if (authoredLessonHash === undefined) {
+      throw new Error(
+        `[Totem Error] compileCandidate: record-carried candidate '${candidate.classifierLedgerRef}' has no authored, minted ruleId — a record candidate is produced only by the ADR-112 §8 authored front-end, which mints identity at the intake seam (Prop 310 § Design 3/R17)`,
+      );
+    }
+    return compileRuleRecord(record, { ruleId: authoredLessonHash, now: opts.now });
+  }
+  if (dslSource === undefined) {
+    throw new Error(
+      `[Totem Error] compileCandidate: candidate '${candidate.classifierLedgerRef}' carries NEITHER a record nor a dslSource — exactly one rule carrier is a producer contract (Prop 310 § Design 1)`,
+    );
+  }
+
   // May throw TotemParseError (e.g. a yaml fence under a non-ast-grep engine) — that
   // propagates loudly as a producer bug; it would also have been dropped at extract.
-  const mp: ManualPattern | null = extractManualPattern(candidate.dslSource);
+  const mp: ManualPattern | null = extractManualPattern(dslSource);
   if (mp === null) {
     throw new Error(
       `[Totem Error] compileCandidate: structural candidate '${candidate.classifierLedgerRef}' has no usable pattern — slice-2 preflight (isUsableDsl) should have dropped it (preflight↔parser desync)`,
@@ -172,7 +215,7 @@ export function compileCandidate(
   const rule = CompiledRuleSchema.parse({
     // §8 id-unification: authored identity is the validated, minted ruleId (asserted
     // up front, above); a mined candidate stays the dslSource-derived content hash.
-    lessonHash: authoredLessonHash ?? hashLesson(heading, candidate.dslSource),
+    lessonHash: authoredLessonHash ?? hashLesson(heading, dslSource),
     lessonHeading: heading,
     message: mp.message ?? heading,
     engine: mp.engine,

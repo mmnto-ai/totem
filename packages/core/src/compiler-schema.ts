@@ -61,6 +61,32 @@ const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 const LESSON_REF_RE = /^[0-9a-f]{16}$/;
 
 /**
+ * A full sha256 digest in lowercase hex — the codomain of every content hash on
+ * this seam (Prop 310 § Design 10's CR-blind example-pair hash, the record file's
+ * own content hash). Canonical form only, for the same reason `COMMIT_SHA_RE`
+ * refuses uppercase: admitting a non-canonical digest is a silent data-quality
+ * hole, and normalising it on parse would move the hash basis.
+ */
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+// The persisted minted-rule-id shape (ADR-112 §8): a 16-char lowercase-hex base from
+// `mintAuthoredRuleId`, with an optional collision suffix. The suffix is EXACTLY what the
+// mint emits — `-<n>` for n≥1, never `-0` and never zero-padded — so schema-valid ≡
+// mint-producible (#2259 CR: a looser `-\d+` admitted ids like `…-0`/`…-01` the mint can't
+// make). Pinned as a shared constant binding the SCHEMA boundary to the mint's codomain.
+//
+// HOMED HERE, not beside the mint (Prop 310 slice 3): `PreimageSourceSchema`'s
+// `kind: 'record'` branch needs it, and this module is a leaf that
+// `spine/authored-rule.ts` already imports — the reverse edge would be an import
+// cycle whose top-level Zod construction would hit a TDZ error. `authored-rule.ts`
+// re-exports it, so the constant still has exactly one definition (Tenet 20) and
+// every existing import path is unchanged.
+export const AUTHORED_RULE_ID_HEX_LEN = 16;
+export const AUTHORED_RULE_ID_RE = new RegExp(
+  `^[0-9a-f]{${AUTHORED_RULE_ID_HEX_LEN}}(?:-[1-9]\\d*)?$`,
+);
+
+/**
  * ISO-8601 shape for an authoring date — a calendar date (`YYYY-MM-DD`) or a full
  * timestamp with optional fractional seconds + `Z`/offset. Shape only; the calendar
  * validity is enforced by `isIso8601CalendarDate` (#2259 — GCA-high + CR).
@@ -142,6 +168,15 @@ export type MinedProvenanceRecord = z.infer<typeof MinedProvenanceWireSchema>;
  *     never a path/mutable alias (§8 identity discipline).
  *   - `commit` (FALLBACK, land-then-fix repos): the pre-fix parent
  *     (`preimageCommitSha` — fire) / post-fix merge (`mergeCommitSha` — silent).
+ *   - `record` (Prop 310 § Design 10 + Amendment 1): DERIVED at intake from a
+ *     `.totem/rules/<slug>.rule.yaml` record's `examples[ordinal]` pair, joined by
+ *     the `(ruleId, ordinal)` key with the CR-blind `pairHash` as drift sensor.
+ *     The bad/good text is carried inline exactly as the `lesson` branch carries
+ *     it, so the differential evaluates identically; the key is what differs.
+ *     Amendment 1 makes the record's `examples` block the EDITABLE home — this
+ *     branch is the derived side and is never hand-authored (an inline
+ *     `preimageSource` in the authored envelope is a migration error, rejected by
+ *     name at intake).
  *
  * `z.discriminatedUnion` (not `z.union`): both branches carry a REQUIRED literal
  * `kind`, so Zod routes a parse error to the matched branch instead of emitting
@@ -187,6 +222,42 @@ export const PreimageSourceSchema = z.discriminatedUnion('kind', [
       /** The PR's merge/squash commit — the post-fix (defect-absent) anchor; the matcher must stay SILENT on this. */
       mergeCommitSha: z.string().regex(COMMIT_SHA_RE, {
         message: 'mergeCommitSha must be a 40-character lowercase hex commit SHA',
+      }),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('record'),
+      /**
+       * Prop 310 § Design 10 — half of the join key. The ADR-112 §8 producer-minted
+       * rule id the record was ingested under; pinned to the mint's codomain so a
+       * derivation that lost the id fails LOUD instead of anchoring the pair to a
+       * free-text label.
+       */
+      ruleId: z.string().regex(AUTHORED_RULE_ID_RE, {
+        message:
+          'ruleId must be a minted authored rule id — 16 hex chars + optional -<n> suffix (ADR-112 §3/§8)',
+      }),
+      /** The `examples[i]` ordinal within the record — the other half of the join key (§ Design 10). */
+      ordinal: z.number().int().nonnegative({
+        message: 'ordinal must be a non-negative `examples[i]` index (Prop 310 § Design 10)',
+      }),
+      /**
+       * Amendment 1 item 3 — the CR-blind per-pair content hash (`ruleExamplePairHash`),
+       * computed over the LF-image of the pair's material. The § Design 10 DRIFT SENSOR:
+       * an `examples` edit flips it, which flips the ledger `contentHash`, which reads
+       * `revised`. There is no second mechanism.
+       */
+      pairHash: z.string().regex(SHA256_HEX_RE, {
+        message: 'pairHash must be the CR-blind example-pair sha256 hex (Prop 310 Amendment 1)',
+      }),
+      /** The record's `examples[ordinal].bad` — the defect preimage the matcher must FIRE on (§4). */
+      badExample: z.string().refine((s) => s.trim().length > 0, {
+        message: 'badExample (the defect preimage the matcher must fire on) must be non-empty',
+      }),
+      /** The record's `examples[ordinal].good` — the fixed postimage the matcher must stay SILENT on (§4). */
+      goodExample: z.string().refine((s) => s.trim().length > 0, {
+        message: 'goodExample (the fixed form the matcher must stay silent on) must be non-empty',
       }),
     })
     .strict(),
@@ -237,6 +308,19 @@ export const AuthoredFixtureSchema = z
   .superRefine((fixture, ctx) => {
     const src = fixture.preimageSource;
     if (src.kind === 'lesson' && src.badExample.trim() === src.goodExample.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'badExample and goodExample must differ — identical sides are a vacuous preimage-differential control (ADR-112 §4)',
+        path: ['preimageSource', 'goodExample'],
+      });
+    }
+    // Prop 310 § Design 10 — the derived record branch takes the SAME anti-vacuity
+    // floor as `lesson`: the two sides are the record's own `examples[i].bad`/`.good`,
+    // and an identical pair is unconditionally vacuous whichever home authored it.
+    // The record grammar requires both sides non-empty but does not require them to
+    // DIFFER, so this is the only gate that catches it.
+    if (src.kind === 'record' && src.badExample.trim() === src.goodExample.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:

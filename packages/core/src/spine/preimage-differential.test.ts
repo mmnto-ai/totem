@@ -282,6 +282,82 @@ describe('evaluatePreimageDifferential — commit source is a typed deferral (sl
   });
 });
 
+// ─── Prop 310 § Design 10 — the record source classifies exactly as `lesson` ──
+
+describe('evaluatePreimageDifferential — record source (Prop 310 slice 3)', () => {
+  /** The DERIVED record fixture: same inline exemplars, the (ruleId, ordinal) join. */
+  function recordFixture(badExample: string, goodExample: string): AuthoredFixture {
+    return {
+      pr: 130,
+      preimageSource: {
+        kind: 'record',
+        ruleId: '0123456789abcdef',
+        ordinal: 0,
+        pairHash: 'f'.repeat(64),
+        badExample,
+        goodExample,
+      },
+      filePath: 'src/sim/level.rs',
+      matchedSpan: 'L10-L12',
+      contentHash: 'abc123def456',
+    };
+  }
+
+  it('classifies a record source EXACTLY as the lesson source does, for every outcome', async () => {
+    // The design's word is "evaluated exactly as `lesson`". Asserted as an EQUALITY
+    // against the lesson result (modulo the `sourceKind` label), across the whole
+    // outcome vocabulary — a per-outcome spot check would let one branch drift.
+    const cases: [string, string][] = [
+      ['console.log("debug")', 'logger.info("ok")'], // differential-holds
+      ['logger.info("ok")', 'console.log("debug")'], // fix-shaped
+      ['console.log("a")', 'console.log("b")'], // over-match
+      ['logger.info("a")', 'logger.warn("b")'], // vacuous-silent
+    ];
+    for (const [bad, good] of cases) {
+      const viaLesson = await evaluatePreimageDifferential(regexRule(), lessonFixture(bad, good));
+      const viaRecord = await evaluatePreimageDifferential(regexRule(), recordFixture(bad, good));
+      expect(viaRecord).toEqual({ ...viaLesson, sourceKind: 'record' });
+    }
+    // …and the four cases really did cover four DISTINCT outcomes, so the equality
+    // above is not four repetitions of one branch.
+    const outcomes = new Set<string>();
+    for (const [bad, good] of cases) {
+      outcomes.add((await evaluatePreimageDifferential(regexRule(), recordFixture(bad, good))).outcome);
+    }
+    expect(outcomes).toEqual(
+      new Set(['differential-holds', 'fix-shaped', 'over-match', 'vacuous-silent']),
+    );
+  });
+
+  it('reports sourceKind `record`, never the lesson label', async () => {
+    const result = await evaluatePreimageDifferential(
+      regexRule(),
+      recordFixture('console.log("debug")', 'logger.info("ok")'),
+    );
+    expect(result.outcome).toBe('differential-holds');
+    expect(result.sourceKind).toBe('record');
+  });
+
+  it('carries the § Design 8 exemplar through an ast-grep rule identically', async () => {
+    const result = await evaluatePreimageDifferential(
+      astGrepRule(),
+      recordFixture('debugger;\n', 'const x = 1;\n'),
+    );
+    expect(result.outcome).toBe('differential-holds');
+    expect(result.sourceKind).toBe('record');
+  });
+
+  it('a whitespace-only side is needs-adjudication on the record source too', async () => {
+    const result = await evaluatePreimageDifferential(
+      regexRule(),
+      recordFixture('console.log("bad")', '   \n  '),
+    );
+    expect(result.outcome).toBe('needs-adjudication');
+    expect(result.sourceKind).toBe('record');
+    expect(result.reason).toContain('goodExample');
+  });
+});
+
 // ─── determinism (Tenet-15) ─────────────────────────
 
 describe('evaluatePreimageDifferential — determinism', () => {

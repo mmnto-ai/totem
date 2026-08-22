@@ -1174,6 +1174,96 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
       ).toThrow(/identical pre\/post commit|must differ/i);
     });
 
+    // ── Prop 310 § Design 10 — the DERIVED record branch (slice 3) ──
+    describe('record preimageSource branch (Prop 310 § Design 10)', () => {
+      const recordSource = {
+        kind: 'record' as const,
+        ruleId: '0123456789abcdef',
+        ordinal: 0,
+        pairHash: 'a'.repeat(64),
+        badExample: 'if (a == b) {}',
+        goodExample: 'if (abs(a - b) < EPS) {}',
+      };
+
+      it('accepts a well-formed record source and preserves it verbatim', () => {
+        const parsed = PreimageSourceSchema.parse(recordSource);
+        expect(parsed).toEqual(recordSource);
+      });
+
+      it('accepts a collision-suffixed ruleId (-N) — the mint emits them', () => {
+        expect(() =>
+          PreimageSourceSchema.parse({ ...recordSource, ruleId: '0123456789abcdef-2' }),
+        ).not.toThrow();
+      });
+
+      it('rejects a ruleId outside the §8 mint codomain — the join key must be the minted id', () => {
+        for (const badId of [
+          'not-a-rule-id',
+          '0123456789ABCDEF',
+          '0123456789abcde',
+          '0123456789abcdef-0',
+          '0123456789abcdef-01',
+        ]) {
+          expect(() => PreimageSourceSchema.parse({ ...recordSource, ruleId: badId })).toThrow(
+            /ruleId must be a minted authored rule id/,
+          );
+        }
+      });
+
+      it('rejects a negative or non-integer ordinal — it indexes `examples[i]`', () => {
+        for (const badOrdinal of [-1, 1.5]) {
+          expect(() =>
+            PreimageSourceSchema.parse({ ...recordSource, ordinal: badOrdinal }),
+          ).toThrow();
+        }
+      });
+
+      it('rejects a pairHash that is not a 64-hex sha256 (the § Design 10 drift sensor)', () => {
+        for (const badHash of ['a'.repeat(63), 'A'.repeat(64), 'nope', 'a'.repeat(32)]) {
+          expect(() => PreimageSourceSchema.parse({ ...recordSource, pairHash: badHash })).toThrow(
+            /pairHash must be the CR-blind example-pair sha256 hex/,
+          );
+        }
+      });
+
+      it('rejects a whitespace-only badExample or goodExample (vacuous control)', () => {
+        expect(() => PreimageSourceSchema.parse({ ...recordSource, badExample: '   ' })).toThrow();
+        expect(() => PreimageSourceSchema.parse({ ...recordSource, goodExample: ' \n ' })).toThrow();
+      });
+
+      it('rejects a cross-branch leak — a lessonRef under kind:record (strict branch, FM(d))', () => {
+        expect(() =>
+          PreimageSourceSchema.parse({ ...recordSource, lessonRef: 'a1b2c3d4e5f60718' }),
+        ).toThrow();
+      });
+
+      it('rejects a record fixture whose badExample equals its goodExample (vacuous — identical sides)', () => {
+        expect(() =>
+          AuthoredFixtureSchema.parse({
+            ...authoredLesson.positiveFixtures[0],
+            preimageSource: {
+              ...recordSource,
+              badExample: 'if (a == b) {}',
+              goodExample: '  if (a == b) {}  ', // trim-equal → still vacuous
+            },
+          }),
+        ).toThrow(/identical sides|must differ/i);
+      });
+
+      it('rejects a fixture carrying the envelope-side `example` ordinal alongside preimageSource', () => {
+        // Intake DERIVES `preimageSource` from the entry's `example: <ordinal>` reference
+        // and must not carry the reference through: two homes for the same ordinal is the
+        // Tenet-20 mirror, and `.strict()` is what makes that mechanical.
+        expect(() =>
+          AuthoredFixtureSchema.parse({
+            ...authoredLesson.positiveFixtures[0],
+            preimageSource: recordSource,
+            example: 0,
+          }),
+        ).toThrow();
+      });
+    });
+
     it('rejects a lesson preimageSource whose lessonRef is a path or mutable alias (immutable 16-hex id only)', () => {
       for (const badRef of [
         'docs/lessons/foo.md',

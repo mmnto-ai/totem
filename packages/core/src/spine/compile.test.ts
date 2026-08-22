@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { stringify as yamlStringify } from 'yaml';
 
 import { type AuthoredRuleRecord, mintAuthoredRuleId, toCompileFeed } from './authored-rule.js';
 import type { CandidateRuleRecord, CompileInputCandidate } from './candidate-rule.js';
@@ -17,6 +18,8 @@ import {
 import type { DraftCandidate, ExtractStageResult } from './extract.js';
 import type { MinerLedgers, SplitLedger } from './ledgers.js';
 import { runFalsificationHarness } from './miner-harness.js';
+import { compileRuleRecord } from './record-lower.js';
+import { type ParsedRuleRecord, parseRuleRecord } from './rule-record.js';
 
 // The frozen LessonInput actuator is wrapped in spies so the call-spy test (agy
 // fold-1) can assert the G-series path NEVER touches it. `validateAstGrepPattern`
@@ -597,6 +600,163 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
       ruleId: '0123456789abcdef', // well-formed, yet still rejected for a mined candidate
     };
     expect(() => compileCandidate(candidate, { now: NOW })).toThrow(/must not carry a ruleId/);
+  });
+
+  // ── Prop 310 § Design 1 (slice 3) — the record carrier ──
+  describe('record carrier — the second, mutually-exclusive rule carrier', () => {
+    const RECORD_PATH = '.totem/rules/forbidden-call.rule.yaml';
+    const RECORD_YAML = yamlStringify({
+      schemaVersion: 1,
+      severity: 'warning',
+      message: 'forbiddenCall() is banned.',
+      target: {
+        type: 'regex',
+        pattern: 'forbiddenCall\\(',
+        scope: { fileGlobs: ['src/**/*.ts'] },
+      },
+      examples: [{ bad: 'forbiddenCall()', good: 'allowedCall()' }],
+    });
+    const parsed = (): ParsedRuleRecord => parseRuleRecord(RECORD_YAML, RECORD_PATH);
+
+    /** An authored candidate carrying the RECORD instead of a dslSource. */
+    function recordCandidate(over: Partial<CompileInputCandidate> = {}): CompileInputCandidate {
+      const rec = authored('alr-record', REGEX_DSL);
+      return {
+        provenance: rec.provenance,
+        classifierDisposition: 'structural',
+        classifierLedgerRef: 'authored:alr-record',
+        record: parsed(),
+        declaredEngine: 'regex',
+        ruleId: rec.ruleId,
+        unverified: true,
+        ...over,
+      };
+    }
+
+    it('compiles a record candidate to EXACTLY what compileRuleRecord produces directly', () => {
+      const rec = authored('alr-record', REGEX_DSL);
+      const viaCandidate = compileCandidate(recordCandidate(), { now: NOW });
+      const direct = compileRuleRecord(parsed(), { ruleId: rec.ruleId, now: NOW });
+      expect(viaCandidate.kind).toBe('compiled');
+      // Deep equality, not a field spot-check: the seam must ADD nothing and DROP
+      // nothing relative to the slice-2 lowering it dispatches to.
+      expect(viaCandidate).toEqual(direct);
+      if (viaCandidate.kind === 'compiled') {
+        expect(viaCandidate.rule.lessonHash).toBe(rec.ruleId);
+        // The § Design 12 compiled homes are present — this really took the record
+        // path and not a coincidental dslSource compile.
+        expect(viaCandidate.rule.examples).toEqual([
+          { bad: 'forbiddenCall()', good: 'allowedCall()' },
+        ]);
+        // § Design 7 verbatim: no `sanitizeFileGlobs` ran on this path.
+        expect(viaCandidate.rule.fileGlobs).toEqual(['src/**/*.ts']);
+      }
+    });
+
+    it('throws when a candidate carries BOTH carriers — compiling either would discard the other', () => {
+      expect(() => compileCandidate(recordCandidate({ dslSource: REGEX_DSL }), { now: NOW })).toThrow(
+        /carries BOTH a record and a dslSource/,
+      );
+    });
+
+    it('throws when a candidate carries NEITHER carrier', () => {
+      const { record: _dropped, ...neither } = recordCandidate();
+      expect(() => compileCandidate(neither, { now: NOW })).toThrow(
+        /carries NEITHER a record nor a dslSource/,
+      );
+    });
+
+    it('throws BEFORE any lowering work when both carriers are present (fail-loud ordering)', () => {
+      // The both-carrier assert must precede the payload gate, so an otherwise-
+      // rejectable record still surfaces the CONTRACT bug rather than a `rejected`
+      // outcome that hides it. Pattern here is ReDoS-unsafe: it would `reject`.
+      const redosRecord = parseRuleRecord(
+        yamlStringify({
+          schemaVersion: 1,
+          severity: 'warning',
+          message: 'redos',
+          target: { type: 'regex', pattern: '(a+)+$', scope: { fileGlobs: ['src/**/*.ts'] } },
+          examples: [{ bad: 'aaa', good: 'b' }],
+        }),
+        RECORD_PATH,
+      );
+      expect(() =>
+        compileCandidate(recordCandidate({ record: redosRecord, dslSource: REGEX_DSL }), {
+          now: NOW,
+        }),
+      ).toThrow(/carries BOTH a record and a dslSource/);
+    });
+
+    it('throws when a record candidate has no authored, minted ruleId (identity is producer-owned)', () => {
+      const { ruleId: _dropped, ...noId } = recordCandidate();
+      expect(() => compileCandidate(noId, { now: NOW })).toThrow(/missing its persisted ruleId/);
+    });
+
+    it('throws when a MINED-provenance candidate carries a record (producer-contract violation)', () => {
+      const mined: CompileInputCandidate = {
+        provenance: candidateRule(9, REGEX_DSL).provenance,
+        classifierDisposition: 'structural',
+        classifierLedgerRef: 'clr-9-0',
+        record: parsed(),
+        unverified: true,
+      };
+      expect(() => compileCandidate(mined, { now: NOW })).toThrow(
+        /has no authored, minted ruleId/,
+      );
+    });
+
+    it('surfaces a record lowering REJECTION as `rejected`, not a throw (authored-content defect)', () => {
+      const redosRecord = parseRuleRecord(
+        yamlStringify({
+          schemaVersion: 1,
+          severity: 'warning',
+          message: 'redos',
+          target: { type: 'regex', pattern: '(a+)+$', scope: { fileGlobs: ['src/**/*.ts'] } },
+          examples: [{ bad: 'aaa', good: 'b' }],
+        }),
+        RECORD_PATH,
+      );
+      const out = compileCandidate(recordCandidate({ record: redosRecord }), { now: NOW });
+      expect(out.kind).toBe('rejected');
+    });
+
+    it('runs a record candidate through runCompileStage end-to-end with Stage-4 evidence', async () => {
+      const rec = authored('alr-record', REGEX_DSL);
+      const candidate = recordCandidate();
+      const r = await runCompileStage(
+        {
+          candidates: [candidate],
+          classifierLedger: {
+            entries: [
+              {
+                candidateRef: candidate.classifierLedgerRef,
+                disposition: 'structural',
+                stage4Confirmed: false,
+                dispositionSource: 'authored-whitelist',
+              },
+            ],
+          },
+        },
+        compileDeps({ 'src/a.ts': 'forbiddenCall()' }),
+      );
+      expect(r.compiled).toHaveLength(1);
+      expect(r.compiled[0]!.rule.lessonHash).toBe(rec.ruleId);
+      // The matched line equals `examples[0].bad`, so Stage 4 promotes it (slice 3's
+      // discharge of the slice-2 candidate-debt pin) — proving the record's examples
+      // are reachable from the shipping compile path, not just from the lowering.
+      expect(r.compiled[0]!.stage4.outcome).toBe('in-scope-bad-example');
+      expect(r.compiled[0]!.rule.confidence).toBe('high');
+    });
+
+    it('leaves a MINED dslSource candidate byte-identical — the carrier XOR adds no mined behaviour', () => {
+      const out = compileCandidate(candidateRule(1, REGEX_DSL), { now: NOW });
+      expect(out.kind).toBe('compiled');
+      if (out.kind === 'compiled') {
+        expect(out.rule.examples).toBeUndefined();
+        expect(out.rule.badExample).toBe('forbiddenCall()');
+        expect(out.rule.lessonHash).toMatch(/^[0-9a-f]{16}$/);
+      }
+    });
   });
 
   it('fails loud if an authored candidate carries a malformed ruleId — id-shape precondition (greptile-P2)', () => {

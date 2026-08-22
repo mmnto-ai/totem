@@ -7,11 +7,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CompileManifest } from './compile-manifest.js';
 import {
+  attestRecordsHash,
   canonicalizeKeys,
   canonicalStringify,
+  EMPTY_RECORDS_HASH,
   generateInputHash,
   generateOutputHash,
+  generateRecordsHash,
+  listRecordFiles,
   readCompileManifest,
+  RECORDS_DIR_REL,
   writeCompileManifest,
 } from './compile-manifest.js';
 import { TotemParseError } from './errors.js';
@@ -98,6 +103,148 @@ describe('generateInputHash', () => {
     fs.writeFileSync(path.join(tmpDir, 'lesson-aaa.md'), 'a\n');
     fs.writeFileSync(path.join(tmpDir, 'lesson-bbb.md'), 'b\n');
     expect(generateInputHash(tmpDir, tmpDir)).toBe(generateInputHash(tmpDir));
+  });
+});
+
+// ─── Prop 310 § Design 1 — the record file class attestation (slice 3) ───────
+
+describe('generateRecordsHash / attestRecordsHash', () => {
+  let tmpDir: string;
+  let totemDir: string;
+  let rulesDir: string;
+
+  const RECORD = [
+    'schemaVersion: 1',
+    'severity: warning',
+    'message: no console.log',
+    'target:',
+    '  type: regex',
+    "  pattern: 'console\\.log'",
+    '  scope:',
+    "    fileGlobs: ['**/*.ts']",
+    'examples:',
+    "  - bad: 'console.log(1)'",
+    "    good: 'logger.info(1)'",
+    '',
+  ].join('\n');
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-manifest-records-'));
+    totemDir = path.join(tmpDir, '.totem');
+    rulesDir = path.join(totemDir, RECORDS_DIR_REL);
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  const write = (rel: string, content = RECORD) => {
+    const target = path.join(rulesDir, rel);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content, 'utf-8');
+  };
+
+  it('returns the EMPTY-SET constant when the records directory is absent (OQ-3 “no records”)', () => {
+    expect(generateRecordsHash(rulesDir)).toBe(EMPTY_RECORDS_HASH);
+    expect(listRecordFiles(rulesDir)).toEqual([]);
+  });
+
+  it('returns the EMPTY-SET constant for an existing but record-free directory', () => {
+    fs.mkdirSync(rulesDir, { recursive: true });
+    fs.writeFileSync(path.join(rulesDir, 'README.md'), 'not a record\n');
+    fs.writeFileSync(path.join(rulesDir, 'config.yaml'), 'not a record\n');
+    expect(generateRecordsHash(rulesDir)).toBe(EMPTY_RECORDS_HASH);
+    expect(listRecordFiles(rulesDir)).toEqual([]);
+  });
+
+  it('the empty-set constant is sha256-over-nothing — stable, not a platform artifact', () => {
+    // Computed the same way the production constant is, from an independent
+    // `crypto` call: a transcribed literal is the mirror this pins against.
+    expect(EMPTY_RECORDS_HASH).toBe(crypto.createHash('sha256').digest('hex'));
+    expect(EMPTY_RECORDS_HASH).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('changes on ONE edited byte', () => {
+    write('a.rule.yaml');
+    const before = generateRecordsHash(rulesDir);
+    write('a.rule.yaml', RECORD.replace('warning', 'error'));
+    expect(generateRecordsHash(rulesDir)).not.toBe(before);
+  });
+
+  it('changes when a record is ADDED and again when it is REMOVED', () => {
+    write('a.rule.yaml');
+    const one = generateRecordsHash(rulesDir);
+    write('b.rule.yaml');
+    const two = generateRecordsHash(rulesDir);
+    expect(two).not.toBe(one);
+    fs.rmSync(path.join(rulesDir, 'b.rule.yaml'));
+    expect(generateRecordsHash(rulesDir)).toBe(one);
+  });
+
+  it('changes on a RENAME even with byte-identical content (path is hash material)', () => {
+    write('a.rule.yaml');
+    const before = generateRecordsHash(rulesDir);
+    fs.renameSync(path.join(rulesDir, 'a.rule.yaml'), path.join(rulesDir, 'b.rule.yaml'));
+    expect(generateRecordsHash(rulesDir)).not.toBe(before);
+  });
+
+  it('is CRLF-blind — a Windows-authored record hashes identically to its LF twin', () => {
+    write('a.rule.yaml');
+    const lf = generateRecordsHash(rulesDir);
+    write('a.rule.yaml', RECORD.replace(/\n/g, '\r\n'));
+    expect(generateRecordsHash(rulesDir)).toBe(lf);
+  });
+
+  it('is deterministic regardless of readdir order, and walks nested directories', () => {
+    write('z.rule.yaml');
+    write('a.rule.yaml');
+    write(path.join('nested', 'm.rule.yaml'));
+    expect(listRecordFiles(rulesDir)).toEqual(['a.rule.yaml', 'nested/m.rule.yaml', 'z.rule.yaml']);
+    expect(generateRecordsHash(rulesDir)).toBe(generateRecordsHash(rulesDir));
+    expect(generateRecordsHash(rulesDir)).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('ignores a non-record `.yaml` sibling — the double extension is the file class', () => {
+    write('a.rule.yaml');
+    const before = generateRecordsHash(rulesDir);
+    fs.writeFileSync(path.join(rulesDir, 'a.yaml'), RECORD, 'utf-8');
+    expect(generateRecordsHash(rulesDir)).toBe(before);
+  });
+
+  it('hashes git-tracked records only when repoCwd is inside a git repo', () => {
+    // Producer/consumer symmetry with `generateInputHash`: an untracked draft
+    // record must not diverge the attestation and block an unrelated push.
+    safeExec('git', ['init', '-q'], { cwd: tmpDir });
+    write('tracked.rule.yaml');
+    write('untracked.rule.yaml');
+    safeExec('git', ['add', '.totem/rules/tracked.rule.yaml'], { cwd: tmpDir });
+
+    const trackedOnly = generateRecordsHash(rulesDir, tmpDir);
+    expect(listRecordFiles(rulesDir, tmpDir)).toEqual(['tracked.rule.yaml']);
+    expect(trackedOnly).not.toBe(generateRecordsHash(rulesDir));
+
+    fs.rmSync(path.join(rulesDir, 'untracked.rule.yaml'));
+    expect(generateRecordsHash(rulesDir)).toBe(trackedOnly);
+  });
+
+  it('attestRecordsHash resolves `<totemDir>/rules` — the one writer-side entry point', () => {
+    write('a.rule.yaml');
+    expect(attestRecordsHash(totemDir)).toBe(generateRecordsHash(rulesDir));
+    expect(RECORDS_DIR_REL).toBe('rules');
+  });
+
+  it('leaves generateInputHash untouched — the lesson class is hashed exactly as before', () => {
+    // The collector was generalised by a suffix parameter; the lesson hash must be
+    // byte-identical, which a fixed expected digest over fixed content pins.
+    const lessonsDir = path.join(totemDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    fs.writeFileSync(path.join(lessonsDir, 'l.md'), 'body\n', 'utf-8');
+    const expected = crypto.createHash('sha256').update('l.md\nbody\n\n').digest('hex');
+    expect(generateInputHash(lessonsDir)).toBe(expected);
+  });
+
+  it('still throws when the LESSONS directory is absent — records-absence tolerance is records-only', () => {
+    expect(() => generateInputHash(path.join(totemDir, 'lessons'))).toThrow(TotemParseError);
   });
 });
 

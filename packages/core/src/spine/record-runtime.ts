@@ -80,8 +80,37 @@ export const RECORD_COMPILED_HOME_KEYS = [
  * (which asserts the legacy manifest carries NONE of them — a stronger claim
  * than this predicate needs, and the right one for a freeze check).
  */
-export function isRecordPathRule(rule: RuleScopeFields): boolean {
+export function isRecordPathRule(rule: Pick<CompiledRule, 'examples'>): boolean {
   return rule.examples !== undefined;
+}
+
+/**
+ * The exemplar lines a rule's Stage-4 / doctor readers treat as "the authored bad
+ * example", single-homed (Tenet 20).
+ *
+ * Prop 310 slice 3 discharges the slice-2 pin: a record rule's authored preimages
+ * live in `examples[i].bad` — the § Design 10 EDITABLE home — and are NOT mirrored
+ * onto the legacy `badExample` field, so every reader of that field would otherwise
+ * read a record rule as having no bad example at all. Both shipped readers now ask
+ * this one function instead:
+ *
+ *   - Stage 4 (`lineMatchesBadExample`) — a matched line equal to any of these
+ *     classifies `in-scope-bad-example` rather than `candidate-debt`;
+ *   - `totem doctor`'s `no-badExample` grandfathering reason — an empty result is
+ *     exactly the old `!badExample || badExample.trim() === ''` test.
+ *
+ * BLANK LINES ARE DROPPED, which is what makes both of those byte-identical for
+ * legacy rules: Stage 4 already refuses to match an empty trimmed line, and a
+ * whitespace-only `badExample` must still count as absent for doctor.
+ */
+export function ruleBadExampleLines(rule: Pick<CompiledRule, 'badExample' | 'examples'>): string[] {
+  const blocks: string[] = [];
+  if (isRecordPathRule(rule)) {
+    for (const example of rule.examples ?? []) blocks.push(example.bad);
+  } else if (rule.badExample !== undefined) {
+    blocks.push(rule.badExample);
+  }
+  return blocks.flatMap((block) => block.split(/\r?\n/)).filter((line) => line.trim().length > 0);
 }
 
 /**

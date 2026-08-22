@@ -55,6 +55,7 @@ import {
 import {
   isRecordPathRule,
   ruleAppliesToFile,
+  ruleBadExampleLines,
   type RuleScopeFields,
 } from './spine/record-runtime.js';
 
@@ -471,16 +472,18 @@ async function runRuleAgainstAllFiles(
  * deferred to T5 (mmnto-ai/totem#1686) when the perf-pass adds AST-aware
  * comparison.
  *
- * `badExample` may carry multiple lines (Pipeline 3 reuses Bad snippets
- * verbatim). The function compares against ANY trimmed line of the
- * `badExample` block — a violation matches if the line equals any one of
- * the badExample's component lines.
+ * A rule's authored bad example may carry multiple lines (Pipeline 3 reuses
+ * Bad snippets verbatim, and a Prop 310 record carries one per `examples[i]`).
+ * The caller resolves the rule to those lines through the single-homed
+ * `ruleBadExampleLines` — which is what makes a RECORD rule's `examples[i].bad`
+ * reachable here (Prop 310 slice 3; the § Design 10 editable home is never
+ * mirrored onto the legacy `badExample` field) — and a violation matches if the
+ * line equals ANY one of them.
  */
-function lineMatchesBadExample(line: string, badExample: string | undefined): boolean {
-  if (badExample === undefined) return false;
+function lineMatchesBadExample(line: string, badExampleLines: readonly string[]): boolean {
   const trimmedLine = line.trim();
   if (trimmedLine.length === 0) return false;
-  for (const candidate of badExample.split(/\r?\n/)) {
+  for (const candidate of badExampleLines) {
     if (candidate.trim() === trimmedLine) return true;
   }
   return false;
@@ -553,6 +556,10 @@ export async function verifyAgainstCodebase(
     };
   }
 
+  // Resolved ONCE per verification, not per violation: the lines are a pure
+  // function of the rule, and a record rule's `examples` can carry several.
+  const badExampleLines = ruleBadExampleLines(rule);
+
   // Partition violations by file classification.
   const baselineMatchSet = new Set<string>();
   const inScopeMatchSet = new Set<string>();
@@ -564,7 +571,7 @@ export async function verifyAgainstCodebase(
       baselineMatchSet.add(violation.file);
     } else {
       inScopeMatchSet.add(violation.file);
-      if (!lineMatchesBadExample(violation.line, rule.badExample)) {
+      if (!lineMatchesBadExample(violation.line, badExampleLines)) {
         candidateDebtLines.push(violation.line);
       }
     }

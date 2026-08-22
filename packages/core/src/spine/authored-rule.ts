@@ -20,6 +20,8 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 import {
+  AUTHORED_RULE_ID_HEX_LEN,
+  AUTHORED_RULE_ID_RE,
   AuthoredFixtureSchema,
   AuthoredNegativeFixtureSchema,
   AuthoredProvenanceRecordSchema,
@@ -81,18 +83,14 @@ export const AuthoredOriginSchema = z.union([
 ]);
 export type AuthoredOrigin = z.infer<typeof AuthoredOriginSchema>;
 
-// The persisted minted-rule-id shape (ADR-112 §8): a 16-char lowercase-hex base from
-// `mintAuthoredRuleId`, with an optional collision suffix. The suffix is EXACTLY what the
-// mint emits — `-<n>` for n≥1, never `-0` and never zero-padded — so schema-valid ≡
-// mint-producible (#2259 CR: a looser `-\d+` admitted ids like `…-0`/`…-01` the mint can't
-// make). Pinned as a shared constant binding the SCHEMA boundary to the mint's codomain.
-const AUTHORED_RULE_ID_HEX_LEN = 16;
-// Exported so the compile seam (the §8 identity selector) can assert an authored
-// candidate's ruleId is well-formed BEFORE enthroning it as the rule's identity —
-// the same shared boundary↔codomain constant, one home (Tenet 20).
-export const AUTHORED_RULE_ID_RE = new RegExp(
-  `^[0-9a-f]{${AUTHORED_RULE_ID_HEX_LEN}}(?:-[1-9]\\d*)?$`,
-);
+// The minted-rule-id shape (ADR-112 §8) is DEFINED in `compiler-schema.ts` — the leaf
+// this module already imports — because `PreimageSourceSchema`'s Prop 310 `record`
+// branch needs it there and the reverse import edge would be a cycle. Re-exported here
+// so the compile seam (the §8 identity selector, which asserts an authored candidate's
+// ruleId is well-formed BEFORE enthroning it as the rule's identity) and the record
+// lowering keep importing it from the authored producer's own module. One definition,
+// one home (Tenet 20).
+export { AUTHORED_RULE_ID_RE } from '../compiler-schema.js';
 
 /**
  * ADR-112 §3 — the authored producer's sole output envelope. Parallel to
