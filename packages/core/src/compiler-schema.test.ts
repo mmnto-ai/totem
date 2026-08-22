@@ -191,6 +191,40 @@ describe('CompiledRule badExample field', () => {
   });
 });
 
+// ─── CompiledRule examples floor (Prop 310 § Design 5) ───────
+
+describe('CompiledRule examples field — the min-1 floor', () => {
+  const baseRule = {
+    lessonHash: 'abc123def456',
+    lessonHeading: 'Test rule',
+    pattern: '\\bfoo\\b',
+    message: 'No foo',
+    engine: 'regex' as const,
+    compiledAt: '2026-04-13T12:00:00Z',
+  };
+
+  it('rejects an EMPTY examples array naming § Design 5', () => {
+    // `examples` is also the `isRecordPathRule` discriminator, so an empty array
+    // would make a rule take the § Design 7 dialect and the two-array scope rule
+    // while carrying nothing for Stage 4, doctor, or `totem rule test` to read.
+    // The record grammar rejects it at parse; this closes the hand-edited hole.
+    expect(() => CompiledRuleSchema.parse({ ...baseRule, examples: [] })).toThrow(
+      /examples must carry ≥1 bad\/good pair when present/,
+    );
+  });
+
+  it('accepts one pair, and accepts ABSENT examples (every mined rule)', () => {
+    expect(
+      CompiledRuleSchema.parse({ ...baseRule, examples: [{ bad: 'foo()', good: 'bar()' }] })
+        .examples,
+    ).toEqual([{ bad: 'foo()', good: 'bar()' }]);
+    // OPTIONAL is untouched: absence still means "legacy rule", which is the
+    // shipped 485-rule corpus — the byte-identity guard in record-lower.test.ts
+    // re-validates it under this schema.
+    expect(CompiledRuleSchema.parse(baseRule).examples).toBeUndefined();
+  });
+});
+
 // ─── CompiledRule archivedAt field (mmnto-ai/totem#1589) ─────
 
 describe('CompiledRule archivedAt field', () => {

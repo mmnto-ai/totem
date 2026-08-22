@@ -295,6 +295,19 @@ describe('runRuleAuthor — record reference resolution', () => {
       rule: null,
       why: 'nested subdir — records_hash walks recursively, so nesting stays legal',
     },
+    // C-6: a `..` PREFIX is not a `..` SEGMENT. Both of these resolve INSIDE the
+    // root and are ordinary file names; a `startsWith('..')` containment check
+    // false-rejected them.
+    {
+      reference: '.totem/rules/..hidden/x.rule.yaml',
+      rule: null,
+      why: 'directory whose name begins with `..`',
+    },
+    {
+      reference: '.totem/rules/..a.rule.yaml',
+      rule: null,
+      why: 'file name beginning with `..`',
+    },
     { reference: '.totem\\rules\\x.rule.yaml', rule: 'separator', why: 'backslashes' },
     {
       reference: 'C:/totem/.totem/rules/x.rule.yaml',
@@ -528,6 +541,48 @@ describe('runRuleAuthor — examples ⇄ fixture derivation', () => {
     // …and the two pairs really do hash differently, so the lookup is discriminating.
     const other = record.record.parsed.examplePairHashes.find((h) => h.ordinal === 0)!;
     expect(byField.hash).not.toBe(other.hash);
+  });
+
+  it('DISCRIMINATES: a REVERSED examplePairHashes list still binds ordinal 1 to ordinal 1’s hash', () => {
+    // The falsifier the row above cannot supply on its own: while the list happens
+    // to be in ordinal order, `find(h => h.ordinal === i)` and `[i]` agree, so an
+    // index-based lookup would pass it. Reversing the list separates them —
+    // `[1]` would return the ordinal-0 entry, so substituting `[ordinal]` FAILS
+    // this assertion while the field lookup holds.
+    const parsed = parseRuleRecord(
+      yamlStringify(
+        recordBody({
+          examples: [
+            { bad: 'console.log("a")', good: 'logger.debug("a")' },
+            { bad: 'console.log("b")', good: 'logger.debug("b")' },
+          ],
+        }),
+      ),
+      recordRef('two-pairs'),
+    );
+    const reversed: ParsedRuleRecord = {
+      ...parsed,
+      examplePairHashes: [...parsed.examplePairHashes].reverse(),
+    };
+    // Pre-condition: the reversal genuinely moves the entries, so position and
+    // field really do disagree here.
+    expect(reversed.examplePairHashes[1]!.ordinal).toBe(0);
+
+    const derived = deriveRecordFixtures(
+      AuthoredRuleInputSchema.parse(
+        decidableRule({ record: recordRef('two-pairs'), positiveFixtures: [fixture(101, 1)] }),
+      ),
+      { path: recordRef('two-pairs'), contentHash: 'a'.repeat(64), parsed: reversed },
+      '0123456789abcdef',
+    );
+    const src = derived[0]!.preimageSource;
+    expect(src.kind).toBe('record');
+    if (src.kind !== 'record') throw new Error('unreachable');
+    expect(src.ordinal).toBe(1);
+    // The ordinal-1 hash by FIELD…
+    expect(src.pairHash).toBe(parsed.examplePairHashes.find((h) => h.ordinal === 1)!.hash);
+    // …and NOT what `examplePairHashes[1]` holds after the reversal.
+    expect(src.pairHash).not.toBe(reversed.examplePairHashes[1]!.hash);
   });
 
   it('THROWS on a ParsedRuleRecord carrying no hash for the referenced ordinal (producer bug)', () => {

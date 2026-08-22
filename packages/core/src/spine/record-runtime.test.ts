@@ -963,6 +963,18 @@ describe('Stage 4 — record scope is visible, and “unscoped” does not inver
     // to the `candidate-debt` warning floor.
     expect(result.outcome).toBe('in-scope-bad-example');
     expect(result.baselineMatches).toEqual([]);
+    // The PRICED half of that flip (spec § Failure modes, "Priced consequence"):
+    // `confidence: high` is now reachable from an author-written exemplar that
+    // happens to occur verbatim in the tree — but `unverified: true` survives the
+    // Stage-4 patch, so the rule stays advisory. The label moves; the enforcement
+    // tier does not. Asserted here so a future patch that dropped the flag would
+    // turn a labelling change into a silent sense→enforce crossing.
+    const patched = CompiledRuleSchema.parse({
+      ...record,
+      status: 'active',
+      confidence: 'high',
+    });
+    expect(patched.unverified).toBe(true);
   });
 
   it('leaves a NON-matching in-scope line at candidate-debt — the derivation is not a blanket promotion', async () => {

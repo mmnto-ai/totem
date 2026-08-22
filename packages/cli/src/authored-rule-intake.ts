@@ -287,7 +287,12 @@ function resolveRecordPath(totemDir: string, reference: string): string {
 
   const resolved = path.resolve(path.dirname(totemDir), reference);
   const relative = path.relative(rulesRoot, resolved);
-  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+  // `..` as a whole SEGMENT, not as a prefix: a bare `startsWith('..')` also
+  // rejects `..hidden/x.rule.yaml` and `..a.rule.yaml`, which are ordinary file
+  // names that resolve INSIDE the root. The escape this guards is a path that
+  // steps OUT, and only a leading `..` segment does that.
+  const escapes = relative === '..' || relative.startsWith(`..${path.sep}`);
+  if (relative === '' || escapes || path.isAbsolute(relative)) {
     reject('containment', `does not resolve inside ${rulesRoot}`);
   }
   return resolved;

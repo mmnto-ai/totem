@@ -761,6 +761,18 @@ const CompiledRuleBaseSchema = z.object({
         good: z.string(),
       }),
     )
+    // MIN-1 of the § Design 5 mandatory set, enforced HERE as well as at parse:
+    // `examples` is also the discriminator `isRecordPathRule` keys on, so an EMPTY
+    // array would make a rule read as record-path — taking the § Design 7 dialect
+    // and the two-array scope rule — while carrying zero exemplars for Stage 4,
+    // doctor, and `totem rule test` to read. No compiled record can be in that
+    // state (the grammar rejects it first); this closes the hand-edited-manifest
+    // hole so the predicate can never be true with nothing behind it. OPTIONAL is
+    // untouched: absence still means "legacy rule", which is every mined rule.
+    .min(1, {
+      message:
+        'examples must carry ≥1 bad/good pair when present — it is certification’s primary preimage source and the record-path discriminator (Prop 310 § Design 5)',
+    })
     .optional(),
   /**
    * Prop 310 § Design 6 — the rule's grammar binding: the single declared

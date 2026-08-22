@@ -1344,8 +1344,16 @@ export interface GrandfatheredRuleCandidate {
  * every reason that applies:
  *
  *   - `vintage-pre-1.13.0`: vintage timestamp precedes the 1.13.0 ship date.
- *   - `no-badExample`: empty or absent `badExample` field.
- *   - `no-goodExample`: empty or absent `goodExample` field.
+ *   - `no-badExample`: the rule has no authored defect preimage.
+ *   - `no-goodExample`: the rule has no authored fixed postimage.
+ *
+ * The two exemplar reasons read through the single-homed `ruleBadExampleLines` /
+ * `ruleGoodExampleLines` (Prop 310 slice 3), so each one asks the rule's OWN home:
+ * a RECORD-path rule (one carrying `examples`) is read from `examples[i].bad` /
+ * `examples[i].good` — the § Design 10 editable home, which the lowering never
+ * mirrors onto the legacy fields — and a legacy rule from `badExample` /
+ * `goodExample`. A whitespace-only value counts as ABSENT on either path, which is
+ * what keeps the legacy verdict byte-identical to the pre-slice-3 reads.
  *
  * Rules with at least one reason are returned; rules that satisfy all
  * three substrate checks are omitted.
