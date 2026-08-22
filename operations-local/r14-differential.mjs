@@ -23,7 +23,20 @@
 //   - regex   → `new RegExp(rule.pattern)` evaluated PER LINE, mirroring
 //               `rule-engine.ts:659`; `requires` suppression applies the
 //               § Design 8 rule at the compiled scope.
-//   - ast-grep → `matchAstGrepPattern(content, '.ts', payload, allLines)`.
+//   - ast-grep → `matchAstGrepPattern(content, ext, payload, allLines)`, where
+//               `ext` is dispatched from the compiled rule's registry-resolved
+//               `language` (typescript → .ts, javascript → .js, tsx → .tsx),
+//               mirroring the runtime's own extension dispatch
+//               (`rule-engine.ts` → `matchAstGrepPatternsBatch(content, ext)`).
+//
+// N RECORDS PER ENTRY. One seed entry may be carried by several records (Prop 310
+// § Design 6: a multi-language ast-grep rule IS N records). The post-registration
+// cure ruled (b) on mmnto-ai/totem-strategy#288 (2026-08-22) adds
+// `language: javascript` twins for two entries; each record keys to its entry by
+// the `r14-<hash8>-` filename prefix, every record is evaluated under ITS OWN
+// grammar, and an entry's verdict is the WORST verdict over its records — a twin
+// can never mask a failing original, and the per-entry split below stays
+// comparable to the registered 20-entry verdict.
 //
 // EXIT CODE. This is a replay check, not a gate on the records: it exits 0 when
 // the measured results MATCH the recorded expectations below, and 1 when they
@@ -95,9 +108,18 @@ const EXPECTED_COUNTS = {
 const allLines = (text) => text.split('\n').map((_, i) => i + 1);
 
 /**
+ * The dispatch extension for an ast-grep rule, from the compiled rule's
+ * registry-resolved `language` (the slice-2 lowering binds it). The shipped runtime
+ * dispatches ast-grep by FILE EXTENSION (`extensionToLang`), so a
+ * `language: javascript` record is evaluated under the javascript grammar here
+ * too — never coerced through `.ts`. A compiled rule without `language` (legacy
+ * shape) keeps the `.ts` this harness used before the twins existed.
+ */
+const EXT_BY_LANGUAGE = { typescript: '.ts', javascript: '.js', tsx: '.tsx' };
+const dispatchExt = (rule) => EXT_BY_LANGUAGE[rule.language] ?? '.ts';
+
+/**
  * Does `rule` fire anywhere in `text`? Mirrors the shipped runtime per engine.
- * ast-grep records in this seed all declare `language: typescript`, so `.ts` is
- * the correct dispatch extension for every one of them.
  */
 function fires(rule, text) {
   if (rule.engine === 'regex') {
@@ -113,20 +135,36 @@ function fires(rule, text) {
     return !requirement.test(text);
   }
   const payload = rule.astGrepYamlRule !== undefined ? rule.astGrepYamlRule : rule.astGrepPattern;
-  return matchAstGrepPattern(text, '.ts', payload, allLines(text)).length > 0;
+  return matchAstGrepPattern(text, dispatchExt(rule), payload, allLines(text)).length > 0;
 }
 
-// ── Leg 1: the per-record differential ───────────────────────────────────────
+// ── Leg 1: the per-ENTRY differential (N records per entry, see header) ──────
 
-const files = readdirSync(RULES_DIR).filter((name) => name.endsWith('.rule.yaml'));
-const byHashPrefix = new Map(files.map((name) => [name.slice(4, 12), name]));
+const files = readdirSync(RULES_DIR)
+  .filter((name) => name.endsWith('.rule.yaml'))
+  .sort();
+/** seed hash8 → every record file carrying that entry (the original first, by sort). */
+const groups = new Map();
+for (const name of files) {
+  const prefix = name.slice(4, 12);
+  if (!groups.has(prefix)) groups.set(prefix, []);
+  groups.get(prefix).push(name);
+}
 
-if (files.length !== SEED_ORDER.length) {
+const knownPrefixes = new Set(SEED_ORDER.map((hash) => hash.slice(0, 8)));
+const orphans = files.filter((name) => !knownPrefixes.has(name.slice(4, 12)));
+if (orphans.length > 0) {
   console.error(
-    `[Totem Error] r14-differential: found ${files.length} record file(s) but the frozen seed draw is ${SEED_ORDER.length} — the evidence set and the record set must agree.`,
+    `[Totem Error] r14-differential: ${orphans.length} record file(s) key to no seed entry (${orphans.join(', ')}) — the evidence set and the record set must agree.`,
   );
   process.exit(1);
 }
+
+/** Worst-first ordering for the per-entry aggregation over N records. */
+const VERDICT_SEVERITY = [SATISFIED, GOOD_FIRES, BAD_SILENT, NOT_EVALUABLE];
+const worse = (a, b) => (VERDICT_SEVERITY.indexOf(b) > VERDICT_SEVERITY.indexOf(a) ? b : a);
+/** `r14-<hash8>-<slug>.rule.yaml` → `<slug>`, for the per-record lines. */
+const slugOf = (name) => name.slice(13).replace(/\.rule\.yaml$/, '');
 
 const counts = {
   [SATISFIED]: 0,
@@ -136,52 +174,65 @@ const counts = {
 };
 const classified = [];
 
-console.log(`R14 differential harness — ${SEED_ORDER.length} record(s), seed order\n`);
+console.log(
+  `R14 differential harness — ${SEED_ORDER.length} seed entries carried by ${files.length} record(s), seed order\n`,
+);
 
 for (let i = 0; i < SEED_ORDER.length; i += 1) {
   const hash = SEED_ORDER[i];
   const entry = i + 1;
-  const name = byHashPrefix.get(hash.slice(0, 8));
-  if (name === undefined) {
+  const names = groups.get(hash.slice(0, 8));
+  if (names === undefined) {
     console.error(
       `[Totem Error] r14-differential: no record file for seed entry ${entry} (${hash}) — expected .totem/rules/r14-${hash.slice(0, 8)}-<slug>.rule.yaml.`,
     );
     process.exit(1);
   }
 
-  const parsed = parseRuleRecord(
-    readFileSync(path.join(RULES_DIR, name), 'utf8'),
-    path.posix.join('.totem/rules', name),
-  );
-  const outcome = compileRuleRecord(parsed, { ruleId: SYNTHETIC_RULE_ID, now: FIXED_NOW });
+  let verdict = SATISFIED;
+  const details = [];
+  for (const name of names) {
+    const parsed = parseRuleRecord(
+      readFileSync(path.join(RULES_DIR, name), 'utf8'),
+      path.posix.join('.totem/rules', name),
+    );
+    const outcome = compileRuleRecord(parsed, { ruleId: SYNTHETIC_RULE_ID, now: FIXED_NOW });
 
-  let verdict;
-  let detail;
-  if (outcome.kind !== 'compiled') {
-    verdict = NOT_EVALUABLE;
-    detail = 'lowering rejected — no compiled rule to evaluate';
-  } else {
-    const rule = outcome.rule;
-    const legs = parsed.record.examples.map((example, ordinal) => ({
-      ordinal,
-      bad: fires(rule, example.bad),
-      good: fires(rule, example.good),
-    }));
-    const badSilent = legs.some((leg) => !leg.bad);
-    const goodFires = legs.some((leg) => leg.good);
-    verdict = badSilent ? BAD_SILENT : goodFires ? GOOD_FIRES : SATISFIED;
-    detail = legs
-      .map(
-        (leg) =>
-          `pair${leg.ordinal}: bad=${leg.bad ? 'FIRES' : 'silent'} good=${leg.good ? 'FIRES' : 'silent'}`,
-      )
-      .join(' | ');
+    let recordVerdict;
+    let detail;
+    let grammar;
+    if (outcome.kind !== 'compiled') {
+      recordVerdict = NOT_EVALUABLE;
+      grammar = 'rejected';
+      detail = 'lowering rejected — no compiled rule to evaluate';
+    } else {
+      const rule = outcome.rule;
+      grammar = rule.engine === 'ast-grep' ? `ast-grep@${dispatchExt(rule)}` : rule.engine;
+      const legs = parsed.record.examples.map((example, ordinal) => ({
+        ordinal,
+        bad: fires(rule, example.bad),
+        good: fires(rule, example.good),
+      }));
+      const badSilent = legs.some((leg) => !leg.bad);
+      const goodFires = legs.some((leg) => leg.good);
+      recordVerdict = badSilent ? BAD_SILENT : goodFires ? GOOD_FIRES : SATISFIED;
+      detail = legs
+        .map(
+          (leg) =>
+            `pair${leg.ordinal}: bad=${leg.bad ? 'FIRES' : 'silent'} good=${leg.good ? 'FIRES' : 'silent'}`,
+        )
+        .join(' | ');
+    }
+    verdict = worse(verdict, recordVerdict);
+    details.push(`${slugOf(name)} [${grammar}] ${recordVerdict}: ${detail}`);
   }
 
   counts[verdict] += 1;
   classified.push({ entry, hash, verdict });
-  console.log(`${String(entry).padStart(2)}. ${hash}  ${verdict}`);
-  console.log(`    ${detail}`);
+  console.log(
+    `${String(entry).padStart(2)}. ${hash}  ${verdict}${names.length > 1 ? `  (${names.length} records)` : ''}`,
+  );
+  for (const detail of details) console.log(`    ${detail}`);
 }
 
 console.log('\nDifferential split (measured):');
@@ -271,15 +322,51 @@ if (seedFlagIndex !== -1) {
     );
     process.exit(1);
   }
-  const seed = JSON.parse(readFileSync(seedPath, 'utf8'));
+  const seedDoc = JSON.parse(readFileSync(seedPath, 'utf8'));
+  // Two accepted shapes (the scorer's contract nit, 2026-08-22): a bare ARRAY of
+  // frozen compiled forms, or the frozen draw ENVELOPE (`picks` + metadata, no
+  // compiled fields — `operations/310-r14-audit/seed-20.json` in totem-strategy),
+  // which is joined to the frozen corpus named by `--corpus <compiled-rules.json>`
+  // on `lessonHash` — the join the scorer built by hand, now in the apparatus.
+  let seed;
+  if (Array.isArray(seedDoc)) {
+    seed = seedDoc;
+  } else if (Array.isArray(seedDoc.picks)) {
+    const corpusFlagIndex = process.argv.indexOf('--corpus');
+    const corpusPath = corpusFlagIndex === -1 ? undefined : process.argv[corpusFlagIndex + 1];
+    if (corpusPath === undefined) {
+      console.error(
+        '[Totem Error] r14-differential: --seed points at a draw envelope (`picks`), which carries no compiled fields — pass --corpus <frozen compiled-rules.json> to join them.',
+      );
+      process.exit(1);
+    }
+    const corpus = JSON.parse(readFileSync(corpusPath, 'utf8'));
+    const byLessonHash = new Map(corpus.rules.map((rule) => [rule.lessonHash, rule]));
+    seed = seedDoc.picks.map((pick) => {
+      const rule = byLessonHash.get(pick.lessonHash);
+      if (rule === undefined) {
+        console.error(
+          `[Totem Error] r14-differential: pick ${pick.lessonHash} is not in the --corpus — the envelope and the corpus must be the same frozen draw.`,
+        );
+        process.exit(1);
+      }
+      return rule;
+    });
+  } else {
+    console.error(
+      '[Totem Error] r14-differential: --seed must be a bare array of compiled forms or a draw envelope with `picks`.',
+    );
+    process.exit(1);
+  }
   console.log('\n\nFidelity leg — parsed record values vs the frozen seed');
   // The ONE divergence the translation intends: § Design 8's absence→`requires`
   // transformation drops the lookahead from the target pattern.
   const EXPECTED_PATTERN_DIVERGENCE = new Set(['5da43ea60b66e96e']);
   let drifts = 0;
-  for (const source of seed) {
-    const name = byHashPrefix.get(source.lessonHash.slice(0, 8));
-    if (name === undefined) continue;
+  const sources = seed.flatMap((source) =>
+    (groups.get(source.lessonHash.slice(0, 8)) ?? []).map((name) => ({ source, name })),
+  );
+  for (const { source, name } of sources) {
     const record = parseRuleRecord(readFileSync(path.join(RULES_DIR, name), 'utf8'), name).record;
     const issues = [];
     if (record.severity !== source.severity) issues.push('severity');
@@ -301,7 +388,7 @@ if (seedFlagIndex !== -1) {
     const unexpected = issues.filter((issue) => !issue.endsWith('(EXPECTED)'));
     if (unexpected.length > 0) drifts += 1;
     console.log(
-      `  ${source.lessonHash}  ${issues.length === 0 ? 'identical to seed' : issues.join(', ')}`,
+      `  ${source.lessonHash}  ${slugOf(name).padEnd(40)} ${issues.length === 0 ? 'identical to seed' : issues.join(', ')}`,
     );
   }
   console.log(`\n  Unexpected divergences: ${drifts} (expected 0)`);
