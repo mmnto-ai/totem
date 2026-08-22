@@ -23,6 +23,23 @@ const savedExitCode = process.exitCode;
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-ruleauthor-cmd-'));
   fs.mkdirSync(path.join(root, '.totem', 'spine'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.totem', 'rules'), { recursive: true });
+  // Prop 310 § Design 1: the rule half lives in the record the envelope references.
+  fs.writeFileSync(
+    path.join(root, '.totem', 'rules', 'no-console-log.rule.yaml'),
+    yamlStringify({
+      schemaVersion: 1,
+      severity: 'warning',
+      message: 'console.log is banned in production code.',
+      target: {
+        type: 'regex',
+        pattern: 'console\\.log',
+        scope: { fileGlobs: ['src/**/*.ts'] },
+      },
+      examples: [{ bad: 'console.log("dbg")', good: 'logger.debug("dbg")' }],
+    }),
+    'utf-8',
+  );
   cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(root);
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -38,14 +55,10 @@ afterEach(() => {
 
 const fixture = (pr: number) => ({
   pr,
-  preimageSource: {
-    kind: 'commit',
-    preimageCommitSha: 'b'.repeat(40),
-    mergeCommitSha: 'a'.repeat(40),
-  },
   filePath: 'src/x.ts',
   matchedSpan: 'L1',
   contentHash: 'h'.repeat(8),
+  example: 0,
 });
 const writeYaml = (rules: unknown[], splitRef = 's') => {
   fs.writeFileSync(
@@ -63,9 +76,8 @@ const decidable = (over: Record<string, unknown> = {}) => ({
   author: 'alice',
   authoredAt: '2026-06-27',
   targetDefect: 'forbidden console.log',
-  declaredEngine: 'regex',
   structuralClass: 'forbidden-literal-token',
-  dslSource: 'console\\.log',
+  record: '.totem/rules/no-console-log.rule.yaml',
   positiveFixtures: [fixture(1)],
   ...over,
 });

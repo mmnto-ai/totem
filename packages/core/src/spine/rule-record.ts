@@ -35,7 +35,7 @@ import { z } from 'zod';
 import { canonicalStringify } from '../compile-manifest.js';
 import { TotemParseError } from '../errors.js';
 import type { DeclaredEngine } from './authored-rule.js';
-import { lfDeepNormalize } from './authoring-ledger.js';
+import { lfDeepNormalize } from './lf-normalize.js';
 
 // ── Error classes ────────────────────────────────────────────────────────────
 //
@@ -796,6 +796,44 @@ export interface ParsedRuleRecord {
   /** One entry per `examples[i]`, in ordinal order (§ Design 10 drift sensors). */
   examplePairHashes: RuleExamplePairHash[];
 }
+
+/**
+ * The `ParsedRuleRecord` value as a Zod schema — the parser's OUTPUT expressed at
+ * a schema boundary so `AuthoredRuleRecord` can carry it under closed keys like
+ * every other field on that envelope (slice 3, § Data model deltas).
+ *
+ * NOT a second grammar: it is composed from the SAME `RuleRecordSchema` and
+ * `RuleTargetTypeSchema` the parser validates with, plus the pair-hash shape, so
+ * there is nothing here that could accept a record the parser rejects.
+ *
+ * IN-MEMORY ONLY, and never hash material: the ledger binds the record by its
+ * file `contentHash`, so re-serialising this value into a hash basis would be a
+ * second statement of the same bytes (Tenet 20) that could drift from them.
+ */
+export const RuleExamplePairHashSchema = z
+  .object({
+    ordinal: z.number().int().nonnegative(),
+    hash: z.string().regex(/^[0-9a-f]{64}$/, {
+      message: 'example pair hash must be a sha256 hex digest',
+    }),
+  })
+  .strict();
+
+export const ParsedRuleRecordSchema = z
+  .object({
+    record: RuleRecordSchema,
+    derivedEngine: RuleTargetTypeSchema,
+    examplePairHashes: z.array(RuleExamplePairHashSchema),
+  })
+  .strict();
+
+// The schema and the interface must describe the SAME value — the parser returns
+// the interface and the envelope validates with the schema, so a drift between
+// them would let one accept what the other cannot represent. Consumed by the
+// assignment (a bare conditional type is inert), so a drift is a COMPILE error.
+type _ParsedRuleRecordSchemaAgrees =
+  z.infer<typeof ParsedRuleRecordSchema> extends ParsedRuleRecord ? true : never;
+const _parsedRuleRecordSchemaCheck: _ParsedRuleRecordSchemaAgrees = true;
 
 const FIX_THE_RECORD =
   'Fix the record file — the V1 grammar is explicit-or-error at every key (Prop 310 § Design 4).';

@@ -443,7 +443,27 @@ describe('runCompileStage — end-to-end §8 harness lock', () => {
 
 // ── runCompileStage — ADR-112 authored compile-feed (one compiler, two producers) ──
 describe('runCompileStage — ADR-112 authored compile-feed', () => {
-  const authored = (ref: string, dsl: string): AuthoredRuleRecord => ({
+  // Prop 310 § Design 1 (slice 3): the authored envelope carries a RECORD, not an
+  // inline `dslSource`. Every assertion below is the one it always made — the same
+  // matcher (`forbiddenCall\(`), the same fixtures, the same §8 identity semantics —
+  // re-pointed at the record carrier.
+  const AUTHORED_RECORD_PATH = '.totem/rules/forbidden-call.rule.yaml';
+  const authoredRecordYaml = (pattern: string): string =>
+    yamlStringify({
+      schemaVersion: 1,
+      severity: 'warning',
+      message: 'forbiddenCall() is banned.',
+      target: { type: 'regex', pattern, scope: { fileGlobs: ['src/**/*.ts'] } },
+      examples: [{ bad: 'forbiddenCall()', good: 'allowedCall()' }],
+    });
+  const AUTHORED_PATTERN = 'forbiddenCall\\(';
+  const authoredCarrier = (pattern: string = AUTHORED_PATTERN) => ({
+    path: AUTHORED_RECORD_PATH,
+    contentHash: 'a'.repeat(64),
+    parsed: parseRuleRecord(authoredRecordYaml(pattern), AUTHORED_RECORD_PATH),
+  });
+
+  const authored = (ref: string, pattern: string = AUTHORED_PATTERN): AuthoredRuleRecord => ({
     ruleId: mintAuthoredRuleId('totem-claude', ref, new Set()),
     provenance: {
       kind: 'authored',
@@ -472,12 +492,12 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     origin: { kind: 'from-scratch' },
     declaredEngine: 'regex',
     authoringLedgerRef: ref,
-    dslSource: dsl,
+    record: authoredCarrier(pattern),
     unverified: true,
   });
 
   it('compiles an authored rule through the SAME runCompileStage — authored provenance + Stage-4 preserved', async () => {
-    const feed = toCompileFeed([authored('alr-1', REGEX_DSL)]);
+    const feed = toCompileFeed([authored('alr-1')]);
     const r = await runCompileStage(feed, compileDeps({ 'src/a.ts': 'forbiddenCall()' }));
     expect(r.compiled).toHaveLength(1);
     const c = r.compiled[0]!;
@@ -493,25 +513,44 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
 
   it('never reaches the compiler for a non-decidable authored rule (toCompileFeed throws first)', () => {
     const nd: AuthoredRuleRecord = {
-      ...authored('alr-x', REGEX_DSL),
+      ...authored('alr-x'),
       structuralEligibility: { decidable: false, basis: 'whitelist:x', judgedBy: 's' },
     };
     expect(() => toCompileFeed([nd])).toThrow(/not structurally decidable/);
   });
 
-  it('fails loud when the compiled engine disagrees with the whitelisted declaredEngine (#2259/#7)', async () => {
-    // declaredEngine 'ast' was whitelisted, but the dslSource parses as regex — the compiler
-    // must not emit it under an engine the eligibility check never cleared.
-    const feed = toCompileFeed([
-      { ...authored('alr-eng', REGEX_DSL), declaredEngine: 'ast' as const },
-    ]);
+  it('fails loud when the record-derived engine disagrees with the whitelisted declaredEngine (#2259/#7)', async () => {
+    // declaredEngine 'ast' was whitelisted, but the record's `target.type` derives
+    // regex — the compiler must not emit it under an engine the eligibility check
+    // never cleared. Re-pointed at the record carrier; the ADR-112 §3 guarantee is
+    // unchanged, and it is a SEPARATE edge from `compileRuleRecord`'s target.type ⇄
+    // payload assert, which would not catch this.
+    const feed = toCompileFeed([{ ...authored('alr-eng'), declaredEngine: 'ast' as const }]);
     await expect(
       runCompileStage(feed, compileDeps({ 'src/a.ts': 'forbiddenCall()' })),
-    ).rejects.toThrow(/declared engine 'ast' but its dslSource compiled as 'regex'/);
+    ).rejects.toThrow(/declared engine 'ast' but its record derives engine 'regex'/);
+  });
+
+  it('still fails loud on the DSLSOURCE carrier’s engine divergence — the shipped assert is intact', async () => {
+    // The mined/lesson-markdown leg of the same #2259/#7 guarantee: a hand-built
+    // authored candidate carrying a dslSource that compiles as regex under a
+    // whitelisted 'ast' verdict is still rejected post-compile.
+    const candidate: CompileInputCandidate = {
+      provenance: authored('alr-eng-dsl').provenance,
+      classifierDisposition: 'structural',
+      classifierLedgerRef: 'authored:alr-eng-dsl',
+      dslSource: REGEX_DSL,
+      declaredEngine: 'ast',
+      ruleId: authored('alr-eng-dsl').ruleId,
+      unverified: true,
+    };
+    expect(() => compileCandidate(candidate, { now: NOW })).toThrow(
+      /declared engine 'ast' but its dslSource compiled as 'regex'/,
+    );
   });
 
   it('fails loud on two structural candidates sharing one classifierLedgerRef (#2259 greptile-P1)', async () => {
-    const base = toCompileFeed([authored('dup', REGEX_DSL)]);
+    const base = toCompileFeed([authored('dup')]);
     // Two candidates, ONE ledger entry: each would pass the exactly-one-entry join, then the
     // later Stage-4 update would overwrite the earlier — the dedup guard rejects it up front.
     const feed: CompileInputCandidate[] = [base.candidates[0]!, base.candidates[0]!];
@@ -525,7 +564,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
 
   // ── ADR-112 §8/§9 id-unification: firingLabelId ← ruleId (slice C2a) ──
   it('threads the persisted ruleId onto the compiled identity (lessonHash ← ruleId), not the dslSource hash', async () => {
-    const rec = authored('alr-id', REGEX_DSL);
+    const rec = authored('alr-id');
     const r = await runCompileStage(
       toCompileFeed([rec]),
       compileDeps({ 'src/a.ts': 'forbiddenCall()' }),
@@ -535,12 +574,12 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     expect(r.compiled[0]!.rule.lessonHash).toBe(rec.ruleId);
   });
 
-  it('keeps the authored identity STABLE across a dslSource (matcher) edit — §8 no-orphan', () => {
-    // Same author + targetDefect → same minted ruleId; only the matcher changes.
-    const REGEX_DSL_EDITED = REGEX_DSL.replace('forbiddenCall\\(', 'forbiddenCall2\\(');
-    const before = authored('alr-stable', REGEX_DSL);
-    const after = authored('alr-stable', REGEX_DSL_EDITED);
-    expect(after.ruleId).toBe(before.ruleId); // the id does NOT derive from dslSource
+  it('keeps the authored identity STABLE across a matcher edit in the record — §8 no-orphan', () => {
+    // Same author + targetDefect → same minted ruleId; only the record's matcher
+    // changes. Re-pointed at the record carrier; the invariant is unchanged.
+    const before = authored('alr-stable');
+    const after = authored('alr-stable', 'forbiddenCall2\\(');
+    expect(after.ruleId).toBe(before.ruleId); // the id does NOT derive from the matcher
     const compiledBefore = compileCandidate(toCompileFeed([before]).candidates[0]!, { now: NOW });
     const compiledAfter = compileCandidate(toCompileFeed([after]).candidates[0]!, { now: NOW });
     expect(compiledBefore.kind).toBe('compiled');
@@ -557,7 +596,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     // A second rule by one author on one targetDefect mints `<seed>-1` (§8 disambiguation);
     // the suffix must survive onto lessonHash so distinct matchers never share a firing key.
     const rec: AuthoredRuleRecord = {
-      ...authored('alr-collide', REGEX_DSL),
+      ...authored('alr-collide'),
       ruleId: '0123456789abcdef-1',
     };
     const out = compileCandidate(toCompileFeed([rec]).candidates[0]!, { now: NOW });
@@ -572,7 +611,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     expect(out.kind).toBe('compiled');
     if (out.kind === 'compiled') {
       expect(out.rule.lessonHash).toMatch(/^[0-9a-f]{16}$/); // bare content hash, no -N suffix
-      expect(out.rule.lessonHash).not.toBe(authored('alr-id', REGEX_DSL).ruleId);
+      expect(out.rule.lessonHash).not.toBe(authored('alr-id').ruleId);
     }
   });
 
@@ -580,7 +619,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     // toCompileFeed always threads it; a hand-built authored candidate missing it would
     // silently re-derive a dslSource-keyed identity and orphan its controls — reject up front.
     const candidate: CompileInputCandidate = {
-      provenance: authored('alr-missing', REGEX_DSL).provenance,
+      provenance: authored('alr-missing').provenance,
       classifierDisposition: 'structural',
       classifierLedgerRef: 'authored:alr-missing',
       dslSource: REGEX_DSL,
@@ -620,7 +659,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
 
     /** An authored candidate carrying the RECORD instead of a dslSource. */
     function recordCandidate(over: Partial<CompileInputCandidate> = {}): CompileInputCandidate {
-      const rec = authored('alr-record', REGEX_DSL);
+      const rec = authored('alr-record');
       return {
         provenance: rec.provenance,
         classifierDisposition: 'structural',
@@ -634,7 +673,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     }
 
     it('compiles a record candidate to EXACTLY what compileRuleRecord produces directly', () => {
-      const rec = authored('alr-record', REGEX_DSL);
+      const rec = authored('alr-record');
       const viaCandidate = compileCandidate(recordCandidate(), { now: NOW });
       const direct = compileRuleRecord(parsed(), { ruleId: rec.ruleId, now: NOW });
       expect(viaCandidate.kind).toBe('compiled');
@@ -721,7 +760,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     });
 
     it('runs a record candidate through runCompileStage end-to-end with Stage-4 evidence', async () => {
-      const rec = authored('alr-record', REGEX_DSL);
+      const rec = authored('alr-record');
       const candidate = recordCandidate();
       const r = await runCompileStage(
         {
@@ -764,7 +803,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     // (would orphan controls.positive[].targetRuleId) is rejected at the use site,
     // not just at the schema parse boundary.
     const candidate: CompileInputCandidate = {
-      provenance: authored('alr-bad', REGEX_DSL).provenance,
+      provenance: authored('alr-bad').provenance,
       classifierDisposition: 'structural',
       classifierLedgerRef: 'authored:alr-bad',
       dslSource: REGEX_DSL,

@@ -170,10 +170,25 @@ export function compileCandidate(
     // The record path is ALREADY PARSED (slice 1) and lowers through slice 2's
     // `compileRuleRecord`; `extractManualPattern`/`sanitizeFileGlobs` never run on it.
     // Identity is the same §8 precondition asserted above — reused, never re-derived.
-    // The §3 engine binding is `compileRuleRecord`'s own two-sided assert (the record's
-    // `target.type` vs the payload's actual compilation path), so the whitelist-judged
-    // `declaredEngine` — which intake DERIVES from that same `target.type` — needs no
-    // second, tautological check here.
+    //
+    // The §3 engine binding is a CHAIN of two asserts on this path, and both legs are
+    // needed because they bind DIFFERENT edges:
+    //   1. here — the whitelist-judged `declaredEngine` vs the record's derived engine
+    //      (the ADR-112 §3 #2259/#7 guarantee: a rule must not compile under an engine
+    //      the eligibility check never cleared);
+    //   2. inside `compileRuleRecord` — the record's `target.type` vs the payload's
+    //      actual compilation path (Prop 310 § Design 3's non-tautology condition).
+    // Dropping leg 1 on the record path would silently retire a shipped guarantee,
+    // since leg 2 says nothing about the whitelist verdict. Three independently
+    // originating facts, two asserts, no tautology.
+    if (
+      candidate.declaredEngine !== undefined &&
+      candidate.declaredEngine !== record.derivedEngine
+    ) {
+      throw new Error(
+        `[Totem Error] compileCandidate: candidate '${candidate.classifierLedgerRef}' declared engine '${candidate.declaredEngine}' but its record derives engine '${record.derivedEngine}' from target.type — the structural-eligibility whitelist was judged for a different engine (ADR-112 §3); intake DERIVES declaredEngine from the record (Prop 310 § Design 3/R17), so a divergence here is a producer bug`,
+      );
+    }
     if (authoredLessonHash === undefined) {
       throw new Error(
         `[Totem Error] compileCandidate: record-carried candidate '${candidate.classifierLedgerRef}' has no authored, minted ruleId — a record candidate is produced only by the ADR-112 §8 authored front-end, which mints identity at the intake seam (Prop 310 § Design 3/R17)`,

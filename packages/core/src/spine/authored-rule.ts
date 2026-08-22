@@ -29,6 +29,7 @@ import {
 } from '../compiler-schema.js';
 import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger } from './ledgers.js';
+import { ParsedRuleRecordSchema } from './rule-record.js';
 
 /** The matcher engines an authored rule may declare (mirrors `CompiledRule.engine`). */
 export const DeclaredEngineSchema = z.enum(['regex', 'ast', 'ast-grep']);
@@ -118,15 +119,44 @@ export const AuthoredRuleRecordSchema = z.object({
   /** INDEPENDENTLY established (§3) — the author never sets this; the check does. */
   structuralEligibility: StructEligResultSchema,
   origin: AuthoredOriginSchema,
+  /**
+   * The engine the structural-eligibility whitelist was judged for. Since Prop 310
+   * slice 3 it is DERIVED at intake from the record's `target.type`
+   * (`parsed.derivedEngine`, § Design 3/R17) and is never author-mirrored — a
+   * mirrored engine field is Tenet 20's prohibited copy at record scale.
+   */
   declaredEngine: DeclaredEngineSchema,
   /** Reference to the §8 authoring-ledger entry (author/date/engine/splitRef/attestations). */
   authoringLedgerRef: z.string().refine((s) => s.trim().length > 0, {
     message: 'authoringLedgerRef must be a non-empty ledger reference',
   }),
-  /** The human-written matcher (same DSL the compiler accepts from the miner). */
-  dslSource: z.string().refine((s) => s.trim().length > 0, {
-    message: 'dslSource must be non-empty',
-  }),
+  /**
+   * Prop 310 § Design 1 — the INGESTED rule record. Replaces the inline
+   * `dslSource`: since slice 3 the record file is the only authoring surface, so
+   * the matcher reaches the compiler already parsed, never re-serialised into
+   * lesson markdown.
+   *
+   * `contentHash` is the sha256 of the LF-admitted bytes actually ingested, and it
+   * is what the §8 attestations bind to (§ Design 1's relocation constraint): the
+   * `path` is INFORMATIONAL only, because renaming a record changes no identity
+   * (§ Design 1) and must not force re-attestation. `parsed` is the in-memory
+   * value the lowering consumes and is never hash material — `contentHash` stands
+   * in for it, so the bytes and the attestation can never disagree.
+   */
+  record: z
+    .object({
+      /** Repo-relative POSIX path the record was read from — informational, never identity. */
+      path: z.string().refine((s) => s.trim().length > 0, {
+        message: 'record.path must be a non-empty repo-relative path',
+      }),
+      /** sha256 of the LF-admitted record bytes — what every attestation binds to. */
+      contentHash: z.string().regex(/^[0-9a-f]{64}$/, {
+        message: 'record.contentHash must be the sha256 hex of the LF-admitted record bytes',
+      }),
+      /** Slice 1's parsed value (§ Design 3's derived engine + Amendment 1's pair hashes). */
+      parsed: ParsedRuleRecordSchema,
+    })
+    .strict(),
   /** Zero-trust mint (ADR-089 / ADR-112 §1) — always literally `true`. */
   unverified: z.literal(true),
 });
@@ -152,8 +182,53 @@ export type AuthoredRuleRecord = z.infer<typeof AuthoredRuleRecordSchema>;
 // Identity/metadata strings are `.transform(trim)` BEFORE the refine (GCA-high
 // diff-review): a non-mutating `.refine` would let `"alice "` (trailing space)
 // bypass the `judgedBy !== author` independence check and mint a DIFFERENT ruleId
-// for a semantically-identical input. `dslSource` is the one string NOT trimmed —
-// trimming a matcher could change its meaning (leading/trailing pattern chars).
+// for a semantically-identical input.
+
+/**
+ * Prop 310 § Design 10 — the AUTHOR-SIDE positive fixture: the ADR-112 §6 corpus
+ * anchor (`pr` + `filePath` + `matchedSpan` + `contentHash`, the line-drift-stable
+ * locus) plus an ORDINAL REFERENCE into the record's `examples`.
+ *
+ * The author writes the reference; INTAKE derives the fixture's `preimageSource`
+ * from `examples[example]` and the minted `ruleId` (Amendment 1: the record's
+ * `examples` block is the editable home, the envelope derives). So an inline
+ * `preimageSource` here is unknown-key under `.strict()` AND named explicitly by
+ * the intake's migration scan — the author never hand-writes the derived side, and
+ * the derived `AuthoredFixture` never carries the reference back (two homes for
+ * one ordinal is the Tenet-20 mirror).
+ *
+ * Refines are NON-mutating, matching `AuthoredFixtureSchema`'s own hash-stability
+ * discipline: these values land inside the ledger's material hash.
+ */
+export const RecordFixtureInputSchema = z
+  .object({
+    /** The PR where the defect was caught/introduced (the in-corpus anchor). */
+    pr: z.number().int().positive(),
+    /** File the defect locus lives in. */
+    filePath: z.string().refine((s) => s.trim().length > 0, {
+      message: 'filePath must be a non-empty reference',
+    }),
+    /** Line-range or AST-node path — the defect locus, not just the file. */
+    matchedSpan: z.string().refine((s) => s.trim().length > 0, {
+      message: 'matchedSpan must be a non-empty locus',
+    }),
+    /** Span content hash, line-drift-stable (cf. `firingLabelId`). */
+    contentHash: z.string().refine((s) => s.trim().length > 0, {
+      message: 'contentHash must be a non-empty hash',
+    }),
+    /**
+     * The `examples[i]` ordinal this fixture's preimage differential draws from
+     * (§ Design 10's `(ruleId, ordinal)` join key). A dangling ordinal, or two
+     * fixtures of one entry naming the same one, fails LOUD at intake — never a
+     * silent re-pair.
+     */
+    example: z.number().int().nonnegative({
+      message: 'example must be a non-negative `examples[i]` ordinal (Prop 310 § Design 10)',
+    }),
+  })
+  .strict();
+export type RecordFixtureInput = z.infer<typeof RecordFixtureInputSchema>;
+
 export const AuthoredRuleInputSchema = z
   .object({
     /** Agent-id or operator handle — attributable (mirrors the provenance field). Trimmed. */
@@ -181,8 +256,6 @@ export const AuthoredRuleInputSchema = z
       .refine((s) => s.length > 0, {
         message: 'targetDefect must be a non-empty defect description',
       }),
-    /** The matcher engine the author declares; the eligibility check confirms it can represent the class. */
-    declaredEngine: DeclaredEngineSchema,
     /**
      * The structural rule-CLASS the author CLAIMS. Fed to the INDEPENDENT
      * `evaluateStructuralEligibility` against the DI whitelist; it is NOT stored
@@ -197,12 +270,27 @@ export const AuthoredRuleInputSchema = z
       .refine((s) => s.length > 0, {
         message: 'structuralClass must be a non-empty rule-class for the whitelist to decide',
       }),
-    /** The human-written matcher (same DSL the compiler accepts from the miner). */
-    dslSource: z.string().refine((s) => s.trim().length > 0, {
-      message: 'dslSource must be non-empty',
-    }),
+    /**
+     * Prop 310 § Design 1 — a repo-relative POSIX reference to the rule record,
+     * `.totem/rules/<slug>.rule.yaml`. THE ONLY rule carrier the envelope accepts
+     * (OQ-1 ruling, records-only): an inline `dslSource` / `declaredEngine` /
+     * `preimageSource` is a migration error the intake rejects BY NAME.
+     *
+     * The path's shape (inside `<totemDir>/rules/`, `*.rule.yaml`, no `..`) is
+     * checked at the intake seam, which has the filesystem; this schema only pins
+     * it to a non-empty string. Trimmed: the path is NOT hash material (§ Design 1
+     * — a rename must not force re-attestation), so normalising it costs nothing
+     * and stops a stray space from becoming an unresolvable reference.
+     */
+    record: z
+      .string()
+      .transform((s) => s.trim())
+      .refine((s) => s.length > 0, {
+        message:
+          'record must reference a rule record, e.g. `.totem/rules/<slug>.rule.yaml` (Prop 310 § Design 1)',
+      }),
     /** ≥1 real lc instance the rule claims to catch — ALL train-side (§5). */
-    positiveFixtures: z.array(AuthoredFixtureSchema).min(1, {
+    positiveFixtures: z.array(RecordFixtureInputSchema).min(1, {
       message: 'an authored rule must declare ≥1 positive fixture (ADR-112 §3)',
     }),
     /**
@@ -381,10 +469,14 @@ export function toCompileFeed(records: readonly AuthoredRuleRecord[]): AuthoredC
       provenance: record.provenance,
       classifierDisposition: 'structural',
       classifierLedgerRef,
-      dslSource: record.dslSource,
-      // §3 (#7): carry the whitelist-judged engine so the compiler can assert it
-      // compiled under THAT engine — a regex-whitelisted rule whose dslSource parses
-      // as ast-grep must fail loud, not silently re-route to a different engine.
+      // Prop 310 § Design 1: the PARSED record is the carrier, never a re-serialised
+      // `dslSource`. `compileCandidate` asserts the carrier XOR and dispatches to
+      // `compileRuleRecord`; nothing on this path touches `extractManualPattern`.
+      record: record.record.parsed,
+      // §3 (#7): carry the whitelist-judged engine. On the record path it is the
+      // engine DERIVED from `target.type` at intake, and `compileRuleRecord`'s own
+      // two-sided assert (record `target.type` vs the payload's actual compilation
+      // path) is what keeps the binding non-tautological (§ Design 3).
       declaredEngine: record.declaredEngine,
       // §8 id-unification: carry the persisted, minted ruleId so the compiler makes it
       // the compiled rule's identity (`firingLabelId ← ruleId`) instead of the

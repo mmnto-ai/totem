@@ -1143,10 +1143,12 @@ export type {
   AuthoredRuleRecord,
   AuthoredRulesFile,
   DeclaredEngine,
+  RecordFixtureInput,
   StructEligResult,
   WhitelistEntry,
 } from './spine/authored-rule.js';
 export {
+  AUTHORED_RULE_ID_RE,
   AuthoredOriginSchema,
   AuthoredRuleInputSchema,
   AuthoredRuleRecordSchema,
@@ -1154,6 +1156,7 @@ export {
   DeclaredEngineSchema,
   evaluateStructuralEligibility,
   mintAuthoredRuleId,
+  RecordFixtureInputSchema,
   StructEligResultSchema,
   toCompileFeed,
 } from './spine/authored-rule.js';
@@ -1389,7 +1392,9 @@ export {
   GLOB_DIALECT_RULES,
   LEGACY_ENGINE_DETAIL,
   LEGACY_INERT_ENGINE,
+  ParsedRuleRecordSchema,
   parseRuleRecord,
+  RuleExamplePairHashSchema,
   REQUIRES_SCOPE_RESERVED,
   RequiresScopeSchema,
   RULE_RECORD_FORBIDDEN_PROTOTYPE_KEYS,
