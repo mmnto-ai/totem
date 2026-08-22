@@ -534,3 +534,76 @@ Replay check against the recorded verdict:
 Both controls holding while all seven candidates score zero is what localizes entry 17's failure to
 the bare-brace-with-leading-`$$$` shape specifically, rather than to the matcher machinery, the
 metavariables, or the probe snippets.
+
+---
+
+## Supplementary twins — post-registration cure (operator ruled (b), 2026-08-22)
+
+**Ruling of record:** mmnto-ai/totem-strategy#288, operator rulings entry 2026-08-22T0354Z, with the
+protocol erratum registered first (0351Z): cardinality is spec-faithful **N records per seed rule**
+(Prop 310 § Design 6), superseding the translation charter's "one record per seed rule" clause. The
+registered 13/20 verdict (PR mmnto-ai/totem-strategy#1092, `5eed24ba`) **binds**; the scorer
+re-scores ONLY the two entries below under the identical apparatus and reports the as-cured count
+beside it, disclosed as a post-registration cure. None of the 20 registered records changed — the
+diff against the pin `62fa5b42` under `.totem/rules/` is additions only.
+
+**The two twins** — each restores the `**/*.js` scope the single-record translation dropped (7
+tracked files at the pin, the scorer's item 5):
+
+| Entry | Twin                                                  | Delta from the original                                                    |
+| ----- | ----------------------------------------------------- | -------------------------------------------------------------------------- |
+| 6     | `r14-6b1890e2-empty-string-in-whitelist-js.rule.yaml` | `language: javascript`; `fileGlobs: ['**/*.js']`; everything else verbatim |
+| 18    | `r14-71935fe9-string-cast-on-input-js.rule.yaml`      | same shape                                                                 |
+
+Same fidelity discipline as the originals: pattern, severity, message, `examples`, and
+`curation.sourceLesson` carried verbatim; the only authored change is the language/glob pair.
+Together with its typescript original, each twin is the entry's N-record translation of the legacy
+`**/*.ts` + `**/*.js` scope. The `**/*.tsx` / `**/*.jsx` legs stay dropped: zero tracked files at
+the pin, already scored zero-delta.
+
+**Apparatus change (the preceding commit; no record changes):** `r14-differential.mjs` now (1)
+dispatches each ast-grep record under its OWN grammar (`language` → `.ts` / `.js` / `.tsx`,
+mirroring the runtime's extension dispatch — the twins are measured under javascript, never coerced
+through `.ts`); (2) groups N records per seed entry by the `r14-<hash8>-` filename prefix and takes
+the WORST verdict over the group, so the 20-entry split stays comparable to the registered verdict
+and a twin can never mask a failing original; (3) accepts the frozen draw envelope on `--seed` when
+joined via `--corpus <frozen compiled-rules.json>` (the scorer's contract nit). The respondent's
+round probe is committed beside it as `r14-treeform-probe.mjs`.
+
+### Replay (this SHA)
+
+`node operations-local/r14-validate.mjs` (exit 0):
+
+```
+Summary: 22 record(s) — parsed 22, compiled 21, lowering-rejected 1, harness failures 0
+```
+
+`node operations-local/r14-differential.mjs` (exit 0) — the two cured entries, then the split:
+
+```
+ 6. 6b1890e2dbda3331  differential-satisfied  (2 records)
+    empty-string-in-whitelist-js [ast-grep@.js] differential-satisfied: pair0: bad=FIRES good=silent
+    empty-string-in-whitelist [ast-grep@.ts] differential-satisfied: pair0: bad=FIRES good=silent
+18. 71935fe9a742137b  differential-satisfied  (2 records)
+    string-cast-on-input-js [ast-grep@.js] differential-satisfied: pair0: bad=FIRES good=silent
+    string-cast-on-input [ast-grep@.ts] differential-satisfied: pair0: bad=FIRES good=silent
+
+Differential split (measured):
+  differential-satisfied   15  (entries 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 16, 18, 19, 20)
+  good-also-fires          3  (entries 11, 14, 15)
+  bad-does-not-fire        1  (entries 17)
+  not-evaluable            1  (entries 12)
+  REPRODUCED — differential split and dead-matcher probe match the notes.
+```
+
+`node operations-local/r14-differential.mjs --seed <seed-20.json> --corpus <frozen compiled-rules.json>`
+(exit 0): both twins `identical to seed` on severity · message · pattern; `Unexpected divergences: 0
+(expected 0)`.
+
+**What this does and does not claim.** The twins restore the dropped `**/*.js` file scope and satisfy
+their differential under the javascript grammar — the mechanically checkable conjuncts. Whether the
+two entries now PASS the full § 15 step-4 composite (effective-scope identity over the pinned tree
+included) is the scorer's measurement, not the translator's; the count this lands at is the scorer's
+to report beside the registered 13/20.
+
+— totem-claude (translator), 2026-08-22
