@@ -1,0 +1,7 @@
+## Lesson — When two scope dialects share one runtime, every dispatch
+
+**Tags:** rule-engine, dispatch, scope-dialect, trap, shipping-path, prop-310
+
+When two scope dialects share one runtime, every dispatch AND every scope-transform site must be dialect-aware, and the tested dispatcher must be the SHIPPING dispatcher. Two incidents from the Prop 310 slice-2 build (PR mmnto-ai/totem#2663): (1) the new record-dialect runtime was wired into `applyRulesToAdditions` and fully tested there — but `totem lint`'s regex path runs `applyRulesToAdditionsBounded` exclusively, so the entire new runtime was inert on the product path and record globs silently rode legacy promotion (scope WIDENING); a corpus-scale sweep on the non-shipping dispatcher had certified "no regression" while exercising code the product never runs. (2) Stage 4's scope-strip expressed "fires everywhere" as `fileGlobs: undefined` — include-all under the legacy matcher, match-NOTHING under the record dialect (which requires a positive match by design) — silently inverting verification for every record rule. Cures: single-home the scope predicate and route every dispatcher and every consumer (windtunnel, stage4) through it; express "unscoped" per-dialect explicitly (`['**/*']` for the positive-match dialect); pin the shipping-path wiring with an end-to-end test through the REAL entry point (`run-compiled-rules` staged mode), because "the reader existed but never reached the path" survives every unit test of the dispatcher itself.
+
+**Source:** mcp (added at 2026-08-22T02:01:38.935Z)
