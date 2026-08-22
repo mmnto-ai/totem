@@ -1228,7 +1228,9 @@ describe('legitimacy / ruleClass marker (mmnto-ai/totem#2183)', () => {
 
       it('rejects a whitespace-only badExample or goodExample (vacuous control)', () => {
         expect(() => PreimageSourceSchema.parse({ ...recordSource, badExample: '   ' })).toThrow();
-        expect(() => PreimageSourceSchema.parse({ ...recordSource, goodExample: ' \n ' })).toThrow();
+        expect(() =>
+          PreimageSourceSchema.parse({ ...recordSource, goodExample: ' \n ' }),
+        ).toThrow();
       });
 
       it('rejects a cross-branch leak — a lessonRef under kind:record (strict branch, FM(d))', () => {

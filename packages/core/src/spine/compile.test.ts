@@ -693,9 +693,9 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
     });
 
     it('throws when a candidate carries BOTH carriers — compiling either would discard the other', () => {
-      expect(() => compileCandidate(recordCandidate({ dslSource: REGEX_DSL }), { now: NOW })).toThrow(
-        /carries BOTH a record and a dslSource/,
-      );
+      expect(() =>
+        compileCandidate(recordCandidate({ dslSource: REGEX_DSL }), { now: NOW }),
+      ).toThrow(/carries BOTH a record and a dslSource/);
     });
 
     it('throws when a candidate carries NEITHER carrier', () => {
@@ -739,9 +739,7 @@ describe('runCompileStage — ADR-112 authored compile-feed', () => {
         record: parsed(),
         unverified: true,
       };
-      expect(() => compileCandidate(mined, { now: NOW })).toThrow(
-        /has no authored, minted ruleId/,
-      );
+      expect(() => compileCandidate(mined, { now: NOW })).toThrow(/has no authored, minted ruleId/);
     });
 
     it('surfaces a record lowering REJECTION as `rejected`, not a throw (authored-content defect)', () => {

@@ -22,7 +22,6 @@ import { z } from 'zod';
 import {
   AUTHORED_RULE_ID_HEX_LEN,
   AUTHORED_RULE_ID_RE,
-  AuthoredFixtureSchema,
   AuthoredNegativeFixtureSchema,
   AuthoredProvenanceRecordSchema,
   isIso8601CalendarDate,

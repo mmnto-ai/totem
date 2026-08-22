@@ -322,7 +322,9 @@ describe('evaluatePreimageDifferential — record source (Prop 310 slice 3)', ()
     // above is not four repetitions of one branch.
     const outcomes = new Set<string>();
     for (const [bad, good] of cases) {
-      outcomes.add((await evaluatePreimageDifferential(regexRule(), recordFixture(bad, good))).outcome);
+      outcomes.add(
+        (await evaluatePreimageDifferential(regexRule(), recordFixture(bad, good))).outcome,
+      );
     }
     expect(outcomes).toEqual(
       new Set(['differential-holds', 'fix-shaped', 'over-match', 'vacuous-silent']),

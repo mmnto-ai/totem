@@ -91,7 +91,11 @@ function collectMdFiles(baseDir: string): string[] {
  * disagree about what "tracked" means (see `generateInputHash`'s own note for
  * why tracked-only is the producer/consumer-symmetric answer).
  */
-function restrictToTracked(files: string[], baseDir: string, repoCwd: string | undefined): string[] {
+function restrictToTracked(
+  files: string[],
+  baseDir: string,
+  repoCwd: string | undefined,
+): string[] {
   if (repoCwd === undefined) return files;
   const tracked = listTrackedFilesUnder(repoCwd, baseDir);
   if (tracked === null) return files;
@@ -117,7 +121,10 @@ function rollingContentHash(
       const content = fs.readFileSync(path.join(baseDir, relPath), 'utf-8').replace(/\r\n/g, '\n');
       hash.update(`${relPath}\n${content}\n`);
     } catch (err) {
-      onReadError(relPath, err);
+      // `throw`n, not merely called: `onReadError` returns `never`, and writing the
+      // throw here keeps this catch visibly non-swallowing (Tenet 4) instead of
+      // hiding the rethrow behind a callback.
+      throw onReadError(relPath, err);
     }
   }
   return hash.digest('hex');
@@ -182,7 +189,11 @@ export const EMPTY_RECORDS_HASH = crypto.createHash('sha256').digest('hex');
  */
 export function listRecordFiles(rulesDir: string, repoCwd?: string): string[] {
   if (!fs.existsSync(rulesDir)) return [];
-  return restrictToTracked(collectFilesWithSuffix(rulesDir, RECORD_FILE_SUFFIX).sort(), rulesDir, repoCwd);
+  return restrictToTracked(
+    collectFilesWithSuffix(rulesDir, RECORD_FILE_SUFFIX).sort(),
+    rulesDir,
+    repoCwd,
+  );
 }
 
 /**

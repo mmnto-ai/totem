@@ -449,9 +449,7 @@ describe('runRuleAuthor — the engine is derived, the record is content-address
     run();
     const entry = readAuthoringLedger(totemDir)[0]!;
     const bytes = fs.readFileSync(path.join(rulesDir, `${DEFAULT_RECORD_SLUG}.rule.yaml`), 'utf-8');
-    const expected = createHash('sha256')
-      .update(bytes.replace(/\r\n/g, '\n'))
-      .digest('hex');
+    const expected = createHash('sha256').update(bytes.replace(/\r\n/g, '\n')).digest('hex');
     expect(entry.record?.contentHash).toBe(expected);
     expect(entry.record?.path).toBe(recordRef(DEFAULT_RECORD_SLUG));
   });
@@ -656,10 +654,7 @@ describe('runRuleAuthor — codex/agy diff-review folds', () => {
     expect(ledger[1]?.ruleId).toBe(ledger[0]?.ruleId);
   });
   it('two distinct decidable rules in one file → 2 records, 2 rows, distinct ids', () => {
-    writeYaml([
-      decidableRule(),
-      decidableRule({ targetDefect: 'another defect' }),
-    ]);
+    writeYaml([decidableRule(), decidableRule({ targetDefect: 'another defect' })]);
     const res = run();
     expect(res.minted).toBe(2);
     expect(res.records).toHaveLength(2);
@@ -764,10 +759,7 @@ describe('runRuleAuthor — verifyOnly no-mint precondition (ADR-112 §8, strate
     writeYaml([decidableRule()]);
     run(); // author rule #1
     const before = snapshot();
-    writeYaml([
-      decidableRule(),
-      decidableRule({ targetDefect: 'another defect' }),
-    ]);
+    writeYaml([decidableRule(), decidableRule({ targetDefect: 'another defect' })]);
     expect(verify).toThrow(/NOT the first author/i);
     expect(snapshot()).toBe(before); // the unchanged rule did not mask the new one; zero writes overall
   });

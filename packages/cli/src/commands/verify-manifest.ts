@@ -114,7 +114,10 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   const recordsFailures: string[] = [];
   if (manifest.records_hash === undefined) {
     if (recordCount === 0) {
-      log.info(TAG, `records: none — no ${config.totemDir}/${RECORDS_DIR_REL}/**/*.rule.yaml on disk and no records_hash attested.`);
+      log.info(
+        TAG,
+        `records: none — no ${config.totemDir}/${RECORDS_DIR_REL}/**/*.rule.yaml on disk and no records_hash attested.`,
+      );
     } else {
       recordsFailures.push(
         `Unattested file class — ${recordCount} rule record(s) on disk but the manifest carries no records_hash.\n` +

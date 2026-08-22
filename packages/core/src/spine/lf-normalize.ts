@@ -26,7 +26,10 @@
 export function lfDeepNormalize(value: unknown): unknown {
   if (typeof value === 'string') return value.replace(/\r\n/g, '\n');
   if (Array.isArray(value)) return value.map(lfDeepNormalize);
-  if (value !== null && typeof value === 'object') {
+  // `typeof` first, then the null guard: `typeof null === 'object'`, so both
+  // conjuncts are load-bearing and this is the order the codebase's own
+  // object-narrowing rule expects.
+  if (typeof value === 'object' && value !== null) {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, lfDeepNormalize(v)]),
     );
