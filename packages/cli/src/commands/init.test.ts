@@ -2282,9 +2282,11 @@ describe('CLAUDE_SESSION_START template', () => {
   it('#2570: stamps a repo-local log and hands the child the same fd (observability leg)', () => {
     // Routed from the status seat's 2026-08-03 silent no-write: under
     // stdio:'ignore' + exit-0-or-nothing, a reaped or dying child left NO
-    // trace. The stamp carries the discriminating fields; the child inherits
-    // the SAME fd so the verb's success line lands after the stamp — a stamp
-    // with nothing after it = the child never finished.
+    // trace. The stamp carries the discriminating fields; the children inherit
+    // the SAME fd so their output lands after the stamps. Narrowed once a
+    // second verb joined the block: child output is unlabelled and interleaves
+    // nondeterministically, so a silent tail attributes only to the LAST verb
+    // stamped — not per child.
     // Repo-local pin: the log must live INSIDE .git — a workspace-parent path
     // would grow an un-gitignorable file outside the repo tree for every
     // consumer of the published template (falsification round, MAJOR 2/4).
@@ -2325,8 +2327,9 @@ describe('CLAUDE_SESSION_START template', () => {
     expect(CLAUDE_SESSION_START.indexOf(storeSpawn)).toBeLessThan(
       CLAUDE_SESSION_START.indexOf('closeSync(logFd)'),
     );
-    // Each stamp NAMES its verb, so a stamp with nothing after it still reads
-    // per verb once two children share the one log.
+    // Each stamp NAMES its verb, so the log records which verbs fired and in
+    // what order. It does NOT restore per-child reap attribution — child
+    // output is unlabelled (see the #2570 test above).
     expect(CLAUDE_SESSION_START).toContain(' verb=refresh-gh');
     expect(CLAUDE_SESSION_START).toContain(' verb=refresh-obligation-store');
     // The BLOCK-level catch covers a block that fires BOTH verbs — neither ran
@@ -3773,6 +3776,63 @@ Force should NOT erase this line.
     const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT);
     expect(result.action).toBe('preserved');
     expect(result.err).toContain('--force-skill-refresh');
+  });
+});
+
+// ── tracked dogfood copy ⇄ published template parity lock ──
+// The Gemini twin of this lock lives in gemini-sessionstart-contract.test.ts
+// (mmnto-ai/totem#2628); the Claude side had none, so a template change could
+// ship while the file THIS repo's Claude seat actually boots stayed stale —
+// exactly the parity drift #2628 was opened for, just on the other vendor.
+// Byte-equality fails CI, so the next template change demands a regeneration
+// instead of relying on vigilance.
+describe('tracked .claude/hooks/SessionStart.cjs matches the published template', () => {
+  it('is byte-identical to CLAUDE_SESSION_START', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
+    const tracked = fs.readFileSync(
+      path.join(repoRoot, '.claude', 'hooks', 'SessionStart.cjs'),
+      'utf-8',
+    );
+    expect(tracked).toBe(CLAUDE_SESSION_START);
+  });
+});
+
+// ── bespoke fourth surface kept in lockstep BY HAND ──
+// `.claude/hooks/session-context.mjs` is the FIRST of two SessionStart entries
+// registered in .claude/settings.json (the managed SessionStart.cjs is second),
+// and it carries its own hand-written copy of the sidecar-refresh block. It is
+// bespoke, not generated: no roster, no regen, no byte-lock covers it, so a
+// template change can silently leave it behind — it was missed once already in
+// this change's first round. These string-locks are the cheapest sensor the
+// repo's existing pattern supports (the repo-root read below is the same one
+// the #1890 skill locks use).
+describe('bespoke .claude/hooks/session-context.mjs stays in lockstep with the templates', () => {
+  const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
+  const bespoke = (): string =>
+    fs.readFileSync(path.join(repoRoot, '.claude', 'hooks', 'session-context.mjs'), 'utf-8');
+
+  it('fires BOTH sidecar verbs', () => {
+    expect(bespoke()).toContain("spawn('totem-status', ['refresh-gh']");
+    expect(bespoke()).toContain("spawn('totem-status', ['refresh-obligation-store']");
+  });
+
+  it('verb-tags every stamp it writes into the shared log', () => {
+    const source = bespoke();
+    expect(source).toContain(' verb=refresh-gh\\n');
+    expect(source).toContain(' verb=refresh-obligation-store\\n');
+    // Both the spawn stamp and the spawn-error stamp, per verb: four in total.
+    expect(source.match(/ verb=refresh-gh\\n/g)).toHaveLength(2);
+    expect(source.match(/ verb=refresh-obligation-store\\n/g)).toHaveLength(2);
+  });
+
+  it('carries the block-level breadcrumb that names the sidecar, not one verb', () => {
+    expect(bespoke()).toContain('totem-status sidecar refresh unavailable (non-fatal)');
+    expect(bespoke()).not.toContain('refresh-gh unavailable (non-fatal)');
+  });
+
+  it('no longer claims to be the sole SessionStart entry', () => {
+    // It is the first of two; the stale banner outlived the second registration.
+    expect(bespoke()).not.toContain('sole SessionStart entry');
   });
 });
 

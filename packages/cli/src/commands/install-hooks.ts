@@ -178,10 +178,13 @@ ${buildResolveBlock(fallbackCmd)}
 # (mmnto-ai/totem-status#127 slice-two residual, sibling of mmnto-ai/totem#2556)
 # writes the durable obligation store beside the GH snapshot, so it gets the same
 # post-merge moment. Same presence + primary-checkout gate, same backgrounded
-# subshell, same log — and each firing stamps its own verb= field, so a stamp with
-# nothing after it still reads per verb. Blind firing stays safe there too: the
-# verb is in-process single-flight only, so it races the daemon exactly the way its
-# manual invocation already does.
+# subshell, same log — and each firing stamps its own verb= field, so the log
+# records WHICH verbs fired and in what order. That does NOT restore the #2570
+# per-child reap discriminator: child output carries no verb tag and the two
+# backgrounded children interleave nondeterministically, so a silent tail
+# attributes only to the LAST verb stamped. Reopen when the sidecar tags its own
+# output. Blind firing stays safe there too: the verb is in-process single-flight
+# only, so it races the daemon exactly the way its manual invocation already does.
 # PRIMARY checkout only ([ -d .git ]): in a linked worktree .git is a FILE, and a
 # detached child inheriting the worktree cwd holds a Windows directory lock that
 # breaks worktree removal; the primary's hooks + the daemon cover the workspace-level
@@ -189,9 +192,12 @@ ${buildResolveBlock(fallbackCmd)}
 if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then
   # Observability leg (mmnto-ai/totem#2570): stamp each firing (time, cwd, and
   # WHICH binary resolved — the shell search order includes cwd on Windows, so
-  # a stale checkout-local exe can shadow the installed one) and hand the child
-  # the same log, so the verb's own success line lands after the stamp; a stamp
-  # with nothing after it means the child never finished. Repo-local inside
+  # a stale checkout-local exe can shadow the installed one) and hand the children
+  # the same log, so their output lands after the stamps. Measured caveat now that
+  # TWO verbs share one log: child output is unlabelled and the two children
+  # interleave nondeterministically, so a silent tail no longer discriminates per
+  # child — it attributes only to the LAST verb stamped. The stamps still record
+  # which verbs fired, and in what order. Repo-local inside
   # .git (never tracked, per-repo, writable wherever git itself writes); 1 MiB
   # self-cap. If the log is not writable, fall back to the previous blind
   # firing — the 2>/dev/null PRECEDES the append so the open failure itself

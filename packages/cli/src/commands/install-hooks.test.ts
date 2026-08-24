@@ -1146,8 +1146,10 @@ describe('post-merge hook fires totem-status refresh-gh', () => {
     // so the open failure of an unwritable log is itself silent (falsification
     // round, MAJOR 1).
     expect(hook).toContain('2>/dev/null >> "$TS_REFRESH_LOG"');
-    // The child appends to the SAME log so its success line lands after the
-    // stamp; a stamp with nothing after it = the child never finished.
+    // The children append to the SAME log so their output lands after the
+    // stamps. Narrowed once a second verb joined the block: child output is
+    // unlabelled and interleaves, so a silent tail attributes only to the LAST
+    // verb stamped — not per child.
     expect(hook).toContain('(totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)');
   });
 
@@ -1173,8 +1175,9 @@ describe('post-merge hook fires totem-status refresh-gh', () => {
     // logged form, and the blind fallback when the log cannot be opened.
     expect(hook).toContain('(totem-status refresh-obligation-store >> "$TS_REFRESH_LOG" 2>&1 &)');
     expect(hook).toContain('(totem-status refresh-obligation-store >/dev/null 2>&1 &)');
-    // The stamp NAMES the verb, so a stamp with nothing after it still reads
-    // per verb once two children share one log.
+    // The stamp NAMES the verb, so the log records which verbs fired and in
+    // what order (it does not restore per-child reap attribution — child
+    // output is unlabelled).
     expect(hook).toContain('post-merge spawn cwd=%s bin=%s verb=%s');
     expect(hook).toContain('"$(command -v totem-status | tr -d \'[:cntrl:]\')" refresh-gh');
     expect(hook).toContain(
@@ -1273,8 +1276,8 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
       const logText = fs.readFileSync(logPath, 'utf-8');
       expect(logText).toContain('post-merge spawn cwd=');
       expect(logText).toMatch(/bin=\S*totem-status/);
-      // Each stamp NAMES its verb, so a stamp with nothing after it still reads
-      // per verb now that two children share the one log.
+      // Each stamp NAMES its verb, so the log records which verbs fired and in
+      // what order — the attribution the unlabelled child output cannot give.
       expect(logText).toContain('verb=refresh-gh');
       expect(logText).toContain('verb=refresh-obligation-store');
     },

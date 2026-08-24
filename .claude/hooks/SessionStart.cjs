@@ -73,9 +73,13 @@ try {
 // writes the durable obligation store beside the GH snapshot, so it gets the same
 // session-start moment. Same primary-checkout gate, same detached+unref spawn, same
 // inherited log fd, same ENOENT-silent arm — and each firing stamps its own `verb=`
-// field, so a stamp with nothing after it still reads per verb. Blind firing stays
-// safe here too: that verb is in-process single-flight only, so it races the daemon
-// exactly the way its manual invocation already does.
+// field, so the log records WHICH verbs fired and in what order. That does NOT
+// restore the #2570 per-child reap discriminator: both stamps are written
+// back-to-back before either child writes, and child output carries no verb tag
+// and arrives in nondeterministic order, so a silent tail attributes only to the
+// LAST verb stamped. Reopen when the sidecar tags its own output. Blind firing
+// stays safe here too: that verb is in-process single-flight only, so it races the
+// daemon exactly the way its manual invocation already does.
 // PRIMARY checkout only (.git must be a DIRECTORY): in a linked worktree .git is a
 // pointer FILE, and a detached child inheriting the worktree cwd holds a Windows
 // directory lock that breaks worktree removal; the primary's hooks + the daemon
@@ -100,10 +104,14 @@ try {
     // exit-0-or-nothing contract, a reaped or dying child leaves NO trace
     // (Windows detached is not job-object breakaway — a hook-harness
     // tree-kill takes the child mid-run). Each firing stamps a workspace-root
-    // log and hands the child the same fd, so the verb's own success line
-    // lands after the stamp; a stamp with nothing after it means the child
-    // never finished. Log failures degrade to the previous blind firing —
-    // the stamp must never block or break the spawn.
+    // log and hands the children the same fd, so their output lands after the
+    // stamps. Measured caveat now that TWO verbs share one fd: both stamps are
+    // written back-to-back before either child writes, and the children's
+    // output is unlabelled and interleaves nondeterministically — so a silent
+    // tail no longer discriminates per child; it attributes only to the LAST
+    // verb stamped. The stamps still record which verbs fired, and in what
+    // order. Log failures degrade to the previous blind firing — the stamp
+    // must never block or break the spawn.
     const { openSync, closeSync, appendFileSync, existsSync, writeFileSync } = require('fs');
     // REPO-LOCAL log, inside .git (falsification round: the primary-checkout
     // gate just proved .git is a directory; never tracked, dies with the
