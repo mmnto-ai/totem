@@ -1,7 +1,8 @@
 {
-  "compiled_at": "2026-07-28T20:50:46.919Z",
+  "compiled_at": "2026-08-24T21:34:19.208Z",
   "model": "gemini-3-flash-preview",
   "input_hash": "887b20d48cfafd849ba15003866da2beba5be5d9352627300667375a3b36f60f",
   "output_hash": "be747bd824418ac8791b8fe0b79428bdd0bf80c75abfc32ee5942962efe78acf",
-  "rule_count": 485
+  "rule_count": 485,
+  "records_hash": "e852a272485db5994044c4889d12272c70c09c27054ffb97ef117ee7a9a070ff"
 }
