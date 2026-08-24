@@ -181,6 +181,14 @@ const { spawnSync } = require('child_process');
 // no-clobber when gh is missing) makes blind firing safe. ENOENT = the sidecar is not
 // adopted in this repo (the common non-cohort case) — zero noise; any other spawn
 // failure keeps a non-fatal stderr breadcrumb.
+// A SECOND verb rides this same block: \`totem-status refresh-obligation-store\`
+// (mmnto-ai/totem-status#127 slice-two residual, sibling of mmnto-ai/totem#2556)
+// writes the durable obligation store beside the GH snapshot, so it gets the same
+// session-start moment. Same primary-checkout gate, same detached+unref spawn, same
+// inherited log fd, same ENOENT-silent arm — and each firing stamps its own \`verb=\`
+// field, so a stamp with nothing after it still reads per verb. Blind firing stays
+// safe here too: that verb is in-process single-flight only, so it races the daemon
+// exactly the way its manual invocation already does.
 // PRIMARY checkout only (.git must be a DIRECTORY): in a linked worktree .git is a
 // pointer FILE, and a detached child inheriting the worktree cwd holds a Windows
 // directory lock that breaks worktree removal; the primary's hooks + the daemon
@@ -231,7 +239,7 @@ try {
       } catch {
         // no log yet — nothing to cap
       }
-      appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + '\\n');
+      appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + ' verb=refresh-gh\\n');
       logFd = openSync(logPath, 'a');
       stdio = ['ignore', logFd, logFd];
     } catch {
@@ -243,7 +251,7 @@ try {
     });
     refresh.on('error', (err) => {
       try {
-        appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn-error code=' + ((err && err.code) || 'unknown') + '\\n');
+        appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn-error code=' + ((err && err.code) || 'unknown') + ' verb=refresh-gh\\n');
       } catch {
         // log write failed — fall through to the stderr breadcrumb
       }
@@ -251,7 +259,31 @@ try {
       process.stderr.write('[SessionStart] totem-status refresh-gh spawn failed (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
     });
     refresh.unref();
-    // The child holds its own copy of the fd from spawn time; release the parent's.
+    // Second verb, same gate and same log fd (see the banner above). Written out
+    // rather than looped so the spawn, the stamp, and the breadcrumb each carry a
+    // literal verb — a reader of the generated hook (or of the log) never has to
+    // resolve a variable to know which refresh fired.
+    try {
+      appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + ' verb=refresh-obligation-store\\n');
+    } catch {
+      // log unavailable — this verb still fires blind, exactly as the first does
+    }
+    const refreshStore = spawn('totem-status', ['refresh-obligation-store'], {
+      detached: true,
+      stdio,
+    });
+    refreshStore.on('error', (err) => {
+      try {
+        appendFileSync(logPath, '[' + new Date().toISOString() + '] gemini spawn-error code=' + ((err && err.code) || 'unknown') + ' verb=refresh-obligation-store\\n');
+      } catch {
+        // log write failed — fall through to the stderr breadcrumb
+      }
+      if (err && err.code === 'ENOENT') return;
+      process.stderr.write('[SessionStart] totem-status refresh-obligation-store spawn failed (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
+    });
+    refreshStore.unref();
+    // Each child holds its own copy of the fd from spawn time; release the parent's
+    // once BOTH are away (an early close would hand the second spawn an EBADF).
     if (logFd !== null) {
       try {
         closeSync(logFd);
@@ -1030,6 +1062,14 @@ try {
 // is missing) makes blind firing safe. ENOENT = the sidecar is not adopted in
 // this repo (the common non-cohort case) — zero noise; any other spawn failure
 // keeps a non-fatal stderr breadcrumb.
+// A SECOND verb rides this same block: \`totem-status refresh-obligation-store\`
+// (mmnto-ai/totem-status#127 slice-two residual, sibling of mmnto-ai/totem#2556)
+// writes the durable obligation store beside the GH snapshot, so it gets the same
+// session-start moment. Same primary-checkout gate, same detached+unref spawn, same
+// inherited log fd, same ENOENT-silent arm — and each firing stamps its own \`verb=\`
+// field, so a stamp with nothing after it still reads per verb. Blind firing stays
+// safe here too: that verb is in-process single-flight only, so it races the daemon
+// exactly the way its manual invocation already does.
 // PRIMARY checkout only (.git must be a DIRECTORY): in a linked worktree .git is a
 // pointer FILE, and a detached child inheriting the worktree cwd holds a Windows
 // directory lock that breaks worktree removal; the primary's hooks + the daemon
@@ -1080,7 +1120,7 @@ try {
       } catch {
         // no log yet — nothing to cap
       }
-      appendFileSync(logPath, '[' + new Date().toISOString() + '] claude spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + '\\n');
+      appendFileSync(logPath, '[' + new Date().toISOString() + '] claude spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + ' verb=refresh-gh\\n');
       logFd = openSync(logPath, 'a');
       stdio = ['ignore', logFd, logFd];
     } catch {
@@ -1092,7 +1132,7 @@ try {
     });
     refresh.on('error', (err) => {
       try {
-        appendFileSync(logPath, '[' + new Date().toISOString() + '] claude spawn-error code=' + ((err && err.code) || 'unknown') + '\\n');
+        appendFileSync(logPath, '[' + new Date().toISOString() + '] claude spawn-error code=' + ((err && err.code) || 'unknown') + ' verb=refresh-gh\\n');
       } catch {
         // log write failed — fall through to the stderr breadcrumb
       }
@@ -1100,7 +1140,31 @@ try {
       process.stderr.write('[SessionStart] totem-status refresh-gh spawn failed (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
     });
     refresh.unref();
-    // The child holds its own copy of the fd from spawn time; release the parent's.
+    // Second verb, same gate and same log fd (see the banner above). Written out
+    // rather than looped so the spawn, the stamp, and the breadcrumb each carry a
+    // literal verb — a reader of the generated hook (or of the log) never has to
+    // resolve a variable to know which refresh fired.
+    try {
+      appendFileSync(logPath, '[' + new Date().toISOString() + '] claude spawn cwd=' + scrub(process.cwd()) + ' path-has-go-bin=' + /go[\\\\/]bin/i.test(process.env.PATH || '') + ' cwd-shadow-exe=' + existsSync(nodePath.join(process.cwd(), 'totem-status.exe')) + ' verb=refresh-obligation-store\\n');
+    } catch {
+      // log unavailable — this verb still fires blind, exactly as the first does
+    }
+    const refreshStore = spawn('totem-status', ['refresh-obligation-store'], {
+      detached: true,
+      stdio,
+    });
+    refreshStore.on('error', (err) => {
+      try {
+        appendFileSync(logPath, '[' + new Date().toISOString() + '] claude spawn-error code=' + ((err && err.code) || 'unknown') + ' verb=refresh-obligation-store\\n');
+      } catch {
+        // log write failed — fall through to the stderr breadcrumb
+      }
+      if (err && err.code === 'ENOENT') return;
+      process.stderr.write('[SessionStart] totem-status refresh-obligation-store spawn failed (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\\n');
+    });
+    refreshStore.unref();
+    // Each child holds its own copy of the fd from spawn time; release the parent's
+    // once BOTH are away (an early close would hand the second spawn an EBADF).
     if (logFd !== null) {
       try {
         closeSync(logFd);

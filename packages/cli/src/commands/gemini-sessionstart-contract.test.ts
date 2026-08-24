@@ -256,4 +256,63 @@ describe('rendered SessionStart.cjs — refresh-gh armed path stays out of the d
     },
     TEST_TIMEOUT_MS,
   );
+
+  // The armed leg now spawns TWO verbs from the one gate — refresh-gh plus the
+  // slice-two refresh-obligation-store (mmnto-ai/totem-status#127, sibling of
+  // mmnto-ai/totem#2556). Both must fire, and neither may reach the decision
+  // channel. POSIX-only: on win32 the extension-less spawn cannot resolve a
+  // `.cmd` shim, so the children never run there (see the sibling test above,
+  // which pins the spawn-reject-quiet branch on that platform).
+  it.skipIf(process.platform === 'win32')(
+    'arms BOTH refresh verbs from the one gate, with stdout still exactly one JSON payload',
+    async () => {
+      fs.mkdirSync(path.join(tmpDir, '.git'));
+      const shimDir = path.join(tmpDir, 'shim');
+      writeTotemShim(shimDir);
+      const verbsPath = path.join(tmpDir, 'verbs.log');
+      const statusSh = path.join(shimDir, 'totem-status');
+      // APPEND: the two detached children land in whatever order they finish.
+      fs.writeFileSync(
+        statusSh,
+        `#!/bin/sh\necho "$1" >> "${verbsPath}"\necho STATUS-NOISE-OUT\necho STATUS-NOISE-ERR 1>&2\n`,
+        'utf-8',
+      );
+      fs.chmodSync(statusSh, 0o755);
+
+      const run = spawnSync(process.execPath, [hookPath], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+        timeout: SPAWN_TIMEOUT_MS,
+        input: '',
+        env: { ...process.env, PATH: shimDir, Path: shimDir },
+      });
+      if (run.error) throw run.error;
+
+      expect(run.status).toBe(0);
+      expect(run.stdout).not.toContain('STATUS-NOISE');
+      const envelope = JSON.parse(run.stdout) as Envelope;
+      expect(envelope.hookSpecificOutput.hookEventName).toBe('SessionStart');
+
+      const readVerbs = (): string[] => {
+        try {
+          if (!fs.existsSync(verbsPath)) return [];
+          return fs
+            .readFileSync(verbsPath, 'utf-8')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+            .sort();
+          // totem-context: intentional [] on a read race (file mid-write) — the poll loop retries
+        } catch {
+          return [];
+        }
+      };
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline && readVerbs().length < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(readVerbs()).toEqual(['refresh-gh', 'refresh-obligation-store']);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

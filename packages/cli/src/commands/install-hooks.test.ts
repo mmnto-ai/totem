@@ -1150,6 +1150,39 @@ describe('post-merge hook fires totem-status refresh-gh', () => {
     // stamp; a stamp with nothing after it = the child never finished.
     expect(hook).toContain('(totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)');
   });
+
+  // ── slice-two residual: refresh-obligation-store beside refresh-gh ──
+  // (mmnto-ai/totem-status#127; sibling of mmnto-ai/totem#2556.) The durable
+  // obligation store gets the same post-merge moment as the GH snapshot.
+  it('also fires refresh-obligation-store under the SAME gate and log (mmnto-ai/totem-status#127)', () => {
+    const hook = buildHookContent('pnpm dlx @mmnto/cli');
+
+    // One gate, not two: both verbs live inside the single presence +
+    // primary-checkout `if`, so a worktree/non-adopter skips BOTH.
+    const gateIdx = hook.indexOf('if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then');
+    expect(gateIdx).toBeGreaterThanOrEqual(0);
+    // Anchor on the EXECUTABLE form, not the banner prose above the gate: a
+    // mutant that relocates the invocation outside the gate but leaves the
+    // comment in place must fail here.
+    expect(hook.indexOf('(totem-status refresh-obligation-store')).toBeGreaterThan(gateIdx);
+    // …and it stays inside the block, ahead of the gate's closing `fi`.
+    expect(hook.indexOf('(totem-status refresh-obligation-store')).toBeLessThan(
+      hook.indexOf('# Only sync when lessons changed'),
+    );
+    // Both arms of the log-writability branch mirror the refresh-gh pair: the
+    // logged form, and the blind fallback when the log cannot be opened.
+    expect(hook).toContain('(totem-status refresh-obligation-store >> "$TS_REFRESH_LOG" 2>&1 &)');
+    expect(hook).toContain('(totem-status refresh-obligation-store >/dev/null 2>&1 &)');
+    // The stamp NAMES the verb, so a stamp with nothing after it still reads
+    // per verb once two children share one log.
+    expect(hook).toContain('post-merge spawn cwd=%s bin=%s verb=%s');
+    expect(hook).toContain('"$(command -v totem-status | tr -d \'[:cntrl:]\')" refresh-gh');
+    expect(hook).toContain(
+      '"$(command -v totem-status | tr -d \'[:cntrl:]\')" refresh-obligation-store',
+    );
+    // The bounded owned region stays intact after the addition.
+    expect(hook.trimEnd().endsWith(`# ${TOTEM_HOOK_END}`)).toBe(true);
+  });
 });
 
 // Behavioral coverage of BOTH gate branches (falsification-leg round 1: the string
@@ -1166,9 +1199,12 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
     binDir = path.join(tmpDir, 'stub-bin');
     fs.mkdirSync(binDir);
     markerPath = path.join(tmpDir, 'refresh-fired.marker');
+    // APPEND, not truncate: the gate now fires TWO verbs from one block and the
+    // backgrounded children land in whatever order they finish — a `>` stub
+    // would race them into a last-writer-wins single line.
     fs.writeFileSync(
       path.join(binDir, 'totem-status'),
-      `#!/bin/sh\necho "$1" > "${markerPath}"\n`,
+      `#!/bin/sh\necho "$1" >> "${markerPath}"\n`,
       { mode: 0o755 },
     );
   });
@@ -1177,16 +1213,29 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
     cleanTmpDir(tmpDir);
   });
 
-  /** Wait for the marker to exist AND carry content — existence alone races
-   *  the stub's open-truncate-then-write window (observed as a CI flake:
-   *  `expected '' to be 'refresh-gh'`). */
-  function markerReady(): boolean {
+  /** The verbs the stub sidecar has been invoked with so far, sorted. Reading
+   *  CONTENT (not existence) still guards the stub's open-then-write window
+   *  (observed as a CI flake: `expected '' to be 'refresh-gh'`). */
+  function firedVerbs(): string[] {
     try {
-      return fs.existsSync(markerPath) && fs.readFileSync(markerPath, 'utf-8').trim() !== '';
-      // totem-context: intentional false on a read race (marker mid-write) — the poll loop retries
+      if (!fs.existsSync(markerPath)) return [];
+      return fs
+        .readFileSync(markerPath, 'utf-8')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .sort();
+      // totem-context: intentional [] on a read race (marker mid-write) — the poll loop retries
     } catch {
-      return false;
+      return [];
     }
+  }
+
+  /** Both verbs must land: refresh-gh AND the slice-two refresh-obligation-store. */
+  const BOTH_VERBS = ['refresh-gh', 'refresh-obligation-store'];
+
+  function markerReady(): boolean {
+    return firedVerbs().length === BOTH_VERBS.length;
   }
 
   async function markerAppears(timeoutMs: number): Promise<boolean> {
@@ -1214,7 +1263,8 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
       });
 
       expect(await markerAppears(5000)).toBe(true);
-      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
+      // BOTH verbs fired from the one gate, and nothing else did.
+      expect(firedVerbs()).toEqual(BOTH_VERBS);
 
       // #2570 observability leg: the firing left a stamp in the repo-local
       // .git log before the child ran, and bin= carries the RESOLVED path.
@@ -1223,6 +1273,10 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
       const logText = fs.readFileSync(logPath, 'utf-8');
       expect(logText).toContain('post-merge spawn cwd=');
       expect(logText).toMatch(/bin=\S*totem-status/);
+      // Each stamp NAMES its verb, so a stamp with nothing after it still reads
+      // per verb now that two children share the one log.
+      expect(logText).toContain('verb=refresh-gh');
+      expect(logText).toContain('verb=refresh-obligation-store');
     },
   );
 
@@ -1249,7 +1303,8 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
       expect(result.stderr ?? '').not.toContain('totem-status-refresh-hook.log');
 
       expect(await markerAppears(5000)).toBe(true);
-      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
+      // The blind fallback carries BOTH verbs, not just the first.
+      expect(firedVerbs()).toEqual(BOTH_VERBS);
     },
   );
 
@@ -1271,6 +1326,9 @@ describe.skipIf(process.platform === 'win32')('post-merge refresh-gh behavior (P
       });
 
       expect(await markerAppears(500)).toBe(false);
+      // The gate covers BOTH verbs — a partial leak (either one firing) is a
+      // failure here, not a pass by way of "fewer than two".
+      expect(firedVerbs()).toEqual([]);
     },
   );
 });

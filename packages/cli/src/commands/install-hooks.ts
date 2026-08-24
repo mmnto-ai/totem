@@ -174,6 +174,14 @@ ${buildResolveBlock(fallbackCmd)}
 # exit-0-or-nothing contract (single-flight, atomic rename, no-clobber when gh is
 # missing) makes blind firing safe, and the merge must never wait on it. An absent
 # binary means the sidecar is not adopted here (non-cohort consumer) — skip silently.
+# A SECOND verb rides the same gate: \`totem-status refresh-obligation-store\`
+# (mmnto-ai/totem-status#127 slice-two residual, sibling of mmnto-ai/totem#2556)
+# writes the durable obligation store beside the GH snapshot, so it gets the same
+# post-merge moment. Same presence + primary-checkout gate, same backgrounded
+# subshell, same log — and each firing stamps its own verb= field, so a stamp with
+# nothing after it still reads per verb. Blind firing stays safe there too: the
+# verb is in-process single-flight only, so it races the daemon exactly the way its
+# manual invocation already does.
 # PRIMARY checkout only ([ -d .git ]): in a linked worktree .git is a FILE, and a
 # detached child inheriting the worktree cwd holds a Windows directory lock that
 # breaks worktree removal; the primary's hooks + the daemon cover the workspace-level
@@ -194,10 +202,18 @@ if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then
   # fields pass through tr -d '[:cntrl:]' so a crafted checkout path cannot
   # forge stamp lines or inject terminal controls into the log.
   if [ -f "$TS_REFRESH_LOG" ] && [ "$(( $(wc -c < "$TS_REFRESH_LOG" 2>/dev/null || echo 0) ))" -gt 1048576 ]; then : > "$TS_REFRESH_LOG"; fi
-  if printf '[%s] post-merge spawn cwd=%s bin=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd | tr -d '[:cntrl:]')" "$(command -v totem-status | tr -d '[:cntrl:]')" 2>/dev/null >> "$TS_REFRESH_LOG"; then
+  if printf '[%s] post-merge spawn cwd=%s bin=%s verb=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd | tr -d '[:cntrl:]')" "$(command -v totem-status | tr -d '[:cntrl:]')" refresh-gh 2>/dev/null >> "$TS_REFRESH_LOG"; then
     (totem-status refresh-gh >> "$TS_REFRESH_LOG" 2>&1 &)
   else
     (totem-status refresh-gh >/dev/null 2>&1 &)
+  fi
+  # Second verb, same gate and same log. Written out rather than looped so the
+  # stamp and the backgrounded invocation each carry a literal verb — a reader of
+  # the hook (or of the log) never has to resolve a variable to know which fired.
+  if printf '[%s] post-merge spawn cwd=%s bin=%s verb=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(pwd | tr -d '[:cntrl:]')" "$(command -v totem-status | tr -d '[:cntrl:]')" refresh-obligation-store 2>/dev/null >> "$TS_REFRESH_LOG"; then
+    (totem-status refresh-obligation-store >> "$TS_REFRESH_LOG" 2>&1 &)
+  else
+    (totem-status refresh-obligation-store >/dev/null 2>&1 &)
   fi
 fi
 

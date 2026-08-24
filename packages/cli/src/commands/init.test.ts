@@ -2302,6 +2302,34 @@ describe('CLAUDE_SESSION_START template', () => {
     // …and the parent releases its fd copy after spawn (the child holds its own).
     expect(CLAUDE_SESSION_START).toContain('closeSync(logFd)');
   });
+
+  // ── slice-two residual: refresh-obligation-store beside refresh-gh ──
+  // (mmnto-ai/totem-status#127; sibling of mmnto-ai/totem#2556.)
+  it('also fires refresh-obligation-store beside refresh-gh, same gate and log', () => {
+    const storeSpawn = "spawn('totem-status', ['refresh-obligation-store']";
+    // A second spawn in the SAME block — detached+unref, and its own ENOENT-silent
+    // arm (the shared `err.code === 'ENOENT'` return) plus its own breadcrumb.
+    expect(CLAUDE_SESSION_START).toContain(storeSpawn);
+    expect(CLAUDE_SESSION_START).toContain('refreshStore.unref()');
+    expect(CLAUDE_SESSION_START).toContain('refresh-obligation-store spawn failed (non-fatal)');
+    // Inside the one primary-checkout gate…
+    expect(CLAUDE_SESSION_START.indexOf('if (primaryCheckout)')).toBeLessThan(
+      CLAUDE_SESSION_START.indexOf(storeSpawn),
+    );
+    // …still ahead of the synchronous briefings (code-anchored, per the twin above)…
+    expect(CLAUDE_SESSION_START.indexOf(storeSpawn)).toBeLessThan(
+      CLAUDE_SESSION_START.indexOf("'describe'"),
+    );
+    // …and the shared fd is released only after BOTH spawns are away: a
+    // close-between-spawns mutant would hand the second child an EBADF.
+    expect(CLAUDE_SESSION_START.indexOf(storeSpawn)).toBeLessThan(
+      CLAUDE_SESSION_START.indexOf('closeSync(logFd)'),
+    );
+    // Each stamp NAMES its verb, so a stamp with nothing after it still reads
+    // per verb once two children share the one log.
+    expect(CLAUDE_SESSION_START).toContain(' verb=refresh-gh');
+    expect(CLAUDE_SESSION_START).toContain(' verb=refresh-obligation-store');
+  });
 });
 
 describe('GEMINI_SESSION_START template', () => {
@@ -2396,6 +2424,26 @@ describe('GEMINI_SESSION_START template', () => {
       GEMINI_SESSION_START.indexOf("spawn('totem-status'"),
     );
     expect(GEMINI_SESSION_START).toContain('closeSync(logFd)');
+  });
+
+  // ── slice-two residual: refresh-obligation-store beside refresh-gh ──
+  // Vehicle parity again — the moment is "session start", not a vendor.
+  it('also fires refresh-obligation-store beside refresh-gh, matching the Claude twin', () => {
+    const storeSpawn = "spawn('totem-status', ['refresh-obligation-store']";
+    expect(GEMINI_SESSION_START).toContain(storeSpawn);
+    expect(GEMINI_SESSION_START).toContain('refreshStore.unref()');
+    expect(GEMINI_SESSION_START).toContain('refresh-obligation-store spawn failed (non-fatal)');
+    expect(GEMINI_SESSION_START.indexOf('if (primaryCheckout)')).toBeLessThan(
+      GEMINI_SESSION_START.indexOf(storeSpawn),
+    );
+    expect(GEMINI_SESSION_START.indexOf(storeSpawn)).toBeLessThan(
+      GEMINI_SESSION_START.indexOf("'totem describe'"),
+    );
+    expect(GEMINI_SESSION_START.indexOf(storeSpawn)).toBeLessThan(
+      GEMINI_SESSION_START.indexOf('closeSync(logFd)'),
+    );
+    expect(GEMINI_SESSION_START).toContain(' verb=refresh-gh');
+    expect(GEMINI_SESSION_START).toContain(' verb=refresh-obligation-store');
   });
 });
 
@@ -2855,6 +2903,27 @@ describe('PreWriteShield runtime behavior', () => {
   });
 });
 
+/**
+ * The verbs an appending stub sidecar has been invoked with so far, sorted.
+ * The session-start block fires TWO verbs (refresh-gh + the slice-two
+ * refresh-obligation-store, mmnto-ai/totem-status#127) as detached children,
+ * so the marker is read as a SET of lines rather than a single value.
+ */
+function firedVerbs(markerPath: string): string[] {
+  try {
+    if (!fs.existsSync(markerPath)) return [];
+    return fs
+      .readFileSync(markerPath, 'utf-8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .sort();
+    // totem-context: intentional [] on a read race (marker mid-write) — the poll loop retries
+  } catch {
+    return [];
+  }
+}
+
 describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
   // Fail-fast guard for the spawned hook process, matching the 30s timeout
   // the hook's own internal spawnSync uses — a stalled child must fail the
@@ -2917,9 +2986,12 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       const binDir = path.join(tmpDir, 'stub-bin');
       fs.mkdirSync(binDir);
       const markerPath = path.join(tmpDir, 'refresh-fired.marker');
+      // APPEND, not truncate: the block fires TWO verbs and the detached
+      // children land in whatever order they finish (mmnto-ai/totem-status#127
+      // slice two) — a `>` stub would race them into last-writer-wins.
       fs.writeFileSync(
         path.join(binDir, 'totem-status'),
-        `#!/bin/sh\necho "$1" > "${markerPath}"\n`,
+        `#!/bin/sh\necho "$1" >> "${markerPath}"\n`,
         { mode: 0o755 },
       );
 
@@ -2935,15 +3007,12 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       expect(result.status).toBe(0);
 
       // Wait for CONTENT, not existence — existence alone races the stub's
-      // open-truncate-then-write window (observed CI flake).
+      // open-then-write window (observed CI flake) — and for BOTH verbs.
       const deadline = Date.now() + 5000;
-      while (
-        Date.now() < deadline &&
-        !(fs.existsSync(markerPath) && fs.readFileSync(markerPath, 'utf-8').trim() !== '')
-      ) {
+      while (Date.now() < deadline && firedVerbs(markerPath).length < 2) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      expect(fs.readFileSync(markerPath, 'utf-8').trim()).toBe('refresh-gh');
+      expect(firedVerbs(markerPath)).toEqual(['refresh-gh', 'refresh-obligation-store']);
     },
   );
 
@@ -2960,7 +3029,7 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       const markerPath = path.join(tmpDir, 'refresh-fired.marker');
       fs.writeFileSync(
         path.join(binDir, 'totem-status'),
-        `#!/bin/sh\necho "$1" > "${markerPath}"\necho "refresh-done"\n`,
+        `#!/bin/sh\necho "$1" >> "${markerPath}"\necho "refresh-done"\n`,
         { mode: 0o755 },
       );
 
@@ -2989,6 +3058,13 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       const log = fs.readFileSync(logPath, 'utf-8');
       expect(log).toContain('] claude spawn cwd=');
       expect(log.indexOf('claude spawn cwd=')).toBeLessThan(log.indexOf('refresh-done'));
+      // Both stamps are written by the parent before it exits, and each NAMES
+      // its verb — two children sharing one fd would otherwise be unpairable.
+      expect(log).toContain('verb=refresh-gh');
+      expect(log).toContain('verb=refresh-obligation-store');
+      expect(log.indexOf('verb=refresh-gh')).toBeLessThan(
+        log.indexOf('verb=refresh-obligation-store'),
+      );
     },
   );
 
@@ -3008,7 +3084,7 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       const markerPath = path.join(tmpDir, 'refresh-fired.marker');
       fs.writeFileSync(
         path.join(binDir, 'totem-status'),
-        `#!/bin/sh\necho "$1" > "${markerPath}"\n`,
+        `#!/bin/sh\necho "$1" >> "${markerPath}"\n`,
         { mode: 0o755 },
       );
 
@@ -3023,12 +3099,15 @@ describe('CLAUDE_SESSION_START runtime behavior (A.3.a ledger write)', () => {
       });
       expect(result.status).toBe(0);
       expect(result.stderr).not.toContain('refresh-gh');
+      expect(result.stderr).not.toContain('refresh-obligation-store');
 
+      // The blind fallback carries BOTH verbs: an unwritable log must not cost
+      // the second spawn either.
       const deadline = Date.now() + 5000;
-      while (Date.now() < deadline && !fs.existsSync(markerPath)) {
+      while (Date.now() < deadline && firedVerbs(markerPath).length < 2) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      expect(fs.existsSync(markerPath)).toBe(true);
+      expect(firedVerbs(markerPath)).toEqual(['refresh-gh', 'refresh-obligation-store']);
     },
   );
 
