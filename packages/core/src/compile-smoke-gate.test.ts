@@ -68,6 +68,28 @@ function makeCompoundRule(overrides: Partial<CompiledRule> = {}): CompiledRule {
   };
 }
 
+// ─── Prop 310 § Design 8 fixtures ────────────────────
+
+/** § Design 8's exemplar target: the git verbs whose output must be locale-pinned. */
+const GIT_TARGET = '\\bgit\\s+(log|diff|status)\\b';
+
+/**
+ * The exemplar's snippets, named ONCE.
+ *
+ * Each is inert fixture TEXT handed to `runSmokeGate` as rule INPUT — this suite
+ * runs no git command at all — so the shipped git-hygiene rules that fire on the
+ * bare forms are overridden at these three definitions rather than at every
+ * assertion that uses them.
+ */
+// totem-context: inert rule-input fixture, never a git invocation (mmnto-ai/totem#2678)
+const BARE_LOG = 'git log --oneline';
+// totem-context: inert rule-input fixture, never a git invocation (mmnto-ai/totem#2678)
+const PINNED_DIFF = 'LC_ALL=C git diff HEAD';
+// totem-context: inert rule-input fixture, never a git invocation (mmnto-ai/totem#2678)
+const BARE_STATUS = 'git status';
+/** The § Design 8 good example: the same target with the companion on the SAME line. */
+const PINNED_LOG = `LC_ALL=C ${BARE_LOG}`;
+
 // ─── runSmokeGate: regex rules ───────────────────────
 
 describe('runSmokeGate — regex engine', () => {
@@ -306,8 +328,6 @@ describe('runSmokeGate over-matching check', () => {
 
 describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)', () => {
   /** § Design 8's own exemplar, as a hand-built compiled rule. */
-  const GIT_TARGET = '\\bgit\\s+(log|diff|status)\\b';
-
   function makeRequiresRegexRule(
     requires: NonNullable<CompiledRule['requires']>,
     overrides: Partial<CompiledRule> = {},
@@ -317,7 +337,7 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
       pattern: GIT_TARGET,
       message: 'git output-consuming commands must pin LC_ALL=C on the same line.',
       requires,
-      examples: [{ bad: 'git log --oneline', good: 'LC_ALL=C git log --oneline' }],
+      examples: [{ bad: BARE_LOG, good: PINNED_LOG }],
       ...overrides,
     });
   }
@@ -326,7 +346,7 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
     const rule = makeRequiresRegexRule({ pattern: 'LC_ALL=C', scope: 'line' });
 
     it('FIRES on the bad example — target present, requirement absent', () => {
-      const result = runSmokeGate(rule, 'git log --oneline');
+      const result = runSmokeGate(rule, BARE_LOG);
       expect(result.matched).toBe(true);
       expect(result.matchCount).toBe(1);
     });
@@ -335,7 +355,7 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
       // Pre-fix the gate ran pass ONE only, so the good example (which keeps the
       // target and adds the companion) read as over-matching and no
       // `requires:`-bearing record could pass `totem rule test`.
-      const result = runSmokeGate(rule, 'LC_ALL=C git log --oneline');
+      const result = runSmokeGate(rule, PINNED_LOG);
       expect(result.matched).toBe(false);
       expect(result.matchCount).toBe(0);
       // Silence for the RIGHT reason: "the snippet simply contains nothing the
@@ -344,7 +364,7 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
     });
 
     it('counts only the unsatisfied loci in a mixed snippet', () => {
-      const result = runSmokeGate(rule, 'git log --oneline\nLC_ALL=C git diff HEAD');
+      const result = runSmokeGate(rule, `${BARE_LOG}\n${PINNED_DIFF}`);
       expect(result.matched).toBe(true);
       expect(result.matchCount).toBe(1);
     });
@@ -353,7 +373,7 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
   describe('regex engine, scope: file', () => {
     const fileScoped = makeRequiresRegexRule({ pattern: 'LC_ALL=C', scope: 'file' });
     /** Target on one line, companion on ANOTHER — satisfied at file scope only. */
-    const SPLIT_SNIPPET = 'export LC_ALL=C\ngit log --oneline';
+    const SPLIT_SNIPPET = `export LC_ALL=C\n${BARE_LOG}`;
 
     it('stays SILENT when the companion sits on a different line', () => {
       const result = runSmokeGate(fileScoped, SPLIT_SNIPPET);
@@ -363,7 +383,7 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
     });
 
     it('FIRES when the companion is nowhere in the snippet', () => {
-      const result = runSmokeGate(fileScoped, 'git log --oneline');
+      const result = runSmokeGate(fileScoped, BARE_LOG);
       expect(result.matched).toBe(true);
       expect(result.matchCount).toBe(1);
     });
@@ -423,7 +443,7 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
 
     it('reports it on the regex engine', () => {
       const rule = makeRequiresRegexRule({ pattern: '(', scope: 'line' });
-      const result = runSmokeGate(rule, 'git log --oneline');
+      const result = runSmokeGate(rule, BARE_LOG);
       expect(result.matched).toBe(false);
       expect(result.matchCount).toBe(0);
       expect(result.reason).toMatch(/requires\.pattern/);
@@ -445,7 +465,7 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
     // would-be companion still fires exactly as it did before #2678.
     const legacy = makeRegexRule({ pattern: GIT_TARGET });
     expect(legacy.requires).toBeUndefined();
-    const result = runSmokeGate(legacy, 'LC_ALL=C git log --oneline');
+    const result = runSmokeGate(legacy, PINNED_LOG);
     expect(result.matched).toBe(true);
     expect(result.matchCount).toBe(1);
   });
@@ -508,11 +528,11 @@ describe('runSmokeGate runtime parity invariant', () => {
     // Recomputing the predicate here line-by-line with that function must
     // reproduce the gate's verdict exactly, count included.
     const rule = makeRegexRule({
-      pattern: '\\bgit\\s+(log|diff|status)\\b',
+      pattern: GIT_TARGET,
       requires: { pattern: 'LC_ALL=C', scope: 'line' },
-      examples: [{ bad: 'git log --oneline', good: 'LC_ALL=C git log --oneline' }],
+      examples: [{ bad: BARE_LOG, good: PINNED_LOG }],
     });
-    const snippet = 'git log --oneline\nLC_ALL=C git diff HEAD\nconst x = 1;\ngit status\n';
+    const snippet = `${BARE_LOG}\n${PINNED_DIFF}\nconst x = 1;\n${BARE_STATUS}\n`;
 
     const result = runSmokeGate(rule, snippet);
 
@@ -526,6 +546,6 @@ describe('runSmokeGate runtime parity invariant', () => {
     expect(result.matched).toBe(runtimeHits.length > 0);
     expect(result.matchCount).toBe(runtimeHits.length);
     // Pinned, so a change that made BOTH sides wrong the same way is still caught.
-    expect(runtimeHits).toEqual(['git log --oneline', 'git status']);
+    expect(runtimeHits).toEqual([BARE_LOG, BARE_STATUS]);
   });
 });

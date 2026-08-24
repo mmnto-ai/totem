@@ -165,12 +165,14 @@ function runAstGrepGate(
   const lineNumbers = lineNumbersFor(snippet);
   let lastReason: string | undefined;
   for (const ext of inferBadExampleExts(rule)) {
-    let matches: AstGrepMatch[];
+    // Seeded EMPTY so a throwing extension needs no statement inside the catch:
+    // the filter below yields nothing, the loop moves to the next extension, and
+    // the shipped degrade-to-`lastReason` behaviour is unchanged.
+    let matches: AstGrepMatch[] = [];
     try {
       matches = matchAstGrepPattern(snippet, ext, pattern, lineNumbers);
     } catch (err) {
       lastReason = `ast-grep runtime error: ${firstLine(err instanceof Error ? err.message : String(err))}`;
-      continue;
     }
     // § Design 8 pass two, OUTSIDE the engine try/catch on purpose: a
     // `requires.pattern` that will not compile is not an ast-grep runtime error
