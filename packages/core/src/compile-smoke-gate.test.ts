@@ -442,6 +442,77 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
     });
   });
 
+  // ── `lastReason` fall-through under the requires filter (bot round 1) ──
+  //
+  // CodeRabbit asked whether one extension can THROW while another returns
+  // matches that the requirement then SUPPRESSES, and noted the PR's evidence
+  // did not establish such an input. It does exist, and this is it: the pattern
+  // below is MULTI-ROOT under the TypeScript grammar (which has no JSX) and
+  // single-root under TSX, so `.ts` throws "Multiple AST nodes are detected"
+  // while `.tsx` parses it and matches the JSX snippet.
+  //
+  // Two constraints shape the construction, and are worth stating so the next
+  // reader does not re-derive them:
+  //   - `requires.scope` must be `file` here — `assertNoAstGrepLineScope`
+  //     refuses `line` on an ast-grep rule, so a per-locus companion is not
+  //     expressible;
+  //   - at `file` scope suppression is a property of the SNIPPET, not of the
+  //     match, so the companion silences every extension's matches at once. A
+  //     variant where ext A is suppressed and ext B is not is therefore NOT
+  //     constructible for ast-grep at all.
+  describe('lastReason fall-through under the requires filter (mmnto-ai/totem#2681)', () => {
+    const JSX_PATTERN = '<div>{console.log($$$)}</div>';
+    const JSX_SNIPPET = 'const el = <div>{console.log("hi")}</div>;\n';
+    const COMPANION = '// debug-ok\n';
+
+    /** `.ts` first, `.tsx` second — the throwing grammar is tried first. */
+    function jsxRule(overrides: Partial<CompiledRule> = {}): CompiledRule {
+      return makeAstGrepStringRule({
+        astGrepPattern: JSX_PATTERN,
+        fileGlobs: ['**/*.ts', '**/*.tsx'],
+        requires: { pattern: '// debug-ok', scope: 'file' },
+        examples: [{ bad: JSX_SNIPPET, good: COMPANION + JSX_SNIPPET }],
+        ...overrides,
+      });
+    }
+
+    it('keeps a throwing extension reason when a LATER extension matches but is fully suppressed', () => {
+      const result = runSmokeGate(jsxRule(), COMPANION + JSX_SNIPPET);
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      // PINNED as current behaviour, not asserted as ideal: `.tsx` did evaluate,
+      // and the requirement WAS satisfied, yet the reason reported is `.ts`'s
+      // engine throw. The gate keeps `lastReason` because a pattern that cannot
+      // compile under a DECLARED extension is a real defect worth surfacing —
+      // the requires filter neither masks it nor replaces it. Callers read the
+      // good-example leg off `matched` alone, so this reason only ever appears
+      // in the `bad did not fire (...)` line, where it is the useful fact.
+      expect(result.reason).toMatch(/ast-grep runtime error/);
+      expect(result.reason).toMatch(/Multiple AST nodes/);
+    });
+
+    it('FIRES on the same rule and snippet with the companion removed', () => {
+      // The falsifier for the test above: without this, that one could pass
+      // because EVERY extension threw and nothing was ever suppressed. Here the
+      // `.tsx` leg demonstrably matches, so the fall-through above really is the
+      // requires filter emptying a non-empty match set.
+      const result = runSmokeGate(jsxRule(), JSX_SNIPPET);
+      expect(result.matched).toBe(true);
+      expect(result.matchCount).toBe(1);
+      expect(result.reason).toBeUndefined();
+    });
+
+    it('keeps the reason when EVERY extension throws and `requires` is present', () => {
+      // The degenerate arm: a bare `catch` clause is multi-root under every
+      // grammar in the set, so no extension ever produces a match to filter.
+      const rule = jsxRule({ astGrepPattern: 'catch ($E) { $$$ }' });
+      const result = runSmokeGate(rule, COMPANION + 'try { work() } catch (err) {}\n');
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toMatch(/ast-grep runtime error/);
+    });
+  });
+
   describe('the evaluator’s PRECONDITIONS are enforced, never propagated', () => {
     // Each of these is refused by a runtime dispatcher before any
     // `requiresSuppressesMatch` runs. A gate that skipped them would ACCEPT a

@@ -275,14 +275,17 @@ export function runSmokeGate(rule: CompiledRule, snippet: string): SmokeGateResu
     // these would crash `totem rule test` instead of reporting the rule as
     // unusable; each message already names the construct at fault
     // (`requires.pattern` / `requires.scope: line` / `examples`), so the prefix
-    // stays generic rather than claiming a cause it did not check. Mirrors the
+    // names no construct of its own. That is load-bearing, not stylistic:
+    // `assertNoTornRecordRules` runs on EVERY rule, so this handler also fronts
+    // rules carrying no `requires` block at all, and a `requires`-specific prefix
+    // would misname exactly that case (CodeRabbit, bot round 1). Mirrors the
     // `invalid regex:` shape the target pattern already gets. Anything else is a
     // real bug: rethrow.
     if (err instanceof TotemParseError) {
       return {
         matched: false,
         matchCount: 0,
-        reason: `requires precondition failed: ${firstLine(err.message)}`,
+        reason: `rule precondition failed: ${firstLine(err.message)}`,
       };
     }
     throw err;
