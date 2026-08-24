@@ -180,7 +180,10 @@ try {
     }
   }
 } catch (err) {
-  process.stderr.write('[SessionStart] totem-status refresh-gh unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\n');
+  // Block-level breadcrumb: this catch covers the whole gated block, so neither
+  // verb fired — it names the SIDECAR, not one verb. The per-spawn breadcrumbs
+  // inside still name their own verb.
+  process.stderr.write('[SessionStart] totem-status sidecar refresh unavailable (non-fatal): ' + (err instanceof Error ? err.message : String(err)) + '\n');
 }
 
 // ─── totem describe briefing (existing behavior) ────────────────

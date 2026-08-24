@@ -2329,6 +2329,13 @@ describe('CLAUDE_SESSION_START template', () => {
     // per verb once two children share the one log.
     expect(CLAUDE_SESSION_START).toContain(' verb=refresh-gh');
     expect(CLAUDE_SESSION_START).toContain(' verb=refresh-obligation-store');
+    // The BLOCK-level catch covers a block that fires BOTH verbs — neither ran
+    // — so its breadcrumb names the sidecar, not one verb. The per-spawn
+    // breadcrumbs asserted above still name theirs.
+    expect(CLAUDE_SESSION_START).toContain(
+      '[SessionStart] totem-status sidecar refresh unavailable (non-fatal)',
+    );
+    expect(CLAUDE_SESSION_START).not.toContain('refresh-gh unavailable (non-fatal)');
   });
 });
 
@@ -2444,6 +2451,11 @@ describe('GEMINI_SESSION_START template', () => {
     );
     expect(GEMINI_SESSION_START).toContain(' verb=refresh-gh');
     expect(GEMINI_SESSION_START).toContain(' verb=refresh-obligation-store');
+    // Block-level breadcrumb names the sidecar, matching the Claude twin.
+    expect(GEMINI_SESSION_START).toContain(
+      '[SessionStart] totem-status sidecar refresh unavailable (non-fatal)',
+    );
+    expect(GEMINI_SESSION_START).not.toContain('refresh-gh unavailable (non-fatal)');
   });
 });
 
