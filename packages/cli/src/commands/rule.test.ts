@@ -511,7 +511,6 @@ describe('rule test', () => {
           severity: 'warning',
           fileGlobs: ['**/*.sh', '**/*.cjs'],
           requires: { pattern: 'LC_ALL=C', scope: 'line' },
-          // totem-context: inert rule-input fixture, never a git invocation (mmnto-ai/totem#2678)
           examples: [{ bad: 'git log --oneline', good: 'LC_ALL=C git log --oneline' }],
           compiledAt: '2026-08-24T00:00:00.000Z',
           createdAt: '2026-08-24T00:00:00.000Z',

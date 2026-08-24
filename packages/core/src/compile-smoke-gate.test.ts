@@ -3,10 +3,11 @@ import { stringify as yamlStringify } from 'yaml';
 
 import { matchAstGrepPattern } from './ast-grep-query.js';
 import { runSmokeGate } from './compile-smoke-gate.js';
-import type { CompiledRule } from './compiler-schema.js';
+import type { CompiledRule, DiffAddition } from './compiler-schema.js';
+import type { RuleEngineContext } from './rule-engine.js';
+import { applyAstRulesToAdditions, applyRulesToAdditions } from './rule-engine.js';
 import { design8ExemplarRecord } from './spine/record-exemplars.fixture.js';
 import { compileRuleRecord } from './spine/record-lower.js';
-import { requiresSuppressesMatch } from './spine/record-runtime.js';
 import { parseRuleRecord } from './spine/rule-record.js';
 
 // ─── Helpers ────────────────────────────────────────
@@ -76,17 +77,15 @@ const GIT_TARGET = '\\bgit\\s+(log|diff|status)\\b';
 /**
  * The exemplar's snippets, named ONCE.
  *
- * Each is inert fixture TEXT handed to `runSmokeGate` as rule INPUT — this suite
- * runs no git command at all — so the shipped git-hygiene rules that fire on the
- * bare forms are overridden at these three definitions rather than at every
- * assertion that uses them.
+ * Each is inert fixture TEXT handed to `runSmokeGate` as rule INPUT — neither
+ * this suite nor the dispatcher drive below runs a git command. The shipped
+ * git-hygiene lessons that fire on the bare forms are ADVISORY here (regex
+ * engine, no `ruleClass` ⇒ not hard-tier ⇒ excluded from the lint exit code), so
+ * they are left to report rather than overridden; hoisting keeps them to one
+ * finding per distinct literal.
  */
-// totem-context: inert rule-input fixture, never a git invocation (mmnto-ai/totem#2678)
 const BARE_LOG = 'git log --oneline';
-// totem-context: inert rule-input fixture, never a git invocation (mmnto-ai/totem#2678)
 const PINNED_DIFF = 'LC_ALL=C git diff HEAD';
-// totem-context: inert rule-input fixture, never a git invocation (mmnto-ai/totem#2678)
-const BARE_STATUS = 'git status';
 /** The § Design 8 good example: the same target with the companion on the SAME line. */
 const PINNED_LOG = `LC_ALL=C ${BARE_LOG}`;
 
@@ -417,11 +416,15 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
   });
 
   describe('ast-grep compound (astGrepYamlRule), scope: file', () => {
-    const rule = makeCompoundRule({
-      requires: { pattern: 'intentionally empty', scope: 'file' },
-    });
     const BAD = 'try {\n  work();\n} catch (err) {\n}\n';
     const GOOD = '// catch is intentionally empty — see the ticket\n' + BAD;
+    const rule = makeCompoundRule({
+      requires: { pattern: 'intentionally empty', scope: 'file' },
+      // `examples` is non-optional for a `requires:` rule: without it the rule is
+      // TORN (a § Design 12 home with no discriminator) and the gate's
+      // `assertNoTornRecordRules` precondition refuses it, as the runtime does.
+      examples: [{ bad: BAD, good: GOOD }],
+    });
 
     it('FIRES on the bad example', () => {
       const result = runSmokeGate(rule, BAD);
@@ -437,11 +440,14 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
     });
   });
 
-  describe('an unusable requires.pattern is reported, never propagated', () => {
-    // Unreachable from a compiled record — the lowering runs the same
-    // safe-regex2 gate — but reachable from a hand-built `CompiledRule`.
+  describe('the evaluator’s PRECONDITIONS are enforced, never propagated', () => {
+    // Each of these is refused by a runtime dispatcher before any
+    // `requiresSuppressesMatch` runs. A gate that skipped them would ACCEPT a
+    // rule the runtime rejects — the exact divergence this module rules out.
+    // All are unreachable from a compiled record (the lowering gates them) and
+    // reachable from a hand-built `CompiledRule` or a hand-edited manifest.
 
-    it('reports it on the regex engine', () => {
+    it('reports an uncompilable requires.pattern on the regex engine', () => {
       const rule = makeRequiresRegexRule({ pattern: '(', scope: 'line' });
       const result = runSmokeGate(rule, BARE_LOG);
       expect(result.matched).toBe(false);
@@ -450,13 +456,67 @@ describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)',
     });
 
     it('reports it on the ast-grep engine too — one handler, both engines', () => {
-      const rule = makeAstGrepStringRule({ requires: { pattern: '(', scope: 'file' } });
+      const rule = makeAstGrepStringRule({
+        requires: { pattern: '(', scope: 'file' },
+        examples: [{ bad: 'debugger;\n', good: 'const x = 1;\n' }],
+      });
       const result = runSmokeGate(rule, 'debugger;\n');
       expect(result.matched).toBe(false);
       expect(result.matchCount).toBe(0);
       expect(result.reason).toMatch(/requires\.pattern/);
       // NOT mislabelled as an engine throw: the requirement is not ast-grep's.
       expect(result.reason).not.toMatch(/ast-grep runtime error/);
+    });
+
+    it('refuses an UNSAFE-but-compilable requires.pattern instead of backtracking on it', () => {
+      // `(a+)+$` compiles fine and is a catastrophic backtracker. Measured before
+      // the precondition landed: 86 SECONDS inside `runSmokeGate` on this input,
+      // reachable straight from `totem rule test` (`loadRulesOrExit` runs no
+      // safe-regex2 pass of its own). `assertRequiresPatternsSafe` is the same
+      // check the compile path and every dispatcher apply.
+      const rule = makeRegexRule({
+        requires: { pattern: '(a+)+$', scope: 'line' },
+        examples: [{ bad: 'console.log(1)', good: 'logger.info(1)' }],
+      });
+      const snippet = 'console.log(1) ' + 'a'.repeat(34) + '!';
+
+      const startedAt = Date.now();
+      const result = runSmokeGate(rule, snippet);
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toMatch(/requires\.pattern/);
+      // The point of the assertion is the REFUSAL, not the wording: a gate that
+      // evaluated this pattern would still be running.
+      expect(elapsedMs).toBeLessThan(2000);
+    });
+
+    it('refuses ast-grep + requires.scope: line, which the runtime refuses too', () => {
+      // An ast-grep match is a SPAN; reading it as its start line makes the
+      // verdict depend on how the author wrapped their source. The lowering
+      // rejects the combination and `assertNoAstGrepLineScope` backstops it at
+      // every dispatcher — pre-cure this rule PASSED the gate.
+      const rule = makeAstGrepStringRule({
+        requires: { pattern: '// debug-ok', scope: 'line' },
+        examples: [{ bad: 'debugger;\n', good: 'debugger; // debug-ok\n' }],
+      });
+      const result = runSmokeGate(rule, 'debugger;\n');
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toMatch(/requires\.scope: line/);
+    });
+
+    it('refuses a TORN rule — `requires` present, `examples` absent', () => {
+      // `isRecordPathRule` keys on `examples`, so this rule would read as LEGACY
+      // and have its requirement silently unevaluated. § Design 12 bans the
+      // silence, not just the unsafe direction.
+      const torn = makeRegexRule({ requires: { pattern: 'LC_ALL=C', scope: 'line' } });
+      expect(torn.examples).toBeUndefined();
+      const result = runSmokeGate(torn, 'console.log(1)');
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toMatch(/examples/);
     });
   });
 
@@ -521,31 +581,104 @@ describe('runSmokeGate runtime parity invariant', () => {
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('uses the runtime’s OWN § Design 8 evaluator — gate verdict equals the runtime predicate', () => {
-    // The parity claim for `requires:` (mmnto-ai/totem#2678): the gate does not
-    // reimplement pass two, it calls `requiresSuppressesMatch` — the same
-    // function `rule-engine.ts` and `regex-safety/apply-rules-bounded.ts` call.
-    // Recomputing the predicate here line-by-line with that function must
-    // reproduce the gate's verdict exactly, count included.
-    const rule = makeRegexRule({
-      pattern: GIT_TARGET,
-      requires: { pattern: 'LC_ALL=C', scope: 'line' },
-      examples: [{ bad: BARE_LOG, good: PINNED_LOG }],
+  // ── § Design 8 parity, driven through the REAL dispatchers ──
+  //
+  // The parity claim for `requires:` (mmnto-ai/totem#2678) is that the gate's
+  // verdict equals `totem lint`'s. Recomputing the predicate in the test body
+  // with `requiresSuppressesMatch` could not establish that: it re-implemented
+  // `runRegexGate` and agreed with the gate whether or not the gate agreed with
+  // the dispatcher — it passed green while the gate was accepting rules the
+  // dispatchers refuse. So these drive `applyRulesToAdditions` and
+  // `applyAstRulesToAdditions` themselves and compare COUNTS.
+  //
+  // Both dispatchers take an injected reader, so no snippet is ever written to
+  // disk: the `scope: file` resolver sees exactly the bytes the gate saw.
+
+  /** One `DiffAddition` per snippet line, as a diff of a wholly-new file produces. */
+  function additionsFor(snippet: string, file: string): DiffAddition[] {
+    const lines = snippet.split('\n');
+    return lines.map((line, i) => ({
+      file,
+      line,
+      lineNumber: i + 1,
+      precedingLine: i === 0 ? null : lines[i - 1]!,
+    }));
+  }
+
+  function engineCtx(): RuleEngineContext {
+    return { logger: { warn: () => {} }, state: { hasWarnedShieldContext: false } };
+  }
+
+  it('gate matchCount equals the REGEX dispatcher’s violation count, at both scopes', () => {
+    const SH_FILE = 'tools/lint.sh';
+    const MIXED = `${BARE_LOG}\n${PINNED_DIFF}`;
+    // `expected` is PINNED, not derived from either side: an agreement of two
+    // zeroes would otherwise satisfy the equality without exercising anything.
+    // The two scopes disagree on MIXED — at `line` the bare locus still fires,
+    // at `file` the companion anywhere in the snippet silences both — so this
+    // also pins that the scope distinction survives the dispatcher.
+    const cases = [
+      { name: 'bad — target only', snippet: BARE_LOG, line: 1, file: 1 },
+      { name: 'good — companion on the SAME line', snippet: PINNED_LOG, line: 0, file: 0 },
+      { name: 'mixed — one bare locus, one companioned', snippet: MIXED, line: 1, file: 0 },
+    ];
+
+    for (const scope of ['line', 'file'] as const) {
+      const rule = makeRegexRule({
+        lessonHeading: 'git output-consuming commands must pin LC_ALL=C',
+        pattern: GIT_TARGET,
+        requires: { pattern: 'LC_ALL=C', scope },
+        fileGlobs: ['**/*.sh'],
+        examples: [{ bad: BARE_LOG, good: PINNED_LOG }],
+      });
+
+      for (const c of cases) {
+        const where = `${scope} / ${c.name}`;
+        const expected = c[scope];
+        const gate = runSmokeGate(rule, c.snippet);
+        const violations = applyRulesToAdditions(
+          engineCtx(),
+          [rule],
+          additionsFor(c.snippet, SH_FILE),
+          undefined,
+          process.cwd(),
+          // The § Design 8 `scope: file` resolver, fed the snippet instead of a
+          // disk read — the same seam `totem lint --staged` uses for the index.
+          () => c.snippet,
+        );
+        expect(gate.matchCount, where).toBe(expected);
+        expect(violations.length, where).toBe(expected);
+        expect(gate.matched, where).toBe(violations.length > 0);
+      }
+    }
+  });
+
+  it('gate matchCount equals the AST-GREP dispatcher’s violation count', async () => {
+    const TS_FILE = 'src/fixture.ts';
+    const rule = makeAstGrepStringRule({
+      requires: { pattern: '// debug-ok', scope: 'file' },
+      fileGlobs: ['**/*.ts'],
+      examples: [{ bad: 'debugger;\n', good: '// debug-ok\ndebugger;\n' }],
     });
-    const snippet = `${BARE_LOG}\n${PINNED_DIFF}\nconst x = 1;\n${BARE_STATUS}\n`;
+    const cases = [
+      { snippet: 'debugger;\n', expected: 1 },
+      { snippet: '// debug-ok\ndebugger;\n', expected: 0 },
+    ];
 
-    const result = runSmokeGate(rule, snippet);
-
-    const re = new RegExp(rule.pattern);
-    const runtimeHits = snippet
-      .split('\n')
-      .filter(
-        (line) => re.test(line) && !requiresSuppressesMatch(rule, { line, file: () => snippet }),
+    for (const { snippet, expected } of cases) {
+      const gate = runSmokeGate(rule, snippet);
+      const violations = await applyAstRulesToAdditions(
+        engineCtx(),
+        [rule],
+        additionsFor(snippet, TS_FILE),
+        process.cwd(),
+        undefined,
+        undefined,
+        () => Promise.resolve(snippet),
       );
-
-    expect(result.matched).toBe(runtimeHits.length > 0);
-    expect(result.matchCount).toBe(runtimeHits.length);
-    // Pinned, so a change that made BOTH sides wrong the same way is still caught.
-    expect(runtimeHits).toEqual([BARE_LOG, BARE_STATUS]);
+      expect(gate.matchCount, snippet).toBe(expected);
+      expect(violations.length, snippet).toBe(expected);
+      expect(gate.matched, snippet).toBe(violations.length > 0);
+    }
   });
 });

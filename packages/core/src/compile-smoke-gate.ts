@@ -27,6 +27,15 @@
  * and are byte-identical by construction — every call site is guarded on
  * `rule.requires !== undefined` so no legacy rule pays a second test.
  *
+ * Borrowing the evaluator means borrowing its PRECONDITIONS: `runSmokeGate` runs
+ * `assertNoTornRecordRules` / `assertRequiresPatternsSafe` /
+ * `assertNoAstGrepLineScope` on a `requires:`-bearing rule before evaluating it,
+ * exactly as every runtime dispatcher does at invocation altitude. Without them
+ * the gate ACCEPTED rules the runtime refuses — an unsafe-but-compilable
+ * `requires.pattern` that backtracks catastrophically, and `ast-grep` +
+ * `requires.scope: line` — which is the same gate-vs-runtime divergence this
+ * module exists to rule out.
+ *
  * Not wired to Pipeline 1 (manual) rules in mmnto/totem#1408 - a dry-run
  * sweep lands in a follow-up ticket before the Pipeline 1 gate flips on.
  */
@@ -35,7 +44,12 @@ import type { AstGrepMatch, AstGrepRule } from './ast-grep-query.js';
 import { matchAstGrepPattern, TRAILING_EXT_RE } from './ast-grep-query.js';
 import type { CompiledRule } from './compiler-schema.js';
 import { TotemParseError } from './errors.js';
-import { requiresSuppressesMatch } from './spine/record-runtime.js';
+import {
+  assertNoAstGrepLineScope,
+  assertNoTornRecordRules,
+  assertRequiresPatternsSafe,
+  requiresSuppressesMatch,
+} from './spine/record-runtime.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -211,20 +225,44 @@ export function runSmokeGate(rule: CompiledRule, snippet: string): SmokeGateResu
   }
 
   try {
+    if (rule.requires !== undefined) {
+      // The evaluator's PRECONDITIONS, taken with the evaluator (Tenet 20: a
+      // borrowed function borrows its contract too). Every runtime dispatcher
+      // runs these three at invocation altitude before any
+      // `requiresSuppressesMatch` — `rule-engine.ts` for both the regex and the
+      // ast paths, `regex-safety/apply-rules-bounded.ts` for the bounded one —
+      // so a gate that skipped them accepted rules the runtime REFUSES:
+      //   - an unsafe-but-compilable `requires.pattern` (`(a+)+$`) that runs to
+      //     catastrophic backtracking here, unbounded, against whole-snippet
+      //     text — `totem rule test` reaches this with no safe-regex2 pass of
+      //     its own;
+      //   - `ast-grep` + `requires.scope: line`, which the lowering rejects and
+      //     `assertNoAstGrepLineScope` refuses at runtime;
+      //   - a TORN rule carrying `requires` with no `examples`, which
+      //     `isRecordPathRule` would silently class as legacy.
+      // Guarded on `requires` because it is the ONLY § Design 12 home this gate
+      // reads: a rule with no requirement reaches no evaluator here, so the torn
+      // check has nothing to protect and legacy rules stay byte-identical.
+      assertNoTornRecordRules([rule]);
+      assertRequiresPatternsSafe([rule]);
+      assertNoAstGrepLineScope([rule]);
+    }
     return dispatchEngineGate(rule, snippet);
   } catch (err) {
-    // The ONE handler for § Design 8's fail-loud arm, shared by both engines:
-    // `requiresSuppressesMatch` throws `TotemParseError` on an uncompilable
-    // `requires.pattern`. Unreachable from a compiled record — the lowering runs
-    // the same safe-regex2 gate — but reachable from a hand-built `CompiledRule`,
-    // and a gate that propagated it would crash `totem rule test` instead of
-    // reporting the rule as unusable. Mirrors the `invalid regex:` shape the
-    // target pattern already gets. Anything else is a real bug: rethrow.
+    // The ONE handler for § Design 8's fail-loud arm, shared by all three
+    // preconditions and by both engines' evaluation (`requiresSuppressesMatch`
+    // throws the same type on an uncompilable pattern). A gate that propagated
+    // any of them would crash `totem rule test` instead of reporting the rule as
+    // unusable; each message already names the construct at fault
+    // (`requires.pattern` / `requires.scope: line` / `examples`), so the prefix
+    // stays generic rather than claiming a cause it did not check. Mirrors the
+    // `invalid regex:` shape the target pattern already gets. Anything else is a
+    // real bug: rethrow.
     if (err instanceof TotemParseError) {
       return {
         matched: false,
         matchCount: 0,
-        reason: `invalid requires.pattern: ${firstLine(err.message)}`,
+        reason: `requires precondition failed: ${firstLine(err.message)}`,
       };
     }
     throw err;
