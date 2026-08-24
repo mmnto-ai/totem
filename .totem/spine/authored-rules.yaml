@@ -1,0 +1,10 @@
+splitRef: 'greenfield-draw3-1.119.0-no-frozen-split'
+authoredAfterSplit: true
+heldOutNonInspectionAttestation: true
+rules:
+  - author: totem-claude
+    authoredAt: '2026-08-24T22:22:08Z'
+    targetDefect: 'A totem-ignore suppression directive without a ticket reference on the same line.'
+    structuralClass: 'suppression-missing-ticket-ref'
+    record: .totem/rules/totem-ignore-needs-ticket-ref.rule.yaml
+    positiveFixtures: []
