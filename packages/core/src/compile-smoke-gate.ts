@@ -14,13 +14,28 @@
  * input. Any divergence between "smoke gate happy" and "runtime happy" is a
  * bug in this module, not a rule authoring problem.
  *
+ * Prop 310 § Design 8 PASS TWO (mmnto-ai/totem#2678): the match predicate is
+ * "the target matched AND the required context is ABSENT", so a gate that ran
+ * only pass one WAS that divergence — a `requires:`-bearing record's `good`
+ * example keeps the target and adds the companion, so the gate read it as
+ * over-matching and no such record could pass `totem rule test` or the ADR-112
+ * §4 preimage differential. The gate therefore evaluates the requirement with
+ * the RUNTIME'S OWN evaluator (`requiresSuppressesMatch`, `spine/record-runtime.ts`)
+ * — the same function `rule-engine.ts` and `regex-safety/apply-rules-bounded.ts`
+ * call. One evaluator, never a second implementation of § Design 8 living here
+ * (Tenet 20: derive or couple, never mirror). Legacy rules carry no `requires`
+ * and are byte-identical by construction — every call site is guarded on
+ * `rule.requires !== undefined` so no legacy rule pays a second test.
+ *
  * Not wired to Pipeline 1 (manual) rules in mmnto/totem#1408 - a dry-run
  * sweep lands in a follow-up ticket before the Pipeline 1 gate flips on.
  */
 
-import type { AstGrepRule } from './ast-grep-query.js';
+import type { AstGrepMatch, AstGrepRule } from './ast-grep-query.js';
 import { matchAstGrepPattern, TRAILING_EXT_RE } from './ast-grep-query.js';
 import type { CompiledRule } from './compiler-schema.js';
+import { TotemParseError } from './errors.js';
+import { requiresSuppressesMatch } from './spine/record-runtime.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -53,12 +68,34 @@ function lineNumbersFor(snippet: string): number[] {
   return result;
 }
 
+/**
+ * Prop 310 § Design 8 pass two at ONE target-match locus, for the gate.
+ *
+ * The snippet IS the file for a gate run — the exemplar is the whole text the
+ * rule is being asked about — so `scope: file` resolves to the entire snippet
+ * and `scope: line` to the matched line. The `file` resolver is the snippet
+ * itself rather than a read, which is what makes the gate PURE where the runtime
+ * dispatchers hand `requiresSuppressesMatch` a lazy disk read.
+ *
+ * Guarded on `rule.requires !== undefined` so a legacy rule never pays a second
+ * `re.test`, and so this is provably a no-op for the frozen 485-rule corpus.
+ *
+ * THROWS `TotemParseError` on an uncompilable `requires.pattern` — unreachable
+ * from any compiled record (the lowering gates it with the same safe-regex2
+ * check), reachable from a hand-built `CompiledRule`. Deliberately not caught
+ * here: `runSmokeGate` catches it once, in one place, for both engines.
+ */
+function suppressedByRequires(rule: CompiledRule, line: string, snippet: string): boolean {
+  if (rule.requires === undefined) return false;
+  return requiresSuppressesMatch(rule, { line, file: () => snippet });
+}
+
 // ─── Engine runners ─────────────────────────────────
 
-function runRegexGate(pattern: string, snippet: string): SmokeGateResult {
+function runRegexGate(rule: CompiledRule, snippet: string): SmokeGateResult {
   let re: RegExp;
   try {
-    re = new RegExp(pattern);
+    re = new RegExp(rule.pattern);
   } catch (err) {
     return {
       matched: false,
@@ -69,7 +106,11 @@ function runRegexGate(pattern: string, snippet: string): SmokeGateResult {
 
   let matchCount = 0;
   for (const line of snippet.split('\n')) {
-    if (re.test(line)) matchCount++;
+    // The FULL match predicate, exactly as `rule-engine.ts`'s regex dispatcher
+    // states it: target hit AND required context absent. A line whose
+    // requirement is satisfied is not a match at all, so it never reaches the
+    // count.
+    if (re.test(line) && !suppressedByRequires(rule, line, snippet)) matchCount++;
   }
   return matchCount > 0 ? { matched: true, matchCount } : { matched: false, matchCount: 0 };
 }
@@ -124,13 +165,25 @@ function runAstGrepGate(
   const lineNumbers = lineNumbersFor(snippet);
   let lastReason: string | undefined;
   for (const ext of inferBadExampleExts(rule)) {
+    let matches: AstGrepMatch[];
     try {
-      const matches = matchAstGrepPattern(snippet, ext, pattern, lineNumbers);
-      if (matches.length > 0) {
-        return { matched: true, matchCount: matches.length };
-      }
+      matches = matchAstGrepPattern(snippet, ext, pattern, lineNumbers);
     } catch (err) {
       lastReason = `ast-grep runtime error: ${firstLine(err instanceof Error ? err.message : String(err))}`;
+      continue;
+    }
+    // § Design 8 pass two, OUTSIDE the engine try/catch on purpose: a
+    // `requires.pattern` that will not compile is not an ast-grep runtime error
+    // and must not be reported as one. It propagates to `runSmokeGate`'s single
+    // catch, which names it for what it is.
+    const unsuppressed = matches.filter(
+      (match) => !suppressedByRequires(rule, match.lineText, snippet),
+    );
+    // Zero UNSUPPRESSED matches under this extension is a miss like any other:
+    // fall through to the next extension, because the gate still passes on ANY
+    // extension (runtime scans the same surface).
+    if (unsuppressed.length > 0) {
+      return { matched: true, matchCount: unsuppressed.length };
     }
   }
   return lastReason
@@ -155,8 +208,31 @@ export function runSmokeGate(rule: CompiledRule, snippet: string): SmokeGateResu
     return { matched: false, matchCount: 0 };
   }
 
+  try {
+    return dispatchEngineGate(rule, snippet);
+  } catch (err) {
+    // The ONE handler for § Design 8's fail-loud arm, shared by both engines:
+    // `requiresSuppressesMatch` throws `TotemParseError` on an uncompilable
+    // `requires.pattern`. Unreachable from a compiled record — the lowering runs
+    // the same safe-regex2 gate — but reachable from a hand-built `CompiledRule`,
+    // and a gate that propagated it would crash `totem rule test` instead of
+    // reporting the rule as unusable. Mirrors the `invalid regex:` shape the
+    // target pattern already gets. Anything else is a real bug: rethrow.
+    if (err instanceof TotemParseError) {
+      return {
+        matched: false,
+        matchCount: 0,
+        reason: `invalid requires.pattern: ${firstLine(err.message)}`,
+      };
+    }
+    throw err;
+  }
+}
+
+/** Engine dispatch for `runSmokeGate`, split out so the § Design 8 catch wraps both engines exactly once. */
+function dispatchEngineGate(rule: CompiledRule, snippet: string): SmokeGateResult {
   if (rule.engine === 'regex') {
-    return runRegexGate(rule.pattern, snippet);
+    return runRegexGate(rule, snippet);
   }
 
   if (rule.engine === 'ast-grep') {

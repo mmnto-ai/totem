@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { stringify as yamlStringify } from 'yaml';
 
 import { matchAstGrepPattern } from './ast-grep-query.js';
 import { runSmokeGate } from './compile-smoke-gate.js';
 import type { CompiledRule } from './compiler-schema.js';
+import { design8ExemplarRecord } from './spine/record-exemplars.fixture.js';
+import { compileRuleRecord } from './spine/record-lower.js';
+import { requiresSuppressesMatch } from './spine/record-runtime.js';
+import { parseRuleRecord } from './spine/rule-record.js';
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -297,6 +302,182 @@ describe('runSmokeGate over-matching check', () => {
   });
 });
 
+// ─── Prop 310 § Design 8 — `requires:` pass two ──────
+
+describe('runSmokeGate — Prop 310 § Design 8 requires (mmnto-ai/totem#2678)', () => {
+  /** § Design 8's own exemplar, as a hand-built compiled rule. */
+  const GIT_TARGET = '\\bgit\\s+(log|diff|status)\\b';
+
+  function makeRequiresRegexRule(
+    requires: NonNullable<CompiledRule['requires']>,
+    overrides: Partial<CompiledRule> = {},
+  ): CompiledRule {
+    return makeRegexRule({
+      lessonHeading: 'git output-consuming commands must pin LC_ALL=C',
+      pattern: GIT_TARGET,
+      message: 'git output-consuming commands must pin LC_ALL=C on the same line.',
+      requires,
+      examples: [{ bad: 'git log --oneline', good: 'LC_ALL=C git log --oneline' }],
+      ...overrides,
+    });
+  }
+
+  describe('regex engine, scope: line', () => {
+    const rule = makeRequiresRegexRule({ pattern: 'LC_ALL=C', scope: 'line' });
+
+    it('FIRES on the bad example — target present, requirement absent', () => {
+      const result = runSmokeGate(rule, 'git log --oneline');
+      expect(result.matched).toBe(true);
+      expect(result.matchCount).toBe(1);
+    });
+
+    it('stays SILENT on the good example — the defect #2678 fixed', () => {
+      // Pre-fix the gate ran pass ONE only, so the good example (which keeps the
+      // target and adds the companion) read as over-matching and no
+      // `requires:`-bearing record could pass `totem rule test`.
+      const result = runSmokeGate(rule, 'LC_ALL=C git log --oneline');
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      // Silence for the RIGHT reason: "the snippet simply contains nothing the
+      // rule fires on", which callers read as good-silent, not as a gate refusal.
+      expect(result.reason).toBeUndefined();
+    });
+
+    it('counts only the unsatisfied loci in a mixed snippet', () => {
+      const result = runSmokeGate(rule, 'git log --oneline\nLC_ALL=C git diff HEAD');
+      expect(result.matched).toBe(true);
+      expect(result.matchCount).toBe(1);
+    });
+  });
+
+  describe('regex engine, scope: file', () => {
+    const fileScoped = makeRequiresRegexRule({ pattern: 'LC_ALL=C', scope: 'file' });
+    /** Target on one line, companion on ANOTHER — satisfied at file scope only. */
+    const SPLIT_SNIPPET = 'export LC_ALL=C\ngit log --oneline';
+
+    it('stays SILENT when the companion sits on a different line', () => {
+      const result = runSmokeGate(fileScoped, SPLIT_SNIPPET);
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toBeUndefined();
+    });
+
+    it('FIRES when the companion is nowhere in the snippet', () => {
+      const result = runSmokeGate(fileScoped, 'git log --oneline');
+      expect(result.matched).toBe(true);
+      expect(result.matchCount).toBe(1);
+    });
+
+    it('still FIRES on the same snippet at scope: line — the scope distinction is real', () => {
+      const lineScoped = makeRequiresRegexRule({ pattern: 'LC_ALL=C', scope: 'line' });
+      const result = runSmokeGate(lineScoped, SPLIT_SNIPPET);
+      expect(result.matched).toBe(true);
+      expect(result.matchCount).toBe(1);
+    });
+  });
+
+  describe('ast-grep flat pattern, scope: file', () => {
+    const rule = makeAstGrepStringRule({
+      requires: { pattern: '// debug-ok', scope: 'file' },
+      examples: [{ bad: 'debugger;\n', good: '// debug-ok\ndebugger;\n' }],
+    });
+
+    it('FIRES on the bad example', () => {
+      const result = runSmokeGate(rule, 'debugger;\n');
+      expect(result.matched).toBe(true);
+      expect(result.matchCount).toBe(1);
+    });
+
+    it('stays SILENT on the good example', () => {
+      const result = runSmokeGate(rule, '// debug-ok\ndebugger;\n');
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toBeUndefined();
+    });
+  });
+
+  describe('ast-grep compound (astGrepYamlRule), scope: file', () => {
+    const rule = makeCompoundRule({
+      requires: { pattern: 'intentionally empty', scope: 'file' },
+    });
+    const BAD = 'try {\n  work();\n} catch (err) {\n}\n';
+    const GOOD = '// catch is intentionally empty — see the ticket\n' + BAD;
+
+    it('FIRES on the bad example', () => {
+      const result = runSmokeGate(rule, BAD);
+      expect(result.matched).toBe(true);
+      expect(result.matchCount).toBe(1);
+    });
+
+    it('stays SILENT on the good example', () => {
+      const result = runSmokeGate(rule, GOOD);
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toBeUndefined();
+    });
+  });
+
+  describe('an unusable requires.pattern is reported, never propagated', () => {
+    // Unreachable from a compiled record — the lowering runs the same
+    // safe-regex2 gate — but reachable from a hand-built `CompiledRule`.
+
+    it('reports it on the regex engine', () => {
+      const rule = makeRequiresRegexRule({ pattern: '(', scope: 'line' });
+      const result = runSmokeGate(rule, 'git log --oneline');
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toMatch(/requires\.pattern/);
+    });
+
+    it('reports it on the ast-grep engine too — one handler, both engines', () => {
+      const rule = makeAstGrepStringRule({ requires: { pattern: '(', scope: 'file' } });
+      const result = runSmokeGate(rule, 'debugger;\n');
+      expect(result.matched).toBe(false);
+      expect(result.matchCount).toBe(0);
+      expect(result.reason).toMatch(/requires\.pattern/);
+      // NOT mislabelled as an engine throw: the requirement is not ast-grep's.
+      expect(result.reason).not.toMatch(/ast-grep runtime error/);
+    });
+  });
+
+  it('leaves a LEGACY rule untouched — the companion text is not magic', () => {
+    // No `requires` block ⇒ pass two never runs, so a snippet carrying the
+    // would-be companion still fires exactly as it did before #2678.
+    const legacy = makeRegexRule({ pattern: GIT_TARGET });
+    expect(legacy.requires).toBeUndefined();
+    const result = runSmokeGate(legacy, 'LC_ALL=C git log --oneline');
+    expect(result.matched).toBe(true);
+    expect(result.matchCount).toBe(1);
+  });
+
+  it('passes § Design 8’s exemplar END-TO-END through the real lowering', () => {
+    // The whole point of the ticket: parse → lower → gate, with no hand-built
+    // rule anywhere, so the gate is proved against the shape the record path
+    // actually emits.
+    const parsed = parseRuleRecord(
+      yamlStringify(design8ExemplarRecord()),
+      '.totem/rules/lc-all-c.rule.yaml',
+    );
+    const outcome = compileRuleRecord(parsed, {
+      ruleId: '0123456789abcdef',
+      now: '2026-08-24T00:00:00.000Z',
+    });
+    if (outcome.kind !== 'compiled') {
+      throw new Error(`expected the § Design 8 exemplar to lower, got: ${outcome.reason}`);
+    }
+    const compiled = outcome.rule;
+    expect(compiled.requires).toEqual({ pattern: 'LC_ALL=C', scope: 'line' });
+
+    const pair = compiled.examples?.[0];
+    expect(pair).toBeDefined();
+    const bad = runSmokeGate(compiled, pair!.bad);
+    const good = runSmokeGate(compiled, pair!.good);
+    expect(bad.matched).toBe(true);
+    expect(good.matched).toBe(false);
+    expect(good.reason).toBeUndefined();
+  });
+});
+
 // ─── runtime-parity invariant ────────────────────────
 
 describe('runSmokeGate runtime parity invariant', () => {
@@ -318,5 +499,33 @@ describe('runSmokeGate runtime parity invariant', () => {
       snippet.split('\n').map((_, i) => i + 1),
     );
     expect(matches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('uses the runtime’s OWN § Design 8 evaluator — gate verdict equals the runtime predicate', () => {
+    // The parity claim for `requires:` (mmnto-ai/totem#2678): the gate does not
+    // reimplement pass two, it calls `requiresSuppressesMatch` — the same
+    // function `rule-engine.ts` and `regex-safety/apply-rules-bounded.ts` call.
+    // Recomputing the predicate here line-by-line with that function must
+    // reproduce the gate's verdict exactly, count included.
+    const rule = makeRegexRule({
+      pattern: '\\bgit\\s+(log|diff|status)\\b',
+      requires: { pattern: 'LC_ALL=C', scope: 'line' },
+      examples: [{ bad: 'git log --oneline', good: 'LC_ALL=C git log --oneline' }],
+    });
+    const snippet = 'git log --oneline\nLC_ALL=C git diff HEAD\nconst x = 1;\ngit status\n';
+
+    const result = runSmokeGate(rule, snippet);
+
+    const re = new RegExp(rule.pattern);
+    const runtimeHits = snippet
+      .split('\n')
+      .filter(
+        (line) => re.test(line) && !requiresSuppressesMatch(rule, { line, file: () => snippet }),
+      );
+
+    expect(result.matched).toBe(runtimeHits.length > 0);
+    expect(result.matchCount).toBe(runtimeHits.length);
+    // Pinned, so a change that made BOTH sides wrong the same way is still caught.
+    expect(runtimeHits).toEqual(['git log --oneline', 'git status']);
   });
 });
