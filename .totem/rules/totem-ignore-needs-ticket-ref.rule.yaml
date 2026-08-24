@@ -1,7 +1,7 @@
 schemaVersion: 1
 severity: error
-message: "A totem-ignore suppression must carry a ticket reference (<owner>/<repo>#NNN) on the same line — AGENTS.md forbids bare suppressions. Use a totem-context directive instead when the pattern is intentional and needs no ticket."
-recoveryHint: "Append the ticket to the directive line, e.g. `// totem-ignore-next-line mmnto-ai/totem#1234 — <why>`, or replace the suppression with `// totem-context: <reason>`."
+message: 'A totem-ignore suppression must carry a ticket reference (<owner>/<repo>#NNN) on the same line — AGENTS.md forbids bare suppressions. Use a totem-context directive instead when the pattern is intentional and needs no ticket.'
+recoveryHint: 'Append the ticket to the directive line, e.g. `// totem-ignore-next-line mmnto-ai/totem#1234 — <why>`, or replace the suppression with `// totem-context: <reason>`.'
 target:
   type: regex
   pattern: '\btotem-ignore\b'
