@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: error
+message: "A totem-ignore suppression must carry a ticket reference (<owner>/<repo>#NNN) on the same line — AGENTS.md forbids bare suppressions. Use a totem-context directive instead when the pattern is intentional and needs no ticket."
+recoveryHint: "Append the ticket to the directive line, e.g. `// totem-ignore-next-line mmnto-ai/totem#1234 — <why>`, or replace the suppression with `// totem-context: <reason>`."
+target:
+  type: regex
+  pattern: '\btotem-ignore\b'
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.mjs'
+      - '**/*.cjs'
+requires:
+  pattern: '[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+'
+  scope: line
+examples:
+  - bad: 'const out = risky(input); // totem-ignore'
+    good: 'const out = risky(input); // totem-ignore mmnto-ai/totem#2679 — upstream guard, see ticket'
+  - bad: '// totem-ignore-next-line'
+    good: '// totem-ignore-next-line mmnto-ai/totem#1889 — fixture literal, see ticket'
+curation:
+  sourceLesson: lesson-1ef06d16
