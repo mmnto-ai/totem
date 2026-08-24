@@ -114,6 +114,28 @@ describe('authoring-ledger fail-loud round-trip (FM(e))', () => {
     fs.writeFileSync(file, '{not valid json\n', 'utf-8');
     expect(() => readAuthoringLedger(dir)).toThrow();
   });
+  it('round-trips the Prop 310 record binding (path + contentHash) verbatim', () => {
+    const entry = baseEntry({
+      record: { path: '.totem/rules/no-console.rule.yaml', contentHash: 'c'.repeat(64) },
+    });
+    appendAuthoringLedgerEntry(dir, entry);
+    expect(readAuthoringLedger(dir)[0]?.record).toEqual(entry.record);
+  });
+
+  it('READS a pre-Prop-310 row carrying NO record binding (optional, additive)', () => {
+    appendAuthoringLedgerEntry(dir, baseEntry());
+    expect(readAuthoringLedger(dir)[0]?.record).toBeUndefined();
+  });
+
+  it('fail-loud on a record binding whose contentHash is not a sha256 hex (the attestation basis)', () => {
+    expect(() =>
+      appendAuthoringLedgerEntry(
+        dir,
+        baseEntry({ record: { path: '.totem/rules/x.rule.yaml', contentHash: 'short' } }),
+      ),
+    ).toThrow();
+  });
+
   it('fail-loud (schema) on an incomplete entry — never reaches disk silently', () => {
     expect(() =>
       appendAuthoringLedgerEntry(dir, { ruleId: 'x' } as unknown as AuthoringLedgerEntry),
@@ -125,7 +147,8 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
   const material = {
     declaredEngine: 'regex',
     structuralClass: 'forbidden-literal-token',
-    dslSource: 'TODO',
+    // Prop 310 § Design 1: the matcher's stand-in is the RECORD's content hash.
+    recordContentHash: 'a'.repeat(64),
     positiveFixtures: [{ pr: 1 }],
     origin: { kind: 'from-scratch' as const },
     splitRef: 'split-2026-06-27',
@@ -140,9 +163,9 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
   it('is deterministic for identical material', () => {
     expect(authoringContentHash(material)).toBe(authoringContentHash({ ...material }));
   });
-  it('changes when the matcher changes (a revision)', () => {
+  it('changes when the RECORD BYTES change (a revision — Prop 310 § Design 1)', () => {
     expect(authoringContentHash(material)).not.toBe(
-      authoringContentHash({ ...material, dslSource: 'FIXME' }),
+      authoringContentHash({ ...material, recordContentHash: 'b'.repeat(64) }),
     );
   });
   it('changes when an attestation changes (splitRef) — greptile-P1/CR diff-review', () => {
@@ -171,12 +194,8 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
     );
   });
   it('is CRLF-invariant — self-normalizes newlines regardless of the caller (Tenet-20 single-home)', () => {
-    // a CRLF-authored multi-line matcher and its LF twin must hash identically even if the
-    // CALLER never normalized — the determinism lives in the hash, not the reader (gemini).
-    expect(authoringContentHash({ ...material, dslSource: 'line-a\r\nline-b' })).toBe(
-      authoringContentHash({ ...material, dslSource: 'line-a\nline-b' }),
-    );
-    // and a nested fixture string (not just dslSource) is normalized too.
+    // A nested fixture string is normalized even if the CALLER never normalized —
+    // the determinism lives in the hash, not the reader (gemini).
     expect(
       authoringContentHash({ ...material, positiveFixtures: [{ pr: 1, matchedSpan: 'a\r\nb' }] }),
     ).toBe(

@@ -146,6 +146,10 @@ export async function buildAuthoredCertifyingCorpus(
   //    cover (non-empty-but-stale): step-0 empty → no-mint stale → step-3 verdict/binding (Q3 layered).
   //    The producer establishes eligibility/identity; NEVER construct AuthoredRuleRecord[] ad hoc or
   //    read YAML→record here.
+  //    Prop 310 § Design 1: the re-derive RE-READS every referenced record from disk and
+  //    re-hashes its LF-admitted bytes into the material, so a record edited since it was
+  //    authored reads `revised` here and this gate throws — the § Design 10 drift sensor
+  //    reaching the cert path through the existing mechanism, with nothing added.
   //    R1: a content-addressed expectedSplitRef binds the run to a FROZEN artifact — the caller
   //    resolves + PROVES the binding at the cert-run boundary (`resolveProvenFreezeBinding`) and
   //    threads it here, or the intake's own content-ref gate voids the verifyOnly re-derive
@@ -250,7 +254,7 @@ export async function buildAuthoredCertifyingCorpus(
       'GATE_INVALID',
       `Authored cert corpus: ${rejectedRefs.length} authored candidate(s) were rejected at compile ` +
         `(${safe(rejectedRefs.join(', '))}) — an authored record must compile cleanly (ADR-112 §2).`,
-      "Fix the authored rule's dslSource so it compiles under its declared engine.",
+      "Fix the authored rule's record so it lowers under its declared engine (Prop 310 § Design 12).",
     );
   }
 

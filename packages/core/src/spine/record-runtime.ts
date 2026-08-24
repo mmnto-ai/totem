@@ -80,8 +80,71 @@ export const RECORD_COMPILED_HOME_KEYS = [
  * (which asserts the legacy manifest carries NONE of them — a stronger claim
  * than this predicate needs, and the right one for a freeze check).
  */
-export function isRecordPathRule(rule: RuleScopeFields): boolean {
+export function isRecordPathRule(rule: Pick<CompiledRule, 'examples'>): boolean {
   return rule.examples !== undefined;
+}
+
+/**
+ * The exemplar lines a rule's Stage-4 / doctor readers treat as "the authored bad
+ * example", single-homed (Tenet 20).
+ *
+ * Prop 310 slice 3 discharges the slice-2 pin: a record rule's authored preimages
+ * live in `examples[i].bad` — the § Design 10 EDITABLE home — and are NOT mirrored
+ * onto the legacy `badExample` field, so every reader of that field would otherwise
+ * read a record rule as having no bad example at all. Both shipped readers now ask
+ * this one function instead:
+ *
+ *   - Stage 4 (`lineMatchesBadExample`) — a matched line equal to any of these
+ *     classifies `in-scope-bad-example` rather than `candidate-debt`;
+ *   - `totem doctor`'s `no-badExample` grandfathering reason — an empty result is
+ *     exactly the old `!badExample || badExample.trim() === ''` test.
+ *
+ * BLANK LINES ARE DROPPED, which is what makes both of those byte-identical for
+ * legacy rules: Stage 4 already refuses to match an empty trimmed line, and a
+ * whitespace-only `badExample` must still count as absent for doctor.
+ */
+export function ruleBadExampleLines(rule: Pick<CompiledRule, 'badExample' | 'examples'>): string[] {
+  return exemplarLines(
+    isRecordPathRule(rule) ? (rule.examples ?? []).map((e) => e.bad) : maybeBlock(rule.badExample),
+  );
+}
+
+/**
+ * The POSTIMAGE twin of `ruleBadExampleLines`, on the identical contract: record
+ * path → every `examples[i].good`, legacy → `goodExample`, blank lines dropped.
+ *
+ * `totem doctor`'s `no-goodExample` grandfathering reason reads it. Without the
+ * twin, a record rule cleared the `no-badExample` reason and then tripped
+ * `no-goodExample` on the very same absence — the record's exemplars live in
+ * `examples`, and § Design 10 makes that the editable home for BOTH sides of the
+ * pair, so a reader that single-homes one side and not the other reports half a
+ * truth. An empty result is exactly the old
+ * `!goodExample || goodExample.trim() === ''` test.
+ */
+export function ruleGoodExampleLines(
+  rule: Pick<CompiledRule, 'goodExample' | 'examples'>,
+): string[] {
+  return exemplarLines(
+    isRecordPathRule(rule)
+      ? (rule.examples ?? []).map((e) => e.good)
+      : maybeBlock(rule.goodExample),
+  );
+}
+
+/** A present block as a one-element list, an absent one as none. */
+function maybeBlock(block: string | undefined): string[] {
+  return block === undefined ? [] : [block];
+}
+
+/**
+ * Split exemplar blocks into lines and DROP the blank ones — the shared half of
+ * both readers' contract. The blank-drop is what makes them byte-identical to the
+ * shipped behaviour for legacy rules: Stage 4 already refuses to match an empty
+ * trimmed line, and a whitespace-only exemplar field must still count as absent
+ * for doctor.
+ */
+function exemplarLines(blocks: readonly string[]): string[] {
+  return blocks.flatMap((block) => block.split(/\r?\n/)).filter((line) => line.trim().length > 0);
 }
 
 /**

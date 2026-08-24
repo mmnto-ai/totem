@@ -2,6 +2,9 @@ import type { CompiledRule } from '@mmnto/totem';
 
 const TAG = 'Rule';
 
+/** How much of an authored exemplar a FAIL line previews before eliding. */
+const EXAMPLE_PREVIEW_MAX_CHARS = 80;
+
 // ─── Helpers ───────────────────────────────────────────
 
 function truncate(text: string, max: number): string {
@@ -223,10 +226,76 @@ export async function ruleScaffoldCommand(id: string, opts: { out?: string }): P
   log.success(TAG, `Scaffolded fixture → ${bold(path.relative(process.cwd(), outPath))}`);
 }
 
+/**
+ * Prop 310 § Design 5/§ Design 10 — run a RECORD rule's own `examples[i]` pairs
+ * through the smoke gate: every `bad` must FIRE and every `good` must stay SILENT.
+ *
+ * This is the record path's answer to the legacy Example Hit/Miss block: a record
+ * rule has no source lesson to look up (§ Design 1 — the record IS the rule), and
+ * its exemplars are the § Design 10 editable home. `runSmokeGate` is the SAME
+ * engine entry point the compiler's smoke gate and the ADR-112 §4 preimage
+ * differential use, so "passes here" and "fires at lint time" cannot diverge.
+ *
+ * Reports PER ORDINAL and exits 1 on any failure — a rule with three pairs where
+ * one is broken must not read as a single opaque FAIL.
+ */
+async function testRecordRuleExamples(rule: CompiledRule): Promise<void> {
+  const { log, bold, dim, errorColor, success: successColor } = await import('../ui.js');
+  const { runSmokeGate, sanitizeForTerminal } = await import('@mmnto/totem');
+
+  const examples = rule.examples ?? [];
+  console.error('');
+  let failures = 0;
+  for (const [ordinal, example] of examples.entries()) {
+    const bad = runSmokeGate(rule, example.bad);
+    const good = runSmokeGate(rule, example.good);
+    const badFired = bad.matched;
+    const goodSilent = !good.matched;
+    const reasons: string[] = [];
+    if (!badFired) {
+      reasons.push(`bad did not fire${bad.reason !== undefined ? ` (${bad.reason})` : ''}`);
+    }
+    if (!goodSilent) reasons.push(`good fired ${good.matchCount} time(s)`);
+    if (reasons.length === 0) {
+      log.info(TAG, `${successColor(bold('PASS'))} examples[${ordinal}]`);
+      log.dim(TAG, `  bad fires (${bad.matchCount}), good silent`);
+      continue;
+    }
+    failures += 1;
+    log.info(TAG, `${errorColor(bold('FAIL'))} examples[${ordinal}] — ${reasons.join('; ')}`);
+    // SANITIZED before it reaches the terminal (bot round 1, B-2): a record's
+    // exemplars are author-controlled YAML text, so an ANSI/control sequence in
+    // one would otherwise be interpreted by the terminal rather than shown — the
+    // same terminal-injection surface `authored-rule-intake.ts` escapes on its
+    // author/targetDefect interpolations.
+    log.warn(
+      TAG,
+      `  bad:  ${dim(truncate(sanitizeForTerminal(example.bad), EXAMPLE_PREVIEW_MAX_CHARS))}`,
+    );
+    log.warn(
+      TAG,
+      `  good: ${dim(truncate(sanitizeForTerminal(example.good), EXAMPLE_PREVIEW_MAX_CHARS))}`,
+    );
+  }
+
+  if (failures > 0) {
+    log.error(
+      'Totem Error',
+      `${failures} of ${examples.length} example pair(s) failed for ${rule.lessonHash} — ${rule.lessonHeading}`,
+    );
+    process.exitCode = 1;
+  } else {
+    log.info(TAG, `${successColor(bold('PASS'))} — ${rule.lessonHeading}`);
+    log.dim(TAG, `${examples.length} example pair(s) verified`);
+  }
+  console.error('');
+}
+
 export async function ruleTestCommand(id: string): Promise<void> {
   const { log, bold, errorColor, success: successColor } = await import('../ui.js');
   const {
     hashLesson,
+    isRecordPathRule,
     readAllLessons,
     extractRuleExamples,
     verifyRuleExamples,
@@ -242,6 +311,13 @@ export async function ruleTestCommand(id: string): Promise<void> {
 
   const rule = resolveRuleByPrefix(rules, id, log, bold);
   if (!rule) return;
+
+  // Prop 310 § Design 1: a record rule carries its own exemplars and has NO source
+  // lesson, so the lesson lookup below would report it as missing. Branch first.
+  if (isRecordPathRule(rule)) {
+    await testRecordRuleExamples(rule);
+    return;
+  }
 
   // Find source lesson — search all lessons for one whose hash matches the rule's lessonHash
   const lessons = readAllLessons(totemDir);
@@ -301,8 +377,13 @@ export async function rulePromoteCommand(id: string): Promise<void> {
   const fs = await import('node:fs');
   const path = await import('node:path');
   const { log, bold } = await import('../ui.js');
-  const { loadCompiledRulesFile, generateOutputHash, readCompileManifest, writeCompileManifest } =
-    await import('@mmnto/totem');
+  const {
+    attestRecordsHash,
+    loadCompiledRulesFile,
+    generateOutputHash,
+    readCompileManifest,
+    writeCompileManifest,
+  } = await import('@mmnto/totem');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
 
   const cwd = process.cwd();
@@ -386,6 +467,8 @@ export async function rulePromoteCommand(id: string): Promise<void> {
   // update-manifest. Missing/corrupt manifest would have thrown above,
   // preserving compiled-rules.json's pre-promote state.
   compileManifest.output_hash = generateOutputHash(rulesPath);
+  // Prop 310 § Design 1: every manifest writer attests the record class.
+  compileManifest.records_hash = attestRecordsHash(totemDir, cwd);
   compileManifest.compiled_at = new Date().toISOString();
   writeCompileManifest(manifestPath, compileManifest);
 

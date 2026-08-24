@@ -26,12 +26,14 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import { canonicalStringify } from '../compile-manifest.js';
+import { SHA256_HEX_RE } from '../compiler-schema.js';
 import { TotemError } from '../errors.js';
 import {
   AuthoredOriginSchema,
   DeclaredEngineSchema,
   StructEligResultSchema,
 } from './authored-rule.js';
+import { lfDeepNormalize } from './lf-normalize.js';
 
 const nonEmpty = (label: string) =>
   z.string().refine((s) => s.trim().length > 0, { message: `${label} must be non-empty` });
@@ -93,17 +95,37 @@ export const AuthoringLedgerEntrySchema = z
      * materialize path fail-louds when a frozen-artifact run meets an
      * uncommitted entry.
      */
-    freezeCommitment: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/)
+    freezeCommitment: z.string().regex(SHA256_HEX_RE).optional(),
+    /**
+     * Prop 310 § Design 1 — the rule record this entry was authored from. Present
+     * iff the rule is record-carried (every rule since slice 3; pre-slice-3 rows
+     * omit it and still parse).
+     *
+     * `contentHash` is what binds the §8 attestations to the EXACT ingested bytes
+     * (the § Design 1 attestation-relocation constraint) and is inside the material
+     * hash below. `path` is INFORMATIONAL: § Design 1 says renaming a record
+     * changes no identity, so the path must not force a re-attestation, and it is
+     * deliberately excluded from the material.
+     */
+    record: z
+      .object({
+        path: nonEmpty('record.path'),
+        contentHash: z.string().regex(SHA256_HEX_RE),
+      })
+      .strict()
       .optional(),
     /**
-     * Fingerprint of the MATERIAL author input (engine / class / matcher /
-     * fixtures / origin) — identity (`author`/`targetDefect`/`ruleId`) AND
-     * `authoredAt` EXCLUDED, so a pure timestamp refresh is a no-op (§8: a
-     * timestamp drift must not churn the rule) while a matcher/fixture edit
-     * appends a new revision row under the SAME `ruleId`. Equal hash on re-read ⇒
-     * no append.
+     * Fingerprint of the MATERIAL author input (engine / class / record bytes /
+     * fixtures / origin) — identity (`author`/`targetDefect`) AND `authoredAt`
+     * EXCLUDED, so a pure timestamp refresh is a no-op (§8: a timestamp drift must
+     * not churn the rule) while a matcher/fixture edit appends a new revision row
+     * under the SAME `ruleId`. Equal hash on re-read ⇒ no append.
+     *
+     * `ruleId` enters the material in exactly ONE place since Prop 310 slice 3: as
+     * the § Design 10 join key inside each derived
+     * `positiveFixtures[].preimageSource`. It is stable per identity (reused from
+     * the ledger, never re-minted), so it cannot churn an unchanged rule — the §8
+     * "identity is not material" property is preserved in effect, not by absence.
      */
     contentHash: nonEmpty('contentHash'),
   })
@@ -111,30 +133,17 @@ export const AuthoringLedgerEntrySchema = z
 export type AuthoringLedgerEntry = z.infer<typeof AuthoringLedgerEntrySchema>;
 
 /**
- * Recursively LF-normalize every string in a value. Keeps the material-hash
- * determinism SINGLE-HOMED in the hash (Tenet-20, gemini diff-review): the hash
- * is CRLF-invariant regardless of whether the caller pre-normalized, so a future
- * caller of `authoringContentHash` can't silently produce a divergent hash by
- * passing un-normalized CRLF input.
- *
- * Exported (Tenet 20, derive-or-couple-never-mirror): it single-homes the
- * LF-image PRIMITIVE for two distinct hash-material edges — this ledger's
- * material and Prop 310 § Design 10's example-pair material — since Amendment 1
- * item 3's "different edge" note distinguishes the CALL SITES, not the normalizer.
+ * The LF-image primitive both hash-material edges share (this ledger's material
+ * and Prop 310 § Design 10's example-pair material). DEFINED in `lf-normalize.ts`
+ * — a leaf, so the record grammar can use it without closing an import cycle
+ * through this module's Zod schemas — and re-exported here, where every existing
+ * caller and the package barrel already reach for it. One definition (Tenet 20).
  */
-export function lfDeepNormalize(value: unknown): unknown {
-  if (typeof value === 'string') return value.replace(/\r\n/g, '\n');
-  if (Array.isArray(value)) return value.map(lfDeepNormalize);
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, lfDeepNormalize(v)]),
-    );
-  }
-  return value;
-}
+export { lfDeepNormalize } from './lf-normalize.js';
 
 /**
- * Deterministic fingerprint of the MATERIAL author fields (§8 idempotency).
+ * Deterministic fingerprint of the MATERIAL author fields (§8 idempotency), the
+ * rule's content-addressed record included (Prop 310 § Design 1).
  * SELF-normalizes newlines (CRLF→LF) on every string it hashes, so a Windows-
  * authored and an LF-authored identical rule hash identically REGARDLESS of the
  * caller — the determinism is single-homed in the hash, not the reader (Tenet-20,
@@ -147,11 +156,27 @@ export function lfDeepNormalize(value: unknown): unknown {
  * row — otherwise the rule reads `unchanged`, no row is appended, and the ledger
  * keeps the STALE split. `authoredAt` stays excluded (a timestamp refresh is a
  * no-op, §8); every OTHER ledger-attested mutable field is covered here.
+ *
+ * IDENTITY (`author`/`targetDefect`) is excluded. `ruleId` is NOT a separate
+ * exclusion since Prop 310 slice 3: it rides inside each derived
+ * `positiveFixtures[].preimageSource` as the § Design 10 join key. Because the
+ * intake reuses an identity's persisted id and never re-mints it, that value is
+ * constant across revisions of one rule and cannot make an unchanged rule read
+ * `revised`.
  */
 export function authoringContentHash(material: {
   declaredEngine: string;
   structuralClass: string;
-  dslSource: string;
+  /**
+   * Prop 310 § Design 1 — the sha256 of the LF-admitted RECORD BYTES, standing in
+   * for the matcher the pre-slice-3 material carried inline as `dslSource`. The
+   * record's PATH is deliberately absent: § Design 1 rules that a rename changes no
+   * identity, so a path in the material would force a spurious re-attestation. An
+   * `examples` edit still moves this hash (it moves the bytes) AND moves the derived
+   * `positiveFixtures[].preimageSource.pairHash` — the § Design 10 drift sensor,
+   * with no second mechanism.
+   */
+  recordContentHash: string;
   positiveFixtures: unknown;
   negativeFixtures?: unknown;
   origin: unknown;

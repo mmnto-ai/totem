@@ -15,6 +15,7 @@
 import { z } from 'zod';
 
 import { MinedProvenanceWireSchema, type ProvenanceRecord } from '../compiler-schema.js';
+import type { ParsedRuleRecord } from './rule-record.js';
 
 /**
  * Stage-2 classifier disposition (ADR-091 funnel, the gate). A `structural`
@@ -40,7 +41,23 @@ export interface CompileInputCandidate {
   provenance: ProvenanceRecord;
   classifierDisposition: ClassifierDisposition;
   classifierLedgerRef: string;
-  dslSource: string;
+  /**
+   * The lesson-markdown DSL carrier. EXACTLY ONE of `dslSource` / `record` is
+   * present on any candidate — the XOR is a producer contract asserted up front
+   * in `compileCandidate` (both or neither throws). The MINED producer always
+   * carries this one; the AUTHORED producer carries `record` since Prop 310
+   * slice 3 made the record the only authoring surface.
+   */
+  dslSource?: string;
+  /**
+   * Prop 310 § Design 1 — the parsed `.totem/rules/<slug>.rule.yaml` record, the
+   * other half of the carrier XOR above. Carried ALREADY PARSED (slice 1's
+   * `ParsedRuleRecord`): re-serialising a record into lesson markdown just to
+   * re-parse it would reintroduce the incumbent grammar this proposal supersedes,
+   * so `compileCandidate` dispatches straight to `compileRuleRecord` and never
+   * touches `extractManualPattern` on this path.
+   */
+  record?: ParsedRuleRecord;
   /**
    * ADR-112 §3 (#2259/#7) — the engine the structural-eligibility whitelist judged
    * this rule for (AUTHORED producer only). When present, `compileCandidate` asserts

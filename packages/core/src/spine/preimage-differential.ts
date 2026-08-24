@@ -8,7 +8,9 @@
  * legitimate control (Falsifying Metric §1(i)).
  *
  * This module evaluates that differential against a fixture's declared
- * `preimageSource` (lesson-anchored PRIMARY / commit-pair FALLBACK) and reports
+ * `preimageSource` (lesson-anchored PRIMARY / Prop 310 record-derived / commit-pair
+ * FALLBACK — the record source is classified EXACTLY as `lesson`, since both carry
+ * their exemplars inline and differ only in the join key) and reports
  * the raw evidence + a differential-level classification. It is deliberately
  * INERT: it wires nothing into the cert path, mints no §5 run verdict, and emits
  * no controls. Slice C2 consumes this to gate control emission; slice D maps the
@@ -115,12 +117,22 @@ function classifyDifferential(
   return 'fix-shaped';
 }
 
-// ─── Lesson-anchored differential (C1) ──────────────
+// ─── Inline-exemplar differential (C1: `lesson`; Prop 310 slice 3: `record`) ──
+//
+// Both sources carry the bad/good exemplars INLINE — they differ only in the JOIN
+// (an immutable `lessonRef` vs the § Design 10 `(ruleId, ordinal)` + CR-blind
+// `pairHash`), never in what the differential means. So the evaluation is
+// single-homed here and the branch below only picks the `sourceKind` label: two
+// copies of this function would be the drift Tenet 20 forbids, and "classifies
+// `record` exactly as `lesson`" is the design's own word.
 
-function evaluateLessonDifferential(
+type InlineExemplarSource = Extract<PreimageSource, { kind: 'lesson' | 'record' }>;
+
+function evaluateInlineExemplarDifferential(
   rule: CompiledRule,
-  source: Extract<PreimageSource, { kind: 'lesson' }>,
+  source: InlineExemplarSource,
 ): PreimageDifferentialResult {
+  const sourceKind = source.kind;
   const pre = runSmokeGate(rule, source.badExample);
   const post = runSmokeGate(rule, source.goodExample);
 
@@ -147,7 +159,7 @@ function evaluateLessonDifferential(
         : post.reason);
     return {
       outcome: 'needs-adjudication',
-      sourceKind: 'lesson',
+      sourceKind,
       firesOnPreimage: preUnevaluable ? null : pre.matched,
       silentOnPostimage: postUnevaluable ? null : !post.matched,
       preimageMatchCount: preUnevaluable ? null : pre.matchCount,
@@ -160,7 +172,7 @@ function evaluateLessonDifferential(
   const silentOnPostimage = !post.matched;
   return {
     outcome: classifyDifferential(firesOnPreimage, silentOnPostimage),
-    sourceKind: 'lesson',
+    sourceKind,
     firesOnPreimage,
     silentOnPostimage,
     preimageMatchCount: pre.matchCount,
@@ -203,7 +215,8 @@ export async function evaluatePreimageDifferential(
   const source = fixture.preimageSource;
   switch (source.kind) {
     case 'lesson':
-      return evaluateLessonDifferential(rule, source);
+    case 'record':
+      return evaluateInlineExemplarDifferential(rule, source);
     case 'commit':
       return deferredCommitResult();
     default: {

@@ -5,7 +5,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { generateInputHash, generateOutputHash, writeCompileManifest } from '@mmnto/totem';
+import {
+  attestRecordsHash,
+  EMPTY_RECORDS_HASH,
+  generateInputHash,
+  generateOutputHash,
+  writeCompileManifest,
+} from '@mmnto/totem';
 
 // ─── Mock utils to bypass real config loading ───────────
 
@@ -58,14 +64,56 @@ function scaffold(cwd: string) {
 }
 
 /**
- * Write a valid manifest that matches the current lessons + rules on disk.
+ * Write one Prop 310 rule record under `<cwd>/.totem/rules/<slug>.rule.yaml`.
+ * `severity` is the knob a test turns to change exactly one byte of one record.
  */
-function writeValidManifest(manifestPath: string, lessonsDir: string, rulesPath: string) {
+function writeRecord(cwd: string, slug: string, severity: 'warning' | 'error' = 'warning'): void {
+  const target = path.join(cwd, '.totem', 'rules', `${slug}.rule.yaml`);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(
+    target,
+    [
+      'schemaVersion: 1',
+      `severity: ${severity}`,
+      'message: no console.log',
+      'target:',
+      '  type: regex',
+      "  pattern: 'console\\.log'",
+      '  scope:',
+      "    fileGlobs: ['**/*.ts']",
+      'examples:',
+      "  - bad: 'console.log(1)'",
+      "    good: 'logger.info(1)'",
+      '',
+    ].join('\n'),
+    'utf-8',
+  );
+}
+
+/**
+ * Write a valid manifest that matches the current lessons + rules on disk.
+ *
+ * Passing `recordsCwd` attests the Prop 310 record class too — what every real
+ * writer does. Omitting it is the pre-Prop-310 manifest shape (no `records_hash`),
+ * which the OQ-3 ruling keeps legal while zero records exist.
+ */
+function writeValidManifest(
+  manifestPath: string,
+  lessonsDir: string,
+  rulesPath: string,
+  recordsCwd?: string,
+) {
   writeCompileManifest(manifestPath, {
     compiled_at: new Date().toISOString(),
     model: 'test-model',
-    input_hash: generateInputHash(lessonsDir),
+    // Producer/consumer symmetry: when a repo cwd is given, BOTH hashes are taken
+    // over the tracked scope — the same thing `totem compile` does, and the only
+    // way a fixture inside a real git repo can be a faithful writer.
+    input_hash: generateInputHash(lessonsDir, recordsCwd),
     output_hash: generateOutputHash(rulesPath),
+    ...(recordsCwd !== undefined
+      ? { records_hash: attestRecordsHash(path.join(recordsCwd, '.totem'), recordsCwd) }
+      : {}),
     rule_count: 1,
   });
 }
@@ -562,5 +610,245 @@ describe('verify-manifest — freeze-aware lesson-staleness verdict', () => {
 
     const { verifyManifestCommand } = await import('./verify-manifest.js');
     await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+
+  // ── Prop 310 § Design 1 — a records failure NEVER takes the downgrade ──
+  it('still FAILS on a records-hash mismatch under an active freeze (input-hash-only downgrade)', async () => {
+    // The freeze covers the legacy lesson-compile path, which neither writes nor
+    // reads the record file class. Downgrading a records mismatch would extend a
+    // freeze to a surface it does not cover.
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeRecord(tmpDir, 'a');
+    writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+    writeLocalFreeze([{ ...RULE_COMPILATION_ENTRY, scope: 'local' }]);
+    makeLessonStale(lessonsDir); // the drift that WOULD downgrade, on its own
+    writeRecord(tmpDir, 'a', 'error'); // …plus a records drift, which never does
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+  });
+
+  it('still downgrades lesson-only staleness when the records hash MATCHES (no false blocking)', async () => {
+    // The negative control for the row above: the records conjunct must not turn
+    // every freeze downgrade into a block once a repo carries records at all.
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeRecord(tmpDir, 'a');
+    writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+    writeLocalFreeze([{ ...RULE_COMPILATION_ENTRY, scope: 'local' }]);
+    makeLessonStale(lessonsDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+});
+
+// ─── Prop 310 § Design 1 — the record file class attestation (OQ-3) ──────────
+
+describe('verify-manifest — records_hash (Prop 310 slice 3)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {};', 'utf-8');
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    vi.restoreAllMocks();
+  });
+
+  it('PASSES over a record-carrying tree whose manifest was written by the same build', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeRecord(tmpDir, 'no-console');
+    writeRecord(tmpDir, 'nested/deep');
+    writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
+  it('FAILS when a record changed since the manifest was written', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeRecord(tmpDir, 'no-console');
+    writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+    writeRecord(tmpDir, 'no-console', 'error'); // one byte of one record
+
+    // The generic throw is shared by every mismatch this command can report, so
+    // the logged text is what pins WHICH gate fired (mirroring the sibling
+    // "unattested file class" row below).
+    const errors: string[] = [];
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+    });
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+    expect(errors.join('\n')).toContain('Records hash mismatch');
+    errSpy.mockRestore();
+  });
+
+  it('FAILS when a record is ADDED after the manifest was written', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeRecord(tmpDir, 'no-console');
+    writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+    writeRecord(tmpDir, 'second');
+
+    const errors: string[] = [];
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+    });
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+    expect(errors.join('\n')).toContain('Records hash mismatch');
+    errSpy.mockRestore();
+  });
+
+  it('FAILS "unattested file class" when records exist and the manifest has no records_hash', async () => {
+    // OQ-3's forcing edge: the first record landing makes attestation mandatory.
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath); // no records_hash
+    writeRecord(tmpDir, 'no-console');
+
+    const errors: string[] = [];
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+    });
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+    expect(errors.join('\n')).toContain('Unattested file class');
+    errSpy.mockRestore();
+  });
+
+  it('PASSES and prints `records: none` when there are no records and no records_hash', async () => {
+    // The state every pre-Prop-310 manifest is in — explicit, never silent.
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath); // no records_hash
+
+    const logs: string[] = [];
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+    expect(logs.join('\n')).toContain('records: none');
+    errSpy.mockRestore();
+  });
+
+  it('PASSES when a records_hash IS attested over an empty record set', async () => {
+    // Attesting the empty set is legal too — OQ-3 makes absence permissible, not
+    // mandatory, so a writer that always attests never breaks a record-free repo.
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+    const written = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as { records_hash?: string };
+    expect(written.records_hash).toBe(EMPTY_RECORDS_HASH);
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
+  // ── MIN-1: the verdict is over GIT-TRACKED records, in a REAL git repo ──
+  //
+  // Every other row in this file runs under `os.tmpdir()`, where
+  // `listTrackedFilesUnder` returns null and the tracked-set restriction
+  // short-circuits — so none of them can tell "no records" from "no TRACKED
+  // records". This one initialises a real repo and stages one of two records.
+  // Nothing is mocked: the git seam is the thing under test.
+  describe('git-tracked scope (real git repo)', () => {
+    /**
+     * A real repo with the LESSONS staged (so the input hash the verifier computes
+     * — which restricts to tracked — matches what the writer recorded) and exactly
+     * ONE of two records staged.
+     */
+    function initRepoWithOneTrackedRecord(): void {
+      execFileSync('git', ['init', '-q'], { cwd: tmpDir });
+      execFileSync('git', ['add', '.totem/lessons'], { cwd: tmpDir });
+      writeRecord(tmpDir, 'tracked');
+      writeRecord(tmpDir, 'untracked');
+      execFileSync('git', ['add', '.totem/rules/tracked.rule.yaml'], { cwd: tmpDir });
+    }
+
+    it('FAILS "unattested file class" naming the TRACKED count when records_hash is absent', async () => {
+      const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+      initRepoWithOneTrackedRecord();
+      // Manifest written WITHOUT a records_hash but with the tracked-scope input
+      // hash, so the only thing this row can fail on is the record class.
+      writeCompileManifest(manifestPath, {
+        compiled_at: new Date().toISOString(),
+        model: 'test-model',
+        input_hash: generateInputHash(lessonsDir, tmpDir),
+        output_hash: generateOutputHash(rulesPath),
+        rule_count: 1,
+      });
+
+      const errors: string[] = [];
+      const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        errors.push(args.map(String).join(' '));
+      });
+      const { verifyManifestCommand } = await import('./verify-manifest.js');
+      await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+      // ONE, not two: the untracked sibling is not counted.
+      expect(errors.join('\n')).toContain('1 git-tracked rule record(s)');
+      errSpy.mockRestore();
+    });
+
+    it('PASSES with `records: none` when the ONLY record is untracked', async () => {
+      const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+      execFileSync('git', ['init', '-q'], { cwd: tmpDir });
+      execFileSync('git', ['add', '.totem/lessons'], { cwd: tmpDir });
+      writeRecord(tmpDir, 'draft'); // never staged
+      writeCompileManifest(manifestPath, {
+        compiled_at: new Date().toISOString(),
+        model: 'test-model',
+        input_hash: generateInputHash(lessonsDir, tmpDir),
+        output_hash: generateOutputHash(rulesPath),
+        rule_count: 1,
+      });
+
+      const logs: string[] = [];
+      const errSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        logs.push(args.map(String).join(' '));
+      });
+      const { verifyManifestCommand } = await import('./verify-manifest.js');
+      await expect(verifyManifestCommand()).resolves.toBeUndefined();
+      expect(logs.join('\n')).toContain('records: none — no git-tracked');
+      errSpy.mockRestore();
+    });
+
+    it('PASSES when the manifest attests exactly the TRACKED set', async () => {
+      const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+      initRepoWithOneTrackedRecord();
+      writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+
+      const { verifyManifestCommand } = await import('./verify-manifest.js');
+      await expect(verifyManifestCommand()).resolves.toBeUndefined();
+    });
+
+    it('is UNMOVED by editing an untracked record, and FAILS on editing a tracked one', async () => {
+      // The two arms of the tracked-set claim, on the same tree: the draft is
+      // invisible to the gate, the staged record is not.
+      const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+      initRepoWithOneTrackedRecord();
+      writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+
+      writeRecord(tmpDir, 'untracked', 'error'); // edit the DRAFT
+      const { verifyManifestCommand } = await import('./verify-manifest.js');
+      await expect(verifyManifestCommand()).resolves.toBeUndefined();
+
+      writeRecord(tmpDir, 'tracked', 'error'); // edit the STAGED record
+      await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
+    });
+  });
+
+  it('IGNORES a non-record `.yaml` under the records dir — the double extension is the class', async () => {
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeRecord(tmpDir, 'no-console');
+    writeValidManifest(manifestPath, lessonsDir, rulesPath, tmpDir);
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'rules', 'notes.yaml'), 'anything: here\n');
+
+    const { verifyManifestCommand } = await import('./verify-manifest.js');
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
   });
 });

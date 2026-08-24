@@ -175,6 +175,56 @@ describe('compileCommand --refresh-manifest (#1587)', () => {
     expect(manifestBytesAfter).toBe(manifestBytesBefore);
   });
 
+  // ── Prop 310 § Design 1 — the record class joins the freshness question ──
+  it('refreshes a manifest whose records_hash is stale, even when output_hash is fresh', async () => {
+    // Without this, a records-only change reports "already fresh" here while
+    // `verify-manifest` hard-FAILS on it — leaving the OQ-3 recovery ("re-run the
+    // manifest writer") with no writer that would act.
+    const { attestRecordsHash } = await import('@mmnto/totem');
+    const heading = 'Use err in catch';
+    const body = 'Do not use the identifier "error" in catch blocks.';
+    const lessonHash = hashLesson(heading, body);
+
+    setupWorkspace(tmpDir, {
+      lessons: { 'use-err.md': lessonMarkdown(heading, body) },
+      rules: [{ lessonHash, lessonHeading: heading }],
+    });
+
+    const totemDir = path.join(tmpDir, '.totem');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+    const recordsDir = path.join(totemDir, 'rules');
+    fs.mkdirSync(recordsDir, { recursive: true });
+    fs.writeFileSync(path.join(recordsDir, 'x.rule.yaml'), 'schemaVersion: 1\n', 'utf-8');
+
+    await compileCommand({ refreshManifest: true });
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as {
+      records_hash?: string;
+    };
+    expect(manifest.records_hash).toBe(attestRecordsHash(totemDir, tmpDir));
+  });
+
+  it('stays a no-op on a pre-Prop-310 manifest when zero records are on disk (OQ-3 absence)', async () => {
+    // The negative control for the row above: absence is legal while no record
+    // exists, so this command must not churn every shipped manifest on upgrade.
+    const heading = 'Use err in catch';
+    const body = 'Do not use the identifier "error" in catch blocks.';
+    const lessonHash = hashLesson(heading, body);
+
+    setupWorkspace(tmpDir, {
+      lessons: { 'use-err.md': lessonMarkdown(heading, body) },
+      rules: [{ lessonHash, lessonHeading: heading }],
+    });
+
+    const manifestPath = path.join(tmpDir, '.totem', 'compile-manifest.json');
+    const before = fs.readFileSync(manifestPath, 'utf-8');
+    expect(before).not.toContain('records_hash');
+
+    await compileCommand({ refreshManifest: true });
+
+    expect(fs.readFileSync(manifestPath, 'utf-8')).toBe(before);
+  });
+
   it('throws TotemConfigError when combined with --force', async () => {
     // Strict exclusivity: --refresh-manifest is a no-LLM primitive and
     // cannot combine with --force (an LLM-invoking regenerate). The combo

@@ -1015,6 +1015,65 @@ describe('captureObservationRules', () => {
     cleanTmpDir(tmpDir);
   });
 
+  // ── Prop 310 § Design 1 (MIN-8 residue) — this writer attests the record class ──
+  it('refreshes records_hash — the shipping writer reaches attestRecordsHash', async () => {
+    // The last of the six `writeCompileManifest` call sites to get a wiring test.
+    // Without the call site this manifest keeps no `records_hash`, and
+    // `verify-manifest` then hard-FAILS "unattested file class" on any repo
+    // carrying a tracked record. Run in a REAL git repo with ONE of two records
+    // staged, so the attested value is neither the empty-set constant nor the
+    // untracked-inclusive walk — a missing call site cannot coincidentally match.
+    const { attestRecordsHash, EMPTY_RECORDS_HASH, generateOutputHash, writeCompileManifest } =
+      await import('@mmnto/totem');
+    const { captureObservationRules } = await import('./shield.js');
+
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(path.join(srcDir, 'routes.ts'), 'app.get("/admin", handler);\n');
+
+    const totemDir = path.join(tmpDir, '.totem');
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    // The manifest refresh is guarded by a pre-existing manifest (ENOENT is a
+    // deliberate silent no-op there), so seed one WITHOUT a records_hash.
+    fs.writeFileSync(rulesPath, JSON.stringify({ version: 1, rules: [] }, null, 2) + '\n', 'utf-8');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+    writeCompileManifest(manifestPath, {
+      compiled_at: '2026-04-22T00:00:00Z',
+      model: 'test-model',
+      input_hash: '0'.repeat(64),
+      output_hash: generateOutputHash(rulesPath),
+      rule_count: 0,
+    });
+
+    const recordsDir = path.join(totemDir, 'rules');
+    fs.mkdirSync(recordsDir, { recursive: true });
+    fs.writeFileSync(path.join(recordsDir, 'tracked.rule.yaml'), 'schemaVersion: 1\n', 'utf-8');
+    fs.writeFileSync(path.join(recordsDir, 'draft.rule.yaml'), 'schemaVersion: 1\n', 'utf-8');
+    execFileSync('git', ['init', '-q'], { cwd: tmpDir });
+    execFileSync('git', ['add', '.totem/rules/tracked.rule.yaml'], { cwd: tmpDir });
+
+    const findings = [
+      {
+        severity: 'CRITICAL' as const,
+        confidence: 0.9,
+        message: 'Missing auth middleware on admin route',
+        file: 'src/routes.ts',
+        line: 1,
+      },
+    ];
+    const config = { totemDir: '.totem' } as import('@mmnto/totem').TotemConfig;
+    await captureObservationRules(findings, tmpDir, config, undefined);
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as {
+      records_hash?: string;
+    };
+    expect(manifest.records_hash).toBe(attestRecordsHash(totemDir, tmpDir));
+    expect(manifest.records_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(manifest.records_hash).not.toBe(EMPTY_RECORDS_HASH);
+    // …and it is the TRACKED-set value, not the untracked-inclusive walk.
+    expect(manifest.records_hash).not.toBe(attestRecordsHash(totemDir));
+  });
+
   it('captures observation rules from findings with file + line', async () => {
     const { captureObservationRules } = await import('./shield.js');
 

@@ -139,15 +139,35 @@ function authoredAtAfterFreeze(w: World): string {
   return new Date(Date.parse(w.artifact.split.frozenAt!) + 60_000).toISOString();
 }
 
+/** Prop 310 § Design 1 — the record the envelope references, written beside it. */
+const AUTHORED_RECORD_REF = '.totem/rules/no-console-log.rule.yaml';
+
+function writeAuthoredRecord(w: World, pattern: string): void {
+  const dir = path.join(w.totemDir, 'rules');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'no-console-log.rule.yaml'),
+    yamlStringify({
+      schemaVersion: 1,
+      severity: 'warning',
+      message: 'console.log is banned in production code.',
+      target: { type: 'regex', pattern, scope: { fileGlobs: ['src/**/*.rs'] } },
+      examples: [{ bad: 'console.log("dbg")', good: 'logger.debug("dbg")' }],
+    }),
+    'utf-8',
+  );
+}
+
 function writeAuthoredYaml(
   w: World,
   over: {
     splitRef?: string;
     freezeCommitment?: string | null;
     fixturePr?: number;
-    dslSource?: string;
+    pattern?: string;
   } = {},
 ): void {
+  writeAuthoredRecord(w, over.pattern ?? 'console\\.log');
   // `freezeCommitment: null` ⇒ OMIT the header field (the absence row); undefined ⇒ the real one.
   const commitment =
     over.freezeCommitment === null
@@ -163,21 +183,15 @@ function writeAuthoredYaml(
         author: 'alice',
         authoredAt: authoredAtAfterFreeze(w),
         targetDefect: 'forbidden console.log in prod',
-        declaredEngine: 'regex',
         structuralClass: 'forbidden-literal-token',
-        dslSource: over.dslSource ?? 'console\\.log',
+        record: AUTHORED_RECORD_REF,
         positiveFixtures: [
           {
             pr: over.fixturePr ?? 1,
-            preimageSource: {
-              kind: 'lesson',
-              lessonRef: 'a1b2c3d4e5f60718',
-              badExample: 'console.log("dbg")',
-              goodExample: 'logger.debug("dbg")',
-            },
             filePath: 'src-f1.rs',
             matchedSpan: 'L1-L2',
             contentHash: 'h'.repeat(8),
+            example: 0,
           },
         ],
       },
@@ -283,19 +297,9 @@ describe('R1 freeze-orchestration (real-git end-to-end)', () => {
     // so a content-addressed run must resolve + PROVE the binding there or the intake's
     // total partition voids the verifyOnly re-derive with GATE_INVALID.
     const w = await buildSharedWorld();
-    // A COMPILE-USABLE dsl (the D5 assembler fixture shape) — this row runs the full
-    // assembly, so the rule must survive runCompileStage, not just intake.
-    const compilableDsl = [
-      '**Pattern:** `console\\.log\\(`',
-      '**Engine:** regex',
-      '**Severity:** warning',
-      '',
-      '### Bad Example',
-      '```ts',
-      'console.log("dbg")',
-      '```',
-    ].join('\n');
-    writeAuthoredYaml(w, { dslSource: compilableDsl });
+    // A COMPILE-USABLE record (the D5 assembler fixture shape) — this row runs the
+    // full assembly, so the rule must survive runCompileStage, not just intake.
+    writeAuthoredYaml(w, { pattern: 'console\\.log\\(' });
     authorUnderFreeze(w);
     commitAll(w.repoRoot, 'author: rule under gate-1 freeze');
     pushMain(w.repoRoot);

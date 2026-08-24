@@ -1,6 +1,7 @@
 import type {
   CompiledRule,
   CompiledRulesFile,
+  CompileManifest,
   LayerTraceEvent,
   LessonInput,
   NonCompilableEntry,
@@ -457,6 +458,10 @@ export async function compileCommand(
     verifyRuleExamples,
     writeCacheEntry,
     writeCompileManifest,
+    // Prop 310 § Design 1 — the ONE record-class attestation every manifest writer
+    // calls, so the three write sites in this file cannot disagree about it.
+    attestRecordsHash,
+    isRecordsAttestationFresh,
   } = await import('@mmnto/totem');
 
   // Compile-worker fingerprint resolved relative to the running compile.js.
@@ -882,11 +887,23 @@ export async function compileCommand(
     const compiledRulesFile = loadCompiledRulesFile(rulesPath);
     const compileManifest = readCompileManifest(manifestPath);
     const freshOutputHash = generateOutputHash(rulesPath);
-    if (compileManifest.output_hash === freshOutputHash) {
+    // Prop 310 § Design 1: the RECORD class is part of "is the manifest fresh?".
+    // Without it, a records-only change would report "already fresh" here and then
+    // hard-FAIL `verify-manifest` — leaving the OQ-3 recovery ("re-run the manifest
+    // writer") with no writer that would act.
+    //
+    // ABSENCE is judged by the OQ-3 rule, not by comparing against the empty-set
+    // hash. Both this path and the ordinary compile no-op path below ask the ONE
+    // `isRecordsAttestationFresh` predicate, so no writer can consider a manifest
+    // fresh that `verify-manifest` would then reject (bot round 1, B-1).
+    const freshRecordsHash = attestRecordsHash(totemDir, cwd);
+    const recordsFresh = isRecordsAttestationFresh(compileManifest.records_hash, totemDir, cwd);
+    if (compileManifest.output_hash === freshOutputHash && recordsFresh) {
       log.info(TAG, 'Manifest already fresh — no changes.');
       return;
     }
     compileManifest.output_hash = freshOutputHash;
+    compileManifest.records_hash = freshRecordsHash;
     compileManifest.compiled_at = new Date().toISOString();
     compileManifest.rule_count = compiledRulesFile.rules.length;
     writeCompileManifest(manifestPath, compileManifest);
@@ -1213,9 +1230,12 @@ export async function compileCommand(
         // consumer symmetric even when compile runs with an untracked lesson
         // present (mmnto-ai/totem#2051 / mmnto-ai/totem#2055).
         const currentInputHash = generateInputHash(lessonsDir, cwd);
-        let existingManifestInputHash: string | null = null;
+        // The WHOLE manifest, not just `input_hash` (bot round 1, B-1): the
+        // records freshness question needs the existing `records_hash`, and a
+        // second read would be a second chance to disagree with this one.
+        let existingManifest: CompileManifest | null = null;
         try {
-          existingManifestInputHash = readCompileManifest(manifestPath).input_hash;
+          existingManifest = readCompileManifest(manifestPath);
         } catch (err) {
           // ONLY swallow "manifest does not exist" (ENOENT) — everything else
           // bubbles up so the user sees a loud failure rather than silently
@@ -1246,7 +1266,18 @@ export async function compileCommand(
           }
           if (!isMissingFile) throw err;
         }
-        const manifestStale = existingManifestInputHash !== currentInputHash;
+        const manifestStale = existingManifest?.input_hash !== currentInputHash;
+        // Prop 310 § Design 1 (B-1): a tracked record-only change moves NOTHING
+        // this branch previously looked at — the lessons are unchanged, so
+        // `input_hash` matches and nothing is pruned — yet `records_hash` is now
+        // stale and `verify-manifest` hard-FAILs on it. The same single-homed
+        // predicate the `--refresh-manifest` path uses answers it here, so the
+        // two writers cannot reach different verdicts about one tree.
+        const recordsFresh = isRecordsAttestationFresh(
+          existingManifest?.records_hash,
+          totemDir,
+          cwd,
+        );
 
         if (rulesPruned > 0 || drained > 0) {
           saveCompiledRulesFile(rulesPath, {
@@ -1268,7 +1299,7 @@ export async function compileCommand(
           }
         }
 
-        if (rulesPruned > 0 || drained > 0 || manifestStale) {
+        if (rulesPruned > 0 || drained > 0 || manifestStale || !recordsFresh) {
           // CR finding on PR mmnto/totem#1331: keep the compile manifest in sync
           // with the rewritten on-disk state. Post-mmnto/totem#1337, this block
           // also fires on pure input-hash drift — rewriting only the manifest,
@@ -1280,6 +1311,7 @@ export async function compileCommand(
             model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
             input_hash: currentInputHash,
             output_hash: outputHash,
+            records_hash: attestRecordsHash(totemDir, cwd),
             rule_count: freshRules.length,
             ...(postPruneFingerprint !== undefined
               ? { compile_worker_fingerprint: postPruneFingerprint }
@@ -1938,6 +1970,7 @@ export async function compileCommand(
           model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
           input_hash: inputHash,
           output_hash: outputHash,
+          records_hash: attestRecordsHash(totemDir, cwd),
           rule_count: newRules.length,
           ...(fullRecompileFingerprint !== undefined
             ? { compile_worker_fingerprint: fullRecompileFingerprint }

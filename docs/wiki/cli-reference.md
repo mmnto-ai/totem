@@ -102,10 +102,10 @@ Manage your deterministic rules (Pipeline 1). Subcommands: `list`, `inspect`, `t
 
 - `rule list` outputs active rules.
 - `rule inspect <id>` shows rule details by hash (supports prefix matching).
-- `rule test <id>` tests a rule against its inline Example Hit/Miss.
+- `rule test <id>` tests a rule against its inline Example Hit/Miss; for a Prop 310 record rule it instead runs every `examples[i]` pair through the smoke gate (the `bad` side must fire, the `good` side must stay silent) and reports one line per ordinal.
 - `rule scaffold <id>` generates a test fixture skeleton for a compiled rule.
 - `rule promote <hash>` flips a rule from `unverified` to active per ADR-089 (Zero-Trust Default). Pipeline 2 and Pipeline 3 LLM-generated rules ship `unverified: true` unconditionally; this command is the atomic activation surface. Supports partial hash prefixes; ambiguous prefixes print candidates and exit non-zero with no mutation. Idempotent.
-- `rule author` ingests `.totem/spine/authored-rules.yaml` into authored rules and the §8 authoring-ledger (ADR-112).
+- `rule author` ingests `.totem/spine/authored-rules.yaml` into authored rules and the §8 authoring-ledger (ADR-112); each entry references its rule as a `.totem/rules/<slug>.rule.yaml` record rather than carrying the matcher inline (Prop 310).
 
 ### `totem gate` (check / install)
 
@@ -139,6 +139,8 @@ Imports rules from existing tools into the Totem engine (Pipeline 4).
 ### `totem verify-manifest`
 
 Verifies the integrity of the compiled rule manifest against current active rules (CI gate).
+
+The manifest also attests `.totem/rules/**/*.rule.yaml` as `records_hash` over the git-tracked records (untracked drafts are neither hashed nor counted); an absent `records_hash` is accepted only while no tracked record exists, and a mismatch is never downgraded by an active freeze.
 
 - **Flags:**
   - `--allow-compile-drift`: Override compile-worker fingerprint drift. In CI this requires a `## Compile Drift Justification` heading in the PR body; a pre-push run without an open PR requires the `TOTEM_DRIFT_JUSTIFICATION` env var to be set.

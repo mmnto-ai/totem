@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -5,44 +6,88 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { stringify as yamlStringify } from 'yaml';
 
-import { readAuthoringLedger } from '@mmnto/totem';
+import {
+  AuthoredRuleInputSchema,
+  type ParsedRuleRecord,
+  parseRuleRecord,
+  readAuthoringLedger,
+  RuleRecordNoSilentSkipError,
+  RuleRecordParseError,
+} from '@mmnto/totem';
 
-import { runRuleAuthor } from '../authored-rule-intake.js';
+import {
+  checkRecordReference,
+  deriveRecordFixtures,
+  RECORD_REFERENCE_RULES,
+  type RecordReferenceRule,
+  runRuleAuthor,
+} from '../authored-rule-intake.js';
 
+let root: string;
 let totemDir: string;
 let yamlPath: string;
+let rulesDir: string;
 beforeEach(() => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-ruleauthor-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-ruleauthor-'));
   totemDir = path.join(root, '.totem');
+  rulesDir = path.join(totemDir, 'rules');
   fs.mkdirSync(path.join(totemDir, 'spine'), { recursive: true });
+  fs.mkdirSync(rulesDir, { recursive: true });
   yamlPath = path.join(totemDir, 'spine', 'authored-rules.yaml');
+  writeRecord(DEFAULT_RECORD_SLUG);
 });
 afterEach(() => {
-  fs.rmSync(path.dirname(totemDir), { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
-const SHA_A = 'a'.repeat(40);
-const SHA_B = 'b'.repeat(40);
-// §4 FALLBACK: a commit-pair preimageSource (land-then-fix).
-const fixture = (pr: number) => ({
-  pr,
-  preimageSource: { kind: 'commit', preimageCommitSha: SHA_B, mergeCommitSha: SHA_A },
-  filePath: 'src/x.ts',
-  matchedSpan: 'L1-L2',
-  contentHash: 'h'.repeat(8),
-});
-// §4 PRIMARY: a lesson-anchored preimageSource (review-caught) — the cert-#1 path.
-const lessonFixture = (pr: number) => ({
-  pr,
-  preimageSource: {
-    kind: 'lesson',
-    lessonRef: 'a1b2c3d4e5f60718',
-    badExample: 'console.log("dbg")',
-    goodExample: 'logger.debug("dbg")',
+// ── Prop 310 § Design 1 — the record carrier the envelope references ──────────
+//
+// The rule half now lives in `.totem/rules/<slug>.rule.yaml`. Every assertion in
+// this file is the one it always made; only the CARRIER moved (OQ-1 records-only).
+// The whitelist row exercised is the shipped `(regex, forbidden-literal-token)`
+// exemplar, so the record declares `target.type: regex` and the intake DERIVES
+// that engine — the envelope never states it.
+
+const DEFAULT_RECORD_SLUG = 'no-console-log';
+
+/** The default record body: a regex rule with ONE example pair at ordinal 0. */
+const recordBody = (over: Record<string, unknown> = {}) => ({
+  schemaVersion: 1,
+  severity: 'warning',
+  message: 'console.log is banned in production code.',
+  target: {
+    type: 'regex',
+    pattern: 'console\\.log',
+    scope: { fileGlobs: ['src/**/*.ts'] },
   },
+  examples: [{ bad: 'console.log("dbg")', good: 'logger.debug("dbg")' }],
+  ...over,
+});
+
+/** Write a record file and return the repo-relative reference the envelope uses. */
+function writeRecord(
+  slug: string,
+  body: Record<string, unknown> = recordBody(),
+  opts: { crlf?: boolean } = {},
+): string {
+  const text = yamlStringify(body);
+  const target = path.join(rulesDir, `${slug}.rule.yaml`);
+  // The slug may carry a directory (`sub/x`) — records nest, and `records_hash`
+  // walks recursively.
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, opts.crlf === true ? text.replace(/\n/g, '\r\n') : text, 'utf-8');
+  return recordRef(slug);
+}
+
+const recordRef = (slug: string): string => `.totem/rules/${slug}.rule.yaml`;
+
+/** The § Design 10 fixture: the ADR-112 §6 corpus anchor + an `examples[i]` ordinal reference. */
+const fixture = (pr: number, example = 0) => ({
+  pr,
   filePath: 'src/x.ts',
   matchedSpan: 'L1-L2',
   contentHash: 'h'.repeat(8),
+  example,
 });
 // §6 SILENCE-ONLY near-miss (strategy#770): one side, NO `pr`, no bad/good pair.
 const nearMissFixture = () => ({
@@ -56,9 +101,8 @@ const decidableRule = (over: Record<string, unknown> = {}) => ({
   author: 'alice',
   authoredAt: '2026-06-27',
   targetDefect: 'forbidden console.log in prod', // spaces → exercises the injective identity key
-  declaredEngine: 'regex',
   structuralClass: 'forbidden-literal-token',
-  dslSource: 'console\\.log',
+  record: recordRef(DEFAULT_RECORD_SLUG),
   positiveFixtures: [fixture(101)],
   ...over,
 });
@@ -108,18 +152,595 @@ describe('runRuleAuthor — FM(d) reject-loud at the reader (the trust boundary)
     writeYaml([decidableRule({ origin: { kind: 'from-scratch', ruleId: 'x'.repeat(16) } })]);
     expect(() => run()).toThrow(/producer-owned key/i);
   });
-  it('rejects a producer-owned key nested inside preimageSource (recursive scan walks the §4 union — FM(d))', () => {
+  it('rejects a producer-owned key nested inside a NEGATIVE fixture too (the scan walks every depth)', () => {
+    writeYaml([
+      decidableRule({
+        negativeFixtures: [{ ...nearMissFixture(), routing: 'rag-only' }],
+      }),
+    ]);
+    expect(() => run()).toThrow(/producer-owned key/i);
+  });
+});
+
+// ── Prop 310 § Design 1 (OQ-1 records-only) — the migration rejections ────────
+
+describe('runRuleAuthor — the pre-slice-3 carrier keys are rejected BY NAME', () => {
+  const RECORD_FORM = /\.totem\/rules\/<slug>\.rule\.yaml/;
+
+  it('rejects an inline dslSource, naming the key, the JSON path, and the record form', () => {
+    writeYaml([decidableRule({ dslSource: 'console\\.log' })]);
+    let thrown: unknown;
+    try {
+      run();
+    } catch (err) {
+      thrown = err;
+    }
+    const message = (thrown as Error).message;
+    expect(message).toContain("carries 'dslSource'");
+    expect(message).toContain('<root>.rules[0].dslSource');
+    expect(message).toMatch(/rules\/<slug>\.rule\.yaml/);
+    expect((thrown as { code?: string }).code).toBe('CONFIG_INVALID');
+    // The recovery hint carries the record form too — the message says WHAT is
+    // wrong, the hint says where the value goes.
+    expect((thrown as { recoveryHint?: string }).recoveryHint).toMatch(RECORD_FORM);
+  });
+
+  it('rejects an inline declaredEngine — the engine is DERIVED from the record’s target.type', () => {
+    writeYaml([decidableRule({ declaredEngine: 'regex' })]);
+    let thrown: unknown;
+    try {
+      run();
+    } catch (err) {
+      thrown = err;
+    }
+    const message = (thrown as Error).message;
+    expect(message).toContain("carries 'declaredEngine'");
+    expect(message).toContain('<root>.rules[0].declaredEngine');
+    expect(message).toMatch(/rules\/<slug>\.rule\.yaml/);
+    expect((thrown as { code?: string }).code).toBe('CONFIG_INVALID');
+  });
+
+  it('rejects an inline fixture preimageSource AT DEPTH — the envelope side is derived', () => {
     writeYaml([
       decidableRule({
         positiveFixtures: [
           {
             ...fixture(101),
-            preimageSource: { ...fixture(101).preimageSource, ruleId: 'x'.repeat(16) },
+            preimageSource: {
+              kind: 'lesson',
+              lessonRef: 'a1b2c3d4e5f60718',
+              badExample: 'console.log("dbg")',
+              goodExample: 'logger.debug("dbg")',
+            },
           },
         ],
       }),
     ]);
-    expect(() => run()).toThrow(/producer-owned key/i);
+    let thrown: unknown;
+    try {
+      run();
+    } catch (err) {
+      thrown = err;
+    }
+    const message = (thrown as Error).message;
+    expect(message).toContain("carries 'preimageSource'");
+    // The JSON path names the DEPTH, which is the whole point of the recursive
+    // scan: Zod `.strict()` is not recursive and would have stripped it.
+    expect(message).toContain('<root>.rules[0].positiveFixtures[0].preimageSource');
+    expect(message).toMatch(/rules\/<slug>\.rule\.yaml/);
+    expect((thrown as { code?: string }).code).toBe('CONFIG_INVALID');
+  });
+
+  it('interpolates the REPO’s totem-dir name into the hint, not a hardcoded `.totem/`', () => {
+    // MIN-6: a repo whose config names a different totem directory was being handed
+    // a migration instruction that does not resolve there. The hint is derived from
+    // the caller's actual `totemDir`.
+    const altRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-altdir-'));
+    const altTotem = path.join(altRoot, '.mytotem');
+    fs.mkdirSync(path.join(altTotem, 'spine'), { recursive: true });
+    fs.mkdirSync(path.join(altTotem, 'rules'), { recursive: true });
+    fs.writeFileSync(
+      path.join(altTotem, 'spine', 'authored-rules.yaml'),
+      yamlStringify({
+        splitRef: 'split-2026-06-27',
+        authoredAfterSplit: true,
+        heldOutNonInspectionAttestation: true,
+        rules: [{ ...decidableRule({ dslSource: 'console\\.log' }) }],
+      }),
+      'utf-8',
+    );
+    let thrown: unknown;
+    try {
+      runRuleAuthor(altTotem, { judgedBy: 'static-whitelist@test' });
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as Error).message).toContain('.mytotem/rules/<slug>.rule.yaml');
+    expect((thrown as Error).message).not.toContain('.totem/rules/<slug>');
+    expect((thrown as { recoveryHint?: string }).recoveryHint).toContain(
+      '.mytotem/rules/<slug>.rule.yaml',
+    );
+    fs.rmSync(altRoot, { recursive: true, force: true });
+  });
+
+  it('rejects, never STRIPS — a migrated key does not silently vanish into a successful run', () => {
+    writeYaml([decidableRule({ dslSource: 'console\\.log' })]);
+    expect(() => run()).toThrow();
+    // Nothing was authored: the reject happens before pass 1 constructs anything.
+    expect(readAuthoringLedger(totemDir)).toHaveLength(0);
+  });
+});
+
+// ── Prop 310 § Design 1 — the `record:` reference's own shape rules ───────────
+
+describe('runRuleAuthor — record reference resolution', () => {
+  // ── MIN-2: the LEXICAL rule table ──
+  //
+  // Every verdict here is a property of the reference TEXT, so it is identical on
+  // win32 and linux. That is the point: `path.resolve`/`path.relative` diverge on
+  // exactly these inputs (a backslash is a separator on one platform and a
+  // filename character on the other; a drive-letter absolute inside the root
+  // passes containment; the default case-insensitive filesystem resolves
+  // `.totem/Rules/…` and linux does not), and the reference is recorded VERBATIM
+  // in the tracked authoring-ledger — so an accepted machine-specific form would
+  // be committed into a shared attestation.
+  //
+  // Exercised through `checkRecordReference` (the pure rule) AND through
+  // `runRuleAuthor` (the shipping path), so the table cannot pass while the
+  // producer bypasses it.
+  const LEXICAL_TABLE: { reference: string; rule: RecordReferenceRule | null; why: string }[] = [
+    { reference: '.totem/rules/no-console-log.rule.yaml', rule: null, why: 'posix relative' },
+    {
+      reference: '.totem/rules/sub/no-console-log.rule.yaml',
+      rule: null,
+      why: 'nested subdir — records_hash walks recursively, so nesting stays legal',
+    },
+    // C-6: a `..` PREFIX is not a `..` SEGMENT. Both of these resolve INSIDE the
+    // root and are ordinary file names; a `startsWith('..')` containment check
+    // false-rejected them.
+    {
+      reference: '.totem/rules/..hidden/x.rule.yaml',
+      rule: null,
+      why: 'directory whose name begins with `..`',
+    },
+    {
+      reference: '.totem/rules/..a.rule.yaml',
+      rule: null,
+      why: 'file name beginning with `..`',
+    },
+    { reference: '.totem\\rules\\x.rule.yaml', rule: 'separator', why: 'backslashes' },
+    {
+      reference: 'C:/totem/.totem/rules/x.rule.yaml',
+      rule: 'drive-letter',
+      why: 'drive-letter absolute',
+    },
+    { reference: '/.totem/rules/x.rule.yaml', rule: 'absolute-path', why: 'leading slash' },
+    { reference: '//server/.totem/rules/x.rule.yaml', rule: 'unc-path', why: 'UNC path' },
+    {
+      reference: '.totem/Rules/x.rule.yaml',
+      rule: 'records-dir-prefix',
+      why: 'records dir case variant',
+    },
+    {
+      reference: '.TOTEM/rules/x.rule.yaml',
+      rule: 'records-dir-prefix',
+      why: 'totem dir case variant',
+    },
+    { reference: './.totem/rules/x.rule.yaml', rule: 'records-dir-prefix', why: 'leading ./' },
+    { reference: '.totem/rules//x.rule.yaml', rule: 'empty-segment', why: '// mid-path' },
+    { reference: '.totem/rules/./x.rule.yaml', rule: 'current-segment', why: '. segment mid-path' },
+    { reference: '.totem/rules/../rules/x.rule.yaml', rule: 'parent-segment', why: '.. segment' },
+    { reference: '.totem/rules/', rule: 'is-the-records-dir', why: 'equals the rules dir' },
+    { reference: '.totem/rules/thing.yaml', rule: 'suffix', why: 'wrong file class' },
+  ];
+
+  it.each(LEXICAL_TABLE)('checkRecordReference: $why → $rule', ({ reference, rule }) => {
+    // EXACT rule, not merely "rejected": a reference that fails for the wrong
+    // reason would send the author to fix the wrong thing.
+    expect(checkRecordReference('.totem', reference)).toBe(rule);
+  });
+
+  it.each(LEXICAL_TABLE.filter((row) => row.rule !== null))(
+    'runRuleAuthor rejects CONFIG_INVALID naming [$rule]: $why',
+    ({ reference, rule }) => {
+      // The record the malformed reference "means" EXISTS on disk, so the reject
+      // can only be the lexical gate — never a coincidental CONFIG_MISSING.
+      writeRecord('x');
+      writeYaml([decidableRule({ record: reference })]);
+      let thrown: unknown;
+      try {
+        run();
+      } catch (err) {
+        thrown = err;
+      }
+      expect((thrown as { code?: string }).code).toBe('CONFIG_INVALID');
+      expect((thrown as Error).message).toContain(`[${rule}]`);
+      expect((thrown as Error).message).toContain('.totem/rules/<slug>.rule.yaml');
+    },
+  );
+
+  it.each(LEXICAL_TABLE.filter((row) => row.rule === null))(
+    'runRuleAuthor ACCEPTS: $why',
+    ({ reference }) => {
+      // `sub/` is created by `writeRecord` when the slug carries a directory.
+      writeRecord(reference.slice('.totem/rules/'.length, -'.rule.yaml'.length));
+      writeYaml([decidableRule({ record: reference })]);
+      const res = run();
+      expect(res.rejected).toEqual([]);
+      expect(res.records[0]?.record.path).toBe(reference);
+    },
+  );
+
+  it('keeps the resolved-containment check as the second line of defence', () => {
+    // A reference that is lexically clean for a DIFFERENT totem dir still cannot
+    // escape this one's `rules/`. The lexical prefix rule catches it first, which
+    // is why the containment check is defence in depth rather than the only gate.
+    fs.writeFileSync(path.join(totemDir, 'stray.rule.yaml'), yamlStringify(recordBody()), 'utf-8');
+    writeYaml([decidableRule({ record: '.totem/stray.rule.yaml' })]);
+    expect(() => run()).toThrow(/records-dir-prefix/);
+  });
+
+  it('every RECORD_REFERENCE_RULE has a negative fixture in the table', () => {
+    // An unexercised rule is an unpinned rule — the same exhaustiveness guard the
+    // glob dialect's conformance suite applies.
+    const covered = new Set(LEXICAL_TABLE.map((row) => row.rule).filter((r) => r !== null));
+    expect([...covered].sort()).toEqual([...RECORD_REFERENCE_RULES].sort());
+  });
+
+  it('CONFIG_MISSING (not CONFIG_INVALID) when the referenced record does not exist', () => {
+    writeYaml([decidableRule({ record: recordRef('never-written') })]);
+    let thrown: unknown;
+    try {
+      run();
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as { code?: string }).code).toBe('CONFIG_MISSING');
+    expect((thrown as Error).message).toMatch(/rule record not found/);
+    expect((thrown as Error).message).toContain('never-written.rule.yaml');
+  });
+
+  it('propagates a RuleRecordParseError UNWRAPPED — file + key path intact, never a generic reject', () => {
+    writeRecord('broken', recordBody({ severity: 'critical' }));
+    writeYaml([decidableRule({ record: recordRef('broken') })]);
+    let thrown: unknown;
+    try {
+      run();
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(RuleRecordParseError);
+    expect((thrown as RuleRecordParseError).filePath).toBe(recordRef('broken'));
+    expect((thrown as RuleRecordParseError).keyPath).toBe('severity');
+  });
+
+  it('propagates the § Design 2 no-silent-skip subclass unwrapped too (unknown schemaVersion)', () => {
+    writeRecord('v2', recordBody({ schemaVersion: 2 }));
+    writeYaml([decidableRule({ record: recordRef('v2') })]);
+    expect(() => run()).toThrow(RuleRecordNoSilentSkipError);
+  });
+});
+
+// ── Prop 310 § Design 10 — the derived preimage envelope ─────────────────────
+
+describe('runRuleAuthor — examples ⇄ fixture derivation', () => {
+  it('derives preimageSource from `examples[ordinal]` under the (ruleId, ordinal) key', () => {
+    writeYaml([decidableRule()]);
+    const res = run();
+    const record = res.records[0]!;
+    const src = record.provenance.positiveFixtures[0]!.preimageSource;
+    expect(src.kind).toBe('record');
+    if (src.kind !== 'record') throw new Error('unreachable');
+    expect(src.ruleId).toBe(record.ruleId);
+    expect(src.ordinal).toBe(0);
+    expect(src.badExample).toBe('console.log("dbg")');
+    expect(src.goodExample).toBe('logger.debug("dbg")');
+    expect(src.pairHash).toBe(record.record.parsed.examplePairHashes[0]!.hash);
+    // The join key carries the REAL minted id, not a placeholder — the derivation
+    // runs after the mint for exactly this reason.
+    expect(src.ruleId).toMatch(/^[0-9a-f]{16}(?:-[1-9]\d*)?$/);
+  });
+
+  it('resolves ordinal 1 to EXACTLY examples[1], never a re-pair', () => {
+    writeRecord(
+      'two-pairs',
+      recordBody({
+        examples: [
+          { bad: 'console.log("a")', good: 'logger.debug("a")' },
+          { bad: 'console.log("b")', good: 'logger.debug("b")' },
+        ],
+      }),
+    );
+    writeYaml([
+      decidableRule({
+        record: recordRef('two-pairs'),
+        positiveFixtures: [fixture(101, 1), fixture(102, 0)],
+      }),
+    ]);
+    const sources = run().records[0]!.provenance.positiveFixtures.map((f) => f.preimageSource);
+    expect(sources.map((s) => (s.kind === 'record' ? [s.ordinal, s.badExample] : null))).toEqual([
+      [1, 'console.log("b")'],
+      [0, 'console.log("a")'],
+    ]);
+  });
+
+  it('fails loud on a DANGLING ordinal, naming the rule, the ordinal, and the count', () => {
+    writeYaml([decidableRule({ positiveFixtures: [fixture(101, 3)] })]);
+    let thrown: unknown;
+    try {
+      run();
+    } catch (err) {
+      thrown = err;
+    }
+    const message = (thrown as Error).message;
+    expect((thrown as { code?: string }).code).toBe('CONFIG_INVALID');
+    expect(message).toContain('example ordinal 3');
+    expect(message).toContain('1 example pair(s)');
+    expect(message).toContain('alice');
+    expect(message).toContain('forbidden console.log in prod');
+    expect(message).toContain('DANGLING');
+  });
+
+  it('fails loud on a DUPLICATE ordinal across two fixtures of one entry (OQ-2 reject)', () => {
+    writeYaml([decidableRule({ positiveFixtures: [fixture(101, 0), fixture(102, 0)] })]);
+    let thrown: unknown;
+    try {
+      run();
+    } catch (err) {
+      thrown = err;
+    }
+    const message = (thrown as Error).message;
+    expect((thrown as { code?: string }).code).toBe('CONFIG_INVALID');
+    expect(message).toContain('SAME example ordinal 0');
+    expect(message).toContain('alice');
+    expect(message).toContain('forbidden console.log in prod');
+  });
+
+  it('accepts two fixtures naming DISTINCT ordinals — the reject is duplication, not multiplicity', () => {
+    writeRecord(
+      'two-pairs',
+      recordBody({
+        examples: [
+          { bad: 'console.log("a")', good: 'logger.debug("a")' },
+          { bad: 'console.log("b")', good: 'logger.debug("b")' },
+        ],
+      }),
+    );
+    writeYaml([
+      decidableRule({
+        record: recordRef('two-pairs'),
+        positiveFixtures: [fixture(101, 0), fixture(102, 1)],
+      }),
+    ]);
+    expect(run().records[0]!.provenance.positiveFixtures).toHaveLength(2);
+  });
+
+  it('binds the pair hash by ORDINAL FIELD, not array position (N-3)', () => {
+    // `examplePairHashes` is a list of `{ordinal, hash}` records. Indexing it would
+    // bind a fixture to the wrong pair the moment the list is filtered or
+    // reordered — and a WRONG drift sensor reads as intact, which is worse than a
+    // missing one. Pinned by asserting the derived hash equals the entry whose
+    // `.ordinal` matches, for a non-zero ordinal.
+    writeRecord(
+      'two-pairs',
+      recordBody({
+        examples: [
+          { bad: 'console.log("a")', good: 'logger.debug("a")' },
+          { bad: 'console.log("b")', good: 'logger.debug("b")' },
+        ],
+      }),
+    );
+    writeYaml([
+      decidableRule({ record: recordRef('two-pairs'), positiveFixtures: [fixture(101, 1)] }),
+    ]);
+    const record = run().records[0]!;
+    const src = record.provenance.positiveFixtures[0]!.preimageSource;
+    const byField = record.record.parsed.examplePairHashes.find((h) => h.ordinal === 1)!;
+    expect(src.kind).toBe('record');
+    if (src.kind === 'record') expect(src.pairHash).toBe(byField.hash);
+    // …and the two pairs really do hash differently, so the lookup is discriminating.
+    const other = record.record.parsed.examplePairHashes.find((h) => h.ordinal === 0)!;
+    expect(byField.hash).not.toBe(other.hash);
+  });
+
+  it('DISCRIMINATES: a REVERSED examplePairHashes list still binds ordinal 1 to ordinal 1’s hash', () => {
+    // The falsifier the row above cannot supply on its own: while the list happens
+    // to be in ordinal order, `find(h => h.ordinal === i)` and `[i]` agree, so an
+    // index-based lookup would pass it. Reversing the list separates them —
+    // `[1]` would return the ordinal-0 entry, so substituting `[ordinal]` FAILS
+    // this assertion while the field lookup holds.
+    const parsed = parseRuleRecord(
+      yamlStringify(
+        recordBody({
+          examples: [
+            { bad: 'console.log("a")', good: 'logger.debug("a")' },
+            { bad: 'console.log("b")', good: 'logger.debug("b")' },
+          ],
+        }),
+      ),
+      recordRef('two-pairs'),
+    );
+    const reversed: ParsedRuleRecord = {
+      ...parsed,
+      examplePairHashes: [...parsed.examplePairHashes].reverse(),
+    };
+    // Pre-condition: the reversal genuinely moves the entries, so position and
+    // field really do disagree here.
+    expect(reversed.examplePairHashes[1]!.ordinal).toBe(0);
+
+    const derived = deriveRecordFixtures(
+      AuthoredRuleInputSchema.parse(
+        decidableRule({ record: recordRef('two-pairs'), positiveFixtures: [fixture(101, 1)] }),
+      ),
+      { path: recordRef('two-pairs'), contentHash: 'a'.repeat(64), parsed: reversed },
+      '0123456789abcdef',
+    );
+    const src = derived[0]!.preimageSource;
+    expect(src.kind).toBe('record');
+    if (src.kind !== 'record') throw new Error('unreachable');
+    expect(src.ordinal).toBe(1);
+    // The ordinal-1 hash by FIELD…
+    expect(src.pairHash).toBe(parsed.examplePairHashes.find((h) => h.ordinal === 1)!.hash);
+    // …and NOT what `examplePairHashes[1]` holds after the reversal.
+    expect(src.pairHash).not.toBe(reversed.examplePairHashes[1]!.hash);
+  });
+
+  it('THROWS on a ParsedRuleRecord carrying no hash for the referenced ordinal (producer bug)', () => {
+    // Unreachable through `parseRuleRecord`, which emits one hash per example — so
+    // this drives the derivation directly with a hand-built value, the caller class
+    // the guard exists for. The removed fallback would have RECOMPUTED the hash,
+    // minting a § Design 10 drift sensor from a value nothing attested.
+    const parsed = parseRuleRecord(yamlStringify(recordBody()), recordRef('x'));
+    const stripped: ParsedRuleRecord = { ...parsed, examplePairHashes: [] };
+    expect(() =>
+      deriveRecordFixtures(
+        AuthoredRuleInputSchema.parse(decidableRule()),
+        { path: recordRef('x'), contentHash: 'a'.repeat(64), parsed: stripped },
+        '0123456789abcdef',
+      ),
+    ).toThrow(/no example-pair hash for ordinal 0/);
+  });
+
+  it('drops the envelope-side `example` reference from the DERIVED fixture (one home for the ordinal)', () => {
+    writeYaml([decidableRule()]);
+    const derived = run().records[0]!.provenance.positiveFixtures[0]!;
+    expect('example' in derived).toBe(false);
+    // …while the ADR-112 §6 corpus anchor rides through untouched.
+    expect(derived.pr).toBe(101);
+    expect(derived.filePath).toBe('src/x.ts');
+    expect(derived.matchedSpan).toBe('L1-L2');
+    expect(derived.contentHash).toBe('h'.repeat(8));
+  });
+});
+
+// ── Prop 310 § Design 1/§ Design 3 — the derived engine + record binding ──────
+
+describe('runRuleAuthor — the engine is derived, the record is content-addressed', () => {
+  it('derives declaredEngine from the record’s target.type, never from the envelope', () => {
+    writeYaml([decidableRule()]);
+    const res = run();
+    expect(res.records[0]?.declaredEngine).toBe('regex');
+    expect(res.records[0]?.record.parsed.derivedEngine).toBe('regex');
+    expect(readAuthoringLedger(totemDir)[0]?.declaredEngine).toBe('regex');
+  });
+
+  it('judges the whitelist on the DERIVED engine — an ast-grep record fails the regex-only class', () => {
+    // `(regex, forbidden-literal-token)` is whitelisted; `(ast-grep, …)` is not.
+    // The author cannot state the engine, so the record's own `target.type` decides.
+    writeRecord(
+      'ast-grep-rule',
+      recordBody({
+        target: {
+          type: 'ast-grep',
+          language: 'typescript',
+          pattern: 'console.log($MSG)',
+          scope: { fileGlobs: ['src/**/*.ts'] },
+        },
+      }),
+    );
+    writeYaml([decidableRule({ record: recordRef('ast-grep-rule') })]);
+    const res = run();
+    expect(res.records).toHaveLength(0);
+    expect(res.rejected).toHaveLength(1);
+    expect(res.rejected[0]?.declaredEngine).toBe('ast-grep');
+    expect(res.rejected[0]?.reason).toContain('(ast-grep, forbidden-literal-token)');
+  });
+
+  it('an ast-grep record IS decided when its class is whitelisted for that engine', () => {
+    writeRecord(
+      'ast-grep-rule',
+      recordBody({
+        target: {
+          type: 'ast-grep',
+          language: 'typescript',
+          pattern: 'console.log($MSG)',
+          scope: { fileGlobs: ['src/**/*.ts'] },
+        },
+      }),
+    );
+    writeYaml([
+      decidableRule({ record: recordRef('ast-grep-rule'), structuralClass: 'node-shape-presence' }),
+    ]);
+    const res = run();
+    expect(res.rejected).toHaveLength(0);
+    expect(res.records[0]?.declaredEngine).toBe('ast-grep');
+    expect(res.records[0]?.structuralEligibility.basis).toBe('whitelist:node-shape-presence');
+  });
+
+  it('binds the ledger entry to the exact ingested BYTES (sha256 of the LF image)', () => {
+    writeYaml([decidableRule()]);
+    run();
+    const entry = readAuthoringLedger(totemDir)[0]!;
+    const bytes = fs.readFileSync(path.join(rulesDir, `${DEFAULT_RECORD_SLUG}.rule.yaml`), 'utf-8');
+    const expected = createHash('sha256').update(bytes.replace(/\r\n/g, '\n')).digest('hex');
+    expect(entry.record?.contentHash).toBe(expected);
+    expect(entry.record?.path).toBe(recordRef(DEFAULT_RECORD_SLUG));
+  });
+
+  it('CRLF twin: identical preimage bytes, identical pairHash, identical ledger contentHash', () => {
+    // The NOQ-1 P3 `serialization-admit` class: the LF admit hop is what everything
+    // downstream sees, so a Windows-authored record is byte-for-byte the same rule.
+    writeYaml([decidableRule()]);
+    const lfRun = run();
+    const lfEntry = readAuthoringLedger(totemDir)[0]!;
+
+    writeRecord(DEFAULT_RECORD_SLUG, recordBody(), { crlf: true });
+    const crlfRun = run();
+    const crlfSrc = crlfRun.records[0]!.provenance.positiveFixtures[0]!.preimageSource;
+    const lfSrc = lfRun.records[0]!.provenance.positiveFixtures[0]!.preimageSource;
+    expect(crlfSrc).toEqual(lfSrc);
+    expect(crlfRun.records[0]!.record.contentHash).toBe(lfRun.records[0]!.record.contentHash);
+    // …so the ledger reads UNCHANGED and appends no spurious revision row.
+    expect(crlfRun.unchanged).toBe(1);
+    expect(crlfRun.revised).toBe(0);
+    expect(readAuthoringLedger(totemDir)).toEqual([lfEntry]);
+  });
+
+  it('RENAME twin: identical contentHash (path is not material) but a different recorded path', () => {
+    writeYaml([decidableRule()]);
+    const first = run();
+    const firstEntry = readAuthoringLedger(totemDir)[0]!;
+
+    // Same bytes at a different path. § Design 1: renaming a record changes no
+    // identity, so the material hash must not move — only the informational path.
+    writeRecord('renamed');
+    writeYaml([decidableRule({ record: recordRef('renamed') })]);
+    const second = run();
+    expect(second.records[0]!.record.contentHash).toBe(first.records[0]!.record.contentHash);
+    expect(second.records[0]!.record.path).toBe(recordRef('renamed'));
+    expect(second.records[0]!.ruleId).toBe(first.records[0]!.ruleId);
+    // The material excludes the path ⇒ no revision row is appended for the rename.
+    expect(second.unchanged).toBe(1);
+    expect(second.revised).toBe(0);
+    expect(readAuthoringLedger(totemDir)).toEqual([firstEntry]);
+  });
+
+  it('an EXAMPLES edit flips the ledger contentHash → `revised` (the § Design 10 drift sensor)', () => {
+    writeYaml([decidableRule()]);
+    run();
+    const before = readAuthoringLedger(totemDir)[0]!.contentHash;
+    writeRecord(
+      DEFAULT_RECORD_SLUG,
+      recordBody({ examples: [{ bad: 'console.log("EDITED")', good: 'logger.debug("dbg")' }] }),
+    );
+    const res = run();
+    expect(res.revised).toBe(1);
+    const ledger = readAuthoringLedger(totemDir);
+    expect(ledger).toHaveLength(2);
+    expect(ledger[1]!.contentHash).not.toBe(before);
+    expect(ledger[1]!.ruleId).toBe(ledger[0]!.ruleId);
+  });
+
+  it('the cert path’s verifyOnly REFUSES a record edited since its ledger entry', () => {
+    writeYaml([decidableRule()]);
+    run();
+    writeRecord(
+      DEFAULT_RECORD_SLUG,
+      recordBody({ examples: [{ bad: 'console.log("EDITED")', good: 'logger.debug("dbg")' }] }),
+    );
+    expect(() =>
+      runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test', verifyOnly: true }),
+    ).toThrow(/\(revised\)/);
   });
 });
 
@@ -133,14 +754,15 @@ describe('runRuleAuthor — eligibility re-run OVERWRITES the author claim', () 
     expect(res.records[0]?.structuralEligibility.basis).toBe('whitelist:forbidden-literal-token');
   });
   it('a non-whitelisted structuralClass is REJECTED even though the author declared it', () => {
-    writeYaml([decidableRule({ structuralClass: 'behavioral-smell', dslSource: 'x' })]);
+    writeYaml([decidableRule({ structuralClass: 'behavioral-smell' })]);
     const res = run();
     expect(res.records).toHaveLength(0);
     expect(res.rejected).toHaveLength(1);
     expect(res.rejected[0]?.structuralClass).toBe('behavioral-smell');
   });
   it('an engine/class mismatch (class whitelisted for a different engine) is rejected', () => {
-    writeYaml([decidableRule({ declaredEngine: 'regex', structuralClass: 'node-shape-presence' })]);
+    // The record derives `regex`; `node-shape-presence` is whitelisted for ast-grep only.
+    writeYaml([decidableRule({ structuralClass: 'node-shape-presence' })]);
     expect(run().rejected).toHaveLength(1);
   });
 });
@@ -157,10 +779,19 @@ describe('runRuleAuthor — upsert idempotency', () => {
     expect(second.records[0]?.ruleId).toBe(id);
     expect(readAuthoringLedger(totemDir)).toHaveLength(1);
   });
-  it('a dslSource edit keeps the ruleId + appends a revision', () => {
+  it('a matcher edit IN THE RECORD keeps the ruleId + appends a revision', () => {
     writeYaml([decidableRule()]);
     const id = run().records[0]?.ruleId;
-    writeYaml([decidableRule({ dslSource: 'console\\.error' })]);
+    writeRecord(
+      DEFAULT_RECORD_SLUG,
+      recordBody({
+        target: {
+          type: 'regex',
+          pattern: 'console\\.error',
+          scope: { fileGlobs: ['src/**/*.ts'] },
+        },
+      }),
+    );
     const res = run();
     expect(res.revised).toBe(1);
     expect(res.records[0]?.ruleId).toBe(id);
@@ -175,7 +806,8 @@ describe('runRuleAuthor — upsert idempotency', () => {
     expect(res.records[0]?.ruleId).not.toBe(id1);
   });
   it('rejects a duplicate (author,targetDefect) within one file (spaces would alias under a naive join)', () => {
-    writeYaml([decidableRule(), decidableRule({ dslSource: 'other' })]);
+    writeRecord('other');
+    writeYaml([decidableRule(), decidableRule({ record: recordRef('other') })]);
     expect(() => run()).toThrow(/more than once/i);
   });
 });
@@ -214,19 +846,30 @@ describe('runRuleAuthor — codex/agy diff-review folds', () => {
     expect(ledger[0]?.positiveFixturePrs).toEqual([101]);
     expect(ledger[0]).not.toHaveProperty('negativeFixturePrs');
   });
-  it('authors a lesson-anchored (PRIMARY, review-caught) positive fixture end-to-end (§4 cert-#1 path)', () => {
-    writeYaml([decidableRule({ positiveFixtures: [lessonFixture(101)] })]);
+  it('authors a RECORD-derived positive fixture end-to-end (§4 cert-#1 path, Prop 310 § Design 10)', () => {
+    // Was a hand-written lesson-anchored fixture; Amendment 1 makes the record's
+    // `examples` block the editable home, so the envelope side is derived instead.
+    writeYaml([decidableRule()]);
     const res = run();
     expect(res.minted).toBe(1);
     const src = res.records[0]?.provenance.positiveFixtures[0]?.preimageSource;
-    expect(src?.kind).toBe('lesson');
-    if (src?.kind === 'lesson') expect(src.lessonRef).toBe('a1b2c3d4e5f60718');
+    expect(src?.kind).toBe('record');
+    if (src?.kind === 'record') expect(src.ruleId).toBe(res.records[0]?.ruleId);
   });
   it('a revision appends a row carrying the NEW contentHash under the SAME ruleId (agy)', () => {
     writeYaml([decidableRule()]);
     run();
     const before = readAuthoringLedger(totemDir)[0]?.contentHash;
-    writeYaml([decidableRule({ dslSource: 'console\\.error' })]);
+    writeRecord(
+      DEFAULT_RECORD_SLUG,
+      recordBody({
+        target: {
+          type: 'regex',
+          pattern: 'console\\.error',
+          scope: { fileGlobs: ['src/**/*.ts'] },
+        },
+      }),
+    );
     run();
     const ledger = readAuthoringLedger(totemDir);
     expect(ledger).toHaveLength(2);
@@ -234,10 +877,7 @@ describe('runRuleAuthor — codex/agy diff-review folds', () => {
     expect(ledger[1]?.ruleId).toBe(ledger[0]?.ruleId);
   });
   it('two distinct decidable rules in one file → 2 records, 2 rows, distinct ids', () => {
-    writeYaml([
-      decidableRule(),
-      decidableRule({ targetDefect: 'another defect', dslSource: 'TODO' }),
-    ]);
+    writeYaml([decidableRule(), decidableRule({ targetDefect: 'another defect' })]);
     const res = run();
     expect(res.minted).toBe(2);
     expect(res.records).toHaveLength(2);
@@ -319,11 +959,21 @@ describe('runRuleAuthor — verifyOnly no-mint precondition (ADR-112 §8, strate
     expect(readAuthoringLedger(totemDir)).toHaveLength(0); // zero writes on the throw (no drift, Tenet-4)
   });
 
-  it('a would-REVISE rule (dslSource edit since authoring) fails loud identically to mint; ledger unmutated (Q2 revised)', () => {
+  it('a would-REVISE rule (record edited since authoring) fails loud identically to mint; ledger unmutated (Q2 revised)', () => {
     writeYaml([decidableRule()]);
     run(); // author the original
     const before = snapshot();
-    writeYaml([decidableRule({ dslSource: 'console\\.error' })]); // YAML diverged from the recorded entry
+    // The RECORD diverged from the bytes the recorded entry attested.
+    writeRecord(
+      DEFAULT_RECORD_SLUG,
+      recordBody({
+        target: {
+          type: 'regex',
+          pattern: 'console\\.error',
+          scope: { fileGlobs: ['src/**/*.ts'] },
+        },
+      }),
+    );
     expect(verify).toThrow(/\(revised\)/); // revise is forbidden identically to mint (Q2)
     expect(snapshot()).toBe(before); // no revision row appended (read-only)
   });
@@ -332,10 +982,7 @@ describe('runRuleAuthor — verifyOnly no-mint precondition (ADR-112 §8, strate
     writeYaml([decidableRule()]);
     run(); // author rule #1
     const before = snapshot();
-    writeYaml([
-      decidableRule(),
-      decidableRule({ targetDefect: 'another defect', dslSource: 'TODO' }),
-    ]);
+    writeYaml([decidableRule(), decidableRule({ targetDefect: 'another defect' })]);
     expect(verify).toThrow(/NOT the first author/i);
     expect(snapshot()).toBe(before); // the unchanged rule did not mask the new one; zero writes overall
   });

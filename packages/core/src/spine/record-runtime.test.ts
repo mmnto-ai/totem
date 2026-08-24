@@ -45,6 +45,8 @@ import {
   recordScopeMatchesFile,
   requiresSuppressesMatch,
   ruleAppliesToFile,
+  ruleBadExampleLines,
+  ruleGoodExampleLines,
 } from './record-runtime.js';
 import { parseRuleRecord } from './rule-record.js';
 import { buildFirings } from './windtunnel-firing.js';
@@ -817,6 +819,95 @@ describe('§ Design 8 — the compiled requires pattern is cached, not recompile
   });
 });
 
+// ─── The single-homed bad-example reader (slice 3) ───────────────────────────
+
+describe('ruleBadExampleLines — one home for both badExample readers', () => {
+  it('reads a record rule’s `examples[i].bad`, every pair, in ordinal order', () => {
+    const rule = compile({
+      ...scopedRegexRecord(['packages/**/*.ts']),
+      examples: [
+        { bad: 'console.log(1)', good: 'logger.info(1)' },
+        { bad: 'console.log(2)\nconsole.log(3)', good: 'logger.info(2)' },
+      ],
+    });
+    expect(ruleBadExampleLines(rule)).toEqual([
+      'console.log(1)',
+      'console.log(2)',
+      'console.log(3)',
+    ]);
+  });
+
+  it('reads a LEGACY rule’s `badExample`, split on lines — byte-identical to the shipped read', () => {
+    expect(ruleBadExampleLines({ ...legacyRule(['**/*.ts']), badExample: 'a()\r\nb()' })).toEqual([
+      'a()',
+      'b()',
+    ]);
+  });
+
+  it('returns [] for a legacy rule with no badExample — the doctor `no-badExample` test', () => {
+    expect(ruleBadExampleLines(legacyRule(['**/*.ts']))).toEqual([]);
+  });
+
+  it('returns [] for a WHITESPACE-ONLY legacy badExample — absent, exactly as before', () => {
+    // The shipped doctor reason was `!badExample || badExample.trim().length === 0`;
+    // dropping blank lines is what keeps `.length === 0` equal to that test rather
+    // than silently un-flagging a whitespace-only field.
+    expect(ruleBadExampleLines({ ...legacyRule(['**/*.ts']), badExample: '  \n\t' })).toEqual([]);
+  });
+
+  it('IGNORES a legacy `badExample` on a record rule — the record’s examples are the home', () => {
+    // A hand-edited manifest could carry both. `examples` is § Design 10's editable
+    // home, so it wins; reading both would give one rule two preimage sources.
+    const rule = compile(scopedRegexRecord(['packages/**/*.ts']));
+    expect(ruleBadExampleLines({ ...rule, badExample: 'never-read()' })).toEqual([
+      'console.log(1)',
+    ]);
+  });
+});
+
+describe('ruleGoodExampleLines — the POSTIMAGE twin, on the identical contract', () => {
+  it('reads a record rule’s `examples[i].good`, every pair, in ordinal order', () => {
+    const rule = compile({
+      ...scopedRegexRecord(['packages/**/*.ts']),
+      examples: [
+        { bad: 'console.log(1)', good: 'logger.info(1)' },
+        { bad: 'console.log(2)', good: 'logger.info(2)\nlogger.info(3)' },
+      ],
+    });
+    expect(ruleGoodExampleLines(rule)).toEqual([
+      'logger.info(1)',
+      'logger.info(2)',
+      'logger.info(3)',
+    ]);
+  });
+
+  it('reads a LEGACY rule’s `goodExample`, split on lines', () => {
+    expect(ruleGoodExampleLines({ ...legacyRule(['**/*.ts']), goodExample: 'a()\r\nb()' })).toEqual(
+      ['a()', 'b()'],
+    );
+  });
+
+  it('returns [] for absent and for whitespace-only — the doctor `no-goodExample` test', () => {
+    expect(ruleGoodExampleLines(legacyRule(['**/*.ts']))).toEqual([]);
+    expect(ruleGoodExampleLines({ ...legacyRule(['**/*.ts']), goodExample: '  \n\t' })).toEqual([]);
+  });
+
+  it('reads the GOOD side, never the bad — the two readers are not aliases', () => {
+    // The failure this pins: a copy-paste twin that reads `example.bad` would make
+    // doctor's two reasons agree by accident and hide a genuine one-sided absence.
+    const rule = compile(scopedRegexRecord(['packages/**/*.ts']));
+    expect(ruleGoodExampleLines(rule)).toEqual(['logger.info(1)']);
+    expect(ruleBadExampleLines(rule)).toEqual(['console.log(1)']);
+  });
+
+  it('IGNORES a legacy `goodExample` on a record rule — the record’s examples are the home', () => {
+    const rule = compile(scopedRegexRecord(['packages/**/*.ts']));
+    expect(ruleGoodExampleLines({ ...rule, goodExample: 'never-read()' })).toEqual([
+      'logger.info(1)',
+    ]);
+  });
+});
+
 // ─── Certification seams — Stage 4 and the wind tunnel ───────────────────────
 
 describe('Stage 4 — record scope is visible, and “unscoped” does not invert', () => {
@@ -861,17 +952,63 @@ describe('Stage 4 — record scope is visible, and “unscoped” does not inver
       emptyBaseline,
       deps('packages/core/src/a.ts', 'console.log(1)\n'),
     );
-    // EXACT outcome, not merely "not no-matches": `candidate-debt` is the ceiling
-    // a record rule can reach today. `in-scope-bad-example` requires the matched
-    // line to equal `rule.badExample`, and the lowering deliberately does NOT
-    // mirror `examples[0].bad` onto that legacy field (Tenet 20 — one editable
-    // home), so `lineMatchesBadExample` returns false for every record rule and
-    // the outcome always lands here. That carries a real consequence downstream:
-    // `candidate-debt` forces `severity: 'warning'`, so a record rule cannot be
-    // Stage-4-promoted to high confidence until intake supplies a badExample
-    // derivation (slice 3). Pinned so that change is visible when it lands.
-    expect(result.outcome).toBe('candidate-debt');
+    // EXACT outcome. Slice 3 DISCHARGED the slice-2 pin that stood here: this
+    // fixture's matched line (`console.log(1)`) equals `examples[0].bad`, and
+    // Stage 4 now resolves a rule's authored preimages through the single-homed
+    // `ruleBadExampleLines` — which reads a record rule's `examples[i].bad`
+    // instead of the legacy `badExample` field the lowering deliberately does not
+    // mirror (Tenet 20 — one editable home). So the outcome is
+    // `in-scope-bad-example`, and the downstream consequence flips with it: the
+    // rule maps to `status: active` + `confidence: high` rather than being forced
+    // to the `candidate-debt` warning floor.
+    expect(result.outcome).toBe('in-scope-bad-example');
     expect(result.baselineMatches).toEqual([]);
+    // The PRICED half of that flip (spec § Failure modes, "Priced consequence"):
+    // `confidence: high` is now reachable from an author-written exemplar that
+    // happens to occur verbatim in the tree — but `unverified: true` survives the
+    // Stage-4 patch, so the rule stays advisory. The label moves; the enforcement
+    // tier does not. Asserted here so a future patch that dropped the flag would
+    // turn a labelling change into a silent sense→enforce crossing.
+    const patched = CompiledRuleSchema.parse({
+      ...record,
+      status: 'active',
+      confidence: 'high',
+    });
+    expect(patched.unverified).toBe(true);
+  });
+
+  it('leaves a NON-matching in-scope line at candidate-debt — the derivation is not a blanket promotion', async () => {
+    // Same record, real code that fires the matcher but is NOT any `examples[i].bad`
+    // line. The sibling of the assertion above: `in-scope-bad-example` is earned by
+    // line equality, not by being a record rule, so `candidate-debt` (and its
+    // `severity: 'warning'` floor) is still the answer for genuine codebase debt.
+    const result = await verifyAgainstCodebase(
+      record,
+      emptyBaseline,
+      deps('packages/core/src/a.ts', 'console.log("a different call site")\n'),
+    );
+    expect(result.outcome).toBe('candidate-debt');
+    expect(result.candidateDebtLines).toEqual(['console.log("a different call site")']);
+  });
+
+  it('reads EVERY `examples[i].bad` line, not just the first pair (§ Design 5 min-1, no maximum)', async () => {
+    // ADR-112 §6 admits the two-loci-one-PR multi-fixture rule, so § Design 5 makes
+    // `examples` an array with no maximum. A second pair's `bad` must be just as
+    // reachable as the first, or a multi-pair record would silently promote only
+    // one of its own exemplars.
+    const multiPair = compile({
+      ...scopedRegexRecord(['packages/**/*.ts']),
+      examples: [
+        { bad: 'console.log(1)', good: 'logger.info(1)' },
+        { bad: 'console.log("second locus")', good: 'logger.info("second locus")' },
+      ],
+    });
+    const result = await verifyAgainstCodebase(
+      multiPair,
+      emptyBaseline,
+      deps('packages/core/src/b.ts', 'console.log("second locus")\n'),
+    );
+    expect(result.outcome).toBe('in-scope-bad-example');
   });
 
   it('leaves a LEGACY rule’s classification byte-identical', async () => {
