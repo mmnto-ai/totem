@@ -1,0 +1,246 @@
+splitRef: r14-intake-smoke-2a713576
+authoredAfterSplit: true
+heldOutNonInspectionAttestation: true
+rules:
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-0167a783-dynamic-import-utility-layer: Dynamic imports should only be used in command entry points, not in utility or adapter layers."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-0167a783-dynamic-import-utility-layer.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-0167a783-dynamic-import-utility-layer.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 60c2f189fb75f7f2d583d1da2dee3a41f378aea5b35b8992eaa9f3da4fbb6c1d
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-0e01112d-bare-new-error: When wrapping external errors or providing fallbacks,"
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/r14-0e01112d-bare-new-error.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-0e01112d-bare-new-error.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: f81e52d025c9f1aedd320fc6d5df41ad0b94d0e9a2ba6b9172952cc2b631a604
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-1a7080eb-inline-secrets-agent-config: Never inline secrets/tokens/API keys in agent config files."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-1a7080eb-inline-secrets-agent-config.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-1a7080eb-inline-secrets-agent-config.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 46503ba55e7604f6cfbc77f02e1d29fab4142fcddc7d3e449770157b95eea28e
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-49dd9e4f-llm-character-counting: LLMs are notoriously poor at character counting; use"
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/r14-49dd9e4f-llm-character-counting.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-49dd9e4f-llm-character-counting.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 90b07188c8237a991e64c1bb65aeff484956bd64bc0f2451333ae750413c2e19
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-54140f59-bare-issue-number-refs: Issue numbers are only unique within a single repository;"
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/r14-54140f59-bare-issue-number-refs.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-54140f59-bare-issue-number-refs.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 75fc1f3ea82dd5e1b627536e315cb3ed9284d02f8c49bafc0f8ec67b62c26f3a
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-5b85fe53-suppress-event-runtime-failure: Do not use the 'suppress' event for runtime execution failures — it lacks the appropriate interface and misrepresents the architectural intent of suppression."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-5b85fe53-suppress-event-runtime-failure.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-5b85fe53-suppress-event-runtime-failure.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 0eb07840154aa837103020a26826a2f931074dfd1df6fcbda156e1a9a986e44e
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-5da43ea6-git-double-dash-separator: Always use the '--' separator before positional arguments in git commands (e.g., 'git log -- <ref>') to prevent argument injection of untrusted strings like branch or tag names."
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/r14-5da43ea6-git-double-dash-separator.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-5da43ea6-git-double-dash-separator.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 4ec00acc17f6edc09f3f374fa2b052abff5bed02c8a69f38bd5ab96c01556359
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-6467c351-dynamic-import-cli-entry: Dynamic imports are restricted to CLI command entry points."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-6467c351-dynamic-import-cli-entry.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-6467c351-dynamic-import-cli-entry.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 1ac3452d5b601513511d0919788ba3be9151ed306e41e743c6dbb4d096047f16
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-65ede9bf-dynamic-import-command-handlers: Dynamic imports must be confined to CLI command handlers (packages/cli/src/commands/)."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-65ede9bf-dynamic-import-command-handlers.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-65ede9bf-dynamic-import-command-handlers.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: a6de28980fd8f80d97d34f7e49407ef4dfa5bdd014462eef766d21414953a010
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-6b1890e2-empty-string-in-whitelist-js: Do not include empty strings in branch whitelists — if branch resolution fails, an empty string will silently bypass security gates."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-6b1890e2-empty-string-in-whitelist-js.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-6b1890e2-empty-string-in-whitelist-js.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: a56c367fe700c1e07b479373ebb34a89c4b20fe44fdd074ba394e59621d761e3
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-6b1890e2-empty-string-in-whitelist: Do not include empty strings in branch whitelists — if branch resolution fails, an empty string will silently bypass security gates."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-6b1890e2-empty-string-in-whitelist.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-6b1890e2-empty-string-in-whitelist.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: a56c367fe700c1e07b479373ebb34a89c4b20fe44fdd074ba394e59621d761e3
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-6b2b62eb-totem-error-log-tag: All log.error calls must include the 'Totem Error' tag for consistent diagnostic parsing and filtering"
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-6b2b62eb-totem-error-log-tag.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-6b2b62eb-totem-error-log-tag.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: b77808c778a556945336bb4dd6b018787265bf538e9a74dd5fa80f6cd1a53eaf
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-71935fe9-string-cast-on-input-js: Avoid String() casting on input patterns — it silently converts unexpected objects to '[object Object]'."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-71935fe9-string-cast-on-input-js.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-71935fe9-string-cast-on-input-js.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 920a1acacc79bf894717dd6e568754fab6e717d7dc287d48b2ed75263d70b5f6
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-71935fe9-string-cast-on-input: Avoid String() casting on input patterns — it silently converts unexpected objects to '[object Object]'."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-71935fe9-string-cast-on-input.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-71935fe9-string-cast-on-input.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 920a1acacc79bf894717dd6e568754fab6e717d7dc287d48b2ed75263d70b5f6
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-87aff037-fail-open-catch-ban: Catch clause swallows the error without re-throwing."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-87aff037-fail-open-catch-ban.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-87aff037-fail-open-catch-ban.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 0641d462a6d0c132bc922f32455aacc99b6539b92fc72dd9517a17b3a3533801
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-89184bb5-bsd-sed-hex-escape: BSD sed on macOS does not support \\x1b hex escapes."
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/r14-89184bb5-bsd-sed-hex-escape.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-89184bb5-bsd-sed-hex-escape.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 5e91341a4127931c3776cb3e2533b6037868b66d7dd5668e511ccdf268656524
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-aa7a588d-async-test-callbacks: Do not mark test callbacks as async unless the code under test is genuinely async — async wrappers mask synchronous API signatures and hide accidental Promise conversions"
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-aa7a588d-async-test-callbacks.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-aa7a588d-async-test-callbacks.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 498662fb6db05d112ee57879e965db1781a43e56c1ab0c9c453af11d16788b6e
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-b237bcf3-pwd-in-credential-regex: Avoid 'pwd' in credential-scanning regexes — in Node.js it may refer to 'present working directory', causing false positives"
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-b237bcf3-pwd-in-credential-regex.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-b237bcf3-pwd-in-credential-regex.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 1f9d1c3be46f9d7834792aaee4130b26f8420a4219bdf9cd8d01dab98236ee1b
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-b9736096-orchestrator-test-timeout: Orchestrator test suites should set an explicit 15s timeout (e.g., { timeout: 15000 }) to prevent flaky CI failures during heavy workloads"
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-b9736096-orchestrator-test-timeout.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-b9736096-orchestrator-test-timeout.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 05d0b6bbac02a76d763fd35ebf81fe94d1a63b2003f55010891d44a4506eaec0
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-be74c55c-actions-input-expansion: Do not expand GitHub Actions inputs directly in run steps — map inputs to intermediate environment variables first to prevent command injection vulnerabilities"
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/r14-be74c55c-actions-input-expansion.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-be74c55c-actions-input-expansion.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: d330100770cf6054ad75aba33efa6f920d6b195309d50cbfd5bc0879ad54f212
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-d5faa14c-absolute-claims-in-docs: Avoid absolute claims like 'guarantee', 'comprehensive', 'always', 'never', 'perfect', 'complete', 'foolproof', or '100% reliable' in technical documentation."
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/r14-d5faa14c-absolute-claims-in-docs.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-d5faa14c-absolute-claims-in-docs.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 9434490560b5e760d66575a7c4f45293928fb314c137c71b32fa49f7b3dcbdb5
+        example: 0
+  - author: totem-claude
+    authoredAt: 2026-08-24
+    targetDefect: "r14-d940b2c9-stdio-in-exec-options: Do not pass 'stdio' in execution options — remove it and rely on hardcoded pipe mode to ensure consistent string-based return values."
+    structuralClass: node-shape-presence
+    record: .totem/rules/r14-d940b2c9-stdio-in-exec-options.rule.yaml
+    positiveFixtures:
+      - pr: 2668
+        filePath: .totem/rules/r14-d940b2c9-stdio-in-exec-options.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 9170285d41541b7ce3d5a7101083cf4cac026f54ce514c1a71aba8d87867031b
+        example: 0
