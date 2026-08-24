@@ -28,13 +28,14 @@
  * `rule.requires !== undefined` so no legacy rule pays a second test.
  *
  * Borrowing the evaluator means borrowing its PRECONDITIONS: `runSmokeGate` runs
- * `assertNoTornRecordRules` / `assertRequiresPatternsSafe` /
- * `assertNoAstGrepLineScope` on a `requires:`-bearing rule before evaluating it,
- * exactly as every runtime dispatcher does at invocation altitude. Without them
- * the gate ACCEPTED rules the runtime refuses — an unsafe-but-compilable
- * `requires.pattern` that backtracks catastrophically, and `ast-grep` +
- * `requires.scope: line` — which is the same gate-vs-runtime divergence this
- * module exists to rule out.
+ * `assertNoTornRecordRules` on every rule, and adds
+ * `assertRequiresPatternsSafe` / `assertNoAstGrepLineScope` for a
+ * `requires:`-bearing one, before evaluating it — two of these at each regex
+ * dispatcher, all three at the ast dispatcher, in each case at invocation
+ * altitude. Without them the gate ACCEPTED rules the runtime refuses — a torn
+ * rule, an unsafe-but-compilable `requires.pattern` that backtracks
+ * catastrophically, and `ast-grep` + `requires.scope: line` — which is the same
+ * gate-vs-runtime divergence this module exists to rule out.
  *
  * Not wired to Pipeline 1 (manual) rules in mmnto/totem#1408 - a dry-run
  * sweep lands in a follow-up ticket before the Pipeline 1 gate flips on.
@@ -94,10 +95,13 @@ function lineNumbersFor(snippet: string): number[] {
  * Guarded on `rule.requires !== undefined` so a legacy rule never pays a second
  * `re.test`, and so this is provably a no-op for the frozen 485-rule corpus.
  *
- * THROWS `TotemParseError` on an uncompilable `requires.pattern` — unreachable
- * from any compiled record (the lowering gates it with the same safe-regex2
- * check), reachable from a hand-built `CompiledRule`. Deliberately not caught
- * here: `runSmokeGate` catches it once, in one place, for both engines.
+ * `requiresSuppressesMatch` THROWS `TotemParseError` on an uncompilable
+ * `requires.pattern`, and nothing here catches it — but that throw is
+ * unreachable via `runSmokeGate`, which runs `assertRequiresPatternsSafe`
+ * first and whose `validateRegex` compiles the pattern before the safe-regex2
+ * check, so an uncompilable one is reported as a precondition failure before any
+ * evaluation. The uncaught path remains as a BACKSTOP for a caller that reaches
+ * this helper another way; `runSmokeGate` handles it once, for both engines.
  */
 function suppressedByRequires(rule: CompiledRule, line: string, snippet: string): boolean {
   if (rule.requires === undefined) return false;
@@ -189,9 +193,11 @@ function runAstGrepGate(
       lastReason = `ast-grep runtime error: ${firstLine(err instanceof Error ? err.message : String(err))}`;
     }
     // § Design 8 pass two, OUTSIDE the engine try/catch on purpose: a
-    // `requires.pattern` that will not compile is not an ast-grep runtime error
-    // and must not be reported as one. It propagates to `runSmokeGate`'s single
-    // catch, which names it for what it is.
+    // `requires.pattern` defect is not an ast-grep runtime error and must not be
+    // reported as one. Via `runSmokeGate` such a pattern is already refused by
+    // `assertRequiresPatternsSafe` before this line runs; keeping the filter out
+    // of the catch means that even a throw from the evaluator itself reaches
+    // `runSmokeGate`'s single handler rather than being mislabelled here.
     const unsuppressed = matches.filter(
       (match) => !suppressedByRequires(rule, match.lineText, snippet),
     );
@@ -225,34 +231,48 @@ export function runSmokeGate(rule: CompiledRule, snippet: string): SmokeGateResu
   }
 
   try {
+    // § Design 12 — UNCONDITIONAL, because tornness is not a property of
+    // `requires`. The assert fires on ANY of the seven
+    // `RECORD_COMPILED_HOME_KEYS` without `examples`, and the runtime refuses
+    // such a rule because it is UNCLASSIFIABLE — neither record nor legacy —
+    // not to protect an evaluator. Scoping this to `requires` left
+    // `{fileGlobs, excludeGlobs}` with no `examples` passing the gate while
+    // `applyRulesToAdditions` threw on it. Legacy rules stay byte-identical for
+    // free: the assert early-returns for a rule carrying no § Design 12 home,
+    // and the byte-identity guard pins that none of the frozen 485 carries one.
+    assertNoTornRecordRules([rule]);
+
     if (rule.requires !== undefined) {
       // The evaluator's PRECONDITIONS, taken with the evaluator (Tenet 20: a
-      // borrowed function borrows its contract too). Every runtime dispatcher
-      // runs these three at invocation altitude before any
-      // `requiresSuppressesMatch` — `rule-engine.ts` for both the regex and the
-      // ast paths, `regex-safety/apply-rules-bounded.ts` for the bounded one —
-      // so a gate that skipped them accepted rules the runtime REFUSES:
+      // borrowed function borrows its contract too). Each regex dispatcher runs
+      // TWO of these at invocation altitude before any `requiresSuppressesMatch`
+      // (`rule-engine.ts:596-597`, `regex-safety/apply-rules-bounded.ts:92-93`);
+      // the ast dispatcher runs all three (`rule-engine.ts:791-793`). A gate that
+      // skipped them accepted rules the runtime REFUSES:
       //   - an unsafe-but-compilable `requires.pattern` (`(a+)+$`) that runs to
       //     catastrophic backtracking here, unbounded, against whole-snippet
       //     text — `totem rule test` reaches this with no safe-regex2 pass of
       //     its own;
       //   - `ast-grep` + `requires.scope: line`, which the lowering rejects and
-      //     `assertNoAstGrepLineScope` refuses at runtime;
-      //   - a TORN rule carrying `requires` with no `examples`, which
-      //     `isRecordPathRule` would silently class as legacy.
-      // Guarded on `requires` because it is the ONLY § Design 12 home this gate
-      // reads: a rule with no requirement reaches no evaluator here, so the torn
-      // check has nothing to protect and legacy rules stay byte-identical.
-      assertNoTornRecordRules([rule]);
+      //     `assertNoAstGrepLineScope` refuses at runtime.
+      // The ast dispatcher also carries a tree-sitter `requires` backstop this
+      // gate does not need: an `ast`-engine rule never reaches an evaluator here
+      // because `dispatchEngineGate` already returns
+      // `smoke gate does not yet cover engine: ast` — a neutral skip the callers
+      // read toward flagging.
       assertRequiresPatternsSafe([rule]);
       assertNoAstGrepLineScope([rule]);
     }
     return dispatchEngineGate(rule, snippet);
   } catch (err) {
     // The ONE handler for § Design 8's fail-loud arm, shared by all three
-    // preconditions and by both engines' evaluation (`requiresSuppressesMatch`
-    // throws the same type on an uncompilable pattern). A gate that propagated
-    // any of them would crash `totem rule test` instead of reporting the rule as
+    // preconditions. It also still catches `requiresSuppressesMatch`'s own throw
+    // on an uncompilable pattern, but only as a BACKSTOP: `validateRegex`
+    // compiles the pattern first, so `assertRequiresPatternsSafe` reports that
+    // defect ("unusable `requires.pattern` (invalid syntax)") and the evaluator's
+    // throw is unreachable from this function. It stays handled for a caller
+    // that reaches the evaluator by another route. A gate that propagated any of
+    // these would crash `totem rule test` instead of reporting the rule as
     // unusable; each message already names the construct at fault
     // (`requires.pattern` / `requires.scope: line` / `examples`), so the prefix
     // stays generic rather than claiming a cause it did not check. Mirrors the
