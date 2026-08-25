@@ -25,15 +25,21 @@ import {
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// ─── totem-status refresh-gh — GH-federation snapshot refresh ───
-// (mmnto-ai/totem-status#127 C3; tracking mmnto-ai/totem#2556.) This repo does
-// NOT run the managed SessionStart.cjs template (this bespoke V2 hook is the
-// sole SessionStart entry in .claude/settings.json), so the C3 session-start
-// moment is wired here directly — the same spawn-and-forget block the managed
-// templates carry: detached+unref (never blocks the briefing), presence-gated
-// (ENOENT = sidecar not adopted, silent), primary-checkout-gated (a detached
-// child inheriting a linked-worktree cwd holds a Windows directory lock that
-// breaks worktree removal).
+// ─── totem-status sidecar refresh — GH snapshot + obligation store ───
+// (mmnto-ai/totem-status#127: C3 tracked in mmnto-ai/totem#2556, slice-two
+// residual its sibling.) BANNER CORRECTED 2026-08-24: this used to claim the
+// bespoke V2 hook was the only session-start entry registered in
+// .claude/settings.json. It is not — it is the FIRST of two; the managed
+// .claude/hooks/SessionStart.cjs template is registered second and carries the
+// same block, so this repo fires the refresh twice per session start. The
+// verbs' single-flight makes the second firing redundant rather than harmful.
+// This file is bespoke, not generated: no template regen and no byte-lock test
+// covers it, so it is kept in lockstep with the templates BY HAND (precedent:
+// 48cb5208 touched it alongside the templates).
+// Same shape as the managed templates: detached+unref (never blocks the
+// briefing), presence-gated (ENOENT = sidecar not adopted, silent),
+// primary-checkout-gated (a detached child inheriting a linked-worktree cwd
+// holds a Windows directory lock that breaks worktree removal).
 try {
   let primaryCheckout = false;
   try {
@@ -45,9 +51,13 @@ try {
     // Observability leg (mmnto-ai/totem#2570, routed from the status seat's
     // 2026-08-03 silent no-write): under stdio:'ignore' plus the verb's
     // exit-0-or-nothing contract, a reaped or dying child leaves NO trace.
-    // Each firing stamps a workspace-root log and hands the child the same
-    // fd; a stamp with nothing after it means the child never finished. Log
-    // failures degrade to the previous blind firing.
+    // Each firing stamps a workspace-root log and hands the children the same
+    // fd. Measured caveat now that TWO verbs share one fd: both stamps are
+    // written back-to-back before either child writes, and their output is
+    // unlabelled and interleaves nondeterministically — so a silent tail no
+    // longer discriminates per child; it attributes only to the LAST verb
+    // stamped. The stamps still record which verbs fired, and in what order.
+    // Log failures degrade to the previous blind firing.
     // Repo-local inside .git (falsification round): never tracked, per-repo,
     // writable wherever git itself writes; 1 MiB self-cap. Control characters
     // are scrubbed from path-derived fields (terminal-injection guideline).
@@ -71,7 +81,7 @@ try {
           /go[\\/]bin/i.test(process.env.PATH || '') +
           ' cwd-shadow-exe=' +
           existsSync(join(process.cwd(), 'totem-status.exe')) +
-          '\n',
+          ' verb=refresh-gh\n',
       );
       logFd = openSync(logPath, 'a');
       stdio = ['ignore', logFd, logFd];
@@ -90,7 +100,7 @@ try {
             new Date().toISOString() +
             '] claude spawn-error code=' +
             ((err && err.code) || 'unknown') +
-            '\n',
+            ' verb=refresh-gh\n',
         );
       } catch {
         // log write failed — fall through to the stderr breadcrumb
@@ -103,7 +113,55 @@ try {
       );
     });
     refresh.unref();
-    // The child holds its own copy of the fd from spawn time; release the parent's.
+    // Second verb, same gate and same log fd — the durable obligation store
+    // (mmnto-ai/totem-status#127 slice two). Written out rather than looped so
+    // the spawn, the stamp and the breadcrumb each carry a literal verb.
+    // Requires a sidecar at slice two (711f07a) or later: an older binary
+    // treats the unknown verb as the default dashboard and writes its whole
+    // status report into this log.
+    try {
+      appendFileSync(
+        logPath,
+        '[' +
+          new Date().toISOString() +
+          '] claude spawn cwd=' +
+          scrub(process.cwd()) +
+          ' path-has-go-bin=' +
+          /go[\\/]bin/i.test(process.env.PATH || '') +
+          ' cwd-shadow-exe=' +
+          existsSync(join(process.cwd(), 'totem-status.exe')) +
+          ' verb=refresh-obligation-store\n',
+      );
+    } catch {
+      // log unavailable — this verb still fires blind, exactly as the first does
+    }
+    const refreshStore = spawn('totem-status', ['refresh-obligation-store'], {
+      detached: true,
+      stdio,
+    });
+    refreshStore.on('error', (err) => {
+      try {
+        appendFileSync(
+          logPath,
+          '[' +
+            new Date().toISOString() +
+            '] claude spawn-error code=' +
+            ((err && err.code) || 'unknown') +
+            ' verb=refresh-obligation-store\n',
+        );
+      } catch {
+        // log write failed — fall through to the stderr breadcrumb
+      }
+      if (err && err.code === 'ENOENT') return;
+      process.stderr.write(
+        '[SessionStart] totem-status refresh-obligation-store spawn failed (non-fatal): ' +
+          (err instanceof Error ? err.message : String(err)) +
+          '\n',
+      );
+    });
+    refreshStore.unref();
+    // Each child holds its own copy of the fd from spawn time; release the
+    // parent's once BOTH are away (an early close would hand the second an EBADF).
     if (logFd !== null) {
       try {
         closeSync(logFd);
@@ -113,8 +171,11 @@ try {
     }
   }
 } catch (err) {
+  // Block-level breadcrumb: this catch covers the whole gated block, so neither
+  // verb fired — it names the SIDECAR, not one verb. The per-spawn breadcrumbs
+  // inside still name their own verb.
   process.stderr.write(
-    '[SessionStart] totem-status refresh-gh unavailable (non-fatal): ' +
+    '[SessionStart] totem-status sidecar refresh unavailable (non-fatal): ' +
       (err instanceof Error ? err.message : String(err)) +
       '\n',
   );

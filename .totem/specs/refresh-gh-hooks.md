@@ -11,6 +11,19 @@
 The three totem-managed hook templates gain a spawn-and-forget invocation of
 `totem-status refresh-gh`, discharging the mmnto-ai/totem-status#127 C3
 residual (refresh moments 3 + 4: SessionStart, post-merge).
+_[Amended by feat/templates-refresh-obligation-store (mmnto-ai/totem-status#127
+slice-two residual): each surface now fires TWO verbs from the one gate —
+`refresh-gh` and `refresh-obligation-store` (the durable obligation store) —
+written out per verb rather than looped, so the spawn, the stamp and the
+breadcrumb each carry a literal verb. The bespoke `.claude/hooks/session-context.mjs`
+(Round 2 F2 below) is the FOURTH surface and carries the same pair; its banner
+claim of being the sole SessionStart entry was corrected — it is the first of
+two registered entries, the managed SessionStart.cjs being the second. Version
+skew is a named bound: the second verb needs a sidecar at slice two (711f07a)
+or later; an older binary treats the unknown verb as the default dashboard and
+writes its whole status report into the hook log (measured: exit 0, ~179 KB per
+firing). A quiet non-zero unknown-verb exit is an open question with the sidecar
+owner.]_
 
 ## Surfaces
 
@@ -20,6 +33,10 @@ residual (refresh moments 3 + 4: SessionStart, post-merge).
    (`.gemini/hooks/SessionStart.js`, same roster; vehicle parity)
 3. `buildHookContent()` — packages/cli/src/commands/install-hooks.ts:166
    (git post-merge, bounded owned region via TOTEM_HOOK_MARKER/END)
+4. `.claude/hooks/session-context.mjs` — bespoke, repo-tracked; the FIRST of
+   the two registered Claude SessionStart entries (the managed SessionStart.cjs
+   is the second). Not generated: kept in lockstep by hand, per the 48cb5208
+   precedent.
 
 ## Contract (theirs)
 
@@ -35,7 +52,16 @@ past deadline+WaitDelay. Safe to fire blind.
   at `.git/totem-status-refresh-hook.log` is writable, the child inherits its
   fd (Node) / appends to it (sh) instead — each firing stamps the log first,
   so a stamp with no verb line after it discriminates a harness reap from a
-  child failure (the status seat's observed silent no-write). Log-unwritable
+  child failure (the status seat's observed silent no-write).
+  _[Amended by feat/templates-refresh-obligation-store: that discriminator does
+  NOT survive the second verb. The parent writes the two stamps in spawn order,
+  but each child is spawned immediately after its OWN stamp, so a fast child's
+  output — unlabelled — can interleave anywhere after that point (in the
+  measured runs both stamps landed first; that is a race, not a contract). A
+  silent tail therefore attributes only to the LAST verb stamped — not per
+  child. What the stamps still buy is WHICH verbs fired and in
+  what order (every stamp now carries `verb=`). Per-child reap attribution
+  reopens only if the sidecar tags its own output.]_ Log-unwritable
   degrades to the blind form above; SOFT 1 MiB self-cap (the pre-append size
   check means a boundary firing can leave the file one record over the
   threshold — the next firing truncates; exact enforcement would buy a
