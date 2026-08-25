@@ -33,6 +33,10 @@ owner.]_
    (`.gemini/hooks/SessionStart.js`, same roster; vehicle parity)
 3. `buildHookContent()` — packages/cli/src/commands/install-hooks.ts:166
    (git post-merge, bounded owned region via TOTEM_HOOK_MARKER/END)
+4. `.claude/hooks/session-context.mjs` — bespoke, repo-tracked; the FIRST of
+   the two registered Claude SessionStart entries (the managed SessionStart.cjs
+   is the second). Not generated: kept in lockstep by hand, per the 48cb5208
+   precedent.
 
 ## Contract (theirs)
 
@@ -50,10 +54,12 @@ past deadline+WaitDelay. Safe to fire blind.
   so a stamp with no verb line after it discriminates a harness reap from a
   child failure (the status seat's observed silent no-write).
   _[Amended by feat/templates-refresh-obligation-store: that discriminator does
-  NOT survive the second verb, measured. Both stamps are written back-to-back
-  before either child writes, and child output is unlabelled and interleaves
-  nondeterministically, so a silent tail attributes only to the LAST verb
-  stamped — not per child. What the stamps still buy is WHICH verbs fired and in
+  NOT survive the second verb. The parent writes the two stamps in spawn order,
+  but each child is spawned immediately after its OWN stamp, so a fast child's
+  output — unlabelled — can interleave anywhere after that point (in the
+  measured runs both stamps landed first; that is a race, not a contract). A
+  silent tail therefore attributes only to the LAST verb stamped — not per
+  child. What the stamps still buy is WHICH verbs fired and in
   what order (every stamp now carries `verb=`). Per-child reap attribution
   reopens only if the sidecar tags its own output.]_ Log-unwritable
   degrades to the blind form above; SOFT 1 MiB self-cap (the pre-append size
