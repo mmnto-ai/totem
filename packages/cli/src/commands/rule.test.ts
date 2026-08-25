@@ -493,6 +493,38 @@ describe('rule test', () => {
       expect(output).toContain('3 example pair(s) verified');
       expect(process.exitCode).toBeUndefined();
     });
+
+    it('PASSES a `requires:`-bearing record — § Design 8 pass two (mmnto-ai/totem#2678)', async () => {
+      // The end-to-end shape of the ticket: a § Design 8 record's `good` example
+      // KEEPS the target and adds the companion. Before #2678 the smoke gate ran
+      // pass one only, so `good` read as firing and `totem rule test` reported
+      // FAIL for every `requires:`-bearing record. Scaffolded inline rather than
+      // through `recordRule` because this rule needs a different target and the
+      // `requires` block the shared helper does not carry.
+      scaffold(tmpDir, [
+        {
+          lessonHash: RECORD_HASH,
+          lessonHeading: 'git output-consuming commands must pin LC_ALL=C',
+          pattern: '\\bgit\\s+(log|diff|status)\\b',
+          message: 'git output-consuming commands must pin LC_ALL=C on the same line.',
+          engine: 'regex',
+          severity: 'warning',
+          fileGlobs: ['**/*.sh', '**/*.cjs'],
+          requires: { pattern: 'LC_ALL=C', scope: 'line' },
+          examples: [{ bad: 'git log --oneline', good: 'LC_ALL=C git log --oneline' }],
+          compiledAt: '2026-08-24T00:00:00.000Z',
+          createdAt: '2026-08-24T00:00:00.000Z',
+        },
+      ]);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { ruleTestCommand } = await import('./rule.js');
+      await ruleTestCommand(RECORD_HASH);
+      const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+
+      expect(output).toContain('PASS examples[0]');
+      expect(output).not.toContain('good fired');
+      expect(process.exitCode).toBeUndefined();
+    });
   });
 });
 
