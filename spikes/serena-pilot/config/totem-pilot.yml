@@ -1,0 +1,62 @@
+# Custom serena CONTEXT for the totem pilot.
+# Installed to $SERENA_HOME/contexts/totem-pilot.yml and selected with
+# `--context totem-pilot`.
+#
+# WHY THIS FILE EXISTS (pilot finding):
+#   Serena computes TWO tool sets (src/serena/agent.py):
+#     _exposed_tools = base_toolset.to_available_tools(...)   # global cfg + CONTEXT only
+#     _active_tools  = base_toolset.apply(*modes).apply(project_config)
+#                                   .without_editing_tools() if project.read_only
+#   `tools/list` over MCP advertises the EXPOSED set. Therefore project-level
+#   `read_only: true`, project-level `excluded_tools`, and `--mode planning`
+#   do NOT remove a tool from `tools/list` -- they only make a call to it fail.
+#   The CONTEXT is the one layer that feeds the exposed set, so the ruled
+#   "retrieval verbs only" bound has to be expressed HERE to be visible to a
+#   client at discovery time.
+
+description: >-
+  Totem serena pilot: retrieval verbs only. Editing, shell and memory verbs are
+  removed from the exposed tool set so that the MCP tool list itself carries the
+  ruled bound, not merely the call-time gate.
+
+prompt: |
+  You are running in a measurement harness context. Only code-retrieval tools
+  are available.
+
+excluded_tools:
+  # agent-context default: instructions are supplied at startup
+  - initial_instructions
+
+  # --- editing verbs (write path) ---
+  - create_text_file
+  - insert_after_symbol
+  - insert_before_symbol
+  - replace_symbol_body
+  - replace_content
+  - replace_in_files
+  - rename_symbol
+  - safe_delete_symbol
+
+  # --- shell verb ---
+  - execute_shell_command
+
+  # --- memory surface (memories OFF) ---
+  - write_memory
+  - read_memory
+  - delete_memory
+  - edit_memory
+  - rename_memory
+  - list_memories
+  - onboarding
+
+included_optional_tools: []
+fixed_tools: []
+
+tool_description_overrides: {}
+
+# With a project supplied at startup, this narrows the exposed tool set to what
+# the project's concrete configuration allows and disables `activate_project`,
+# so the server cannot be pointed at another checkout mid-session.
+single_project: true
+
+structured_tool_output: null
