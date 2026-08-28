@@ -1,0 +1,1184 @@
+{
+  "alphabet": {
+    "bound": "\\f, \\v and every non-ASCII character are OUTSIDE Σ. A z3 witness is always a real line, but an UNSAT is an absence only over Σ — the same bound lang.rs states for the O-series obligations.",
+    "definition": "{0x09 (tab)} ∪ [0x20..0x7E] — 96 characters",
+    "mirrors": "spikes/spine-adopt/smt/src/lang.rs::line_any()",
+    "name": "LINE alphabet Σ",
+    "nonWordClass": "Σ minus the word class, ENUMERATED as ranges — never re.comp (lang.rs::nonword_char; O9 check A is the proof that the enumeration equals the complement form)",
+    "why": "the record runtime evaluates every regex per ADDED LINE and flagless, so a line never contains \\n; `.` and `[^\\n]` therefore both denote Σ",
+    "wordClass": "[A-Za-z0-9_] (lang.rs::word_char)"
+  },
+  "contract": "spikes/spine-adopt/egg-probe/DESIGN.md",
+  "corpus": {
+    "byClass": {
+      "re2-clean": 107,
+      "word-boundary": 70
+    },
+    "censusArtifact": "spikes/spine-adopt/artifacts/expressibility-census.json",
+    "distinctPatternStrings": 172,
+    "inputRepair": {
+      "effect": "U+FFFD is outside Σ, so the affected row is refused under `char-outside-line-alphabet` exactly as the original ill-formed pattern would be — recorded here rather than repaired silently",
+      "replacements": [
+        "\\ud83c",
+        "\\udfff"
+      ],
+      "what": "the census artifact (and the corpora it names) contain LONE surrogate escapes, which strict JSON forbids and serde_json refuses; each was replaced with \\ufffd so the artifact could be read at all"
+    },
+    "integrityCrossCheck": {
+      "files": {
+        "pack-agent-security": "packages/pack-agent-security/compiled-rules.json",
+        "pack-agent-workflow": "packages/pack-agent-workflow/compiled-rules.json",
+        "pack-rust-architecture": "packages/pack-rust-architecture/compiled-rules.json",
+        "root": ".totem/compiled-rules.json"
+      },
+      "matched": 177,
+      "method": "each census row's (corpus, ruleHash) is looked up in that corpus's compiled-rules.json and its `pattern` compared byte-for-byte",
+      "mismatched": []
+    },
+    "rows": 177,
+    "targetClasses": [
+      "re2-clean",
+      "word-boundary"
+    ]
+  },
+  "criteria": {
+    "cost": {
+      "allSaturated": false,
+      "budgetMs": 60000,
+      "failedSubCondition": "10 of 167 per-pattern runs stopped at egg's DEFAULT node limit (10 000) instead of reaching a fixpoint. Wall time was NOT the binding constraint (13196 ms of the 60 000 ms budget). The node growth is AC churn from the named laws: concat-assoc and union-assoc/comm dominate the application counts.",
+      "measure": "every per-pattern run reached StopReason::Saturated AND the total wall time is within the 60s budget",
+      "pass": false,
+      "statement": "DESIGN 3 — full-corpus saturation completes under 60s wall with egg's default iteration limits; a blowup is a REJECT row with the measurement",
+      "stopReasons": {
+        "Some(NodeLimit(10265))": 1,
+        "Some(NodeLimit(11088))": 1,
+        "Some(NodeLimit(11298))": 1,
+        "Some(NodeLimit(12323))": 1,
+        "Some(NodeLimit(12391))": 1,
+        "Some(NodeLimit(13049))": 1,
+        "Some(NodeLimit(13447))": 1,
+        "Some(NodeLimit(13832))": 1,
+        "Some(NodeLimit(16887))": 1,
+        "Some(NodeLimit(22576))": 1,
+        "Some(Saturated)": 157
+      },
+      "totalWallMs": 13196,
+      "withinBudget": true
+    },
+    "soundness": {
+      "coverage": {
+        "crossPatternMerges": "7 of 7 — EXHAUSTIVE (every unordered pair inside every multi-pattern class, from both groupings)",
+        "nodeLimitedPatternsInSample": 1,
+        "rewrittenVsOriginal": "20 of 167 parsed patterns — a SAMPLE, as DESIGN § Method 4 specifies; the other 147 extracted canonical forms are NOT externally verified"
+      },
+      "measure": "all emitted xor-emptiness queries returned unsat",
+      "pass": true,
+      "queries": 27,
+      "sat": 0,
+      "statement": "DESIGN 1 — every equivalence egg claims is verified UNSAT; ONE unsound merge ⇒ REJECT",
+      "tautologicalQueries": {
+        "count": 22,
+        "meaning": "queries whose two sides print BYTE-IDENTICALLY. Their UNSAT is a tautology and carries no evidential weight: it happens when the claimed equality is decided by the IR REPRESENTATION (canonical char-class sets making ['\"] and [\"'] one node) rather than by a rewrite. The remaining queries are real proofs.",
+        "nonTautological": 5,
+        "of": 27
+      },
+      "unsat": 27,
+      "unverified": 0
+    },
+    "yield": {
+      "classes": [
+        {
+          "allCongruenceOnly": true,
+          "canonicalForm": "(Σ)*·'c'·'u'·'r'·'r'·'e'·'n'·'t'·'B'·'r'·'a'·'n'·'c'·'h'·':'·([\\t ])*·[\"']·([\\t -!#-&(-~])+·[\"']·(Σ)*",
+          "canonicalKey": "(cat (cat (cat (star cls:7fffffffffffffffffffffff00000200) (cat lit:63 lit:75)) (cat lit:72 lit:72)) (cat (cat lit:65 (cat (cat lit:6e (cat lit:74 lit:42)) (cat lit:72 (cat lit:61 lit:6e)))) (cat (cat (cat lit:63 (cat lit:68 lit:3a)) (cat (star cls:00000000000000000000000100000200) (cat cls:00000000000000000000008400000000 (plus cls:7fffffffffffffffffffff7b00000200)))) (cat cls:00000000000000000000008400000000 (star cls:7fffffffffffffffffffffff00000200)))))",
+          "patterns": [
+            {
+              "pattern": "currentBranch:\\s*['\"][^'\"]+['\"]",
+              "ruleHash": "28cc46c09bd5820f"
+            },
+            {
+              "pattern": "currentBranch:\\s*[\"'][^\"']+[\"']",
+              "ruleHash": "a24ec7272f1f670e"
+            }
+          ]
+        },
+        {
+          "allCongruenceOnly": false,
+          "canonicalForm": "(Σ)*·'.'·'g'·'i'·'t'·'/'·'h'·'o'·'o'·'k'·'s'·(Σ)*",
+          "canonicalKey": "(cat (cat (cat (star cls:7fffffffffffffffffffffff00000200) lit:2e) lit:67) (cat (cat (cat lit:69 lit:74) (cat lit:2f (cat lit:68 (cat lit:6f (cat lit:6f lit:6b))))) (cat lit:73 (star cls:7fffffffffffffffffffffff00000200))))",
+          "patterns": [
+            {
+              "pattern": "\\.git[\\/]hooks",
+              "ruleHash": "d2f88c8528441069"
+            },
+            {
+              "pattern": "\\.git\\/hooks",
+              "ruleHash": "282e9e8692be3edb"
+            }
+          ]
+        }
+      ],
+      "measure": "canonical-form groups with ≥2 patterns whose whitespace-normalized SOURCES are not all identical",
+      "nonSyntacticClasses": 2,
+      "pass": true,
+      "statement": "DESIGN 2 — at least one equivalence class naive syntactic dedup does not find"
+    }
+  },
+  "grouping": {
+    "crossPatternMergeGroups": 7,
+    "eClassCountPerPattern": 160,
+    "eClassCountSharedEGraph": 161,
+    "syntacticDistinctOverParsed": 162
+  },
+  "merges": [
+    {
+      "a": {
+        "class": "re2-clean",
+        "pattern": "currentBranch:\\s*['\"][^'\"]+['\"]",
+        "ruleHash": "28cc46c09bd5820f"
+      },
+      "attributableTo": "congruence-only (hash-consing + canonical char-class sets; no rewrite needed)",
+      "b": {
+        "class": "re2-clean",
+        "pattern": "currentBranch:\\s*[\"'][^\"']+[\"']",
+        "ruleHash": "a24ec7272f1f670e"
+      },
+      "canonicalForm": "(Σ)*·'c'·'u'·'r'·'r'·'e'·'n'·'t'·'B'·'r'·'a'·'n'·'c'·'h'·':'·([\\t ])*·[\"']·([\\t -!#-&(-~])+·[\"']·(Σ)*",
+      "foundBy": [
+        "per-pattern-canonical-form",
+        "shared-egraph-eclass"
+      ],
+      "id": "merge-000-1b565a00-ffcd9c9c",
+      "smt2": "artifacts/verification/merge-000-1b565a00-ffcd9c9c.smt2",
+      "smtSidesIdentical": true,
+      "syntacticallyDistinct": true,
+      "z3": {
+        "elapsedMs": 16,
+        "output": "unsat",
+        "verdict": "unsat",
+        "witness": null
+      }
+    },
+    {
+      "a": {
+        "class": "re2-clean",
+        "pattern": "text-embedding-004",
+        "ruleHash": "56c801dfda484c75"
+      },
+      "attributableTo": "congruence-only (hash-consing + canonical char-class sets; no rewrite needed)",
+      "b": {
+        "class": "re2-clean",
+        "pattern": "text-embedding-004",
+        "ruleHash": "719a577b17874645"
+      },
+      "canonicalForm": "(Σ)*·'t'·'e'·'x'·'t'·'-'·'e'·'m'·'b'·'e'·'d'·'d'·'i'·'n'·'g'·'-'·'0'·'0'·'4'·(Σ)*",
+      "foundBy": [
+        "per-pattern-canonical-form",
+        "shared-egraph-eclass"
+      ],
+      "id": "merge-001-2acb1c6a-2acb1c6a",
+      "smt2": "artifacts/verification/merge-001-2acb1c6a-2acb1c6a.smt2",
+      "smtSidesIdentical": true,
+      "syntacticallyDistinct": false,
+      "z3": {
+        "elapsedMs": 15,
+        "output": "unsat",
+        "verdict": "unsat",
+        "witness": null
+      }
+    },
+    {
+      "a": {
+        "class": "word-boundary",
+        "pattern": "\\bimport\\s*\\(",
+        "ruleHash": "7cdfa1069477b69a"
+      },
+      "attributableTo": "congruence-only (hash-consing + canonical char-class sets; no rewrite needed)",
+      "b": {
+        "class": "word-boundary",
+        "pattern": "\\bimport\\s*\\(",
+        "ruleHash": "f36ef6d87ba44a00"
+      },
+      "canonicalForm": "((Σ)*·NW)?·'i'·'m'·'p'·'o'·'r'·'t'·([\\t ])*·'('·(Σ)*",
+      "foundBy": [
+        "per-pattern-canonical-form",
+        "shared-egraph-eclass"
+      ],
+      "id": "merge-002-6c4c3874-6c4c3874",
+      "smt2": "artifacts/verification/merge-002-6c4c3874-6c4c3874.smt2",
+      "smtSidesIdentical": true,
+      "syntacticallyDistinct": false,
+      "z3": {
+        "elapsedMs": 14,
+        "output": "unsat",
+        "verdict": "unsat",
+        "witness": null
+      }
+    },
+    {
+      "a": {
+        "class": "re2-clean",
+        "pattern": "\\.git[\\/]hooks",
+        "ruleHash": "d2f88c8528441069"
+      },
+      "attributableTo": "rewrites (the named ruleset fired)",
+      "b": {
+        "class": "re2-clean",
+        "pattern": "\\.git\\/hooks",
+        "ruleHash": "282e9e8692be3edb"
+      },
+      "canonicalForm": "(Σ)*·'.'·'g'·'i'·'t'·'/'·'h'·'o'·'o'·'k'·'s'·(Σ)*",
+      "foundBy": [
+        "per-pattern-canonical-form"
+      ],
+      "id": "merge-003-771a4041-5d129393",
+      "smt2": "artifacts/verification/merge-003-771a4041-5d129393.smt2",
+      "smtSidesIdentical": false,
+      "syntacticallyDistinct": true,
+      "z3": {
+        "elapsedMs": 15,
+        "output": "unsat",
+        "verdict": "unsat",
+        "witness": null
+      }
+    },
+    {
+      "a": {
+        "class": "word-boundary",
+        "pattern": "\\bexit\\s+0\\b",
+        "ruleHash": "40fdd031e2db1230"
+      },
+      "attributableTo": "congruence-only (hash-consing + canonical char-class sets; no rewrite needed)",
+      "b": {
+        "class": "word-boundary",
+        "pattern": "\\bexit\\s+0\\b",
+        "ruleHash": "d9d647256e88af40"
+      },
+      "canonicalForm": "((Σ)*·NW)?·'e'·'x'·'i'·'t'·([\\t ])+·'0'·(NW·(Σ)*)?",
+      "foundBy": [
+        "per-pattern-canonical-form",
+        "shared-egraph-eclass"
+      ],
+      "id": "merge-004-89b30a51-89b30a51",
+      "smt2": "artifacts/verification/merge-004-89b30a51-89b30a51.smt2",
+      "smtSidesIdentical": true,
+      "syntacticallyDistinct": false,
+      "z3": {
+        "elapsedMs": 15,
+        "output": "unsat",
+        "verdict": "unsat",
+        "witness": null
+      }
+    },
+    {
+      "a": {
+        "class": "re2-clean",
+        "pattern": "bun-version:\\s*['\"]?latest['\"]?",
+        "ruleHash": "ece07b64a3df6e2a"
+      },
+      "attributableTo": "congruence-only (hash-consing + canonical char-class sets; no rewrite needed)",
+      "b": {
+        "class": "re2-clean",
+        "pattern": "bun-version:\\s*['\"]?latest['\"]?",
+        "ruleHash": "3706efb77448d53d"
+      },
+      "canonicalForm": "(Σ)*·'b'·'u'·'n'·'-'·'v'·'e'·'r'·'s'·'i'·'o'·'n'·':'·([\\t ])*·([\"'])?·'l'·'a'·'t'·'e'·'s'·'t'·([\"'])?·(Σ)*",
+      "foundBy": [
+        "per-pattern-canonical-form",
+        "shared-egraph-eclass"
+      ],
+      "id": "merge-005-92111288-92111288",
+      "smt2": "artifacts/verification/merge-005-92111288-92111288.smt2",
+      "smtSidesIdentical": true,
+      "syntacticallyDistinct": false,
+      "z3": {
+        "elapsedMs": 14,
+        "output": "unsat",
+        "verdict": "unsat",
+        "witness": null
+      }
+    },
+    {
+      "a": {
+        "class": "re2-clean",
+        "pattern": "\\[Totem Error\\]",
+        "ruleHash": "55c903bd228e0b5c"
+      },
+      "attributableTo": "congruence-only (hash-consing + canonical char-class sets; no rewrite needed)",
+      "b": {
+        "class": "re2-clean",
+        "pattern": "\\[Totem Error\\]",
+        "ruleHash": "027b32b8ea3c8c51"
+      },
+      "canonicalForm": "(Σ)*·'['·'T'·'o'·'t'·'e'·'m'·' '·'E'·'r'·'r'·'o'·'r'·']'·(Σ)*",
+      "foundBy": [
+        "per-pattern-canonical-form",
+        "shared-egraph-eclass"
+      ],
+      "id": "merge-006-a83e39f6-a83e39f6",
+      "smt2": "artifacts/verification/merge-006-a83e39f6-a83e39f6.smt2",
+      "smtSidesIdentical": true,
+      "syntacticallyDistinct": false,
+      "z3": {
+        "elapsedMs": 15,
+        "output": "unsat",
+        "verdict": "unsat",
+        "witness": null
+      }
+    }
+  ],
+  "parse": {
+    "openRepeatsLowered": 5,
+    "parsed": 167,
+    "partitionAssertion": "parsed 167 + unparsed 10 = 177 ✓",
+    "unparsed": 10,
+    "unparsedByReason": {
+      "anchor-not-at-branch-edge": 3,
+      "char-outside-line-alphabet": 1,
+      "lazy-quantifier": 2,
+      "word-boundary-ambiguous-polarity": 2,
+      "word-boundary-nested": 2
+    },
+    "unparsedRows": [
+      {
+        "class": "word-boundary",
+        "corpus": "root",
+        "detail": "`\\b` occurs inside a group, alternation or quantifier; the careful desugar needs the adjacent pattern characters, which are not local there",
+        "pattern": "\\.git(?:/|\\b)",
+        "reason": "word-boundary-nested",
+        "ruleHash": "d245b21395563e6f"
+      },
+      {
+        "class": "word-boundary",
+        "corpus": "root",
+        "detail": "`\\b` occurs inside a group, alternation or quantifier; the careful desugar needs the adjacent pattern characters, which are not local there",
+        "pattern": "\\.(lance|lancedb|idx|ivf|hnsw|faiss|annoy|nmslib)(\\b|/)",
+        "reason": "word-boundary-nested",
+        "ruleHash": "a5c181bb3715b4c8"
+      },
+      {
+        "class": "word-boundary",
+        "corpus": "root",
+        "detail": "neither side of a `\\b` has a pattern-determined word polarity (a nullable or mixed-polarity neighbour); case-splitting the neighbour would be a different construction from the O9-verified desugar",
+        "pattern": "git add\\s+(-A|\\.)\\b",
+        "reason": "word-boundary-ambiguous-polarity",
+        "ruleHash": "55797450514d4c3b"
+      },
+      {
+        "class": "re2-clean",
+        "corpus": "root",
+        "detail": "positive character class names a character outside Σ = {0x09} ∪ [0x20..0x7E]; intersecting it with Σ would silently narrow the class",
+        "pattern": "[☀-➿�-􏰀-�⌀-⏿⭐-⭕⌚-⌛▪-◾☔-☕♈-♓⚪-⚫✅✔✖❌❎❓-❕❗➡⤴-⤵©®‼⁉⃣〰〽㊗㊙]",
+        "reason": "char-outside-line-alphabet",
+        "ruleHash": "5afaf8d03f059a41"
+      },
+      {
+        "class": "word-boundary",
+        "corpus": "root",
+        "detail": "neither side of a `\\b` has a pattern-determined word polarity (a nullable or mixed-polarity neighbour); case-splitting the neighbour would be a different construction from the O9-verified desugar",
+        "pattern": "\\b[\\w.-]+\\/[\\w.-]+\\.[a-z0-9]{2,}\\b",
+        "reason": "word-boundary-ambiguous-polarity",
+        "ruleHash": "d4d16d3f84cb5546"
+      },
+      {
+        "class": "word-boundary",
+        "corpus": "root",
+        "detail": "`*?`/`+?`/`??`/`{n,m}?` is outside the declared subset; it is language-equal to the greedy form under membership, but the subset does not name it and reading it as greedy would be a silent re-reading of match semantics",
+        "pattern": "\\bsetTimeout\\s*\\(.*?\\breject\\b",
+        "reason": "lazy-quantifier",
+        "ruleHash": "74d568ba0307dd43"
+      },
+      {
+        "class": "word-boundary",
+        "corpus": "root",
+        "detail": "`*?`/`+?`/`??`/`{n,m}?` is outside the declared subset; it is language-equal to the greedy form under membership, but the subset does not name it and reading it as greedy would be a silent re-reading of match semantics",
+        "pattern": "\\bif\\s*\\(.*?\\b(budget|limit|max|capacity|length|chars)\\b.*?\\)\\s*break\\b",
+        "reason": "lazy-quantifier",
+        "ruleHash": "1e9417ca76e7a183"
+      },
+      {
+        "class": "word-boundary",
+        "corpus": "root",
+        "detail": "`^`/`$` occurs somewhere other than the start/end of a top-level branch; desugaring it would need a non-local rewrite",
+        "pattern": "(?:\\brun:|^\\s*[^:\\s]+\\s+).*\\$\\{\\{\\s*inputs\\..*\\}\\}",
+        "reason": "anchor-not-at-branch-edge",
+        "ruleHash": "5763ada90f821028"
+      },
+      {
+        "class": "re2-clean",
+        "corpus": "root",
+        "detail": "`^`/`$` occurs somewhere other than the start/end of a top-level branch; desugaring it would need a non-local rewrite",
+        "pattern": "(^|[^a-zA-Z0-9-_./])#\\d+",
+        "reason": "anchor-not-at-branch-edge",
+        "ruleHash": "54140f59be3e6e44"
+      },
+      {
+        "class": "word-boundary",
+        "corpus": "pack-agent-security",
+        "detail": "`^`/`$` occurs somewhere other than the start/end of a top-level branch; desugaring it would need a non-local rewrite",
+        "pattern": "\\b(?:curl|wget)\\b[^\\n'\"`]*(?:(?:\\d{1,3}\\.){3}\\d{1,3}|(?:^|[^\\w.-])pastebin\\.com/api|(?:^|[^\\w.-])(?:ngrok\\.io|transfer\\.sh|gofile\\.io|anonfiles\\.com)(?:$|[^\\w.-])|\\.trycloudflare\\.com(?:$|[^\\w.-])|\\.onion(?:$|[^\\w.-]))",
+        "reason": "anchor-not-at-branch-edge",
+        "ruleHash": "6fa15756b8a004ef"
+      }
+    ]
+  },
+  "pins": {
+    "egg": "0.11.0",
+    "eggPinKind": "`=` requirement in Cargo.toml + committed Cargo.lock",
+    "saturationBudgetSeconds": 60,
+    "z3": "5.1.0 (spike toolchain.lock)",
+    "z3Path": "spikes/spine-adopt/tools/z3-5.1.0-x64-win/bin/z3.exe",
+    "z3TimeoutSeconds": 30
+  },
+  "probe": "egg e-graph probe — spec § Enrichment row 1 (\"egg proposes, Z3 disposes\")",
+  "representationChoices": [
+    "cat and alt are BINARY, right-associated at build time, so DESIGN's named union/concat assoc + comm rules are expressible as egg patterns (an n-ary operator would make them inexpressible as rewrites).",
+    "A multi-character literal is a CONCATENATION OF PER-CHARACTER atoms. Whole-string literal atoms would hide `\\.git\\/hooks` from the named single-char-class ↔ literal rule, letting the representation rather than the semantics decide the yield.",
+    "A character class is a canonical 128-bit Σ-subset mask, so ['\"] and [\"'] hash-cons to the SAME e-node and class equality is decided by the representation, not by a rewrite. Union / complement-within-Σ / subset are single machine words.",
+    "`rep` carries its bounds in a Bnd LEAF child (`(rep body bounds)`), keeping the language inside plain define_language! forms.",
+    "`opt` is a primitive node (matching how DESIGN words a?·a* → a*), printed o09's way as (re.union (str.to_re \"\") X).",
+    "The e-graph holds the SEARCH LANGUAGE (padding + anchors + desugared \\b), not the raw parse — so a merge is a claim about the shipped semantics, which is exactly what the z3 pass checks."
+  ],
+  "rewriteSample": {
+    "pairs": [
+      {
+        "canonicalCost": 37,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'`'·'t'·'o'·'t'·'e'·'m'·([\\t ])+·'e'·'x'·'t'·'r'·'a'·'c'·'t'·(NW·(Σ)*)?",
+        "id": "sample-00-04f9c1bb",
+        "originalCost": 37,
+        "pattern": "`totem\\s+extract\\b",
+        "patternSha256": "04f9c1bbcd554725ee34dc3d421fa0da5c52a5e864edc9ffa19c0745efeb43d2",
+        "ruleHash": "4ae0a01d912f8742",
+        "smt2": "artifacts/verification/sample-00-04f9c1bb.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 19,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 41,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·'g'·'i'·'t'·([\\t ])+·(Σ)*·[\\t ]·'-'·'-'·([\\t ])+·(Σ)*·('.'·'.'·('.')?|[^~])·(Σ)*",
+        "id": "sample-01-06debdfa",
+        "originalCost": 41,
+        "pattern": "\\bgit\\s+.*\\s--\\s+.*(\\.\\.\\.?|[\\^~])",
+        "patternSha256": "06debdfad5b8a0d9864a6f1669cd29cd9bc69a70f6e64733139d2ba57c976b28",
+        "ruleHash": "3d09188d0fa85674",
+        "smt2": "artifacts/verification/sample-01-06debdfa.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 81,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·'c'·'o'·'n'·'s'·'o'·'l'·'e'·'.'·('w'·'a'·'r'·'n'|('i'·'n'·'f'·'o'|('e'·'r'·'r'·'o'·'r'|('t'·'r'·'a'·'c'·'e'|('l'·'o'·'g'|'d'·'e'·'b'·'u'·'g')))))·([\\t ])*·'('·(Σ)*",
+        "id": "sample-02-0708a620",
+        "originalCost": 81,
+        "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\s*\\(",
+        "patternSha256": "0708a62081418724d7325c07d369a2e2ce05692a13a6b08e5e3371fe096f72be",
+        "ruleHash": "17f273d09af38f0c",
+        "smt2": "artifacts/verification/sample-02-0708a620.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 21,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·'t'·'h'·'r'·'o'·'w'·([\\t ])+·(Σ)*",
+        "id": "sample-03-0845c151",
+        "originalCost": 21,
+        "pattern": "\\bthrow\\s+",
+        "patternSha256": "0845c1516d26ab93e84a2c509408ad559f9bd8941be6975e20254c6e7685839c",
+        "ruleHash": "58a6bb25a38e97f8",
+        "smt2": "artifacts/verification/sample-03-0845c151.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 16,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 18,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'\\'·'b'·[$A-Z_a-z]·([$0-9A-Z_a-z])*·'\\'·'b'·(Σ)*",
+        "id": "sample-04-088276a0",
+        "originalCost": 18,
+        "pattern": "\\\\b[A-Za-z_$][\\w$]*\\\\b",
+        "patternSha256": "088276a081627d1f939dc137829f47aee645f2596731375f697008e3e5d24d0c",
+        "ruleHash": "76762d7d0ad98113",
+        "smt2": "artifacts/verification/sample-04-088276a0.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 16,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 54,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'\"'·'o'·'p'·'t'·'i'·'o'·'n'·'a'·'l'·'D'·'e'·'p'·'e'·'n'·'d'·'e'·'n'·'c'·'i'·'e'·'s'·'\"'·([\\t ])*·':'·(Σ)*",
+        "id": "sample-05-08a53f91",
+        "originalCost": 54,
+        "pattern": "\"optionalDependencies\"\\s*:",
+        "patternSha256": "08a53f91a9150522bc3f8522d531bed4ffc4a6ed6a3afb74bc68627ca426103e",
+        "ruleHash": "e12c9c71f8e0aa5b",
+        "smt2": "artifacts/verification/sample-05-08a53f91.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 16,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 25,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'p'·'n'·'p'·'m'·([\\t ])+·'b'·'i'·'n'·(NW·(Σ)*)?",
+        "id": "sample-06-0965479e",
+        "originalCost": 25,
+        "pattern": "pnpm\\s+bin\\b",
+        "patternSha256": "0965479e0f91226dfab9cfa5adfee777ee448f1d6251604b4d1c85e70b5c3f37",
+        "ruleHash": "e1046c772a6bb6f9",
+        "smt2": "artifacts/verification/sample-06-0965479e.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 31,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·([0-9])*·'>'·([\\t ])*·'/'·'d'·'e'·'v'·'/'·'n'·'u'·'l'·'l'·(Σ)*",
+        "id": "sample-07-09815ba9",
+        "originalCost": 31,
+        "pattern": "\\d*>\\s*/dev/null",
+        "patternSha256": "09815ba975c6b8d9a692b2415846e81ca5ae5378d64c73f46fbca70b1b063af3",
+        "ruleHash": "ff5e30cff913a43d",
+        "smt2": "artifacts/verification/sample-07-09815ba9.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 29,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·'e'·'x'·'e'·'c'·'S'·'y'·'n'·'c'·([\\t ])*·'('·(Σ)*",
+        "id": "sample-08-0ab7687b",
+        "originalCost": 29,
+        "pattern": "\\bexecSync\\s*\\(",
+        "patternSha256": "0ab7687ba7db0099c274f4e6ebafb526fc7fef22cfffb6b0f609181ba404d56a",
+        "ruleHash": "3c28f6dd8d7b5057",
+        "smt2": "artifacts/verification/sample-08-0ab7687b.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 23,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'['·[\"']·[A-Z_a-z]·(W)*·[\"']·']'·([\\t ])*·'('·(Σ)*",
+        "id": "sample-09-0b2f9c07",
+        "originalCost": 23,
+        "pattern": "\\[['\"][a-zA-Z_]\\w*['\"]\\]\\s*\\(",
+        "patternSha256": "0b2f9c074365ff46a7a9ac886d512a08571f3239fefc3d63c1a18435c5b7e21a",
+        "ruleHash": "16104b4e57be1a86",
+        "smt2": "artifacts/verification/sample-09-0b2f9c07.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 30,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'.'·('m'·'a'·'t'·'c'·'h'|'e'·'x'·'e'·'c')·([\\t ])*·'('·(Σ)*",
+        "id": "sample-10-0c2872fc",
+        "originalCost": 30,
+        "pattern": "\\.(match|exec)\\s*\\(",
+        "patternSha256": "0c2872fc73799c565ba2b91c7f1b463223001aff48b972716bb7b6b948e0c62a",
+        "ruleHash": "46dff393ac3b12e9",
+        "smt2": "artifacts/verification/sample-10-0c2872fc.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 30,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'}'·([\\t ])*·'a'·'s'·([\\t ])+·'E'·'r'·'r'·'o'·'r'·(NW·(Σ)*)?",
+        "id": "sample-11-0e47e502",
+        "originalCost": 30,
+        "pattern": "\\}\\s*as\\s+Error\\b",
+        "patternSha256": "0e47e502e13a23ef9cbfb0b67759411f24624c776c742ff480b8291de72cc2c4",
+        "ruleHash": "71afc4b8f4c930a1",
+        "smt2": "artifacts/verification/sample-11-0e47e502.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 77,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'\"'·('t'·'o'·'k'·'e'·'n'|('s'·'e'·'c'·'r'·'e'·'t'|('a'·'p'·'i'·([-_])?·'k'·'e'·'y'|'p'·'a'·'s'·'s'·'w'·'o'·'r'·'d')))·'\"'·([\\t ])*·':'·([\\t ])*·'\"'·(Σ)+·'\"'·(Σ)*",
+        "id": "sample-12-1154603f",
+        "originalCost": 77,
+        "pattern": "\"(?:api[_-]?key|token|secret|password)\"\\s*:\\s*\".+\"",
+        "patternSha256": "1154603f9f2ba3403c09f912d96061d3dfe53bfb990589854f4ac433e6f340e1",
+        "ruleHash": "3da0f60891174989",
+        "smt2": "artifacts/verification/sample-12-1154603f.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 16,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'<'·'/'·[A-Za-z]·([\\t -=?-~])*·'>'·(Σ)*",
+        "id": "sample-13-130422c4",
+        "originalCost": 16,
+        "pattern": "<\\/[a-zA-Z][^>]*>",
+        "patternSha256": "130422c438df7b0cb822b538e30ba9b7888d229c3a110af81a0a3d512ee53e47",
+        "ruleHash": "4d63af6631a6ddf7",
+        "smt2": "artifacts/verification/sample-13-130422c4.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 72,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'J'·'S'·'O'·'N'·'.'·'p'·'a'·'r'·'s'·'e'·'('·(Σ)*·('s'·'p'·'a'·'w'·'n'|('s'·'t'·'d'·'o'·'u'·'t'|('e'·'x'·'e'·'c'|'s'·'t'·'d'·'e'·'r'·'r')))·(Σ)*",
+        "id": "sample-14-18b53489",
+        "originalCost": 72,
+        "pattern": "JSON\\.parse\\(.*(exec|spawn|stdout|stderr)",
+        "patternSha256": "18b5348919bede4b998dd89a579bbea54c9f75cf9ae47a63b1e3f149d1be141f",
+        "ruleHash": "cae08ccccd834eb3",
+        "smt2": "artifacts/verification/sample-14-18b53489.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 57,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·'g'·'i'·'t'·' '·'a'·'d'·'d'·' '·'-'·'A'·(Σ)*|(Σ)*·'g'·'i'·'t'·' '·'a'·'d'·'d'·' '·'-'·'-'·'a'·'l'·'l'·(Σ)*)",
+        "id": "sample-15-18cfa60b",
+        "originalCost": 57,
+        "pattern": "git add -A|git add --all",
+        "patternSha256": "18cfa60b0d2d912758d3ba4a8d9e2629c4aef6345787ea70dc684e61b2571e33",
+        "ruleHash": "271765fe97bafafb",
+        "smt2": "artifacts/verification/sample-15-18cfa60b.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 16,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 21,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'|'·([\\t ])*·'g'·'r'·'e'·'p'·(NW·(Σ)*)?",
+        "id": "sample-16-1ab6a210",
+        "originalCost": 21,
+        "pattern": "\\|\\s*grep\\b",
+        "patternSha256": "1ab6a210ea82a0efec1632712343e349ac1d53762b85540eacd5ce4e0879146c",
+        "ruleHash": "3d6802ffb3a85fb8",
+        "smt2": "artifacts/verification/sample-16-1ab6a210.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 43,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'c'·'u'·'r'·'r'·'e'·'n'·'t'·'B'·'r'·'a'·'n'·'c'·'h'·':'·([\\t ])*·[\"']·([\\t -!#-&(-~])+·[\"']·(Σ)*",
+        "id": "sample-17-1b565a00",
+        "originalCost": 43,
+        "pattern": "currentBranch:\\s*['\"][^'\"]+['\"]",
+        "patternSha256": "1b565a003d16043dda05a4e1954bee16ca0d1a9e2655ebee738b54a2b17ed874",
+        "ruleHash": "28cc46c09bd5820f",
+        "smt2": "artifacts/verification/sample-17-1b565a00.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 84,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'t'·'h'·'r'·'o'·'w'·([\\t ])+·'n'·'e'·'w'·([\\t ])+·(W)*·'E'·'r'·'r'·'o'·'r'·'('·([\\t -(*-~])*·'+'·([\\t ])*·('e'|('e'·'r'·'r'|'e'·'r'·'r'·'o'·'r'))·'.'·'m'·'e'·'s'·'s'·'a'·'g'·'e'·(Σ)*",
+        "id": "sample-18-1c8fe917",
+        "originalCost": 84,
+        "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
+        "patternSha256": "1c8fe9179bd7daf8bb66f3b14a1619b075e553372741c187167d3b6a55e6dc2c",
+        "ruleHash": "d5b7c8b5391ffb9f",
+        "smt2": "artifacts/verification/sample-18-1c8fe917.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 30,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·'o'·'s'·'.'·'t'·'m'·'p'·'d'·'i'·'r'·'('·')'·(Σ)*",
+        "id": "sample-19-1d47ce64",
+        "originalCost": 30,
+        "pattern": "\\bos\\.tmpdir\\(\\)",
+        "patternSha256": "1d47ce64419be6ceb433fb6522e3e03cebc65efa44d3c3e0f46cfffbb389c7ce",
+        "ruleHash": "d6f2b8a2f3884537",
+        "smt2": "artifacts/verification/sample-19-1d47ce64.smt2",
+        "smtSidesIdentical": true,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      }
+    ],
+    "rewrittenPairsAvailable": 166,
+    "selectionRule": "order all parsed patterns by sha256(pattern-text) ascending; take pairs whose extracted canonical DIFFERS from the desugared original first (an identical pair proves nothing about rewriting), then fill from the same hash order. No RNG, no timestamps.",
+    "size": 20
+  },
+  "saturation": {
+    "congruenceOnlyControl": {
+      "distinctRootEClasses": 161,
+      "groupsWithMoreThanOne": 6,
+      "note": "hash-consing + the canonical char-class representation, NO rewrite applied — what a plain typed IR would already give. Merges beyond this are what egg's rewriting earned."
+    },
+    "perPattern": {
+      "allSaturated": false,
+      "canonicalChange": {
+        "differsAfterFlattening": 41,
+        "differsAsTerm": 166,
+        "measure": "how the extracted canonical differs from the desugared original, per parsed pattern",
+        "note": "`differsAsTerm` counts any structural difference; `differsAfterFlattening` counts those that survive n-ary flattening of cat/alt chains. The gap is pure RE-ASSOCIATION — what the 250k concat-assoc firings produce, and what any n-ary IR collapses for free."
+      },
+      "costReduction": {
+        "measure": "AstSize of the desugared original vs the extracted canonical, per pattern",
+        "patternsWithEqualCost": 156,
+        "patternsWithLargerCanonical": 0,
+        "patternsWithSmallerCanonical": 11,
+        "totalCanonicalCost": 9784,
+        "totalOriginalCost": 9814
+      },
+      "distinctCanonicalForms": 160,
+      "nodeLimited": {
+        "count": 10,
+        "note": "these runs stopped at egg's DEFAULT node limit (10 000) — a blowup under DESIGN criterion 3, not a timeout: the whole per-pattern arm used 2% of the 60s wall budget",
+        "patterns": [
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 425,
+            "eNodes": 4094,
+            "iterations": 18,
+            "pattern": "open-pull-requests-limit:\\s*0",
+            "ruleHash": "a6f2d3a89d9ebae8",
+            "stopReason": "Some(NodeLimit(10265))",
+            "wallMs": 237
+          },
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 1891,
+            "eNodes": 8327,
+            "iterations": 16,
+            "pattern": "\\b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\\b",
+            "ruleHash": "6ad0d4d5c760a5d6",
+            "stopReason": "Some(NodeLimit(12391))",
+            "wallMs": 337
+          },
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 2976,
+            "eNodes": 9886,
+            "iterations": 18,
+            "pattern": "\\.startsWith\\(['\"]http://localhost['\"]\\)|\\.startsWith\\(['\"]http://127\\.|\\.startsWith\\(['\"]http://\\[::1\\]",
+            "ruleHash": "b93bd44e6c1d2d59",
+            "stopReason": "Some(NodeLimit(13049))",
+            "wallMs": 237
+          },
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 2677,
+            "eNodes": 10348,
+            "iterations": 15,
+            "pattern": "\\b(guarantee[sd]?|comprehensive(ly)?|always|never|perfect(ly)?|complete(ly)?|foolproof|infallible|100%\\s+(?:accurate|reliable|secure|safe))\\b",
+            "ruleHash": "d5faa14cbb8b50fb",
+            "stopReason": "Some(NodeLimit(12323))",
+            "wallMs": 160
+          },
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 425,
+            "eNodes": 4095,
+            "iterations": 20,
+            "pattern": "new\\s+GoogleGenerativeAI\\s*\\(\\s*[^\\s\\{]",
+            "ruleHash": "37a2ad412bd8ce20",
+            "stopReason": "Some(NodeLimit(11088))",
+            "wallMs": 265
+          },
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 954,
+            "eNodes": 7369,
+            "iterations": 16,
+            "pattern": "(\\.(match|test|includes)\\s*\\(|pattern:\\s*)[/\"']\\^?\\b(git|npm|docker|aws|kubectl|gh|sh|bash)\\b\\$?[/\"']",
+            "ruleHash": "acafedf51e69f512",
+            "stopReason": "Some(NodeLimit(13832))",
+            "wallMs": 233
+          },
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 1273,
+            "eNodes": 7278,
+            "iterations": 22,
+            "pattern": "new\\s+RegExp\\s*\\(\\s*[^,]+\\s*,\\s*[^,]*\\.flags\\s*\\+\\s*['\"][^'\"]*g",
+            "ruleHash": "4fe39839b3e16366",
+            "stopReason": "Some(NodeLimit(16887))",
+            "wallMs": 364
+          },
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 6389,
+            "eNodes": 19481,
+            "iterations": 14,
+            "pattern": "\\bfs\\.(promises|readFile|writeFile|readdir|mkdir|rm|stat|access|appendFile|copyFile|rename|unlink)\\b|['\"]fs/promises['\"]",
+            "ruleHash": "173334b199f58fb2",
+            "stopReason": "Some(NodeLimit(22576))",
+            "wallMs": 239
+          },
+          {
+            "coveredByRewriteSample": true,
+            "eClasses": 1148,
+            "eNodes": 6633,
+            "iterations": 21,
+            "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
+            "ruleHash": "d5b7c8b5391ffb9f",
+            "stopReason": "Some(NodeLimit(13447))",
+            "wallMs": 334
+          },
+          {
+            "coveredByRewriteSample": false,
+            "eClasses": 675,
+            "eNodes": 6973,
+            "iterations": 21,
+            "pattern": "process\\.stderr\\.write\\([^)]*\\[Totem Error\\]",
+            "ruleHash": "42559b2f75734104",
+            "stopReason": "Some(NodeLimit(11298))",
+            "wallMs": 385
+          }
+        ]
+      },
+      "note": "DESIGN § Method 3 — 'Saturate per pattern (canonical form + cost via ast-size extractor)'. This arm is what criteria.cost measures.",
+      "patterns": 167,
+      "ruleApplications": {
+        "class-single-to-literal": 5,
+        "concat-assoc-left": 174939,
+        "concat-assoc-right": 84775,
+        "concat-eps-left": 48,
+        "concat-eps-right": 21,
+        "literal-to-class-single": 1925,
+        "plus-to-cat-star": 69,
+        "union-assoc-left": 12277,
+        "union-assoc-right": 38957,
+        "union-comm": 9971
+      },
+      "rulesThatNeverFired": [
+        "union-idempotent",
+        "concat-empty-left",
+        "concat-empty-right",
+        "union-empty-left",
+        "union-empty-right",
+        "star-star",
+        "opt-then-star",
+        "cat-star-to-plus",
+        "class-union-merge"
+      ],
+      "slowest": [
+        {
+          "eClasses": 716,
+          "eNodes": 5682,
+          "iterations": 24,
+          "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 549
+        },
+        {
+          "eClasses": 551,
+          "eNodes": 6021,
+          "iterations": 22,
+          "pattern": "open-pull-requests-limit\\s*:\\s*['\"]?[1-9]\\d*['\"]?",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 500
+        },
+        {
+          "eClasses": 511,
+          "eNodes": 5485,
+          "iterations": 24,
+          "pattern": "totem\\s+shield\\s+--deterministic",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 452
+        },
+        {
+          "eClasses": 675,
+          "eNodes": 6973,
+          "iterations": 21,
+          "pattern": "process\\.stderr\\.write\\([^)]*\\[Totem Error\\]",
+          "stopReason": "Some(NodeLimit(11298))",
+          "wallMs": 385
+        },
+        {
+          "eClasses": 1273,
+          "eNodes": 7278,
+          "iterations": 22,
+          "pattern": "new\\s+RegExp\\s*\\(\\s*[^,]+\\s*,\\s*[^,]*\\.flags\\s*\\+\\s*['\"][^'\"]*g",
+          "stopReason": "Some(NodeLimit(16887))",
+          "wallMs": 364
+        },
+        {
+          "eClasses": 424,
+          "eNodes": 4094,
+          "iterations": 22,
+          "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 347
+        },
+        {
+          "eClasses": 1891,
+          "eNodes": 8327,
+          "iterations": 16,
+          "pattern": "\\b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\\b",
+          "stopReason": "Some(NodeLimit(12391))",
+          "wallMs": 337
+        },
+        {
+          "eClasses": 1148,
+          "eNodes": 6633,
+          "iterations": 21,
+          "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
+          "stopReason": "Some(NodeLimit(13447))",
+          "wallMs": 334
+        },
+        {
+          "eClasses": 479,
+          "eNodes": 3807,
+          "iterations": 24,
+          "pattern": "(import\\s+.*from\\s+['\"]inquirer['\"]|require\\(['\"]inquirer['\"]\\)|\\\"inquirer\\\"\\s*:)",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 316
+        },
+        {
+          "eClasses": 510,
+          "eNodes": 3538,
+          "iterations": 23,
+          "pattern": "expect\\(.*\\.length\\)\\.(toBeGreaterThan|toBeLessThan)(OrEqual)?\\(\\d+\\)",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 307
+        }
+      ],
+      "stopReasons": {
+        "Some(NodeLimit(10265))": 1,
+        "Some(NodeLimit(11088))": 1,
+        "Some(NodeLimit(11298))": 1,
+        "Some(NodeLimit(12323))": 1,
+        "Some(NodeLimit(12391))": 1,
+        "Some(NodeLimit(13049))": 1,
+        "Some(NodeLimit(13447))": 1,
+        "Some(NodeLimit(13832))": 1,
+        "Some(NodeLimit(16887))": 1,
+        "Some(NodeLimit(22576))": 1,
+        "Some(Saturated)": 157
+      },
+      "totalEClasses": 44754,
+      "totalENodes": 234911,
+      "totalWallMs": 13196
+    },
+    "sharedEGraph": {
+      "distinctRootEClasses": 161,
+      "eClasses": 6388,
+      "eNodes": 11328,
+      "iterations": 13,
+      "note": "SUPPLEMENTARY. DESIGN criterion 3 says 'full-corpus saturation' while § Method 3 says 'saturate per pattern'; both readings are measured rather than adjudicated here.",
+      "ruleApplications": {
+        "concat-assoc-right": 1532,
+        "concat-eps-left": 319,
+        "concat-eps-right": 5,
+        "plus-to-cat-star": 15,
+        "union-assoc-left": 594,
+        "union-assoc-right": 3110,
+        "union-comm": 481
+      },
+      "stopReason": "Some(NodeLimit(12884))",
+      "wallMs": 309
+    }
+  },
+  "smtDialect": {
+    "constructsEmitted": [
+      "str.in_re",
+      "re.++",
+      "re.union",
+      "re.inter",
+      "re.range",
+      "str.to_re",
+      "re.*",
+      "re.+",
+      "(_ re.loop n m)"
+    ],
+    "dialectProbe": {
+      "re.comp": {
+        "accepted": true,
+        "z3Output": "sat"
+      },
+      "re.inter": {
+        "accepted": true,
+        "z3Output": "unsat"
+      },
+      "re.loop": {
+        "accepted": true,
+        "z3Output": "sat"
+      },
+      "re.opt": {
+        "accepted": true,
+        "z3Output": "sat"
+      }
+    },
+    "notEmitted": {
+      "re.comp": "in the o09 subset but unnecessary here — the non-word class is enumerated, as lang.rs does",
+      "re.none": "not used by o09, so the empty language is spelled (re.inter (str.to_re \"\") (str.to_re \"a\")) — ε ∩ {\"a\"} = ∅ — which stays inside the subset",
+      "re.opt": "accepted by the pinned z3 (see dialectProbe) but NOT emitted; `?` is spelled o09's way as a union with the empty word"
+    },
+    "printerOptimisations": "right-associated cat/alt chains are flattened to n-ary re.++ / re.union and runs of adjacent LITERAL atoms are coalesced into one str.to_re — semantics-preserving, and it makes the emitted text look like o09's rather than handing z3 a needlessly deep term. A singleton CLASS is deliberately NOT folded into a literal run: doing so would print `\\.git[\\/]hooks` and `\\.git\\/hooks` identically and turn the z3 check of that very merge into a tautology.",
+    "stringEscaping": "smt/src/re.rs's rule: printable ASCII passes through, `\"` is doubled, every other character is emitted \\u{..}. A raw control byte is accepted by z3 and REJECTED by cvc5, so tab is always \\u{9}."
+  },
+  "subsetNotes": [
+    "DESIGN § Method 1 names 'bounded {n,m}'. `{n}` and `{n,}` are the same counted-repetition family and are parsed here: `{n}` → (_ re.loop n n), `{n,}` → (_ re.loop n n) · re.* — an exact rewriting, not an approximation. Flagged for the dispatching seat because it is an extension of the words DESIGN uses.",
+    "Lazy quantifiers (`*?`, `+?`, `??`) are NOT in the declared subset and are recorded unparsed, even though they are language-equal to the greedy form under membership: reading them as greedy would silently re-read match semantics.",
+    "A `{` that does not open a valid quantifier is a LITERAL — the shipped JS RegExp (Annex B) rule, so this is fidelity, not a guess.",
+    "A POSITIVE character class naming an out-of-Σ character is refused rather than intersected with Σ, which would silently narrow it. A NEGATED class naming out-of-Σ characters is exact on Σ and is kept — this is lang.rs's own reading of [^\\n]."
+  ],
+  "syntacticBaseline": {
+    "distinctOverAll177": 172,
+    "distinctOverParsed": 162,
+    "normalization": "collapse every run of ASCII whitespace in the pattern SOURCE to one space, then trim; group by exact string equality"
+  },
+  "verdict": "REJECT — plain typed IR structures win",
+  "verdictComputedFrom": "criteria.{soundness,yield,cost}.pass — all three must hold",
+  "verification": {
+    "construction": "O9's xor-emptiness: (assert (xor (str.in_re s A) (str.in_re s B))); UNSAT = the symmetric difference is empty = the languages are equal. Both sides are subsets of Σ, so a string outside Σ lies in NEITHER and cannot be a witness — equivalence proved here holds on the LINE alphabet exactly as O9 words it.",
+    "encodingControls": {
+      "allAsExpected": true,
+      "controls": [
+        {
+          "a": "pnpm\\s+bin\\b",
+          "b": "\\bpnpm\\s+bin\\b",
+          "eggMergedThem": false,
+          "expected": "sat",
+          "id": "control-0-e1046c772a6bb6f9-fe55021637d003d4",
+          "why": "`pnpm\\s+bin\\b` vs `\\bpnpm\\s+bin\\b` differ only by a LEADING \\b, so the second rejects a line like `xpnpm bin` that the first accepts. A SAT here (with a witness) is what proves the construction discriminates rather than proving everything equal.",
+          "z3": {
+            "elapsedMs": 19,
+            "output": "sat",
+            "verdict": "sat",
+            "witness": "sat\r\n(\r\n  (define-fun symmetric-difference () Bool\r\n    (let ((a!1 (re.++ (re.* (re.union (str.to_re \"\\u{9}\") (re.range \" \" \"~\")))\r\n                  (str.to_re \"pnpm\")))\r\n      (a!3 (re.union (re.union (re.union (str.to_re \"\\u{9}\") (re.range \" \" \"/\"))\r\n                               (re.range \":\" \"@\"))\r\n                     (re.range \"[\" \"^\"))))\r\n(let ((a!2 (re.++ a!1 (re.+ (re.union (str.to_re \"\\u{9}\") (str.to_re \" \")))))\r\n      (a!4 (re.++ (re.union (re.union a!3 (str.to_re \"`\")) (re.range \"{\" \"~\"))\r\n                  (re.* (re.union (str.to_re \"\\u{9}\") (re.range \" \" \"~\")))))\r\n      (a!6 (re.++ (re.* (re.union (str.to_re \"\\u{9}\") (re.range \" \" \"~\")))\r\n                  (re.union (re.union a!3 (str.to_re \"`\")) (re.range \"{\" \"~\")))))\r\n(let ((a!5 (str.in_re s\r\n                      (re.++ (re.++ a!2 (str.to_re \"bin\"))\r\n                             (re.union (str.to_re \"\") a!4))))\r\n      (a!7 (re.++ (re.++ (re.union (str.to_re \"\") a!6) (str.to_re \"pnpm\"))\r\n                  (re.+ (re.union (str.to_re \"\\u{9}\") (str.to_re \" \"))))))\r\n(let ((a!8 (str.in_re s\r\n                      (re.++ (re.++ a!7 (str.to_re \"bin\"))\r\n                             (re.union (str.to_re \"\") a!4)))))\r\n  (xor a!5 a!8))))))\r\n  (define-fun s () String\r\n    \"ppnpm bin`\")\r\n)"
+          }
+        },
+        {
+          "a": "[\\/'\"`]?\\.git[\\/]hooks",
+          "b": "\\.git[\\/]hooks",
+          "eggMergedThem": false,
+          "expected": "unsat",
+          "id": "control-1-7056157a6bf72fa8-d2f88c8528441069",
+          "why": "`[\\/'\"`]?\\.git[\\/]hooks` vs `\\.git[\\/]hooks` ARE equal under unanchored search (Σ*·C? = Σ*), but egg did NOT merge them: the absorbing law Σ*·C? → Σ* is not in the ruleset DESIGN names. A recorded FALSE NEGATIVE of the named ruleset, not of egg.",
+          "z3": {
+            "elapsedMs": 19,
+            "output": "unsat",
+            "verdict": "unsat",
+            "witness": null
+          }
+        }
+      ],
+      "why": "an all-UNSAT verification pass is only evidence if the encoding can produce a SAT at all; these are NOT criterion-1 evidence and their verdicts are excluded from the counts above"
+    },
+    "failClosed": "a timeout or `unknown` is recorded UNVERIFIED and criterion 1 treats it as NOT PROVEN — the same posture as O10",
+    "queries": 27,
+    "sat": 0,
+    "solver": "pinned z3 5.1.0 CLI, -T:30 per query",
+    "unsat": 27,
+    "unverified": 0
+  },
+  "wordBoundaryDesugar": {
+    "base": "lang.rs's CAREFUL desugar: a leading \\b abutting a WORD character becomes opt(Σ*·NW) (the ε branch is what makes a match at position 0 legal); the trailing mirror is opt(NW·Σ*). O9 check A verified these shapes; check B measured what the naive 'a non-word character' shortcut costs.",
+    "generalisation": "This corpus also puts \\b next to NON-word characters (e.g. \\b#515\\b), which lang.rs never needed. There the assertion requires the context character to BE a word character and to be present, so the ε branch is dropped: Σ*·W / W·Σ*. When BOTH sides are pattern-determined the assertion is static — a boundary holds iff the two polarities differ — yielding ε or ∅.",
+    "needingReInter": 8,
+    "nonLocalCase": "When the constrained side is not bare Σ* the context is applied with re.inter (in the o09 subset) rather than by substitution. When it IS bare Σ*, Σ* ∩ opt(Σ*·NW) = opt(Σ*·NW), so the emitted text is byte-identical to lang.rs's shape.",
+    "refusals": "\\b inside a group/alternation/quantifier, and \\b whose neighbours are both nullable or mixed-polarity, are recorded unparsed rather than case-split — a case-split would be a DIFFERENT construction from the O9-verified one.",
+    "sites": 103,
+    "staticallyDecided": 5
+  }
+}

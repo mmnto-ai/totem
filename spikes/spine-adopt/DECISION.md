@@ -65,7 +65,17 @@ freeze on core wasm. Day-one friction: wazero's HostModuleBuilder cannot export 
 OPA's `env.memory` import needs a ~120-line synthesized shim module (constant, not per-policy).
 `wazero-probe/artifacts/wazero-report.json`.
 
-### Enrichment — egg/egglog on DSL→IR normalization: **PENDING** (probe running; pre-registered check in `egg-probe/DESIGN.md`)
+### Enrichment — egg/egglog on DSL→IR normalization: **REJECT — plain typed IR wins** (pre-registered check, mechanically computed)
+
+Soundness held perfectly (27/27 claimed equivalences z3-verified UNSAT; tautologies disclosed — 5
+real proofs) and yield technically cleared (one rewrite-earned merge), but cost failed: 10/167
+patterns hit egg's node limit on AC churn (concat-assoc 259k firings) in BOTH the per-pattern and
+shared-e-graph arms, and 9 of the 19 locally-proven rules never fired on the real corpus. The
+decisive control: congruence closure + canonical char-class sets ALONE deliver 161 of the 162→160
+dedup — e-graph rewriting earned exactly one merge over free hash-consing. Adoption consequence:
+build the Spine IR with canonicalizing constructors (n-ary flattened, hash-consed, canonical
+classes) and skip the e-graph engine; egg's verified-equivalence HARNESS pattern (egg proposes, Z3
+disposes) is the reusable idea. `egg-probe/artifacts/egg-report.json`.
 
 ### Enrichment — wasm validation/mutation (wasm-tools 1.258.0): **DONE**
 

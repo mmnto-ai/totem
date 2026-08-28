@@ -1,0 +1,122 @@
+{
+  "closure": "Nothing beyond that list is implemented. Where DESIGN writes `↔` the rule ships as a named pair. In particular NO rule such as `Σ*·C? → Σ*` was added, even though it is locally provable and would have raised the yield — extending the ruleset would be re-writing the contract.",
+  "contract": "spikes/spine-adopt/egg-probe/DESIGN.md § Method 2",
+  "count": 19,
+  "designClause": "union assoc/comm/idempotence, concat assoc + ε-identity, `∅` annihilator/identity laws, `(a*)* → a*`, `a?·a* → a*`, `a·a* ↔ a+`, char-class union merging, single-char class ↔ literal. NO rule that is not locally provable",
+  "rules": [
+    {
+      "designClause": "union assoc",
+      "localProof": "set union is associative",
+      "name": "union-assoc-right",
+      "statement": "(A ∪ B) ∪ C  →  A ∪ (B ∪ C)"
+    },
+    {
+      "designClause": "union assoc",
+      "localProof": "set union is associative",
+      "name": "union-assoc-left",
+      "statement": "A ∪ (B ∪ C)  →  (A ∪ B) ∪ C"
+    },
+    {
+      "designClause": "union comm",
+      "localProof": "set union is commutative",
+      "name": "union-comm",
+      "statement": "A ∪ B  →  B ∪ A"
+    },
+    {
+      "designClause": "union idempotence",
+      "localProof": "set union is idempotent",
+      "name": "union-idempotent",
+      "statement": "A ∪ A  →  A"
+    },
+    {
+      "designClause": "concat assoc",
+      "localProof": "language concatenation is associative (string concatenation is)",
+      "name": "concat-assoc-right",
+      "statement": "(A·B)·C  →  A·(B·C)"
+    },
+    {
+      "designClause": "concat assoc",
+      "localProof": "language concatenation is associative",
+      "name": "concat-assoc-left",
+      "statement": "A·(B·C)  →  (A·B)·C"
+    },
+    {
+      "designClause": "concat ε-identity",
+      "localProof": "{\"\"}·A = A: prepending the empty word changes no string",
+      "name": "concat-eps-left",
+      "statement": "ε·A  →  A"
+    },
+    {
+      "designClause": "concat ε-identity",
+      "localProof": "A·{\"\"} = A",
+      "name": "concat-eps-right",
+      "statement": "A·ε  →  A"
+    },
+    {
+      "designClause": "∅ annihilator",
+      "localProof": "no w splits as x·y with x ∈ ∅, so the concatenation is empty",
+      "name": "concat-empty-left",
+      "statement": "∅·A  →  ∅"
+    },
+    {
+      "designClause": "∅ annihilator",
+      "localProof": "mirror of concat-empty-left",
+      "name": "concat-empty-right",
+      "statement": "A·∅  →  ∅"
+    },
+    {
+      "designClause": "∅ identity",
+      "localProof": "∅ is the identity of set union",
+      "name": "union-empty-left",
+      "statement": "∅ ∪ A  →  A"
+    },
+    {
+      "designClause": "∅ identity",
+      "localProof": "∅ is the identity of set union",
+      "name": "union-empty-right",
+      "statement": "A ∪ ∅  →  A"
+    },
+    {
+      "designClause": "(a*)* → a*",
+      "localProof": "A* is closed under concatenation and contains ε, so (A*)* = A*",
+      "name": "star-star",
+      "statement": "(A*)*  →  A*"
+    },
+    {
+      "designClause": "a?·a* → a*",
+      "localProof": "(ε ∪ A)·A* = A* ∪ A·A* = A*",
+      "name": "opt-then-star",
+      "statement": "A?·A*  →  A*"
+    },
+    {
+      "designClause": "a·a* ↔ a+ (forward)",
+      "localProof": "A+ is by definition A·A*",
+      "name": "cat-star-to-plus",
+      "statement": "A·A*  →  A+"
+    },
+    {
+      "designClause": "a·a* ↔ a+ (reverse)",
+      "localProof": "A+ is by definition A·A*",
+      "name": "plus-to-cat-star",
+      "statement": "A+  →  A·A*"
+    },
+    {
+      "designClause": "char-class union merging",
+      "localProof": "a one-character language denoting the set S unions elementwise: L([S]) ∪ L([T]) = S ∪ T = L([S ∪ T]); the sets are Σ-subsets so the union stays in Σ",
+      "name": "class-union-merge",
+      "statement": "[S] ∪ [T]  →  [S ∪ T]"
+    },
+    {
+      "designClause": "single-char class ↔ literal (forward)",
+      "localProof": "a singleton class denotes {c}, the same language as the literal c",
+      "name": "class-single-to-literal",
+      "statement": "[c]  →  'c'"
+    },
+    {
+      "designClause": "single-char class ↔ literal (reverse)",
+      "localProof": "the literal c denotes {c}, the same language as the singleton class",
+      "name": "literal-to-class-single",
+      "statement": "'c'  →  [c]"
+    }
+  ]
+}

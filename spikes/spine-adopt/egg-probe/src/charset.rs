@@ -138,6 +138,7 @@ impl ClassSet {
     pub fn is_empty(self) -> bool {
         self.0 == 0
     }
+    #[allow(dead_code)] // used by the alphabet tests
     pub fn len(self) -> u32 {
         self.0.count_ones()
     }
