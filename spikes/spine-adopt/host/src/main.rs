@@ -1,6 +1,6 @@
 //! The spike host — `spikes/spine-adopt/rego/LOWERING.md` § Host contract.
 //!
-//! Two arms, one binary:
+//! Three arms, one binary:
 //!
 //!   `--arm opa`     `rust-opa-wasm` on wasmtime, loading each record's compiled
 //!                   `policy.wasm`, setting `input` to a FactBundle, evaluating the
@@ -8,6 +8,16 @@
 //!   `--arm regorus` `microsoft/regorus` reading the same lowered `policy.rego`
 //!                   and the same input. Writes `artifacts/regorus-verdicts.json`.
 //!                   REFERENCE DIFFERENTIAL ONLY — never a semantics replacement.
+//!   `--arm certify` ONE bundle, ONE input, EVERY entrypoint — the single-eval mode
+//!                   `src/certify.mts` drives (spec § Actuator slice: "certification
+//!                   evaluates EVERY emitted entrypoint against a schema-valid
+//!                   sentinel FactBundle BEFORE artifact publication"). It reports
+//!                   the RAW outcome — load error, trap, result-set length, result
+//!                   value — and classifies NOTHING: the five typed blocked reasons
+//!                   are the certifier's judgement, made in one place, and a host
+//!                   that pre-judged them would be a second opinion free to drift.
+//!                   Emits its JSON object on stdout; writes no artifact unless
+//!                   `--out` is given. The other two arms are untouched by it.
 //!
 //! Strictness (§ Lowering 2, and the § Host contract's "enforces strict
 //! builtin-error surfacing"): an evaluation failure is an ERROR ROW, never an
@@ -176,6 +186,31 @@ fn read_result(result: &Value) -> Result<Verdict> {
         violations: canonical_array(obj.get("violations")),
         events: canonical_array(obj.get("events")),
     })
+}
+
+/// The host's OWN verdict on one evaluation, as reported data (spec § Actuator
+/// slice — "every host retains the failure rule").
+///
+/// The certification arm records this beside the raw outcome so the certifier can
+/// read a verdict the HOST reached, running the host's own `entrypoint_value` /
+/// `read_result` / regorus-undefined checks, rather than re-deriving one from the
+/// raw shape and then calling that "the host's failure rule". `error` is the
+/// host's own message, verbatim — an empty string would mean the rule never ran.
+fn failure_rule_verdict(outcome: Result<Verdict>) -> Value {
+    match outcome {
+        Ok(v) => json!({
+            "ok": true,
+            "error": Value::Null,
+            "violations": v.violations.len(),
+            "events": v.events.len(),
+        }),
+        Err(e) => json!({
+            "ok": false,
+            "error": format!("{e:#}"),
+            "violations": Value::Null,
+            "events": Value::Null,
+        }),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -493,6 +528,231 @@ fn run_regorus_arm(records: &[LoweredRecord], facts: &[FactFile]) -> Result<Valu
     }))
 }
 
+// ─── Arm 3: certification single-eval (spec § Actuator slice) ────────────────
+
+/// Evaluate ONE bundle against ONE input on EVERY entrypoint it declares, and
+/// report the raw outcome.
+///
+/// The three outcomes this mode has to keep distinguishable — and which a
+/// verdict-shaped return would collapse — are:
+///
+///   * the module would not LOAD (bad wasm, or a builtin the host cannot resolve),
+///   * an entrypoint TRAPPED or errored during evaluation,
+///   * an entrypoint returned a result SET, of some length, holding some value.
+///
+/// All three are reported structurally. The certifier maps them onto the ruled
+/// blocked classes (empty result set / eval error or trap / non-object / missing
+/// keys / extra-or-malformed keys); nothing here decides PASS or BLOCK.
+///
+/// What this mode DOES decide is its own `failureRuleVerdict`: the ruled text says
+/// "every host retains the failure rule", and a rule the host does not EXECUTE is
+/// not retained. So every evaluation additionally runs this host's normal-arm
+/// chain — `entrypoint_value` then `read_result`, the same two functions
+/// `run_opa_arm` uses — and records Ok/Err with the host's own error string. The
+/// certifier reads that verdict rather than re-deriving one from the raw shape.
+async fn run_certify_arm(
+    wasm_path: &Path,
+    requested_entrypoints: &[String],
+    input: &Value,
+    rego_path: Option<&Path>,
+    rule_path: Option<&str>,
+) -> Result<Value> {
+    let wasm = std::fs::read(wasm_path)
+        .with_context(|| format!("reading {}", wasm_path.display()))?;
+    let wasm_sha = hex(&Sha256::digest(&wasm));
+
+    let mut wasmtime_block = Map::new();
+    wasmtime_block.insert("loaded".to_owned(), json!(false));
+    wasmtime_block.insert("loadError".to_owned(), Value::Null);
+    wasmtime_block.insert("evaluations".to_owned(), json!([]));
+
+    // Everything up to and including instantiation is one fallible unit: a module
+    // that will not load has no entrypoints to evaluate, and that IS the report.
+    let loaded = (|| -> Result<(Engine, Module)> {
+        let engine = Engine::new(&Config::new())
+            .map_err(anyhow::Error::from)
+            .context("creating the wasmtime engine")?;
+        let module = Module::new(&engine, &wasm)
+            .map_err(anyhow::Error::from)
+            .with_context(|| format!("compiling {}", wasm_path.display()))?;
+        Ok((engine, module))
+    })();
+
+    match loaded {
+        Err(e) => {
+            wasmtime_block.insert("loadError".to_owned(), json!(format!("{e:#}")));
+        }
+        Ok((engine, module)) => {
+            let imports: Vec<String> = module
+                .imports()
+                .map(|i| format!("{}.{}:{}", i.module(), i.name(), kind_of(&i.ty())))
+                .collect();
+            let mut store = Store::new(&engine, ());
+            match Runtime::new(&mut store, &module).await {
+                Err(e) => {
+                    wasmtime_block.insert("imports".to_owned(), json!(imports));
+                    wasmtime_block.insert(
+                        "loadError".to_owned(),
+                        json!(format!(
+                            "Runtime::new failed — a builtin this host cannot resolve: {e:#}"
+                        )),
+                    );
+                }
+                Ok(runtime) => {
+                    let mut declared: Vec<String> =
+                        runtime.entrypoints().into_iter().map(str::to_owned).collect();
+                    declared.sort();
+                    let abi_version = format!("{}", runtime.abi_version());
+                    let default_entrypoint = runtime.default_entrypoint().map(str::to_owned);
+
+                    let policy = runtime
+                        .without_data(&mut store)
+                        .await
+                        .context("instantiating the policy with an empty data document")?;
+
+                    // "EVERY emitted entrypoint": an explicit list is honoured so the
+                    // certifier can prove it asked for what the module declares, and
+                    // an empty list means every entrypoint the module itself declares.
+                    let to_eval: Vec<String> = if requested_entrypoints.is_empty() {
+                        declared.clone()
+                    } else {
+                        requested_entrypoints.to_vec()
+                    };
+
+                    let mut evaluations: Vec<Value> = Vec::new();
+                    for ep in &to_eval {
+                        let outcome: Result<Value> = policy
+                            .evaluate::<_, Value, _>(&mut store, ep, input)
+                            .await
+                            .map_err(|e| anyhow!("{e:#}"));
+                        evaluations.push(match outcome {
+                            Ok(raw) => {
+                                let len = raw.as_array().map(Vec::len);
+                                let single = match raw.as_array() {
+                                    Some(a) if a.len() == 1 => a[0].get("result").cloned(),
+                                    _ => None,
+                                };
+                                // THE FAILURE RULE, EXECUTED HERE. The raw fields
+                                // above are untouched; this is the host's own
+                                // verdict, from the normal arm's own functions.
+                                let verdict = entrypoint_value(&raw).and_then(|v| read_result(&v));
+                                json!({
+                                    "entrypoint": ep,
+                                    "ok": true,
+                                    "error": Value::Null,
+                                    "resultSet": raw,
+                                    "resultSetIsArray": len.is_some(),
+                                    "resultSetLength": len,
+                                    "result": single,
+                                    "failureRuleVerdict": failure_rule_verdict(verdict),
+                                })
+                            }
+                            Err(e) => {
+                                let message = format!("{e:#}");
+                                // An evaluation that never returned has no result
+                                // to unwrap: the failure rule's verdict IS the
+                                // evaluation error, carried through verbatim.
+                                let verdict = failure_rule_verdict(Err(e));
+                                json!({
+                                    "entrypoint": ep,
+                                    "ok": false,
+                                    "error": message,
+                                    "resultSet": Value::Null,
+                                    "resultSetIsArray": Value::Null,
+                                    "resultSetLength": Value::Null,
+                                    "result": Value::Null,
+                                    "failureRuleVerdict": verdict,
+                                })
+                            }
+                        });
+                    }
+
+                    wasmtime_block.insert("loaded".to_owned(), json!(true));
+                    wasmtime_block.insert("abiVersion".to_owned(), json!(abi_version));
+                    wasmtime_block.insert("imports".to_owned(), json!(imports));
+                    wasmtime_block.insert("declaredEntrypoints".to_owned(), json!(declared));
+                    wasmtime_block
+                        .insert("defaultEntrypoint".to_owned(), json!(default_entrypoint));
+                    wasmtime_block.insert("evaluatedEntrypoints".to_owned(), json!(to_eval));
+                    wasmtime_block.insert("evaluations".to_owned(), json!(evaluations));
+                }
+            }
+        }
+    }
+
+    // The regorus companion row, for the "every host retains the failure rule"
+    // half of the ruled text. It reads the .rego SOURCE, so it is a genuinely
+    // independent host rather than the same module twice.
+    //
+    // Its `failureRuleVerdict` runs the NORMAL regorus arm's full check chain —
+    // `run_regorus_arm`'s undefined/null/non-object rejection followed by
+    // `read_result` — so the verdict recorded here is the same rule that arm
+    // applies, not a weaker echo of it.
+    let regorus_block = match (rego_path, rule_path) {
+        (Some(p), Some(rule)) => {
+            let outcome = (|| -> Result<Value> {
+                let source = std::fs::read_to_string(p)
+                    .with_context(|| format!("reading {}", p.display()))?;
+                let mut e = regorus::Engine::new();
+                e.set_strict_builtin_errors(true);
+                e.add_policy(p.to_string_lossy().into_owned(), source)
+                    .map_err(|e| anyhow!("regorus add_policy: {e:#}"))?;
+                e.set_input_json(&serde_json::to_string(input)?)
+                    .map_err(|e| anyhow!("regorus set_input_json: {e:#}"))?;
+                let v = e
+                    .eval_rule(rule.to_owned())
+                    .map_err(|e| anyhow!("regorus eval_rule({rule}): {e:#}"))?;
+                Ok(serde_json::to_value(&v)?)
+            })();
+            match outcome {
+                Ok(v) => {
+                    // regorus reports an undefined rule as a bare `<undefined>`
+                    // string rather than an Err, so the sentinel is surfaced
+                    // explicitly instead of being mistaken for a value.
+                    let undefined = v.as_str() == Some("<undefined>");
+                    // `run_regorus_arm`'s own chain, verbatim: the
+                    // undefined/null/non-object rejection, then `read_result`.
+                    let verdict = (|| -> Result<Verdict> {
+                        if v.is_null() || v.as_str() == Some("<undefined>") || !v.is_object() {
+                            bail!(
+                                "regorus returned an UNDEFINED/non-object result for {rule}: {v}"
+                            );
+                        }
+                        read_result(&v)
+                    })();
+                    let failure_rule = failure_rule_verdict(verdict);
+                    json!({
+                        "ran": true, "rule": rule, "ok": !undefined,
+                        "undefined": undefined,
+                        "value": v, "error": Value::Null,
+                        "failureRuleVerdict": failure_rule,
+                    })
+                }
+                Err(e) => {
+                    let message = format!("{e:#}");
+                    let failure_rule = failure_rule_verdict(Err(e));
+                    json!({
+                        "ran": true, "rule": rule, "ok": false, "undefined": Value::Null,
+                        "value": Value::Null, "error": message,
+                        "failureRuleVerdict": failure_rule,
+                    })
+                }
+            }
+        }
+        _ => json!({ "ran": false }),
+    };
+
+    Ok(json!({
+        "generatedBy": "spikes/spine-adopt/host/src/main.rs --arm certify",
+        "contract": "spec `.totem/specs/spine-spike.md` § Actuator slice — evaluate EVERY emitted entrypoint against the sentinel FactBundle before publication. Raw outcomes only; classification is the certifier's.",
+        "wasm": wasm_path.to_string_lossy(),
+        "wasmBytes": wasm.len(),
+        "wasmSha256": wasm_sha,
+        "wasmtime": Value::Object(wasmtime_block),
+        "regorus": regorus_block,
+    }))
+}
+
 // ─── Shared ──────────────────────────────────────────────────────────────────
 
 /// The (record, fixture) join, asserted rather than assumed.
@@ -576,15 +836,61 @@ async fn main() -> Result<()> {
     let mut arm: Option<String> = None;
     let mut spike_root: Option<PathBuf> = None;
     let mut out: Option<PathBuf> = None;
+    // `--arm certify` only.
+    let mut wasm: Option<PathBuf> = None;
+    let mut input: Option<PathBuf> = None;
+    let mut rego: Option<PathBuf> = None;
+    let mut rule: Option<String> = None;
+    let mut entrypoints: Vec<String> = Vec::new();
     while let Some(a) = args.next() {
         match a.as_str() {
             "--arm" => arm = args.next(),
             "--spike-root" => spike_root = args.next().map(PathBuf::from),
             "--out" => out = args.next().map(PathBuf::from),
-            other => bail!("unknown argument {other}; usage: --arm opa|regorus [--spike-root <dir>] [--out <file>]"),
+            "--wasm" => wasm = args.next().map(PathBuf::from),
+            "--input" => input = args.next().map(PathBuf::from),
+            "--rego" => rego = args.next().map(PathBuf::from),
+            "--rule" => rule = args.next(),
+            "--entrypoint" => {
+                if let Some(e) = args.next() {
+                    entrypoints.push(e);
+                }
+            }
+            other => bail!(
+                "unknown argument {other}; usage: --arm opa|regorus [--spike-root <dir>] [--out <file>] \
+                 | --arm certify --wasm <policy.wasm> --input <factbundle.json> \
+                 [--entrypoint <ep> ...] [--rego <policy.rego> --rule <data.pkg.result>] [--out <file>]"
+            ),
         }
     }
-    let arm = arm.ok_or_else(|| anyhow!("--arm opa|regorus is required"))?;
+    let arm = arm.ok_or_else(|| anyhow!("--arm opa|regorus|certify is required"))?;
+
+    // The certify arm reads ONE bundle and ONE input; it deliberately does not
+    // load the lowering index or the fact corpus, so it can be pointed at a
+    // hand-authored conformance fixture that is not in either.
+    if arm == "certify" {
+        let wasm = wasm.ok_or_else(|| anyhow!("--arm certify requires --wasm <policy.wasm>"))?;
+        let input_path =
+            input.ok_or_else(|| anyhow!("--arm certify requires --input <factbundle.json>"))?;
+        let input_value = read_json(&input_path)?;
+        let value = run_certify_arm(
+            &wasm,
+            &entrypoints,
+            &input_value,
+            rego.as_deref(),
+            rule.as_deref(),
+        )
+        .await?;
+        if let Some(out) = &out {
+            write_artifact(out, &value)?;
+        }
+        // stdout carries the JSON and NOTHING else, so the caller can parse it
+        // without a delimiter convention.
+        let mut text = serde_json::to_string_pretty(&value)?;
+        text.push('\n');
+        print!("{text}");
+        return Ok(());
+    }
     // Default: the crate lives at `<spike-root>/host`.
     let spike_root = spike_root.unwrap_or_else(|| {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))

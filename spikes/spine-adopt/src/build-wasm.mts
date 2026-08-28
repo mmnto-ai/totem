@@ -12,19 +12,29 @@
 // `Runtime::new` resolves the builtin map, but measured without the host in the
 // way, so a host that silently tolerated a missing builtin could not hide it.
 //
+// PUBLICATION (spec § Actuator slice 2, the 2026-08-28 conditional adoption word):
+// this step no longer WRITES `artifacts/chains/*.json`. It still computes every
+// hash in the chain — that is the determinism measurement and it belongs with the
+// build — but the chain artifact IS the certificate, so it is emitted only by
+// `src/certify.mts` and only on certification PASS. The computed chains are handed
+// over as `artifacts/chain-inputs.json`, which is an INPUT to certification, not a
+// published certificate.
+//
+// It does INVALIDATE, though: a rebuild makes every certificate on disk a claim
+// about wasm that no longer exists, so `artifacts/chains/` and `artifacts/blocked/`
+// are removed at the start of the run. Removing a stale certificate is not
+// publishing one — `src/certify.mts` stays the only writer.
+//
 // Run: node --experimental-strip-types src/build-wasm.mts   (after src/lower.mts)
 
-import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 
 import { ARTIFACTS_DIR, Checks, OPA_BIN, SPIKE_ROOT, writeArtifact } from './lib/spike-env.mts';
 import { specimen } from './lib/specimens.mts';
-
-const CHAINS_DIR = 'chains';
+import { censusWasm, readBundleMember, readCStr, sha256 } from './lib/wasm-census.mts';
 
 /**
  * The lowerer's own declared output, read rather than re-derived. `src/lower.mts`
@@ -77,10 +87,6 @@ const EMITTED_BUILTINS = [
   'is_number',
 ] as const;
 
-function sha256(buf: Buffer | string): string {
-  return crypto.createHash('sha256').update(buf).digest('hex');
-}
-
 function opa(
   args: string[],
   cwd: string,
@@ -89,113 +95,9 @@ function opa(
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
-/**
- * Read one member out of an OPA bundle tarball, in-process.
- *
- * GNU `tar` is available here but unusable on these paths: without
- * `--force-local` it reads a leading `C:` as a REMOTE HOST spec ("Cannot connect
- * to C: resolve failed"), and WITH it the `-C <windows path>` argument is mangled
- * instead. Rather than fight the quoting, the gzip+ustar read is done directly —
- * zero dependencies, no shell, and no temp directory to leak.
- *
- * OPA bundle members are plain files with `/`-prefixed names (`/policy.wasm`,
- * `/.manifest`, `/data.json`, `/<source>.rego`).
- */
-export function readBundleMember(tarball: string, member: string): Buffer {
-  const tar = zlib.gunzipSync(fs.readFileSync(tarball));
-  const seen: string[] = [];
-  let off = 0;
-  while (off + 512 <= tar.length) {
-    const header = tar.subarray(off, off + 512);
-    // Two consecutive zero blocks terminate the archive.
-    if (header.every((b) => b === 0)) break;
-    const name = header.subarray(0, 100).toString('utf-8').replace(/\0.*$/, '');
-    const sizeField = header.subarray(124, 136).toString('utf-8').replace(/\0.*$/, '').trim();
-    const size = Number.parseInt(sizeField, 8);
-    if (!Number.isFinite(size))
-      throw new Error(`bad tar size field ${JSON.stringify(sizeField)} in ${tarball}`);
-    const dataAt = off + 512;
-    const normalized = name.replace(/^\.?\//, '');
-    seen.push(normalized);
-    if (normalized === member) return tar.subarray(dataAt, dataAt + size);
-    off = dataAt + Math.ceil(size / 512) * 512;
-  }
-  throw new Error(`bundle ${tarball} has no member ${member} (members: ${seen.join(', ')})`);
-}
-
-// ─── The ABI census, measured on the module ──────────────────────────────────
-
-export interface WasmCensus {
-  imports: {
-    module: string;
-    name: string;
-    kind: string;
-    memory?: { minimum: number; maximum: number | null; shared: boolean };
-  }[];
-  exports: { name: string; kind: string }[];
-  abiVersion: number | null;
-  abiMinorVersion: number | null;
-  /** The module's own `builtins` export: name → builtin id. NON-EMPTY means the HOST must implement these. */
-  hostBuiltins: Record<string, number>;
-  entrypoints: Record<string, number>;
-}
-
-/**
- * Instantiate the module against the documented OPA ABI import set and read its
- * `builtins` / `entrypoints` exports back out of linear memory. Every host
- * function is wired to THROW, so a module that actually needed one would fail
- * loudly here rather than returning a plausible zero.
- */
-export function censusWasm(bytes: Buffer): WasmCensus {
-  const mod = new WebAssembly.Module(bytes);
-
-  const imports = WebAssembly.Module.imports(mod).map((i) => {
-    const row: WasmCensus['imports'][number] = { module: i.module, name: i.name, kind: i.kind };
-    if (i.kind === 'memory') {
-      const t = (i as unknown as { type?: { minimum: number; maximum?: number; shared?: boolean } })
-        .type;
-      if (t)
-        row.memory = { minimum: t.minimum, maximum: t.maximum ?? null, shared: t.shared ?? false };
-    }
-    return row;
-  });
-  const exportsList = WebAssembly.Module.exports(mod).map((e) => ({ name: e.name, kind: e.kind }));
-
-  const memory = new WebAssembly.Memory({ initial: 32 });
-  const boom = (what: string) => () => {
-    throw new Error(`module required an unexpected host import: ${what}`);
-  };
-  const env = {
-    memory,
-    opa_abort: (addr: number) => {
-      throw new Error(`opa_abort: ${readCStr(memory, addr)}`);
-    },
-    opa_println: () => {},
-    opa_builtin0: boom('opa_builtin0'),
-    opa_builtin1: boom('opa_builtin1'),
-    opa_builtin2: boom('opa_builtin2'),
-    opa_builtin3: boom('opa_builtin3'),
-    opa_builtin4: boom('opa_builtin4'),
-  };
-  const inst = new WebAssembly.Instance(mod, { env });
-  const x = inst.exports as Record<string, any>;
-
-  return {
-    imports,
-    exports: exportsList,
-    abiVersion: x.opa_wasm_abi_version?.value ?? null,
-    abiMinorVersion: x.opa_wasm_abi_minor_version?.value ?? null,
-    hostBuiltins: JSON.parse(readCStr(memory, x.opa_json_dump(x.builtins()))),
-    entrypoints: JSON.parse(readCStr(memory, x.opa_json_dump(x.entrypoints()))),
-  };
-}
-
-function readCStr(memory: WebAssembly.Memory, addr: number): string {
-  const u8 = new Uint8Array(memory.buffer);
-  let end = addr;
-  while (u8[end] !== 0) end += 1;
-  return new TextDecoder().decode(u8.subarray(addr, end));
-}
+// The bundle reader and the module census now live in `src/lib/wasm-census.mts`,
+// shared with `src/certify.mts` so the certificate's entrypoint/import manifest
+// and this artifact's ABI census are provably the SAME reading of the module.
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
@@ -204,6 +106,30 @@ async function main(): Promise<void> {
   const lowering = readLowering();
   const schemaLine = lowering.factSchemaLine;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-wasm-'));
+
+  // ── CERTIFICATE INVALIDATION, first thing (spec § Actuator slice 2) ──
+  //
+  // A rebuild produces new wasm. Every certificate on disk attests the PREVIOUS
+  // wasm, so from the moment this step starts they are claims about bytes that no
+  // longer exist. Run standalone — `npm run build-wasm` without `npm run certify`
+  // after it — leaving them in place would leave a directory of certificates that
+  // certify nothing, and the only reader who could notice is the one who already
+  // trusted them.
+  //
+  // This step still does not WRITE either directory: removing a stale certificate
+  // is not publishing one, and `src/certify.mts` remains the only writer
+  // (`src/certify-verify.mts` INV 8 scans for write verbs, not for this).
+  for (const dir of ['chains', 'blocked']) {
+    const at = path.join(ARTIFACTS_DIR, dir);
+    if (fs.existsSync(at)) {
+      const n = fs.readdirSync(at).length;
+      fs.rmSync(at, { recursive: true, force: true });
+      console.log(
+        `INVALIDATED  artifacts/${dir}/ (${n} file(s) removed) — they attest the PREVIOUS wasm. ` +
+          'Certificates are invalidated pending `npm run certify`.',
+      );
+    }
+  }
 
   const version = opa(['version'], SPIKE_ROOT)
     .stdout.split('\n')[0]
@@ -316,8 +242,10 @@ async function main(): Promise<void> {
         bundleTarballSha256: outs.map((o) => o.tarSha),
       },
     };
+    // NOT published here (spec § Actuator slice 2): `artifacts/chains/*.json` is
+    // the CERTIFICATE, and a certificate is emitted only by a certification PASS.
+    // The computed chain is handed to `src/certify.mts` as an input.
     chains.push(chain);
-    writeArtifact(path.join(CHAINS_DIR, `${suffix}.json`), chain);
 
     // ── the ABI census, per module ──
     const c = censusWasm(outs[0]!.wasm);
@@ -651,8 +579,23 @@ async function main(): Promise<void> {
     checks: checks.rows,
   });
 
+  // ── the chain HAND-OFF (spec § Actuator slice 2) ──
+  //
+  // Every hash in the certificate is computed here, with the build that produced
+  // the artifact; nothing is published. `src/certify.mts` reads this, evaluates
+  // each bundle's entrypoints against the sentinel FactBundle, and writes
+  // `artifacts/chains/<pkg>.json` only for the bundles that certify PASS.
+  writeArtifact('chain-inputs.json', {
+    generatedBy: 'spikes/spine-adopt/src/build-wasm.mts',
+    contract:
+      'spec § Actuator slice 2 — "the chain artifact IS the certificate; `certify` gates chain emission". This file is the UNPUBLISHED input to that gate, never a certificate.',
+    publishedBy: 'spikes/spine-adopt/src/certify.mts (on certification PASS only)',
+    chains,
+  });
+
   fs.rmSync(tmp, { recursive: true, force: true });
-  console.log(`\n${chains.length} chains -> artifacts/${CHAINS_DIR}/`);
+  console.log(`\n${chains.length} chains computed -> artifacts/chain-inputs.json (UNPUBLISHED)`);
+  console.log('   publication is gated on `npm run certify` (spec § Actuator slice 2)');
   checks.finish('build-wasm');
 }
 

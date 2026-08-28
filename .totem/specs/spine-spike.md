@@ -272,3 +272,50 @@ lint rules scope over `spikes/**`, so harness commits may carry ordinary advisor
 - **Q: Artifact deposit** — ECL mail only vs mail + committed `spikes/spine-adopt/artifacts/` on the
   branch. **Recommendation:** both; the branch is the durable record and never merges without a
   separate operator word.
+
+## Actuator slice (slice 1 — BINDING condition 1 of the 2026-08-28 conditional adoption word)
+
+The ruled contract, verbatim-normative: certification evaluates EVERY emitted entrypoint against a
+schema-valid sentinel FactBundle BEFORE artifact publication; empty / undefined / error /
+non-object / missing result keys BLOCK the artifact and its certificate; the guard lives in the
+only exported result path; every host retains the failure rule; negative conformance fixtures
+exercise unsupported patterns on all hosts; the certificate chain binds
+source · IR · guarded policy · entrypoint/import manifest · final Wasm hash.
+
+Reference implementation lives in the spike surface (freeze-safe; promotion to `packages/*` is a
+separate post-trial word). Design decisions (mine, the rest is the ruled text):
+
+1. **Sentinel** = `{file: "certify/sentinel.ts", fileText: "", lines: [], astMatches: []}` —
+   schema-valid and neutral: a CORRECT policy yields a defined object with exactly the keys
+   `violations` + `events` (both empty sets); a policy whose `patterns_compile` probe fails yields
+   an UNDEFINED result (empty eval result set). The discriminator is well-formed-object vs
+   {empty result set, eval error/trap, non-object, missing keys} — five blocked classes, each a
+   typed reason. As implemented the reason set is {`empty-result-set` — which SUBSUMES the ruled
+   "undefined", because the wasm ABI encodes an undefined result rule as an empty result set and
+   there is therefore no separate undefined class — `eval-error-or-trap`, `non-object`,
+   `missing-keys`, `extra-or-malformed-keys`}, plus two structural gates that are not result classes
+   at all (`entrypoint-set-not-single-result`, `schema-invalid-sentinel`); so the mapping to the five
+   ruled words is a partition of the same blocking surface rather than a 1:1 correspondence, and any
+   ADR amendment should carry the implemented set instead of inferring one from the ruled wording.
+2. **Publication semantics in spike terms:** the chain artifact IS the certificate. `certify`
+   gates chain emission — `artifacts/chains/*.json` is written ONLY on certification PASS; a
+   blocked bundle produces `artifacts/blocked/<pkg>.json` (typed reason, no chain, wasm retained
+   for forensics but never chained).
+3. **Chain extension:** `{recordSha256, regoSha256 (the GUARDED policy), manifestSha256
+(sha256 of the canonical JSON of {entrypoints[], imports[], builtins{}} from the bundle),
+wasmSha256, certified: true}` — the entrypoint/import manifest joins the bound set.
+4. **Only-exported-result-path assertion:** certification FAILS a bundle whose entrypoint set is
+   not exactly one `<pkg>/result` (no ungated side entrypoints).
+5. **Negative conformance fixtures — defense-in-depth, all hosts:** hand-authored policies with
+   patterns the lowerer would reject (negative lookahead; backreference) fed DIRECTLY to
+   `opa build` (which accepts them — the measured fail-open) must be (a) BLOCKED by certification,
+   and (b) produce error rows — never clean zeros — on all three hosts (wasmtime host, regorus,
+   wazero). A malformed-sentinel control (schema-invalid bundle) must be refused by the certifier
+   itself before any eval.
+6. **CI:** the certify step joins the Linux workflow between build-wasm and the host arms, so both
+   platforms exercise it.
+
+Invariants to lock: all 7 specimen bundles certify PASS with chains byte-identical to the
+pre-slice chains EXCEPT the added manifest field (the extension is additive; record/rego/wasm
+hashes unchanged); both negative fixtures BLOCK with typed reasons on both platforms; every host's
+failure rule proven by fixture, not assumed; the certifier refuses a schema-invalid sentinel.

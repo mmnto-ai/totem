@@ -696,7 +696,22 @@ func jsonEqual(a, b string) (bool, string, string) {
 
 func main() {
 	root := flag.String("spike-root", "..", "path to spikes/spine-adopt")
+	conformance := flag.String("conformance", "",
+		"run the certification conformance mode against this case spec instead of the full probe (spec § Actuator slice 5)")
+	conformanceOut := flag.String("conformance-out", "artifacts/wazero-conformance.json",
+		"where -conformance writes its rows")
 	flag.Parse()
+	// Conformance mode is a DIFFERENT question on DIFFERENT bundles (hand-authored
+	// fixtures that are in neither the lowering index nor the fact corpus), so it
+	// replaces the normal run rather than extending it. `go run .` with no flags is
+	// byte-for-byte the run it always was.
+	if *conformance != "" {
+		if err := runConformance(*root, *conformance, *conformanceOut); err != nil {
+			fmt.Fprintf(os.Stderr, "\nFATAL: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(*root); err != nil {
 		fmt.Fprintf(os.Stderr, "\nFATAL: %v\n", err)
 		os.Exit(1)

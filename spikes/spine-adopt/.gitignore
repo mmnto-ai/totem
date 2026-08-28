@@ -2,3 +2,4 @@ tools/
 target/
 node_modules/
 rego/build/
+rego/certify-fixtures/build/

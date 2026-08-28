@@ -12,9 +12,10 @@
     "all": "npm run census && npm run verify-records && npm run facts && npm run shipped-verdicts",
     "lower": "node --experimental-strip-types src/lower.mts",
     "build-wasm": "node --experimental-strip-types src/build-wasm.mts",
+    "certify": "node --experimental-strip-types src/certify.mts && node --experimental-strip-types src/certify-verify.mts",
     "host:opa": "cargo run --release --manifest-path host/Cargo.toml -- --arm opa",
     "host:regorus": "cargo run --release --manifest-path host/Cargo.toml -- --arm regorus",
     "compare": "node --experimental-strip-types src/compare.mts",
-    "differential": "npm run lower && npm run build-wasm && npm run host:opa && npm run host:regorus && npm run compare"
+    "differential": "npm run lower && npm run build-wasm && npm run certify && npm run host:opa && npm run host:regorus && npm run compare"
   }
 }

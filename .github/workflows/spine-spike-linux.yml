@@ -103,8 +103,17 @@ jobs:
       # ON LINUX — the matrix row measures the cross-platform runtime (incl. the
       # line-ending axis in FactBundle.fileText), not just the OPA arms replayed
       # against Windows-generated fixtures. Then `differential` = lower →
-      # build-wasm → host:opa → host:regorus → compare (host arms are `cargo
-      # run`, hence the rust toolchain above).
+      # build-wasm → certify → host:opa → host:regorus → compare (host arms are
+      # `cargo run`, hence the rust toolchain above).
+      #
+      # CERTIFY IS WIRED AT THE SCRIPT LEVEL, not as a step here (spec § Actuator
+      # slice 6: "the certify step joins the Linux workflow between build-wasm and
+      # the host arms, so both platforms exercise it"). Putting it inside
+      # `differential` puts it in exactly that position on BOTH platforms from one
+      # edit, so Windows and Linux cannot drift into running different pipelines —
+      # which a second, workflow-only step is free to do. `npm run certify` drives
+      # all three hosts, including the Go/wazero arm, which is why setup-go above
+      # must stay ahead of this step.
       - name: Spike 1 — shipped runtime re-derived on Linux
         working-directory: spikes/spine-adopt
         env:
