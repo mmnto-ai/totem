@@ -1,0 +1,7 @@
+sat
+(
+  (define-fun good () String
+    "rm .totem/lessons/lesson-cd27a5b0.md")
+  (define-fun bad () String
+    "git rm .totem/lessons.md")
+)

@@ -1,0 +1,599 @@
+{
+  "harness": {
+    "bindingFeature": "enabled",
+    "crate": "spine-smt-obligations",
+    "crateVersion": "0.1.0"
+  },
+  "solvers": {
+    "cvc5": "cvc5 1.3.4 [git f3b21c4 on branch HEAD]",
+    "z3": "Z3 version 5.1.0 - 64 bit"
+  },
+  "bindingMaturity": [
+    {
+      "solver": "z3",
+      "crateName": "z3 (prove-rs), over z3-sys",
+      "crateVersion": "z3 0.20.2 / z3-sys 0.11.0 (Cargo.lock)",
+      "windowsMsvcBuild": "BUILDS AND LINKS",
+      "detail": "Built against the pinned Z3 5.1.0 Windows release with NO from-source cmake build, exactly as § Binding notes requires: Z3_SYS_Z3_HEADER points at the release's include/z3.h, and build.rs stages the release's import library into OUT_DIR under both `libz3.lib` and `z3.lib` (z3-sys 0.11.0 asks the linker for `libz3.lib`; getting this wrong yields LNK1181). All ten obligations are expressible through the API — concat/union/intersect/complement/star/plus/ loop/range/literal all exist on ast::Regexp, assert_and_track + get_unsat_core supply the core material, and Params `timeout` supplies O10's budget.",
+      "consequence": "The primary binding is viable on Windows. RUNTIME NOTE: libz3.dll must be on PATH for the built binary — a bare run yields STATUS_DLL_NOT_FOUND (0xc0000135), which is a packaging obligation, not a build failure."
+    },
+    {
+      "solver": "cvc5",
+      "crateName": "cvc5 (over cvc5-sys)",
+      "crateVersion": "cvc5 0.4.1 / cvc5-sys 0.4.0 (published, attempted)",
+      "windowsMsvcBuild": "DOES NOT BUILD",
+      "detail": "A published crate exists, so it was attempted. It fails on x86_64-pc-windows-msvc for TWO INDEPENDENT reasons. (1) cvc5-sys generates its FFI with bindgen, which aborts: `Unable to find libclang: \"couldn't find any valid shared libraries matching: ['clang.dll', 'libclang.dll'], set the LIBCLANG_PATH environment variable...\"`. (2) Even with libclang present, the crate emits `cargo:rustc-link-lib=dylib=cvc5`, while the PINNED cvc5 1.3.4 Windows distribution ships only GCC/Clang static archives (lib/libcvc5.a, libcvc5parser.a, libcadical.a, libgmp.a, libpicpoly*.a) and no MSVC-linkable import library — a toolchain-format mismatch the crate cannot bridge.",
+      "consequence": "Recorded as the binding-maturity finding § Binding notes anticipates. The challenger runs through the SMT-LIB process boundary against the pinned CLI, which is a legitimate spike outcome and is the arm every cvc5 result in this report came from."
+    }
+  ],
+  "dialectFindings": [
+    {
+      "id": "D1",
+      "finding": "probe — is a RAW control byte inside an SMT-LIB string literal accepted? MEASURED: z3 ACCEPTED it, cvc5 REJECTED it; the two solvers DIVERGE (raw answers in the cells beside this one).",
+      "z3": "sat",
+      "cvc5": "(error \"Parse Error: <worktree>\\spikes\\spine-adopt\\smt\\artifacts\\dialect-probes\\raw-control-byte.smt2:3.14: Illegal string character: \"\t\", must use escape sequence\")",
+      "portableEncoding": "emit every non-printable character in \\u{...} form (re.rs::smt_string_literal); measured portable: z3=sat cvc5=sat"
+    },
+    {
+      "id": "D2",
+      "finding": "probe — is push/pop accepted with NO incrementality flag? MEASURED: z3 ACCEPTED it, cvc5 REJECTED it; the two solvers DIVERGE (raw answers in the cells beside this one).",
+      "z3": "sat",
+      "cvc5": "(error \"cannot push when not solving incrementally (use --incremental)\")",
+      "portableEncoding": "the harness passes --incremental to cvc5 whenever an obligation emits more than one check-sat (runner.rs::args_for)"
+    },
+    {
+      "id": "D3",
+      "finding": "timeout is expressed and REPORTED differently: z3 -T:<seconds> answers with the token `timeout`; cvc5 --tlimit=<ms> answers with the prose line `cvc5 interrupted by timeout.`",
+      "z3": "-T:<seconds>, prints `timeout`",
+      "cvc5": "--tlimit=<milliseconds>, prints `cvc5 interrupted by timeout.`",
+      "portableEncoding": "runner.rs::parse_output normalizes both to Status::Timeout, which is NOT-PROVEN under Status::is_proven"
+    },
+    {
+      "id": "D4",
+      "finding": "evidence layout differs: with :produce-unsat-cores enabled z3's (get-model) also defines a Bool for every :named assertion, which cvc5 omits; unsat cores print on one line (z3) versus one label per line (cvc5)",
+      "z3": "model carries `(define-fun <label> () Bool ...)`; core on a single line",
+      "cvc5": "model carries only the declared constants; core one label per line",
+      "portableEncoding": "runner.rs::normalize_model keeps only String-sorted assignments and normalize_core sorts the label set"
+    },
+    {
+      "id": "D5",
+      "finding": "(_ re.loop lo hi) sits OUTSIDE the construct subset OBLIGATIONS.md names, but is accepted by BOTH pinned solvers — measured, not assumed. It is used for the {0,40} bound in specimen (a) and for O10's length ladders.",
+      "z3": "accepted",
+      "cvc5": "accepted",
+      "portableEncoding": "no adaptation needed; recorded so the subset claim stays honest"
+    },
+    {
+      "id": "D6",
+      "finding": "ENCODING SENSITIVITY, not a syntax divergence — and the sharpest result of this arm. Adding a LOGICALLY REDUNDANT assertion (a line-alphabet membership already implied by the pattern membership beside it) changes no model, yet moves cvc5 from deciding O7 in ~34ms to NOT deciding it at a 300-second budget. z3 is indifferent to the same edit.",
+      "z3": "~23ms sat with or without the redundant assertion",
+      "cvc5": "~34ms sat without it; undecided at 300s with it",
+      "portableEncoding": "obligations.rs enforces the REDUNDANT-ASSERTION rule: never emit an assertion implied by another in the same check. O9 is the control — the same removal does NOT rescue cvc5 there, so that obligation's cost is intrinsic, not encoding-induced."
+    }
+  ],
+  "obligations": [
+    {
+      "id": "O1",
+      "class": "contradiction",
+      "expected": "SAT, stable witness",
+      "expectedHolds": true,
+      "z3": {
+        "status": "sat",
+        "timeMs": 23,
+        "evidenceSha256": "157a94a8ad88054913c9251f38106a7e66bb7babb19a381f84451d2fa5f850d4",
+        "evidenceFile": "evidence/o01.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "sat",
+        "timeMs": 24,
+        "evidenceSha256": "c7706f1ee5d7717221c3c4998528362d31a1d4c788ad2c65dd0299d23d6e865f",
+        "evidenceFile": "evidence/o01.cvc5.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "agreement": true,
+      "divergence": "none",
+      "decidedByBoth": true,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
+      "proven": true,
+      "deliberateTimeout": false,
+      "finding": false,
+      "witness": "[0:sat] s=\"git status`\"",
+      "smtlibFile": "../obligations/o01.smt2",
+      "smtlibSha256": "607f7b241e271e8dfd269285ae8b2317ed4f06e53dbbfb119c4fe988e37a38dd",
+      "obligationSourceSha256": "d8d258d0aabffb32e6461eb1e8397b3ae38b05503b29668025b3a632982a93ee",
+      "question": "Requires-vacuity: does requires.pattern match every line that target.pattern matches — i.e. can the rule EVER fire? SAT = the rule can fire and the witness IS the firing line; UNSAT = the rule is vacuous."
+    },
+    {
+      "id": "O2",
+      "class": "contradiction",
+      "expected": "UNSAT + unsat core",
+      "expectedHolds": true,
+      "z3": {
+        "status": "unsat",
+        "timeMs": 23,
+        "evidenceSha256": "afa28a545bfedd27bf6f56bc9f8eff79c752830bf7b72d5b538f3f878f5f02e1",
+        "evidenceFile": "evidence/o02.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "unsat",
+        "timeMs": 23,
+        "evidenceSha256": "873e484d0c2cb582019ba78e3af810751c143585eebb8ee355f4f301705e8731",
+        "evidenceFile": "evidence/o02.cvc5.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "agreement": true,
+      "divergence": "none",
+      "decidedByBoth": true,
+      "binding": "expressed",
+      "bindingStatus": "unsat",
+      "bindingAgreesWithCli": true,
+      "proven": true,
+      "deliberateTimeout": false,
+      "finding": false,
+      "smtlibFile": "../obligations/o02.smt2",
+      "smtlibSha256": "29f60f9dfcb2313024dd2a164d4a45b181ff36c68c937f2b8c3654fbe2a0bf84",
+      "obligationSourceSha256": "05bd3621319d1eb3239ec2868e984f8630c0ee94a1da2604e957ef961db7955c",
+      "question": "Dead matcher: is L(pattern) empty for a contradictory construction p = re.inter(A, re.comp(A))? UNSAT proves the matcher can never fire."
+    },
+    {
+      "id": "O3",
+      "class": "exhaustiveness",
+      "expected": "SAT x5, UNSAT control",
+      "expectedHolds": true,
+      "z3": {
+        "status": "sat;sat;sat;sat;sat;unsat",
+        "timeMs": 24,
+        "evidenceSha256": "cd7d3d32a8f657db19a4d49db718cbd6fa7557f91f0c46ac982a57f4d9289476",
+        "evidenceFile": "evidence/o03.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "sat;sat;sat;sat;sat;unsat",
+        "timeMs": 23,
+        "evidenceSha256": "dfdcefd4975b45e9840814e56a6037408389e653a0efb230aa4722ca536514cc",
+        "evidenceFile": "evidence/o03.cvc5.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "agreement": true,
+      "divergence": "none",
+      "decidedByBoth": true,
+      "binding": "expressed",
+      "bindingStatus": "sat;sat;sat;sat;sat;unsat",
+      "bindingAgreesWithCli": true,
+      "proven": true,
+      "deliberateTimeout": false,
+      "finding": false,
+      "witness": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
+      "smtlibFile": "../obligations/o03.smt2",
+      "smtlibSha256": "efb13bf4c9d1dfe993738d33ccaec3fcb3c601c83df8655312401a91b50f8991",
+      "obligationSourceSha256": "117cb9b055334a0d184437ae705c13e97ff59ba11597c4d9ee369d22feab8bcd",
+      "question": "Severity vocabulary exhaustiveness: is every record severity in the closed set {error, warning}? Five specimen severities must be members; the negative control \"info\" must not be."
+    },
+    {
+      "id": "O4",
+      "class": "exhaustiveness",
+      "expected": "SAT (both conjuncts)",
+      "expectedHolds": true,
+      "z3": {
+        "status": "sat",
+        "timeMs": 23,
+        "evidenceSha256": "d296574593b85702606b5bea4a79d99817157c780a4993f3e2b8263dbefbe5df",
+        "evidenceFile": "evidence/o04.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "sat",
+        "timeMs": 23,
+        "evidenceSha256": "250deb9d7a53d2019b651ae3b497ab37aa092bc53a8099080413f4403e7b76c0",
+        "evidenceFile": "evidence/o04.cvc5.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "agreement": true,
+      "divergence": "none",
+      "decidedByBoth": true,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
+      "proven": true,
+      "deliberateTimeout": false,
+      "finding": false,
+      "witness": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
+      "smtlibFile": "../obligations/o04.smt2",
+      "smtlibSha256": "fcac926496c6407292b10ecfbd7b14a4c5f1e70d154985ff4cec7f96c1acbf78",
+      "obligationSourceSha256": "3aea2f63b1df59a23eec9baa09728b365b0eb1fc95693f8754945bf1f6fea886",
+      "question": "Fixture differential: for specimen (a)'s inline example pair, is the bad line in L(pattern) AND the good line outside it? SAT means the authored pair actually discriminates."
+    },
+    {
+      "id": "O5",
+      "class": "set membership",
+      "expected": "SAT, witness path",
+      "expectedHolds": true,
+      "z3": {
+        "status": "sat",
+        "timeMs": 23,
+        "evidenceSha256": "32f0979b7974ae7068e7079edf11224c29b1a9244dd97cdd6a0218226eef5720",
+        "evidenceFile": "evidence/o05.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "sat",
+        "timeMs": 23,
+        "evidenceSha256": "745d00b07b7ecdd98830941fd17897d3925bf520cab83c0d37de8eec1208b9b7",
+        "evidenceFile": "evidence/o05.cvc5.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "agreement": true,
+      "divergence": "none",
+      "decidedByBoth": true,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
+      "proven": true,
+      "deliberateTimeout": false,
+      "finding": false,
+      "witness": "[0:sat] p=\"packages/.ts\"",
+      "smtlibFile": "../obligations/o05.smt2",
+      "smtlibSha256": "0d28ac7b49fb2b861e6ffbe826ed1dd594b35e75f558d7fa0c60a065d59bc4c6",
+      "obligationSourceSha256": "5f3b70b75c068aca3ebb7b940db1b88021fa18843d6adff40996670ce9da4142",
+      "question": "Scope emptiness: does ANY path match fileGlobs and not excludeGlobs? SAT means the rule has a live scope; the witness is an in-scope path."
+    },
+    {
+      "id": "O6",
+      "class": "set membership",
+      "expected": "UNSAT + core",
+      "expectedHolds": true,
+      "z3": {
+        "status": "unsat",
+        "timeMs": 23,
+        "evidenceSha256": "11cc36848e53908564cff59adb231d2b372c127980d61e1a2b220369d9803d42",
+        "evidenceFile": "evidence/o06.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "unsat",
+        "timeMs": 2214,
+        "evidenceSha256": "bdb8d972976d0aa206264551416446947a83c7190acfcc8f19806735c00d335f",
+        "evidenceFile": "evidence/o06.cvc5.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "agreement": true,
+      "divergence": "none",
+      "decidedByBoth": true,
+      "binding": "expressed",
+      "bindingStatus": "unsat",
+      "bindingAgreesWithCli": true,
+      "proven": true,
+      "deliberateTimeout": false,
+      "finding": false,
+      "smtlibFile": "../obligations/o06.smt2",
+      "smtlibSha256": "d570ef638e1a6e215a7b4c508a240a2a745ef914e16719bc2ad7815b71c85026",
+      "obligationSourceSha256": "7a671948e69d578a926ea494ea20fe561f5844e5021be6ec10fc056908ff2946",
+      "question": "Exclusion subsumption: is L(fileGlobs) a subset of L(excludeGlobs) — i.e. is every in-scope file excluded, making the rule dead by scope? UNSAT proves the subsumption."
+    },
+    {
+      "id": "O7",
+      "class": "regex/string constraints",
+      "expected": "measured (either), agreement required",
+      "expectedHolds": true,
+      "z3": {
+        "status": "sat",
+        "timeMs": 23,
+        "evidenceSha256": "0dd56952c6fbe69443d90358259e342f7bdbc7797d4334946e6df7679ed7a349",
+        "evidenceFile": "evidence/o07.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "sat",
+        "timeMs": 23,
+        "evidenceSha256": "50b1e165b0a27a2f33caa9537c5a2cd5552aa52ac08e787dd1aa3c0d60c788cd",
+        "evidenceFile": "evidence/o07.cvc5.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "agreement": true,
+      "divergence": "none",
+      "decidedByBoth": true,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
+      "proven": true,
+      "deliberateTimeout": false,
+      "finding": false,
+      "witness": "[0:sat] s=\"git tag`\"",
+      "smtlibFile": "../obligations/o07.smt2",
+      "smtlibSha256": "57c4cd9c5bf00a1701588efa25a88eb8defc54eacc9dda99c92cb0a53807c72e",
+      "obligationSourceSha256": "ad3d796e82043682b3e12e9c4ae8a82bb2d79e3be26a267b23ad2eab60577a82",
+      "question": "Rule subsumption/redundancy: is L(p_A) a subset of L(p_B) for two corpus patterns with known overlap? Asked over the WIDENED p_A (see the dropped-lookahead note), so UNSAT would prove the SOURCE pattern subsumed, while a SAT witness is evidence for the widened approximation only."
+    },
+    {
+      "id": "O8",
+      "class": "regex/string constraints",
+      "expected": "SAT offender, UNSAT control",
+      "expectedHolds": true,
+      "z3": {
+        "status": "sat;unsat",
+        "timeMs": 23,
+        "evidenceSha256": "263b95122a95b82d6dd9f325d013644274f87459ae5596ae3a9c2411169b8508",
+        "evidenceFile": "evidence/o08.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "sat;unsat",
+        "timeMs": 23,
+        "evidenceSha256": "cb10ef912de543b82b43aba20d52f8d353dfac736c4bd48555ecc7ae10144b46",
+        "evidenceFile": "evidence/o08.cvc5.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "agreement": true,
+      "divergence": "none",
+      "decidedByBoth": true,
+      "binding": "expressed",
+      "bindingStatus": "sat;unsat",
+      "bindingAgreesWithCli": true,
+      "proven": true,
+      "deliberateTimeout": false,
+      "finding": false,
+      "witness": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
+      "smtlibFile": "../obligations/o08.smt2",
+      "smtlibSha256": "547cb54bcd350d4ff25914b138ceb20ac1e07287b16761eb09c4ce495482e1d9",
+      "obligationSourceSha256": "5bdc4f418ef39e5c714016d2df4fc816d45256462320732990e8e7faacc2cd96",
+      "question": "Self-suppressing pattern: does L(pattern) intersect the suppression-directive language .*totem-ignore.*? SAT on the offender means the rule matches its own suppression comment; UNSAT on the control means a clean pattern cannot."
+    },
+    {
+      "id": "O9",
+      "class": "regex/string constraints",
+      "expected": "UNSAT (equivalent) or witness",
+      "expectedHolds": false,
+      "z3": {
+        "status": "unsat;sat",
+        "timeMs": 1341,
+        "evidenceSha256": "21bfbf0c0ee686172fd1b9522964896812267b8af24f01910e48dd2b98352fd0",
+        "evidenceFile": "evidence/o09.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "timeout;timeout",
+        "timeMs": 30154,
+        "evidenceSha256": "89c6bfc740e5f5fc7d479c6b83f440ddd05d4a0d33bb41321e832ffbd340d27c",
+        "evidenceFile": "evidence/o09.cvc5.out",
+        "proven": false,
+        "killedByHarness": false
+      },
+      "agreement": false,
+      "divergence": "capability",
+      "decidedByBoth": false,
+      "binding": "expressed",
+      "bindingStatus": "unsat;sat",
+      "bindingAgreesWithCli": true,
+      "proven": false,
+      "deliberateTimeout": false,
+      "finding": true,
+      "findingNote": "CAPABILITY DIVERGENCE — z3=unsat;sat cvc5=timeout;timeout at a 30s budget. No two answers conflict; one solver simply did not decide within budget, so this is not a semantic disagreement. measured status differs from the OBLIGATIONS.md expectation (UNSAT (equivalent) or witness): z3=unsat;sat cvc5=timeout;timeout",
+      "witness": "[0:unsat] symmetric-difference\n[1:sat] s=\"rm rm0000000000000000000000000000000000 rm .totem/lessons.md\"",
+      "smtlibFile": "../obligations/o09.smt2",
+      "smtlibSha256": "40d338e5b8e04a29667e7f75e54daf75dc89f7455260aedc62dc7d47434bc124",
+      "obligationSourceSha256": "1c9d601963083cb8f34308cefa0a7e6c6cbc416505bb2451a35f26eca53ec3d9",
+      "question": "Word-boundary desugar equivalence: is a \\b-desugared RE2 form equivalent to the intended language on the line alphabet? The test is symmetric-difference emptiness — UNSAT means equivalent, SAT hands back a distinguishing witness."
+    },
+    {
+      "id": "O10",
+      "class": "deliberate timeout",
+      "expected": "timeout on >=1 solver",
+      "expectedHolds": false,
+      "z3": {
+        "status": "sat",
+        "timeMs": 23,
+        "evidenceSha256": "09fdf810369044286bc10611c9208ec4afb033226b97ac84f8a5a1488cd25f91",
+        "evidenceFile": "evidence/o10.z3.out",
+        "proven": true,
+        "killedByHarness": false
+      },
+      "cvc5": {
+        "status": "timeout",
+        "timeMs": 10097,
+        "evidenceSha256": "89c6bfc740e5f5fc7d479c6b83f440ddd05d4a0d33bb41321e832ffbd340d27c",
+        "evidenceFile": "evidence/o10.cvc5.out",
+        "proven": false,
+        "killedByHarness": false
+      },
+      "agreement": false,
+      "divergence": "capability",
+      "decidedByBoth": false,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
+      "proven": false,
+      "deliberateTimeout": true,
+      "finding": false,
+      "witness": "[0:sat] s=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
+      "smtlibFile": "../obligations/o10.smt2",
+      "smtlibSha256": "3a7683b15136bbcf828c4858726e139d59524795c453121e8797ad94593320b8",
+      "obligationSourceSha256": "8949fa61906921e038513b807a5173662f5ceb503a2b7d30a21fcefb804e8054",
+      "question": "Deliberate timeout, fail closed: a nested re.inter chain over long ranges engineered past the budget. The ASSERTION is not about the answer — it is that the harness reports timeout/unknown and treats the obligation as NOT-PROVEN, with no pass-through."
+    }
+  ],
+  "capabilityProbes": [
+    {
+      "id": "O9",
+      "solver": "cvc5",
+      "standardBudgetS": 30,
+      "extendedBudgetS": 120,
+      "statusAtExtendedBudget": "timeout;timeout",
+      "timeMs": 120141,
+      "evidenceFile": "evidence/o09.cvc5.extended-120s.out",
+      "interpretation": "CAPABILITY-BOUND: still undecided at the extended budget, so the divergence is a property of this solver on this encoding, not of the budget."
+    }
+  ],
+  "stability": [
+    {
+      "id": "O1",
+      "solver": "z3",
+      "run1Sha256": "157a94a8ad88054913c9251f38106a7e66bb7babb19a381f84451d2fa5f850d4",
+      "run2Sha256": "157a94a8ad88054913c9251f38106a7e66bb7babb19a381f84451d2fa5f850d4",
+      "normalizedRun1": "[0:sat] s=\"git status`\"",
+      "normalizedRun2": "[0:sat] s=\"git status`\"",
+      "stable": true
+    },
+    {
+      "id": "O1",
+      "solver": "cvc5",
+      "run1Sha256": "c7706f1ee5d7717221c3c4998528362d31a1d4c788ad2c65dd0299d23d6e865f",
+      "run2Sha256": "c7706f1ee5d7717221c3c4998528362d31a1d4c788ad2c65dd0299d23d6e865f",
+      "normalizedRun1": "[0:sat] s=\"git log\"",
+      "normalizedRun2": "[0:sat] s=\"git log\"",
+      "stable": true
+    },
+    {
+      "id": "O3",
+      "solver": "z3",
+      "run1Sha256": "cd7d3d32a8f657db19a4d49db718cbd6fa7557f91f0c46ac982a57f4d9289476",
+      "run2Sha256": "cd7d3d32a8f657db19a4d49db718cbd6fa7557f91f0c46ac982a57f4d9289476",
+      "normalizedRun1": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
+      "normalizedRun2": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
+      "stable": true
+    },
+    {
+      "id": "O3",
+      "solver": "cvc5",
+      "run1Sha256": "dfdcefd4975b45e9840814e56a6037408389e653a0efb230aa4722ca536514cc",
+      "run2Sha256": "dfdcefd4975b45e9840814e56a6037408389e653a0efb230aa4722ca536514cc",
+      "normalizedRun1": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
+      "normalizedRun2": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
+      "stable": true
+    },
+    {
+      "id": "O4",
+      "solver": "z3",
+      "run1Sha256": "d296574593b85702606b5bea4a79d99817157c780a4993f3e2b8263dbefbe5df",
+      "run2Sha256": "d296574593b85702606b5bea4a79d99817157c780a4993f3e2b8263dbefbe5df",
+      "normalizedRun1": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
+      "normalizedRun2": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
+      "stable": true
+    },
+    {
+      "id": "O4",
+      "solver": "cvc5",
+      "run1Sha256": "250deb9d7a53d2019b651ae3b497ab37aa092bc53a8099080413f4403e7b76c0",
+      "run2Sha256": "250deb9d7a53d2019b651ae3b497ab37aa092bc53a8099080413f4403e7b76c0",
+      "normalizedRun1": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
+      "normalizedRun2": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
+      "stable": true
+    },
+    {
+      "id": "O5",
+      "solver": "z3",
+      "run1Sha256": "32f0979b7974ae7068e7079edf11224c29b1a9244dd97cdd6a0218226eef5720",
+      "run2Sha256": "32f0979b7974ae7068e7079edf11224c29b1a9244dd97cdd6a0218226eef5720",
+      "normalizedRun1": "[0:sat] p=\"packages/.ts\"",
+      "normalizedRun2": "[0:sat] p=\"packages/.ts\"",
+      "stable": true
+    },
+    {
+      "id": "O5",
+      "solver": "cvc5",
+      "run1Sha256": "745d00b07b7ecdd98830941fd17897d3925bf520cab83c0d37de8eec1208b9b7",
+      "run2Sha256": "745d00b07b7ecdd98830941fd17897d3925bf520cab83c0d37de8eec1208b9b7",
+      "normalizedRun1": "[0:sat] p=\"packages/.ts\"",
+      "normalizedRun2": "[0:sat] p=\"packages/.ts\"",
+      "stable": true
+    },
+    {
+      "id": "O7",
+      "solver": "z3",
+      "run1Sha256": "0dd56952c6fbe69443d90358259e342f7bdbc7797d4334946e6df7679ed7a349",
+      "run2Sha256": "0dd56952c6fbe69443d90358259e342f7bdbc7797d4334946e6df7679ed7a349",
+      "normalizedRun1": "[0:sat] s=\"git tag`\"",
+      "normalizedRun2": "[0:sat] s=\"git tag`\"",
+      "stable": true
+    },
+    {
+      "id": "O7",
+      "solver": "cvc5",
+      "run1Sha256": "50b1e165b0a27a2f33caa9537c5a2cd5552aa52ac08e787dd1aa3c0d60c788cd",
+      "run2Sha256": "50b1e165b0a27a2f33caa9537c5a2cd5552aa52ac08e787dd1aa3c0d60c788cd",
+      "normalizedRun1": "[0:sat] s=\"git show\"",
+      "normalizedRun2": "[0:sat] s=\"git show\"",
+      "stable": true
+    },
+    {
+      "id": "O8",
+      "solver": "z3",
+      "run1Sha256": "263b95122a95b82d6dd9f325d013644274f87459ae5596ae3a9c2411169b8508",
+      "run2Sha256": "263b95122a95b82d6dd9f325d013644274f87459ae5596ae3a9c2411169b8508",
+      "normalizedRun1": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
+      "normalizedRun2": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
+      "stable": true
+    },
+    {
+      "id": "O8",
+      "solver": "cvc5",
+      "run1Sha256": "cb10ef912de543b82b43aba20d52f8d353dfac736c4bd48555ecc7ae10144b46",
+      "run2Sha256": "cb10ef912de543b82b43aba20d52f8d353dfac736c4bd48555ecc7ae10144b46",
+      "normalizedRun1": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
+      "normalizedRun2": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
+      "stable": true
+    },
+    {
+      "id": "O9",
+      "solver": "z3",
+      "run1Sha256": "21bfbf0c0ee686172fd1b9522964896812267b8af24f01910e48dd2b98352fd0",
+      "run2Sha256": "21bfbf0c0ee686172fd1b9522964896812267b8af24f01910e48dd2b98352fd0",
+      "normalizedRun1": "[0:unsat] symmetric-difference\n[1:sat] s=\"rm rm0000000000000000000000000000000000 rm .totem/lessons.md\"",
+      "normalizedRun2": "[0:unsat] symmetric-difference\n[1:sat] s=\"rm rm0000000000000000000000000000000000 rm .totem/lessons.md\"",
+      "stable": true
+    },
+    {
+      "id": "O10",
+      "solver": "z3",
+      "run1Sha256": "09fdf810369044286bc10611c9208ec4afb033226b97ac84f8a5a1488cd25f91",
+      "run2Sha256": "09fdf810369044286bc10611c9208ec4afb033226b97ac84f8a5a1488cd25f91",
+      "normalizedRun1": "[0:sat] s=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
+      "normalizedRun2": "[0:sat] s=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
+      "stable": true
+    }
+  ],
+  "assertions": {
+    "solversAgreeOnEveryDecidableObligation": true,
+    "contradictingObligations": [],
+    "capabilityDivergences": [
+      "O9 (z3=unsat;sat cvc5=timeout;timeout)"
+    ],
+    "expectedStatusesHoldWhereDecided": true,
+    "obligationsWithFindings": [
+      "O9"
+    ],
+    "o10NotProvenOnAtLeastOneSolver": true,
+    "o10TreatedAsNotProvenByHarness": true,
+    "countermodelsStableAcrossTwoRuns": true,
+    "unstableRows": [],
+    "bindingArmBuilt": true,
+    "bindingArmAgreesWithCli": true
+  },
+  "verdict": "PASS",
+  "verdictUnderStrictReading": "FAIL",
+  "verdictNotes": [
+    "findings recorded on: O9 — see each row's findingNote",
+    "CONTRACT QUESTION for the dispatching seat: 1 obligation(s) were decided by exactly one solver — O9 (z3=unsat;sat cvc5=timeout;timeout). OBLIGATIONS.md scopes the criterion to \"every DECIDABLE obligation\" and the spec's FAIL is \"unexplained solver DISAGREEMENT\", so the harness records these as capability divergences rather than disagreements and the headline verdict follows that reading. Under the stricter reading (any status mismatch counts) the verdict is FAIL. The harness does not settle which reading governs adoption.",
+    "capability probe — O9 on cvc5 at 120s: timeout;timeout (CAPABILITY-BOUND)",
+    "PASS/FAIL is the spec § Spike 2 criterion set, not a judgement on adoption: a pass adopts nothing by itself."
+  ]
+}

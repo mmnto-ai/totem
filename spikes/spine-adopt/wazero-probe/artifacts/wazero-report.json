@@ -1,0 +1,489 @@
+{
+  "answer": "YES. wazero loaded and correctly evaluated the exact policy.wasm artifacts this spike produced, agreeing with the shipped oracle and with the wasmtime arm on every compared row. The Go-satellite lane is viable on CORE wasm; the component model is not needed for this path. One piece of real friction was found and worked around without touching the artifacts (see frictionFound).",
+  "checks": [
+    {
+      "name": "DETECTOR IDENTITY — an unperturbed pair MATCHES (the detector is not stuck on \"divergent\")",
+      "passed": true
+    },
+    {
+      "name": "DETECTOR MUTANT — a shifted line_number is UNEXPLAINED",
+      "passed": true
+    },
+    {
+      "name": "DETECTOR MUTANT — a DROPPED violation is UNEXPLAINED (multiplicity, not just membership)",
+      "passed": true
+    },
+    {
+      "name": "DETECTOR MUTANT — an identical violation multiset with a DIVERGENT event stream is UNEXPLAINED",
+      "passed": true
+    },
+    {
+      "name": "DETECTOR MUTANT — a `suppress` event where the other arm emitted `trigger` is UNEXPLAINED (kind is compared, not just line)",
+      "passed": true
+    },
+    {
+      "name": "DETECTOR MUTANT — an ERROR ROW is UNEXPLAINED, never a clean zero",
+      "passed": true
+    },
+    {
+      "name": "DETECTOR MUTANT — `fired`/`matchCount` that do NOT derive from the violation multiset is UNEXPLAINED",
+      "passed": true
+    },
+    {
+      "name": "DETECTOR MUTANT — an ORDINAL-ONLY permutation is EXPLAINED (and only this one is)",
+      "passed": true
+    },
+    {
+      "name": "DETECTOR MUTANT — an ORDINAL-ONLY permutation carrying a NON-DERIVING `matchCount` is UNEXPLAINED (the explanation branch does not skip the derivation check)",
+      "passed": true
+    },
+    {
+      "name": "shipped arm produced 24 verdict rows",
+      "passed": true
+    },
+    {
+      "name": "opa (wasmtime) arm produced 24 verdict rows",
+      "passed": true
+    },
+    {
+      "name": "wazero arm produced 24 verdict rows",
+      "passed": true
+    },
+    {
+      "name": "the join key (ruleId, fixtureId) is unique on every arm",
+      "passed": true
+    },
+    {
+      "name": "every shipped pair has a wazero row (no silent skip)",
+      "passed": true
+    },
+    {
+      "name": "the corpus is DISCRIMINATING — the shipped arm both fires and stays silent, and at least one row is multi-violation",
+      "passed": true
+    },
+    {
+      "name": "shipped-vs-wazero — every pair MATCHES (the ruled PASS criterion: identical violation multisets AND event streams on every fixture)",
+      "passed": true
+    },
+    {
+      "name": "opa(wasmtime)-vs-wazero — no unexplained divergence (the SAME wasm artifact under two runtimes)",
+      "passed": true
+    },
+    {
+      "name": "the CLASSIC eval-context sequence and the ONE-SHOT `opa_eval` fast path agree on every fixture",
+      "passed": true
+    },
+    {
+      "name": "every fixture exercised BOTH ABI paths",
+      "passed": true
+    },
+    {
+      "name": "every module's own `builtins` export is EMPTY — the host implements no builtin, so the opa_builtin0..4 stubs are provably never called",
+      "passed": true
+    }
+  ],
+  "comparedAgainst": {
+    "opa": "artifacts/opa-verdicts.json — opa-wasm 0.3.2 (matrix-org/rust-opa-wasm) on wasmtime 47.x (pinned exactly in host/Cargo.lock; opa-wasm 0.3.2 requires \u003e=42, \u003c48)",
+    "shipped": "artifacts/shipped-verdicts.json (the shipped oracle; arms[0] = arm1-pin)"
+  },
+  "componentModelNote": {
+    "consequenceForTheContract": "A wasm contract can be frozen on CORE wasm without waiting on component-model maturity in wazero. The component model would only become load-bearing if the Spine chose to ship policies as COMPONENTS or to pass structured values across the boundary instead of JSON-through-linear-memory, which OPA's own wasm target does not do.",
+    "finding": "NOT NEEDED FOR THIS PATH. The seven policy modules are core wasm (MVP + the mutable-globals/sign-extension class of Core 2.0 features at most): every import is a plain function or a memory, every export is a plain function, a memory, or a global. No component, no interface types, no resources, no WIT. wazero loaded and evaluated them with nothing but the Core Specification.",
+    "needed": false,
+    "wazeroSupportStatus": "wazero's README (module cache, v1.12.0) states: \"wazero is a WebAssembly Core Specification 1.0 and 2.0 compliant runtime\" and \"Both runtimes pass WebAssembly Core 1.0 and 2.0 specification tests\". The component model is not claimed anywhere in the README; RATIONALE.md mentions it exactly twice, in passing, about a hypothetical future \"wasi-filesystem\" — noting that \"component model intentionally does not define an ABI\". So: no component-model support, and none required here."
+  },
+  "divergences": {
+    "explained": [],
+    "note": "Verbatim. Empty arrays mean no divergence was found, not that none was looked for — the detector is exercised against 9 synthetic mutants in `checks` before any real row is compared.",
+    "unexplained": []
+  },
+  "evalSequence": {
+    "bothPathsRun": "Every fixture is evaluated through BOTH sequences and the dumped JSON is compared structurally. A hand-driven ABI can produce a plausible verdict through one path while mis-driving the heap; two paths with different allocation discipline agreeing is much harder to fake.",
+    "classic": [
+      "opa_heap_ptr_set(baseHeap)",
+      "opa_malloc(len(inputJSON)) + memory.Write",
+      "opa_json_parse(ptr, len) -\u003e input opa_value",
+      "opa_eval_ctx_new()",
+      "opa_eval_ctx_set_input(ctx, input)",
+      "opa_eval_ctx_set_data(ctx, data)   // data = parsed `{}`, allocated BELOW baseHeap",
+      "opa_eval_ctx_set_entrypoint(ctx, entrypointId)",
+      "eval(ctx)  // must return 0",
+      "opa_eval_ctx_get_result(ctx)",
+      "opa_json_dump(result) -\u003e NUL-terminated JSON"
+    ],
+    "classicAndOneShotDisagreements": [],
+    "oneShot": [
+      "opa_heap_ptr_set(baseHeap)",
+      "opa_malloc(len(inputJSON)) + memory.Write",
+      "opa_heap_ptr_get() -\u003e heapPtr (ABOVE the input just written)",
+      "opa_eval(0, entrypointId, data, inputPtr, inputLen, heapPtr, 0 /*JSON*/) -\u003e NUL-terminated JSON"
+    ],
+    "setupOrderIsLoadBearing": "The data document is parsed BEFORE the heap watermark is saved, so it lives below baseHeap and survives every per-eval `opa_heap_ptr_set(baseHeap)`. Saving the watermark first would let each eval reclaim the data document out from under itself."
+  },
+  "frictionFound": {
+    "costToASatellite": "~120 lines of hand-encoded wasm, or a dependency that emits it. Constant, not per-policy.",
+    "detail": "OPA emits `(import \"env\" \"memory\" (memory 2))` and re-exports it. wazero v1.12.0's `HostModuleBuilder` interface has exactly three methods — NewFunctionBuilder, Compile, Instantiate. There is no ExportMemory, so a Go host module can define functions and nothing else, and `env.memory` is unsatisfiable by a host module.",
+    "issue": "wazero cannot satisfy a memory IMPORT from a host module.",
+    "severity": "WORKED AROUND, NOT BLOCKING — but it is real integration friction a Go satellite will hit on day one.",
+    "workaround": "`env` is supplied as a real (synthesised) WASM module instead of a host module: it DEFINES and exports the memory, IMPORTS the six OPA ABI functions from a Go host module named `opa_host`, and RE-EXPORTS them under the names the policy expects. See envshim.go. The policy.wasm bytes are NEVER modified — the rejected alternative was patching the memory import into a definition, which would have meant no longer testing the artifact the spike actually produced."
+  },
+  "generatedBy": "spikes/spine-adopt/wazero-probe (go run .)",
+  "goVersion": "go1.26.2 windows/amd64",
+  "memoryGrowth": {
+    "minPagesSource": "read off each policy's OWN `(import \"env\" \"memory\" (memory N))` declaration via wazero's decoder, not hardcoded",
+    "note": "The shim declares the memory with NO maximum, so `memory.grow` stays available to the guest, and every specimen did in fact grow it past the declared minimum during evaluation. wazero's api.Memory.Read re-derives the backing slice on each call, so host-side reads stay correct across a grow — the address-handling hazard the dispatch flagged did not materialise. A host that cached a raw pointer WOULD have been bitten here.",
+    "shimMinPagesPerSpecimen": {
+      "a": 2,
+      "b": 2,
+      "c": 2,
+      "c-supp": 2,
+      "d-file": 2,
+      "d-line": 2,
+      "e": 2
+    },
+    "specimensThatGrewTheMemory": [
+      "a: 2 -\u003e 4 pages",
+      "b: 2 -\u003e 3 pages",
+      "c: 2 -\u003e 3 pages",
+      "c-supp: 2 -\u003e 3 pages",
+      "d-line: 2 -\u003e 3 pages",
+      "d-file: 2 -\u003e 3 pages",
+      "e: 2 -\u003e 3 pages"
+    ]
+  },
+  "question": "Can wazero, today, load and correctly evaluate the exact wasm artifacts this spike produced — i.e. is the Go-satellite lane viable on core wasm, and is anything about the component model needed at all?",
+  "rowsCompared": {
+    "opa-vs-wazero": 24,
+    "requiredSubset": "specimen-a (61dcb058bd1df15d) + specimen-d-file (0123456789abcdef_d_file) — the rows the dispatch names explicitly",
+    "requiredSubsetRows": 8,
+    "shipped-vs-wazero": 24,
+    "wazeroVerdictRows": 24
+  },
+  "summary": {
+    "opa-vs-wazero": {
+      "MATCH": 24,
+      "EXPLAINED-DIVERGENCE": 0,
+      "UNEXPLAINED-DIVERGENCE": 0
+    },
+    "requiredSubset": {
+      "MATCH": 8,
+      "EXPLAINED-DIVERGENCE": 0,
+      "UNEXPLAINED-DIVERGENCE": 0
+    },
+    "shipped-vs-wazero": {
+      "MATCH": 24,
+      "EXPLAINED-DIVERGENCE": 0,
+      "UNEXPLAINED-DIVERGENCE": 0
+    }
+  },
+  "timingsMicros": {
+    "clockGranularityMicros": 303,
+    "coldEval": {
+      "max": 654.584,
+      "mean": 202.876,
+      "median": 140.16,
+      "min": 40.008
+    },
+    "coldReps": 25,
+    "comparisonToWasmtimeArm": "artifacts/opa-verdicts.json reports a MIN over 50 individually-timed reps (cold 246-355us, warm 236-241us on specimen a). Those are minima and these are means, and they were taken through a different host crate, so treat any cross-runtime comparison as indicative only — this probe was built to answer CORRECTNESS, not to benchmark.",
+    "compilePerSpecimen": {
+      "max": 64637,
+      "mean": 62746.714,
+      "median": 62790,
+      "min": 60658
+    },
+    "instantiatePerSpecimen": {
+      "max": 0,
+      "mean": 0,
+      "median": 0,
+      "min": 0
+    },
+    "method": "This host's monotonic clock resolves to ~303 us, which is LARGER than one eval, so no per-call measurement is meaningful. Every eval number here is therefore a BATCH mean: one timer around N evaluations, divided by N. Warm = 200 evals on one already-warm instance. Cold = the FIRST eval on each of 25 instances that were all built before the timer started, so instantiation is excluded. Compile and instantiate are single coarse readings per specimen and are only reliable to ~303 us; compile is ~65ms and comfortably above the noise, instantiate is NOT and should be read as 'sub-millisecond' rather than as a figure.",
+    "perFixture": [
+      {
+        "specimen": "a",
+        "fixtureId": "a-corpus-fail",
+        "compileMicros": 64034,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 654.584,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 540.626,
+        "warmOneShotEvalMicrosMean": 529.9995,
+        "warmReps": 200
+      },
+      {
+        "specimen": "a",
+        "fixtureId": "a-corpus-pass",
+        "compileMicros": 64034,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 647.088,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 528.717,
+        "warmOneShotEvalMicrosMean": 527.774,
+        "warmReps": 200
+      },
+      {
+        "specimen": "a",
+        "fixtureId": "a-inline-bad",
+        "compileMicros": 64034,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 632.2,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 511.1365,
+        "warmOneShotEvalMicrosMean": 526.9545,
+        "warmReps": 200
+      },
+      {
+        "specimen": "a",
+        "fixtureId": "a-inline-good",
+        "compileMicros": 64034,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 586.892,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 525.0125,
+        "warmOneShotEvalMicrosMean": 532.261,
+        "warmReps": 200
+      },
+      {
+        "specimen": "b",
+        "fixtureId": "b-corpus-fail",
+        "compileMicros": 62790,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 40.012,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 42.5385,
+        "warmOneShotEvalMicrosMean": 38.6075,
+        "warmReps": 200
+      },
+      {
+        "specimen": "b",
+        "fixtureId": "b-corpus-pass",
+        "compileMicros": 62790,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 60.072,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 35.082,
+        "warmOneShotEvalMicrosMean": 30.12,
+        "warmReps": 200
+      },
+      {
+        "specimen": "b",
+        "fixtureId": "b-inline-bad",
+        "compileMicros": 62790,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 40.008,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 40.598,
+        "warmOneShotEvalMicrosMean": 40.292,
+        "warmReps": 200
+      },
+      {
+        "specimen": "b",
+        "fixtureId": "b-inline-good",
+        "compileMicros": 62790,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 80.116,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 30.633,
+        "warmOneShotEvalMicrosMean": 32.524,
+        "warmReps": 200
+      },
+      {
+        "specimen": "c",
+        "fixtureId": "c-corpus-fail",
+        "compileMicros": 60743,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 145.136,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 119.712,
+        "warmOneShotEvalMicrosMean": 125.413,
+        "warmReps": 200
+      },
+      {
+        "specimen": "c",
+        "fixtureId": "c-corpus-pass",
+        "compileMicros": 60743,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 140.312,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 94.225,
+        "warmOneShotEvalMicrosMean": 98.1655,
+        "warmReps": 200
+      },
+      {
+        "specimen": "c",
+        "fixtureId": "c-inline-bad",
+        "compileMicros": 60743,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 160.672,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 103.756,
+        "warmOneShotEvalMicrosMean": 104.6405,
+        "warmReps": 200
+      },
+      {
+        "specimen": "c",
+        "fixtureId": "c-inline-good",
+        "compileMicros": 60743,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 140.636,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 97.292,
+        "warmOneShotEvalMicrosMean": 98.117,
+        "warmReps": 200
+      },
+      {
+        "specimen": "c-supp",
+        "fixtureId": "c-supp-corpus-fail",
+        "compileMicros": 60658,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 206.232,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 100.481,
+        "warmOneShotEvalMicrosMean": 98.8735,
+        "warmReps": 200
+      },
+      {
+        "specimen": "c-supp",
+        "fixtureId": "c-supp-corpus-pass",
+        "compileMicros": 60658,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 80.004,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 91.5035,
+        "warmOneShotEvalMicrosMean": 90.038,
+        "warmReps": 200
+      },
+      {
+        "specimen": "c-supp",
+        "fixtureId": "c-supp-inline-bad",
+        "compileMicros": 60658,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 163.492,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 92.867,
+        "warmOneShotEvalMicrosMean": 103.002,
+        "warmReps": 200
+      },
+      {
+        "specimen": "c-supp",
+        "fixtureId": "c-supp-inline-good",
+        "compileMicros": 60658,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 100.204,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 88.1965,
+        "warmOneShotEvalMicrosMean": 94.4245,
+        "warmReps": 200
+      },
+      {
+        "specimen": "d-line",
+        "fixtureId": "d-line-inline-bad",
+        "compileMicros": 64637,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 120.936,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 103.618,
+        "warmOneShotEvalMicrosMean": 103.948,
+        "warmReps": 200
+      },
+      {
+        "specimen": "d-line",
+        "fixtureId": "d-line-inline-good",
+        "compileMicros": 64637,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 140.124,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 101.356,
+        "warmOneShotEvalMicrosMean": 104.9255,
+        "warmReps": 200
+      },
+      {
+        "specimen": "d-file",
+        "fixtureId": "d-file-control-empty",
+        "compileMicros": 62788,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 120.012,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 93.4935,
+        "warmOneShotEvalMicrosMean": 109.519,
+        "warmReps": 200
+      },
+      {
+        "specimen": "d-file",
+        "fixtureId": "d-file-control-unreadable",
+        "compileMicros": 62788,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 141.856,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 99.423,
+        "warmOneShotEvalMicrosMean": 97.0475,
+        "warmReps": 200
+      },
+      {
+        "specimen": "d-file",
+        "fixtureId": "d-file-inline-bad",
+        "compileMicros": 62788,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 122.972,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 99.595,
+        "warmOneShotEvalMicrosMean": 98.579,
+        "warmReps": 200
+      },
+      {
+        "specimen": "d-file",
+        "fixtureId": "d-file-inline-good",
+        "compileMicros": 62788,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 140.16,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 102.894,
+        "warmOneShotEvalMicrosMean": 104.393,
+        "warmReps": 200
+      },
+      {
+        "specimen": "e",
+        "fixtureId": "e-inline-bad",
+        "compileMicros": 63577,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 125.192,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 65.84,
+        "warmOneShotEvalMicrosMean": 63.051,
+        "warmReps": 200
+      },
+      {
+        "specimen": "e",
+        "fixtureId": "e-inline-good",
+        "compileMicros": 63577,
+        "instantiateMicros": 0,
+        "coldEvalMicrosMean": 80.116,
+        "coldReps": 25,
+        "warmEvalMicrosMean": 62.52,
+        "warmOneShotEvalMicrosMean": 62.1655,
+        "warmReps": 200
+      }
+    ],
+    "warmEvalClassic": {
+      "max": 540.626,
+      "mean": 157.13,
+      "median": 99.423,
+      "min": 30.633
+    },
+    "warmEvalOneShot": {
+      "max": 532.261,
+      "mean": 158.951,
+      "median": 98.874,
+      "min": 30.12
+    },
+    "warmReps": 200
+  },
+  "wazeroVersion": "v1.12.0",
+  "whatWasNotDone": [
+    "Nothing outside spikes/spine-adopt/wazero-probe/ was created or modified; policy.wasm files were read only.",
+    "No commit was made.",
+    "The regorus arm was not re-run or compared against; this probe compares wazero to the shipped oracle and to the wasmtime arm.",
+    "No claim is made about wazero's compiler backend on hosts other than the one measured — this run was windows/amd64."
+  ]
+}

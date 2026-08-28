@@ -1,0 +1,24 @@
+# Specimen (b) — FLAT AST-GREP class.
+#
+# Spec § "The five specimens", row b: `2d962603591aa928` (RegExp-in-try empty
+# catch) NARROWED to `fileGlobs: ['**/*.ts'], language: typescript`. The legacy
+# 4-extension glob set (`.ts`/`.js`/`.tsx`/`.jsx`) fails the § Design 6
+# one-declared-language floor (`record-lower.ts` `checkLanguageGlobConsistency`),
+# and would be lowering-REJECTED. The fixture file `scripts/audit.ts` stays in
+# scope under the narrowed glob.
+schemaVersion: 1
+severity: warning
+message: |-
+  Empty catch block silently swallows RegExp compilation errors in audit scripts — log or rethrow the error to surface malformed rules.
+target:
+  type: ast-grep
+  language: typescript
+  pattern: 'try { $$$PRE new RegExp($$$ARGS) $$$POST } catch ($ERR) {}'
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+examples:
+  - bad: |-
+      try { new RegExp(pattern) } catch (err) {}
+    good: |-
+      try { new RegExp(pattern) } catch (err) { console.error(err) }

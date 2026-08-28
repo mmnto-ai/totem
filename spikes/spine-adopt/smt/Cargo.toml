@@ -1,0 +1,26 @@
+# Spike 2 — solver-neutral proof-obligation harness (spec § "Spike 2").
+#
+# Own workspace (empty `[workspace]` table) so this crate is NOT absorbed into
+# any ancestor Cargo workspace: the spike is disposable and must not perturb the
+# repo's build graph (spec § Scope: "It will NOT touch packages/*").
+[workspace]
+
+[package]
+name = "spine-smt-obligations"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+
+# The BINDING arm (OBLIGATIONS.md § Binding notes, "Primary"). Optional so the
+# CLI harness — the deliverable floor — builds and runs even if the native
+# binding does not link.
+z3 = { version = "0.20.2", optional = true }
+
+[features]
+default = []
+binding-z3 = ["dep:z3"]

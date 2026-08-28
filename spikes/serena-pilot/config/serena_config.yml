@@ -1,0 +1,57 @@
+# Serena GLOBAL config for the totem serena pilot (mmnto-ai/totem spike).
+# Copied to $SERENA_HOME/serena_config.yml, where SERENA_HOME is set to a
+# scratchpad path so that NOTHING is written to ~/.serena or into the checkout.
+#
+# Ruled bounds this file implements:
+#   - memories OFF          -> base_modes/default_modes carry no memory-enabling mode;
+#                              memory tools are excluded at project level too.
+#   - editing/shell OFF     -> base_modes is EMPTIED (upstream default is
+#                              [interactive, editing]; `editing` is a BASE mode and
+#                              base modes are NOT overridable by the --mode CLI flag,
+#                              which only overrides `default_modes`).
+#   - zero config mutation  -> project registry left empty; projects are never
+#                              persisted into a machine-level config.
+
+language_backend: LSP
+line_ending: native
+
+# No GUI, no browser tab, no tray icon: this is a headless measurement run.
+gui_log_window: False
+web_dashboard: False
+web_dashboard_open_on_launch: False
+
+log_level: 20
+trace_lsp_communication: False
+
+ls_specific_settings: {}
+ls_priorities:
+ignored_paths: []
+
+read_only_memory_patterns: []
+ignored_memory_patterns: []
+
+tool_timeout: 240
+
+excluded_tools: []
+included_optional_tools: []
+fixed_tools: []
+
+# CRITICAL: upstream default is [interactive, editing]. Base modes are always
+# unioned in and CANNOT be removed via --mode, so they are cleared here.
+base_modes: []
+default_modes: []
+
+default_max_tool_answer_chars: 150000
+token_count_estimator: CHAR_COUNT
+symbol_info_budget: 10
+
+# Default location; the pilot deliberately does NOT redirect this, so that the
+# measured run reflects serena's out-of-the-box footprint on a checkout.
+project_serena_folder_location: '$projectDir/.serena'
+
+# Deliberately EMPTY: an untrusted project cannot run `activation_command`
+# and cannot apply ls_specific_settings. This is a security property we want
+# for the pilot (see the Tenet-8 note in PILOT.md).
+trusted_project_path_patterns: []
+
+projects: []

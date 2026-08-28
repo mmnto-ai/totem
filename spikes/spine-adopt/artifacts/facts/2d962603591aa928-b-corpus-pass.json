@@ -1,0 +1,28 @@
+{
+  "fixtureId": "b-corpus-pass",
+  "specimen": "b",
+  "ruleId": "2d962603591aa928",
+  "engine": "ast-grep",
+  "source": "corpus-fixture",
+  "arm": "pass",
+  "provenance": {
+    "fixtureFile": ".totem/tests/test-ast-empty-catch.md",
+    "fixtureRuleHash": "2d962603591aa928",
+    "fixtureDeclaredFilePath": "scripts/audit.ts",
+    "blockLineCount": 5,
+    "shaping": "ONE whole-file source per fixture block; every line an addition with precedingLine = lines[i-1]."
+  },
+  "astQuery": "try { $$$PRE new RegExp($$$ARGS) $$$POST } catch ($ERR) {}",
+  "factBundle": {
+    "file": "scripts/audit.ts",
+    "fileText": "try {\n  new RegExp(pattern);\n} catch (err) {\n  console.error(err);\n}",
+    "lines": [
+      "try {",
+      "  new RegExp(pattern);",
+      "} catch (err) {",
+      "  console.error(err);",
+      "}"
+    ],
+    "astMatches": []
+  }
+}

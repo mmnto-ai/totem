@@ -1,0 +1,5 @@
+sat
+(
+  (define-fun s () String
+    "git status`")
+)

@@ -1,0 +1,26 @@
+sat
+(
+  (define-fun symmetric-difference () Bool
+    (let ((a!1 (re.++ (re.* (re.union (str.to_re "\u{9}") (re.range " " "~")))
+                  (str.to_re "pnpm")))
+      (a!3 (re.union (re.union (re.union (str.to_re "\u{9}") (re.range " " "/"))
+                               (re.range ":" "@"))
+                     (re.range "[" "^"))))
+(let ((a!2 (re.++ a!1 (re.+ (re.union (str.to_re "\u{9}") (str.to_re " ")))))
+      (a!4 (re.++ (re.union (re.union a!3 (str.to_re "`")) (re.range "{" "~"))
+                  (re.* (re.union (str.to_re "\u{9}") (re.range " " "~")))))
+      (a!6 (re.++ (re.* (re.union (str.to_re "\u{9}") (re.range " " "~")))
+                  (re.union (re.union a!3 (str.to_re "`")) (re.range "{" "~")))))
+(let ((a!5 (str.in_re s
+                      (re.++ (re.++ a!2 (str.to_re "bin"))
+                             (re.union (str.to_re "") a!4))))
+      (a!7 (re.++ (re.++ (re.union (str.to_re "") a!6) (str.to_re "pnpm"))
+                  (re.+ (re.union (str.to_re "\u{9}") (str.to_re " "))))))
+(let ((a!8 (str.in_re s
+                      (re.++ (re.++ a!7 (str.to_re "bin"))
+                             (re.union (str.to_re "") a!4)))))
+  (xor a!5 a!8))))))
+  (define-fun s () String
+    "ppnpm bin`")
+)
+; verdict=sat elapsedMs=19

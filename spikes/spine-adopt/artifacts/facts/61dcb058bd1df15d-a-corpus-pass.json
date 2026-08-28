@@ -1,0 +1,24 @@
+{
+  "fixtureId": "a-corpus-pass",
+  "specimen": "a",
+  "ruleId": "61dcb058bd1df15d",
+  "engine": "regex",
+  "source": "corpus-fixture",
+  "arm": "pass",
+  "provenance": {
+    "fixtureFile": ".totem/tests/test-61dcb058bd1df15d.md",
+    "fixtureRuleHash": "61dcb058bd1df15d",
+    "fixtureDeclaredFilePath": "src/example.sh",
+    "blockLineCount": 1,
+    "shaping": "ONE whole-file source per fixture block; every line an addition with precedingLine = lines[i-1]."
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "src/example.sh",
+    "fileText": "`rm .totem/lessons/lesson-cd27a5b0.md` — individual lesson file deletion is allowed",
+    "lines": [
+      "`rm .totem/lessons/lesson-cd27a5b0.md` — individual lesson file deletion is allowed"
+    ],
+    "astMatches": []
+  }
+}

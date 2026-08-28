@@ -1,0 +1,22 @@
+[package]
+name = "egg-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "spine-adopt spike — egg e-graph probe (DESIGN.md, spec § Enrichment row 1)"
+
+# Own workspace: this probe is deliberately NOT a member of the totem pnpm/cargo
+# tree (DESIGN.md § Boundaries — "Own crate at spikes/spine-adopt/egg-probe/,
+# empty [workspace], committed Cargo.lock, egg pinned").
+[workspace]
+
+[dependencies]
+# PINNED to the current stable crates.io release of egg (0.11.0, the newest
+# non-yanked version as of 2026-08-27). `=` so a `cargo update` cannot move it.
+egg = "=0.11.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 2

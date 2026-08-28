@@ -1,0 +1,385 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+  "contract": "spec § Actuator slice 2 — \"the chain artifact IS the certificate; `certify` gates chain emission\". This file is the UNPUBLISHED input to that gate, never a certificate.",
+  "publishedBy": "spikes/spine-adopt/src/certify.mts (on certification PASS only)",
+  "chains": [
+    {
+      "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+      "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+      "specimen": "a",
+      "ruleId": "61dcb058bd1df15d",
+      "package": "totem.spike.r61dcb058bd1df15d",
+      "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
+      "recordSha256": "24be123733cda7a3a5a345d2fedb0633607344fdc375af587a8a7e31f2f345ad",
+      "recordFile": "records/a-regex-lessons-rm-guard.rule.yaml",
+      "regoSha256": "12c788f645b3369a52dbfae52f17f744f21e524016b62d4b72d4ec777c1f2abc",
+      "regoComposition": {
+        "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+        "order": [
+          "policy.rego",
+          "globs.json",
+          "factSchemaLine"
+        ],
+        "components": {
+          "policy.rego": "77942137614cd9016fc286a88c8db112f238b810196b49758ec30c0dd1b34829",
+          "globs.json": "abd916ad074c8ec20febec397002b3d1084fb3528c39630bcb5449028d4dd645",
+          "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+        },
+        "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+        "preimage": "policy.rego:77942137614cd9016fc286a88c8db112f238b810196b49758ec30c0dd1b34829\nglobs.json:abd916ad074c8ec20febec397002b3d1084fb3528c39630bcb5449028d4dd645\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+      },
+      "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+      "bundleTarballSha256": "1c97f06193df25da6a2eada3952dfcb4671b28f271bd1140440139281b3c69aa",
+      "manifest": {
+        "revision": "",
+        "roots": [
+          ""
+        ],
+        "wasm": [
+          {
+            "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
+            "module": "/policy.wasm"
+          }
+        ],
+        "rego_version": 1
+      },
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+          "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48"
+        ],
+        "bundleTarballSha256": [
+          "1c97f06193df25da6a2eada3952dfcb4671b28f271bd1140440139281b3c69aa",
+          "1c97f06193df25da6a2eada3952dfcb4671b28f271bd1140440139281b3c69aa"
+        ]
+      }
+    },
+    {
+      "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+      "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+      "specimen": "b",
+      "ruleId": "2d962603591aa928",
+      "package": "totem.spike.r2d962603591aa928",
+      "entrypoint": "totem/spike/r2d962603591aa928/result",
+      "recordSha256": "40bd79d7c970e21edced9b9ef90bedbec66e1fbf6d98d8c10e3dd6f6f19dbd19",
+      "recordFile": "records/b-astgrep-flat-empty-catch.rule.yaml",
+      "regoSha256": "634fc78f98b73f867c4bcf3fb2898ba7dc6acffd161c4cd1619dff8017f4c48b",
+      "regoComposition": {
+        "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+        "order": [
+          "policy.rego",
+          "globs.json",
+          "factSchemaLine"
+        ],
+        "components": {
+          "policy.rego": "a84403a07362e8cbd04226c9dc6cce0dca18b9a0d64281a23ce77cfd8010d681",
+          "globs.json": "17f9ced87f5bca2eaf7eb80bfe5c5e3c4f14608ec21090119f8a17e502ee6110",
+          "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+        },
+        "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+        "preimage": "policy.rego:a84403a07362e8cbd04226c9dc6cce0dca18b9a0d64281a23ce77cfd8010d681\nglobs.json:17f9ced87f5bca2eaf7eb80bfe5c5e3c4f14608ec21090119f8a17e502ee6110\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+      },
+      "wasmSha256": "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+      "bundleTarballSha256": "fbc9560131d3be79df8feefaeba334a0b5ba7a2c0d7ac726d8ba63b4d9490698",
+      "manifest": {
+        "revision": "",
+        "roots": [
+          ""
+        ],
+        "wasm": [
+          {
+            "entrypoint": "totem/spike/r2d962603591aa928/result",
+            "module": "/policy.wasm"
+          }
+        ],
+        "rego_version": 1
+      },
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+          "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c"
+        ],
+        "bundleTarballSha256": [
+          "fbc9560131d3be79df8feefaeba334a0b5ba7a2c0d7ac726d8ba63b4d9490698",
+          "fbc9560131d3be79df8feefaeba334a0b5ba7a2c0d7ac726d8ba63b4d9490698"
+        ]
+      }
+    },
+    {
+      "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+      "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+      "specimen": "c",
+      "ruleId": "d0815b6769304e26",
+      "package": "totem.spike.rd0815b6769304e26",
+      "entrypoint": "totem/spike/rd0815b6769304e26/result",
+      "recordSha256": "99c2deb2827c2f85785cd79d2322fa5a013af67a37d5cdecc4f49ded284aad44",
+      "recordFile": "records/c-astgrep-compound-spawn-shell.rule.yaml",
+      "regoSha256": "92b130e5b1d55064db19944322e3fcf9ac6e98a0274d0f03f1007d684a2c062a",
+      "regoComposition": {
+        "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+        "order": [
+          "policy.rego",
+          "globs.json",
+          "factSchemaLine"
+        ],
+        "components": {
+          "policy.rego": "2b9c56249bf510a48aac842344145908a8ea570b310f8232dfab5cbe05e97d94",
+          "globs.json": "d7f6019db06252129c43581dd13e5b72b0423253d45b6409e7ea101acc5b2ce2",
+          "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+        },
+        "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+        "preimage": "policy.rego:2b9c56249bf510a48aac842344145908a8ea570b310f8232dfab5cbe05e97d94\nglobs.json:d7f6019db06252129c43581dd13e5b72b0423253d45b6409e7ea101acc5b2ce2\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+      },
+      "wasmSha256": "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
+      "bundleTarballSha256": "7c85694cc7fddd47045e1a98546aa915d9425f3b76423678382aa3e0a39ec8ff",
+      "manifest": {
+        "revision": "",
+        "roots": [
+          ""
+        ],
+        "wasm": [
+          {
+            "entrypoint": "totem/spike/rd0815b6769304e26/result",
+            "module": "/policy.wasm"
+          }
+        ],
+        "rego_version": 1
+      },
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
+          "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc"
+        ],
+        "bundleTarballSha256": [
+          "7c85694cc7fddd47045e1a98546aa915d9425f3b76423678382aa3e0a39ec8ff",
+          "7c85694cc7fddd47045e1a98546aa915d9425f3b76423678382aa3e0a39ec8ff"
+        ]
+      }
+    },
+    {
+      "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+      "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+      "specimen": "c-supp",
+      "ruleId": "87aff037d7de47a7",
+      "package": "totem.spike.r87aff037d7de47a7",
+      "entrypoint": "totem/spike/r87aff037d7de47a7/result",
+      "recordSha256": "27ba70dd4820e67fc528c9c660f632f78586bc85608b4d783dc62897a8e7171d",
+      "recordFile": "records/c-supp-astgrep-compound-failopen-catch.rule.yaml",
+      "regoSha256": "e3d32564de9c7463a8ce70033a9b7378cbd306ebc68a4de19b05172000c42ca8",
+      "regoComposition": {
+        "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+        "order": [
+          "policy.rego",
+          "globs.json",
+          "factSchemaLine"
+        ],
+        "components": {
+          "policy.rego": "528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db",
+          "globs.json": "3288f10c51e1163046fec34c952242ec14cc6e64a2a58497ae2d80f4b66937a7",
+          "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+        },
+        "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+        "preimage": "policy.rego:528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db\nglobs.json:3288f10c51e1163046fec34c952242ec14cc6e64a2a58497ae2d80f4b66937a7\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+      },
+      "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+      "bundleTarballSha256": "db5eb1a9d2f8d3d628d00b854630fcdc143ac3f30fac87f4035cc668fdddab38",
+      "manifest": {
+        "revision": "",
+        "roots": [
+          ""
+        ],
+        "wasm": [
+          {
+            "entrypoint": "totem/spike/r87aff037d7de47a7/result",
+            "module": "/policy.wasm"
+          }
+        ],
+        "rego_version": 1
+      },
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+          "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec"
+        ],
+        "bundleTarballSha256": [
+          "db5eb1a9d2f8d3d628d00b854630fcdc143ac3f30fac87f4035cc668fdddab38",
+          "db5eb1a9d2f8d3d628d00b854630fcdc143ac3f30fac87f4035cc668fdddab38"
+        ]
+      }
+    },
+    {
+      "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+      "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+      "specimen": "d-line",
+      "ruleId": "0123456789abcdef",
+      "package": "totem.spike.r0123456789abcdef_d_line",
+      "entrypoint": "totem/spike/r0123456789abcdef_d_line/result",
+      "recordSha256": "76e5e1725e0c0fa0c4baee22304351bd2f05119018f53887068f2b47c67d4449",
+      "recordFile": "records/d-requires-line.rule.yaml",
+      "regoSha256": "cf5d25f929b85c0dadb0a56def1932c436084b9957e547758f444cf76bf0f8bb",
+      "regoComposition": {
+        "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+        "order": [
+          "policy.rego",
+          "globs.json",
+          "factSchemaLine"
+        ],
+        "components": {
+          "policy.rego": "264ef7932ae142ff405b6ff21c8e669f75c1fad0d85f67a35795890a12f7c109",
+          "globs.json": "573d33f195009cd4aedfd130b4f3c434163b2b1e8ff0bd9564292125bdac3fa5",
+          "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+        },
+        "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+        "preimage": "policy.rego:264ef7932ae142ff405b6ff21c8e669f75c1fad0d85f67a35795890a12f7c109\nglobs.json:573d33f195009cd4aedfd130b4f3c434163b2b1e8ff0bd9564292125bdac3fa5\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+      },
+      "wasmSha256": "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
+      "bundleTarballSha256": "7432111105ae10f226fd436a0c39815363f0033126897fb5f0450a70a466113f",
+      "manifest": {
+        "revision": "",
+        "roots": [
+          ""
+        ],
+        "wasm": [
+          {
+            "entrypoint": "totem/spike/r0123456789abcdef_d_line/result",
+            "module": "/policy.wasm"
+          }
+        ],
+        "rego_version": 1
+      },
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
+          "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10"
+        ],
+        "bundleTarballSha256": [
+          "7432111105ae10f226fd436a0c39815363f0033126897fb5f0450a70a466113f",
+          "7432111105ae10f226fd436a0c39815363f0033126897fb5f0450a70a466113f"
+        ]
+      }
+    },
+    {
+      "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+      "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+      "specimen": "d-file",
+      "ruleId": "0123456789abcdef",
+      "package": "totem.spike.r0123456789abcdef_d_file",
+      "entrypoint": "totem/spike/r0123456789abcdef_d_file/result",
+      "recordSha256": "048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239",
+      "recordFile": "records/d-requires-file.rule.yaml",
+      "regoSha256": "3525bdd8ec94033d51117dad49e69dca531570c529e85d98cc75887b5623392a",
+      "regoComposition": {
+        "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+        "order": [
+          "policy.rego",
+          "globs.json",
+          "factSchemaLine"
+        ],
+        "components": {
+          "policy.rego": "dcbcd77a041737297322928b74b650911c6eda6b4552bec20c70df5188382085",
+          "globs.json": "e28b298ed0a8d93c6eb9c0e00c0af87cd39d070c642be98b7e0f6aa038fcf5c9",
+          "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+        },
+        "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+        "preimage": "policy.rego:dcbcd77a041737297322928b74b650911c6eda6b4552bec20c70df5188382085\nglobs.json:e28b298ed0a8d93c6eb9c0e00c0af87cd39d070c642be98b7e0f6aa038fcf5c9\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+      },
+      "wasmSha256": "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
+      "bundleTarballSha256": "f7537894fa9ecfd5a32ab9a7dcfac7047f87746499d5dc91f1f8d6f89851ec6b",
+      "manifest": {
+        "revision": "",
+        "roots": [
+          ""
+        ],
+        "wasm": [
+          {
+            "entrypoint": "totem/spike/r0123456789abcdef_d_file/result",
+            "module": "/policy.wasm"
+          }
+        ],
+        "rego_version": 1
+      },
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
+          "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad"
+        ],
+        "bundleTarballSha256": [
+          "f7537894fa9ecfd5a32ab9a7dcfac7047f87746499d5dc91f1f8d6f89851ec6b",
+          "f7537894fa9ecfd5a32ab9a7dcfac7047f87746499d5dc91f1f8d6f89851ec6b"
+        ]
+      }
+    },
+    {
+      "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+      "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+      "specimen": "e",
+      "ruleId": "0123456789abcdef",
+      "package": "totem.spike.r0123456789abcdef_e",
+      "entrypoint": "totem/spike/r0123456789abcdef_e/result",
+      "recordSha256": "d42a48e025863d320a214ee5c1c577e437b8cf4b068f2d5572ac8f8bbcf12ee8",
+      "recordFile": "records/e-exception-excludeglobs.rule.yaml",
+      "regoSha256": "9f2bbf2bfc222ee9b91b0929a9df0edf53efdc3fc3eee66c032855f0a61e2de2",
+      "regoComposition": {
+        "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+        "order": [
+          "policy.rego",
+          "globs.json",
+          "factSchemaLine"
+        ],
+        "components": {
+          "policy.rego": "50cd2f2d98d6239e2d9c3546d088f22bd05bdb49495c06ce3636ace67cd79739",
+          "globs.json": "d9fe4718ea5ac3350c721aa9add0cd94ce3b65c5e4f44994a10b5788bccf539b",
+          "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+        },
+        "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+        "preimage": "policy.rego:50cd2f2d98d6239e2d9c3546d088f22bd05bdb49495c06ce3636ace67cd79739\nglobs.json:d9fe4718ea5ac3350c721aa9add0cd94ce3b65c5e4f44994a10b5788bccf539b\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+      },
+      "wasmSha256": "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
+      "bundleTarballSha256": "0c734aa1f6745cc413034b3ecd0b6cc1995ca128f4c39fa9704de5f1f0793eaa",
+      "manifest": {
+        "revision": "",
+        "roots": [
+          ""
+        ],
+        "wasm": [
+          {
+            "entrypoint": "totem/spike/r0123456789abcdef_e/result",
+            "module": "/policy.wasm"
+          }
+        ],
+        "rego_version": 1
+      },
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
+          "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9"
+        ],
+        "bundleTarballSha256": [
+          "0c734aa1f6745cc413034b3ecd0b6cc1995ca128f4c39fa9704de5f1f0793eaa",
+          "0c734aa1f6745cc413034b3ecd0b6cc1995ca128f4c39fa9704de5f1f0793eaa"
+        ]
+      }
+    }
+  ]
+}

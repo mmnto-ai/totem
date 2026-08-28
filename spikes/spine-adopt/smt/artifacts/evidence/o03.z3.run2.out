@@ -1,0 +1,27 @@
+sat
+(
+  (define-fun sev () String
+    "error")
+)
+sat
+(
+  (define-fun sev () String
+    "warning")
+)
+sat
+(
+  (define-fun sev () String
+    "error")
+)
+sat
+(
+  (define-fun sev () String
+    "warning")
+)
+sat
+(
+  (define-fun sev () String
+    "error")
+)
+unsat
+(sev-is-info sev-in-vocabulary)

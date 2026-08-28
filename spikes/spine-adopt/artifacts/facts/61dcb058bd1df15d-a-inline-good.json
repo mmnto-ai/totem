@@ -1,0 +1,22 @@
+{
+  "fixtureId": "a-inline-good",
+  "specimen": "a",
+  "ruleId": "61dcb058bd1df15d",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/records/a-regex-lessons-rm-guard.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "13d98138fc8570c8f5739b164a207838888ecaa3db26efe24f9f4cab53a1b050"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "scripts/deploy.sh",
+    "fileText": "rm .totem/lessons/lesson-cd27a5b0.md",
+    "lines": [
+      "rm .totem/lessons/lesson-cd27a5b0.md"
+    ],
+    "astMatches": []
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "fixtureId": "c-supp-inline-good",
+  "specimen": "c-supp",
+  "ruleId": "87aff037d7de47a7",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/records/c-supp-astgrep-compound-failopen-catch.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "83f1cea551dc00f12d3fa56e4fab69cdabde9727bfa2e56e2ce8d1b24a1f1051"
+  },
+  "astQuery": {
+    "rule": {
+      "kind": "catch_clause",
+      "not": {
+        "has": {
+          "kind": "throw_statement",
+          "stopBy": "end"
+        }
+      }
+    },
+    "language": "TypeScript"
+  },
+  "factBundle": {
+    "file": "packages/core/src/catch-site.ts",
+    "fileText": "try { doWork() } catch (err) { throw new Error('doWork failed', { cause: err }) }",
+    "lines": [
+      "try { doWork() } catch (err) { throw new Error('doWork failed', { cause: err }) }"
+    ],
+    "astMatches": []
+  }
+}

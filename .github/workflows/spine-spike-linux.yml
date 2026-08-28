@@ -1,0 +1,195 @@
+# Linux arm of the spine-adopt spike's day-14 "build matrix Windows+Linux"
+# deliverable (spec `.totem/specs/spine-spike.md` § Enrichment rows 3).
+#
+# Windows is measured on the operator's machine; this workflow is the Linux half.
+# It is deliberately branch-scoped: the spike is disposable, lives only on
+# `wt/spine-spike`, and must never run against `main` or perturb the repo's CI.
+#
+# Tool provisioning reads the URL + sha256 straight out of
+# `spikes/spine-adopt/toolchain.lock` so the lock stays the single source of
+# truth ("mutated only by an explicit re-pin commit"); nothing is pinned twice.
+name: Spine Spike (Linux)
+
+on:
+  push:
+    branches: [wt/spine-spike]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: spine-adopt harnesses on ubuntu-latest
+    runs-on: ubuntu-latest
+    env:
+      TOOLS_DIR: ${{ github.workspace }}/spikes/spine-adopt/tools
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # PINNED, not `@stable`. The `toolchain` input overrides the action's tag,
+      # so this installs exactly 1.96.1 — the same compiler the Windows arm was
+      # measured on. A floating `stable` lets two runs of the SAME commit build
+      # with different compilers, which makes the recorded build-matrix rows
+      # incomparable. Recorded in `spikes/spine-adopt/toolchain.lock` [rust];
+      # re-pin there and here together.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.96.1'
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: spikes/spine-adopt/wazero-probe/go.mod
+          cache-dependency-path: spikes/spine-adopt/wazero-probe/go.sum
+
+      - run: pnpm install --frozen-lockfile
+
+      # The harness file-URL-imports `packages/core/dist/index.js` (spec
+      # § Oracle arms, P5 ruling), so the dist must exist before any TS arm runs.
+      - run: pnpm -r build
+
+      # ── Pinned Linux toolchain, verified against toolchain.lock ─────────────
+      # Extracted into the spike's own (gitignored) tools/ dir, which is also
+      # where the harnesses' platform DEFAULT paths point — so the SPIKE_*_BIN
+      # values set below and the no-env defaults resolve to the same binaries.
+      - name: Provision pinned Linux tools (sha256-verified from toolchain.lock)
+        working-directory: spikes/spine-adopt
+        run: |
+          set -euo pipefail
+          mkdir -p tools
+          cd tools
+
+          # Read `key = "value"` out of a named TOML section of the lock.
+          lockval() {
+            awk -v sect="[$1]" -v key="$2" '
+              $0 == sect { inside = 1; next }
+              /^\[/      { inside = 0 }
+              inside && $1 == key { gsub(/"/, "", $3); print $3; exit }
+            ' ../toolchain.lock
+          }
+
+          fetch() { # <section> <output-filename>
+            local url sha
+            url="$(lockval "$1" url)"
+            sha="$(lockval "$1" sha256)"
+            if [ -z "$url" ] || [ -z "$sha" ]; then
+              echo "toolchain.lock: missing url/sha256 for [$1]" >&2
+              exit 1
+            fi
+            echo "[$1] $url"
+            curl -fsSL --retry 3 -o "$2" "$url"
+            echo "${sha}  $2" | sha256sum -c -
+          }
+
+          fetch opa.linux   opa_linux_amd64_static
+          fetch z3.linux    z3-5.1.0-x64-glibc-2.39.zip
+          fetch cvc5.linux  cvc5-Linux-x86_64-static.zip
+
+          chmod +x opa_linux_amd64_static
+          unzip -q z3-5.1.0-x64-glibc-2.39.zip
+          unzip -q cvc5-Linux-x86_64-static.zip
+          chmod +x z3-5.1.0-x64-glibc-2.39/bin/z3 cvc5-Linux-x86_64-static/bin/cvc5
+
+          ./opa_linux_amd64_static version
+          ./z3-5.1.0-x64-glibc-2.39/bin/z3 --version
+          ./cvc5-Linux-x86_64-static/bin/cvc5 --version | head -1
+
+      # ── (a) OPA Rego→Wasm verdict differential ─────────────────────────────
+      # `all` FIRST (census → verify-records → facts → shipped-verdicts) so the
+      # shipped runtime, fact bundles, and reference verdicts are all re-derived
+      # ON LINUX — the matrix row measures the cross-platform runtime (incl. the
+      # line-ending axis in FactBundle.fileText), not just the OPA arms replayed
+      # against Windows-generated fixtures. Then `differential` = lower →
+      # build-wasm → certify → host:opa → host:regorus → compare (host arms are
+      # `cargo run`, hence the rust toolchain above).
+      #
+      # CERTIFY IS WIRED AT THE SCRIPT LEVEL, not as a step here (spec § Actuator
+      # slice 6: "the certify step joins the Linux workflow between build-wasm and
+      # the host arms, so both platforms exercise it"). Putting it inside
+      # `differential` puts it in exactly that position on BOTH platforms from one
+      # edit, so Windows and Linux cannot drift into running different pipelines —
+      # which a second, workflow-only step is free to do. `npm run certify` drives
+      # all three hosts, including the Go/wazero arm, which is why setup-go above
+      # must stay ahead of this step.
+      - name: Spike 1 — shipped runtime re-derived on Linux
+        working-directory: spikes/spine-adopt
+        env:
+          SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
+        run: npm run all
+      - name: Spike 1 — OPA differential
+        working-directory: spikes/spine-adopt
+        env:
+          SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
+        run: npm run differential
+
+      # ── (b) SMT obligations, CLI floor ─────────────────────────────────────
+      # This is the deliverable floor and MUST pass; the native binding is a
+      # separate, explicitly non-fatal step below.
+      - name: Spike 2 — SMT obligations (pinned CLI arm)
+        working-directory: spikes/spine-adopt/smt
+        env:
+          SPIKE_Z3_BIN: ${{ env.TOOLS_DIR }}/z3-5.1.0-x64-glibc-2.39/bin/z3
+          SPIKE_CVC5_BIN: ${{ env.TOOLS_DIR }}/cvc5-Linux-x86_64-static/bin/cvc5
+        run: cargo run
+
+      # NON-FATAL by design: whether z3-sys links against the pinned Linux
+      # release is itself the binding-maturity finding the spike is measuring
+      # (spec § Failure modes, "z3-sys/cvc5 build fails" => recorded build-matrix
+      # row, not a spike failure). The CLI floor above already passed.
+      - name: Spike 2 — z3 binding arm (non-fatal build-matrix probe)
+        id: binding
+        continue-on-error: true
+        working-directory: spikes/spine-adopt/smt
+        env:
+          SPIKE_Z3_BIN: ${{ env.TOOLS_DIR }}/z3-5.1.0-x64-glibc-2.39/bin/z3
+          SPIKE_CVC5_BIN: ${{ env.TOOLS_DIR }}/cvc5-Linux-x86_64-static/bin/cvc5
+          SPIKE_Z3_ROOT: ${{ env.TOOLS_DIR }}/z3-5.1.0-x64-glibc-2.39
+          Z3_SYS_Z3_HEADER: ${{ env.TOOLS_DIR }}/z3-5.1.0-x64-glibc-2.39/include/z3.h
+          LD_LIBRARY_PATH: ${{ env.TOOLS_DIR }}/z3-5.1.0-x64-glibc-2.39/bin
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          cargo run --features binding-z3 2>&1 | tee artifacts/binding-z3-linux.log
+
+      - name: Record the binding arm's outcome as an artifact row
+        if: always()
+        working-directory: spikes/spine-adopt/smt
+        run: |
+          mkdir -p artifacts
+          printf '%s\n' \
+            "platform=linux/amd64 (ubuntu-latest)" \
+            "step=cargo run --features binding-z3" \
+            "outcome=${{ steps.binding.outcome }}" \
+            "z3_pin=toolchain.lock [z3.linux] 5.1.0 (x64-glibc-2.39)" \
+            > artifacts/binding-z3-linux.outcome.txt
+          cat artifacts/binding-z3-linux.outcome.txt
+
+      # ── (c) wazero component-model / core-Wasm probe ───────────────────────
+      # Runs AFTER the differential: it reads that run's lowering-rejects.json,
+      # opa-verdicts.json and the rego/*/policy.wasm artifacts.
+      - name: Enrichment — wazero probe
+        working-directory: spikes/spine-adopt/wazero-probe
+        run: |
+          go test ./...
+          go run .
+
+      - name: Upload spike artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spine-spike-linux-artifacts
+          if-no-files-found: error
+          path: |
+            spikes/spine-adopt/artifacts/**
+            spikes/spine-adopt/**/artifacts/**

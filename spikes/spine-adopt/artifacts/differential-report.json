@@ -1,0 +1,938 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/compare.mts",
+  "contract": "rego/LOWERING.md § Comparator + spec § Differential units (\"a VERDICT is the violation MULTISET\", \"`fired` derives from violations\")",
+  "comparisonKey": {
+    "violations": "(rule_id, line_number, ordinal) as a MULTISET",
+    "events": "(kind, line_number) as a MULTISET",
+    "ordinalOnTheShippedArm": "DERIVED — the shipped Violation carries no ordinal. regex ⇒ 0; ast-grep ⇒ the index of the FactBundle astMatches entry the violation pairs with, matched greedily by lineNumber. An unpairable violation aborts the run rather than defaulting to 0.",
+    "eventProjection": "The shipped event context `line` is the line NUMBER (the Violation `line` is the matched TEXT — projecting the wrong one would compare strings against integers)."
+  },
+  "armProvenance": {
+    "shipped": "spikes/spine-adopt/src/shipped-verdicts.mts",
+    "opa": "spikes/spine-adopt/host/src/main.rs --arm opa — opa-wasm 0.3.2 (matrix-org/rust-opa-wasm)",
+    "regorus": "spikes/spine-adopt/host/src/main.rs --arm regorus — regorus 0.11.0 (microsoft/regorus)"
+  },
+  "explanationClasses": [
+    {
+      "id": "ORDINAL-DERIVATION-ONLY",
+      "fires": "the (rule_id, line_number) multisets and the event streams are identical and only the ordinal differs",
+      "timesFired": 0,
+      "rationale": "Deliberately the ONLY registered class. A wider rule would launder a real semantic divergence as \"explained\", which is the failure a differential exists to prevent."
+    }
+  ],
+  "summary": {
+    "shipped-vs-opa": {
+      "MATCH": 24,
+      "EXPLAINED-DIVERGENCE": 0,
+      "UNEXPLAINED-DIVERGENCE": 0
+    },
+    "shipped-vs-regorus": {
+      "MATCH": 24,
+      "EXPLAINED-DIVERGENCE": 0,
+      "UNEXPLAINED-DIVERGENCE": 0
+    },
+    "opa-vs-regorus": {
+      "MATCH": 24,
+      "EXPLAINED-DIVERGENCE": 0,
+      "UNEXPLAINED-DIVERGENCE": 0
+    },
+    "total": {
+      "MATCH": 72,
+      "EXPLAINED-DIVERGENCE": 0,
+      "UNEXPLAINED-DIVERGENCE": 0
+    }
+  },
+  "unexplained": [],
+  "explained": [],
+  "pairs": [
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-empty",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-empty",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-empty",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-unreadable",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-unreadable",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-unreadable",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-bad",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-bad",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-bad",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-good",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-good",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-good",
+      "specimen": "d-file",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-bad",
+      "specimen": "d-line",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-bad",
+      "specimen": "d-line",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-bad",
+      "specimen": "d-line",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-good",
+      "specimen": "d-line",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-good",
+      "specimen": "d-line",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-good",
+      "specimen": "d-line",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-bad",
+      "specimen": "e",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-bad",
+      "specimen": "e",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-bad",
+      "specimen": "e",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-good",
+      "specimen": "e",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-good",
+      "specimen": "e",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-good",
+      "specimen": "e",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-fail",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-fail",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-fail",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-pass",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-pass",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-pass",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-bad",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-bad",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-bad",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-good",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-good",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-good",
+      "specimen": "b",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-fail",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-fail",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-fail",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-pass",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-pass",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-pass",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-bad",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-bad",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-bad",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-good",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-good",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-good",
+      "specimen": "a",
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-fail",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-fail",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-fail",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-pass",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-pass",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-pass",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-bad",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-bad",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-bad",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-good",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-good",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-good",
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-fail",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-fail",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-fail",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-pass",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-pass",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-pass",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-bad",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-bad",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-bad",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-good",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-good",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-good",
+      "specimen": "c",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    }
+  ],
+  "checks": [
+    {
+      "name": "DETECTOR IDENTITY — an unperturbed pair MATCHES (the detector is not stuck on \"divergent\")",
+      "ok": true,
+      "detail": "expected MATCH, got MATCH"
+    },
+    {
+      "name": "DETECTOR MUTANT — a shifted line_number is UNEXPLAINED",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR MUTANT — a DROPPED violation is UNEXPLAINED (multiplicity, not just membership)",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR MUTANT — an identical violation multiset with a DIVERGENT event stream is UNEXPLAINED",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR MUTANT — a `suppress` event where the other arm emitted `trigger` is UNEXPLAINED (kind is compared, not just line)",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR MUTANT — an ERROR ROW is UNEXPLAINED, never a clean zero",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR MUTANT — `fired`/`matchCount` that do NOT derive from the violation multiset is UNEXPLAINED",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR MUTANT — an ORDINAL-ONLY permutation is EXPLAINED (and only this one is)",
+      "ok": true,
+      "detail": "expected EXPLAINED-DIVERGENCE, got EXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "the fact bundles and the OPA arm agree on the fixture count",
+      "ok": true,
+      "detail": "24"
+    },
+    {
+      "name": "the fact bundles and the regorus arm agree on the fixture count",
+      "ok": true,
+      "detail": "24"
+    },
+    {
+      "name": "shipped arm produced 24 verdict rows",
+      "ok": true,
+      "detail": "24"
+    },
+    {
+      "name": "opa arm produced 24 verdict rows",
+      "ok": true,
+      "detail": "24"
+    },
+    {
+      "name": "regorus arm produced 24 verdict rows",
+      "ok": true,
+      "detail": "24"
+    },
+    {
+      "name": "the join key (ruleId, fixtureId) is unique on every arm",
+      "ok": true,
+      "detail": "[24,24,24]"
+    },
+    {
+      "name": "every shipped pair has an opa row AND a regorus row (no silent skip)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "the corpus is DISCRIMINATING — the shipped arm both fires and stays silent, and at least one row is multi-violation",
+      "ok": true,
+      "detail": "13 fired / 11 silent / max matchCount 2"
+    },
+    {
+      "name": "shipped-vs-opa — every pair MATCHES (the ruled PASS criterion: identical violation multisets AND event streams on every fixture)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "shipped-vs-regorus — no unexplained divergence",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "opa-vs-regorus — no unexplained divergence (a divergence here is a finding ABOUT regorus)",
+      "ok": true,
+      "detail": "0"
+    }
+  ]
+}

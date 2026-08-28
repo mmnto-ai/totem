@@ -1,0 +1,829 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/certify-verify.mts",
+  "contract": "spec `.totem/specs/spine-spike.md` § Actuator slice, \"Invariants to lock\" — asserted against what src/certify.mts left on disk, with the pre-slice chains read from `git show HEAD:`.",
+  "chainPreservation": {
+    "method": "BIDIRECTIONAL, chosen per chain from the COMMITTED file's own shape, so the invariant survives its own commit. `pre-commit` (the committed chain carries no `manifestSha256`): two independent claims — (a) a BYTE claim, the published file starts with the committed file's bytes up to its closing brace, so the extension is appended and nothing was re-serialised; (b) a STRUCTURAL claim, every pre-slice key holds an identical value and the added key set is exactly the extension's. `drift-detection` (the committed chain already carries `manifestSha256`): the published chain must be BYTE-EQUAL to it, and no key may be added, changed or removed — certification is deterministic, so any difference is drift. In both modes the named hashes are checked unchanged and the manifest hash is RE-DERIVED from the module.",
+    "modeMarker": "the presence of `manifestSha256` in the committed chain",
+    "preSliceSource": "git show HEAD:spikes/spine-adopt/artifacts/chains/<name>.json",
+    "expectedAddedKeys": [
+      "certification",
+      "certified",
+      "entrypointManifest",
+      "manifestSha256",
+      "publishedBy"
+    ],
+    "modesRun": {
+      "r0123456789abcdef_d_file.json": "drift-detection",
+      "r0123456789abcdef_d_line.json": "drift-detection",
+      "r0123456789abcdef_e.json": "drift-detection",
+      "r2d962603591aa928.json": "drift-detection",
+      "r61dcb058bd1df15d.json": "drift-detection",
+      "r87aff037d7de47a7.json": "drift-detection",
+      "rd0815b6769304e26.json": "drift-detection"
+    },
+    "rows": [
+      {
+        "chain": "r0123456789abcdef_d_file.json",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
+        "allModeChecksPassed": true,
+        "preservedBytes": 5448,
+        "publishedBytes": 5448,
+        "changedKeys": [],
+        "addedKeys": [],
+        "recordSha256": "048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239",
+        "regoSha256": "3525bdd8ec94033d51117dad49e69dca531570c529e85d98cc75887b5623392a",
+        "wasmSha256": "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
+        "manifestSha256": "15b853c2fe8f9f4de2a2f9525ad671042d401846b9dacb09c2d5bb16a10705ec",
+        "manifestSha256RederivedFromModule": "15b853c2fe8f9f4de2a2f9525ad671042d401846b9dacb09c2d5bb16a10705ec"
+      },
+      {
+        "chain": "r0123456789abcdef_d_line.json",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
+        "allModeChecksPassed": true,
+        "preservedBytes": 5448,
+        "publishedBytes": 5448,
+        "changedKeys": [],
+        "addedKeys": [],
+        "recordSha256": "76e5e1725e0c0fa0c4baee22304351bd2f05119018f53887068f2b47c67d4449",
+        "regoSha256": "cf5d25f929b85c0dadb0a56def1932c436084b9957e547758f444cf76bf0f8bb",
+        "wasmSha256": "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
+        "manifestSha256": "21368409551a7f6424d5cd1512da006ba3982ae6bf118eb6de1bec25916f7ecc",
+        "manifestSha256RederivedFromModule": "21368409551a7f6424d5cd1512da006ba3982ae6bf118eb6de1bec25916f7ecc"
+      },
+      {
+        "chain": "r0123456789abcdef_e.json",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
+        "allModeChecksPassed": true,
+        "preservedBytes": 5412,
+        "publishedBytes": 5412,
+        "changedKeys": [],
+        "addedKeys": [],
+        "recordSha256": "d42a48e025863d320a214ee5c1c577e437b8cf4b068f2d5572ac8f8bbcf12ee8",
+        "regoSha256": "9f2bbf2bfc222ee9b91b0929a9df0edf53efdc3fc3eee66c032855f0a61e2de2",
+        "wasmSha256": "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
+        "manifestSha256": "9d75a0488d8057d16c80be39e81cda8c9d215d86f6c48f05400fdfb92e29d0d8",
+        "manifestSha256RederivedFromModule": "9d75a0488d8057d16c80be39e81cda8c9d215d86f6c48f05400fdfb92e29d0d8"
+      },
+      {
+        "chain": "r2d962603591aa928.json",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
+        "allModeChecksPassed": true,
+        "preservedBytes": 5398,
+        "publishedBytes": 5398,
+        "changedKeys": [],
+        "addedKeys": [],
+        "recordSha256": "40bd79d7c970e21edced9b9ef90bedbec66e1fbf6d98d8c10e3dd6f6f19dbd19",
+        "regoSha256": "634fc78f98b73f867c4bcf3fb2898ba7dc6acffd161c4cd1619dff8017f4c48b",
+        "wasmSha256": "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+        "manifestSha256": "084b4852e2180feb456be6d45be05ba5a705cd4cf86748f5995b7d19616d83a7",
+        "manifestSha256RederivedFromModule": "084b4852e2180feb456be6d45be05ba5a705cd4cf86748f5995b7d19616d83a7"
+      },
+      {
+        "chain": "r61dcb058bd1df15d.json",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
+        "allModeChecksPassed": true,
+        "preservedBytes": 5396,
+        "publishedBytes": 5396,
+        "changedKeys": [],
+        "addedKeys": [],
+        "recordSha256": "24be123733cda7a3a5a345d2fedb0633607344fdc375af587a8a7e31f2f345ad",
+        "regoSha256": "12c788f645b3369a52dbfae52f17f744f21e524016b62d4b72d4ec777c1f2abc",
+        "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+        "manifestSha256": "d5a3b732780f60232dde8f6f7e81e0eff5269fe1b2781a652cf5900c7c7c5616",
+        "manifestSha256RederivedFromModule": "d5a3b732780f60232dde8f6f7e81e0eff5269fe1b2781a652cf5900c7c7c5616"
+      },
+      {
+        "chain": "r87aff037d7de47a7.json",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
+        "allModeChecksPassed": true,
+        "preservedBytes": 5415,
+        "publishedBytes": 5415,
+        "changedKeys": [],
+        "addedKeys": [],
+        "recordSha256": "27ba70dd4820e67fc528c9c660f632f78586bc85608b4d783dc62897a8e7171d",
+        "regoSha256": "e3d32564de9c7463a8ce70033a9b7378cbd306ebc68a4de19b05172000c42ca8",
+        "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+        "manifestSha256": "d3fcc0b58295aeb494b75769283efe7eb4c4a165308913b23111e19e8c7b37c8",
+        "manifestSha256RederivedFromModule": "d3fcc0b58295aeb494b75769283efe7eb4c4a165308913b23111e19e8c7b37c8"
+      },
+      {
+        "chain": "rd0815b6769304e26.json",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
+        "allModeChecksPassed": true,
+        "preservedBytes": 5402,
+        "publishedBytes": 5402,
+        "changedKeys": [],
+        "addedKeys": [],
+        "recordSha256": "99c2deb2827c2f85785cd79d2322fa5a013af67a37d5cdecc4f49ded284aad44",
+        "regoSha256": "92b130e5b1d55064db19944322e3fcf9ac6e98a0274d0f03f1007d684a2c062a",
+        "wasmSha256": "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
+        "manifestSha256": "70b6c0bb0a917147af8d87a27cda02626384870f7e28869a688c2c3c6492a8f8",
+        "manifestSha256RederivedFromModule": "70b6c0bb0a917147af8d87a27cda02626384870f7e28869a688c2c3c6492a8f8"
+      }
+    ],
+    "selfTest": {
+      "why": "Only one mode can be live in a given repository state. The other is exercised here on constructed inputs — including a falsifier for the equality claim — so neither branch can rot unobserved while the repository sits on one side of the commit.",
+      "cases": [
+        {
+          "case": "post-commit simulation (current file as the committed input)",
+          "chain": "r0123456789abcdef_d_file.json",
+          "mode": "drift-detection",
+          "passed": true,
+          "rows": [
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+              "ok": true,
+              "detail": "5448 bytes identical"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+              "ok": true,
+              "detail": "changed=[] added=[] removed=[]"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `recordSha256` is unchanged",
+              "ok": true,
+              "detail": "048f8da563164389"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `regoSha256` is unchanged",
+              "ok": true,
+              "detail": "3525bdd8ec94033d"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `wasmSha256` is unchanged",
+              "ok": true,
+              "detail": "07b771da11130e61"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `certified` is true",
+              "ok": true,
+              "detail": "true"
+            }
+          ]
+        },
+        {
+          "case": "equality-mode falsifier (a whitespace-only difference)",
+          "chain": "r0123456789abcdef_d_file.json",
+          "mode": "drift-detection",
+          "expected": "the BYTE claim fails, every structural claim still passes",
+          "behavedAsExpected": true,
+          "rows": [
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+              "ok": false,
+              "detail": "DRIFT at byte 5447 — committed \"/src/certify.mts (certification PASS)\\\"\\n} \\n\" vs published \"/src/certify.mts (certification PASS)\\\"\\n}\\n\""
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+              "ok": true,
+              "detail": "changed=[] added=[] removed=[]"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `recordSha256` is unchanged",
+              "ok": true,
+              "detail": "048f8da563164389"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `regoSha256` is unchanged",
+              "ok": true,
+              "detail": "3525bdd8ec94033d"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `wasmSha256` is unchanged",
+              "ok": true,
+              "detail": "07b771da11130e61"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `certified` is true",
+              "ok": true,
+              "detail": "true"
+            }
+          ]
+        },
+        {
+          "case": "pre-commit mode against a synthetic pre-slice baseline (the five added keys removed)",
+          "chain": "r0123456789abcdef_d_file.json",
+          "mode": "pre-commit",
+          "passed": true,
+          "rows": [
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2506 bytes (the extension is appended, never interleaved)",
+              "ok": true,
+              "detail": "2506/5448 bytes carried through verbatim"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: [pre-commit] no pre-slice key CHANGED value",
+              "ok": true,
+              "detail": "[]"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: [pre-commit] the added keys are EXACTLY the extension's",
+              "ok": true,
+              "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `recordSha256` is unchanged",
+              "ok": true,
+              "detail": "048f8da563164389"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `regoSha256` is unchanged",
+              "ok": true,
+              "detail": "3525bdd8ec94033d"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `wasmSha256` is unchanged",
+              "ok": true,
+              "detail": "07b771da11130e61"
+            },
+            {
+              "name": "INV 2 — r0123456789abcdef_d_file.json: `certified` is true",
+              "ok": true,
+              "detail": "true"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "checks": [
+    {
+      "name": "INV 1 — the report carries all 7 specimen bundles",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "name": "INV 1 — every specimen bundle certifies PASS",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 1 — and every specimen was actually EVALUATED (a PASS that skipped the eval would be vacuous)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 2 — the published chain set is exactly the pre-slice committed chain set",
+      "ok": true,
+      "detail": "[\"r0123456789abcdef_d_file.json\",\"r0123456789abcdef_d_line.json\",\"r0123456789abcdef_e.json\",\"r2d962603591aa928.json\",\"r61dcb058bd1df15d.json\",\"r87aff037d7de47a7.json\",\"rd0815b6769304e26.json\"]"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+      "ok": true,
+      "detail": "5448 bytes identical"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+      "ok": true,
+      "detail": "changed=[] added=[] removed=[]"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: `recordSha256` is unchanged",
+      "ok": true,
+      "detail": "048f8da563164389"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: `regoSha256` is unchanged",
+      "ok": true,
+      "detail": "3525bdd8ec94033d"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: `wasmSha256` is unchanged",
+      "ok": true,
+      "detail": "07b771da11130e61"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: `certified` is true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"15b853c2fe8f9f4de2a2f9525ad671042d401846b9dacb09c2d5bb16a10705ec\""
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"048f8da56316\",\"ir\":\"3525bdd8ec94\",\"guardedPolicy\":\"dcbcd77a0417\",\"entrypointManifest\":\"15b853c2fe8f\",\"finalWasm\":\"07b771da1113\"}"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"dcbcd77a041737297322928b74b650911c6eda6b4552bec20c70df5188382085\""
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_file.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+      "ok": true,
+      "detail": "5448 bytes identical"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+      "ok": true,
+      "detail": "changed=[] added=[] removed=[]"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: `recordSha256` is unchanged",
+      "ok": true,
+      "detail": "76e5e1725e0c0fa0"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: `regoSha256` is unchanged",
+      "ok": true,
+      "detail": "cf5d25f929b85c0d"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: `wasmSha256` is unchanged",
+      "ok": true,
+      "detail": "ea46fa323435ea07"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: `certified` is true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"21368409551a7f6424d5cd1512da006ba3982ae6bf118eb6de1bec25916f7ecc\""
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"76e5e1725e0c\",\"ir\":\"cf5d25f929b8\",\"guardedPolicy\":\"264ef7932ae1\",\"entrypointManifest\":\"21368409551a\",\"finalWasm\":\"ea46fa323435\"}"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"264ef7932ae142ff405b6ff21c8e669f75c1fad0d85f67a35795890a12f7c109\""
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_d_line.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+      "ok": true,
+      "detail": "5412 bytes identical"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+      "ok": true,
+      "detail": "changed=[] added=[] removed=[]"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: `recordSha256` is unchanged",
+      "ok": true,
+      "detail": "d42a48e025863d32"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: `regoSha256` is unchanged",
+      "ok": true,
+      "detail": "9f2bbf2bfc222ee9"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: `wasmSha256` is unchanged",
+      "ok": true,
+      "detail": "b81f809552a233b3"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: `certified` is true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"9d75a0488d8057d16c80be39e81cda8c9d215d86f6c48f05400fdfb92e29d0d8\""
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"d42a48e02586\",\"ir\":\"9f2bbf2bfc22\",\"guardedPolicy\":\"50cd2f2d98d6\",\"entrypointManifest\":\"9d75a0488d80\",\"finalWasm\":\"b81f809552a2\"}"
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"50cd2f2d98d6239e2d9c3546d088f22bd05bdb49495c06ce3636ace67cd79739\""
+    },
+    {
+      "name": "INV 2 — r0123456789abcdef_e.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+      "ok": true,
+      "detail": "5398 bytes identical"
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+      "ok": true,
+      "detail": "changed=[] added=[] removed=[]"
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: `recordSha256` is unchanged",
+      "ok": true,
+      "detail": "40bd79d7c970e21e"
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: `regoSha256` is unchanged",
+      "ok": true,
+      "detail": "634fc78f98b73f86"
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: `wasmSha256` is unchanged",
+      "ok": true,
+      "detail": "761f95f29e6e4272"
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: `certified` is true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"084b4852e2180feb456be6d45be05ba5a705cd4cf86748f5995b7d19616d83a7\""
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"40bd79d7c970\",\"ir\":\"634fc78f98b7\",\"guardedPolicy\":\"a84403a07362\",\"entrypointManifest\":\"084b4852e218\",\"finalWasm\":\"761f95f29e6e\"}"
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"a84403a07362e8cbd04226c9dc6cce0dca18b9a0d64281a23ce77cfd8010d681\""
+    },
+    {
+      "name": "INV 2 — r2d962603591aa928.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+      "ok": true,
+      "detail": "5396 bytes identical"
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+      "ok": true,
+      "detail": "changed=[] added=[] removed=[]"
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: `recordSha256` is unchanged",
+      "ok": true,
+      "detail": "24be123733cda7a3"
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: `regoSha256` is unchanged",
+      "ok": true,
+      "detail": "12c788f645b3369a"
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: `wasmSha256` is unchanged",
+      "ok": true,
+      "detail": "757f8118a34de759"
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: `certified` is true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"d5a3b732780f60232dde8f6f7e81e0eff5269fe1b2781a652cf5900c7c7c5616\""
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"24be123733cd\",\"ir\":\"12c788f645b3\",\"guardedPolicy\":\"77942137614c\",\"entrypointManifest\":\"d5a3b732780f\",\"finalWasm\":\"757f8118a34d\"}"
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"77942137614cd9016fc286a88c8db112f238b810196b49758ec30c0dd1b34829\""
+    },
+    {
+      "name": "INV 2 — r61dcb058bd1df15d.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+      "ok": true,
+      "detail": "5415 bytes identical"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+      "ok": true,
+      "detail": "changed=[] added=[] removed=[]"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `recordSha256` is unchanged",
+      "ok": true,
+      "detail": "27ba70dd4820e67f"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `regoSha256` is unchanged",
+      "ok": true,
+      "detail": "e3d32564de9c7463"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `wasmSha256` is unchanged",
+      "ok": true,
+      "detail": "f1c2c73119b1f5e6"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `certified` is true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"d3fcc0b58295aeb494b75769283efe7eb4c4a165308913b23111e19e8c7b37c8\""
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"27ba70dd4820\",\"ir\":\"e3d32564de9c\",\"guardedPolicy\":\"528c8d80ce14\",\"entrypointManifest\":\"d3fcc0b58295\",\"finalWasm\":\"f1c2c73119b1\"}"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db\""
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+      "ok": true,
+      "detail": "5402 bytes identical"
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+      "ok": true,
+      "detail": "changed=[] added=[] removed=[]"
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: `recordSha256` is unchanged",
+      "ok": true,
+      "detail": "99c2deb2827c2f85"
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: `regoSha256` is unchanged",
+      "ok": true,
+      "detail": "92b130e5b1d55064"
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: `wasmSha256` is unchanged",
+      "ok": true,
+      "detail": "5aa898a084d8214d"
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: `certified` is true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"70b6c0bb0a917147af8d87a27cda02626384870f7e28869a688c2c3c6492a8f8\""
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"99c2deb2827c\",\"ir\":\"92b130e5b1d5\",\"guardedPolicy\":\"2b9c56249bf5\",\"entrypointManifest\":\"70b6c0bb0a91\",\"finalWasm\":\"5aa898a084d8\"}"
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"2b9c56249bf510a48aac842344145908a8ea570b310f8232dfab5cbe05e97d94\""
+    },
+    {
+      "name": "INV 2 — rd0815b6769304e26.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 self-test — a committed chain that ALREADY carries the extension selects `drift-detection`",
+      "ok": true,
+      "detail": "\"drift-detection\""
+    },
+    {
+      "name": "INV 2 self-test — and the published chain PASSES equality mode against it (so the invariant survives its own commit)",
+      "ok": true,
+      "detail": "6/6 checks pass; none failing"
+    },
+    {
+      "name": "INV 2 self-test — equality mode has TEETH: a one-byte whitespace difference FAILS it while every structural key still matches",
+      "ok": true,
+      "detail": "byteClaim=FAILED (correct), structuralClaims=all passed"
+    },
+    {
+      "name": "INV 2 self-test — a committed chain WITHOUT the extension selects `pre-commit`",
+      "ok": true,
+      "detail": "\"pre-commit\""
+    },
+    {
+      "name": "INV 2 self-test — and the additive-extension proof PASSES against it (byte prefix + exactly the five added keys)",
+      "ok": true,
+      "detail": "7/7 checks pass; none failing"
+    },
+    {
+      "name": "INV 3 — both negative conformance fixtures are present",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "name": "INV 3 — fixture:neg-lookahead is BLOCKED",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "INV 3 — fixture:neg-lookahead carries one of the five TYPED reasons",
+      "ok": true,
+      "detail": "empty-result-set — `totem/spike/certfix_neg_lookahead/result`: the entrypoint returned an EMPTY RESULT SET — the guarded `result` rule was UNDEFINED (`patterns_compile` or `facts_wellformed` failed). Never a zero-violation verdict."
+    },
+    {
+      "name": "INV 3 — fixture:neg-lookahead has NO chain and DOES have a blocked artifact",
+      "ok": true,
+      "detail": "[null,true]"
+    },
+    {
+      "name": "INV 3 — fixture:backreference is BLOCKED",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "INV 3 — fixture:backreference carries one of the five TYPED reasons",
+      "ok": true,
+      "detail": "empty-result-set — `totem/spike/certfix_backreference/result`: the entrypoint returned an EMPTY RESULT SET — the guarded `result` rule was UNDEFINED (`patterns_compile` or `facts_wellformed` failed). Never a zero-violation verdict."
+    },
+    {
+      "name": "INV 3 — fixture:backreference has NO chain and DOES have a blocked artifact",
+      "ok": true,
+      "detail": "[null,true]"
+    },
+    {
+      "name": "INV 3 — each negative fixture is traceable to the corpus rule it transcribes",
+      "ok": true,
+      "detail": "[\"80192e6ac2a1dd3c\",\"e64911592b774cc6\"]"
+    },
+    {
+      "name": "INV 4 — the schema-invalid sentinel is REFUSED",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "INV 4 — with the pre-eval reason `schema-invalid-sentinel`",
+      "ok": true,
+      "detail": "\"schema-invalid-sentinel\""
+    },
+    {
+      "name": "INV 4 — refused BEFORE any eval: zero host invocations, and the bundle was never evaluated",
+      "ok": true,
+      "detail": "hostInvocations=0, evaluated=false"
+    },
+    {
+      "name": "INV 4 — the refusal names MULTIPLE independent schema violations (not one lucky check)",
+      "ok": true,
+      "detail": "6: unknown key(s) `surprise` — the schema line is exact | `file` must be a string (got number) | `fileText` must be a string or null (got array) | `lines[1]` must be a string (got number) | `lines[2]` must be a string (got null) | `astMatches` must be an array (got string)"
+    },
+    {
+      "name": "INV 5 — the two-entrypoint control is present",
+      "ok": true,
+      "detail": "fixture:two-entrypoints"
+    },
+    {
+      "name": "INV 5 — it is BLOCKED by the entrypoint-set assertion",
+      "ok": true,
+      "detail": "\"entrypoint-set-not-single-result\""
+    },
+    {
+      "name": "INV 5 — the assertion itself reports NOT-ok",
+      "ok": true,
+      "detail": "false"
+    },
+    {
+      "name": "INV 5 — it declares TWO entrypoints, both EVALUATED",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "name": "INV 5 — and BOTH classify PASS, so the assertion has TEETH: nothing else blocked this bundle",
+      "ok": true,
+      "detail": "result=PASS, side_result=PASS"
+    },
+    {
+      "name": "INV 5 — and it earned NO chain",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "INV 5 — every CERTIFIED bundle passed the same assertion",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — neg-lookahead was asked of all THREE hosts",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: every host produced an ERROR row",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: every error row is HOST-ORIGINATED — a non-empty error string from the host's own failure rule",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: each host names the function that raised it",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: the three error strings are DISTINCT texts, so no two hosts are being reported from one reading",
+      "ok": true,
+      "detail": "wasmtime (rust-opa-wasm): EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFI | regorus: regorus eval_rule(data.totem.spike.certfix_neg_lookahead.res | wazero: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFI"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: no host returned a clean zero",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — backreference was asked of all THREE hosts",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "INV 6 — backreference: every host produced an ERROR row",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — backreference: every error row is HOST-ORIGINATED — a non-empty error string from the host's own failure rule",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — backreference: each host names the function that raised it",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — backreference: the three error strings are DISTINCT texts, so no two hosts are being reported from one reading",
+      "ok": true,
+      "detail": "wasmtime (rust-opa-wasm): EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFI | regorus: regorus eval_rule(data.totem.spike.certfix_backreference.res | wazero: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFI"
+    },
+    {
+      "name": "INV 6 — backreference: no host returned a clean zero",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — the hosts asked are exactly wasmtime, regorus and wazero",
+      "ok": true,
+      "detail": "[\"regorus\",\"wasmtime (rust-opa-wasm)\",\"wazero\"]"
+    },
+    {
+      "name": "INV 7 — all five typed blocked classes were OBSERVED, so the classifier is not single-valued",
+      "ok": true,
+      "detail": "[\"empty-result-set\",\"eval-error-or-trap\",\"extra-or-malformed-keys\",\"missing-keys\",\"non-object\"]"
+    },
+    {
+      "name": "INV 8 — `src/certify.mts` is the ONLY TypeScript module that writes `artifacts/chains/` (publication is genuinely gated). 12 sibling module(s) scanned: src/build-wasm.mts, src/census.mts, src/compare.mts, src/facts.mts, src/lower.mts, src/shipped-verdicts.mts, src/verify-records.mts, src/lib/expressibility.mts, src/lib/records.mts, src/lib/specimens.mts, src/lib/spike-env.mts, src/lib/wasm-census.mts — TypeScript sources only; the Rust host, the Go probe and CI are outside this scan",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 8 — the scan is not vacuous: the same patterns DO fire on a constructed writer",
+      "ok": true,
+      "detail": "a `join(…, 'chains', …)` write and a multi-line `CHAINS_DIR` write are both caught; an `rmSync` of the same path is not"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# Specimen (d) — `requires:` (§ Design 8), LINE arm.
+#
+# A HAND-COPY of `design8ExemplarRecord()`
+# (`packages/core/src/spine/record-exemplars.fixture.ts:49-62`) — the fixture is
+# deliberately NOT barrel-exported (it is conformance material, not public API),
+# so the spike transcribes it and `verify-records.mts` asserts field-by-field
+# equality against the source module. The pinned verdicts this arm must reproduce
+# live at `record-runtime.test.ts:286-334`.
+#
+# YAML hazard N8: `target.pattern` and `requires.pattern` are SINGLE-QUOTED.
+# The fixture's JS source writes `'\\bgit\\s+(log|diff|status)\\b'`, which is the
+# JS-literal spelling of the regex `\bgit\s+(log|diff|status)\b` — the record
+# carries the REGEX, not the JS escaping of it.
+schemaVersion: 1
+severity: warning
+message: |-
+  git output-consuming commands must pin LC_ALL=C on the same line.
+target:
+  type: regex
+  pattern: '\bgit\s+(log|diff|status)\b'
+  scope:
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.cjs'
+requires:
+  pattern: 'LC_ALL=C'
+  scope: line
+examples:
+  - bad: |-
+      git log --oneline
+    good: |-
+      LC_ALL=C git log --oneline

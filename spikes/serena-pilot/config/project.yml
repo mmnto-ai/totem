@@ -1,0 +1,61 @@
+# Serena PROJECT config for the totem serena pilot.
+# Copied to <worktree>/.serena/project.yml for the duration of the run, then
+# the whole <worktree>/.serena tree is deleted and its absence verified.
+
+project_name: 'totem-serena-pilot'
+
+# The totem monorepo is TypeScript. `typescript` is serena's managed
+# typescript-language-server backend (node-based).
+language_servers: ['typescript']
+
+encoding: 'utf-8'
+
+# No activation command: nothing is built, installed or executed on our behalf.
+activation_command:
+activation_command_timeout: 180
+
+line_ending:
+language_backend:
+
+# dist/ and node_modules/ are gitignored in this repo, so this single switch
+# gives serena the SAME exclusion set that ripgrep applies by default. This is
+# what keeps the two arms matched.
+ignore_all_files_in_gitignore: true
+
+ls_specific_settings: {}
+ls_workspace_folders: ['.']
+ls_additional_workspace_folders: []
+
+ignored_paths: []
+
+# RULED BOUND: read-only. Serena drops every tool whose class reports
+# can_edit() == True (agent.py ToolSet.without_editing_tools()).
+read_only: true
+
+# RULED BOUND: retrieval verbs only. read_only already removes the editing
+# verbs by class; this list additionally removes the shell verb and the whole
+# memory surface, and is stated explicitly so the bound is legible in config
+# rather than implied by a class predicate.
+excluded_tools:
+  - execute_shell_command
+  - write_memory
+  - read_memory
+  - delete_memory
+  - edit_memory
+  - rename_memory
+  - list_memories
+  - onboarding
+
+included_optional_tools: []
+fixed_tools: []
+
+# Modes are supplied on the CLI (--mode planning --mode no-memories
+# --mode no-onboarding); base_modes is emptied in the global config.
+default_modes: []
+added_modes: []
+
+initial_prompt: ''
+symbol_info_budget:
+
+read_only_memory_patterns: []
+ignored_memory_patterns: []

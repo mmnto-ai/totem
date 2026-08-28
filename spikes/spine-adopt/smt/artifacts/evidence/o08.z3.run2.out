@@ -1,0 +1,7 @@
+sat
+(
+  (define-fun s () String
+    "//totem-ignore")
+)
+unsat
+(control-pattern-membership suppression-directive-membership)

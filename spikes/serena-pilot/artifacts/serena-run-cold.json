@@ -1,0 +1,756 @@
+{
+  "pilot": "serena retrieval-only pilot (mmnto-ai/totem)",
+  "generatedAt": "2026-08-28T04:14:57.159Z",
+  "worktree": "D:\\Dev\\worktrees\\totem-totem-claude-spine-spike",
+  "pin": {
+    "tag": "v1.7.0",
+    "commit": "949a27ef1e5fda1a6e7b561e777bcece345c6ffd",
+    "source": "git+https://github.com/oraios/serena@v1.7.0",
+    "note": "MCP serverInfo.version reports 1.28.1, which is the `mcp` Python SDK version (pyproject: mcp==1.28.1), NOT serena. The serena pin must be verified out-of-band: pyproject version = 1.7.0 at commit 949a27ef1e5fda1a6e7b561e777bcece345c6ffd."
+  },
+  "friction": [],
+  "tasks": [
+    {
+      "id": "T1",
+      "kind": "definition",
+      "question": "Where is `compileRuleRecord` defined (file + line)?",
+      "groundTruthFiles": ["packages/core/src/spine/record-lower.ts"],
+      "serena": {
+        "calls": [
+          {
+            "name": "find_symbol",
+            "args": {
+              "name_path_pattern": "compileRuleRecord",
+              "relative_path": ""
+            },
+            "ms": 1010.941,
+            "bytes": 175,
+            "envelopeBytes": 525,
+            "isError": false
+          }
+        ],
+        "bytes": 175,
+        "ms": 1010.941,
+        "missed": [],
+        "correct": true,
+        "decoysReported": []
+      },
+      "baseline": {
+        "calls": [
+          {
+            "argv": [
+              "-n",
+              "export function compileRuleRecord",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 32.4964,
+            "bytes": 81,
+            "exitCode": 0
+          }
+        ],
+        "bytes": 81,
+        "ms": 32.4964,
+        "missed": [],
+        "correct": true,
+        "decoysReported": []
+      },
+      "serenaTextSample": "[{\"name_path\": \"compileRuleRecord\", \"kind\": \"Function\", \"relative_path\": \"packages\\\\core\\\\src\\\\spine\\\\record-lower.ts\", \"body_location\": {\"start_line\": 350, \"end_line\": 522}}]",
+      "baselineTextSample": ".\\packages\\core\\src\\spine\\record-lower.ts:351:export function compileRuleRecord(\n"
+    },
+    {
+      "id": "T2",
+      "kind": "references",
+      "question": "Every call site of `runSmokeGate` across packages (src only, exclude dist).",
+      "groundTruthFiles": [
+        "packages/core/src/compile-smoke-gate.test.ts",
+        "packages/core/src/compile-lesson.ts",
+        "packages/cli/src/commands/rule.ts",
+        "packages/core/src/spine/preimage-differential.ts"
+      ],
+      "serena": {
+        "calls": [
+          {
+            "name": "find_symbol",
+            "args": {
+              "name_path_pattern": "runSmokeGate",
+              "relative_path": ""
+            },
+            "ms": 942.295,
+            "bytes": 356,
+            "envelopeBytes": 935,
+            "isError": false
+          },
+          {
+            "name": "find_referencing_symbols",
+            "args": {
+              "name_path": "runSmokeGate",
+              "relative_path": "packages\\core\\src\\compile-smoke-gate.ts"
+            },
+            "ms": 8463.6841,
+            "bytes": 24740,
+            "envelopeBytes": 51635,
+            "isError": false
+          }
+        ],
+        "bytes": 25096,
+        "ms": 9405.9791,
+        "missed": [],
+        "correct": true,
+        "decoysReported": ["packages/core/src/index.ts"]
+      },
+      "baseline": {
+        "calls": [
+          {
+            "argv": [
+              "-l",
+              "-w",
+              "runSmokeGate",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 36.5286,
+            "bytes": 286,
+            "exitCode": 0
+          },
+          {
+            "argv": [
+              "-n",
+              "runSmokeGate\\(",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 29.6532,
+            "bytes": 5817,
+            "exitCode": 0
+          }
+        ],
+        "bytes": 6103,
+        "ms": 66.1818,
+        "missed": [],
+        "correct": true,
+        "decoysReported": ["packages/core/src/index.ts"]
+      },
+      "serenaTextSample": "[{\"name_path\": \"testRecordRuleExamples/runSmokeGate\", \"kind\": \"Constant\", \"relative_path\": \"packages\\\\cli\\\\src\\\\commands\\\\rule.ts\", \"body_location\": {\"start_line\": 243, \"end_line\": 243}}, {\"name_path\": \"runSmokeGate\", \"kind\": \"Function\", \"relative_path\": \"packages\\\\core\\\\src\\\\compile-smoke-gate.ts\", \"body_location\": {\"start_line\": 227, \"end_line\": 292}}]\n{\"packages\\\\core\\\\src\\\\compile-lesson.ts\": {\"File\": [{\"name_path\": \"compile-lesson\", \"body_location\": {\"start_line\": 0, \"end_line\": 1795}, \"content_around_reference\": \"...   4:import { resolveAstGrepLangs } from './ast-grep-query.js';\\n  >   5:import { runSmokeGate } from './compile-smoke-gate.js';\\n...   6:import { engineFields, sanitizeFileGlobs, validateRegex } from './compiler.js';\"}], \"Constant\": [{\"name_path\": \"buildCompiledRule/gate\", \"body_location\": {\"start_line\": 700, \"end_line\": 700}, \"content_around_reference\": \"... 699:    }\\n  > 700:    const gate = runSmokeGate(candidate, effectiveBadExample);\\n... 701:    if (!gate.matched) {\"}, {\"name_path\": \"buildCompiledRule/overMatchGate\", \"body_location\": {\"start_line\": 714, \"end_line\": 714}, \"content_around_reference\": \"... 713:    }\\n  > 714:    const overMatchGate = runSmoke",
+      "baselineTextSample": ".\\packages\\core\\src\\compile-smoke-gate.test.ts\n.\\packages\\core\\src\\compile-smoke-gate.ts\n.\\packages\\core\\src\\compile-lesson.ts\n.\\packages\\core\\src\\compile-lesson.test.ts\n.\\packages\\core\\src\\index.ts\n.\\packages\\cli\\src\\commands\\rule.ts\n.\\packages\\core\\src\\spine\\preimage-differential.ts\n\n.\\packages\\core\\src\\compile-lesson.ts:701:    const gate = runSmokeGate(candidate, effectiveBadExample);\n.\\packages\\core\\src\\compile-lesson.ts:715:    const overMatchGate = runSmokeGate(candidate, effectiveGoodExample);\n.\\packages\\core\\src\\compile-smoke-gate.ts:228:export function runSmokeGate(rule: CompiledRule, snippet: string): SmokeGateResult {\n.\\packages\\core\\src\\compile-smoke-gate.test.ts:99:    const result = runSmokeGate(rule, 'console.log(\"debug\")');\n.\\packages\\core\\src\\compile-smoke-gate.test.ts:106:    const result = runSmokeGate(rule, 'const x = 1;');\n.\\packages\\core\\src\\compile-smoke-gate.test.ts:113:    const result = runSmokeGate(rule, '');\n.\\packages\\core\\src\\compile-smoke-gate.test.ts:120:    const result = runSmokeGate(rule, 'console.log(1)');\n.\\packages\\core\\src\\compile-smoke-gate.test.ts:132:    const result = runSmokeGate(rule, 'debugger;\\n');\n.\\packages\\core\\src\\compile-smoke-ga"
+    },
+    {
+      "id": "T3",
+      "kind": "references",
+      "question": "Every caller of `applyRulesToAdditionsBounded` (cross-package).",
+      "groundTruthFiles": [
+        "spikes/spine-adopt/src/shipped-verdicts.mts",
+        "packages/core/src/compile-smoke-gate.test.ts",
+        "packages/core/src/regex-safety/apply-rules-bounded.test.ts",
+        "packages/core/src/rule-engine.test.ts",
+        "packages/cli/src/commands/run-compiled-rules.ts",
+        "packages/core/src/spine/record-runtime.test.ts"
+      ],
+      "serena": {
+        "calls": [
+          {
+            "name": "find_symbol",
+            "args": {
+              "name_path_pattern": "applyRulesToAdditionsBounded",
+              "relative_path": ""
+            },
+            "ms": 908.9739,
+            "bytes": 760,
+            "envelopeBytes": 1795,
+            "isError": false
+          },
+          {
+            "name": "find_referencing_symbols",
+            "args": {
+              "name_path": "applyRulesToAdditionsBounded",
+              "relative_path": "packages\\core\\src\\regex-safety\\apply-rules-bounded.ts"
+            },
+            "ms": 366.2181,
+            "bytes": 8328,
+            "envelopeBytes": 17515,
+            "isError": false
+          }
+        ],
+        "bytes": 9088,
+        "ms": 1275.192,
+        "missed": ["spikes/spine-adopt/src/shipped-verdicts.mts"],
+        "correct": false,
+        "decoysReported": []
+      },
+      "baseline": {
+        "calls": [
+          {
+            "argv": [
+              "-l",
+              "-w",
+              "applyRulesToAdditionsBounded",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 30.7894,
+            "bytes": 509,
+            "exitCode": 0
+          },
+          {
+            "argv": [
+              "-n",
+              "applyRulesToAdditionsBounded\\(",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 29.4804,
+            "bytes": 2585,
+            "exitCode": 0
+          }
+        ],
+        "bytes": 3094,
+        "ms": 60.269800000000004,
+        "missed": [],
+        "correct": true,
+        "decoysReported": ["packages/core/src/rule-engine.ts"]
+      },
+      "serenaTextSample": "[{\"name_path\": \"runCompiledRules/applyRulesToAdditionsBounded\", \"kind\": \"Constant\", \"relative_path\": \"packages\\\\cli\\\\src\\\\commands\\\\run-compiled-rules.ts\", \"body_location\": {\"start_line\": 345, \"end_line\": 345}}, {\"name_path\": \"applyRulesToAdditionsBounded\", \"kind\": \"Function\", \"relative_path\": \"packages\\\\core\\\\src\\\\regex-safety\\\\apply-rules-bounded.ts\", \"body_location\": {\"start_line\": 75, \"end_line\": 261}}, {\"name_path\": \"describe('Rust Inline Test Module Exemption (#2397)') callback/it('applyRulesToAdditionsBounded exempts bounded-regex violations inside Rust test modules') callback/applyRulesToAdditionsBounded\", \"kind\": \"Constant\", \"relative_path\": \"packages\\\\core\\\\src\\\\rule-engine.test.ts\", \"body_location\": {\"start_line\": 1693, \"end_line\": 1693}}]\n{\"packages\\\\core\\\\src\\\\rule-engine.test.ts\": {\"Constant\": [{\"name_path\": \"describe('Rust Inline Test Module Exemption (#2397)') callback/it('applyRulesToAdditionsBounded exempts bounded-regex violations inside Rust test modules') callback/applyRulesToAdditionsBounded\", \"body_location\": {\"start_line\": 1693, \"end_line\": 1693}, \"content_around_reference\": \"...1692:  it('applyRulesToAdditionsBounded exempts bounded-regex violations inside ",
+      "baselineTextSample": ".\\spikes\\spine-adopt\\src\\shipped-verdicts.mts\n.\\spikes\\spine-adopt\\src\\lib\\records.mts\n.\\packages\\core\\src\\compile-smoke-gate.test.ts\n.\\packages\\core\\src\\index.ts\n.\\packages\\core\\src\\regex-safety\\apply-rules-bounded.ts\n.\\packages\\core\\src\\regex-safety\\apply-rules-bounded.test.ts\n.\\packages\\core\\src\\rule-engine.test.ts\n.\\packages\\core\\src\\rule-engine.ts\n.\\packages\\core\\src\\spine\\record-runtime.test.ts\n.\\packages\\cli\\src\\commands\\run-compiled-rules.test.ts\n.\\packages\\cli\\src\\commands\\run-compiled-rules.ts\n\n.\\spikes\\spine-adopt\\src\\shipped-verdicts.mts:178:        const r2 = await core.applyRulesToAdditionsBounded(\n.\\spikes\\spine-adopt\\src\\shipped-verdicts.mts:485:    const sr2 = await core.applyRulesToAdditionsBounded(\n.\\spikes\\spine-adopt\\src\\shipped-verdicts.mts:573:      const bounded = await core.applyRulesToAdditionsBounded(\n.\\packages\\core\\src\\compile-smoke-gate.test.ts:774:          const { violations } = await applyRulesToAdditionsBounded(\n.\\packages\\core\\src\\rule-engine.test.ts:1738:      const result = await applyRulesToAdditionsBounded(ctx, [rule], additions, {\n.\\packages\\core\\src\\regex-safety\\apply-rules-bounded.test.ts:32:      const result = await applyRulesToAdditionsB"
+    },
+    {
+      "id": "T4",
+      "kind": "blast-radius",
+      "question": "Rename blast radius: every reference to `requiresSuppressesMatch` (defs, calls, tests, re-exports).",
+      "groundTruthFiles": [
+        "packages/core/src/spine/record-runtime.ts",
+        "packages/core/src/spine/record-runtime.test.ts",
+        "packages/core/src/compile-smoke-gate.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/regex-safety/apply-rules-bounded.ts",
+        "packages/core/src/rule-engine.ts"
+      ],
+      "serena": {
+        "calls": [
+          {
+            "name": "find_symbol",
+            "args": {
+              "name_path_pattern": "requiresSuppressesMatch",
+              "relative_path": ""
+            },
+            "ms": 909.757,
+            "bytes": 183,
+            "envelopeBytes": 542,
+            "isError": false
+          },
+          {
+            "name": "find_referencing_symbols",
+            "args": {
+              "name_path": "requiresSuppressesMatch",
+              "relative_path": "packages\\core\\src\\spine\\record-runtime.ts"
+            },
+            "ms": 338.6639,
+            "bytes": 7140,
+            "envelopeBytes": 15136,
+            "isError": false
+          }
+        ],
+        "bytes": 7323,
+        "ms": 1248.4209,
+        "missed": [],
+        "correct": true,
+        "decoysReported": []
+      },
+      "baseline": {
+        "calls": [
+          {
+            "argv": [
+              "-l",
+              "-w",
+              "requiresSuppressesMatch",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 31.5917,
+            "bytes": 302,
+            "exitCode": 0
+          },
+          {
+            "argv": [
+              "-n",
+              "-w",
+              "requiresSuppressesMatch",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 30.1956,
+            "bytes": 3238,
+            "exitCode": 0
+          }
+        ],
+        "bytes": 3540,
+        "ms": 61.7873,
+        "missed": [],
+        "correct": true,
+        "decoysReported": ["packages/core/src/compile-smoke-gate.test.ts"]
+      },
+      "serenaTextSample": "[{\"name_path\": \"requiresSuppressesMatch\", \"kind\": \"Function\", \"relative_path\": \"packages\\\\core\\\\src\\\\spine\\\\record-runtime.ts\", \"body_location\": {\"start_line\": 389, \"end_line\": 392}}]\n{\"packages\\\\core\\\\src\\\\rule-engine.ts\": {\"File\": [{\"name_path\": \"rule-engine\", \"body_location\": {\"start_line\": 0, \"end_line\": 1176}, \"content_around_reference\": \"...  23:  isInsideRoot,\\n  >  24:  requiresSuppressesMatch,\\n...  25:  ruleAppliesToFile,\"}], \"Function\": [{\"name_path\": \"applyRulesToAdditions\", \"body_location\": {\"start_line\": 581, \"end_line\": 753}, \"content_around_reference\": \"... 690:        re.test(addition.line) &&\\n  > 691:        requiresSuppressesMatch(rule, {\\n... 692:          line: addition.line,\"}, {\"name_path\": \"applyAstRulesToAdditions\", \"body_location\": {\"start_line\": 778, \"end_line\": 1144}, \"content_around_reference\": \"...1080:              if (\\n  >1081:                requiresSuppressesMatch(rule, {\\n...1082:                  line: match.lineText,\"}]}, \"packages\\\\core\\\\src\\\\compile-smoke-gate.ts\": {\"File\": [{\"name_path\": \"compile-smoke-gate\", \"body_location\": {\"start_line\": 0, \"end_line\": 323}, \"content_around_reference\": \"...  50:  assertRequiresPatternsSafe,\\n  >  51:  re",
+      "baselineTextSample": ".\\packages\\core\\src\\compile-smoke-gate.ts\n.\\packages\\core\\src\\compile-smoke-gate.test.ts\n.\\packages\\core\\src\\index.ts\n.\\packages\\core\\src\\regex-safety\\apply-rules-bounded.ts\n.\\packages\\core\\src\\rule-engine.ts\n.\\packages\\core\\src\\spine\\record-runtime.ts\n.\\packages\\core\\src\\spine\\record-runtime.test.ts\n\n.\\packages\\core\\src\\compile-smoke-gate.ts:23: * the RUNTIME'S OWN evaluator (`requiresSuppressesMatch`, `spine/record-runtime.ts`)\n.\\packages\\core\\src\\compile-smoke-gate.ts:52:  requiresSuppressesMatch,\n.\\packages\\core\\src\\compile-smoke-gate.ts:93: * dispatchers hand `requiresSuppressesMatch` a lazy disk read.\n.\\packages\\core\\src\\compile-smoke-gate.ts:98: * `requiresSuppressesMatch` THROWS `TotemParseError` on an uncompilable\n.\\packages\\core\\src\\compile-smoke-gate.ts:108:  return requiresSuppressesMatch(rule, { line, file: () => snippet });\n.\\packages\\core\\src\\compile-smoke-gate.ts:248:      // TWO of these at invocation altitude before any `requiresSuppressesMatch`\n.\\packages\\core\\src\\compile-smoke-gate.ts:269:    // preconditions. It also still catches `requiresSuppressesMatch`'s own throw\n.\\packages\\core\\src\\compile-smoke-gate.test.ts:518:    // `requiresSuppressesMatch` runs. A ga"
+    },
+    {
+      "id": "T5",
+      "kind": "type-usage",
+      "question": "Definition of interface `AstGrepMatch` plus every file referencing the type.",
+      "groundTruthFiles": [
+        "packages/core/src/ast-grep-query.ts",
+        "packages/core/src/compile-smoke-gate.ts",
+        "packages/core/src/index.ts"
+      ],
+      "serena": {
+        "calls": [
+          {
+            "name": "find_symbol",
+            "args": {
+              "name_path_pattern": "AstGrepMatch",
+              "relative_path": ""
+            },
+            "ms": 871.0784,
+            "bytes": 164,
+            "envelopeBytes": 500,
+            "isError": false
+          },
+          {
+            "name": "find_referencing_symbols",
+            "args": {
+              "name_path": "AstGrepMatch",
+              "relative_path": "packages\\core\\src\\ast-grep-query.ts"
+            },
+            "ms": 306.2967,
+            "bytes": 2012,
+            "envelopeBytes": 4440,
+            "isError": false
+          }
+        ],
+        "bytes": 2176,
+        "ms": 1177.3751,
+        "missed": [],
+        "correct": true,
+        "decoysReported": []
+      },
+      "baseline": {
+        "calls": [
+          {
+            "argv": [
+              "-l",
+              "-w",
+              "AstGrepMatch",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 31.4571,
+            "bytes": 144,
+            "exitCode": 0
+          },
+          {
+            "argv": [
+              "-n",
+              "-w",
+              "AstGrepMatch",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 32.0538,
+            "bytes": 763,
+            "exitCode": 0
+          }
+        ],
+        "bytes": 907,
+        "ms": 63.51090000000001,
+        "missed": [],
+        "correct": true,
+        "decoysReported": ["spikes/spine-adopt/src/facts.mts"]
+      },
+      "serenaTextSample": "[{\"name_path\": \"AstGrepMatch\", \"kind\": \"Interface\", \"relative_path\": \"packages\\\\core\\\\src\\\\ast-grep-query.ts\", \"body_location\": {\"start_line\": 11, \"end_line\": 26}}]\n{\"packages\\\\core\\\\src\\\\ast-grep-query.ts\": {\"Function\": [{\"name_path\": \"executeQuery\", \"body_location\": {\"start_line\": 126, \"end_line\": 164}, \"content_around_reference\": \"... 130:  lines: string[],\\n  > 131:): AstGrepMatch[] {\\n... 132:  if (addedLineNumbers.length === 0) return [];\"}, {\"name_path\": \"matchAstGrepPattern\", \"body_location\": {\"start_line\": 172, \"end_line\": 187}, \"content_around_reference\": \"... 176:  addedLineNumbers: number[],\\n  > 177:): AstGrepMatch[] {\\n... 178:  const lang = extensionToLang(ext);\"}, {\"name_path\": \"matchAstGrepPatternsBatch\", \"body_location\": {\"start_line\": 206, \"end_line\": 245}, \"content_around_reference\": \"... 210:  onRuleFailure?: OnRuleFailure,\\n  > 211:): AstGrepMatch[][] {\\n... 212:  if (queries.length === 0) return [];\"}], \"Constant\": [{\"name_path\": \"executeQuery/results\", \"body_location\": {\"start_line\": 139, \"end_line\": 139}, \"content_around_reference\": \"... 138:    const matches = root.root().findAll(rule);\\n  > 139:    const results: AstGrepMatch[] = [];\\n... 140:\"}]}, \"packa",
+      "baselineTextSample": ".\\spikes\\spine-adopt\\src\\facts.mts\n.\\packages\\core\\src\\compile-smoke-gate.ts\n.\\packages\\core\\src\\ast-grep-query.ts\n.\\packages\\core\\src\\index.ts\n\n.\\packages\\core\\src\\ast-grep-query.ts:12:export interface AstGrepMatch {\n.\\packages\\core\\src\\ast-grep-query.ts:132:): AstGrepMatch[] {\n.\\packages\\core\\src\\ast-grep-query.ts:140:    const results: AstGrepMatch[] = [];\n.\\packages\\core\\src\\ast-grep-query.ts:178:): AstGrepMatch[] {\n.\\packages\\core\\src\\ast-grep-query.ts:212:): AstGrepMatch[][] {\n.\\spikes\\spine-adopt\\src\\facts.mts:6://    astMatches[]}` with `astMatches` in `AstGrepMatch` shape, produced by a TS\n.\\packages\\core\\src\\compile-smoke-gate.ts:44:import type { AstGrepMatch, AstGrepRule } from './ast-grep-query.js';\n.\\packages\\core\\src\\compile-smoke-gate.ts:189:    let matches: AstGrepMatch[] = [];\n.\\packages\\core\\src\\index.ts:359:export type { AstGrepMatch, AstGrepRule } from './ast-grep-query.js';\n"
+    },
+    {
+      "id": "T6",
+      "kind": "module-consumers",
+      "question": "Every file importing from `record-runtime` (any import path form).",
+      "groundTruthFiles": [
+        "packages/core/src/compile-smoke-gate.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/regex-safety/apply-rules-bounded.ts",
+        "packages/core/src/rule-engine.ts",
+        "packages/core/src/stage4-verifier.ts",
+        "packages/core/src/spine/record-lower.test.ts",
+        "packages/core/src/spine/record-runtime.test.ts",
+        "packages/core/src/spine/windtunnel-firing.ts"
+      ],
+      "serena": {
+        "calls": [
+          {
+            "name": "search_for_pattern",
+            "args": {
+              "substring_pattern": "from '[^']*record-runtime",
+              "restrict_search_to_code_files": true,
+              "multiline": false
+            },
+            "ms": 369.0808,
+            "bytes": 938,
+            "envelopeBytes": 2184,
+            "isError": false
+          }
+        ],
+        "bytes": 938,
+        "ms": 369.0808,
+        "missed": [],
+        "correct": true,
+        "decoysReported": []
+      },
+      "baseline": {
+        "calls": [
+          {
+            "argv": [
+              "-l",
+              "record-runtime",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 31.061,
+            "bytes": 658,
+            "exitCode": 0
+          },
+          {
+            "argv": [
+              "-n",
+              "from '[^']*record-runtime",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 31.5209,
+            "bytes": 869,
+            "exitCode": 0
+          }
+        ],
+        "bytes": 1527,
+        "ms": 62.581900000000005,
+        "missed": [],
+        "correct": true,
+        "decoysReported": [
+          "packages/core/src/compiler-schema.ts",
+          "packages/core/src/regex-validation.ts",
+          "packages/core/src/sys/glob.ts"
+        ]
+      },
+      "serenaTextSample": "{\"packages\\\\core\\\\src\\\\compile-smoke-gate.ts\": [\"  >  52:} from './spine/record-runtime.js';\"], \"packages\\\\core\\\\src\\\\index.ts\": [\"  >1357:export type { RequiresScopeText } from './spine/record-runtime.js';\", \"  >1358:export type { RuleScopeFields } from './spine/record-runtime.js';\", \"  >1372:} from './spine/record-runtime.js';\"], \"packages\\\\core\\\\src\\\\rule-engine.ts\": [\"  >  26:} from './spine/record-runtime.js';\"], \"packages\\\\core\\\\src\\\\stage4-verifier.ts\": [\"  >  59:} from './spine/record-runtime.js';\"], \"packages\\\\core\\\\src\\\\regex-safety\\\\apply-rules-bounded.ts\": [\"  >  40:} from '../spine/record-runtime.js';\"], \"packages\\\\core\\\\src\\\\spine\\\\record-lower.test.ts\": [\"  >  32:} from './record-runtime.js';\"], \"packages\\\\core\\\\src\\\\spine\\\\record-runtime.test.ts\": [\"  >  49:} from './record-runtime.js';\"], \"packages\\\\core\\\\src\\\\spine\\\\windtunnel-firing.ts\": [\"  >   5:import { ruleAppliesToFile } from './record-runtime.js';\"]}",
+      "baselineTextSample": ".\\spikes\\spine-adopt\\src\\verify-records.mts\n.\\spikes\\spine-adopt\\src\\shipped-verdicts.mts\n.\\spikes\\spine-adopt\\src\\lower.mts\n.\\spikes\\spine-adopt\\src\\facts.mts\n.\\spikes\\spine-adopt\\src\\lib\\specimens.mts\n.\\packages\\core\\src\\compiler-schema.ts\n.\\packages\\core\\src\\compile-smoke-gate.ts\n.\\packages\\core\\src\\index.ts\n.\\packages\\core\\src\\regex-safety\\apply-rules-bounded.ts\n.\\packages\\core\\src\\rule-engine.ts\n.\\packages\\core\\src\\regex-validation.ts\n.\\packages\\core\\src\\stage4-verifier.ts\n.\\packages\\core\\src\\sys\\glob.ts\n.\\packages\\core\\src\\spine\\record-lower.test.ts\n.\\packages\\core\\src\\spine\\record-runtime.test.ts\n.\\packages\\core\\src\\spine\\windtunnel-firing.ts\n\n.\\packages\\core\\src\\compile-smoke-gate.ts:53:} from './spine/record-runtime.js';\n.\\packages\\core\\src\\index.ts:1358:export type { RequiresScopeText } from './spine/record-runtime.js';\n.\\packages\\core\\src\\index.ts:1359:export type { RuleScopeFields } from './spine/record-runtime.js';\n.\\packages\\core\\src\\index.ts:1373:} from './spine/record-runtime.js';\n.\\packages\\core\\src\\regex-safety\\apply-rules-bounded.ts:41:} from '../spine/record-runtime.js';\n.\\packages\\core\\src\\rule-engine.ts:27:} from './spine/record-runtime.js';\n.\\packages\\core\\sr"
+    },
+    {
+      "id": "T7",
+      "kind": "symbol-and-uses",
+      "question": "Definition of `RECORD_COMPILED_HOME_KEYS` plus all its uses.",
+      "groundTruthFiles": [
+        "packages/core/src/spine/record-runtime.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/spine/record-lower.test.ts"
+      ],
+      "serena": {
+        "calls": [
+          {
+            "name": "find_symbol",
+            "args": {
+              "name_path_pattern": "RECORD_COMPILED_HOME_KEYS",
+              "relative_path": ""
+            },
+            "ms": 960.7776,
+            "bytes": 183,
+            "envelopeBytes": 542,
+            "isError": false
+          },
+          {
+            "name": "find_referencing_symbols",
+            "args": {
+              "name_path": "RECORD_COMPILED_HOME_KEYS",
+              "relative_path": "packages\\core\\src\\spine\\record-runtime.ts"
+            },
+            "ms": 307.664,
+            "bytes": 2100,
+            "envelopeBytes": 4592,
+            "isError": false
+          }
+        ],
+        "bytes": 2283,
+        "ms": 1268.4416,
+        "missed": [],
+        "correct": true,
+        "decoysReported": []
+      },
+      "baseline": {
+        "calls": [
+          {
+            "argv": [
+              "-l",
+              "-w",
+              "RECORD_COMPILED_HOME_KEYS",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 30.6376,
+            "bytes": 209,
+            "exitCode": 0
+          },
+          {
+            "argv": [
+              "-n",
+              "-w",
+              "RECORD_COMPILED_HOME_KEYS",
+              "-g",
+              "*.ts",
+              "-g",
+              "*.tsx",
+              "-g",
+              "*.mts",
+              "-g",
+              "*.cts",
+              "-g",
+              "!**/dist/**",
+              "."
+            ],
+            "ms": 30.623,
+            "bytes": 1093,
+            "exitCode": 0
+          }
+        ],
+        "bytes": 1302,
+        "ms": 61.2606,
+        "missed": [],
+        "correct": true,
+        "decoysReported": [
+          "packages/core/src/compile-smoke-gate.ts",
+          "packages/core/src/compile-smoke-gate.test.ts"
+        ]
+      },
+      "serenaTextSample": "[{\"name_path\": \"RECORD_COMPILED_HOME_KEYS\", \"kind\": \"Constant\", \"relative_path\": \"packages\\\\core\\\\src\\\\spine\\\\record-runtime.ts\", \"body_location\": {\"start_line\": 48, \"end_line\": 56}}]\n{\"packages\\\\core\\\\src\\\\spine\\\\record-runtime.ts\": {\"Function\": [{\"name_path\": \"assertNoTornRecordRules/torn/rules.find() callback\", \"body_location\": {\"start_line\": 177, \"end_line\": 179}, \"content_around_reference\": \"... 178:      rule.examples === undefined &&\\n  > 179:      RECORD_COMPILED_HOME_KEYS.some((key) => rule[key] !== undefined),\\n... 180:  );\"}], \"Constant\": [{\"name_path\": \"assertNoTornRecordRules/homes\", \"body_location\": {\"start_line\": 182, \"end_line\": 182}, \"content_around_reference\": \"... 181:  if (torn === undefined) return;\\n  > 182:  const homes = RECORD_COMPILED_HOME_KEYS.filter((key) => torn[key] !== undefined);\\n... 183:  throw new TotemParseError(\"}]}, \"packages\\\\core\\\\src\\\\index.ts\": {\"File\": [{\"name_path\": \"index\", \"body_location\": {\"start_line\": 0, \"end_line\": 1548}, \"content_around_reference\": \"...1364:  isRecordPathRule,\\n  >1365:  RECORD_COMPILED_HOME_KEYS,\\n...1366:  recordScopeMatchesFile,\"}]}, \"packages\\\\core\\\\src\\\\spine\\\\record-lower.test.ts\": {\"File\": [{\"name_path\": \"re",
+      "baselineTextSample": ".\\packages\\core\\src\\compile-smoke-gate.ts\n.\\packages\\core\\src\\compile-smoke-gate.test.ts\n.\\packages\\core\\src\\index.ts\n.\\packages\\core\\src\\spine\\record-runtime.ts\n.\\packages\\core\\src\\spine\\record-lower.test.ts\n\n.\\packages\\core\\src\\compile-smoke-gate.test.ts:602:      // seven `RECORD_COMPILED_HOME_KEYS` without `examples`, because such a rule\n.\\packages\\core\\src\\compile-smoke-gate.ts:236:    // `RECORD_COMPILED_HOME_KEYS` without `examples`, and the runtime refuses\n.\\packages\\core\\src\\index.ts:1366:  RECORD_COMPILED_HOME_KEYS,\n.\\packages\\core\\src\\spine\\record-lower.test.ts:31:  RECORD_COMPILED_HOME_KEYS,\n.\\packages\\core\\src\\spine\\record-lower.test.ts:149:      RECORD_COMPILED_HOME_KEYS.some((key) => rule[key] !== undefined),\n.\\packages\\core\\src\\spine\\record-lower.test.ts:230:    for (const key of RECORD_COMPILED_HOME_KEYS) {\n.\\packages\\core\\src\\spine\\record-runtime.ts:49:export const RECORD_COMPILED_HOME_KEYS = [\n.\\packages\\core\\src\\spine\\record-runtime.ts:79: * `RECORD_COMPILED_HOME_KEYS` remains the full home set for the corpus guard\n.\\packages\\core\\src\\spine\\record-runtime.ts:180:      RECORD_COMPILED_HOME_KEYS.some((key) => rule[key] !== undefined),\n.\\packages\\core\\src\\spine\\rec"
+    }
+  ],
+  "handshake": {
+    "initializeMs": 3204.7031,
+    "serverInfo": {
+      "name": "Serena",
+      "version": "1.28.1",
+      "websiteUrl": "https://oraios.github.io/serena"
+    }
+  },
+  "exposedTools": {
+    "listMs": 1.2912,
+    "count": 10,
+    "names": [
+      "find_declaration",
+      "find_file",
+      "find_implementations",
+      "find_referencing_symbols",
+      "find_symbol",
+      "get_diagnostics_for_file",
+      "get_symbols_overview",
+      "list_dir",
+      "read_file",
+      "search_for_pattern"
+    ],
+    "retrievalOnlyVerification": {
+      "editingVerbsExposed": [],
+      "shellVerbsExposed": [],
+      "memoryVerbsExposed": [],
+      "pass": true
+    }
+  },
+  "indexing": {
+    "initializeMs": 3204.7031,
+    "coldFirstSymbolCallMs": 6630.705,
+    "warmSameCallMs": 984.2585,
+    "attributedIndexingMs": 5646.4465,
+    "note": "serena starts lazily: `initialize` returns before the TypeScript language server is spawned. The first symbol-level call pays LSP launch + workspace indexing; attributedIndexingMs is (cold - warm) on an identical call. All per-task numbers below are WARM."
+  },
+  "medians": {
+    "serenaBytes": 2283,
+    "baselineBytes": 1527,
+    "serenaMs": 1248.4209,
+    "baselineMs": 61.7873,
+    "bytesReductionPct": -49.50884086444008,
+    "timeReductionPct": -1920.5137625369616
+  },
+  "correctness": {
+    "tasksRun": 7,
+    "serenaMissedTasks": [
+      {
+        "id": "T3",
+        "missed": ["spikes/spine-adopt/src/shipped-verdicts.mts"]
+      }
+    ],
+    "baselineMissedTasks": [],
+    "baselineMissedSomethingSerenaFound": []
+  },
+  "verdict": {
+    "criteria": {
+      "medianReductionAtLeast25PctInBytesOrTime": false,
+      "zeroMissedAnswersOnSerenaArm": false,
+      "retrievalOnlyBoundVerified": true
+    },
+    "measurementVerdict": "FAIL",
+    "rationale": "neither median dropped >=25% (bytes -49.5%, time -1920.5%; negative = serena WORSE than baseline); serena arm MISSED answers on T3"
+  },
+  "precision": {
+    "note": "decoys are files a naive whole-word text search reports but which carry no reference of the kind the task asked for (usually a comment-only mention). Surfacing one is a false positive.",
+    "perTask": [
+      {
+        "id": "T1",
+        "serenaDecoys": [],
+        "baselineDecoys": []
+      },
+      {
+        "id": "T2",
+        "serenaDecoys": ["packages/core/src/index.ts"],
+        "baselineDecoys": ["packages/core/src/index.ts"]
+      },
+      {
+        "id": "T3",
+        "serenaDecoys": [],
+        "baselineDecoys": ["packages/core/src/rule-engine.ts"]
+      },
+      {
+        "id": "T4",
+        "serenaDecoys": [],
+        "baselineDecoys": ["packages/core/src/compile-smoke-gate.test.ts"]
+      },
+      {
+        "id": "T5",
+        "serenaDecoys": [],
+        "baselineDecoys": ["spikes/spine-adopt/src/facts.mts"]
+      },
+      {
+        "id": "T6",
+        "serenaDecoys": [],
+        "baselineDecoys": [
+          "packages/core/src/compiler-schema.ts",
+          "packages/core/src/regex-validation.ts",
+          "packages/core/src/sys/glob.ts"
+        ]
+      },
+      {
+        "id": "T7",
+        "serenaDecoys": [],
+        "baselineDecoys": [
+          "packages/core/src/compile-smoke-gate.ts",
+          "packages/core/src/compile-smoke-gate.test.ts"
+        ]
+      }
+    ],
+    "serenaFalsePositiveCount": 1,
+    "baselineFalsePositiveCount": 9
+  },
+  "runLabel": "cold",
+  "cacheState": "cold: .serena/cache deleted immediately before this run"
+}
