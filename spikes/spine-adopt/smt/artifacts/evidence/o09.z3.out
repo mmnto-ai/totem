@@ -1,0 +1,7 @@
+unsat
+(symmetric-difference)
+sat
+(
+  (define-fun s () String
+    "rm rm0000000000000000000000000000000000 rm .totem/lessons.md")
+)

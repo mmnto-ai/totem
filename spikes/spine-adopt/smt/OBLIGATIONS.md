@@ -37,6 +37,19 @@ binding is selected (Linux via CI). Any unexplained disagreement ⇒ no solver a
 SMT-LIB process boundary (already exercised as the replay path above) becomes the recorded
 fallback posture.
 
+## Ruling: capability vs strict reading (2026-08-27, dispatching seat)
+
+The **capability reading governs**: the ruled FAIL criterion is "unexplained solver
+DISAGREEMENT", and a decided-vs-timeout status mismatch with an in-harness capability probe
+(O9-cvc5 intrinsic at 120s even after the D6 encoding cure) is an EXPLAINED capability bound, not a
+disagreement — no obligation produced conflicting answers. Headline verdict: PASS. Both readings
+travel to the deposit, and the adoption consequence is carried explicitly rather than laundered:
+solver-neutrality holds on the COMMON DECIDABLE SET; the challenger runs at the SMT-LIB process
+boundary (its Rust binding does not build on Windows — two independent blockers), its decidable set
+is smaller, and it is encoding-sensitive (finding D6: one logically redundant assertion moved cvc5
+from 34ms to undecided at 300s). A production proof pipeline adopting z3-primary must treat
+"cvc5 confirms" as best-effort corroboration with a timeout budget, never a gate.
+
 ## Binding notes
 
 - Primary: `z3` crate (prove-rs) — build against the pinned Z3 5.1.0 release libs

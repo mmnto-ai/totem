@@ -1,0 +1,4 @@
+sat
+(
+(define-fun p () String "packages/.ts")
+)

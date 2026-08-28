@@ -1,0 +1,7 @@
+(set-logic QF_SLIA)
+(declare-const s String)
+(push 1)
+(assert (= s "a"))
+(check-sat)
+(pop 1)
+(check-sat)
