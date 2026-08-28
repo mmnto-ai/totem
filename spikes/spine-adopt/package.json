@@ -1,0 +1,14 @@
+{
+  "name": "@spike/spine-adopt",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Disposable adopt-round spike (mmnto-ai/totem-strategy#1138). Not a workspace package: pnpm-workspace.yaml globs `packages/*` only, so `pnpm -r` never sees this.",
+  "scripts": {
+    "census": "node --experimental-strip-types src/census.mts",
+    "verify-records": "node --experimental-strip-types src/verify-records.mts",
+    "facts": "node --experimental-strip-types src/facts.mts",
+    "shipped-verdicts": "node --experimental-strip-types src/shipped-verdicts.mts",
+    "all": "npm run census && npm run verify-records && npm run facts && npm run shipped-verdicts"
+  }
+}

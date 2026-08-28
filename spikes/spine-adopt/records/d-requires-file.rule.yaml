@@ -1,0 +1,34 @@
+# Specimen (d) — `requires:` (§ Design 8), FILE arm.
+#
+# The pinned `scope: file` spread-variant of the § Design 8 exemplar
+# (`record-runtime.test.ts:358-361`):
+#
+#     const rule = compile({
+#       ...design8ExemplarRecord(),
+#       requires: { pattern: 'LC_ALL=C', scope: 'file' },
+#     });
+#
+# Identical to `d-requires-line.rule.yaml` in EVERY field except `requires.scope`.
+# That single-key delta is the point: the line arm reads the added line, the file
+# arm reads the whole file through the caller's read seam — and the M3 fold's
+# null / '' / content split only exists on this arm. Verdicts pinned at
+# `record-runtime.test.ts:336-395`.
+schemaVersion: 1
+severity: warning
+message: |-
+  git output-consuming commands must pin LC_ALL=C on the same line.
+target:
+  type: regex
+  pattern: '\bgit\s+(log|diff|status)\b'
+  scope:
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.cjs'
+requires:
+  pattern: 'LC_ALL=C'
+  scope: file
+examples:
+  - bad: |-
+      git log --oneline
+    good: |-
+      LC_ALL=C git log --oneline

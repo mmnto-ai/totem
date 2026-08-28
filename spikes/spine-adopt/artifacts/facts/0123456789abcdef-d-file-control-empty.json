@@ -1,0 +1,21 @@
+{
+  "fixtureId": "d-file-control-empty",
+  "specimen": "d-file",
+  "ruleId": "0123456789abcdef",
+  "engine": "regex",
+  "source": "synthetic-control",
+  "arm": "empty",
+  "provenance": {
+    "note": "fileText: '' — READABLE but zero-length. Distinct from null: the requirement is EVALUATED against the empty string, so the verdict depends on whether requires.pattern matches ''. The split is measured in shipped-verdicts.mts against a hand-constructed ''-matching requirement.",
+    "expectation": "requires.pattern 'LC_ALL=C' does NOT match '' => FIRES; a ''-matching requirement (e.g. 'a*') IS satisfied => silent."
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "scripts/empty.sh",
+    "fileText": "",
+    "lines": [
+      "git log --oneline"
+    ],
+    "astMatches": []
+  }
+}

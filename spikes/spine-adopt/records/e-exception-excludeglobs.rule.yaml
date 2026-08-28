@@ -1,0 +1,55 @@
+# Specimen (e) — EXCEPTION / EXCLUSION class.
+#
+# A HAND-COPY of `design4ExemplarRecord()`
+# (`packages/core/src/spine/record-exemplars.fixture.ts:20-46`) — the § Design 4
+# exemplar with EVERY optional block (`recoveryHint`, `curation`,
+# `verification_shadow`). `verify-records.mts` asserts field-by-field equality
+# against the source module. Verdicts pinned at `record-runtime.test.ts:397-433`.
+#
+# The matcher is deliberately SHARED with `c-supp-...-failopen-catch.rule.yaml`
+# (`87aff037d7de47a7`): holding the matcher fixed isolates the exception axis, so
+# any verdict delta between the two records is attributable to `excludeGlobs`
+# alone.
+#
+# YAML notes:
+#   - `curatedAt` is QUOTED. Unquoted it is a YAML timestamp, and the grammar
+#     wants the string.
+#   - `verification_shadow.source` uses a CLIP block scalar (`|`), which keeps
+#     exactly one trailing newline — the fixture's value is
+#     'package totem.rules.example\n'.
+#   - `verification_shadow` keeps its snake_case name deliberately (§ Design 9:
+#     "NEVER rename it"), and is carried VERBATIM, never evaluated at V1.
+schemaVersion: 1
+severity: error
+message: |-
+  Catch blocks must re-throw or route the error — fail-open catch is banned.
+recoveryHint: |-
+  Re-throw after logging, or route to the error channel.
+target:
+  type: ast-grep
+  language: typescript
+  rule:
+    kind: catch_clause
+    not:
+      has:
+        kind: throw_statement
+        stopBy: end
+  scope:
+    fileGlobs:
+      - 'packages/**/*.ts'
+    excludeGlobs:
+      - '**/*.test.ts'
+examples:
+  - bad: |-
+      try { risky() } catch (e) { log(e) }
+    good: |-
+      try { risky() } catch (e) { log(e); throw e }
+curation:
+  sourceLesson: 'lesson-77c5e668389fb1a2'
+  curatedBy: 'strategy-gemini'
+  curatedAt: '2026-06-15T14:00:00Z'
+  baseline5Phase: 3
+verification_shadow:
+  type: 'rego'
+  source: |
+    package totem.rules.example

@@ -119,9 +119,14 @@ and inert), or adopt/wire anything — outputs are artifacts + a decision report
   construct is `excludeGlobs` (record profile: empty positives ⇒ match NOTHING — opposite of legacy).
 - ast-grep matching is native (`@ast-grep/napi`); compound trees can embed Rust-regex-crate
   expressions — two regex dialects in one record.
-- DISPUTED, settled by step 0: the leg's RE2 table marks `\b` (101/226 patterns) unsupported;
-  RE2/Go-regexp documentation says `\b` IS supported (ASCII word boundary). Lookarounds (50) +
-  backreference (1) are the confirmed-inexpressible set (~23%). Step 0 measures; no claim adopted.
+- SETTLED by step 0 (executed on pinned OPA v1.20.0): **`\b` IS supported** — the census leg's RE2
+  table row is falsified. Inexpressible: 48 lookaround-bearing patterns + 1 backreference = 49/226
+  (~22%), all rejected AT COMPILE (never a silent non-match). Escape-aware `\b` count is 99 (the
+  naive 101 includes two rules matching literal `\b` text). Three measured lowering hazards bind the
+  lowerer: (i) OPA is FAIL-OPEN without `--strict-builtin-errors` (exit 0 + `{}` on an uncompilable
+  regex) — the lowerer and host MUST run strict; (ii) `\b` in a double-quoted Rego literal is
+  BACKSPACE — emitted patterns are JSON-escaped, never verbatim; (iii) Rego raw strings have no
+  escape mechanism, so the 17 backtick-bearing patterns cannot use that form.
 
 ### The five specimens (sourcing: AUTHOR them as V1 records, semantics drawn from named legacy rules)
 
@@ -175,6 +180,11 @@ and the 48 lookaround-bearing patterns (47 negative-lookahead + 1 lookbehind; oc
   `packages/core/dist/index.js` (verified: every needed symbol except the exemplars is on the
   barrel; `@mmnto/totem` is not root-linked and deep imports are exports-blocked). No workspace or
   package config mutation.
+- **Arm model ruling (post-build):** the two-arm contract applies to REGEX only. There is exactly
+  one shipped ast dispatcher — `applyAstRulesToAdditions` is simultaneously the pin oracle and the
+  lint path (the sync sibling filters ast rules out entirely; measured: 0 violations/events on all
+  ast bundles). The harness records `armsCoincide: true` for ast rather than manufacturing a
+  same-function "agreement"; arm agreement is asserted only where two distinct dispatchers exist.
 
 ### Data model deltas (all spike-local, under `spikes/spine-adopt/`)
 

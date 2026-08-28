@@ -1,0 +1,766 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/verify-records.mts",
+  "spec": ".totem/specs/spine-spike.md § Data model deltas (SpikeRecord) + § Invariants",
+  "exemplarReferent": "packages\\core\\dist\\spine\\record-exemplars.fixture.js",
+  "pinnedRuleId": "0123456789abcdef",
+  "pinnedNow": "2026-08-21T00:00:00.000Z",
+  "specimens": [
+    {
+      "specimen": "a",
+      "class": "regex",
+      "recordFile": "spikes/spine-adopt/records/a-regex-lessons-rm-guard.rule.yaml",
+      "ruleId": "61dcb058bd1df15d",
+      "legacySource": "61dcb058bd1df15d",
+      "exemplarFactory": null,
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.zsh",
+        "**/*.md",
+        "**/*.ts",
+        "**/*.js",
+        "**/*.cjs",
+        "**/*.mjs",
+        ".claude/**/*"
+      ],
+      "recordFileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.zsh",
+        "**/*.md",
+        "**/*.ts",
+        "**/*.js",
+        "**/*.cjs",
+        "**/*.mjs",
+        ".claude/**/*"
+      ],
+      "recordExcludeGlobs": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        ".totem/lessons/**",
+        ".totem/lessons.md",
+        ".totem/tests/**"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": false,
+      "examples": [
+        {
+          "bad": "git rm .totem/lessons.md",
+          "good": "rm .totem/lessons/lesson-cd27a5b0.md"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "b",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/records/b-astgrep-flat-empty-catch.rule.yaml",
+      "ruleId": "2d962603591aa928",
+      "legacySource": "2d962603591aa928",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": false,
+      "examples": [
+        {
+          "bad": "try { new RegExp(pattern) } catch (err) {}",
+          "good": "try { new RegExp(pattern) } catch (err) { console.error(err) }"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "c",
+      "class": "compound ast-grep",
+      "recordFile": "spikes/spine-adopt/records/c-astgrep-compound-spawn-shell.rule.yaml",
+      "ruleId": "d0815b6769304e26",
+      "legacySource": "d0815b6769304e26",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "packages/cli/src/orchestrators/shell-orchestrator.ts"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": false,
+      "examples": [
+        {
+          "bad": "spawn('ls -la', { shell: true });",
+          "good": "const result = safeExec('ls', ['-la']);"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "all",
+        "any",
+        "bad",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "has",
+        "kind",
+        "language",
+        "message",
+        "pattern",
+        "regex",
+        "rule",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "stopBy",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "c-supp",
+      "class": "compound ast-grep",
+      "recordFile": "spikes/spine-adopt/records/c-supp-astgrep-compound-failopen-catch.rule.yaml",
+      "ruleId": "87aff037d7de47a7",
+      "legacySource": "87aff037d7de47a7",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": false,
+      "examples": [
+        {
+          "bad": "try { doWork() } catch (err) { return null }",
+          "good": "try { doWork() } catch (err) { throw new Error('doWork failed', { cause: err }) }"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "has",
+        "kind",
+        "language",
+        "message",
+        "not",
+        "rule",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "stopBy",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "d-line",
+      "class": "requires (§ D8)",
+      "recordFile": "spikes/spine-adopt/records/d-requires-line.rule.yaml",
+      "ruleId": "0123456789abcdef",
+      "legacySource": null,
+      "exemplarFactory": "design8ExemplarRecord",
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.sh",
+        "**/*.cjs"
+      ],
+      "recordFileGlobs": [
+        "**/*.sh",
+        "**/*.cjs"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": {
+        "pattern": "LC_ALL=C",
+        "scope": "line"
+      },
+      "hasVerificationShadow": false,
+      "hasCuration": false,
+      "examples": [
+        {
+          "bad": "git log --oneline",
+          "good": "LC_ALL=C git log --oneline"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "requires",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "d-file",
+      "class": "requires (§ D8)",
+      "recordFile": "spikes/spine-adopt/records/d-requires-file.rule.yaml",
+      "ruleId": "0123456789abcdef",
+      "legacySource": null,
+      "exemplarFactory": "design8ExemplarRecord",
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.sh",
+        "**/*.cjs"
+      ],
+      "recordFileGlobs": [
+        "**/*.sh",
+        "**/*.cjs"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": {
+        "pattern": "LC_ALL=C",
+        "scope": "file"
+      },
+      "hasVerificationShadow": false,
+      "hasCuration": false,
+      "examples": [
+        {
+          "bad": "git log --oneline",
+          "good": "LC_ALL=C git log --oneline"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "requires",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "e",
+      "class": "exception",
+      "recordFile": "spikes/spine-adopt/records/e-exception-excludeglobs.rule.yaml",
+      "ruleId": "0123456789abcdef",
+      "legacySource": null,
+      "exemplarFactory": "design4ExemplarRecord",
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "**/*.test.ts"
+      ],
+      "requires": null,
+      "hasVerificationShadow": true,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "try { risky() } catch (e) { log(e) }",
+          "good": "try { risky() } catch (e) { log(e); throw e }"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "baseline5Phase",
+        "curatedAt",
+        "curatedBy",
+        "curation",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "has",
+        "kind",
+        "language",
+        "message",
+        "not",
+        "recoveryHint",
+        "rule",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "source",
+        "sourceLesson",
+        "stopBy",
+        "target",
+        "type",
+        "verification_shadow"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "the two exemplar factories are reachable at their non-barrel dist path",
+      "ok": true,
+      "detail": "packages\\core\\dist\\spine\\record-exemplars.fixture.js"
+    },
+    {
+      "name": "specimen a — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "regex"
+    },
+    {
+      "name": "specimen a — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "12 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen a — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"61dcb058bd1df15d\""
+    },
+    {
+      "name": "specimen a — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen a — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"\\\\b(?:git\\\\s+rm|rm)\\\\s+[^\\\\n]{0,40}\\\\.totem/lessons\\\\.md\\\\b\""
+    },
+    {
+      "name": "specimen a — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen a — the named legacy source 61dcb058bd1df15d exists in the corpora",
+      "ok": true,
+      "detail": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)"
+    },
+    {
+      "name": "specimen a — severity carried from the legacy rule",
+      "ok": true,
+      "detail": "\"error\""
+    },
+    {
+      "name": "specimen a — message carried VERBATIM from the legacy rule",
+      "ok": true,
+      "detail": "\"Do not delete .totem/lessons.md (load-bearing for 41+ rules)\""
+    },
+    {
+      "name": "specimen a — every legacy `!`-negation became a POSITIVE-FORM excludeGlobs entry",
+      "ok": true,
+      "detail": "[\"**/*.spec.*\",\"**/*.test.*\",\".totem/lessons.md\",\".totem/lessons/**\",\".totem/tests/**\"]"
+    },
+    {
+      "name": "specimen a — no excludeGlobs entry carries a `!` prefix (record grammar, § Design 4)",
+      "ok": true,
+      "detail": "[\"**/*.test.*\",\"**/*.spec.*\",\".totem/lessons/**\",\".totem/lessons.md\",\".totem/tests/**\"]"
+    },
+    {
+      "name": "specimen a — all 9 legacy POSITIVE globs carried verbatim, in order",
+      "ok": true,
+      "detail": "[\"**/*.sh\",\"**/*.bash\",\"**/*.zsh\",\"**/*.md\",\"**/*.ts\",\"**/*.js\",\"**/*.cjs\",\"**/*.mjs\",\".claude/**/*\"]"
+    },
+    {
+      "name": "specimen a — target.pattern identical to the legacy rule pattern",
+      "ok": true,
+      "detail": "\"\\\\b(?:git\\\\s+rm|rm)\\\\s+[^\\\\n]{0,40}\\\\.totem/lessons\\\\.md\\\\b\""
+    },
+    {
+      "name": "specimen b — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen b — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "12 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen b — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"2d962603591aa928\""
+    },
+    {
+      "name": "specimen b — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen b — the named legacy source 2d962603591aa928 exists in the corpora",
+      "ok": true,
+      "detail": "Using empty catch blocks during regex compilation in audit"
+    },
+    {
+      "name": "specimen b — severity carried from the legacy rule",
+      "ok": true,
+      "detail": "\"warning\""
+    },
+    {
+      "name": "specimen b — message carried VERBATIM from the legacy rule",
+      "ok": true,
+      "detail": "\"Empty catch block silently swallows RegExp compilation errors in audit scripts — log or rethrow the error to surface malformed rules.\""
+    },
+    {
+      "name": "specimen b — every legacy `!`-negation became a POSITIVE-FORM excludeGlobs entry",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "specimen b — no excludeGlobs entry carries a `!` prefix (record grammar, § Design 4)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "specimen b — fileGlobs NARROWED to ['**/*.ts'] (the legacy 4-extension set is a § Design 6 floor violation)",
+      "ok": true,
+      "detail": "[\"**/*.ts\"]"
+    },
+    {
+      "name": "specimen b — language declared typescript",
+      "ok": true,
+      "detail": "\"typescript\""
+    },
+    {
+      "name": "specimen b — ast-grep pattern identical to the legacy rule",
+      "ok": true,
+      "detail": "\"try { $$$PRE new RegExp($$$ARGS) $$$POST } catch ($ERR) {}\""
+    },
+    {
+      "name": "specimen b — the fixture file scripts/audit.ts is still IN SCOPE under the narrowed glob (dispatcher predicate)",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'scripts/audit.ts') = true"
+    },
+    {
+      "name": "specimen b — the un-narrowed control YAML really did substitute the 4 legacy globs",
+      "ok": true,
+      "detail": "4 globs: **/*.ts, **/*.js, **/*.tsx, **/*.jsx"
+    },
+    {
+      "name": "specimen b — the LEGACY 4-extension glob set is LOWERING-REJECTED (§ Design 6 one-declared-language floor), EXECUTED",
+      "ok": true,
+      "detail": "Prop 310 § Design 6: target.scope.fileGlobs entry '**/*.js' targets language 'javascript' but the record declares 'typescript'. § Design 6 fixes ONE declared language per record — \"a multi-language ast-grep rule is N records\". Split the rule per language, or correct the glob. (The runtime dispatches ast-grep by FILE EXTENSION, so a scope the declared language does not cover would be evaluated under a grammar the payload was never validated against.)"
+    },
+    {
+      "name": "specimen c — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "compound ast-grep"
+    },
+    {
+      "name": "specimen c — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "20 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen c — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"d0815b6769304e26\""
+    },
+    {
+      "name": "specimen c — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen c — the named legacy source d0815b6769304e26 exists in the corpora",
+      "ok": true,
+      "detail": "Ban `spawn()` / `spawnSync()` with `shell: true`"
+    },
+    {
+      "name": "specimen c — severity carried from the legacy rule",
+      "ok": true,
+      "detail": "\"error\""
+    },
+    {
+      "name": "specimen c — message carried VERBATIM from the legacy rule",
+      "ok": true,
+      "detail": "\"`spawn` / `spawnSync` with `shell: true` opens a shell-injection vector. Use `safeExec` (which routes through `cross-spawn.sync` without a shell) from `packages/core/src/sys/exec.ts` instead. The single legitimate exception — the shell orchestrator at `packages/cli/src/orchestrators/shell-orchestrator.ts` that pipes prompts to third-party CLI tools — is scope-excluded via `!` glob and has its own input-sanitization gate.\\n\\n`shell: true` on Node's `child_process.spawn` / `spawnSync` concatenates argument strings into a shell command line. If any interpolated value contains shell metacharacters (`;`, `|`, `$(...)`, backticks, newlines, etc.), it runs as code. This is the exact class of RCE that mmnto/totem#1329 closed in 1.14.5 (`safeExec` rewrite) and mmnto/totem#1429 (the shell orchestrator `{model}` token hardening in 1.14.10).\\n\\nThe compound rule combines an `any:` disjunction over `spawn($$$)` and `spawnSync($$$)` call patterns with a `has:` descendant check for the `shell: true` pair in any options object. `stopBy: end` lets the descendant scan traverse the full argument subtree, so `shell: true` nested inside a destructured config or a spread still matches.\\n\\n**The deliberate escape hatch (one site):** `packages/cli/src/orchestrators/shell-orchestrator.ts` legitimately needs `shell: true` to invoke arbitrary CLI tools (`gemini`, `claude`, `ollama`). That file is scope-excluded via the `!` glob entry. The input-sanitization that protects it lives in the same file (`MODEL_SAFE_RE` allow-list + `quoteShellArg` defense-in-depth) and was added in 1.14.10.\\n\\n### Bad Example\\n\\n```ts\\nimport { spawn } from 'node:child_process';\\nspawn('ls -la', { shell: true });\\n```\\n\\n### Good Example\\n\\n```ts\\nimport { safeExec } from '../sys/exec.js';\\nconst result = safeExec('ls', ['-la']);\\n```\\n\\n## Why this needs to be compound\\n\\nA flat ast-grep pattern for `spawn(...)` matches every `spawn` call regardless of options, so it is too broad and would flag every legitimate `cross-spawn` usage. A pattern that literally spells out `spawn($CMD, { shell: true })` misses the three-argument form `spawn($CMD, $ARGS, { shell: true })` and doesn't cover `spawnSync`. The compound form — `any:` over the two call names, `has:` on `shell: true` descendants — encodes the real invariant: the danger is `shell: true` anywhere in the options, not the spawn call in isolation.\""
+    },
+    {
+      "name": "specimen c — every legacy `!`-negation became a POSITIVE-FORM excludeGlobs entry",
+      "ok": true,
+      "detail": "[\"**/*.spec.ts\",\"**/*.test.ts\",\"packages/cli/src/orchestrators/shell-orchestrator.ts\"]"
+    },
+    {
+      "name": "specimen c — no excludeGlobs entry carries a `!` prefix (record grammar, § Design 4)",
+      "ok": true,
+      "detail": "[\"**/*.test.ts\",\"**/*.spec.ts\",\"packages/cli/src/orchestrators/shell-orchestrator.ts\"]"
+    },
+    {
+      "name": "specimen c — compound rule tree identical to the legacy astGrepYamlRule.rule",
+      "ok": true,
+      "detail": "{\"any\":[{\"pattern\":\"spawn($$$)\",\"has\":{\"kind\":\"pair\",\"all\":[{\"has\":{\"kind\":\"property_identifier\",\"regex\":\"^shell$\"}},{\"has\":{\"kind\":\"true\"}}],\"stopBy\":\"end\"}},{\"pattern\":\"spawnSync($$$)\",\"has\":{\"kind\":\"pair\",\"all\":[{\"has\":{\"kind\":\"property_identifier\",\"regex\":\"^shell$\"}},{\"has\":{\"kind\":\"true\"}}],\"stopBy\":\"end\"}}]}"
+    },
+    {
+      "name": "specimen c — the lowered NapiConfig carries the SAME rule tree",
+      "ok": true,
+      "detail": "{\"any\":[{\"pattern\":\"spawn($$$)\",\"has\":{\"kind\":\"pair\",\"all\":[{\"has\":{\"kind\":\"property_identifier\",\"regex\":\"^shell$\"}},{\"has\":{\"kind\":\"true\"}}],\"stopBy\":\"end\"}},{\"pattern\":\"spawnSync($$$)\",\"has\":{\"kind\":\"pair\",\"all\":[{\"has\":{\"kind\":\"property_identifier\",\"regex\":\"^shell$\"}},{\"has\":{\"kind\":\"true\"}}],\"stopBy\":\"end\"}}]}"
+    },
+    {
+      "name": "specimen c — the lowered NapiConfig adds EXACTLY the pinned grammar key (record-vs-legacy delta)",
+      "ok": true,
+      "detail": "[\"language\",\"rule\"]"
+    },
+    {
+      "name": "specimen c — the pinned grammar resolves from the record's declared language",
+      "ok": true,
+      "detail": "astGrepYamlRule.language = \"TypeScript\" for target.language = \"typescript\""
+    },
+    {
+      "name": "specimen c — the LEGACY config carries no such pin (the divergence is on the legacy side)",
+      "ok": true,
+      "detail": "legacy keys: rule"
+    },
+    {
+      "name": "specimen c — the embedded Rust-regex-crate expression `^shell$` survives into the lowered tree",
+      "ok": true,
+      "detail": "target.rule contains regex:\"^shell$\""
+    },
+    {
+      "name": "specimen c — `kind: true` stayed a STRING through YAML (bare `true` would be a boolean)",
+      "ok": true,
+      "detail": "target.rule carries kind:\"true\""
+    },
+    {
+      "name": "specimen c-supp — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "compound ast-grep"
+    },
+    {
+      "name": "specimen c-supp — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "17 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen c-supp — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"87aff037d7de47a7\""
+    },
+    {
+      "name": "specimen c-supp — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen c-supp — the named legacy source 87aff037d7de47a7 exists in the corpora",
+      "ok": true,
+      "detail": "Ban fail-open catch blocks that skip re-throwing"
+    },
+    {
+      "name": "specimen c-supp — severity carried from the legacy rule",
+      "ok": true,
+      "detail": "\"error\""
+    },
+    {
+      "name": "specimen c-supp — message carried VERBATIM from the legacy rule",
+      "ok": true,
+      "detail": "\"Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-context: intentional cleanup` above the try/catch to document the exception.\\n\\nTenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.\""
+    },
+    {
+      "name": "specimen c-supp — every legacy `!`-negation became a POSITIVE-FORM excludeGlobs entry",
+      "ok": true,
+      "detail": "[\"**/*.spec.ts\",\"**/*.test.ts\"]"
+    },
+    {
+      "name": "specimen c-supp — no excludeGlobs entry carries a `!` prefix (record grammar, § Design 4)",
+      "ok": true,
+      "detail": "[\"**/*.test.ts\",\"**/*.spec.ts\"]"
+    },
+    {
+      "name": "specimen c-supp — compound rule tree identical to the legacy astGrepYamlRule.rule",
+      "ok": true,
+      "detail": "{\"kind\":\"catch_clause\",\"not\":{\"has\":{\"kind\":\"throw_statement\",\"stopBy\":\"end\"}}}"
+    },
+    {
+      "name": "specimen c-supp — the lowered NapiConfig carries the SAME rule tree",
+      "ok": true,
+      "detail": "{\"kind\":\"catch_clause\",\"not\":{\"has\":{\"kind\":\"throw_statement\",\"stopBy\":\"end\"}}}"
+    },
+    {
+      "name": "specimen c-supp — the lowered NapiConfig adds EXACTLY the pinned grammar key (record-vs-legacy delta)",
+      "ok": true,
+      "detail": "[\"language\",\"rule\"]"
+    },
+    {
+      "name": "specimen c-supp — the pinned grammar resolves from the record's declared language",
+      "ok": true,
+      "detail": "astGrepYamlRule.language = \"TypeScript\" for target.language = \"typescript\""
+    },
+    {
+      "name": "specimen c-supp — the LEGACY config carries no such pin (the divergence is on the legacy side)",
+      "ok": true,
+      "detail": "legacy keys: rule"
+    },
+    {
+      "name": "specimen d-line — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "requires (§ D8)"
+    },
+    {
+      "name": "specimen d-line — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "12 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen d-line — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"0123456789abcdef\""
+    },
+    {
+      "name": "specimen d-line — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen d-line — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"\\\\bgit\\\\s+(log|diff|status)\\\\b\""
+    },
+    {
+      "name": "specimen d-line — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen d-line — transcription is FIELD-IDENTICAL to design8ExemplarRecord()",
+      "ok": true,
+      "detail": "exact"
+    },
+    {
+      "name": "specimen d-file — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "requires (§ D8)"
+    },
+    {
+      "name": "specimen d-file — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "12 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen d-file — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"0123456789abcdef\""
+    },
+    {
+      "name": "specimen d-file — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen d-file — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"\\\\bgit\\\\s+(log|diff|status)\\\\b\""
+    },
+    {
+      "name": "specimen d-file — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen d-file — transcription is FIELD-IDENTICAL to design8ExemplarRecord() with the pinned {scope: file} spread (record-runtime.test.ts:358-361)",
+      "ok": true,
+      "detail": "exact"
+    },
+    {
+      "name": "specimen e — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "exception"
+    },
+    {
+      "name": "specimen e — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "25 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen e — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"0123456789abcdef\""
+    },
+    {
+      "name": "specimen e — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen e — transcription is FIELD-IDENTICAL to design4ExemplarRecord()",
+      "ok": true,
+      "detail": "exact"
+    },
+    {
+      "name": "all 7 record sources compiled",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "name": "CONTROL — an empty `fileGlobs` is UNREACHABLE from a parsed record (min-1 at parse)",
+      "ok": true,
+      "detail": "[Totem Error] spikes/spine-adopt/records/CONTROL-empty-positives.rule.yaml: target.scope.fileGlobs — target.scope.fileGlobs: target.scope.fileGlobs must declare ≥1 glob (Prop 310 §"
+    },
+    {
+      "name": "CONTROL — hand-constructed empty-positives RECORD scope matches NOTHING",
+      "ok": true,
+      "detail": "a.ts=false, packages/core/src/a.ts=false, scripts/x.sh=false"
+    },
+    {
+      "name": "CONTROL — the LEGACY profile on the same empty list matches EVERYTHING (the documented inversion)",
+      "ok": true,
+      "detail": "a.ts=true, packages/core/src/a.ts=true, scripts/x.sh=true"
+    },
+    {
+      "name": "CONTROL — the two profiles are opposites on every probe path",
+      "ok": true,
+      "detail": "3 paths"
+    }
+  ]
+}

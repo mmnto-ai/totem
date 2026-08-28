@@ -1,0 +1,22 @@
+{
+  "fixtureId": "d-line-inline-good",
+  "specimen": "d-line",
+  "ruleId": "0123456789abcdef",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/records/d-requires-line.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "72dd588d108abe25abe05ba96c069c28ddba995e29d3b4488b3837af2ba5685a"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "scripts/x.sh",
+    "fileText": "LC_ALL=C git log --oneline",
+    "lines": [
+      "LC_ALL=C git log --oneline"
+    ],
+    "astMatches": []
+  }
+}

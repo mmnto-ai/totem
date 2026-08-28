@@ -1,0 +1,41 @@
+# Specimen (a) — REGEX class.
+#
+# Spec § "The five specimens", row a: `61dcb058bd1df15d` (lessons-md rm guard);
+# its 5 `!`-negated globs move to `excludeGlobs` (positive form), the 9 positives
+# carried verbatim.
+#
+# YAML hazard N8: `target.pattern` is a SINGLE-QUOTED scalar. In a double-quoted
+# YAML scalar `\b` / `\s` / `\.` would be escape sequences, so the regex would be
+# silently mangled before the parser ever sees it. Single quotes are literal.
+schemaVersion: 1
+severity: error
+message: |-
+  Do not delete .totem/lessons.md (load-bearing for 41+ rules)
+target:
+  type: regex
+  pattern: '\b(?:git\s+rm|rm)\s+[^\n]{0,40}\.totem/lessons\.md\b'
+  scope:
+    # The 9 legacy POSITIVE globs, verbatim.
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.bash'
+      - '**/*.zsh'
+      - '**/*.md'
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.cjs'
+      - '**/*.mjs'
+      - '.claude/**/*'
+    # The 5 legacy `!`-NEGATED globs, re-authored in the record grammar's
+    # positive form (§ Design 4: `positiveMatch && !excludeMatch`).
+    excludeGlobs:
+      - '**/*.test.*'
+      - '**/*.spec.*'
+      - '.totem/lessons/**'
+      - '.totem/lessons.md'
+      - '.totem/tests/**'
+examples:
+  - bad: |-
+      git rm .totem/lessons.md
+    good: |-
+      rm .totem/lessons/lesson-cd27a5b0.md
