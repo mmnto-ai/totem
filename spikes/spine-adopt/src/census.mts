@@ -23,6 +23,7 @@
 // Run: node --experimental-strip-types src/census.mts
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import {
@@ -570,7 +571,10 @@ async function main(): Promise<void> {
       })),
     },
     opa: {
-      binary: OPA_BIN.slice(REPO_ROOT.length + 1),
+      // `path.relative` rather than a slice: with `SPIKE_OPA_BIN` set to a tools
+      // dir outside the checkout (CI), a length-slice would emit a mangled
+      // fragment. Identical output for the in-repo default.
+      binary: path.relative(REPO_ROOT, OPA_BIN),
       version,
       pin: 'toolchain.lock [opa] v1.20.0',
       note:

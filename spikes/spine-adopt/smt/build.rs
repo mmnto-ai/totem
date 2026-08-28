@@ -34,6 +34,28 @@ fn main() {
         }
     };
 
+    // On a Unix target the pinned Linux release (`z3-5.1.0-x64-glibc-2.39.zip`,
+    // toolchain.lock [z3.linux]) already ships `bin/libz3.so` under the exact
+    // name `-lz3` looks for, so no staging is needed: point the linker at the
+    // directory and stop. (`CARGO_CFG_TARGET_OS` is the TARGET os — `cfg!()` in a
+    // build script would describe the host.) The loader still needs that dir on
+    // `LD_LIBRARY_PATH` at run time; the harness/CI sets it, as it does PATH on
+    // Windows.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os != "windows" {
+        let lib_dir = format!("{root}/bin");
+        if std::path::Path::new(&format!("{lib_dir}/libz3.so")).exists() {
+            println!("cargo:rustc-link-search=native={lib_dir}");
+            println!("cargo:rerun-if-changed={lib_dir}/libz3.so");
+        } else {
+            println!(
+                "cargo:warning=no libz3.so under {lib_dir}; the binding arm will fail to link and \
+                 that is recorded as the binding-maturity finding."
+            );
+        }
+        return;
+    }
+
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is always set by cargo");
     let import_lib = format!("{root}/bin/libz3.lib");
 

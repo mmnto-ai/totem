@@ -583,7 +583,10 @@ func run(root string) error {
 			"Nothing outside spikes/spine-adopt/wazero-probe/ was created or modified; policy.wasm files were read only.",
 			"No commit was made.",
 			"The regorus arm was not re-run or compared against; this probe compares wazero to the shipped oracle and to the wasmtime arm.",
-			"No claim is made about wazero's compiler backend on non-amd64 hosts — this ran on windows/amd64 only.",
+			fmt.Sprintf(
+				"No claim is made about wazero's compiler backend on hosts other than the one measured — this run was %s/%s.",
+				runtime.GOOS, runtime.GOARCH,
+			),
 		},
 
 		"memoryGrowth": map[string]any{

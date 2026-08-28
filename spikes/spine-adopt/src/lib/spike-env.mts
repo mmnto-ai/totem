@@ -20,7 +20,26 @@ export const ARTIFACTS_DIR = path.join(SPIKE_ROOT, 'artifacts');
 export const FACTS_DIR = path.join(ARTIFACTS_DIR, 'facts');
 export const RECORDS_DIR = path.join(SPIKE_ROOT, 'records');
 export const TOOLS_DIR = path.join(SPIKE_ROOT, 'tools');
-export const OPA_BIN = path.join(TOOLS_DIR, 'opa_windows_amd64.exe');
+
+/**
+ * Platform-aware pinned-tool resolution (day-14 "build matrix Windows+Linux").
+ *
+ * Precedence: `$<envVar>` (absolute path to the binary, how CI points at its own
+ * tools dir) → the per-platform default under `TOOLS_DIR`. Both defaults name the
+ * asset pinned in `toolchain.lock`; on win32 with no env set this is byte-identical
+ * to the original hardcoded path.
+ */
+function resolveTool(envVar: string, windowsRel: string, posixRel: string): string {
+  const override = process.env[envVar];
+  if (override !== undefined && override !== '') return override;
+  return path.join(TOOLS_DIR, process.platform === 'win32' ? windowsRel : posixRel);
+}
+
+export const OPA_BIN = resolveTool(
+  'SPIKE_OPA_BIN',
+  'opa_windows_amd64.exe',
+  'opa_linux_amd64_static',
+);
 
 export const CORE_DIST_BARREL = path.join(REPO_ROOT, 'packages', 'core', 'dist', 'index.js');
 

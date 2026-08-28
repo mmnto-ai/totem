@@ -262,8 +262,24 @@ fn run() -> Result<(), String> {
         fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
     }
 
-    let z3 = SolverSpec::detect("z3", tools.join("z3-5.1.0-x64-win/bin/z3.exe"))?;
-    let cvc5 = SolverSpec::detect("cvc5", tools.join("cvc5-Win64-x86_64-static/bin/cvc5.exe"))?;
+    let z3 = SolverSpec::detect(
+        "z3",
+        runner::resolve_solver(
+            "SPIKE_Z3_BIN",
+            &tools,
+            "z3-5.1.0-x64-win/bin/z3.exe",
+            "z3-5.1.0-x64-glibc-2.39/bin/z3",
+        ),
+    )?;
+    let cvc5 = SolverSpec::detect(
+        "cvc5",
+        runner::resolve_solver(
+            "SPIKE_CVC5_BIN",
+            &tools,
+            "cvc5-Win64-x86_64-static/bin/cvc5.exe",
+            "cvc5-Linux-x86_64-static/bin/cvc5",
+        ),
+    )?;
     println!("z3   : {}", z3.version);
     println!("cvc5 : {}", cvc5.version);
     println!();

@@ -1,0 +1,22 @@
+{
+  "tool": "wasm-tools 1.258.0",
+  "subject": "rego/build/r61dcb058bd1df15d/policy.wasm",
+  "original": {
+    "validate": "ok",
+    "sha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+    "chainMatch": true
+  },
+  "corruption": {
+    "method": "single byte xor 0xFF at offset 100",
+    "validate": "error: invalid value type (at offset 0x64)",
+    "caughtBy": "validation"
+  },
+  "mutation": {
+    "method": "wasm-tools mutate --seed 1 (validity-preserving semantic mutation)",
+    "validate": "ok",
+    "sha256": "d473e5bbb266b9e8639e57b7b882ffb0d8b20def931821a828a8a81865c4d669",
+    "chainMatch": false,
+    "caughtBy": "hash chain (R2 certificate: artifact sha256 diverges from chains/r61dcb058bd1df15d.json)"
+  },
+  "lesson": "validation catches corruption; a validity-preserving mutation is invisible to validate and is caught only by the artifact hash chain — the R2 certificate layer is load-bearing, not decorative"
+}

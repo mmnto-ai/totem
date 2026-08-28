@@ -113,7 +113,7 @@
       "expectedHolds": true,
       "z3": {
         "status": "unsat",
-        "timeMs": 24,
+        "timeMs": 23,
         "evidenceSha256": "6153d98adf985ab5065cb8a4be2ecd866ccbaea3871a7060e5872a28499d4992",
         "evidenceFile": "evidence/o02.z3.out",
         "proven": true,
@@ -148,7 +148,7 @@
       "expectedHolds": true,
       "z3": {
         "status": "sat;sat;sat;sat;sat;unsat",
-        "timeMs": 24,
+        "timeMs": 23,
         "evidenceSha256": "1b51e6f76979bcaed2fc5106634ac37df655b0ac758b06c1d6974c85f22682f7",
         "evidenceFile": "evidence/o03.z3.out",
         "proven": true,
@@ -156,7 +156,7 @@
       },
       "cvc5": {
         "status": "sat;sat;sat;sat;sat;unsat",
-        "timeMs": 25,
+        "timeMs": 23,
         "evidenceSha256": "d3f26f81d50f0884f5417c1e29b447c6a3961eb40f770b4be5f5cfa0323269e7",
         "evidenceFile": "evidence/o03.cvc5.out",
         "proven": true,
@@ -191,7 +191,7 @@
       },
       "cvc5": {
         "status": "sat",
-        "timeMs": 23,
+        "timeMs": 22,
         "evidenceSha256": "fd1ac4a5328d55beaad5051781cb7d65f3f5d6eea49f96e0eef601e586e1218d",
         "evidenceFile": "evidence/o04.cvc5.out",
         "proven": true,
@@ -218,7 +218,7 @@
       "expectedHolds": true,
       "z3": {
         "status": "sat",
-        "timeMs": 24,
+        "timeMs": 23,
         "evidenceSha256": "8885b4c18546ffe2e12134f68984a018cd7dd773403f854d2dfaab2abc8a2af9",
         "evidenceFile": "evidence/o05.z3.out",
         "proven": true,
@@ -253,7 +253,7 @@
       "expectedHolds": true,
       "z3": {
         "status": "unsat",
-        "timeMs": 24,
+        "timeMs": 23,
         "evidenceSha256": "fb76b1e9d9fc7af8d11050d50fb7923240017ea0bf431d563b4977ef5be6f22c",
         "evidenceFile": "evidence/o06.z3.out",
         "proven": true,
@@ -261,7 +261,7 @@
       },
       "cvc5": {
         "status": "unsat",
-        "timeMs": 2380,
+        "timeMs": 2260,
         "evidenceSha256": "570c4e2e70438e2ecc6be9ea1c846a9a8f54f29969ce61fecbff07cfcdc966f6",
         "evidenceFile": "evidence/o06.cvc5.out",
         "proven": true,
@@ -323,7 +323,7 @@
       "expectedHolds": true,
       "z3": {
         "status": "sat;unsat",
-        "timeMs": 23,
+        "timeMs": 24,
         "evidenceSha256": "3a72e075e84136065495632a80456d61accd7531f49410b557aa16c4050530f4",
         "evidenceFile": "evidence/o08.z3.out",
         "proven": true,
@@ -358,7 +358,7 @@
       "expectedHolds": false,
       "z3": {
         "status": "unsat;sat",
-        "timeMs": 1386,
+        "timeMs": 1385,
         "evidenceSha256": "74677845a251edd30498d6e90a74c15c2da2c437722068838538042e9b369aeb",
         "evidenceFile": "evidence/o09.z3.out",
         "proven": true,
@@ -366,7 +366,7 @@
       },
       "cvc5": {
         "status": "timeout;timeout",
-        "timeMs": 30203,
+        "timeMs": 30115,
         "evidenceSha256": "3191bd225713d9530caa22ae9bfd4e18535375b866fe867fb9e2d6b9a82801ff",
         "evidenceFile": "evidence/o09.cvc5.out",
         "proven": false,
@@ -402,7 +402,7 @@
       },
       "cvc5": {
         "status": "timeout",
-        "timeMs": 10183,
+        "timeMs": 10098,
         "evidenceSha256": "3191bd225713d9530caa22ae9bfd4e18535375b866fe867fb9e2d6b9a82801ff",
         "evidenceFile": "evidence/o10.cvc5.out",
         "proven": false,
@@ -430,7 +430,7 @@
       "standardBudgetS": 30,
       "extendedBudgetS": 120,
       "statusAtExtendedBudget": "timeout;timeout",
-      "timeMs": 120150,
+      "timeMs": 120168,
       "evidenceFile": "evidence/o09.cvc5.extended-120s.out",
       "interpretation": "CAPABILITY-BOUND: still undecided at the extended budget, so the divergence is a property of this solver on this encoding, not of the budget."
     }

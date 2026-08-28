@@ -50,6 +50,19 @@ impl Status {
     }
 }
 
+/// Platform-aware pinned-solver resolution (day-14 "build matrix Windows+Linux").
+///
+/// Precedence: `$<env_var>` (absolute path to the binary, how CI points at its own
+/// tools dir) → the per-platform default under `tools`. Both defaults name the
+/// asset pinned in `toolchain.lock`; on Windows with no env set this resolves to
+/// exactly the path that was previously hardcoded at the call site.
+pub fn resolve_solver(env_var: &str, tools: &Path, windows_rel: &str, unix_rel: &str) -> PathBuf {
+    match std::env::var(env_var) {
+        Ok(value) if !value.is_empty() => PathBuf::from(value),
+        _ => tools.join(if cfg!(windows) { windows_rel } else { unix_rel }),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SolverSpec {
     pub name: &'static str,

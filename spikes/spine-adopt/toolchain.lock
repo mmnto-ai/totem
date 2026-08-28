@@ -22,5 +22,39 @@ sha256 = "279fe7e95810cfb62433fcfc2932f35325a665f32d3697ff33f75e31d5c6a179"
 verified = "sha256 computed at download (no publisher checksum asset)"
 reports = "cvc5 1.3.4 [git f3b21c4 on branch HEAD]"
 
+# ── Linux x86_64 pins (day-14 "build matrix Windows+Linux") ────────────────────
+# SAME upstream versions as the Windows rows above; only the platform asset
+# differs. Downloaded and hashed 2026-08-27. Selected on the deliverable's terms:
+# OPA the static build (no glibc floor), cvc5 the static build, Z3 the x64-glibc
+# zip (the only x86_64 Linux archive in the release).
+#
+# Harnesses resolve these via SPIKE_OPA_BIN / SPIKE_Z3_BIN / SPIKE_CVC5_BIN
+# (and SPIKE_Z3_ROOT for the binding arm's link path); with no env set each
+# harness falls back to the per-platform default under ./tools/.
+
+[opa.linux]
+version = "v1.20.0"
+url = "https://github.com/open-policy-agent/opa/releases/download/v1.20.0/opa_linux_amd64_static"
+sha256 = "4e4c65be08ed27e7375d816d446a444e65ba101806014c7a51b2a7652c2a942a"
+verified = "publisher .sha256 asset (opa_linux_amd64_static.sha256), sha256sum -c OK"
+binary = "opa_linux_amd64_static (chmod +x; single file, no archive)"
+
+[z3.linux]
+version = "5.1.0"
+url = "https://github.com/Z3Prover/z3/releases/download/z3-5.1.0/z3-5.1.0-x64-glibc-2.39.zip"
+sha256 = "f47be8d27d3230e823bf1eeede2fe0abaca55bb78d0b59974370e6689a92284a"
+verified = "sha256 computed at download (no publisher checksum asset)"
+binary = "z3-5.1.0-x64-glibc-2.39/bin/z3"
+# Binding arm: bin/libz3.so + bin/libz3.a + include/z3.h are all present, so
+# SPIKE_Z3_ROOT=<extracted dir> gives build.rs its link dir and z3-sys its header.
+# Unlike Windows there is no import library to stage — libz3.so IS the `-lz3` name.
+
+[cvc5.linux]
+version = "1.3.4"
+url = "https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.4/cvc5-Linux-x86_64-static.zip"
+sha256 = "dcdbfada0ce493ee98259c0816e0daafc561c223aadb3af298c2968e73ea39c6"
+verified = "sha256 computed at download (no publisher checksum asset)"
+binary = "cvc5-Linux-x86_64-static/bin/cvc5"
+
 # Rust crates (z3 / cvc5 bindings, opa-wasm host, wasmtime) pin via the spike
 # crates' Cargo.lock, committed beside them.
