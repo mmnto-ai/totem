@@ -50,7 +50,9 @@ interface LoweringArtifact {
 function readLowering(): LoweringArtifact {
   const at = path.join(ARTIFACTS_DIR, 'lowering-rejects.json');
   if (!fs.existsSync(at)) {
-    throw new Error(`${at} is missing — run \`node --experimental-strip-types src/lower.mts\` first.`);
+    throw new Error(
+      `${at} is missing — run \`node --experimental-strip-types src/lower.mts\` first.`,
+    );
   }
   const a = JSON.parse(fs.readFileSync(at, 'utf-8')) as LoweringArtifact;
   if (!Array.isArray(a.lowered) || a.lowered.length === 0 || typeof a.factSchemaLine !== 'string') {
@@ -79,7 +81,10 @@ function sha256(buf: Buffer | string): string {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-function opa(args: string[], cwd: string): { status: number | null; stdout: string; stderr: string } {
+function opa(
+  args: string[],
+  cwd: string,
+): { status: number | null; stdout: string; stderr: string } {
   const r = spawnSync(OPA_BIN, args, { cwd, encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
@@ -107,7 +112,8 @@ export function readBundleMember(tarball: string, member: string): Buffer {
     const name = header.subarray(0, 100).toString('utf-8').replace(/\0.*$/, '');
     const sizeField = header.subarray(124, 136).toString('utf-8').replace(/\0.*$/, '').trim();
     const size = Number.parseInt(sizeField, 8);
-    if (!Number.isFinite(size)) throw new Error(`bad tar size field ${JSON.stringify(sizeField)} in ${tarball}`);
+    if (!Number.isFinite(size))
+      throw new Error(`bad tar size field ${JSON.stringify(sizeField)} in ${tarball}`);
     const dataAt = off + 512;
     const normalized = name.replace(/^\.?\//, '');
     seen.push(normalized);
@@ -120,7 +126,12 @@ export function readBundleMember(tarball: string, member: string): Buffer {
 // ─── The ABI census, measured on the module ──────────────────────────────────
 
 export interface WasmCensus {
-  imports: { module: string; name: string; kind: string; memory?: { minimum: number; maximum: number | null; shared: boolean } }[];
+  imports: {
+    module: string;
+    name: string;
+    kind: string;
+    memory?: { minimum: number; maximum: number | null; shared: boolean };
+  }[];
   exports: { name: string; kind: string }[];
   abiVersion: number | null;
   abiMinorVersion: number | null;
@@ -141,8 +152,10 @@ export function censusWasm(bytes: Buffer): WasmCensus {
   const imports = WebAssembly.Module.imports(mod).map((i) => {
     const row: WasmCensus['imports'][number] = { module: i.module, name: i.name, kind: i.kind };
     if (i.kind === 'memory') {
-      const t = (i as unknown as { type?: { minimum: number; maximum?: number; shared?: boolean } }).type;
-      if (t) row.memory = { minimum: t.minimum, maximum: t.maximum ?? null, shared: t.shared ?? false };
+      const t = (i as unknown as { type?: { minimum: number; maximum?: number; shared?: boolean } })
+        .type;
+      if (t)
+        row.memory = { minimum: t.minimum, maximum: t.maximum ?? null, shared: t.shared ?? false };
     }
     return row;
   });
@@ -192,7 +205,10 @@ async function main(): Promise<void> {
   const schemaLine = lowering.factSchemaLine;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-wasm-'));
 
-  const version = opa(['version'], SPIKE_ROOT).stdout.split('\n')[0]?.replace(/^Version:\s*/, '').trim();
+  const version = opa(['version'], SPIKE_ROOT)
+    .stdout.split('\n')[0]
+    ?.replace(/^Version:\s*/, '')
+    .trim();
   checks.eq('pinned OPA binary reports toolchain.lock [opa] version', version, '1.20.0');
 
   // § Lowering 2's build half, MEASURED: the flag the contract names is eval-only.
@@ -363,11 +379,18 @@ async function main(): Promise<void> {
     const f = path.join(controlDir, `${pkg}.rego`);
     fs.writeFileSync(f, `package ctl.${pkg}\n\n${body}\n`, 'utf-8');
     const tarball = path.join(controlDir, `${pkg}.tar.gz`);
-    const r = opa(['build', '-t', 'wasm', '-e', `ctl/${pkg}/result`, `${pkg}.rego`, '-o', tarball], controlDir);
+    const r = opa(
+      ['build', '-t', 'wasm', '-e', `ctl/${pkg}/result`, `${pkg}.rego`, '-o', tarball],
+      controlDir,
+    );
     if (r.status !== 0) throw new Error(`control build failed (${name}): ${r.stderr || r.stdout}`);
     const wasm = readBundleMember(tarball, 'policy.wasm');
     const c = censusWasm(wasm);
-    controls.push({ control: name, body, hostImplementedBuiltins: Object.keys(c.hostBuiltins).sort() });
+    controls.push({
+      control: name,
+      body,
+      hostImplementedBuiltins: Object.keys(c.hostBuiltins).sort(),
+    });
   }
   checks.check(
     'CENSUS FALSIFIER — a policy calling `crypto.sha256` DOES demand a host builtin (the empty maps above are a measurement, not a vacuous read)',
@@ -380,7 +403,7 @@ async function main(): Promise<void> {
     JSON.stringify(controls[1]!.hostImplementedBuiltins),
   );
   checks.eq(
-    'CENSUS — a policy using only the lowering\'s own builtins demands NONE',
+    "CENSUS — a policy using only the lowering's own builtins demands NONE",
     controls[2]!.hostImplementedBuiltins,
     [],
   );
@@ -397,7 +420,11 @@ async function main(): Promise<void> {
     const pats: [string, string, string][] = [
       ['word-boundary', '\\bfoo\\b', 'a foo b'],
       ['word-boundary-neg', '\\bfoo\\b', 'afoob'],
-      ['corpus-a', '\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b', 'git rm .totem/lessons.md'],
+      [
+        'corpus-a',
+        '\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b',
+        'git rm .totem/lessons.md',
+      ],
       ['requires-lc-all', 'LC_ALL=C', 'LC_ALL=C git log --oneline'],
       ['glob-globstar', '^(?:[^/]+/)*[^/]*\\.sh$', 'a/b/c.sh'],
       ['glob-anchored-neg', '^[^/]*\\.ts$', 'src/a.ts'],
@@ -409,7 +436,10 @@ async function main(): Promise<void> {
       'package ctl.engine',
       '',
       'result := {',
-      ...pats.map(([k, p]) => `\t${JSON.stringify(k)}: regex.match(${JSON.stringify(p)}, input[${JSON.stringify(k)}]),`),
+      ...pats.map(
+        ([k, p]) =>
+          `\t${JSON.stringify(k)}: regex.match(${JSON.stringify(p)}, input[${JSON.stringify(k)}]),`,
+      ),
       '}',
       '',
     ].join('\n');
@@ -420,19 +450,39 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(probeDir, 'input.json'), JSON.stringify(input), 'utf-8');
 
     const tarball = path.join(probeDir, 'engine.tar.gz');
-    const b = opa(['build', '-t', 'wasm', '-e', 'ctl/engine/result', 'engine.rego', '-o', tarball], probeDir);
+    const b = opa(
+      ['build', '-t', 'wasm', '-e', 'ctl/engine/result', 'engine.rego', '-o', tarball],
+      probeDir,
+    );
     if (b.status !== 0) throw new Error(`engine probe build failed: ${b.stderr || b.stdout}`);
     const wasm = readBundleMember(tarball, 'policy.wasm');
     const wasmResult = evalWasm(wasm, 'ctl/engine/result', input);
 
     const goRun = opa(
-      ['eval', '--format=json', '--strict-builtin-errors', '-d', 'engine.rego', '-i', 'input.json', 'data.ctl.engine.result'],
+      [
+        'eval',
+        '--format=json',
+        '--strict-builtin-errors',
+        '-d',
+        'engine.rego',
+        '-i',
+        'input.json',
+        'data.ctl.engine.result',
+      ],
       probeDir,
     );
-    const goResult = JSON.parse(goRun.stdout).result[0].expressions[0].value as Record<string, boolean>;
+    const goResult = JSON.parse(goRun.stdout).result[0].expressions[0].value as Record<
+      string,
+      boolean
+    >;
 
     for (const [k] of pats) {
-      engineProbes.push({ probe: k, wasm: wasmResult[k], go: goResult[k], agree: wasmResult[k] === goResult[k] });
+      engineProbes.push({
+        probe: k,
+        wasm: wasmResult[k],
+        go: goResult[k],
+        agree: wasmResult[k] === goResult[k],
+      });
     }
     checks.check(
       'ENGINE — the wasm-native regex engine agrees with the Go/RE2 binary on every discriminating probe',
@@ -452,7 +502,11 @@ async function main(): Promise<void> {
   const failOpen = (() => {
     const d = path.join(tmp, 'failopen');
     fs.mkdirSync(d, { recursive: true });
-    fs.writeFileSync(path.join(d, 'fo.rego'), 'package ctl.fo\n\nresult := regex.match("foo(?!bar)", input.s)\n', 'utf-8');
+    fs.writeFileSync(
+      path.join(d, 'fo.rego'),
+      'package ctl.fo\n\nresult := regex.match("foo(?!bar)", input.s)\n',
+      'utf-8',
+    );
     fs.writeFileSync(path.join(d, 'input.json'), JSON.stringify({ s: 'foobaz' }), 'utf-8');
     const b = opa(['build', '-t', 'wasm', '-e', 'ctl/fo/result', 'fo.rego', '-o', 'fo.tar.gz'], d);
     const built = b.status === 0;
@@ -462,13 +516,35 @@ async function main(): Promise<void> {
       const wasm = readBundleMember(path.join(d, 'fo.tar.gz'), 'policy.wasm');
       try {
         raw = evalWasmRaw(wasm, 'ctl/fo/result', { s: 'foobaz' });
-        wasmOutcome = Array.isArray(raw) && raw.length === 0 ? 'EMPTY RESULT SET (silent, no trap, no opa_abort)' : `result: ${JSON.stringify(raw)}`;
+        wasmOutcome =
+          Array.isArray(raw) && raw.length === 0
+            ? 'EMPTY RESULT SET (silent, no trap, no opa_abort)'
+            : `result: ${JSON.stringify(raw)}`;
       } catch (err) {
         wasmOutcome = `TRAPPED: ${(err as Error).message}`;
       }
     }
-    const goStrict = opa(['eval', '--format=json', '--strict-builtin-errors', '-d', 'fo.rego', '-i', 'input.json', 'data.ctl.fo.result'], d);
-    return { built, buildExit: b.status, wasmOutcome, wasmRaw: raw, goStrictExit: goStrict.status, goStrictStdout: goStrict.stdout.trim().slice(0, 400) };
+    const goStrict = opa(
+      [
+        'eval',
+        '--format=json',
+        '--strict-builtin-errors',
+        '-d',
+        'fo.rego',
+        '-i',
+        'input.json',
+        'data.ctl.fo.result',
+      ],
+      d,
+    );
+    return {
+      built,
+      buildExit: b.status,
+      wasmOutcome,
+      wasmRaw: raw,
+      goStrictExit: goStrict.status,
+      goStrictStdout: goStrict.stdout.trim().slice(0, 400),
+    };
   })();
 
   checks.check(
@@ -520,7 +596,7 @@ async function main(): Promise<void> {
     return evalWasmRaw(wasm, 'ctl/g/result', { s: 'foobaz' });
   })();
   checks.check(
-    'STRICTNESS — the lowering\'s `patterns_compile` guard turns that fail-open into an UNDEFINED `result` (empty result SET), which the host contract raises as an error row',
+    "STRICTNESS — the lowering's `patterns_compile` guard turns that fail-open into an UNDEFINED `result` (empty result SET), which the host contract raises as an error row",
     Array.isArray(guarded) && guarded.length === 0,
     JSON.stringify(guarded),
   );
@@ -544,7 +620,7 @@ async function main(): Promise<void> {
       hostImplementedBuiltinsAcrossAll7: [...allHostBuiltins].sort(),
       distinctImportsAcrossAll7: [...allImports].sort(),
       finding:
-        'ZERO host-implemented builtins across all 7 policies. `regex.match` — the builtin that decides every verdict in this spike — is COMPILED NATIVELY INTO THE WASM by `opa build`, not delegated to the host. The regex engine that actually runs is OPA\'s own wasm-compiled engine; neither the host language\'s regex crate nor the Go RE2 binary is in the evaluation path. Measured to agree with the Go binary on every discriminating probe (see `engineProbes`), and the empty map is falsified by controls that DO demand `crypto.sha256` / `regex.find_n`.',
+        "ZERO host-implemented builtins across all 7 policies. `regex.match` — the builtin that decides every verdict in this spike — is COMPILED NATIVELY INTO THE WASM by `opa build`, not delegated to the host. The regex engine that actually runs is OPA's own wasm-compiled engine; neither the host language's regex crate nor the Go RE2 binary is in the evaluation path. Measured to agree with the Go binary on every discriminating probe (see `engineProbes`), and the empty map is falsified by controls that DO demand `crypto.sha256` / `regex.find_n`.",
       hostPathConsequence:
         'The host never needs builtin injection for these policies, so `rust-opa-wasm`\'s fixed `builtins::resolve` table — which has no public extension point — is not a constraint here. It WOULD be for any policy using a builtin outside that table, and `regex.find_n` is the sharp case: it IS in the crate\'s table but its body is `bail!("not implemented")`, so such a policy loads fine and fails at CALL time.',
       importSetVerdict:
@@ -620,7 +696,10 @@ function evalWasmRaw(bytes: Buffer, entrypoint: string, input: unknown): unknown
     new Uint8Array(memory.buffer).set(buf, p);
     return [p, buf.length];
   };
-  const eps = JSON.parse(readCStr(memory, x.opa_json_dump(x.entrypoints()))) as Record<string, number>;
+  const eps = JSON.parse(readCStr(memory, x.opa_json_dump(x.entrypoints()))) as Record<
+    string,
+    number
+  >;
   const epId = eps[entrypoint];
   if (epId === undefined) throw new Error(`no entrypoint ${entrypoint} in ${JSON.stringify(eps)}`);
   const [dp, dl] = write('{}');
@@ -638,7 +717,9 @@ function evalWasmRaw(bytes: Buffer, entrypoint: string, input: unknown): unknown
 function evalWasm(bytes: Buffer, entrypoint: string, input: unknown): Record<string, boolean> {
   const raw = evalWasmRaw(bytes, entrypoint, input) as { result: Record<string, boolean> }[];
   if (!Array.isArray(raw) || raw.length !== 1) {
-    throw new Error(`entrypoint ${entrypoint} returned ${JSON.stringify(raw)} — expected one result`);
+    throw new Error(
+      `entrypoint ${entrypoint} returned ${JSON.stringify(raw)} — expected one result`,
+    );
   }
   return raw[0]!.result;
 }

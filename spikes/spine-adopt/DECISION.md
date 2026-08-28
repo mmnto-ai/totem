@@ -10,20 +10,21 @@ itself — this report IS the adoption decision input.
 
 ### Spike 1 — OPA Rego→Wasm: **PASS**
 
-| Criterion (verbatim) | Result | Artifact |
-|---|---|---|
-| identical verdicts on every registered good/bad fixture | 72/72 MATCH, violations AND event streams, 3 arms (shipped/OPA-wasmtime/regorus) | `artifacts/differential-report.json` |
-| repeatable artifact hash | byte-identical wasm + bundle, 2 consecutive builds ×7 records; stable across full regenerate | `artifacts/chains/*.json` |
-| all imports/builtins enumerated | imports = env.memory + opa_abort + opa_builtin0..4; **zero host builtins** — regex.match compiles natively into the wasm (falsified controls prove the census sees host builtins when present) | `artifacts/opa-abi-census.json` |
-| no network | none (verified: no wasi, no sockets; evaluation pure) | same |
-| bounded cold/warm runtime | compile ~24ms median; cold eval ~61µs; warm ~50µs (wasmtime). wazero: warm ~100µs means | `artifacts/opa-verdicts.json`, `wazero-probe/artifacts/` |
+| Criterion (verbatim)                                    | Result                                                                                                                                                                                         | Artifact                                                 |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| identical verdicts on every registered good/bad fixture | 72/72 MATCH, violations AND event streams, 3 arms (shipped/OPA-wasmtime/regorus)                                                                                                               | `artifacts/differential-report.json`                     |
+| repeatable artifact hash                                | byte-identical wasm + bundle, 2 consecutive builds ×7 records; stable across full regenerate                                                                                                   | `artifacts/chains/*.json`                                |
+| all imports/builtins enumerated                         | imports = env.memory + opa_abort + opa_builtin0..4; **zero host builtins** — regex.match compiles natively into the wasm (falsified controls prove the census sees host builtins when present) | `artifacts/opa-abi-census.json`                          |
+| no network                                              | none (verified: no wasi, no sockets; evaluation pure)                                                                                                                                          | same                                                     |
+| bounded cold/warm runtime                               | compile ~24ms median; cold eval ~61µs; warm ~50µs (wasmtime). wazero: warm ~100µs means                                                                                                        | `artifacts/opa-verdicts.json`, `wazero-probe/artifacts/` |
 
 **Scope bound (the honest edge):** 49/226 corpus regex patterns are inexpressible on this path —
 48 lookaround-bearing + 1 backreference — ALL rejected at compile, never silently
 (`artifacts/lowering-rejects.json`, `artifacts/expressibility-census.json`). The record-grammar
-path already refuses the lookbehind one (safe-regex2), so the *record-era* gap is lookaheads.
+path already refuses the lookbehind one (safe-regex2), so the _record-era_ gap is lookaheads.
 
 **Hazards a production adoption must carry:**
+
 1. `opa build -t wasm` has **no strict mode** — an uncompilable builtin call builds (exit 0) and
    fails OPEN at eval (empty result, no trap). Cure shipped in the lowering: a `patterns_compile`
    probe inside the complete `result` rule + host raising undefined-result as an error.
@@ -35,15 +36,16 @@ path already refuses the lookbehind one (safe-regex2), so the *record-era* gap i
 
 ### Spike 2 — solver-neutral Z3/cvc5: **PASS** (capability ruling recorded)
 
-| Criterion | Result | Artifact |
-|---|---|---|
-| Z3 and cvc5 agree on SAT/UNSAT | 9/10 decided by both, **zero semantic contradictions**; O9/O10 = explained capability bounds (cvc5 timeout), ruled not-disagreement (`smt/OBLIGATIONS.md` § Ruling) | `smt/artifacts/obligations-report.json` |
-| countermodels stable | 14/14 rows byte-stable across two runs per solver | same |
-| unsat-core/proof material binds the chain | 20 chain rows: obligation→SMT-LIB→evidence sha256; emission byte-deterministic | `smt/artifacts/chains.json` |
-| timeouts fail closed | O10 verified: timeout/unknown ⇒ NOT-PROVEN, no pass-through; outer kill backstop | report + `smt/src/runner.rs` |
-| static/vendored builds Windows+Linux | Windows: **z3 binding BUILDS on MSVC** (10/10 obligations via API, all agree with CLI); **cvc5 binding does NOT build** (bindgen libclang + no MSVC import lib in the pinned distribution) → challenger runs at the SMT-LIB process boundary. Linux: CI row pending | `smt/` crate, CI |
+| Criterion                                 | Result                                                                                                                                                                                                                                                              | Artifact                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Z3 and cvc5 agree on SAT/UNSAT            | 9/10 decided by both, **zero semantic contradictions**; O9/O10 = explained capability bounds (cvc5 timeout), ruled not-disagreement (`smt/OBLIGATIONS.md` § Ruling)                                                                                                 | `smt/artifacts/obligations-report.json` |
+| countermodels stable                      | 14/14 rows byte-stable across two runs per solver                                                                                                                                                                                                                   | same                                    |
+| unsat-core/proof material binds the chain | 20 chain rows: obligation→SMT-LIB→evidence sha256; emission byte-deterministic                                                                                                                                                                                      | `smt/artifacts/chains.json`             |
+| timeouts fail closed                      | O10 verified: timeout/unknown ⇒ NOT-PROVEN, no pass-through; outer kill backstop                                                                                                                                                                                    | report + `smt/src/runner.rs`            |
+| static/vendored builds Windows+Linux      | Windows: **z3 binding BUILDS on MSVC** (10/10 obligations via API, all agree with CLI); **cvc5 binding does NOT build** (bindgen libclang + no MSVC import lib in the pinned distribution) → challenger runs at the SMT-LIB process boundary. Linux: CI row pending | `smt/` crate, CI                        |
 
 **The adoption-shaping findings:**
+
 1. **D6 encoding sensitivity:** one logically redundant assertion moved cvc5 from 34ms SAT to
    undecided at 300s (z3 indifferent). A lowerer emitting redundant guards makes the challenger
    unusable; encoding discipline is a first-class constraint.

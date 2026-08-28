@@ -89,7 +89,9 @@ async function main(): Promise<void> {
   const legacy = legacyCorpusIndex();
 
   if (!fs.existsSync(EXEMPLAR_DIST)) {
-    throw new Error(`exemplar fixture dist missing at ${EXEMPLAR_DIST} — run \`pnpm -r build\` first.`);
+    throw new Error(
+      `exemplar fixture dist missing at ${EXEMPLAR_DIST} — run \`pnpm -r build\` first.`,
+    );
   }
   const exemplars = (await import(pathToFileURL(EXEMPLAR_DIST).href)) as Record<string, () => any>;
   checks.check(
@@ -126,12 +128,22 @@ async function main(): Promise<void> {
     checks.check(
       `specimen ${s.id} — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)`,
       forbidden.length === 0,
-      forbidden.length ? `found: ${forbidden.join(', ')}` : `${keys.size} distinct keys, all expressible`,
+      forbidden.length
+        ? `found: ${forbidden.join(', ')}`
+        : `${keys.size} distinct keys, all expressible`,
     );
 
     // ── the lowered identity IS the threaded producer id (ADR-112 §8/§9) ──
-    checks.eq(`specimen ${s.id} — lowered lessonHash === threaded ruleId`, cs.rule.lessonHash, s.ruleId);
-    checks.eq(`specimen ${s.id} — lowered compiledAt === injected now`, cs.rule.compiledAt, PINNED_NOW);
+    checks.eq(
+      `specimen ${s.id} — lowered lessonHash === threaded ruleId`,
+      cs.rule.lessonHash,
+      s.ruleId,
+    );
+    checks.eq(
+      `specimen ${s.id} — lowered compiledAt === injected now`,
+      cs.rule.compiledAt,
+      PINNED_NOW,
+    );
 
     // ── YAML hazard N8: the regex survived authoring unmangled ──
     if (cs.record.target.type === 'regex') {
@@ -176,7 +188,9 @@ async function main(): Promise<void> {
       );
 
       // The legacy glob list, split into the record grammar's two arrays.
-      const legacyPositives = (legacyRule.fileGlobs ?? []).filter((g: string) => !g.startsWith('!'));
+      const legacyPositives = (legacyRule.fileGlobs ?? []).filter(
+        (g: string) => !g.startsWith('!'),
+      );
       const legacyNegatives = (legacyRule.fileGlobs ?? [])
         .filter((g: string) => g.startsWith('!'))
         .map((g: string) => g.slice(1));
@@ -211,7 +225,11 @@ async function main(): Promise<void> {
           cs.record.target.scope.fileGlobs,
           ['**/*.ts'],
         );
-        checks.eq('specimen b — language declared typescript', cs.record.target.language, 'typescript');
+        checks.eq(
+          'specimen b — language declared typescript',
+          cs.record.target.language,
+          'typescript',
+        );
         checks.eq(
           'specimen b — ast-grep pattern identical to the legacy rule',
           cs.record.target.pattern,
@@ -234,7 +252,8 @@ async function main(): Promise<void> {
           /    fileGlobs:\n      - '\*\*\/\*\.ts'\n/,
           // FUNCTION replacer — `$`-bearing replacement text is otherwise treated
           // as a substitution directive.
-          () => `    fileGlobs:\n${legacyPositives.map((g: string) => `      - '${g}'`).join('\n')}\n`,
+          () =>
+            `    fileGlobs:\n${legacyPositives.map((g: string) => `      - '${g}'`).join('\n')}\n`,
         );
         checks.check(
           'specimen b — the un-narrowed control YAML really did substitute the 4 legacy globs',
@@ -243,7 +262,10 @@ async function main(): Promise<void> {
           `${legacyPositives.length} globs: ${legacyPositives.join(', ')}`,
         );
         const unnarrowedOutcome = core.compileRuleRecord(
-          core.parseRuleRecord(unnarrowedYaml, 'spikes/spine-adopt/records/CONTROL-b-unnarrowed.rule.yaml'),
+          core.parseRuleRecord(
+            unnarrowedYaml,
+            'spikes/spine-adopt/records/CONTROL-b-unnarrowed.rule.yaml',
+          ),
           { ruleId: s.ruleId, now: PINNED_NOW },
         );
         checks.check(

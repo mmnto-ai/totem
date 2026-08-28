@@ -22,8 +22,8 @@ itself):
 
 ### Architectural context (constraints that bind the spike)
 
-- **ADR-103 Amendment 2026-08-19:** Rego is REJECTED as an *authoring surface*; **G1's Rego
-  compilation *target* stands** (surface-only rejection). This spike exercises the compilation-target
+- **ADR-103 Amendment 2026-08-19:** Rego is REJECTED as an _authoring surface_; **G1's Rego
+  compilation _target_ stands** (surface-only rejection). This spike exercises the compilation-target
   lane only: records remain the authoring surface; the spike's disposable lowerer translates
   record semantics to a bounded Rego subset.
 - **Prop 310 (record grammar):** `verification_shadow` is carried verbatim, never evaluated at V1;
@@ -130,15 +130,15 @@ and inert), or adopt/wire anything — outputs are artifacts + a decision report
 
 ### The five specimens (sourcing: AUTHOR them as V1 records, semantics drawn from named legacy rules)
 
-*(Amended per the falsification fold, 2026-08-27 — see § Falsification fold.)*
+_(Amended per the falsification fold, 2026-08-27 — see § Falsification fold.)_
 
-| # | Class | Source semantics | Fixtures / oracle |
-|---|---|---|---|
-| a | regex | `61dcb058bd1df15d` (lessons-md rm guard); its 5 `!`-negated globs move to `excludeGlobs` (verified: parses + lowers, scope probes match legacy) | `.totem/tests/test-61dcb058bd1df15d.md` (1F/1P) + inline pair |
-| b | flat ast-grep | `2d962603591aa928` (RegExp-in-try empty catch) **narrowed to `fileGlobs: ['**/*.ts'], language: typescript`** — the legacy 4-extension glob set fails the language⇄glob floor (`record-lower.ts:142-146`, lowering-rejected when executed); fixture file `scripts/audit.ts` stays in scope | `test-ast-empty-catch.md` (3F/5P) |
-| c | compound ast-grep | **`d0815b6769304e26`** (spawn shell:true; embedded `regex:"^shell$"` — the dual-dialect hazard; verified to compile as a record; `!`-negations → excludeGlobs) | `test-d0815b6769304e26.md` (3F/4P); supplementary richness arm at zero lowering cost: `87aff037d7de47a7` (8F/20P — same matcher as specimen e) |
-| d | requires (§ D8) | `design8ExemplarRecord()` transcription (line arm) + its pinned `scope: file` spread-variant (`record-runtime.test.ts:358-361`) | verdicts pre-pinned `record-runtime.test.ts:286-395` (line 286-334, file 336-395); control: `09ee37252a814a09` (same intent via lookahead) |
-| e | exception | `design4ExemplarRecord()` transcription — excludeGlobs arm; matcher deliberately shared with 87aff037 (isolates the exception axis) | 4 verdicts pinned `record-runtime.test.ts:397-433`; synthetic suppression arm uses plain `// totem-ignore` (NOT `totem-context:` — the fail-soft attestation machinery at `rule-engine.ts:498-510` injects an extra engine Violation) |
+| #   | Class             | Source semantics                                                                                                                                                                                                                                                                            | Fixtures / oracle                                                                                                                                                                                                                     |
+| --- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a   | regex             | `61dcb058bd1df15d` (lessons-md rm guard); its 5 `!`-negated globs move to `excludeGlobs` (verified: parses + lowers, scope probes match legacy)                                                                                                                                             | `.totem/tests/test-61dcb058bd1df15d.md` (1F/1P) + inline pair                                                                                                                                                                         |
+| b   | flat ast-grep     | `2d962603591aa928` (RegExp-in-try empty catch) **narrowed to `fileGlobs: ['**/\*.ts'], language: typescript`** — the legacy 4-extension glob set fails the language⇄glob floor (`record-lower.ts:142-146`, lowering-rejected when executed); fixture file `scripts/audit.ts` stays in scope | `test-ast-empty-catch.md` (3F/5P)                                                                                                                                                                                                     |
+| c   | compound ast-grep | **`d0815b6769304e26`** (spawn shell:true; embedded `regex:"^shell$"` — the dual-dialect hazard; verified to compile as a record; `!`-negations → excludeGlobs)                                                                                                                              | `test-d0815b6769304e26.md` (3F/4P); supplementary richness arm at zero lowering cost: `87aff037d7de47a7` (8F/20P — same matcher as specimen e)                                                                                        |
+| d   | requires (§ D8)   | `design8ExemplarRecord()` transcription (line arm) + its pinned `scope: file` spread-variant (`record-runtime.test.ts:358-361`)                                                                                                                                                             | verdicts pre-pinned `record-runtime.test.ts:286-395` (line 286-334, file 336-395); control: `09ee37252a814a09` (same intent via lookahead)                                                                                            |
+| e   | exception         | `design4ExemplarRecord()` transcription — excludeGlobs arm; matcher deliberately shared with 87aff037 (isolates the exception axis)                                                                                                                                                         | 4 verdicts pinned `record-runtime.test.ts:397-433`; synthetic suppression arm uses plain `// totem-ignore` (NOT `totem-context:` — the fail-soft attestation machinery at `rule-engine.ts:498-510` injects an extra engine Violation) |
 
 The two exemplar transcriptions are hand-copies of a deliberately non-exported fixture
 (`record-exemplars.fixture.ts:10-13`); each is pinned against its cited source line range and the
@@ -215,17 +215,17 @@ re-pin commit.
 
 ### Failure modes
 
-| Failure | Category | Agent-facing surface | Recovery |
-| --- | --- | --- | --- |
-| opa/z3/cvc5 binary missing or version ≠ pin | init | hard error naming the pin | install per lock; re-run |
-| pattern inexpressible in Rego regex | runtime | enumerated REJECT row in census artifact | none needed — that IS the finding |
-| ast fact-extractor output diverges from engine match | runtime | differential FAIL row | fix extractor; divergence class recorded |
-| verdict mismatch shipped vs OPA | runtime | the measured outcome — classified per the deposit's PASS/FAIL | explained ⇒ documented; unexplained ⇒ spike FAIL/park |
-| solver disagreement Z3 vs cvc5 | runtime | FAIL row (no solver adoption) | fallback posture: pinned SMT-LIB process boundary |
-| solver timeout (the deliberate arm) | runtime | must fail CLOSED; a fail-open pass is a spike FAIL | assertion in harness |
-| z3-sys/cvc5 build fails on Windows | permanent | recorded build-matrix row | SMT-LIB process-boundary fallback, explicitly recorded |
-| wasm host needs import beyond OPA ABI | runtime | FAIL per deposit (unbounded host import) | none — reject row |
-| nondeterministic wasm artifact hash | runtime | FAIL per deposit | none — reject row |
+| Failure                                              | Category  | Agent-facing surface                                          | Recovery                                               |
+| ---------------------------------------------------- | --------- | ------------------------------------------------------------- | ------------------------------------------------------ |
+| opa/z3/cvc5 binary missing or version ≠ pin          | init      | hard error naming the pin                                     | install per lock; re-run                               |
+| pattern inexpressible in Rego regex                  | runtime   | enumerated REJECT row in census artifact                      | none needed — that IS the finding                      |
+| ast fact-extractor output diverges from engine match | runtime   | differential FAIL row                                         | fix extractor; divergence class recorded               |
+| verdict mismatch shipped vs OPA                      | runtime   | the measured outcome — classified per the deposit's PASS/FAIL | explained ⇒ documented; unexplained ⇒ spike FAIL/park  |
+| solver disagreement Z3 vs cvc5                       | runtime   | FAIL row (no solver adoption)                                 | fallback posture: pinned SMT-LIB process boundary      |
+| solver timeout (the deliberate arm)                  | runtime   | must fail CLOSED; a fail-open pass is a spike FAIL            | assertion in harness                                   |
+| z3-sys/cvc5 build fails on Windows                   | permanent | recorded build-matrix row                                     | SMT-LIB process-boundary fallback, explicitly recorded |
+| wasm host needs import beyond OPA ABI                | runtime   | FAIL per deposit (unbounded host import)                      | none — reject row                                      |
+| nondeterministic wasm artifact hash                  | runtime   | FAIL per deposit                                              | none — reject row                                      |
 
 No silent-degradation rows exist: every skip/reject is an artifact row (Tenet 4).
 

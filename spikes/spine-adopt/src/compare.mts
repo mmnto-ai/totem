@@ -105,8 +105,13 @@ function deriveShippedOrdinals(
       }
     }
     return {
-      violations: violations.map((v) => ({ rule_id: v.ruleId, line_number: v.lineNumber, ordinal: 0 })),
-      derivation: 'regex: ordinal := 0 (§ Lowering 1 — the shipped regex path emits ≤1 violation per added line)',
+      violations: violations.map((v) => ({
+        rule_id: v.ruleId,
+        line_number: v.lineNumber,
+        ordinal: 0,
+      })),
+      derivation:
+        'regex: ordinal := 0 (§ Lowering 1 — the shipped regex path emits ≤1 violation per added line)',
       problems,
     };
   }
@@ -137,7 +142,12 @@ function normaliseShipped(rows: any[], bundles: Map<string, any>): NormalRow[] {
     const bundle = bundles.get(r.fixtureId);
     if (!bundle) throw new Error(`shipped row ${r.fixtureId} has no FactBundle`);
     const primary = r.arms[0];
-    const d = deriveShippedOrdinals(r.engine, r.ruleId, primary.violations, bundle.astMatches ?? []);
+    const d = deriveShippedOrdinals(
+      r.engine,
+      r.ruleId,
+      primary.violations,
+      bundle.astMatches ?? [],
+    );
     if (d.problems.length > 0) {
       throw new Error(`ordinal derivation failed for ${r.fixtureId}: ${d.problems.join('; ')}`);
     }
@@ -315,8 +325,16 @@ function comparePair(left: NormalRow, right: NormalRow): PairResult {
         detail: {
           reason:
             '`fired`/`matchCount` do not DERIVE from the violation multiset on one of the arms (§ Differential units)',
-          left: { fired: left.fired, matchCount: left.matchCount, violations: left.violations!.length },
-          right: { fired: right.fired, matchCount: right.matchCount, violations: right.violations!.length },
+          left: {
+            fired: left.fired,
+            matchCount: left.matchCount,
+            violations: left.violations!.length,
+          },
+          right: {
+            fired: right.fired,
+            matchCount: right.matchCount,
+            violations: right.violations!.length,
+          },
         },
       };
     }
@@ -325,7 +343,12 @@ function comparePair(left: NormalRow, right: NormalRow): PairResult {
 
   const ex = explain(left, right);
   if (ex) {
-    return { ...base, status: 'EXPLAINED-DIVERGENCE', explanation: ex.explanation, detail: ex.detail };
+    return {
+      ...base,
+      status: 'EXPLAINED-DIVERGENCE',
+      explanation: ex.explanation,
+      detail: ex.detail,
+    };
   }
 
   return {
@@ -427,7 +450,14 @@ function selfTest(checks: Checks): void {
     {
       name: 'MUTANT — an ERROR ROW is UNEXPLAINED, never a clean zero',
       left: base(),
-      right: base({ arm: 'shipped', violations: null, events: null, fired: null, matchCount: null, error: 'boom' }),
+      right: base({
+        arm: 'shipped',
+        violations: null,
+        events: null,
+        fired: null,
+        matchCount: null,
+        error: 'boom',
+      }),
       expect: 'UNEXPLAINED-DIVERGENCE',
     },
     {
@@ -471,7 +501,10 @@ function main(): void {
   const regorusArt = readArtifact('regorus-verdicts.json');
 
   const bundles = new Map<string, any>();
-  for (const f of fs.readdirSync(FACTS_DIR).filter((f) => f.endsWith('.json')).sort()) {
+  for (const f of fs
+    .readdirSync(FACTS_DIR)
+    .filter((f) => f.endsWith('.json'))
+    .sort()) {
     const rec = JSON.parse(fs.readFileSync(path.join(FACTS_DIR, f), 'utf-8'));
     bundles.set(rec.fixtureId, rec.factBundle);
   }
@@ -490,7 +523,11 @@ function main(): void {
   const O = byKey(opa);
   const R = byKey(regorus);
 
-  checks.eq('the join key (ruleId, fixtureId) is unique on every arm', [S.size, O.size, R.size], [24, 24, 24]);
+  checks.eq(
+    'the join key (ruleId, fixtureId) is unique on every arm',
+    [S.size, O.size, R.size],
+    [24, 24, 24],
+  );
   const missing = [...S.keys()].filter((k) => !O.has(k) || !R.has(k));
   checks.eq('every shipped pair has an opa row AND a regorus row (no silent skip)', missing, []);
 
@@ -570,7 +607,8 @@ function main(): void {
     explanationClasses: [
       {
         id: 'ORDINAL-DERIVATION-ONLY',
-        fires: 'the (rule_id, line_number) multisets and the event streams are identical and only the ordinal differs',
+        fires:
+          'the (rule_id, line_number) multisets and the event streams are identical and only the ordinal differs',
         timesFired: explained.length,
         rationale:
           'Deliberately the ONLY registered class. A wider rule would launder a real semantic divergence as "explained", which is the failure a differential exists to prevent.',

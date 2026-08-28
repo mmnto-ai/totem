@@ -62,7 +62,11 @@ interface PatternRow {
   pattern: string;
 }
 
-function readCorpora(): { rows: PatternRow[]; totalRules: number; perCorpus: Record<string, { rules: number; withPattern: number }> } {
+function readCorpora(): {
+  rows: PatternRow[];
+  totalRules: number;
+  perCorpus: Record<string, { rules: number; withPattern: number }>;
+} {
   const rows: PatternRow[] = [];
   const perCorpus: Record<string, { rules: number; withPattern: number }> = {};
   let totalRules = 0;
@@ -109,8 +113,8 @@ export {
 
 /** Most-inexpressible-wins order, used for the disjoint assignment. */
 const CLASS_RANK: Record<ExpressibilityClass, number> = {
-  'backreference': 3,
-  'lookaround': 2,
+  backreference: 3,
+  lookaround: 2,
   'word-boundary': 1,
   're2-clean': 0,
 };
@@ -160,8 +164,7 @@ function opaRegexMatch(label: string, pattern: string, input: string): OpaProbe 
   const stringForm: OpaProbe['stringForm'] = pattern.includes('`')
     ? 'double-quoted-json-escaped'
     : 'raw-backtick';
-  const literal =
-    stringForm === 'raw-backtick' ? `\`${pattern}\`` : JSON.stringify(pattern);
+  const literal = stringForm === 'raw-backtick' ? `\`${pattern}\`` : JSON.stringify(pattern);
   const query = `regex.match(${literal}, ${JSON.stringify(input)})`;
   const r = spawnSync(OPA_BIN, ['eval', '--format=json', '--strict-builtin-errors', query], {
     encoding: 'utf-8',
@@ -194,7 +197,10 @@ function opaRegexMatch(label: string, pattern: string, input: string): OpaProbe 
 }
 
 /** The non-strict default, probed once, so the fail-open is recorded rather than assumed. */
-function opaNonStrictLookahead(pattern: string, input: string): { exitCode: number | null; stdout: string } {
+function opaNonStrictLookahead(
+  pattern: string,
+  input: string,
+): { exitCode: number | null; stdout: string } {
   const query = `regex.match(\`${pattern}\`, ${JSON.stringify(input)})`;
   const r = spawnSync(OPA_BIN, ['eval', '--format=json', query], { encoding: 'utf-8' });
   return { exitCode: r.status, stdout: r.stdout.trim() };
@@ -231,8 +237,8 @@ async function main(): Promise<void> {
   const classCounts: Record<ExpressibilityClass, number> = {
     're2-clean': 0,
     'word-boundary': 0,
-    'lookaround': 0,
-    'backreference': 0,
+    lookaround: 0,
+    backreference: 0,
   };
   for (const c of classified) classCounts[c.class] += 1;
 
@@ -251,7 +257,11 @@ async function main(): Promise<void> {
       .every(
         (c) =>
           c.scan.backreference === 0 &&
-          c.scan.lookahead + c.scan.negativeLookahead + c.scan.lookbehind + c.scan.negativeLookbehind === 0,
+          c.scan.lookahead +
+            c.scan.negativeLookahead +
+            c.scan.lookbehind +
+            c.scan.negativeLookbehind ===
+            0,
       ),
     `${classCounts['word-boundary']} word-boundary rows checked`,
   );
@@ -268,7 +278,11 @@ async function main(): Promise<void> {
         (c) =>
           c.scan.wordBoundary === 0 &&
           c.scan.backreference === 0 &&
-          c.scan.lookahead + c.scan.negativeLookahead + c.scan.lookbehind + c.scan.negativeLookbehind === 0,
+          c.scan.lookahead +
+            c.scan.negativeLookahead +
+            c.scan.lookbehind +
+            c.scan.negativeLookbehind ===
+            0,
       ),
     `${classCounts['re2-clean']} re2-clean rows checked`,
   );
@@ -278,7 +292,10 @@ async function main(): Promise<void> {
     wordBoundaryBearing: classified.filter((c) => c.scan.wordBoundary > 0).length,
     lookaroundBearing: classified.filter(
       (c) =>
-        c.scan.lookahead + c.scan.negativeLookahead + c.scan.lookbehind + c.scan.negativeLookbehind >
+        c.scan.lookahead +
+          c.scan.negativeLookahead +
+          c.scan.lookbehind +
+          c.scan.negativeLookbehind >
         0,
     ).length,
     negativeLookaheadBearing: classified.filter((c) => c.scan.negativeLookahead > 0).length,
@@ -406,8 +423,7 @@ async function main(): Promise<void> {
   const laRow =
     classified.find((c) => c.ruleHash === '09ee37252a814a09' && c.scan.negativeLookahead > 0) ??
     classified.find((c) => c.scan.negativeLookahead > 0)!;
-  const lbRow =
-    classified.find((c) => c.scan.lookbehind + c.scan.negativeLookbehind > 0) ?? null;
+  const lbRow = classified.find((c) => c.scan.lookbehind + c.scan.negativeLookbehind > 0) ?? null;
   const brRow = classified.find((c) => c.scan.backreference > 0) ?? null;
 
   const inexpressibleProbes = [
@@ -437,7 +453,11 @@ async function main(): Promise<void> {
     inexpressibleProbes[1]!.error ?? '(no error)',
   );
   for (const p of inexpressibleProbes.slice(2)) {
-    checks.check(`EMPIRICAL: ${p.label} is REJECTED by RE2`, p.verdict === 'rejected-by-re2', p.error ?? '(no error)');
+    checks.check(
+      `EMPIRICAL: ${p.label} is REJECTED by RE2`,
+      p.verdict === 'rejected-by-re2',
+      p.error ?? '(no error)',
+    );
   }
 
   // A THIRD inexpressibility axis, distinct from RE2 syntax: the Rego string
@@ -510,7 +530,12 @@ async function main(): Promise<void> {
   }
   checks.eq(
     'EVIDENCE ROW — 48 lookaround-bearing patterns (47 negative-lookahead + 1 lookbehind), 53 occurrences',
-    [bearing.lookaroundBearing, bearing.negativeLookaheadBearing, bearing.lookbehindAnyBearing, occurrences.lookaround],
+    [
+      bearing.lookaroundBearing,
+      bearing.negativeLookaheadBearing,
+      bearing.lookbehindAnyBearing,
+      occurrences.lookaround,
+    ],
     [48, 47, 1, 53],
   );
 
@@ -553,7 +578,11 @@ async function main(): Promise<void> {
     generatedBy: 'spikes/spine-adopt/src/census.mts',
     spec: '.totem/specs/spine-spike.md § "Census corrections the design binds to" (DISPUTED row) + § Invariants ("classes partition all 226")',
     repoRoot: REPO_ROOT,
-    corpora: CORPORA.map((c) => ({ id: c.id, file: c.file.slice(REPO_ROOT.length + 1), ...perCorpus[c.id]! })),
+    corpora: CORPORA.map((c) => ({
+      id: c.id,
+      file: c.file.slice(REPO_ROOT.length + 1),
+      ...perCorpus[c.id]!,
+    })),
     totals: { rules: totalRules, patternsCensused: rows.length },
     classCounts,
     classPartitionSum: sum,
@@ -577,8 +606,7 @@ async function main(): Promise<void> {
       binary: path.relative(REPO_ROOT, OPA_BIN),
       version,
       pin: 'toolchain.lock [opa] v1.20.0',
-      note:
-        'Patterns are handed to OPA as Rego RAW strings (backticks). In a Rego DOUBLE-QUOTED string `\\b` is the JSON backspace escape — the double-quoted form measures U+0008, not a word boundary. `--strict-builtin-errors` is required: without it a regex COMPILE failure degrades to an undefined expression with exit 0.',
+      note: 'Patterns are handed to OPA as Rego RAW strings (backticks). In a Rego DOUBLE-QUOTED string `\\b` is the JSON backspace escape — the double-quoted form measures U+0008, not a word boundary. `--strict-builtin-errors` is required: without it a regex COMPILE failure degrades to an undefined expression with exit 0.',
       wordBoundaryProbes: wbProbes,
       inexpressibleProbes,
       failOpenProbe: {
@@ -589,22 +617,29 @@ async function main(): Promise<void> {
           'OPA exits 0 with an empty result set. A lowerer that shells out without --strict-builtin-errors converts an inexpressible pattern into a silent NO-VIOLATION — a fail-open rule drop.',
       },
       doubleQuotedStringProbe: {
-        label: 'regex.match("\\bfoo\\b", "a foo b") — DOUBLE-QUOTED form, pattern text emitted VERBATIM',
+        label:
+          'regex.match("\\bfoo\\b", "a foo b") — DOUBLE-QUOTED form, pattern text emitted VERBATIM',
         value: dqValue,
         finding: `false. \`\\b\` in a Rego double-quoted string is BACKSPACE (U+0008). A lowerer that emits pattern text verbatim into a double-quoted Rego string silently breaks all ${bearing.wordBoundaryBearing} word-boundary-bearing patterns. Either use the raw-string form or re-escape every backslash (JSON.stringify semantics).`,
       },
       regoStringLiteralConstraint: {
         finding:
           'A Rego RAW string (backticks) has NO escape mechanism, so a regex containing a backtick cannot be carried in that form at all. This is an expressibility axis SEPARATE from RE2 syntax and it is not visible in the class partition.',
-        affectedPatterns: backtickBearing.map((c) => ({ ruleHash: c.ruleHash, corpus: c.corpus, class: c.class, pattern: c.pattern })),
+        affectedPatterns: backtickBearing.map((c) => ({
+          ruleHash: c.ruleHash,
+          corpus: c.corpus,
+          class: c.class,
+          pattern: c.pattern,
+        })),
         workaround:
           'double-quoted literal with every backslash re-escaped; measured working on the affected pattern (see inexpressibleProbes[].stringForm).',
       },
     },
     expressibilityEvidenceRows,
     disputedRowVerdict: {
-      row: '`\\b` (101/226 patterns) marked unsupported by the leg\'s RE2 table',
-      settled: 'FALSIFIED — `\\b` IS supported by the pinned OPA (RE2/Go regexp) as an ASCII word boundary.',
+      row: "`\\b` (101/226 patterns) marked unsupported by the leg's RE2 table",
+      settled:
+        'FALSIFIED — `\\b` IS supported by the pinned OPA (RE2/Go regexp) as an ASCII word boundary.',
       evidence:
         'regex.match(`\\bfoo\\b`, "a foo b") = true; regex.match(`\\bfoo\\b`, "afoob") = false; the corpus pattern 61dcb058bd1df15d matches its fixture fail line and not its pass line.',
       confirmedInexpressible:

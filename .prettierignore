@@ -24,3 +24,12 @@ packages/pack-agent-workflow/test/fixtures/
 .claude/hooks/
 .gemini/hooks/
 cloc-results.json
+
+# spike branch: gitignored toolchains + generated policies + byte-deterministic evidence emissions
+spikes/spine-adopt/tools/
+spikes/spine-adopt/rego/build/
+spikes/spine-adopt/artifacts/
+spikes/spine-adopt/smt/artifacts/
+spikes/spine-adopt/smt/obligations/
+spikes/spine-adopt/wazero-probe/artifacts/
+spikes/spine-adopt/egg-probe/artifacts/

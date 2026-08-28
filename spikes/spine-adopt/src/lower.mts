@@ -205,7 +205,14 @@ export function lowerPattern(role: string, pattern: string): PatternVerdict {
           : 'RE2 rejects backreferences AT COMPILE ("invalid escape sequence: `\\1`"); § Lowering 4 forbids an approximation.',
     };
   }
-  return { role, pattern, class: cls, lowered: true, literal: JSON.stringify(pattern), reason: null };
+  return {
+    role,
+    pattern,
+    class: cls,
+    lowered: true,
+    literal: JSON.stringify(pattern),
+    reason: null,
+  };
 }
 
 // ─── § Lowering 1 — the package name ─────────────────────────────────────────
@@ -338,7 +345,9 @@ function emitPolicy(cs: CompiledSpecimen, lowered: LoweredRecord): string {
   L.push(`\tis_array(input.lines)`);
   L.push(`\tis_array(input.astMatches)`);
   L.push(`\tcount([1 | some l in input.lines; is_string(l)]) == count(input.lines)`);
-  L.push(`\tcount([1 | some m in input.astMatches; ast_match_wellformed(m)]) == count(input.astMatches)`);
+  L.push(
+    `\tcount([1 | some m in input.astMatches; ast_match_wellformed(m)]) == count(input.astMatches)`,
+  );
   L.push(`}`);
   L.push(``);
   L.push(`ast_match_wellformed(m) if {`);
@@ -422,7 +431,8 @@ function emitPolicy(cs: CompiledSpecimen, lowered: LoweredRecord): string {
     L.push(``);
   }
 
-  const requiresGuard = requires && req?.literal ? [`\tnot requirement_met(${isRegex ? 'i' : 'j'})`] : [];
+  const requiresGuard =
+    requires && req?.literal ? [`\tnot requirement_met(${isRegex ? 'i' : 'j'})`] : [];
 
   L.push(`# ─── § Lowering 1 — the output contract ────────────────────────────────────`);
   L.push(``);
@@ -671,7 +681,9 @@ async function main(): Promise<void> {
       globDrift.length === 0,
       globDrift.length === 0
         ? `${perGlob.length} (glob × path) probes agree`
-        : globDrift.map((d) => `${d.glob} vs ${d.path}: mine=${d.mine} shipped=${d.shipped}`).join('; '),
+        : globDrift
+            .map((d) => `${d.glob} vs ${d.path}: mine=${d.mine} shipped=${d.shipped}`)
+            .join('; '),
     );
     const scopeDrift = scopeProbes.filter((r) => r.mine !== r.shipped);
     checks.check(
@@ -727,7 +739,8 @@ async function main(): Promise<void> {
       const p = patterns.find((x) => x.role === 'target')!;
       checks.check(
         `${s.id} — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)`,
-        emitted.includes(p.literal!) && (!p.pattern.includes('\\') || p.literal !== `"${p.pattern}"`),
+        emitted.includes(p.literal!) &&
+          (!p.pattern.includes('\\') || p.literal !== `"${p.pattern}"`),
         `${p.literal!.slice(0, 60)}…`,
       );
     }

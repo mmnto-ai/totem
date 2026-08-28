@@ -9,6 +9,7 @@ measured on the REAL corpus, with every claimed equivalence externally verified?
 ## Falsifiable adoption check (pre-registered)
 
 ADOPT-for-study only if ALL of:
+
 1. **Soundness 100%:** every equivalence egg claims (two syntactically-distinct corpus patterns in
    one e-class, or a rewritten form vs its original) is verified UNSAT by the Z3 xor-emptiness
    construction (the O9 shape: `∃s: s ∈ L(A) ⊕ s ∈ L(B)` — UNSAT = equivalent). ONE unsound merge
@@ -18,8 +19,8 @@ ADOPT-for-study only if ALL of:
    keep on real rules, not constructed examples.
 3. **Bounded cost:** full-corpus saturation completes under a declared budget (60s wall, default
    egg iteration limits); a blowup is a REJECT row with the measurement.
-Otherwise: **REJECT — plain typed IR structures win** (codex Q-GAP row 3's default), recorded with
-the numbers.
+   Otherwise: **REJECT — plain typed IR structures win** (codex Q-GAP row 3's default), recorded with
+   the numbers.
 
 ## Method
 

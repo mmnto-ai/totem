@@ -219,12 +219,22 @@ async function main(): Promise<void> {
           events: a.events,
           timeoutOutcomes: null,
         });
-        checks.check(`${rec.fixtureId} — ast dispatcher emitted no warnings`, warnings.length === 0, warnings.join('; ') || 'clean');
+        checks.check(
+          `${rec.fixtureId} — ast dispatcher emitted no warnings`,
+          warnings.length === 0,
+          warnings.join('; ') || 'clean',
+        );
 
         // The engine filter, MEASURED rather than assumed: the sync regex
         // dispatcher is not a second ast arm — it drops ast rules by design.
         const probe = collector();
-        const filtered = core.applyRulesToAdditions(ctx(), [cs.rule], additions, probe.onRuleEvent, workRoot);
+        const filtered = core.applyRulesToAdditions(
+          ctx(),
+          [cs.rule],
+          additions,
+          probe.onRuleEvent,
+          workRoot,
+        );
         checks.check(
           `${rec.fixtureId} — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)`,
           filtered.length === 0 && probe.events.length === 0,
@@ -257,7 +267,8 @@ async function main(): Promise<void> {
         specimen: rec.specimen,
         engine: cs.engine,
         file: bundle.file,
-        fileTextState: bundle.fileText === null ? 'null' : bundle.fileText === '' ? 'empty' : 'content',
+        fileTextState:
+          bundle.fileText === null ? 'null' : bundle.fileText === '' ? 'empty' : 'content',
         lineCount: bundle.lines.length,
         arms,
         armsCoincide,
@@ -279,7 +290,8 @@ async function main(): Promise<void> {
       'ENGINE ASYMMETRY — the regex path emits AT MOST ONE violation per added line (worker.ts:53-62)',
       regexRows.every((r) => {
         const perLine = new Map<number, number>();
-        for (const v of r.arms[0]!.violations) perLine.set(v.lineNumber, (perLine.get(v.lineNumber) ?? 0) + 1);
+        for (const v of r.arms[0]!.violations)
+          perLine.set(v.lineNumber, (perLine.get(v.lineNumber) ?? 0) + 1);
         return [...perLine.values()].every((n) => n <= 1);
       }),
       `${regexRows.length} regex rows`,
@@ -288,7 +300,9 @@ async function main(): Promise<void> {
     checks.check(
       'ENGINE ASYMMETRY — the ast-grep path emits ONE violation PER MATCH (rule-engine.ts:1074)',
       Boolean(astMultiHit),
-      astMultiHit ? `${astMultiHit.fixtureId}: ${astMultiHit.matchCount} violations` : 'no multi-match ast row found',
+      astMultiHit
+        ? `${astMultiHit.fixtureId}: ${astMultiHit.matchCount} violations`
+        : 'no multi-match ast row found',
     );
 
     // ── § Invariants floor (i): specimens d/e reproduce the ALREADY-PINNED verdicts ──
@@ -310,7 +324,11 @@ async function main(): Promise<void> {
       precedingLine: null,
     });
 
-    const pinBad = core.applyRulesToAdditions(ctx(), [dLine], [add('scripts/x.sh', 'git log --oneline')]);
+    const pinBad = core.applyRulesToAdditions(
+      ctx(),
+      [dLine],
+      [add('scripts/x.sh', 'git log --oneline')],
+    );
     pin(
       'd-line (test:289-304) FIRES on its own `bad` example, lessonHash === the pinned RULE_ID',
       pinBad.length === 1 && pinBad[0].rule.lessonHash === PINNED_RULE_ID,
@@ -321,7 +339,11 @@ async function main(): Promise<void> {
       [dLine],
       [add('scripts/x.sh', 'LC_ALL=C git log --oneline')],
     );
-    pin('d-line (test:298-303) stays SILENT on its own `good` example', pinGood.length === 0, `${pinGood.length} violation(s)`);
+    pin(
+      'd-line (test:298-303) stays SILENT on its own `good` example',
+      pinGood.length === 0,
+      `${pinGood.length} violation(s)`,
+    );
 
     const evGood: string[] = [];
     core.applyRulesToAdditions(
@@ -331,15 +353,22 @@ async function main(): Promise<void> {
       (k: string) => evGood.push(k),
     );
     const evBad: string[] = [];
-    core.applyRulesToAdditions(ctx(), [dLine], [add('scripts/x.sh', 'git log --oneline')], (k: string) =>
-      evBad.push(k),
+    core.applyRulesToAdditions(
+      ctx(),
+      [dLine],
+      [add('scripts/x.sh', 'git log --oneline')],
+      (k: string) => evBad.push(k),
     );
     pin(
       'd-line (test:306-324) required-context-present emits NO event; firing emits exactly [trigger]',
       JSON.stringify(evGood) === '[]' && JSON.stringify(evBad) === '["trigger"]',
       `good=${JSON.stringify(evGood)} bad=${JSON.stringify(evBad)}`,
     );
-    const pinTs = core.applyRulesToAdditions(ctx(), [dLine], [add('scripts/x.ts', 'git log --oneline')]);
+    const pinTs = core.applyRulesToAdditions(
+      ctx(),
+      [dLine],
+      [add('scripts/x.ts', 'git log --oneline')],
+    );
     const pinCjs = core.applyRulesToAdditions(
       ctx(),
       [dLine],
@@ -360,7 +389,11 @@ async function main(): Promise<void> {
       ['export LC_ALL=C', 'git log --oneline'].join('\n'),
       'utf-8',
     );
-    fs.writeFileSync(path.join(pinDir, 'scripts', 'unpinned.sh'), ['git log --oneline'].join('\n'), 'utf-8');
+    fs.writeFileSync(
+      path.join(pinDir, 'scripts', 'unpinned.sh'),
+      ['git log --oneline'].join('\n'),
+      'utf-8',
+    );
 
     const pinSatisfied = core.applyRulesToAdditions(
       ctx(),
@@ -422,7 +455,11 @@ async function main(): Promise<void> {
       `${eBad.length} violation(s), hash=${eBad[0]?.rule.lessonHash}`,
     );
     const eGood = await runE('packages/core/src/a.ts', eExamples[0]!.good);
-    pin('e (test:422-424) stays SILENT on its own `good` example', eGood.length === 0, `${eGood.length}`);
+    pin(
+      'e (test:422-424) stays SILENT on its own `good` example',
+      eGood.length === 0,
+      `${eGood.length}`,
+    );
     const eExcluded = await runE('packages/core/src/a.test.ts', eExamples[0]!.bad);
     pin(
       'e (test:426-428) honours `excludeGlobs` at dispatch — the same bad source in a test file is out of scope',
@@ -512,24 +549,37 @@ async function main(): Promise<void> {
       // substitution directives in a string replacement, so a requirement like
       // `^$` would silently splice the rest of the document in. (Measured: it did.)
       const yaml = dFileYaml.replace(/^  pattern: 'LC_ALL=C'$/m, () => `  pattern: '${pattern}'`);
-      if (yaml === dFileYaml) throw new Error(`requires-pattern substitution missed for ${pattern}`);
+      if (yaml === dFileYaml)
+        throw new Error(`requires-pattern substitution missed for ${pattern}`);
       const outcome = core.compileRuleRecord(
-        core.parseRuleRecord(yaml, `spikes/spine-adopt/records/CONTROL-requires-${pattern}.rule.yaml`),
+        core.parseRuleRecord(
+          yaml,
+          `spikes/spine-adopt/records/CONTROL-requires-${pattern}.rule.yaml`,
+        ),
         { ruleId: PINNED_RULE_ID, now: PINNED_NOW },
       );
-      if (outcome.kind !== 'compiled') throw new Error(`control requires:'${pattern}' did not lower: ${outcome.reason}`);
+      if (outcome.kind !== 'compiled')
+        throw new Error(`control requires:'${pattern}' did not lower: ${outcome.reason}`);
       return outcome.rule;
     }
 
     const splitAdds = additionsOf('scripts/probe.sh', ['git log --oneline']);
-    async function verdictFor(rule: any, fileText: string | null): Promise<{ sync: number; bounded: number }> {
+    async function verdictFor(
+      rule: any,
+      fileText: string | null,
+    ): Promise<{ sync: number; bounded: number }> {
       const read = (p: string) => (p === 'scripts/probe.sh' ? fileText : null);
       const sync = core.applyRulesToAdditions(ctx(), [rule], splitAdds, undefined, workRoot, read);
       const bounded = await core.applyRulesToAdditionsBounded(
         ctx(),
         [rule],
         splitAdds,
-        { evaluator, timeoutMode: 'strict', repoRoot: workRoot, readStrategy: async (p: string) => read(p) },
+        {
+          evaluator,
+          timeoutMode: 'strict',
+          repoRoot: workRoot,
+          readStrategy: async (p: string) => read(p),
+        },
         undefined,
       );
       return { sync: sync.length, bounded: bounded.violations.length };
@@ -572,7 +622,8 @@ async function main(): Promise<void> {
     checks.check(
       "M3 SPLIT — null and '' DIVERGE on a ''-matching requirement, and AGREE on one that does not",
       splitMatrix["a* (matches '')"]!.null!.sync !== splitMatrix["a* (matches '')"]!.empty!.sync &&
-        splitMatrix["^$ (matches '')"]!.null!.sync !== splitMatrix["^$ (matches '')"]!.empty!.sync &&
+        splitMatrix["^$ (matches '')"]!.null!.sync !==
+          splitMatrix["^$ (matches '')"]!.empty!.sync &&
         splitMatrix["LC_ALL=C (pinned — does NOT match '')"]!.null!.sync ===
           splitMatrix["LC_ALL=C (pinned — does NOT match '')"]!.empty!.sync,
       JSON.stringify(splitMatrix),
@@ -587,16 +638,18 @@ async function main(): Promise<void> {
         'Every addition is fed UNCLASSIFIED (astContext absent ⇒ code). Shipped lint never runs this configuration; `astContext: "comment"` gates emission after triggering (apply-rules-bounded.ts:249).',
       armModel: {
         regex: {
-          'arm1-pin': 'applyRulesToAdditions — the sync dispatcher that produced the pins at record-runtime.test.ts:286-395',
+          'arm1-pin':
+            'applyRulesToAdditions — the sync dispatcher that produced the pins at record-runtime.test.ts:286-395',
           'arm2-lint': 'applyRulesToAdditionsBounded — what `totem lint` runs',
           agreementAsserted: true,
         },
         'ast-grep': {
-          'arm1-pin': 'applyAstRulesToAdditions — the dispatcher that produced the pins at record-runtime.test.ts:397-433',
-          'arm2-lint': 'applyAstRulesToAdditions — the SAME function; `totem lint` has no second ast dispatcher',
+          'arm1-pin':
+            'applyAstRulesToAdditions — the dispatcher that produced the pins at record-runtime.test.ts:397-433',
+          'arm2-lint':
+            'applyAstRulesToAdditions — the SAME function; `totem lint` has no second ast dispatcher',
           agreementAsserted: false,
-          note:
-            'The arms COINCIDE for ast rules. Recorded rather than manufactured: calling one function twice and reporting agreement would be a vacuous check. The engine filter is measured instead — applyRulesToAdditions drops ast rules entirely, so it is not a second ast arm. FLAGGED for the dispatching seat: § Oracle arms says "both arms run on all specimens", which has no two-dispatcher reading on the ast side.',
+          note: 'The arms COINCIDE for ast rules. Recorded rather than manufactured: calling one function twice and reporting agreement would be a vacuous check. The engine filter is measured instead — applyRulesToAdditions drops ast rules entirely, so it is not a second ast arm. FLAGGED for the dispatching seat: § Oracle arms says "both arms run on all specimens", which has no two-dispatcher reading on the ast side.',
         },
       },
       verdictRows: rows,

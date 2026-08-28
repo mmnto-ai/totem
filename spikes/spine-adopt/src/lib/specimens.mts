@@ -54,7 +54,7 @@ export const SPECIMENS: Specimen[] = [
     exemplarFactory: null,
     fixture: { file: '.totem/tests/test-61dcb058bd1df15d.md', specFailLines: 1, specPassLines: 1 },
     inlineFilePath: 'scripts/deploy.sh',
-    notes: "5 `!`-negated legacy globs re-authored as excludeGlobs; 9 positives verbatim.",
+    notes: '5 `!`-negated legacy globs re-authored as excludeGlobs; 9 positives verbatim.',
   },
   {
     id: 'b',
@@ -77,7 +77,7 @@ export const SPECIMENS: Specimen[] = [
     exemplarFactory: null,
     fixture: { file: '.totem/tests/test-d0815b6769304e26.md', specFailLines: 3, specPassLines: 4 },
     inlineFilePath: 'packages/core/src/spawn-site.ts',
-    notes: "compound tree verbatim incl. the embedded Rust-regex `^shell$` (dual-dialect hazard).",
+    notes: 'compound tree verbatim incl. the embedded Rust-regex `^shell$` (dual-dialect hazard).',
   },
   {
     id: 'c-supp',
@@ -88,7 +88,8 @@ export const SPECIMENS: Specimen[] = [
     exemplarFactory: null,
     fixture: { file: '.totem/tests/test-87aff037d7de47a7.md', specFailLines: 8, specPassLines: 20 },
     inlineFilePath: 'packages/core/src/catch-site.ts',
-    notes: 'supplementary richness arm; SAME matcher as specimen (e), isolating the exception axis.',
+    notes:
+      'supplementary richness arm; SAME matcher as specimen (e), isolating the exception axis.',
   },
   {
     id: 'd-line',

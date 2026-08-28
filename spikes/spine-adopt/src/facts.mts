@@ -145,7 +145,11 @@ async function main(): Promise<void> {
     const abs = fixtureAbsPath(s.fixture);
     checks.check(`specimen ${s.id} — fixture exists: ${s.fixture.file}`, fs.existsSync(abs), abs);
     const parsed = core.parseFixture(fs.readFileSync(abs, 'utf-8'), abs);
-    checks.check(`specimen ${s.id} — parseFixture returned a fixture`, Boolean(parsed), s.fixture.file);
+    checks.check(
+      `specimen ${s.id} — parseFixture returned a fixture`,
+      Boolean(parsed),
+      s.fixture.file,
+    );
     if (!parsed) continue;
 
     // The spec table's F/P counts are CORPUS DESCRIPTIONS. Verified as such —
@@ -278,8 +282,7 @@ async function main(): Promise<void> {
     arm: 'unreadable',
     provenance: {
       mirrors: 'record-runtime.test.ts:385-394 — "fires when the file cannot be read at all"',
-      note:
-        'fileText: null beside a NON-EMPTY lines[]. A diff addition exists whether or not the file can be read, so lines[] here comes from the DIFF, not from fileText — the one bundle where the two sources are not the same source.',
+      note: 'fileText: null beside a NON-EMPTY lines[]. A diff addition exists whether or not the file can be read, so lines[] here comes from the DIFF, not from fileText — the one bundle where the two sources are not the same source.',
       expectation: 'context absent => fail TOWARD flagging => FIRES',
     },
     astQuery: null,
@@ -294,8 +297,7 @@ async function main(): Promise<void> {
     source: 'synthetic-control',
     arm: 'empty',
     provenance: {
-      note:
-        "fileText: '' — READABLE but zero-length. Distinct from null: the requirement is EVALUATED against the empty string, so the verdict depends on whether requires.pattern matches ''. The split is measured in shipped-verdicts.mts against a hand-constructed ''-matching requirement.",
+      note: "fileText: '' — READABLE but zero-length. Distinct from null: the requirement is EVALUATED against the empty string, so the verdict depends on whether requires.pattern matches ''. The split is measured in shipped-verdicts.mts against a hand-constructed ''-matching requirement.",
       expectation:
         "requires.pattern 'LC_ALL=C' does NOT match '' => FIRES; a ''-matching requirement (e.g. 'a*') IS satisfied => silent.",
     },
@@ -339,7 +341,12 @@ async function main(): Promise<void> {
       engine: r.engine,
       source: r.source,
       arm: r.arm,
-      fileTextState: r.factBundle.fileText === null ? 'null' : r.factBundle.fileText === '' ? 'empty' : 'content',
+      fileTextState:
+        r.factBundle.fileText === null
+          ? 'null'
+          : r.factBundle.fileText === ''
+            ? 'empty'
+            : 'content',
       lineCount: r.factBundle.lines.length,
       astMatchCount: r.factBundle.astMatches.length,
     })),

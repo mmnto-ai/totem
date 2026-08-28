@@ -28,14 +28,14 @@ array) has `preceding = lines[i-1]` (absent for the first). All lines are additi
 1. **One package per record** — `totem.spike.r<ruleId>`; one wasm bundle per record
    (`opa build -t wasm -e totem/spike/r<ruleId>/result`), giving a per-record artifact hash for the
    chain `sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm)`.
-   `result = {violations, events}`. *(Ratified amendment: ruleId alone is not unique — the two
+   `result = {violations, events}`. _(Ratified amendment: ruleId alone is not unique — the two
    exemplar transcriptions share the pinned id — so colliding ids take a `_<specimen>` package
-   suffix; unique ids stay bare.)*
-2. **Strict is STRUCTURAL** *(amended after measurement — the original "run
+   suffix; unique ids stay bare.)\_
+2. **Strict is STRUCTURAL** _(amended after measurement — the original "run
    `--strict-builtin-errors` everywhere" is unsatisfiable: the flag is eval-only, `opa build`
    rejects it, and a wasm module has no equivalent — a policy with an uncompilable pattern builds
    (exit 0) and FAILS OPEN at eval: empty result, no trap. This wasm strictness gap is itself a
-   deposit finding.)* Cure: every emitted pattern is exercised by a `patterns_compile` probe inside
+   deposit finding.)_ Cure: every emitted pattern is exercised by a `patterns_compile` probe inside
    the complete `result` rule, so a compile failure leaves `result` undefined, and the host raises
    an empty/undefined result as an ERROR row, never a no-violation verdict. `opa eval` runs (CLI
    arms, tests) still pass `--strict-builtin-errors`.
@@ -57,9 +57,9 @@ array) has `preceding = lines[i-1]` (absent for the first). All lines are additi
    (fail-toward-flagging, explicit rule arm — never a default). `''` is a readable empty file and
    matches only `''`-matching requirements (the measured split).
 7. **Suppression:** same-line `totem-ignore`/`totem-context:`/`shield-context:` substring, or
-   preceding-line `totem-ignore-next-line`/`totem-context:`/`shield-context:` *(amended: the
+   preceding-line `totem-ignore-next-line`/`totem-context:`/`shield-context:` _(amended: the
    shipped `isSuppressed` accepts `shield-context:` on the preceding anchor too —
-   `rule-engine.ts:349-356,384-388`; the contract was one marker short)* — regex arm anchors on the
+   `rule-engine.ts:349-356,384-388`; the contract was one marker short)_ — regex arm anchors on the
    matched line + its preceding; ast arm additionally on `startLineText`/`startPrecedingLineText`
    (dual anchor). Suppressed match ⇒ `suppress` event, no violation. **Order: `requires` is
    evaluated BEFORE suppression on all shipped dispatchers — a requires-satisfied match is silent
