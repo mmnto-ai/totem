@@ -1,4 +1,4 @@
-# Spine spike pair — decision report (DRAFT; two rows pending)
+# Spine spike pair — decision report (COMPLETE — all day-14 rows measured; sealed 2026-08-27)
 
 **Charter:** operator word 2026-08-27; design source of record = strategy-codex's adopt-round
 deposit (Q1 ranks 1–2 + Q-GAP) + the round's three enrichment rows. Durable record:
