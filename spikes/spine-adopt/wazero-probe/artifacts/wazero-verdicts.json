@@ -1,0 +1,1083 @@
+{
+  "abi": [
+    {
+      "specimen": "a",
+      "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+      "wasmBytes": 347397,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r61dcb058bd1df15d/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r61dcb058bd1df15d/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 4
+    },
+    {
+      "specimen": "b",
+      "wasmSha256": "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+      "wasmBytes": 345903,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r2d962603591aa928/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r2d962603591aa928/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "c",
+      "wasmSha256": "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
+      "wasmBytes": 346215,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/rd0815b6769304e26/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/rd0815b6769304e26/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "c-supp",
+      "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+      "wasmBytes": 346096,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r87aff037d7de47a7/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r87aff037d7de47a7/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "d-line",
+      "wasmSha256": "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
+      "wasmBytes": 346899,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r0123456789abcdef_d_line/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r0123456789abcdef_d_line/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "d-file",
+      "wasmSha256": "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
+      "wasmBytes": 346985,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r0123456789abcdef_d_file/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r0123456789abcdef_d_file/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "e",
+      "wasmSha256": "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
+      "wasmBytes": 346040,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r0123456789abcdef_e/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r0123456789abcdef_e/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    }
+  ],
+  "arm": "wazero",
+  "contract": "spec § Enrichment rows item 2 — the wazero component-model maturity check BEFORE any WASM contract freezes. Row shape is the wasmtime arm's VerdictRow, arm: \"wazero\".",
+  "exportEnumerationNote": "The per-specimen `exports` list holds 24 entries (23 functions + the re-exported memory) where artifacts/opa-abi-census.json reports 26. The difference is the two GLOBALS, `opa_wasm_abi_version` and `opa_wasm_abi_minor_version`: wazero's CompiledModule exposes ImportedFunctions / ExportedFunctions / ImportedMemories / ExportedMemories but has NO accessor for exported globals, so this probe cannot read them. Not a divergence and not a wazero defect — a gap in its reflection API, and one a Go satellite would have to work around (by decoding the binary itself) if it ever needed to gate on the declared ABI version. Here the ABI version is confirmed BEHAVIOURALLY instead: `opa_eval` is exported and evaluates correctly, which requires ABI 1.2 or later, consistent with the census's 1.3.",
+  "generatedBy": "spikes/spine-adopt/wazero-probe (go run .)",
+  "opaVersion": "1.20.0 (the pinned binary that emitted these artifacts; unchanged by this probe)",
+  "strictness": "An evaluation error, a non-object result, a missing `violations`/`events` key, or an EMPTY RESULT SET is an ERROR ROW. An empty result set means the entrypoint's `result` rule was UNDEFINED, which for these policies means `patterns_compile` or `facts_wellformed` failed — never a zero-violation verdict.",
+  "timings": [
+    {
+      "specimen": "a",
+      "fixtureId": "a-corpus-fail",
+      "compileMicros": 66746,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 678.384,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 539.336,
+      "warmOneShotEvalMicrosMean": 556.923,
+      "warmReps": 200
+    },
+    {
+      "specimen": "a",
+      "fixtureId": "a-corpus-pass",
+      "compileMicros": 66746,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 612.448,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 578.144,
+      "warmOneShotEvalMicrosMean": 586.431,
+      "warmReps": 200
+    },
+    {
+      "specimen": "a",
+      "fixtureId": "a-inline-bad",
+      "compileMicros": 66746,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 592.2,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 595.8575,
+      "warmOneShotEvalMicrosMean": 557.3605,
+      "warmReps": 200
+    },
+    {
+      "specimen": "a",
+      "fixtureId": "a-inline-good",
+      "compileMicros": 66746,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 628.408,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 523.05,
+      "warmOneShotEvalMicrosMean": 534.767,
+      "warmReps": 200
+    },
+    {
+      "specimen": "b",
+      "fixtureId": "b-corpus-fail",
+      "compileMicros": 61293,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 81.188,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 34.608,
+      "warmOneShotEvalMicrosMean": 38.1385,
+      "warmReps": 200
+    },
+    {
+      "specimen": "b",
+      "fixtureId": "b-corpus-pass",
+      "compileMicros": 61293,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 39.98,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 35.264,
+      "warmOneShotEvalMicrosMean": 32.846,
+      "warmReps": 200
+    },
+    {
+      "specimen": "b",
+      "fixtureId": "b-inline-bad",
+      "compileMicros": 61293,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 44.36,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 33.3495,
+      "warmOneShotEvalMicrosMean": 45.596,
+      "warmReps": 200
+    },
+    {
+      "specimen": "b",
+      "fixtureId": "b-inline-good",
+      "compileMicros": 61293,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 40.448,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 34.0485,
+      "warmOneShotEvalMicrosMean": 30.5545,
+      "warmReps": 200
+    },
+    {
+      "specimen": "c",
+      "fixtureId": "c-corpus-fail",
+      "compileMicros": 62540,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 125.452,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 126.221,
+      "warmOneShotEvalMicrosMean": 159.263,
+      "warmReps": 200
+    },
+    {
+      "specimen": "c",
+      "fixtureId": "c-corpus-pass",
+      "compileMicros": 62540,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 155.416,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 97.0605,
+      "warmOneShotEvalMicrosMean": 101.0745,
+      "warmReps": 200
+    },
+    {
+      "specimen": "c",
+      "fixtureId": "c-inline-bad",
+      "compileMicros": 62540,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 125.632,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 104.213,
+      "warmOneShotEvalMicrosMean": 110.6605,
+      "warmReps": 200
+    },
+    {
+      "specimen": "c",
+      "fixtureId": "c-inline-good",
+      "compileMicros": 62540,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 121.56,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 98.4015,
+      "warmOneShotEvalMicrosMean": 102.123,
+      "warmReps": 200
+    },
+    {
+      "specimen": "c-supp",
+      "fixtureId": "c-supp-corpus-fail",
+      "compileMicros": 61964,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 144.364,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 101.3725,
+      "warmOneShotEvalMicrosMean": 104.072,
+      "warmReps": 200
+    },
+    {
+      "specimen": "c-supp",
+      "fixtureId": "c-supp-corpus-pass",
+      "compileMicros": 61964,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 120.344,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 101.8455,
+      "warmOneShotEvalMicrosMean": 97.4885,
+      "warmReps": 200
+    },
+    {
+      "specimen": "c-supp",
+      "fixtureId": "c-supp-inline-bad",
+      "compileMicros": 61964,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 161.376,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 94.6225,
+      "warmOneShotEvalMicrosMean": 116.3025,
+      "warmReps": 200
+    },
+    {
+      "specimen": "c-supp",
+      "fixtureId": "c-supp-inline-good",
+      "compileMicros": 61964,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 140.532,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 89.714,
+      "warmOneShotEvalMicrosMean": 90.091,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d-line",
+      "fixtureId": "d-line-inline-bad",
+      "compileMicros": 62219,
+      "instantiateMicros": 1753,
+      "coldEvalMicrosMean": 122.336,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 111.6605,
+      "warmOneShotEvalMicrosMean": 102.026,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d-line",
+      "fixtureId": "d-line-inline-good",
+      "compileMicros": 62219,
+      "instantiateMicros": 1753,
+      "coldEvalMicrosMean": 144.532,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 100.6895,
+      "warmOneShotEvalMicrosMean": 98.573,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d-file",
+      "fixtureId": "d-file-control-empty",
+      "compileMicros": 61835,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 148.76,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 119.297,
+      "warmOneShotEvalMicrosMean": 101.6715,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d-file",
+      "fixtureId": "d-file-control-unreadable",
+      "compileMicros": 61835,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 123.932,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 108.0635,
+      "warmOneShotEvalMicrosMean": 123.56,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d-file",
+      "fixtureId": "d-file-inline-bad",
+      "compileMicros": 61835,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 121.42,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 117.3225,
+      "warmOneShotEvalMicrosMean": 115.4415,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d-file",
+      "fixtureId": "d-file-inline-good",
+      "compileMicros": 61835,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 100.192,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 105.595,
+      "warmOneShotEvalMicrosMean": 99.682,
+      "warmReps": 200
+    },
+    {
+      "specimen": "e",
+      "fixtureId": "e-inline-bad",
+      "compileMicros": 64766,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 83.944,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 88.7255,
+      "warmOneShotEvalMicrosMean": 67.3715,
+      "warmReps": 200
+    },
+    {
+      "specimen": "e",
+      "fixtureId": "e-inline-good",
+      "compileMicros": 64766,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 70.184,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 59.8705,
+      "warmOneShotEvalMicrosMean": 56.1135,
+      "warmReps": 200
+    }
+  ],
+  "verdictRows": [
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-empty",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "d-file",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-unreadable",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "d-file",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "d-file",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "d-file",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "d-line",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "d-line",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "e",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "e",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-fail",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "2d962603591aa928"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "b",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-pass",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "b",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "2d962603591aa928"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "b",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "b",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-fail",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "61dcb058bd1df15d"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "a",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-pass",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "a",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "61dcb058bd1df15d"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "a",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "a",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-fail",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 4,
+          "ordinal": 0,
+          "rule_id": "87aff037d7de47a7"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 4,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-pass",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "87aff037d7de47a7"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "c-supp",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-fail",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 2,
+      "violations": [
+        {
+          "line_number": 2,
+          "ordinal": 0,
+          "rule_id": "d0815b6769304e26"
+        },
+        {
+          "line_number": 3,
+          "ordinal": 1,
+          "rule_id": "d0815b6769304e26"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 2,
+          "ordinal": 0
+        },
+        {
+          "kind": "trigger",
+          "line_number": 3,
+          "ordinal": 1
+        }
+      ],
+      "specimen": "c",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-pass",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "c",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "d0815b6769304e26"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "c",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "c",
+      "engine": "ast-grep",
+      "error": null
+    }
+  ],
+  "wazero": "v1.12.0"
+}

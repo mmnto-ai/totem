@@ -1,0 +1,3 @@
+# `go build` in this directory drops an ~8MB binary named after the module.
+wazero-probe
+wazero-probe.exe
