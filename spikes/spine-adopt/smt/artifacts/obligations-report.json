@@ -1,6 +1,6 @@
 {
   "harness": {
-    "bindingFeature": "disabled",
+    "bindingFeature": "enabled",
     "crate": "spine-smt-obligations",
     "crateVersion": "0.1.0"
   },
@@ -29,14 +29,14 @@
   "dialectFindings": [
     {
       "id": "D1",
-      "finding": "a RAW control byte inside an SMT-LIB string literal is accepted by one solver and rejected by the other",
+      "finding": "probe — is a RAW control byte inside an SMT-LIB string literal accepted? MEASURED: z3 ACCEPTED it, cvc5 REJECTED it; the two solvers DIVERGE (raw answers in the cells beside this one).",
       "z3": "sat",
-      "cvc5": "(error \"Parse Error: D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\spikes\\spine-adopt\\smt\\artifacts\\dialect-probes\\raw-control-byte.smt2:3.14: Illegal string character: \"\t\", must use escape sequence\")",
+      "cvc5": "(error \"Parse Error: <worktree>\\spikes\\spine-adopt\\smt\\artifacts\\dialect-probes\\raw-control-byte.smt2:3.14: Illegal string character: \"\t\", must use escape sequence\")",
       "portableEncoding": "emit every non-printable character in \\u{...} form (re.rs::smt_string_literal); measured portable: z3=sat cvc5=sat"
     },
     {
       "id": "D2",
-      "finding": "push/pop requires an explicit incrementality flag on one solver and none on the other",
+      "finding": "probe — is push/pop accepted with NO incrementality flag? MEASURED: z3 ACCEPTED it, cvc5 REJECTED it; the two solvers DIVERGE (raw answers in the cells beside this one).",
       "z3": "sat",
       "cvc5": "(error \"cannot push when not solving incrementally (use --incremental)\")",
       "portableEncoding": "the harness passes --incremental to cvc5 whenever an obligation emits more than one check-sat (runner.rs::args_for)"
@@ -79,15 +79,15 @@
       "z3": {
         "status": "sat",
         "timeMs": 23,
-        "evidenceSha256": "6407104ad83c6b41ccf8156fcf53cb310fe1f3b55b7ba7e650b8db570470e72e",
+        "evidenceSha256": "157a94a8ad88054913c9251f38106a7e66bb7babb19a381f84451d2fa5f850d4",
         "evidenceFile": "evidence/o01.z3.out",
         "proven": true,
         "killedByHarness": false
       },
       "cvc5": {
         "status": "sat",
-        "timeMs": 23,
-        "evidenceSha256": "bddd4854fa070e4482231f958e21cf3e100d4dfbc753fab6b75e221507e08b83",
+        "timeMs": 24,
+        "evidenceSha256": "c7706f1ee5d7717221c3c4998528362d31a1d4c788ad2c65dd0299d23d6e865f",
         "evidenceFile": "evidence/o01.cvc5.out",
         "proven": true,
         "killedByHarness": false
@@ -95,10 +95,11 @@
       "agreement": true,
       "divergence": "none",
       "decidedByBoth": true,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
       "proven": true,
+      "deliberateTimeout": false,
       "finding": false,
       "witness": "[0:sat] s=\"git status`\"",
       "smtlibFile": "../obligations/o01.smt2",
@@ -114,7 +115,7 @@
       "z3": {
         "status": "unsat",
         "timeMs": 23,
-        "evidenceSha256": "6153d98adf985ab5065cb8a4be2ecd866ccbaea3871a7060e5872a28499d4992",
+        "evidenceSha256": "afa28a545bfedd27bf6f56bc9f8eff79c752830bf7b72d5b538f3f878f5f02e1",
         "evidenceFile": "evidence/o02.z3.out",
         "proven": true,
         "killedByHarness": false
@@ -122,7 +123,7 @@
       "cvc5": {
         "status": "unsat",
         "timeMs": 23,
-        "evidenceSha256": "82cbb1f2ae6e2993612212e9cb92e508b03b5d4d97bb4511d4b985f5fc4d6af0",
+        "evidenceSha256": "873e484d0c2cb582019ba78e3af810751c143585eebb8ee355f4f301705e8731",
         "evidenceFile": "evidence/o02.cvc5.out",
         "proven": true,
         "killedByHarness": false
@@ -130,12 +131,12 @@
       "agreement": true,
       "divergence": "none",
       "decidedByBoth": true,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "unsat",
+      "bindingAgreesWithCli": true,
       "proven": true,
+      "deliberateTimeout": false,
       "finding": false,
-      "witness": "[0:unsat] dead-matcher-membership",
       "smtlibFile": "../obligations/o02.smt2",
       "smtlibSha256": "29f60f9dfcb2313024dd2a164d4a45b181ff36c68c937f2b8c3654fbe2a0bf84",
       "obligationSourceSha256": "05bd3621319d1eb3239ec2868e984f8630c0ee94a1da2604e957ef961db7955c",
@@ -148,8 +149,8 @@
       "expectedHolds": true,
       "z3": {
         "status": "sat;sat;sat;sat;sat;unsat",
-        "timeMs": 23,
-        "evidenceSha256": "1b51e6f76979bcaed2fc5106634ac37df655b0ac758b06c1d6974c85f22682f7",
+        "timeMs": 24,
+        "evidenceSha256": "cd7d3d32a8f657db19a4d49db718cbd6fa7557f91f0c46ac982a57f4d9289476",
         "evidenceFile": "evidence/o03.z3.out",
         "proven": true,
         "killedByHarness": false
@@ -157,7 +158,7 @@
       "cvc5": {
         "status": "sat;sat;sat;sat;sat;unsat",
         "timeMs": 23,
-        "evidenceSha256": "d3f26f81d50f0884f5417c1e29b447c6a3961eb40f770b4be5f5cfa0323269e7",
+        "evidenceSha256": "dfdcefd4975b45e9840814e56a6037408389e653a0efb230aa4722ca536514cc",
         "evidenceFile": "evidence/o03.cvc5.out",
         "proven": true,
         "killedByHarness": false
@@ -165,10 +166,11 @@
       "agreement": true,
       "divergence": "none",
       "decidedByBoth": true,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "sat;sat;sat;sat;sat;unsat",
+      "bindingAgreesWithCli": true,
       "proven": true,
+      "deliberateTimeout": false,
       "finding": false,
       "witness": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
       "smtlibFile": "../obligations/o03.smt2",
@@ -184,15 +186,15 @@
       "z3": {
         "status": "sat",
         "timeMs": 23,
-        "evidenceSha256": "e3e4b94112bbf9fe6d79a56b48277efb4bcc54a81bb2bb631539b1dadc21f996",
+        "evidenceSha256": "d296574593b85702606b5bea4a79d99817157c780a4993f3e2b8263dbefbe5df",
         "evidenceFile": "evidence/o04.z3.out",
         "proven": true,
         "killedByHarness": false
       },
       "cvc5": {
         "status": "sat",
-        "timeMs": 22,
-        "evidenceSha256": "fd1ac4a5328d55beaad5051781cb7d65f3f5d6eea49f96e0eef601e586e1218d",
+        "timeMs": 23,
+        "evidenceSha256": "250deb9d7a53d2019b651ae3b497ab37aa092bc53a8099080413f4403e7b76c0",
         "evidenceFile": "evidence/o04.cvc5.out",
         "proven": true,
         "killedByHarness": false
@@ -200,10 +202,11 @@
       "agreement": true,
       "divergence": "none",
       "decidedByBoth": true,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
       "proven": true,
+      "deliberateTimeout": false,
       "finding": false,
       "witness": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
       "smtlibFile": "../obligations/o04.smt2",
@@ -219,7 +222,7 @@
       "z3": {
         "status": "sat",
         "timeMs": 23,
-        "evidenceSha256": "8885b4c18546ffe2e12134f68984a018cd7dd773403f854d2dfaab2abc8a2af9",
+        "evidenceSha256": "32f0979b7974ae7068e7079edf11224c29b1a9244dd97cdd6a0218226eef5720",
         "evidenceFile": "evidence/o05.z3.out",
         "proven": true,
         "killedByHarness": false
@@ -227,7 +230,7 @@
       "cvc5": {
         "status": "sat",
         "timeMs": 23,
-        "evidenceSha256": "fe91a09dc49fa5beb086e5e970479e2999c4a321eced68575df095efce26d0f5",
+        "evidenceSha256": "745d00b07b7ecdd98830941fd17897d3925bf520cab83c0d37de8eec1208b9b7",
         "evidenceFile": "evidence/o05.cvc5.out",
         "proven": true,
         "killedByHarness": false
@@ -235,10 +238,11 @@
       "agreement": true,
       "divergence": "none",
       "decidedByBoth": true,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
       "proven": true,
+      "deliberateTimeout": false,
       "finding": false,
       "witness": "[0:sat] p=\"packages/.ts\"",
       "smtlibFile": "../obligations/o05.smt2",
@@ -254,15 +258,15 @@
       "z3": {
         "status": "unsat",
         "timeMs": 23,
-        "evidenceSha256": "fb76b1e9d9fc7af8d11050d50fb7923240017ea0bf431d563b4977ef5be6f22c",
+        "evidenceSha256": "11cc36848e53908564cff59adb231d2b372c127980d61e1a2b220369d9803d42",
         "evidenceFile": "evidence/o06.z3.out",
         "proven": true,
         "killedByHarness": false
       },
       "cvc5": {
         "status": "unsat",
-        "timeMs": 2260,
-        "evidenceSha256": "570c4e2e70438e2ecc6be9ea1c846a9a8f54f29969ce61fecbff07cfcdc966f6",
+        "timeMs": 2214,
+        "evidenceSha256": "bdb8d972976d0aa206264551416446947a83c7190acfcc8f19806735c00d335f",
         "evidenceFile": "evidence/o06.cvc5.out",
         "proven": true,
         "killedByHarness": false
@@ -270,12 +274,12 @@
       "agreement": true,
       "divergence": "none",
       "decidedByBoth": true,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "unsat",
+      "bindingAgreesWithCli": true,
       "proven": true,
+      "deliberateTimeout": false,
       "finding": false,
-      "witness": "[0:unsat] in-positive-scope not-in-exclusion",
       "smtlibFile": "../obligations/o06.smt2",
       "smtlibSha256": "d570ef638e1a6e215a7b4c508a240a2a745ef914e16719bc2ad7815b71c85026",
       "obligationSourceSha256": "7a671948e69d578a926ea494ea20fe561f5844e5021be6ec10fc056908ff2946",
@@ -289,7 +293,7 @@
       "z3": {
         "status": "sat",
         "timeMs": 23,
-        "evidenceSha256": "5adc5025749862a0ba2bf077f3c64ad4a991b2c9bed89a316f923024b89ecd08",
+        "evidenceSha256": "0dd56952c6fbe69443d90358259e342f7bdbc7797d4334946e6df7679ed7a349",
         "evidenceFile": "evidence/o07.z3.out",
         "proven": true,
         "killedByHarness": false
@@ -297,7 +301,7 @@
       "cvc5": {
         "status": "sat",
         "timeMs": 23,
-        "evidenceSha256": "0f6810f8dbab54f2d008206e5dfdef06aad9879e71236e08f6131d8bd1fa6780",
+        "evidenceSha256": "50b1e165b0a27a2f33caa9537c5a2cd5552aa52ac08e787dd1aa3c0d60c788cd",
         "evidenceFile": "evidence/o07.cvc5.out",
         "proven": true,
         "killedByHarness": false
@@ -305,16 +309,17 @@
       "agreement": true,
       "divergence": "none",
       "decidedByBoth": true,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
       "proven": true,
+      "deliberateTimeout": false,
       "finding": false,
       "witness": "[0:sat] s=\"git tag`\"",
       "smtlibFile": "../obligations/o07.smt2",
-      "smtlibSha256": "6999028259973c015e24b7b20d24bfa038b4c3d0cd304bbd0c275091b79d180a",
-      "obligationSourceSha256": "4574f4677bee1b3f058f69935306c027d335404f8a275160c7a5e1d65e7e3a46",
-      "question": "Rule subsumption/redundancy: is L(p_A) a subset of L(p_B) for two corpus patterns with known overlap? SAT means p_A is NOT redundant against p_B and the witness is a line only p_A catches."
+      "smtlibSha256": "57c4cd9c5bf00a1701588efa25a88eb8defc54eacc9dda99c92cb0a53807c72e",
+      "obligationSourceSha256": "ad3d796e82043682b3e12e9c4ae8a82bb2d79e3be26a267b23ad2eab60577a82",
+      "question": "Rule subsumption/redundancy: is L(p_A) a subset of L(p_B) for two corpus patterns with known overlap? Asked over the WIDENED p_A (see the dropped-lookahead note), so UNSAT would prove the SOURCE pattern subsumed, while a SAT witness is evidence for the widened approximation only."
     },
     {
       "id": "O8",
@@ -323,8 +328,8 @@
       "expectedHolds": true,
       "z3": {
         "status": "sat;unsat",
-        "timeMs": 24,
-        "evidenceSha256": "3a72e075e84136065495632a80456d61accd7531f49410b557aa16c4050530f4",
+        "timeMs": 23,
+        "evidenceSha256": "263b95122a95b82d6dd9f325d013644274f87459ae5596ae3a9c2411169b8508",
         "evidenceFile": "evidence/o08.z3.out",
         "proven": true,
         "killedByHarness": false
@@ -332,7 +337,7 @@
       "cvc5": {
         "status": "sat;unsat",
         "timeMs": 23,
-        "evidenceSha256": "9e707b0b2f0f587cf05f228142318de5bb5ca08e70013bbad7657611a6bf7932",
+        "evidenceSha256": "cb10ef912de543b82b43aba20d52f8d353dfac736c4bd48555ecc7ae10144b46",
         "evidenceFile": "evidence/o08.cvc5.out",
         "proven": true,
         "killedByHarness": false
@@ -340,10 +345,11 @@
       "agreement": true,
       "divergence": "none",
       "decidedByBoth": true,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "sat;unsat",
+      "bindingAgreesWithCli": true,
       "proven": true,
+      "deliberateTimeout": false,
       "finding": false,
       "witness": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
       "smtlibFile": "../obligations/o08.smt2",
@@ -358,16 +364,16 @@
       "expectedHolds": false,
       "z3": {
         "status": "unsat;sat",
-        "timeMs": 1385,
-        "evidenceSha256": "74677845a251edd30498d6e90a74c15c2da2c437722068838538042e9b369aeb",
+        "timeMs": 1341,
+        "evidenceSha256": "21bfbf0c0ee686172fd1b9522964896812267b8af24f01910e48dd2b98352fd0",
         "evidenceFile": "evidence/o09.z3.out",
         "proven": true,
         "killedByHarness": false
       },
       "cvc5": {
         "status": "timeout;timeout",
-        "timeMs": 30115,
-        "evidenceSha256": "3191bd225713d9530caa22ae9bfd4e18535375b866fe867fb9e2d6b9a82801ff",
+        "timeMs": 30154,
+        "evidenceSha256": "89c6bfc740e5f5fc7d479c6b83f440ddd05d4a0d33bb41321e832ffbd340d27c",
         "evidenceFile": "evidence/o09.cvc5.out",
         "proven": false,
         "killedByHarness": false
@@ -375,10 +381,11 @@
       "agreement": false,
       "divergence": "capability",
       "decidedByBoth": false,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "unsat;sat",
+      "bindingAgreesWithCli": true,
       "proven": false,
+      "deliberateTimeout": false,
       "finding": true,
       "findingNote": "CAPABILITY DIVERGENCE — z3=unsat;sat cvc5=timeout;timeout at a 30s budget. No two answers conflict; one solver simply did not decide within budget, so this is not a semantic disagreement. measured status differs from the OBLIGATIONS.md expectation (UNSAT (equivalent) or witness): z3=unsat;sat cvc5=timeout;timeout",
       "witness": "[0:unsat] symmetric-difference\n[1:sat] s=\"rm rm0000000000000000000000000000000000 rm .totem/lessons.md\"",
@@ -394,16 +401,16 @@
       "expectedHolds": false,
       "z3": {
         "status": "sat",
-        "timeMs": 44,
-        "evidenceSha256": "c124bcefcf7d283213441f100a34be500978c95c6a43f8c22f3313936cc1da77",
+        "timeMs": 23,
+        "evidenceSha256": "09fdf810369044286bc10611c9208ec4afb033226b97ac84f8a5a1488cd25f91",
         "evidenceFile": "evidence/o10.z3.out",
         "proven": true,
         "killedByHarness": false
       },
       "cvc5": {
         "status": "timeout",
-        "timeMs": 10098,
-        "evidenceSha256": "3191bd225713d9530caa22ae9bfd4e18535375b866fe867fb9e2d6b9a82801ff",
+        "timeMs": 10097,
+        "evidenceSha256": "89c6bfc740e5f5fc7d479c6b83f440ddd05d4a0d33bb41321e832ffbd340d27c",
         "evidenceFile": "evidence/o10.cvc5.out",
         "proven": false,
         "killedByHarness": false
@@ -411,15 +418,16 @@
       "agreement": false,
       "divergence": "capability",
       "decidedByBoth": false,
-      "binding": "inexpressible(binding-z3 feature not enabled for this build)",
-      "bindingStatus": "n/a",
-      "bindingAgreesWithCli": null,
+      "binding": "expressed",
+      "bindingStatus": "sat",
+      "bindingAgreesWithCli": true,
       "proven": false,
+      "deliberateTimeout": true,
       "finding": false,
       "witness": "[0:sat] s=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
       "smtlibFile": "../obligations/o10.smt2",
-      "smtlibSha256": "2445b98a4e25e03a5533fee903b829317cdb0bfdb20d06c3efa72fbed4583bc3",
-      "obligationSourceSha256": "e32cdd31058bcccb949dea9cfb467aca5b60bdef95323e8ba361097f3d947499",
+      "smtlibSha256": "3a7683b15136bbcf828c4858726e139d59524795c453121e8797ad94593320b8",
+      "obligationSourceSha256": "8949fa61906921e038513b807a5173662f5ceb503a2b7d30a21fcefb804e8054",
       "question": "Deliberate timeout, fail closed: a nested re.inter chain over long ranges engineered past the budget. The ASSERTION is not about the answer — it is that the harness reports timeout/unknown and treats the obligation as NOT-PROVEN, with no pass-through."
     }
   ],
@@ -430,7 +438,7 @@
       "standardBudgetS": 30,
       "extendedBudgetS": 120,
       "statusAtExtendedBudget": "timeout;timeout",
-      "timeMs": 120168,
+      "timeMs": 120141,
       "evidenceFile": "evidence/o09.cvc5.extended-120s.out",
       "interpretation": "CAPABILITY-BOUND: still undecided at the extended budget, so the divergence is a property of this solver on this encoding, not of the budget."
     }
@@ -439,8 +447,8 @@
     {
       "id": "O1",
       "solver": "z3",
-      "run1Sha256": "6407104ad83c6b41ccf8156fcf53cb310fe1f3b55b7ba7e650b8db570470e72e",
-      "run2Sha256": "6407104ad83c6b41ccf8156fcf53cb310fe1f3b55b7ba7e650b8db570470e72e",
+      "run1Sha256": "157a94a8ad88054913c9251f38106a7e66bb7babb19a381f84451d2fa5f850d4",
+      "run2Sha256": "157a94a8ad88054913c9251f38106a7e66bb7babb19a381f84451d2fa5f850d4",
       "normalizedRun1": "[0:sat] s=\"git status`\"",
       "normalizedRun2": "[0:sat] s=\"git status`\"",
       "stable": true
@@ -448,8 +456,8 @@
     {
       "id": "O1",
       "solver": "cvc5",
-      "run1Sha256": "bddd4854fa070e4482231f958e21cf3e100d4dfbc753fab6b75e221507e08b83",
-      "run2Sha256": "bddd4854fa070e4482231f958e21cf3e100d4dfbc753fab6b75e221507e08b83",
+      "run1Sha256": "c7706f1ee5d7717221c3c4998528362d31a1d4c788ad2c65dd0299d23d6e865f",
+      "run2Sha256": "c7706f1ee5d7717221c3c4998528362d31a1d4c788ad2c65dd0299d23d6e865f",
       "normalizedRun1": "[0:sat] s=\"git log\"",
       "normalizedRun2": "[0:sat] s=\"git log\"",
       "stable": true
@@ -457,8 +465,8 @@
     {
       "id": "O3",
       "solver": "z3",
-      "run1Sha256": "1b51e6f76979bcaed2fc5106634ac37df655b0ac758b06c1d6974c85f22682f7",
-      "run2Sha256": "1b51e6f76979bcaed2fc5106634ac37df655b0ac758b06c1d6974c85f22682f7",
+      "run1Sha256": "cd7d3d32a8f657db19a4d49db718cbd6fa7557f91f0c46ac982a57f4d9289476",
+      "run2Sha256": "cd7d3d32a8f657db19a4d49db718cbd6fa7557f91f0c46ac982a57f4d9289476",
       "normalizedRun1": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
       "normalizedRun2": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
       "stable": true
@@ -466,8 +474,8 @@
     {
       "id": "O3",
       "solver": "cvc5",
-      "run1Sha256": "d3f26f81d50f0884f5417c1e29b447c6a3961eb40f770b4be5f5cfa0323269e7",
-      "run2Sha256": "d3f26f81d50f0884f5417c1e29b447c6a3961eb40f770b4be5f5cfa0323269e7",
+      "run1Sha256": "dfdcefd4975b45e9840814e56a6037408389e653a0efb230aa4722ca536514cc",
+      "run2Sha256": "dfdcefd4975b45e9840814e56a6037408389e653a0efb230aa4722ca536514cc",
       "normalizedRun1": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
       "normalizedRun2": "[0:sat] sev=\"error\"\n[1:sat] sev=\"warning\"\n[2:sat] sev=\"error\"\n[3:sat] sev=\"warning\"\n[4:sat] sev=\"error\"\n[5:unsat] sev-in-vocabulary sev-is-info",
       "stable": true
@@ -475,8 +483,8 @@
     {
       "id": "O4",
       "solver": "z3",
-      "run1Sha256": "e3e4b94112bbf9fe6d79a56b48277efb4bcc54a81bb2bb631539b1dadc21f996",
-      "run2Sha256": "e3e4b94112bbf9fe6d79a56b48277efb4bcc54a81bb2bb631539b1dadc21f996",
+      "run1Sha256": "d296574593b85702606b5bea4a79d99817157c780a4993f3e2b8263dbefbe5df",
+      "run2Sha256": "d296574593b85702606b5bea4a79d99817157c780a4993f3e2b8263dbefbe5df",
       "normalizedRun1": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
       "normalizedRun2": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
       "stable": true
@@ -484,8 +492,8 @@
     {
       "id": "O4",
       "solver": "cvc5",
-      "run1Sha256": "fd1ac4a5328d55beaad5051781cb7d65f3f5d6eea49f96e0eef601e586e1218d",
-      "run2Sha256": "fd1ac4a5328d55beaad5051781cb7d65f3f5d6eea49f96e0eef601e586e1218d",
+      "run1Sha256": "250deb9d7a53d2019b651ae3b497ab37aa092bc53a8099080413f4403e7b76c0",
+      "run2Sha256": "250deb9d7a53d2019b651ae3b497ab37aa092bc53a8099080413f4403e7b76c0",
       "normalizedRun1": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
       "normalizedRun2": "[0:sat] bad=\"git rm .totem/lessons.md\" good=\"rm .totem/lessons/lesson-cd27a5b0.md\"",
       "stable": true
@@ -493,8 +501,8 @@
     {
       "id": "O5",
       "solver": "z3",
-      "run1Sha256": "8885b4c18546ffe2e12134f68984a018cd7dd773403f854d2dfaab2abc8a2af9",
-      "run2Sha256": "8885b4c18546ffe2e12134f68984a018cd7dd773403f854d2dfaab2abc8a2af9",
+      "run1Sha256": "32f0979b7974ae7068e7079edf11224c29b1a9244dd97cdd6a0218226eef5720",
+      "run2Sha256": "32f0979b7974ae7068e7079edf11224c29b1a9244dd97cdd6a0218226eef5720",
       "normalizedRun1": "[0:sat] p=\"packages/.ts\"",
       "normalizedRun2": "[0:sat] p=\"packages/.ts\"",
       "stable": true
@@ -502,8 +510,8 @@
     {
       "id": "O5",
       "solver": "cvc5",
-      "run1Sha256": "fe91a09dc49fa5beb086e5e970479e2999c4a321eced68575df095efce26d0f5",
-      "run2Sha256": "fe91a09dc49fa5beb086e5e970479e2999c4a321eced68575df095efce26d0f5",
+      "run1Sha256": "745d00b07b7ecdd98830941fd17897d3925bf520cab83c0d37de8eec1208b9b7",
+      "run2Sha256": "745d00b07b7ecdd98830941fd17897d3925bf520cab83c0d37de8eec1208b9b7",
       "normalizedRun1": "[0:sat] p=\"packages/.ts\"",
       "normalizedRun2": "[0:sat] p=\"packages/.ts\"",
       "stable": true
@@ -511,8 +519,8 @@
     {
       "id": "O7",
       "solver": "z3",
-      "run1Sha256": "5adc5025749862a0ba2bf077f3c64ad4a991b2c9bed89a316f923024b89ecd08",
-      "run2Sha256": "5adc5025749862a0ba2bf077f3c64ad4a991b2c9bed89a316f923024b89ecd08",
+      "run1Sha256": "0dd56952c6fbe69443d90358259e342f7bdbc7797d4334946e6df7679ed7a349",
+      "run2Sha256": "0dd56952c6fbe69443d90358259e342f7bdbc7797d4334946e6df7679ed7a349",
       "normalizedRun1": "[0:sat] s=\"git tag`\"",
       "normalizedRun2": "[0:sat] s=\"git tag`\"",
       "stable": true
@@ -520,8 +528,8 @@
     {
       "id": "O7",
       "solver": "cvc5",
-      "run1Sha256": "0f6810f8dbab54f2d008206e5dfdef06aad9879e71236e08f6131d8bd1fa6780",
-      "run2Sha256": "0f6810f8dbab54f2d008206e5dfdef06aad9879e71236e08f6131d8bd1fa6780",
+      "run1Sha256": "50b1e165b0a27a2f33caa9537c5a2cd5552aa52ac08e787dd1aa3c0d60c788cd",
+      "run2Sha256": "50b1e165b0a27a2f33caa9537c5a2cd5552aa52ac08e787dd1aa3c0d60c788cd",
       "normalizedRun1": "[0:sat] s=\"git show\"",
       "normalizedRun2": "[0:sat] s=\"git show\"",
       "stable": true
@@ -529,8 +537,8 @@
     {
       "id": "O8",
       "solver": "z3",
-      "run1Sha256": "3a72e075e84136065495632a80456d61accd7531f49410b557aa16c4050530f4",
-      "run2Sha256": "3a72e075e84136065495632a80456d61accd7531f49410b557aa16c4050530f4",
+      "run1Sha256": "263b95122a95b82d6dd9f325d013644274f87459ae5596ae3a9c2411169b8508",
+      "run2Sha256": "263b95122a95b82d6dd9f325d013644274f87459ae5596ae3a9c2411169b8508",
       "normalizedRun1": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
       "normalizedRun2": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
       "stable": true
@@ -538,8 +546,8 @@
     {
       "id": "O8",
       "solver": "cvc5",
-      "run1Sha256": "9e707b0b2f0f587cf05f228142318de5bb5ca08e70013bbad7657611a6bf7932",
-      "run2Sha256": "9e707b0b2f0f587cf05f228142318de5bb5ca08e70013bbad7657611a6bf7932",
+      "run1Sha256": "cb10ef912de543b82b43aba20d52f8d353dfac736c4bd48555ecc7ae10144b46",
+      "run2Sha256": "cb10ef912de543b82b43aba20d52f8d353dfac736c4bd48555ecc7ae10144b46",
       "normalizedRun1": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
       "normalizedRun2": "[0:sat] s=\"//totem-ignore\"\n[1:unsat] control-pattern-membership suppression-directive-membership",
       "stable": true
@@ -547,8 +555,8 @@
     {
       "id": "O9",
       "solver": "z3",
-      "run1Sha256": "74677845a251edd30498d6e90a74c15c2da2c437722068838538042e9b369aeb",
-      "run2Sha256": "74677845a251edd30498d6e90a74c15c2da2c437722068838538042e9b369aeb",
+      "run1Sha256": "21bfbf0c0ee686172fd1b9522964896812267b8af24f01910e48dd2b98352fd0",
+      "run2Sha256": "21bfbf0c0ee686172fd1b9522964896812267b8af24f01910e48dd2b98352fd0",
       "normalizedRun1": "[0:unsat] symmetric-difference\n[1:sat] s=\"rm rm0000000000000000000000000000000000 rm .totem/lessons.md\"",
       "normalizedRun2": "[0:unsat] symmetric-difference\n[1:sat] s=\"rm rm0000000000000000000000000000000000 rm .totem/lessons.md\"",
       "stable": true
@@ -556,8 +564,8 @@
     {
       "id": "O10",
       "solver": "z3",
-      "run1Sha256": "c124bcefcf7d283213441f100a34be500978c95c6a43f8c22f3313936cc1da77",
-      "run2Sha256": "c124bcefcf7d283213441f100a34be500978c95c6a43f8c22f3313936cc1da77",
+      "run1Sha256": "09fdf810369044286bc10611c9208ec4afb033226b97ac84f8a5a1488cd25f91",
+      "run2Sha256": "09fdf810369044286bc10611c9208ec4afb033226b97ac84f8a5a1488cd25f91",
       "normalizedRun1": "[0:sat] s=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
       "normalizedRun2": "[0:sat] s=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
       "stable": true
@@ -577,7 +585,7 @@
     "o10TreatedAsNotProvenByHarness": true,
     "countermodelsStableAcrossTwoRuns": true,
     "unstableRows": [],
-    "bindingArmBuilt": false,
+    "bindingArmBuilt": true,
     "bindingArmAgreesWithCli": true
   },
   "verdict": "PASS",
@@ -586,7 +594,6 @@
     "findings recorded on: O9 — see each row's findingNote",
     "CONTRACT QUESTION for the dispatching seat: 1 obligation(s) were decided by exactly one solver — O9 (z3=unsat;sat cvc5=timeout;timeout). OBLIGATIONS.md scopes the criterion to \"every DECIDABLE obligation\" and the spec's FAIL is \"unexplained solver DISAGREEMENT\", so the harness records these as capability divergences rather than disagreements and the headline verdict follows that reading. Under the stricter reading (any status mismatch counts) the verdict is FAIL. The harness does not settle which reading governs adoption.",
     "capability probe — O9 on cvc5 at 120s: timeout;timeout (CAPABILITY-BOUND)",
-    "the z3 binding arm did not run in this build; re-run with --features binding-z3",
     "PASS/FAIL is the spec § Spike 2 criterion set, not a judgement on adoption: a pass adopts nothing by itself."
   ]
 }

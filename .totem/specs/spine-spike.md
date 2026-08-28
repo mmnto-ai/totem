@@ -7,7 +7,7 @@
 > 2026-08-27T19:24Z, Q1 ranks 1–2 + Q-GAP, verbatim** — plus the round's three enrichment rows.
 > Durable record: mmnto-ai/totem-strategy#1138.
 
-### Problem statement
+## Problem statement
 
 Before the first Rust core crate exists, decide adopt-vs-build for two Spine layers with
 disposable, freeze-safe spikes that produce the adoption **decision** (a pass adopts nothing by

@@ -431,8 +431,21 @@ function emitPolicy(cs: CompiledSpecimen, lowered: LoweredRecord): string {
     L.push(``);
   }
 
-  const requiresGuard =
-    requires && req?.literal ? [`\tnot requirement_met(${isRegex ? 'i' : 'j'})`] : [];
+  // The guard's ARGUMENT is arm-specific. The regex arm's `i` is already an
+  // `input.lines` index. The ast arm's `j` is an `input.astMatches` ORDINAL,
+  // but `requirement_met` on `scope: line` indexes `input.lines` — so passing
+  // `j` would check whichever line happens to sit at the match's ordinal. The
+  // match's own reported line is the right index (`lineNumber` is 1-based,
+  // `input.lines` is 0-based); `m` is in scope in every ast rule body below.
+  //
+  // This combination is GRAMMAR-UNREACHABLE for a valid record: the shipped
+  // `compileRuleRecord` rejects `requires.scope: line` on an `ast-grep` target
+  // (`packages/core/src/spine/record-lower.ts:397`, Prop 310 § Design 8), so no
+  // conforming record reaches it. Corrected anyway — this lowerer is a
+  // REFERENCE IMPLEMENTATION of the contract, and its correctness is read off
+  // the Rego it emits, not off the records that happen to exist today.
+  const requiresArg = isRegex ? 'i' : requires?.scope === 'line' ? 'm.lineNumber - 1' : 'j';
+  const requiresGuard = requires && req?.literal ? [`\tnot requirement_met(${requiresArg})`] : [];
 
   L.push(`# ─── § Lowering 1 — the output contract ────────────────────────────────────`);
   L.push(``);

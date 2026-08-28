@@ -189,13 +189,25 @@ enum NaryOp {
 
 /// The n-ary combinators are generic (`fn concat<T: Into<Self> + Clone>(&[T])`),
 /// so they cannot be passed as plain fn pointers; the operation is selected by
-/// tag instead. Folding 0 and 1 operand mirrors `re.rs`'s printer exactly, so
-/// both arms build the same shape.
+/// tag instead. Folding 0 and 1 operand mirrors `re.rs::write_nary` exactly —
+/// including its per-operator treatment of zero operands — so both arms build
+/// the same shape, and neither arm can quietly substitute epsilon for the union
+/// or intersection identity.
 #[cfg(feature = "binding-z3")]
 fn nary(parts: &[crate::re::Re], op: NaryOp) -> z3::ast::Regexp {
     use z3::ast::Regexp;
     match parts.len() {
-        0 => Regexp::literal(""),
+        0 => match op {
+            NaryOp::Concat => Regexp::literal(""),
+            NaryOp::Union => panic!(
+                "zero-operand re.union has no epsilon identity and is outside this harness's \
+                 supported subset — build the operand list before lowering it"
+            ),
+            NaryOp::Inter => panic!(
+                "zero-operand re.inter has no epsilon identity and is outside this harness's \
+                 supported subset — build the operand list before lowering it"
+            ),
+        },
         1 => build_re(&parts[0]),
         _ => {
             let built: Vec<Regexp> = parts.iter().map(build_re).collect();

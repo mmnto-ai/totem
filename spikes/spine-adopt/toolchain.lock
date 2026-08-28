@@ -58,3 +58,16 @@ binary = "cvc5-Linux-x86_64-static/bin/cvc5"
 
 # Rust crates (z3 / cvc5 bindings, opa-wasm host, wasmtime) pin via the spike
 # crates' Cargo.lock, committed beside them.
+
+# ── Rust TOOLCHAIN pin (the compiler, not the crates) ─────────────────────────
+# The Cargo.lock files above pin the dependency graph; they do not pin the
+# compiler that builds it. Both build-matrix arms must use the SAME rustc or the
+# recorded rows are not comparable, so the Linux workflow installs this exact
+# version via `dtolnay/rust-toolchain` with `toolchain: 1.96.1` rather than the
+# floating `@stable` tag.
+
+[rust]
+version = "1.96.1"
+verified = "measured on the operator's Windows machine 2026-08-28, the platform the Windows arm's rows were recorded on"
+reports = "cargo 1.96.1 (356927216 2026-06-26) / rustc 1.96.1 (31fca3adb 2026-06-26)"
+consumed_by = ".github/workflows/spine-spike-linux.yml — dtolnay/rust-toolchain `with: toolchain`"

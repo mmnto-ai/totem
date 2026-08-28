@@ -18,6 +18,23 @@ const thresholdMet = steady.verdict.criteria.medianReductionAtLeast25PctInBytesO
 const noMissed = steady.verdict.criteria.zeroMissedAnswersOnSerenaArm;
 const retrievalOnly = steady.verdict.criteria.retrievalOnlyBoundVerified;
 
+// The plain-language reading is DERIVED from the measured values, never
+// transcribed. A hardcoded sentence goes stale the moment the harness is re-run
+// and would then contradict `criteria` and `rationale` in the same artifact.
+const missedIds = steady.correctness.serenaMissedTasks.map((t) => t.id);
+const num = (v, digits) => (typeof v === 'number' ? v.toFixed(digits) : 'n/a');
+const plainReading =
+  `Serena median wall time ${num(steady.medians.serenaMs, 0)}ms vs baseline ` +
+  `${num(steady.medians.baselineMs, 0)}ms (${num(steady.medians.timeReductionPct, 1)}% reduction); ` +
+  `median bytes ${steady.medians.serenaBytes} vs baseline ${steady.medians.baselineBytes} ` +
+  `(${num(steady.medians.bytesReductionPct, 1)}% reduction); ` +
+  `serena missed ${missedIds.length} ground-truth answer(s)` +
+  `${missedIds.length ? ` (${missedIds.join(',')})` : ''} across ` +
+  `${steady.correctness.tasksRun} task(s). A NEGATIVE reduction means serena was ` +
+  `WORSE than the baseline. The >=25% reduction bar is ${thresholdMet ? 'MET' : 'NOT met'} ` +
+  `and the no-missed-answer condition is ${noMissed ? 'MET' : 'NOT met'}, so the pilot ` +
+  `${thresholdMet && noMissed ? 'clears' : 'does not clear'} its kill threshold.`;
+
 const combined = {
   pilot: 'serena retrieval-only pilot (mmnto-ai/totem)',
   generatedAt: new Date().toISOString(),
@@ -42,11 +59,7 @@ const combined = {
     },
     VERDICT: thresholdMet && noMissed ? 'PASS' : 'FAIL',
     rationale: steady.verdict.rationale,
-    plainReading:
-      'Serena was SLOWER on every task (median 1233ms vs 59ms, ~20x) and returned ' +
-      'MORE bytes at the median (2283 vs 1527, 49.5% worse), and missed one ' +
-      'ground-truth answer. Both halves of the >=25% reduction bar fail, and the ' +
-      'no-missed-answer condition fails. The pilot does not clear its kill threshold.',
+    plainReading,
   },
 
   exposedTools: steady.exposedTools,

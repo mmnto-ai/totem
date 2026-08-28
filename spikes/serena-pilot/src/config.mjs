@@ -22,31 +22,28 @@ export const SERENA_GIT = `git+https://github.com/oraios/serena@${SERENA_TAG}`;
 /** Commit the tag resolved to, as reported by uv during the build. */
 export const SERENA_COMMIT = '949a27ef1e5fda1a6e7b561e777bcece345c6ffd';
 
-/** uv is installed per-user and is not on every shell's PATH. */
-export const UV_SCRIPTS_DIR =
-  process.env.TOTEM_UV_SCRIPTS_DIR ??
-  path.join(process.env.APPDATA ?? '', 'Python', 'Python314', 'Scripts');
-export const UVX = process.env.TOTEM_UVX ?? path.join(UV_SCRIPTS_DIR, 'uvx.exe');
+/**
+ * uv is installed per-user and is not on every shell's PATH. By default `uvx` is
+ * resolved from PATH; set TOTEM_UV_SCRIPTS_DIR to the directory that holds it
+ * (on Windows, the per-user Python `Scripts` directory) when it is not there, or
+ * TOTEM_UVX to name the executable outright. No interpreter version is assumed.
+ */
+export const UV_SCRIPTS_DIR = process.env.TOTEM_UV_SCRIPTS_DIR ?? '';
+export const UVX =
+  process.env.TOTEM_UVX ?? (UV_SCRIPTS_DIR ? path.join(UV_SCRIPTS_DIR, 'uvx.exe') : 'uvx');
 
 /** ripgrep, for the baseline arm. */
 export const RG = process.env.TOTEM_RG ?? 'rg';
 
 /**
- * SERENA_HOME is pointed at a scratchpad directory so that the pilot writes no
- * global config, no memories and no managed language-server installs into
- * either the user's home or the checkout.
+ * SERENA_HOME is redirected away from `~/.serena` so that the pilot writes no
+ * global config, no memories and no managed language-server installs into the
+ * user's home. The default is a pilot-local scratch directory, which keeps the
+ * harness reproducible on any machine; set TOTEM_SERENA_HOME to move it fully
+ * outside the checkout (which is how the recorded measurement run was taken).
  */
 export const SERENA_HOME =
-  process.env.TOTEM_SERENA_HOME ??
-  path.join(
-    process.env.LOCALAPPDATA ?? '',
-    'Temp',
-    'claude',
-    'D--Dev-totem',
-    '79f6decd-54a6-4c97-a0f6-d995f35c8cd2',
-    'scratchpad',
-    'serena-home',
-  );
+  process.env.TOTEM_SERENA_HOME ?? path.join(PILOT_DIR, '.scratch', 'serena-home');
 
 /** Tool-name groups used to VERIFY the retrieval-only bound at runtime. */
 export const EDITING_TOOLS = [
@@ -107,7 +104,9 @@ export function serverSpec() {
     env: {
       ...process.env,
       SERENA_HOME,
-      PATH: `${UV_SCRIPTS_DIR}${path.delimiter}${process.env.PATH ?? ''}`,
+      PATH: UV_SCRIPTS_DIR
+        ? `${UV_SCRIPTS_DIR}${path.delimiter}${process.env.PATH ?? ''}`
+        : (process.env.PATH ?? ''),
       PYTHONIOENCODING: 'utf-8',
       PYTHONUTF8: '1',
     },

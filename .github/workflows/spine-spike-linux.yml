@@ -38,7 +38,15 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # PINNED, not `@stable`. The `toolchain` input overrides the action's tag,
+      # so this installs exactly 1.96.1 — the same compiler the Windows arm was
+      # measured on. A floating `stable` lets two runs of the SAME commit build
+      # with different compilers, which makes the recorded build-matrix rows
+      # incomparable. Recorded in `spikes/spine-adopt/toolchain.lock` [rust];
+      # re-pin there and here together.
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.96.1'
 
       - uses: actions/setup-go@v6
         with:

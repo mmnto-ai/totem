@@ -32,9 +32,9 @@
   },
   "sentinelSchemaErrors": [],
   "regorus": {
-    "error": "regorus eval_rule(data.totem.spike.certfix_backreference.result): \n--> D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\spikes\\spine-adopt\\rego\\certify-fixtures\\backreference\\policy.rego:57:29\n   |\n57 | \tis_boolean(regex.match(\"\\\\bmodel\\\\w*\\\\b.*(['\\\"\\\\/])\\\\^?\\\\[[a-zA-Z0-9\\\\-_]+\\\\][*+]\\\\$?\\\\1\", \"\"))\n   |                             ^\nerror: invalid regex",
+    "error": "regorus eval_rule(data.totem.spike.certfix_backreference.result): \n--> spikes/spine-adopt/rego/certify-fixtures/backreference/policy.rego:57:29\n   |\n57 | \tis_boolean(regex.match(\"\\\\bmodel\\\\w*\\\\b.*(['\\\"\\\\/])\\\\^?\\\\[[a-zA-Z0-9\\\\-_]+\\\\][*+]\\\\$?\\\\1\", \"\"))\n   |                             ^\nerror: invalid regex",
     "failureRuleVerdict": {
-      "error": "regorus eval_rule(data.totem.spike.certfix_backreference.result): \n--> D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\spikes\\spine-adopt\\rego\\certify-fixtures\\backreference\\policy.rego:57:29\n   |\n57 | \tis_boolean(regex.match(\"\\\\bmodel\\\\w*\\\\b.*(['\\\"\\\\/])\\\\^?\\\\[[a-zA-Z0-9\\\\-_]+\\\\][*+]\\\\$?\\\\1\", \"\"))\n   |                             ^\nerror: invalid regex",
+      "error": "regorus eval_rule(data.totem.spike.certfix_backreference.result): \n--> spikes/spine-adopt/rego/certify-fixtures/backreference/policy.rego:57:29\n   |\n57 | \tis_boolean(regex.match(\"\\\\bmodel\\\\w*\\\\b.*(['\\\"\\\\/])\\\\^?\\\\[[a-zA-Z0-9\\\\-_]+\\\\][*+]\\\\$?\\\\1\", \"\"))\n   |                             ^\nerror: invalid regex",
       "events": null,
       "ok": false,
       "violations": null

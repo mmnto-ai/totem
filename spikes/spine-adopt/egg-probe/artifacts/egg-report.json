@@ -45,7 +45,7 @@
     "cost": {
       "allSaturated": false,
       "budgetMs": 60000,
-      "failedSubCondition": "10 of 167 per-pattern runs stopped at egg's DEFAULT node limit (10 000) instead of reaching a fixpoint. Wall time was NOT the binding constraint (13196 ms of the 60 000 ms budget). The node growth is AC churn from the named laws: concat-assoc and union-assoc/comm dominate the application counts.",
+      "failedSubCondition": "10 of 167 per-pattern runs stopped at egg's DEFAULT node limit (10 000) instead of reaching a fixpoint. Wall time was NOT the binding constraint (12238 ms of the 60 000 ms budget). The node growth is AC churn from the named laws: concat-assoc and union-assoc/comm dominate the application counts.",
       "measure": "every per-pattern run reached StopReason::Saturated AND the total wall time is within the 60s budget",
       "pass": false,
       "statement": "DESIGN 3 — full-corpus saturation completes under 60s wall with egg's default iteration limits; a blowup is a REJECT row with the measurement",
@@ -62,14 +62,15 @@
         "Some(NodeLimit(22576))": 1,
         "Some(Saturated)": 157
       },
-      "totalWallMs": 13196,
+      "totalWallMs": 12238,
       "withinBudget": true
     },
     "soundness": {
       "coverage": {
         "crossPatternMerges": "7 of 7 — EXHAUSTIVE (every unordered pair inside every multi-pattern class, from both groupings)",
-        "nodeLimitedPatternsInSample": 1,
-        "rewrittenVsOriginal": "20 of 167 parsed patterns — a SAMPLE, as DESIGN § Method 4 specifies; the other 147 extracted canonical forms are NOT externally verified"
+        "nodeLimitedPatternsInSample": 2,
+        "rewrittenVsOriginal": "20 of 167 parsed patterns — a SAMPLE, as DESIGN § Method 4 specifies; the other 147 extracted canonical forms are NOT externally verified",
+        "rewrittenVsOriginalEvidenceBearing": "20 of the 20 sampled pairs are `rewrite-evidence` — the two sides serialize DIFFERENTLY, so the query is not a tautology; the remaining 0 are `representation-only` (xor(R, R)) and carry no rewrite evidence. The corpus offers 41 rewrite-evidence pairs in total; selection takes them first, in hash order."
       },
       "measure": "all emitted xor-emptiness queries returned unsat",
       "pass": true,
@@ -77,9 +78,9 @@
       "sat": 0,
       "statement": "DESIGN 1 — every equivalence egg claims is verified UNSAT; ONE unsound merge ⇒ REJECT",
       "tautologicalQueries": {
-        "count": 22,
+        "count": 6,
         "meaning": "queries whose two sides print BYTE-IDENTICALLY. Their UNSAT is a tautology and carries no evidential weight: it happens when the claimed equality is decided by the IR REPRESENTATION (canonical char-class sets making ['\"] and [\"'] one node) rather than by a rewrite. The remaining queries are real proofs.",
-        "nonTautological": 5,
+        "nonTautological": 21,
         "of": 27
       },
       "unsat": 27,
@@ -153,7 +154,7 @@
       "smtSidesIdentical": true,
       "syntacticallyDistinct": true,
       "z3": {
-        "elapsedMs": 16,
+        "elapsedMs": 15,
         "output": "unsat",
         "verdict": "unsat",
         "witness": null
@@ -181,7 +182,7 @@
       "smtSidesIdentical": true,
       "syntacticallyDistinct": false,
       "z3": {
-        "elapsedMs": 15,
+        "elapsedMs": 14,
         "output": "unsat",
         "verdict": "unsat",
         "witness": null
@@ -236,7 +237,7 @@
       "smtSidesIdentical": false,
       "syntacticallyDistinct": true,
       "z3": {
-        "elapsedMs": 15,
+        "elapsedMs": 14,
         "output": "unsat",
         "verdict": "unsat",
         "witness": null
@@ -264,7 +265,7 @@
       "smtSidesIdentical": true,
       "syntacticallyDistinct": false,
       "z3": {
-        "elapsedMs": 15,
+        "elapsedMs": 14,
         "output": "unsat",
         "verdict": "unsat",
         "witness": null
@@ -320,7 +321,7 @@
       "smtSidesIdentical": true,
       "syntacticallyDistinct": false,
       "z3": {
-        "elapsedMs": 15,
+        "elapsedMs": 16,
         "output": "unsat",
         "verdict": "unsat",
         "witness": null
@@ -428,6 +429,8 @@
     "saturationBudgetSeconds": 60,
     "z3": "5.1.0 (spike toolchain.lock)",
     "z3Path": "spikes/spine-adopt/tools/z3-5.1.0-x64-win/bin/z3.exe",
+    "z3PathResolution": "$SPIKE_Z3_BIN when set, else the per-platform default under spikes/spine-adopt/tools/ — z3-5.1.0-x64-win/bin/z3.exe on Windows, z3-5.1.0-x64-glibc-2.39/bin/z3 elsewhere. Both assets are pinned in spikes/spine-adopt/toolchain.lock ([z3] / [z3.linux]); the precedence is smt/src/runner.rs::resolve_solver's, reimplemented here because DESIGN § Boundaries forbids depending on that crate.",
+    "z3PathResolvedFrom": "per-platform default under spikes/spine-adopt/tools (windows host, $SPIKE_Z3_BIN unset)",
     "z3TimeoutSeconds": 30
   },
   "probe": "egg e-graph probe — spec § Enrichment row 1 (\"egg proposes, Z3 disposes\")",
@@ -440,216 +443,36 @@
     "The e-graph holds the SEARCH LANGUAGE (padding + anchors + desugared \\b), not the raw parse — so a merge is a claim about the shipped semantics, which is exactly what the z3 pass checks."
   ],
   "rewriteSample": {
+    "evidenceClasses": {
+      "availableInCorpus": {
+        "no-rewrite": 1,
+        "representation-only": 125,
+        "rewrite-evidence": 41
+      },
+      "inSample": {
+        "no-rewrite": 0,
+        "representation-only": 0,
+        "rewrite-evidence": 20
+      },
+      "meaning": {
+        "no-rewrite": "the extracted canonical IS the desugared original",
+        "representation-only": "canonical differs only as an e-graph TERM; the two sides print byte-identically, so the emitted query is xor(R, R) and its UNSAT is a tautology carrying NO rewrite evidence. Labelled, not hidden: the equality was decided by the IR representation (canonical char-class sets, printer flattening), which is itself a measured result.",
+        "rewrite-evidence": "canonical differs from the original AND the emitted SMT operands differ — the z3 UNSAT is a real proof that the rewriting preserved the language"
+      }
+    },
     "pairs": [
-      {
-        "canonicalCost": 37,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'`'·'t'·'o'·'t'·'e'·'m'·([\\t ])+·'e'·'x'·'t'·'r'·'a'·'c'·'t'·(NW·(Σ)*)?",
-        "id": "sample-00-04f9c1bb",
-        "originalCost": 37,
-        "pattern": "`totem\\s+extract\\b",
-        "patternSha256": "04f9c1bbcd554725ee34dc3d421fa0da5c52a5e864edc9ffa19c0745efeb43d2",
-        "ruleHash": "4ae0a01d912f8742",
-        "smt2": "artifacts/verification/sample-00-04f9c1bb.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 19,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 41,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "((Σ)*·NW)?·'g'·'i'·'t'·([\\t ])+·(Σ)*·[\\t ]·'-'·'-'·([\\t ])+·(Σ)*·('.'·'.'·('.')?|[^~])·(Σ)*",
-        "id": "sample-01-06debdfa",
-        "originalCost": 41,
-        "pattern": "\\bgit\\s+.*\\s--\\s+.*(\\.\\.\\.?|[\\^~])",
-        "patternSha256": "06debdfad5b8a0d9864a6f1669cd29cd9bc69a70f6e64733139d2ba57c976b28",
-        "ruleHash": "3d09188d0fa85674",
-        "smt2": "artifacts/verification/sample-01-06debdfa.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
       {
         "canonicalCost": 81,
         "canonicalDiffersFromOriginal": true,
         "canonicalForm": "((Σ)*·NW)?·'c'·'o'·'n'·'s'·'o'·'l'·'e'·'.'·('w'·'a'·'r'·'n'|('i'·'n'·'f'·'o'|('e'·'r'·'r'·'o'·'r'|('t'·'r'·'a'·'c'·'e'|('l'·'o'·'g'|'d'·'e'·'b'·'u'·'g')))))·([\\t ])*·'('·(Σ)*",
-        "id": "sample-02-0708a620",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-00-0708a620",
         "originalCost": 81,
         "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\s*\\(",
         "patternSha256": "0708a62081418724d7325c07d369a2e2ce05692a13a6b08e5e3371fe096f72be",
         "ruleHash": "17f273d09af38f0c",
-        "smt2": "artifacts/verification/sample-02-0708a620.smt2",
+        "smt2": "artifacts/verification/sample-00-0708a620.smt2",
         "smtSidesIdentical": false,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 21,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "((Σ)*·NW)?·'t'·'h'·'r'·'o'·'w'·([\\t ])+·(Σ)*",
-        "id": "sample-03-0845c151",
-        "originalCost": 21,
-        "pattern": "\\bthrow\\s+",
-        "patternSha256": "0845c1516d26ab93e84a2c509408ad559f9bd8941be6975e20254c6e7685839c",
-        "ruleHash": "58a6bb25a38e97f8",
-        "smt2": "artifacts/verification/sample-03-0845c151.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 16,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 18,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'\\'·'b'·[$A-Z_a-z]·([$0-9A-Z_a-z])*·'\\'·'b'·(Σ)*",
-        "id": "sample-04-088276a0",
-        "originalCost": 18,
-        "pattern": "\\\\b[A-Za-z_$][\\w$]*\\\\b",
-        "patternSha256": "088276a081627d1f939dc137829f47aee645f2596731375f697008e3e5d24d0c",
-        "ruleHash": "76762d7d0ad98113",
-        "smt2": "artifacts/verification/sample-04-088276a0.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 16,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 54,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'\"'·'o'·'p'·'t'·'i'·'o'·'n'·'a'·'l'·'D'·'e'·'p'·'e'·'n'·'d'·'e'·'n'·'c'·'i'·'e'·'s'·'\"'·([\\t ])*·':'·(Σ)*",
-        "id": "sample-05-08a53f91",
-        "originalCost": 54,
-        "pattern": "\"optionalDependencies\"\\s*:",
-        "patternSha256": "08a53f91a9150522bc3f8522d531bed4ffc4a6ed6a3afb74bc68627ca426103e",
-        "ruleHash": "e12c9c71f8e0aa5b",
-        "smt2": "artifacts/verification/sample-05-08a53f91.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 16,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 25,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'p'·'n'·'p'·'m'·([\\t ])+·'b'·'i'·'n'·(NW·(Σ)*)?",
-        "id": "sample-06-0965479e",
-        "originalCost": 25,
-        "pattern": "pnpm\\s+bin\\b",
-        "patternSha256": "0965479e0f91226dfab9cfa5adfee777ee448f1d6251604b4d1c85e70b5c3f37",
-        "ruleHash": "e1046c772a6bb6f9",
-        "smt2": "artifacts/verification/sample-06-0965479e.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 31,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·([0-9])*·'>'·([\\t ])*·'/'·'d'·'e'·'v'·'/'·'n'·'u'·'l'·'l'·(Σ)*",
-        "id": "sample-07-09815ba9",
-        "originalCost": 31,
-        "pattern": "\\d*>\\s*/dev/null",
-        "patternSha256": "09815ba975c6b8d9a692b2415846e81ca5ae5378d64c73f46fbca70b1b063af3",
-        "ruleHash": "ff5e30cff913a43d",
-        "smt2": "artifacts/verification/sample-07-09815ba9.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 29,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "((Σ)*·NW)?·'e'·'x'·'e'·'c'·'S'·'y'·'n'·'c'·([\\t ])*·'('·(Σ)*",
-        "id": "sample-08-0ab7687b",
-        "originalCost": 29,
-        "pattern": "\\bexecSync\\s*\\(",
-        "patternSha256": "0ab7687ba7db0099c274f4e6ebafb526fc7fef22cfffb6b0f609181ba404d56a",
-        "ruleHash": "3c28f6dd8d7b5057",
-        "smt2": "artifacts/verification/sample-08-0ab7687b.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 23,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'['·[\"']·[A-Z_a-z]·(W)*·[\"']·']'·([\\t ])*·'('·(Σ)*",
-        "id": "sample-09-0b2f9c07",
-        "originalCost": 23,
-        "pattern": "\\[['\"][a-zA-Z_]\\w*['\"]\\]\\s*\\(",
-        "patternSha256": "0b2f9c074365ff46a7a9ac886d512a08571f3239fefc3d63c1a18435c5b7e21a",
-        "ruleHash": "16104b4e57be1a86",
-        "smt2": "artifacts/verification/sample-09-0b2f9c07.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 30,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'.'·('m'·'a'·'t'·'c'·'h'|'e'·'x'·'e'·'c')·([\\t ])*·'('·(Σ)*",
-        "id": "sample-10-0c2872fc",
-        "originalCost": 30,
-        "pattern": "\\.(match|exec)\\s*\\(",
-        "patternSha256": "0c2872fc73799c565ba2b91c7f1b463223001aff48b972716bb7b6b948e0c62a",
-        "ruleHash": "46dff393ac3b12e9",
-        "smt2": "artifacts/verification/sample-10-0c2872fc.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 30,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'}'·([\\t ])*·'a'·'s'·([\\t ])+·'E'·'r'·'r'·'o'·'r'·(NW·(Σ)*)?",
-        "id": "sample-11-0e47e502",
-        "originalCost": 30,
-        "pattern": "\\}\\s*as\\s+Error\\b",
-        "patternSha256": "0e47e502e13a23ef9cbfb0b67759411f24624c776c742ff480b8291de72cc2c4",
-        "ruleHash": "71afc4b8f4c930a1",
-        "smt2": "artifacts/verification/sample-11-0e47e502.smt2",
-        "smtSidesIdentical": true,
         "z3": {
           "elapsedMs": 15,
           "output": "unsat",
@@ -661,31 +484,14 @@
         "canonicalCost": 77,
         "canonicalDiffersFromOriginal": true,
         "canonicalForm": "(Σ)*·'\"'·('t'·'o'·'k'·'e'·'n'|('s'·'e'·'c'·'r'·'e'·'t'|('a'·'p'·'i'·([-_])?·'k'·'e'·'y'|'p'·'a'·'s'·'s'·'w'·'o'·'r'·'d')))·'\"'·([\\t ])*·':'·([\\t ])*·'\"'·(Σ)+·'\"'·(Σ)*",
-        "id": "sample-12-1154603f",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-01-1154603f",
         "originalCost": 77,
         "pattern": "\"(?:api[_-]?key|token|secret|password)\"\\s*:\\s*\".+\"",
         "patternSha256": "1154603f9f2ba3403c09f912d96061d3dfe53bfb990589854f4ac433e6f340e1",
         "ruleHash": "3da0f60891174989",
-        "smt2": "artifacts/verification/sample-12-1154603f.smt2",
+        "smt2": "artifacts/verification/sample-01-1154603f.smt2",
         "smtSidesIdentical": false,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 16,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'<'·'/'·[A-Za-z]·([\\t -=?-~])*·'>'·(Σ)*",
-        "id": "sample-13-130422c4",
-        "originalCost": 16,
-        "pattern": "<\\/[a-zA-Z][^>]*>",
-        "patternSha256": "130422c438df7b0cb822b538e30ba9b7888d229c3a110af81a0a3d512ee53e47",
-        "ruleHash": "4d63af6631a6ddf7",
-        "smt2": "artifacts/verification/sample-13-130422c4.smt2",
-        "smtSidesIdentical": true,
         "z3": {
           "elapsedMs": 14,
           "output": "unsat",
@@ -697,67 +503,14 @@
         "canonicalCost": 72,
         "canonicalDiffersFromOriginal": true,
         "canonicalForm": "(Σ)*·'J'·'S'·'O'·'N'·'.'·'p'·'a'·'r'·'s'·'e'·'('·(Σ)*·('s'·'p'·'a'·'w'·'n'|('s'·'t'·'d'·'o'·'u'·'t'|('e'·'x'·'e'·'c'|'s'·'t'·'d'·'e'·'r'·'r')))·(Σ)*",
-        "id": "sample-14-18b53489",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-02-18b53489",
         "originalCost": 72,
         "pattern": "JSON\\.parse\\(.*(exec|spawn|stdout|stderr)",
         "patternSha256": "18b5348919bede4b998dd89a579bbea54c9f75cf9ae47a63b1e3f149d1be141f",
         "ruleHash": "cae08ccccd834eb3",
-        "smt2": "artifacts/verification/sample-14-18b53489.smt2",
+        "smt2": "artifacts/verification/sample-02-18b53489.smt2",
         "smtSidesIdentical": false,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 57,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "((Σ)*·'g'·'i'·'t'·' '·'a'·'d'·'d'·' '·'-'·'A'·(Σ)*|(Σ)*·'g'·'i'·'t'·' '·'a'·'d'·'d'·' '·'-'·'-'·'a'·'l'·'l'·(Σ)*)",
-        "id": "sample-15-18cfa60b",
-        "originalCost": 57,
-        "pattern": "git add -A|git add --all",
-        "patternSha256": "18cfa60b0d2d912758d3ba4a8d9e2629c4aef6345787ea70dc684e61b2571e33",
-        "ruleHash": "271765fe97bafafb",
-        "smt2": "artifacts/verification/sample-15-18cfa60b.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 16,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 21,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'|'·([\\t ])*·'g'·'r'·'e'·'p'·(NW·(Σ)*)?",
-        "id": "sample-16-1ab6a210",
-        "originalCost": 21,
-        "pattern": "\\|\\s*grep\\b",
-        "patternSha256": "1ab6a210ea82a0efec1632712343e349ac1d53762b85540eacd5ce4e0879146c",
-        "ruleHash": "3d6802ffb3a85fb8",
-        "smt2": "artifacts/verification/sample-16-1ab6a210.smt2",
-        "smtSidesIdentical": true,
-        "z3": {
-          "elapsedMs": 15,
-          "output": "unsat",
-          "verdict": "unsat",
-          "witness": null
-        }
-      },
-      {
-        "canonicalCost": 43,
-        "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "(Σ)*·'c'·'u'·'r'·'r'·'e'·'n'·'t'·'B'·'r'·'a'·'n'·'c'·'h'·':'·([\\t ])*·[\"']·([\\t -!#-&(-~])+·[\"']·(Σ)*",
-        "id": "sample-17-1b565a00",
-        "originalCost": 43,
-        "pattern": "currentBranch:\\s*['\"][^'\"]+['\"]",
-        "patternSha256": "1b565a003d16043dda05a4e1954bee16ca0d1a9e2655ebee738b54a2b17ed874",
-        "ruleHash": "28cc46c09bd5820f",
-        "smt2": "artifacts/verification/sample-17-1b565a00.smt2",
-        "smtSidesIdentical": true,
         "z3": {
           "elapsedMs": 14,
           "output": "unsat",
@@ -769,12 +522,32 @@
         "canonicalCost": 84,
         "canonicalDiffersFromOriginal": true,
         "canonicalForm": "(Σ)*·'t'·'h'·'r'·'o'·'w'·([\\t ])+·'n'·'e'·'w'·([\\t ])+·(W)*·'E'·'r'·'r'·'o'·'r'·'('·([\\t -(*-~])*·'+'·([\\t ])*·('e'|('e'·'r'·'r'|'e'·'r'·'r'·'o'·'r'))·'.'·'m'·'e'·'s'·'s'·'a'·'g'·'e'·(Σ)*",
-        "id": "sample-18-1c8fe917",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-03-1c8fe917",
         "originalCost": 84,
         "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
         "patternSha256": "1c8fe9179bd7daf8bb66f3b14a1619b075e553372741c187167d3b6a55e6dc2c",
         "ruleHash": "d5b7c8b5391ffb9f",
-        "smt2": "artifacts/verification/sample-18-1c8fe917.smt2",
+        "smt2": "artifacts/verification/sample-03-1c8fe917.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 213,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·('p'·'l'·'a'·'n'·'n'·'e'·'d'·' '·('f'·'e'·'a'·'t'·'u'·'r'·'e'|'f'·'o'·'r')|('c'·'o'·'m'·'i'·'n'·'g'·' '·'s'·'o'·'o'·'n'|('s'·'l'·'a'·'t'·'e'·'d'·' '·'f'·'o'·'r'|('f'·'u'·'t'·'u'·'r'·'e'·' '·'r'·'e'·'l'·'e'·'a'·'s'·'e'|('r'·'o'·'a'·'d'·'m'·'a'·'p'|('u'·'n'·'d'·'e'·'r'·' '·'d'·'e'·'v'·'e'·'l'·'o'·'p'·'m'·'e'·'n'·'t'|'l'·'a'·'t'·'e'·'r'·' '·'d'·'e'·'v'·'e'·'l'·'o'·'p'·'m'·'e'·'n'·'t'·' '·'p'·'h'·'a'·'s'·'e'·'s'))))))·(NW·(Σ)*)?",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-04-1de1f6ce",
+        "originalCost": 213,
+        "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
+        "patternSha256": "1de1f6cef866c017f0cfeb414e937722e2ac28bc757326f1da6aa358f8a9bfcd",
+        "ruleHash": "c2d9e854231b78f1",
+        "smt2": "artifacts/verification/sample-04-1de1f6ce.smt2",
         "smtSidesIdentical": false,
         "z3": {
           "elapsedMs": 15,
@@ -784,18 +557,285 @@
         }
       },
       {
-        "canonicalCost": 30,
+        "canonicalCost": 79,
         "canonicalDiffersFromOriginal": true,
-        "canonicalForm": "((Σ)*·NW)?·'o'·'s'·'.'·'t'·'m'·'p'·'d'·'i'·'r'·'('·')'·(Σ)*",
-        "id": "sample-19-1d47ce64",
-        "originalCost": 30,
-        "pattern": "\\bos\\.tmpdir\\(\\)",
-        "patternSha256": "1d47ce64419be6ceb433fb6522e3e03cebc65efa44d3c3e0f46cfffbb389c7ce",
-        "ruleHash": "d6f2b8a2f3884537",
-        "smt2": "artifacts/verification/sample-19-1d47ce64.smt2",
-        "smtSidesIdentical": true,
+        "canonicalForm": "((Σ)*·NW)?·'c'·'o'·'n'·'s'·'o'·'l'·'e'·'.'·('w'·'a'·'r'·'n'|('e'·'r'·'r'·'o'·'r'|('d'·'e'·'b'·'u'·'g'|('l'·'o'·'g'|('i'·'n'·'f'·'o'|'t'·'r'·'a'·'c'·'e')))))·(NW·(Σ)*)?",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-05-38c17eaa",
+        "originalCost": 79,
+        "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\b",
+        "patternSha256": "38c17eaa3c6eb060020e42df5f7d9210707fa0e797ec85fd2244dc53eb5b4df9",
+        "ruleHash": "b63eb4992616cf41",
+        "smt2": "artifacts/verification/sample-05-38c17eaa.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 170,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·([Ww]·'i'·'l'·'l'·([\\t ])+·('n'·'e'·'v'·'e'·'r'·([\\t ])+·('c'·'h'·'a'·'n'·'g'·'e'|'m'·'o'·'v'·'e')|('s'·'t'·'a'·'y'|('r'·'e'·'m'·'a'·'i'·'n'|'a'·'l'·'w'·'a'·'y'·'s'·([\\t ])+·'b'·'e')))|([Ww]·'o'·'n'·'''·'t'·([\\t ])+·('c'·'h'·'a'·'n'·'g'·'e'|'e'·'v'·'e'·'r')|([Gg]·'u'·'a'·'r'·'a'·'n'·'t'·'e'·'e'·'s'|[Pp]·'r'·'o'·'m'·'i'·'s'·'e'·'s'·([\\t ])+·'t'·'o')))·(NW·(Σ)*)?",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-06-5987f032",
+        "originalCost": 170,
+        "pattern": "\\b(?:[Ww]ill\\s+(?:stay|remain|always\\s+be|never\\s+(?:change|move))|[Ww]on['']t\\s+(?:change|ever)|[Gg]uarantees|[Pp]romises\\s+to)\\b",
+        "patternSha256": "5987f0329c5bd88d98a4c7804c9c7c4aa18afa4915cebac03b8ee2e8f6c54850",
+        "ruleHash": "ef18015c7c3d78ae",
+        "smt2": "artifacts/verification/sample-06-5987f032.smt2",
+        "smtSidesIdentical": false,
         "z3": {
           "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 105,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'g'·'i'·'t'·([\\t ])+·('r'·'e'·'s'·'t'·'o'·'r'·'e'|('c'·'h'·'e'·'c'·'k'·'o'·'u'·'t'|('d'·'i'·'f'·'f'|(('a'·'d'·'d'|'l'·'s'·'-'·'f'·'i'·'l'·'e'·'s')|('r'·'e'·'s'·'e'·'t'|'s'·'h'·'o'·'w')))))·([\\t ])+·([\\t -%'-:<-{}-~])*·'$'·[A-Z_a-z]·(W)*·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-07-5d3456f2",
+        "originalCost": 105,
+        "pattern": "git\\s+(diff|checkout|restore|reset|add|ls-files|show)\\s+[^|&;]*\\$[a-zA-Z_][a-zA-Z0-9_]*",
+        "patternSha256": "5d3456f2c34ddec8d4c69acac6380401f0395de7d06ab41aff3c7d0cd86f588e",
+        "ruleHash": "94ad9eb3fe20bdb0",
+        "smt2": "artifacts/verification/sample-07-5d3456f2.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 108,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'['·'['·(Σ)*·'='·'='·([\\t ])*·([\"'])?·('r'·'e'·'b'·'a'·'s'·'e'|('c'·'o'·'m'·'m'·'i'·'t'|('m'·'e'·'r'·'g'·'e'|('p'·'u'·'l'·'l'|('c'·'h'·'e'·'c'·'k'·'o'·'u'·'t'|('p'·'u'·'s'·'h'|'f'·'e'·'t'·'c'·'h'))))))·([\"'])?·([\\t ])*·']'·']'·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-08-5e1a84ec",
+        "originalCost": 108,
+        "pattern": "\\[\\[.*==\\s*['\"]?(commit|push|pull|merge|rebase|checkout|fetch)['\"]?\\s*\\]\\]",
+        "patternSha256": "5e1a84ec3cd35496fc809c930d0ff9615fc85478f8cf883cfaba3bff9ea8554a",
+        "ruleHash": "60c2e674222dc4e5",
+        "smt2": "artifacts/verification/sample-08-5e1a84ec.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 374,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·('g'·'u'·'a'·'r'·'a'·'n'·'t'·'e'·'e'·('s')?|((((('e'·'n'·'t'·'e'·'r'·'p'·'r'·'i'·'s'·'e'·'-'·'g'·'r'·'a'·'d'·'e'|'n'·'e'·'x'·'t'·'-'·'g'·'e'·'n'·'e'·'r'·'a'·'t'·'i'·'o'·'n')|('s'·'e'·'a'·'m'·'l'·'e'·'s'·'s'|'f'·'u'·'t'·'u'·'r'·'e'·'-'·'p'·'r'·'o'·'o'·'f'))|(('s'·'t'·'a'·'t'·'e'·'-'·'o'·'f'·'-'·'t'·'h'·'e'·'-'·'a'·'r'·'t'|'r'·'e'·'v'·'o'·'l'·'u'·'t'·'i'·'o'·'n'·'a'·'r'·'y')|('r'·'o'·'b'·'u'·'s'·'t'|'p'·'o'·'w'·'e'·'r'·'f'·'u'·'l')))|('i'·'n'·'d'·'u'·'s'·'t'·'r'·'y'·'-'·'l'·'e'·'a'·'d'·'i'·'n'·'g'|'u'·'n'·'p'·'a'·'r'·'a'·'l'·'l'·'e'·'l'·'e'·'d'))|(('w'·'o'·'r'·'l'·'d'·'-'·'c'·'l'·'a'·'s'·'s'|'c'·'u'·'t'·'t'·'i'·'n'·'g'·'-'·'e'·'d'·'g'·'e')|('c'·'o'·'m'·'p'·'r'·'e'·'h'·'e'·'n'·'s'·'i'·'v'·'e'|'b'·'e'·'s'·'t'·'-'·'i'·'n'·'-'·'c'·'l'·'a'·'s'·'s'))))·(NW·(Σ)*)?",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-09-62f19cad",
+        "originalCost": 374,
+        "pattern": "\\b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\\b",
+        "patternSha256": "62f19cad2ea5a933fcd0271d319f915987bee38cdb59eaa548ba8ef9305ef0a0",
+        "ruleHash": "6ad0d4d5c760a5d6",
+        "smt2": "artifacts/verification/sample-09-62f19cad.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 16,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 68,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·'c'·'o'·'n'·'s'·'o'·'l'·'e'·'.'·('w'·'a'·'r'·'n'|('e'·'r'·'r'·'o'·'r'|('d'·'e'·'b'·'u'·'g'|('l'·'o'·'g'|'i'·'n'·'f'·'o'))))·'('·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-10-685b9e80",
+        "originalCost": 68,
+        "pattern": "\\bconsole\\.(log|warn|error|info|debug)\\(",
+        "patternSha256": "685b9e80f2d962b240b33f3f35b4a4d7ee9a1c9793f1b50f48ce64e0e29a5352",
+        "ruleHash": "8944562b6cb4a869",
+        "smt2": "artifacts/verification/sample-10-685b9e80.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 15,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 69,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·('r'·'m'|'g'·'i'·'t'·([\\t ])+·'r'·'m')·([\\t ])+·(Σ){0,40}·'.'·'t'·'o'·'t'·'e'·'m'·'/'·'l'·'e'·'s'·'s'·'o'·'n'·'s'·'.'·'m'·'d'·(NW·(Σ)*)?",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-11-68b33ef4",
+        "originalCost": 69,
+        "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
+        "patternSha256": "68b33ef4d2b0e9248128f8c3af73991e960b27efb8d7bd1eb9f2a5fd4038189e",
+        "ruleHash": "61dcb058bd1df15d",
+        "smt2": "artifacts/verification/sample-11-68b33ef4.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 50,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'?'·'?'·([\\t ])*·((([0-9])+|'f'·'a'·'l'·'s'·'e')|([\"']·([\\t -!#-&(-~])*·[\"']|'t'·'r'·'u'·'e'))·([\\t ])+·'a'·'s'·([\\t ])+·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-12-69159407",
+        "originalCost": 50,
+        "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s+as\\s+",
+        "patternSha256": "6915940700fc8c8739aeed848299772427f5a922492b9b76a84fc9110b5d8f26",
+        "ruleHash": "e118e1e349e8439e",
+        "smt2": "artifacts/verification/sample-12-69159407.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 102,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·([Ff]·'i'·'x'·(('e'·'d'|'e'·'s'))?|([Rr]·'e'·'s'·'o'·'l'·'v'·'e'·('s')?|([Cc]·'l'·'o'·'s'·'e'·('s')?|([Cc]·'l'·'o'·'s'·'e'·'d'|[Rr]·'e'·'s'·'o'·'l'·'v'·'e'·'d'))))·([\\t ])+·'#'·([0-9])+·([\\t ])*·','·([\\t ])*·'#'·([0-9])+·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-13-75cb99bc",
+        "originalCost": 102,
+        "pattern": "\\b(?:[Cc]loses?|[Cc]losed|[Ff]ix(?:es|ed)?|[Rr]esolves?|[Rr]esolved)\\s+#\\d+\\s*,\\s*#\\d+",
+        "patternSha256": "75cb99bc712e4bd711024aba2dfee97f87a71057f3c03f26f8414f38dd7fdb41",
+        "ruleHash": "8213cd4e21b375ba",
+        "smt2": "artifacts/verification/sample-13-75cb99bc.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 138,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·('e'·'x'·'e'·'c'·'S'·'y'·'n'·'c'|('e'·'x'·'e'·'c'|('s'·'p'·'a'·'w'·'n'·'S'·'y'·'n'·'c'|'s'·'p'·'a'·'w'·'n')))·'('·([\\t -(*-~])*·'g'·'i'·'t'·([\\t ])+·('d'·'e'·'s'·'c'·'r'·'i'·'b'·'e'|('b'·'r'·'a'·'n'·'c'·'h'|('s'·'t'·'a'·'t'·'u'·'s'|('s'·'h'·'o'·'w'|('d'·'i'·'f'·'f'|'l'·'o'·'g')))))·([\\t -(*-~])*·')'·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-14-760412e1",
+        "originalCost": 138,
+        "pattern": "(?:execSync|exec|spawnSync|spawn)\\([^)]*(?:git\\s+(?:branch|status|diff|log|show|describe))[^)]*\\)",
+        "patternSha256": "760412e1ba7a20b2533c9da4aefdbf67b7483fdd282d9f7524d8ceb62f6af9d7",
+        "ruleHash": "a8ade9d9b017f7b3",
+        "smt2": "artifacts/verification/sample-14-760412e1.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 25,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'.'·'g'·'i'·'t'·'/'·'h'·'o'·'o'·'k'·'s'·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-15-771a4041",
+        "originalCost": 25,
+        "pattern": "\\.git[\\/]hooks",
+        "patternSha256": "771a4041c65cc129927e3cd7b0fbad0bcc45acb64fb7764d1af329ff298e77be",
+        "ruleHash": "d2f88c8528441069",
+        "smt2": "artifacts/verification/sample-15-771a4041.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 73,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "((Σ)*·NW)?·(('m'·'s'|('t'·'o'·'k'·'e'·'n'·('s')?|'c'·'o'·'u'·'n'·'t'))|('l'·'a'·'t'·'e'·'n'·'c'·'y'|'d'·'u'·'r'·'a'·'t'·'i'·'o'·'n'))·[\\t ]·'*'·'|'·'|'·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-16-772fda99",
+        "originalCost": 73,
+        "pattern": "\\b(latency|tokens?|duration|ms|count)\\b\\s\\*\\|\\|",
+        "patternSha256": "772fda9913e267be16c97939484acdd6d0111f5e5b28646ebd5a82bdda93b4ea",
+        "ruleHash": "6f1ffc8fb332d76f",
+        "smt2": "artifacts/verification/sample-16-772fda99.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 141,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'.'·(('i'·'n'·'c'·'l'·'u'·'d'·'e'·'s'|'s'·'t'·'a'·'r'·'t'·'s'·'W'·'i'·'t'·'h')·([\\t ])*·'('·([\\t ])*·[\"']·'*'·'*'·[\"']|'i'·'n'·'d'·'e'·'x'·'O'·'f'·([\\t ])*·'('·([\\t ])*·[\"']·'*'·'*'·[\"']·([\\t ])*·')'·([\\t ])*·('>'·([\\t ])*·'-'·'1'|('!'·'='·('=')?·([\\t ])*·'-'·'1'|('>'·'='·([\\t ])*·'0'|'='·'='·('=')?·([\\t ])*·'0'))))·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-17-79546931",
+        "originalCost": 141,
+        "pattern": "\\.(?:(?:includes|startsWith)\\s*\\(\\s*['\"]\\*\\*['\"]|indexOf\\s*\\(\\s*['\"]\\*\\*['\"]\\s*\\)\\s*(?:>=\\s*0|>\\s*-1|!==?\\s*-1|===?\\s*0))",
+        "patternSha256": "79546931598367f5373f87fe0e4434191f01707414488a53e75fb8b899f9015e",
+        "ruleHash": "626503cb7d4d4204",
+        "smt2": "artifacts/verification/sample-17-79546931.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 13,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'\"'·'.'·'.'·'/'·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-18-7b4f4d30",
+        "originalCost": 13,
+        "pattern": "\"\\.\\.[\\/]",
+        "patternSha256": "7b4f4d30252cdebf63c2d51bc0a802027e541c806c42a7ccfdf06e3f10e237c1",
+        "ruleHash": "92c5de19ec77d768",
+        "smt2": "artifacts/verification/sample-18-7b4f4d30.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
+          "output": "unsat",
+          "verdict": "unsat",
+          "witness": null
+        }
+      },
+      {
+        "canonicalCost": 97,
+        "canonicalDiffersFromOriginal": true,
+        "canonicalForm": "(Σ)*·'.'·('w'·'h'·'e'·'r'·'e'|'d'·'e'·'l'·'e'·'t'·'e')·([\\t ])*·'('·([\\t ])*·('\"'·([\\t -!#-~])*·'\\'·'\"'·([\\t -!#-~])+·'\\'·'\"'·([\\t -!#-~])*·'\"'|('''·([\\t -&(-~])*·'\"'·([\\t -!#-~])+·'\"'·([\\t -&(-~])*·'''|'`'·([\\t -_a-~])*·'\"'·([\\t -!#-~])+·'\"'·([\\t -_a-~])*·'`'))·([\\t ])*·')'·(Σ)*",
+        "evidenceClass": "rewrite-evidence",
+        "id": "sample-19-8523d2a6",
+        "originalCost": 97,
+        "pattern": "\\.(where|delete)\\s*\\(\\s*(?:'[^']*\"[^\"]+\"[^']*'|\"[^\"]*\\\\\"[^\"]+\\\\\"[^\"]*\"|`[^`]*\"[^\"]+\"[^`]*`)\\s*\\)",
+        "patternSha256": "8523d2a6cf50b4dc72e47324f4b7e64f4550b5c36472e7d71cd4bc309ff4e0c9",
+        "ruleHash": "44c3aad7ac60e8ba",
+        "smt2": "artifacts/verification/sample-19-8523d2a6.smt2",
+        "smtSidesIdentical": false,
+        "z3": {
+          "elapsedMs": 14,
           "output": "unsat",
           "verdict": "unsat",
           "witness": null
@@ -803,7 +843,7 @@
       }
     ],
     "rewrittenPairsAvailable": 166,
-    "selectionRule": "order all parsed patterns by sha256(pattern-text) ascending; take pairs whose extracted canonical DIFFERS from the desugared original first (an identical pair proves nothing about rewriting), then fill from the same hash order. No RNG, no timestamps.",
+    "selectionRule": "order all parsed patterns by sha256(pattern-text) ascending, then take by EVIDENCE CLASS strongest first: `rewrite-evidence` (canonical differs from the desugared original AND the two sides serialize differently, so the xor query is a real question), then `representation-only` (the canonical differs as an e-graph term but serializes byte-identically, making xor(R, R) a tautology), then `no-rewrite` (canonical == original, which proves nothing about rewriting). Within each class, the same hash order. No RNG, no timestamps.",
     "size": 20
   },
   "saturation": {
@@ -841,17 +881,17 @@
             "pattern": "open-pull-requests-limit:\\s*0",
             "ruleHash": "a6f2d3a89d9ebae8",
             "stopReason": "Some(NodeLimit(10265))",
-            "wallMs": 237
+            "wallMs": 234
           },
           {
-            "coveredByRewriteSample": false,
+            "coveredByRewriteSample": true,
             "eClasses": 1891,
             "eNodes": 8327,
             "iterations": 16,
             "pattern": "\\b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\\b",
             "ruleHash": "6ad0d4d5c760a5d6",
             "stopReason": "Some(NodeLimit(12391))",
-            "wallMs": 337
+            "wallMs": 329
           },
           {
             "coveredByRewriteSample": false,
@@ -861,7 +901,7 @@
             "pattern": "\\.startsWith\\(['\"]http://localhost['\"]\\)|\\.startsWith\\(['\"]http://127\\.|\\.startsWith\\(['\"]http://\\[::1\\]",
             "ruleHash": "b93bd44e6c1d2d59",
             "stopReason": "Some(NodeLimit(13049))",
-            "wallMs": 237
+            "wallMs": 233
           },
           {
             "coveredByRewriteSample": false,
@@ -871,7 +911,7 @@
             "pattern": "\\b(guarantee[sd]?|comprehensive(ly)?|always|never|perfect(ly)?|complete(ly)?|foolproof|infallible|100%\\s+(?:accurate|reliable|secure|safe))\\b",
             "ruleHash": "d5faa14cbb8b50fb",
             "stopReason": "Some(NodeLimit(12323))",
-            "wallMs": 160
+            "wallMs": 158
           },
           {
             "coveredByRewriteSample": false,
@@ -881,7 +921,7 @@
             "pattern": "new\\s+GoogleGenerativeAI\\s*\\(\\s*[^\\s\\{]",
             "ruleHash": "37a2ad412bd8ce20",
             "stopReason": "Some(NodeLimit(11088))",
-            "wallMs": 265
+            "wallMs": 241
           },
           {
             "coveredByRewriteSample": false,
@@ -891,7 +931,7 @@
             "pattern": "(\\.(match|test|includes)\\s*\\(|pattern:\\s*)[/\"']\\^?\\b(git|npm|docker|aws|kubectl|gh|sh|bash)\\b\\$?[/\"']",
             "ruleHash": "acafedf51e69f512",
             "stopReason": "Some(NodeLimit(13832))",
-            "wallMs": 233
+            "wallMs": 209
           },
           {
             "coveredByRewriteSample": false,
@@ -901,7 +941,7 @@
             "pattern": "new\\s+RegExp\\s*\\(\\s*[^,]+\\s*,\\s*[^,]*\\.flags\\s*\\+\\s*['\"][^'\"]*g",
             "ruleHash": "4fe39839b3e16366",
             "stopReason": "Some(NodeLimit(16887))",
-            "wallMs": 364
+            "wallMs": 337
           },
           {
             "coveredByRewriteSample": false,
@@ -911,7 +951,7 @@
             "pattern": "\\bfs\\.(promises|readFile|writeFile|readdir|mkdir|rm|stat|access|appendFile|copyFile|rename|unlink)\\b|['\"]fs/promises['\"]",
             "ruleHash": "173334b199f58fb2",
             "stopReason": "Some(NodeLimit(22576))",
-            "wallMs": 239
+            "wallMs": 221
           },
           {
             "coveredByRewriteSample": true,
@@ -921,7 +961,7 @@
             "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
             "ruleHash": "d5b7c8b5391ffb9f",
             "stopReason": "Some(NodeLimit(13447))",
-            "wallMs": 334
+            "wallMs": 305
           },
           {
             "coveredByRewriteSample": false,
@@ -931,7 +971,7 @@
             "pattern": "process\\.stderr\\.write\\([^)]*\\[Totem Error\\]",
             "ruleHash": "42559b2f75734104",
             "stopReason": "Some(NodeLimit(11298))",
-            "wallMs": 385
+            "wallMs": 366
           }
         ]
       },
@@ -967,15 +1007,7 @@
           "iterations": 24,
           "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
           "stopReason": "Some(Saturated)",
-          "wallMs": 549
-        },
-        {
-          "eClasses": 551,
-          "eNodes": 6021,
-          "iterations": 22,
-          "pattern": "open-pull-requests-limit\\s*:\\s*['\"]?[1-9]\\d*['\"]?",
-          "stopReason": "Some(Saturated)",
-          "wallMs": 500
+          "wallMs": 523
         },
         {
           "eClasses": 511,
@@ -983,7 +1015,15 @@
           "iterations": 24,
           "pattern": "totem\\s+shield\\s+--deterministic",
           "stopReason": "Some(Saturated)",
-          "wallMs": 452
+          "wallMs": 449
+        },
+        {
+          "eClasses": 551,
+          "eNodes": 6021,
+          "iterations": 22,
+          "pattern": "open-pull-requests-limit\\s*:\\s*['\"]?[1-9]\\d*['\"]?",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 447
         },
         {
           "eClasses": 675,
@@ -991,7 +1031,7 @@
           "iterations": 21,
           "pattern": "process\\.stderr\\.write\\([^)]*\\[Totem Error\\]",
           "stopReason": "Some(NodeLimit(11298))",
-          "wallMs": 385
+          "wallMs": 366
         },
         {
           "eClasses": 1273,
@@ -999,15 +1039,7 @@
           "iterations": 22,
           "pattern": "new\\s+RegExp\\s*\\(\\s*[^,]+\\s*,\\s*[^,]*\\.flags\\s*\\+\\s*['\"][^'\"]*g",
           "stopReason": "Some(NodeLimit(16887))",
-          "wallMs": 364
-        },
-        {
-          "eClasses": 424,
-          "eNodes": 4094,
-          "iterations": 22,
-          "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
-          "stopReason": "Some(Saturated)",
-          "wallMs": 347
+          "wallMs": 337
         },
         {
           "eClasses": 1891,
@@ -1015,7 +1047,15 @@
           "iterations": 16,
           "pattern": "\\b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\\b",
           "stopReason": "Some(NodeLimit(12391))",
-          "wallMs": 337
+          "wallMs": 329
+        },
+        {
+          "eClasses": 424,
+          "eNodes": 4094,
+          "iterations": 22,
+          "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 322
         },
         {
           "eClasses": 1148,
@@ -1023,7 +1063,15 @@
           "iterations": 21,
           "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
           "stopReason": "Some(NodeLimit(13447))",
-          "wallMs": 334
+          "wallMs": 305
+        },
+        {
+          "eClasses": 209,
+          "eNodes": 1363,
+          "iterations": 18,
+          "pattern": "echo\\s+\\$[A-Z_]*TOOL_INPUT",
+          "stopReason": "Some(Saturated)",
+          "wallMs": 297
         },
         {
           "eClasses": 479,
@@ -1031,15 +1079,7 @@
           "iterations": 24,
           "pattern": "(import\\s+.*from\\s+['\"]inquirer['\"]|require\\(['\"]inquirer['\"]\\)|\\\"inquirer\\\"\\s*:)",
           "stopReason": "Some(Saturated)",
-          "wallMs": 316
-        },
-        {
-          "eClasses": 510,
-          "eNodes": 3538,
-          "iterations": 23,
-          "pattern": "expect\\(.*\\.length\\)\\.(toBeGreaterThan|toBeLessThan)(OrEqual)?\\(\\d+\\)",
-          "stopReason": "Some(Saturated)",
-          "wallMs": 307
+          "wallMs": 296
         }
       ],
       "stopReasons": {
@@ -1057,7 +1097,7 @@
       },
       "totalEClasses": 44754,
       "totalENodes": 234911,
-      "totalWallMs": 13196
+      "totalWallMs": 12238
     },
     "sharedEGraph": {
       "distinctRootEClasses": 161,
@@ -1075,7 +1115,7 @@
         "union-comm": 481
       },
       "stopReason": "Some(NodeLimit(12884))",
-      "wallMs": 309
+      "wallMs": 291
     }
   },
   "smtDialect": {
@@ -1119,7 +1159,7 @@
   "subsetNotes": [
     "DESIGN § Method 1 names 'bounded {n,m}'. `{n}` and `{n,}` are the same counted-repetition family and are parsed here: `{n}` → (_ re.loop n n), `{n,}` → (_ re.loop n n) · re.* — an exact rewriting, not an approximation. Flagged for the dispatching seat because it is an extension of the words DESIGN uses.",
     "Lazy quantifiers (`*?`, `+?`, `??`) are NOT in the declared subset and are recorded unparsed, even though they are language-equal to the greedy form under membership: reading them as greedy would silently re-read match semantics.",
-    "A `{` that does not open a valid quantifier is a LITERAL — the shipped JS RegExp (Annex B) rule, so this is fidelity, not a guess.",
+    "A `{` that does not open a valid quantifier is a LITERAL — the shipped JS RegExp (Annex B) rule, so this is fidelity, not a guess. A `{n,m}` with REVERSED bounds (`a{3,1}`) is the one brace form that is neither: it matches QuantifierPrefix, so the Annex-B literal reading does not apply, and ECMAScript's InvalidBracedQuantifier early error makes the whole pattern a SyntaxError (V8: \"numbers out of order in {} quantifier\"). It is recorded unparsed under `reversed-counted-bounds` rather than modelled as `(_ re.loop 3 1)`, which would be a language the shipped engine never produces.",
     "A POSITIVE character class naming an out-of-Σ character is refused rather than intersected with Σ, which would silently narrow it. A NEGATED class naming out-of-Σ characters is exact on Σ and is kept — this is lang.rs's own reading of [^\\n]."
   ],
   "syntacticBaseline": {

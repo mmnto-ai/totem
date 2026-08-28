@@ -248,8 +248,8 @@ pub fn run_with_budget(
     }
     let time_ms = started.elapsed().as_millis();
 
-    let stdout = stdout_reader.join().unwrap_or_default();
-    let stderr = stderr_reader.join().unwrap_or_default();
+    let stdout = normalize_line_endings(&stdout_reader.join().unwrap_or_default());
+    let stderr = normalize_line_endings(&stderr_reader.join().unwrap_or_default());
     let raw_output = if stderr.trim().is_empty() {
         stdout
     } else {
@@ -278,11 +278,6 @@ pub fn run_with_budget(
 
 /// Parse solver output into the ordered status list and the evidence blocks.
 pub fn parse_output(raw: &str) -> (Vec<Status>, Vec<String>) {
-    // cvc5 announces a timeout in prose rather than as an SMT-LIB response.
-    if raw.contains("interrupted by timeout") {
-        return (vec![Status::Timeout], Vec::new());
-    }
-
     let mut statuses = Vec::new();
     let mut evidence = Vec::new();
     for chunk in split_top_level(raw) {
@@ -301,7 +296,34 @@ pub fn parse_output(raw: &str) -> (Vec<Status>, Vec<String>) {
             }
         }
     }
+
+    // cvc5 announces a timeout in PROSE rather than as an SMT-LIB response, so
+    // it has to be recognised separately. It is appended AFTER the responses the
+    // solver did print, never in place of them: a multi-check run that answered
+    // checks 1 and 2 before the budget ran out really did answer them, and
+    // returning a bare `timeout` here would drop both those statuses and their
+    // evidence blocks. `run_with_budget` pads the still-unanswered checks.
+    if raw.contains("interrupted by timeout") {
+        statuses.push(Status::Timeout);
+    }
+
     (statuses, evidence)
+}
+
+/// Normalize captured solver output to LF line endings.
+///
+/// The evidence chain's claim is `sha256(recorded) == sha256(the file on disk)`.
+/// On Windows the pinned solvers emit CRLF, and git's `text=auto` normalization
+/// rewrites those bytes to LF for anyone who checks the repository out — so a
+/// hash taken over the raw CRLF capture names a file that exists only on the
+/// machine that produced it, and the chain silently fails to re-derive
+/// everywhere else. Normalizing at CAPTURE makes the evidence byte-identical on
+/// both platforms and keeps the recorded hash re-derivable from the artifact as
+/// distributed. Parsing is unaffected: `\r` is whitespace to `split_top_level`.
+pub fn normalize_line_endings(text: &str) -> String {
+    let crlf = format!("{}{}", char::from(13u8), char::from(10u8));
+    let lf = char::from(10u8).to_string();
+    text.replace(&crlf, &lf)
 }
 
 /// Split solver output into top-level s-expressions and bare tokens, honouring
@@ -434,7 +456,11 @@ fn strip_outer_parens(text: &str) -> String {
 }
 
 /// Whether a run's statuses match what the obligation's checks expect.
+///
 /// `Expect::Measured` accepts any PROVEN status but never a timeout or error.
+/// `Expect::NotProven` is its exact inverse — the deliberate-timeout check,
+/// whose PASS condition is that the solver did NOT decide it — so the harness
+/// no longer has to re-derive that intent from an id literal downstream.
 pub fn matches_expectation(obligation: &Obligation, run: &SolverRun) -> bool {
     if run.statuses.len() != obligation.checks.len() {
         return false;
@@ -447,5 +473,6 @@ pub fn matches_expectation(obligation: &Obligation, run: &SolverRun) -> bool {
             Expect::Sat => *status == Status::Sat,
             Expect::Unsat => *status == Status::Unsat,
             Expect::Measured => status.is_proven(),
+            Expect::NotProven => !status.is_proven(),
         })
 }

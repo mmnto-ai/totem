@@ -144,7 +144,17 @@ async function main(): Promise<void> {
 
     for (const fname of factFiles) {
       const rec = JSON.parse(fs.readFileSync(path.join(FACTS_DIR, fname), 'utf-8'));
-      const cs = compiled.get(rec.specimen)!;
+      // The producer of FACTS_DIR (`src/facts.mts`) and this consumer are not
+      // verified to agree on the specimen set. A stale bundle left by an earlier
+      // run, or a renamed specimen, would make `compiled.get` return undefined
+      // and blow up several lines later with a `TypeError` naming neither the
+      // file nor the specimen. Assert the CONTRACT, not the type.
+      const cs = compiled.get(rec.specimen);
+      if (!cs) {
+        throw new Error(
+          `${fname} names specimen '${rec.specimen}', which is not in SPECIMENS — stale fact bundle? Re-run src/facts.mts.`,
+        );
+      }
       const bundle = rec.factBundle as { file: string; fileText: string | null; lines: string[] };
       const additions = additionsOf(bundle.file, bundle.lines);
 
@@ -383,55 +393,60 @@ async function main(): Promise<void> {
     // d-file: the pinned block builds a REAL worktree and passes NO reader.
     const dFile = compiled.get('d-file')!.rule;
     const pinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-p310-'));
-    fs.mkdirSync(path.join(pinDir, 'scripts'), { recursive: true });
-    fs.writeFileSync(
-      path.join(pinDir, 'scripts', 'pinned.sh'),
-      ['export LC_ALL=C', 'git log --oneline'].join('\n'),
-      'utf-8',
-    );
-    fs.writeFileSync(
-      path.join(pinDir, 'scripts', 'unpinned.sh'),
-      ['git log --oneline'].join('\n'),
-      'utf-8',
-    );
+    // try/finally: any throw between mkdtemp and rmSync would otherwise ORPHAN
+    // the temp worktree, and a failing run is exactly when that happens.
+    try {
+      fs.mkdirSync(path.join(pinDir, 'scripts'), { recursive: true });
+      fs.writeFileSync(
+        path.join(pinDir, 'scripts', 'pinned.sh'),
+        ['export LC_ALL=C', 'git log --oneline'].join('\n'),
+        'utf-8',
+      );
+      fs.writeFileSync(
+        path.join(pinDir, 'scripts', 'unpinned.sh'),
+        ['git log --oneline'].join('\n'),
+        'utf-8',
+      );
 
-    const pinSatisfied = core.applyRulesToAdditions(
-      ctx(),
-      [dFile],
-      [add('scripts/pinned.sh', 'git log --oneline', 2)],
-      undefined,
-      pinDir,
-    );
-    pin(
-      'd-file (test:363-372) silent when the requirement is satisfied ELSEWHERE in the file',
-      pinSatisfied.length === 0,
-      `${pinSatisfied.length} violation(s)`,
-    );
-    const pinUnsatisfied = core.applyRulesToAdditions(
-      ctx(),
-      [dFile],
-      [add('scripts/unpinned.sh', 'git log --oneline')],
-      undefined,
-      pinDir,
-    );
-    pin(
-      'd-file (test:374-383) FIRES when the file never satisfies the requirement',
-      pinUnsatisfied.length === 1,
-      `${pinUnsatisfied.length} violation(s)`,
-    );
-    const pinAbsent = core.applyRulesToAdditions(
-      ctx(),
-      [dFile],
-      [add('scripts/absent.sh', 'git log --oneline')],
-      undefined,
-      pinDir,
-    );
-    pin(
-      'd-file (test:385-394) FIRES when the file cannot be read at all (fails toward flagging)',
-      pinAbsent.length === 1,
-      `${pinAbsent.length} violation(s)`,
-    );
-    fs.rmSync(pinDir, { recursive: true, force: true });
+      const pinSatisfied = core.applyRulesToAdditions(
+        ctx(),
+        [dFile],
+        [add('scripts/pinned.sh', 'git log --oneline', 2)],
+        undefined,
+        pinDir,
+      );
+      pin(
+        'd-file (test:363-372) silent when the requirement is satisfied ELSEWHERE in the file',
+        pinSatisfied.length === 0,
+        `${pinSatisfied.length} violation(s)`,
+      );
+      const pinUnsatisfied = core.applyRulesToAdditions(
+        ctx(),
+        [dFile],
+        [add('scripts/unpinned.sh', 'git log --oneline')],
+        undefined,
+        pinDir,
+      );
+      pin(
+        'd-file (test:374-383) FIRES when the file never satisfies the requirement',
+        pinUnsatisfied.length === 1,
+        `${pinUnsatisfied.length} violation(s)`,
+      );
+      const pinAbsent = core.applyRulesToAdditions(
+        ctx(),
+        [dFile],
+        [add('scripts/absent.sh', 'git log --oneline')],
+        undefined,
+        pinDir,
+      );
+      pin(
+        'd-file (test:385-394) FIRES when the file cannot be read at all (fails toward flagging)',
+        pinAbsent.length === 1,
+        `${pinAbsent.length} violation(s)`,
+      );
+    } finally {
+      fs.rmSync(pinDir, { recursive: true, force: true });
+    }
 
     // e: the ast pins, replayed with the pinned `run()` helper's exact shape.
     const eRule = compiled.get('e')!.rule;
@@ -663,8 +678,13 @@ async function main(): Promise<void> {
     console.log(`repo root: ${REPO_ROOT}`);
     checks.finish('shipped-verdicts');
   } finally {
-    await evaluator.dispose();
-    fs.rmSync(workRoot, { recursive: true, force: true });
+    // `dispose()` is nested in its own try/finally: a rejection from it would
+    // otherwise skip the rmSync below and orphan the temp worktree.
+    try {
+      await evaluator.dispose();
+    } finally {
+      fs.rmSync(workRoot, { recursive: true, force: true });
+    }
   }
 }
 

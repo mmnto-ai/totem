@@ -880,6 +880,16 @@
       "detail": "expected EXPLAINED-DIVERGENCE, got EXPLAINED-DIVERGENCE"
     },
     {
+      "name": "the fact bundles and the OPA arm agree on the fixture count",
+      "ok": true,
+      "detail": "24"
+    },
+    {
+      "name": "the fact bundles and the regorus arm agree on the fixture count",
+      "ok": true,
+      "detail": "24"
+    },
+    {
       "name": "shipped arm produced 24 verdict rows",
       "ok": true,
       "detail": "24"

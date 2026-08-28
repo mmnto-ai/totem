@@ -2,16 +2,23 @@
 ; O7 — regex/string constraints
 ;
 ; Rule subsumption/redundancy: is L(p_A) a subset of L(p_B) for two corpus
-; patterns with known overlap? SAT means p_A is NOT redundant against p_B
-; and the witness is a line only p_A catches.
+; patterns with known overlap? Asked over the WIDENED p_A (see the
+; dropped-lookahead note), so UNSAT would prove the SOURCE pattern subsumed,
+; while a SAT witness is evidence for the widened approximation only.
 ;
 ; - p_A = corpus rule 09ee37252a814a09 (the lookahead-vs-requires control),
 ;   RE2-EXPRESSIBLE PARTS ONLY — its trailing (?![^'"\n]*LC_ALL=C) negative
 ;   lookahead is dropped.
-; - That drop is an enumerable builtin-gap finding, NOT a silent
-;   approximation: it WIDENS p_A, so a SAT witness here remains sound evidence
-;   of non-subsumption, while an UNSAT would have needed the lookahead to be
-;   sound.
+; - EVIDENCE BOUNDARY. Dropping that lookahead WIDENS p_A: L(p_A_source) is a
+;   SUBSET of L(p_A_widened). The containment makes the two answers
+;   asymmetric. UNSAT proves L(p_A_widened) is a subset of L(p_B), hence
+;   L(p_A_source) is too — source-pattern SUBSUMPTION is established. SAT
+;   only produces a witness in L(p_A_widened) minus L(p_B); the dropped
+;   lookahead may exclude that very witness from the source pattern, so it is
+;   evidence for the WIDENED APPROXIMATION and does NOT establish
+;   non-subsumption of the source pattern. The drop is an enumerable
+;   builtin-gap finding, not a silent approximation, and this is the boundary
+;   it carries.
 ; - p_B = specimen (d)'s target \bgit\s+(log|diff|status)\b — a strict
 ;   sub-alternation of p_A's fifteen branches.
 ; - MEASURED (dialect finding D6): this obligation originally also asserted

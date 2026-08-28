@@ -41,7 +41,7 @@ different package entirely.
 
 Asserted at runtime from `tools/list`, not assumed. Exactly **10** tools:
 
-```
+```text
 find_declaration   find_file             find_implementations
 find_referencing_symbols                 find_symbol
 get_diagnostics_for_file                 get_symbols_overview
@@ -51,7 +51,7 @@ list_dir           read_file             search_for_pattern
 Editing verbs exposed: **none**. Shell verbs: **none**. Memory verbs: **none**.
 Corroborated server-side in serena's own log:
 
-```
+```text
 serena.mcp:_set_mcp_tools:307 - Starting MCP server with 10 tools:
 ['read_file', 'list_dir', 'find_file', 'search_for_pattern',
  'get_symbols_overview', 'find_symbol', 'find_referencing_symbols',
@@ -64,7 +64,7 @@ This is the pilot's most transferable configuration finding, and it cost a
 config iteration to discover. Serena computes **two** tool sets
 (`src/serena/agent.py`):
 
-```
+```text
 _exposed_tools = base_toolset.to_available_tools(...)        # global config + CONTEXT only
 _active_tools  = base_toolset.apply(*modes)
                              .apply(project_config)
@@ -265,7 +265,7 @@ also sweep the filesystem, which `src/verify-clean.ps1` does.
 
 After removing serena's residue:
 
-```
+```text
 filesystem sweep for .serena* in the checkout   ->  none (pass)
 git status --porcelain                          ->  ?? spikes/serena-pilot/
 git status --porcelain --untracked-files=no     ->  (empty)
@@ -299,7 +299,7 @@ Everything serena wrote, and where:
 
 All four locations were re-checked after removal:
 
-```
+```text
 C:\Users\jmatt\AppData\Local\uv\cache      ABSENT (pass)
 C:\Users\jmatt\AppData\Roaming\uv\tools    ABSENT (pass)
 C:\Users\jmatt\.serena                     ABSENT (pass)
@@ -408,6 +408,9 @@ a real gap, and it is the axis the kill threshold did not measure.
 ```powershell
 $env:SERENA_HOME = "<scratch>\serena-home"   # keeps everything out of ~ and the checkout
 $env:TOTEM_RG    = "<path>\rg.exe"
+
+New-Item -ItemType Directory -Force "$env:SERENA_HOME\contexts" | Out-Null
+New-Item -ItemType Directory -Force "<worktree>\.serena"         | Out-Null
 
 Copy-Item config\serena_config.yml  $env:SERENA_HOME\serena_config.yml
 Copy-Item config\totem-pilot.yml    $env:SERENA_HOME\contexts\totem-pilot.yml

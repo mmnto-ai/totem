@@ -35,6 +35,15 @@ try {
   console.log('  shell verbs exposed  :', leaked.shell.length ? leaked.shell : 'NONE (pass)');
   console.log('  memory verbs exposed :', leaked.memory.length ? leaked.memory : 'NONE (pass)');
 
+  // Fail CLOSED. A config regression that re-exposes an editing, shell or
+  // memory verb must not leave this probe reporting success.
+  const prohibited = [...leaked.editing, ...leaked.shell, ...leaked.memory];
+  if (prohibited.length > 0) {
+    throw new Error(
+      `retrieval-only bound VIOLATED -- prohibited tools exposed: ${prohibited.join(', ')}`,
+    );
+  }
+
   // In-band check of the ACTIVE set (exposed != active in serena; see
   // config/totem-pilot.yml for why).
   if (names.includes('get_current_config')) {

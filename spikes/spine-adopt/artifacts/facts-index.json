@@ -297,7 +297,7 @@
     {
       "name": "specimen a — fixture exists: .totem/tests/test-61dcb058bd1df15d.md",
       "ok": true,
-      "detail": "D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\.totem\\tests\\test-61dcb058bd1df15d.md"
+      "detail": ".totem/tests/test-61dcb058bd1df15d.md"
     },
     {
       "name": "specimen a — parseFixture returned a fixture",
@@ -332,7 +332,7 @@
     {
       "name": "specimen b — fixture exists: .totem/tests/test-ast-empty-catch.md",
       "ok": true,
-      "detail": "D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\.totem\\tests\\test-ast-empty-catch.md"
+      "detail": ".totem/tests/test-ast-empty-catch.md"
     },
     {
       "name": "specimen b — parseFixture returned a fixture",
@@ -387,7 +387,7 @@
     {
       "name": "specimen c — fixture exists: .totem/tests/test-d0815b6769304e26.md",
       "ok": true,
-      "detail": "D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\.totem\\tests\\test-d0815b6769304e26.md"
+      "detail": ".totem/tests/test-d0815b6769304e26.md"
     },
     {
       "name": "specimen c — parseFixture returned a fixture",
@@ -442,7 +442,7 @@
     {
       "name": "specimen c-supp — fixture exists: .totem/tests/test-87aff037d7de47a7.md",
       "ok": true,
-      "detail": "D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\.totem\\tests\\test-87aff037d7de47a7.md"
+      "detail": ".totem/tests/test-87aff037d7de47a7.md"
     },
     {
       "name": "specimen c-supp — parseFixture returned a fixture",

@@ -13,30 +13,24 @@
       "publishedBy"
     ],
     "modesRun": {
-      "r0123456789abcdef_d_file.json": "pre-commit",
-      "r0123456789abcdef_d_line.json": "pre-commit",
-      "r0123456789abcdef_e.json": "pre-commit",
-      "r2d962603591aa928.json": "pre-commit",
-      "r61dcb058bd1df15d.json": "pre-commit",
-      "r87aff037d7de47a7.json": "pre-commit",
-      "rd0815b6769304e26.json": "pre-commit"
+      "r0123456789abcdef_d_file.json": "drift-detection",
+      "r0123456789abcdef_d_line.json": "drift-detection",
+      "r0123456789abcdef_e.json": "drift-detection",
+      "r2d962603591aa928.json": "drift-detection",
+      "r61dcb058bd1df15d.json": "drift-detection",
+      "r87aff037d7de47a7.json": "drift-detection",
+      "rd0815b6769304e26.json": "drift-detection"
     },
     "rows": [
       {
         "chain": "r0123456789abcdef_d_file.json",
-        "mode": "pre-commit",
-        "modeReason": "the committed chain has no `manifestSha256` — a pre-slice baseline, so the claim is the additive extension",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
         "allModeChecksPassed": true,
-        "preservedBytes": 2506,
+        "preservedBytes": 5448,
         "publishedBytes": 5448,
         "changedKeys": [],
-        "addedKeys": [
-          "certification",
-          "certified",
-          "entrypointManifest",
-          "manifestSha256",
-          "publishedBy"
-        ],
+        "addedKeys": [],
         "recordSha256": "048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239",
         "regoSha256": "3525bdd8ec94033d51117dad49e69dca531570c529e85d98cc75887b5623392a",
         "wasmSha256": "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
@@ -45,19 +39,13 @@
       },
       {
         "chain": "r0123456789abcdef_d_line.json",
-        "mode": "pre-commit",
-        "modeReason": "the committed chain has no `manifestSha256` — a pre-slice baseline, so the claim is the additive extension",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
         "allModeChecksPassed": true,
-        "preservedBytes": 2506,
+        "preservedBytes": 5448,
         "publishedBytes": 5448,
         "changedKeys": [],
-        "addedKeys": [
-          "certification",
-          "certified",
-          "entrypointManifest",
-          "manifestSha256",
-          "publishedBy"
-        ],
+        "addedKeys": [],
         "recordSha256": "76e5e1725e0c0fa0c4baee22304351bd2f05119018f53887068f2b47c67d4449",
         "regoSha256": "cf5d25f929b85c0dadb0a56def1932c436084b9957e547758f444cf76bf0f8bb",
         "wasmSha256": "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
@@ -66,19 +54,13 @@
       },
       {
         "chain": "r0123456789abcdef_e.json",
-        "mode": "pre-commit",
-        "modeReason": "the committed chain has no `manifestSha256` — a pre-slice baseline, so the claim is the additive extension",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
         "allModeChecksPassed": true,
-        "preservedBytes": 2495,
+        "preservedBytes": 5412,
         "publishedBytes": 5412,
         "changedKeys": [],
-        "addedKeys": [
-          "certification",
-          "certified",
-          "entrypointManifest",
-          "manifestSha256",
-          "publishedBy"
-        ],
+        "addedKeys": [],
         "recordSha256": "d42a48e025863d320a214ee5c1c577e437b8cf4b068f2d5572ac8f8bbcf12ee8",
         "regoSha256": "9f2bbf2bfc222ee9b91b0929a9df0edf53efdc3fc3eee66c032855f0a61e2de2",
         "wasmSha256": "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
@@ -87,19 +69,13 @@
       },
       {
         "chain": "r2d962603591aa928.json",
-        "mode": "pre-commit",
-        "modeReason": "the committed chain has no `manifestSha256` — a pre-slice baseline, so the claim is the additive extension",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
         "allModeChecksPassed": true,
-        "preservedBytes": 2491,
+        "preservedBytes": 5398,
         "publishedBytes": 5398,
         "changedKeys": [],
-        "addedKeys": [
-          "certification",
-          "certified",
-          "entrypointManifest",
-          "manifestSha256",
-          "publishedBy"
-        ],
+        "addedKeys": [],
         "recordSha256": "40bd79d7c970e21edced9b9ef90bedbec66e1fbf6d98d8c10e3dd6f6f19dbd19",
         "regoSha256": "634fc78f98b73f867c4bcf3fb2898ba7dc6acffd161c4cd1619dff8017f4c48b",
         "wasmSha256": "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
@@ -108,19 +84,13 @@
       },
       {
         "chain": "r61dcb058bd1df15d.json",
-        "mode": "pre-commit",
-        "modeReason": "the committed chain has no `manifestSha256` — a pre-slice baseline, so the claim is the additive extension",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
         "allModeChecksPassed": true,
-        "preservedBytes": 2489,
+        "preservedBytes": 5396,
         "publishedBytes": 5396,
         "changedKeys": [],
-        "addedKeys": [
-          "certification",
-          "certified",
-          "entrypointManifest",
-          "manifestSha256",
-          "publishedBy"
-        ],
+        "addedKeys": [],
         "recordSha256": "24be123733cda7a3a5a345d2fedb0633607344fdc375af587a8a7e31f2f345ad",
         "regoSha256": "12c788f645b3369a52dbfae52f17f744f21e524016b62d4b72d4ec777c1f2abc",
         "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
@@ -129,19 +99,13 @@
       },
       {
         "chain": "r87aff037d7de47a7.json",
-        "mode": "pre-commit",
-        "modeReason": "the committed chain has no `manifestSha256` — a pre-slice baseline, so the claim is the additive extension",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
         "allModeChecksPassed": true,
-        "preservedBytes": 2508,
+        "preservedBytes": 5415,
         "publishedBytes": 5415,
         "changedKeys": [],
-        "addedKeys": [
-          "certification",
-          "certified",
-          "entrypointManifest",
-          "manifestSha256",
-          "publishedBy"
-        ],
+        "addedKeys": [],
         "recordSha256": "27ba70dd4820e67fc528c9c660f632f78586bc85608b4d783dc62897a8e7171d",
         "regoSha256": "e3d32564de9c7463a8ce70033a9b7378cbd306ebc68a4de19b05172000c42ca8",
         "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
@@ -150,19 +114,13 @@
       },
       {
         "chain": "rd0815b6769304e26.json",
-        "mode": "pre-commit",
-        "modeReason": "the committed chain has no `manifestSha256` — a pre-slice baseline, so the claim is the additive extension",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
         "allModeChecksPassed": true,
-        "preservedBytes": 2495,
+        "preservedBytes": 5402,
         "publishedBytes": 5402,
         "changedKeys": [],
-        "addedKeys": [
-          "certification",
-          "certified",
-          "entrypointManifest",
-          "manifestSha256",
-          "publishedBy"
-        ],
+        "addedKeys": [],
         "recordSha256": "99c2deb2827c2f85785cd79d2322fa5a013af67a37d5cdecc4f49ded284aad44",
         "regoSha256": "92b130e5b1d55064db19944322e3fcf9ac6e98a0274d0f03f1007d684a2c062a",
         "wasmSha256": "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
@@ -318,19 +276,14 @@
       "detail": "[\"r0123456789abcdef_d_file.json\",\"r0123456789abcdef_d_line.json\",\"r0123456789abcdef_e.json\",\"r2d962603591aa928.json\",\"r61dcb058bd1df15d.json\",\"r87aff037d7de47a7.json\",\"rd0815b6769304e26.json\"]"
     },
     {
-      "name": "INV 2 — r0123456789abcdef_d_file.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2506 bytes (the extension is appended, never interleaved)",
+      "name": "INV 2 — r0123456789abcdef_d_file.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
       "ok": true,
-      "detail": "2506/5448 bytes carried through verbatim"
+      "detail": "5448 bytes identical"
     },
     {
-      "name": "INV 2 — r0123456789abcdef_d_file.json: [pre-commit] no pre-slice key CHANGED value",
+      "name": "INV 2 — r0123456789abcdef_d_file.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
       "ok": true,
-      "detail": "[]"
-    },
-    {
-      "name": "INV 2 — r0123456789abcdef_d_file.json: [pre-commit] the added keys are EXACTLY the extension's",
-      "ok": true,
-      "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+      "detail": "changed=[] added=[] removed=[]"
     },
     {
       "name": "INV 2 — r0123456789abcdef_d_file.json: `recordSha256` is unchanged",
@@ -373,19 +326,14 @@
       "detail": "1 `result :=` rule(s), guard block present"
     },
     {
-      "name": "INV 2 — r0123456789abcdef_d_line.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2506 bytes (the extension is appended, never interleaved)",
+      "name": "INV 2 — r0123456789abcdef_d_line.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
       "ok": true,
-      "detail": "2506/5448 bytes carried through verbatim"
+      "detail": "5448 bytes identical"
     },
     {
-      "name": "INV 2 — r0123456789abcdef_d_line.json: [pre-commit] no pre-slice key CHANGED value",
+      "name": "INV 2 — r0123456789abcdef_d_line.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
       "ok": true,
-      "detail": "[]"
-    },
-    {
-      "name": "INV 2 — r0123456789abcdef_d_line.json: [pre-commit] the added keys are EXACTLY the extension's",
-      "ok": true,
-      "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+      "detail": "changed=[] added=[] removed=[]"
     },
     {
       "name": "INV 2 — r0123456789abcdef_d_line.json: `recordSha256` is unchanged",
@@ -428,19 +376,14 @@
       "detail": "1 `result :=` rule(s), guard block present"
     },
     {
-      "name": "INV 2 — r0123456789abcdef_e.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2495 bytes (the extension is appended, never interleaved)",
+      "name": "INV 2 — r0123456789abcdef_e.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
       "ok": true,
-      "detail": "2495/5412 bytes carried through verbatim"
+      "detail": "5412 bytes identical"
     },
     {
-      "name": "INV 2 — r0123456789abcdef_e.json: [pre-commit] no pre-slice key CHANGED value",
+      "name": "INV 2 — r0123456789abcdef_e.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
       "ok": true,
-      "detail": "[]"
-    },
-    {
-      "name": "INV 2 — r0123456789abcdef_e.json: [pre-commit] the added keys are EXACTLY the extension's",
-      "ok": true,
-      "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+      "detail": "changed=[] added=[] removed=[]"
     },
     {
       "name": "INV 2 — r0123456789abcdef_e.json: `recordSha256` is unchanged",
@@ -483,19 +426,14 @@
       "detail": "1 `result :=` rule(s), guard block present"
     },
     {
-      "name": "INV 2 — r2d962603591aa928.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2491 bytes (the extension is appended, never interleaved)",
+      "name": "INV 2 — r2d962603591aa928.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
       "ok": true,
-      "detail": "2491/5398 bytes carried through verbatim"
+      "detail": "5398 bytes identical"
     },
     {
-      "name": "INV 2 — r2d962603591aa928.json: [pre-commit] no pre-slice key CHANGED value",
+      "name": "INV 2 — r2d962603591aa928.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
       "ok": true,
-      "detail": "[]"
-    },
-    {
-      "name": "INV 2 — r2d962603591aa928.json: [pre-commit] the added keys are EXACTLY the extension's",
-      "ok": true,
-      "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+      "detail": "changed=[] added=[] removed=[]"
     },
     {
       "name": "INV 2 — r2d962603591aa928.json: `recordSha256` is unchanged",
@@ -538,19 +476,14 @@
       "detail": "1 `result :=` rule(s), guard block present"
     },
     {
-      "name": "INV 2 — r61dcb058bd1df15d.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2489 bytes (the extension is appended, never interleaved)",
+      "name": "INV 2 — r61dcb058bd1df15d.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
       "ok": true,
-      "detail": "2489/5396 bytes carried through verbatim"
+      "detail": "5396 bytes identical"
     },
     {
-      "name": "INV 2 — r61dcb058bd1df15d.json: [pre-commit] no pre-slice key CHANGED value",
+      "name": "INV 2 — r61dcb058bd1df15d.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
       "ok": true,
-      "detail": "[]"
-    },
-    {
-      "name": "INV 2 — r61dcb058bd1df15d.json: [pre-commit] the added keys are EXACTLY the extension's",
-      "ok": true,
-      "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+      "detail": "changed=[] added=[] removed=[]"
     },
     {
       "name": "INV 2 — r61dcb058bd1df15d.json: `recordSha256` is unchanged",
@@ -593,19 +526,14 @@
       "detail": "1 `result :=` rule(s), guard block present"
     },
     {
-      "name": "INV 2 — r87aff037d7de47a7.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2508 bytes (the extension is appended, never interleaved)",
+      "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
       "ok": true,
-      "detail": "2508/5415 bytes carried through verbatim"
+      "detail": "5415 bytes identical"
     },
     {
-      "name": "INV 2 — r87aff037d7de47a7.json: [pre-commit] no pre-slice key CHANGED value",
+      "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
       "ok": true,
-      "detail": "[]"
-    },
-    {
-      "name": "INV 2 — r87aff037d7de47a7.json: [pre-commit] the added keys are EXACTLY the extension's",
-      "ok": true,
-      "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+      "detail": "changed=[] added=[] removed=[]"
     },
     {
       "name": "INV 2 — r87aff037d7de47a7.json: `recordSha256` is unchanged",
@@ -648,19 +576,14 @@
       "detail": "1 `result :=` rule(s), guard block present"
     },
     {
-      "name": "INV 2 — rd0815b6769304e26.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2495 bytes (the extension is appended, never interleaved)",
+      "name": "INV 2 — rd0815b6769304e26.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
       "ok": true,
-      "detail": "2495/5402 bytes carried through verbatim"
+      "detail": "5402 bytes identical"
     },
     {
-      "name": "INV 2 — rd0815b6769304e26.json: [pre-commit] no pre-slice key CHANGED value",
+      "name": "INV 2 — rd0815b6769304e26.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
       "ok": true,
-      "detail": "[]"
-    },
-    {
-      "name": "INV 2 — rd0815b6769304e26.json: [pre-commit] the added keys are EXACTLY the extension's",
-      "ok": true,
-      "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+      "detail": "changed=[] added=[] removed=[]"
     },
     {
       "name": "INV 2 — rd0815b6769304e26.json: `recordSha256` is unchanged",

@@ -11,8 +11,10 @@
 // It shares the probe's real machinery (`loadPolicy`, `evalClassic`, the panicking
 // builtin stubs) rather than a simplified copy, so what it measures is the same
 // host the enrichment probe measured — INCLUDING the failure rule: the unwrap is
-// `entrypointValue` from main.go, so the empty-result-set error row ORIGINATES
-// here, in Go, and is not a verdict the certifier reconstructed from a shape.
+// `entrypointValue` FOLLOWED BY `readResult`, both from main.go and both the same
+// functions the normal differential run uses, so the empty-result-set AND the
+// result-shape error rows ORIGINATE here, in Go, and are not verdicts the
+// certifier reconstructed from a shape.
 // Rows still carry the raw outcome alongside it (result set, its length), and
 // `src/certify.mts` maps the host-produced error into the five typed reasons for
 // all three hosts in one place.
@@ -174,6 +176,24 @@ func runConformanceCase(ctx context.Context, cache wazero.CompilationCache, root
 			row.Evaluations = append(row.Evaluations, e)
 			continue
 		}
+
+		// THE RESULT-SHAPE RULE, ALSO EXECUTED BY THIS HOST. `entrypointValue`
+		// only unwraps the result SET; it says nothing about what was inside it.
+		// `readResult` (main.go, again the normal run's own function) is what
+		// refuses a non-object result, a missing `violations`/`events` key, and a
+		// field that is not an array. Without it a bundle that returns a bare
+		// string — or half a verdict — landed here as `ok: true` with a
+		// `resultSetLength` of 1, which is precisely the fail-open the classifier
+		// controls exist to catch. The unwrapped value is NOT recorded on a
+		// rejected row: `ok` and `result` stay in step, and the raw evidence
+		// survives twice over — verbatim inside the error string readResult
+		// raises, and whole in `resultSet`.
+		if _, err := readResult(v); err != nil {
+			msg := err.Error()
+			e.Error = &msg
+			row.Evaluations = append(row.Evaluations, e)
+			continue
+		}
 		e.OK = true
 		e.Result = v
 		row.Evaluations = append(row.Evaluations, e)
@@ -192,7 +212,7 @@ func runConformance(root, specPath, outPath string) error {
 	}
 
 	cache := wazero.NewCompilationCache()
-	defer cache.Close(ctx)
+	defer func() { _ = cache.Close(ctx) }()
 
 	rows := make([]conformanceRow, 0, len(spec.Cases))
 	for _, c := range spec.Cases {

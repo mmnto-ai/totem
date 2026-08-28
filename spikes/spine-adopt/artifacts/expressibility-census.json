@@ -1,7 +1,7 @@
 {
   "generatedBy": "spikes/spine-adopt/src/census.mts",
   "spec": ".totem/specs/spine-spike.md § \"Census corrections the design binds to\" (DISPUTED row) + § Invariants (\"classes partition all 226\")",
-  "repoRoot": "D:\\Dev\\worktrees\\totem-totem-claude-spine-spike",
+  "repoRoot": "<worktree>",
   "corpora": [
     {
       "id": "root",

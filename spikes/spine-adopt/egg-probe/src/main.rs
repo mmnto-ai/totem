@@ -30,6 +30,44 @@ const EXPECTED_ROWS: usize = 177;
 const SATURATION_BUDGET: Duration = Duration::from_secs(60);
 const Z3_TIMEOUT_SECS: u64 = 30;
 const SAMPLE_SIZE: usize = 20;
+/// Per-platform pinned-z3 assets, both from `spikes/spine-adopt/toolchain.lock`
+/// (`[z3]` and `[z3.linux]`), relative to `spikes/spine-adopt/tools/`.
+const Z3_REL_WINDOWS: &str = "z3-5.1.0-x64-win/bin/z3.exe";
+const Z3_REL_UNIX: &str = "z3-5.1.0-x64-glibc-2.39/bin/z3";
+const Z3_BIN_ENV: &str = "SPIKE_Z3_BIN";
+
+/// Resolve the PINNED z3 CLI for the host platform.
+///
+/// Precedence, mirroring the sibling `smt/src/runner.rs::resolve_solver`:
+/// `$SPIKE_Z3_BIN` (an absolute path — how CI points at its own tools dir) →
+/// the per-platform default under `spikes/spine-adopt/tools/`. The precedence
+/// is REIMPLEMENTED here rather than imported because DESIGN § Boundaries says
+/// this crate does not depend on `smt/`. On Windows with no env set this
+/// resolves to exactly the path that used to be hardcoded at the call site.
+///
+/// Returns `(path to run, path as recorded in the report, how it resolved)`.
+fn resolve_z3() -> (PathBuf, String, String) {
+    let rel = if cfg!(windows) {
+        Z3_REL_WINDOWS
+    } else {
+        Z3_REL_UNIX
+    };
+    match std::env::var(Z3_BIN_ENV) {
+        Ok(value) if !value.is_empty() => (
+            PathBuf::from(&value),
+            value,
+            format!("${Z3_BIN_ENV} (explicit override)"),
+        ),
+        _ => (
+            spike_root().join("tools").join(rel),
+            format!("spikes/spine-adopt/tools/{rel}"),
+            format!(
+                "per-platform default under spikes/spine-adopt/tools ({} host, ${Z3_BIN_ENV} unset)",
+                std::env::consts::OS
+            ),
+        ),
+    }
+}
 
 fn crate_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -93,8 +131,13 @@ fn main() {
 
     let integrity = corpora_integrity(&census, &rows);
 
-    let z3_path = spike_root().join("tools/z3-5.1.0-x64-win/bin/z3.exe");
-    assert!(z3_path.exists(), "pinned z3 not found at {}", z3_path.display());
+    let (z3_path, z3_path_recorded, z3_resolved_from) = resolve_z3();
+    assert!(
+        z3_path.exists(),
+        "pinned z3 not found at {} — resolved from {z3_resolved_from}; provision the \
+         asset pinned in spikes/spine-adopt/toolchain.lock or point ${Z3_BIN_ENV} at it",
+        z3_path.display()
+    );
 
     let egg_version = locked_version("egg").expect("egg version from Cargo.lock");
 
@@ -262,10 +305,18 @@ fn main() {
     }
 
     // ── deterministic 20-pair sample, seeded from pattern hashes ────────────
-    // Ordering key: sha256 of the pattern text, ascending. Pairs where the
-    // extracted canonical DIFFERS from the original are taken first — an
-    // identical pair proves nothing about rewriting — and the remainder is
-    // filled in the same hash order. No RNG, no timestamps.
+    // Ordering key: sha256 of the pattern text, ascending. Selection is then by
+    // EVIDENCE CLASS, strongest first, because a pair whose two sides SERIALIZE
+    // identically makes the emitted query `xor(R, R)` — a tautology whose UNSAT
+    // says nothing about the rewriting:
+    //   1. `rewrite-evidence`    — canonical differs from the original AND the
+    //      two sides serialize differently, so z3 is asked a real question;
+    //   2. `representation-only` — the canonical differs as an e-graph TERM but
+    //      serializes byte-identically (the equality was decided by the IR
+    //      representation — canonical char-class sets, printer flattening —
+    //      not by a rewrite);
+    //   3. `no-rewrite`          — the extracted canonical IS the original.
+    // Within each class, the same hash order. No RNG, no timestamps.
     let mut order: Vec<usize> = (0..parsed.len()).collect();
     order.sort_by(|a, b| {
         rows[parsed[*a].row]
@@ -273,12 +324,28 @@ fn main() {
             .cmp(&rows[parsed[*b].row].pattern_sha256)
     });
     let differs = |i: usize| sats[i].canonical_key != parsed[i].original.to_string();
-    let mut sample: Vec<usize> = order.iter().copied().filter(|i| differs(*i)).collect();
-    let rewritten_available = sample.len();
-    if sample.len() > SAMPLE_SIZE {
-        sample.truncate(SAMPLE_SIZE);
-    } else {
-        for i in order.iter().copied().filter(|i| !differs(*i)) {
+    let evidence_class = |i: usize| -> &'static str {
+        if !differs(i) {
+            "no-rewrite"
+        } else if to_smt(&parsed[i].original) == to_smt(&sats[i].canonical) {
+            "representation-only"
+        } else {
+            "rewrite-evidence"
+        }
+    };
+    const EVIDENCE_CLASSES: [&str; 3] = ["rewrite-evidence", "representation-only", "no-rewrite"];
+    let mut by_evidence_class: BTreeMap<&'static str, Vec<usize>> = BTreeMap::new();
+    for i in order.iter().copied() {
+        by_evidence_class
+            .entry(evidence_class(i))
+            .or_default()
+            .push(i);
+    }
+    let available = |class: &str| by_evidence_class.get(class).map_or(0, Vec::len);
+    let rewritten_available = available("rewrite-evidence") + available("representation-only");
+    let mut sample: Vec<usize> = Vec::with_capacity(SAMPLE_SIZE);
+    for class in EVIDENCE_CLASSES {
+        for i in by_evidence_class.get(class).into_iter().flatten().copied() {
             if sample.len() >= SAMPLE_SIZE {
                 break;
             }
@@ -378,6 +445,7 @@ fn main() {
             "patternSha256": r.pattern_sha256,
             "canonicalDiffersFromOriginal": differs(*i),
             "smtSidesIdentical": sides_identical,
+            "evidenceClass": evidence_class(*i),
             "originalCost": ast_size(&parsed[*i].original),
             "canonicalCost": sats[*i].cost,
             "canonicalForm": pretty(&sats[*i].canonical),
@@ -564,6 +632,11 @@ fn main() {
     let boundaries_inter: usize = parsed.iter().map(|p| p.notes.boundaries_inter).sum();
     let open_repeats: usize = parsed.iter().map(|p| p.notes.open_repeats).sum();
 
+    let sample_evidence_bearing = sample
+        .iter()
+        .filter(|i| evidence_class(**i) == "rewrite-evidence")
+        .count();
+
     let report = json!({
         "probe": "egg e-graph probe — spec § Enrichment row 1 (\"egg proposes, Z3 disposes\")",
         "contract": "spikes/spine-adopt/egg-probe/DESIGN.md",
@@ -574,7 +647,16 @@ fn main() {
             "egg": egg_version,
             "eggPinKind": "`=` requirement in Cargo.toml + committed Cargo.lock",
             "z3": "5.1.0 (spike toolchain.lock)",
-            "z3Path": "spikes/spine-adopt/tools/z3-5.1.0-x64-win/bin/z3.exe",
+            "z3Path": z3_path_recorded,
+            "z3PathResolvedFrom": z3_resolved_from,
+            "z3PathResolution": format!(
+                "${Z3_BIN_ENV} when set, else the per-platform default under \
+                 spikes/spine-adopt/tools/ — {Z3_WIN} on Windows, {Z3_UNIX} elsewhere. Both \
+                 assets are pinned in spikes/spine-adopt/toolchain.lock ([z3] / [z3.linux]); \
+                 the precedence is smt/src/runner.rs::resolve_solver's, reimplemented here \
+                 because DESIGN § Boundaries forbids depending on that crate.",
+                Z3_BIN_ENV = Z3_BIN_ENV, Z3_WIN = Z3_REL_WINDOWS, Z3_UNIX = Z3_REL_UNIX
+            ),
             "z3TimeoutSeconds": Z3_TIMEOUT_SECS,
             "saturationBudgetSeconds": SATURATION_BUDGET.as_secs(),
         },
@@ -601,7 +683,7 @@ fn main() {
         "subsetNotes": [
             "DESIGN § Method 1 names 'bounded {n,m}'. `{n}` and `{n,}` are the same counted-repetition family and are parsed here: `{n}` → (_ re.loop n n), `{n,}` → (_ re.loop n n) · re.* — an exact rewriting, not an approximation. Flagged for the dispatching seat because it is an extension of the words DESIGN uses.",
             "Lazy quantifiers (`*?`, `+?`, `??`) are NOT in the declared subset and are recorded unparsed, even though they are language-equal to the greedy form under membership: reading them as greedy would silently re-read match semantics.",
-            "A `{` that does not open a valid quantifier is a LITERAL — the shipped JS RegExp (Annex B) rule, so this is fidelity, not a guess.",
+            "A `{` that does not open a valid quantifier is a LITERAL — the shipped JS RegExp (Annex B) rule, so this is fidelity, not a guess. A `{n,m}` with REVERSED bounds (`a{3,1}`) is the one brace form that is neither: it matches QuantifierPrefix, so the Annex-B literal reading does not apply, and ECMAScript's InvalidBracedQuantifier early error makes the whole pattern a SyntaxError (V8: \"numbers out of order in {} quantifier\"). It is recorded unparsed under `reversed-counted-bounds` rather than modelled as `(_ re.loop 3 1)`, which would be a language the shipped engine never produces.",
             "A POSITIVE character class naming an out-of-Σ character is refused rather than intersected with Σ, which would silently narrow it. A NEGATED class naming out-of-Σ characters is exact on Σ and is kept — this is lang.rs's own reading of [^\\n].",
         ],
 
@@ -725,9 +807,20 @@ fn main() {
 
         "merges": merge_reports,
         "rewriteSample": {
-            "selectionRule": "order all parsed patterns by sha256(pattern-text) ascending; take pairs whose extracted canonical DIFFERS from the desugared original first (an identical pair proves nothing about rewriting), then fill from the same hash order. No RNG, no timestamps.",
+            "selectionRule": "order all parsed patterns by sha256(pattern-text) ascending, then take by EVIDENCE CLASS strongest first: `rewrite-evidence` (canonical differs from the desugared original AND the two sides serialize differently, so the xor query is a real question), then `representation-only` (the canonical differs as an e-graph term but serializes byte-identically, making xor(R, R) a tautology), then `no-rewrite` (canonical == original, which proves nothing about rewriting). Within each class, the same hash order. No RNG, no timestamps.",
             "size": sample.len(),
             "rewrittenPairsAvailable": rewritten_available,
+            "evidenceClasses": {
+                "meaning": {
+                    "rewrite-evidence": "canonical differs from the original AND the emitted SMT operands differ — the z3 UNSAT is a real proof that the rewriting preserved the language",
+                    "representation-only": "canonical differs only as an e-graph TERM; the two sides print byte-identically, so the emitted query is xor(R, R) and its UNSAT is a tautology carrying NO rewrite evidence. Labelled, not hidden: the equality was decided by the IR representation (canonical char-class sets, printer flattening), which is itself a measured result.",
+                    "no-rewrite": "the extracted canonical IS the desugared original",
+                },
+                "availableInCorpus": EVIDENCE_CLASSES.iter().map(|c| (c.to_string(), json!(available(c)))).collect::<Map<String, Value>>(),
+                "inSample": EVIDENCE_CLASSES.iter().map(|c| {
+                    (c.to_string(), json!(sample.iter().filter(|i| evidence_class(**i) == *c).count()))
+                }).collect::<Map<String, Value>>(),
+            },
             "pairs": sample_reports,
         },
 
@@ -764,6 +857,7 @@ fn main() {
                 "coverage": {
                     "crossPatternMerges": format!("{} of {} — EXHAUSTIVE (every unordered pair inside every multi-pattern class, from both groupings)", merge_reports.len(), pairs.len()),
                     "rewrittenVsOriginal": format!("{} of {} parsed patterns — a SAMPLE, as DESIGN § Method 4 specifies; the other {} extracted canonical forms are NOT externally verified", sample.len(), parsed.len(), parsed.len().saturating_sub(sample.len())),
+                    "rewrittenVsOriginalEvidenceBearing": format!("{} of the {} sampled pairs are `rewrite-evidence` — the two sides serialize DIFFERENTLY, so the query is not a tautology; the remaining {} are `representation-only` (xor(R, R)) and carry no rewrite evidence. The corpus offers {} rewrite-evidence pairs in total; selection takes them first, in hash order.", sample_evidence_bearing, sample.len(), sample.len().saturating_sub(sample_evidence_bearing), available("rewrite-evidence")),
                     "nodeLimitedPatternsInSample": node_limited.iter().filter(|p| p["coveredByRewriteSample"] == json!(true)).count(),
                 },
             },

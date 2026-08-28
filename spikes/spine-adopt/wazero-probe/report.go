@@ -80,8 +80,10 @@ func normaliseShipped(rows []shippedRow, bundles map[string][]astMatch) ([]norma
 		evs := make([]event, 0, len(r.Events))
 		for _, e := range r.Events {
 			// The shipped event context's `line` is the line NUMBER (the shipped
-			// Violation's `line` is the matched TEXT).
-			evs = append(evs, event{Kind: e.Kind, Line: e.Line})
+			// Violation's `line` is the matched TEXT). The two structs have
+			// identical fields, so this is a conversion, not a re-spelling — and a
+			// conversion stops compiling if either shape ever drifts.
+			evs = append(evs, event(e))
 		}
 		fired, count := r.Fired, r.MatchCount
 		out = append(out, normalRow{
@@ -173,8 +175,12 @@ func tallyOf(rows []pairResult) tally {
 	return t
 }
 
+// writeArtifact serialises one artifact. The modes are the restrictive ones
+// gosec's G301/G306 ask for; nothing here needs to be group- or world-readable,
+// and git records only the executable bit, so the committed artifacts are
+// unaffected.
 func writeArtifact(dir, name string, v any) (string, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", err
 	}
 	b, err := json.MarshalIndent(v, "", "  ")
@@ -182,7 +188,7 @@ func writeArtifact(dir, name string, v any) (string, error) {
 		return "", err
 	}
 	at := filepath.Join(dir, name)
-	if err := os.WriteFile(at, append(b, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(at, append(b, '\n'), 0o600); err != nil {
 		return "", err
 	}
 	return at, nil
@@ -222,7 +228,7 @@ func run(root string) error {
 	// Shared across every runtime so the cold-eval measurement's fresh instances
 	// do not each pay the ~65ms compile.
 	cache := wazero.NewCompilationCache()
-	defer cache.Close(ctx)
+	defer func() { _ = cache.Close(ctx) }()
 
 	for _, rec := range records {
 		res, err := runSpecimen(ctx, root, cache, rec, facts)
@@ -231,6 +237,16 @@ func run(root string) error {
 			// so it is reported at the exact point it happened rather than papered
 			// over with a fabricated verdict.
 			return fmt.Errorf("specimen %s (%s): %w", rec.Specimen, rec.RuleID, err)
+		}
+		// `runSpecimen` emits one row and one timing per fact bundle whose
+		// `specimen` matches the record, and NO error when none does — so an empty
+		// `timings` means the join found nothing, and the `res.timings[0]` below
+		// would panic on it. A lowered record that pairs with no fact bundle is a
+		// corpus defect and is reported as one, rather than as a crash or as a
+		// specimen that silently evaluated nothing.
+		if len(res.timings) == 0 {
+			return fmt.Errorf("specimen %s (%s): no fact bundle in artifacts/facts pairs with this lowered record — "+
+				"nothing was evaluated for it, so there is no verdict to report", rec.Specimen, rec.RuleID)
 		}
 		allRows = append(allRows, res.rows...)
 		allTimings = append(allTimings, res.timings...)
@@ -491,7 +507,7 @@ func run(root string) error {
 			"unexplained": unexplained,
 			"explained":   explained,
 			"note": "Verbatim. Empty arrays mean no divergence was found, not that none was looked for — the detector " +
-				"is exercised against 8 synthetic mutants in `checks` before any real row is compared.",
+				"is exercised against 9 synthetic mutants in `checks` before any real row is compared.",
 		},
 
 		"evalSequence": map[string]any{

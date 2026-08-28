@@ -43,7 +43,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { ARTIFACTS_DIR, Checks, OPA_BIN, SPIKE_ROOT, writeArtifact } from './lib/spike-env.mts';
+import {
+  ARTIFACTS_DIR,
+  Checks,
+  OPA_BIN,
+  REPO_ROOT,
+  SPIKE_ROOT,
+  writeArtifact,
+} from './lib/spike-env.mts';
 import {
   canonicalJson,
   censusWasm,
@@ -352,6 +359,37 @@ function firstLine(s: string): string {
   return s.split('\n')[0]!.trim();
 }
 
+/**
+ * Is this host's parsed result the well-formed ZERO verdict — exactly
+ * `violations` + `events`, both empty?
+ *
+ * Compared STRUCTURALLY, never against a serialised literal. The three hosts do
+ * not agree on key order: `serde_json`'s default map is a `BTreeMap`, so the two
+ * Rust arms emit `{"events":…,"violations":…}` (sorted), while the Go probe
+ * marshals a STRUCT and emits `{"violations":…,"events":…}` (declaration order).
+ * A string comparison therefore answers a question about serialisation instead
+ * of a question about the verdict, and silently reports `false` for a genuine
+ * clean zero on whichever host lost the coin toss.
+ *
+ * This matters because every `required` row asserts `!cleanZero`. A predicate
+ * that could never return `true` would satisfy that vacuously, which is why the
+ * positive control below asserts the other side.
+ */
+function isCleanZero(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
+  const o = v as Record<string, unknown>;
+  const keys = Object.keys(o).sort();
+  return (
+    keys.length === 2 &&
+    keys[0] === 'events' &&
+    keys[1] === 'violations' &&
+    Array.isArray(o.violations) &&
+    o.violations.length === 0 &&
+    Array.isArray(o.events) &&
+    o.events.length === 0
+  );
+}
+
 // ─── Host drivers ────────────────────────────────────────────────────────────
 
 /**
@@ -423,7 +461,16 @@ function hostCertify(
   hostEvalInvocations += 1;
   const args = ['--arm', 'certify', '--wasm', wasmPath, '--input', inputPath];
   for (const e of entrypoints) args.push('--entrypoint', e);
-  if (rego) args.push('--rego', rego.regoPath, '--rule', rego.rule);
+  if (rego) {
+    // regorus quotes this label in its own error text, and the certifier copies
+    // that text VERBATIM into `artifacts/blocked/<pkg>.json` and the
+    // certification report. Handing the host the absolute path would publish the
+    // operator's worktree layout as committed evidence and break byte-comparison
+    // between the Windows and Linux matrix arms. The host still READS the policy
+    // from `--rego`; only the printed name is normalised.
+    const regoLabel = path.relative(REPO_ROOT, rego.regoPath).split(path.sep).join('/');
+    args.push('--rego', rego.regoPath, '--rego-label', regoLabel, '--rule', rego.rule);
+  }
   const r = spawnSync(HOST_BIN, args, {
     cwd: SPIKE_ROOT,
     encoding: 'utf-8',
@@ -1311,9 +1358,7 @@ async function main(): Promise<void> {
         host.wasmtime.loaded === true &&
         host.wasmtime.evaluations.length > 0 &&
         host.wasmtime.evaluations.every(
-          (e) =>
-            e.failureRuleVerdict?.ok === true &&
-            JSON.stringify(e.result ?? null) === '{"violations":[],"events":[]}',
+          (e) => e.failureRuleVerdict?.ok === true && isCleanZero(e.result),
         ),
       // The typed CLASS is the certifier's mapping (one place, all three hosts);
       // whether there was an error at all is the host's.
@@ -1340,7 +1385,7 @@ async function main(): Promise<void> {
     // rejection followed by `read_result`, executed in the certify arm.
     const rg = host.regorus;
     const rgVerdict = rg.failureRuleVerdict;
-    const rgClean = JSON.stringify(rg.value ?? null) === '{"events":[],"violations":[]}';
+    const rgClean = isCleanZero(rg.value);
     const regorusVerdict: HostVerdict = {
       host: 'regorus',
       errored: rg.ran === true && rgVerdict?.ok === false,
@@ -1352,9 +1397,10 @@ async function main(): Promise<void> {
         "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`",
     };
 
-    // wazero: `e.error` is what the probe's OWN `entrypointValue` returned
-    // (wazero-probe/main.go), recorded by conformance.go. The empty-result-set
-    // error row originates in Go; nothing here re-derives it from a length.
+    // wazero: `e.error` is what the probe's OWN `entrypointValue` + `readResult`
+    // chain returned (wazero-probe/main.go), recorded by conformance.go. The
+    // empty-result-set and result-shape error rows both originate in Go; nothing
+    // here re-derives either from a length.
     const wazFailures = waz.evaluations.filter((e) => !e.ok || e.error !== null);
     const wazeroVerdict: HostVerdict = {
       host: 'wazero',
@@ -1362,12 +1408,7 @@ async function main(): Promise<void> {
       cleanZero:
         waz.loaded === true &&
         waz.evaluations.length > 0 &&
-        waz.evaluations.every(
-          (e) =>
-            e.ok &&
-            e.error === null &&
-            JSON.stringify(e.result ?? null) === '{"violations":[],"events":[]}',
-        ),
+        waz.evaluations.every((e) => e.ok && e.error === null && isCleanZero(e.result)),
       kind:
         waz.loaded === false
           ? 'load-error'
@@ -1390,7 +1431,7 @@ async function main(): Promise<void> {
           ? (waz.loadError ?? null)
           : (wazFailures.find((e) => (e.error ?? '').trim() !== '')?.error ?? null),
       hostErrorSource:
-        'wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`',
+        'wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`',
     };
 
     allHosts.push({
@@ -1425,6 +1466,30 @@ async function main(): Promise<void> {
           : 'no clean-zero verdict',
       );
     }
+  }
+
+  // ── the clean-zero POSITIVE control ──
+  //
+  // Every assertion above is `!cleanZero`. A `cleanZero` that could never be
+  // TRUE satisfies all of them and proves nothing — the negative rows would pass
+  // just as happily against a predicate hard-wired to `false`. `two-entrypoints`
+  // is the control: a VALID policy whose `result` genuinely is the zero verdict
+  // (both entrypoints classify PASS with 0 violations and 0 events). Each host
+  // must recognise it AS a clean zero, or the negative rows above are vacuous.
+  const cleanZeroControl = allHosts.find((x) => x.fixture === 'two-entrypoints');
+  checks.check(
+    'CLEAN-ZERO CONTROL — the positive fixture reached the all-hosts table',
+    cleanZeroControl !== undefined && cleanZeroControl.hosts.length === 3,
+    cleanZeroControl
+      ? `${cleanZeroControl.hosts.length} host(s)`
+      : 'two-entrypoints is MISSING from the all-hosts table',
+  );
+  for (const h of cleanZeroControl?.hosts ?? []) {
+    checks.check(
+      `CLEAN-ZERO CONTROL — two-entrypoints on ${h.host}: a valid zero-violation result IS recognised as a clean zero (so the \`NEVER a clean zero\` rows above are not vacuous)`,
+      h.cleanZero === true && h.errored === false,
+      `cleanZero=${h.cleanZero} errored=${h.errored} — ${h.detail}`,
+    );
   }
 
   // ── the five typed reasons, each OBSERVED ──
@@ -1548,7 +1613,7 @@ async function main(): Promise<void> {
         regorus:
           "host/src/main.rs `run_certify_arm`'s regorus block, reported as `failureRuleVerdict`: `set_strict_builtin_errors(true)`; an Err from `eval_rule`, a null/`<undefined>`/non-object value (the `run_regorus_arm` rejection, main.rs:440-443), then `read_result` — the same chain the normal regorus arm applies.",
         wazero:
-          'wazero-probe/main.go `entrypointValue`, called by conformance.go `runConformanceCase` — an empty result set is an ERROR raised in Go, and the `opa_builtin*` stubs panic rather than fabricate a return value (the conformance mode recovers the panic into an error ROW so the failure is data, not a dead process).',
+          'wazero-probe/main.go `entrypointValue` + `readResult`, called by conformance.go `runConformanceCase` — an empty result set is an ERROR raised in Go, a result whose SHAPE is not `{violations[], events[]}` is rejected by the same `readResult` the differential run uses, and the `opa_builtin*` stubs panic rather than fabricate a return value (the conformance mode recovers the panic into an error ROW so the failure is data, not a dead process).',
       },
       rows: allHosts,
     },

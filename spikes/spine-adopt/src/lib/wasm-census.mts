@@ -136,7 +136,15 @@ export function censusWasm(bytes: Buffer): WasmCensus {
 export function readCStr(memory: WebAssembly.Memory, addr: number): string {
   const u8 = new Uint8Array(memory.buffer);
   let end = addr;
-  while (u8[end] !== 0) end += 1;
+  // BOUNDED. Out-of-range indexing on a Uint8Array yields `undefined`, and
+  // `undefined !== 0` is true, so an unbounded scan past the end of linear
+  // memory never terminates. `addr` comes from `opa_json_dump`; a stale or bogus
+  // pointer would wedge the harness until the CI timeout with no diagnostic
+  // instead of failing loud here.
+  while (end < u8.length && u8[end] !== 0) end += 1;
+  if (end >= u8.length) {
+    throw new Error(`unterminated C string at ${addr} (${u8.length} bytes of linear memory)`);
+  }
   return new TextDecoder().decode(u8.subarray(addr, end));
 }
 

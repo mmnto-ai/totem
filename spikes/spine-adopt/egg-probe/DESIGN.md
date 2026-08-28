@@ -40,9 +40,12 @@ ADOPT-for-study only if ALL of:
    merge listed.
 4. **Verification pass:** for every cross-pattern merge AND for a 20-pattern random-free sample of
    (original, extracted-canonical) pairs (seeded deterministically from pattern hashes — no RNG),
-   emit SMT-LIB2 xor-emptiness and run the PINNED z3 CLI
-   (`tools/z3-5.1.0-x64-win/bin/z3.exe`, 30s timeout each; a timeout = the pair is recorded
-   UNVERIFIED and criterion 1 treats it as not-proven — fail closed, same posture as O10). The
+   emit SMT-LIB2 xor-emptiness and run the PINNED z3 CLI — resolved PER PLATFORM the way the rest
+   of the spike resolves its pinned solvers: `$SPIKE_Z3_BIN` when set, else
+   `tools/z3-5.1.0-x64-win/bin/z3.exe` on Windows and `tools/z3-5.1.0-x64-glibc-2.39/bin/z3`
+   elsewhere (both assets pinned in `toolchain.lock`, `[z3]` / `[z3.linux]`), with a 30s timeout
+   each; a timeout = the pair is recorded UNVERIFIED and criterion 1 treats it as not-proven —
+   fail closed, same posture as O10. The
    probe emits its own SMT-LIB (self-contained printer for the subset); it does NOT modify or
    depend on the `smt/` crate.
 5. **Artifacts** (`egg-probe/artifacts/`): `egg-report.json` — parsed/unparsed counts, e-class vs

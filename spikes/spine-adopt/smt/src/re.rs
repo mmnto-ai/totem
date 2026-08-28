@@ -126,9 +126,23 @@ impl Re {
 
 /// N-ary application, folded to the single operand when there is exactly one
 /// (`(re.++ X)` is legal but noisy, and a 0-ary `re.++` is not portable).
+///
+/// ZERO OPERANDS are handled PER OPERATOR, because the three do not share an
+/// identity. Concatenation's is the empty word, so `re.++` over nothing folds to
+/// `(str.to_re "")`. Union's identity is the EMPTY language and intersection's
+/// is the UNIVERSAL one; emitting epsilon for either would silently ask a
+/// different question. No obligation constructs a zero-operand union or
+/// intersection (`globs_to_re` is the only caller that builds its operand list
+/// from an argument, and every call site passes a non-empty list), so this
+/// refuses loudly rather than guessing an identity — a wrong `re.none`/`re.all`
+/// choice here would be indistinguishable from a correct proof downstream.
 fn write_nary(out: &mut String, op: &str, parts: &[Re]) {
     match parts.len() {
-        0 => out.push_str("(str.to_re \"\")"),
+        0 if op == "re.++" => out.push_str("(str.to_re \"\")"),
+        0 => panic!(
+            "zero-operand {op} has no epsilon identity and is outside this harness's supported \
+             subset — build the operand list before printing it"
+        ),
         1 => parts[0].write_smt(out),
         _ => {
             let _ = write!(out, "({op}");

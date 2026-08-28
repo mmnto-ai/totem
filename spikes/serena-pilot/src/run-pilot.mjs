@@ -36,10 +36,8 @@ function norm(s) {
 function scoreArm(text, task) {
   const hay = norm(text);
   const missed = task.groundTruth.filter((g) => !hay.includes(norm(g)));
-  let extraOk = true;
-  if (task.mustContainAny) {
-    extraOk = task.mustContainAny.some((m) => text.includes(m));
-    if (!extraOk) missed.push(`<line-marker: one of ${task.mustContainAny.join('|')}>`);
+  if (task.mustContainAny && !task.mustContainAny.some((m) => text.includes(m))) {
+    missed.push(`<line-marker: one of ${task.mustContainAny.join('|')}>`);
   }
   // False positives: files the arm surfaced that carry no reference of the kind
   // the task asked for (almost always a comment-only mention).
@@ -281,7 +279,9 @@ report.correctness = {
 const thresholdMet =
   (bytesReductionPct !== null && bytesReductionPct >= 25) ||
   (timeReductionPct !== null && timeReductionPct >= 25);
-const noMissedOnSerena = serenaMissed.length === 0;
+// `rows` is empty when the run died before any task completed (the block below
+// runs outside the try). An empty set must not read as "missed nothing".
+const noMissedOnSerena = rows.length > 0 && serenaMissed.length === 0;
 
 report.verdict = {
   criteria: {

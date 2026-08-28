@@ -131,9 +131,11 @@ export class McpStdioClient {
       }
     }, timeoutMs);
 
-    this.#send({ jsonrpc: '2.0', id, method, params });
-
+    // #send() throws when the child is already gone. It must run INSIDE the
+    // try, or that throw would leave this request's pending entry and timer
+    // behind (the finally below is the only thing that clears them).
     try {
+      this.#send({ jsonrpc: '2.0', id, method, params });
       const { msg, rawLine } = await waiter;
       const ms = Number(process.hrtime.bigint() - started) / 1e6;
       return {
@@ -144,6 +146,7 @@ export class McpStdioClient {
       };
     } finally {
       clearTimeout(timer);
+      this.#pending.delete(id);
     }
   }
 

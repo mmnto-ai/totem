@@ -28,9 +28,9 @@ array) has `preceding = lines[i-1]` (absent for the first). All lines are additi
 1. **One package per record** — `totem.spike.r<ruleId>`; one wasm bundle per record
    (`opa build -t wasm -e totem/spike/r<ruleId>/result`), giving a per-record artifact hash for the
    chain `sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm)`.
-   `result = {violations, events}`. _(Ratified amendment: ruleId alone is not unique — the two
+   `result = {violations, events}`. (Ratified amendment: ruleId alone is not unique — the two
    exemplar transcriptions share the pinned id — so colliding ids take a `_<specimen>` package
-   suffix; unique ids stay bare.)\_
+   suffix; unique ids stay bare.)
 2. **Strict is STRUCTURAL** _(amended after measurement — the original "run
    `--strict-builtin-errors` everywhere" is unsatisfiable: the flag is eval-only, `opa build`
    rejects it, and a wasm module has no equivalent — a policy with an uncompilable pattern builds
@@ -65,6 +65,10 @@ array) has `preceding = lines[i-1]` (absent for the first). All lines are additi
    evaluated BEFORE suppression on all shipped dispatchers — a requires-satisfied match is silent
    even when marked (no suppress event).** Plain `totem-ignore` only in fixtures (the fail-soft
    attestation machinery is out of scope, spec § specimens note).
+   _Implementation note: the current lowerer emits the PRE-amendment two-marker preceding list, and
+   documents the omission deliberately at `src/lower.mts:59-68`; the fidelity fix to this amended
+   clause is owed at the next chain-regeneration slice. The divergence is unreachable on all
+   current specimens and fixtures — no fixture exercises a preceding-line `shield-context:`._
 8. **Severity/message** are compile-time constants in the package (emitted for the report; not part
    of verdict comparison).
 

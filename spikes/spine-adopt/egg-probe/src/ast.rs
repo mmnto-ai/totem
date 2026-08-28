@@ -130,7 +130,7 @@ impl<'a> Parser<'a> {
                 self.bump();
                 Some(Ast::Opt(Box::new(atom.clone())))
             }
-            Some('{') => match self.try_counted() {
+            Some('{') => match self.try_counted()? {
                 Some((lo, hi)) => Some(Ast::Repeat(Box::new(atom.clone()), lo, hi)),
                 // Annex-B behaviour, which is what the shipped JS `RegExp`
                 // engine does: a `{` that does not open a valid quantifier is a
@@ -176,9 +176,10 @@ impl<'a> Parser<'a> {
         Ok(node)
     }
 
-    /// `{n}` / `{n,}` / `{n,m}`. Returns `None` (rewinding) when the braces do
-    /// not form a quantifier, so the caller can treat `{` as a literal.
-    fn try_counted(&mut self) -> Option<(u32, Option<u32>)> {
+    /// `{n}` / `{n,}` / `{n,m}`. Returns `Ok(None)` (rewinding) when the braces
+    /// do not form a quantifier, so the caller can treat `{` as a literal, and
+    /// `Err` when they form a quantifier the shipped engine REFUSES.
+    fn try_counted(&mut self) -> PResult<Option<(u32, Option<u32>)>> {
         let start = self.i;
         self.bump(); // '{'
         let mut lo = String::new();
@@ -187,7 +188,7 @@ impl<'a> Parser<'a> {
         }
         if lo.is_empty() {
             self.i = start;
-            return None;
+            return Ok(None);
         }
         let hi = if self.peek() == Some(',') {
             self.bump();
@@ -202,7 +203,7 @@ impl<'a> Parser<'a> {
                     Ok(v) => Some(v),
                     Err(_) => {
                         self.i = start;
-                        return None;
+                        return Ok(None);
                     }
                 }
             }
@@ -211,23 +212,42 @@ impl<'a> Parser<'a> {
                 Ok(v) => Some(v),
                 Err(_) => {
                     self.i = start;
-                    return None;
+                    return Ok(None);
                 }
             }
         };
         if self.peek() != Some('}') {
             self.i = start;
-            return None;
+            return Ok(None);
         }
         self.bump();
         let lo_v = match lo.parse::<u32>() {
             Ok(v) => v,
             Err(_) => {
                 self.i = start;
-                return None;
+                return Ok(None);
             }
         };
-        Some((lo_v, hi))
+        // A REVERSED bound (`a{3,1}`) is not a pattern the shipped engine
+        // accepts: `{3,1}` matches QuantifierPrefix, so the Annex-B literal
+        // reading does NOT apply, and ECMAScript's early error
+        // (InvalidBracedQuantifier) makes the whole regex a SyntaxError —
+        // V8: "numbers out of order in {} quantifier". Modelling it as
+        // `re.loop 3 1` would give the probe a language the engine never
+        // produces, and rewinding to a literal `{` would model a pattern the
+        // engine rejects. Both are guesses, so this is REFUSED with a reason.
+        if matches!(hi, Some(h) if h < lo_v) {
+            return Err(Unparsed::new(
+                "reversed-counted-bounds",
+                format!(
+                    "`{{{lo_v},{}}}` has its bounds out of order; the shipped RegExp \
+                     engine rejects the pattern as a SyntaxError rather than matching \
+                     anything",
+                    hi.unwrap()
+                ),
+            ));
+        }
+        Ok(Some((lo_v, hi)))
     }
 
     fn parse_atom(&mut self) -> PResult<Ast> {
@@ -570,9 +590,13 @@ pub fn first_edge(a: &Ast) -> Edge {
             set: ClassSet::single(*c as u32),
             nullable: false,
         },
+        // An EMPTY set is the empty LANGUAGE, not epsilon: a class node matches
+        // exactly one character or nothing at all, so it can never match the
+        // empty string. (`ir::lower` agrees — it lowers an empty class to
+        // `Re::Empty`.) Reporting it nullable would widen the `\b` desugar.
         Ast::Class(s) => Edge {
             set: *s,
-            nullable: s.is_empty(),
+            nullable: false,
         },
         Ast::Group(inner) => first_edge(inner),
         Ast::Star(_) | Ast::Opt(_) => Edge {
@@ -627,9 +651,10 @@ pub fn last_edge(a: &Ast) -> Edge {
             set: ClassSet::single(*c as u32),
             nullable: false,
         },
+        // Empty set = empty LANGUAGE, never epsilon — see `first_edge`.
         Ast::Class(s) => Edge {
             set: *s,
-            nullable: s.is_empty(),
+            nullable: false,
         },
         Ast::Group(inner) => last_edge(inner),
         Ast::Star(_) | Ast::Opt(_) => Edge {
@@ -756,6 +781,39 @@ mod tests {
     fn brace_that_is_not_a_quantifier_is_a_literal() {
         // Annex-B / shipped-engine behaviour.
         assert_eq!(ok("a{x"), Ast::Concat(vec![Ast::Lit(b'a'), Ast::Lit(b'{'), Ast::Lit(b'x')]));
+    }
+
+    #[test]
+    fn reversed_counted_bounds_are_refused() {
+        // `a{3,1}` is a SyntaxError in the shipped engine (V8: "numbers out of
+        // order in {} quantifier"), so it is neither `re.loop 3 1` nor a
+        // literal `{`.
+        assert_eq!(parse("a{3,1}").unwrap_err().kind, "reversed-counted-bounds");
+        // The ordered forms still parse.
+        assert_eq!(
+            ok("a{1,3}"),
+            Ast::Repeat(Box::new(Ast::Lit(b'a')), 1, Some(3))
+        );
+        assert_eq!(
+            ok("a{2}"),
+            Ast::Repeat(Box::new(Ast::Lit(b'a')), 2, Some(2))
+        );
+        assert_eq!(ok("a{2,}"), Ast::Repeat(Box::new(Ast::Lit(b'a')), 2, None));
+    }
+
+    #[test]
+    fn empty_class_is_the_empty_language_not_epsilon() {
+        // A negated class whose members cover Σ yields the EMPTY set, which
+        // denotes the empty language — it must not be reported nullable.
+        let a = ok(r"[^\s\S]");
+        assert_eq!(a, Ast::Class(ClassSet::empty()));
+        assert!(!first_edge(&a).nullable);
+        assert!(!last_edge(&a).nullable);
+        // The widening this guards: an alternation with an empty branch is
+        // nullable only if a REAL branch is.
+        let alt = Ast::Alt(vec![a.clone(), Ast::Lit(b'x')]);
+        assert!(!first_edge(&alt).nullable);
+        assert!(!last_edge(&alt).nullable);
     }
 
     #[test]

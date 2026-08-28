@@ -1,7 +1,7 @@
 {
   "generatedBy": "spikes/spine-adopt/src/verify-records.mts",
   "spec": ".totem/specs/spine-spike.md § Data model deltas (SpikeRecord) + § Invariants",
-  "exemplarReferent": "packages\\core\\dist\\spine\\record-exemplars.fixture.js",
+  "exemplarReferent": "packages/core/dist/spine/record-exemplars.fixture.js",
   "pinnedRuleId": "0123456789abcdef",
   "pinnedNow": "2026-08-21T00:00:00.000Z",
   "specimens": [
@@ -350,7 +350,7 @@
     {
       "name": "the two exemplar factories are reachable at their non-barrel dist path",
       "ok": true,
-      "detail": "packages\\core\\dist\\spine\\record-exemplars.fixture.js"
+      "detail": "packages/core/dist/spine/record-exemplars.fixture.js"
     },
     {
       "name": "specimen a — parseRuleRecord + compileRuleRecord succeed",

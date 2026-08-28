@@ -31,9 +31,15 @@ use crate::re::{Form, Re};
 pub enum Expect {
     Sat,
     Unsat,
-    /// O7's "measured (either), agreement required" and O10's "any". A result
-    /// that is not the guessed one is DATA, not a defect.
+    /// O7's "measured (either), agreement required". A result that is not the
+    /// guessed one is DATA, not a defect.
     Measured,
+    /// The deliberate-timeout expectation: NOT being decided is the PASS
+    /// condition. Typed rather than left as `Measured`, because `Measured`
+    /// cannot express it and every consumer would otherwise have to recover the
+    /// intent from the `O10` id literal — which a second timeout obligation
+    /// would then be misreported by.
+    NotProven,
 }
 
 impl Expect {
@@ -42,6 +48,7 @@ impl Expect {
             Expect::Sat => "sat",
             Expect::Unsat => "unsat",
             Expect::Measured => "measured",
+            Expect::NotProven => "not-proven",
         }
     }
 }
@@ -452,17 +459,23 @@ fn o07() -> Obligation {
         id: "O7".into(),
         class: "regex/string constraints".into(),
         question: "Rule subsumption/redundancy: is L(p_A) a subset of L(p_B) for two corpus \
-                   patterns with known overlap? SAT means p_A is NOT redundant against p_B and the \
-                   witness is a line only p_A catches."
+                   patterns with known overlap? Asked over the WIDENED p_A (see the dropped-\
+                   lookahead note), so UNSAT would prove the SOURCE pattern subsumed, while a SAT \
+                   witness is evidence for the widened approximation only."
             .into(),
         notes: vec![
             "p_A = corpus rule 09ee37252a814a09 (the lookahead-vs-requires control), \
              RE2-EXPRESSIBLE PARTS ONLY — its trailing (?![^'\"\\n]*LC_ALL=C) negative lookahead is \
              dropped."
                 .into(),
-            "That drop is an enumerable builtin-gap finding, NOT a silent approximation: it WIDENS \
-             p_A, so a SAT witness here remains sound evidence of non-subsumption, while an UNSAT \
-             would have needed the lookahead to be sound."
+            "EVIDENCE BOUNDARY. Dropping that lookahead WIDENS p_A: L(p_A_source) is a SUBSET of \
+             L(p_A_widened). The containment makes the two answers asymmetric. UNSAT proves \
+             L(p_A_widened) is a subset of L(p_B), hence L(p_A_source) is too — source-pattern \
+             SUBSUMPTION is established. SAT only produces a witness in L(p_A_widened) minus \
+             L(p_B); the dropped lookahead may exclude that very witness from the source pattern, \
+             so it is evidence for the WIDENED APPROXIMATION and does NOT establish non-subsumption \
+             of the source pattern. The drop is an enumerable builtin-gap finding, not a silent \
+             approximation, and this is the boundary it carries."
                 .into(),
             "p_B = specimen (d)'s target \\bgit\\s+(log|diff|status)\\b — a strict sub-alternation \
              of p_A's fifteen branches."
@@ -658,7 +671,7 @@ fn o10() -> Obligation {
         decls: vec!["s".into()],
         checks: vec![Check {
             name: "engineered-past-the-budget".into(),
-            expect: Expect::Measured,
+            expect: Expect::NotProven,
             asserts: vec![Assertion::plain(Form::in_re("s", chain))],
         }],
         timeout_s: Some(10),

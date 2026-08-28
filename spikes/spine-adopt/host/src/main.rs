@@ -213,7 +213,6 @@ fn failure_rule_verdict(outcome: Result<Verdict>) -> Value {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn verdict_row(
     arm: &str,
     rec: &LoweredRecord,
@@ -555,6 +554,7 @@ async fn run_certify_arm(
     requested_entrypoints: &[String],
     input: &Value,
     rego_path: Option<&Path>,
+    rego_label: Option<&str>,
     rule_path: Option<&str>,
 ) -> Result<Value> {
     let wasm = std::fs::read(wasm_path)
@@ -695,7 +695,17 @@ async fn run_certify_arm(
                     .with_context(|| format!("reading {}", p.display()))?;
                 let mut e = regorus::Engine::new();
                 e.set_strict_builtin_errors(true);
-                e.add_policy(p.to_string_lossy().into_owned(), source)
+                // regorus prints this NAME verbatim in its diagnostics, and the
+                // certifier copies that text into `artifacts/blocked/<pkg>.json`
+                // and the certification report. Using the absolute path would
+                // stamp the operator's worktree layout into committed evidence
+                // and make the Windows and Linux matrix arms disagree
+                // byte-for-byte on the same commit. The caller supplies the
+                // repo-relative label; the SOURCE is still read from `p`.
+                let policy_name = rego_label
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| p.to_string_lossy().into_owned());
+                e.add_policy(policy_name, source)
                     .map_err(|e| anyhow!("regorus add_policy: {e:#}"))?;
                 e.set_input_json(&serde_json::to_string(input)?)
                     .map_err(|e| anyhow!("regorus set_input_json: {e:#}"))?;
@@ -816,9 +826,12 @@ fn write_artifact(path: &Path, value: &Value) -> Result<()> {
     Ok(())
 }
 
-/// `{"a": 1}` → sorted-key JSON, so the artifact is byte-stable across runs.
-/// `serde_json`'s default map is insertion-ordered; the arm builders already emit
-/// deterministic orders, and the row vectors follow the sorted fact-file list.
+/// Wraps a non-object `Value` as `{"value": …}` so the caller always has a map.
+///
+/// This function sorts nothing. The artifact's byte stability comes from
+/// `serde_json`'s insertion-ordered map plus deterministic producers: the arm
+/// builders emit keys in a fixed order, and the row vectors follow the sorted
+/// fact-file list.
 fn ensure_object(v: Value) -> Map<String, Value> {
     match v {
         Value::Object(m) => m,
@@ -840,6 +853,10 @@ async fn main() -> Result<()> {
     let mut wasm: Option<PathBuf> = None;
     let mut input: Option<PathBuf> = None;
     let mut rego: Option<PathBuf> = None;
+    // The NAME regorus should print in diagnostics for the policy read from
+    // `--rego`. Supplied by the caller (which knows the repo root) so the error
+    // text that lands in committed evidence is machine-independent.
+    let mut rego_label: Option<String> = None;
     let mut rule: Option<String> = None;
     let mut entrypoints: Vec<String> = Vec::new();
     while let Some(a) = args.next() {
@@ -850,6 +867,7 @@ async fn main() -> Result<()> {
             "--wasm" => wasm = args.next().map(PathBuf::from),
             "--input" => input = args.next().map(PathBuf::from),
             "--rego" => rego = args.next().map(PathBuf::from),
+            "--rego-label" => rego_label = args.next(),
             "--rule" => rule = args.next(),
             "--entrypoint" => {
                 if let Some(e) = args.next() {
@@ -859,7 +877,8 @@ async fn main() -> Result<()> {
             other => bail!(
                 "unknown argument {other}; usage: --arm opa|regorus [--spike-root <dir>] [--out <file>] \
                  | --arm certify --wasm <policy.wasm> --input <factbundle.json> \
-                 [--entrypoint <ep> ...] [--rego <policy.rego> --rule <data.pkg.result>] [--out <file>]"
+                 [--entrypoint <ep> ...] [--rego <policy.rego> [--rego-label <repo-relative>] \
+                 --rule <data.pkg.result>] [--out <file>]"
             ),
         }
     }
@@ -878,6 +897,7 @@ async fn main() -> Result<()> {
             &entrypoints,
             &input_value,
             rego.as_deref(),
+            rego_label.as_deref(),
             rule.as_deref(),
         )
         .await?;

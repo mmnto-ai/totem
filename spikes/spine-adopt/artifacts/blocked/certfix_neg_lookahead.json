@@ -32,9 +32,9 @@
   },
   "sentinelSchemaErrors": [],
   "regorus": {
-    "error": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result): \n--> D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\spikes\\spine-adopt\\rego\\certify-fixtures\\neg-lookahead\\policy.rego:59:29\n   |\n59 | \tis_boolean(regex.match(\"(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\\\|\\\\|).)*\\\\|\\\\|\\\\s*true\", \"\"))\n   |                             ^\nerror: invalid regex",
+    "error": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result): \n--> spikes/spine-adopt/rego/certify-fixtures/neg-lookahead/policy.rego:59:29\n   |\n59 | \tis_boolean(regex.match(\"(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\\\|\\\\|).)*\\\\|\\\\|\\\\s*true\", \"\"))\n   |                             ^\nerror: invalid regex",
     "failureRuleVerdict": {
-      "error": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result): \n--> D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\spikes\\spine-adopt\\rego\\certify-fixtures\\neg-lookahead\\policy.rego:59:29\n   |\n59 | \tis_boolean(regex.match(\"(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\\\|\\\\|).)*\\\\|\\\\|\\\\s*true\", \"\"))\n   |                             ^\nerror: invalid regex",
+      "error": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result): \n--> spikes/spine-adopt/rego/certify-fixtures/neg-lookahead/policy.rego:59:29\n   |\n59 | \tis_boolean(regex.match(\"(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\\\|\\\\|).)*\\\\|\\\\|\\\\s*true\", \"\"))\n   |                             ^\nerror: invalid regex",
       "events": null,
       "ok": false,
       "violations": null

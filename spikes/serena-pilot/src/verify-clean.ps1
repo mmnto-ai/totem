@@ -3,22 +3,42 @@
 # Usage:
 #   pwsh -NoProfile -File verify-clean.ps1 -Phase pre
 #   pwsh -NoProfile -File verify-clean.ps1 -Phase post
+#   pwsh -NoProfile -File verify-clean.ps1 -Phase post -Worktree <path> -Scratch <path>
 #
 # `pre` captures the baseline `git status --porcelain`; `post` removes serena's
 # residue from the checkout, re-captures, and diffs the two captures. The pilot's
-# zero-mutation criterion is met only when the two captures are byte-identical
-# and no serena residue remains.
+# zero-mutation criterion is met when no serena residue remains AND either the
+# two captures are byte-identical or every line present in POST but not in PRE is
+# an untracked path under `spikes/serena-pilot/` — the pilot's own tree, which is
+# its documented end state (`?? spikes/serena-pilot/`) and not a mutation of the
+# checkout under verification. Any other difference still fails. `post` exits 1
+# when either check fails, so a caller can gate on the process status.
 
 param(
   [Parameter(Mandatory = $true)]
   [ValidateSet('pre', 'post')]
-  [string]$Phase
+  [string]$Phase,
+
+  # Checkout under verification. Defaults to the repository this script lives in.
+  [string]$Worktree,
+
+  # Where the pre/post captures are written. Defaults to a script-local scratch dir.
+  [string]$Scratch = (Join-Path $PSScriptRoot '.scratch')
 )
 
 $ErrorActionPreference = 'Stop'
 
-$Worktree = 'D:\Dev\worktrees\totem-totem-claude-spine-spike'
-$Scratch  = 'C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\79f6decd-54a6-4c97-a0f6-d995f35c8cd2\scratchpad'
+if (-not $Worktree) {
+  $Worktree = & git -C $PSScriptRoot rev-parse --show-toplevel
+  if (-not $Worktree) {
+    throw 'could not derive -Worktree from git rev-parse --show-toplevel; pass -Worktree explicitly'
+  }
+  # git reports forward slashes on Windows; normalise to the native separator.
+  $Worktree = (Resolve-Path -LiteralPath $Worktree).ProviderPath
+}
+
+New-Item -ItemType Directory -Force -Path $Scratch | Out-Null
+
 $PreFile  = Join-Path $Scratch 'git-status-pre.txt'
 $PostFile = Join-Path $Scratch 'git-status-post.txt'
 
@@ -40,6 +60,9 @@ if ($Phase -eq 'pre') {
 
 # ---------------- post phase ----------------
 
+# Set by either failing check; drives the exit status so a caller can gate on it.
+$failed = $false
+
 Write-Host '=== removing serena residue from the CHECKOUT ==='
 $ProjectSerena = Join-Path $Worktree '.serena'
 if (Test-Path $ProjectSerena) {
@@ -57,6 +80,7 @@ $residue = Get-ChildItem $Worktree -Recurse -Force -Filter '.serena*' -ErrorActi
 if ($residue) {
   Write-Host 'RESIDUE FOUND:'
   $residue | ForEach-Object { Write-Host "  $($_.FullName)" }
+  $failed = $true
 } else {
   Write-Host '  none (pass)'
 }
@@ -74,10 +98,52 @@ if ($pre.Trim().Length -eq 0)  { Write-Host '  <clean tree>' } else { Write-Host
 Write-Host "POST (len $($post.Length)):"
 if ($post.Trim().Length -eq 0) { Write-Host '  <clean tree>' } else { Write-Host $post }
 
+# The one difference the pilot is allowed to leave behind: its OWN untracked
+# tree. `?? spikes/serena-pilot/` is the documented end state, and git collapses
+# an untracked directory to that single entry, so both the directory line and any
+# path beneath it are exempt. The pattern anchors on the trailing separator, so a
+# sibling like `?? spikes/serena-pilot-scratch/` is NOT exempt.
+$ExemptPattern = '^\?\? "?spikes/serena-pilot/'
+
+function Split-StatusLines {
+  param([string]$Text)
+  if ([string]::IsNullOrEmpty($Text)) { return @() }
+  # Porcelain lines carry significant LEADING whitespace (` M path`), so split
+  # without trimming and drop only the wholly blank entries.
+  return @($Text -split "`r?`n" | Where-Object { $_.Trim().Length -gt 0 })
+}
+
 if ($pre -ceq $post) {
   Write-Host ''
   Write-Host 'ZERO-MUTATION: PASS (pre and post porcelain captures are byte-identical)'
 } else {
+  $preLines  = Split-StatusLines $pre
+  $postLines = Split-StatusLines $post
+  # Case-sensitive: git paths are case-sensitive even where the filesystem is not.
+  $addedLines = @($postLines | Where-Object { $preLines -cnotcontains $_ })
+  $unexempt   = @($addedLines | Where-Object { $_ -cnotmatch $ExemptPattern })
+
   Write-Host ''
-  Write-Host 'ZERO-MUTATION: DIFFERENCE PRESENT (expected: the pilot''s own untracked spikes/serena-pilot/ tree)'
+  Write-Host 'PRESENT IN POST BUT NOT PRE:'
+  if ($addedLines.Count -eq 0) { Write-Host '  <none>' } else { $addedLines | ForEach-Object { Write-Host "  $_" } }
+
+  if ($unexempt.Count -eq 0) {
+    Write-Host ''
+    Write-Host 'ZERO-MUTATION: PASS (every new porcelain line is an untracked path under spikes/serena-pilot/ — the pilot''s own tree)'
+  } else {
+    Write-Host ''
+    Write-Host 'ZERO-MUTATION: FAIL (new porcelain lines outside the pilot''s own untracked tree):'
+    $unexempt | ForEach-Object { Write-Host "  $_" }
+    $failed = $true
+  }
 }
+
+if ($failed) {
+  Write-Host ''
+  Write-Host 'VERIFY-CLEAN: FAIL (see the checks above)'
+  exit 1
+}
+
+Write-Host ''
+Write-Host 'VERIFY-CLEAN: PASS'
+exit 0

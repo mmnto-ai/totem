@@ -33,6 +33,19 @@ const EXEMPLAR_DIST = path.join(
   'record-exemplars.fixture.js',
 );
 
+/**
+ * The repo-relative form of `EXEMPLAR_DIST`, with POSIX separators.
+ *
+ * `path.join` uses the HOST separator, so the raw slice yields
+ * `packages\core\dist\...` on Windows and `packages/core/dist/...` on Linux.
+ * `npm run all` regenerates `records-verification.json` on BOTH matrix arms, and
+ * this value is committed evidence — normalising here is what makes the two arms
+ * byte-comparable for the same commit.
+ */
+const EXEMPLAR_REFERENT = EXEMPLAR_DIST.slice(REPO_ROOT.length + 1)
+  .split(path.sep)
+  .join('/');
+
 function legacyCorpusIndex(): Map<string, any> {
   const index = new Map<string, any>();
   for (const { file } of CORPORA) {
@@ -98,7 +111,7 @@ async function main(): Promise<void> {
     'the two exemplar factories are reachable at their non-barrel dist path',
     typeof exemplars.design4ExemplarRecord === 'function' &&
       typeof exemplars.design8ExemplarRecord === 'function',
-    EXEMPLAR_DIST.slice(REPO_ROOT.length + 1),
+    EXEMPLAR_REFERENT,
   );
 
   const compiled: CompiledSpecimen[] = [];
@@ -421,7 +434,7 @@ async function main(): Promise<void> {
   const out = writeArtifact('records-verification.json', {
     generatedBy: 'spikes/spine-adopt/src/verify-records.mts',
     spec: '.totem/specs/spine-spike.md § Data model deltas (SpikeRecord) + § Invariants',
-    exemplarReferent: EXEMPLAR_DIST.slice(REPO_ROOT.length + 1),
+    exemplarReferent: EXEMPLAR_REFERENT,
     pinnedRuleId: SPECIMENS.find((s) => s.exemplarFactory)?.ruleId ?? null,
     pinnedNow: PINNED_NOW,
     specimens: rows,

@@ -141,7 +141,22 @@ function normaliseShipped(rows: any[], bundles: Map<string, any>): NormalRow[] {
   return rows.map((r) => {
     const bundle = bundles.get(r.fixtureId);
     if (!bundle) throw new Error(`shipped row ${r.fixtureId} has no FactBundle`);
+    // Reducing a two-arm shipped row to `arms[0]` is only sound while the
+    // artifact records that the arms AGREE. For regex specimens the two arms are
+    // different dispatchers — `applyRulesToAdditions` (arm1-pin) and
+    // `applyRulesToAdditionsBounded` (arm2-lint, what `totem lint` runs, and the
+    // one carrying the timeout path). If arm2 ever diverged, silently comparing
+    // arm1 against OPA would report MATCH and exit 0, laundering a real
+    // shipped-side divergence into a PASS. The exit code IS the verdict here, so
+    // this fails loud, the same way an unpairable ordinal already aborts the run.
+    if (r.armsAgree !== true) {
+      throw new Error(
+        `shipped row ${r.fixtureId} reports armsAgree=${JSON.stringify(r.armsAgree)}; ` +
+          `arms[0] is not a sound stand-in for the shipped verdict`,
+      );
+    }
     const primary = r.arms[0];
+    if (!primary) throw new Error(`shipped row ${r.fixtureId} carries no arms`);
     const d = deriveShippedOrdinals(
       r.engine,
       r.ruleId,
@@ -513,9 +528,25 @@ function main(): void {
   const opa = normaliseRego('opa', opaArt.verdictRows);
   const regorus = normaliseRego('regorus', regorusArt.verdictRows);
 
-  checks.eq('shipped arm produced 24 verdict rows', shipped.length, 24);
-  checks.eq('opa arm produced 24 verdict rows', opa.length, 24);
-  checks.eq('regorus arm produced 24 verdict rows', regorus.length, 24);
+  // The fixture count is a DECLARED property of the arms and of the fact-bundle
+  // directory, not a constant of this comparator. Deriving it means an arm that
+  // dropped a fixture is reported AS THAT, once — instead of three or four
+  // separate "expected 24" failures that each name the stale literal rather than
+  // the arm at fault.
+  const expectedRows = bundles.size;
+  checks.eq(
+    'the fact bundles and the OPA arm agree on the fixture count',
+    opaArt.fixtureCount,
+    expectedRows,
+  );
+  checks.eq(
+    'the fact bundles and the regorus arm agree on the fixture count',
+    regorusArt.fixtureCount,
+    expectedRows,
+  );
+  checks.eq(`shipped arm produced ${expectedRows} verdict rows`, shipped.length, expectedRows);
+  checks.eq(`opa arm produced ${expectedRows} verdict rows`, opa.length, expectedRows);
+  checks.eq(`regorus arm produced ${expectedRows} verdict rows`, regorus.length, expectedRows);
 
   const key = (r: NormalRow) => `${r.ruleId}|${r.fixtureId}`;
   const byKey = (rows: NormalRow[]) => new Map(rows.map((r) => [key(r), r]));
@@ -526,7 +557,7 @@ function main(): void {
   checks.eq(
     'the join key (ruleId, fixtureId) is unique on every arm',
     [S.size, O.size, R.size],
-    [24, 24, 24],
+    [expectedRows, expectedRows, expectedRows],
   );
   const missing = [...S.keys()].filter((k) => !O.has(k) || !R.has(k));
   checks.eq('every shipped pair has an opa row AND a regorus row (no silent skip)', missing, []);

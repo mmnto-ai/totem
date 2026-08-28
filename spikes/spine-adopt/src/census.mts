@@ -134,7 +134,15 @@ interface OpaProbe {
   value: boolean | undefined;
   /** OPA's own error text under `--strict-builtin-errors`, or null. */
   error: string | null;
-  verdict: 'supported-match' | 'supported-nonmatch' | 'rejected-by-re2';
+  /**
+   * `harness-error` is NOT an RE2 verdict. It means the probe could not be read
+   * at all (OPA printed something this code cannot parse), so the run proves
+   * nothing either way. It is kept distinct because the census is the ARBITER of
+   * the disputed expressibility row: folding a broken run into
+   * `rejected-by-re2` would let a tooling failure masquerade as evidence that
+   * RE2 rejected the pattern.
+   */
+  verdict: 'supported-match' | 'supported-nonmatch' | 'rejected-by-re2' | 'harness-error';
 }
 
 function opaVersion(): string {
@@ -171,6 +179,9 @@ function opaRegexMatch(label: string, pattern: string, input: string): OpaProbe 
   });
   let value: boolean | undefined;
   let error: string | null = null;
+  // Distinguishes "OPA answered, and its answer was an RE2 rejection" from "OPA's
+  // output could not be read". Both set `error`; only the first is evidence.
+  let unparseable = false;
   try {
     const parsed = JSON.parse(r.stdout) as {
       result?: { expressions?: { value?: boolean }[] }[];
@@ -179,10 +190,16 @@ function opaRegexMatch(label: string, pattern: string, input: string): OpaProbe 
     value = parsed.result?.[0]?.expressions?.[0]?.value;
     if (parsed.errors?.length) error = parsed.errors.map((e) => e.message ?? '').join('; ');
   } catch {
+    unparseable = true;
     error = `unparseable OPA output: ${r.stdout}${r.stderr}`;
   }
-  const verdict: OpaProbe['verdict'] =
-    error !== null ? 'rejected-by-re2' : value === true ? 'supported-match' : 'supported-nonmatch';
+  const verdict: OpaProbe['verdict'] = unparseable
+    ? 'harness-error'
+    : error !== null
+      ? 'rejected-by-re2'
+      : value === true
+        ? 'supported-match'
+        : 'supported-nonmatch';
   return {
     label,
     regoQuery: query,
@@ -577,7 +594,11 @@ async function main(): Promise<void> {
   const artifact = {
     generatedBy: 'spikes/spine-adopt/src/census.mts',
     spec: '.totem/specs/spine-spike.md § "Census corrections the design binds to" (DISPUTED row) + § Invariants ("classes partition all 226")',
-    repoRoot: REPO_ROOT,
+    // A stable TOKEN, not the absolute checkout path: every other path in this
+    // artifact is already repo-relative, so recording the machine's `REPO_ROOT`
+    // here would be the artifact's only machine-specific byte — it would churn
+    // the committed diff on every clone and leak the author's directory layout.
+    repoRoot: '<worktree>',
     corpora: CORPORA.map((c) => ({
       id: c.id,
       file: c.file.slice(REPO_ROOT.length + 1),

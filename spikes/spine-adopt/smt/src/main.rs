@@ -32,6 +32,28 @@ fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Write one evidence file and return the sha256 OF THE BYTES ON DISK.
+///
+/// The chain's claim is "this hash names that file", so the hash is taken by
+/// reading the file back rather than by hashing the in-memory string. Anything
+/// that transformed the bytes between the two — a text-mode write, a rewrite by
+/// something else — then surfaces as a harness defect instead of producing a
+/// plausible-looking chain entry that no one can re-derive.
+fn write_evidence(path: &Path, text: &str) -> Result<String, String> {
+    fs::write(path, text.as_bytes())
+        .map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    let on_disk =
+        fs::read(path).map_err(|e| format!("could not read back {}: {e}", path.display()))?;
+    if on_disk != text.as_bytes() {
+        return Err(format!(
+            "evidence file {} does not hold the bytes that were written to it; its recorded \
+             sha256 would not name its own evidence",
+            path.display()
+        ));
+    }
+    Ok(sha256_hex(&on_disk))
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SolverCell {
@@ -73,6 +95,11 @@ struct ObligationRow {
     binding_agrees_with_cli: Option<bool>,
     /// The harness's verdict on whether this obligation was DECIDED at all.
     proven: bool,
+    /// True for an obligation whose PASS condition is NOT being decided (O10,
+    /// the deliberate timeout). Published as a field so downstream filters read
+    /// the property instead of re-deriving the intent from the id literal — a
+    /// second timeout obligation would silently break every such filter.
+    deliberate_timeout: bool,
     finding: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     finding_note: Option<String>,
@@ -213,7 +240,12 @@ struct Assertions {
     countermodels_stable_across_two_runs: bool,
     unstable_rows: Vec<String>,
     binding_arm_built: bool,
-    binding_arm_agrees_with_cli: bool,
+    /// `None` when the binding arm did not run. A gate reading this field must
+    /// not be able to pass on nothing: with no arm there is no agreement to
+    /// assert, and `true` would claim evidence the run never produced. Mirrors
+    /// each row's `bindingAgreesWithCli`, which is already null for the same
+    /// reason.
+    binding_arm_agrees_with_cli: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -334,12 +366,11 @@ fn run() -> Result<(), String> {
             let run = runner::run(solver, obligation, smt_path);
             let file_name = format!("o{:02}.{}.out", index + 1, solver.name);
             let evidence_path = evidence_dir.join(&file_name);
-            fs::write(&evidence_path, run.raw_output.as_bytes())
-                .map_err(|e| format!("could not write {}: {e}", evidence_path.display()))?;
+            let evidence_sha256 = write_evidence(&evidence_path, &run.raw_output)?;
             let cell = SolverCell {
                 status: run.status_summary(),
                 time_ms: run.time_ms,
-                evidence_sha256: sha256_hex(run.raw_output.as_bytes()),
+                evidence_sha256,
                 evidence_file: format!("evidence/{file_name}"),
                 proven: run.all_proven(),
                 killed_by_harness: run.killed_by_harness,
@@ -369,15 +400,15 @@ fn run() -> Result<(), String> {
             if produced_countermodel || (sat_expected && first.all_proven()) {
                 let second = runner::run(solver, obligation, smt_path);
                 let file_name = format!("o{:02}.{}.run2.out", index + 1, solver.name);
-                fs::write(evidence_dir.join(&file_name), second.raw_output.as_bytes())
-                    .map_err(|e| format!("could not write {file_name}: {e}"))?;
+                let run2_sha256 =
+                    write_evidence(&evidence_dir.join(&file_name), &second.raw_output)?;
                 let n1 = first.normalized_evidence();
                 let n2 = second.normalized_evidence();
                 stability.push(StabilityRow {
                     id: obligation.id.clone(),
                     solver: solver.name.to_string(),
                     run1_sha256: sha256_hex(first.raw_output.as_bytes()),
-                    run2_sha256: sha256_hex(second.raw_output.as_bytes()),
+                    run2_sha256,
                     normalized_run1: n1.clone(),
                     normalized_run2: n2.clone(),
                     stable: n1 == n2,
@@ -463,8 +494,7 @@ fn run() -> Result<(), String> {
                     runner::run_with_budget(solver, obligation, smt_path, Some(EXTENDED_BUDGET_S));
                 let file_name =
                     format!("o{:02}.{}.extended-{}s.out", index + 1, solver.name, EXTENDED_BUDGET_S);
-                fs::write(evidence_dir.join(&file_name), probe.raw_output.as_bytes())
-                    .map_err(|e| format!("could not write {file_name}: {e}"))?;
+                write_evidence(&evidence_dir.join(&file_name), &probe.raw_output)?;
                 let decided = probe.all_proven();
                 capability_probes.push(CapabilityProbe {
                     id: obligation.id.clone(),
@@ -495,10 +525,17 @@ fn run() -> Result<(), String> {
             }
         }
 
-        let witness = {
-            let normalized = z3_run.normalized_evidence();
-            if normalized.trim().is_empty() { None } else { Some(normalized) }
-        };
+        // Only a `sat` answer carries a WITNESS. A timeout or an error block is
+        // still evidence — it is on disk and in the chain — but it is not a
+        // countermodel, and `normalized_evidence()` renders it as whitespace-
+        // joined solver prose, which a non-empty check happily publishes under a
+        // field named `witness`. Gating on a proven Sat also stops the row from
+        // dropping a countermodel that only the challenger produced.
+        let witness = [&z3_run, &cvc5_run]
+            .into_iter()
+            .filter(|run| run.statuses.contains(&Status::Sat))
+            .map(|run| run.normalized_evidence())
+            .find(|text| !text.trim().is_empty());
 
         let binding_outcome = &binding_outcomes[index];
         let binding_agrees = if binding_outcome.binding == "expressed" {
@@ -531,6 +568,7 @@ fn run() -> Result<(), String> {
             binding_status: binding_outcome.status_summary.clone(),
             binding_agrees_with_cli: binding_agrees,
             proven,
+            deliberate_timeout: is_timeout_obligation,
             finding,
             finding_note,
             witness,
@@ -552,7 +590,7 @@ fn run() -> Result<(), String> {
         .collect();
     let capability: Vec<String> = rows
         .iter()
-        .filter(|r| r.divergence == "capability" && r.id != "O10")
+        .filter(|r| r.divergence == "capability" && !r.deliberate_timeout)
         .map(|r| format!("{} (z3={} cvc5={})", r.id, r.z3.status, r.cvc5.status))
         .collect();
     let with_findings: Vec<String> = rows
@@ -567,9 +605,16 @@ fn run() -> Result<(), String> {
         .collect();
 
     let binding_built = rows.iter().all(|r| r.binding == "expressed");
-    let binding_agrees = rows
+    let rows_agree = rows
         .iter()
         .all(|r| r.binding_agrees_with_cli.unwrap_or(true));
+    let binding_agrees: Option<bool> = if binding_built {
+        Some(rows_agree)
+    } else {
+        // No arm ran, so there is no agreement to report — and reporting one
+        // would let a gate pass on evidence that does not exist.
+        None
+    };
 
     let assertions = Assertions {
         solvers_agree_on_every_decidable_obligation: contradicting.is_empty(),
@@ -577,7 +622,7 @@ fn run() -> Result<(), String> {
         capability_divergences: capability.clone(),
         expected_statuses_hold_where_decided: rows
             .iter()
-            .all(|r| r.expected_holds || r.id == "O10" || !r.decided_by_both),
+            .all(|r| r.expected_holds || r.deliberate_timeout || !r.decided_by_both),
         obligations_with_findings: with_findings.clone(),
         o10_not_proven_on_at_least_one_solver: o10_not_proven_somewhere,
         o10_treated_as_not_proven_by_harness: !o10.proven,
@@ -591,8 +636,10 @@ fn run() -> Result<(), String> {
         && assertions.o10_not_proven_on_at_least_one_solver
         && assertions.o10_treated_as_not_proven_by_harness
         && assertions.countermodels_stable_across_two_runs
-        && assertions.expected_statuses_hold_where_decided
-        && binding_agrees;
+        // An arm that did not run cannot fail the criterion, so `None` is not a
+        // failure here — but it is not an assertion of agreement either, which
+        // is why the published field stays null.
+        && binding_agrees.unwrap_or(true);
 
     // Under the strict reading, any status mismatch counts against the
     // criterion, capability divergences included.
@@ -667,6 +714,8 @@ fn run() -> Result<(), String> {
         verdict_notes,
     };
 
+    verify_evidence_chain(&artifacts_dir, &report.obligations, &chains)?;
+
     write_json(&artifacts_dir.join("obligations-report.json"), &report)?;
     write_json(&artifacts_dir.join("chains.json"), &chains)?;
 
@@ -677,6 +726,61 @@ fn run() -> Result<(), String> {
     }
     println!();
     println!("artifacts: {}", artifacts_dir.display());
+    Ok(())
+}
+
+/// Re-derive every recorded evidence hash from the file it names.
+///
+/// The report's claim is that `evidenceSha256` is the sha256 of `evidenceFile`.
+/// This checks that claim against the bytes on disk at the end of the run, so a
+/// chain nobody can re-derive is a HARNESS DEFECT (exit non-zero) rather than a
+/// plausible-looking artifact. Two hashes coinciding is NOT a defect and is not
+/// flagged here: two runs that produced byte-identical output legitimately share
+/// an evidence hash — what must never happen is a hash that names no file.
+fn verify_evidence_chain(
+    artifacts_dir: &Path,
+    rows: &[ObligationRow],
+    chains: &[ChainRow],
+) -> Result<(), String> {
+    let mut recorded: Vec<(String, String, String)> = Vec::new();
+    for row in rows {
+        for (solver, cell) in [("z3", &row.z3), ("cvc5", &row.cvc5)] {
+            recorded.push((
+                format!("{}/{solver}", row.id),
+                cell.evidence_file.clone(),
+                cell.evidence_sha256.clone(),
+            ));
+        }
+    }
+
+    for (label, file, expected) in &recorded {
+        let path = artifacts_dir.join(file);
+        let bytes = fs::read(&path).map_err(|e| format!("{label}: cannot read {file}: {e}"))?;
+        let actual = sha256_hex(&bytes);
+        if &actual != expected {
+            return Err(format!(
+                "{label}: recorded evidenceSha256 {expected} does not name {} (sha256 {actual})",
+                path.display()
+            ));
+        }
+    }
+
+    // The chain artifact copies those hashes; check it did not drift from them.
+    for chain in chains {
+        let label = format!("{}/{}", chain.id, chain.solver);
+        let matched = recorded
+            .iter()
+            .any(|(row_label, _, sha)| row_label == &label && sha == &chain.evidence_sha256);
+        if !matched {
+            return Err(format!(
+                "{label}: chains.json evidenceSha256 {} does not match the report row",
+                chain.evidence_sha256
+            ));
+        }
+    }
+
+    let count = recorded.len();
+    println!("evidence chain: {count} hashes re-derived from disk");
     Ok(())
 }
 
@@ -698,6 +802,10 @@ fn probe_dialect(
     cvc5: &SolverSpec,
     dir: &Path,
 ) -> Result<Vec<DialectRow>, String> {
+    // Wall budget for a dialect probe. The probe scripts are three lines each,
+    // so this is an outer bound, not a working budget.
+    const PROBE_BUDGET_S: u32 = 10;
+
     let tab = char::from(9u8);
 
     // Probe 1 — a RAW control byte inside a string literal.
@@ -713,6 +821,40 @@ fn probe_dialect(
     // Probe 3 — push/pop without any incrementality flag.
     let push_pop = "(set-logic QF_SLIA)\n(declare-const s String)\n(push 1)\n(assert (= s \"a\"))\n(check-sat)\n(pop 1)\n(check-sat)\n".to_string();
 
+    // MACHINE-PATH REDACTION, applied at the CAPTURE point so every recorded
+    // string is covered by construction: cvc5 echoes the absolute script path in
+    // its parse errors, and that text becomes both a `.out` replay file and a
+    // D-row cell in the committed report. Redacting downstream would mean
+    // remembering to do it at each recorder; redacting here means a new recorder
+    // cannot reintroduce the leak.
+    //
+    // `dir` is `<root>/spikes/spine-adopt/smt/artifacts/dialect-probes`, so its
+    // 5th ancestor is the worktree root. A missing ancestor is a HARNESS DEFECT
+    // rather than a silent pass-through — silence there would publish the
+    // author's directory layout into a committed artifact.
+    let worktree_root = dir
+        .ancestors()
+        .nth(5)
+        .ok_or_else(|| {
+            format!(
+                "cannot derive the worktree root from the probes directory {} — refusing to \
+                 record solver output that may carry an absolute path",
+                dir.display()
+            )
+        })?
+        .to_string_lossy()
+        .to_string();
+    // Both separator spellings: the solver echoes the path in the form it was
+    // given (native), but nothing guarantees a future solver prints it that way.
+    let worktree_root_slashed = worktree_root.replace('\\', "/");
+    let redact = |text: &str| -> String {
+        let mut out = text.replace(&worktree_root, "<worktree>");
+        if worktree_root_slashed != worktree_root {
+            out = out.replace(&worktree_root_slashed, "<worktree>");
+        }
+        out
+    };
+
     let mut results: BTreeMap<&str, (String, String)> = BTreeMap::new();
     for (name, body) in [
         ("raw-control-byte", &raw_tab),
@@ -723,22 +865,32 @@ fn probe_dialect(
         fs::write(&path, body).map_err(|e| format!("write probe {name}: {e}"))?;
         let mut answers = Vec::new();
         for solver in [z3, cvc5] {
+            // The probes run BEFORE any obligation and call `.output()`, which
+            // blocks until the child exits — so unlike `runner::run_with_budget`
+            // there is no outer kill behind them. They therefore carry the
+            // solver's own timeout flag: a probe that did not terminate would
+            // otherwise wedge the whole harness with no artifacts written.
             let out = std::process::Command::new(&solver.exe)
                 .args(match solver.name {
-                    "z3" => vec!["-smt2".to_string(), path.to_string_lossy().to_string()],
+                    "z3" => vec![
+                        "-smt2".to_string(),
+                        format!("-T:{PROBE_BUDGET_S}"),
+                        path.to_string_lossy().to_string(),
+                    ],
                     _ => vec![
                         "--lang".to_string(),
                         "smt2".to_string(),
+                        format!("--tlimit={}", PROBE_BUDGET_S * 1000),
                         path.to_string_lossy().to_string(),
                     ],
                 })
                 .output()
                 .map_err(|e| format!("probe {name} on {}: {e}", solver.name))?;
-            let text = format!(
+            let text = redact(&runner::normalize_line_endings(&format!(
                 "{}{}",
                 String::from_utf8_lossy(&out.stdout),
                 String::from_utf8_lossy(&out.stderr)
-            );
+            )));
             let first = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("<no output>");
             answers.push(first.trim().to_string());
             fs::write(dir.join(format!("{name}.{}.out", solver.name)), text.as_bytes())
@@ -751,12 +903,50 @@ fn probe_dialect(
     let (esc_z3, esc_cvc5) = results["unicode-escape"].clone();
     let (pp_z3, pp_cvc5) = results["push-pop-no-flags"].clone();
 
+    // D1 and D2 report on the two probes whose cells are MEASURED, so their
+    // prose is DERIVED from those same two answers rather than asserted beside
+    // them. Fixed text would let a pinned-solver update publish a claim the
+    // cells next to it contradict — the exact failure the module doc rules out.
+    //
+    // The prose reports the CLASSIFICATION of each answer, not the answer
+    // verbatim: the raw text is already in the cell beside it, and a solver's
+    // parse error carries the script path (redacted to `<worktree>` above, but
+    // still noise), which has no business being duplicated into the finding.
+    let verdict = |answer: &str| {
+        if answer.starts_with("(error") {
+            "REJECTED it"
+        } else if matches!(answer, "sat" | "unsat" | "unknown") {
+            "ACCEPTED it"
+        } else {
+            "gave an unclassified answer"
+        }
+    };
+    let agreement = |a: &str, b: &str| {
+        if verdict(a) == verdict(b) {
+            "AGREE"
+        } else {
+            "DIVERGE"
+        }
+    };
+    let d1_finding = format!(
+        "probe — is a RAW control byte inside an SMT-LIB string literal accepted? MEASURED: z3 {}, \
+         cvc5 {}; the two solvers {} (raw answers in the cells beside this one).",
+        verdict(&raw_z3),
+        verdict(&raw_cvc5),
+        agreement(&raw_z3, &raw_cvc5)
+    );
+    let d2_finding = format!(
+        "probe — is push/pop accepted with NO incrementality flag? MEASURED: z3 {}, cvc5 {}; the \
+         two solvers {} (raw answers in the cells beside this one).",
+        verdict(&pp_z3),
+        verdict(&pp_cvc5),
+        agreement(&pp_z3, &pp_cvc5)
+    );
+
     let mut rows = vec![
         DialectRow {
             id: "D1".into(),
-            finding: "a RAW control byte inside an SMT-LIB string literal is accepted by one \
-                      solver and rejected by the other"
-                .into(),
+            finding: d1_finding,
             z3: raw_z3,
             cvc5: raw_cvc5,
             portable_encoding: format!(
@@ -767,9 +957,7 @@ fn probe_dialect(
         },
         DialectRow {
             id: "D2".into(),
-            finding: "push/pop requires an explicit incrementality flag on one solver and none on \
-                      the other"
-                .into(),
+            finding: d2_finding,
             z3: pp_z3,
             cvc5: pp_cvc5,
             portable_encoding: "the harness passes --incremental to cvc5 whenever an obligation \

@@ -399,10 +399,22 @@ async function main(): Promise<void> {
       ],
       probeDir,
     );
-    const goResult = JSON.parse(goRun.stdout).result[0].expressions[0].value as Record<
-      string,
-      boolean
-    >;
+    // Every other `opa` call site in this file guards on `status` first. Without
+    // it a non-zero exit yields `stdout === ''`, `JSON.parse` throws
+    // "Unexpected end of JSON input", and OPA's real diagnostic — which is on
+    // stderr — is never printed. Same for a body that binds nothing: `.result`
+    // is absent and the property chain throws a TypeError instead of naming the
+    // problem.
+    if (goRun.status !== 0) {
+      throw new Error(`engine probe \`opa eval\` failed: ${goRun.stderr || goRun.stdout}`);
+    }
+    const goRows = JSON.parse(goRun.stdout).result as
+      | { expressions: { value: Record<string, boolean> }[] }[]
+      | undefined;
+    if (!Array.isArray(goRows) || goRows.length !== 1) {
+      throw new Error(`engine probe \`opa eval\` returned no single result: ${goRun.stdout}`);
+    }
+    const goResult = goRows[0]!.expressions[0]!.value;
 
     for (const [k] of pats) {
       engineProbes.push({

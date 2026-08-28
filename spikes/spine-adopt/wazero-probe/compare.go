@@ -14,7 +14,9 @@ package main
 //   - the shipped event context's `line` is the line NUMBER, while the shipped
 //     Violation's `line` is the matched TEXT — projecting the wrong one would
 //     compare strings against integers and always diverge;
-//   - `fired` and `matchCount` must DERIVE from the multiset, checked not assumed;
+//   - `fired` and `matchCount` must DERIVE from the multiset, checked not assumed,
+//     and checked on EVERY pair before any classification — an explained
+//     divergence is not an excuse to stop looking at the derived fields;
 //   - an ERROR ROW on either side is a divergence, never a clean zero;
 //   - exactly ONE explanation class is registered: ORDINAL-DERIVATION-ONLY.
 //
@@ -250,25 +252,34 @@ func comparePair(left, right normalRow) pairResult {
 		return base
 	}
 
+	// `fired` and `matchCount` must DERIVE from the violation multiset on BOTH
+	// arms — checked HERE, before either classification branch, because it is a
+	// property of each row on its own and not of the pair. Checking it only inside
+	// the equal-multiset branch left the explanation branch able to wave through a
+	// row whose derived fields were wrong: an ordinal-only divergence carrying an
+	// invalid `matchCount` came back EXPLAINED-DIVERGENCE ("not a semantic
+	// divergence") on the strength of a multiset comparison that never looked at
+	// the field that was wrong.
+	firedOK := left.Fired != nil && right.Fired != nil &&
+		*left.Fired == (len(left.Violations) > 0) && *right.Fired == (len(right.Violations) > 0)
+	countOK := left.MatchCount != nil && right.MatchCount != nil &&
+		*left.MatchCount == len(left.Violations) && *right.MatchCount == len(right.Violations)
+	if !firedOK || !countOK {
+		base.Status = statusUnexplained
+		base.Detail = map[string]any{
+			"reason": "`fired`/`matchCount` do not DERIVE from the violation multiset on one of the arms (§ Differential units)",
+			"left":   map[string]any{"fired": left.Fired, "matchCount": left.MatchCount, "violations": len(left.Violations)},
+			"right":  map[string]any{"fired": right.Fired, "matchCount": right.MatchCount, "violations": len(right.Violations)},
+		}
+		return base
+	}
+
 	lv, rv := strictKeys(left.Violations), strictKeys(right.Violations)
 	le, re := eventKeys(left.Events), eventKeys(right.Events)
 	violationsEqual := multisetEqual(lv, rv)
 	eventsEqual := multisetEqual(le, re)
 
 	if violationsEqual && eventsEqual {
-		firedOK := left.Fired != nil && right.Fired != nil &&
-			*left.Fired == (len(left.Violations) > 0) && *right.Fired == (len(right.Violations) > 0)
-		countOK := left.MatchCount != nil && right.MatchCount != nil &&
-			*left.MatchCount == len(left.Violations) && *right.MatchCount == len(right.Violations)
-		if !firedOK || !countOK {
-			base.Status = statusUnexplained
-			base.Detail = map[string]any{
-				"reason": "`fired`/`matchCount` do not DERIVE from the violation multiset on one of the arms (§ Differential units)",
-				"left":   map[string]any{"fired": left.Fired, "matchCount": left.MatchCount, "violations": len(left.Violations)},
-				"right":  map[string]any{"fired": right.Fired, "matchCount": right.MatchCount, "violations": len(right.Violations)},
-			}
-			return base
-		}
 		base.Status = statusMatch
 		return base
 	}
@@ -370,6 +381,17 @@ func selfTest(ck *checks) {
 				r.Arm = "shipped"
 				r.Violations = []violation{{"d0815b6769304e26", 2, 1}, {"d0815b6769304e26", 3, 0}}
 			}), statusExplained},
+		// Two axes at once: the ONE divergence class this comparator is allowed to
+		// explain away, carried by a row whose `matchCount` does not derive. The
+		// explanation must not swallow the second defect — before the derivation
+		// check was hoisted out of the equal-multiset branch, this mutant came back
+		// EXPLAINED.
+		{"MUTANT — an ORDINAL-ONLY permutation carrying a NON-DERIVING `matchCount` is UNEXPLAINED (the explanation branch does not skip the derivation check)",
+			base(nil), base(func(r *normalRow) {
+				r.Arm = "shipped"
+				r.Violations = []violation{{"d0815b6769304e26", 2, 1}, {"d0815b6769304e26", 3, 0}}
+				r.MatchCount = intPtr(7)
+			}), statusUnexplained},
 	}
 
 	for _, m := range mutants {
@@ -397,9 +419,23 @@ func (c *checks) check(name string, ok bool, detail string) {
 	c.Rows = append(c.Rows, r)
 }
 
+// eq compares two values by their canonical JSON.
+//
+// A marshal failure FAILS the check rather than being discarded: `json.Marshal`
+// returns an empty slice on error, so swallowing it would compare "" against ""
+// and record `Passed: true` — a check that cannot fail, which is worse than no
+// check at all in a falsifier whose whole value is that its assertions can fail.
 func (c *checks) eq(name string, got, want any) {
-	g, _ := json.Marshal(got)
-	w, _ := json.Marshal(want)
+	g, err := json.Marshal(got)
+	if err != nil {
+		c.check(name, false, fmt.Sprintf("the `got` value could not be marshalled, so this check could not be evaluated: %v", err))
+		return
+	}
+	w, err := json.Marshal(want)
+	if err != nil {
+		c.check(name, false, fmt.Sprintf("the `want` value could not be marshalled, so this check could not be evaluated: %v", err))
+		return
+	}
 	c.check(name, string(g) == string(w), fmt.Sprintf("got %s, want %s", g, w))
 }
 

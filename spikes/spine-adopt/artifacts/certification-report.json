@@ -899,7 +899,7 @@
     "hostFailureRules": {
       "wasmtime (rust-opa-wasm)": "host/src/main.rs `entrypoint_value` then `read_result`, executed inside `run_certify_arm` (the SAME two functions `run_opa_arm` uses) and reported per evaluation as `failureRuleVerdict`. An empty result SET, a non-array set, a set of length ≠ 1, a non-object result, a missing violations/events key, or a non-array value for either key is an ERROR, never a zero-violation verdict.",
       "regorus": "host/src/main.rs `run_certify_arm`'s regorus block, reported as `failureRuleVerdict`: `set_strict_builtin_errors(true)`; an Err from `eval_rule`, a null/`<undefined>`/non-object value (the `run_regorus_arm` rejection, main.rs:440-443), then `read_result` — the same chain the normal regorus arm applies.",
-      "wazero": "wazero-probe/main.go `entrypointValue`, called by conformance.go `runConformanceCase` — an empty result set is an ERROR raised in Go, and the `opa_builtin*` stubs panic rather than fabricate a return value (the conformance mode recovers the panic into an error ROW so the failure is data, not a dead process)."
+      "wazero": "wazero-probe/main.go `entrypointValue` + `readResult`, called by conformance.go `runConformanceCase` — an empty result set is an ERROR raised in Go, a result whose SHAPE is not `{violations[], events[]}` is rejected by the same `readResult` the differential run uses, and the `opa_builtin*` stubs panic rather than fabricate a return value (the conformance mode recovers the panic into an error ROW so the failure is data, not a dead process)."
     },
     "rows": [
       {
@@ -921,7 +921,7 @@
             "cleanZero": false,
             "kind": "eval-error",
             "detail": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result):",
-            "hostError": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result): \n--> D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\spikes\\spine-adopt\\rego\\certify-fixtures\\neg-lookahead\\policy.rego:59:29\n   |\n59 | \tis_boolean(regex.match(\"(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\\\|\\\\|).)*\\\\|\\\\|\\\\s*true\", \"\"))\n   |                             ^\nerror: invalid regex",
+            "hostError": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result): \n--> spikes/spine-adopt/rego/certify-fixtures/neg-lookahead/policy.rego:59:29\n   |\n59 | \tis_boolean(regex.match(\"(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\\\|\\\\|).)*\\\\|\\\\|\\\\s*true\", \"\"))\n   |                             ^\nerror: invalid regex",
             "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
           },
           {
@@ -931,7 +931,7 @@
             "kind": "empty-result-set",
             "detail": "result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
             "hostError": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
-            "hostErrorSource": "wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`"
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
           }
         ]
       },
@@ -954,7 +954,7 @@
             "cleanZero": false,
             "kind": "eval-error",
             "detail": "regorus eval_rule(data.totem.spike.certfix_backreference.result):",
-            "hostError": "regorus eval_rule(data.totem.spike.certfix_backreference.result): \n--> D:\\Dev\\worktrees\\totem-totem-claude-spine-spike\\spikes\\spine-adopt\\rego\\certify-fixtures\\backreference\\policy.rego:57:29\n   |\n57 | \tis_boolean(regex.match(\"\\\\bmodel\\\\w*\\\\b.*(['\\\"\\\\/])\\\\^?\\\\[[a-zA-Z0-9\\\\-_]+\\\\][*+]\\\\$?\\\\1\", \"\"))\n   |                             ^\nerror: invalid regex",
+            "hostError": "regorus eval_rule(data.totem.spike.certfix_backreference.result): \n--> spikes/spine-adopt/rego/certify-fixtures/backreference/policy.rego:57:29\n   |\n57 | \tis_boolean(regex.match(\"\\\\bmodel\\\\w*\\\\b.*(['\\\"\\\\/])\\\\^?\\\\[[a-zA-Z0-9\\\\-_]+\\\\][*+]\\\\$?\\\\1\", \"\"))\n   |                             ^\nerror: invalid regex",
             "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
           },
           {
@@ -964,7 +964,7 @@
             "kind": "empty-result-set",
             "detail": "result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
             "hostError": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
-            "hostErrorSource": "wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`"
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
           }
         ]
       },
@@ -975,7 +975,7 @@
           {
             "host": "wasmtime (rust-opa-wasm)",
             "errored": false,
-            "cleanZero": false,
+            "cleanZero": true,
             "kind": "well-formed",
             "detail": "result: ok; side_result: ok",
             "hostError": null,
@@ -997,7 +997,7 @@
             "kind": "value",
             "detail": "result: len=1; side_result: len=1",
             "hostError": null,
-            "hostErrorSource": "wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`"
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
           }
         ]
       },
@@ -1030,7 +1030,7 @@
             "kind": "eval-error",
             "detail": "result: eval: opa_builtin3 was CALLED with builtin id 2 — the ABI census says these policies delegate NO builtin to the host, so this is either a stale census or a policy outside the surveyed set. Refusing to fabricate a return value. (recovered by wazero)",
             "hostError": "eval: opa_builtin3 was CALLED with builtin id 2 — the ABI census says these policies delegate NO builtin to the host, so this is either a stale census or a policy outside the surveyed set. Refusing to fabricate a return value. (recovered by wazero)\nwasm stack trace:\n\topa_host.opa_builtin3(i32,i32,i32,i32,i32) i32\n\topa.wasm.g0.data.totem.spike.certctl_eval_error.hits(i32,i32) i32\n\topa.wasm.g0.data.totem.spike.certctl_eval_error.result(i32,i32) i32\n\topa.wasm.eval(i32) i32",
-            "hostErrorSource": "wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`"
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
           }
         ]
       },
@@ -1058,12 +1058,12 @@
           },
           {
             "host": "wazero",
-            "errored": false,
+            "errored": true,
             "cleanZero": false,
-            "kind": "value",
-            "detail": "result: len=1",
-            "hostError": null,
-            "hostErrorSource": "wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`"
+            "kind": "eval-error",
+            "detail": "result: entrypoint result is not an object: \"certification must refuse a non-object result\"",
+            "hostError": "entrypoint result is not an object: \"certification must refuse a non-object result\"",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
           }
         ]
       },
@@ -1091,12 +1091,12 @@
           },
           {
             "host": "wazero",
-            "errored": false,
+            "errored": true,
             "cleanZero": false,
-            "kind": "value",
-            "detail": "result: len=1",
-            "hostError": null,
-            "hostErrorSource": "wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`"
+            "kind": "eval-error",
+            "detail": "result: entrypoint result is missing `events`: {\"violations\":[]}",
+            "hostError": "entrypoint result is missing `events`: {\"violations\":[]}",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
           }
         ]
       },
@@ -1129,7 +1129,7 @@
             "kind": "value",
             "detail": "result: len=1",
             "hostError": null,
-            "hostErrorSource": "wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`"
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
           }
         ]
       },
@@ -1157,12 +1157,12 @@
           },
           {
             "host": "wazero",
-            "errored": false,
+            "errored": true,
             "cleanZero": false,
-            "kind": "value",
-            "detail": "result: len=1",
-            "hostError": null,
-            "hostErrorSource": "wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`"
+            "kind": "eval-error",
+            "detail": "result: entrypoint result `violations` is not an array: {\"violations\":\"none\",\"events\":[]}",
+            "hostError": "entrypoint result `violations` is not an array: {\"violations\":\"none\",\"events\":[]}",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
           }
         ]
       }
@@ -1390,15 +1390,15 @@
       "evaluations": [
         {
           "entrypoint": "totem/spike/certctl_non_object/result",
-          "ok": true,
-          "error": null,
+          "ok": false,
+          "error": "entrypoint result is not an object: \"certification must refuse a non-object result\"",
           "resultSet": [
             {
               "result": "certification must refuse a non-object result"
             }
           ],
           "resultSetLength": 1,
-          "result": "certification must refuse a non-object result"
+          "result": null
         }
       ]
     },
@@ -1416,8 +1416,8 @@
       "evaluations": [
         {
           "entrypoint": "totem/spike/certctl_missing_keys/result",
-          "ok": true,
-          "error": null,
+          "ok": false,
+          "error": "entrypoint result is missing `events`: {\"violations\":[]}",
           "resultSet": [
             {
               "result": {
@@ -1426,9 +1426,7 @@
             }
           ],
           "resultSetLength": 1,
-          "result": {
-            "violations": []
-          }
+          "result": null
         }
       ]
     },
@@ -1480,8 +1478,8 @@
       "evaluations": [
         {
           "entrypoint": "totem/spike/certctl_malformed_keys/result",
-          "ok": true,
-          "error": null,
+          "ok": false,
+          "error": "entrypoint result `violations` is not an array: {\"violations\":\"none\",\"events\":[]}",
           "resultSet": [
             {
               "result": {
@@ -1491,10 +1489,7 @@
             }
           ],
           "resultSetLength": 1,
-          "result": {
-            "violations": "none",
-            "events": []
-          }
+          "result": null
         }
       ]
     }
@@ -1901,7 +1896,7 @@
       "detail": "empty-result-set — result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
     },
     {
-      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on wazero: the error row is HOST-ORIGINATED — a non-empty error string from wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`",
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on wazero: the error row is HOST-ORIGINATED — a non-empty error string from wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`",
       "ok": true,
       "detail": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
     },
@@ -1946,7 +1941,7 @@
       "detail": "empty-result-set — result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
     },
     {
-      "name": "ALL-HOSTS FAILURE RULE — backreference on wazero: the error row is HOST-ORIGINATED — a non-empty error string from wazero-probe/main.go `entrypointValue`, executed by conformance.go `runConformanceCase`",
+      "name": "ALL-HOSTS FAILURE RULE — backreference on wazero: the error row is HOST-ORIGINATED — a non-empty error string from wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`",
       "ok": true,
       "detail": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
     },
@@ -1954,6 +1949,26 @@
       "name": "ALL-HOSTS FAILURE RULE — backreference on wazero: NEVER a clean zero",
       "ok": true,
       "detail": "no clean-zero verdict"
+    },
+    {
+      "name": "CLEAN-ZERO CONTROL — the positive fixture reached the all-hosts table",
+      "ok": true,
+      "detail": "3 host(s)"
+    },
+    {
+      "name": "CLEAN-ZERO CONTROL — two-entrypoints on wasmtime (rust-opa-wasm): a valid zero-violation result IS recognised as a clean zero (so the `NEVER a clean zero` rows above are not vacuous)",
+      "ok": true,
+      "detail": "cleanZero=true errored=false — result: ok; side_result: ok"
+    },
+    {
+      "name": "CLEAN-ZERO CONTROL — two-entrypoints on regorus: a valid zero-violation result IS recognised as a clean zero (so the `NEVER a clean zero` rows above are not vacuous)",
+      "ok": true,
+      "detail": "cleanZero=true errored=false — {\"events\":[],\"violations\":[]}"
+    },
+    {
+      "name": "CLEAN-ZERO CONTROL — two-entrypoints on wazero: a valid zero-violation result IS recognised as a clean zero (so the `NEVER a clean zero` rows above are not vacuous)",
+      "ok": true,
+      "detail": "cleanZero=true errored=false — result: len=1; side_result: len=1"
     },
     {
       "name": "CLASSIFIER — all FIVE typed blocked reasons are REACHABLE and observed in this run",

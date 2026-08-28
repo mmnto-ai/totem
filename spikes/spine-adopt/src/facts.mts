@@ -143,7 +143,17 @@ async function main(): Promise<void> {
 
     if (!s.fixture) continue;
     const abs = fixtureAbsPath(s.fixture);
-    checks.check(`specimen ${s.id} — fixture exists: ${s.fixture.file}`, fs.existsSync(abs), abs);
+    // The recorded DETAIL is repo-relative with `/` separators. `abs` is a host
+    // path, so writing it here would stamp the operator's worktree layout into
+    // committed evidence and make the artifact differ between the Windows and
+    // Linux matrix arms for the same commit — i.e. not byte-comparable.
+    const rel = path.relative(REPO_ROOT, abs).split(path.sep).join('/');
+    const exists = fs.existsSync(abs);
+    checks.check(`specimen ${s.id} — fixture exists: ${s.fixture.file}`, exists, rel);
+    // Without this guard the readFileSync below throws ENOENT BEFORE
+    // `checks.finish('facts')` writes any row, so the check that just diagnosed
+    // the problem never reaches the operator — they get a raw stack trace instead.
+    if (!exists) continue;
     const parsed = core.parseFixture(fs.readFileSync(abs, 'utf-8'), abs);
     checks.check(
       `specimen ${s.id} — parseFixture returned a fixture`,

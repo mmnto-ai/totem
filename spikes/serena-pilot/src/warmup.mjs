@@ -22,7 +22,7 @@ try {
   console.log('\ncold find_symbol (pays for LSP bring-up + indexing)...');
   const cold = await client.callTool(
     'find_symbol',
-    { name_path: 'compileRuleRecord', relative_path: '.' },
+    { name_path_pattern: 'compileRuleRecord', relative_path: '.' },
     { timeoutMs: 900000 },
   );
   console.log(`  cold: ${cold.ms.toFixed(0)}ms, ${cold.bytes} bytes, isError=${cold.isError}`);
@@ -32,7 +32,7 @@ try {
   console.log('\nwarm find_symbol (same call again)...');
   const warm = await client.callTool(
     'find_symbol',
-    { name_path: 'compileRuleRecord', relative_path: '.' },
+    { name_path_pattern: 'compileRuleRecord', relative_path: '.' },
     { timeoutMs: 300000 },
   );
   console.log(`  warm: ${warm.ms.toFixed(0)}ms, ${warm.bytes} bytes, isError=${warm.isError}`);

@@ -22,7 +22,7 @@
 
 (declare-const s String)
 
-; ── check: engineered-past-the-budget (expect measured) ─────────────────────────────────
+; ── check: engineered-past-the-budget (expect not-proven) ─────────────────────────────────
 (assert (str.in_re s (re.inter (re.* ((_ re.loop 3 3) (re.range "a" "z"))) (re.* ((_ re.loop 7 7) (re.range "a" "z"))) (re.comp (re.* ((_ re.loop 5 5) (re.range "a" "z")))) (re.* ((_ re.loop 11 11) (re.range "a" "z"))) (re.comp (re.* ((_ re.loop 13 13) (re.range "a" "z")))) (re.++ ((_ re.loop 150 150) (re.range "a" "z")) (re.* (re.range "a" "z"))))))
 (check-sat)
 (get-model)

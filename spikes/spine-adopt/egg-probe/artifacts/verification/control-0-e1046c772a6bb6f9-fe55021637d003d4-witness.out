@@ -23,4 +23,4 @@ sat
   (define-fun s () String
     "ppnpm bin`")
 )
-; verdict=sat elapsedMs=20
+; verdict=sat elapsedMs=19
