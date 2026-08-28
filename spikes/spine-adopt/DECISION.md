@@ -26,8 +26,17 @@ path already refuses the lookbehind one (safe-regex2), so the _record-era_ gap i
 **Hazards a production adoption must carry:**
 
 1. `opa build -t wasm` has **no strict mode** — an uncompilable builtin call builds (exit 0) and
-   fails OPEN at eval (empty result, no trap). Cure shipped in the lowering: a `patterns_compile`
-   probe inside the complete `result` rule + host raising undefined-result as an error.
+   fails OPEN at eval (empty result, no trap). The `patterns_compile` guard + the host's
+   empty-result→error-row mapping is a real structural cure, but it fires at ENTRYPOINT
+   EVALUATION — evaluation-loud, not compile-loud (codex MATERIAL 1; the earlier "cured in the
+   lowering" was one phase too strong). **Production contract — BINDING condition 1 of the
+   2026-08-28 conditional adoption word:** certification MUST evaluate every emitted entrypoint
+   against a schema-valid sentinel FactBundle BEFORE artifact publication; empty / undefined /
+   error / non-object / missing result keys BLOCK the artifact and its certificate; the guard
+   lives in the only exported result path; every host retains the failure rule; negative
+   conformance fixtures exercise unsupported patterns on all hosts; the certificate chain binds
+   source · IR · guarded policy · entrypoint/import manifest · final Wasm hash. With the actuator
+   normative, the mechanism is compile-loud at PIPELINE altitude.
 2. regorus's regex capability is a property of the CONSUMER's dependency graph (it declares
    `regex` with default-features off; without host-side `unicode-perl`, 10/24 rows error). As a
    reference oracle it must be pinned WITH its feature graph.
@@ -36,19 +45,22 @@ path already refuses the lookbehind one (safe-regex2), so the _record-era_ gap i
 
 ### Spike 2 — solver-neutral Z3/cvc5: **PASS** (capability ruling recorded)
 
-| Criterion                                 | Result                                                                                                                                                                                                                                                                                                                                                                      | Artifact                                |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Z3 and cvc5 agree on SAT/UNSAT            | 9/10 decided by both, **zero semantic contradictions**; O9/O10 = explained capability bounds (cvc5 timeout), ruled not-disagreement (`smt/OBLIGATIONS.md` § Ruling)                                                                                                                                                                                                         | `smt/artifacts/obligations-report.json` |
-| countermodels stable                      | 14/14 rows byte-stable across two runs per solver                                                                                                                                                                                                                                                                                                                           | same                                    |
-| unsat-core/proof material binds the chain | 20 chain rows: obligation→SMT-LIB→evidence sha256; emission byte-deterministic                                                                                                                                                                                                                                                                                              | `smt/artifacts/chains.json`             |
-| timeouts fail closed                      | O10 verified: timeout/unknown ⇒ NOT-PROVEN, no pass-through; outer kill backstop                                                                                                                                                                                                                                                                                            | report + `smt/src/runner.rs`            |
-| static/vendored builds Windows+Linux      | Windows: **z3 binding BUILDS on MSVC** (10/10 obligations via API, all agree with CLI); **cvc5 binding does NOT build** (bindgen libclang + no MSVC import lib in the pinned distribution) → challenger runs at the SMT-LIB process boundary. Linux: **binding arm GREEN in CI** (run 33138382926) — z3 binding builds+runs on BOTH platforms; cvc5 CLI floor green on both | `smt/` crate, CI                        |
+| Criterion                                 | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Artifact                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| Z3 and cvc5 agree on SAT/UNSAT            | **8/10 decided by both** (O9 z3-only, O10 the deliberate fail-closed timeout — corrected per codex verification; the artifact records `decidedByBoth: false` for both), **zero semantic contradictions**; O9/O10 = explained capability bounds, ruled not-disagreement (`smt/OBLIGATIONS.md` § Ruling)                                                                                                                                                                                                                                                             | `smt/artifacts/obligations-report.json` |
+| countermodels stable                      | 14/14 rows byte-stable across two runs per solver                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | same                                    |
+| unsat-core/proof material binds the chain | 20 chain rows: obligation→SMT-LIB→evidence sha256; emission byte-deterministic                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `smt/artifacts/chains.json`             |
+| timeouts fail closed                      | O10 verified: timeout/unknown ⇒ NOT-PROVEN, no pass-through; outer kill backstop                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | report + `smt/src/runner.rs`            |
+| static/vendored builds Windows+Linux      | Windows: **z3 binding BUILDS on MSVC** (10/10 obligations via API, all agree with CLI); **cvc5 binding does NOT build** (bindgen libclang + no MSVC import lib in the pinned distribution) → challenger runs at the SMT-LIB process boundary. Linux: **binding arm GREEN in CI** (run 33138382926) — z3 binding builds+runs on BOTH platforms; cvc5 CLI floor green on both; the cvc5 Linux BINDING is UNPROBED (only the CLI ran on Linux — the deposit mail's "builds on neither platform" overstated; measured = Windows binding fails, Linux binding untested) | `smt/` crate, CI                        |
 
 **The adoption-shaping findings:**
 
 1. **D6 encoding sensitivity:** one logically redundant assertion moved cvc5 from 34ms SAT to
    undecided at 300s (z3 indifferent). A lowerer emitting redundant guards makes the challenger
-   unusable; encoding discipline is a first-class constraint.
+   unusable; encoding discipline is a first-class constraint. Pre-cure specimen committed
+   one-command-replayable: `smt/obligations/o07-pre-cure-d6.smt2`. Proof-lowerer implication:
+   canonical, deterministic constraint construction (normalized order, implied-guard dedupe, hash
+   of the canonical form, a D6-shaped regression); cvc5 timeout/unknown/error = NOT-PROVEN, always.
 2. cvc5 = **budgeted corroboration, never a gate** (smaller decidable set, process-boundary only on
    Windows).
 3. The naive `\b`→`[^\w]` desugar is **provably not language-preserving** (line-edge witness); the
@@ -74,8 +86,9 @@ shared-e-graph arms, and 9 of the 19 locally-proven rules never fired on the rea
 decisive control: congruence closure + canonical char-class sets ALONE deliver 161 of the 162→160
 dedup — e-graph rewriting earned exactly one merge over free hash-consing. Adoption consequence:
 build the Spine IR with canonicalizing constructors (n-ary flattened, hash-consed, canonical
-classes) and skip the e-graph engine; egg's verified-equivalence HARNESS pattern (egg proposes, Z3
-disposes) is the reusable idea. `egg-probe/artifacts/egg-report.json`.
+classes) and skip the e-graph engine — SCOPED to this V1 corpus and ruleset, with a measured re-open
+tripwire: rewrite yield materially exceeding the congruence null without the AC cost; egg's
+verified-equivalence HARNESS pattern (egg proposes, Z3 disposes) is the reusable idea. `egg-probe/artifacts/egg-report.json`.
 
 ### Enrichment — wasm validation/mutation (wasm-tools 1.258.0): **DONE**
 
@@ -100,6 +113,19 @@ validation only catches corruption.** `artifacts/wasm-validation-mutation.json`.
 5. Component-model wait for the Go lane — rejected as unnecessary (core wasm suffices).
 6. `--strict-builtin-errors` as the wasm strictness story — impossible (eval-only flag);
    structural strictness instead.
+
+## Ruling of record (2026-08-28) + codex verification fold
+
+Strategy-codex independently replayed the deposit at `c7c59334`: **BLOCKING none** — every measured
+target choice reproduced. Its 3 MATERIAL + 2 MINOR wording corrections are folded into this
+revision (evaluation-loud vs compile-loud + the actuator contract; 8/10; cvc5 Linux-binding
+unprobed; the D6 specimen; e-graph scoping). Operator word 2026-08-28: **CONDITIONAL adoption of
+the spike targets**, void where either binding condition is unmet — (1) the pre-publication
+strictness actuator is normative (Spike-1 hazard 1 above) and is the lane's first slice; (2)
+ADR-103 R14's frozen seed-20 trial remains the binding V1 gate (>=15/20 express cleanly; a typed
+disposition for every miss) — the 177/226 census is a compilation-target boundary, not corpus
+coverage, and lifts no freeze; every inexpressible pattern is typed and routed, none disappears.
+Codification: ADR-103 amendment (strategy lane) citing this revision's sha.
 
 ## Recommendation (drafted; final after pending rows)
 
