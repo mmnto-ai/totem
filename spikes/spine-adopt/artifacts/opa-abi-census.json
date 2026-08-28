@@ -1,0 +1,1699 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+  "contract": "rego/LOWERING.md § Host contract (\"enumerates EVERY import the wasm instance requires\") + spec § Spike 1 (\"all imports/builtins enumerated\"; \"Census required builtins and OPA ABI imports BEFORE choosing the host path\")",
+  "opaVersion": "1.20.0",
+  "headline": {
+    "hostImplementedBuiltinsAcrossAll7": [],
+    "distinctImportsAcrossAll7": [
+      "env.memory:memory",
+      "env.opa_abort:function",
+      "env.opa_builtin0:function",
+      "env.opa_builtin1:function",
+      "env.opa_builtin2:function",
+      "env.opa_builtin3:function",
+      "env.opa_builtin4:function"
+    ],
+    "finding": "ZERO host-implemented builtins across all 7 policies. `regex.match` — the builtin that decides every verdict in this spike — is COMPILED NATIVELY INTO THE WASM by `opa build`, not delegated to the host. The regex engine that actually runs is OPA's own wasm-compiled engine; neither the host language's regex crate nor the Go RE2 binary is in the evaluation path. Measured to agree with the Go binary on every discriminating probe (see `engineProbes`), and the empty map is falsified by controls that DO demand `crypto.sha256` / `regex.find_n`.",
+    "hostPathConsequence": "The host never needs builtin injection for these policies, so `rust-opa-wasm`'s fixed `builtins::resolve` table — which has no public extension point — is not a constraint here. It WOULD be for any policy using a builtin outside that table, and `regex.find_n` is the sharp case: it IS in the crate's table but its body is `bail!(\"not implemented\")`, so such a policy loads fine and fails at CALL time.",
+    "importSetVerdict": "Every import is inside the documented OPA ABI set (env.memory + opa_abort + opa_builtin0..4). No unbounded host import. `env.opa_println` is NOT imported by any of the 7 modules, so a host that defines it simply goes unused."
+  },
+  "emittedBuiltins": [
+    "regex.match",
+    "replace",
+    "contains",
+    "count",
+    "is_boolean",
+    "is_string",
+    "is_array",
+    "is_number"
+  ],
+  "perRecord": [
+    {
+      "specimen": "a",
+      "ruleId": "61dcb058bd1df15d",
+      "package": "totem.spike.r61dcb058bd1df15d",
+      "wasmBytes": 347397,
+      "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+      "abiVersion": 1,
+      "abiMinorVersion": 3,
+      "imports": [
+        {
+          "module": "env",
+          "name": "opa_builtin0",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin1",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin2",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin3",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin4",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_abort",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "exports": [
+        {
+          "name": "memory",
+          "kind": "memory"
+        },
+        {
+          "name": "opa_eval_ctx_new",
+          "kind": "function"
+        },
+        {
+          "name": "opa_malloc",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_input",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_set",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_data",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_entrypoint",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_get_result",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_get",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_stash",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_stash_clear",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_restore",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_add_path",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_remove_path",
+          "kind": "function"
+        },
+        {
+          "name": "eval",
+          "kind": "function"
+        },
+        {
+          "name": "builtins",
+          "kind": "function"
+        },
+        {
+          "name": "entrypoints",
+          "kind": "function"
+        },
+        {
+          "name": "opa_wasm_abi_version",
+          "kind": "global"
+        },
+        {
+          "name": "opa_wasm_abi_minor_version",
+          "kind": "global"
+        }
+      ],
+      "entrypoints": {
+        "totem/spike/r61dcb058bd1df15d/result": 0
+      },
+      "hostImplementedBuiltins": [],
+      "nativelyCompiledBuiltins": [
+        "regex.match",
+        "replace",
+        "contains",
+        "count",
+        "is_boolean",
+        "is_string",
+        "is_array",
+        "is_number"
+      ]
+    },
+    {
+      "specimen": "b",
+      "ruleId": "2d962603591aa928",
+      "package": "totem.spike.r2d962603591aa928",
+      "wasmBytes": 345903,
+      "wasmSha256": "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+      "abiVersion": 1,
+      "abiMinorVersion": 3,
+      "imports": [
+        {
+          "module": "env",
+          "name": "opa_builtin0",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin1",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin2",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin3",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin4",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_abort",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "exports": [
+        {
+          "name": "memory",
+          "kind": "memory"
+        },
+        {
+          "name": "opa_eval_ctx_new",
+          "kind": "function"
+        },
+        {
+          "name": "opa_malloc",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_input",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_set",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_data",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_entrypoint",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_get_result",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_get",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_stash",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_stash_clear",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_restore",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_add_path",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_remove_path",
+          "kind": "function"
+        },
+        {
+          "name": "eval",
+          "kind": "function"
+        },
+        {
+          "name": "builtins",
+          "kind": "function"
+        },
+        {
+          "name": "entrypoints",
+          "kind": "function"
+        },
+        {
+          "name": "opa_wasm_abi_version",
+          "kind": "global"
+        },
+        {
+          "name": "opa_wasm_abi_minor_version",
+          "kind": "global"
+        }
+      ],
+      "entrypoints": {
+        "totem/spike/r2d962603591aa928/result": 0
+      },
+      "hostImplementedBuiltins": [],
+      "nativelyCompiledBuiltins": [
+        "regex.match",
+        "replace",
+        "contains",
+        "count",
+        "is_boolean",
+        "is_string",
+        "is_array",
+        "is_number"
+      ]
+    },
+    {
+      "specimen": "c",
+      "ruleId": "d0815b6769304e26",
+      "package": "totem.spike.rd0815b6769304e26",
+      "wasmBytes": 346215,
+      "wasmSha256": "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
+      "abiVersion": 1,
+      "abiMinorVersion": 3,
+      "imports": [
+        {
+          "module": "env",
+          "name": "opa_builtin0",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin1",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin2",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin3",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin4",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_abort",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "exports": [
+        {
+          "name": "memory",
+          "kind": "memory"
+        },
+        {
+          "name": "opa_eval_ctx_new",
+          "kind": "function"
+        },
+        {
+          "name": "opa_malloc",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_input",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_set",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_data",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_entrypoint",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_get_result",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_get",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_stash",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_stash_clear",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_restore",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_add_path",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_remove_path",
+          "kind": "function"
+        },
+        {
+          "name": "eval",
+          "kind": "function"
+        },
+        {
+          "name": "builtins",
+          "kind": "function"
+        },
+        {
+          "name": "entrypoints",
+          "kind": "function"
+        },
+        {
+          "name": "opa_wasm_abi_version",
+          "kind": "global"
+        },
+        {
+          "name": "opa_wasm_abi_minor_version",
+          "kind": "global"
+        }
+      ],
+      "entrypoints": {
+        "totem/spike/rd0815b6769304e26/result": 0
+      },
+      "hostImplementedBuiltins": [],
+      "nativelyCompiledBuiltins": [
+        "regex.match",
+        "replace",
+        "contains",
+        "count",
+        "is_boolean",
+        "is_string",
+        "is_array",
+        "is_number"
+      ]
+    },
+    {
+      "specimen": "c-supp",
+      "ruleId": "87aff037d7de47a7",
+      "package": "totem.spike.r87aff037d7de47a7",
+      "wasmBytes": 346096,
+      "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+      "abiVersion": 1,
+      "abiMinorVersion": 3,
+      "imports": [
+        {
+          "module": "env",
+          "name": "opa_builtin0",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin1",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin2",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin3",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin4",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_abort",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "exports": [
+        {
+          "name": "memory",
+          "kind": "memory"
+        },
+        {
+          "name": "opa_eval_ctx_new",
+          "kind": "function"
+        },
+        {
+          "name": "opa_malloc",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_input",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_set",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_data",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_entrypoint",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_get_result",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_get",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_stash",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_stash_clear",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_restore",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_add_path",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_remove_path",
+          "kind": "function"
+        },
+        {
+          "name": "eval",
+          "kind": "function"
+        },
+        {
+          "name": "builtins",
+          "kind": "function"
+        },
+        {
+          "name": "entrypoints",
+          "kind": "function"
+        },
+        {
+          "name": "opa_wasm_abi_version",
+          "kind": "global"
+        },
+        {
+          "name": "opa_wasm_abi_minor_version",
+          "kind": "global"
+        }
+      ],
+      "entrypoints": {
+        "totem/spike/r87aff037d7de47a7/result": 0
+      },
+      "hostImplementedBuiltins": [],
+      "nativelyCompiledBuiltins": [
+        "regex.match",
+        "replace",
+        "contains",
+        "count",
+        "is_boolean",
+        "is_string",
+        "is_array",
+        "is_number"
+      ]
+    },
+    {
+      "specimen": "d-line",
+      "ruleId": "0123456789abcdef",
+      "package": "totem.spike.r0123456789abcdef_d_line",
+      "wasmBytes": 346899,
+      "wasmSha256": "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
+      "abiVersion": 1,
+      "abiMinorVersion": 3,
+      "imports": [
+        {
+          "module": "env",
+          "name": "opa_builtin0",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin1",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin2",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin3",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin4",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_abort",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "exports": [
+        {
+          "name": "memory",
+          "kind": "memory"
+        },
+        {
+          "name": "opa_eval_ctx_new",
+          "kind": "function"
+        },
+        {
+          "name": "opa_malloc",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_input",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_set",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_data",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_entrypoint",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_get_result",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_get",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_stash",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_stash_clear",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_restore",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_add_path",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_remove_path",
+          "kind": "function"
+        },
+        {
+          "name": "eval",
+          "kind": "function"
+        },
+        {
+          "name": "builtins",
+          "kind": "function"
+        },
+        {
+          "name": "entrypoints",
+          "kind": "function"
+        },
+        {
+          "name": "opa_wasm_abi_version",
+          "kind": "global"
+        },
+        {
+          "name": "opa_wasm_abi_minor_version",
+          "kind": "global"
+        }
+      ],
+      "entrypoints": {
+        "totem/spike/r0123456789abcdef_d_line/result": 0
+      },
+      "hostImplementedBuiltins": [],
+      "nativelyCompiledBuiltins": [
+        "regex.match",
+        "replace",
+        "contains",
+        "count",
+        "is_boolean",
+        "is_string",
+        "is_array",
+        "is_number"
+      ]
+    },
+    {
+      "specimen": "d-file",
+      "ruleId": "0123456789abcdef",
+      "package": "totem.spike.r0123456789abcdef_d_file",
+      "wasmBytes": 346985,
+      "wasmSha256": "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
+      "abiVersion": 1,
+      "abiMinorVersion": 3,
+      "imports": [
+        {
+          "module": "env",
+          "name": "opa_builtin0",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin1",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin2",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin3",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin4",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_abort",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "exports": [
+        {
+          "name": "memory",
+          "kind": "memory"
+        },
+        {
+          "name": "opa_eval_ctx_new",
+          "kind": "function"
+        },
+        {
+          "name": "opa_malloc",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_input",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_set",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_data",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_entrypoint",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_get_result",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_get",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_stash",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_stash_clear",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_restore",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_add_path",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_remove_path",
+          "kind": "function"
+        },
+        {
+          "name": "eval",
+          "kind": "function"
+        },
+        {
+          "name": "builtins",
+          "kind": "function"
+        },
+        {
+          "name": "entrypoints",
+          "kind": "function"
+        },
+        {
+          "name": "opa_wasm_abi_version",
+          "kind": "global"
+        },
+        {
+          "name": "opa_wasm_abi_minor_version",
+          "kind": "global"
+        }
+      ],
+      "entrypoints": {
+        "totem/spike/r0123456789abcdef_d_file/result": 0
+      },
+      "hostImplementedBuiltins": [],
+      "nativelyCompiledBuiltins": [
+        "regex.match",
+        "replace",
+        "contains",
+        "count",
+        "is_boolean",
+        "is_string",
+        "is_array",
+        "is_number"
+      ]
+    },
+    {
+      "specimen": "e",
+      "ruleId": "0123456789abcdef",
+      "package": "totem.spike.r0123456789abcdef_e",
+      "wasmBytes": 346040,
+      "wasmSha256": "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
+      "abiVersion": 1,
+      "abiMinorVersion": 3,
+      "imports": [
+        {
+          "module": "env",
+          "name": "opa_builtin0",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin1",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin2",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin3",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_builtin4",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "opa_abort",
+          "kind": "function"
+        },
+        {
+          "module": "env",
+          "name": "memory",
+          "kind": "memory"
+        }
+      ],
+      "exports": [
+        {
+          "name": "memory",
+          "kind": "memory"
+        },
+        {
+          "name": "opa_eval_ctx_new",
+          "kind": "function"
+        },
+        {
+          "name": "opa_malloc",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_input",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_set",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_dump",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_data",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_set_entrypoint",
+          "kind": "function"
+        },
+        {
+          "name": "opa_eval_ctx_get_result",
+          "kind": "function"
+        },
+        {
+          "name": "opa_json_parse",
+          "kind": "function"
+        },
+        {
+          "name": "opa_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_free",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_ptr_get",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_stash",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_stash_clear",
+          "kind": "function"
+        },
+        {
+          "name": "opa_heap_blocks_restore",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_add_path",
+          "kind": "function"
+        },
+        {
+          "name": "opa_value_remove_path",
+          "kind": "function"
+        },
+        {
+          "name": "eval",
+          "kind": "function"
+        },
+        {
+          "name": "builtins",
+          "kind": "function"
+        },
+        {
+          "name": "entrypoints",
+          "kind": "function"
+        },
+        {
+          "name": "opa_wasm_abi_version",
+          "kind": "global"
+        },
+        {
+          "name": "opa_wasm_abi_minor_version",
+          "kind": "global"
+        }
+      ],
+      "entrypoints": {
+        "totem/spike/r0123456789abcdef_e/result": 0
+      },
+      "hostImplementedBuiltins": [],
+      "nativelyCompiledBuiltins": [
+        "regex.match",
+        "replace",
+        "contains",
+        "count",
+        "is_boolean",
+        "is_string",
+        "is_array",
+        "is_number"
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "control": "host-builtin-control",
+      "body": "result := crypto.sha256(input.s)",
+      "hostImplementedBuiltins": [
+        "crypto.sha256"
+      ]
+    },
+    {
+      "control": "host-regex-find-n-control",
+      "body": "result := regex.find_n(\"a\", input.s, -1)",
+      "hostImplementedBuiltins": [
+        "regex.find_n"
+      ]
+    },
+    {
+      "control": "emitted-builtins-control",
+      "body": "result := regex.match(\"^a$\", replace(input.s, \"x\", \"y\"))",
+      "hostImplementedBuiltins": []
+    }
+  ],
+  "engineProbes": [
+    {
+      "probe": "word-boundary",
+      "wasm": true,
+      "go": true,
+      "agree": true
+    },
+    {
+      "probe": "word-boundary-neg",
+      "wasm": false,
+      "go": false,
+      "agree": true
+    },
+    {
+      "probe": "corpus-a",
+      "wasm": true,
+      "go": true,
+      "agree": true
+    },
+    {
+      "probe": "requires-lc-all",
+      "wasm": true,
+      "go": true,
+      "agree": true
+    },
+    {
+      "probe": "glob-globstar",
+      "wasm": true,
+      "go": true,
+      "agree": true
+    },
+    {
+      "probe": "glob-anchored-neg",
+      "wasm": false,
+      "go": false,
+      "agree": true
+    },
+    {
+      "probe": "posix-class",
+      "wasm": true,
+      "go": true,
+      "agree": true
+    },
+    {
+      "probe": "unicode-w",
+      "wasm": true,
+      "go": true,
+      "agree": true
+    },
+    {
+      "probe": "unicode-w-accent",
+      "wasm": false,
+      "go": false,
+      "agree": true
+    }
+  ],
+  "strictness": {
+    "contractClause": "§ Lowering 2: \"`opa build` and every `opa eval` run with `--strict-builtin-errors`; the host must surface builtin errors as errors.\"",
+    "buildFlagMeasurement": "`opa build` REJECTS `--strict-builtin-errors` — \"unknown flag\". It is an `eval`-only flag, so the build half of § Lowering 2 is not satisfiable as written against pinned OPA v1.20.0.",
+    "wasmMeasurement": {
+      "built": true,
+      "buildExit": 0,
+      "wasmOutcome": "EMPTY RESULT SET (silent, no trap, no opa_abort)",
+      "wasmRaw": [],
+      "goStrictExit": 2,
+      "goStrictStdout": "{\n  \"errors\": [\n    {\n      \"message\": \"regex.match: error parsing regexp: invalid or unsupported Perl syntax: `(?!`\",\n      \"code\": \"eval_builtin_error\",\n      \"location\": {\n        \"file\": \"fo.rego\",\n        \"row\": 3,\n        \"col\": 11\n      }\n    }\n  ]\n}"
+    },
+    "structuralMitigation": "The lowering makes strictness structural instead: every emitted pattern is exercised by `patterns_compile` inside the COMPLETE `result` rule, so a compile failure leaves `result` undefined and the entrypoint returns an EMPTY RESULT SET. Proven on a control (see `guardedControlResult`). The host contract then requires reading an empty result set as an ERROR ROW, never as a zero-violation verdict.",
+    "guardedControlResult": []
+  },
+  "chains": [
+    {
+      "specimen": "a",
+      "ruleId": "61dcb058bd1df15d",
+      "recordSha256": "24be123733cda7a3a5a345d2fedb0633607344fdc375af587a8a7e31f2f345ad",
+      "regoSha256": "12c788f645b3369a52dbfae52f17f744f21e524016b62d4b72d4ec777c1f2abc",
+      "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+          "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48"
+        ],
+        "bundleTarballSha256": [
+          "1c97f06193df25da6a2eada3952dfcb4671b28f271bd1140440139281b3c69aa",
+          "1c97f06193df25da6a2eada3952dfcb4671b28f271bd1140440139281b3c69aa"
+        ]
+      }
+    },
+    {
+      "specimen": "b",
+      "ruleId": "2d962603591aa928",
+      "recordSha256": "40bd79d7c970e21edced9b9ef90bedbec66e1fbf6d98d8c10e3dd6f6f19dbd19",
+      "regoSha256": "634fc78f98b73f867c4bcf3fb2898ba7dc6acffd161c4cd1619dff8017f4c48b",
+      "wasmSha256": "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+          "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c"
+        ],
+        "bundleTarballSha256": [
+          "fbc9560131d3be79df8feefaeba334a0b5ba7a2c0d7ac726d8ba63b4d9490698",
+          "fbc9560131d3be79df8feefaeba334a0b5ba7a2c0d7ac726d8ba63b4d9490698"
+        ]
+      }
+    },
+    {
+      "specimen": "c",
+      "ruleId": "d0815b6769304e26",
+      "recordSha256": "99c2deb2827c2f85785cd79d2322fa5a013af67a37d5cdecc4f49ded284aad44",
+      "regoSha256": "92b130e5b1d55064db19944322e3fcf9ac6e98a0274d0f03f1007d684a2c062a",
+      "wasmSha256": "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
+          "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc"
+        ],
+        "bundleTarballSha256": [
+          "7c85694cc7fddd47045e1a98546aa915d9425f3b76423678382aa3e0a39ec8ff",
+          "7c85694cc7fddd47045e1a98546aa915d9425f3b76423678382aa3e0a39ec8ff"
+        ]
+      }
+    },
+    {
+      "specimen": "c-supp",
+      "ruleId": "87aff037d7de47a7",
+      "recordSha256": "27ba70dd4820e67fc528c9c660f632f78586bc85608b4d783dc62897a8e7171d",
+      "regoSha256": "e3d32564de9c7463a8ce70033a9b7378cbd306ebc68a4de19b05172000c42ca8",
+      "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+          "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec"
+        ],
+        "bundleTarballSha256": [
+          "db5eb1a9d2f8d3d628d00b854630fcdc143ac3f30fac87f4035cc668fdddab38",
+          "db5eb1a9d2f8d3d628d00b854630fcdc143ac3f30fac87f4035cc668fdddab38"
+        ]
+      }
+    },
+    {
+      "specimen": "d-line",
+      "ruleId": "0123456789abcdef",
+      "recordSha256": "76e5e1725e0c0fa0c4baee22304351bd2f05119018f53887068f2b47c67d4449",
+      "regoSha256": "cf5d25f929b85c0dadb0a56def1932c436084b9957e547758f444cf76bf0f8bb",
+      "wasmSha256": "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
+          "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10"
+        ],
+        "bundleTarballSha256": [
+          "7432111105ae10f226fd436a0c39815363f0033126897fb5f0450a70a466113f",
+          "7432111105ae10f226fd436a0c39815363f0033126897fb5f0450a70a466113f"
+        ]
+      }
+    },
+    {
+      "specimen": "d-file",
+      "ruleId": "0123456789abcdef",
+      "recordSha256": "048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239",
+      "regoSha256": "3525bdd8ec94033d51117dad49e69dca531570c529e85d98cc75887b5623392a",
+      "wasmSha256": "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
+          "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad"
+        ],
+        "bundleTarballSha256": [
+          "f7537894fa9ecfd5a32ab9a7dcfac7047f87746499d5dc91f1f8d6f89851ec6b",
+          "f7537894fa9ecfd5a32ab9a7dcfac7047f87746499d5dc91f1f8d6f89851ec6b"
+        ]
+      }
+    },
+    {
+      "specimen": "e",
+      "ruleId": "0123456789abcdef",
+      "recordSha256": "d42a48e025863d320a214ee5c1c577e437b8cf4b068f2d5572ac8f8bbcf12ee8",
+      "regoSha256": "9f2bbf2bfc222ee9b91b0929a9df0edf53efdc3fc3eee66c032855f0a61e2de2",
+      "wasmSha256": "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
+      "determinism": {
+        "buildCount": 2,
+        "wasmIdentical": true,
+        "tarballIdentical": true,
+        "wasmSha256": [
+          "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
+          "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9"
+        ],
+        "bundleTarballSha256": [
+          "0c734aa1f6745cc413034b3ecd0b6cc1995ca128f4c39fa9704de5f1f0793eaa",
+          "0c734aa1f6745cc413034b3ecd0b6cc1995ca128f4c39fa9704de5f1f0793eaa"
+        ]
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "pinned OPA binary reports toolchain.lock [opa] version",
+      "ok": true,
+      "detail": "\"1.20.0\""
+    },
+    {
+      "name": "CONTRACT MEASUREMENT — `opa build` REJECTS `--strict-builtin-errors` (§ Lowering 2 names it for build AND eval)",
+      "ok": true,
+      "detail": "Error: unknown flag: --strict-builtin-errors"
+    },
+    {
+      "name": "the lowering index carries all 7 records",
+      "ok": true,
+      "detail": "7"
+    },
+    {
+      "name": "a — DETERMINISM: two consecutive `opa build` runs give a BYTE-IDENTICAL policy.wasm",
+      "ok": true,
+      "detail": "757f8118a34de759… vs 757f8118a34de759…"
+    },
+    {
+      "name": "a — DETERMINISM: the BUNDLE TARBALL is also byte-identical (gzip mtime is zeroed, not merely the wasm)",
+      "ok": true,
+      "detail": "tarball and inner wasm both stable"
+    },
+    {
+      "name": "a — the module exposes exactly the ONE declared entrypoint",
+      "ok": true,
+      "detail": "{\"totem/spike/r61dcb058bd1df15d/result\":0}"
+    },
+    {
+      "name": "a — OPA wasm ABI version",
+      "ok": true,
+      "detail": "[1,3]"
+    },
+    {
+      "name": "a — the module requires NO host-implemented builtin (empty `builtins` export)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "a — every wasm import is inside the documented OPA ABI set (no unbounded host import)",
+      "ok": true,
+      "detail": "[\"env.memory:memory\",\"env.opa_abort:function\",\"env.opa_builtin0:function\",\"env.opa_builtin1:function\",\"env.opa_builtin2:function\",\"env.opa_builtin3:function\",\"env.opa_builtin4:function\"]"
+    },
+    {
+      "name": "b — DETERMINISM: two consecutive `opa build` runs give a BYTE-IDENTICAL policy.wasm",
+      "ok": true,
+      "detail": "761f95f29e6e4272… vs 761f95f29e6e4272…"
+    },
+    {
+      "name": "b — DETERMINISM: the BUNDLE TARBALL is also byte-identical (gzip mtime is zeroed, not merely the wasm)",
+      "ok": true,
+      "detail": "tarball and inner wasm both stable"
+    },
+    {
+      "name": "b — the module exposes exactly the ONE declared entrypoint",
+      "ok": true,
+      "detail": "{\"totem/spike/r2d962603591aa928/result\":0}"
+    },
+    {
+      "name": "b — OPA wasm ABI version",
+      "ok": true,
+      "detail": "[1,3]"
+    },
+    {
+      "name": "b — the module requires NO host-implemented builtin (empty `builtins` export)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "b — every wasm import is inside the documented OPA ABI set (no unbounded host import)",
+      "ok": true,
+      "detail": "[\"env.memory:memory\",\"env.opa_abort:function\",\"env.opa_builtin0:function\",\"env.opa_builtin1:function\",\"env.opa_builtin2:function\",\"env.opa_builtin3:function\",\"env.opa_builtin4:function\"]"
+    },
+    {
+      "name": "c — DETERMINISM: two consecutive `opa build` runs give a BYTE-IDENTICAL policy.wasm",
+      "ok": true,
+      "detail": "5aa898a084d8214d… vs 5aa898a084d8214d…"
+    },
+    {
+      "name": "c — DETERMINISM: the BUNDLE TARBALL is also byte-identical (gzip mtime is zeroed, not merely the wasm)",
+      "ok": true,
+      "detail": "tarball and inner wasm both stable"
+    },
+    {
+      "name": "c — the module exposes exactly the ONE declared entrypoint",
+      "ok": true,
+      "detail": "{\"totem/spike/rd0815b6769304e26/result\":0}"
+    },
+    {
+      "name": "c — OPA wasm ABI version",
+      "ok": true,
+      "detail": "[1,3]"
+    },
+    {
+      "name": "c — the module requires NO host-implemented builtin (empty `builtins` export)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "c — every wasm import is inside the documented OPA ABI set (no unbounded host import)",
+      "ok": true,
+      "detail": "[\"env.memory:memory\",\"env.opa_abort:function\",\"env.opa_builtin0:function\",\"env.opa_builtin1:function\",\"env.opa_builtin2:function\",\"env.opa_builtin3:function\",\"env.opa_builtin4:function\"]"
+    },
+    {
+      "name": "c-supp — DETERMINISM: two consecutive `opa build` runs give a BYTE-IDENTICAL policy.wasm",
+      "ok": true,
+      "detail": "f1c2c73119b1f5e6… vs f1c2c73119b1f5e6…"
+    },
+    {
+      "name": "c-supp — DETERMINISM: the BUNDLE TARBALL is also byte-identical (gzip mtime is zeroed, not merely the wasm)",
+      "ok": true,
+      "detail": "tarball and inner wasm both stable"
+    },
+    {
+      "name": "c-supp — the module exposes exactly the ONE declared entrypoint",
+      "ok": true,
+      "detail": "{\"totem/spike/r87aff037d7de47a7/result\":0}"
+    },
+    {
+      "name": "c-supp — OPA wasm ABI version",
+      "ok": true,
+      "detail": "[1,3]"
+    },
+    {
+      "name": "c-supp — the module requires NO host-implemented builtin (empty `builtins` export)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "c-supp — every wasm import is inside the documented OPA ABI set (no unbounded host import)",
+      "ok": true,
+      "detail": "[\"env.memory:memory\",\"env.opa_abort:function\",\"env.opa_builtin0:function\",\"env.opa_builtin1:function\",\"env.opa_builtin2:function\",\"env.opa_builtin3:function\",\"env.opa_builtin4:function\"]"
+    },
+    {
+      "name": "d-line — DETERMINISM: two consecutive `opa build` runs give a BYTE-IDENTICAL policy.wasm",
+      "ok": true,
+      "detail": "ea46fa323435ea07… vs ea46fa323435ea07…"
+    },
+    {
+      "name": "d-line — DETERMINISM: the BUNDLE TARBALL is also byte-identical (gzip mtime is zeroed, not merely the wasm)",
+      "ok": true,
+      "detail": "tarball and inner wasm both stable"
+    },
+    {
+      "name": "d-line — the module exposes exactly the ONE declared entrypoint",
+      "ok": true,
+      "detail": "{\"totem/spike/r0123456789abcdef_d_line/result\":0}"
+    },
+    {
+      "name": "d-line — OPA wasm ABI version",
+      "ok": true,
+      "detail": "[1,3]"
+    },
+    {
+      "name": "d-line — the module requires NO host-implemented builtin (empty `builtins` export)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "d-line — every wasm import is inside the documented OPA ABI set (no unbounded host import)",
+      "ok": true,
+      "detail": "[\"env.memory:memory\",\"env.opa_abort:function\",\"env.opa_builtin0:function\",\"env.opa_builtin1:function\",\"env.opa_builtin2:function\",\"env.opa_builtin3:function\",\"env.opa_builtin4:function\"]"
+    },
+    {
+      "name": "d-file — DETERMINISM: two consecutive `opa build` runs give a BYTE-IDENTICAL policy.wasm",
+      "ok": true,
+      "detail": "07b771da11130e61… vs 07b771da11130e61…"
+    },
+    {
+      "name": "d-file — DETERMINISM: the BUNDLE TARBALL is also byte-identical (gzip mtime is zeroed, not merely the wasm)",
+      "ok": true,
+      "detail": "tarball and inner wasm both stable"
+    },
+    {
+      "name": "d-file — the module exposes exactly the ONE declared entrypoint",
+      "ok": true,
+      "detail": "{\"totem/spike/r0123456789abcdef_d_file/result\":0}"
+    },
+    {
+      "name": "d-file — OPA wasm ABI version",
+      "ok": true,
+      "detail": "[1,3]"
+    },
+    {
+      "name": "d-file — the module requires NO host-implemented builtin (empty `builtins` export)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "d-file — every wasm import is inside the documented OPA ABI set (no unbounded host import)",
+      "ok": true,
+      "detail": "[\"env.memory:memory\",\"env.opa_abort:function\",\"env.opa_builtin0:function\",\"env.opa_builtin1:function\",\"env.opa_builtin2:function\",\"env.opa_builtin3:function\",\"env.opa_builtin4:function\"]"
+    },
+    {
+      "name": "e — DETERMINISM: two consecutive `opa build` runs give a BYTE-IDENTICAL policy.wasm",
+      "ok": true,
+      "detail": "b81f809552a233b3… vs b81f809552a233b3…"
+    },
+    {
+      "name": "e — DETERMINISM: the BUNDLE TARBALL is also byte-identical (gzip mtime is zeroed, not merely the wasm)",
+      "ok": true,
+      "detail": "tarball and inner wasm both stable"
+    },
+    {
+      "name": "e — the module exposes exactly the ONE declared entrypoint",
+      "ok": true,
+      "detail": "{\"totem/spike/r0123456789abcdef_e/result\":0}"
+    },
+    {
+      "name": "e — OPA wasm ABI version",
+      "ok": true,
+      "detail": "[1,3]"
+    },
+    {
+      "name": "e — the module requires NO host-implemented builtin (empty `builtins` export)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "e — every wasm import is inside the documented OPA ABI set (no unbounded host import)",
+      "ok": true,
+      "detail": "[\"env.memory:memory\",\"env.opa_abort:function\",\"env.opa_builtin0:function\",\"env.opa_builtin1:function\",\"env.opa_builtin2:function\",\"env.opa_builtin3:function\",\"env.opa_builtin4:function\"]"
+    },
+    {
+      "name": "CENSUS FALSIFIER — a policy calling `crypto.sha256` DOES demand a host builtin (the empty maps above are a measurement, not a vacuous read)",
+      "ok": true,
+      "detail": "[\"crypto.sha256\"]"
+    },
+    {
+      "name": "CENSUS FALSIFIER — `regex.find_n` is ALSO host-demanded, so it is `regex.match` SPECIFICALLY that OPA compiles natively",
+      "ok": true,
+      "detail": "[\"regex.find_n\"]"
+    },
+    {
+      "name": "CENSUS — a policy using only the lowering's own builtins demands NONE",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "ENGINE — the wasm-native regex engine agrees with the Go/RE2 binary on every discriminating probe",
+      "ok": true,
+      "detail": "9/9 agree"
+    },
+    {
+      "name": "ENGINE — the probe set is DISCRIMINATING (it contains both a true and a false)",
+      "ok": true,
+      "detail": "{\"word-boundary\":true,\"glob-anchored-neg\":false,\"posix-class\":true,\"unicode-w-accent\":false,\"glob-globstar\":true,\"corpus-a\":true,\"requires-lc-all\":true,\"unicode-w\":true,\"word-boundary-neg\":false}"
+    },
+    {
+      "name": "STRICTNESS — `opa build -t wasm` ACCEPTS an RE2-inexpressible pattern (the failure is deferred to eval)",
+      "ok": true,
+      "detail": "build exit=0"
+    },
+    {
+      "name": "STRICTNESS — the wasm module then FAILS OPEN at eval: an empty result set, no trap, no `opa_abort`",
+      "ok": true,
+      "detail": "EMPTY RESULT SET (silent, no trap, no opa_abort)"
+    },
+    {
+      "name": "STRICTNESS — the SAME policy under `opa eval --strict-builtin-errors` exits NON-ZERO with a compile error",
+      "ok": true,
+      "detail": "exit=2"
+    },
+    {
+      "name": "STRICTNESS — the lowering's `patterns_compile` guard turns that fail-open into an UNDEFINED `result` (empty result SET), which the host contract raises as an error row",
+      "ok": true,
+      "detail": "[]"
+    }
+  ]
+}

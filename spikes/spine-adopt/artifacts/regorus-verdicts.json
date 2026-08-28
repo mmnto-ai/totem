@@ -1,0 +1,676 @@
+{
+  "buildFindings": [
+    {
+      "finding": "`regorus = \"0.11.0\"` with DEFAULT features does not build on this Windows/MSVC toolchain. Its `std` feature (reached from the default `full-opa`) pulls `msvc_spectre_libs` with `features = [\"error\"]`, whose build script PANICS rather than warns when the Visual Studio installation carries no Spectre-mitigated libraries: `No spectre-mitigated libs were found. Please modify the VS Installation to add these.`",
+      "id": "regorus-msvc-spectre",
+      "resolution": "Built with `default-features = false, features = [\"arc\", \"regex\", \"rvm\"]`. Recorded as a build-matrix row (spec § Failure modes) rather than worked around silently. A Linux arm of the build matrix would not hit this.",
+      "severity": "blocks the stock dependency"
+    },
+    {
+      "consequence": "As a differential arm, regorus's regex capability is a property of the CONSUMER's dependency graph, not of regorus's version. A consumer that happened to depend on `regex` with default features elsewhere would silently get the capability; one that did not would silently lose it. That is a real adoption hazard for using regorus as a reference oracle, and it was surfaced only because the lowering's `patterns_compile` guard turns an uncompilable pattern into a LOUD error instead of an empty violation set.",
+      "finding": "regorus 0.11.0 declares its `regex` dependency `default-features = false` and NO regorus feature ever adds features to it. In a dependency graph where regorus is the only `regex` consumer, the Unicode-perl escape class (word-boundary, whitespace, word, digit) is therefore ABSENT, and `regex.match` fails at COMPILE with `error: invalid regex` on patterns pinned OPA/RE2 accepts.",
+      "id": "regorus-regex-unicode-perl-gap",
+      "measurement": "CONTROLLED, both directions. Without a consumer-side `regex` feature declaration: 10 of 24 regorus rows are ERROR ROWS — precisely the 3 specimens carrying a regex target pattern (a, d-line, d-file) across their 10 fixtures; the 14 ast-grep rows are unaffected because their only regexes are the lowered globs, which use no Unicode-perl escapes. With `regex = { version = \"1\", default-features = false, features = [\"unicode-perl\"] }` declared by this crate (Cargo's feature unification is additive and global): 0 error rows.",
+      "severity": "silently disables a regex class the differential depends on"
+    }
+  ],
+  "contract": "spikes/spine-adopt/rego/LOWERING.md § Host contract",
+  "fixtureCount": 24,
+  "generatedBy": "spikes/spine-adopt/host/src/main.rs --arm regorus",
+  "host": {
+    "crate": "regorus 0.11.0 (microsoft/regorus)",
+    "role": "REFERENCE DIFFERENTIAL ONLY (spec § Spike 1). It reads the lowered .rego SOURCE, so it exercises the lowering rather than the compiled wasm. A regorus-vs-OPA divergence is a finding about regorus, adjudicated against OPA as the reference semantics (LOWERING.md § Host contract).",
+    "strictness": "set_strict_builtin_errors(true). regorus's own docs note that not all builtins honour the flag. An UNDEFINED or non-object rule value is an error row."
+  },
+  "recordCount": 7,
+  "timings": [
+    {
+      "coldEvalMicros": 3466,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "a-corpus-fail",
+      "specimen": "a",
+      "warmEvalMicrosMin": 1576,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 2091,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "a-corpus-pass",
+      "specimen": "a",
+      "warmEvalMicrosMin": 965,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 1642,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "a-inline-bad",
+      "specimen": "a",
+      "warmEvalMicrosMin": 899,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 1654,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "a-inline-good",
+      "specimen": "a",
+      "warmEvalMicrosMin": 775,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 608,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "b-corpus-fail",
+      "specimen": "b",
+      "warmEvalMicrosMin": 129,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 529,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "b-corpus-pass",
+      "specimen": "b",
+      "warmEvalMicrosMin": 79,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 557,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "b-inline-bad",
+      "specimen": "b",
+      "warmEvalMicrosMin": 126,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 707,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "b-inline-good",
+      "specimen": "b",
+      "warmEvalMicrosMin": 74,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 803,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "c-corpus-fail",
+      "specimen": "c",
+      "warmEvalMicrosMin": 303,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 797,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "c-corpus-pass",
+      "specimen": "c",
+      "warmEvalMicrosMin": 188,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 684,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "c-inline-bad",
+      "specimen": "c",
+      "warmEvalMicrosMin": 230,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 709,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "c-inline-good",
+      "specimen": "c",
+      "warmEvalMicrosMin": 182,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 739,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "c-supp-corpus-fail",
+      "specimen": "c-supp",
+      "warmEvalMicrosMin": 238,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 631,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "c-supp-corpus-pass",
+      "specimen": "c-supp",
+      "warmEvalMicrosMin": 172,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 686,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "c-supp-inline-bad",
+      "specimen": "c-supp",
+      "warmEvalMicrosMin": 213,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 598,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "c-supp-inline-good",
+      "specimen": "c-supp",
+      "warmEvalMicrosMin": 168,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 782,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "d-line-inline-bad",
+      "specimen": "d-line",
+      "warmEvalMicrosMin": 250,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 732,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "d-line-inline-good",
+      "specimen": "d-line",
+      "warmEvalMicrosMin": 225,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 771,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "d-file-control-empty",
+      "specimen": "d-file",
+      "warmEvalMicrosMin": 242,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 659,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "d-file-control-unreadable",
+      "specimen": "d-file",
+      "warmEvalMicrosMin": 225,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 776,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "d-file-inline-bad",
+      "specimen": "d-file",
+      "warmEvalMicrosMin": 239,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 685,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "d-file-inline-good",
+      "specimen": "d-file",
+      "warmEvalMicrosMin": 225,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 650,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "e-inline-bad",
+      "specimen": "e",
+      "warmEvalMicrosMin": 170,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 583,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "e-inline-good",
+      "specimen": "e",
+      "warmEvalMicrosMin": 120,
+      "warmReps": 50
+    }
+  ],
+  "verdictRows": [
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "a-corpus-fail",
+      "matchCount": 1,
+      "ruleId": "61dcb058bd1df15d",
+      "specimen": "a",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "61dcb058bd1df15d"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "a-corpus-pass",
+      "matchCount": 0,
+      "ruleId": "61dcb058bd1df15d",
+      "specimen": "a",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "a-inline-bad",
+      "matchCount": 1,
+      "ruleId": "61dcb058bd1df15d",
+      "specimen": "a",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "61dcb058bd1df15d"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "a-inline-good",
+      "matchCount": 0,
+      "ruleId": "61dcb058bd1df15d",
+      "specimen": "a",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "b-corpus-fail",
+      "matchCount": 1,
+      "ruleId": "2d962603591aa928",
+      "specimen": "b",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "2d962603591aa928"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "b-corpus-pass",
+      "matchCount": 0,
+      "ruleId": "2d962603591aa928",
+      "specimen": "b",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "b-inline-bad",
+      "matchCount": 1,
+      "ruleId": "2d962603591aa928",
+      "specimen": "b",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "2d962603591aa928"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "b-inline-good",
+      "matchCount": 0,
+      "ruleId": "2d962603591aa928",
+      "specimen": "b",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 2,
+          "ordinal": 0
+        },
+        {
+          "kind": "trigger",
+          "line_number": 3,
+          "ordinal": 1
+        }
+      ],
+      "fired": true,
+      "fixtureId": "c-corpus-fail",
+      "matchCount": 2,
+      "ruleId": "d0815b6769304e26",
+      "specimen": "c",
+      "violations": [
+        {
+          "line_number": 2,
+          "ordinal": 0,
+          "rule_id": "d0815b6769304e26"
+        },
+        {
+          "line_number": 3,
+          "ordinal": 1,
+          "rule_id": "d0815b6769304e26"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "c-corpus-pass",
+      "matchCount": 0,
+      "ruleId": "d0815b6769304e26",
+      "specimen": "c",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "c-inline-bad",
+      "matchCount": 1,
+      "ruleId": "d0815b6769304e26",
+      "specimen": "c",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "d0815b6769304e26"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "c-inline-good",
+      "matchCount": 0,
+      "ruleId": "d0815b6769304e26",
+      "specimen": "c",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 4,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "c-supp-corpus-fail",
+      "matchCount": 1,
+      "ruleId": "87aff037d7de47a7",
+      "specimen": "c-supp",
+      "violations": [
+        {
+          "line_number": 4,
+          "ordinal": 0,
+          "rule_id": "87aff037d7de47a7"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "c-supp-corpus-pass",
+      "matchCount": 0,
+      "ruleId": "87aff037d7de47a7",
+      "specimen": "c-supp",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "c-supp-inline-bad",
+      "matchCount": 1,
+      "ruleId": "87aff037d7de47a7",
+      "specimen": "c-supp",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "87aff037d7de47a7"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "c-supp-inline-good",
+      "matchCount": 0,
+      "ruleId": "87aff037d7de47a7",
+      "specimen": "c-supp",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "d-line-inline-bad",
+      "matchCount": 1,
+      "ruleId": "0123456789abcdef",
+      "specimen": "d-line",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "d-line-inline-good",
+      "matchCount": 0,
+      "ruleId": "0123456789abcdef",
+      "specimen": "d-line",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "d-file-control-empty",
+      "matchCount": 1,
+      "ruleId": "0123456789abcdef",
+      "specimen": "d-file",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "d-file-control-unreadable",
+      "matchCount": 1,
+      "ruleId": "0123456789abcdef",
+      "specimen": "d-file",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "d-file-inline-bad",
+      "matchCount": 1,
+      "ruleId": "0123456789abcdef",
+      "specimen": "d-file",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "regex",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "d-file-inline-good",
+      "matchCount": 0,
+      "ruleId": "0123456789abcdef",
+      "specimen": "d-file",
+      "violations": []
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "e-inline-bad",
+      "matchCount": 1,
+      "ruleId": "0123456789abcdef",
+      "specimen": "e",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0123456789abcdef"
+        }
+      ]
+    },
+    {
+      "arm": "regorus",
+      "engine": "ast-grep",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "e-inline-good",
+      "matchCount": 0,
+      "ruleId": "0123456789abcdef",
+      "specimen": "e",
+      "violations": []
+    }
+  ]
+}

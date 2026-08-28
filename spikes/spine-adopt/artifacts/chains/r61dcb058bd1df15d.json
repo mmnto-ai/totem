@@ -1,0 +1,54 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+  "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+  "specimen": "a",
+  "ruleId": "61dcb058bd1df15d",
+  "package": "totem.spike.r61dcb058bd1df15d",
+  "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
+  "recordSha256": "24be123733cda7a3a5a345d2fedb0633607344fdc375af587a8a7e31f2f345ad",
+  "recordFile": "records/a-regex-lessons-rm-guard.rule.yaml",
+  "regoSha256": "12c788f645b3369a52dbfae52f17f744f21e524016b62d4b72d4ec777c1f2abc",
+  "regoComposition": {
+    "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+    "order": [
+      "policy.rego",
+      "globs.json",
+      "factSchemaLine"
+    ],
+    "components": {
+      "policy.rego": "77942137614cd9016fc286a88c8db112f238b810196b49758ec30c0dd1b34829",
+      "globs.json": "abd916ad074c8ec20febec397002b3d1084fb3528c39630bcb5449028d4dd645",
+      "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+    },
+    "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+    "preimage": "policy.rego:77942137614cd9016fc286a88c8db112f238b810196b49758ec30c0dd1b34829\nglobs.json:abd916ad074c8ec20febec397002b3d1084fb3528c39630bcb5449028d4dd645\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+  },
+  "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+  "bundleTarballSha256": "1c97f06193df25da6a2eada3952dfcb4671b28f271bd1140440139281b3c69aa",
+  "manifest": {
+    "revision": "",
+    "roots": [
+      ""
+    ],
+    "wasm": [
+      {
+        "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
+        "module": "/policy.wasm"
+      }
+    ],
+    "rego_version": 1
+  },
+  "determinism": {
+    "buildCount": 2,
+    "wasmIdentical": true,
+    "tarballIdentical": true,
+    "wasmSha256": [
+      "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+      "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48"
+    ],
+    "bundleTarballSha256": [
+      "1c97f06193df25da6a2eada3952dfcb4671b28f271bd1140440139281b3c69aa",
+      "1c97f06193df25da6a2eada3952dfcb4671b28f271bd1140440139281b3c69aa"
+    ]
+  }
+}

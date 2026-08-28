@@ -1,0 +1,65 @@
+# Spike host crate — `rego/LOWERING.md` § Host contract.
+#
+# `[workspace]` is present and EMPTY on purpose: it declares this package its own
+# workspace root so it never attaches to a parent workspace discovered by walking
+# up the tree. Nothing outside `spikes/spine-adopt/` may be touched by this spike.
+[workspace]
+
+[package]
+name = "spine-host"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Disposable adopt-round spike host: rust-opa-wasm on wasmtime + regorus reference differential (mmnto-ai/totem-strategy#1138)."
+
+[dependencies]
+# matrix-org/rust-opa-wasm, the crate the spec names. Default features are
+# `all-builtins` + `fast`; `fast` is what turns on `wasmtime/cranelift` and
+# parallel compilation, and `all-builtins` is what populates the host-side
+# builtin table. Neither is load-bearing for these 7 policies (the ABI census
+# measured ZERO host-implemented builtins), but keeping the defaults means the
+# host is the one the spec pins rather than a trimmed variant of it.
+opa-wasm = "0.3.2"
+
+# Pinned explicitly so the version is visible in this file and not only in the
+# lock. opa-wasm requires `>=42, <48`, so this cannot silently follow wasmtime's
+# current 48.x. The code uses `opa_wasm::wasmtime` (the crate's own re-export,
+# added "to make it easier to keep the versions in sync"), so type identity with
+# opa-wasm holds even if resolution ever changed. `anyhow` is explicit because
+# wasmtime 47 has its OWN `Error` type rather than re-exporting anyhow's.
+wasmtime = { version = "47", default-features = false, features = ["anyhow"] }
+
+# The reference differential arm. `microsoft/regorus` — a Rego INTERPRETER, not a
+# wasm host: it reads the same lowered `.rego` source, so it exercises the
+# lowering rather than the compiled artifact. Never a silent semantics
+# replacement (spec § Spike 1); a regorus-vs-OPA divergence is a finding ABOUT
+# regorus, adjudicated against OPA.
+#
+# `default-features = false` is FORCED, not a preference: regorus's `std` feature
+# (reached from its default `full-opa`) pulls `msvc_spectre_libs` with
+# `features = ["error"]`, whose build script PANICS — not warns — when the Visual
+# Studio installation carries no Spectre-mitigated libraries. On this machine it
+# does not, so stock `regorus = "0.11.0"` does not build at all. Recorded as a
+# build-matrix row rather than worked around silently.
+regorus = { version = "0.11.0", default-features = false, features = [
+	"arc",
+	"regex",
+	"rvm",
+] }
+
+# NOT used directly by this crate. Declared PURELY to repair regorus's regex
+# capability through Cargo's additive feature unification. regorus 0.11.0
+# declares `regex` with `default-features = false` and NO regorus feature ever
+# adds to it, so in a graph where regorus is the only `regex` consumer the
+# Unicode-perl escape class (word-boundary, whitespace, word, digit) is absent
+# and `regex.match` fails with "invalid regex" on patterns OPA/RE2 accepts.
+# MEASURED both ways: WITHOUT this line, 10 of 24 regorus rows are error rows —
+# exactly the specimens carrying a regex target pattern (a, d-line, d-file);
+# WITH it, zero. This is a property of the DEPENDENCY GRAPH, not of the lowering,
+# and it is a first-order finding about regorus as a differential arm.
+regex = { version = "1", default-features = false, features = ["unicode-perl"] }
+
+serde_json = "1"
+sha2 = "0.10"
+anyhow = "1"
+tokio = { version = "1", features = ["rt", "macros"] }
