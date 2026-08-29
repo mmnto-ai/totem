@@ -2,8 +2,13 @@
 # deliverable (spec `.totem/specs/spine-spike.md` § Enrichment rows 3).
 #
 # Windows is measured on the operator's machine; this workflow is the Linux half.
-# It is deliberately branch-scoped: the spike is disposable, lives only on
-# `wt/spine-spike`, and must never run against `main` or perturb the repo's CI.
+#
+# PATH-scoped, not branch-scoped (spec `.totem/specs/seed20-apparatus.md` § G9): the
+# spike has outlived the single `wt/spine-spike` branch it was cut on — the R14
+# seed-20 apparatus lands on `r14/seed20-target-apparatus` — so the trigger follows
+# the SPIKE DIRECTORY on any branch instead of one branch name. A push that touches
+# nothing under `spikes/spine-adopt/**` still does not run it, so `main` and the
+# repo's CI are perturbed no more than before.
 #
 # Tool provisioning reads the URL + sha256 straight out of
 # `spikes/spine-adopt/toolchain.lock` so the lock stays the single source of
@@ -12,7 +17,7 @@ name: Spine Spike (Linux)
 
 on:
   push:
-    branches: [wt/spine-spike]
+    paths: [spikes/spine-adopt/**]
   workflow_dispatch:
 
 concurrency:

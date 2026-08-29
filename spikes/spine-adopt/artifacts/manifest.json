@@ -1,0 +1,245 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/manifest.mts",
+  "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
+  "recordSet": "specimens",
+  "runCommit": "6ca24d42ad01d3b69ba169d7d1267b7f6fb4738e",
+  "recordPin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
+  "recordPinApplies": "the specimens set is authored in spikes/spine-adopt/records/; the pin names the seed set only",
+  "records": [
+    {
+      "file": "spikes/spine-adopt/records/a-regex-lessons-rm-guard.rule.yaml",
+      "sha256": "24be123733cda7a3a5a345d2fedb0633607344fdc375af587a8a7e31f2f345ad",
+      "seedEntry": null,
+      "ruleId": "61dcb058bd1df15d"
+    },
+    {
+      "file": "spikes/spine-adopt/records/b-astgrep-flat-empty-catch.rule.yaml",
+      "sha256": "40bd79d7c970e21edced9b9ef90bedbec66e1fbf6d98d8c10e3dd6f6f19dbd19",
+      "seedEntry": null,
+      "ruleId": "2d962603591aa928"
+    },
+    {
+      "file": "spikes/spine-adopt/records/c-astgrep-compound-spawn-shell.rule.yaml",
+      "sha256": "99c2deb2827c2f85785cd79d2322fa5a013af67a37d5cdecc4f49ded284aad44",
+      "seedEntry": null,
+      "ruleId": "d0815b6769304e26"
+    },
+    {
+      "file": "spikes/spine-adopt/records/c-supp-astgrep-compound-failopen-catch.rule.yaml",
+      "sha256": "27ba70dd4820e67fc528c9c660f632f78586bc85608b4d783dc62897a8e7171d",
+      "seedEntry": null,
+      "ruleId": "87aff037d7de47a7"
+    },
+    {
+      "file": "spikes/spine-adopt/records/d-requires-line.rule.yaml",
+      "sha256": "76e5e1725e0c0fa0c4baee22304351bd2f05119018f53887068f2b47c67d4449",
+      "seedEntry": null,
+      "ruleId": "0123456789abcdef"
+    },
+    {
+      "file": "spikes/spine-adopt/records/d-requires-file.rule.yaml",
+      "sha256": "048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239",
+      "seedEntry": null,
+      "ruleId": "0123456789abcdef"
+    },
+    {
+      "file": "spikes/spine-adopt/records/e-exception-excludeglobs.rule.yaml",
+      "sha256": "d42a48e025863d320a214ee5c1c577e437b8cf4b068f2d5572ac8f8bbcf12ee8",
+      "seedEntry": null,
+      "ruleId": "0123456789abcdef"
+    }
+  ],
+  "fixtures": [
+    {
+      "file": ".totem/tests/test-61dcb058bd1df15d.md",
+      "sha256": "7b368a8b70ff12ff0b30e5c608ab667b6bd43596f5df308700c49516fe7623f8"
+    },
+    {
+      "file": ".totem/tests/test-87aff037d7de47a7.md",
+      "sha256": "5245d599f50e6ff4e3ba573e656561ecef2a9d5c6d066d9cb8e8ebd9e1a33a86"
+    },
+    {
+      "file": ".totem/tests/test-ast-empty-catch.md",
+      "sha256": "4b9ce4c268c7cc3b28fa3c6898a28fc146eed64dca2a5df9c362a9d0a513e8b3"
+    },
+    {
+      "file": ".totem/tests/test-d0815b6769304e26.md",
+      "sha256": "53061686710c6afe534dd7704bf794090c65ad2061adb573de07849eff00ce09"
+    }
+  ],
+  "probePaths": [
+    "scripts/deploy.sh",
+    "deploy.sh",
+    "a/b/c/deploy.sh",
+    "scripts/audit.ts",
+    "audit.ts",
+    "packages/core/src/a.ts",
+    "packages/core/src/a.test.ts",
+    "packages/core/src/a.spec.ts",
+    "packages/src/example.ts",
+    "src/example.sh",
+    "scripts/x.sh",
+    "deep/nest/x.cjs",
+    "scripts/x.ts",
+    ".claude/agents/foo.md",
+    ".claude/x",
+    ".totem/lessons.md",
+    ".totem/lessons/lesson-cd27a5b0.md",
+    ".totem/tests/test-x.md",
+    "packages/cli/src/orchestrators/shell-orchestrator.ts",
+    "packages\\core\\src\\a.ts",
+    "notes.md",
+    "README"
+  ],
+  "trackedPaths": {
+    "source": "git ls-files at HEAD, sorted (T5 sweep set)",
+    "list": "artifacts/tracked-paths.txt",
+    "count": 3005,
+    "sha256": "89272a4a3f0f2f4c8292d76b5482ebb263a3fd8308534f1196f2895bba940694"
+  },
+  "bundles": [
+    {
+      "fixtureId": "a-corpus-fail",
+      "sha256": "79d634f655dbf7b5fbc084470020ad9142bcc66482a86812ad1ef602581d67ec"
+    },
+    {
+      "fixtureId": "a-corpus-pass",
+      "sha256": "b99feb80aa09fa55bcbcc81e13f0c785e28baa75c99a1b48a56c006128d0ee13"
+    },
+    {
+      "fixtureId": "b-corpus-fail",
+      "sha256": "2f20b60033f04f69542bcab389e732cce9d422b2e6e428080475267b3d529686"
+    },
+    {
+      "fixtureId": "b-corpus-pass",
+      "sha256": "b5ef5d265b588736a2e266f70fe668f5407406d37fa1d50780f96b3496ea98fd"
+    },
+    {
+      "fixtureId": "c-corpus-fail",
+      "sha256": "1f4993e9efd55a32accdc8382aeb0296274aa22c67576e640f3458338a7633bc"
+    },
+    {
+      "fixtureId": "c-corpus-pass",
+      "sha256": "72f7dd85b840c8ee1007dda5cd3982e8c3c1a5a9ad20c406e92cfdcd9bf41eef"
+    },
+    {
+      "fixtureId": "c-supp-corpus-fail",
+      "sha256": "59dd27636b4beab157478ba23970bf9d49a3b2e058f926cbc1f01f174b42731b"
+    },
+    {
+      "fixtureId": "c-supp-corpus-pass",
+      "sha256": "d6aa8b0e0ea9e4c6942e7a1d19e363d99bb2f3e74dde068f307181c3ee3ddbb6"
+    },
+    {
+      "fixtureId": "a-inline-bad",
+      "sha256": "d373fb76dcf6791e0c787e1c64d0b430d54f941a90556cf117974d63517d4623"
+    },
+    {
+      "fixtureId": "a-inline-good",
+      "sha256": "0ceff8bc5f48a85740d3087d00f5fa5c555e990b4470dc0d79da934a80f455af"
+    },
+    {
+      "fixtureId": "b-inline-bad",
+      "sha256": "8ac60f1f63b33654c9c90a55145dfbdff6979cfa7967a38c2e4150fb88ec24dd"
+    },
+    {
+      "fixtureId": "b-inline-good",
+      "sha256": "74df16e6e6bb839a4b46bddfad22532bb788f2f158b741c1aef1641136d9a03c"
+    },
+    {
+      "fixtureId": "c-inline-bad",
+      "sha256": "5f79d076d3a623e11b7b6f01e8cde8e82783696737f310982184ea7dfdacea43"
+    },
+    {
+      "fixtureId": "c-inline-good",
+      "sha256": "e6d02c01e8071f422ddf830932105cfa8eecac093a6f6b25a6190a39233114bb"
+    },
+    {
+      "fixtureId": "c-supp-inline-bad",
+      "sha256": "691ccd467b8b520c3f859e90c36670f21dd925e7755f54741eec6c4afbf3cb6e"
+    },
+    {
+      "fixtureId": "c-supp-inline-good",
+      "sha256": "f411976860fc6ec17bbea77248416ed7c7b6a3f8d0f132a16c997c4146c93985"
+    },
+    {
+      "fixtureId": "d-line-inline-bad",
+      "sha256": "f41745ee9d6a00f657aefee519d07ef315220d98d308dc50fc2932e2622408a5"
+    },
+    {
+      "fixtureId": "d-line-inline-good",
+      "sha256": "192749542df2c010e63d3dd8a1277c6dd0cc0c3d2da1f784a7bde96748e9fe32"
+    },
+    {
+      "fixtureId": "d-file-inline-bad",
+      "sha256": "ce3cf5aee170c0434d7dfdb0cfda827537658929ef756daf547f352b71854541"
+    },
+    {
+      "fixtureId": "d-file-inline-good",
+      "sha256": "f79c932a1b2c734a0fbc62081ef7192a191c55264a1a5d7803ea7f9e6dc17b3f"
+    },
+    {
+      "fixtureId": "e-inline-bad",
+      "sha256": "b8405dc3148dc8b61de52f42bdbb270703d588da95c748ba37b56ece39d988c6"
+    },
+    {
+      "fixtureId": "e-inline-good",
+      "sha256": "76ed0c6f8fe82f46b1b71eedb3770e9d0b5e213a9bc2484e613b5f419c2f2817"
+    },
+    {
+      "fixtureId": "d-file-control-unreadable",
+      "sha256": "c3335610ad8afdb3b61526eea47715466a215ae88f55fcefecd607204a5beac2"
+    },
+    {
+      "fixtureId": "d-file-control-empty",
+      "sha256": "ef6c89ce75e397bd3dae21eafe791ca807dac197d550fb4dfc42abde33322abc"
+    }
+  ],
+  "toolchain": {
+    "opa": {
+      "version": "1.20.0",
+      "resolvedFrom": "the pinned OPA binary: `opa_windows_amd64.exe version`"
+    },
+    "rust": {
+      "version": "1.96.1",
+      "resolvedFrom": "the installed cargo: `cargo --version`"
+    },
+    "node": {
+      "version": "24.16.0",
+      "resolvedFrom": "process.versions.node"
+    },
+    "astGrepNapi": {
+      "version": "0.42.0",
+      "resolvedFrom": "packages/core/node_modules/@ast-grep/napi/package.json"
+    },
+    "wazero": {
+      "version": "1.12.0",
+      "resolvedFrom": "wazero-probe/go.mod require github.com/tetratelabs/wazero"
+    },
+    "go": {
+      "version": "1.26.2",
+      "resolvedFrom": "the installed go toolchain: `go version`"
+    },
+    "wasmtime": {
+      "version": "47.0.4",
+      "resolvedFrom": "host/Cargo.lock [[package]] name = \"wasmtime\""
+    },
+    "regorus": {
+      "version": "0.11.0",
+      "resolvedFrom": "host/Cargo.lock [[package]] name = \"regorus\""
+    },
+    "opaWasm": {
+      "version": "0.3.2",
+      "resolvedFrom": "host/Cargo.lock [[package]] name = \"opa-wasm\""
+    }
+  },
+  "platform": {
+    "os": "win32",
+    "arch": "x64",
+    "release": "10.0.26200"
+  },
+  "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
+  "recordLowerSource": "packages/core/src/spine/record-lower.ts",
+  "generatedAt": "2026-08-29T06:57:44.043Z",
+  "runManifestSha256": "0f443c032f56e951f258277bd2c5ee72157d5d2e7ad596c6f750b0685bb3a216"
+}

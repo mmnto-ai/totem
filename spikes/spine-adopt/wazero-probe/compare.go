@@ -54,6 +54,12 @@ type normalRow struct {
 	MatchCount *int
 	Error      string // "" ⇒ no error
 
+	// Absent marks a row this arm did not produce AT ALL, as distinct from an
+	// error row (which the arm produced deliberately). The distinction is
+	// load-bearing: the malformed-facts control is EXPLAINED only when both arms
+	// actually errored, so a missing row must not be able to satisfy it.
+	Absent bool
+
 	OrdinalDerivation string
 }
 
@@ -69,6 +75,7 @@ type pairResult struct {
 	RuleID      string         `json:"ruleId"`
 	FixtureID   string         `json:"fixtureId"`
 	Specimen    string         `json:"specimen"`
+	SeedEntry   string         `json:"seedEntry"`
 	Engine      string         `json:"engine"`
 	Left        string         `json:"left"`
 	Right       string         `json:"right"`
@@ -232,14 +239,97 @@ func explain(left, right normalRow) (string, map[string]any) {
 	return "", nil
 }
 
+// malformedFactsControlFixture is the K5b control bundle: a FactBundle carrying a
+// non-string member in `lines[]`, so `facts_wellformed` is false, the entrypoint's
+// `result` rule is UNDEFINED, and BOTH wasm arms must return an EMPTY RESULT SET —
+// which `entrypointValue` turns into an error row on purpose.
+//
+// Its whole point is to make the strictness contract OBSERVABLE, so the comparator
+// names the designed error instead of reporting it as a divergence
+// (mmnto-ai/totem-strategy#1154 § G8 — the comparator "carves it out with a named
+// explanation class (MALFORMED-FACTS-CONTROL) so it never renders as
+// UNEXPLAINED-DIVERGENCE and never manufactures a parity-divergence").
+//
+// The carve-out is deliberately NARROW. It is keyed on this one fixture id, it
+// fires only when BOTH arms actually errored, and it declines when either arm
+// produced a clean verdict — a control that stopped controlling is a finding, not
+// an explanation. Widening any of the three would launder a real divergence.
+const malformedFactsControlFixture = "m3-malformed-lines"
+
+const malformedFactsControlExplanation = "MALFORMED-FACTS-CONTROL — the K5b control bundle. Its `lines[]` carries a " +
+	"non-string member, so `facts_wellformed` is false and the entrypoint's `result` rule is UNDEFINED on BOTH arms. " +
+	"The matching error rows are the DESIGNED outcome of the strictness contract, not a divergence between the runtimes."
+
+const absentRowReason = "ABSENT ROW — an arm produced no row at all for this (ruleId, fixtureId). " +
+	"This is not an error row: the arm did not decide and then fail, it never reached the fixture."
+
+// compareControlPair classifies the malformed-facts control.
+//
+// It runs BEFORE every other branch, including the MATCH branch: if both arms
+// returned a clean verdict for this fixture — even the same clean verdict — the
+// control did not fire and the run must say so.
+func compareControlPair(base pairResult, left, right normalRow) pairResult {
+	switch {
+	case left.Absent || right.Absent:
+		base.Status = statusUnexplained
+		base.Detail = map[string]any{
+			"reason":      absentRowReason,
+			"leftAbsent":  left.Absent,
+			"rightAbsent": right.Absent,
+			"control":     "the malformed-facts control cannot be satisfied by a MISSING row — an arm that never evaluated the control proves nothing about the strictness contract",
+		}
+	case left.Error != "" && right.Error != "":
+		ex := malformedFactsControlExplanation
+		base.Status = statusExplained
+		base.Explanation = &ex
+		base.Detail = map[string]any{
+			"reason":     "MALFORMED-FACTS-CONTROL",
+			"leftError":  left.Error,
+			"rightError": right.Error,
+		}
+	default:
+		base.Status = statusUnexplained
+		base.Detail = map[string]any{
+			"reason": "MALFORMED-FACTS-CONTROL DID NOT FIRE — this bundle must produce an ERROR ROW on BOTH arms; " +
+				"at least one arm returned a clean verdict, so the strictness contract the control exists to observe is not holding",
+			"leftError":  left.Error,
+			"rightError": right.Error,
+		}
+	}
+	return base
+}
+
 func comparePair(left, right normalRow) pairResult {
+	// Identity is taken from whichever side HAS it: one of the two rows may be a
+	// synthesised absent row, and reading the specimen off it unconditionally
+	// would file the pair under the empty specimen.
+	pick := func(a, b string) string {
+		if a != "" {
+			return a
+		}
+		return b
+	}
 	base := pairResult{
-		RuleID:    left.RuleID,
-		FixtureID: left.FixtureID,
-		Specimen:  left.Specimen,
-		Engine:    left.Engine,
+		RuleID:    pick(left.RuleID, right.RuleID),
+		FixtureID: pick(left.FixtureID, right.FixtureID),
+		Specimen:  pick(left.Specimen, right.Specimen),
+		Engine:    pick(left.Engine, right.Engine),
 		Left:      left.Arm,
 		Right:     right.Arm,
+	}
+
+	if base.FixtureID == malformedFactsControlFixture {
+		return compareControlPair(base, left, right)
+	}
+
+	if left.Absent || right.Absent {
+		base.Status = statusUnexplained
+		base.Detail = map[string]any{
+			"reason":      absentRowReason,
+			"leftAbsent":  left.Absent,
+			"rightAbsent": right.Absent,
+		}
+		return base
 	}
 
 	if left.Error != "" || right.Error != "" {

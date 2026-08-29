@@ -816,7 +816,7 @@
       "detail": "[\"empty-result-set\",\"eval-error-or-trap\",\"extra-or-malformed-keys\",\"missing-keys\",\"non-object\"]"
     },
     {
-      "name": "INV 8 — `src/certify.mts` is the ONLY TypeScript module that writes `artifacts/chains/` (publication is genuinely gated). 12 sibling module(s) scanned: src/build-wasm.mts, src/census.mts, src/compare.mts, src/facts.mts, src/lower.mts, src/shipped-verdicts.mts, src/verify-records.mts, src/lib/expressibility.mts, src/lib/records.mts, src/lib/specimens.mts, src/lib/spike-env.mts, src/lib/wasm-census.mts — TypeScript sources only; the Rust host, the Go probe and CI are outside this scan",
+      "name": "INV 8 — `src/certify.mts` is the ONLY TypeScript module that writes `artifacts/chains/` (publication is genuinely gated). 15 sibling module(s) scanned: src/build-wasm.mts, src/census.mts, src/compare.mts, src/facts.mts, src/lower.mts, src/manifest.mts, src/shipped-verdicts.mts, src/verify-records.mts, src/lib/expressibility.mts, src/lib/lowering-gate.mts, src/lib/record-sets.mts, src/lib/records.mts, src/lib/specimens.mts, src/lib/spike-env.mts, src/lib/wasm-census.mts — TypeScript sources only; the Rust host, the Go probe and CI are outside this scan",
       "ok": true,
       "detail": "[]"
     },
@@ -825,5 +825,6 @@
       "ok": true,
       "detail": "a `join(…, 'chains', …)` write and a multi-line `CHAINS_DIR` write are both caught; an `rmSync` of the same path is not"
     }
-  ]
+  ],
+  "runManifestSha256": "0f443c032f56e951f258277bd2c5ee72157d5d2e7ad596c6f750b0685bb3a216"
 }

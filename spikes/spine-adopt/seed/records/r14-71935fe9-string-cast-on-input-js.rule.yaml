@@ -1,0 +1,19 @@
+schemaVersion: 1
+
+severity: warning
+message: "Avoid String() casting on input patterns — it silently converts unexpected objects to '[object Object]'. Explicitly validate the type and throw a descriptive error instead."
+
+target:
+  type: ast-grep
+  language: javascript
+  pattern: 'String($INPUT)'
+  scope:
+    fileGlobs:
+      - '**/*.js'
+
+examples:
+  - bad: 'const pattern = String(input.pattern);'
+    good: "if (typeof input.pattern !== 'string') throw new Error('pattern must be a string'); const pattern = input.pattern;"
+
+curation:
+  sourceLesson: 'lesson-71935fe9a742137b'

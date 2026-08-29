@@ -1,0 +1,23 @@
+schemaVersion: 1
+
+severity: warning
+message: 'Dynamic imports are restricted to CLI command entry points. Use standard top-level imports in utility and adapter layers.'
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: 'import($MODULE)'
+  scope:
+    fileGlobs:
+      - 'packages/cli/src/**/*.ts'
+    excludeGlobs:
+      - 'packages/cli/src/commands/**/*.ts'
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: "const { renderBanner } = await import('./banner.js');"
+    good: "import { renderBanner } from './banner.js';"
+
+curation:
+  sourceLesson: 'lesson-6467c35159c1504d'

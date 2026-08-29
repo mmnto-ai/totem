@@ -37,14 +37,33 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { classify, scanPattern, type ExpressibilityClass } from './lib/expressibility.mts';
-import { compileSpecimen, loadCore, type CompiledSpecimen } from './lib/records.mts';
-import { Checks, SPIKE_ROOT, writeArtifact } from './lib/spike-env.mts';
-import { SPECIMENS, type Specimen } from './lib/specimens.mts';
+import { classify, scanPattern } from './lib/expressibility.mts';
+import { lowerPattern, type PatternVerdict } from './lib/lowering-gate.mts';
+import {
+  activeRecordSet,
+  DECLARED_TWINNED_IDS,
+  loadRecordSet,
+  measuredSharedIds,
+  sharedIdCheckName,
+  sharedProbePaths,
+  type RecordRow,
+} from './lib/record-sets.mts';
+import { intakeRecordSet, loadCore, type CompiledSpecimen } from './lib/records.mts';
+import { ARTIFACTS_DIR, Checks, SPIKE_ROOT, writeArtifact } from './lib/spike-env.mts';
+
+export { lowerPattern, type PatternVerdict };
 
 export const REGO_DIR = path.join(SPIKE_ROOT, 'rego');
 export const REGO_BUILD_DIR = path.join(REGO_DIR, 'build');
 export const LOWERING_MD = path.join(REGO_DIR, 'LOWERING.md');
+/**
+ * G7 — the PUBLISHED lowering. `rego/build/` stays a gitignored build tree; the
+ * policy and its glob table are copied here so T3 can audit the lowering from the
+ * repository at the pin without rebuilding it.
+ * `<pkg>` is the package SUFFIX (`totem.spike.` stripped) — the same key the build
+ * tree and `artifacts/chains/<pkg>.json` already use.
+ */
+export const LOWERED_PUBLISH_DIR = path.join(ARTIFACTS_DIR, 'lowered');
 
 // ─── § Lowering 7 — the suppression marker sets, verbatim from the contract ──
 
@@ -168,67 +187,74 @@ export function normalizePath(filePath: string): string {
 }
 
 // ─── § Lowering 4 — the regex engine gate ────────────────────────────────────
+//
+// `lowerPattern` and `PatternVerdict` now live in `src/lib/lowering-gate.mts`
+// (re-exported above, unchanged): `src/facts.mts` and `src/verify-records.mts` run
+// BEFORE this module and need the same verdict to skip a rejected record, and
+// importing this file for it would re-run the whole lowering as an import side
+// effect.
 
-export interface PatternVerdict {
-  role: string;
-  pattern: string;
-  class: ExpressibilityClass;
-  lowered: boolean;
-  /** The Rego source literal, or null on a REJECT. */
-  literal: string | null;
-  reason: string | null;
-}
+// ─── § Lowering 3 — raw-string SYNTAX, not the backtick byte (G6) ────────────
 
 /**
- * § Lowering 4 + § Lowering 3 in one place. `re2-clean` and `word-boundary` lower
- * to a JSON-escaped DOUBLE-QUOTED literal (`JSON.stringify`, the contract's named
- * `json.Marshal`-equivalent); `lookaround` and `backreference` are compile-loud
- * REJECT rows and produce no literal at all.
+ * Remove every DOUBLE-QUOTED Rego string literal from a line of emitted code,
+ * honouring `\"` (and every other backslash escape) inside them.
  *
- * The double-quoted form is what makes the 17 backtick-bearing corpus patterns
- * representable — a Rego RAW string has no escape mechanism — and `JSON.stringify`
- * re-escapes every backslash, so `\b` reaches RE2 as a word boundary instead of
- * the U+0008 the census measured a verbatim emission to produce.
+ * The § Lowering 3 self-assert used to search the code for a backtick BYTE. That
+ * over-fires: a record whose pattern legitimately contains a backtick — inside a
+ * character class, say — lowers to a JSON-escaped DOUBLE-QUOTED literal that
+ * carries the backtick as DATA, which is exactly what the contract asks for. What
+ * must never appear is a RAW string literal, and a raw literal is a backtick
+ * OUTSIDE any double-quoted span. Stripping the quoted spans first makes the
+ * assert test the syntax the clause is about.
  */
-export function lowerPattern(role: string, pattern: string): PatternVerdict {
-  const cls = classify(scanPattern(pattern));
-  if (cls === 'lookaround' || cls === 'backreference') {
-    return {
-      role,
-      pattern,
-      class: cls,
-      lowered: false,
-      literal: null,
-      reason:
-        cls === 'lookaround'
-          ? 'RE2 rejects lookaround AT COMPILE ("invalid or unsupported Perl syntax: `(?!`" / "invalid named capture"); § Lowering 4 forbids an approximation.'
-          : 'RE2 rejects backreferences AT COMPILE ("invalid escape sequence: `\\1`"); § Lowering 4 forbids an approximation.',
-    };
+export function stripRegoStringLiterals(line: string): string {
+  let out = '';
+  let i = 0;
+  let inString = false;
+  while (i < line.length) {
+    const ch = line[i]!;
+    if (inString) {
+      if (ch === '\\') {
+        i += 2; // the escape and whatever it escapes, `\"` included
+        continue;
+      }
+      if (ch === '"') inString = false;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      i += 1;
+      continue;
+    }
+    out += ch;
+    i += 1;
   }
-  return {
-    role,
-    pattern,
-    class: cls,
-    lowered: true,
-    literal: JSON.stringify(pattern),
-    reason: null,
-  };
+  return out;
 }
 
 // ─── § Lowering 1 — the package name ─────────────────────────────────────────
 
 /**
  * (N1) `r<ruleId>` where the id is unique among the lowered records; a
- * `_<specimen>` suffix where it is not. Three records share `0123456789abcdef`.
+ * `_<discriminator>` suffix where it is not.
+ *
+ * The discriminator is the record row's `packageDiscriminator`: the specimen id on
+ * the specimens set (three records share the pinned id `0123456789abcdef`), the
+ * record's declared LANGUAGE on the seed set — the charter fixes
+ * `totem.spike.r<lessonHash>_<language>` for BOTH records of a twinned rule.
  */
-export function packageSuffix(ruleId: string, specimenId: string, shared: boolean): string {
-  return shared ? `r${ruleId}_${specimenId.replace(/-/g, '_')}` : `r${ruleId}`;
+export function packageSuffix(ruleId: string, discriminator: string, shared: boolean): string {
+  return shared ? `r${ruleId}_${discriminator.replace(/-/g, '_')}` : `r${ruleId}`;
 }
 
 // ─── The emitter ─────────────────────────────────────────────────────────────
 
 interface LoweredRecord {
   specimen: string;
+  /** G4 — the seed entry beside the specimen, so a rule's N records group. */
+  seedEntry: string | null;
   ruleId: string;
   pkgSuffix: string;
   packageName: string;
@@ -541,33 +567,14 @@ function emitPolicy(cs: CompiledSpecimen, lowered: LoweredRecord): string {
  * nested (`barePatternMatchesBasename: false`), an excluded extension, a
  * `.claude/**\/*` subtree, a Windows-separator spelling, and a path that matches a
  * positive AND an exclude (the two-array rule's whole point).
+ *
+ * The shared list is per RECORD SET (`src/lib/record-sets.mts`): the specimens list
+ * is frozen because it is serialised into each `globs.json`, whose sha256 is a
+ * component of the chain's `regoSha256`; the seed set appends its own probes so
+ * every seed glob has a matching and a non-matching path (G2).
  */
-function probePaths(s: Specimen): string[] {
-  const base = [
-    s.inlineFilePath,
-    'scripts/deploy.sh',
-    'deploy.sh',
-    'a/b/c/deploy.sh',
-    'scripts/audit.ts',
-    'audit.ts',
-    'packages/core/src/a.ts',
-    'packages/core/src/a.test.ts',
-    'packages/core/src/a.spec.ts',
-    'packages/src/example.ts',
-    'src/example.sh',
-    'scripts/x.sh',
-    'deep/nest/x.cjs',
-    'scripts/x.ts',
-    '.claude/agents/foo.md',
-    '.claude/x',
-    '.totem/lessons.md',
-    '.totem/lessons/lesson-cd27a5b0.md',
-    '.totem/tests/test-x.md',
-    'packages/cli/src/orchestrators/shell-orchestrator.ts',
-    'packages\\core\\src\\a.ts',
-    'notes.md',
-    'README',
-  ];
+function probePaths(s: RecordRow): string[] {
+  const base = [s.inlineFilePath, ...sharedProbePaths(activeRecordSet())];
   if (s.fixture) base.push(s.fixture.file);
   return [...new Set(base)];
 }
@@ -585,55 +592,84 @@ async function main(): Promise<void> {
     schemaLine,
   );
 
-  // (N1) which rule ids collide across the 7 records.
-  const idCounts = new Map<string, number>();
-  for (const s of SPECIMENS) idCounts.set(s.ruleId, (idCounts.get(s.ruleId) ?? 0) + 1);
-  const sharedIds = [...idCounts.entries()].filter(([, n]) => n > 1).map(([id]) => id);
-  checks.eq(
-    'CONTRACT NOTE (N1) — `r<ruleId>` is not unique: the pinned exemplar id is shared',
-    sharedIds,
-    ['0123456789abcdef'],
+  // (N1) which rule ids collide across the loaded records — MEASURED against the
+  // set's own declaration, so neither side is derived from the other.
+  const recordSet = activeRecordSet();
+  const loadedRows = loadRecordSet(recordSet);
+  const sharedIds = measuredSharedIds(loadedRows);
+  checks.eq(sharedIdCheckName(recordSet), sharedIds, [...DECLARED_TWINNED_IDS[recordSet]]);
+
+  // (G6) the § Lowering 3 assert reads raw-string SYNTAX. Proven BOTH ways on
+  // synthetic lines before any policy is tested with it — an assert that could not
+  // fire, or that fired on quoted data, would say nothing about the emitted code.
+  const rawControl = 'x := `raw`';
+  const quotedBacktickControl = 'x := "a`b"';
+  const escapedQuoteControl = 'x := "a\\"`b"';
+  checks.check(
+    'CONTROL (§ Lowering 3) — the backtick assert tests raw-string SYNTAX: a genuine RAW literal is flagged, a backtick INSIDE a double-quoted literal is not, and `\\"` does not end the literal early',
+    stripRegoStringLiterals(rawControl).includes('`') &&
+      !stripRegoStringLiterals(quotedBacktickControl).includes('`') &&
+      !stripRegoStringLiterals(escapedQuoteControl).includes('`'),
+    `raw=${JSON.stringify(stripRegoStringLiterals(rawControl))} quoted=${JSON.stringify(stripRegoStringLiterals(quotedBacktickControl))} escaped=${JSON.stringify(stripRegoStringLiterals(escapedQuoteControl))}`,
   );
+
+  // (G3) intake: parse + shipped-compile + the § Lowering 4 gate, ONCE. On the
+  // specimens set a rejection still throws; on the seed set it is a reject ROW and
+  // the run continues without that record — no policy, no bundle, no chain.
+  const intake = intakeRecordSet(core);
+  const recordRejects = intake.rejects;
 
   fs.rmSync(REGO_BUILD_DIR, { recursive: true, force: true });
   fs.mkdirSync(REGO_BUILD_DIR, { recursive: true });
+  // G7's publication surface is rebuilt from scratch, so what is on disk after a
+  // run is exactly what this run lowered.
+  fs.rmSync(LOWERED_PUBLISH_DIR, { recursive: true, force: true });
+  fs.mkdirSync(LOWERED_PUBLISH_DIR, { recursive: true });
 
   const lowered: LoweredRecord[] = [];
 
-  for (const s of SPECIMENS) {
-    const cs = compileSpecimen(core, s);
-    const rule = cs.rule as Record<string, any>;
-    const shared = (idCounts.get(s.ruleId) ?? 0) > 1;
-    const pkgSuffix = packageSuffix(rule.lessonHash, s.id, shared);
-    const packageName = `totem.spike.${pkgSuffix}`;
-    const dir = path.join(REGO_BUILD_DIR, pkgSuffix);
+  for (const row of intake.rows) {
+    const s = row.specimen;
+    const rule = (row.compiled?.rule ?? {}) as Record<string, any>;
 
-    // ── § Lowering 4 — the regex engine gate, on every pattern the record carries ──
-    const patterns: PatternVerdict[] = [];
-    if (cs.engine === 'regex') {
-      patterns.push(lowerPattern('target', String(rule.pattern)));
-    } else {
+    if (row.compiled && row.compiled.engine !== 'regex') {
       checks.eq(
         `${s.id} — ast-grep record carries an EMPTY \`pattern\` (tree matching is a FACT, not a regex)`,
         rule.pattern,
         '',
       );
     }
-    if (rule.requires) patterns.push(lowerPattern('requires', String(rule.requires.pattern)));
-
-    const rejected = patterns.filter((p) => !p.lowered);
-    checks.check(
-      `${s.id} — every pattern lowers (§ Lowering 4 gate)`,
-      rejected.length === 0,
-      rejected.length === 0
-        ? patterns.map((p) => `${p.role}:${p.class}`).join(', ') || '(no regex patterns)'
-        : rejected.map((p) => `${p.role} REJECTED (${p.class})`).join('; '),
-    );
-    if (rejected.length > 0) {
-      throw new Error(
-        `specimen ${s.id} carries an RE2-inexpressible pattern; the spec says all five specimens lower.`,
-      );
+    if (row.compiled) {
+      const refused = row.patterns.filter((p) => !p.lowered);
+      if (refused.length === 0) {
+        checks.check(
+          `${s.id} — every pattern lowers (§ Lowering 4 gate)`,
+          true,
+          row.patterns.map((p) => `${p.role}:${p.class}`).join(', ') || '(no regex patterns)',
+        );
+      } else {
+        // (§ G3) A § Lowering 4 refusal is a SCORED ROW, not a failed check —
+        // apparatus health is not a record verdict. The typed row is already in
+        // `intake.rejects`; this line only makes it visible in `checks[]`.
+        // On the `specimens` set the intake THROWS before reaching here, so the
+        // old fail-loud behaviour on that set is untouched.
+        checks.check(
+          `${s.id} — REJECT ROW (target-lowering): a pattern is RE2-inexpressible, so no policy is emitted (§ Lowering 4)`,
+          true,
+          refused.map((p) => `${p.role} REJECTED (${p.class})`).join('; '),
+        );
+      }
     }
+    // A REJECT ROW is not a failed check (apparatus health ≠ record verdict): the
+    // row was already recorded by the intake, and the record is simply not lowered.
+    if (row.status === 'rejected' || !row.compiled) continue;
+
+    const cs = row.compiled;
+    const patterns = row.patterns;
+    const shared = DECLARED_TWINNED_IDS[recordSet].includes(rule.lessonHash as string);
+    const pkgSuffix = packageSuffix(rule.lessonHash, s.packageDiscriminator, shared);
+    const packageName = `totem.spike.${pkgSuffix}`;
+    const dir = path.join(REGO_BUILD_DIR, pkgSuffix);
 
     // ── § Lowering 5 — globs → anchored regexes ──
     const globTable: GlobRow[] = [];
@@ -650,6 +686,7 @@ async function main(): Promise<void> {
 
     const rec: LoweredRecord = {
       specimen: s.id,
+      seedEntry: s.seedEntry,
       ruleId: rule.lessonHash,
       pkgSuffix,
       packageName,
@@ -668,13 +705,13 @@ async function main(): Promise<void> {
     const scopeProbes: { path: string; mine: boolean; shipped: boolean }[] = [];
     for (const p of probePaths(s)) {
       const norm = normalizePath(p);
-      for (const row of globTable) {
-        const mine = new RegExp(row.regex).test(norm);
+      for (const gr of globTable) {
+        const mine = new RegExp(gr.regex).test(norm);
         // `matchesRecordGlob` is not on the dist barrel; `recordScopeMatchesFile`
         // with ONE positive glob and no excludes is exactly it
         // (`record-runtime.ts:208-211`) and IS exported.
-        const shipped = core.recordScopeMatchesFile(p, [row.glob], undefined) as boolean;
-        perGlob.push({ glob: row.glob, path: p, mine, shipped });
+        const shipped = core.recordScopeMatchesFile(p, [gr.glob], undefined) as boolean;
+        perGlob.push({ glob: gr.glob, path: p, mine, shipped });
       }
       const positive = globTable
         .filter((r) => r.kind === 'fileGlobs')
@@ -712,6 +749,27 @@ async function main(): Promise<void> {
       scopeProbes.some((p) => p.shipped) && scopeProbes.some((p) => !p.shipped),
       `${scopeProbes.filter((p) => p.shipped).length} in / ${scopeProbes.filter((p) => !p.shipped).length} out`,
     );
+    // (G2) The seed set additionally requires PER-GLOB discrimination: a glob no
+    // probe path matches is a glob whose lowering nothing checked. Asserted only on
+    // the seed set — the specimens probe list is frozen (it is a chain component),
+    // so adding this row there would move committed evidence for no new coverage.
+    if (recordSet === 'seed20') {
+      const perGlobCoverage = globTable.map((gr) => {
+        const re = new RegExp(gr.regex);
+        const matching = scopeProbes.filter((p) => re.test(normalizePath(p.path))).length;
+        return { glob: gr.glob, matching, nonMatching: scopeProbes.length - matching };
+      });
+      const blind = perGlobCoverage.filter((c) => c.matching === 0 || c.nonMatching === 0);
+      checks.check(
+        `${s.id} — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)`,
+        blind.length === 0,
+        blind.length === 0
+          ? perGlobCoverage.map((c) => `${c.glob}:${c.matching}/${c.nonMatching}`).join(', ')
+          : blind
+              .map((c) => `${c.glob}: ${c.matching} matching, ${c.nonMatching} non-matching`)
+              .join('; '),
+      );
+    }
 
     // ── emit ──
     fs.mkdirSync(dir, { recursive: true });
@@ -737,15 +795,31 @@ async function main(): Promise<void> {
       'utf-8',
     );
 
+    // ── G7 — PUBLISH the lowering beside the artifacts ──
+    //
+    // A copy of the bytes that were just written, never a re-emission: publishing a
+    // second rendering would let the audited policy drift from the one whose sha256
+    // the chain binds.
+    const publishDir = path.join(LOWERED_PUBLISH_DIR, pkgSuffix);
+    fs.mkdirSync(publishDir, { recursive: true });
+    fs.copyFileSync(rec.regoPath, path.join(publishDir, 'policy.rego'));
+    fs.copyFileSync(rec.globsPath, path.join(publishDir, 'globs.json'));
+
     // § Lowering 3, asserted on the BYTES that were written rather than on intent.
     // Comment lines are excluded — the emitted prose quotes Rego and regex syntax
     // in backticks, and only CODE can carry a raw-string literal. Every generated
     // comment is a whole line beginning `#`, so the split is exact.
+    //
+    // (G6) Within the code lines the test is on SYNTAX: double-quoted string
+    // literals are stripped first, so a backtick carried as DATA inside a pattern
+    // literal — `5da43ea6` has one, inside a character class — is not mistaken for a
+    // RAW string literal, which is the only thing § Lowering 3 forbids.
     const emitted = fs.readFileSync(rec.regoPath, 'utf-8');
     const codeLines = emitted.split('\n').filter((l) => !l.trimStart().startsWith('#'));
+    const codeOutsideStringLiterals = codeLines.map(stripRegoStringLiterals).join('\n');
     checks.check(
       `${s.id} — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)`,
-      !codeLines.join('\n').includes('`'),
+      !codeOutsideStringLiterals.includes('`'),
       `${codeLines.length} code lines / ${emitted.length} bytes`,
     );
     if (cs.engine === 'regex') {
@@ -761,12 +835,32 @@ async function main(): Promise<void> {
     lowered.push(rec);
   }
 
-  checks.eq('7 records lowered, one policy package each (§ Lowering 1)', lowered.length, 7);
+  // The cardinality is DERIVED from the loaded set minus its reject rows, never a
+  // literal: a set of any size holds the same invariant, and a stale literal would
+  // name itself rather than the record that went missing.
+  const expectedLowered = loadedRows.length - recordRejects.length;
+  checks.eq(
+    `${expectedLowered} records lowered, one policy package each (§ Lowering 1)`,
+    lowered.length,
+    expectedLowered,
+  );
   checks.eq(
     'package names are UNIQUE (the N1 collision is resolved, not papered over)',
     new Set(lowered.map((l) => l.packageName)).size,
-    7,
+    expectedLowered,
   );
+  if (recordRejects.length > 0) {
+    // A reject row is DATA the scorer reads, not a failed check — apparatus health
+    // is not a record verdict (§ G3). Recorded as an always-true row so the run's
+    // reject set is visible in `checks[]` without reddening the apparatus.
+    checks.check(
+      `REJECT ROWS — ${recordRejects.length} record(s) did not lower; the run continued and emitted no bundle or chain for them`,
+      true,
+      recordRejects
+        .map((r) => `${r.recordId} [${r.stage}${r.class ? `/${r.class}` : ''}]`)
+        .join('; '),
+    );
+  }
 
   // ── § Lowering 4's reject path, EXERCISED on the two evidence-row patterns ──
   //
@@ -818,9 +912,27 @@ async function main(): Promise<void> {
     [],
   );
   checks.eq(
-    'the build tree holds EXACTLY the 7 lowered packages',
+    `the build tree holds EXACTLY the ${lowered.length} lowered packages`,
     builtDirs,
     lowered.map((l) => l.pkgSuffix).sort(),
+  );
+  // (G7) and the PUBLISHED tree holds exactly the same set, so an audit reading
+  // `artifacts/lowered/` is reading the run's whole lowering, not a subset of it.
+  checks.eq(
+    `the published tree \`artifacts/lowered/\` holds EXACTLY the same ${lowered.length} packages`,
+    fs.readdirSync(LOWERED_PUBLISH_DIR).sort(),
+    lowered.map((l) => l.pkgSuffix).sort(),
+  );
+  checks.eq(
+    '(G7) every published policy.rego is BYTE-IDENTICAL to the one whose sha256 the chain binds',
+    lowered
+      .filter(
+        (l) =>
+          fs.readFileSync(path.join(LOWERED_PUBLISH_DIR, l.pkgSuffix, 'policy.rego'), 'utf-8') !==
+          fs.readFileSync(l.regoPath, 'utf-8'),
+      )
+      .map((l) => l.pkgSuffix),
+    [],
   );
   for (const l of lowered) {
     checks.check(
@@ -829,6 +941,29 @@ async function main(): Promise<void> {
       path.relative(SPIKE_ROOT, l.dir).split(path.sep).join('/'),
     );
   }
+
+  // (N2)/(N4) reachability, MEASURED against the run's own fact bundles rather than
+  // asserted from a remembered count. Both notes claim the ordering/marker gap is
+  // unreachable; that claim is only worth the measurement behind it, and the number
+  // of bundles is a property of the record set, not a constant.
+  const factsDir = path.join(SPIKE_ROOT, 'artifacts', 'facts');
+  const factBundleFiles = fs.existsSync(factsDir)
+    ? fs.readdirSync(factsDir).filter((f) => f.endsWith('.json'))
+    : [];
+  const markerBearing = factBundleFiles.filter((f) => {
+    const rec = JSON.parse(fs.readFileSync(path.join(factsDir, f), 'utf-8')) as {
+      factBundle: { lines: unknown[] };
+    };
+    return rec.factBundle.lines.some(
+      (l) =>
+        typeof l === 'string' &&
+        [...SAME_LINE_MARKERS, ...PRECEDING_LINE_MARKERS].some((m) => l.includes(m)),
+    );
+  });
+  const reachability =
+    markerBearing.length === 0
+      ? `Unreachable on all ${factBundleFiles.length} fact bundles (none carries a suppression marker)`
+      : `Reachable: ${markerBearing.length} of ${factBundleFiles.length} fact bundles carry a suppression marker (${markerBearing.join(', ')})`;
 
   const out = writeArtifact('lowering-rejects.json', {
     generatedBy: 'spikes/spine-adopt/src/lower.mts',
@@ -839,18 +974,21 @@ async function main(): Promise<void> {
         id: 'N1',
         clause: '§ Lowering 1 — "One package per record … `totem.spike.r<ruleId>`"',
         finding:
-          '`r<ruleId>` is NOT unique across the 7 records: d-line, d-file and e all carry the pinned exemplar id 0123456789abcdef. "One package per record" and "r<ruleId>" cannot both hold.',
+          recordSet === 'seed20'
+            ? '`r<ruleId>` is NOT unique across the 22 seed records: `6b1890e2` and `71935fe9` each carry TWO records (a `language: typescript` original and a `language: javascript` twin) under ONE `curation.sourceLesson`, so both records of each twinned rule compile under the same lessonHash. "One package per record" and "r<ruleId>" cannot both hold.'
+            : '`r<ruleId>` is NOT unique across the 7 records: d-line, d-file and e all carry the pinned exemplar id 0123456789abcdef. "One package per record" and "r<ruleId>" cannot both hold.',
         resolution:
-          'The SEMANTIC half (one policy per record) is unambiguous in both the spec and LOWERING.md, so the naming gives: a colliding id takes a `_<specimen>` suffix; a unique id stays exactly on-contract. FLAGGED for the dispatching seat — this is a naming decision, reversible in one place (`packageSuffix`).',
-        affected: SPECIMENS.filter((s) => sharedIds.includes(s.ruleId)).map((s) => s.id),
+          recordSet === 'seed20'
+            ? 'The SEMANTIC half (one policy per record) is unambiguous in both the spec and LOWERING.md, so the naming gives. The CHARTER fixes the seed form: `totem.spike.r<lessonHash>_<language>` for BOTH records of a twinned rule, `totem.spike.r<lessonHash>` for a single-record rule. The discriminator is the record`s declared `target.language`, and the twinned ids are DECLARED by the record set (`src/lib/record-sets.mts` DECLARED_TWINNED_IDS) rather than inferred from which records happened to lower — a twin that failed to lower must not silently un-suffix its surviving sibling.'
+            : 'The SEMANTIC half (one policy per record) is unambiguous in both the spec and LOWERING.md, so the naming gives: a colliding id takes a `_<specimen>` suffix; a unique id stays exactly on-contract. FLAGGED for the dispatching seat — this is a naming decision, reversible in one place (`packageSuffix`).',
+        affected: loadedRows.filter((s) => sharedIds.includes(s.ruleId)).map((s) => s.id),
       },
       {
         id: 'N2',
         clause: '§ Lowering 6 vs § Lowering 7',
         finding:
           'The contract does not order the suppression check against the requires check. A match that is BOTH suppressed and requires-satisfied could emit `suppress` or emit nothing.',
-        resolution:
-          'MEASURED in the shipped source: all three dispatchers check `requires` FIRST and `continue` before any `onRuleEvent` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. Unreachable on all 24 fact bundles (none carries a suppression marker), so it changes no differential row.',
+        resolution: `MEASURED in the shipped source: all three dispatchers check \`requires\` FIRST and \`continue\` before any \`onRuleEvent\` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. ${reachability}, so it changes no differential row.`,
         affected: [],
       },
       {
@@ -858,8 +996,7 @@ async function main(): Promise<void> {
         clause: '§ Lowering 7 — "or preceding-line `totem-ignore-next-line`/`totem-context:`"',
         finding:
           "The contract's PRECEDING-line marker set is one marker short of the shipped runtime. `isSuppressed` (rule-engine.ts:384-388) routes the preceding line through `hasContextDirective` (:349-356), which accepts `shield-context:` as well as `totem-context:`. The same-line set in the contract is exact (rule-engine.ts:377-381); only the preceding anchor diverges.",
-        resolution:
-          'Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line `shield-context:` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. Unreachable on all 24 fact bundles. FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.',
+        resolution: `Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line \`shield-context:\` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. ${reachability}. FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.`,
         affected: [],
       },
       {
@@ -872,14 +1009,18 @@ async function main(): Promise<void> {
         affected: [],
       },
     ],
-    rejects,
+    // The two census EVIDENCE rejects keep their shape and their position (§ G3);
+    // the per-record reject rows are appended, typed by the STAGE that refused them.
+    rejects: [...rejects, ...recordRejects],
     lowered: lowered.map((l) => ({
       specimen: l.specimen,
+      seedEntry: l.seedEntry,
       ruleId: l.ruleId,
       package: l.packageName,
       entrypoint: l.entrypoint,
       engine: l.engine,
       dir: path.relative(SPIKE_ROOT, l.dir).split(path.sep).join('/'),
+      published: `artifacts/lowered/${l.pkgSuffix}`,
       patterns: l.patterns,
       globCount: l.globTable.length,
     })),
@@ -887,7 +1028,10 @@ async function main(): Promise<void> {
   });
 
   console.log(`\n${lowered.length} policies -> ${path.relative(SPIKE_ROOT, REGO_BUILD_DIR)}`);
-  console.log(`${rejects.length} reject rows -> ${out}`);
+  console.log(`${lowered.length} policies published -> artifacts/lowered/`);
+  console.log(
+    `${rejects.length + recordRejects.length} reject rows (${rejects.length} census evidence, ${recordRejects.length} record) -> ${out}`,
+  );
   checks.finish('lower');
 }
 

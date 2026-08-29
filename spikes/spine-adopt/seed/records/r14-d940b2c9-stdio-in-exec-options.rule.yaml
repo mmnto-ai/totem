@@ -1,0 +1,19 @@
+schemaVersion: 1
+
+severity: warning
+message: "Do not pass 'stdio' in execution options — remove it and rely on hardcoded pipe mode to ensure consistent string-based return values."
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: '{ $$$BEFORE, stdio: $VAL, $$$AFTER }'
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+
+examples:
+  - bad: "const out = execSync(cmd, { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' });"
+    good: "const out = execSync(cmd, { cwd: repoRoot, encoding: 'utf8' });"
+
+curation:
+  sourceLesson: 'lesson-d940b2c9ffe92e99'

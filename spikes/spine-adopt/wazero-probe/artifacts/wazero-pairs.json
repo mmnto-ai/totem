@@ -1,0 +1,320 @@
+{
+  "armProvenance": {
+    "opa": "artifacts/opa-verdicts.json — spikes/spine-adopt/host/src/main.rs --arm opa (wasmtime), the SAME policy.wasm bytes",
+    "wazero": "wazero-probe/artifacts/wazero-verdicts.json — this probe, driving the OPA wasm ABI by hand under wazero"
+  },
+  "comparisonKey": {
+    "derivedFields": "`fired` and `matchCount` must DERIVE from the violation multiset on BOTH arms, checked on every pair before any classification — an explained divergence is not an excuse to stop looking at them.",
+    "errorRows": "An error row on either side is a divergence, never a clean zero. The one exception is the malformed-facts control, below.",
+    "events": "(kind, line_number) as a MULTISET",
+    "rowJoin": "(ruleId, fixtureId). The bundle-to-record join upstream of it is the PAIR (ruleId, specimen), never ruleId alone — records sharing a lessonHash (the pinned exemplar id on `specimens`, the language twins on `seed20`) would otherwise fan one fixture across siblings.",
+    "violations": "(rule_id, line_number, ordinal) as a MULTISET"
+  },
+  "contract": "mmnto-ai/totem-strategy#1154 § G10 — the wazero arm's differential rows, in artifacts/differential-report.json's shape. rego/LOWERING.md § Comparator + spec § Differential units (\"a VERDICT is the violation MULTISET\", \"`fired` derives from violations\") supply the semantics, ported in compare.go.",
+  "explanationClasses": [
+    {
+      "declines": "either arm returned a clean verdict, or either arm produced no row at all",
+      "fires": "fixtureId == m3-malformed-lines AND both arms returned an error row",
+      "id": "MALFORMED-FACTS-CONTROL",
+      "rationale": "MALFORMED-FACTS-CONTROL — the K5b control bundle. Its `lines[]` carries a non-string member, so `facts_wellformed` is false and the entrypoint's `result` rule is UNDEFINED on BOTH arms. The matching error rows are the DESIGNED outcome of the strictness contract, not a divergence between the runtimes."
+    }
+  ],
+  "generatedBy": "spikes/spine-adopt/wazero-probe (go run .)",
+  "pairs": [
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-empty",
+      "specimen": "d-file",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-control-unreadable",
+      "specimen": "d-file",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-bad",
+      "specimen": "d-file",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-file-inline-good",
+      "specimen": "d-file",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-bad",
+      "specimen": "d-line",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "d-line-inline-good",
+      "specimen": "d-line",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-bad",
+      "specimen": "e",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0123456789abcdef",
+      "fixtureId": "e-inline-good",
+      "specimen": "e",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-fail",
+      "specimen": "b",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-corpus-pass",
+      "specimen": "b",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-bad",
+      "specimen": "b",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "2d962603591aa928",
+      "fixtureId": "b-inline-good",
+      "specimen": "b",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-fail",
+      "specimen": "a",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-corpus-pass",
+      "specimen": "a",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-bad",
+      "specimen": "a",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "61dcb058bd1df15d",
+      "fixtureId": "a-inline-good",
+      "specimen": "a",
+      "seedEntry": "",
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-fail",
+      "specimen": "c-supp",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-corpus-pass",
+      "specimen": "c-supp",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-bad",
+      "specimen": "c-supp",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "c-supp-inline-good",
+      "specimen": "c-supp",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-fail",
+      "specimen": "c",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-corpus-pass",
+      "specimen": "c",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-bad",
+      "specimen": "c",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    },
+    {
+      "ruleId": "d0815b6769304e26",
+      "fixtureId": "c-inline-good",
+      "specimen": "c",
+      "seedEntry": "",
+      "engine": "ast-grep",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "detail": null
+    }
+  ],
+  "recordSet": "specimens",
+  "summary": {
+    "EXPLAINED-DIVERGENCE": 0,
+    "MATCH": 24,
+    "UNEXPLAINED-DIVERGENCE": 0,
+    "total": 24
+  }
+}

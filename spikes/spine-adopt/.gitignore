@@ -3,3 +3,12 @@ target/
 node_modules/
 rego/build/
 rego/certify-fixtures/build/
+
+# G7 (mmnto-ai/totem-strategy#1154, spec `.totem/specs/seed20-apparatus.md`): the
+# lowered policy and its glob table are PUBLISHED under `artifacts/lowered/<pkg>/`
+# so T3 can audit the lowering from the repository at the pin. The BUILD tree
+# (`rego/build/`, above) stays ignored — the published copy is the auditable one.
+# Stated explicitly rather than relied on: nothing above matches this path today
+# (`git check-ignore -v` reports no rule), and this line keeps it that way if a
+# broader `artifacts/`-shaped ignore is ever added here.
+!artifacts/lowered/

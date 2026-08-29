@@ -47,6 +47,7 @@ import {
   ARTIFACTS_DIR,
   Checks,
   OPA_BIN,
+  readRunManifest,
   REPO_ROOT,
   SPIKE_ROOT,
   writeArtifact,
@@ -115,9 +116,10 @@ export const MALFORMED_SENTINEL = {
  * a bundle the policy was not written against. Returns the list of violations —
  * EMPTY means valid.
  *
- * Not vacuously strict: `main` runs it over all 24 measured fact bundles and
- * asserts every one is accepted, so a validator that rejected everything could
- * not pass this run.
+ * Not vacuously strict: `main` runs it over every MEASURED fact bundle the run
+ * produced and asserts each is accepted, so a validator that rejected everything
+ * could not pass this run — and it runs it over the G8 malformed-facts control,
+ * which it must REJECT, so one that accepted everything could not pass either.
  */
 export function validateFactBundle(v: unknown): string[] {
   if (v === null || typeof v !== 'object' || Array.isArray(v)) {
@@ -189,7 +191,7 @@ function validateAstMatch(m: unknown, i: number): string[] {
     }
   }
   // `startPrecedingLineText` is absent for a match on line 1 and null when the
-  // extractor read no preceding line — measured across all 24 bundles.
+  // extractor read no preceding line — measured across every bundle in the run.
   if (
     'startPrecedingLineText' in o &&
     !(o.startPrecedingLineText === null || typeof o.startPrecedingLineText === 'string')
@@ -576,7 +578,7 @@ interface CertifyOptions {
   regoPath: string;
   sentinel: unknown;
   sentinelPathFor: (v: unknown) => string;
-  /** Present for the 7 specimens: the computed, unpublished chain to extend and publish on PASS. */
+  /** Present for every lowered record: the computed, unpublished chain to extend and publish on PASS. */
   chainInput?: Record<string, unknown>;
   chainFileName?: string;
 }
@@ -964,29 +966,45 @@ async function main(): Promise<void> {
     malformedErrors.length >= 5,
     `${malformedErrors.length} violations: ${malformedErrors.join(' | ')}`,
   );
-  const factFiles = fs
+  const allFactFiles = fs
     .readdirSync(path.join(ARTIFACTS_DIR, 'facts'))
     .filter((f) => f.endsWith('.json'))
     .sort();
+  const readBundleFile = (f: string) =>
+    JSON.parse(fs.readFileSync(path.join(ARTIFACTS_DIR, 'facts', f), 'utf-8')) as {
+      factBundle: unknown;
+      provenance?: { malformedFactsControl?: boolean };
+    };
+  // The G8 malformed-facts control is DESIGNED to fail this validator — it is the
+  // one bundle whose `lines[]` is not `[string]`. Excluded from the "everything
+  // measured validates" claim and asserted separately below, so the acceptance
+  // above stays a real measurement rather than one the control quietly weakens.
+  const malformedControls = allFactFiles.filter(
+    (f) => readBundleFile(f).provenance?.malformedFactsControl === true,
+  );
+  const factFiles = allFactFiles.filter((f) => !malformedControls.includes(f));
   const factRejects = factFiles
-    .map((f) => ({
-      file: f,
-      errs: validateFactBundle(
-        (
-          JSON.parse(fs.readFileSync(path.join(ARTIFACTS_DIR, 'facts', f), 'utf-8')) as {
-            factBundle: unknown;
-          }
-        ).factBundle,
-      ),
-    }))
+    .map((f) => ({ file: f, errs: validateFactBundle(readBundleFile(f).factBundle) }))
     .filter((r) => r.errs.length > 0);
+  // The expected count is the MANIFEST's bundle list minus the controls, so a
+  // bundle that silently went missing from the directory is reported as that.
+  const expectedMeasured =
+    (readRunManifest().bundles as unknown[]).length - malformedControls.length;
   checks.check(
     `SENTINEL — the validator is NOT vacuously strict: all ${factFiles.length} measured FactBundles validate`,
-    factRejects.length === 0 && factFiles.length === 24,
+    factRejects.length === 0 && factFiles.length === expectedMeasured,
     factRejects.length === 0
       ? `${factFiles.length}/${factFiles.length} accepted`
       : factRejects.map((r) => `${r.file}: ${r.errs.join('; ')}`).join(' | '),
   );
+  for (const f of malformedControls) {
+    const errs = validateFactBundle(readBundleFile(f).factBundle);
+    checks.check(
+      `SENTINEL — the G8 malformed-facts control ${f} is REJECTED by the SAME validator (so the acceptance above is a measurement, not a vacuous read)`,
+      errs.length > 0,
+      errs.join('; ') || 'ACCEPTED — the control is not malformed, which falsifies its premise',
+    );
+  }
 
   // ── publication surfaces are rebuilt from scratch every run ──
   //
@@ -1007,20 +1025,20 @@ async function main(): Promise<void> {
     .map((d) => d.name)
     .sort();
   checks.eq(
-    'the bundles on disk under `rego/build/` are exactly the 7 the lowering declared',
+    `the bundles on disk under \`rego/build/\` are exactly the ${lowering.lowered.length} the lowering declared`,
     builtDirs,
     lowering.lowered.map((l) => l.package.replace(/^totem\.spike\./, '')).sort(),
   );
   checks.eq(
-    'the build hand-off carries a computed chain for each of the 7',
+    `the build hand-off carries a computed chain for each of the ${lowering.lowered.length}`,
     chainInputs.chains.length,
-    7,
+    lowering.lowered.length,
   );
 
   const rows: CertificationRow[] = [];
   const hostResults = new Map<string, HostCertifyResult>();
 
-  // ── the 7 specimen bundles ──
+  // ── the lowered record bundles ──
   for (const suffix of builtDirs) {
     const lowRow = lowering.lowered.find((l) => l.package === `totem.spike.${suffix}`);
     if (!lowRow) throw new Error(`built bundle ${suffix} has no lowering row`);

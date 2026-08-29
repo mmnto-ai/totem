@@ -18,11 +18,18 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-import { compileSpecimen, loadCore, type CompiledSpecimen } from './lib/records.mts';
-import { Checks, CORPORA, REPO_ROOT, writeArtifact } from './lib/spike-env.mts';
-import { PINNED_NOW, recordRelPath, SPECIMENS } from './lib/specimens.mts';
+import {
+  activeRecordSet,
+  SEED_RECORD_PIN,
+  SEED_RECORDS_DIR,
+  type RecordRow,
+} from './lib/record-sets.mts';
+import { intakeRecordSet, loadCore, type CompiledSpecimen } from './lib/records.mts';
+import { Checks, CORPORA, REPO_ROOT, sha256, writeArtifact } from './lib/spike-env.mts';
+import { PINNED_NOW, recordRelPath } from './lib/specimens.mts';
 
 const EXEMPLAR_DIST = path.join(
   REPO_ROOT,
@@ -114,23 +121,29 @@ async function main(): Promise<void> {
     EXEMPLAR_REFERENT,
   );
 
+  const recordSet = activeRecordSet();
+  const intake = intakeRecordSet(core);
+  const loadedRows: RecordRow[] = intake.rows.map((r) => r.specimen);
   const compiled: CompiledSpecimen[] = [];
   const rows: any[] = [];
 
-  for (const s of SPECIMENS) {
+  for (const intakeRow of intake.rows) {
+    const s = intakeRow.specimen;
     // ── the invariant itself: parse, then lower ──
-    let cs: CompiledSpecimen;
-    try {
-      cs = compileSpecimen(core, s);
-      checks.check(`specimen ${s.id} — parseRuleRecord + compileRuleRecord succeed`, true, s.class);
-    } catch (err) {
+    //
+    // A SHIPPED-COMPILE reject is a scored row on the seed set (§ G3), so the check
+    // below records the outcome and the loop moves on; on the specimens set the
+    // intake has already thrown before reaching here.
+    const cs = intakeRow.compiled;
+    if (!cs) {
       checks.check(
-        `specimen ${s.id} — parseRuleRecord + compileRuleRecord succeed`,
-        false,
-        (err as Error).message,
+        `specimen ${s.id} — REJECT ROW (shipped-compile): the shipped compiler refused this record, so it is a scored row rather than an apparatus failure (§ G3)`,
+        true,
+        intakeRow.reject?.reason ?? '(rejected, no reason recorded)',
       );
       continue;
     }
+    checks.check(`specimen ${s.id} — parseRuleRecord + compileRuleRecord succeed`, true, s.class);
     compiled.push(cs);
 
     // ── closed-key floor: no producer-owned / inexpressible key at any depth ──
@@ -180,10 +193,16 @@ async function main(): Promise<void> {
     }
 
     // ── transcription fidelity, against the referent ──
-    const legacyRule = s.legacySource ? legacy.get(s.legacySource) : null;
-    if (s.legacySource) {
+    //
+    // Keyed on `legacyCorpusRule`, not on `legacySource`: on the seed set
+    // `legacySource` is the SEED ENTRY (the file stem's 8-hex, § G1) and there is no
+    // corpus row behind it — the seed records translate R14 lessons, they do not
+    // transcribe shipped corpus rules — so the whole transcription block is simply
+    // not applicable there rather than failing to find a row that never existed.
+    const legacyRule = s.legacyCorpusRule ? legacy.get(s.legacyCorpusRule) : null;
+    if (s.legacyCorpusRule) {
       checks.check(
-        `specimen ${s.id} — the named legacy source ${s.legacySource} exists in the corpora`,
+        `specimen ${s.id} — the named legacy source ${s.legacyCorpusRule} exists in the corpora`,
         Boolean(legacyRule),
         legacyRule ? (legacyRule.lessonHeading ?? '') : 'NOT FOUND',
       );
@@ -356,6 +375,7 @@ async function main(): Promise<void> {
 
     rows.push({
       specimen: s.id,
+      seedEntry: s.seedEntry,
       class: s.class,
       recordFile: recordRelPath(s),
       ruleId: s.ruleId,
@@ -373,7 +393,52 @@ async function main(): Promise<void> {
     });
   }
 
-  checks.eq('all 7 record sources compiled', compiled.length, SPECIMENS.length);
+  // DERIVED, never a literal: the loaded set minus the records the SHIPPED compiler
+  // refused (a § Lowering 4 target reject still compiles, so it counts here).
+  const shippedRejects = intake.rejects.filter((r) => r.stage === 'shipped-compile');
+  const expectedCompiled = loadedRows.length - shippedRejects.length;
+  checks.eq(`all ${expectedCompiled} record sources compiled`, compiled.length, expectedCompiled);
+
+  // ── constraint 5: the seed copies ARE the pinned blobs ──
+  //
+  // Compared against the pin itself, not against a recorded hash — a hash table
+  // committed beside the copies proves only that the table and the copies agree.
+  // SKIPS with a named reason when the pin commit is not in this clone (a CI
+  // shallow checkout has no `r14/seed-20-translation` history).
+  if (recordSet === 'seed20') {
+    const hasPin =
+      spawnSync('git', ['cat-file', '-e', `${SEED_RECORD_PIN}^{commit}`], {
+        cwd: REPO_ROOT,
+        encoding: 'utf-8',
+      }).status === 0;
+    if (!hasPin) {
+      checks.check(
+        `SEED PIN — SKIPPED with the named reason \`pin-commit-not-present-locally\`: ${SEED_RECORD_PIN} is not in this clone, so the copies cannot be compared against the pinned blobs`,
+        true,
+        'run in a full clone of mmnto-ai/totem with the `r14/seed-20-translation` history fetched',
+      );
+    } else {
+      const drift: string[] = [];
+      for (const f of fs.readdirSync(SEED_RECORDS_DIR).filter((n) => n.endsWith('.rule.yaml'))) {
+        const pinned = spawnSync(
+          'git',
+          ['cat-file', 'blob', `${SEED_RECORD_PIN}:.totem/rules/${f}`],
+          { cwd: REPO_ROOT, maxBuffer: 16 * 1024 * 1024 },
+        );
+        if (pinned.status !== 0) {
+          drift.push(`${f}: absent at the pin`);
+          continue;
+        }
+        const mine = fs.readFileSync(path.join(SEED_RECORDS_DIR, f));
+        if (sha256(pinned.stdout as Buffer) !== sha256(mine)) drift.push(`${f}: BYTES DIFFER`);
+      }
+      checks.eq(
+        `SEED PIN — every seed/records/ copy is BYTE-IDENTICAL to \`${SEED_RECORD_PIN}:.totem/rules/<file>\``,
+        drift,
+        [],
+      );
+    }
+  }
 
   // ── the hand-constructed empty-positives control (§ Invariants) ──
   // "excludeGlobs uses the record profile — empty-positives ⇒ match-nothing is a
@@ -435,7 +500,7 @@ async function main(): Promise<void> {
     generatedBy: 'spikes/spine-adopt/src/verify-records.mts',
     spec: '.totem/specs/spine-spike.md § Data model deltas (SpikeRecord) + § Invariants',
     exemplarReferent: EXEMPLAR_REFERENT,
-    pinnedRuleId: SPECIMENS.find((s) => s.exemplarFactory)?.ruleId ?? null,
+    pinnedRuleId: loadedRows.find((s) => s.exemplarFactory)?.ruleId ?? null,
     pinnedNow: PINNED_NOW,
     specimens: rows,
     checks: checks.rows,

@@ -5,11 +5,12 @@
   "type": "module",
   "description": "Disposable adopt-round spike (mmnto-ai/totem-strategy#1138). Not a workspace package: pnpm-workspace.yaml globs `packages/*` only, so `pnpm -r` never sees this.",
   "scripts": {
+    "manifest": "node --experimental-strip-types src/manifest.mts",
     "census": "node --experimental-strip-types src/census.mts",
     "verify-records": "node --experimental-strip-types src/verify-records.mts",
     "facts": "node --experimental-strip-types src/facts.mts",
     "shipped-verdicts": "node --experimental-strip-types src/shipped-verdicts.mts",
-    "all": "npm run census && npm run verify-records && npm run facts && npm run shipped-verdicts",
+    "all": "npm run manifest && npm run census && npm run verify-records && npm run facts && npm run shipped-verdicts",
     "lower": "node --experimental-strip-types src/lower.mts",
     "build-wasm": "node --experimental-strip-types src/build-wasm.mts",
     "certify": "node --experimental-strip-types src/certify.mts && node --experimental-strip-types src/certify-verify.mts",

@@ -25,7 +25,7 @@
       "id": "N4",
       "clause": "§ Lowering 7 — \"or preceding-line `totem-ignore-next-line`/`totem-context:`\"",
       "finding": "The contract's PRECEDING-line marker set is one marker short of the shipped runtime. `isSuppressed` (rule-engine.ts:384-388) routes the preceding line through `hasContextDirective` (:349-356), which accepts `shield-context:` as well as `totem-context:`. The same-line set in the contract is exact (rule-engine.ts:377-381); only the preceding anchor diverges.",
-      "resolution": "Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line `shield-context:` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. Unreachable on all 24 fact bundles. FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.",
+      "resolution": "Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line `shield-context:` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. Unreachable on all 24 fact bundles (none carries a suppression marker). FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.",
       "affected": []
     },
     {
@@ -73,11 +73,13 @@
   "lowered": [
     {
       "specimen": "a",
+      "seedEntry": null,
       "ruleId": "61dcb058bd1df15d",
       "package": "totem.spike.r61dcb058bd1df15d",
       "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
       "engine": "regex",
       "dir": "rego/build/r61dcb058bd1df15d",
+      "published": "artifacts/lowered/r61dcb058bd1df15d",
       "patterns": [
         {
           "role": "target",
@@ -92,41 +94,49 @@
     },
     {
       "specimen": "b",
+      "seedEntry": null,
       "ruleId": "2d962603591aa928",
       "package": "totem.spike.r2d962603591aa928",
       "entrypoint": "totem/spike/r2d962603591aa928/result",
       "engine": "ast-grep",
       "dir": "rego/build/r2d962603591aa928",
+      "published": "artifacts/lowered/r2d962603591aa928",
       "patterns": [],
       "globCount": 1
     },
     {
       "specimen": "c",
+      "seedEntry": null,
       "ruleId": "d0815b6769304e26",
       "package": "totem.spike.rd0815b6769304e26",
       "entrypoint": "totem/spike/rd0815b6769304e26/result",
       "engine": "ast-grep",
       "dir": "rego/build/rd0815b6769304e26",
+      "published": "artifacts/lowered/rd0815b6769304e26",
       "patterns": [],
       "globCount": 4
     },
     {
       "specimen": "c-supp",
+      "seedEntry": null,
       "ruleId": "87aff037d7de47a7",
       "package": "totem.spike.r87aff037d7de47a7",
       "entrypoint": "totem/spike/r87aff037d7de47a7/result",
       "engine": "ast-grep",
       "dir": "rego/build/r87aff037d7de47a7",
+      "published": "artifacts/lowered/r87aff037d7de47a7",
       "patterns": [],
       "globCount": 3
     },
     {
       "specimen": "d-line",
+      "seedEntry": null,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_d_line",
       "entrypoint": "totem/spike/r0123456789abcdef_d_line/result",
       "engine": "regex",
       "dir": "rego/build/r0123456789abcdef_d_line",
+      "published": "artifacts/lowered/r0123456789abcdef_d_line",
       "patterns": [
         {
           "role": "target",
@@ -149,11 +159,13 @@
     },
     {
       "specimen": "d-file",
+      "seedEntry": null,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_d_file",
       "entrypoint": "totem/spike/r0123456789abcdef_d_file/result",
       "engine": "regex",
       "dir": "rego/build/r0123456789abcdef_d_file",
+      "published": "artifacts/lowered/r0123456789abcdef_d_file",
       "patterns": [
         {
           "role": "target",
@@ -176,11 +188,13 @@
     },
     {
       "specimen": "e",
+      "seedEntry": null,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_e",
       "entrypoint": "totem/spike/r0123456789abcdef_e/result",
       "engine": "ast-grep",
       "dir": "rego/build/r0123456789abcdef_e",
+      "published": "artifacts/lowered/r0123456789abcdef_e",
       "patterns": [],
       "globCount": 2
     }
@@ -195,6 +209,11 @@
       "name": "CONTRACT NOTE (N1) — `r<ruleId>` is not unique: the pinned exemplar id is shared",
       "ok": true,
       "detail": "[\"0123456789abcdef\"]"
+    },
+    {
+      "name": "CONTROL (§ Lowering 3) — the backtick assert tests raw-string SYNTAX: a genuine RAW literal is flagged, a backtick INSIDE a double-quoted literal is not, and `\\\"` does not end the literal early",
+      "ok": true,
+      "detail": "raw=\"x := `raw`\" quoted=\"x := \" escaped=\"x := \""
     },
     {
       "name": "a — every pattern lowers (§ Lowering 4 gate)",
@@ -452,6 +471,16 @@
       "detail": "[\"r0123456789abcdef_d_file\",\"r0123456789abcdef_d_line\",\"r0123456789abcdef_e\",\"r2d962603591aa928\",\"r61dcb058bd1df15d\",\"r87aff037d7de47a7\",\"rd0815b6769304e26\"]"
     },
     {
+      "name": "the published tree `artifacts/lowered/` holds EXACTLY the same 7 packages",
+      "ok": true,
+      "detail": "[\"r0123456789abcdef_d_file\",\"r0123456789abcdef_d_line\",\"r0123456789abcdef_e\",\"r2d962603591aa928\",\"r61dcb058bd1df15d\",\"r87aff037d7de47a7\",\"rd0815b6769304e26\"]"
+    },
+    {
+      "name": "(G7) every published policy.rego is BYTE-IDENTICAL to the one whose sha256 the chain binds",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
       "name": "a — policy.rego + globs.json both written",
       "ok": true,
       "detail": "rego/build/r61dcb058bd1df15d"
@@ -486,5 +515,6 @@
       "ok": true,
       "detail": "rego/build/r0123456789abcdef_e"
     }
-  ]
+  ],
+  "runManifestSha256": "0f443c032f56e951f258277bd2c5ee72157d5d2e7ad596c6f750b0685bb3a216"
 }

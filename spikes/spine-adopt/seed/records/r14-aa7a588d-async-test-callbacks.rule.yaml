@@ -1,0 +1,20 @@
+schemaVersion: 1
+
+severity: warning
+message: 'Do not mark test callbacks as async unless the code under test is genuinely async — async wrappers mask synchronous API signatures and hide accidental Promise conversions'
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: 'it($DESC, async () => { $$$BODY })'
+  scope:
+    fileGlobs:
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: "it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });"
+    good: "it('returns the parsed record', () => { expect(parse(src)).toEqual(expected); });"
+
+curation:
+  sourceLesson: 'lesson-aa7a588d48e74503'

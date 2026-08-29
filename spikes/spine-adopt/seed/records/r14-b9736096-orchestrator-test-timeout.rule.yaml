@@ -1,0 +1,19 @@
+schemaVersion: 1
+
+severity: warning
+message: 'Orchestrator test suites should set an explicit 15s timeout (e.g., { timeout: 15000 }) to prevent flaky CI failures during heavy workloads'
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: 'describe($TITLE, $FN)'
+  scope:
+    fileGlobs:
+      - 'packages/cli/**/*.test.ts'
+
+examples:
+  - bad: "describe('orchestrator dispatch', () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });"
+    good: "describe('orchestrator dispatch', { timeout: 15000 }, () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });"
+
+curation:
+  sourceLesson: 'lesson-b973609688ec2888'

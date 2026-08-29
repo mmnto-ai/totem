@@ -42,6 +42,13 @@ type shippedRow struct {
 	MatchCount int            `json:"matchCount"`
 	Events     []shippedEvent `json:"events"`
 	Arms       []shippedArm   `json:"arms"`
+	// Error is non-nil ONLY on the shipped arm's error row for the K5b
+	// malformed-facts control (`m3-malformed-lines`, `src/shipped-verdicts.mts`):
+	// `fired`/`matchCount` are null there and `arms` is empty because no
+	// dispatcher ran. Mirrors `regoRow.Error` — the same field the wasmtime
+	// and wazero rows carry — so all three arms normalise an error row the
+	// same way and the count checks hold the shipped arm to the corpus.
+	Error *string `json:"error"`
 }
 
 type regoEvent struct {
@@ -69,6 +76,19 @@ func normaliseShipped(rows []shippedRow, bundles map[string][]astMatch) ([]norma
 		am, ok := bundles[r.FixtureID]
 		if !ok {
 			return nil, fmt.Errorf("shipped row %s has no FactBundle", r.FixtureID)
+		}
+		// A shipped ERROR row (K5b: the malformed-facts control) carries no arms
+		// by construction — no dispatcher produced a verdict. It normalises to
+		// the same error shape as a wasmtime/wazero error row (nil violations,
+		// nil events, the error text) so the comparator's control carve-out and
+		// the per-arm count checks see it; it is NOT the "no arms" defect below,
+		// which stays fatal for a row that claims a verdict without one.
+		if r.Error != nil && *r.Error != "" {
+			out = append(out, normalRow{
+				Arm: "shipped", RuleID: r.RuleID, FixtureID: r.FixtureID,
+				Specimen: r.Specimen, Engine: r.Engine, Error: *r.Error,
+			})
+			continue
 		}
 		if len(r.Arms) == 0 {
 			return nil, fmt.Errorf("shipped row %s carries no arms", r.FixtureID)
@@ -194,17 +214,16 @@ func writeArtifact(dir, name string, v any) (string, error) {
 	return at, nil
 }
 
-// requiredSubset is the pair set the dispatch names explicitly: specimen-a and
-// specimen-d-file. Everything else this probe evaluates is a superset, reported
-// separately so the named rows are not lost in the aggregate.
-func isRequired(specimen string) bool {
-	return specimen == "a" || specimen == "d-file"
-}
-
 func run(root string) error {
 	ctx := context.Background()
 	ck := &checks{}
 	selfTest(ck)
+
+	recordSet, err := loadRecordSet()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("record set: %s (%s)\n", recordSet, recordSetEnvVar)
 
 	records, err := loadLowering(root)
 	if err != nil {
@@ -213,6 +232,23 @@ func run(root string) error {
 	facts, err := loadFacts(root)
 	if err != nil {
 		return err
+	}
+
+	// The row cardinality every arm is held to, DERIVED from the fact corpus and
+	// its index. Nothing below may write the count as a literal: the number is a
+	// property of the selected record set, not of the seven specimens this probe
+	// was first built against.
+	want, err := expectedRowCount(root, facts)
+	if err != nil {
+		return err
+	}
+
+	// `seedEntry` is carried on the lowered record rows for the seed set and is
+	// absent on `specimens`; the pairs artifact relabels each pair with it so a
+	// rule's N records group without the scorer re-deriving the mapping.
+	seedEntryOf := map[string]string{}
+	for _, rec := range records {
+		seedEntryOf[rec.Specimen] = rec.SeedEntry
 	}
 
 	// ── Drive every policy under wazero ──
@@ -289,9 +325,12 @@ func run(root string) error {
 		return err
 	}
 
-	ck.eq("shipped arm produced 24 verdict rows", len(shipped), 24)
-	ck.eq("opa (wasmtime) arm produced 24 verdict rows", len(opa), 24)
-	ck.eq("wazero arm produced 24 verdict rows", len(waz), 24)
+	// `want` comes from the fact corpus (see expectedRowCount); the check NAMES are
+	// formatted from it too, so a run over a different record set reports the
+	// cardinality it was actually held to instead of a stale 24.
+	ck.eq(fmt.Sprintf("shipped arm produced %d verdict rows", want), len(shipped), want)
+	ck.eq(fmt.Sprintf("opa (wasmtime) arm produced %d verdict rows", want), len(opa), want)
+	ck.eq(fmt.Sprintf("wazero arm produced %d verdict rows", want), len(waz), want)
 
 	index := func(rows []normalRow) map[string]normalRow {
 		m := map[string]normalRow{}
@@ -302,7 +341,7 @@ func run(root string) error {
 	}
 	S, O, W := index(shipped), index(opa), index(waz)
 	ck.eq("the join key (ruleId, fixtureId) is unique on every arm",
-		[]int{len(S), len(O), len(W)}, []int{24, 24, 24})
+		[]int{len(S), len(O), len(W)}, []int{want, want, want})
 
 	missing := []string{}
 	for k := range S {
@@ -324,21 +363,67 @@ func run(root string) error {
 			maxCount = *r.MatchCount
 		}
 	}
-	ck.check("the corpus is DISCRIMINATING — the shipped arm both fires and stays silent, and at least one row is multi-violation",
-		firedN > 0 && silentN > 0 && maxCount > 1,
-		fmt.Sprintf("%d fired / %d silent / max matchCount %d", firedN, silentN, maxCount))
+	discriminatingDetail := fmt.Sprintf("%d fired / %d silent / max matchCount %d", firedN, silentN, maxCount)
+	if maxCount > 1 || recordSet == recordSetSpecimens {
+		ck.check("the corpus is DISCRIMINATING — the shipped arm both fires and stays silent, and at least one row is multi-violation",
+			firedN > 0 && silentN > 0 && maxCount > 1, discriminatingDetail)
+	} else {
+		// Mirrors src/compare.mts on a non-specimens set whose bundles never carry
+		// more than one match: the multi-violation clause is a CORPUS property of
+		// the frozen set (the ast ordinal axis is simply unexercised there), not an
+		// apparatus defect — the probe must not refuse the run over it. Demoted to
+		// a named skip; the fires-and-silences half keeps full strength. On
+		// `specimens` the original check stays byte-identical.
+		ck.check("the corpus is DISCRIMINATING — the shipped arm both fires and stays silent",
+			firedN > 0 && silentN > 0, discriminatingDetail)
+		ck.check("MULTI-VIOLATION — SKIPPED with a named reason: NO bundle in this record set carries more than one violation, so the ast ORDINAL axis (§ Lowering 1, \"the ordinal is the match index\") is UNEXERCISED here (a corpus property of the frozen set, not an apparatus defect)",
+			true, discriminatingDetail)
+	}
 
 	// ── Compare ──
-	keys := make([]string, 0, len(S))
-	for k := range S {
-		keys = append(keys, k)
+	//
+	// The key set is the UNION of the three arms, not the shipped arm's alone. A
+	// fixture only one arm produced — the malformed-facts control is the designed
+	// case, an arm that skipped a record is the undesigned one — has to reach the
+	// comparator to be reported; keying on shipped would drop it silently, and a
+	// dropped row is exactly what a differential must never do.
+	keySeen := map[string]bool{}
+	identity := map[string]normalRow{}
+	keys := []string{}
+	for _, m := range []map[string]normalRow{S, O, W} {
+		for k, r := range m {
+			if !keySeen[k] {
+				keySeen[k] = true
+				keys = append(keys, k)
+				identity[k] = r
+			}
+		}
 	}
 	sort.Strings(keys)
 
+	// rowOrAbsent synthesises a marked ABSENT row for an arm that produced none, so
+	// the pair is comparable and the reason is named rather than inferred from a
+	// zero value.
+	rowOrAbsent := func(m map[string]normalRow, k, arm string) normalRow {
+		if r, ok := m[k]; ok {
+			return r
+		}
+		id := identity[k]
+		return normalRow{
+			Arm: arm, RuleID: id.RuleID, FixtureID: id.FixtureID,
+			Specimen: id.Specimen, Engine: id.Engine, Absent: true,
+		}
+	}
+
 	var pairs []pairResult
 	for _, k := range keys {
-		pairs = append(pairs, comparePair(S[k], W[k]))
-		pairs = append(pairs, comparePair(O[k], W[k]))
+		w := rowOrAbsent(W, k, "wazero")
+		pairs = append(pairs,
+			comparePair(rowOrAbsent(S, k, "shipped"), w),
+			comparePair(rowOrAbsent(O, k, "opa"), w))
+	}
+	for i := range pairs {
+		pairs[i].SeedEntry = seedEntryOf[pairs[i].Specimen]
 	}
 	by := func(l, r string) []pairResult {
 		var out []pairResult
@@ -377,7 +462,18 @@ func run(root string) error {
 	}
 	ck.eq("the CLASSIC eval-context sequence and the ONE-SHOT `opa_eval` fast path agree on every fixture",
 		len(pathDisagree), 0)
-	ck.eq("every fixture exercised BOTH ABI paths", len(allPaths), 24)
+	// The cross-check runs on every fixture that produced a VERDICT. A fixture whose
+	// classic eval errored — the malformed-facts control is the designed one — has
+	// no verdict for the one-shot path to agree with, so the expectation is the
+	// verdict rows minus the error rows, derived here rather than assumed to be the
+	// whole corpus. On a clean run there are no error rows and this is `want`.
+	errorRows := 0
+	for _, r := range allRows {
+		if r.Error != nil {
+			errorRows++
+		}
+	}
+	ck.eq("every fixture exercised BOTH ABI paths", len(allPaths), len(allRows)-errorRows)
 
 	hostBuiltins := map[string][]string{}
 	for _, a := range allABI {
@@ -473,9 +569,15 @@ func run(root string) error {
 	// ── Write the comparison report ──
 	requiredPairs := []pairResult{}
 	for _, p := range sVsW {
-		if isRequired(p.Specimen) {
+		if isRequired(recordSet, p.Specimen) {
 			requiredPairs = append(requiredPairs, p)
 		}
+	}
+
+	// ── Write the opa-vs-wazero pairs artifact ──
+	pairsAt, err := writePairsArtifact(outDir, recordSet, oVsW)
+	if err != nil {
+		return err
 	}
 
 	reportAt, err := writeArtifact(outDir, "wazero-report.json", map[string]any{
@@ -495,7 +597,7 @@ func run(root string) error {
 			"wazeroVerdictRows":  len(allRows),
 			"shipped-vs-wazero":  len(sVsW),
 			"opa-vs-wazero":      len(oVsW),
-			"requiredSubset":     "specimen-a (61dcb058bd1df15d) + specimen-d-file (0123456789abcdef_d_file) — the rows the dispatch names explicitly",
+			"requiredSubset":     requiredSubsetDescription(recordSet, records),
 			"requiredSubsetRows": len(requiredPairs),
 		},
 		"summary": map[string]any{
@@ -630,7 +732,7 @@ func run(root string) error {
 	fmt.Printf("classic vs one-shot disagreements: %d\n", len(pathDisagree))
 	fmt.Printf("cold eval us  %v\nwarm eval us  %v\none-shot us   %v\n",
 		summarise(cold), summarise(warm), summarise(warmOneShot))
-	fmt.Printf("\n  %s\n  %s\n", verdictsAt, reportAt)
+	fmt.Printf("\n  %s\n  %s\n  %s\n", verdictsAt, reportAt, pairsAt)
 
 	if f := ck.failed(); len(f) > 0 {
 		fmt.Fprintf(os.Stderr, "\n%d CHECK(S) FAILED:\n", len(f))
