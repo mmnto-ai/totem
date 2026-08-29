@@ -525,6 +525,6 @@
       "detail": "rego/build/r0123456789abcdef_e"
     }
   ],
-  "runManifestSha256": "b360253bfc0e1e01b71977a50fec74e4cb7531e723b117a4eeb479f7bb1a4e00",
+  "runManifestSha256": "606301088db6b1c9a14678ee9ec0964040dde1db038379d6ac1a3a47bd5dd8dd",
   "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

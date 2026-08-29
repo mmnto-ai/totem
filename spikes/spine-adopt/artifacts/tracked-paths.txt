@@ -1750,6 +1750,7 @@
 .totem/specs/s14-probes.md
 .totem/specs/seed20-apparatus-round1.md
 .totem/specs/seed20-apparatus-slice2-fold1.md
+.totem/specs/seed20-apparatus-slice2-fold2.md
 .totem/specs/seed20-apparatus-slice2.md
 .totem/specs/seed20-apparatus.md
 .totem/specs/silent-to-loud.md
@@ -3022,6 +3023,7 @@ spikes/spine-adopt/wazero-probe/errorrows_test.go
 spikes/spine-adopt/wazero-probe/go.mod
 spikes/spine-adopt/wazero-probe/go.sum
 spikes/spine-adopt/wazero-probe/header.go
+spikes/spine-adopt/wazero-probe/identity_fold2_test.go
 spikes/spine-adopt/wazero-probe/main.go
 spikes/spine-adopt/wazero-probe/pairs.go
 spikes/spine-adopt/wazero-probe/paths.go

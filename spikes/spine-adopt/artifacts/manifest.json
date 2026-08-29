@@ -2,8 +2,10 @@
   "generatedBy": "spikes/spine-adopt/src/manifest.mts",
   "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
   "recordSet": "specimens",
-  "runCommit": "773870c09f48f71f54a6fdc6c122ac01e3ef4bdd",
+  "runCommit": "a05e69484709742360f0f5484753efd79471b400",
   "workingTreeClean": true,
+  "workingTreeCleanScope": ". :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build",
+  "artifactTreeEntries": [],
   "recordPin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
   "recordPinApplies": "the specimens set is authored in spikes/spine-adopt/records/; the pin names the seed set only",
   "records": [
@@ -92,7 +94,8 @@
     "scripts/x.ts",
     "src/example.sh"
   ],
-  "probePathsSha256": "1b84c04e6e8d110a8cf461162d1d6d5aa9424c56c3133d0fb386b71a95863ed3",
+  "digestRule": "governs `probePathsSha256`, `trackedPathsAtRecordPin.sha256` and `t5-sweep.json.header.treeSha256`: sha256 over the sorted list, newline-joined, NO trailing newline — equal to `sha256sum` of the published list file (`tracked-paths-at-record-pin.txt` is written without a final newline). NOT `trackedPaths.sha256` (T17, slice 1): that is the bytes of `tracked-paths.txt` as written, trailing newline included, unchanged.",
+  "probePathsSha256": "fb171cbe9c0160770cd09882eda0ba8bf4fac4666e6cec751e8f52067121792e",
   "probeGeneration": {
     "rule": "matching probe = every `**/` -> `k3b/` then every `*` -> `probe`; twin = that probe with the glob's LAST LITERAL character (right-to-left; `*` and `/` are not literals) replaced by `_`, or by `-` when it is already `_`.",
     "globCount": 0,
@@ -141,7 +144,8 @@
     "policyRegoSha256": "528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db",
     "policyRegoCodeSha256": "0f8223c74c1cc5560cfbfcb7c86590490eef3f6e269677c136ca0bcc0ce08e7b",
     "chainSha256": "2a4d56caf0b4d18157ecf823374f3bf784b3c857f92faf148aa159f431fe3881",
-    "repinned": false,
+    "repinned": null,
+    "repinnedFrom": null,
     "files": {
       "policyRego": "seed/controls/k3/k3-target.policy.rego",
       "chain": "seed/controls/k3/k3-target.chain.json"
@@ -243,14 +247,14 @@
   "trackedPaths": {
     "source": "git ls-tree -r --name-only HEAD, sorted (T5 sweep set — the tree at `runCommit`, not the index)",
     "list": "artifacts/tracked-paths.txt",
-    "count": 3078,
-    "sha256": "e1d1b6e64b851655213fed3c07ed6b5364915ec83c9cba5b0d398cf1a9df525e"
+    "count": 3080,
+    "sha256": "fe5917c356b00a7edc5381cbec43089109370893f9146b462af7a630b240b6f3"
   },
   "trackedPathsAtRecordPin": {
     "pin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
     "present": true,
     "count": 2742,
-    "sha256": "12bb0591b639037d795526af2fb746e157535a5595e4ac79d90805315035f438",
+    "sha256": "85368266d265c73fc394fab427701b9454107d4bb4a8b815f153a866de632b0e",
     "file": "artifacts/tracked-paths-at-record-pin.txt"
   },
   "artifactsSubdir": null,
@@ -399,6 +403,153 @@
   },
   "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
   "recordLowerSource": "packages/core/src/spine/record-lower.ts",
-  "generatedAt": "2026-08-29T21:26:35.680Z",
-  "runManifestSha256": "b360253bfc0e1e01b71977a50fec74e4cb7531e723b117a4eeb479f7bb1a4e00"
+  "generatedAt": "2026-08-29T22:09:44.631Z",
+  "runManifestSha256": "606301088db6b1c9a14678ee9ec0964040dde1db038379d6ac1a3a47bd5dd8dd",
+  "checks": [
+    {
+      "name": "the manifest names the ACTIVE record set",
+      "ok": true,
+      "detail": "\"specimens\""
+    },
+    {
+      "name": "the manifest re-records a sha256 for every one of the 7 record files",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "every record file resolved a lessonHash and (on seed20) a seed entry",
+      "ok": true,
+      "detail": "7 record(s)"
+    },
+    {
+      "name": "the tracked-path sweep set is non-empty and published beside the manifest",
+      "ok": true,
+      "detail": "3080 paths -> artifacts/tracked-paths.txt"
+    },
+    {
+      "name": "`probePaths` is published in CODEPOINT order (22 paths; `probePathsSha256` attests that order — the SHARED list on `specimens` is the frozen 22 in AUTHORED order by construction, a chain-digest input, so the claim is about the published list)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "every one of the 22 frozen SPECIMEN_PROBE_PATHS is in the published probe set",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "the working tree state at `runCommit` is RECORDED (not gated — a dirty tree is the scorer's to refuse)",
+      "ok": true,
+      "detail": "clean — scope: `git status --porcelain -- . :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build`; the 3 excluded output tree(s) carry 0 recorded entries (`artifactTreeEntries`, never gated)"
+    },
+    {
+      "name": "every toolchain version was RESOLVED from a binary or a lockfile (never declared)",
+      "ok": true,
+      "detail": "opa=1.20.0, rust=1.96.1, node=24.16.0, astGrepNapi=0.42.0, wazero=1.12.0, go=1.26.2, wasmtime=47.0.4, regorus=0.11.0, opaWasm=0.3.2"
+    },
+    {
+      "name": "K6 — `packages/core/src/spine/rule-record.ts` (file) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"34af45324b0d8298855ca4de6b20ee16089e2437d866267082c802ecd8faf1ff\""
+    },
+    {
+      "name": "K6 — `packages/core/src/spine/record-lower.ts` (file) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e\""
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/rego/LOWERING.md` (file) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"d031189ed6a412e088f747b5e2a2f1ed8b6d8ec3e189db6efcffa775b31fd5f7\""
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/toolchain.lock` (section:[opa]) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"6de88005604d33727c38021f6adb8ef37b9c5219dd7689d9f727b2a799257f92\""
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/src/lower.mts` (symbol:emitPolicy) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"c41bb536bb4d6a015c687dbd6750e50277a337ee18336a6c5896efc37ce0bf1c\""
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/src/lower.mts` (symbol:SAME_LINE_MARKERS) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"2824956ce95ad4b8f8ba1113ee0ec9bf3f5f99899af0c8a72ba138643c350516\""
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/src/lower.mts` (symbol:PRECEDING_LINE_MARKERS) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"0365b26a686b71eccd4212206f790fcdbbb39ab8cc8bb5efd71cd1a407bce1ec\""
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/src/lower.mts` (symbol:globToRegexSource) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"059aa53ee4b42b993bddc0cfb3e40740c2eb8b42abd7fb58161cebbb33f008e4\""
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/src/lower.mts` (symbol:packageSuffix) DIFFERS from BASELINE_PIN 6ca24d42, DISCLOSED by the owner",
+      "ok": true,
+      "detail": "25fd4366d30f08d2506a14efac97e4b02374fa4dbbacdaf71ada231b9f99f637 -> 442d640cd3be4d6bc0cf385fdfc4fe31bf9e36b8146f7fc70777f7e5a822c5b5 — the parameter rename `specimenId` -> `discriminator` (mmnto-ai/totem#2694 G1: the suffix is the row's `packageDiscriminator`, which is the specimen id on the specimens set and the declared language on the seed set). The BODY is byte-identical modulo that identifier and the emitted bytes are unchanged — proven by the seven committed chains reproducing under INV 2."
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/src/lower.mts` (symbol:q) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"1bf1fc350c0dfe130faffeae0994567e5fe47eda3fb5e03a94b4d2fa63458b4c\""
+    },
+    {
+      "name": "K6 — `spikes/spine-adopt/src/lower.mts` (symbol:regoStringArray) is byte-identical to BASELINE_PIN 6ca24d42",
+      "ok": true,
+      "detail": "\"e11dedd9cf81a3cc70a76cb557b048131396bdb853b9ec831e2fab1a37160b93\""
+    },
+    {
+      "name": "K3 CAPTURE — `seed/controls/k3/k3-target.policy.rego` matches its pinned sha256",
+      "ok": true,
+      "detail": "\"528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db\""
+    },
+    {
+      "name": "K3 CAPTURE — `seed/controls/k3/k3-target.chain.json` matches its pinned sha256",
+      "ok": true,
+      "detail": "\"2a4d56caf0b4d18157ecf823374f3bf784b3c857f92faf148aa159f431fe3881\""
+    },
+    {
+      "name": "K3 CAPTURE — the § 5 COMMENT-STRIPPED digest of `seed/controls/k3/k3-target.policy.rego` (charter formula: lines whose first non-blank char is `#` removed, `\\n`-joined, no trailing newline)",
+      "ok": true,
+      "detail": "\"0f8223c74c1cc5560cfbfcb7c86590490eef3f6e269677c136ca0bcc0ce08e7b\""
+    },
+    {
+      "name": "K3 CAPTURE — `repinned` MEASURED from arm B (the control-only build under `artifacts/k3-control/`): NOT MEASURED (null)",
+      "ok": true,
+      "detail": "`artifacts/k3-control/lowered/r87aff037d7de47a7/policy.rego` and/or its chain are absent — run the § S5 seam with SPIKE_CONTROL_RECORD set; the disposition is `controls.json` K3 arm B's"
+    },
+    {
+      "name": "K6 — every byte-identity delta measured in this run is DISCLOSED by the owner (an undisclosed delta refuses, row by row, above)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "K8 FIXTURE — `seed/controls/k8/k8-unknown-key.rule.yaml` matches its pinned sha256",
+      "ok": true,
+      "detail": "\"f6610f9a355d8ce80cbe24eb803421d376f9d350670806ef59cfb2d0492431d4\""
+    },
+    {
+      "name": "K8 FIXTURE — `seed/controls/k8/k8-missing-mandatory.rule.yaml` matches its pinned sha256",
+      "ok": true,
+      "detail": "\"a0c67c7d4f4762e3d5817115be67ba846b7d7a75eb80d2464459980a48467d84\""
+    },
+    {
+      "name": "K5 CONTROL — `seed/controls/k5/d-requires-file.rule.yaml` is byte-identical to `records/d-requires-file.rule.yaml`",
+      "ok": true,
+      "detail": "\"048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239\""
+    },
+    {
+      "name": "the digest is stable under the pending `bundles` + `bundlesSha256` fill and this stage`s own `checks[]` (all three are outside the preimage)",
+      "ok": true,
+      "detail": "\"606301088db6b1c9a14678ee9ec0964040dde1db038379d6ac1a3a47bd5dd8dd\""
+    },
+    {
+      "name": "`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)",
+      "ok": true,
+      "detail": "sorted-equal=true, bytes-differ=true"
+    }
+  ]
 }
