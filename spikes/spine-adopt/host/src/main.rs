@@ -79,8 +79,34 @@ fn read_json(path: &Path) -> Result<Value> {
     serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
+/// C10 of `.totem/specs/seed20-apparatus-slice2.md`: `SPIKE_ARTIFACTS_SUBDIR=<name>`
+/// redirects every artifact read and write under `artifacts/<name>/`, so the K4
+/// swapped run and the K3 control-only build get their own homes instead of
+/// overwriting the run of record. Unset ⇒ `artifacts/`, byte-for-byte today's
+/// paths. The name is validated exactly as the TS arm (`src/lib/spike-env.mts`)
+/// and the Go arm (`wazero-probe/paths.go`) validate it, so the three arms can
+/// never disagree on where a run lives. The lowered rows' `dir` is NOT touched
+/// here: `src/lower.mts` already writes it relative to the subdir'd build root.
+fn artifacts_dir(spike_root: &Path) -> Result<PathBuf> {
+    let base = spike_root.join("artifacts");
+    match std::env::var("SPIKE_ARTIFACTS_SUBDIR") {
+        Ok(name) if !name.is_empty() => {
+            let valid = name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+            if !valid {
+                bail!(
+                    "SPIKE_ARTIFACTS_SUBDIR={name:?} is not a valid subdir name (expected ^[a-z0-9-]+$)"
+                );
+            }
+            Ok(base.join(name))
+        }
+        _ => Ok(base),
+    }
+}
+
 fn load_lowering(spike_root: &Path) -> Result<Vec<LoweredRecord>> {
-    let at = spike_root.join("artifacts").join("lowering-rejects.json");
+    let at = artifacts_dir(spike_root)?.join("lowering-rejects.json");
     let v = read_json(&at)?;
     let rows = v
         .get("lowered")
@@ -111,7 +137,7 @@ fn load_lowering(spike_root: &Path) -> Result<Vec<LoweredRecord>> {
 }
 
 fn load_facts(spike_root: &Path) -> Result<Vec<FactFile>> {
-    let dir = spike_root.join("artifacts").join("facts");
+    let dir = artifacts_dir(spike_root)?.join("facts");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
         .with_context(|| format!("reading {}", dir.display()))?
         .filter_map(|e| e.ok())
@@ -951,7 +977,10 @@ async fn main() -> Result<()> {
     obj.insert("recordCount".to_owned(), json!(records.len()));
     obj.insert("fixtureCount".to_owned(), json!(facts.len()));
 
-    let out = out.unwrap_or_else(|| spike_root.join("artifacts").join(default_out));
+    let out = match out {
+        Some(explicit) => explicit,
+        None => artifacts_dir(&spike_root)?.join(default_out),
+    };
     write_artifact(&out, &Value::Object(obj))?;
 
     let rows = read_json(&out)?;

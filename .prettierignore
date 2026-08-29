@@ -32,5 +32,9 @@ spikes/spine-adopt/artifacts/
 spikes/spine-adopt/smt/artifacts/
 spikes/spine-adopt/smt/obligations/
 spikes/spine-adopt/wazero-probe/artifacts/
+# Slice-2 byte pins (`.totem/specs/seed20-apparatus-slice2.md` constraint 4): the K5 control record,
+# the K8 parser-control fixtures and the K3 capture are sha256-pinned copies verified at run time —
+# a prettier rewrap of the chain JSON or the YAML reads as tamper against the pin
+spikes/spine-adopt/seed/controls/
 spikes/spine-adopt/egg-probe/artifacts/
 spikes/serena-pilot/artifacts/
