@@ -4,11 +4,16 @@
 // (record, path): does the LOWERED policy's `in_scope` agree with the SHIPPED
 // `ruleAppliesToFile`? The corpus is the tree at the RECORD PIN — the repository
 // the seed records were written against — not the tree this run happens to sit on.
+// The same question is asked a second time over the frozen probe set
+// (`manifest.probePaths`), deposited as `probeRows[]` in the same shape.
 //
-// THE MEASUREMENT IS BINDING. Any disagreement is a FAILED check and the run
-// refuses: a lowered scope that admits a file the shipped rule excludes (or the
-// reverse) is a semantic divergence in the exact axis this trial exists to measure,
-// and reporting it as a row for someone else to notice would be the failure mode.
+// THE MEASUREMENT IS DEPOSITED, NEVER REFUSED (strategy-claude 2026-08-29T19:57Z,
+// governing the charter's § 3 T5): a disagreement is that RECORD's `scope-divergence`
+// — a typed miss the scorer assigns per package — not an apparatus fault. Every
+// disagreement is listed in full, and the count is a named check row that reads
+// true so the number is visible in the artifact. The apparatus refuses ONLY on
+// apparatus fault: an `opa eval` non-zero exit, a lowered package with no sweep
+// entry, or a malformed set (a member that is not a corpus path).
 //
 // Two readings, deliberately:
 //
@@ -56,11 +61,19 @@ interface LoweringRow {
   package: string;
 }
 
+interface SweepRow {
+  pkg: string;
+  inScope: string[];
+  shippedApplies: string[];
+  disagreements: { path: string; in_scope: boolean; ruleAppliesToFile: boolean }[];
+  elapsedMs: number;
+}
+
 function spikeRel(abs: string): string {
   return path.relative(SPIKE_ROOT, abs).split(path.sep).join('/');
 }
 
-/** One `opa eval`, with a non-zero exit raised as the hard failure it is. */
+/** One `opa eval`, with a non-zero exit raised as the apparatus fault it is. */
 function evalQuery(args: string[], label: string): unknown {
   const r = opa(args, SPIKE_ROOT);
   if (r.status !== 0) {
@@ -78,6 +91,112 @@ function evalQuery(args: string[], label: string): unknown {
   return expr === undefined ? undefined : expr.value;
 }
 
+interface CorpusSweep {
+  /** `rows` (the record-pin tree) or `probeRows` (the frozen probe set). */
+  label: string;
+  /** The corpus, in the order the manifest lists it. */
+  paths: string[];
+  /** Where the corpus JSON lives for `opa eval -i`. */
+  inputAt: string;
+}
+
+/**
+ * Sweep ONE lowered package over ONE corpus: the batched `opa eval`, the shipped
+ * reading of the same paths, the disagreement list (deposited, never refused),
+ * and the per-path cross-check of the batched rewriting.
+ */
+function sweepPackage(
+  checks: Checks,
+  core: { ruleAppliesToFile(rule: unknown, filePath: string): boolean },
+  compiledRule: unknown,
+  row: LoweringRow,
+  suffix: string,
+  policyAt: string,
+  wrapperAt: string,
+  corpus: CorpusSweep,
+  singleInputAt: string,
+): SweepRow {
+  const argv = [
+    'eval',
+    '--format=json',
+    '--strict-builtin-errors',
+    '-d',
+    spikeRel(policyAt),
+    '-d',
+    spikeRel(wrapperAt),
+    '-i',
+    corpus.inputAt,
+    'data.t5sweep.in_scope_paths',
+  ];
+  const started = Date.now();
+  const value = evalQuery(argv, `${suffix} (${corpus.label}, batched)`);
+  const elapsedMs = Date.now() - started;
+
+  // ── apparatus-fault arm: the set must be a set of CORPUS paths ──
+  const corpusSet = new Set(corpus.paths);
+  const raw = (value as unknown[] | undefined) ?? [];
+  const malformed = raw.filter((m) => typeof m !== 'string' || !corpusSet.has(m));
+  if (malformed.length > 0) {
+    throw new Error(
+      `T5 — ${suffix} (${corpus.label}): \`in_scope_paths\` carries ${malformed.length} member(s) that are not corpus paths (apparatus fault): ${JSON.stringify(malformed.slice(0, 5))}`,
+    );
+  }
+  const inScope = [...new Set(raw as string[])].sort();
+
+  // ── the SHIPPED reading of the same corpus ──
+  const shippedApplies = corpus.paths
+    .filter((p) => core.ruleAppliesToFile(compiledRule, p) === true)
+    .sort();
+
+  const inScopeSet = new Set(inScope);
+  const shippedSet = new Set(shippedApplies);
+  const disagreements = corpus.paths
+    .filter((p) => inScopeSet.has(p) !== shippedSet.has(p))
+    .map((p) => ({ path: p, in_scope: inScopeSet.has(p), ruleAppliesToFile: shippedSet.has(p) }));
+
+  // DEPOSITED, never refused: the row reads true so the run continues; the
+  // count and the first entries are the check's detail so a reader sees them
+  // without opening the deposit. The scorer types each entry as T5
+  // `scope-divergence` for this package's record.
+  checks.check(
+    `T5 — ${suffix} (${corpus.label}): LOWERED \`in_scope\` vs SHIPPED \`ruleAppliesToFile\` over ${corpus.paths.length} paths — ${disagreements.length} disagreement(s) DEPOSITED (a disagreement is this record's scope-divergence, typed by the scorer; never an apparatus refusal)`,
+    true,
+    disagreements.length === 0 ? 'no disagreement' : JSON.stringify(disagreements.slice(0, 5)),
+  );
+
+  // ── the batched form, cross-checked against the PER-PATH form ──
+  const sample = [
+    ...inScope.slice(0, 4),
+    ...corpus.paths.filter((p) => !inScopeSet.has(p)).slice(0, 4),
+  ];
+  const perPath: { path: string; batched: boolean; single: boolean }[] = [];
+  for (const p of sample) {
+    fs.writeFileSync(singleInputAt, `${JSON.stringify({ file: p })}\n`, 'utf-8');
+    const single = evalQuery(
+      [
+        'eval',
+        '--format=json',
+        '--strict-builtin-errors',
+        '-d',
+        spikeRel(policyAt),
+        '-i',
+        singleInputAt,
+        `data.${row.package}.in_scope`,
+      ],
+      `${suffix} (${corpus.label}, per-path ${p})`,
+    );
+    perPath.push({ path: p, batched: inScopeSet.has(p), single: single === true });
+  }
+  const inSampled = Math.min(4, inScope.length);
+  checks.eq(
+    `T5 — ${suffix} (${corpus.label}): the BATCHED set comprehension agrees with the PER-PATH \`in_scope\` query on ${sample.length} sampled paths (${inSampled} in scope, ${sample.length - inSampled} out)`,
+    perPath.filter((r) => r.batched !== r.single),
+    [],
+  );
+
+  return { pkg: row.package, inScope, shippedApplies, disagreements, elapsedMs };
+}
+
 async function main(): Promise<void> {
   const checks = new Checks();
   const recordSet = activeRecordSet();
@@ -93,6 +212,12 @@ async function main(): Promise<void> {
   if (pinHeader === undefined) {
     throw new Error(
       'the run manifest carries no `trackedPathsAtRecordPin` — re-run `npm run manifest` (it enumerates the sweep corpus).',
+    );
+  }
+  const probePaths = manifest.probePaths as string[] | undefined;
+  if (!Array.isArray(probePaths)) {
+    throw new Error(
+      'the run manifest carries no `probePaths[]` — re-run `npm run manifest` (it enumerates the probe set).',
     );
   }
 
@@ -120,13 +245,15 @@ async function main(): Promise<void> {
         recordPin: pinHeader.pin,
         treeCount: 0,
         treeSha256: null,
+        probeCount: probePaths.length,
         invocation: INVOCATION,
         mode: 'batched-set-comprehension',
         opaVersion: null,
         wrapperTemplateSha256,
         packages: [],
       },
-      packages: [],
+      rows: [],
+      probeRows: [],
       checks: checks.rows,
     });
     console.log(`\nT5 sweep SKIPPED -> ${skipped}`);
@@ -171,14 +298,25 @@ async function main(): Promise<void> {
   const compiledById = new Map(intake.accepted.map((r) => [r.specimen.id, r.compiled!]));
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-t5-'));
-  const inputAt = path.join(tmp, 'sweep-input.json');
-  fs.writeFileSync(inputAt, `${JSON.stringify({ paths })}\n`, 'utf-8');
+  const treeCorpus: CorpusSweep = {
+    label: 'rows',
+    paths,
+    inputAt: path.join(tmp, 'sweep-input.json'),
+  };
+  fs.writeFileSync(treeCorpus.inputAt, `${JSON.stringify({ paths })}\n`, 'utf-8');
+  const probeCorpus: CorpusSweep = {
+    label: 'probeRows',
+    paths: probePaths,
+    inputAt: path.join(tmp, 'probe-input.json'),
+  };
+  fs.writeFileSync(probeCorpus.inputAt, `${JSON.stringify({ paths: probePaths })}\n`, 'utf-8');
   // `opa eval -i` takes a FILE, never inline JSON, so the per-path cross-check
   // rewrites this one rather than trying to pass a document on the command line.
   const singleInputAt = path.join(tmp, 'single-input.json');
 
   const headerPackages: Record<string, unknown>[] = [];
-  const packages: Record<string, unknown>[] = [];
+  const rows: SweepRow[] = [];
+  const probeRows: SweepRow[] = [];
   const startedAll = Date.now();
 
   for (const row of lowering.lowered) {
@@ -195,70 +333,38 @@ async function main(): Promise<void> {
     const wrapperText = templateText.split('__PACKAGE__').join(row.package);
     fs.writeFileSync(wrapperAt, wrapperText, 'utf-8');
 
-    const argv = [
-      'eval',
-      '--format=json',
-      '--strict-builtin-errors',
-      '-d',
-      spikeRel(policyAt),
-      '-d',
-      spikeRel(wrapperAt),
-      '-i',
-      inputAt,
-      'data.t5sweep.in_scope_paths',
-    ];
-    const started = Date.now();
-    const value = evalQuery(argv, `${suffix} (batched)`);
-    const elapsedMs = Date.now() - started;
-    const inScope = [...((value as string[] | undefined) ?? [])].sort();
-
-    // ── the SHIPPED reading of the same corpus ──
     const compiled = compiledById.get(row.specimen);
     if (!compiled) {
       throw new Error(
         `no compiled rule for lowered record '${row.specimen}' — the lowering artifact and the loaded record set disagree; re-run \`npm run lower\`.`,
       );
     }
-    const shippedApplies = paths
-      .filter((p) => core.ruleAppliesToFile(compiled.rule, p) === true)
-      .sort();
 
-    const inScopeSet = new Set(inScope);
-    const shippedSet = new Set(shippedApplies);
-    const disagreements = paths
-      .filter((p) => inScopeSet.has(p) !== shippedSet.has(p))
-      .map((p) => ({ path: p, in_scope: inScopeSet.has(p), ruleAppliesToFile: shippedSet.has(p) }));
-
-    checks.eq(
-      `T5 — ${suffix}: the LOWERED \`in_scope\` and the SHIPPED \`ruleAppliesToFile\` agree on all ${paths.length} record-pin paths`,
-      disagreements.slice(0, 10),
-      [],
+    rows.push(
+      sweepPackage(
+        checks,
+        core,
+        compiled.rule,
+        row,
+        suffix,
+        policyAt,
+        wrapperAt,
+        treeCorpus,
+        singleInputAt,
+      ),
     );
-
-    // ── the batched form, cross-checked against the PER-PATH form ──
-    const sample = [...inScope.slice(0, 4), ...paths.filter((p) => !inScopeSet.has(p)).slice(0, 4)];
-    const perPath: { path: string; batched: boolean; single: boolean }[] = [];
-    for (const p of sample) {
-      fs.writeFileSync(singleInputAt, `${JSON.stringify({ file: p })}\n`, 'utf-8');
-      const single = evalQuery(
-        [
-          'eval',
-          '--format=json',
-          '--strict-builtin-errors',
-          '-d',
-          spikeRel(policyAt),
-          '-i',
-          singleInputAt,
-          `data.${row.package}.in_scope`,
-        ],
-        `${suffix} (per-path ${p})`,
-      );
-      perPath.push({ path: p, batched: inScopeSet.has(p), single: single === true });
-    }
-    checks.eq(
-      `T5 — ${suffix}: the BATCHED set comprehension agrees with the PER-PATH \`in_scope\` query on ${sample.length} sampled paths (${inScope.length ? Math.min(4, inScope.length) : 0} in scope, ${sample.length - Math.min(4, inScope.length)} out)`,
-      perPath.filter((r) => r.batched !== r.single),
-      [],
+    probeRows.push(
+      sweepPackage(
+        checks,
+        core,
+        compiled.rule,
+        row,
+        suffix,
+        policyAt,
+        wrapperAt,
+        probeCorpus,
+        singleInputAt,
+      ),
     );
 
     headerPackages.push({
@@ -269,26 +375,29 @@ async function main(): Promise<void> {
       policyRegoSha256: sha256(fs.readFileSync(policyAt)),
       wrapperSha256: sha256(wrapperText),
     });
-    packages.push({
-      pkg: row.package,
-      inScope,
-      shippedApplies,
-      disagreements,
-      elapsedMs,
-    });
   }
 
+  // ── apparatus-fault arm: every lowered package has exactly one entry per corpus ──
+  checks.eq(
+    `T5 — every lowered package has exactly one \`rows[]\` entry and one \`probeRows[]\` entry (${lowering.lowered.length} lowered)`,
+    { rows: rows.length, probeRows: probeRows.length },
+    { rows: lowering.lowered.length, probeRows: lowering.lowered.length },
+  );
+
   const totalMs = Date.now() - startedAll;
+  const disagreeing = (list: SweepRow[]): number =>
+    list.filter((p) => p.disagreements.length > 0).length;
 
   const out = writeArtifact('t5-sweep.json', {
     generatedBy: 'spikes/spine-adopt/src/t5-sweep.mts',
     contract:
-      'spec `.totem/specs/seed20-apparatus-slice2.md` § S6 — T5 scope sweep. The charter names a per-path pair {in_scope, ruleAppliesToFile}; it is DERIVED from the two sorted lists below (`in_scope` = path ∈ `inScope`, `ruleAppliesToFile` = path ∈ `shippedApplies`), so the deposit is O(in-scope) rather than O(tree) per package and loses nothing. Every disagreement is listed in full AND is a FAILED check — T5 is binding.',
+      "spec `.totem/specs/seed20-apparatus-slice2.md` § S6 — T5 scope sweep. The charter names a per-path pair {in_scope, ruleAppliesToFile}; it is DERIVED from the two sorted lists per package (`in_scope` = path ∈ `inScope`, `ruleAppliesToFile` = path ∈ `shippedApplies`), so the deposit is O(in-scope) rather than O(tree) per package and loses nothing. `rows[]` sweeps the record-pin tree; `probeRows[]` sweeps `manifest.probePaths[]` in the same shape. Every disagreement is listed in full and DEPOSITED, never refused — the scorer types each as that record's T5 scope-divergence. The apparatus refuses only on apparatus fault (an `opa eval` non-zero exit, a lowered package with no entry, a malformed set).",
     status: 'MEASURED',
     header: {
       recordPin: pinHeader.pin,
       treeCount: paths.length,
       treeSha256: sha256(listText),
+      probeCount: probePaths.length,
       invocation: INVOCATION,
       mode: 'batched-set-comprehension',
       opaVersion,
@@ -297,13 +406,13 @@ async function main(): Promise<void> {
     },
     recordSet,
     elapsedMs: totalMs,
-    packages,
+    rows,
+    probeRows,
     checks: checks.rows,
   });
 
-  const disagreeing = packages.filter((p) => (p.disagreements as unknown[]).length > 0).length;
   console.log(
-    `\nT5 sweep: ${packages.length} package(s) x ${paths.length} paths in ${totalMs} ms — ${disagreeing} package(s) with disagreements`,
+    `\nT5 sweep: ${rows.length} package(s) x ${paths.length} tree paths + ${probePaths.length} probe paths in ${totalMs} ms — ${disagreeing(rows)} package(s) with tree disagreements, ${disagreeing(probeRows)} with probe disagreements (deposited)`,
   );
   console.log(`t5 sweep -> ${out}`);
   checks.finish('t5-sweep');
