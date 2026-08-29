@@ -74,8 +74,20 @@ func clockGranularityMicros() float64 {
 // way — no DisallowUnknownFields — so a later additive field cannot break the
 // Go arm.
 type loweredRecord struct {
-	Specimen   string `json:"specimen"`
-	SeedEntry  string `json:"seedEntry"`
+	Specimen  string `json:"specimen"`
+	SeedEntry string `json:"seedEntry"`
+
+	// Control marks a CONTROL record — the K5 record on `seed20`, the single
+	// record of a `control` run — as distinct from a seed or specimen row
+	// (mmnto-ai/totem#2694 C5). It rides through to every pairs row.
+	//
+	// The zero value is the honest default here: `false` is what a row that does
+	// not carry the field means (a specimen row, or any row written before the TS
+	// half published it), and it is also what C5 requires to be PRESENT rather
+	// than omitted on the artifacts this arm writes. There is no third state to
+	// lose, so a pointer would add a `null` the grammar does not have.
+	Control bool `json:"control"`
+
 	RuleID     string `json:"ruleId"`
 	Package    string `json:"package"`
 	Entrypoint string `json:"entrypoint"`
@@ -109,11 +121,11 @@ func readJSON(path string, into any) error {
 	return nil
 }
 
-func loadLowering(root string) ([]loweredRecord, error) {
+func loadLowering(p spikePaths) ([]loweredRecord, error) {
 	var doc struct {
 		Lowered []loweredRecord `json:"lowered"`
 	}
-	at := filepath.Join(root, "artifacts", "lowering-rejects.json")
+	at := p.artifact("lowering-rejects.json")
 	if err := readJSON(at, &doc); err != nil {
 		return nil, err
 	}
@@ -123,8 +135,8 @@ func loadLowering(root string) ([]loweredRecord, error) {
 	return doc.Lowered, nil
 }
 
-func loadFacts(root string) ([]factFile, error) {
-	dir := filepath.Join(root, "artifacts", "facts")
+func loadFacts(p spikePaths) ([]factFile, error) {
+	dir := p.Facts
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", dir, err)
@@ -204,8 +216,8 @@ func joinIsSound(rec loweredRecord, f factFile) error {
 
 // factsIndexPath is where the fact corpus's index lives, named once so the
 // refusals below and the count derivation cannot point at different files.
-func factsIndexPath(root string) string {
-	return filepath.Join(root, "artifacts", "facts-index.json")
+func factsIndexPath(p spikePaths) string {
+	return p.artifact("facts-index.json")
 }
 
 // factsIndex is `artifacts/facts-index.json` as far as this arm models it.
@@ -237,9 +249,9 @@ const recordSetIdentityRefusal = "RECORD-SET IDENTITY"
 // A missing field is refused just as hard as a mismatched one; the TS half writes
 // it on every run now, so its absence means the corpus predates this contract and
 // its provenance is simply unknown.
-func loadFactsIndex(root, recordSet string) (factsIndex, error) {
+func loadFactsIndex(p spikePaths, recordSet string) (factsIndex, error) {
 	var idx factsIndex
-	at := factsIndexPath(root)
+	at := factsIndexPath(p)
 	if err := readJSON(at, &idx); err != nil {
 		return idx, err
 	}
@@ -270,9 +282,9 @@ func loadFactsIndex(root, recordSet string) (factsIndex, error) {
 //
 // It reads the index through loadFactsIndex, so no count can be derived from a
 // corpus whose record-set identity has not been checked first.
-func expectedRowCount(root, recordSet string, facts []factFile) (int, error) {
-	at := factsIndexPath(root)
-	idx, err := loadFactsIndex(root, recordSet)
+func expectedRowCount(p spikePaths, recordSet string, facts []factFile) (int, error) {
+	at := factsIndexPath(p)
+	idx, err := loadFactsIndex(p, recordSet)
 	if err != nil {
 		return 0, err
 	}
@@ -630,13 +642,27 @@ func loadPolicy(ctx context.Context, cache wazero.CompilationCache, wasmBytes []
 // artifact declares. The directory is READ, never re-derived from the ruleId: the
 // package-suffix rule that names it (the `_<language>` twins, the `_<specimen>`
 // exemplar siblings) belongs to the TS lowering.
-func policyWasmPath(root string, rec loweredRecord) string {
-	dir := filepath.Join(append([]string{root}, strings.Split(rec.Dir, "/")...)...)
-	return filepath.Join(dir, "policy.wasm")
+//
+// C10's `SPIKE_ARTIFACTS_SUBDIR` moves the rego build root too, and it reaches
+// this path THROUGH the declared `dir` — the TS half writes `dir` relative to the
+// spike root, so a subdir run's rows already say `rego/build/<subdir>/<pkg>`.
+// Re-deriving it here would apply the subdir twice. What is checked instead is
+// that the declared dir lives under the build root this run resolved
+// (see spikePaths.checkUnderRegoBuild), which is the assertion a read-verbatim
+// path cannot make for itself.
+func policyWasmPath(p spikePaths, rec loweredRecord) (string, error) {
+	if err := p.checkUnderRegoBuild(rec); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(append([]string{p.Root}, strings.Split(rec.Dir, "/")...)...)
+	return filepath.Join(dir, "policy.wasm"), nil
 }
 
-func runSpecimen(ctx context.Context, root string, cache wazero.CompilationCache, rec loweredRecord, facts []factFile) (*specimenResult, error) {
-	wasmPath := policyWasmPath(root, rec)
+func runSpecimen(ctx context.Context, paths spikePaths, cache wazero.CompilationCache, rec loweredRecord, facts []factFile) (*specimenResult, error) {
+	wasmPath, err := policyWasmPath(paths, rec)
+	if err != nil {
+		return nil, err
+	}
 	wasmBytes, err := os.ReadFile(wasmPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s — run `npm run lower && npm run build-wasm` first: %w", wasmPath, err)

@@ -18,7 +18,9 @@ package main
 //     and checked on EVERY pair before any classification — an explained
 //     divergence is not an excuse to stop looking at the derived fields;
 //   - an ERROR ROW on either side is a divergence, never a clean zero;
-//   - exactly ONE explanation class is registered: ORDINAL-DERIVATION-ONLY.
+//   - exactly TWO explanation classes are registered, and their ids are the TS
+//     comparator's: ORDINAL-DERIVATION-ONLY and MALFORMED-FACTS-CONTROL
+//     (mmnto-ai/totem#2694 C9).
 //
 // The detector is exercised against synthetic mutants before any real row is
 // compared (see selfTest), because an all-green report is worth exactly what its
@@ -89,12 +91,32 @@ type pairResult struct {
 	// does not model seedEntry".
 	SeedEntry *string `json:"seedEntry"`
 
-	Engine      string         `json:"engine"`
-	Left        string         `json:"left"`
-	Right       string         `json:"right"`
-	Status      status         `json:"status"`
-	Explanation *string        `json:"explanation"`
-	Detail      map[string]any `json:"detail"`
+	// Control marks a pair whose RECORD is a control record (mmnto-ai/totem#2694
+	// C5 — "beside `seedEntry`, present-as-`false`, never omitted"). It carries no
+	// `omitempty`: `false` is the value most rows carry, and dropping the key on
+	// them would leave the artifact modelling the flag only where it is true,
+	// which reads as "unknown" rather than as "not a control".
+	Control bool `json:"control"`
+
+	Engine      string  `json:"engine"`
+	Left        string  `json:"left"`
+	Right       string  `json:"right"`
+	Status      status  `json:"status"`
+	Explanation *string `json:"explanation"`
+
+	// ExplanationClass is the machine id of the class the explanation belongs to,
+	// where `Explanation` is its prose (mmnto-ai/totem#2694 C9). The vocabulary is
+	// the TS comparator's `differential-report.json.explanationClasses[]`
+	// (`src/compare.mts:1016-1036`), and this arm publishes the same ids in
+	// `wazero-pairs.json.explanationClasses[]`.
+	//
+	// A POINTER with no `omitempty`, for C4's reason: a MATCH row has no class,
+	// and that must serialise as `null` — a present key with no value — rather
+	// than as `""` (which reads as a class whose id is empty) or as a missing key
+	// (which reads as an artifact that does not model the class at all).
+	ExplanationClass *string `json:"explanationClass"`
+
+	Detail map[string]any `json:"detail"`
 }
 
 // ─── Multiset helpers ────────────────────────────────────────────────────────
@@ -231,6 +253,16 @@ func deriveShippedOrdinals(engine, _ruleID string, vs []shippedViolation, astMat
 
 const ordinalExplanation = "ORDINAL-DERIVATION ONLY — the (rule_id, line_number) violation multisets and the event streams are identical; the arms differ only on the ordinal, which the shipped side does not carry natively and which this comparator reconstructs from the FactBundle. Not a semantic divergence."
 
+// ordinalDerivationOnlyClass is the machine ID of the explanation above.
+//
+// It is the id the TS comparator publishes for the same class
+// (`src/compare.mts:1018`, `differential-report.json.explanationClasses[].id`),
+// spelled here as a constant rather than inline so the pairs artifact's class
+// list, the rows it classifies, and the tests all read ONE string. Note that it
+// is NOT a slug of the prose: the explanation says "ORDINAL-DERIVATION ONLY" and
+// the class id hyphenates all three words, exactly as the TS side does.
+const ordinalDerivationOnlyClass = "ORDINAL-DERIVATION-ONLY"
+
 func explain(left, right normalRow) (string, map[string]any) {
 	if left.Violations == nil || right.Violations == nil {
 		return "", nil
@@ -343,7 +375,15 @@ func designedControlErrorOf(arm string) string {
 	return "contains " + d.text
 }
 
-const malformedFactsControlExplanation = "MALFORMED-FACTS-CONTROL — the K5b control bundle. Its `lines[]` carries a " +
+// malformedFactsControlClass is the machine ID of the K5b carve-out class, the
+// same id the TS comparator publishes (`src/compare.mts:372`, exported into
+// `differential-report.json.explanationClasses[].id`). Every place that names the
+// class — the pairs artifact's class list, the row's `explanationClass`, the
+// detail's `reason`, and the prose below — reads THIS constant, so the id cannot
+// drift in one of them.
+const malformedFactsControlClass = "MALFORMED-FACTS-CONTROL"
+
+const malformedFactsControlExplanation = malformedFactsControlClass + " — the K5b control bundle. Its `lines[]` carries a " +
 	"non-string member: on the wasm arms (opa, wazero) `facts_wellformed` is false and the entrypoint's `result` rule is " +
 	"UNDEFINED (an EMPTY RESULT SET error row); the shipped harness never evaluates a policy over it and refuses the bundle " +
 	"(a MALFORMED FACTS error row). Each arm's error row is that arm's DESIGNED outcome of the strictness contract, not a " +
@@ -372,10 +412,12 @@ func compareControlPair(base pairResult, left, right normalRow) pairResult {
 		rightDesigned := matchesDesignedControlError(right.Arm, right.Error)
 		if leftDesigned && rightDesigned {
 			ex := malformedFactsControlExplanation
+			cls := malformedFactsControlClass
 			base.Status = statusExplained
 			base.Explanation = &ex
+			base.ExplanationClass = &cls
 			base.Detail = map[string]any{
-				"reason":     "MALFORMED-FACTS-CONTROL",
+				"reason":     malformedFactsControlClass,
 				"leftError":  left.Error,
 				"rightError": right.Error,
 			}
@@ -484,8 +526,10 @@ func comparePair(left, right normalRow) pairResult {
 	}
 
 	if ex, detail := explain(left, right); ex != "" {
+		cls := ordinalDerivationOnlyClass
 		base.Status = statusExplained
 		base.Explanation = &ex
+		base.ExplanationClass = &cls
 		base.Detail = detail
 		return base
 	}
@@ -602,16 +646,26 @@ func selfTest(ck *checks) {
 
 // ─── Checks ──────────────────────────────────────────────────────────────────
 
+// checkRow is one assertion's outcome, in the shape BOTH halves of the seam
+// publish: `{ name, ok, detail }` (mmnto-ai/totem#2694 C8), matching the TS
+// harness's `Checks.rows` (`src/lib/spike-env.mts:299`). The key was `passed`
+// here and `ok` there, so a scorer reading `checks[]` across the two comparators
+// had to know which language wrote the artifact.
+//
+// `detail` keeps its `omitempty`: this arm records a detail only on a FAILING
+// check, so on a green run the key is absent rather than present-and-empty. (The
+// TS harness always writes the key, defaulting to the empty string — a difference
+// C8 leaves standing.)
 type checkRow struct {
 	Name   string `json:"name"`
-	Passed bool   `json:"passed"`
+	OK     bool   `json:"ok"`
 	Detail string `json:"detail,omitempty"`
 }
 
 type checks struct{ Rows []checkRow }
 
 func (c *checks) check(name string, ok bool, detail string) {
-	r := checkRow{Name: name, Passed: ok}
+	r := checkRow{Name: name, OK: ok}
 	if !ok {
 		r.Detail = detail
 	}
@@ -641,7 +695,7 @@ func (c *checks) eq(name string, got, want any) {
 func (c *checks) failed() []checkRow {
 	var out []checkRow
 	for _, r := range c.Rows {
-		if !r.Passed {
+		if !r.OK {
 			out = append(out, r)
 		}
 	}
