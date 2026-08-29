@@ -1698,9 +1698,12 @@ describe('buildPreCommitHook agent detection', () => {
 });
 
 describe('buildPreCommitHook with strict tier', () => {
-  it('includes spec-completed check', () => {
+  it('gates on spec evidence and never on the retired hand-set marker', () => {
     const hook = buildPreCommitHook('strict');
-    expect(hook).toContain('.spec-completed');
+    // The former `.totem/cache/.spec-completed` sentinel (mmnto-ai/totem#2690)
+    // may be NAMED in a comment that says it is not honored, but no test-able
+    // path may read it.
+    expect(hook).not.toMatch(/-f\s+"?\.totem\/cache\/\.spec-completed/);
     expect(hook).toContain("Run 'totem spec <issue>' before committing (strict mode)");
   });
 
@@ -1710,12 +1713,12 @@ describe('buildPreCommitHook with strict tier', () => {
     expect(hook).toContain('$TOTEM_HOOK_TIER');
   });
 
-  it('gates on the totem spec run artifact, JSON-aware, with the legacy marker second', () => {
+  it('gates on the totem spec run artifact, JSON-aware — the only evidence', () => {
     const hook = buildPreCommitHook('strict');
     expect(hook).toContain('.totem/artifacts/runs');
     expect(hook).toContain('admission.runMetadata.caller');
     expect(hook).toContain('spec evidence:');
-    expect(hook).toContain('(legacy marker)');
+    expect(hook).not.toContain('(legacy marker)');
   });
 });
 
@@ -1788,13 +1791,14 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
   );
 
   it.skipIf(!shellOk)(
-    'the legacy marker still passes on its own when the reader cannot run',
+    'a hand-set marker does not rescue a reader that cannot run — still the distinct failure, still closed',
     () => {
       fs.mkdirSync(path.join(tmpDir, '.totem', 'cache'), { recursive: true });
       fs.writeFileSync(path.join(tmpDir, '.totem', 'cache', '.spec-completed'), '');
       const r = runHookWith(shimNodeExiting(127));
-      expect(r.status).toBe(0);
-      expect(r.stdout).toContain('(legacy marker)');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('the spec-evidence reader could not run (node exit status 127');
+      expect(r.stdout).not.toContain('legacy');
     },
   );
 
@@ -1844,14 +1848,16 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
     },
   );
 
-  it.skipIf(!shellOk)('passes on the legacy hand-set marker alone and names it as legacy', () => {
+  it.skipIf(!shellOk)('ignores the retired hand-set marker — a marker alone is BLOCKED', () => {
+    // No CLI path ever wrote `.totem/cache/.spec-completed`; honoring it would be
+    // compatibility with a hand hack, not with a user (operator ruling
+    // 2026-08-29, mmnto-ai/totem#2690).
     fs.mkdirSync(path.join(tmpDir, '.totem', 'cache'), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, '.totem', 'cache', '.spec-completed'), '');
     const r = runHook();
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain(
-      '[Totem] spec evidence: .totem/cache/.spec-completed (legacy marker)',
-    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('no totem spec run artifact under .totem/artifacts/runs/');
+    expect(r.stdout).not.toContain('spec evidence:');
   });
 
   it.skipIf(!shellOk)(
@@ -1891,9 +1897,9 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
 });
 
 describe('buildPreCommitHook with standard tier', () => {
-  it('includes spec-completed check guarded by agent/tier condition', () => {
+  it('includes the spec-evidence check guarded by agent/tier condition', () => {
     const hook = buildPreCommitHook('standard');
-    expect(hook).toContain('.spec-completed');
+    expect(hook).toContain('.totem/artifacts/runs');
     expect(hook).toContain('is_agent');
     expect(hook).toContain('TOTEM_HOOK_TIER="standard"');
   });
@@ -1901,7 +1907,7 @@ describe('buildPreCommitHook with standard tier', () => {
   it('defaults to standard tier when no tier specified', () => {
     const hook = buildPreCommitHook();
     expect(hook).toContain('TOTEM_HOOK_TIER="standard"');
-    expect(hook).toContain('.spec-completed');
+    expect(hook).toContain('.totem/artifacts/runs');
   });
 });
 

@@ -483,23 +483,20 @@ export function buildPreCommitHook(tier?: 'strict' | 'standard'): string {
   // pass the gate on a review of any text that merely QUOTES the key (this
   // very test fixture). node is already assumed by the pre-push template's
   // format-check block; ~50 ms, no CLI boot, nothing written (Tenet 13). The
-  // legacy hand-set .totem/cache/.spec-completed marker is honored second.
-  // The evidence line makes a stale pass VISIBLE (age from the artifact's own
-  // createdAt); a freshness rule is a separate policy, deliberately not here.
-  //
-  // TWO READERS, ONE RULE: the same evidence rule is implemented independently
-  // in the repo's legacy `.gemini/hooks/BeforeTool.js` (`hasSpecEvidence` — a
-  // self-contained Gemini hook file that cannot import from packages/, so the
-  // logic cannot be shared as a module). `spec-evidence-readers.test.ts`
-  // executes BOTH readers against the same fixture checkouts and fails on any
-  // disagreement — change the rule here and there together, and extend that
-  // test's state list with any new evidence state.
+  // former .totem/cache/.spec-completed marker is NOT honored: no CLI path ever
+  // wrote it, so "compatibility" with it would be compatibility with a hand
+  // hack (operator ruling 2026-08-29 — no legacy shims while there is no hard
+  // consumer, Tenet 19). The evidence line makes a stale pass VISIBLE (age
+  // from the artifact's own createdAt); a freshness rule is a separate policy,
+  // deliberately not here. This is the ONLY reader of the rule — the repo's
+  // pre-managed-era `.gemini/hooks/BeforeTool.js` (unregistered, inert) was
+  // deleted with the marker rather than kept in step.
   const strictBlock = `
 # Strict mode: require spec EVIDENCE before commit (mmnto-ai/totem#2690).
 # Evidence = a totem spec run artifact (.totem/artifacts/runs/*.json with a
 # top-level admission.runMetadata.caller of "spec"), read JSON-aware — a
 # substring match would accept a review artifact that merely quotes the key.
-# The legacy hand-set marker .totem/cache/.spec-completed is honored second.
+# The former .totem/cache/.spec-completed marker is not honored (no CLI wrote it).
 if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
   spec_evidence=$(node -e '
 const fs = require("fs");
@@ -523,18 +520,15 @@ process.stdout.write(dir + "/" + best.name + " (" + (best.at || "undated") + (da
 ' 2>/dev/null)
   # Reader status: 0 = evidence found · 2 = none found · anything else = the
   # reader itself could not run (node missing from PATH, a crash) — reported
-  # distinctly, never as "no evidence"; the legacy marker still passes on its
-  # own so a broken runtime cannot regress a marker-bearing checkout.
+  # distinctly, never as "no evidence", and still fail-closed.
   reader_status=$?
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
     echo "[Totem] spec evidence: $spec_evidence"
-  elif [ -f ".totem/cache/.spec-completed" ]; then
-    echo "[Totem] spec evidence: .totem/cache/.spec-completed (legacy marker)"
   elif [ "$reader_status" != "2" ]; then
     echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or .totem/artifacts/runs/ unreadable); fix the runtime and retry (strict mode)"
     exit 1
   else
-    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under .totem/artifacts/runs/ and no legacy .totem/cache/.spec-completed marker in this checkout"
+    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under .totem/artifacts/runs/ in this checkout"
     exit 1
   fi
 fi`;

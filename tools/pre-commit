@@ -21,7 +21,7 @@ fi
 # Evidence = a totem spec run artifact (.totem/artifacts/runs/*.json with a
 # top-level admission.runMetadata.caller of "spec"), read JSON-aware — a
 # substring match would accept a review artifact that merely quotes the key.
-# The legacy hand-set marker .totem/cache/.spec-completed is honored second.
+# The former .totem/cache/.spec-completed marker is not honored (no CLI wrote it).
 if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
   spec_evidence=$(node -e '
 const fs = require("fs");
@@ -45,18 +45,15 @@ process.stdout.write(dir + "/" + best.name + " (" + (best.at || "undated") + (da
 ' 2>/dev/null)
   # Reader status: 0 = evidence found · 2 = none found · anything else = the
   # reader itself could not run (node missing from PATH, a crash) — reported
-  # distinctly, never as "no evidence"; the legacy marker still passes on its
-  # own so a broken runtime cannot regress a marker-bearing checkout.
+  # distinctly, never as "no evidence", and still fail-closed.
   reader_status=$?
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
     echo "[Totem] spec evidence: $spec_evidence"
-  elif [ -f ".totem/cache/.spec-completed" ]; then
-    echo "[Totem] spec evidence: .totem/cache/.spec-completed (legacy marker)"
   elif [ "$reader_status" != "2" ]; then
     echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or .totem/artifacts/runs/ unreadable); fix the runtime and retry (strict mode)"
     exit 1
   else
-    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under .totem/artifacts/runs/ and no legacy .totem/cache/.spec-completed marker in this checkout"
+    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under .totem/artifacts/runs/ in this checkout"
     exit 1
   fi
 fi
