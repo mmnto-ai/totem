@@ -28,7 +28,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { activeRecordSet } from './lib/record-sets.mts';
-import { astQueryOf, intakeRecordSet, loadCore, type CompiledSpecimen } from './lib/records.mts';
+import { astQueryOf, type CompiledSpecimen, intakeRecordSet, loadCore } from './lib/records.mts';
+import { fixtureAbsPath } from './lib/specimens.mts';
 import {
   Checks,
   FACTS_DIR,
@@ -37,7 +38,6 @@ import {
   sha256,
   writeArtifact,
 } from './lib/spike-env.mts';
-import { fixtureAbsPath } from './lib/specimens.mts';
 
 /**
  * K4's dev flag (spec § "K4 support"): `SPIKE_SWAP_EXAMPLES=<recordId>` swaps that
@@ -142,6 +142,19 @@ function extractAstMatches(
 }
 
 /**
+ * (C5) The control label on a bundle's own `provenance`.
+ *
+ * Emitted ONLY when it is `true`. The 24 committed specimen bundles are read
+ * byte-for-byte by the Rust host and the Go probe and are held byte-identical by
+ * the slice's § Verification (`facts/**` unchanged), so a `control: false` on every
+ * one of them would move committed evidence to say what the index already says
+ * present-as-false. The same shape `malformedFactsControl` already uses.
+ */
+function controlProvenance(s: { control: boolean }): { control?: true } {
+  return s.control ? { control: true } : {};
+}
+
+/**
  * `<ruleId>-<specimen>-<rest>.json`.
  *
  * The `<ruleId>-<specimen>-` PREFIX is load-bearing: the Rust host's join
@@ -172,6 +185,8 @@ async function main(): Promise<void> {
   const intake = intakeRecordSet(core);
   const recordSet = activeRecordSet();
   const seedEntryById = new Map(intake.rows.map((r) => [r.specimen.id, r.specimen.seedEntry]));
+  // (C5) The control flag, joined onto every index row by the record it came from.
+  const controlById = new Map(intake.rows.map((r) => [r.specimen.id, r.specimen.control]));
 
   const records: FactRecord[] = [];
   const compiledById = new Map<string, CompiledSpecimen>();
@@ -253,6 +268,7 @@ async function main(): Promise<void> {
         source: 'corpus-fixture',
         arm,
         provenance: {
+          ...controlProvenance(s),
           fixtureFile: s.fixture.file,
           fixtureRuleHash: parsed.ruleHash,
           fixtureDeclaredFilePath: parsed.filePath,
@@ -312,6 +328,7 @@ async function main(): Promise<void> {
           source: 'record-examples',
           arm,
           provenance: {
+            ...controlProvenance(s),
             recordFile: path.relative(REPO_ROOT, s.recordFile).split(path.sep).join('/'),
             exampleOrdinal: i,
             examplePairHash: cs.parsed.examplePairHashes?.[i]?.hash ?? null,
@@ -367,6 +384,7 @@ async function main(): Promise<void> {
       source: 'synthetic-control',
       arm: 'unreadable',
       provenance: {
+        ...controlProvenance(dFile),
         mirrors: 'record-runtime.test.ts:385-394 — "fires when the file cannot be read at all"',
         note: 'fileText: null beside a NON-EMPTY lines[]. A diff addition exists whether or not the file can be read, so lines[] here comes from the DIFF, not from fileText — the one bundle where the two sources are not the same source.',
         expectation: 'context absent => fail TOWARD flagging => FIRES',
@@ -388,6 +406,7 @@ async function main(): Promise<void> {
       source: 'synthetic-control',
       arm: 'empty',
       provenance: {
+        ...controlProvenance(dFile),
         note: "fileText: '' — READABLE but zero-length. Distinct from null: the requirement is EVALUATED against the empty string, so the verdict depends on whether requires.pattern matches ''. The split is measured in shipped-verdicts.mts against a hand-constructed ''-matching requirement.",
         expectation: `requires.pattern '${requiresPattern}' does NOT match '' => FIRES; a ''-matching requirement (e.g. 'a*') IS satisfied => silent.`,
       },
@@ -429,6 +448,7 @@ async function main(): Promise<void> {
       source: 'synthetic-control',
       arm: 'malformed',
       provenance: {
+        ...controlProvenance(k3Row.specimen),
         malformedFactsControl: true,
         contract: 'spec `.totem/specs/seed20-apparatus.md` § G8 (K5b)',
         note: 'lines[] carries a NON-STRING member, so `facts_wellformed` is false and the entrypoint`s `result` is UNDEFINED. Every arm — wasmtime, regorus, wazero AND the shipped harness — must produce an ERROR ROW for this bundle, never a clean zero and never a missing row.',
@@ -520,6 +540,14 @@ async function main(): Promise<void> {
       fixtureId: r.fixtureId,
       specimen: r.specimen,
       seedEntry: seedEntryById.get(r.specimen) ?? null,
+      // (C5) present-as-`false`, never omitted: a reader counting scored rows must
+      // not have to infer the answer from an absent key.
+      control: controlById.get(r.specimen) ?? false,
+      // (§ S2) A K4 run used to be INVISIBLE to any reader of the index — the swap
+      // was labelled on the bundle's own `provenance` and projected nowhere. K4's
+      // whole claim ("T7 fails while T8 still MATCHes") is read off this file, so
+      // the label has to be here too.
+      swapped: (r.provenance as { swapped?: boolean }).swapped === true,
       ruleId: r.ruleId,
       engine: r.engine,
       source: r.source,

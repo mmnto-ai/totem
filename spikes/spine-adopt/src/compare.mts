@@ -56,6 +56,8 @@ interface NormalRow {
   specimen: string;
   /** G4 — the seed entry beside the specimen, so a rule's N records group. */
   seedEntry: string | null;
+  /** (C5) `true` for a K-control row, `false` for every scored record. */
+  control: boolean;
   engine: string;
   /** null when the arm produced an ERROR ROW rather than a verdict. */
   violations: RegoViolation[] | null;
@@ -200,6 +202,7 @@ function normaliseShipped(
   rows: any[],
   bundles: Map<string, any>,
   seedEntryByFixture: Map<string, string | null>,
+  controlByFixture: Map<string, boolean>,
 ): NormalRow[] {
   return rows.map((r) => {
     const bundle = bundles.get(r.fixtureId);
@@ -216,6 +219,7 @@ function normaliseShipped(
         fixtureId: r.fixtureId,
         specimen: r.specimen,
         seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
+        control: controlByFixture.get(r.fixtureId) ?? false,
         engine: r.engine,
         violations: null,
         events: null,
@@ -255,6 +259,7 @@ function normaliseShipped(
       fixtureId: r.fixtureId,
       specimen: r.specimen,
       seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
+      control: controlByFixture.get(r.fixtureId) ?? false,
       engine: r.engine,
       violations: d.violations,
       // The shipped event context's `line` is the line NUMBER; the Violation's
@@ -281,6 +286,7 @@ function normaliseRego(
   arm: 'opa' | 'regorus',
   rows: any[],
   seedEntryByFixture: Map<string, string | null>,
+  controlByFixture: Map<string, boolean>,
 ): NormalRow[] {
   return rows.map((r) => {
     // (C3) The SAME non-empty-string rule as the shipped arm above: an `error: ""`
@@ -292,6 +298,7 @@ function normaliseRego(
       fixtureId: r.fixtureId,
       specimen: r.specimen,
       seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
+      control: controlByFixture.get(r.fixtureId) ?? false,
       engine: r.engine,
       violations: errorText === null ? (r.violations as RegoViolation[]) : null,
       events:
@@ -354,6 +361,8 @@ interface PairResult {
   specimen: string;
   /** G4 — the seed entry beside the specimen, so a rule's N pairs group. */
   seedEntry: string | null;
+  /** (C5) `true` for a K-control row, `false` for every scored record. */
+  control: boolean;
   engine: string;
   left: Arm;
   right: Arm;
@@ -414,6 +423,7 @@ function comparePair(
     fixtureId: left.fixtureId,
     specimen: left.specimen,
     seedEntry: left.seedEntry ?? right.seedEntry ?? null,
+    control: left.control || right.control,
     engine: left.engine,
     left: left.arm,
     right: right.arm,
@@ -568,6 +578,7 @@ function selfTest(checks: Checks): void {
     fixtureId: 'c-corpus-fail',
     specimen: 'c',
     seedEntry: null,
+    control: false,
     engine: 'ast-grep',
     violations: [
       { rule_id: 'd0815b6769304e26', line_number: 2, ordinal: 0 },
@@ -821,15 +832,31 @@ function main(): void {
   // (G4) the seed label, joined in from the fact index so every arm's rows carry it
   // — including the two the Rust host emits, which keep the wasmtime row shape.
   const factsIndex = readArtifact('facts-index.json') as {
-    bundles: { fixtureId: string; seedEntry?: string | null }[];
+    bundles: { fixtureId: string; seedEntry?: string | null; control?: boolean }[];
   };
   const seedEntryByFixture = new Map<string, string | null>(
     factsIndex.bundles.map((b) => [b.fixtureId, b.seedEntry ?? null]),
   );
+  // (C5) The control label, joined in from the fact index for the same reason the
+  // seed label is: the Rust host emits the wasmtime row shape unchanged, so the
+  // label is attached where the join key already is.
+  const controlByFixture = new Map<string, boolean>(
+    factsIndex.bundles.map((b) => [b.fixtureId, b.control === true]),
+  );
 
-  const shipped = normaliseShipped(shippedArt.verdictRows, bundles, seedEntryByFixture);
-  const opa = normaliseRego('opa', opaArt.verdictRows, seedEntryByFixture);
-  const regorus = normaliseRego('regorus', regorusArt.verdictRows, seedEntryByFixture);
+  const shipped = normaliseShipped(
+    shippedArt.verdictRows,
+    bundles,
+    seedEntryByFixture,
+    controlByFixture,
+  );
+  const opa = normaliseRego('opa', opaArt.verdictRows, seedEntryByFixture, controlByFixture);
+  const regorus = normaliseRego(
+    'regorus',
+    regorusArt.verdictRows,
+    seedEntryByFixture,
+    controlByFixture,
+  );
 
   // The fixture count is a DECLARED property of the arms and of the fact-bundle
   // directory, not a constant of this comparator. Deriving it means an arm that

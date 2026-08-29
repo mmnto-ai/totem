@@ -1,0 +1,27 @@
+# TEMPLATE for the T5 scope sweep (spec `.totem/specs/seed20-apparatus-slice2.md` § S6).
+#
+# `src/t5-sweep.mts` substitutes __PACKAGE__ with the lowered policy's package name
+# and writes the result to `rego/build/<subdir>/<pkg>/t5-sweep.rego`, then evaluates
+# it beside the PUBLISHED `artifacts/lowered/<pkg>/policy.rego` in ONE `opa eval`.
+#
+# WHY A SET, NOT AN OBJECT. The emitted `in_scope` is a partial rule with NO
+# `default` (`src/lower.mts` § Lowering 5), so a path the policy does not match
+# leaves it UNDEFINED rather than false. In an object comprehension an undefined
+# value silently drops the key, and the artifact would show a shorter map with no
+# indication that anything had been dropped. In a set comprehension "dropped" IS the
+# reading: membership means in scope, absence means out of scope, and the two are
+# recovered from one list.
+#
+# WHY ONE EVAL. `data.__PACKAGE__.in_scope with input as {"file": p}` re-binds the
+# whole document per path inside a single evaluation, so 2,742 paths cost one
+# process start instead of 2,742. The per-path form is exercised too — on a sample —
+# so the batched reading is checked against the form it replaces rather than trusted.
+
+package t5sweep
+
+import rego.v1
+
+in_scope_paths := {p |
+	some p in input.paths
+	data.__PACKAGE__.in_scope with input as {"file": p}
+}

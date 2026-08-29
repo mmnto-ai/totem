@@ -38,16 +38,19 @@
 //      (after src/lower.mts and src/build-wasm.mts; `npm run certify` chains it
 //       with src/certify-verify.mts, which asserts the ruled invariants)
 
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
+import { opa } from './lib/opa.mts';
 import {
   ARTIFACTS_DIR,
+  BLOCKED_DIR,
+  CHAINS_DIR,
   Checks,
-  OPA_BIN,
   readRunManifest,
+  REGO_BUILD_DIR,
   REPO_ROOT,
   SPIKE_ROOT,
   writeArtifact,
@@ -55,18 +58,20 @@ import {
 import {
   canonicalJson,
   censusWasm,
+  type EntrypointManifest,
   entrypointManifest,
   readBundleMember,
   sha256,
-  type EntrypointManifest,
   type WasmCensus,
 } from './lib/wasm-census.mts';
 
-const REGO_BUILD_DIR = path.join(SPIKE_ROOT, 'rego', 'build');
+// (C10) `REGO_BUILD_DIR`, `CHAINS_DIR` and `BLOCKED_DIR` are IMPORTED from
+// `src/lib/spike-env.mts` rather than re-derived here: with
+// `SPIKE_ARTIFACTS_SUBDIR` set they all move together, and three local
+// re-declarations would let the certifier read one run's build tree while
+// publishing into another run's artifact set.
 const FIXTURES_DIR = path.join(SPIKE_ROOT, 'rego', 'certify-fixtures');
 const FIXTURE_BUILD_DIR = path.join(FIXTURES_DIR, 'build');
-const CHAINS_DIR = path.join(ARTIFACTS_DIR, 'chains');
-const BLOCKED_DIR = path.join(ARTIFACTS_DIR, 'blocked');
 
 // ─── The sentinel (spec § Actuator slice 1) ──────────────────────────────────
 
@@ -526,6 +531,11 @@ function wazeroConformance(
     cwd: probeDir,
     encoding: 'utf-8',
     maxBuffer: 64 * 1024 * 1024,
+    // (C10) The environment is passed through EXPLICITLY — `SPIKE_ARTIFACTS_SUBDIR`
+    // and `SPIKE_RECORD_SET` included — so the Go arm this run spawns is the same
+    // run. It is what `spawnSync` does by default; stated here because the default
+    // is exactly the thing a future `env: {…}` override would silently break.
+    env: process.env,
   });
   if (r.status !== 0) {
     // A missing/broken Go toolchain is a HARD failure, never a skip: "every host
@@ -794,14 +804,10 @@ function publishBlocked(row: CertificationRow, host: HostCertifyResult | null): 
 }
 
 // ─── Fixture building ────────────────────────────────────────────────────────
-
-function opa(
-  args: string[],
-  cwd: string,
-): { status: number | null; stdout: string; stderr: string } {
-  const r = spawnSync(OPA_BIN, args, { cwd, encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
-  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
-}
+//
+// `opa(args, cwd)` is imported from `src/lib/opa.mts` (§ S6). It used to be a
+// byte-identical copy of `src/build-wasm.mts`'s helper; the hoist makes that
+// identity structural instead of coincidental.
 
 interface Fixture {
   id: string;
@@ -966,10 +972,18 @@ async function main(): Promise<void> {
     malformedErrors.length >= 5,
     `${malformedErrors.length} violations: ${malformedErrors.join(' | ')}`,
   );
-  const allFactFiles = fs
-    .readdirSync(path.join(ARTIFACTS_DIR, 'facts'))
-    .filter((f) => f.endsWith('.json'))
-    .sort();
+  // (§ S5) The `control` seam is `manifest -> lower -> build-wasm -> certify`: there
+  // is no fact stage, by construction — a control-only re-pin build has nothing to
+  // differential. An absent facts directory is therefore the correct state there,
+  // not a missing input, and `expectedMeasured` below derives 0 from the manifest's
+  // (empty) bundle list, so the count check still measures rather than skips.
+  const factsAt = path.join(ARTIFACTS_DIR, 'facts');
+  const allFactFiles = fs.existsSync(factsAt)
+    ? fs
+        .readdirSync(factsAt)
+        .filter((f) => f.endsWith('.json'))
+        .sort()
+    : [];
   const readBundleFile = (f: string) =>
     JSON.parse(fs.readFileSync(path.join(ARTIFACTS_DIR, 'facts', f), 'utf-8')) as {
       factBundle: unknown;
@@ -1136,10 +1150,21 @@ async function main(): Promise<void> {
   // Provenance first: each negative fixture's target pattern is asserted
   // byte-exact against the corpus row it claims, so a fixture that had drifted
   // from its source could not quietly become a different test.
-  const census = readArtifact<{ rules: { ruleHash: string; class: string; pattern: string }[] }>(
-    'expressibility-census.json',
-    'npm run census',
-  );
+  // (C10) The census is an INPUT — a property of the four shipped corpora, not of
+  // this run's record set — and a named-subdir run (§ S5's control seam) has no
+  // `npm run census` in its stages. The subdir copy is preferred when it exists so a
+  // self-contained artifact set stays self-contained; the base root is the fallback,
+  // never a silent skip of the fixture-provenance assertions below.
+  const censusInSubdir = path.join(ARTIFACTS_DIR, 'expressibility-census.json');
+  const censusAt = fs.existsSync(censusInSubdir)
+    ? censusInSubdir
+    : path.join(SPIKE_ROOT, 'artifacts', 'expressibility-census.json');
+  if (!fs.existsSync(censusAt)) {
+    throw new Error(`${censusAt} is missing — run \`npm run census\` first.`);
+  }
+  const census = JSON.parse(fs.readFileSync(censusAt, 'utf-8')) as {
+    rules: { ruleHash: string; class: string; pattern: string }[];
+  };
   const fixtureBuilds = new Map<
     string,
     { wasmPath: string; regoPath: string; wasmSha256: string }

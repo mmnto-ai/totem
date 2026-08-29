@@ -43,23 +43,22 @@
 //
 // Run: node --experimental-strip-types src/certify-verify.mts   (after src/certify.mts)
 
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
-import { activeRecordSet } from './lib/record-sets.mts';
+import { activeRecordSet, loadRecordSet } from './lib/record-sets.mts';
 import {
   ARTIFACTS_DIR,
+  CHAINS_DIR,
   Checks,
   readRunManifest,
+  REGO_BUILD_DIR,
   REPO_ROOT,
   SPIKE_ROOT,
   writeArtifact,
 } from './lib/spike-env.mts';
 import { canonicalJson, censusWasm, entrypointManifest, sha256 } from './lib/wasm-census.mts';
-
-const CHAINS_DIR = path.join(ARTIFACTS_DIR, 'chains');
-const REGO_BUILD_DIR = path.join(SPIKE_ROOT, 'rego', 'build');
 
 /** The exact key set `src/certify.mts` appends. Anything else is a contract drift. */
 const EXPECTED_ADDED_KEYS = [
@@ -267,8 +266,11 @@ function main(): void {
   const lowering = JSON.parse(
     fs.readFileSync(path.join(ARTIFACTS_DIR, 'lowering-rejects.json'), 'utf-8'),
   ) as { rejects?: { stage?: string }[] };
+  // (C5) `records[]` + `controlRecords[]` — the manifest splits the scored corpus
+  // from the K-controls, and a control record certifies exactly like a scored one.
   const expectedSpecimenBundles =
-    (manifest.records as unknown[]).length -
+    (manifest.records as unknown[]).length +
+    ((manifest.controlRecords as unknown[]) ?? []).length -
     (lowering.rejects ?? []).filter((r) => typeof r.stage === 'string').length;
   const specimens = report.certifications.filter((c) => c.kind === 'specimen');
   checks.eq(
@@ -330,12 +332,28 @@ function main(): void {
         ? ''
         : ' — re-run `npm run all` for this record set before certifying'),
   );
-  const committedChainsApply = manifestRecordSet === 'specimens';
-  if (committedChainsApply) {
+  // (§ S5) The committed chains are the SPECIMENS baseline, so the comparison has a
+  // referent for `specimens` — where the published set is the whole committed set —
+  // and for `control`, where it is ONE of them: a control-only rebuild of a specimen
+  // record whose chain is already committed IS K3 arm B, and restricting the set
+  // comparison to the loaded packages is what lets that one chain be compared
+  // without pretending the other six went missing. Only `seed20` has no referent.
+  const committedChainsApply = manifestRecordSet !== 'seed20';
+  if (manifestRecordSet === 'specimens') {
     checks.eq(
       'INV 2 — the published chain set is exactly the pre-slice committed chain set',
       chainFiles,
       committedNames,
+    );
+  } else if (manifestRecordSet === 'control') {
+    const expected = loadRecordSet('control').map((r) => `r${r.ruleId}.json`);
+    checks.eq(
+      `INV 2 (K3 arm B) — the control-only run published exactly the ${expected.length} chain(s) its record set names, and each has a committed counterpart at HEAD`,
+      {
+        published: chainFiles,
+        missingFromCommitted: expected.filter((n) => !committedNames.includes(n)),
+      },
+      { published: expected, missingFromCommitted: [] },
     );
   } else {
     checks.check(

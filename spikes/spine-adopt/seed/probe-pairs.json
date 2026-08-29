@@ -1,0 +1,207 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/lib/record-sets.mts generatedSeedProbes()",
+  "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S1 — the PINNED EXPECTATION for the G2 probe generator. This repo has no TS test runner; a committed artifact the generator is re-derived against IS the test. `src/verify-records.mts` asserts generatedSeedProbes() deep-equals `pairs` below, so a change to either rule shows up as a failed check instead of as a silently different probe set.",
+  "recordPin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
+  "rule": "matching probe = every `**/` -> `k3b/` then every `*` -> `probe`; twin = that probe with the glob's LAST LITERAL character (right-to-left; `*` and `/` are not literals) replaced by `_`, or by `-` when it is already `_`.",
+  "globCount": 33,
+  "pairs": [
+    {
+      "glob": "packages/cli/src/**/*.ts",
+      "kind": "fileGlobs",
+      "probe": "packages/cli/src/k3b/probe.ts",
+      "twin": "packages/cli/src/k3b/probe.t_"
+    },
+    {
+      "glob": "packages/cli/src/commands/**/*.ts",
+      "kind": "excludeGlobs",
+      "probe": "packages/cli/src/commands/k3b/probe.ts",
+      "twin": "packages/cli/src/commands/k3b/probe.t_"
+    },
+    {
+      "glob": "**/*.test.ts",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.test.ts",
+      "twin": "k3b/probe.test.t_"
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.spec.ts",
+      "twin": "k3b/probe.spec.t_"
+    },
+    {
+      "glob": "**/*.ts",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.ts",
+      "twin": "k3b/probe.t_"
+    },
+    {
+      "glob": "**/*.tsx",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.tsx",
+      "twin": "k3b/probe.ts_"
+    },
+    {
+      "glob": "**/*.js",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.js",
+      "twin": "k3b/probe.j_"
+    },
+    {
+      "glob": "**/*.jsx",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.jsx",
+      "twin": "k3b/probe.js_"
+    },
+    {
+      "glob": "**/.mcp.json",
+      "kind": "fileGlobs",
+      "probe": "k3b/.mcp.json",
+      "twin": "k3b/.mcp.jso_"
+    },
+    {
+      "glob": "**/.gemini/settings.json",
+      "kind": "fileGlobs",
+      "probe": "k3b/.gemini/settings.json",
+      "twin": "k3b/.gemini/settings.jso_"
+    },
+    {
+      "glob": "**/mcp*.json",
+      "kind": "fileGlobs",
+      "probe": "k3b/mcpprobe.json",
+      "twin": "k3b/mcpprobe.jso_"
+    },
+    {
+      "glob": "**/.cursor/mcp.json",
+      "kind": "fileGlobs",
+      "probe": "k3b/.cursor/mcp.json",
+      "twin": "k3b/.cursor/mcp.jso_"
+    },
+    {
+      "glob": "**/*.py",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.py",
+      "twin": "k3b/probe.p_"
+    },
+    {
+      "glob": "**/*.md",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.md",
+      "twin": "k3b/probe.m_"
+    },
+    {
+      "glob": "**/*.txt",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.txt",
+      "twin": "k3b/probe.tx_"
+    },
+    {
+      "glob": "packages/cli/**/*.ts",
+      "kind": "fileGlobs",
+      "probe": "packages/cli/k3b/probe.ts",
+      "twin": "packages/cli/k3b/probe.t_"
+    },
+    {
+      "glob": "apps/cli/**/*.ts",
+      "kind": "fileGlobs",
+      "probe": "apps/cli/k3b/probe.ts",
+      "twin": "apps/cli/k3b/probe.t_"
+    },
+    {
+      "glob": "packages/core/**/*.ts",
+      "kind": "fileGlobs",
+      "probe": "packages/core/k3b/probe.ts",
+      "twin": "packages/core/k3b/probe.t_"
+    },
+    {
+      "glob": "**/*.test.*",
+      "kind": "excludeGlobs",
+      "probe": "k3b/probe.test.probe",
+      "twin": "k3b/probe.test_probe"
+    },
+    {
+      "glob": "**/*.spec.*",
+      "kind": "excludeGlobs",
+      "probe": "k3b/probe.spec.probe",
+      "twin": "k3b/probe.spec_probe"
+    },
+    {
+      "glob": "**/*.sh",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.sh",
+      "twin": "k3b/probe.s_"
+    },
+    {
+      "glob": "**/*.bash",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.bash",
+      "twin": "k3b/probe.bas_"
+    },
+    {
+      "glob": "**/*.mjs",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.mjs",
+      "twin": "k3b/probe.mj_"
+    },
+    {
+      "glob": "**/*.cjs",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.cjs",
+      "twin": "k3b/probe.cj_"
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "kind": "fileGlobs",
+      "probe": "packages/k3b/probe.ts",
+      "twin": "packages/k3b/probe.t_"
+    },
+    {
+      "glob": "**/*.zsh",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.zsh",
+      "twin": "k3b/probe.zs_"
+    },
+    {
+      "glob": "**/*.ksh",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.ksh",
+      "twin": "k3b/probe.ks_"
+    },
+    {
+      "glob": "packages/cli/src/assets/**/*.ts",
+      "kind": "fileGlobs",
+      "probe": "packages/cli/src/assets/k3b/probe.ts",
+      "twin": "packages/cli/src/assets/k3b/probe.t_"
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "kind": "fileGlobs",
+      "probe": "packages/cli/k3b/probe.test.ts",
+      "twin": "packages/cli/k3b/probe.test.t_"
+    },
+    {
+      "glob": "**/*.yml",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.yml",
+      "twin": "k3b/probe.ym_"
+    },
+    {
+      "glob": "**/*.yaml",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.yaml",
+      "twin": "k3b/probe.yam_"
+    },
+    {
+      "glob": "**/*.mdx",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.mdx",
+      "twin": "k3b/probe.md_"
+    },
+    {
+      "glob": "**/*.rst",
+      "kind": "fileGlobs",
+      "probe": "k3b/probe.rst",
+      "twin": "k3b/probe.rs_"
+    }
+  ]
+}

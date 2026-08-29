@@ -192,6 +192,19 @@ jobs:
           go test ./...
           go run .
 
+      # ── (d) the K-controls ─────────────────────────────────────────────────
+      # LAST, and only here: `src/controls.mts` summarises controls that live
+      # inline in the differential's artifacts AND in the Go probe's, so this is
+      # the only position at which every source it reads exists (spec
+      # `.totem/specs/seed20-apparatus-slice2.md` § S7/§ S10). Running it on the
+      # Linux arm means `controls.json` is deposited on BOTH platforms from one
+      # edit, the way `certify` already is.
+      - name: Enrichment — K-controls
+        working-directory: spikes/spine-adopt
+        env:
+          SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
+        run: npm run controls
+
       - name: Upload spike artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

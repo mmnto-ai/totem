@@ -6,8 +6,8 @@
 // dispatchers without mutating any workspace or package config.
 
 import * as crypto from 'node:crypto';
-import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -17,10 +17,73 @@ export const SPIKE_ROOT = path.resolve(HERE, '..', '..');
 /** The worktree root (the repo the corpora and fixtures live in). */
 export const REPO_ROOT = path.resolve(SPIKE_ROOT, '..', '..');
 
-export const ARTIFACTS_DIR = path.join(SPIKE_ROOT, 'artifacts');
+// ─── C10 — `SPIKE_ARTIFACTS_SUBDIR`, one artifact set per named run ──────────
+
+/**
+ * `SPIKE_ARTIFACTS_SUBDIR=<name>` moves BOTH output roots one level down:
+ * `artifacts/<name>/…` and `rego/build/<name>/…`. Unset ⇒ today's paths,
+ * byte-for-byte — every existing run, artifact and check is untouched.
+ *
+ * It exists because the K-controls need a SECOND, complete artifact set beside
+ * the run of record (K4's swapped-examples run, K7's rebuild, K3's control-only
+ * re-pin build), and a control that overwrote the run it is a control FOR would
+ * destroy its own referent. The Go arm reads the same variable and applies it to
+ * its input root and its output dir, so the two languages address one set.
+ *
+ * VALIDATED `^[a-z0-9-]+$`: the value becomes a path segment, so `..`, an
+ * absolute path or a separator would escape the artifact tree.
+ */
+function readArtifactsSubdir(): string | null {
+  const raw = process.env.SPIKE_ARTIFACTS_SUBDIR;
+  if (raw === undefined || raw === '') {
+    // (§ S5) The control-only re-pin build DEFAULTS to `k3-control`. Without a
+    // default it would publish into the run of record's own roots and wipe the
+    // chains it exists to be a control for — `src/build-wasm.mts` removes
+    // `artifacts/chains/` at the start of every build. Read from the environment
+    // directly rather than through `activeRecordSet()`: `src/lib/record-sets.mts`
+    // imports THIS module, so calling into it here would close a cycle.
+    const control = process.env.SPIKE_CONTROL_RECORD;
+    return control === undefined || control === '' ? null : 'k3-control';
+  }
+  if (!/^[a-z0-9-]+$/.test(raw)) {
+    throw new Error(
+      `SPIKE_ARTIFACTS_SUBDIR=${JSON.stringify(raw)} is not a valid artifact subdirectory name; ` +
+        'expected `^[a-z0-9-]+$` (it becomes one path segment under `artifacts/` and `rego/build/`).',
+    );
+  }
+  return raw;
+}
+
+/** The active artifact subdirectory, or `null` when unset. Recorded in the manifest. */
+export const ARTIFACTS_SUBDIR: string | null = readArtifactsSubdir();
+
+export const ARTIFACTS_DIR = path.join(
+  SPIKE_ROOT,
+  'artifacts',
+  ...(ARTIFACTS_SUBDIR === null ? [] : [ARTIFACTS_SUBDIR]),
+);
 export const FACTS_DIR = path.join(ARTIFACTS_DIR, 'facts');
+/** `artifacts/chains/` — the published certificates (`src/certify.mts` is the only writer). */
+export const CHAINS_DIR = path.join(ARTIFACTS_DIR, 'chains');
+/** `artifacts/blocked/` — a blocked bundle's typed reason, and no chain. */
+export const BLOCKED_DIR = path.join(ARTIFACTS_DIR, 'blocked');
+/**
+ * G7 — the PUBLISHED lowering. `rego/build/` stays a gitignored build tree; the
+ * policy and its glob table are copied here so T3 can audit the lowering from the
+ * repository at the pin without rebuilding it.
+ * `<pkg>` is the package SUFFIX (`totem.spike.` stripped) — the same key the build
+ * tree and `artifacts/chains/<pkg>.json` already use.
+ */
+export const LOWERED_PUBLISH_DIR = path.join(ARTIFACTS_DIR, 'lowered');
 export const RECORDS_DIR = path.join(SPIKE_ROOT, 'records');
 export const TOOLS_DIR = path.join(SPIKE_ROOT, 'tools');
+export const REGO_DIR = path.join(SPIKE_ROOT, 'rego');
+/** The gitignored build tree, subdir-aware like `ARTIFACTS_DIR` (C10). */
+export const REGO_BUILD_DIR = path.join(
+  REGO_DIR,
+  'build',
+  ...(ARTIFACTS_SUBDIR === null ? [] : [ARTIFACTS_SUBDIR]),
+);
 
 /**
  * Platform-aware pinned-tool resolution (day-14 "build matrix Windows+Linux").
@@ -90,6 +153,12 @@ export const MANIFEST_ARTIFACT = 'manifest.json';
 export const MANIFEST_FILE = path.join(ARTIFACTS_DIR, MANIFEST_ARTIFACT);
 /** `artifacts/tracked-paths.txt` — the sorted `git ls-tree -r --name-only HEAD` sweep set the manifest hashes (T17: the tree at `runCommit`, never the index). */
 export const TRACKED_PATHS_ARTIFACT = 'tracked-paths.txt';
+/**
+ * `artifacts/tracked-paths-at-record-pin.txt` — the sorted tree at the RECORD PIN
+ * (§ S6), which is the T5 sweep set. Distinct from `tracked-paths.txt`: that one is
+ * the tree at `runCommit` (T17 provenance), this one is the corpus T5 sweeps.
+ */
+export const TRACKED_PATHS_AT_RECORD_PIN_ARTIFACT = 'tracked-paths-at-record-pin.txt';
 
 export function sha256(buf: Buffer | string): string {
   return crypto.createHash('sha256').update(buf).digest('hex');
@@ -182,6 +251,10 @@ export const POST_FACTS_ARTIFACTS: readonly string[] = [
   'certification-report.json',
   'certification-invariants.json',
   'differential-report.json',
+  // § S6 — the T5 sweep reads the lowered policies of a run whose fact bytes are
+  // already fixed, and § S7's controls summarise artifacts written after facts.
+  't5-sweep.json',
+  'controls.json',
 ];
 
 let manifestCache: Record<string, unknown> | null = null;

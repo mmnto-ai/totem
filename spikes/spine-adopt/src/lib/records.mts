@@ -17,8 +17,8 @@ import {
   type RecordRow,
   type RecordSetId,
 } from './record-sets.mts';
-import { loadCoreBarrel, requireSymbols } from './spike-env.mts';
 import { PINNED_NOW, recordRelPath, type Specimen } from './specimens.mts';
+import { loadCoreBarrel, requireSymbols } from './spike-env.mts';
 
 export interface CompiledSpecimen {
   specimen: Specimen;
@@ -47,6 +47,12 @@ export async function loadCore(): Promise<Record<string, any>> {
     'parseFixture',
     'loadFixtures',
     'RegexEvaluator',
+    // (§ S6) Both were already CALLED — `src/lower.mts`'s per-glob and two-array
+    // scope parity — and neither was REQUIRED, so a barrel that stopped exporting
+    // them would have failed as `undefined is not a function` inside a probe loop
+    // rather than as a named missing export. `src/t5-sweep.mts` is a second caller.
+    'ruleAppliesToFile',
+    'recordScopeMatchesFile',
   ]);
   return core;
 }
@@ -110,6 +116,8 @@ export type RejectStage = 'shipped-compile' | 'target-lowering';
 export interface RejectRow {
   recordId: string;
   seedEntry: string | null;
+  /** (C5) `true` for a K-control row, `false` for every seed/specimen row. */
+  control: boolean;
   ruleId: string;
   stage: RejectStage;
   reason: string;
@@ -167,6 +175,7 @@ export function intakeRecordSet(core: Record<string, any>): Intake {
         reject: {
           recordId: s.id,
           seedEntry: s.seedEntry,
+          control: s.control,
           ruleId: s.ruleId,
           stage: 'shipped-compile',
           reason: attempt.reason,
@@ -197,6 +206,7 @@ export function intakeRecordSet(core: Record<string, any>): Intake {
       reject: {
         recordId: s.id,
         seedEntry: s.seedEntry,
+        control: s.control,
         ruleId: s.ruleId,
         stage: 'target-lowering',
         reason: `${refused.map((p) => `${p.role} REJECTED (${p.class})`).join('; ')} — ${first.reason}`,
